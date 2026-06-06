@@ -28,14 +28,14 @@
 // 1.18) clamps to 1.0 in the framebuffer for both implementations,
 // so the over-exposure flash is shared with niri.
 
-vec4 pzTransition(vec2 uv, float t) {
+vec4 pTransition(vec2 uv, float t) {
     // ── niri OPEN body (handles both legs via runtime iTime flip) ──
     float p = clamp(t, 0.0, 1.0);
     float PI = 3.141592653589793;
 
     vec4 win = surfaceColor(uv);
 
-    float to_m = p + sin(PI * p) * pz_strength;
+    float to_m = p + sin(PI * p) * p_strength;
     return vec4(
         win.r * win.a * to_m,
         win.g * win.a * to_m,

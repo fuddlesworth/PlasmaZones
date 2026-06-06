@@ -21,15 +21,15 @@
 // BMW's `uSeed` and `uStartPos` are vec2 — PlasmaZones param slots are
 // scalar, so we expose the components as separate `*X` / `*Y` floats
 // and reassemble at the call sites below.
-// `pz_*` param macros are generated from metadata.json by the harness.
+// `p_*` param macros are generated from metadata.json by the harness.
 
 // This maps a given value in [0..1] to a color from the rgba color ramp
 // [transparent black ... semi-transparent uColor ... opaque white].
 vec4 getFireColor(float val) {
-  return vec4(tritone(val, vec3(0.0), pz_uColor.rgb, vec3(1.0)), val);
+  return vec4(tritone(val, vec3(0.0), p_uColor.rgb, vec3(1.0)), val);
 }
 
-vec4 pzTransition(vec2 uv, float t) {
+vec4 pTransition(vec2 uv, float t) {
 
   // The burning fire edge is composed of multiple regions. The width of all regions is
   // defined below. If a window is closed and the burning direction happens to be from top
@@ -60,10 +60,10 @@ vec4 pzTransition(vec2 uv, float t) {
   // below the flames and the smoke).
 
   // All widths depend on the configured scale of the effect.
-  float SCORCH_WIDTH = 0.2 * pz_uScale;
-  float BURN_WIDTH   = 0.03 * pz_uScale;
-  float SMOKE_WIDTH  = 0.9 * pz_uScale;
-  float FLAME_WIDTH  = 0.2 * pz_uScale;
+  float SCORCH_WIDTH = 0.2 * p_uScale;
+  float BURN_WIDTH   = 0.03 * p_uScale;
+  float SMOKE_WIDTH  = 0.9 * p_uScale;
+  float FLAME_WIDTH  = 0.2 * p_uScale;
 
   // During the animation, the hideThreshold transitions from a small value to a larger
   // value, so that all the above ranges are covered.
@@ -81,17 +81,17 @@ vec4 pzTransition(vec2 uv, float t) {
   // Now we compute a 2D gradient in [0..1] which covers the entire window. The dark
   // regions will be burned first, the bright regions in the end. We mix a radial gradient
   // with some noise. The center of the radial gradient is positioned at uStartPos.
-  float circle = length((iTexCoord - vec2(pz_uStartPosX, pz_uStartPosY)) * (uSize.xy / max(uSize.x, uSize.y)));
+  float circle = length((iTexCoord - vec2(p_uStartPosX, p_uStartPosY)) * (uSize.xy / max(uSize.x, uSize.y)));
 
-  vec2 noiseUv = iTexCoord / pz_uScale * uSize / 1.5;
+  vec2 noiseUv = iTexCoord / p_uScale * uSize / 1.5;
   // BMW: `uSeed + uProgress * vec2(0.0, 0.3 * uDuration)`. The
   // `uProgress * uDuration` term is BMW's elapsed-leg-seconds idiom,
   // substituted with `(float(iFrame) / 60.0)` per bmw_compat.glsl.
   float smokeNoise =
-    simplex2DFractal(noiseUv * 0.01 + vec2(pz_uSeedX, pz_uSeedY) + (float(iFrame) / 60.0) * vec2(0.0, 0.3));
+    simplex2DFractal(noiseUv * 0.01 + vec2(p_uSeedX, p_uSeedY) + (float(iFrame) / 60.0) * vec2(0.0, 0.3));
 
   float gradient =
-    mix(circle, smokeNoise, 200.0 * pz_uTurbulence * pz_uScale / max(uSize.x, uSize.y));
+    mix(circle, smokeNoise, 200.0 * p_uTurbulence * p_uScale / max(uSize.x, uSize.y));
 
   // Now, based on the gradient and the ranges, we can compute masks for the individual
   // zones.
@@ -141,7 +141,7 @@ vec4 pzTransition(vec2 uv, float t) {
     // we substitute it with 1.0 — a typical BMW leg duration in seconds —
     // so the ember sampling offset stays at its BMW magnitude.
     float emberNoise = simplex2DFractal(
-      noiseUv * 0.05 + vec2(pz_uSeedX, pz_uSeedY) - smokeNoise * vec2(0.0, 0.3 * smokeMask * 1.0));
+      noiseUv * 0.05 + vec2(p_uSeedX, p_uSeedY) - smokeNoise * vec2(0.0, 0.3 * smokeMask * 1.0));
     float embers = clamp(pow(emberNoise + 0.3, 100.0), 0.0, 2.0) * smoke;
     oColor += getFireColor(embers);
   }
@@ -159,7 +159,7 @@ vec4 pzTransition(vec2 uv, float t) {
     // First `uDuration` is a free scalar → 1.0; the `uProgress *
     // uDuration` term → `(float(iFrame) / 60.0)`.
     float flameNoise =
-      simplex2DFractal(noiseUv * 0.02 + vec2(pz_uSeedX, pz_uSeedY) + smokeNoise * vec2(0.0, 1.0) +
+      simplex2DFractal(noiseUv * 0.02 + vec2(p_uSeedX, p_uSeedY) + smokeNoise * vec2(0.0, 1.0) +
                        vec2(0.0, (float(iFrame) / 60.0)));
 
     if (flameRange.x < gradient && gradient < flameRange.y) {

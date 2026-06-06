@@ -6,7 +6,7 @@
 #include "../config/configdefaults.h"
 #include "../config/settings.h"
 #include "../core/logging.h"
-#include "pz_i18n.h"
+#include "p_i18n.h"
 
 #include <PhosphorShortcuts/Factory.h>
 #include <PhosphorShortcuts/IBackend.h>
@@ -569,7 +569,7 @@ void ShortcutManager::buildEntries()
         Entry e;
         e.id = QString::fromLatin1(src.id);
         e.defaultSeq = parseSequence(src.defGetter(), e.id);
-        e.description = PzI18n::tr(src.label);
+        e.description = PI18n::tr(src.label);
         const auto curGetter = src.curGetter;
         const QString idCopy = e.id;
         e.currentSeq = [s, curGetter, idCopy] {
@@ -589,7 +589,7 @@ void ShortcutManager::buildEntries()
         Entry e;
         e.id = quickLayoutId(i);
         e.defaultSeq = parseSequence(kQuickLayoutDefaults[i](), e.id);
-        e.description = PzI18n::tr("Apply Layout %1").arg(i + 1);
+        e.description = PI18n::tr("Apply Layout %1").arg(i + 1);
         const QString idCopy = e.id;
         e.currentSeq = [s, i, idCopy] {
             return parseSequence(s->quickLayoutShortcut(i), idCopy);
@@ -607,7 +607,7 @@ void ShortcutManager::buildEntries()
         Entry e;
         e.id = snapToZoneId(i);
         e.defaultSeq = parseSequence(kSnapToZoneDefaults[i](), e.id);
-        e.description = PzI18n::tr("Snap to Zone %1").arg(i + 1);
+        e.description = PI18n::tr("Snap to Zone %1").arg(i + 1);
         const QString idCopy = e.id;
         e.currentSeq = [s, i, idCopy] {
             return parseSequence(s->snapToZoneShortcut(i), idCopy);

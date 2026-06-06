@@ -3,7 +3,7 @@
 
 #include "windowruletemplates.h"
 
-#include "../pz_i18n.h"
+#include "../p_i18n.h"
 
 #include <PhosphorWindowRule/MatchExpression.h>
 #include <PhosphorWindowRule/MatchTypes.h>
@@ -36,26 +36,26 @@ QVariantMap newEmptyRule(const QString& subject)
     rule.enabled = true;
 
     if (subject == QLatin1String("monitor")) {
-        rule.name = PzI18n::tr("New monitor rule");
+        rule.name = PI18n::tr("New monitor rule");
         rule.priority = kContextBandBase;
         rule.match = MatchExpression::makeLeaf(Field::ScreenId, Operator::Equals, QString());
     } else if (subject == QLatin1String("desktop")) {
-        rule.name = PzI18n::tr("New desktop rule");
+        rule.name = PI18n::tr("New desktop rule");
         rule.priority = kContextBandBase;
         // VirtualDesktop is numeric; seed with 1 (typical first desktop).
         // Validator rejects 0 because 0 means "all desktops" and is the same
         // as having no predicate at all.
         rule.match = MatchExpression::makeLeaf(Field::VirtualDesktop, Operator::Equals, 1);
     } else if (subject == QLatin1String("application")) {
-        rule.name = PzI18n::tr("New application rule");
+        rule.name = PI18n::tr("New application rule");
         rule.priority = kApplicationBandBase;
         rule.match = MatchExpression::makeLeaf(Field::AppId, Operator::AppIdMatches, QString());
     } else if (subject == QLatin1String("activity")) {
-        rule.name = PzI18n::tr("New activity rule");
+        rule.name = PI18n::tr("New activity rule");
         rule.priority = kContextBandBase;
         rule.match = MatchExpression::makeLeaf(Field::Activity, Operator::Equals, QString());
     } else if (subject == QLatin1String("animation")) {
-        rule.name = PzI18n::tr("New animation rule");
+        rule.name = PI18n::tr("New animation rule");
         rule.priority = kAnimationBandBase;
         // Animation overrides typically apply globally — the action carries
         // the event scope (see `anim-shader:`/`anim-timing:`/`anim-curve:`
@@ -65,7 +65,7 @@ QVariantMap newEmptyRule(const QString& subject)
     } else {
         // "custom" — start from the always-true catch-all so the user builds
         // the tree from scratch in the Advanced editor.
-        rule.name = PzI18n::tr("New custom rule");
+        rule.name = PI18n::tr("New custom rule");
         rule.priority = kAdvancedBandBase;
         rule.match = MatchExpression{};
     }
@@ -89,12 +89,12 @@ QVariantList ruleTemplates()
     // exclusion lists). That's where the bulk of real-world rules live, so
     // these three give one-click starting points for the common cases.
     QVariantList out;
-    out.append(entry(QLatin1String("layoutOnMonitor"), PzI18n::tr("Set a layout on a monitor"),
-                     PzI18n::tr("Pick a snapping layout to use on one monitor."), QLatin1String("view-grid")));
-    out.append(entry(QLatin1String("algorithmOnMonitor"), PzI18n::tr("Set a tiling algorithm on a monitor"),
-                     PzI18n::tr("Pick an autotile algorithm to use on one monitor."), QLatin1String("view-list-tree")));
-    out.append(entry(QLatin1String("excludeApp"), PzI18n::tr("Exclude an app from tiling"),
-                     PzI18n::tr("Keep one application's windows out of the snap and autotile engines entirely."),
+    out.append(entry(QLatin1String("layoutOnMonitor"), PI18n::tr("Set a layout on a monitor"),
+                     PI18n::tr("Pick a snapping layout to use on one monitor."), QLatin1String("view-grid")));
+    out.append(entry(QLatin1String("algorithmOnMonitor"), PI18n::tr("Set a tiling algorithm on a monitor"),
+                     PI18n::tr("Pick an autotile algorithm to use on one monitor."), QLatin1String("view-list-tree")));
+    out.append(entry(QLatin1String("excludeApp"), PI18n::tr("Exclude an app from tiling"),
+                     PI18n::tr("Keep one application's windows out of the snap and autotile engines entirely."),
                      QLatin1String("edit-delete-remove")));
     return out;
 }
@@ -106,7 +106,7 @@ QVariantMap newRuleFromTemplate(const QString& templateId)
     rule.enabled = true;
 
     if (templateId == QLatin1String("layoutOnMonitor")) {
-        rule.name = PzI18n::tr("Snapping layout on monitor");
+        rule.name = PI18n::tr("Snapping layout on monitor");
         rule.priority = kContextBandBase;
         rule.match = MatchExpression::makeLeaf(Field::ScreenId, Operator::Equals, QString());
         // Two seeded actions — set engine mode AND pick the layout — so the
@@ -124,7 +124,7 @@ QVariantMap newRuleFromTemplate(const QString& templateId)
         layoutAction.params.insert(ActionParam::LayoutId, QString());
         rule.actions.append(layoutAction);
     } else if (templateId == QLatin1String("algorithmOnMonitor")) {
-        rule.name = PzI18n::tr("Tiling algorithm on monitor");
+        rule.name = PI18n::tr("Tiling algorithm on monitor");
         rule.priority = kContextBandBase;
         rule.match = MatchExpression::makeLeaf(Field::ScreenId, Operator::Equals, QString());
         // Mirror of the layout template, but for the autotile engine + an
@@ -139,7 +139,7 @@ QVariantMap newRuleFromTemplate(const QString& templateId)
         algoAction.params.insert(ActionParam::Algorithm, QString());
         rule.actions.append(algoAction);
     } else if (templateId == QLatin1String("excludeApp")) {
-        rule.name = PzI18n::tr("Exclude an app from tiling");
+        rule.name = PI18n::tr("Exclude an app from tiling");
         rule.priority = kApplicationBandBase;
         rule.match = MatchExpression::makeLeaf(Field::AppId, Operator::AppIdMatches, QString());
         RuleAction action;

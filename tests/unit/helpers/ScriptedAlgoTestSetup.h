@@ -35,7 +35,7 @@ namespace TestHelpers {
  *
  * Usage in test class:
  *   ScriptedAlgoTestSetup m_scriptSetup;
- *   void initTestCase() { QVERIFY(m_scriptSetup.init(QStringLiteral(PZ_SOURCE_DIR))); }
+ *   void initTestCase() { QVERIFY(m_scriptSetup.init(QStringLiteral(P_SOURCE_DIR))); }
  *   // then: m_scriptSetup.registry()->algorithm(id);
  */
 class ScriptedAlgoTestSetup
@@ -51,7 +51,7 @@ public:
 
     /**
      * @brief Set up XDG environment and load scripted algorithms
-     * @param sourceDir Project source directory (PZ_SOURCE_DIR)
+     * @param sourceDir Project source directory (P_SOURCE_DIR)
      * @return true if setup succeeded
      */
     bool init(const QString& sourceDir)

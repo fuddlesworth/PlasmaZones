@@ -20,14 +20,14 @@
 // rewritten to `texture` (GLSL 4.50 core) inline.
 
 // metadata.json declaration order → customParams[0] sub-slots:
-// pz_segmentsParam (customParams[0].x).
+// p_segmentsParam (customParams[0].x).
 
-vec4 pzTransition(vec2 uv, float t) {
+vec4 pTransition(vec2 uv, float t) {
     // ── niri OPEN body (handles both legs via runtime iTime flip) ──
     float p = clamp(iTime, 0.0, 1.0);
     vec4 win = surfaceColor(uv);
 
-    int segments = int(pz_segmentsParam);
+    int segments = int(p_segmentsParam);
     float angle = atan(uv.y - 0.5, uv.x - 0.5);
     float radius = (cos(float(segments) * angle) + 4.0) / 4.0;
     float difference = length(uv - vec2(0.5, 0.5));

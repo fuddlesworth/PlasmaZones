@@ -69,7 +69,7 @@ private:
 private Q_SLOTS:
     void initTestCase()
     {
-        QVERIFY(m_scriptSetup.init(QStringLiteral(PZ_SOURCE_DIR)));
+        QVERIFY(m_scriptSetup.init(QStringLiteral(P_SOURCE_DIR)));
         // Verify all 25 algorithms are loaded
         for (const auto& id : allAlgoIds()) {
             QVERIFY2(m_scriptSetup.registry()->algorithm(id) != nullptr,

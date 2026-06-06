@@ -52,7 +52,7 @@ float getMask(vec2 texCoord, float progress) {
   return step(progress, brush);
 }
 
-vec4 pzTransition(vec2 uv, float t) {
+vec4 pTransition(vec2 uv, float t) {
 
   vec4 oColor = getInputColor(iTexCoord.st);
 

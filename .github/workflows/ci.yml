@@ -314,15 +314,15 @@ jobs:
           fi
 
   # ─── Luau static analysis: type-check + lint the bundled tiling algorithms
-  # and the pz standard library with luau-analyze. Catches parse and type
+  # and the pluau standard library with luau-analyze. Catches parse and type
   # errors (a broken bundled .luau would otherwise only surface at runtime as
   # a silently-skipped algorithm). The analyzer is built from the committed
   # vendored Luau (extern/luau-*.tar.gz) so the lint/type ruleset is pinned exactly to
   # the runtime we ship — analysis stays deterministic across CI runs and only
   # changes when we deliberately bump the vendored Luau.
   #
-  # The bundled algorithms consume `pz` as an injected global; data/algorithms/
-  # .luaurc declares it so the analyzer resolves it (pz.luau itself *defines*
+  # The bundled algorithms consume `pluau` as an injected global; data/algorithms/
+  # .luaurc declares it so the analyzer resolves it (pluau.luau itself *defines*
   # the global and is analyzed under the default config, which luau-analyze
   # picks per-file from the nearest .luaurc).
   luau-analyze:
@@ -358,14 +358,14 @@ jobs:
             -DLUAU_BUILD_WEB=OFF
           cmake --build luau-cli --target Luau.Analyze.CLI --parallel "$(nproc)"
 
-      - name: Analyze bundled algorithms + pz stdlib
+      - name: Analyze bundled algorithms + pluau stdlib
         run: |
           set -euo pipefail
           # Non-zero exit on any parse/type error fails the job. Lint findings
           # are advisory (lintErrors:false in .luaurc) but still printed.
           ./luau-cli/luau-analyze \
             data/algorithms/*.luau \
-            libs/phosphor-tiles/src/pz/pz.luau
+            libs/phosphor-tiles/src/pluau/pluau.luau
 
   # ═══════════════════════════════════════════════════════════════════════════
   # Nix Flake CI (x86_64 + aarch64)

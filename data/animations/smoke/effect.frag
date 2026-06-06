@@ -10,7 +10,7 @@
 // genuinely differ (close uses `dissolve = (1-dist)*1.2 + fluid*0.7;
 // remain = smoothstep(...,p*1.8); tail = smoothstep(1.0,0.8,p)` while
 // open uses `appear = (1-dist*1.2) + (1-fluid)*0.7; reveal =
-// smoothstep(...,(1-p)*1.8)`). This is a pzIn/pzOut pair: the harness
+// smoothstep(...,(1-p)*1.8)`). This is a pIn/pOut pair: the harness
 // feeds forward 0→1 `t` to both legs (so the niri `p` is just `t` in each
 // branch) and dispatches the matching body by leg direction
 // (`windowFadingIn`).
@@ -25,9 +25,9 @@
 // and main(). noise.glsl is pack-specific, so it stays here.
 #include <noise.glsl>
 
-// pz_smokeNoiseScale / pz_smokeSwirlSpeed / pz_smokeVerticalSquish /
-// pz_smokeDistortion (customParams[0].xyzw) are generated from metadata.json.
-// Both legs share the same params: `pz_smokeDistortion` is the close-leg
+// p_smokeNoiseScale / p_smokeSwirlSpeed / p_smokeVerticalSquish /
+// p_smokeDistortion (customParams[0].xyzw) are generated from metadata.json.
+// Both legs share the same params: `p_smokeDistortion` is the close-leg
 // coefficient (default 0.4) and the open leg uses `* 0.875` to preserve the
 // niri 0.4-vs-0.35 ratio so defaults reproduce the original visual exactly.
 
@@ -65,20 +65,20 @@ vec4 smokeBody(vec2 uv, float t, bool windowFadingIn) {
         float p = t;
         float seed = surfaceSeed() * 100.0;
 
-        float swirlT = p * pz_smokeSwirlSpeed + seed;
+        float swirlT = p * p_smokeSwirlSpeed + seed;
 
-        // `pz_smokeNoiseScale` means "fbm cycles across the screen":
+        // `p_smokeNoiseScale` means "fbm cycles across the screen":
         // multiplying by iAnchorSize/iSurfaceScreenPos.zw scales the
         // cycle count to the fraction of the screen this surface
         // covers, so smoke feature pixel size stays constant across
         // popup vs. maximized windows. Matches niri's reference on
         // full-screen (multiplier = 1.0 there).
         vec2 screenScale = max(iAnchorSize, vec2(1.0)) / max(iSurfaceScreenPos.zw, vec2(1.0));
-        vec2 perCardScale = pz_smokeNoiseScale * screenScale;
+        vec2 perCardScale = p_smokeNoiseScale * screenScale;
         float fluid = sm_warpedFbm(uv * perCardScale + seed, swirlT);
 
         vec2 center = uv - 0.5;
-        float dist = length(center * vec2(1.0, pz_smokeVerticalSquish));
+        float dist = length(center * vec2(1.0, p_smokeVerticalSquish));
 
         float dissolve = (1.0 - dist) * 1.2 + fluid * 0.7;
         float remain = smoothstep(dissolve + 0.5, dissolve - 0.5, p * 1.8);
@@ -90,7 +90,7 @@ vec4 smokeBody(vec2 uv, float t, bool windowFadingIn) {
         // pattern = 50% of card width regardless of pixels),
         // reintroducing the same Bug A the primary fbm fix above
         // resolved.
-        float distort_strength = p * p * pz_smokeDistortion;
+        float distort_strength = p * p * p_smokeDistortion;
         vec2 secondaryScale = 2.0 * screenScale;
         vec2 wq = vec2(sm_fbm(uv * secondaryScale + vec2(0.0, swirlT * 0.2)),
                        sm_fbm(uv * secondaryScale + vec2(5.2, swirlT * 0.2)));
@@ -108,21 +108,21 @@ vec4 smokeBody(vec2 uv, float t, bool windowFadingIn) {
         float p = t;
         float seed = surfaceSeed() * 100.0;
 
-        float swirlT = p * pz_smokeSwirlSpeed + seed;
+        float swirlT = p * p_smokeSwirlSpeed + seed;
 
         // See close-branch comment above on the screen-anchored scaling.
         vec2 screenScale = max(iAnchorSize, vec2(1.0)) / max(iSurfaceScreenPos.zw, vec2(1.0));
-        vec2 perCardScale = pz_smokeNoiseScale * screenScale;
+        vec2 perCardScale = p_smokeNoiseScale * screenScale;
         float fluid = sm_warpedFbm(uv * perCardScale + seed, swirlT);
 
         vec2 center = uv - 0.5;
-        float dist = length(center * vec2(1.0, pz_smokeVerticalSquish));
+        float dist = length(center * vec2(1.0, p_smokeVerticalSquish));
 
         float appear = (1.0 - dist * 1.2) + (1.0 - fluid) * 0.7;
         float reveal = smoothstep(appear + 0.5, appear - 0.5, (1.0 - p) * 1.8);
 
         // See close-branch comment above on the secondary-warp scaling.
-        float distort_strength = (1.0 - p) * (1.0 - p) * (pz_smokeDistortion * 0.875);
+        float distort_strength = (1.0 - p) * (1.0 - p) * (p_smokeDistortion * 0.875);
         vec2 secondaryScale = 2.0 * screenScale;
         vec2 wq = vec2(sm_fbm(uv * secondaryScale + vec2(0.0, swirlT * 0.2)),
                        sm_fbm(uv * secondaryScale + vec2(5.2, swirlT * 0.2)));
@@ -138,5 +138,5 @@ vec4 smokeBody(vec2 uv, float t, bool windowFadingIn) {
     return result;
 }
 
-vec4 pzIn(vec2 uv, float t)  { return smokeBody(uv, t, true);  }
-vec4 pzOut(vec2 uv, float t) { return smokeBody(uv, t, false); }
+vec4 pIn(vec2 uv, float t)  { return smokeBody(uv, t, true);  }
+vec4 pOut(vec2 uv, float t) { return smokeBody(uv, t, false); }

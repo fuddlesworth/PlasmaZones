@@ -1,9 +1,9 @@
 -- SPDX-FileCopyrightText: 2026 fuddlesworth
 -- SPDX-License-Identifier: GPL-3.0-or-later
 
-local pz = pz
+local pluau = pluau
 
-return pz.algorithm {
+return pluau.algorithm {
     metadata = {
         name = "Corner Master",
         id = "corner-master",
@@ -24,9 +24,9 @@ return pz.algorithm {
         if count <= 0 then return {} end
         local area = ctx.area
         local gap = ctx.innerGap
-        local splitRatio = pz.clampSplitRatio(ctx.splitRatio)
+        local splitRatio = pluau.clampSplitRatio(ctx.splitRatio)
 
         -- alternate distribution, bottom row = master width, right column = master height
-        return pz.lShapeLayout(area, count, gap, splitRatio, "alternate", "master", "master")
+        return pluau.lShapeLayout(area, count, gap, splitRatio, "alternate", "master", "master")
     end,
 }

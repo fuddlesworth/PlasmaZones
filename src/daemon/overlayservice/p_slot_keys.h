@@ -16,7 +16,7 @@
 
 #include <QString>
 
-namespace PlasmaZones::PzSlotKeys {
+namespace PlasmaZones::PSlotKeys {
 
 inline const QString& Osd()
 {
@@ -48,4 +48,4 @@ inline const QString& MainOverlay()
     return s;
 }
 
-} // namespace PlasmaZones::PzSlotKeys
+} // namespace PlasmaZones::PSlotKeys

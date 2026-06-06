@@ -117,7 +117,7 @@ vec2 getHexCenter(vec2 axial, float size)
     return vec2(x, y);
 }
 
-vec4 pzTransition(vec2 uv, float t)
+vec4 pTransition(vec2 uv, float t)
 {
     float progress = clamp(iTime, 0.0, 1.0);
 
@@ -146,8 +146,8 @@ vec4 pzTransition(vec2 uv, float t)
     // reference). Floor guards against the pre-first-frame
     // iSurfaceScreenPos = (0,0) state.
     float screenHeight = max(iSurfaceScreenPos.w, 1.0);
-    float unitSize = max(pz_hexSize, 0.04) * screenHeight / flooredAnchor.y;
-    float softEdgeWidth = max(pz_softEdge, 0.001);
+    float unitSize = max(p_hexSize, 0.04) * screenHeight / flooredAnchor.y;
+    float softEdgeWidth = max(p_softEdge, 0.001);
 
     // Snap the fragment to the centre of its enclosing hex cell, then
     // compute the centre's distance from screen centre. Every fragment

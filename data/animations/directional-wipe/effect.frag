@@ -20,18 +20,18 @@
 // The harness supplies #version, <animation_uniforms.glsl>, the in/out,
 // and main().
 
-// pz_dirX / pz_dirY / pz_wipeSmoothness (customParams[0].xyz) are generated
+// p_dirX / p_dirY / p_wipeSmoothness (customParams[0].xyz) are generated
 // from metadata.json — no hand-written slot #defines.
 
-// Symmetric: a single pzTransition. `t` is the leg's iTime, which the runtime
+// Symmetric: a single pTransition. `t` is the leg's iTime, which the runtime
 // flips on the close leg (1→0), so the niri OPEN body auto-mirrors on close
 // with no direction code.
-vec4 pzTransition(vec2 uv, float t) {
+vec4 pTransition(vec2 uv, float t) {
     // ── niri OPEN body (handles both legs via runtime iTime flip) ──
     float p = clamp(t, 0.0, 1.0);
     vec4 win = surfaceColor(uv);
 
-    vec2 dir = vec2(pz_dirX, pz_dirY);
+    vec2 dir = vec2(p_dirX, p_dirY);
     // Defend against (0,0) which would NaN through normalize().
     // magnitude < 1e-6 falls back to vertical default.
     if (length(dir) < 1e-6) {
@@ -42,7 +42,7 @@ vec4 pzTransition(vec2 uv, float t) {
     v /= abs(v.x) + abs(v.y);
     float d = v.x * center.x + v.y * center.y;
     float reveal = (1.0 - step(p, 0.0)) *
-        (1.0 - smoothstep(-pz_wipeSmoothness, 0.0, v.x * uv.x + v.y * uv.y - (d - 0.5 + p * (1.0 + pz_wipeSmoothness))));
+        (1.0 - smoothstep(-p_wipeSmoothness, 0.0, v.x * uv.x + v.y * uv.y - (d - 0.5 + p * (1.0 + p_wipeSmoothness))));
 
     return win * reveal;
 }

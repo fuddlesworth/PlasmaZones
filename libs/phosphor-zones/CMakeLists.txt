@@ -148,8 +148,8 @@ target_compile_features(PhosphorZones PUBLIC cxx_std_20)
 # and works correctly on every supported compiler. Scoped PRIVATE so
 # downstream consumers still see the diagnostic on their own code.
 include(CheckCXXCompilerFlag)
-check_cxx_compiler_flag("-Wno-sfinae-incomplete" PZ_HAS_NO_SFINAE_INCOMPLETE)
-if(PZ_HAS_NO_SFINAE_INCOMPLETE)
+check_cxx_compiler_flag("-Wno-sfinae-incomplete" P_HAS_NO_SFINAE_INCOMPLETE)
+if(P_HAS_NO_SFINAE_INCOMPLETE)
     target_compile_options(PhosphorZones PRIVATE -Wno-sfinae-incomplete)
 endif()
 

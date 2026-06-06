@@ -586,13 +586,13 @@ void Settings::setAudioSpectrumBarCount(int count)
 //
 // These are local to settings.cpp and #undef'd at the bottom of the file.
 
-#define PZ_STORE_GET(retType, fn, group, key, readType)                                                                \
+#define P_STORE_GET(retType, fn, group, key, readType)                                                                 \
     retType Settings::fn() const                                                                                       \
     {                                                                                                                  \
         return m_store->read<readType>(ConfigDefaults::group(), ConfigDefaults::key());                                \
     }
 
-#define PZ_STORE_SET_BOOL(fn, group, key, signal)                                                                      \
+#define P_STORE_SET_BOOL(fn, group, key, signal)                                                                       \
     void Settings::fn(bool value)                                                                                      \
     {                                                                                                                  \
         const bool before = m_store->read<bool>(ConfigDefaults::group(), ConfigDefaults::key());                       \
@@ -605,7 +605,7 @@ void Settings::setAudioSpectrumBarCount(int count)
         Q_EMIT settingsChanged();                                                                                      \
     }
 
-#define PZ_STORE_SET_INT(fn, group, key, signal)                                                                       \
+#define P_STORE_SET_INT(fn, group, key, signal)                                                                        \
     void Settings::fn(int value)                                                                                       \
     {                                                                                                                  \
         const int before = m_store->read<int>(ConfigDefaults::group(), ConfigDefaults::key());                         \
@@ -618,7 +618,7 @@ void Settings::setAudioSpectrumBarCount(int count)
         Q_EMIT settingsChanged();                                                                                      \
     }
 
-#define PZ_STORE_SET_DOUBLE(fn, group, key, signal)                                                                    \
+#define P_STORE_SET_DOUBLE(fn, group, key, signal)                                                                     \
     void Settings::fn(qreal value)                                                                                     \
     {                                                                                                                  \
         const qreal before = m_store->read<double>(ConfigDefaults::group(), ConfigDefaults::key());                    \
@@ -631,7 +631,7 @@ void Settings::setAudioSpectrumBarCount(int count)
         Q_EMIT settingsChanged();                                                                                      \
     }
 
-#define PZ_STORE_SET_COLOR(fn, group, key, signal)                                                                     \
+#define P_STORE_SET_COLOR(fn, group, key, signal)                                                                      \
     void Settings::fn(const QColor& value)                                                                             \
     {                                                                                                                  \
         const QColor before = m_store->read<QColor>(ConfigDefaults::group(), ConfigDefaults::key());                   \
@@ -644,7 +644,7 @@ void Settings::setAudioSpectrumBarCount(int count)
         Q_EMIT settingsChanged();                                                                                      \
     }
 
-#define PZ_STORE_SET_STRING(fn, group, key, signal)                                                                    \
+#define P_STORE_SET_STRING(fn, group, key, signal)                                                                     \
     void Settings::fn(const QString& value)                                                                            \
     {                                                                                                                  \
         const QString before = m_store->read<QString>(ConfigDefaults::group(), ConfigDefaults::key());                 \
@@ -659,7 +659,7 @@ void Settings::setAudioSpectrumBarCount(int count)
 
 // ── Appearance (PhosphorConfig::Store-backed) ───────────────────────────────
 // Colors group
-PZ_STORE_GET(bool, useSystemColors, snappingZonesColorsGroup, useSystemKey, bool)
+P_STORE_GET(bool, useSystemColors, snappingZonesColorsGroup, useSystemKey, bool)
 void Settings::setUseSystemColors(bool use)
 {
     if (useSystemColors() == use) {
@@ -672,44 +672,44 @@ void Settings::setUseSystemColors(bool use)
     Q_EMIT useSystemColorsChanged();
     Q_EMIT settingsChanged();
 }
-PZ_STORE_GET(QColor, highlightColor, snappingZonesColorsGroup, highlightKey, QColor)
-PZ_STORE_SET_COLOR(setHighlightColor, snappingZonesColorsGroup, highlightKey, highlightColorChanged)
-PZ_STORE_GET(QColor, inactiveColor, snappingZonesColorsGroup, inactiveKey, QColor)
-PZ_STORE_SET_COLOR(setInactiveColor, snappingZonesColorsGroup, inactiveKey, inactiveColorChanged)
-PZ_STORE_GET(QColor, borderColor, snappingZonesColorsGroup, borderKey, QColor)
-PZ_STORE_SET_COLOR(setBorderColor, snappingZonesColorsGroup, borderKey, borderColorChanged)
+P_STORE_GET(QColor, highlightColor, snappingZonesColorsGroup, highlightKey, QColor)
+P_STORE_SET_COLOR(setHighlightColor, snappingZonesColorsGroup, highlightKey, highlightColorChanged)
+P_STORE_GET(QColor, inactiveColor, snappingZonesColorsGroup, inactiveKey, QColor)
+P_STORE_SET_COLOR(setInactiveColor, snappingZonesColorsGroup, inactiveKey, inactiveColorChanged)
+P_STORE_GET(QColor, borderColor, snappingZonesColorsGroup, borderKey, QColor)
+P_STORE_SET_COLOR(setBorderColor, snappingZonesColorsGroup, borderKey, borderColorChanged)
 
 // Labels group
-PZ_STORE_GET(QColor, labelFontColor, snappingZonesLabelsGroup, fontColorKey, QColor)
-PZ_STORE_SET_COLOR(setLabelFontColor, snappingZonesLabelsGroup, fontColorKey, labelFontColorChanged)
-PZ_STORE_GET(QString, labelFontFamily, snappingZonesLabelsGroup, fontFamilyKey, QString)
-PZ_STORE_SET_STRING(setLabelFontFamily, snappingZonesLabelsGroup, fontFamilyKey, labelFontFamilyChanged)
-PZ_STORE_GET(qreal, labelFontSizeScale, snappingZonesLabelsGroup, fontSizeScaleKey, double)
-PZ_STORE_SET_DOUBLE(setLabelFontSizeScale, snappingZonesLabelsGroup, fontSizeScaleKey, labelFontSizeScaleChanged)
-PZ_STORE_GET(int, labelFontWeight, snappingZonesLabelsGroup, fontWeightKey, int)
-PZ_STORE_SET_INT(setLabelFontWeight, snappingZonesLabelsGroup, fontWeightKey, labelFontWeightChanged)
-PZ_STORE_GET(bool, labelFontItalic, snappingZonesLabelsGroup, fontItalicKey, bool)
-PZ_STORE_SET_BOOL(setLabelFontItalic, snappingZonesLabelsGroup, fontItalicKey, labelFontItalicChanged)
-PZ_STORE_GET(bool, labelFontUnderline, snappingZonesLabelsGroup, fontUnderlineKey, bool)
-PZ_STORE_SET_BOOL(setLabelFontUnderline, snappingZonesLabelsGroup, fontUnderlineKey, labelFontUnderlineChanged)
-PZ_STORE_GET(bool, labelFontStrikeout, snappingZonesLabelsGroup, fontStrikeoutKey, bool)
-PZ_STORE_SET_BOOL(setLabelFontStrikeout, snappingZonesLabelsGroup, fontStrikeoutKey, labelFontStrikeoutChanged)
+P_STORE_GET(QColor, labelFontColor, snappingZonesLabelsGroup, fontColorKey, QColor)
+P_STORE_SET_COLOR(setLabelFontColor, snappingZonesLabelsGroup, fontColorKey, labelFontColorChanged)
+P_STORE_GET(QString, labelFontFamily, snappingZonesLabelsGroup, fontFamilyKey, QString)
+P_STORE_SET_STRING(setLabelFontFamily, snappingZonesLabelsGroup, fontFamilyKey, labelFontFamilyChanged)
+P_STORE_GET(qreal, labelFontSizeScale, snappingZonesLabelsGroup, fontSizeScaleKey, double)
+P_STORE_SET_DOUBLE(setLabelFontSizeScale, snappingZonesLabelsGroup, fontSizeScaleKey, labelFontSizeScaleChanged)
+P_STORE_GET(int, labelFontWeight, snappingZonesLabelsGroup, fontWeightKey, int)
+P_STORE_SET_INT(setLabelFontWeight, snappingZonesLabelsGroup, fontWeightKey, labelFontWeightChanged)
+P_STORE_GET(bool, labelFontItalic, snappingZonesLabelsGroup, fontItalicKey, bool)
+P_STORE_SET_BOOL(setLabelFontItalic, snappingZonesLabelsGroup, fontItalicKey, labelFontItalicChanged)
+P_STORE_GET(bool, labelFontUnderline, snappingZonesLabelsGroup, fontUnderlineKey, bool)
+P_STORE_SET_BOOL(setLabelFontUnderline, snappingZonesLabelsGroup, fontUnderlineKey, labelFontUnderlineChanged)
+P_STORE_GET(bool, labelFontStrikeout, snappingZonesLabelsGroup, fontStrikeoutKey, bool)
+P_STORE_SET_BOOL(setLabelFontStrikeout, snappingZonesLabelsGroup, fontStrikeoutKey, labelFontStrikeoutChanged)
 
 // Opacity group
-PZ_STORE_GET(qreal, activeOpacity, snappingZonesOpacityGroup, activeKey, double)
-PZ_STORE_SET_DOUBLE(setActiveOpacity, snappingZonesOpacityGroup, activeKey, activeOpacityChanged)
-PZ_STORE_GET(qreal, inactiveOpacity, snappingZonesOpacityGroup, inactiveKey, double)
-PZ_STORE_SET_DOUBLE(setInactiveOpacity, snappingZonesOpacityGroup, inactiveKey, inactiveOpacityChanged)
+P_STORE_GET(qreal, activeOpacity, snappingZonesOpacityGroup, activeKey, double)
+P_STORE_SET_DOUBLE(setActiveOpacity, snappingZonesOpacityGroup, activeKey, activeOpacityChanged)
+P_STORE_GET(qreal, inactiveOpacity, snappingZonesOpacityGroup, inactiveKey, double)
+P_STORE_SET_DOUBLE(setInactiveOpacity, snappingZonesOpacityGroup, inactiveKey, inactiveOpacityChanged)
 
 // Border group
-PZ_STORE_GET(int, borderWidth, snappingZonesBorderGroup, widthKey, int)
-PZ_STORE_SET_INT(setBorderWidth, snappingZonesBorderGroup, widthKey, borderWidthChanged)
-PZ_STORE_GET(int, borderRadius, snappingZonesBorderGroup, radiusKey, int)
-PZ_STORE_SET_INT(setBorderRadius, snappingZonesBorderGroup, radiusKey, borderRadiusChanged)
+P_STORE_GET(int, borderWidth, snappingZonesBorderGroup, widthKey, int)
+P_STORE_SET_INT(setBorderWidth, snappingZonesBorderGroup, widthKey, borderWidthChanged)
+P_STORE_GET(int, borderRadius, snappingZonesBorderGroup, radiusKey, int)
+P_STORE_SET_INT(setBorderRadius, snappingZonesBorderGroup, radiusKey, borderRadiusChanged)
 
 // Effects group (blur lives here for historical reasons)
-PZ_STORE_GET(bool, enableBlur, snappingEffectsGroup, blurKey, bool)
-PZ_STORE_SET_BOOL(setEnableBlur, snappingEffectsGroup, blurKey, enableBlurChanged)
+P_STORE_GET(bool, enableBlur, snappingEffectsGroup, blurKey, bool)
+P_STORE_SET_BOOL(setEnableBlur, snappingEffectsGroup, blurKey, enableBlurChanged)
 
 // ── Ordering (PhosphorConfig::Store-backed) ─────────────────────────────────
 // On disk: comma-joined QString. In API: QStringList. The schema validator
@@ -792,8 +792,8 @@ void Settings::setTilingAlgorithmOrder(const QStringList& order)
 // `animationsEnabled` stays as a standalone bool — it's an orthogonal
 // on/off toggle rather than part of the Profile concept.
 
-PZ_STORE_GET(bool, animationsEnabled, animationsGroup, enabledKey, bool)
-PZ_STORE_SET_BOOL(setAnimationsEnabled, animationsGroup, enabledKey, animationsEnabledChanged)
+P_STORE_GET(bool, animationsEnabled, animationsGroup, enabledKey, bool)
+P_STORE_SET_BOOL(setAnimationsEnabled, animationsGroup, enabledKey, animationsEnabledChanged)
 
 // Process-wide fallback registry for standalone Settings instances
 // constructed without an injected CurveRegistry (tests, settings-app
@@ -1195,39 +1195,39 @@ void Settings::setShaderProfileTreeJson(const QString& json)
 // to a known backend, so a hand-edited "Rendering.Backend = foobar" reads
 // back as the default on next load.
 
-PZ_STORE_GET(QString, renderingBackend, renderingGroup, backendKey, QString)
-PZ_STORE_SET_STRING(setRenderingBackend, renderingGroup, backendKey, renderingBackendChanged)
+P_STORE_GET(QString, renderingBackend, renderingGroup, backendKey, QString)
+P_STORE_SET_STRING(setRenderingBackend, renderingGroup, backendKey, renderingBackendChanged)
 
 // ── Performance (PhosphorConfig::Store-backed) ──────────────────────────────
 
-PZ_STORE_GET(int, pollIntervalMs, performanceGroup, pollIntervalMsKey, int)
-PZ_STORE_SET_INT(setPollIntervalMs, performanceGroup, pollIntervalMsKey, pollIntervalMsChanged)
-PZ_STORE_GET(int, minimumZoneSizePx, performanceGroup, minimumZoneSizePxKey, int)
-PZ_STORE_SET_INT(setMinimumZoneSizePx, performanceGroup, minimumZoneSizePxKey, minimumZoneSizePxChanged)
-PZ_STORE_GET(int, minimumZoneDisplaySizePx, performanceGroup, minimumZoneDisplaySizePxKey, int)
-PZ_STORE_SET_INT(setMinimumZoneDisplaySizePx, performanceGroup, minimumZoneDisplaySizePxKey,
-                 minimumZoneDisplaySizePxChanged)
+P_STORE_GET(int, pollIntervalMs, performanceGroup, pollIntervalMsKey, int)
+P_STORE_SET_INT(setPollIntervalMs, performanceGroup, pollIntervalMsKey, pollIntervalMsChanged)
+P_STORE_GET(int, minimumZoneSizePx, performanceGroup, minimumZoneSizePxKey, int)
+P_STORE_SET_INT(setMinimumZoneSizePx, performanceGroup, minimumZoneSizePxKey, minimumZoneSizePxChanged)
+P_STORE_GET(int, minimumZoneDisplaySizePx, performanceGroup, minimumZoneDisplaySizePxKey, int)
+P_STORE_SET_INT(setMinimumZoneDisplaySizePx, performanceGroup, minimumZoneDisplaySizePxKey,
+                minimumZoneDisplaySizePxChanged)
 
 // ── PhosphorZones::Zone geometry (PhosphorConfig::Store-backed) ────────────────────────────
 // Inner/outer gaps (uniform + per-side) plus adjacency threshold. Schema
 // clampInt validators enforce the same ranges readValidatedInt used to.
 
-PZ_STORE_GET(int, zonePadding, snappingGapsGroup, innerKey, int)
-PZ_STORE_SET_INT(setZonePadding, snappingGapsGroup, innerKey, zonePaddingChanged)
-PZ_STORE_GET(int, outerGap, snappingGapsGroup, outerKey, int)
-PZ_STORE_SET_INT(setOuterGap, snappingGapsGroup, outerKey, outerGapChanged)
-PZ_STORE_GET(bool, usePerSideOuterGap, snappingGapsGroup, usePerSideKey, bool)
-PZ_STORE_SET_BOOL(setUsePerSideOuterGap, snappingGapsGroup, usePerSideKey, usePerSideOuterGapChanged)
-PZ_STORE_GET(int, outerGapTop, snappingGapsGroup, topKey, int)
-PZ_STORE_SET_INT(setOuterGapTop, snappingGapsGroup, topKey, outerGapTopChanged)
-PZ_STORE_GET(int, outerGapBottom, snappingGapsGroup, bottomKey, int)
-PZ_STORE_SET_INT(setOuterGapBottom, snappingGapsGroup, bottomKey, outerGapBottomChanged)
-PZ_STORE_GET(int, outerGapLeft, snappingGapsGroup, leftKey, int)
-PZ_STORE_SET_INT(setOuterGapLeft, snappingGapsGroup, leftKey, outerGapLeftChanged)
-PZ_STORE_GET(int, outerGapRight, snappingGapsGroup, rightKey, int)
-PZ_STORE_SET_INT(setOuterGapRight, snappingGapsGroup, rightKey, outerGapRightChanged)
-PZ_STORE_GET(int, adjacentThreshold, snappingGapsGroup, adjacentThresholdKey, int)
-PZ_STORE_SET_INT(setAdjacentThreshold, snappingGapsGroup, adjacentThresholdKey, adjacentThresholdChanged)
+P_STORE_GET(int, zonePadding, snappingGapsGroup, innerKey, int)
+P_STORE_SET_INT(setZonePadding, snappingGapsGroup, innerKey, zonePaddingChanged)
+P_STORE_GET(int, outerGap, snappingGapsGroup, outerKey, int)
+P_STORE_SET_INT(setOuterGap, snappingGapsGroup, outerKey, outerGapChanged)
+P_STORE_GET(bool, usePerSideOuterGap, snappingGapsGroup, usePerSideKey, bool)
+P_STORE_SET_BOOL(setUsePerSideOuterGap, snappingGapsGroup, usePerSideKey, usePerSideOuterGapChanged)
+P_STORE_GET(int, outerGapTop, snappingGapsGroup, topKey, int)
+P_STORE_SET_INT(setOuterGapTop, snappingGapsGroup, topKey, outerGapTopChanged)
+P_STORE_GET(int, outerGapBottom, snappingGapsGroup, bottomKey, int)
+P_STORE_SET_INT(setOuterGapBottom, snappingGapsGroup, bottomKey, outerGapBottomChanged)
+P_STORE_GET(int, outerGapLeft, snappingGapsGroup, leftKey, int)
+P_STORE_SET_INT(setOuterGapLeft, snappingGapsGroup, leftKey, outerGapLeftChanged)
+P_STORE_GET(int, outerGapRight, snappingGapsGroup, rightKey, int)
+P_STORE_SET_INT(setOuterGapRight, snappingGapsGroup, rightKey, outerGapRightChanged)
+P_STORE_GET(int, adjacentThreshold, snappingGapsGroup, adjacentThresholdKey, int)
+P_STORE_SET_INT(setAdjacentThreshold, snappingGapsGroup, adjacentThresholdKey, adjacentThresholdChanged)
 
 // ── Display (PhosphorConfig::Store-backed) ──────────────────────────────────
 // Display.* keys live in snappingBehaviorDisplayGroup; OSD + Effects keys
@@ -1235,9 +1235,9 @@ PZ_STORE_SET_INT(setAdjacentThreshold, snappingGapsGroup, adjacentThresholdKey, 
 // QStringList keys go over the wire as comma-joined strings; the getters
 // parse back via parseCommaList (defined above in the Ordering section).
 
-PZ_STORE_GET(bool, showZonesOnAllMonitors, snappingBehaviorDisplayGroup, showOnAllMonitorsKey, bool)
-PZ_STORE_SET_BOOL(setShowZonesOnAllMonitors, snappingBehaviorDisplayGroup, showOnAllMonitorsKey,
-                  showZonesOnAllMonitorsChanged)
+P_STORE_GET(bool, showZonesOnAllMonitors, snappingBehaviorDisplayGroup, showOnAllMonitorsKey, bool)
+P_STORE_SET_BOOL(setShowZonesOnAllMonitors, snappingBehaviorDisplayGroup, showOnAllMonitorsKey,
+                 showZonesOnAllMonitorsChanged)
 
 // ── Per-mode disable lists — rule-backed (Phase 3b) ─────────────────────────
 //
@@ -1595,16 +1595,16 @@ bool Settings::isActivityDisabled(PhosphorZones::AssignmentEntry::Mode mode, con
     return false;
 }
 
-PZ_STORE_GET(bool, showZoneNumbers, snappingEffectsGroup, showNumbersKey, bool)
-PZ_STORE_SET_BOOL(setShowZoneNumbers, snappingEffectsGroup, showNumbersKey, showZoneNumbersChanged)
-PZ_STORE_GET(bool, flashZonesOnSwitch, snappingEffectsGroup, flashOnSwitchKey, bool)
-PZ_STORE_SET_BOOL(setFlashZonesOnSwitch, snappingEffectsGroup, flashOnSwitchKey, flashZonesOnSwitchChanged)
-PZ_STORE_GET(bool, showOsdOnLayoutSwitch, snappingEffectsGroup, osdOnLayoutSwitchKey, bool)
-PZ_STORE_SET_BOOL(setShowOsdOnLayoutSwitch, snappingEffectsGroup, osdOnLayoutSwitchKey, showOsdOnLayoutSwitchChanged)
-PZ_STORE_GET(bool, showOsdOnDesktopSwitch, snappingEffectsGroup, osdOnDesktopSwitchKey, bool)
-PZ_STORE_SET_BOOL(setShowOsdOnDesktopSwitch, snappingEffectsGroup, osdOnDesktopSwitchKey, showOsdOnDesktopSwitchChanged)
-PZ_STORE_GET(bool, showNavigationOsd, snappingEffectsGroup, navigationOsdKey, bool)
-PZ_STORE_SET_BOOL(setShowNavigationOsd, snappingEffectsGroup, navigationOsdKey, showNavigationOsdChanged)
+P_STORE_GET(bool, showZoneNumbers, snappingEffectsGroup, showNumbersKey, bool)
+P_STORE_SET_BOOL(setShowZoneNumbers, snappingEffectsGroup, showNumbersKey, showZoneNumbersChanged)
+P_STORE_GET(bool, flashZonesOnSwitch, snappingEffectsGroup, flashOnSwitchKey, bool)
+P_STORE_SET_BOOL(setFlashZonesOnSwitch, snappingEffectsGroup, flashOnSwitchKey, flashZonesOnSwitchChanged)
+P_STORE_GET(bool, showOsdOnLayoutSwitch, snappingEffectsGroup, osdOnLayoutSwitchKey, bool)
+P_STORE_SET_BOOL(setShowOsdOnLayoutSwitch, snappingEffectsGroup, osdOnLayoutSwitchKey, showOsdOnLayoutSwitchChanged)
+P_STORE_GET(bool, showOsdOnDesktopSwitch, snappingEffectsGroup, osdOnDesktopSwitchKey, bool)
+P_STORE_SET_BOOL(setShowOsdOnDesktopSwitch, snappingEffectsGroup, osdOnDesktopSwitchKey, showOsdOnDesktopSwitchChanged)
+P_STORE_GET(bool, showNavigationOsd, snappingEffectsGroup, navigationOsdKey, bool)
+P_STORE_SET_BOOL(setShowNavigationOsd, snappingEffectsGroup, navigationOsdKey, showNavigationOsdChanged)
 
 // Enum setters: stored as int, exposed via the enum-typed getter/setter and
 // also via the int adapters QML uses (osdStyleInt / overlayDisplayModeInt).
@@ -1668,9 +1668,9 @@ void Settings::setOverlayDisplayModeInt(int mode)
 
 // filterLayoutsByAspectRatio sits in snappingBehaviorDisplayGroup with the
 // other display settings — NOTIFY signal is filterLayoutsByAspectRatioChanged.
-PZ_STORE_GET(bool, filterLayoutsByAspectRatio, snappingBehaviorDisplayGroup, filterByAspectRatioKey, bool)
-PZ_STORE_SET_BOOL(setFilterLayoutsByAspectRatio, snappingBehaviorDisplayGroup, filterByAspectRatioKey,
-                  filterLayoutsByAspectRatioChanged)
+P_STORE_GET(bool, filterLayoutsByAspectRatio, snappingBehaviorDisplayGroup, filterByAspectRatioKey, bool)
+P_STORE_SET_BOOL(setFilterLayoutsByAspectRatio, snappingBehaviorDisplayGroup, filterByAspectRatioKey,
+                 filterLayoutsByAspectRatioChanged)
 
 // ── Global exclusion knobs (PhosphorConfig::Store-backed) ──────────────────
 //
@@ -1691,12 +1691,12 @@ PZ_STORE_SET_BOOL(setFilterLayoutsByAspectRatio, snappingBehaviorDisplayGroup, f
 // for a label change. The accessor name `exclusionsGroup()` keeps the
 // disk shape, and the runtime UI label is independent.
 
-PZ_STORE_GET(bool, excludeTransientWindows, exclusionsGroup, transientWindowsKey, bool)
-PZ_STORE_SET_BOOL(setExcludeTransientWindows, exclusionsGroup, transientWindowsKey, excludeTransientWindowsChanged)
-PZ_STORE_GET(int, minimumWindowWidth, exclusionsGroup, minimumWindowWidthKey, int)
-PZ_STORE_SET_INT(setMinimumWindowWidth, exclusionsGroup, minimumWindowWidthKey, minimumWindowWidthChanged)
-PZ_STORE_GET(int, minimumWindowHeight, exclusionsGroup, minimumWindowHeightKey, int)
-PZ_STORE_SET_INT(setMinimumWindowHeight, exclusionsGroup, minimumWindowHeightKey, minimumWindowHeightChanged)
+P_STORE_GET(bool, excludeTransientWindows, exclusionsGroup, transientWindowsKey, bool)
+P_STORE_SET_BOOL(setExcludeTransientWindows, exclusionsGroup, transientWindowsKey, excludeTransientWindowsChanged)
+P_STORE_GET(int, minimumWindowWidth, exclusionsGroup, minimumWindowWidthKey, int)
+P_STORE_SET_INT(setMinimumWindowWidth, exclusionsGroup, minimumWindowWidthKey, minimumWindowWidthChanged)
+P_STORE_GET(int, minimumWindowHeight, exclusionsGroup, minimumWindowHeightKey, int)
+P_STORE_SET_INT(setMinimumWindowHeight, exclusionsGroup, minimumWindowHeightKey, minimumWindowHeightChanged)
 
 // ── Animation Window Filtering (PhosphorConfig::Store-backed) ──────────────
 //
@@ -1708,18 +1708,18 @@ PZ_STORE_SET_INT(setMinimumWindowHeight, exclusionsGroup, minimumWindowHeightKey
 // snapping it (or vice versa). Per-app / per-class animation exclusion
 // lists retired in v4 — they fold into ExcludeAnimations WindowRules.
 
-PZ_STORE_GET(bool, animationExcludeTransientWindows, animationsWindowFilteringGroup, transientWindowsKey, bool)
-PZ_STORE_SET_BOOL(setAnimationExcludeTransientWindows, animationsWindowFilteringGroup, transientWindowsKey,
-                  animationExcludeTransientWindowsChanged)
-PZ_STORE_GET(bool, animationExcludeNotificationsAndOsd, animationsWindowFilteringGroup, notificationsAndOsdKey, bool)
-PZ_STORE_SET_BOOL(setAnimationExcludeNotificationsAndOsd, animationsWindowFilteringGroup, notificationsAndOsdKey,
-                  animationExcludeNotificationsAndOsdChanged)
-PZ_STORE_GET(int, animationMinimumWindowWidth, animationsWindowFilteringGroup, minimumWindowWidthKey, int)
-PZ_STORE_SET_INT(setAnimationMinimumWindowWidth, animationsWindowFilteringGroup, minimumWindowWidthKey,
-                 animationMinimumWindowWidthChanged)
-PZ_STORE_GET(int, animationMinimumWindowHeight, animationsWindowFilteringGroup, minimumWindowHeightKey, int)
-PZ_STORE_SET_INT(setAnimationMinimumWindowHeight, animationsWindowFilteringGroup, minimumWindowHeightKey,
-                 animationMinimumWindowHeightChanged)
+P_STORE_GET(bool, animationExcludeTransientWindows, animationsWindowFilteringGroup, transientWindowsKey, bool)
+P_STORE_SET_BOOL(setAnimationExcludeTransientWindows, animationsWindowFilteringGroup, transientWindowsKey,
+                 animationExcludeTransientWindowsChanged)
+P_STORE_GET(bool, animationExcludeNotificationsAndOsd, animationsWindowFilteringGroup, notificationsAndOsdKey, bool)
+P_STORE_SET_BOOL(setAnimationExcludeNotificationsAndOsd, animationsWindowFilteringGroup, notificationsAndOsdKey,
+                 animationExcludeNotificationsAndOsdChanged)
+P_STORE_GET(int, animationMinimumWindowWidth, animationsWindowFilteringGroup, minimumWindowWidthKey, int)
+P_STORE_SET_INT(setAnimationMinimumWindowWidth, animationsWindowFilteringGroup, minimumWindowWidthKey,
+                animationMinimumWindowWidthChanged)
+P_STORE_GET(int, animationMinimumWindowHeight, animationsWindowFilteringGroup, minimumWindowHeightKey, int)
+P_STORE_SET_INT(setAnimationMinimumWindowHeight, animationsWindowFilteringGroup, minimumWindowHeightKey,
+                animationMinimumWindowHeightChanged)
 
 // animationExcludedApplications / animationExcludedWindowClasses (+ their
 // add*/remove* convenience methods) retired in v4 — the v4 migration drains
@@ -1731,11 +1731,11 @@ PZ_STORE_SET_INT(setAnimationMinimumWindowHeight, animationsWindowFilteringGroup
 // Three enum-ints exposed via both the typed setter and an Int adapter for
 // QML binding. Stored as int, the schema clamps the range.
 
-PZ_STORE_GET(bool, zoneSelectorEnabled, snappingZoneSelectorGroup, enabledKey, bool)
-PZ_STORE_SET_BOOL(setZoneSelectorEnabled, snappingZoneSelectorGroup, enabledKey, zoneSelectorEnabledChanged)
-PZ_STORE_GET(int, zoneSelectorTriggerDistance, snappingZoneSelectorGroup, triggerDistanceKey, int)
-PZ_STORE_SET_INT(setZoneSelectorTriggerDistance, snappingZoneSelectorGroup, triggerDistanceKey,
-                 zoneSelectorTriggerDistanceChanged)
+P_STORE_GET(bool, zoneSelectorEnabled, snappingZoneSelectorGroup, enabledKey, bool)
+P_STORE_SET_BOOL(setZoneSelectorEnabled, snappingZoneSelectorGroup, enabledKey, zoneSelectorEnabledChanged)
+P_STORE_GET(int, zoneSelectorTriggerDistance, snappingZoneSelectorGroup, triggerDistanceKey, int)
+P_STORE_SET_INT(setZoneSelectorTriggerDistance, snappingZoneSelectorGroup, triggerDistanceKey,
+                zoneSelectorTriggerDistanceChanged)
 
 ZoneSelectorPosition Settings::zoneSelectorPosition() const
 {
@@ -1792,17 +1792,17 @@ void Settings::setZoneSelectorLayoutModeInt(int value)
     }
 }
 
-PZ_STORE_GET(int, zoneSelectorPreviewWidth, snappingZoneSelectorGroup, previewWidthKey, int)
-PZ_STORE_SET_INT(setZoneSelectorPreviewWidth, snappingZoneSelectorGroup, previewWidthKey,
-                 zoneSelectorPreviewWidthChanged)
-PZ_STORE_GET(int, zoneSelectorPreviewHeight, snappingZoneSelectorGroup, previewHeightKey, int)
-PZ_STORE_SET_INT(setZoneSelectorPreviewHeight, snappingZoneSelectorGroup, previewHeightKey,
-                 zoneSelectorPreviewHeightChanged)
-PZ_STORE_GET(bool, zoneSelectorPreviewLockAspect, snappingZoneSelectorGroup, previewLockAspectKey, bool)
-PZ_STORE_SET_BOOL(setZoneSelectorPreviewLockAspect, snappingZoneSelectorGroup, previewLockAspectKey,
-                  zoneSelectorPreviewLockAspectChanged)
-PZ_STORE_GET(int, zoneSelectorGridColumns, snappingZoneSelectorGroup, gridColumnsKey, int)
-PZ_STORE_SET_INT(setZoneSelectorGridColumns, snappingZoneSelectorGroup, gridColumnsKey, zoneSelectorGridColumnsChanged)
+P_STORE_GET(int, zoneSelectorPreviewWidth, snappingZoneSelectorGroup, previewWidthKey, int)
+P_STORE_SET_INT(setZoneSelectorPreviewWidth, snappingZoneSelectorGroup, previewWidthKey,
+                zoneSelectorPreviewWidthChanged)
+P_STORE_GET(int, zoneSelectorPreviewHeight, snappingZoneSelectorGroup, previewHeightKey, int)
+P_STORE_SET_INT(setZoneSelectorPreviewHeight, snappingZoneSelectorGroup, previewHeightKey,
+                zoneSelectorPreviewHeightChanged)
+P_STORE_GET(bool, zoneSelectorPreviewLockAspect, snappingZoneSelectorGroup, previewLockAspectKey, bool)
+P_STORE_SET_BOOL(setZoneSelectorPreviewLockAspect, snappingZoneSelectorGroup, previewLockAspectKey,
+                 zoneSelectorPreviewLockAspectChanged)
+P_STORE_GET(int, zoneSelectorGridColumns, snappingZoneSelectorGroup, gridColumnsKey, int)
+P_STORE_SET_INT(setZoneSelectorGridColumns, snappingZoneSelectorGroup, gridColumnsKey, zoneSelectorGridColumnsChanged)
 
 ZoneSelectorSizeMode Settings::zoneSelectorSizeMode() const
 {
@@ -1831,8 +1831,8 @@ void Settings::setZoneSelectorSizeModeInt(int value)
     }
 }
 
-PZ_STORE_GET(int, zoneSelectorMaxRows, snappingZoneSelectorGroup, maxRowsKey, int)
-PZ_STORE_SET_INT(setZoneSelectorMaxRows, snappingZoneSelectorGroup, maxRowsKey, zoneSelectorMaxRowsChanged)
+P_STORE_GET(int, zoneSelectorMaxRows, snappingZoneSelectorGroup, maxRowsKey, int)
+P_STORE_SET_INT(setZoneSelectorMaxRows, snappingZoneSelectorGroup, maxRowsKey, zoneSelectorMaxRowsChanged)
 
 // ── Activation + Behavior (PhosphorConfig::Store-backed) ────────────────────
 
@@ -1852,10 +1852,10 @@ static_assert(Settings::MaxTriggersPerAction == ConfigDefaults::maxTriggersPerAc
               "Settings::MaxTriggersPerAction must equal ConfigDefaults::maxTriggersPerAction — "
               "single source of truth lives in ConfigDefaults.");
 
-PZ_STORE_GET(bool, snappingEnabled, snappingGroup, enabledKey, bool)
-PZ_STORE_SET_BOOL(setSnappingEnabled, snappingGroup, enabledKey, snappingEnabledChanged)
-PZ_STORE_GET(bool, toggleActivation, snappingBehaviorGroup, toggleActivationKey, bool)
-PZ_STORE_SET_BOOL(setToggleActivation, snappingBehaviorGroup, toggleActivationKey, toggleActivationChanged)
+P_STORE_GET(bool, snappingEnabled, snappingGroup, enabledKey, bool)
+P_STORE_SET_BOOL(setSnappingEnabled, snappingGroup, enabledKey, snappingEnabledChanged)
+P_STORE_GET(bool, toggleActivation, snappingBehaviorGroup, toggleActivationKey, bool)
+P_STORE_SET_BOOL(setToggleActivation, snappingBehaviorGroup, toggleActivationKey, toggleActivationChanged)
 
 // Shared helper for the three "plain" trigger-list setters (activation,
 // snap-assist, autotile-insert). Post-write compare — the schema's
@@ -1887,8 +1887,8 @@ void Settings::setDragActivationTriggers(const QVariantList& triggers)
                      &Settings::dragActivationTriggersChanged);
 }
 
-PZ_STORE_GET(bool, zoneSpanEnabled, snappingBehaviorZoneSpanGroup, enabledKey, bool)
-PZ_STORE_SET_BOOL(setZoneSpanEnabled, snappingBehaviorZoneSpanGroup, enabledKey, zoneSpanEnabledChanged)
+P_STORE_GET(bool, zoneSpanEnabled, snappingBehaviorZoneSpanGroup, enabledKey, bool)
+P_STORE_SET_BOOL(setZoneSpanEnabled, snappingBehaviorZoneSpanGroup, enabledKey, zoneSpanEnabledChanged)
 
 DragModifier Settings::zoneSpanModifier() const
 {
@@ -2027,16 +2027,16 @@ void Settings::setZoneSpanTriggers(const QVariantList& triggers)
 
 // Behavior: WindowHandling + SnapAssist.
 
-PZ_STORE_GET(bool, keepWindowsInZonesOnResolutionChange, snappingBehaviorWindowHandlingGroup, keepOnResolutionChangeKey,
-             bool)
-PZ_STORE_SET_BOOL(setKeepWindowsInZonesOnResolutionChange, snappingBehaviorWindowHandlingGroup,
-                  keepOnResolutionChangeKey, keepWindowsInZonesOnResolutionChangeChanged)
-PZ_STORE_GET(bool, moveNewWindowsToLastZone, snappingBehaviorWindowHandlingGroup, moveNewToLastZoneKey, bool)
-PZ_STORE_SET_BOOL(setMoveNewWindowsToLastZone, snappingBehaviorWindowHandlingGroup, moveNewToLastZoneKey,
-                  moveNewWindowsToLastZoneChanged)
-PZ_STORE_GET(bool, restoreOriginalSizeOnUnsnap, snappingBehaviorWindowHandlingGroup, restoreOnUnsnapKey, bool)
-PZ_STORE_SET_BOOL(setRestoreOriginalSizeOnUnsnap, snappingBehaviorWindowHandlingGroup, restoreOnUnsnapKey,
-                  restoreOriginalSizeOnUnsnapChanged)
+P_STORE_GET(bool, keepWindowsInZonesOnResolutionChange, snappingBehaviorWindowHandlingGroup, keepOnResolutionChangeKey,
+            bool)
+P_STORE_SET_BOOL(setKeepWindowsInZonesOnResolutionChange, snappingBehaviorWindowHandlingGroup,
+                 keepOnResolutionChangeKey, keepWindowsInZonesOnResolutionChangeChanged)
+P_STORE_GET(bool, moveNewWindowsToLastZone, snappingBehaviorWindowHandlingGroup, moveNewToLastZoneKey, bool)
+P_STORE_SET_BOOL(setMoveNewWindowsToLastZone, snappingBehaviorWindowHandlingGroup, moveNewToLastZoneKey,
+                 moveNewWindowsToLastZoneChanged)
+P_STORE_GET(bool, restoreOriginalSizeOnUnsnap, snappingBehaviorWindowHandlingGroup, restoreOnUnsnapKey, bool)
+P_STORE_SET_BOOL(setRestoreOriginalSizeOnUnsnap, snappingBehaviorWindowHandlingGroup, restoreOnUnsnapKey,
+                 restoreOriginalSizeOnUnsnapChanged)
 
 StickyWindowHandling Settings::stickyWindowHandling() const
 {
@@ -2069,12 +2069,12 @@ void Settings::setStickyWindowHandlingInt(int handling)
     }
 }
 
-PZ_STORE_GET(bool, restoreWindowsToZonesOnLogin, snappingBehaviorWindowHandlingGroup, restoreOnLoginKey, bool)
-PZ_STORE_SET_BOOL(setRestoreWindowsToZonesOnLogin, snappingBehaviorWindowHandlingGroup, restoreOnLoginKey,
-                  restoreWindowsToZonesOnLoginChanged)
-PZ_STORE_GET(bool, autoAssignAllLayouts, snappingBehaviorWindowHandlingGroup, autoAssignAllLayoutsKey, bool)
-PZ_STORE_SET_BOOL(setAutoAssignAllLayouts, snappingBehaviorWindowHandlingGroup, autoAssignAllLayoutsKey,
-                  autoAssignAllLayoutsChanged)
+P_STORE_GET(bool, restoreWindowsToZonesOnLogin, snappingBehaviorWindowHandlingGroup, restoreOnLoginKey, bool)
+P_STORE_SET_BOOL(setRestoreWindowsToZonesOnLogin, snappingBehaviorWindowHandlingGroup, restoreOnLoginKey,
+                 restoreWindowsToZonesOnLoginChanged)
+P_STORE_GET(bool, autoAssignAllLayouts, snappingBehaviorWindowHandlingGroup, autoAssignAllLayoutsKey, bool)
+P_STORE_SET_BOOL(setAutoAssignAllLayouts, snappingBehaviorWindowHandlingGroup, autoAssignAllLayoutsKey,
+                 autoAssignAllLayoutsChanged)
 
 QString Settings::defaultLayoutId() const
 {
@@ -2101,11 +2101,11 @@ void Settings::setDefaultLayoutId(const QString& layoutId)
     Q_EMIT settingsChanged();
 }
 
-PZ_STORE_GET(bool, snapAssistFeatureEnabled, snappingBehaviorSnapAssistGroup, featureEnabledKey, bool)
-PZ_STORE_SET_BOOL(setSnapAssistFeatureEnabled, snappingBehaviorSnapAssistGroup, featureEnabledKey,
-                  snapAssistFeatureEnabledChanged)
-PZ_STORE_GET(bool, snapAssistEnabled, snappingBehaviorSnapAssistGroup, enabledKey, bool)
-PZ_STORE_SET_BOOL(setSnapAssistEnabled, snappingBehaviorSnapAssistGroup, enabledKey, snapAssistEnabledChanged)
+P_STORE_GET(bool, snapAssistFeatureEnabled, snappingBehaviorSnapAssistGroup, featureEnabledKey, bool)
+P_STORE_SET_BOOL(setSnapAssistFeatureEnabled, snappingBehaviorSnapAssistGroup, featureEnabledKey,
+                 snapAssistFeatureEnabledChanged)
+P_STORE_GET(bool, snapAssistEnabled, snappingBehaviorSnapAssistGroup, enabledKey, bool)
+P_STORE_SET_BOOL(setSnapAssistEnabled, snappingBehaviorSnapAssistGroup, enabledKey, snapAssistEnabledChanged)
 
 QVariantList Settings::snapAssistTriggers() const
 {
@@ -2123,8 +2123,8 @@ void Settings::setSnapAssistTriggers(const QVariantList& triggers)
 // PhosphorTiles::AlgorithmRegistry for validation; per-algorithm settings round-trip as a
 // JSON string and sanitize via AutotileConfig::perAlgoFromVariantMap.
 
-PZ_STORE_GET(bool, autotileEnabled, tilingGroup, enabledKey, bool)
-PZ_STORE_SET_BOOL(setAutotileEnabled, tilingGroup, enabledKey, autotileEnabledChanged)
+P_STORE_GET(bool, autotileEnabled, tilingGroup, enabledKey, bool)
+P_STORE_SET_BOOL(setAutotileEnabled, tilingGroup, enabledKey, autotileEnabledChanged)
 
 QString Settings::defaultAutotileAlgorithm() const
 {
@@ -2147,14 +2147,14 @@ void Settings::setDefaultAutotileAlgorithm(const QString& algorithm)
     Q_EMIT settingsChanged();
 }
 
-PZ_STORE_GET(qreal, autotileSplitRatio, tilingAlgorithmGroup, splitRatioKey, double)
-PZ_STORE_SET_DOUBLE(setAutotileSplitRatio, tilingAlgorithmGroup, splitRatioKey, autotileSplitRatioChanged)
-PZ_STORE_GET(qreal, autotileSplitRatioStep, tilingAlgorithmGroup, splitRatioStepKey, double)
-PZ_STORE_SET_DOUBLE(setAutotileSplitRatioStep, tilingAlgorithmGroup, splitRatioStepKey, autotileSplitRatioStepChanged)
-PZ_STORE_GET(int, autotileMasterCount, tilingAlgorithmGroup, masterCountKey, int)
-PZ_STORE_SET_INT(setAutotileMasterCount, tilingAlgorithmGroup, masterCountKey, autotileMasterCountChanged)
-PZ_STORE_GET(int, autotileMaxWindows, tilingAlgorithmGroup, maxWindowsKey, int)
-PZ_STORE_SET_INT(setAutotileMaxWindows, tilingAlgorithmGroup, maxWindowsKey, autotileMaxWindowsChanged)
+P_STORE_GET(qreal, autotileSplitRatio, tilingAlgorithmGroup, splitRatioKey, double)
+P_STORE_SET_DOUBLE(setAutotileSplitRatio, tilingAlgorithmGroup, splitRatioKey, autotileSplitRatioChanged)
+P_STORE_GET(qreal, autotileSplitRatioStep, tilingAlgorithmGroup, splitRatioStepKey, double)
+P_STORE_SET_DOUBLE(setAutotileSplitRatioStep, tilingAlgorithmGroup, splitRatioStepKey, autotileSplitRatioStepChanged)
+P_STORE_GET(int, autotileMasterCount, tilingAlgorithmGroup, masterCountKey, int)
+P_STORE_SET_INT(setAutotileMasterCount, tilingAlgorithmGroup, masterCountKey, autotileMasterCountChanged)
+P_STORE_GET(int, autotileMaxWindows, tilingAlgorithmGroup, maxWindowsKey, int)
+P_STORE_SET_INT(setAutotileMaxWindows, tilingAlgorithmGroup, maxWindowsKey, autotileMaxWindowsChanged)
 
 QVariantMap Settings::autotilePerAlgorithmSettings() const
 {
@@ -2183,32 +2183,32 @@ void Settings::setAutotilePerAlgorithmSettings(const QVariantMap& value)
 }
 
 // Tiling.Gaps
-PZ_STORE_GET(int, autotileInnerGap, tilingGapsGroup, innerKey, int)
-PZ_STORE_SET_INT(setAutotileInnerGap, tilingGapsGroup, innerKey, autotileInnerGapChanged)
-PZ_STORE_GET(int, autotileOuterGap, tilingGapsGroup, outerKey, int)
-PZ_STORE_SET_INT(setAutotileOuterGap, tilingGapsGroup, outerKey, autotileOuterGapChanged)
-PZ_STORE_GET(bool, autotileUsePerSideOuterGap, tilingGapsGroup, usePerSideKey, bool)
-PZ_STORE_SET_BOOL(setAutotileUsePerSideOuterGap, tilingGapsGroup, usePerSideKey, autotileUsePerSideOuterGapChanged)
-PZ_STORE_GET(int, autotileOuterGapTop, tilingGapsGroup, topKey, int)
-PZ_STORE_SET_INT(setAutotileOuterGapTop, tilingGapsGroup, topKey, autotileOuterGapTopChanged)
-PZ_STORE_GET(int, autotileOuterGapBottom, tilingGapsGroup, bottomKey, int)
-PZ_STORE_SET_INT(setAutotileOuterGapBottom, tilingGapsGroup, bottomKey, autotileOuterGapBottomChanged)
-PZ_STORE_GET(int, autotileOuterGapLeft, tilingGapsGroup, leftKey, int)
-PZ_STORE_SET_INT(setAutotileOuterGapLeft, tilingGapsGroup, leftKey, autotileOuterGapLeftChanged)
-PZ_STORE_GET(int, autotileOuterGapRight, tilingGapsGroup, rightKey, int)
-PZ_STORE_SET_INT(setAutotileOuterGapRight, tilingGapsGroup, rightKey, autotileOuterGapRightChanged)
-PZ_STORE_GET(bool, autotileSmartGaps, tilingGapsGroup, smartGapsKey, bool)
-PZ_STORE_SET_BOOL(setAutotileSmartGaps, tilingGapsGroup, smartGapsKey, autotileSmartGapsChanged)
+P_STORE_GET(int, autotileInnerGap, tilingGapsGroup, innerKey, int)
+P_STORE_SET_INT(setAutotileInnerGap, tilingGapsGroup, innerKey, autotileInnerGapChanged)
+P_STORE_GET(int, autotileOuterGap, tilingGapsGroup, outerKey, int)
+P_STORE_SET_INT(setAutotileOuterGap, tilingGapsGroup, outerKey, autotileOuterGapChanged)
+P_STORE_GET(bool, autotileUsePerSideOuterGap, tilingGapsGroup, usePerSideKey, bool)
+P_STORE_SET_BOOL(setAutotileUsePerSideOuterGap, tilingGapsGroup, usePerSideKey, autotileUsePerSideOuterGapChanged)
+P_STORE_GET(int, autotileOuterGapTop, tilingGapsGroup, topKey, int)
+P_STORE_SET_INT(setAutotileOuterGapTop, tilingGapsGroup, topKey, autotileOuterGapTopChanged)
+P_STORE_GET(int, autotileOuterGapBottom, tilingGapsGroup, bottomKey, int)
+P_STORE_SET_INT(setAutotileOuterGapBottom, tilingGapsGroup, bottomKey, autotileOuterGapBottomChanged)
+P_STORE_GET(int, autotileOuterGapLeft, tilingGapsGroup, leftKey, int)
+P_STORE_SET_INT(setAutotileOuterGapLeft, tilingGapsGroup, leftKey, autotileOuterGapLeftChanged)
+P_STORE_GET(int, autotileOuterGapRight, tilingGapsGroup, rightKey, int)
+P_STORE_SET_INT(setAutotileOuterGapRight, tilingGapsGroup, rightKey, autotileOuterGapRightChanged)
+P_STORE_GET(bool, autotileSmartGaps, tilingGapsGroup, smartGapsKey, bool)
+P_STORE_SET_BOOL(setAutotileSmartGaps, tilingGapsGroup, smartGapsKey, autotileSmartGapsChanged)
 
 // Tiling.Behavior
-PZ_STORE_GET(bool, autotileFocusNewWindows, tilingBehaviorGroup, focusNewWindowsKey, bool)
-PZ_STORE_SET_BOOL(setAutotileFocusNewWindows, tilingBehaviorGroup, focusNewWindowsKey, autotileFocusNewWindowsChanged)
-PZ_STORE_GET(bool, autotileFocusFollowsMouse, tilingBehaviorGroup, focusFollowsMouseKey, bool)
-PZ_STORE_SET_BOOL(setAutotileFocusFollowsMouse, tilingBehaviorGroup, focusFollowsMouseKey,
-                  autotileFocusFollowsMouseChanged)
-PZ_STORE_GET(bool, autotileRespectMinimumSize, tilingBehaviorGroup, respectMinimumSizeKey, bool)
-PZ_STORE_SET_BOOL(setAutotileRespectMinimumSize, tilingBehaviorGroup, respectMinimumSizeKey,
-                  autotileRespectMinimumSizeChanged)
+P_STORE_GET(bool, autotileFocusNewWindows, tilingBehaviorGroup, focusNewWindowsKey, bool)
+P_STORE_SET_BOOL(setAutotileFocusNewWindows, tilingBehaviorGroup, focusNewWindowsKey, autotileFocusNewWindowsChanged)
+P_STORE_GET(bool, autotileFocusFollowsMouse, tilingBehaviorGroup, focusFollowsMouseKey, bool)
+P_STORE_SET_BOOL(setAutotileFocusFollowsMouse, tilingBehaviorGroup, focusFollowsMouseKey,
+                 autotileFocusFollowsMouseChanged)
+P_STORE_GET(bool, autotileRespectMinimumSize, tilingBehaviorGroup, respectMinimumSizeKey, bool)
+P_STORE_SET_BOOL(setAutotileRespectMinimumSize, tilingBehaviorGroup, respectMinimumSizeKey,
+                 autotileRespectMinimumSizeChanged)
 
 Settings::AutotileInsertPosition Settings::autotileInsertPosition() const
 {
@@ -2429,18 +2429,17 @@ void Settings::setAutotileDragInsertTriggers(const QVariantList& triggers)
                      &Settings::autotileDragInsertTriggersChanged);
 }
 
-PZ_STORE_GET(bool, autotileDragInsertToggle, tilingBehaviorGroup, toggleActivationKey, bool)
-PZ_STORE_SET_BOOL(setAutotileDragInsertToggle, tilingBehaviorGroup, toggleActivationKey,
-                  autotileDragInsertToggleChanged)
+P_STORE_GET(bool, autotileDragInsertToggle, tilingBehaviorGroup, toggleActivationKey, bool)
+P_STORE_SET_BOOL(setAutotileDragInsertToggle, tilingBehaviorGroup, toggleActivationKey, autotileDragInsertToggleChanged)
 
 // Tiling.Appearance
-PZ_STORE_GET(QColor, autotileBorderColor, tilingAppearanceColorsGroup, activeKey, QColor)
-PZ_STORE_SET_COLOR(setAutotileBorderColor, tilingAppearanceColorsGroup, activeKey, autotileBorderColorChanged)
-PZ_STORE_GET(QColor, autotileInactiveBorderColor, tilingAppearanceColorsGroup, inactiveKey, QColor)
-PZ_STORE_SET_COLOR(setAutotileInactiveBorderColor, tilingAppearanceColorsGroup, inactiveKey,
-                   autotileInactiveBorderColorChanged)
+P_STORE_GET(QColor, autotileBorderColor, tilingAppearanceColorsGroup, activeKey, QColor)
+P_STORE_SET_COLOR(setAutotileBorderColor, tilingAppearanceColorsGroup, activeKey, autotileBorderColorChanged)
+P_STORE_GET(QColor, autotileInactiveBorderColor, tilingAppearanceColorsGroup, inactiveKey, QColor)
+P_STORE_SET_COLOR(setAutotileInactiveBorderColor, tilingAppearanceColorsGroup, inactiveKey,
+                  autotileInactiveBorderColorChanged)
 
-PZ_STORE_GET(bool, autotileUseSystemBorderColors, tilingAppearanceColorsGroup, useSystemKey, bool)
+P_STORE_GET(bool, autotileUseSystemBorderColors, tilingAppearanceColorsGroup, useSystemKey, bool)
 void Settings::setAutotileUseSystemBorderColors(bool use)
 {
     if (autotileUseSystemBorderColors() == use) {
@@ -2454,25 +2453,25 @@ void Settings::setAutotileUseSystemBorderColors(bool use)
     Q_EMIT settingsChanged();
 }
 
-PZ_STORE_GET(bool, autotileHideTitleBars, tilingAppearanceDecorationsGroup, hideTitleBarsKey, bool)
-PZ_STORE_SET_BOOL(setAutotileHideTitleBars, tilingAppearanceDecorationsGroup, hideTitleBarsKey,
-                  autotileHideTitleBarsChanged)
-PZ_STORE_GET(bool, autotileShowBorder, tilingAppearanceBordersGroup, showBorderKey, bool)
-PZ_STORE_SET_BOOL(setAutotileShowBorder, tilingAppearanceBordersGroup, showBorderKey, autotileShowBorderChanged)
-PZ_STORE_GET(int, autotileBorderWidth, tilingAppearanceBordersGroup, widthKey, int)
-PZ_STORE_SET_INT(setAutotileBorderWidth, tilingAppearanceBordersGroup, widthKey, autotileBorderWidthChanged)
-PZ_STORE_GET(int, autotileBorderRadius, tilingAppearanceBordersGroup, radiusKey, int)
-PZ_STORE_SET_INT(setAutotileBorderRadius, tilingAppearanceBordersGroup, radiusKey, autotileBorderRadiusChanged)
+P_STORE_GET(bool, autotileHideTitleBars, tilingAppearanceDecorationsGroup, hideTitleBarsKey, bool)
+P_STORE_SET_BOOL(setAutotileHideTitleBars, tilingAppearanceDecorationsGroup, hideTitleBarsKey,
+                 autotileHideTitleBarsChanged)
+P_STORE_GET(bool, autotileShowBorder, tilingAppearanceBordersGroup, showBorderKey, bool)
+P_STORE_SET_BOOL(setAutotileShowBorder, tilingAppearanceBordersGroup, showBorderKey, autotileShowBorderChanged)
+P_STORE_GET(int, autotileBorderWidth, tilingAppearanceBordersGroup, widthKey, int)
+P_STORE_SET_INT(setAutotileBorderWidth, tilingAppearanceBordersGroup, widthKey, autotileBorderWidthChanged)
+P_STORE_GET(int, autotileBorderRadius, tilingAppearanceBordersGroup, radiusKey, int)
+P_STORE_SET_INT(setAutotileBorderRadius, tilingAppearanceBordersGroup, radiusKey, autotileBorderRadiusChanged)
 
 // Snapping.Appearance — the snapped window's border / title-bar (parallel to
 // Tiling.Appearance above; distinct from the Snapping.Zones.* drag overlay).
-PZ_STORE_GET(QColor, snapWindowBorderColor, snappingAppearanceColorsGroup, activeKey, QColor)
-PZ_STORE_SET_COLOR(setSnapWindowBorderColor, snappingAppearanceColorsGroup, activeKey, snapWindowBorderColorChanged)
-PZ_STORE_GET(QColor, snapWindowInactiveBorderColor, snappingAppearanceColorsGroup, inactiveKey, QColor)
-PZ_STORE_SET_COLOR(setSnapWindowInactiveBorderColor, snappingAppearanceColorsGroup, inactiveKey,
-                   snapWindowInactiveBorderColorChanged)
+P_STORE_GET(QColor, snapWindowBorderColor, snappingAppearanceColorsGroup, activeKey, QColor)
+P_STORE_SET_COLOR(setSnapWindowBorderColor, snappingAppearanceColorsGroup, activeKey, snapWindowBorderColorChanged)
+P_STORE_GET(QColor, snapWindowInactiveBorderColor, snappingAppearanceColorsGroup, inactiveKey, QColor)
+P_STORE_SET_COLOR(setSnapWindowInactiveBorderColor, snappingAppearanceColorsGroup, inactiveKey,
+                  snapWindowInactiveBorderColorChanged)
 
-PZ_STORE_GET(bool, snapWindowUseSystemBorderColors, snappingAppearanceColorsGroup, useSystemKey, bool)
+P_STORE_GET(bool, snapWindowUseSystemBorderColors, snappingAppearanceColorsGroup, useSystemKey, bool)
 void Settings::setSnapWindowUseSystemBorderColors(bool use)
 {
     if (snapWindowUseSystemBorderColors() == use) {
@@ -2486,15 +2485,15 @@ void Settings::setSnapWindowUseSystemBorderColors(bool use)
     Q_EMIT settingsChanged();
 }
 
-PZ_STORE_GET(bool, snapWindowHideTitleBars, snappingAppearanceDecorationsGroup, hideTitleBarsKey, bool)
-PZ_STORE_SET_BOOL(setSnapWindowHideTitleBars, snappingAppearanceDecorationsGroup, hideTitleBarsKey,
-                  snapWindowHideTitleBarsChanged)
-PZ_STORE_GET(bool, snapWindowShowBorder, snappingAppearanceBordersGroup, showBorderKey, bool)
-PZ_STORE_SET_BOOL(setSnapWindowShowBorder, snappingAppearanceBordersGroup, showBorderKey, snapWindowShowBorderChanged)
-PZ_STORE_GET(int, snapWindowBorderWidth, snappingAppearanceBordersGroup, widthKey, int)
-PZ_STORE_SET_INT(setSnapWindowBorderWidth, snappingAppearanceBordersGroup, widthKey, snapWindowBorderWidthChanged)
-PZ_STORE_GET(int, snapWindowBorderRadius, snappingAppearanceBordersGroup, radiusKey, int)
-PZ_STORE_SET_INT(setSnapWindowBorderRadius, snappingAppearanceBordersGroup, radiusKey, snapWindowBorderRadiusChanged)
+P_STORE_GET(bool, snapWindowHideTitleBars, snappingAppearanceDecorationsGroup, hideTitleBarsKey, bool)
+P_STORE_SET_BOOL(setSnapWindowHideTitleBars, snappingAppearanceDecorationsGroup, hideTitleBarsKey,
+                 snapWindowHideTitleBarsChanged)
+P_STORE_GET(bool, snapWindowShowBorder, snappingAppearanceBordersGroup, showBorderKey, bool)
+P_STORE_SET_BOOL(setSnapWindowShowBorder, snappingAppearanceBordersGroup, showBorderKey, snapWindowShowBorderChanged)
+P_STORE_GET(int, snapWindowBorderWidth, snappingAppearanceBordersGroup, widthKey, int)
+P_STORE_SET_INT(setSnapWindowBorderWidth, snappingAppearanceBordersGroup, widthKey, snapWindowBorderWidthChanged)
+P_STORE_GET(int, snapWindowBorderRadius, snappingAppearanceBordersGroup, radiusKey, int)
+P_STORE_SET_INT(setSnapWindowBorderRadius, snappingAppearanceBordersGroup, radiusKey, snapWindowBorderRadiusChanged)
 
 // ── reset / color helpers ────────────────────────────────────────────────────
 
@@ -2603,23 +2602,23 @@ void Settings::reset()
 
 // ── Shortcuts (PhosphorConfig::Store-backed) ────────────────────────────────
 // Every shortcut is a flat string; schema registers them without validators.
-// Change-detection goes through the PZ_STORE_SET_STRING macro.
+// Change-detection goes through the P_STORE_SET_STRING macro.
 
 // Global shortcuts — meta actions, zone navigation, snap-to-zone numbered,
 // layout rotation, virtual-screen swap/rotate.
-PZ_STORE_GET(QString, openEditorShortcut, shortcutsGlobalGroup, openEditorKey, QString)
-PZ_STORE_SET_STRING(setOpenEditorShortcut, shortcutsGlobalGroup, openEditorKey, openEditorShortcutChanged)
-PZ_STORE_GET(QString, openSettingsShortcut, shortcutsGlobalGroup, openSettingsKey, QString)
-PZ_STORE_SET_STRING(setOpenSettingsShortcut, shortcutsGlobalGroup, openSettingsKey, openSettingsShortcutChanged)
-PZ_STORE_GET(QString, previousLayoutShortcut, shortcutsGlobalGroup, previousLayoutKey, QString)
-PZ_STORE_SET_STRING(setPreviousLayoutShortcut, shortcutsGlobalGroup, previousLayoutKey, previousLayoutShortcutChanged)
-PZ_STORE_GET(QString, nextLayoutShortcut, shortcutsGlobalGroup, nextLayoutKey, QString)
-PZ_STORE_SET_STRING(setNextLayoutShortcut, shortcutsGlobalGroup, nextLayoutKey, nextLayoutShortcutChanged)
+P_STORE_GET(QString, openEditorShortcut, shortcutsGlobalGroup, openEditorKey, QString)
+P_STORE_SET_STRING(setOpenEditorShortcut, shortcutsGlobalGroup, openEditorKey, openEditorShortcutChanged)
+P_STORE_GET(QString, openSettingsShortcut, shortcutsGlobalGroup, openSettingsKey, QString)
+P_STORE_SET_STRING(setOpenSettingsShortcut, shortcutsGlobalGroup, openSettingsKey, openSettingsShortcutChanged)
+P_STORE_GET(QString, previousLayoutShortcut, shortcutsGlobalGroup, previousLayoutKey, QString)
+P_STORE_SET_STRING(setPreviousLayoutShortcut, shortcutsGlobalGroup, previousLayoutKey, previousLayoutShortcutChanged)
+P_STORE_GET(QString, nextLayoutShortcut, shortcutsGlobalGroup, nextLayoutKey, QString)
+P_STORE_SET_STRING(setNextLayoutShortcut, shortcutsGlobalGroup, nextLayoutKey, nextLayoutShortcutChanged)
 
 // quickLayoutN and snapToZoneN arrays — dispatch to per-index key.
 // Each wrapper reads/writes the same store using ConfigDefaults::quickLayoutKey(n).
 
-#define PZ_QUICK_LAYOUT(N)                                                                                             \
+#define P_QUICK_LAYOUT(N)                                                                                              \
     QString Settings::quickLayout##N##Shortcut() const                                                                 \
     {                                                                                                                  \
         return m_store->read<QString>(ConfigDefaults::shortcutsGlobalGroup(), ConfigDefaults::quickLayoutKey(N));      \
@@ -2629,16 +2628,16 @@ PZ_STORE_SET_STRING(setNextLayoutShortcut, shortcutsGlobalGroup, nextLayoutKey, 
         setQuickLayoutShortcut(N - 1, shortcut);                                                                       \
     }
 
-PZ_QUICK_LAYOUT(1)
-PZ_QUICK_LAYOUT(2)
-PZ_QUICK_LAYOUT(3)
-PZ_QUICK_LAYOUT(4)
-PZ_QUICK_LAYOUT(5)
-PZ_QUICK_LAYOUT(6)
-PZ_QUICK_LAYOUT(7)
-PZ_QUICK_LAYOUT(8)
-PZ_QUICK_LAYOUT(9)
-#undef PZ_QUICK_LAYOUT
+P_QUICK_LAYOUT(1)
+P_QUICK_LAYOUT(2)
+P_QUICK_LAYOUT(3)
+P_QUICK_LAYOUT(4)
+P_QUICK_LAYOUT(5)
+P_QUICK_LAYOUT(6)
+P_QUICK_LAYOUT(7)
+P_QUICK_LAYOUT(8)
+P_QUICK_LAYOUT(9)
+#undef P_QUICK_LAYOUT
 
 QString Settings::quickLayoutShortcut(int index) const
 {
@@ -2671,44 +2670,41 @@ void Settings::setQuickLayoutShortcut(int index, const QString& shortcut)
 }
 
 // Navigation shortcuts.
-PZ_STORE_GET(QString, moveWindowLeftShortcut, shortcutsGlobalGroup, moveWindowLeftKey, QString)
-PZ_STORE_SET_STRING(setMoveWindowLeftShortcut, shortcutsGlobalGroup, moveWindowLeftKey, moveWindowLeftShortcutChanged)
-PZ_STORE_GET(QString, moveWindowRightShortcut, shortcutsGlobalGroup, moveWindowRightKey, QString)
-PZ_STORE_SET_STRING(setMoveWindowRightShortcut, shortcutsGlobalGroup, moveWindowRightKey,
-                    moveWindowRightShortcutChanged)
-PZ_STORE_GET(QString, moveWindowUpShortcut, shortcutsGlobalGroup, moveWindowUpKey, QString)
-PZ_STORE_SET_STRING(setMoveWindowUpShortcut, shortcutsGlobalGroup, moveWindowUpKey, moveWindowUpShortcutChanged)
-PZ_STORE_GET(QString, moveWindowDownShortcut, shortcutsGlobalGroup, moveWindowDownKey, QString)
-PZ_STORE_SET_STRING(setMoveWindowDownShortcut, shortcutsGlobalGroup, moveWindowDownKey, moveWindowDownShortcutChanged)
-PZ_STORE_GET(QString, focusZoneLeftShortcut, shortcutsGlobalGroup, focusZoneLeftKey, QString)
-PZ_STORE_SET_STRING(setFocusZoneLeftShortcut, shortcutsGlobalGroup, focusZoneLeftKey, focusZoneLeftShortcutChanged)
-PZ_STORE_GET(QString, focusZoneRightShortcut, shortcutsGlobalGroup, focusZoneRightKey, QString)
-PZ_STORE_SET_STRING(setFocusZoneRightShortcut, shortcutsGlobalGroup, focusZoneRightKey, focusZoneRightShortcutChanged)
-PZ_STORE_GET(QString, focusZoneUpShortcut, shortcutsGlobalGroup, focusZoneUpKey, QString)
-PZ_STORE_SET_STRING(setFocusZoneUpShortcut, shortcutsGlobalGroup, focusZoneUpKey, focusZoneUpShortcutChanged)
-PZ_STORE_GET(QString, focusZoneDownShortcut, shortcutsGlobalGroup, focusZoneDownKey, QString)
-PZ_STORE_SET_STRING(setFocusZoneDownShortcut, shortcutsGlobalGroup, focusZoneDownKey, focusZoneDownShortcutChanged)
-PZ_STORE_GET(QString, pushToEmptyZoneShortcut, shortcutsGlobalGroup, pushToEmptyZoneKey, QString)
-PZ_STORE_SET_STRING(setPushToEmptyZoneShortcut, shortcutsGlobalGroup, pushToEmptyZoneKey,
-                    pushToEmptyZoneShortcutChanged)
-PZ_STORE_GET(QString, restoreWindowSizeShortcut, shortcutsGlobalGroup, restoreWindowSizeKey, QString)
-PZ_STORE_SET_STRING(setRestoreWindowSizeShortcut, shortcutsGlobalGroup, restoreWindowSizeKey,
-                    restoreWindowSizeShortcutChanged)
-PZ_STORE_GET(QString, toggleWindowFloatShortcut, shortcutsGlobalGroup, toggleWindowFloatKey, QString)
-PZ_STORE_SET_STRING(setToggleWindowFloatShortcut, shortcutsGlobalGroup, toggleWindowFloatKey,
-                    toggleWindowFloatShortcutChanged)
-PZ_STORE_GET(QString, swapWindowLeftShortcut, shortcutsGlobalGroup, swapWindowLeftKey, QString)
-PZ_STORE_SET_STRING(setSwapWindowLeftShortcut, shortcutsGlobalGroup, swapWindowLeftKey, swapWindowLeftShortcutChanged)
-PZ_STORE_GET(QString, swapWindowRightShortcut, shortcutsGlobalGroup, swapWindowRightKey, QString)
-PZ_STORE_SET_STRING(setSwapWindowRightShortcut, shortcutsGlobalGroup, swapWindowRightKey,
-                    swapWindowRightShortcutChanged)
-PZ_STORE_GET(QString, swapWindowUpShortcut, shortcutsGlobalGroup, swapWindowUpKey, QString)
-PZ_STORE_SET_STRING(setSwapWindowUpShortcut, shortcutsGlobalGroup, swapWindowUpKey, swapWindowUpShortcutChanged)
-PZ_STORE_GET(QString, swapWindowDownShortcut, shortcutsGlobalGroup, swapWindowDownKey, QString)
-PZ_STORE_SET_STRING(setSwapWindowDownShortcut, shortcutsGlobalGroup, swapWindowDownKey, swapWindowDownShortcutChanged)
+P_STORE_GET(QString, moveWindowLeftShortcut, shortcutsGlobalGroup, moveWindowLeftKey, QString)
+P_STORE_SET_STRING(setMoveWindowLeftShortcut, shortcutsGlobalGroup, moveWindowLeftKey, moveWindowLeftShortcutChanged)
+P_STORE_GET(QString, moveWindowRightShortcut, shortcutsGlobalGroup, moveWindowRightKey, QString)
+P_STORE_SET_STRING(setMoveWindowRightShortcut, shortcutsGlobalGroup, moveWindowRightKey, moveWindowRightShortcutChanged)
+P_STORE_GET(QString, moveWindowUpShortcut, shortcutsGlobalGroup, moveWindowUpKey, QString)
+P_STORE_SET_STRING(setMoveWindowUpShortcut, shortcutsGlobalGroup, moveWindowUpKey, moveWindowUpShortcutChanged)
+P_STORE_GET(QString, moveWindowDownShortcut, shortcutsGlobalGroup, moveWindowDownKey, QString)
+P_STORE_SET_STRING(setMoveWindowDownShortcut, shortcutsGlobalGroup, moveWindowDownKey, moveWindowDownShortcutChanged)
+P_STORE_GET(QString, focusZoneLeftShortcut, shortcutsGlobalGroup, focusZoneLeftKey, QString)
+P_STORE_SET_STRING(setFocusZoneLeftShortcut, shortcutsGlobalGroup, focusZoneLeftKey, focusZoneLeftShortcutChanged)
+P_STORE_GET(QString, focusZoneRightShortcut, shortcutsGlobalGroup, focusZoneRightKey, QString)
+P_STORE_SET_STRING(setFocusZoneRightShortcut, shortcutsGlobalGroup, focusZoneRightKey, focusZoneRightShortcutChanged)
+P_STORE_GET(QString, focusZoneUpShortcut, shortcutsGlobalGroup, focusZoneUpKey, QString)
+P_STORE_SET_STRING(setFocusZoneUpShortcut, shortcutsGlobalGroup, focusZoneUpKey, focusZoneUpShortcutChanged)
+P_STORE_GET(QString, focusZoneDownShortcut, shortcutsGlobalGroup, focusZoneDownKey, QString)
+P_STORE_SET_STRING(setFocusZoneDownShortcut, shortcutsGlobalGroup, focusZoneDownKey, focusZoneDownShortcutChanged)
+P_STORE_GET(QString, pushToEmptyZoneShortcut, shortcutsGlobalGroup, pushToEmptyZoneKey, QString)
+P_STORE_SET_STRING(setPushToEmptyZoneShortcut, shortcutsGlobalGroup, pushToEmptyZoneKey, pushToEmptyZoneShortcutChanged)
+P_STORE_GET(QString, restoreWindowSizeShortcut, shortcutsGlobalGroup, restoreWindowSizeKey, QString)
+P_STORE_SET_STRING(setRestoreWindowSizeShortcut, shortcutsGlobalGroup, restoreWindowSizeKey,
+                   restoreWindowSizeShortcutChanged)
+P_STORE_GET(QString, toggleWindowFloatShortcut, shortcutsGlobalGroup, toggleWindowFloatKey, QString)
+P_STORE_SET_STRING(setToggleWindowFloatShortcut, shortcutsGlobalGroup, toggleWindowFloatKey,
+                   toggleWindowFloatShortcutChanged)
+P_STORE_GET(QString, swapWindowLeftShortcut, shortcutsGlobalGroup, swapWindowLeftKey, QString)
+P_STORE_SET_STRING(setSwapWindowLeftShortcut, shortcutsGlobalGroup, swapWindowLeftKey, swapWindowLeftShortcutChanged)
+P_STORE_GET(QString, swapWindowRightShortcut, shortcutsGlobalGroup, swapWindowRightKey, QString)
+P_STORE_SET_STRING(setSwapWindowRightShortcut, shortcutsGlobalGroup, swapWindowRightKey, swapWindowRightShortcutChanged)
+P_STORE_GET(QString, swapWindowUpShortcut, shortcutsGlobalGroup, swapWindowUpKey, QString)
+P_STORE_SET_STRING(setSwapWindowUpShortcut, shortcutsGlobalGroup, swapWindowUpKey, swapWindowUpShortcutChanged)
+P_STORE_GET(QString, swapWindowDownShortcut, shortcutsGlobalGroup, swapWindowDownKey, QString)
+P_STORE_SET_STRING(setSwapWindowDownShortcut, shortcutsGlobalGroup, swapWindowDownKey, swapWindowDownShortcutChanged)
 
 // snapToZone1..9 — same dispatch pattern as quickLayout.
-#define PZ_SNAP_TO_ZONE(N)                                                                                             \
+#define P_SNAP_TO_ZONE(N)                                                                                              \
     QString Settings::snapToZone##N##Shortcut() const                                                                  \
     {                                                                                                                  \
         return m_store->read<QString>(ConfigDefaults::shortcutsGlobalGroup(), ConfigDefaults::snapToZoneKey(N));       \
@@ -2718,16 +2714,16 @@ PZ_STORE_SET_STRING(setSwapWindowDownShortcut, shortcutsGlobalGroup, swapWindowD
         setSnapToZoneShortcut(N - 1, shortcut);                                                                        \
     }
 
-PZ_SNAP_TO_ZONE(1)
-PZ_SNAP_TO_ZONE(2)
-PZ_SNAP_TO_ZONE(3)
-PZ_SNAP_TO_ZONE(4)
-PZ_SNAP_TO_ZONE(5)
-PZ_SNAP_TO_ZONE(6)
-PZ_SNAP_TO_ZONE(7)
-PZ_SNAP_TO_ZONE(8)
-PZ_SNAP_TO_ZONE(9)
-#undef PZ_SNAP_TO_ZONE
+P_SNAP_TO_ZONE(1)
+P_SNAP_TO_ZONE(2)
+P_SNAP_TO_ZONE(3)
+P_SNAP_TO_ZONE(4)
+P_SNAP_TO_ZONE(5)
+P_SNAP_TO_ZONE(6)
+P_SNAP_TO_ZONE(7)
+P_SNAP_TO_ZONE(8)
+P_SNAP_TO_ZONE(9)
+#undef P_SNAP_TO_ZONE
 
 QString Settings::snapToZoneShortcut(int index) const
 {
@@ -2758,102 +2754,102 @@ void Settings::setSnapToZoneShortcut(int index, const QString& shortcut)
     Q_EMIT settingsChanged();
 }
 
-PZ_STORE_GET(QString, rotateWindowsClockwiseShortcut, shortcutsGlobalGroup, rotateWindowsClockwiseKey, QString)
-PZ_STORE_SET_STRING(setRotateWindowsClockwiseShortcut, shortcutsGlobalGroup, rotateWindowsClockwiseKey,
-                    rotateWindowsClockwiseShortcutChanged)
-PZ_STORE_GET(QString, rotateWindowsCounterclockwiseShortcut, shortcutsGlobalGroup, rotateWindowsCounterclockwiseKey,
-             QString)
-PZ_STORE_SET_STRING(setRotateWindowsCounterclockwiseShortcut, shortcutsGlobalGroup, rotateWindowsCounterclockwiseKey,
-                    rotateWindowsCounterclockwiseShortcutChanged)
-PZ_STORE_GET(QString, cycleWindowForwardShortcut, shortcutsGlobalGroup, cycleWindowForwardKey, QString)
-PZ_STORE_SET_STRING(setCycleWindowForwardShortcut, shortcutsGlobalGroup, cycleWindowForwardKey,
-                    cycleWindowForwardShortcutChanged)
-PZ_STORE_GET(QString, cycleWindowBackwardShortcut, shortcutsGlobalGroup, cycleWindowBackwardKey, QString)
-PZ_STORE_SET_STRING(setCycleWindowBackwardShortcut, shortcutsGlobalGroup, cycleWindowBackwardKey,
-                    cycleWindowBackwardShortcutChanged)
-PZ_STORE_GET(QString, resnapToNewLayoutShortcut, shortcutsGlobalGroup, resnapToNewLayoutKey, QString)
-PZ_STORE_SET_STRING(setResnapToNewLayoutShortcut, shortcutsGlobalGroup, resnapToNewLayoutKey,
-                    resnapToNewLayoutShortcutChanged)
-PZ_STORE_GET(QString, snapAllWindowsShortcut, shortcutsGlobalGroup, snapAllWindowsKey, QString)
-PZ_STORE_SET_STRING(setSnapAllWindowsShortcut, shortcutsGlobalGroup, snapAllWindowsKey, snapAllWindowsShortcutChanged)
-PZ_STORE_GET(QString, layoutPickerShortcut, shortcutsGlobalGroup, layoutPickerKey, QString)
-PZ_STORE_SET_STRING(setLayoutPickerShortcut, shortcutsGlobalGroup, layoutPickerKey, layoutPickerShortcutChanged)
-PZ_STORE_GET(QString, toggleLayoutLockShortcut, shortcutsGlobalGroup, toggleLayoutLockKey, QString)
-PZ_STORE_SET_STRING(setToggleLayoutLockShortcut, shortcutsGlobalGroup, toggleLayoutLockKey,
-                    toggleLayoutLockShortcutChanged)
-PZ_STORE_GET(QString, swapVirtualScreenLeftShortcut, shortcutsGlobalGroup, swapVirtualScreenLeftKey, QString)
-PZ_STORE_SET_STRING(setSwapVirtualScreenLeftShortcut, shortcutsGlobalGroup, swapVirtualScreenLeftKey,
-                    swapVirtualScreenLeftShortcutChanged)
-PZ_STORE_GET(QString, swapVirtualScreenRightShortcut, shortcutsGlobalGroup, swapVirtualScreenRightKey, QString)
-PZ_STORE_SET_STRING(setSwapVirtualScreenRightShortcut, shortcutsGlobalGroup, swapVirtualScreenRightKey,
-                    swapVirtualScreenRightShortcutChanged)
-PZ_STORE_GET(QString, swapVirtualScreenUpShortcut, shortcutsGlobalGroup, swapVirtualScreenUpKey, QString)
-PZ_STORE_SET_STRING(setSwapVirtualScreenUpShortcut, shortcutsGlobalGroup, swapVirtualScreenUpKey,
-                    swapVirtualScreenUpShortcutChanged)
-PZ_STORE_GET(QString, swapVirtualScreenDownShortcut, shortcutsGlobalGroup, swapVirtualScreenDownKey, QString)
-PZ_STORE_SET_STRING(setSwapVirtualScreenDownShortcut, shortcutsGlobalGroup, swapVirtualScreenDownKey,
-                    swapVirtualScreenDownShortcutChanged)
-PZ_STORE_GET(QString, rotateVirtualScreensClockwiseShortcut, shortcutsGlobalGroup, rotateVirtualScreensClockwiseKey,
-             QString)
-PZ_STORE_SET_STRING(setRotateVirtualScreensClockwiseShortcut, shortcutsGlobalGroup, rotateVirtualScreensClockwiseKey,
-                    rotateVirtualScreensClockwiseShortcutChanged)
-PZ_STORE_GET(QString, rotateVirtualScreensCounterclockwiseShortcut, shortcutsGlobalGroup,
-             rotateVirtualScreensCounterclockwiseKey, QString)
-PZ_STORE_SET_STRING(setRotateVirtualScreensCounterclockwiseShortcut, shortcutsGlobalGroup,
-                    rotateVirtualScreensCounterclockwiseKey, rotateVirtualScreensCounterclockwiseShortcutChanged)
+P_STORE_GET(QString, rotateWindowsClockwiseShortcut, shortcutsGlobalGroup, rotateWindowsClockwiseKey, QString)
+P_STORE_SET_STRING(setRotateWindowsClockwiseShortcut, shortcutsGlobalGroup, rotateWindowsClockwiseKey,
+                   rotateWindowsClockwiseShortcutChanged)
+P_STORE_GET(QString, rotateWindowsCounterclockwiseShortcut, shortcutsGlobalGroup, rotateWindowsCounterclockwiseKey,
+            QString)
+P_STORE_SET_STRING(setRotateWindowsCounterclockwiseShortcut, shortcutsGlobalGroup, rotateWindowsCounterclockwiseKey,
+                   rotateWindowsCounterclockwiseShortcutChanged)
+P_STORE_GET(QString, cycleWindowForwardShortcut, shortcutsGlobalGroup, cycleWindowForwardKey, QString)
+P_STORE_SET_STRING(setCycleWindowForwardShortcut, shortcutsGlobalGroup, cycleWindowForwardKey,
+                   cycleWindowForwardShortcutChanged)
+P_STORE_GET(QString, cycleWindowBackwardShortcut, shortcutsGlobalGroup, cycleWindowBackwardKey, QString)
+P_STORE_SET_STRING(setCycleWindowBackwardShortcut, shortcutsGlobalGroup, cycleWindowBackwardKey,
+                   cycleWindowBackwardShortcutChanged)
+P_STORE_GET(QString, resnapToNewLayoutShortcut, shortcutsGlobalGroup, resnapToNewLayoutKey, QString)
+P_STORE_SET_STRING(setResnapToNewLayoutShortcut, shortcutsGlobalGroup, resnapToNewLayoutKey,
+                   resnapToNewLayoutShortcutChanged)
+P_STORE_GET(QString, snapAllWindowsShortcut, shortcutsGlobalGroup, snapAllWindowsKey, QString)
+P_STORE_SET_STRING(setSnapAllWindowsShortcut, shortcutsGlobalGroup, snapAllWindowsKey, snapAllWindowsShortcutChanged)
+P_STORE_GET(QString, layoutPickerShortcut, shortcutsGlobalGroup, layoutPickerKey, QString)
+P_STORE_SET_STRING(setLayoutPickerShortcut, shortcutsGlobalGroup, layoutPickerKey, layoutPickerShortcutChanged)
+P_STORE_GET(QString, toggleLayoutLockShortcut, shortcutsGlobalGroup, toggleLayoutLockKey, QString)
+P_STORE_SET_STRING(setToggleLayoutLockShortcut, shortcutsGlobalGroup, toggleLayoutLockKey,
+                   toggleLayoutLockShortcutChanged)
+P_STORE_GET(QString, swapVirtualScreenLeftShortcut, shortcutsGlobalGroup, swapVirtualScreenLeftKey, QString)
+P_STORE_SET_STRING(setSwapVirtualScreenLeftShortcut, shortcutsGlobalGroup, swapVirtualScreenLeftKey,
+                   swapVirtualScreenLeftShortcutChanged)
+P_STORE_GET(QString, swapVirtualScreenRightShortcut, shortcutsGlobalGroup, swapVirtualScreenRightKey, QString)
+P_STORE_SET_STRING(setSwapVirtualScreenRightShortcut, shortcutsGlobalGroup, swapVirtualScreenRightKey,
+                   swapVirtualScreenRightShortcutChanged)
+P_STORE_GET(QString, swapVirtualScreenUpShortcut, shortcutsGlobalGroup, swapVirtualScreenUpKey, QString)
+P_STORE_SET_STRING(setSwapVirtualScreenUpShortcut, shortcutsGlobalGroup, swapVirtualScreenUpKey,
+                   swapVirtualScreenUpShortcutChanged)
+P_STORE_GET(QString, swapVirtualScreenDownShortcut, shortcutsGlobalGroup, swapVirtualScreenDownKey, QString)
+P_STORE_SET_STRING(setSwapVirtualScreenDownShortcut, shortcutsGlobalGroup, swapVirtualScreenDownKey,
+                   swapVirtualScreenDownShortcutChanged)
+P_STORE_GET(QString, rotateVirtualScreensClockwiseShortcut, shortcutsGlobalGroup, rotateVirtualScreensClockwiseKey,
+            QString)
+P_STORE_SET_STRING(setRotateVirtualScreensClockwiseShortcut, shortcutsGlobalGroup, rotateVirtualScreensClockwiseKey,
+                   rotateVirtualScreensClockwiseShortcutChanged)
+P_STORE_GET(QString, rotateVirtualScreensCounterclockwiseShortcut, shortcutsGlobalGroup,
+            rotateVirtualScreensCounterclockwiseKey, QString)
+P_STORE_SET_STRING(setRotateVirtualScreensCounterclockwiseShortcut, shortcutsGlobalGroup,
+                   rotateVirtualScreensCounterclockwiseKey, rotateVirtualScreensCounterclockwiseShortcutChanged)
 
 // Tiling shortcuts.
-PZ_STORE_GET(QString, autotileToggleShortcut, shortcutsTilingGroup, toggleKey, QString)
-PZ_STORE_SET_STRING(setAutotileToggleShortcut, shortcutsTilingGroup, toggleKey, autotileToggleShortcutChanged)
-PZ_STORE_GET(QString, autotileFocusMasterShortcut, shortcutsTilingGroup, focusMasterKey, QString)
-PZ_STORE_SET_STRING(setAutotileFocusMasterShortcut, shortcutsTilingGroup, focusMasterKey,
-                    autotileFocusMasterShortcutChanged)
-PZ_STORE_GET(QString, autotileSwapMasterShortcut, shortcutsTilingGroup, swapMasterKey, QString)
-PZ_STORE_SET_STRING(setAutotileSwapMasterShortcut, shortcutsTilingGroup, swapMasterKey,
-                    autotileSwapMasterShortcutChanged)
-PZ_STORE_GET(QString, autotileIncMasterRatioShortcut, shortcutsTilingGroup, incMasterRatioKey, QString)
-PZ_STORE_SET_STRING(setAutotileIncMasterRatioShortcut, shortcutsTilingGroup, incMasterRatioKey,
-                    autotileIncMasterRatioShortcutChanged)
-PZ_STORE_GET(QString, autotileDecMasterRatioShortcut, shortcutsTilingGroup, decMasterRatioKey, QString)
-PZ_STORE_SET_STRING(setAutotileDecMasterRatioShortcut, shortcutsTilingGroup, decMasterRatioKey,
-                    autotileDecMasterRatioShortcutChanged)
-PZ_STORE_GET(QString, autotileIncMasterCountShortcut, shortcutsTilingGroup, incMasterCountKey, QString)
-PZ_STORE_SET_STRING(setAutotileIncMasterCountShortcut, shortcutsTilingGroup, incMasterCountKey,
-                    autotileIncMasterCountShortcutChanged)
-PZ_STORE_GET(QString, autotileDecMasterCountShortcut, shortcutsTilingGroup, decMasterCountKey, QString)
-PZ_STORE_SET_STRING(setAutotileDecMasterCountShortcut, shortcutsTilingGroup, decMasterCountKey,
-                    autotileDecMasterCountShortcutChanged)
-PZ_STORE_GET(QString, autotileRetileShortcut, shortcutsTilingGroup, retileKey, QString)
-PZ_STORE_SET_STRING(setAutotileRetileShortcut, shortcutsTilingGroup, retileKey, autotileRetileShortcutChanged)
+P_STORE_GET(QString, autotileToggleShortcut, shortcutsTilingGroup, toggleKey, QString)
+P_STORE_SET_STRING(setAutotileToggleShortcut, shortcutsTilingGroup, toggleKey, autotileToggleShortcutChanged)
+P_STORE_GET(QString, autotileFocusMasterShortcut, shortcutsTilingGroup, focusMasterKey, QString)
+P_STORE_SET_STRING(setAutotileFocusMasterShortcut, shortcutsTilingGroup, focusMasterKey,
+                   autotileFocusMasterShortcutChanged)
+P_STORE_GET(QString, autotileSwapMasterShortcut, shortcutsTilingGroup, swapMasterKey, QString)
+P_STORE_SET_STRING(setAutotileSwapMasterShortcut, shortcutsTilingGroup, swapMasterKey,
+                   autotileSwapMasterShortcutChanged)
+P_STORE_GET(QString, autotileIncMasterRatioShortcut, shortcutsTilingGroup, incMasterRatioKey, QString)
+P_STORE_SET_STRING(setAutotileIncMasterRatioShortcut, shortcutsTilingGroup, incMasterRatioKey,
+                   autotileIncMasterRatioShortcutChanged)
+P_STORE_GET(QString, autotileDecMasterRatioShortcut, shortcutsTilingGroup, decMasterRatioKey, QString)
+P_STORE_SET_STRING(setAutotileDecMasterRatioShortcut, shortcutsTilingGroup, decMasterRatioKey,
+                   autotileDecMasterRatioShortcutChanged)
+P_STORE_GET(QString, autotileIncMasterCountShortcut, shortcutsTilingGroup, incMasterCountKey, QString)
+P_STORE_SET_STRING(setAutotileIncMasterCountShortcut, shortcutsTilingGroup, incMasterCountKey,
+                   autotileIncMasterCountShortcutChanged)
+P_STORE_GET(QString, autotileDecMasterCountShortcut, shortcutsTilingGroup, decMasterCountKey, QString)
+P_STORE_SET_STRING(setAutotileDecMasterCountShortcut, shortcutsTilingGroup, decMasterCountKey,
+                   autotileDecMasterCountShortcutChanged)
+P_STORE_GET(QString, autotileRetileShortcut, shortcutsTilingGroup, retileKey, QString)
+P_STORE_SET_STRING(setAutotileRetileShortcut, shortcutsTilingGroup, retileKey, autotileRetileShortcutChanged)
 
 // Editor shortcuts.
-PZ_STORE_GET(QString, editorDuplicateShortcut, editorShortcutsGroup, duplicateKey, QString)
-PZ_STORE_SET_STRING(setEditorDuplicateShortcut, editorShortcutsGroup, duplicateKey, editorDuplicateShortcutChanged)
-PZ_STORE_GET(QString, editorSplitHorizontalShortcut, editorShortcutsGroup, splitHorizontalKey, QString)
-PZ_STORE_SET_STRING(setEditorSplitHorizontalShortcut, editorShortcutsGroup, splitHorizontalKey,
-                    editorSplitHorizontalShortcutChanged)
-PZ_STORE_GET(QString, editorSplitVerticalShortcut, editorShortcutsGroup, splitVerticalKey, QString)
-PZ_STORE_SET_STRING(setEditorSplitVerticalShortcut, editorShortcutsGroup, splitVerticalKey,
-                    editorSplitVerticalShortcutChanged)
-PZ_STORE_GET(QString, editorFillShortcut, editorShortcutsGroup, fillKey, QString)
-PZ_STORE_SET_STRING(setEditorFillShortcut, editorShortcutsGroup, fillKey, editorFillShortcutChanged)
+P_STORE_GET(QString, editorDuplicateShortcut, editorShortcutsGroup, duplicateKey, QString)
+P_STORE_SET_STRING(setEditorDuplicateShortcut, editorShortcutsGroup, duplicateKey, editorDuplicateShortcutChanged)
+P_STORE_GET(QString, editorSplitHorizontalShortcut, editorShortcutsGroup, splitHorizontalKey, QString)
+P_STORE_SET_STRING(setEditorSplitHorizontalShortcut, editorShortcutsGroup, splitHorizontalKey,
+                   editorSplitHorizontalShortcutChanged)
+P_STORE_GET(QString, editorSplitVerticalShortcut, editorShortcutsGroup, splitVerticalKey, QString)
+P_STORE_SET_STRING(setEditorSplitVerticalShortcut, editorShortcutsGroup, splitVerticalKey,
+                   editorSplitVerticalShortcutChanged)
+P_STORE_GET(QString, editorFillShortcut, editorShortcutsGroup, fillKey, QString)
+P_STORE_SET_STRING(setEditorFillShortcut, editorShortcutsGroup, fillKey, editorFillShortcutChanged)
 
 // Editor snapping + fill-on-drop toggles.
-PZ_STORE_GET(bool, editorGridSnappingEnabled, editorSnappingGroup, gridEnabledKey, bool)
-PZ_STORE_SET_BOOL(setEditorGridSnappingEnabled, editorSnappingGroup, gridEnabledKey, editorGridSnappingEnabledChanged)
-PZ_STORE_GET(bool, editorEdgeSnappingEnabled, editorSnappingGroup, edgeEnabledKey, bool)
-PZ_STORE_SET_BOOL(setEditorEdgeSnappingEnabled, editorSnappingGroup, edgeEnabledKey, editorEdgeSnappingEnabledChanged)
-PZ_STORE_GET(qreal, editorSnapIntervalX, editorSnappingGroup, intervalXKey, double)
-PZ_STORE_SET_DOUBLE(setEditorSnapIntervalX, editorSnappingGroup, intervalXKey, editorSnapIntervalXChanged)
-PZ_STORE_GET(qreal, editorSnapIntervalY, editorSnappingGroup, intervalYKey, double)
-PZ_STORE_SET_DOUBLE(setEditorSnapIntervalY, editorSnappingGroup, intervalYKey, editorSnapIntervalYChanged)
-PZ_STORE_GET(int, editorSnapOverrideModifier, editorSnappingGroup, overrideModifierKey, int)
-PZ_STORE_SET_INT(setEditorSnapOverrideModifier, editorSnappingGroup, overrideModifierKey,
-                 editorSnapOverrideModifierChanged)
-PZ_STORE_GET(bool, fillOnDropEnabled, editorFillOnDropGroup, enabledKey, bool)
-PZ_STORE_SET_BOOL(setFillOnDropEnabled, editorFillOnDropGroup, enabledKey, fillOnDropEnabledChanged)
-PZ_STORE_GET(int, fillOnDropModifier, editorFillOnDropGroup, modifierKey, int)
-PZ_STORE_SET_INT(setFillOnDropModifier, editorFillOnDropGroup, modifierKey, fillOnDropModifierChanged)
+P_STORE_GET(bool, editorGridSnappingEnabled, editorSnappingGroup, gridEnabledKey, bool)
+P_STORE_SET_BOOL(setEditorGridSnappingEnabled, editorSnappingGroup, gridEnabledKey, editorGridSnappingEnabledChanged)
+P_STORE_GET(bool, editorEdgeSnappingEnabled, editorSnappingGroup, edgeEnabledKey, bool)
+P_STORE_SET_BOOL(setEditorEdgeSnappingEnabled, editorSnappingGroup, edgeEnabledKey, editorEdgeSnappingEnabledChanged)
+P_STORE_GET(qreal, editorSnapIntervalX, editorSnappingGroup, intervalXKey, double)
+P_STORE_SET_DOUBLE(setEditorSnapIntervalX, editorSnappingGroup, intervalXKey, editorSnapIntervalXChanged)
+P_STORE_GET(qreal, editorSnapIntervalY, editorSnappingGroup, intervalYKey, double)
+P_STORE_SET_DOUBLE(setEditorSnapIntervalY, editorSnappingGroup, intervalYKey, editorSnapIntervalYChanged)
+P_STORE_GET(int, editorSnapOverrideModifier, editorSnappingGroup, overrideModifierKey, int)
+P_STORE_SET_INT(setEditorSnapOverrideModifier, editorSnappingGroup, overrideModifierKey,
+                editorSnapOverrideModifierChanged)
+P_STORE_GET(bool, fillOnDropEnabled, editorFillOnDropGroup, enabledKey, bool)
+P_STORE_SET_BOOL(setFillOnDropEnabled, editorFillOnDropGroup, enabledKey, fillOnDropEnabledChanged)
+P_STORE_GET(int, fillOnDropModifier, editorFillOnDropGroup, modifierKey, int)
+P_STORE_SET_INT(setFillOnDropModifier, editorFillOnDropGroup, modifierKey, fillOnDropModifierChanged)
 
 // ── TilingQuickLayoutSlots helpers ───────────────────────────────────────────
 
@@ -2934,11 +2930,11 @@ void Settings::applySnapWindowBorderSystemColor()
     setSnapWindowInactiveBorderColor(inactiveColor());
 }
 
-#undef PZ_STORE_GET
-#undef PZ_STORE_SET_BOOL
-#undef PZ_STORE_SET_INT
-#undef PZ_STORE_SET_DOUBLE
-#undef PZ_STORE_SET_COLOR
-#undef PZ_STORE_SET_STRING
+#undef P_STORE_GET
+#undef P_STORE_SET_BOOL
+#undef P_STORE_SET_INT
+#undef P_STORE_SET_DOUBLE
+#undef P_STORE_SET_COLOR
+#undef P_STORE_SET_STRING
 
 } // namespace PlasmaZones

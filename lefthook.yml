@@ -30,7 +30,7 @@ pre-commit:
       glob: "data/shaders/**/*.{frag,vert,glsl,json}"
       # When any bundled zone-shader file is staged, validate the whole pack set
       # (metadata parse + headless glslang bake of every stage) via T1.2's
-      # plasmazones-shader-validate, so a broken pz_<id>/preamble/include never
+      # plasmazones-shader-validate, so a broken p_<id>/preamble/include never
       # lands. --quiet prints only failing packs. Best-effort: the hook can't
       # build the binary, so if it isn't built yet it skips (with a note) rather
       # than blocking the commit; CI's shader_validate_bundled is the hard gate.

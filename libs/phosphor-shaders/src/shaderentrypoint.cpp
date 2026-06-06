@@ -45,8 +45,8 @@ QString stripGlslComments(const QString& source)
 
 namespace {
 // Whole-word `<name> ( ... ) {` — matches a definition, not a call
-// (`return pzZone(z);`). GLSL params contain no parens, so `[^)]*` safely spans a
-// multi-line parameter list; `\b` stops `pzZone2` matching `pzZone`. Shared by
+// (`return pZone(z);`). GLSL params contain no parens, so `[^)]*` safely spans a
+// multi-line parameter list; `\b` stops `pZone2` matching `pZone`. Shared by
 // definesFunction and composeEntryPoint so the entry-detection shape can't drift.
 QRegularExpression entryDefinitionRegex(const QString& name)
 {
@@ -89,8 +89,8 @@ QString composeEntryPoint(const QString& expandedSource, const QList<EntryCandid
         if (!definesIn(cand.functionName)) {
             continue;
         }
-        // A direction-dispatched pair (pzIn requires pzOut) only matches when
-        // every required companion is also defined — a lone pzIn falls through.
+        // A direction-dispatched pair (pIn requires pOut) only matches when
+        // every required companion is also defined — a lone pIn falls through.
         bool allPresent = true;
         for (const QString& req : cand.alsoRequires) {
             if (!definesIn(req)) {

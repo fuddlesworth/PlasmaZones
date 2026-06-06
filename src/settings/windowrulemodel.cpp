@@ -3,7 +3,7 @@
 
 #include "windowrulemodel.h"
 
-#include "../pz_i18n.h"
+#include "../p_i18n.h"
 
 #include <PhosphorWindowRule/ContextRuleBridge.h>
 #include <PhosphorWindowRule/MatchTypes.h>
@@ -173,12 +173,12 @@ QString leafLabel(const MatchExpression::Predicate& predicate, const WindowRuleM
         }
         // QStringList::join keeps the rendered list short; falling back to
         // a single space-joined line matches how the daemon logs the same set.
-        return PzI18n::tr("%1: %2").arg(WindowRuleModel::fieldLabel(predicate.field),
-                                        resolved.join(QStringLiteral(", ")));
+        return PI18n::tr("%1: %2").arg(WindowRuleModel::fieldLabel(predicate.field),
+                                       resolved.join(QStringLiteral(", ")));
     }
 
-    return PzI18n::tr("%1: %2").arg(WindowRuleModel::fieldLabel(predicate.field),
-                                    resolveOne(predicate.value.toString()));
+    return PI18n::tr("%1: %2").arg(WindowRuleModel::fieldLabel(predicate.field),
+                                   resolveOne(predicate.value.toString()));
 }
 
 /// Localise a single engine-mode wire token. Returns an empty QString
@@ -199,11 +199,11 @@ QString engineModeDisplayLabel(const QString& wire)
     }
     switch (*mode) {
     case PhosphorZones::AssignmentEntry::Snapping:
-        return PzI18n::tr("Snapping");
+        return PI18n::tr("Snapping");
     case PhosphorZones::AssignmentEntry::Autotile:
-        return PzI18n::tr("Autotile");
+        return PI18n::tr("Autotile");
     case PhosphorZones::AssignmentEntry::Scrolling:
-        return PzI18n::tr("Scrolling");
+        return PI18n::tr("Scrolling");
     }
     return wire;
 }
@@ -229,12 +229,12 @@ QString actionLabel(const RuleAction& action, const WindowRuleModel::LabelLookup
     if (action.type == ActionType::SetEngineMode) {
         const QString mode = action.params.value(PhosphorWindowRule::ActionParam::Mode).toString();
         const QString label = engineModeDisplayLabel(mode);
-        return PzI18n::tr("Engine: %1").arg(label.isEmpty() ? mode : label);
+        return PI18n::tr("Engine: %1").arg(label.isEmpty() ? mode : label);
     }
     if (action.type == ActionType::SetSnappingLayout) {
         const QString layoutId = action.params.value(PhosphorWindowRule::ActionParam::LayoutId).toString();
-        return layoutId.isEmpty() ? PzI18n::tr("Snapping layout")
-                                  : PzI18n::tr("Snapping: %1").arg(resolveWith(layoutId, snappingLayoutLookup));
+        return layoutId.isEmpty() ? PI18n::tr("Snapping layout")
+                                  : PI18n::tr("Snapping: %1").arg(resolveWith(layoutId, snappingLayoutLookup));
     }
     if (action.type == ActionType::SetTilingAlgorithm) {
         const QString algo = action.params.value(PhosphorWindowRule::ActionParam::Algorithm).toString();
@@ -242,7 +242,7 @@ QString actionLabel(const RuleAction& action, const WindowRuleModel::LabelLookup
         // tilingAlgorithm lookup knows about autotile entries — the
         // WindowRuleController wires it from settingsController.layouts,
         // which contains the displayName ("Binary Split") for each algorithm.
-        return PzI18n::tr("Tiling: %1").arg(resolveWith(algo, tilingAlgorithmLookup));
+        return PI18n::tr("Tiling: %1").arg(resolveWith(algo, tilingAlgorithmLookup));
     }
     if (action.type == ActionType::DisableEngine) {
         // Name the engine being disabled — a rules list with "Disable
@@ -253,15 +253,15 @@ QString actionLabel(const RuleAction& action, const WindowRuleModel::LabelLookup
         const QString mode = action.params.value(PhosphorWindowRule::ActionParam::Mode).toString();
         const QString label = engineModeDisplayLabel(mode);
         if (label.isEmpty()) {
-            return PzI18n::tr("Disabled");
+            return PI18n::tr("Disabled");
         }
-        return PzI18n::tr("Disable: %1").arg(label);
+        return PI18n::tr("Disable: %1").arg(label);
     }
     if (action.type == ActionType::Exclude) {
-        return PzI18n::tr("Excluded");
+        return PI18n::tr("Excluded");
     }
     if (action.type == ActionType::Float) {
-        return PzI18n::tr("Float");
+        return PI18n::tr("Float");
     }
     if (action.type == ActionType::SetOpacity) {
         // Mirror EVERY resolver reject path (shader_resolve.cpp's
@@ -270,72 +270,72 @@ QString actionLabel(const RuleAction& action, const WindowRuleModel::LabelLookup
         // bool payload → "Opacity (invalid)", out-of-range value → same.
         const QJsonValue raw = action.params.value(PhosphorWindowRule::ActionParam::Value);
         if (raw.isNull() || raw.isUndefined()) {
-            return PzI18n::tr("Opacity");
+            return PI18n::tr("Opacity");
         }
         const QVariant rv = raw.toVariant();
         if (rv.typeId() == QMetaType::Bool) {
-            return PzI18n::tr("Opacity (invalid)");
+            return PI18n::tr("Opacity (invalid)");
         }
         bool ok = false;
         const double v = rv.toDouble(&ok);
         if (!ok || v < 0.0 || v > 1.0) {
-            return PzI18n::tr("Opacity (invalid)");
+            return PI18n::tr("Opacity (invalid)");
         }
-        return PzI18n::tr("Opacity: %1%").arg(static_cast<int>(v * 100.0 + 0.5));
+        return PI18n::tr("Opacity: %1%").arg(static_cast<int>(v * 100.0 + 0.5));
     }
     if (action.type == ActionType::OverrideAnimationShader) {
         const QString id = action.params.value(PhosphorWindowRule::ActionParam::EffectId).toString();
-        return id.isEmpty() ? PzI18n::tr("Block animation shader")
-                            : PzI18n::tr("Shader: %1").arg(resolveWith(id, shaderEffectLookup));
+        return id.isEmpty() ? PI18n::tr("Block animation shader")
+                            : PI18n::tr("Shader: %1").arg(resolveWith(id, shaderEffectLookup));
     }
     if (action.type == ActionType::OverrideAnimationTiming) {
         const int ms = action.params.value(PhosphorWindowRule::ActionParam::DurationMs).toInt();
-        return ms > 0 ? PzI18n::tr("Duration: %1 ms").arg(ms) : PzI18n::tr("Animation duration");
+        return ms > 0 ? PI18n::tr("Duration: %1 ms").arg(ms) : PI18n::tr("Animation duration");
     }
     if (action.type == ActionType::OverrideAnimationCurve) {
         const QString curve = action.params.value(PhosphorWindowRule::ActionParam::Curve).toString();
-        return curve.isEmpty() ? PzI18n::tr("Animation curve")
-                               : PzI18n::tr("Curve: %1").arg(resolveWith(curve, curveLookup));
+        return curve.isEmpty() ? PI18n::tr("Animation curve")
+                               : PI18n::tr("Curve: %1").arg(resolveWith(curve, curveLookup));
     }
     // ── border / title-bar overrides (single-value, keyed ActionParam::Value) ──
     {
         const QJsonValue raw = action.params.value(PhosphorWindowRule::ActionParam::Value);
         if (action.type == ActionType::SetHideTitleBar) {
-            return raw.toBool() ? PzI18n::tr("Hide title bars") : PzI18n::tr("Show title bars");
+            return raw.toBool() ? PI18n::tr("Hide title bars") : PI18n::tr("Show title bars");
         }
         if (action.type == ActionType::SetBorderVisible) {
-            return raw.toBool() ? PzI18n::tr("Show border") : PzI18n::tr("Hide border");
+            return raw.toBool() ? PI18n::tr("Show border") : PI18n::tr("Hide border");
         }
         if (action.type == ActionType::SetBorderWidth) {
-            return PzI18n::tr("Border width: %1 px").arg(raw.toInt());
+            return PI18n::tr("Border width: %1 px").arg(raw.toInt());
         }
         if (action.type == ActionType::SetBorderRadius) {
-            return PzI18n::tr("Corner radius: %1 px").arg(raw.toInt());
+            return PI18n::tr("Corner radius: %1 px").arg(raw.toInt());
         }
         if (action.type == ActionType::SetBorderColor) {
-            return PzI18n::tr("Border: %1").arg(raw.toString().toUpper());
+            return PI18n::tr("Border: %1").arg(raw.toString().toUpper());
         }
         // ── per-context gap overrides ──
         if (action.type == ActionType::SetZonePadding) {
-            return PzI18n::tr("Zone padding: %1 px").arg(raw.toInt());
+            return PI18n::tr("Zone padding: %1 px").arg(raw.toInt());
         }
         if (action.type == ActionType::SetOuterGap) {
-            return PzI18n::tr("Outer gap: %1 px").arg(raw.toInt());
+            return PI18n::tr("Outer gap: %1 px").arg(raw.toInt());
         }
         if (action.type == ActionType::SetUsePerSideOuterGap) {
-            return raw.toBool() ? PzI18n::tr("Per-side outer gaps") : PzI18n::tr("Uniform outer gap");
+            return raw.toBool() ? PI18n::tr("Per-side outer gaps") : PI18n::tr("Uniform outer gap");
         }
         if (action.type == ActionType::SetOuterGapTop) {
-            return PzI18n::tr("Top gap: %1 px").arg(raw.toInt());
+            return PI18n::tr("Top gap: %1 px").arg(raw.toInt());
         }
         if (action.type == ActionType::SetOuterGapBottom) {
-            return PzI18n::tr("Bottom gap: %1 px").arg(raw.toInt());
+            return PI18n::tr("Bottom gap: %1 px").arg(raw.toInt());
         }
         if (action.type == ActionType::SetOuterGapLeft) {
-            return PzI18n::tr("Left gap: %1 px").arg(raw.toInt());
+            return PI18n::tr("Left gap: %1 px").arg(raw.toInt());
         }
         if (action.type == ActionType::SetOuterGapRight) {
-            return PzI18n::tr("Right gap: %1 px").arg(raw.toInt());
+            return PI18n::tr("Right gap: %1 px").arg(raw.toInt());
         }
     }
     return WindowRuleModel::actionTypeFallbackLabel(action.type);
@@ -597,15 +597,15 @@ QString WindowRuleModel::sectionLabel(Section section)
 {
     switch (section) {
     case Section::Monitor:
-        return PzI18n::tr("Monitor & Layout");
+        return PI18n::tr("Monitor & Layout");
     case Section::Application:
-        return PzI18n::tr("Applications");
+        return PI18n::tr("Applications");
     case Section::Activity:
-        return PzI18n::tr("Activities");
+        return PI18n::tr("Activities");
     case Section::Animation:
-        return PzI18n::tr("Animations");
+        return PI18n::tr("Animations");
     case Section::Advanced:
-        return PzI18n::tr("Advanced / Custom");
+        return PI18n::tr("Advanced / Custom");
     }
     return QString();
 }
@@ -614,35 +614,35 @@ QString WindowRuleModel::fieldLabel(Field field)
 {
     switch (field) {
     case Field::AppId:
-        return PzI18n::tr("Application");
+        return PI18n::tr("Application");
     case Field::WindowClass:
-        return PzI18n::tr("Window class");
+        return PI18n::tr("Window class");
     case Field::DesktopFile:
-        return PzI18n::tr("Desktop file");
+        return PI18n::tr("Desktop file");
     case Field::WindowRole:
-        return PzI18n::tr("Window role");
+        return PI18n::tr("Window role");
     case Field::Pid:
-        return PzI18n::tr("Process ID");
+        return PI18n::tr("Process ID");
     case Field::Title:
-        return PzI18n::tr("Title");
+        return PI18n::tr("Title");
     case Field::WindowType:
-        return PzI18n::tr("Window type");
+        return PI18n::tr("Window type");
     case Field::IsSticky:
-        return PzI18n::tr("Sticky");
+        return PI18n::tr("Sticky");
     case Field::IsFullscreen:
-        return PzI18n::tr("Fullscreen");
+        return PI18n::tr("Fullscreen");
     case Field::IsMaximized:
-        return PzI18n::tr("Maximized");
+        return PI18n::tr("Maximized");
     case Field::IsMinimized:
-        return PzI18n::tr("Minimized");
+        return PI18n::tr("Minimized");
     case Field::IsFocused:
-        return PzI18n::tr("Focused");
+        return PI18n::tr("Focused");
     case Field::ScreenId:
-        return PzI18n::tr("Monitor");
+        return PI18n::tr("Monitor");
     case Field::VirtualDesktop:
-        return PzI18n::tr("Desktop");
+        return PI18n::tr("Desktop");
     case Field::Activity:
-        return PzI18n::tr("Activity");
+        return PI18n::tr("Activity");
     }
     return QString();
 }
@@ -650,7 +650,7 @@ QString WindowRuleModel::fieldLabel(Field field)
 QString WindowRuleModel::matchSummary(const MatchExpression& match) const
 {
     if (match.isCatchAll()) {
-        return PzI18n::tr("Any window");
+        return PI18n::tr("Any window");
     }
     if (match.isLeaf()) {
         return leafLabel(match.predicate(), m_screenLookup, m_activityLookup);
@@ -662,20 +662,20 @@ QString WindowRuleModel::matchSummary(const MatchExpression& match) const
             if (child.isLeaf()) {
                 parts.append(leafLabel(child.predicate(), m_screenLookup, m_activityLookup));
             } else {
-                parts.append(PzI18n::tr("(condition group)"));
+                parts.append(PI18n::tr("(condition group)"));
             }
         }
         return parts.join(QStringLiteral(" · "));
     }
     // Any composite that is not a flat AND — count the leaves.
     const int n = conditionCount(match);
-    return PzI18n::tr("%n condition(s)", nullptr, n);
+    return PI18n::tr("%n condition(s)", nullptr, n);
 }
 
 QString WindowRuleModel::actionSummary(const QList<RuleAction>& actions) const
 {
     if (actions.isEmpty()) {
-        return PzI18n::tr("No action");
+        return PI18n::tr("No action");
     }
     QStringList parts;
     for (const RuleAction& a : actions) {

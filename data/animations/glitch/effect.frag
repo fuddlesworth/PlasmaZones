@@ -14,7 +14,7 @@
 
 #include <noise.glsl>
 
-vec4 pzTransition(vec2 uv, float t)
+vec4 pTransition(vec2 uv, float t)
 {
     // UV from the vertex stage; gl_FragCoord/iResolution overshoots [0,1]
     // by DPR on high-DPI displays.
@@ -26,7 +26,7 @@ vec4 pzTransition(vec2 uv, float t)
     // (start of leg), iTime 1 → strength 0 (end of leg), iTime 0.5 →
     // peak.
     float visibility = clamp(iTime, 0.0, 1.0);
-    float strength = pz_intensity * sin(visibility * 3.14159);
+    float strength = p_intensity * sin(visibility * 3.14159);
 
     // Strength collapses to zero at both leg endpoints (sin is 0 at
     // visibility 0 and 1), where displacement and rgbSplit*strength
@@ -43,7 +43,7 @@ vec4 pzTransition(vec2 uv, float t)
     // the screen" into "fraction of the surface" so block pixel size
     // stays constant across popup vs. maximized windows. Floors guard
     // against the pre-first-frame (0,0) state of either uniform.
-    float bs = max(pz_blockSize, 0.01);
+    float bs = max(p_blockSize, 0.01);
     vec2 block = floor(uv * max(iAnchorSize, vec2(1.0))
                           / (bs * max(iSurfaceScreenPos.zw, vec2(1.0))));
     // Quantise the jitter to per-leg-frame buckets that bump every ~10
@@ -61,9 +61,9 @@ vec4 pzTransition(vec2 uv, float t)
         displacement = (niriHash(block * 2.0) - 0.5) * strength * 0.2;
     }
 
-    vec2 uvR = uv + vec2(displacement + pz_rgbSplit * strength, 0.0);
+    vec2 uvR = uv + vec2(displacement + p_rgbSplit * strength, 0.0);
     vec2 uvG = uv + vec2(displacement, 0.0);
-    vec2 uvB = uv + vec2(displacement - pz_rgbSplit * strength, 0.0);
+    vec2 uvB = uv + vec2(displacement - p_rgbSplit * strength, 0.0);
 
     // Sample the surface with per-channel offset for the chromatic
     // aberration. Texture sampler has clampToEdge so off-surface UVs

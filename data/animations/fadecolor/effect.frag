@@ -22,18 +22,18 @@
 // The harness supplies #version, <animation_uniforms.glsl>, the in/out,
 // and main().
 
-// pz_colorPhase (customParams[0].x) is generated from metadata.json — no
+// p_colorPhase (customParams[0].x) is generated from metadata.json — no
 // hand-written slot #defines.
 
-// Symmetric: a single pzTransition. `t` is the leg's iTime, which the runtime
+// Symmetric: a single pTransition. `t` is the leg's iTime, which the runtime
 // flips on the close leg (1→0), so the niri OPEN body auto-mirrors on close
 // with no direction code.
-vec4 pzTransition(vec2 uv, float t) {
+vec4 pTransition(vec2 uv, float t) {
     // ── niri OPEN body (handles both legs via runtime iTime flip) ──
     float p = clamp(t, 0.0, 1.0);
 
     vec4 win = surfaceColor(uv);
 
-    float reveal = smoothstep(pz_colorPhase, 1.0, p);
+    float reveal = smoothstep(p_colorPhase, 1.0, p);
     return win * reveal;
 }

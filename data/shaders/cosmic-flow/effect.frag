@@ -17,7 +17,7 @@
  * The harness supplies #version, <common.glsl> (zone UBO + ZoneCtx + helpers),
  * the vTexCoord/vFragCoord ins, and the fragColor out. audio.glsl is
  * pack-specific, so it stays here. A whole-frame label composite runs after
- * the per-zone loop, so this is a pzImage entry point.
+ * the per-zone loop, so this is a pImage entry point.
  */
 
 #include <audio.glsl>
@@ -52,27 +52,27 @@ vec4 renderCosmicZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColo
     float borderWidth = max(params.y, 2.0);
 
     // Get shader parameters with defaults
-    float speed = pz_speed >= 0.0 ? pz_speed : 0.1;
-    float flowSpeed = pz_flowSpeed >= 0.0 ? pz_flowSpeed : 0.3;
-    float noiseScale = pz_noiseScale >= 0.0 ? pz_noiseScale : 3.0;
-    int octaves = int(pz_octaves >= 0.0 ? pz_octaves : 6.0);
+    float speed = p_speed >= 0.0 ? p_speed : 0.1;
+    float flowSpeed = p_flowSpeed >= 0.0 ? p_flowSpeed : 0.3;
+    float noiseScale = p_noiseScale >= 0.0 ? p_noiseScale : 3.0;
+    int octaves = int(p_octaves >= 0.0 ? p_octaves : 6.0);
 
-    float colorShift = pz_colorShift >= 0.0 ? pz_colorShift : 0.0;
-    float saturation = pz_saturation >= 0.0 ? pz_saturation : 0.5;
-    float brightness = pz_brightness >= 0.0 ? pz_brightness : 0.5;
-    float contrast = pz_contrast >= 0.0 ? pz_contrast : 0.95;
+    float colorShift = p_colorShift >= 0.0 ? p_colorShift : 0.0;
+    float saturation = p_saturation >= 0.0 ? p_saturation : 0.5;
+    float brightness = p_brightness >= 0.0 ? p_brightness : 0.5;
+    float contrast = p_contrast >= 0.0 ? p_contrast : 0.95;
 
-    float fillOpacity = pz_fillOpacity >= 0.0 ? pz_fillOpacity : 0.85;
-    float borderGlow = pz_borderGlow >= 0.0 ? pz_borderGlow : 0.3;
-    float edgeFadeStart = pz_edgeFadeStart >= 0.0 ? pz_edgeFadeStart : 30.0;
-    float borderBrightness = pz_borderBrightness >= 0.0 ? pz_borderBrightness : 1.3;
+    float fillOpacity = p_fillOpacity >= 0.0 ? p_fillOpacity : 0.85;
+    float borderGlow = p_borderGlow >= 0.0 ? p_borderGlow : 0.3;
+    float edgeFadeStart = p_edgeFadeStart >= 0.0 ? p_edgeFadeStart : 30.0;
+    float borderBrightness = p_borderBrightness >= 0.0 ? p_borderBrightness : 1.3;
 
-    float audioReact = pz_audioReactivity >= 0.0 ? pz_audioReactivity : 1.0;
-    float veinDetail = pz_veinDetail >= 0.0 ? pz_veinDetail : 0.25;
-    float innerGlowStr = pz_innerGlowStrength >= 0.0 ? pz_innerGlowStrength : 0.25;
-    float sparkleStr = pz_sparkleIntensity >= 0.0 ? pz_sparkleIntensity : 2.5;
+    float audioReact = p_audioReactivity >= 0.0 ? p_audioReactivity : 1.0;
+    float veinDetail = p_veinDetail >= 0.0 ? p_veinDetail : 0.25;
+    float innerGlowStr = p_innerGlowStrength >= 0.0 ? p_innerGlowStrength : 0.25;
+    float sparkleStr = p_sparkleIntensity >= 0.0 ? p_sparkleIntensity : 2.5;
 
-    float fbmRot = pz_fbmRotation >= 0.0 ? pz_fbmRotation : 0.5;
+    float fbmRot = p_fbmRotation >= 0.0 ? p_fbmRotation : 0.5;
 
     // Convert rect to pixel coordinates
     vec2 rectPos = zoneRectPos(rect);
@@ -95,10 +95,10 @@ vec4 renderCosmicZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColo
     centeredUV.x *= aspect;
 
     // Palette colors from uniforms or defaults
-    vec3 palA = pz_paletteColorA.rgb;
-    vec3 palB = pz_paletteColorB.rgb;
-    vec3 palC = pz_paletteColorC.rgb;
-    vec3 palD = pz_paletteColorD.rgb;
+    vec3 palA = p_paletteColorA.rgb;
+    vec3 palB = p_paletteColorB.rgb;
+    vec3 palC = p_paletteColorC.rgb;
+    vec3 palD = p_paletteColorD.rgb;
 
     // IQ palette: when palette colors are unset, palA/palB become gray (brightness/saturation);
     // set palette colors in the UI for full control.
@@ -265,18 +265,18 @@ vec4 compositeCosmicLabels(vec4 color, vec2 fragCoord,
     vec4 labels = texture(uZoneLabels, uv);
 
     // Reconstruct IQ palette colors (same defaults as renderCosmicZone)
-    float brightness = pz_brightness >= 0.0 ? pz_brightness : 0.5;
-    float saturation = pz_saturation >= 0.0 ? pz_saturation : 0.5;
-    float colorShift = pz_colorShift >= 0.0 ? pz_colorShift : 0.0;
-    vec3 palA = colorWithFallback(pz_paletteColorA.rgb, vec3(brightness));
-    vec3 palB = colorWithFallback(pz_paletteColorB.rgb, vec3(saturation));
-    vec3 palC = colorWithFallback(pz_paletteColorC.rgb, vec3(1.0));
-    vec3 palD = colorWithFallback(pz_paletteColorD.rgb, vec3(0.0, 0.10, 0.20));
+    float brightness = p_brightness >= 0.0 ? p_brightness : 0.5;
+    float saturation = p_saturation >= 0.0 ? p_saturation : 0.5;
+    float colorShift = p_colorShift >= 0.0 ? p_colorShift : 0.0;
+    vec3 palA = colorWithFallback(p_paletteColorA.rgb, vec3(brightness));
+    vec3 palB = colorWithFallback(p_paletteColorB.rgb, vec3(saturation));
+    vec3 palC = colorWithFallback(p_paletteColorC.rgb, vec3(1.0));
+    vec3 palD = colorWithFallback(p_paletteColorD.rgb, vec3(0.0, 0.10, 0.20));
     palD += vec3(colorShift);
 
-    float labelGlowSpread = pz_nebulaSpread >= 0.0 ? pz_nebulaSpread : 3.0;
-    float labelBrightness = pz_lensIntensity >= 0.0 ? pz_lensIntensity : 2.5;
-    float labelAudioReact = pz_stellarReact >= 0.0 ? pz_stellarReact : 1.0;
+    float labelGlowSpread = p_nebulaSpread >= 0.0 ? p_nebulaSpread : 3.0;
+    float labelBrightness = p_lensIntensity >= 0.0 ? p_lensIntensity : 2.5;
+    float labelAudioReact = p_stellarReact >= 0.0 ? p_stellarReact : 1.0;
 
     // Gaussian halo with nebula palette tint
     float halo = 0.0;
@@ -322,7 +322,7 @@ vec4 compositeCosmicLabels(vec4 color, vec2 fragCoord,
     return color;
 }
 
-vec4 pzImage(vec2 fragCoord) {
+vec4 pImage(vec2 fragCoord) {
     vec4 color = vec4(0.0);
 
     if (zoneCount == 0) {
@@ -346,7 +346,7 @@ vec4 pzImage(vec2 fragCoord) {
         color = blendOver(color, zoneColor);
     }
 
-    if (pz_showLabels > 0.5)
+    if (p_showLabels > 0.5)
         color = compositeCosmicLabels(color, fragCoord, bass, treble, hasAudio);
 
     return color;

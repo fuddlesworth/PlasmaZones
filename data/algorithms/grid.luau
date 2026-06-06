@@ -1,9 +1,9 @@
 -- SPDX-FileCopyrightText: 2026 fuddlesworth
 -- SPDX-License-Identifier: GPL-3.0-or-later
 
-local pz = pz
+local pluau = pluau
 
-return pz.algorithm {
+return pluau.algorithm {
     metadata = {
         name = "Grid",
         id = "grid",
@@ -21,8 +21,8 @@ return pz.algorithm {
         local count = ctx.windowCount
         if count <= 0 then return {} end
         local area = ctx.area
-        if area.width < pz.MIN_ZONE_SIZE or area.height < pz.MIN_ZONE_SIZE then
-            return pz.fillArea(area, count)
+        if area.width < pluau.MIN_ZONE_SIZE or area.height < pluau.MIN_ZONE_SIZE then
+            return pluau.fillArea(area, count)
         end
         local gap = ctx.innerGap
         local minSizes = ctx.minSizes
@@ -53,8 +53,8 @@ return pz.algorithm {
             end
         end
 
-        local columnWidths = pz.distributeWithOptionalMins(area.width, cols, gap, colMinWidths)
-        local rowHeights = pz.distributeWithOptionalMins(area.height, rows, gap, rowMinHeights)
+        local columnWidths = pluau.distributeWithOptionalMins(area.width, cols, gap, colMinWidths)
+        local rowHeights = pluau.distributeWithOptionalMins(area.height, rows, gap, rowMinHeights)
 
         local colX = {}
         colX[1] = area.x
@@ -83,7 +83,7 @@ return pz.algorithm {
                             (idx < #minSizes and e and e.w and e.w > 0) and e.w or 0
                     end
                 end
-                local lastRowWidths = pz.distributeWithOptionalMins(area.width, windowsInThisRow, gap, lastRowMinWidths)
+                local lastRowWidths = pluau.distributeWithOptionalMins(area.width, windowsInThisRow, gap, lastRowMinWidths)
                 local lastRowX = area.x
                 for j = 0, windowsInThisRow - 1 do
                     zones[#zones + 1] = { x = lastRowX, y = rowY[row + 1],

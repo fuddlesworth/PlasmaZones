@@ -38,19 +38,19 @@
 #include <noise.glsl>
 
 // metadata.json declaration order:
-//   color  → customColors[0]  (pz_beamColor — only `.rgb` used; the effect
+//   color  → customColors[0]  (p_beamColor — only `.rgb` used; the effect
 //                              drives its own emission alpha from the
 //                              shower / streak / atom envelopes)
-//   float  → customParams[0]  (pz_particleScale)
+//   float  → customParams[0]  (p_particleScale)
 
 // 2D simplex noise — MIT-licensed (Inigo Quilez,
 // https://www.shadertoy.com/view/Msf3WH). Definitions in
 // shared/noise.glsl.
 
-vec4 pzTransition(vec2 uv, float t)
+vec4 pTransition(vec2 uv, float t)
 {
-    vec3 effectColor = pz_beamColor.rgb;
-    float pScale     = max(pz_particleScale, 0.05);
+    vec3 effectColor = p_beamColor.rgb;
+    float pScale     = max(p_particleScale, 0.05);
 
     float v = clamp(t, 0.0, 1.0);
 

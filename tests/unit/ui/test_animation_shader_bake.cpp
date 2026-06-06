@@ -9,8 +9,8 @@
 // site. Fragment-stage coverage moved to `test_animation_shader_preamble_bake`,
 // which bakes every effect.frag through the FULL runtime assembly (T1.4/T1.5
 // entry scaffold + T1.1 param preamble + include expansion); a raw
-// compileFromFile here would reject an entry-only pack that defines pzTransition
-// / pzZone instead of main().
+// compileFromFile here would reject an entry-only pack that defines pTransition
+// / pZone instead of main().
 
 #include <PhosphorRendering/ShaderCompiler.h>
 

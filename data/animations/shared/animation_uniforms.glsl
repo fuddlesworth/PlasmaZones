@@ -365,13 +365,13 @@ vec4 surfaceColor(vec2 uv) {
 
 // Direction as a clean boolean — replaces the `iIsReversed == 1` exact-
 // equality test (branching on `!= 0` was the documented footgun).
-#define pz_reversed (iIsReversed == 1)
+#define p_reversed (iIsReversed == 1)
 
 // Un-flipped, always-forward 0→1 leg progress. 24 of the bundled shaders
 // hand-roll exactly this `(iIsReversed == 1) ? (1.0 - iTime) : iTime` to
 // recover direction-independent progress; call this instead.
 float legProgress() {
-    return pz_reversed ? (1.0 - iTime) : iTime;
+    return p_reversed ? (1.0 - iTime) : iTime;
 }
 
 #endif // PLASMAZONES_ANIMATION_UNIFORMS_GLSL

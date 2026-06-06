@@ -1,9 +1,9 @@
 -- SPDX-FileCopyrightText: 2026 fuddlesworth
 -- SPDX-License-Identifier: GPL-3.0-or-later
 
-local pz = pz
+local pluau = pluau
 
-return pz.algorithm {
+return pluau.algorithm {
     metadata = {
         name = "Tatami",
         id = "tatami",
@@ -24,12 +24,12 @@ return pz.algorithm {
         local area = ctx.area
         local gap = ctx.innerGap
 
-        if area.width < pz.MIN_ZONE_SIZE or area.height < pz.MIN_ZONE_SIZE then
-            return pz.fillArea(area, count)
+        if area.width < pluau.MIN_ZONE_SIZE or area.height < pluau.MIN_ZONE_SIZE then
+            return pluau.fillArea(area, count)
         end
 
         if area.width - gap <= 0 or area.height - gap <= 0 then
-            return pz.fillArea(area, count)
+            return pluau.fillArea(area, count)
         end
 
         if count == 2 then
@@ -47,7 +47,7 @@ return pz.algorithm {
 
         local availableHeight = area.height - gap * (rows - 1)
         if availableHeight <= 0 then
-            return pz.fillArea(area, count)
+            return pluau.fillArea(area, count)
         end
 
         local rowHeight = math.floor(availableHeight / rows)

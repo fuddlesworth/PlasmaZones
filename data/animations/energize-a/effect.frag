@@ -39,10 +39,10 @@
 #include <noise.glsl>
 
 // metadata.json declaration order:
-//   color  → customColors[0]  (pz_particleColor — only `.rgb` used; alpha
+//   color  → customColors[0]  (p_particleColor — only `.rgb` used; alpha
 //                              ignored, the effect drives its own emission
 //                              alpha from the particle envelopes below)
-//   float  → customParams[0]  (pz_particleScale)
+//   float  → customParams[0]  (p_particleScale)
 
 // 2D simplex noise — MIT-licensed (Inigo Quilez,
 // https://www.shadertoy.com/view/Msf3WH). Used for the per-pixel
@@ -50,10 +50,10 @@
 // into the input UV instead of a third axis. Definitions in
 // shared/noise.glsl.
 
-vec4 pzTransition(vec2 uv, float t)
+vec4 pTransition(vec2 uv, float t)
 {
-    vec3 effectColor = pz_particleColor.rgb;
-    float pScale     = max(pz_particleScale, 0.05);
+    vec3 effectColor = p_particleColor.rgb;
+    float pScale     = max(p_particleScale, 0.05);
 
     float v = clamp(t, 0.0, 1.0);
 

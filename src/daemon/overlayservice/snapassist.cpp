@@ -4,7 +4,7 @@
 #include "internal.h"
 #include "../overlayservice.h"
 #include "../../core/logging.h"
-#include "pz_slot_keys.h"
+#include "p_slot_keys.h"
 #include <PhosphorOverlay/ShellHost.h>
 #include <PhosphorSurfaces/SurfaceManager.h>
 #include <PhosphorZones/Layout.h>
@@ -28,7 +28,7 @@
 
 #include <PhosphorLayer/Surface.h>
 #include <PhosphorLayer/ILayerShellTransport.h>
-#include "pz_roles.h"
+#include "p_roles.h"
 #include <PhosphorScreens/ScreenIdentity.h>
 
 namespace PlasmaZones {
@@ -141,7 +141,7 @@ void OverlayService::showSnapAssist(const QString& screenId, const PhosphorProto
     // If snap-assist is currently shown on a DIFFERENT screen, dismiss
     // it there first - snap-assist is a singleton across all screens.
     // Animator-driven beginHide on (prevSurface, prevSlot,
-    // PzRoles::SnapAssist) keys ONLY the snap-assist track via the
+    // PRoles::SnapAssist) keys ONLY the snap-assist track via the
     // per-(Surface, target) animator keying - sibling slots on the
     // same shell (OSD, zone-selector) keep animating cleanly.
     if (m_snapAssistVisible && !m_snapAssistScreenId.isEmpty() && m_snapAssistScreenId != screenId) {
@@ -149,7 +149,7 @@ void OverlayService::showSnapAssist(const QString& screenId, const PhosphorProto
         auto prevIt = m_screenStates.find(prevScreenId);
         if (prevIt != m_screenStates.end() && prevIt->shell && prevIt->shell->shellSurface()
             && prevIt->snapAssistSlot()) {
-            m_shellHost->hideSlot(prevScreenId, PzSlotKeys::SnapAssist(), [this, prevScreenId]() {
+            m_shellHost->hideSlot(prevScreenId, PSlotKeys::SnapAssist(), [this, prevScreenId]() {
                 onSnapAssistSlotHideCompleted(prevScreenId);
             });
         }
@@ -236,7 +236,7 @@ void OverlayService::showSnapAssist(const QString& screenId, const PhosphorProto
         shellSurface->show();
     }
     slot->setVisible(true);
-    m_surfaceAnimator->beginShow(shellSurface, slot, PzRoles::SnapAssist, []() { });
+    m_surfaceAnimator->beginShow(shellSurface, slot, PRoles::SnapAssist, []() { });
     // Snap-assist is modal - needs input for click-to-select. The
     // sync re-evaluates the input region now that the modal slot is
     // visible so `Qt::WindowTransparentForInput` flips off.
@@ -430,7 +430,7 @@ void OverlayService::hideSnapAssist()
     auto stateIt = m_screenStates.find(screenId);
     if (stateIt != m_screenStates.end() && stateIt->shell && stateIt->shell->shellSurface()
         && stateIt->snapAssistSlot()) {
-        m_shellHost->hideSlot(screenId, PzSlotKeys::SnapAssist(), [this, effectiveId = screenId]() {
+        m_shellHost->hideSlot(screenId, PSlotKeys::SnapAssist(), [this, effectiveId = screenId]() {
             onSnapAssistSlotHideCompleted(effectiveId);
         });
     }
@@ -594,7 +594,7 @@ void OverlayService::showLayoutPicker(const QString& screenId)
         shellSurface->show();
     }
     slot->setVisible(true);
-    m_surfaceAnimator->beginShow(shellSurface, slot, PzRoles::LayoutPicker, []() { });
+    m_surfaceAnimator->beginShow(shellSurface, slot, PRoles::LayoutPicker, []() { });
     // Layout picker is modal - needs input for click-to-select.
     syncPassiveShellSurfaceStateForSurface(shellSurface);
 
@@ -628,7 +628,7 @@ void OverlayService::hideLayoutPicker()
     auto stateIt = m_screenStates.find(screenId);
     if (stateIt != m_screenStates.end() && stateIt->shell && stateIt->shell->shellSurface()
         && stateIt->layoutPickerSlot()) {
-        m_shellHost->hideSlot(screenId, PzSlotKeys::LayoutPicker(), [this, effectiveId = screenId]() {
+        m_shellHost->hideSlot(screenId, PSlotKeys::LayoutPicker(), [this, effectiveId = screenId]() {
             onLayoutPickerSlotHideCompleted(effectiveId);
         });
     }

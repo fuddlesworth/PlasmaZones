@@ -23,7 +23,7 @@
  */
 
 // The harness supplies #version, <common.glsl>, the vTexCoord/vFragCoord ins,
-// the fragColor out, and the pzImage() dispatch. audio.glsl is pack-specific.
+// the fragColor out, and the pImage() dispatch. audio.glsl is pack-specific.
 #include <audio.glsl>
 
 
@@ -99,28 +99,28 @@ vec4 renderPrismataZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderCo
     float d = sdRoundedBox(p, rectSize * 0.5, borderRadius);
 
     // Params
-    float cellScale = pz_cellScale >= 0.0 ? pz_cellScale : 12.0;
-    float animSpeed = pz_animSpeed >= 0.0 ? pz_animSpeed : 0.6;
-    float facetSharpness = pz_facetSharpness >= 0.0 ? pz_facetSharpness : 0.7;
-    float zoneTintBlend = pz_zoneTintBlend >= 0.0 ? pz_zoneTintBlend : 0.35;
-    float fillOpacity = pz_fillOpacity >= 0.0 ? pz_fillOpacity : 0.88;
-    float causticStr = pz_causticStrength >= 0.0 ? pz_causticStrength : 0.5;
-    float chromaStr = pz_chromaticStrength >= 0.0 ? pz_chromaticStrength : 0.4;
-    float resonanceStr = pz_resonanceStrength >= 0.0 ? pz_resonanceStrength : 0.6;
-    float audioReact = pz_audioReactivity >= 0.0 ? pz_audioReactivity : 1.0;
-    float idlePulse = pz_idlePulse >= 0.0 ? pz_idlePulse : 0.8;
+    float cellScale = p_cellScale >= 0.0 ? p_cellScale : 12.0;
+    float animSpeed = p_animSpeed >= 0.0 ? p_animSpeed : 0.6;
+    float facetSharpness = p_facetSharpness >= 0.0 ? p_facetSharpness : 0.7;
+    float zoneTintBlend = p_zoneTintBlend >= 0.0 ? p_zoneTintBlend : 0.35;
+    float fillOpacity = p_fillOpacity >= 0.0 ? p_fillOpacity : 0.88;
+    float causticStr = p_causticStrength >= 0.0 ? p_causticStrength : 0.5;
+    float chromaStr = p_chromaticStrength >= 0.0 ? p_chromaticStrength : 0.4;
+    float resonanceStr = p_resonanceStrength >= 0.0 ? p_resonanceStrength : 0.6;
+    float audioReact = p_audioReactivity >= 0.0 ? p_audioReactivity : 1.0;
+    float idlePulse = p_idlePulse >= 0.0 ? p_idlePulse : 0.8;
 
     float energy = hasAudio ? overall * audioReact : 0.0;
     float idleAnim = hasAudio ? 0.0 : (0.5 + 0.5 * sin(iTime * 1.2 * PI)) * idlePulse;
     float vitality = zoneVitality(isHighlighted);
 
-    vec3 accent = colorWithFallback(pz_accentColor.rgb, vec3(0.0, 0.83, 1.0));
-    vec3 hlTint = colorWithFallback(pz_highlightTint.rgb, vec3(1.0));
-    vec3 cryst1 = colorWithFallback(pz_crystalColor1.rgb, vec3(0.2, 0.27, 0.4));
-    vec3 cryst2 = colorWithFallback(pz_crystalColor2.rgb, vec3(0.27, 0.53, 0.8));
-    vec3 cryst3 = colorWithFallback(pz_crystalColor3.rgb, vec3(0.53, 0.67, 0.87));
-    vec3 cryst4 = colorWithFallback(pz_crystalColor4.rgb, vec3(0.67, 0.8, 1.0));
-    vec3 edgeClr = colorWithFallback(pz_edgeColor.rgb, accent);
+    vec3 accent = colorWithFallback(p_accentColor.rgb, vec3(0.0, 0.83, 1.0));
+    vec3 hlTint = colorWithFallback(p_highlightTint.rgb, vec3(1.0));
+    vec3 cryst1 = colorWithFallback(p_crystalColor1.rgb, vec3(0.2, 0.27, 0.4));
+    vec3 cryst2 = colorWithFallback(p_crystalColor2.rgb, vec3(0.27, 0.53, 0.8));
+    vec3 cryst3 = colorWithFallback(p_crystalColor3.rgb, vec3(0.53, 0.67, 0.87));
+    vec3 cryst4 = colorWithFallback(p_crystalColor4.rgb, vec3(0.67, 0.8, 1.0));
+    vec3 edgeClr = colorWithFallback(p_edgeColor.rgb, accent);
 
     // Mouse interaction
     vec2 mouseLocal = zoneLocalUV(iMouse.xy, rectPos, rectSize);
@@ -305,17 +305,17 @@ vec4 compositePrismataLabels(vec4 color, vec2 fragCoord,
     vec2 px = 1.0 / max(iResolution, vec2(1.0));
     vec4 labels = texture(uZoneLabels, uv);
 
-    float etchSpread   = pz_etchSpread >= 0.0 ? pz_etchSpread : 3.0;
-    float etchBright   = pz_etchBright >= 0.0 ? pz_etchBright : 2.0;
-    float refractReact = pz_refractionReact >= 0.0 ? pz_refractionReact : 1.0;
+    float etchSpread   = p_etchSpread >= 0.0 ? p_etchSpread : 3.0;
+    float etchBright   = p_etchBright >= 0.0 ? p_etchBright : 2.0;
+    float refractReact = p_refractionReact >= 0.0 ? p_refractionReact : 1.0;
 
-    vec3 accent = colorWithFallback(pz_accentColor.rgb, vec3(0.0, 0.83, 1.0));
-    vec3 hlTint = colorWithFallback(pz_highlightTint.rgb, vec3(1.0));
+    vec3 accent = colorWithFallback(p_accentColor.rgb, vec3(0.0, 0.83, 1.0));
+    vec3 hlTint = colorWithFallback(p_highlightTint.rgb, vec3(1.0));
 
     // Sample voronoi at label position — crystal facet geometry
     vec2 globalUV = fragCoord / max(iResolution, vec2(1.0));
-    float cellScale = pz_cellScale >= 0.0 ? pz_cellScale : 12.0;
-    float animSpeed = pz_animSpeed >= 0.0 ? pz_animSpeed : 0.6;
+    float cellScale = p_cellScale >= 0.0 ? p_cellScale : 12.0;
+    float animSpeed = p_animSpeed >= 0.0 ? p_animSpeed : 0.6;
     float time = iTime * animSpeed;
     vec3 vor = voronoi(globalUV, cellScale, time);
     float edgeDist = vor.z;
@@ -399,7 +399,7 @@ vec4 compositePrismataLabels(vec4 color, vec2 fragCoord,
     return color;
 }
 
-vec4 pzImage(vec2 fragCoord) {
+vec4 pImage(vec2 fragCoord) {
     vec4 color = vec4(0.0);
 
     if (zoneCount == 0) {
@@ -425,7 +425,7 @@ vec4 pzImage(vec2 fragCoord) {
         color = blendOver(color, zoneColor);
     }
 
-    if (pz_showLabels > 0.5)
+    if (p_showLabels > 0.5)
         color = compositePrismataLabels(color, fragCoord, bass, mids, treble, hasAudio);
 
     return color;

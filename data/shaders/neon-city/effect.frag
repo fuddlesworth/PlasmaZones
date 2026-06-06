@@ -19,19 +19,19 @@ vec4 renderZone(vec2 fragCoord, vec4 rect, vec4 params, bool isHighlighted,
     float borderRadius = max(params.x, 6.0);
     float borderWidth  = max(params.y, 2.5);
 
-    float reactivity   = pz_reactivity >= 0.0 ? pz_reactivity : 1.5;
-    float bassImpact   = pz_bassImpact >= 0.0 ? pz_bassImpact : 1.5;
-    float trebleImpact = pz_trebleImpact >= 0.0 ? pz_trebleImpact : 1.5;
-    float midsImpact   = pz_midsImpact >= 0.0 ? pz_midsImpact : 1.0;
-    float idleSpeed    = pz_idleSpeed >= 0.0 ? pz_idleSpeed : 1.0;
-    float fillOpacity  = pz_fillOpacity >= 0.0 ? pz_fillOpacity : 0.92;
-    float showLabels   = pz_showLabels;  // bool: >0.5 = show
-    float dofStrength  = pz_dofStrength >= 0.0 ? pz_dofStrength : 0.35;
-    float edgeGlow     = pz_edgeGlow >= 0.0 ? pz_edgeGlow : 1.4;
+    float reactivity   = p_reactivity >= 0.0 ? p_reactivity : 1.5;
+    float bassImpact   = p_bassImpact >= 0.0 ? p_bassImpact : 1.5;
+    float trebleImpact = p_trebleImpact >= 0.0 ? p_trebleImpact : 1.5;
+    float midsImpact   = p_midsImpact >= 0.0 ? p_midsImpact : 1.0;
+    float idleSpeed    = p_idleSpeed >= 0.0 ? p_idleSpeed : 1.0;
+    float fillOpacity  = p_fillOpacity >= 0.0 ? p_fillOpacity : 0.92;
+    float showLabels   = p_showLabels;  // bool: >0.5 = show
+    float dofStrength  = p_dofStrength >= 0.0 ? p_dofStrength : 0.35;
+    float edgeGlow     = p_edgeGlow >= 0.0 ? p_edgeGlow : 1.4;
 
-    vec3 accent  = colorWithFallback(pz_accentColor.rgb, vec3(0.50, 1.50, 2.00));
-    vec3 bassCol = colorWithFallback(pz_bassColor.rgb, vec3(0.00, 0.00, 1.50));
-    vec3 lightC  = colorWithFallback(pz_lightColor.rgb, vec3(0.80, 0.45, 0.18));
+    vec3 accent  = colorWithFallback(p_accentColor.rgb, vec3(0.50, 1.50, 2.00));
+    vec3 bassCol = colorWithFallback(p_bassColor.rgb, vec3(0.00, 0.00, 1.50));
+    vec3 lightC  = colorWithFallback(p_lightColor.rgb, vec3(0.80, 0.45, 0.18));
 
     // Audio channels scaled by reactivity AND per-band impact — consistent
     // with the buffer pass so the reactivity slider affects every element.
@@ -339,7 +339,7 @@ vec4 renderZone(vec2 fragCoord, vec4 rect, vec4 params, bool isHighlighted,
 
 // ─── Main ───────────────────────────────────────────────────────────
 
-vec4 pzImage(vec2 fragCoord) {
+vec4 pImage(vec2 fragCoord) {
     vec4 color = vec4(0.0);
 
     if (zoneCount == 0) {

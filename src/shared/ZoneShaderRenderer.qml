@@ -47,7 +47,7 @@ Item {
         zones: root.safeConfig.zones || []
         hoveredZoneIndex: root.safeConfig.hoveredZoneIndex ?? -1
         shaderParams: root.safeConfig.shaderParams || {}
-        // T1.1 (zone): generated `#define pz_<id> ...` block the node splices
+        // T1.1 (zone): generated `#define p_<id> ...` block the node splices
         // after #version so packs read params by name. Empty = no-op.
         paramPreamble: root.safeConfig.paramPreamble || ""
         iTime: root.safeConfig.iTime ?? 0

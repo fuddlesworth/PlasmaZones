@@ -128,9 +128,9 @@ public:
     QVariantMap validateAndCoerceParams(const QString& id, const QVariantMap& params) const;
     Q_INVOKABLE QVariantMap translateParamsToUniforms(const QString& shaderId, const QVariantMap& storedParams) const;
 
-    /// Build the generated `#define pz_<id> <glsl-accessor>` preamble (T1.1) for
+    /// Build the generated `#define p_<id> <glsl-accessor>` preamble (T1.1) for
     /// @p info's declared parameters, so a zone shader author reads a parameter
-    /// by name (`pz_borderRadius`) instead of hand-decoding a
+    /// by name (`p_borderRadius`) instead of hand-decoding a
     /// `customParams[N].xyzw` lane. Each param's explicit `slot` drives the
     /// accessor exactly as `ParameterInfo::uniformName()` /
     /// `translateParamsToUniforms` derive the upload target — scalar slot N →

@@ -43,7 +43,7 @@ const float SCALING    = 0.5;   // Additional vertical scaling of the window.
 
 // This is a combination of the effects from tv.frag and glitch.frag. Credits go to Kurt
 // Wilson (https://github.com/Kurtoid) for this idea!
-vec4 pzTransition(vec2 uv, float t) {
+vec4 pTransition(vec2 uv, float t) {
 
   // Add the tv effect sooner/later in the animation, compared to the original TV effect.
   float tOffset    = uForOpening ? 0.0 : 1.0;
@@ -57,10 +57,10 @@ vec4 pzTransition(vec2 uv, float t) {
 
   // This is from the original Glitch effect.
   float progress = easeInQuad(uForOpening ? 1.0 - uProgress : uProgress);
-  float time     = progress * uDuration * pz_uSpeed;
-  float strength = pz_uStrength * progress;
+  float time     = progress * uDuration * p_uSpeed;
+  float strength = p_uStrength * progress;
   float displace = 1000.0 * strength / uSize.x;
-  float yPos     = pz_uScale * uSize.y * (coords.y + uSeed * 10.0);
+  float yPos     = p_uScale * uSize.y * (coords.y + uSeed * 10.0);
 
   // Create large noise waves and add some smaller noise waves.
   float noise = clamp(simplex2D(vec2(time, yPos * 0.002)) - 0.5, 0.0, 1.0);
@@ -71,18 +71,18 @@ vec4 pzTransition(vec2 uv, float t) {
   vec4 oColor = getClippedInputColor(vec2(xPos, coords.y));
 
   // Mix in some random interference lines.
-  vec3 interference          = pz_uColor.rgb * hash12(vec2(yPos * time));
+  vec3 interference          = p_uColor.rgb * hash12(vec2(yPos * time));
   float interferenceStrength = noise * min(strength, 1.0);
-  oColor.rgb = mix(oColor.rgb, interference, pz_uColor.a * interferenceStrength);
+  oColor.rgb = mix(oColor.rgb, interference, p_uColor.a * interferenceStrength);
 
   // Mix in some grainy noise.
-  vec3 grain          = pz_uColor.rgb * simplex2D(uSize * coords + vec2(time * 100.0));
+  vec3 grain          = p_uColor.rgb * simplex2D(uSize * coords + vec2(time * 100.0));
   float grainStrength = 0.2 * min(strength, 1.0);
-  oColor.rgb          = mix(oColor.rgb, grain, pz_uColor.a * grainStrength);
+  oColor.rgb          = mix(oColor.rgb, grain, p_uColor.a * grainStrength);
 
   // Add a subtle line pattern every 4 pixels.
   if (floor(mod(yPos * 0.25, 2.0)) == 0.0) {
-    oColor.rgb = mix(oColor.rgb, pz_uColor.rgb, pz_uColor.a * (0.15 * noise));
+    oColor.rgb = mix(oColor.rgb, p_uColor.rgb, p_uColor.a * (0.15 * noise));
   }
 
   // Shift green/blue channels.
@@ -116,7 +116,7 @@ vec4 pzTransition(vec2 uv, float t) {
 
   // Assemble the final color value.
   oColor.rgb =
-    mix(oColor.rgb, pz_uColor.rgb * oColor.a, pz_uColor.a * smoothstep(0.0, 1.0, tvProgress));
+    mix(oColor.rgb, p_uColor.rgb * oColor.a, p_uColor.a * smoothstep(0.0, 1.0, tvProgress));
   float mask = tbMask * lrMask * ffMask;
 
   oColor.a *= mask;

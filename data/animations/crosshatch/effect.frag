@@ -19,25 +19,25 @@
 // The harness supplies #version, <animation_uniforms.glsl>, the in/out,
 // and main().
 
-// pz_radialFalloff / pz_edgeFade (customParams[0].xy) are generated from
+// p_radialFalloff / p_edgeFade (customParams[0].xy) are generated from
 // metadata.json — no hand-written slot #defines.
 
 float crosshatch_rand(vec2 co) {
     return fract(sin(dot(co.xy, vec2(12.9898, 78.233))) * 43758.5453);
 }
 
-// Symmetric: a single pzTransition. `t` is the leg's iTime, which the runtime
+// Symmetric: a single pTransition. `t` is the leg's iTime, which the runtime
 // flips on the close leg (1→0), so the niri OPEN body auto-mirrors on close
 // with no direction code.
-vec4 pzTransition(vec2 uv, float t) {
+vec4 pTransition(vec2 uv, float t) {
     // ── niri OPEN body (handles both legs via runtime iTime flip) ──
     float p = clamp(t, 0.0, 1.0);
     vec4 win = surfaceColor(uv);
 
     vec2 center = vec2(0.5);
-    float dist = distance(center, uv) / pz_radialFalloff;
+    float dist = distance(center, uv) / p_radialFalloff;
     float r = p - min(crosshatch_rand(vec2(uv.y, 0.0)), crosshatch_rand(vec2(0.0, uv.x)));
-    float reveal = mix(0.0, mix(step(dist, r), 1.0, smoothstep(1.0 - pz_edgeFade, 1.0, p)), smoothstep(0.0, pz_edgeFade, p));
+    float reveal = mix(0.0, mix(step(dist, r), 1.0, smoothstep(1.0 - p_edgeFade, 1.0, p)), smoothstep(0.0, p_edgeFade, p));
 
     return win * reveal;
 }

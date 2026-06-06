@@ -29,10 +29,10 @@
 
 #include <noise.glsl>
 
-// `pz_maxPixelSize` / `pz_spokeCount` are generated from metadata.json
+// `p_maxPixelSize` / `p_spokeCount` are generated from metadata.json
 // (the customParams[0] sub-slots) by the harness.
 
-vec4 pzTransition(vec2 uv, float t)
+vec4 pTransition(vec2 uv, float t)
 {
     float visibility = clamp(iTime, 0.0, 1.0);
     float progress   = smoothstep(0.0, 1.0, 1.0 - visibility);
@@ -40,7 +40,7 @@ vec4 pzTransition(vec2 uv, float t)
     // Pixelate. Cell size grows with progress; at progress=0 this is
     // `ceil(0+1)=1` so the grid collapses to per-pixel sampling
     // (visual no-op).
-    float pixelSize = ceil(pz_maxPixelSize * progress + 1.0);
+    float pixelSize = ceil(p_maxPixelSize * progress + 1.0);
     // Floor iResolution so an early-frame zero-sized surface doesn't
     // divide-by-zero into an infinite pixelGrid. Real frames replace
     // this with the actual surface size.
@@ -72,7 +72,7 @@ vec4 pzTransition(vec2 uv, float t)
     // Each spoke wedge is its own [0,1] gradient. Cells with low
     // threshold (clockwise-leading edge) are hidden first; cells
     // with high threshold (clockwise-trailing edge) are hidden last.
-    float threshold = mod(angle * max(pz_spokeCount, 1.0), 1.0);
+    float threshold = mod(angle * max(p_spokeCount, 1.0), 1.0);
     if (progress > threshold) {
         sampled = vec4(0.0);
     }

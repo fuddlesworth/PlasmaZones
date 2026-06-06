@@ -23,39 +23,39 @@ QString zoneEntryPrologue()
 
 QList<PhosphorShaders::EntryCandidate> zoneEntryCandidates()
 {
-    // pzZone: the per-zone dispatch the 26 packs write by hand today — the
+    // pZone: the per-zone dispatch the 26 packs write by hand today — the
     // zoneCount guard, the bounded loop, the degenerate-rect skip, the
     // blendOver accumulate, and the final clamp — all generated once here.
-    // `pz_`-prefixed locals avoid colliding with author identifiers.
+    // `p_`-prefixed locals avoid colliding with author identifiers.
     static const QString zoneMain = QStringLiteral(
         "void main() {\n"
         "    if (zoneCount == 0) { fragColor = vec4(0.0); return; }\n"
-        "    vec4 pz_accum = vec4(0.0);\n"
-        "    for (int pz_i = 0; pz_i < zoneCount && pz_i < 64; pz_i++) {\n"
-        "        vec4 pz_rect = zoneRects[pz_i];\n"
-        "        if (pz_rect.z <= 0.0 || pz_rect.w <= 0.0) continue;\n"
-        "        ZoneCtx pz_z;\n"
-        "        pz_z.index = pz_i;\n"
-        "        pz_z.fragCoord = vFragCoord;\n"
-        "        pz_z.rect = pz_rect;\n"
-        "        pz_z.fillColor = zoneFillColors[pz_i];\n"
-        "        pz_z.borderColor = zoneBorderColors[pz_i];\n"
-        "        pz_z.params = zoneParams[pz_i];\n"
-        "        pz_z.isHighlighted = zoneParams[pz_i].z > 0.5;\n"
-        "        pz_accum = blendOver(pz_accum, pzZone(pz_z));\n"
+        "    vec4 p_accum = vec4(0.0);\n"
+        "    for (int p_i = 0; p_i < zoneCount && p_i < 64; p_i++) {\n"
+        "        vec4 p_rect = zoneRects[p_i];\n"
+        "        if (p_rect.z <= 0.0 || p_rect.w <= 0.0) continue;\n"
+        "        ZoneCtx p_z;\n"
+        "        p_z.index = p_i;\n"
+        "        p_z.fragCoord = vFragCoord;\n"
+        "        p_z.rect = p_rect;\n"
+        "        p_z.fillColor = zoneFillColors[p_i];\n"
+        "        p_z.borderColor = zoneBorderColors[p_i];\n"
+        "        p_z.params = zoneParams[p_i];\n"
+        "        p_z.isHighlighted = zoneParams[p_i].z > 0.5;\n"
+        "        p_accum = blendOver(p_accum, pZone(p_z));\n"
         "    }\n"
-        "    fragColor = clampFragColor(pz_accum);\n"
+        "    fragColor = clampFragColor(p_accum);\n"
         "}\n");
 
-    // pzImage: full-frame entry — the trivial main() a multipass buffer pass or
+    // pImage: full-frame entry — the trivial main() a multipass buffer pass or
     // a wallpaper/full-screen effect needs, with the central clamp applied.
     static const QString imageMain = QStringLiteral(
         "void main() {\n"
-        "    fragColor = clampFragColor(pzImage(vFragCoord));\n"
+        "    fragColor = clampFragColor(pImage(vFragCoord));\n"
         "}\n");
 
-    return {PhosphorShaders::EntryCandidate{QStringLiteral("pzZone"), zoneMain},
-            PhosphorShaders::EntryCandidate{QStringLiteral("pzImage"), imageMain}};
+    return {PhosphorShaders::EntryCandidate{QStringLiteral("pZone"), zoneMain},
+            PhosphorShaders::EntryCandidate{QStringLiteral("pImage"), imageMain}};
 }
 
 QString assembleZoneEntrySource(const QString& rawFragmentSource)
@@ -63,7 +63,7 @@ QString assembleZoneEntrySource(const QString& rawFragmentSource)
     // Delegate to the shared library assembler so the zone path can't drift from
     // the rendering/kwin-effect paths: a pack that ships its own main() passes
     // through byte-for-byte; an entry-only pack gets the prologue + the generated
-    // main() for whichever candidate (pzZone/pzImage) its body defines. The zone
+    // main() for whichever candidate (pZone/pImage) its body defines. The zone
     // candidate list is never empty, so this is exactly the old open-coded form.
     return PhosphorShaders::assembleEntryPoint(rawFragmentSource, zoneEntryPrologue(), zoneEntryCandidates());
 }

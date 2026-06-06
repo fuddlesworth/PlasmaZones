@@ -38,11 +38,11 @@ layout(std140, binding = 0) uniform ZoneUniforms {
     vec4 zoneParams[64];
 };
 
-// Per-zone context handed to a `vec4 pzZone(ZoneCtx z)` entry function (T1.4).
-// When a pack defines pzZone instead of main(), the harness generates the
+// Per-zone context handed to a `vec4 pZone(ZoneCtx z)` entry function (T1.4).
+// When a pack defines pZone instead of main(), the harness generates the
 // dispatch loop: for each visible zone it fills one ZoneCtx and accumulates the
 // returned colors with blendOver(), then clampFragColor()s the result. The full
-// zoneRects[]/iTime/audio globals stay readable inside pzZone, so continuous-
+// zoneRects[]/iTime/audio globals stay readable inside pZone, so continuous-
 // field and cross-zone effects remain expressible. Unused by packs that keep
 // their own main().
 struct ZoneCtx {

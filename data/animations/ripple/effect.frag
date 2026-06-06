@@ -10,7 +10,7 @@
 // bodies — close uses `intensity = p*p` with `alpha = smoothstep(1.0,
 // 0.5, p)`; open uses `intensity = (1-p)*(1-p)` with
 // `alpha = smoothstep(0.0, 0.3, p)`. The runtime's iTime flip alone
-// can't express both curves, so this is a pzIn/pzOut pair: the harness
+// can't express both curves, so this is a pIn/pOut pair: the harness
 // feeds forward 0→1 `t` to both and dispatches the matching niri body by
 // leg direction (`windowFadingIn`).
 //
@@ -24,7 +24,7 @@
 // and main(). noise.glsl is pack-specific, so it stays here.
 #include <noise.glsl>
 
-// pz_rippleAmplitude / pz_rippleSpeed (customParams[0].xy) are generated from
+// p_rippleAmplitude / p_rippleSpeed (customParams[0].xy) are generated from
 // metadata.json. Same params drive BOTH legs — the asymmetry lives in the
 // intensity / alpha curves, not in amplitude or speed.
 
@@ -41,7 +41,7 @@ vec4 rippleBody(vec2 uv, float t, bool windowFadingIn) {
         float dist = length(dir);
 
         float intensity = p * p;
-        vec2 offset = dir * (sin(p * dist * pz_rippleAmplitude - p * pz_rippleSpeed + seed) + 0.5) / 30.0;
+        vec2 offset = dir * (sin(p * dist * p_rippleAmplitude - p * p_rippleSpeed + seed) + 0.5) / 30.0;
 
         vec2 wuv = uv + offset * intensity;
         // boundaryMask: see noise.glsl. Crops off-window samples to transparent.
@@ -58,7 +58,7 @@ vec4 rippleBody(vec2 uv, float t, bool windowFadingIn) {
         float dist = length(dir);
 
         float intensity = (1.0 - p) * (1.0 - p);
-        vec2 offset = dir * (sin(p * dist * pz_rippleAmplitude - p * pz_rippleSpeed + seed) + 0.5) / 30.0;
+        vec2 offset = dir * (sin(p * dist * p_rippleAmplitude - p * p_rippleSpeed + seed) + 0.5) / 30.0;
 
         vec2 wuv = uv + offset * intensity;
         // boundaryMask: see noise.glsl. Crops off-window samples to transparent.
@@ -70,5 +70,5 @@ vec4 rippleBody(vec2 uv, float t, bool windowFadingIn) {
     return result;
 }
 
-vec4 pzIn(vec2 uv, float t)  { return rippleBody(uv, t, true);  }
-vec4 pzOut(vec2 uv, float t) { return rippleBody(uv, t, false); }
+vec4 pIn(vec2 uv, float t)  { return rippleBody(uv, t, true);  }
+vec4 pOut(vec2 uv, float t) { return rippleBody(uv, t, false); }

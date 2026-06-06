@@ -46,7 +46,7 @@ vec4 oldColor(vec2 uv) {
 }
 #endif
 
-vec4 pzTransition(vec2 uv, float t) {
+vec4 pTransition(vec2 uv, float t) {
 #ifdef PLASMAZONES_KWIN
     t = clamp(t, 0.0, 1.0);
 

@@ -400,27 +400,27 @@ set(PHOSPHOR_ENGINE_TARGETS
 # zero-match firewall would let a future Qml link through unnoticed,
 # which is exactly the failure mode the rationale above is designed
 # to prevent.
-set(_pz_engine_matched_any FALSE)
-foreach(_pz_engine_lib IN LISTS PHOSPHOR_ENGINE_TARGETS)
-    if(TARGET ${_pz_engine_lib})
-        set(_pz_engine_matched_any TRUE)
-        get_target_property(_pz_engine_links ${_pz_engine_lib} LINK_LIBRARIES)
-        if(_pz_engine_links)
-            foreach(_pz_link IN LISTS _pz_engine_links)
-                if(_pz_link MATCHES "(^|::)Qt6::(Qml|Quick)$")
+set(_p_engine_matched_any FALSE)
+foreach(_p_engine_lib IN LISTS PHOSPHOR_ENGINE_TARGETS)
+    if(TARGET ${_p_engine_lib})
+        set(_p_engine_matched_any TRUE)
+        get_target_property(_p_engine_links ${_p_engine_lib} LINK_LIBRARIES)
+        if(_p_engine_links)
+            foreach(_p_link IN LISTS _p_engine_links)
+                if(_p_link MATCHES "(^|::)Qt6::(Qml|Quick)$")
                     message(FATAL_ERROR
-                        "Engine library '${_pz_engine_lib}' links '${_pz_link}'. "
+                        "Engine library '${_p_engine_lib}' links '${_p_link}'. "
                         "Engine libs must stay QML-free, see comment above this "
                         "check in CMakeLists.txt for rationale.")
                 endif()
             endforeach()
         endif()
-        get_target_property(_pz_engine_iface ${_pz_engine_lib} INTERFACE_LINK_LIBRARIES)
-        if(_pz_engine_iface)
-            foreach(_pz_link IN LISTS _pz_engine_iface)
-                if(_pz_link MATCHES "(^|::)Qt6::(Qml|Quick)$")
+        get_target_property(_p_engine_iface ${_p_engine_lib} INTERFACE_LINK_LIBRARIES)
+        if(_p_engine_iface)
+            foreach(_p_link IN LISTS _p_engine_iface)
+                if(_p_link MATCHES "(^|::)Qt6::(Qml|Quick)$")
                     message(FATAL_ERROR
-                        "Engine library '${_pz_engine_lib}' publicly links '${_pz_link}'. "
+                        "Engine library '${_p_engine_lib}' publicly links '${_p_link}'. "
                         "Engine libs must stay QML-free, see comment above this "
                         "check in CMakeLists.txt for rationale.")
                 endif()
@@ -428,7 +428,7 @@ foreach(_pz_engine_lib IN LISTS PHOSPHOR_ENGINE_TARGETS)
         endif()
     endif()
 endforeach()
-if(NOT _pz_engine_matched_any)
+if(NOT _p_engine_matched_any)
     message(FATAL_ERROR
         "Engine QML firewall matched zero targets from PHOSPHOR_ENGINE_TARGETS "
         "(${PHOSPHOR_ENGINE_TARGETS}). The firewall is a no-op in this state, "
@@ -558,12 +558,12 @@ install(DIRECTORY data/curves/
 # that join produces `/usr//absolute/...` when ECM hands us an absolute
 # KDE_INSTALL_DATADIR (some distros override it that way).
 install(CODE "
-    set(_pz_profiles_install_dir \"\$ENV{DESTDIR}${KDE_INSTALL_FULL_DATADIR}/plasmazones/profiles\")
-    if(EXISTS \"\${_pz_profiles_install_dir}\")
-        file(GLOB _pz_stale_profile_jsons \"\${_pz_profiles_install_dir}/*.json\")
-        if(_pz_stale_profile_jsons)
-            message(STATUS \"Removing stale animation profile JSONs from \${_pz_profiles_install_dir}\")
-            file(REMOVE \${_pz_stale_profile_jsons})
+    set(_p_profiles_install_dir \"\$ENV{DESTDIR}${KDE_INSTALL_FULL_DATADIR}/plasmazones/profiles\")
+    if(EXISTS \"\${_p_profiles_install_dir}\")
+        file(GLOB _p_stale_profile_jsons \"\${_p_profiles_install_dir}/*.json\")
+        if(_p_stale_profile_jsons)
+            message(STATUS \"Removing stale animation profile JSONs from \${_p_profiles_install_dir}\")
+            file(REMOVE \${_p_stale_profile_jsons})
         endif()
     endif()
 ")

@@ -43,7 +43,7 @@ bool probeAndSetGraphicsApi(const QString& backend)
 #if QT_CONFIG(vulkan)
 bool createAndRegisterVulkanInstance(QVulkanInstance& vulkanInstance, QGuiApplication& app)
 {
-    vulkanInstance.setApiVersion(PzVulkanApiVersion);
+    vulkanInstance.setApiVersion(PVulkanApiVersion);
     vulkanInstance.setExtensions(vulkanInstance.extensions() << QByteArrayLiteral("VK_EXT_swapchain_colorspace"));
     if (!vulkanInstance.create()) {
         QQuickWindow::setGraphicsApi(QSGRendererInterface::OpenGL);
@@ -71,7 +71,7 @@ bool createAndRegisterVulkanInstance(QVulkanInstance& vulkanInstance, QGuiApplic
         return false;
     }
 
-    app.setProperty(PzVulkanInstanceProperty, QVariant::fromValue(&vulkanInstance));
+    app.setProperty(PVulkanInstanceProperty, QVariant::fromValue(&vulkanInstance));
     return true;
 }
 #endif

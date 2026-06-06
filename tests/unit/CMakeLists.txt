@@ -14,7 +14,7 @@
 # coincidental, not contractual. A future refactor that drops Qt6::DBus from
 # plasmazones_core's interface link would silently break every test that
 # relied on the transitive pull.
-macro(pz_add_test _name _src)
+macro(p_add_test _name _src)
     add_executable(${_name} ${_src})
     target_link_libraries(${_name} PRIVATE Qt6::Test Qt6::Core plasmazones_core)
     add_test(NAME ${_name} COMMAND ${_name})
@@ -23,21 +23,21 @@ endmacro()
 # ═══════════════════════════════════════════════════════════════════════════════
 # core/ - Window Identity Tests
 # ═══════════════════════════════════════════════════════════════════════════════
-pz_add_test(test_window_identity core/test_window_identity.cpp)
-pz_add_test(test_window_registry core/test_window_registry.cpp)
+p_add_test(test_window_identity core/test_window_identity.cpp)
+p_add_test(test_window_registry core/test_window_registry.cpp)
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # core/ - Window Tracking Tests (snap/unsnap, floating)
 # ═══════════════════════════════════════════════════════════════════════════════
-pz_add_test(test_window_tracking_snap core/test_window_tracking_snap.cpp)
-pz_add_test(test_window_tracking_float core/test_window_tracking_float.cpp)
-pz_add_test(test_window_placement_store core/test_window_placement_store.cpp)
+p_add_test(test_window_tracking_snap core/test_window_tracking_snap.cpp)
+p_add_test(test_window_tracking_float core/test_window_tracking_float.cpp)
+p_add_test(test_window_placement_store core/test_window_placement_store.cpp)
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # core/ - Session Persistence Tests
 # ═══════════════════════════════════════════════════════════════════════════════
-pz_add_test(test_session_persistence core/test_session_persistence.cpp)
-pz_add_test(test_session_persistence_layout core/test_session_persistence_layout.cpp)
+p_add_test(test_session_persistence core/test_session_persistence.cpp)
+p_add_test(test_session_persistence_layout core/test_session_persistence_layout.cpp)
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # core/ - Window Tracking Service Tests (lifecycle, session, queries)
@@ -92,24 +92,24 @@ add_test(NAME test_placement_engine_base COMMAND test_placement_engine_base)
 # ═══════════════════════════════════════════════════════════════════════════════
 # autotile/ - Tiling Algorithm Tests (split by algorithm family)
 # ═══════════════════════════════════════════════════════════════════════════════
-pz_add_test(test_tiling_algo_masterstack autotile/test_tiling_algo_masterstack.cpp)
-target_compile_definitions(test_tiling_algo_masterstack PRIVATE "PZ_SOURCE_DIR=\"${PROJECT_SOURCE_DIR}\"")
-pz_add_test(test_tiling_algo_spiral_monocle autotile/test_tiling_algo_spiral_monocle.cpp)
-target_compile_definitions(test_tiling_algo_spiral_monocle PRIVATE "PZ_SOURCE_DIR=\"${PROJECT_SOURCE_DIR}\"")
-pz_add_test(test_tiling_algo_grid_threecolumn autotile/test_tiling_algo_grid_threecolumn.cpp)
-target_compile_definitions(test_tiling_algo_grid_threecolumn PRIVATE "PZ_SOURCE_DIR=\"${PROJECT_SOURCE_DIR}\"")
-pz_add_test(test_tiling_algo_wide_centered autotile/test_tiling_algo_wide_centered.cpp)
-target_compile_definitions(test_tiling_algo_wide_centered PRIVATE "PZ_SOURCE_DIR=\"${PROJECT_SOURCE_DIR}\"")
-pz_add_test(test_tiling_algo_cascade_stair_spread autotile/test_tiling_algo_cascade_stair_spread.cpp)
-target_compile_definitions(test_tiling_algo_cascade_stair_spread PRIVATE "PZ_SOURCE_DIR=\"${PROJECT_SOURCE_DIR}\"")
-pz_add_test(test_tiling_algo_lshape autotile/test_tiling_algo_lshape.cpp)
-target_compile_definitions(test_tiling_algo_lshape PRIVATE "PZ_SOURCE_DIR=\"${PROJECT_SOURCE_DIR}\"")
-pz_add_test(test_tiling_algo_deck_zen autotile/test_tiling_algo_deck_zen.cpp)
-target_compile_definitions(test_tiling_algo_deck_zen PRIVATE "PZ_SOURCE_DIR=\"${PROJECT_SOURCE_DIR}\"")
-pz_add_test(test_tiling_algo_edge_cases autotile/test_tiling_algo_edge_cases.cpp)
-target_compile_definitions(test_tiling_algo_edge_cases PRIVATE "PZ_SOURCE_DIR=\"${PROJECT_SOURCE_DIR}\"")
-pz_add_test(test_tiling_algo_bsp autotile/test_tiling_algo_bsp.cpp)
-target_compile_definitions(test_tiling_algo_bsp PRIVATE "PZ_SOURCE_DIR=\"${PROJECT_SOURCE_DIR}\"")
+p_add_test(test_tiling_algo_masterstack autotile/test_tiling_algo_masterstack.cpp)
+target_compile_definitions(test_tiling_algo_masterstack PRIVATE "P_SOURCE_DIR=\"${PROJECT_SOURCE_DIR}\"")
+p_add_test(test_tiling_algo_spiral_monocle autotile/test_tiling_algo_spiral_monocle.cpp)
+target_compile_definitions(test_tiling_algo_spiral_monocle PRIVATE "P_SOURCE_DIR=\"${PROJECT_SOURCE_DIR}\"")
+p_add_test(test_tiling_algo_grid_threecolumn autotile/test_tiling_algo_grid_threecolumn.cpp)
+target_compile_definitions(test_tiling_algo_grid_threecolumn PRIVATE "P_SOURCE_DIR=\"${PROJECT_SOURCE_DIR}\"")
+p_add_test(test_tiling_algo_wide_centered autotile/test_tiling_algo_wide_centered.cpp)
+target_compile_definitions(test_tiling_algo_wide_centered PRIVATE "P_SOURCE_DIR=\"${PROJECT_SOURCE_DIR}\"")
+p_add_test(test_tiling_algo_cascade_stair_spread autotile/test_tiling_algo_cascade_stair_spread.cpp)
+target_compile_definitions(test_tiling_algo_cascade_stair_spread PRIVATE "P_SOURCE_DIR=\"${PROJECT_SOURCE_DIR}\"")
+p_add_test(test_tiling_algo_lshape autotile/test_tiling_algo_lshape.cpp)
+target_compile_definitions(test_tiling_algo_lshape PRIVATE "P_SOURCE_DIR=\"${PROJECT_SOURCE_DIR}\"")
+p_add_test(test_tiling_algo_deck_zen autotile/test_tiling_algo_deck_zen.cpp)
+target_compile_definitions(test_tiling_algo_deck_zen PRIVATE "P_SOURCE_DIR=\"${PROJECT_SOURCE_DIR}\"")
+p_add_test(test_tiling_algo_edge_cases autotile/test_tiling_algo_edge_cases.cpp)
+target_compile_definitions(test_tiling_algo_edge_cases PRIVATE "P_SOURCE_DIR=\"${PROJECT_SOURCE_DIR}\"")
+p_add_test(test_tiling_algo_bsp autotile/test_tiling_algo_bsp.cpp)
+target_compile_definitions(test_tiling_algo_bsp PRIVATE "P_SOURCE_DIR=\"${PROJECT_SOURCE_DIR}\"")
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # core/ - PhosphorLayoutApi LayoutSourceBundle + FactoryContext
@@ -117,18 +117,18 @@ target_compile_definitions(test_tiling_algo_bsp PRIVATE "PZ_SOURCE_DIR=\"${PROJE
 # Covers the PR #343 plugin-discovery API directly: FactoryContext
 # set/get, bundle lifecycle, duplicate-name handling, priority sort, and
 # the ~LayoutSourceBundle "no spurious emit" guarantee.
-pz_add_test(test_layout_source_bundle core/test_layout_source_bundle.cpp)
+p_add_test(test_layout_source_bundle core/test_layout_source_bundle.cpp)
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # autotile/ - Algorithm Registry Tests
 # ═══════════════════════════════════════════════════════════════════════════════
-pz_add_test(test_algorithm_registry autotile/test_algorithm_registry.cpp)
-target_compile_definitions(test_algorithm_registry PRIVATE "PZ_SOURCE_DIR=\"${PROJECT_SOURCE_DIR}\"")
-pz_add_test(test_algorithm_registry_custom autotile/test_algorithm_registry_custom.cpp)
-target_compile_definitions(test_algorithm_registry_custom PRIVATE "PZ_SOURCE_DIR=\"${PROJECT_SOURCE_DIR}\"")
-pz_add_test(test_split_tree autotile/test_split_tree.cpp)
-target_compile_definitions(test_split_tree PRIVATE "PZ_SOURCE_DIR=\"${PROJECT_SOURCE_DIR}\"")
-pz_add_test(test_scripted_algorithm_loader autotile/test_scripted_algorithm_loader.cpp)
+p_add_test(test_algorithm_registry autotile/test_algorithm_registry.cpp)
+target_compile_definitions(test_algorithm_registry PRIVATE "P_SOURCE_DIR=\"${PROJECT_SOURCE_DIR}\"")
+p_add_test(test_algorithm_registry_custom autotile/test_algorithm_registry_custom.cpp)
+target_compile_definitions(test_algorithm_registry_custom PRIVATE "P_SOURCE_DIR=\"${PROJECT_SOURCE_DIR}\"")
+p_add_test(test_split_tree autotile/test_split_tree.cpp)
+target_compile_definitions(test_split_tree PRIVATE "P_SOURCE_DIR=\"${PROJECT_SOURCE_DIR}\"")
+p_add_test(test_scripted_algorithm_loader autotile/test_scripted_algorithm_loader.cpp)
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # scripting/ - PhosphorScripting (embedded Luau host)
@@ -142,7 +142,7 @@ add_test(NAME test_luau_engine COMMAND test_luau_engine)
 
 add_executable(test_luau_tile_algorithm scripting/test_luau_tile_algorithm.cpp)
 set_target_properties(test_luau_tile_algorithm PROPERTIES AUTOMOC ON)
-target_compile_definitions(test_luau_tile_algorithm PRIVATE "PZ_LUAU_TEST_DIR=\"${CMAKE_CURRENT_SOURCE_DIR}/scripting\"")
+target_compile_definitions(test_luau_tile_algorithm PRIVATE "P_LUAU_TEST_DIR=\"${CMAKE_CURRENT_SOURCE_DIR}/scripting\"")
 target_link_libraries(test_luau_tile_algorithm PRIVATE Qt6::Test Qt6::Core PhosphorTiles::PhosphorTiles)
 add_test(NAME test_luau_tile_algorithm COMMAND test_luau_tile_algorithm)
 
@@ -150,108 +150,108 @@ add_test(NAME test_luau_tile_algorithm COMMAND test_luau_tile_algorithm)
 # (originally captured from the JS engine's byte-identical output).
 add_executable(test_luau_parity scripting/test_luau_parity.cpp)
 set_target_properties(test_luau_parity PROPERTIES AUTOMOC ON)
-target_compile_definitions(test_luau_parity PRIVATE "PZ_SOURCE_DIR=\"${PROJECT_SOURCE_DIR}\"")
+target_compile_definitions(test_luau_parity PRIVATE "P_SOURCE_DIR=\"${PROJECT_SOURCE_DIR}\"")
 target_link_libraries(test_luau_parity PRIVATE Qt6::Test Qt6::Core PhosphorTiles::PhosphorTiles)
 add_test(NAME test_luau_parity COMMAND test_luau_parity)
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # autotile/ - Autotile Engine Tests (core, master, minsize, overflow)
 # ═══════════════════════════════════════════════════════════════════════════════
-pz_add_test(test_autotile_engine_core autotile/test_autotile_engine_core.cpp)
-target_compile_definitions(test_autotile_engine_core PRIVATE "PZ_SOURCE_DIR=\"${PROJECT_SOURCE_DIR}\"")
-pz_add_test(test_autotile_engine_master autotile/test_autotile_engine_master.cpp)
-target_compile_definitions(test_autotile_engine_master PRIVATE "PZ_SOURCE_DIR=\"${PROJECT_SOURCE_DIR}\"")
-pz_add_test(test_autotile_engine_minsize autotile/test_autotile_engine_minsize.cpp)
-pz_add_test(test_autotile_engine_overflow autotile/test_autotile_engine_overflow.cpp)
-pz_add_test(test_autotile_engine_retry autotile/test_autotile_engine_retry.cpp)
-pz_add_test(test_autotile_engine_order_cycling autotile/test_autotile_engine_order_cycling.cpp)
-target_compile_definitions(test_autotile_engine_order_cycling PRIVATE "PZ_SOURCE_DIR=\"${PROJECT_SOURCE_DIR}\"")
-pz_add_test(test_autotile_engine_class_mutation autotile/test_autotile_engine_class_mutation.cpp)
-pz_add_test(test_autotile_drag_insert autotile/test_autotile_drag_insert.cpp)
-target_compile_definitions(test_autotile_drag_insert PRIVATE "PZ_SOURCE_DIR=\"${PROJECT_SOURCE_DIR}\"")
-pz_add_test(test_autotile_handoff autotile/test_autotile_handoff.cpp)
-target_compile_definitions(test_autotile_handoff PRIVATE "PZ_SOURCE_DIR=\"${PROJECT_SOURCE_DIR}\"")
+p_add_test(test_autotile_engine_core autotile/test_autotile_engine_core.cpp)
+target_compile_definitions(test_autotile_engine_core PRIVATE "P_SOURCE_DIR=\"${PROJECT_SOURCE_DIR}\"")
+p_add_test(test_autotile_engine_master autotile/test_autotile_engine_master.cpp)
+target_compile_definitions(test_autotile_engine_master PRIVATE "P_SOURCE_DIR=\"${PROJECT_SOURCE_DIR}\"")
+p_add_test(test_autotile_engine_minsize autotile/test_autotile_engine_minsize.cpp)
+p_add_test(test_autotile_engine_overflow autotile/test_autotile_engine_overflow.cpp)
+p_add_test(test_autotile_engine_retry autotile/test_autotile_engine_retry.cpp)
+p_add_test(test_autotile_engine_order_cycling autotile/test_autotile_engine_order_cycling.cpp)
+target_compile_definitions(test_autotile_engine_order_cycling PRIVATE "P_SOURCE_DIR=\"${PROJECT_SOURCE_DIR}\"")
+p_add_test(test_autotile_engine_class_mutation autotile/test_autotile_engine_class_mutation.cpp)
+p_add_test(test_autotile_drag_insert autotile/test_autotile_drag_insert.cpp)
+target_compile_definitions(test_autotile_drag_insert PRIVATE "P_SOURCE_DIR=\"${PROJECT_SOURCE_DIR}\"")
+p_add_test(test_autotile_handoff autotile/test_autotile_handoff.cpp)
+target_compile_definitions(test_autotile_handoff PRIVATE "P_SOURCE_DIR=\"${PROJECT_SOURCE_DIR}\"")
 # Producer-side validator guard - ensures the JSON emitted by
 # AutotileEngine::applyTiling round-trips through TileRequestEntry
 # parsing and passes validationError(). Would have caught PR #326 C1.
-pz_add_test(test_autotile_tile_request_validation autotile/test_autotile_tile_request_validation.cpp)
+p_add_test(test_autotile_tile_request_validation autotile/test_autotile_tile_request_validation.cpp)
 target_link_libraries(test_autotile_tile_request_validation PRIVATE PhosphorCompositor::PhosphorCompositor)
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # autotile/ - Autotile + Virtual Screen Integration Tests
 # ═══════════════════════════════════════════════════════════════════════════════
-pz_add_test(test_autotile_virtual autotile/test_autotile_virtual.cpp)
-target_compile_definitions(test_autotile_virtual PRIVATE "PZ_SOURCE_DIR=\"${PROJECT_SOURCE_DIR}\"")
+p_add_test(test_autotile_virtual autotile/test_autotile_virtual.cpp)
+target_compile_definitions(test_autotile_virtual PRIVATE "P_SOURCE_DIR=\"${PROJECT_SOURCE_DIR}\"")
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # autotile/ - Autotile Engine Extended Tests (startup, float, algoswitch, overflow)
 # ═══════════════════════════════════════════════════════════════════════════════
-pz_add_test(test_autotile_ext_startup_float autotile/test_autotile_ext_startup_float.cpp)
-pz_add_test(test_autotile_ext_algoswitch autotile/test_autotile_ext_algoswitch.cpp)
-target_compile_definitions(test_autotile_ext_algoswitch PRIVATE "PZ_SOURCE_DIR=\"${PROJECT_SOURCE_DIR}\"")
-pz_add_test(test_autotile_ext_overflow autotile/test_autotile_ext_overflow.cpp)
+p_add_test(test_autotile_ext_startup_float autotile/test_autotile_ext_startup_float.cpp)
+p_add_test(test_autotile_ext_algoswitch autotile/test_autotile_ext_algoswitch.cpp)
+target_compile_definitions(test_autotile_ext_algoswitch PRIVATE "P_SOURCE_DIR=\"${PROJECT_SOURCE_DIR}\"")
+p_add_test(test_autotile_ext_overflow autotile/test_autotile_ext_overflow.cpp)
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # autotile/ - Tiling State Tests (windows, config, serialization)
 # ═══════════════════════════════════════════════════════════════════════════════
-pz_add_test(test_tiling_state_windows autotile/test_tiling_state_windows.cpp)
-pz_add_test(test_tiling_state_config autotile/test_tiling_state_config.cpp)
-pz_add_test(test_tiling_state_serial autotile/test_tiling_state_serial.cpp)
+p_add_test(test_tiling_state_windows autotile/test_tiling_state_windows.cpp)
+p_add_test(test_tiling_state_config autotile/test_tiling_state_config.cpp)
+p_add_test(test_tiling_state_serial autotile/test_tiling_state_serial.cpp)
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # autotile/ - Overflow Manager Tests
 # ═══════════════════════════════════════════════════════════════════════════════
-pz_add_test(test_overflow_manager autotile/test_overflow_manager.cpp)
+p_add_test(test_overflow_manager autotile/test_overflow_manager.cpp)
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # core/ - Geometry Utils Tests (minsizes, overlaps, BSP)
 # ═══════════════════════════════════════════════════════════════════════════════
-pz_add_test(test_geometry_utils_minsizes core/test_geometry_utils_minsizes.cpp)
-pz_add_test(test_geometry_utils_overlaps core/test_geometry_utils_overlaps.cpp)
-pz_add_test(test_geometry_utils_bsp core/test_geometry_utils_bsp.cpp)
-pz_add_test(test_geometry_utils_clamp core/test_geometry_utils_clamp.cpp)
-pz_add_test(test_geometry_utils_serialization core/test_geometry_utils_serialization.cpp)
-pz_add_test(test_spatial_adjacency core/test_spatial_adjacency.cpp)
-pz_add_test(test_virtualscreen_swapper core/test_virtualscreen_swapper.cpp)
-pz_add_test(test_screen_mode_router core/test_screen_mode_router.cpp)
+p_add_test(test_geometry_utils_minsizes core/test_geometry_utils_minsizes.cpp)
+p_add_test(test_geometry_utils_overlaps core/test_geometry_utils_overlaps.cpp)
+p_add_test(test_geometry_utils_bsp core/test_geometry_utils_bsp.cpp)
+p_add_test(test_geometry_utils_clamp core/test_geometry_utils_clamp.cpp)
+p_add_test(test_geometry_utils_serialization core/test_geometry_utils_serialization.cpp)
+p_add_test(test_spatial_adjacency core/test_spatial_adjacency.cpp)
+p_add_test(test_virtualscreen_swapper core/test_virtualscreen_swapper.cpp)
+p_add_test(test_screen_mode_router core/test_screen_mode_router.cpp)
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # config/ - Settings Tests (core, validation, per-screen)
 # ═══════════════════════════════════════════════════════════════════════════════
-pz_add_test(test_settings_core config/test_settings_core.cpp)
+p_add_test(test_settings_core config/test_settings_core.cpp)
 
 # Companion test executable: animation Profile JSON-blob storage,
 # per-field signal discrimination, aggregate-setter merge semantics.
 # Split from test_settings_core to keep each test file under the
 # project's <800-line guideline.
-pz_add_test(test_settings_animation_profile config/test_settings_animation_profile.cpp)
+p_add_test(test_settings_animation_profile config/test_settings_animation_profile.cpp)
 
 # Companion test executable: ShaderProfileTree persistence + prune,
 # autoAssignAllLayouts master toggle. Split from test_settings_core to
 # keep each test file under the project's <800-line guideline.
-pz_add_test(test_settings_shader_tree config/test_settings_shader_tree.cpp)
+p_add_test(test_settings_shader_tree config/test_settings_shader_tree.cpp)
 
-pz_add_test(test_settings_validation config/test_settings_validation.cpp)
+p_add_test(test_settings_validation config/test_settings_validation.cpp)
 
-pz_add_test(test_settings_perscreen config/test_settings_perscreen.cpp)
+p_add_test(test_settings_perscreen config/test_settings_perscreen.cpp)
 
-pz_add_test(test_settings_disable_per_mode config/test_settings_disable_per_mode.cpp)
+p_add_test(test_settings_disable_per_mode config/test_settings_disable_per_mode.cpp)
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # config/ - Virtual Screen Settings Tests (save/load round-trip, staged flow)
 # ═══════════════════════════════════════════════════════════════════════════════
-pz_add_test(test_settings_virtualscreen config/test_settings_virtualscreen.cpp)
+p_add_test(test_settings_virtualscreen config/test_settings_virtualscreen.cpp)
 
-pz_add_test(test_virtualscreen_staged config/test_virtualscreen_staged.cpp)
+p_add_test(test_virtualscreen_staged config/test_virtualscreen_staged.cpp)
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # config/ - ConfigDefaults Tests (standalone, no external dependency)
 # ═══════════════════════════════════════════════════════════════════════════════
-pz_add_test(test_configdefaults config/test_configdefaults.cpp)
+p_add_test(test_configdefaults config/test_configdefaults.cpp)
 
-pz_add_test(test_configbackend_json config/test_configbackend_json.cpp)
+p_add_test(test_configbackend_json config/test_configbackend_json.cpp)
 
-pz_add_test(test_configmigration config/test_configmigration.cpp)
+p_add_test(test_configmigration config/test_configmigration.cpp)
 
 # v3 → v4 window-rule consolidation migration.
 add_executable(test_migration_v3_to_v4 config/test_migration_v3_to_v4.cpp)
@@ -291,7 +291,7 @@ add_test(NAME test_wayland_session_check COMMAND test_wayland_session_check)
 
 # Phase-5 SurfaceAnimator scope-prefix policy. Pins down the
 # per-instance scope construction in osd.cpp / selector.cpp /
-# snapassist.cpp so a divergence from the PzRoles base scopePrefix
+# snapassist.cpp so a divergence from the PRoles base scopePrefix
 # doesn't silently fall back to the empty default config in release
 # builds. Replaces the debug-only Q_ASSERT_X in createZoneSelectorWindow
 # with a release-built check that covers every overlay role.
@@ -322,21 +322,21 @@ add_test(NAME test_snap_assist_thumbnail_provider COMMAND test_snap_assist_thumb
 # ═══════════════════════════════════════════════════════════════════════════════
 # core/ - Layout Tests (core, zones)
 # ═══════════════════════════════════════════════════════════════════════════════
-pz_add_test(test_layout_core core/test_layout_core.cpp)
-pz_add_test(test_layout_zones core/test_layout_zones.cpp)
+p_add_test(test_layout_core core/test_layout_core.cpp)
+p_add_test(test_layout_zones core/test_layout_zones.cpp)
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # core/ - LayoutManager Tests (persistence, cycling, assignment)
 # ═══════════════════════════════════════════════════════════════════════════════
-pz_add_test(test_layoutmanager_persistence core/test_layoutmanager_persistence.cpp)
-pz_add_test(test_layoutmanager_cycling core/test_layoutmanager_cycling.cpp)
-pz_add_test(test_layoutmanager_assignment core/test_layoutmanager_assignment.cpp)
-pz_add_test(test_layout_registry_cache core/test_layout_registry_cache.cpp)
+p_add_test(test_layoutmanager_persistence core/test_layoutmanager_persistence.cpp)
+p_add_test(test_layoutmanager_cycling core/test_layoutmanager_cycling.cpp)
+p_add_test(test_layoutmanager_assignment core/test_layoutmanager_assignment.cpp)
+p_add_test(test_layout_registry_cache core/test_layout_registry_cache.cpp)
 
 # Regression guard for the in-process dual-WindowRuleStore data-loss race
 # where Settings used to construct its own store pointed at the same file
 # as the daemon's. Pins the share-via-borrow-ctor wiring in daemon.cpp.
-pz_add_test(test_daemon_dual_store_race core/test_daemon_dual_store_race.cpp)
+p_add_test(test_daemon_dual_store_race core/test_daemon_dual_store_race.cpp)
 
 # Cascade-fidelity proof for the window-rule context model — the priority
 # formula reproduces the legacy zone-Assignment cascade.
@@ -348,8 +348,8 @@ add_test(NAME test_windowrule_cascade_fidelity COMMAND test_windowrule_cascade_f
 # ═══════════════════════════════════════════════════════════════════════════════
 # core/ - Virtual Screen Tests (ID utilities, data model, PhosphorScreens::ScreenManager)
 # ═══════════════════════════════════════════════════════════════════════════════
-pz_add_test(test_virtual_screen core/test_virtual_screen.cpp)
-pz_add_test(test_virtual_screen_manager core/test_virtual_screen_manager.cpp)
+p_add_test(test_virtual_screen core/test_virtual_screen.cpp)
+p_add_test(test_virtual_screen_manager core/test_virtual_screen_manager.cpp)
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # core/ - Snap Assist Virtual Screen Tests (screensMatch, buildOccupiedZoneSet)
@@ -403,13 +403,13 @@ add_test(NAME test_foreigntoplevel COMMAND test_foreigntoplevel)
 # ═══════════════════════════════════════════════════════════════════════════════
 # core/ - Support Report Tests (redaction, generation)
 # ═══════════════════════════════════════════════════════════════════════════════
-pz_add_test(test_support_report core/test_support_report.cpp)
+p_add_test(test_support_report core/test_support_report.cpp)
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # core/ - Zone Detection Tests (layout, service)
 # ═══════════════════════════════════════════════════════════════════════════════
-pz_add_test(test_zone_detection_layout core/test_zone_detection_layout.cpp)
-pz_add_test(test_zone_detector_overlap core/test_zone_detector_overlap.cpp)
+p_add_test(test_zone_detection_layout core/test_zone_detection_layout.cpp)
+p_add_test(test_zone_detector_overlap core/test_zone_detector_overlap.cpp)
 
 add_executable(test_zone_detection_service core/test_zone_detection_service.cpp)
 target_link_libraries(test_zone_detection_service PRIVATE Qt6::Test Qt6::Core Qt6::DBus plasmazones_core)
@@ -418,19 +418,19 @@ add_test(NAME test_zone_detection_service COMMAND test_zone_detection_service)
 # ═══════════════════════════════════════════════════════════════════════════════
 # autotile/ - Per-Screen Config Tests
 # ═══════════════════════════════════════════════════════════════════════════════
-pz_add_test(test_per_screen_config autotile/test_per_screen_config.cpp)
-target_compile_definitions(test_per_screen_config PRIVATE "PZ_SOURCE_DIR=\"${PROJECT_SOURCE_DIR}\"")
+p_add_test(test_per_screen_config autotile/test_per_screen_config.cpp)
+target_compile_definitions(test_per_screen_config PRIVATE "P_SOURCE_DIR=\"${PROJECT_SOURCE_DIR}\"")
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # autotile/ - Navigation Controller Tests
 # ═══════════════════════════════════════════════════════════════════════════════
-pz_add_test(test_navigation_controller autotile/test_navigation_controller.cpp)
+p_add_test(test_navigation_controller autotile/test_navigation_controller.cpp)
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # autotile/ - Engine Settings Tests (replaces deleted test_settings_bridge)
 # ═══════════════════════════════════════════════════════════════════════════════
-pz_add_test(test_engine_settings autotile/test_engine_settings.cpp)
-target_compile_definitions(test_engine_settings PRIVATE "PZ_SOURCE_DIR=\"${PROJECT_SOURCE_DIR}\"")
+p_add_test(test_engine_settings autotile/test_engine_settings.cpp)
+target_compile_definitions(test_engine_settings PRIVATE "P_SOURCE_DIR=\"${PROJECT_SOURCE_DIR}\"")
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # ui/ - Zone Shader Item Tests - need Qt6::Quick + plasmazones_rendering
@@ -470,7 +470,7 @@ target_link_libraries(test_shader_entry_point PRIVATE Qt6::Test Qt6::Core Qt6::G
 target_compile_definitions(test_shader_entry_point PRIVATE "PLASMAZONES_SOURCE_DIR=\"${PROJECT_SOURCE_DIR}\"")
 add_test(NAME test_shader_entry_point COMMAND test_shader_entry_point)
 
-# End-to-end: an entry-only zone shader (author writes only pzZone/pzImage)
+# End-to-end: an entry-only zone shader (author writes only pZone/pImage)
 # assembles through the harness scaffold and bakes against the real zone UBO,
 # and a traditional main() pack is passed through unchanged (T1.4 scope B).
 add_executable(test_zone_entry_scaffold ui/test_zone_entry_scaffold.cpp)
@@ -478,7 +478,7 @@ target_link_libraries(test_zone_entry_scaffold PRIVATE Qt6::Test Qt6::Core Qt6::
 target_compile_definitions(test_zone_entry_scaffold PRIVATE "PLASMAZONES_SOURCE_DIR=\"${PROJECT_SOURCE_DIR}\"")
 add_test(NAME test_zone_entry_scaffold COMMAND test_zone_entry_scaffold)
 
-# Pins buildParamPreamble's generated `#define pz_<id> <accessor>` block:
+# Pins buildParamPreamble's generated `#define p_<id> <accessor>` block:
 # declaration-order auto-slotting (must match the lane the runtime uploads to),
 # independent scalar/color/image pools, and skip-don't-break on bad input.
 add_executable(test_shader_param_preamble ui/test_shader_param_preamble.cpp)
@@ -486,16 +486,16 @@ target_link_libraries(test_shader_param_preamble PRIVATE Qt6::Test Qt6::Core Qt6
 add_test(NAME test_shader_param_preamble COMMAND test_shader_param_preamble)
 
 # End-to-end: every built-in animation shader must still bake once its
-# generated `#define pz_<id> ...` preamble is spliced in — proving the
+# generated `#define p_<id> ...` preamble is spliced in — proving the
 # generated accessors compile against the real animation UBO across all packs.
 add_executable(test_animation_shader_preamble_bake ui/test_animation_shader_preamble_bake.cpp)
 target_link_libraries(test_animation_shader_preamble_bake PRIVATE Qt6::Test Qt6::Core Qt6::GuiPrivate Qt6::ShaderToolsPrivate PhosphorAnimation::PhosphorAnimation PhosphorRendering::PhosphorRendering PhosphorShaders::PhosphorShaders)
 target_compile_definitions(test_animation_shader_preamble_bake PRIVATE "PLASMAZONES_SOURCE_DIR=\"${PROJECT_SOURCE_DIR}\"")
 add_test(NAME test_animation_shader_preamble_bake COMMAND test_animation_shader_preamble_bake)
 
-# End-to-end: an entry-only animation shader (author writes only pzTransition,
-# or pzIn+pzOut) assembles through the harness scaffold and bakes against the
-# real animation UBO; lone pzIn falls through; traditional main() passes (T1.5).
+# End-to-end: an entry-only animation shader (author writes only pTransition,
+# or pIn+pOut) assembles through the harness scaffold and bakes against the
+# real animation UBO; lone pIn falls through; traditional main() passes (T1.5).
 add_executable(test_animation_entry_scaffold ui/test_animation_entry_scaffold.cpp)
 target_link_libraries(test_animation_entry_scaffold PRIVATE Qt6::Test Qt6::Core Qt6::GuiPrivate Qt6::ShaderToolsPrivate PhosphorAnimation::PhosphorAnimation PhosphorRendering::PhosphorRendering PhosphorShaders::PhosphorShaders)
 target_compile_definitions(test_animation_entry_scaffold PRIVATE "PLASMAZONES_SOURCE_DIR=\"${PROJECT_SOURCE_DIR}\"")

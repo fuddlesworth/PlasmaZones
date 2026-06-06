@@ -9,8 +9,8 @@
 #include "settingscontroller.h"
 #include "settingslaunchcontroller.h"
 #include "version.h"
-#include "pz_i18n.h"
-#include "pz_qml_i18n.h"
+#include "p_i18n.h"
+#include "p_qml_i18n.h"
 
 #include "../core/constants.h"
 #include <PhosphorProtocol/ServiceConstants.h>
@@ -77,12 +77,12 @@ int main(int argc, char* argv[])
     app.setWindowIcon(QIcon::fromTheme(QStringLiteral("plasmazones-settings")));
 
     QCommandLineParser parser;
-    parser.setApplicationDescription(PzI18n::tr("PlasmaZones Settings"));
+    parser.setApplicationDescription(PI18n::tr("PlasmaZones Settings"));
     parser.addHelpOption();
     parser.addVersionOption();
 
     QCommandLineOption pageOption(QStringList{QStringLiteral("p"), QStringLiteral("page")},
-                                  PzI18n::tr("Open a specific settings page"), QStringLiteral("name"));
+                                  PI18n::tr("Open a specific settings page"), QStringLiteral("name"));
     parser.addOption(pageOption);
     parser.process(app);
 
@@ -155,7 +155,7 @@ int main(int argc, char* argv[])
 
     QQmlApplicationEngine engine;
 
-    auto* localizedContext = new PzLocalizedContext(&engine);
+    auto* localizedContext = new PLocalizedContext(&engine);
     engine.rootContext()->setContextObject(localizedContext);
 
     engine.rootContext()->setContextProperty(QStringLiteral("settingsController"), &controller);

@@ -16,7 +16,7 @@
 #include "../../core/utils.h"
 #include <PhosphorIdentity/VirtualScreenId.h>
 
-#include "pz_i18n.h"
+#include "p_i18n.h"
 #include <memory>
 #include <QDBusMessage>
 #include <QGuiApplication>
@@ -312,7 +312,7 @@ void EditorController::createNewLayout()
     m_layoutBoundsOverride = QSize();
 
     m_layoutId = QUuid::createUuid().toString();
-    m_layoutName = PzI18n::tr("New Layout");
+    m_layoutName = PI18n::tr("New Layout");
     if (m_zoneManager) {
         m_zoneManager->clearAllZones();
     }
@@ -372,12 +372,12 @@ void EditorController::createNewLayout()
 void EditorController::loadLayout(const QString& layoutId)
 {
     if (layoutId.isEmpty()) {
-        Q_EMIT layoutLoadFailed(PzI18n::tr("Layout ID cannot be empty"));
+        Q_EMIT layoutLoadFailed(PI18n::tr("Layout ID cannot be empty"));
         return;
     }
 
     if (!m_layoutService) {
-        Q_EMIT layoutLoadFailed(PzI18n::tr("Layout service not initialized"));
+        Q_EMIT layoutLoadFailed(PI18n::tr("Layout service not initialized"));
         return;
     }
 
@@ -407,7 +407,7 @@ void EditorController::loadLayout(const QString& layoutId)
 
     QJsonDocument doc = QJsonDocument::fromJson(jsonLayout.toUtf8());
     if (doc.isNull() || !doc.isObject()) {
-        Q_EMIT layoutLoadFailed(PzI18n::tr("Invalid layout data format"));
+        Q_EMIT layoutLoadFailed(PI18n::tr("Invalid layout data format"));
         qCWarning(lcEditor) << "Invalid JSON for layout" << layoutId;
         return;
     }
@@ -706,7 +706,7 @@ void EditorController::loadLayout(const QString& layoutId)
 void EditorController::saveLayout()
 {
     if (!m_layoutService || !m_zoneManager) {
-        Q_EMIT layoutSaveFailed(PzI18n::tr("Services not initialized"));
+        Q_EMIT layoutSaveFailed(PI18n::tr("Services not initialized"));
         return;
     }
 
@@ -901,14 +901,14 @@ void EditorController::discardChanges()
 void EditorController::importLayout(const QString& filePath)
 {
     if (filePath.isEmpty()) {
-        Q_EMIT layoutLoadFailed(PzI18n::tr("File path cannot be empty"));
+        Q_EMIT layoutLoadFailed(PI18n::tr("File path cannot be empty"));
         return;
     }
 
     const QDBusMessage reply = PhosphorProtocol::ClientHelpers::syncCall(
         PhosphorProtocol::Service::Interface::LayoutRegistry, QStringLiteral("importLayout"), {filePath});
     if (reply.type() != QDBusMessage::ReplyMessage) {
-        QString error = PzI18n::tr("Failed to import layout: %1").arg(reply.errorMessage());
+        QString error = PI18n::tr("Failed to import layout: %1").arg(reply.errorMessage());
         qCWarning(lcEditor) << error;
         Q_EMIT layoutLoadFailed(error);
         return;
@@ -916,7 +916,7 @@ void EditorController::importLayout(const QString& filePath)
 
     const QString newLayoutId = reply.arguments().value(0).toString();
     if (newLayoutId.isEmpty()) {
-        QString error = PzI18n::tr("Imported layout but received empty ID");
+        QString error = PI18n::tr("Imported layout but received empty ID");
         qCWarning(lcEditor) << error;
         Q_EMIT layoutLoadFailed(error);
         return;
@@ -936,19 +936,19 @@ void EditorController::importLayout(const QString& filePath)
 void EditorController::exportLayout(const QString& filePath)
 {
     if (filePath.isEmpty()) {
-        Q_EMIT layoutSaveFailed(PzI18n::tr("File path cannot be empty"));
+        Q_EMIT layoutSaveFailed(PI18n::tr("File path cannot be empty"));
         return;
     }
 
     if (m_layoutId.isEmpty()) {
-        Q_EMIT layoutSaveFailed(PzI18n::tr("No layout loaded to export"));
+        Q_EMIT layoutSaveFailed(PI18n::tr("No layout loaded to export"));
         return;
     }
 
     const QDBusMessage reply = PhosphorProtocol::ClientHelpers::syncCall(
         PhosphorProtocol::Service::Interface::LayoutRegistry, QStringLiteral("exportLayout"), {m_layoutId, filePath});
     if (reply.type() != QDBusMessage::ReplyMessage) {
-        QString error = PzI18n::tr("Failed to export layout: %1").arg(reply.errorMessage());
+        QString error = PI18n::tr("Failed to export layout: %1").arg(reply.errorMessage());
         qCWarning(lcEditor) << error;
         Q_EMIT layoutSaveFailed(error);
         return;

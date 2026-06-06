@@ -61,13 +61,13 @@ vec4 getHexagons(vec2 p) {
     return vec4(cellCoords, dist, glow);
 }
 
-vec4 pzTransition(vec2 uv, float t)
+vec4 pTransition(vec2 uv, float t)
 {
     float visibility = clamp(iTime, 0.0, 1.0);
     float progress   = 1.0 - visibility;
 
     // Per-pixel noise jitter so tiles stagger their transitions.
-    vec2 seed   = vec2(pz_seedX, pz_seedY);
+    vec2 seed   = vec2(p_seedX, p_seedY);
     float noise = simplex2D(uv + seed);
     progress    = clamp(mix(noise - 1.0, noise + 1.0, progress), 0.0, 1.0);
 
@@ -81,7 +81,7 @@ vec4 pzTransition(vec2 uv, float t)
     // Floor iResolution so an early-frame surface size of 0 doesn't
     // produce a zero-component texScale (which would divide-by-zero in
     // the lookupOffset below).
-    vec2 texScale = 0.1 * max(iResolution, vec2(1.0)) / max(pz_tileScale, 0.05);
+    vec2 texScale = 0.1 * max(iResolution, vec2(1.0)) / max(p_tileScale, 0.05);
     vec4 hex      = getHexagons(uv * texScale);
 
     vec4 oColor = vec4(0.0);
@@ -101,8 +101,8 @@ vec4 pzTransition(vec2 uv, float t)
         vec2 lookupCoords = uv + lookupOffset;
         oColor = surfaceColor(lookupCoords) * boundaryMask(lookupCoords);
 
-        vec4 glow = pz_glowColor;
-        vec4 line = pz_lineColor;
+        vec4 glow = p_glowColor;
+        vec4 line = p_lineColor;
 
         // Glow shaping: stack of pow-curves on hex.w (squared
         // distance to cell centre) gives a tight bright core with
@@ -119,8 +119,8 @@ vec4 pzTransition(vec2 uv, float t)
         // function degenerates to a hard step at hex.z==0 — a visible
         // hard line where the user asked for "no line at all". Gate on
         // lineWidth so the no-line case zeros line.a cleanly.
-        if (pz_lineWidth > 0.001) {
-            line.a *= 1.0 - smoothstep(pz_lineWidth * 0.02 * 0.5, pz_lineWidth * 0.02, hex.z);
+        if (p_lineWidth > 0.001) {
+            line.a *= 1.0 - smoothstep(p_lineWidth * 0.02 * 0.5, p_lineWidth * 0.02, hex.z);
         } else {
             line.a = 0.0;
         }
@@ -138,7 +138,7 @@ vec4 pzTransition(vec2 uv, float t)
         glow.a *= oColor.a;
         line.a *= oColor.a;
 
-        if (pz_additiveBlending > 0.5) {
+        if (p_additiveBlending > 0.5) {
             // Pre-multiplied additive emission.
             oColor.rgb += glow.rgb * glow.a;
             oColor.rgb += line.rgb * line.a;

@@ -20,27 +20,27 @@
 #include <noise.glsl>
 
 // metadata.json declaration order → customParams[0] sub-slots.
-// `pz_peakBlocks` is the chunkiest endpoint of the wave (fewest blocks
+// `p_peakBlocks` is the chunkiest endpoint of the wave (fewest blocks
 // across the surface = biggest visual blocks at the wave crest);
-// `pz_baselineBlocks` is the finest endpoint (idle resolution between
+// `p_baselineBlocks` is the finest endpoint (idle resolution between
 // crests). The names follow visual semantics rather than the
-// numerical min/max — `pz_peakBlocks` (default 8) is < `pz_baselineBlocks`
+// numerical min/max — `p_peakBlocks` (default 8) is < `p_baselineBlocks`
 // (default 800) because more blocks = smaller blocks.
-// pz_waveSlope is customParams[0].z.
+// p_waveSlope is customParams[0].z.
 
-vec4 pzTransition(vec2 uv, float t) {
+vec4 pTransition(vec2 uv, float t) {
     // ── niri OPEN body (handles both legs via runtime iTime flip) ──
     float p = clamp(iTime, 0.0, 1.0);
 
     float wave_x = (uv.x + uv.y) * 0.5;
-    float wave_p = smoothstep(0.0, 1.0, p * 1.6 - wave_x * pz_waveSlope);
+    float wave_p = smoothstep(0.0, 1.0, p * 1.6 - wave_x * p_waveSlope);
     float bump = sin(wave_p * 3.14159);
     // `peakBlocks` / `baselineBlocks` mean "blocks across the screen":
     // multiplying by iAnchorSize/iSurfaceScreenPos.zw scales the count
     // to the fraction of the screen this surface covers, so block
     // pixel size stays constant across popup vs. maximized windows.
     // Matches niri's reference on full-screen (multiplier = 1.0 there).
-    float blocksRef = mix(pz_baselineBlocks, pz_peakBlocks, bump);
+    float blocksRef = mix(p_baselineBlocks, p_peakBlocks, bump);
     vec2 blocks = vec2(blocksRef) * max(iAnchorSize, vec2(1.0))
                                   / max(iSurfaceScreenPos.zw, vec2(1.0));
     vec2 q = floor(uv * blocks) / blocks + 0.5 / blocks;

@@ -26,7 +26,7 @@
 
 #include <bmw_compat.glsl>
 
-vec4 pzTransition(vec2 uv, float t) {
+vec4 pTransition(vec2 uv, float t) {
   // We reverse the progress for window opening.
   float progress = easeOutQuad(uProgress);
   progress       = uForOpening ? 1.0 - progress : progress;
@@ -35,16 +35,16 @@ vec4 pzTransition(vec2 uv, float t) {
   vec2 coords = iTexCoord.st * 2.0 - 1.0;
 
   // Scale image texture with progress.
-  coords /= mix(1.0, pz_uScale, progress);
+  coords /= mix(1.0, p_uScale, progress);
 
   // Squish image texture vertically.
-  coords.y /= mix(1.0, (1.0 - 0.2 * pz_uSquish), progress);
+  coords.y /= mix(1.0, (1.0 - 0.2 * p_uSquish), progress);
 
   // 'Tilt' image texture around x-axis.
-  coords.x /= mix(1.0, 1.0 - 0.1 * pz_uTilt * coords.y, progress);
+  coords.x /= mix(1.0, 1.0 - 0.1 * p_uTilt * coords.y, progress);
 
   // Move image texture vertically.
-  coords.y += pz_uShift * progress;
+  coords.y += p_uShift * progress;
 
   // Move texture coordinate center to corner again.
   coords = coords * 0.5 + 0.5;

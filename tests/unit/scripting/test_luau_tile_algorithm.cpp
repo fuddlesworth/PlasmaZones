@@ -32,7 +32,7 @@ private:
     QTemporaryDir m_tmp;
     static QString scriptPath(const QString& name)
     {
-        return QStringLiteral(PZ_LUAU_TEST_DIR "/data/") + name;
+        return QStringLiteral(P_LUAU_TEST_DIR "/data/") + name;
     }
 
 private Q_SLOTS:
@@ -160,7 +160,7 @@ void TestLuauTileAlgorithm::metadataOutOfRangeValuesClamped()
 {
     using namespace PlasmaZones::TestHelpers;
     using namespace AutotileDefaults;
-    // Raw metadata table (bypassing pz.algorithm) so the C++ parse + clamp path
+    // Raw metadata table (bypassing pluau.algorithm) so the C++ parse + clamp path
     // sees the out-of-range values directly.
     const QString path = writeTempScript(m_tmp, QStringLiteral("clamp.luau"), QStringLiteral(R"LUA(
         return {
@@ -367,7 +367,7 @@ void TestLuauTileAlgorithm::onWindowRemovedHookRuns()
 {
     using namespace PlasmaZones::TestHelpers;
     // Self-contained module: onWindowAdded increments, onWindowRemoved decrements
-    // a module-local counter; tile() returns `counter` plain rects (no pz needed).
+    // a module-local counter; tile() returns `counter` plain rects (no pluau needed).
     const QString path = writeTempScript(m_tmp, QStringLiteral("hooks.luau"), QStringLiteral(R"LUA(
         local n = 0
         return {
