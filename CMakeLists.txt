@@ -670,8 +670,14 @@ add_subdirectory(examples/phosphor-ipc-demo)
 
 # phosphor-perscreen-demo. Acceptance harness for the Phosphor.Shell
 # PerScreen helper (Phase 1.5). Opens a small window per monitor;
-# hot-plug a display → window appears.
-add_subdirectory(examples/phosphor-perscreen-demo)
+# hot-plug a display → window appears. Unlike the foundation-lib demos
+# above, this one links the gated PhosphorShell::PhosphorShellQml target
+# (PerScreen lives in libs/phosphor-shell), so it must be gated too: when
+# BUILD_PHOSPHOR_SHELL is OFF that target does not exist and an
+# unconditional add_subdirectory fails the CMake generate step.
+if(BUILD_PHOSPHOR_SHELL)
+    add_subdirectory(examples/phosphor-perscreen-demo)
+endif()
 
 # phosphor-service-pipewire-cli. Acceptance harness for the
 # phosphor-service-pipewire library (Phase 2.1). Headless driver
