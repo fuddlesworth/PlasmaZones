@@ -47,7 +47,18 @@ public:
     // (`bar.widget`, `control-center.tile`, `network.read`,
     // `notify.send`, etc.). Enforcement is deferred to Phase 5; today
     // the list is informational.
-    [[nodiscard]] virtual QStringList capabilities() const = 0;
+    //
+    // Defaulted to an empty list rather than pure-virtual: the five
+    // UI-seam plugin factories override it with their manifest
+    // capabilities, but the domain registries unified onto Registry<T>
+    // (shader packs, animation effects, tiling algorithms, layout
+    // sources) carry no capability metadata and should not have to
+    // fabricate an override returning `{}`. The advisory contract is
+    // unchanged — an entry that declares nothing simply declares nothing.
+    [[nodiscard]] virtual QStringList capabilities() const
+    {
+        return {};
+    }
 };
 
 } // namespace PhosphorRegistry

@@ -21,6 +21,14 @@ namespace PhosphorRegistry {
 // five: bar widgets, control-center tiles, launcher providers, OSDs,
 // desktop widgets).
 //
+// Not UI-only: the entry type need not be a widget factory. Any type
+// deriving IFactoryBase (id/displayName, capabilities optional) works,
+// so the domain registries — shader packs, animation effects, tiling
+// algorithms, layout sources — also compose Registry<T> for storage +
+// id lookup + change notification, populated by PluginLoader (.so packs)
+// or MetadataPackLoader<T> (content packs scanned from disk) rather than
+// by hand-rolled QHash maps.
+//
 // Lifetime / threading
 //   - Owned by the composition root. Not a singleton; tests can build
 //     their own Registry locally and tear down cleanly.
