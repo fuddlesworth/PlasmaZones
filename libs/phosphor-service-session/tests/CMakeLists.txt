@@ -27,3 +27,9 @@ _phosphorservicesession_test(test_phosphorservicesession_smoke test_smoke.cpp)
 # instantiates SessionHost, and exercises the QML-visible surface (the
 # Availability enum, the interactive property, the safe logout() invokable).
 _phosphorservicesession_test(test_phosphorservicesession_qmlfacade test_qmlfacade.cpp)
+
+# SessionHost behaviour against an in-process fake logind Manager + Session on
+# the session bus: capability parsing, action routing + interactive flag,
+# capability-gated refusal, inhibitor what/mode, the PrepareForSleep handshake,
+# and lock / terminate / session-signal surfacing. QSKIPs without a session bus.
+_phosphorservicesession_test(test_phosphorservicesession_sessionhost test_sessionhost.cpp)
