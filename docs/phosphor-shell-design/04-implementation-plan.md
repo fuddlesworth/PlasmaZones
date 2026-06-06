@@ -704,6 +704,64 @@ Second **Wayland-client** service lib (after 2.7), with two structural firsts:
 
 **Out of scope for 2.8.** The clipboard-manager UI (a Phase 3 / 4 popup / picker consumer), image thumbnail rendering, primary-selection history (U4), cross-device sync, and any D-Bus clipboard interface. The service watches, stores, and re-applies; the shell renders the picker.
 
+### 2.9: `phosphor-service-lock` *(shipped)*
+
+A session-lock + authentication service: it authenticates the session user through PAM and coordinates the `ext-session-lock-v1` lock state with the compositor. Namespace `PhosphorServiceLock`, export macro `PHOSPHORSERVICELOCK_EXPORT`, LGPL-2.1-or-later, QML URI `Phosphor.Service.Lock 1.0`. Table effort **M**.
+
+Third **Wayland-client** service lib (after 2.7 idle and 2.8 clipboard), and the first to do **authentication**: it is the first lib to link PAM, and the first whose correctness is genuinely security-critical in the authentication sense (2.6 polkit and 2.8 clipboard guard *secrets*; this lib decides whether to *unlock the session*).
+
+**What already exists (foundation tier).**
+
+- `phosphor-wayland` binds Wayland globals in `LayerShellIntegration::registryHandler`. An `ext_session_lock_manager_v1` global binds the same way as the other managers, and a `phosphor-wayland` client class wraps the lock object, mirroring `IdleNotifier` / `ClipboardDevice`.
+- `ext-session-lock-v1.xml` was **not yet vendored**. 2.9 vendors it (the freedesktop staging protocol) under `libs/phosphor-wayland/protocols/` and code-generates it there, the established pattern.
+
+**What the service adds.**
+
+- **A foundation session-lock client** (lands in `phosphor-wayland`): bind `ext_session_lock_manager_v1`, request a lock, surface the compositor's `locked` / `finished` reply, and `unlock_and_destroy` on success. Protocol-correct teardown (never destroy a locked session; honour the must-stay-locked-if-the-client-dies guarantee) lives here.
+- **A PAM authenticator**: `pam_authenticate` + `pam_acct_mgmt` run on the global thread pool and the result is marshalled back to the GUI thread, so a sleeping PAM module never blocks the loop. Configurable service name (default `login`); the password answers only the echo-off prompt, is moved to a sole owner, and is wiped after the transaction.
+- **A QML / CLI facade** (`LockService` + a lock state machine): `Unlocked → Locking → Locked → Authenticating`, with auth-failure retry and compositor-driven teardown. Plus a public `PamAuthenticator` for standalone credential checks.
+
+**Decisions taken up front.**
+
+- **Foundation client in phosphor-wayland, policy in the service.** The raw `ext-session-lock-v1` client is a `phosphor-wayland` primitive (like `ClipboardDevice`); the service is the PAM + state-machine layer over it, linked PRIVATE so no Wayland types leak from the public surface.
+- **Authenticate off the GUI thread.** PAM is blocking (faildelay, network modules); the transaction runs on the thread pool and the result is delivered on the GUI thread. The authenticator sits behind an `IAuthenticator` seam, so the lock policy is unit-tested with a fake — no real PAM, no valid credentials.
+- **Single state, not a model.** The lock is one active state (a `State` enum), the single-active shape of 2.6 / 2.7, not the list-model shape of 2.5 / 2.8.
+- **Lock surfaces are a later phase.** The per-output `ext_session_lock_surface_v1` graphics shown while locked need rendering / output enumeration; that is shell work (Phase 4). This lib owns authentication and the lock lifecycle, not rendering — so the CLI exposes `authenticate` (the gate criterion) and a `supported` check, not an interactive screen-lock that would blank the outputs with no visible prompt.
+
+**Milestones (as landed).**
+
+1. **Foundation `SessionLock` client in `phosphor-wayland` (M).** Vendor `ext-session-lock-v1.xml`; bind `ext_session_lock_manager_v1` in `LayerShellIntegration` (the `strcmp` branch + a `sessionLockManager()` accessor); `SessionLock` class with `lock()` / `unlockAndDestroy()` / `locked` / `finished` / `isSupported()`. Inert when the compositor lacks the global.
+2. **Service skeleton + CMake plumbing (S).** `libs/phosphor-service-lock/` mirroring the 2.8 shape. Link `PhosphorWayland` (PRIVATE) + Qt6 Core / Qml. Imperative `qmlregistration.cpp`, `std::call_once`-guarded, called from `src/shell/main.cpp`. `BUILD_PHOSPHOR_SHELL`-gated.
+3. **PAM authenticator (M).** `IAuthenticator` seam + `PamAuthenticator` (off-thread `pam_authenticate` + `pam_acct_mgmt`, configurable service, password wiped). Unit-tested for the credential-free contract.
+4. **Lock state machine + QML facade (M).** `ISessionLock` seam + `WaylandSessionLock` adapter; `LockStateMachine` (DI'd with both seams, unit-tested with fakes); `LockService` exposing the QML surface.
+5. **CLI demo (S-M).** `examples/phosphor-service-lock-cli/`: `authenticate [user] [--service NAME]` (PAM, prints success/failure, no compositor) and `supported` (under the phosphorwayland QPA).
+6. **Tests (M).** Smoke, QML facade load, PAM authenticator, and the lock state machine.
+7. **README + Status (S).** Sibling convention; "Phase 2.9: shipped".
+
+**Dependencies**
+
+- `phosphor-wayland` (PRIVATE link; provides the new session-lock client + the vendored protocol code).
+- PAM (`libpam`, PRIVATE link).
+- Qt6 ≥ 6.6 Core / Qml; Qt6 Concurrent (PRIVATE) for the off-thread PAM transaction. The CLI additionally links Gui for `QGuiApplication`.
+- A compositor implementing `ext-session-lock-v1` for the live lock path (the lib loads inert without it; authentication still works).
+
+**Risks**
+
+- **Authentication correctness.** A bug that accepts a wrong password, or unlocks on the wrong signal, defeats the lock. The state machine gates unlock strictly on `IAuthenticator::succeeded` while `Authenticating`, and `pam_acct_mgmt` gates success alongside `pam_authenticate`.
+- **Blocking the loop.** PAM can sleep; the transaction must stay off the GUI thread (it does, via the thread pool + `QFutureWatcher`).
+- **Password in memory.** Minimised: the password answers only the echo-off prompt, is moved to a single owner, and is wiped (`explicit_bzero`) after `pam_end`; never logged. Full secure-input handling is an input-layer concern.
+- **Locking with no prompt.** Without lock surfaces the compositor blanks the outputs; the CLI therefore does not offer an interactive lock, and the interactive screen-lock waits on Phase 4 surfaces.
+
+**Unknowns resolved during implementation**
+
+| # | Question | Resolution |
+|---|----------|------------|
+| U1 | How much of `ext-session-lock-v1` to build now? | Foundation client (`SessionLock`) + PAM + state machine; defer per-output lock *surfaces* to the Phase 4 shell. |
+| U2 | Which PAM service name? | Configurable, default `login` (present on every system, so the demo authenticates out of the box); a shell points it at its own stack. |
+| U3 | PAM threading model? | Blocking transaction on the global thread pool (`QtConcurrent::run`), result marshalled to the GUI thread via `QFutureWatcher`. |
+
+**Out of scope for 2.9.** The per-output lock surfaces and the lock-screen UI (Phase 4 consumers), fingerprint / smartcard / other PAM-driven factors beyond password, screensaver / DPMS coupling, and any D-Bus lock interface. The service authenticates and drives the lock lifecycle; the shell renders the lock screen.
+
 ---
 
 ## Phase 3: UI primitives + first visible examples
