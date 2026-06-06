@@ -127,6 +127,29 @@ public:
     bool validateParams(const QString& id, const QVariantMap& params) const;
     QVariantMap validateAndCoerceParams(const QString& id, const QVariantMap& params) const;
     Q_INVOKABLE QVariantMap translateParamsToUniforms(const QString& shaderId, const QVariantMap& storedParams) const;
+
+    /// Build the generated `#define pz_<id> <glsl-accessor>` preamble (T1.1) for
+    /// @p info's declared parameters, so a zone shader author reads a parameter
+    /// by name (`pz_borderRadius`) instead of hand-decoding a
+    /// `customParams[N].xyzw` lane. Each param's explicit `slot` drives the
+    /// accessor exactly as `ParameterInfo::uniformName()` /
+    /// `translateParamsToUniforms` derive the upload target — scalar slot N →
+    /// `customParams[N/4].<xyzw>`, color slot N → `customColors[N]`, image slot
+    /// N → `uTexture<N>` — so the macro a shader reads resolves to the same UBO
+    /// lane the value is uploaded to. The daemon overlay splices the result
+    /// after the shader's `#version` (via `PhosphorShaders::spliceAfterVersion`).
+    /// Empty when the shader declares no parameters.
+    static QString paramPreamble(const ShaderInfo& info);
+
+    /// Parse a pack directory's `metadata.json` into a ShaderInfo using the SAME
+    /// parser the live registry uses (T1.1 auto-slot assignment included), so an
+    /// offline validator (`plasmazones-shader-validate`) and the daemon agree on
+    /// what a pack is. Returns an invalid ShaderInfo and sets @p error on a
+    /// missing/unreadable file or non-object JSON root. Does NOT verify that the
+    /// frag/buffer files exist on disk — that's a validator lint, not a parse
+    /// failure — so `sourcePath`/`bufferShaderPaths` are returned as declared.
+    static ShaderInfo parsePackMetadata(const QString& packDir, QString* error = nullptr);
+
     Q_INVOKABLE QVariantMap presetParams(const QString& shaderId, const QString& presetName) const;
     Q_INVOKABLE QStringList shaderPresetNames(const QString& shaderId) const;
     Q_INVOKABLE QVariantList shaderPresetsVariant(const QString& shaderId) const;

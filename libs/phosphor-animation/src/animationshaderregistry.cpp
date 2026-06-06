@@ -4,6 +4,8 @@
 #include <PhosphorAnimation/AnimationShaderContract.h>
 #include <PhosphorAnimation/AnimationShaderRegistry.h>
 
+#include <PhosphorShaders/ShaderParamPreamble.h>
+
 #include <PhosphorFsLoader/MetadataPackScanStrategy.h>
 
 #include <QColor>
@@ -435,6 +437,12 @@ QVariantMap AnimationShaderRegistry::translateAnimationParams(const AnimationSha
     QStringList droppedColorParams;
     QStringList droppedFloatParams;
     for (const auto& param : effect.parameters) {
+        // Skip ids the pz_<id> preamble (buildParamPreamble via paramPreamble)
+        // rejects, so this upload-lane numbering stays identical to the define
+        // numbering — a rejected param consumes no lane on either side.
+        if (!PhosphorShaders::isValidParamId(param.id)) {
+            continue;
+        }
         const QString& type = param.type;
         if (type == QLatin1String("color")) {
             if (colorSlot >= AnimationShaderContract::kMaxCustomColors) {
@@ -659,6 +667,68 @@ QVariantMap AnimationShaderRegistry::translateAnimationParams(const QString& eff
                                                               const QVariantMap& friendlyParams) const
 {
     return translateAnimationParams(effect(effectId), friendlyParams);
+}
+
+QString AnimationShaderRegistry::paramPreamble(const AnimationShaderEffect& effect)
+{
+    // Mirror translateAnimationParams' allocation exactly: color params take
+    // the customColors pool, everything else the customParams scalar pool,
+    // both auto-numbered in declaration order. buildParamPreamble advances the
+    // two pools independently, so the generated macro for each param resolves
+    // to the same UBO lane translateAnimationParams uploads its value to.
+    QList<PhosphorShaders::PreambleParam> params;
+    params.reserve(effect.parameters.size());
+    for (const auto& p : effect.parameters) {
+        PhosphorShaders::PreambleParam entry;
+        entry.id = p.id;
+        entry.pool = (p.type == QLatin1String("color")) ? PhosphorShaders::PreambleParam::Pool::Color
+                                                        : PhosphorShaders::PreambleParam::Pool::Scalar;
+        entry.explicitSlot = -1; // animation packs always auto-slot by declaration order
+        params.append(entry);
+    }
+    return PhosphorShaders::buildParamPreamble(params);
+}
+
+QString AnimationShaderRegistry::animationEntryPrologue()
+{
+    // `#version` first; the animation-uniforms include declares the UBO (both
+    // runtime branches) plus the T1.5 direction helpers (legProgress /
+    // pz_reversed) and surfaceColor; then the vertex texcoord in and the
+    // fragColor out an entry-only pack no longer declares by hand.
+    return QStringLiteral(
+        "#version 450\n"
+        "#include <animation_uniforms.glsl>\n"
+        "layout(location = 0) in vec2 vTexCoord;\n"
+        "layout(location = 0) out vec4 fragColor;\n");
+}
+
+QList<PhosphorShaders::EntryCandidate> AnimationShaderRegistry::animationEntryCandidates()
+{
+    // Symmetric: one function, `t` is raw iTime (the runtime still flips it on
+    // reverse legs, so the shader auto-mirrors with no direction code).
+    static const QString transitionMain = QStringLiteral(
+        "void main() {\n"
+        "    fragColor = pzTransition(vTexCoord, iTime);\n"
+        "}\n");
+    // Asymmetric: the harness un-flips iTime (legProgress → forward 0→1) and
+    // dispatches by direction, so the author never touches iIsReversed/iTime
+    // and the `== 1` footgun is gone.
+    static const QString inOutMain = QStringLiteral(
+        "void main() {\n"
+        "    float pz_t = legProgress();\n"
+        "    fragColor = pz_reversed ? pzOut(vTexCoord, pz_t) : pzIn(vTexCoord, pz_t);\n"
+        "}\n");
+
+    PhosphorShaders::EntryCandidate transition;
+    transition.functionName = QStringLiteral("pzTransition");
+    transition.generatedMain = transitionMain;
+
+    PhosphorShaders::EntryCandidate inOut;
+    inOut.functionName = QStringLiteral("pzIn");
+    inOut.generatedMain = inOutMain;
+    inOut.alsoRequires = {QStringLiteral("pzOut")};
+
+    return {transition, inOut};
 }
 
 } // namespace PhosphorAnimationShaders

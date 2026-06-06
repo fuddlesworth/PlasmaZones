@@ -61,7 +61,9 @@ set(phosphorshaders_public_HDRS
     include/PhosphorShaders/CustomParamsKey.h
     include/PhosphorShaders/IUniformExtension.h
     include/PhosphorShaders/IWallpaperProvider.h
+    include/PhosphorShaders/ShaderEntryPoint.h
     include/PhosphorShaders/ShaderIncludeResolver.h
+    include/PhosphorShaders/ShaderParamPreamble.h
     include/PhosphorShaders/ShaderRegistry.h
 )
 
@@ -69,12 +71,16 @@ set(phosphorshaders_public_HDRS
 set(phosphorshaders_camelcase_HDRS
     include/PhosphorShaders/IUniformExtension
     include/PhosphorShaders/IWallpaperProvider
+    include/PhosphorShaders/ShaderEntryPoint
     include/PhosphorShaders/ShaderIncludeResolver
+    include/PhosphorShaders/ShaderParamPreamble
     include/PhosphorShaders/ShaderRegistry
 )
 
 set(phosphorshaders_SRCS
+    src/shaderentrypoint.cpp
     src/shaderincluderesolver.cpp
+    src/shaderparampreamble.cpp
     src/shaderregistry.cpp
     src/wallpaperprovider.cpp
 )

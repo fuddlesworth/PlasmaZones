@@ -17,39 +17,30 @@
 // `texture(uTexture0, uv)` samples directly. `texture2D` (GLSL ES) is
 // rewritten to `texture` (GLSL 4.50 core) inline.
 
-#version 450
-
-#include <animation_uniforms.glsl>
 #include <noise.glsl>
 
 // metadata.json declaration order → customParams[0] sub-slots.
-// `peakBlocks` is the chunkiest endpoint of the wave (fewest blocks
+// `pz_peakBlocks` is the chunkiest endpoint of the wave (fewest blocks
 // across the surface = biggest visual blocks at the wave crest);
-// `baselineBlocks` is the finest endpoint (idle resolution between
+// `pz_baselineBlocks` is the finest endpoint (idle resolution between
 // crests). The names follow visual semantics rather than the
-// numerical min/max — `peakBlocks` (default 8) is < `baselineBlocks`
+// numerical min/max — `pz_peakBlocks` (default 8) is < `pz_baselineBlocks`
 // (default 800) because more blocks = smaller blocks.
-#define peakBlocks      customParams[0].x
-#define baselineBlocks  customParams[0].y
-#define waveSlope       customParams[0].z
+// pz_waveSlope is customParams[0].z.
 
-layout(location = 0) in vec2 vTexCoord;
-layout(location = 0) out vec4 fragColor;
-
-void main() {
+vec4 pzTransition(vec2 uv, float t) {
     // ── niri OPEN body (handles both legs via runtime iTime flip) ──
     float p = clamp(iTime, 0.0, 1.0);
-    vec2 uv = vTexCoord;
 
     float wave_x = (uv.x + uv.y) * 0.5;
-    float wave_p = smoothstep(0.0, 1.0, p * 1.6 - wave_x * waveSlope);
+    float wave_p = smoothstep(0.0, 1.0, p * 1.6 - wave_x * pz_waveSlope);
     float bump = sin(wave_p * 3.14159);
     // `peakBlocks` / `baselineBlocks` mean "blocks across the screen":
     // multiplying by iAnchorSize/iSurfaceScreenPos.zw scales the count
     // to the fraction of the screen this surface covers, so block
     // pixel size stays constant across popup vs. maximized windows.
     // Matches niri's reference on full-screen (multiplier = 1.0 there).
-    float blocksRef = mix(baselineBlocks, peakBlocks, bump);
+    float blocksRef = mix(pz_baselineBlocks, pz_peakBlocks, bump);
     vec2 blocks = vec2(blocksRef) * max(iAnchorSize, vec2(1.0))
                                   / max(iSurfaceScreenPos.zw, vec2(1.0));
     vec2 q = floor(uv * blocks) / blocks + 0.5 / blocks;
@@ -62,5 +53,5 @@ void main() {
     vec4 win = surfaceColor(q) * boundaryMask(q);
 
     float reveal = smoothstep(0.0, 1.0, wave_p);
-    fragColor = win * reveal;
+    return win * reveal;
 }

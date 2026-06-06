@@ -75,6 +75,23 @@ inline QString slotKey(int slot)
     return slotKey(slot / 4, kComponents[slot & 3]);
 }
 
+/// GLSL author-facing accessor for a flat scalar sub-slot — the form a shader
+/// author reads in fragment source, as opposed to `slotKey()`'s `QVariantMap`
+/// serialisation form. Slot 0 → `"customParams[0].x"`, slot 5 →
+/// `"customParams[1].y"`. The vec index is rendered **0-based** here to match
+/// GLSL array indexing (`slotKey()` is 1-based for the uniform-key wire
+/// format). Out-of-range values return an empty `QString` — same
+/// graceful-degradation contract as `slotKey(int)`.
+inline QString glslAccessor(int slot)
+{
+    if (slot < 0 || slot >= kFlatSlotCount) {
+        return {};
+    }
+    static constexpr char kComponents[4] = {'x', 'y', 'z', 'w'};
+    return QStringLiteral("customParams[") + QString::number(slot / 4) + QStringLiteral("].")
+        + QLatin1Char(kComponents[slot & 3]);
+}
+
 } // namespace CustomParams
 
 /// Canonical key format for the `customColors[N]` slots in `BaseUniforms`.
@@ -119,6 +136,19 @@ inline QString colorKey(int slot)
         return {};
     }
     return QStringLiteral("customColor") + QString::number(slot + 1);
+}
+
+/// GLSL author-facing accessor for a color slot — the form a shader author
+/// reads in fragment source, as opposed to `colorKey()`'s `QVariantMap`
+/// serialisation form. Slot 0 → `"customColors[0]"`. **0-based** to match GLSL
+/// array indexing (`colorKey()` is 1-based for the uniform-key wire format).
+/// Out-of-range values return an empty `QString`.
+inline QString glslAccessor(int slot)
+{
+    if (slot < 0 || slot >= kColorCount) {
+        return {};
+    }
+    return QStringLiteral("customColors[") + QString::number(slot) + QLatin1Char(']');
 }
 
 } // namespace CustomColors
