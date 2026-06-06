@@ -22,3 +22,8 @@ endfunction()
 # live logind. The capability / action / inhibitor coverage lands alongside
 # those milestones.
 _phosphorservicesession_test(test_phosphorservicesession_smoke test_smoke.cpp)
+
+# QML facade: a real QQmlEngine imports Phosphor.Service.Session 1.0,
+# instantiates SessionHost, and exercises the QML-visible surface (the
+# Availability enum, the interactive property, the safe logout() invokable).
+_phosphorservicesession_test(test_phosphorservicesession_qmlfacade test_qmlfacade.cpp)
