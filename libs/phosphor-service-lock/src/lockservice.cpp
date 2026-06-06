@@ -4,9 +4,9 @@
 #include <PhosphorServiceLock/LockService.h>
 
 #include "lockstatemachine.h"
-#include "pamauthenticator.h"
 #include "waylandsessionlock.h"
 
+#include <PhosphorServiceLock/PamAuthenticator.h>
 #include <PhosphorWayland/SessionLock.h>
 
 #include <utility>

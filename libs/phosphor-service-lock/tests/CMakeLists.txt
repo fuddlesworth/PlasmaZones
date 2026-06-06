@@ -24,33 +24,12 @@ endfunction()
 # CLI demo as they land.
 _phosphorservicelock_test(test_phosphorservicelock_smoke test_smoke.cpp)
 
-# PAM authenticator unit test: compiles the internal authenticator sources
-# directly (they are not exported) and links PAM + Concurrent, so it needs no
-# compositor and the internal classes stay unexported. Exercises the
-# credential-free contract; authenticating a valid user is left to the CLI demo.
-add_executable(test_phosphorservicelock_pam
-    test_pamauthenticator.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/../src/pamauthenticator.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/../src/iauthenticator.cpp
-)
-target_include_directories(test_phosphorservicelock_pam
-    PRIVATE
-        ${CMAKE_CURRENT_SOURCE_DIR}/../src
-        ${CMAKE_CURRENT_BINARY_DIR}/..
-        ${PAM_INCLUDE_DIR}
-)
-target_link_libraries(test_phosphorservicelock_pam
-    PRIVATE
-        Qt6::Test
-        Qt6::Concurrent
-        ${PAM_LIBRARY}
-)
-add_test(NAME test_phosphorservicelock_pam COMMAND test_phosphorservicelock_pam)
-set_tests_properties(test_phosphorservicelock_pam
-    PROPERTIES
-        ENVIRONMENT "QT_QPA_PLATFORM=offscreen"
-        LABELS "phosphorservicelock"
-)
+# PAM authenticator unit test: links the lib and exercises the public
+# PamAuthenticator's credential-free contract (configured service, fast-fail on
+# bad input, the concurrency guard, and that a nonexistent user is rejected
+# through the real off-thread PAM path). Authenticating a valid user needs real
+# credentials and is left to the CLI demo.
+_phosphorservicelock_test(test_phosphorservicelock_pam test_pamauthenticator.cpp)
 
 # Lock state-machine unit test: compiles the internal state machine + seams
 # directly (no lib link, no PAM, no compositor) and drives them with fakes, so
@@ -60,6 +39,9 @@ add_executable(test_phosphorservicelock_statemachine
     ${CMAKE_CURRENT_SOURCE_DIR}/../src/lockstatemachine.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/../src/isessionlock.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/../src/iauthenticator.cpp
+    # Listed so AUTOMOC generates the IAuthenticator metaobject: its source file
+    # name (iauthenticator.cpp) does not match the public header (IAuthenticator.h).
+    ${CMAKE_CURRENT_SOURCE_DIR}/../include/PhosphorServiceLock/IAuthenticator.h
 )
 target_include_directories(test_phosphorservicelock_statemachine
     PRIVATE

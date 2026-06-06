@@ -60,6 +60,8 @@ set(phosphorservicelock_public_HDRS
     include/PhosphorServiceLock/PhosphorServiceLock.h
     include/PhosphorServiceLock/QmlRegistration.h
     include/PhosphorServiceLock/LockService.h
+    include/PhosphorServiceLock/IAuthenticator.h
+    include/PhosphorServiceLock/PamAuthenticator.h
 )
 
 set(phosphorservicelock_SRCS

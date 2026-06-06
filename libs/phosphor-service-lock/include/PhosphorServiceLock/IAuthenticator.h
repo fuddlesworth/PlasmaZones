@@ -3,19 +3,23 @@
 
 #pragma once
 
-// Internal (not installed) seam for verifying a user's credentials. Production
-// wraps PAM (PamAuthenticator); tests substitute a fake that resolves a result
-// directly. Keeping the lock state machine behind this interface is what lets it
-// be unit-tested without a real PAM stack or valid credentials.
+#include <PhosphorServiceLock/phosphorservicelock_export.h>
 
 #include <QObject>
 #include <QString>
 
 namespace PhosphorServiceLock {
 
-/// The authentication surface the lock state machine drives: it verifies a
-/// password for a user and reports the outcome asynchronously.
-class IAuthenticator : public QObject
+/**
+ * @brief The credential-verification surface a lock UI (and the lock state
+ *        machine) drives.
+ *
+ * Verifies a password for a user and reports the outcome asynchronously. The
+ * production implementation is PamAuthenticator; tests and the state machine can
+ * substitute a fake, so the lock policy is exercisable without a real PAM stack
+ * or valid credentials.
+ */
+class PHOSPHORSERVICELOCK_EXPORT IAuthenticator : public QObject
 {
     Q_OBJECT
 
@@ -24,8 +28,6 @@ public:
         : QObject(parent)
     {
     }
-    // Out-of-line (defined in iauthenticator.cpp) so it anchors the vtable and
-    // gives AUTOMOC a translation unit for the Q_OBJECT metaobject.
     ~IAuthenticator() override;
 
     /// Asynchronously verify @p password for @p username.

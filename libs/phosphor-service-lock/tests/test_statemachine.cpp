@@ -10,8 +10,9 @@
 
 #include "lockstatemachine.h"
 
-#include "iauthenticator.h"
 #include "isessionlock.h"
+
+#include <PhosphorServiceLock/IAuthenticator.h>
 
 #include <QSignalSpy>
 #include <QTest>

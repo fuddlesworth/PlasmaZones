@@ -7,7 +7,7 @@
 // rejected (never accepted) through the real off-thread PAM path. Authenticating
 // a VALID user needs real credentials and is exercised by the CLI demo.
 
-#include "pamauthenticator.h"
+#include <PhosphorServiceLock/PamAuthenticator.h>
 
 #include <QSignalSpy>
 #include <QTest>

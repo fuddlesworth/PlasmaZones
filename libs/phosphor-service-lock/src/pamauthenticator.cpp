@@ -1,8 +1,9 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: LGPL-2.1-or-later
 
-#include "pamauthenticator.h"
+#include <PhosphorServiceLock/PamAuthenticator.h>
 
+#include <QFutureWatcher>
 #include <QtConcurrent>
 
 #include <security/pam_appl.h>
@@ -14,6 +15,14 @@
 namespace PhosphorServiceLock {
 
 namespace {
+
+// Result of one PAM transaction, marshalled from the worker thread back to the
+// GUI thread by the QFutureWatcher.
+struct PamResult
+{
+    bool success = false;
+    QString reason;
+};
 
 // Payload handed to the PAM conversation callback: a pointer to the (still
 // owned, null-terminated) password bytes to answer the module's echo-off prompt
@@ -125,16 +134,24 @@ PamResult runPamTransaction(const QString& service, const QString& username, QBy
 
 } // namespace
 
+class PamAuthenticator::Private
+{
+public:
+    QString service;
+    QFutureWatcher<PamResult> watcher;
+};
+
 PamAuthenticator::PamAuthenticator(QString service, QObject* parent)
     : IAuthenticator(parent)
-    , m_service(std::move(service))
+    , d(std::make_unique<Private>())
 {
+    d->service = std::move(service);
     // QFutureWatcher::finished is delivered on this (the GUI) thread, so reading
     // the result and emitting here is thread-safe.
-    connect(&m_watcher, &QFutureWatcher<PamResult>::finished, this, [this] {
-        if (m_watcher.future().resultCount() == 0)
+    connect(&d->watcher, &QFutureWatcher<PamResult>::finished, this, [this] {
+        if (d->watcher.future().resultCount() == 0)
             return; // cancelled / no result
-        const PamResult result = m_watcher.result();
+        const PamResult result = d->watcher.result();
         if (result.success)
             Q_EMIT succeeded();
         else
@@ -146,12 +163,12 @@ PamAuthenticator::~PamAuthenticator() = default;
 
 QString PamAuthenticator::service() const
 {
-    return m_service;
+    return d->service;
 }
 
 void PamAuthenticator::authenticate(const QString& username, const QString& password)
 {
-    if (m_watcher.isRunning()) {
+    if (d->watcher.isRunning()) {
         // One transaction at a time: never run two PAM stacks concurrently.
         Q_EMIT failed(QStringLiteral("authentication already in progress"));
         return;
@@ -161,14 +178,14 @@ void PamAuthenticator::authenticate(const QString& username, const QString& pass
         return;
     }
 
-    const QString service = m_service;
+    const QString service = d->service;
     QByteArray pw = password.toUtf8();
     // The worker captures only value copies (service, user, and the moved-in
     // password buffer) — never `this` — so destroying the authenticator
     // mid-transaction cannot dangle: the watcher disconnects and the detached
     // task finishes harmlessly. The password buffer is moved through to
     // runPamTransaction, which is its sole owner and wipes it.
-    m_watcher.setFuture(QtConcurrent::run([service, user = username, pw = std::move(pw)]() mutable -> PamResult {
+    d->watcher.setFuture(QtConcurrent::run([service, user = username, pw = std::move(pw)]() mutable -> PamResult {
         return runPamTransaction(service, user, std::move(pw));
     }));
 }

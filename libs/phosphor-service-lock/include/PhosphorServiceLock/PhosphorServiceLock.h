@@ -17,6 +17,8 @@
  *
  * Shells consume:
  *   - `LockService`: the lock host (lock state machine + authenticate path).
+ *   - `PamAuthenticator` / `IAuthenticator`: the standalone credential-check
+ *     surface, for verifying the user's password independently of the lock.
  *
  * Lock *surfaces* (the per-output graphics shown while locked) are a shell
  * concern wired in a later phase; this service owns authentication and the lock
@@ -26,5 +28,7 @@
  * `docs/phosphor-shell-design/04-implementation-plan.md`.
  */
 
+#include <PhosphorServiceLock/IAuthenticator.h>
 #include <PhosphorServiceLock/LockService.h>
+#include <PhosphorServiceLock/PamAuthenticator.h>
 #include <PhosphorServiceLock/QmlRegistration.h>

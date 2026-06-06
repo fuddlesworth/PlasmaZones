@@ -3,20 +3,14 @@
 
 #pragma once
 
-#include "iauthenticator.h"
+#include <PhosphorServiceLock/IAuthenticator.h>
+#include <PhosphorServiceLock/phosphorservicelock_export.h>
 
-#include <QFutureWatcher>
 #include <QString>
 
-namespace PhosphorServiceLock {
+#include <memory>
 
-/// Result of one PAM transaction, marshalled from the worker thread back to the
-/// GUI thread by the QFutureWatcher.
-struct PamResult
-{
-    bool success = false;
-    QString reason;
-};
+namespace PhosphorServiceLock {
 
 /**
  * @brief IAuthenticator backed by PAM (`pam_authenticate` + `pam_acct_mgmt`).
@@ -28,12 +22,12 @@ struct PamResult
  *
  * The PAM service name (which `/etc/pam.d/<service>` stack validates the
  * password) is configurable; it defaults to `login`, which exists on every
- * system so the demo authenticates out of the box. A shell would point this at
- * its own stack.
+ * system so the service authenticates out of the box. A shell would point this
+ * at its own stack.
  *
  * Threading: construct and call from the GUI thread.
  */
-class PamAuthenticator : public IAuthenticator
+class PHOSPHORSERVICELOCK_EXPORT PamAuthenticator : public IAuthenticator
 {
     Q_OBJECT
     Q_DISABLE_COPY_MOVE(PamAuthenticator)
@@ -49,8 +43,8 @@ public:
     void authenticate(const QString& username, const QString& password) override;
 
 private:
-    QString m_service;
-    QFutureWatcher<PamResult> m_watcher;
+    class Private;
+    std::unique_ptr<Private> d;
 };
 
 } // namespace PhosphorServiceLock
