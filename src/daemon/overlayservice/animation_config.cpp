@@ -39,7 +39,7 @@ namespace {
 // exactly one named function rather than appending to a 100-line
 // setupSurfaceAnimator. Each builder documents the visual shape it
 // encodes; setupSurfaceAnimator just wires the builder output to the
-// matching PzRole.
+// matching PRole.
 //
 // **Surface-family separation policy.** Profile paths are partitioned by
 // surface family so each overlay tunes independently:
@@ -275,7 +275,7 @@ void OverlayService::setupSurfaceAnimator(PhosphorAnimation::PhosphorProfileRegi
     // and therefore fall back to the empty default (no shader effect, the
     // library-default 150 ms OutCubic motion):
     //   - ZoneOverlay (zone overlay rendering): routes through the
-    //     animator (overlay.cpp passes PzRoles::ZoneOverlay to
+    //     animator (overlay.cpp passes PRoles::ZoneOverlay to
     //     beginShow/beginHide on the passive-shell slot) but the default
     //     motion is the intended visual; no shader leg is configured.
     //   - ShaderPreview (editor preview window): shown via direct
@@ -320,9 +320,9 @@ void OverlayService::setupSurfaceAnimator(PhosphorAnimation::PhosphorProfileRegi
     // unified PassiveShell (one per screen, scoped
     // `plasmazones-passive-shell-{screenId}-{gen}`); OSD content rides
     // a slot inside it via `PassiveOverlayShell.qml`'s Loader. The
-    // animator config registered here is keyed on PzRoles::Osd's scope
+    // animator config registered here is keyed on PRoles::Osd's scope
     // prefix (`plasmazones-osd`). Lookups go through the role-override
-    // path on beginShow / beginHide (osd.cpp passes PzRoles::Osd as the
+    // path on beginShow / beginHide (osd.cpp passes PRoles::Osd as the
     // override role), not through the longest-prefix surface lookup, so
     // the passive-shell surface scope does not collide with this config.
     //
@@ -369,10 +369,10 @@ void OverlayService::applyShaderProfilesToAnimator(const PAS::ShaderProfileTree&
     // hides and per-role config registration; the daemon retains the
     // SHAPE of each config (curves, durations, shader paths) via the
     // build*Config helpers above.
-    m_shellHost->registerConfigForRole(PzRoles::Osd, buildOsdConfig(tree));
-    m_shellHost->registerConfigForRole(PzRoles::LayoutPicker, buildLayoutPickerConfig(tree));
-    m_shellHost->registerConfigForRole(PzRoles::ZoneSelector, buildZoneSelectorConfig(tree));
-    m_shellHost->registerConfigForRole(PzRoles::SnapAssist, buildSnapAssistConfig(tree));
+    m_shellHost->registerConfigForRole(PRoles::Osd, buildOsdConfig(tree));
+    m_shellHost->registerConfigForRole(PRoles::LayoutPicker, buildLayoutPickerConfig(tree));
+    m_shellHost->registerConfigForRole(PRoles::ZoneSelector, buildZoneSelectorConfig(tree));
+    m_shellHost->registerConfigForRole(PRoles::SnapAssist, buildSnapAssistConfig(tree));
 }
 
 } // namespace PlasmaZones

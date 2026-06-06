@@ -83,7 +83,7 @@ QString buildParamPreamble(const QList<PreambleParam>& params)
     QString out = QStringLiteral("// ---- generated parameter accessors (do not edit) ----\n");
     for (const PreambleParam& p : params) {
         if (!isValidParamId(p.id)) {
-            out += QStringLiteral("// pz: skipped a parameter with an invalid identifier\n");
+            out += QStringLiteral("// p: skipped a parameter with an invalid identifier\n");
             continue;
         }
 
@@ -107,7 +107,7 @@ QString buildParamPreamble(const QList<PreambleParam>& params)
         }
 
         if (accessor.isEmpty()) {
-            out += QStringLiteral("// pz: skipped \"") + p.id + QStringLiteral("\" (slot out of range)\n");
+            out += QStringLiteral("// p: skipped \"") + p.id + QStringLiteral("\" (slot out of range)\n");
             continue;
         }
         out += QStringLiteral("#define p_") + p.id + QLatin1Char(' ') + accessor + QLatin1Char('\n');

@@ -1,9 +1,9 @@
 -- SPDX-FileCopyrightText: 2026 fuddlesworth
 -- SPDX-License-Identifier: GPL-3.0-or-later
 
-local pz = pz
+local phosphor_luau = phosphor_luau
 
-return pz.algorithm {
+return phosphor_luau.algorithm {
     metadata = {
         name = "Horizontal Deck",
         id = "horizontal-deck",
@@ -22,7 +22,7 @@ return pz.algorithm {
         -- Overlapping layout — innerGap intentionally ignored (zones overlap by design)
         local count = ctx.windowCount
         if count <= 0 then return {} end
-        local splitRatio = pz.clampSplitRatio(ctx.splitRatio)
-        return pz.deckLayout(ctx.area, count, splitRatio, true)
+        local splitRatio = phosphor_luau.clampSplitRatio(ctx.splitRatio)
+        return phosphor_luau.deckLayout(ctx.area, count, splitRatio, true)
     end,
 }

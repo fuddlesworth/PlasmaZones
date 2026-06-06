@@ -78,27 +78,27 @@ QQuickItem* slotItemOrNull(const OverlayService::PerScreenOverlayState& state, c
 
 QQuickItem* OverlayService::PerScreenOverlayState::osdSlot() const
 {
-    return slotItemOrNull(*this, PzSlotKeys::Osd());
+    return slotItemOrNull(*this, PSlotKeys::Osd());
 }
 
 QQuickItem* OverlayService::PerScreenOverlayState::snapAssistSlot() const
 {
-    return slotItemOrNull(*this, PzSlotKeys::SnapAssist());
+    return slotItemOrNull(*this, PSlotKeys::SnapAssist());
 }
 
 QQuickItem* OverlayService::PerScreenOverlayState::layoutPickerSlot() const
 {
-    return slotItemOrNull(*this, PzSlotKeys::LayoutPicker());
+    return slotItemOrNull(*this, PSlotKeys::LayoutPicker());
 }
 
 QQuickItem* OverlayService::PerScreenOverlayState::zoneSelectorSlot() const
 {
-    return slotItemOrNull(*this, PzSlotKeys::ZoneSelector());
+    return slotItemOrNull(*this, PSlotKeys::ZoneSelector());
 }
 
 QQuickItem* OverlayService::PerScreenOverlayState::mainOverlaySlot() const
 {
-    return slotItemOrNull(*this, PzSlotKeys::MainOverlay());
+    return slotItemOrNull(*this, PSlotKeys::MainOverlay());
 }
 
 // Per-role SurfaceAnimator config builders + setupSurfaceAnimator +
@@ -155,7 +155,7 @@ OverlayService::OverlayService(PhosphorScreens::ScreenManager* screenManager, Sh
 
     QVulkanInstance* externalVulkanInstance = nullptr;
 #if QT_CONFIG(vulkan)
-    externalVulkanInstance = qApp->property(PlasmaZones::PzVulkanInstanceProperty).value<QVulkanInstance*>();
+    externalVulkanInstance = qApp->property(PlasmaZones::PVulkanInstanceProperty).value<QVulkanInstance*>();
 #endif
 
     // Construct the thumbnail provider eagerly so the borrowed @c m_thumbnailProvider
@@ -179,7 +179,7 @@ OverlayService::OverlayService(PhosphorScreens::ScreenManager* screenManager, Sh
         .surfaceFactory = m_surfaceFactory.get(),
         .engineConfigurator =
             [this](QQmlEngine& engine) {
-                auto* localizedContext = new PzLocalizedContext(&engine);
+                auto* localizedContext = new PLocalizedContext(&engine);
                 engine.rootContext()->setContextObject(localizedContext);
                 engine.rootContext()->setContextProperty(QStringLiteral("overlayService"), this);
 
@@ -228,7 +228,7 @@ OverlayService::OverlayService(PhosphorScreens::ScreenManager* screenManager, Sh
             },
         .pipelineCachePath = pipelineCachePath,
         .vulkanInstance = externalVulkanInstance,
-        .vulkanApiVersion = PlasmaZones::PzVulkanApiVersion,
+        .vulkanApiVersion = PlasmaZones::PVulkanApiVersion,
         // Zero-copy dma-buf thumbnail import (PLASMAZONES_DMABUF_THUMBNAILS)
         // needs these device extensions enabled on the overlay windows' QRhi
         // Vulkan device; without them vkGetMemoryFdPropertiesKHR is unavailable
@@ -249,7 +249,7 @@ OverlayService::OverlayService(PhosphorScreens::ScreenManager* screenManager, Sh
     // m_surfaceManager to exist, so they're registered here.
     m_shellHost->setSurfaceFactory([this](const QString& screenId, QScreen* physScreen) -> PhosphorLayer::Surface* {
         const auto role =
-            PzRoles::makePerInstanceRole(PzRoles::PassiveShell, screenId, m_surfaceManager->nextScopeGeneration());
+            PRoles::makePerInstanceRole(PRoles::PassiveShell, screenId, m_surfaceManager->nextScopeGeneration());
         auto* surface = createWarmedOsdSurface(role, QUrl(QStringLiteral("qrc:/ui/PassiveOverlayShell.qml")),
                                                physScreen, "passive shell", screenId);
         if (!surface) {

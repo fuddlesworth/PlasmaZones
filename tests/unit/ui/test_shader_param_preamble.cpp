@@ -118,7 +118,7 @@ private Q_SLOTS:
         QVERIFY2(out.contains(QStringLiteral("#define p_good customParams[0].x")), qPrintable(out));
         QVERIFY2(!out.contains(QStringLiteral("#define p_waytoobig")), qPrintable(out));
         // The skipped entries leave a comment trail.
-        QVERIFY2(out.contains(QStringLiteral("// pz: skipped")), qPrintable(out));
+        QVERIFY2(out.contains(QStringLiteral("// p: skipped")), qPrintable(out));
     }
 
     // A leading digit in the id is fine — the p_ prefix guarantees a valid

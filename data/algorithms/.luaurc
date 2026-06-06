@@ -2,5 +2,5 @@
     "languageMode": "nonstrict",
     "lint": { "*": true },
     "lintErrors": false,
-    "globals": ["pz"]
+    "globals": ["phosphor_luau"]
 }

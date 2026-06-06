@@ -291,7 +291,7 @@ add_test(NAME test_wayland_session_check COMMAND test_wayland_session_check)
 
 # Phase-5 SurfaceAnimator scope-prefix policy. Pins down the
 # per-instance scope construction in osd.cpp / selector.cpp /
-# snapassist.cpp so a divergence from the PzRoles base scopePrefix
+# snapassist.cpp so a divergence from the PRoles base scopePrefix
 # doesn't silently fall back to the empty default config in release
 # builds. Replaces the debug-only Q_ASSERT_X in createZoneSelectorWindow
 # with a release-built check that covers every overlay role.

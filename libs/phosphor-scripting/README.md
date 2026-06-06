@@ -52,7 +52,7 @@ using namespace PhosphorScripting;
 auto watchdog = std::make_shared<LuauWatchdog>();
 LuauEngine engine(watchdog);          // default 64 MiB heap cap
 engine.init();
-engine.runPrelude(QStringLiteral("pz"), preludeSource);  // install host globals
+engine.runPrelude(QStringLiteral("phosphor_luau"), preludeSource);  // install host globals
 engine.sandbox();                     // freeze globals + stdlib
 
 QString err;
@@ -93,5 +93,5 @@ project's global build settings.
 
 ## See also
 
-- [`phosphor-tiles`](../phosphor-tiles/README.md) — the first consumer: `LuauTileAlgorithm` + the `pz` tiling standard library.
+- [`phosphor-tiles`](../phosphor-tiles/README.md) — the first consumer: `LuauTileAlgorithm` + the `phosphor_luau` tiling standard library.
 - [`docs/architecture/adr/0001-luau-shell-scripting-language.md`](../../docs/architecture/adr/0001-luau-shell-scripting-language.md) — why Luau.

@@ -47,7 +47,7 @@ struct PreambleParam
 /// Auto-numbers each pool independently in declaration order for params whose
 /// `explicitSlot < 0`. Returns an empty string for an empty list. A param
 /// whose id isn't a valid GLSL identifier body, or whose resolved slot is out
-/// of range, is emitted as a `// pz: skipped ...` comment rather than a broken
+/// of range, is emitted as a `// p: skipped ...` comment rather than a broken
 /// `#define`, so the block always compiles.
 ///
 /// The returned block is newline-terminated and contains no `#version` or

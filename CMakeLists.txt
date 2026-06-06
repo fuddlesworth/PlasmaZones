@@ -309,7 +309,7 @@ file(GLOB TRANSLATION_TS_FILES "${CMAKE_SOURCE_DIR}/translations/plasmazones_*.t
 list(FILTER TRANSLATION_TS_FILES EXCLUDE REGEX "plasmazones_en\\.ts$")
 
 # --- update-ts target: lupdate scans source directly ---
-# PzI18n::tr() uses Q_DECLARE_TR_FUNCTIONS(plasmazones) - lupdate
+# PI18n::tr() uses Q_DECLARE_TR_FUNCTIONS(plasmazones) - lupdate
 # recognizes tr() natively.  No custom scripts or intermediate files.
 if(Qt6LinguistTools_FOUND)
     # All .ts files to update (en template + per-language)
@@ -403,25 +403,25 @@ add_subdirectory(libs/phosphor-snap-engine) # zone-based snap placement engine
 # Refuse to configure if any engine target ever picks up a Qml/Quick
 # link. Cheap guardrail; failures here mean someone added a dependency
 # that drags Qml in transitively or wired a target up wrong.
-foreach(_pz_engine_lib PhosphorZones PhosphorSnapEngine PhosphorTileEngine PhosphorEngine)
-    if(TARGET ${_pz_engine_lib})
-        get_target_property(_pz_engine_links ${_pz_engine_lib} LINK_LIBRARIES)
-        if(_pz_engine_links)
-            foreach(_pz_link IN LISTS _pz_engine_links)
-                if(_pz_link MATCHES "(^|::)Qt6::(Qml|Quick)$")
+foreach(_p_engine_lib PhosphorZones PhosphorSnapEngine PhosphorTileEngine PhosphorEngine)
+    if(TARGET ${_p_engine_lib})
+        get_target_property(_p_engine_links ${_p_engine_lib} LINK_LIBRARIES)
+        if(_p_engine_links)
+            foreach(_p_link IN LISTS _p_engine_links)
+                if(_p_link MATCHES "(^|::)Qt6::(Qml|Quick)$")
                     message(FATAL_ERROR
-                        "Engine library '${_pz_engine_lib}' links '${_pz_link}'. "
+                        "Engine library '${_p_engine_lib}' links '${_p_link}'. "
                         "Engine libs must stay QML-free — see comment above this "
                         "check in CMakeLists.txt for rationale.")
                 endif()
             endforeach()
         endif()
-        get_target_property(_pz_engine_iface ${_pz_engine_lib} INTERFACE_LINK_LIBRARIES)
-        if(_pz_engine_iface)
-            foreach(_pz_link IN LISTS _pz_engine_iface)
-                if(_pz_link MATCHES "(^|::)Qt6::(Qml|Quick)$")
+        get_target_property(_p_engine_iface ${_p_engine_lib} INTERFACE_LINK_LIBRARIES)
+        if(_p_engine_iface)
+            foreach(_p_link IN LISTS _p_engine_iface)
+                if(_p_link MATCHES "(^|::)Qt6::(Qml|Quick)$")
                     message(FATAL_ERROR
-                        "Engine library '${_pz_engine_lib}' publicly links '${_pz_link}'. "
+                        "Engine library '${_p_engine_lib}' publicly links '${_p_link}'. "
                         "Engine libs must stay QML-free — see comment above this "
                         "check in CMakeLists.txt for rationale.")
                 endif()
@@ -529,12 +529,12 @@ install(DIRECTORY data/curves/
 # — that join produces `/usr//absolute/...` when ECM hands us an absolute
 # KDE_INSTALL_DATADIR (some distros override it that way).
 install(CODE "
-    set(_pz_profiles_install_dir \"\$ENV{DESTDIR}${KDE_INSTALL_FULL_DATADIR}/plasmazones/profiles\")
-    if(EXISTS \"\${_pz_profiles_install_dir}\")
-        file(GLOB _pz_stale_profile_jsons \"\${_pz_profiles_install_dir}/*.json\")
-        if(_pz_stale_profile_jsons)
-            message(STATUS \"Removing stale animation profile JSONs from \${_pz_profiles_install_dir}\")
-            file(REMOVE \${_pz_stale_profile_jsons})
+    set(_p_profiles_install_dir \"\$ENV{DESTDIR}${KDE_INSTALL_FULL_DATADIR}/plasmazones/profiles\")
+    if(EXISTS \"\${_p_profiles_install_dir}\")
+        file(GLOB _p_stale_profile_jsons \"\${_p_profiles_install_dir}/*.json\")
+        if(_p_stale_profile_jsons)
+            message(STATUS \"Removing stale animation profile JSONs from \${_p_profiles_install_dir}\")
+            file(REMOVE \${_p_stale_profile_jsons})
         endif()
     endif()
 ")

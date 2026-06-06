@@ -996,7 +996,7 @@ private:
      *
      * Common pattern for ensurePassiveShellFor (and the LayoutPicker
      * surface in snapassist.cpp): (1) caller builds a per-instance
-     * scope-prefixed Role via @ref PzRoles::makePerInstanceRole,
+     * scope-prefixed Role via @ref PRoles::makePerInstanceRole,
      * (2) this helper calls createLayerSurface with keepMappedOnHide=true,
      * (3) string-connects the QML-side `dismissRequested()` signal to
      * `Surface::hide()` so the auto-dismiss timer (or backdrop click for
@@ -1008,7 +1008,7 @@ private:
      * window pointers into PerScreenOverlayState.
      *
      * @param role           Fully-formed per-instance role (use
-     *                       PzRoles::makePerInstanceRole to build).
+     *                       PRoles::makePerInstanceRole to build).
      * @param qmlUrl         QML file to load.
      * @param physScreen     Target physical screen.
      * @param windowType     Debug/telemetry label.

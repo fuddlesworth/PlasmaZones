@@ -40,7 +40,7 @@ is **parity with it along five axes**:
 | Parameter access | `ctx.custom.focusBoost` (named, typed) | `customParams[2].x` (hand-computed slot arithmetic) |
 | Entry point | `tile(ctx)` — receive context, return zones | hand-written `main()` + dispatch loop, re-implemented per pack |
 | Pre-load validation | `luau-analyze` catches errors before load | errors surface only at GPU runtime, unmapped |
-| Editor tooling | `.luaurc` + `pz.d.luau` → autocomplete | nothing |
+| Editor tooling | `.luaurc` + `phosphor_luau.d.luau` → autocomplete | nothing |
 | Onboarding | 10-line working quick-start | ~89-line frag + vert + JSON minimum, no "hello world" |
 
 ## Non-goals
@@ -527,9 +527,9 @@ full-frame + `main()` triad covers everything else cleanly.)
   `glsl-language-server` / `glslls` resolves `#include <common.glsl>` and friends.
 - For the generated `p_*` defines: the validator (T1.2) gains a `--emit-preamble`
   mode that writes the generated `#define` block to a sidecar
-  (e.g. `.pz-generated.glsl`) the author can `#include "…"` while editing for
+  (e.g. `.phosphor_luau-generated.glsl`) the author can `#include "…"` while editing for
   autocomplete, stripped/ignored at load. (This is the pragmatic GLSL-side stand-in
-  for `pz.d.luau`; GLSL LSP tooling is weaker than luau-lsp, so we lean on a
+  for `phosphor_luau.d.luau`; GLSL LSP tooling is weaker than luau-lsp, so we lean on a
   generated include rather than a type stub.)
 
 #### T2.3 — Documentation split

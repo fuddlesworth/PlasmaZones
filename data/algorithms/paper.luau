@@ -1,9 +1,9 @@
 -- SPDX-FileCopyrightText: 2026 fuddlesworth
 -- SPDX-License-Identifier: GPL-3.0-or-later
 
-local pz = pz
+local phosphor_luau = phosphor_luau
 
-return pz.algorithm {
+return phosphor_luau.algorithm {
     metadata = {
         name = "Paper",
         id = "paper",
@@ -24,7 +24,7 @@ return pz.algorithm {
         if count <= 0 then return {} end
         local area = ctx.area
 
-        local pageRatio = pz.clampSplitRatio(ctx.splitRatio)
+        local pageRatio = phosphor_luau.clampSplitRatio(ctx.splitRatio)
         local pageWidth = math.floor(area.width * pageRatio)
         if pageWidth < 1 then pageWidth = 1 end
         if pageWidth > area.width then pageWidth = area.width end

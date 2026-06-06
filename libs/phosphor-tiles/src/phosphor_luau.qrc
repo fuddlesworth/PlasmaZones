@@ -1,7 +1,7 @@
 <!-- SPDX-FileCopyrightText: 2026 fuddlesworth -->
 <!-- SPDX-License-Identifier: LGPL-2.1-or-later -->
 <RCC>
-    <qresource prefix="/pz">
-        <file alias="pz.luau">pz/pz.luau</file>
+    <qresource prefix="/phosphor_luau">
+        <file alias="phosphor_luau.luau">phosphor_luau/phosphor_luau.luau</file>
     </qresource>
 </RCC>

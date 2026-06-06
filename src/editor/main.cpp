@@ -133,17 +133,17 @@ int main(int argc, char* argv[])
 
     // Command line options
     QCommandLineParser parser;
-    parser.setApplicationDescription(PzI18n::tr("Visual layout editor for PlasmaZones"));
+    parser.setApplicationDescription(PI18n::tr("Visual layout editor for PlasmaZones"));
     parser.addHelpOption();
     parser.addVersionOption();
 
     QCommandLineOption layoutIdOption(QStringList{QStringLiteral("l"), QStringLiteral("layout")},
-                                      PzI18n::tr("Layout ID to edit"), QStringLiteral("uuid"));
+                                      PI18n::tr("Layout ID to edit"), QStringLiteral("uuid"));
     QCommandLineOption screenOption(QStringList{QStringLiteral("s"), QStringLiteral("screen")},
-                                    PzI18n::tr("Target screen name"), QStringLiteral("name"));
+                                    PI18n::tr("Target screen name"), QStringLiteral("name"));
     QCommandLineOption newLayoutOption(QStringList{QStringLiteral("n"), QStringLiteral("new")},
-                                       PzI18n::tr("Create new layout"));
-    QCommandLineOption previewOption(QStringLiteral("preview"), PzI18n::tr("Open in read-only preview mode"));
+                                       PI18n::tr("Create new layout"));
+    QCommandLineOption previewOption(QStringLiteral("preview"), PI18n::tr("Open in read-only preview mode"));
 
     parser.addOptions({layoutIdOption, screenOption, newLayoutOption, previewOption});
     parser.process(app);
@@ -253,7 +253,7 @@ int main(int argc, char* argv[])
     QQmlApplicationEngine engine;
 
     // Set up i18n for QML (makes i18n() available in QML)
-    auto* localizedContext = new PzLocalizedContext(&engine);
+    auto* localizedContext = new PLocalizedContext(&engine);
     engine.rootContext()->setContextObject(localizedContext);
 
     // Expose controller to QML

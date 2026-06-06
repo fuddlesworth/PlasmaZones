@@ -11,7 +11,7 @@ namespace PlasmaZones {
 
 ChangeSelectionCommand::ChangeSelectionCommand(QPointer<EditorController> controller, const QStringList& oldSelection,
                                                const QStringList& newSelection, const QString& text)
-    : QUndoCommand(text.isEmpty() ? PzI18n::tr("Change Selection", "@action") : text)
+    : QUndoCommand(text.isEmpty() ? PI18n::tr("Change Selection", "@action") : text)
     , m_controller(controller)
     , m_oldSelection(oldSelection)
     , m_newSelection(newSelection)

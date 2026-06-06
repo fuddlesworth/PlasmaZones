@@ -172,22 +172,22 @@ void EditorController::changeZOrderImpl(const QString& zoneId, ZOrderOp op, cons
 
 void EditorController::bringToFront(const QString& zoneId)
 {
-    changeZOrderImpl(zoneId, ZOrderOp::BringToFront, PzI18n::tr("Bring to Front", "@action"));
+    changeZOrderImpl(zoneId, ZOrderOp::BringToFront, PI18n::tr("Bring to Front", "@action"));
 }
 
 void EditorController::sendToBack(const QString& zoneId)
 {
-    changeZOrderImpl(zoneId, ZOrderOp::SendToBack, PzI18n::tr("Send to Back", "@action"));
+    changeZOrderImpl(zoneId, ZOrderOp::SendToBack, PI18n::tr("Send to Back", "@action"));
 }
 
 void EditorController::bringForward(const QString& zoneId)
 {
-    changeZOrderImpl(zoneId, ZOrderOp::BringForward, PzI18n::tr("Bring Forward", "@action"));
+    changeZOrderImpl(zoneId, ZOrderOp::BringForward, PI18n::tr("Bring Forward", "@action"));
 }
 
 void EditorController::sendBackward(const QString& zoneId)
 {
-    changeZOrderImpl(zoneId, ZOrderOp::SendBackward, PzI18n::tr("Send Backward", "@action"));
+    changeZOrderImpl(zoneId, ZOrderOp::SendBackward, PI18n::tr("Send Backward", "@action"));
 }
 
 /**

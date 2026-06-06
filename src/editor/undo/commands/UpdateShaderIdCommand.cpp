@@ -12,7 +12,7 @@ using namespace PlasmaZones;
 
 UpdateShaderIdCommand::UpdateShaderIdCommand(QPointer<EditorController> editorController, const QString& oldId,
                                              const QString& newId, const QString& text, QUndoCommand* parent)
-    : QUndoCommand(text.isEmpty() ? PzI18n::tr("Change Shader Effect", "@action") : text, parent)
+    : QUndoCommand(text.isEmpty() ? PI18n::tr("Change Shader Effect", "@action") : text, parent)
     , m_editorController(editorController)
     , m_oldId(oldId)
     , m_newId(newId)

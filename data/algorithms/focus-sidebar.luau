@@ -1,9 +1,9 @@
 -- SPDX-FileCopyrightText: 2026 fuddlesworth
 -- SPDX-License-Identifier: GPL-3.0-or-later
 
-local pz = pz
+local phosphor_luau = phosphor_luau
 
-return pz.algorithm {
+return phosphor_luau.algorithm {
     metadata = {
         name = "Focus + Sidebar",
         id = "focus-sidebar",
@@ -25,11 +25,11 @@ return pz.algorithm {
         local gap = ctx.innerGap
 
         if count <= 0 then return {} end
-        if area.width < pz.MIN_ZONE_SIZE or area.height < pz.MIN_ZONE_SIZE then
-            return pz.fillArea(area, count)
+        if area.width < phosphor_luau.MIN_ZONE_SIZE or area.height < phosphor_luau.MIN_ZONE_SIZE then
+            return phosphor_luau.fillArea(area, count)
         end
 
-        local splitRatio = pz.clampSplitRatio(ctx.splitRatio)
+        local splitRatio = phosphor_luau.clampSplitRatio(ctx.splitRatio)
         local mainWidth = math.max(1, math.floor(area.width * splitRatio - gap / 2))
         local sidebarX = math.min(area.x + mainWidth + gap, area.x + area.width - 1)
         local sidebarWidth = math.max(1, area.x + area.width - sidebarX)
@@ -42,12 +42,12 @@ return pz.algorithm {
         local totalGaps = (sidebarCount - 1) * gap
 
         if totalGaps >= area.height then
-            local fill = pz.fillRegion(sidebarX, area.y, sidebarWidth, area.height, sidebarCount)
+            local fill = phosphor_luau.fillRegion(sidebarX, area.y, sidebarWidth, area.height, sidebarCount)
             for i = 1, #fill do zones[#zones + 1] = fill[i] end
             return zones
         end
 
-        local slots = pz.distributeEvenly(area.y, area.height, sidebarCount, gap)
+        local slots = phosphor_luau.distributeEvenly(area.y, area.height, sidebarCount, gap)
         for i = 1, #slots do
             zones[#zones + 1] = { x = sidebarX, y = slots[i].pos, width = sidebarWidth, height = slots[i].size }
         end

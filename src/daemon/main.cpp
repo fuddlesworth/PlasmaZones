@@ -203,20 +203,20 @@ int main(int argc, char* argv[])
 
     // Command line options
     QCommandLineParser parser;
-    parser.setApplicationDescription(PzI18n::tr("Window tiling and zone management"));
+    parser.setApplicationDescription(PI18n::tr("Window tiling and zone management"));
     parser.addHelpOption();
     parser.addVersionOption();
 
     QCommandLineOption replaceOption(QStringList{QStringLiteral("r"), QStringLiteral("replace")},
-                                     PzI18n::tr("Replace existing daemon instance"));
+                                     PI18n::tr("Replace existing daemon instance"));
     parser.addOption(replaceOption);
 
     QCommandLineOption debugOption(QStringList{QStringLiteral("d"), QStringLiteral("debug")},
-                                   PzI18n::tr("Enable debug logging for all PlasmaZones categories"));
+                                   PI18n::tr("Enable debug logging for all PlasmaZones categories"));
     parser.addOption(debugOption);
 
     QCommandLineOption logFileOption(QStringList{QStringLiteral("l"), QStringLiteral("log-file")},
-                                     PzI18n::tr("Write log output to <file> instead of stderr"), PzI18n::tr("file"));
+                                     PI18n::tr("Write log output to <file> instead of stderr"), PI18n::tr("file"));
     parser.addOption(logFileOption);
 
     parser.process(app);

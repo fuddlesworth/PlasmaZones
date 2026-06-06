@@ -1,9 +1,9 @@
 -- SPDX-FileCopyrightText: 2026 fuddlesworth
 -- SPDX-License-Identifier: GPL-3.0-or-later
 
-local pz = pz
+local phosphor_luau = phosphor_luau
 
-return pz.algorithm {
+return phosphor_luau.algorithm {
     metadata = {
         id = "master-stack",
         name = "Master + Stack",
@@ -17,7 +17,7 @@ return pz.algorithm {
             return ctx.area:columns(ctx.count, ctx.gap)
         end
         local master, stack = ctx.area:splitLeft(ctx.splitRatio, ctx.gap)
-        return pz.join(
+        return phosphor_luau.join(
             master:rows(ctx.masterCount, ctx.gap),
             stack:rows(ctx.count - ctx.masterCount, ctx.gap)
         )

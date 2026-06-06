@@ -53,20 +53,20 @@ ImportResult importFromKwinrc()
     kwinrc.endGroup();
 
     if (jsonStr.isEmpty()) {
-        return {0, PzI18n::tr("No KZones configuration found in kwinrc"), QString()};
+        return {0, PI18n::tr("No KZones configuration found in kwinrc"), QString()};
     }
 
     QJsonParseError parseError;
     const QJsonDocument doc = QJsonDocument::fromJson(jsonStr.toUtf8(), &parseError);
     if (parseError.error != QJsonParseError::NoError || !doc.isArray()) {
-        return {0, PzI18n::tr("Failed to parse KZones layoutsJson: %1").arg(parseError.errorString()), QString()};
+        return {0, PI18n::tr("Failed to parse KZones layoutsJson: %1").arg(parseError.errorString()), QString()};
     }
 
     ImportResult result = importLayouts(doc.array());
     if (result.imported > 0) {
-        result.message = PzI18n::tr("Imported %n layout(s) from KZones", "", result.imported);
+        result.message = PI18n::tr("Imported %n layout(s) from KZones", "", result.imported);
     } else if (result.message.isEmpty()) {
-        result.message = PzI18n::tr("No layouts found in KZones configuration");
+        result.message = PI18n::tr("No layouts found in KZones configuration");
     }
     return result;
 }
@@ -74,12 +74,12 @@ ImportResult importFromKwinrc()
 ImportResult importFromFile(const QString& filePath)
 {
     if (filePath.isEmpty()) {
-        return {0, PzI18n::tr("No file path specified"), QString()};
+        return {0, PI18n::tr("No file path specified"), QString()};
     }
 
     QFile file(filePath);
     if (!file.open(QIODevice::ReadOnly)) {
-        return {0, PzI18n::tr("Could not open file: %1").arg(filePath), QString()};
+        return {0, PI18n::tr("Could not open file: %1").arg(filePath), QString()};
     }
 
     QByteArray data = file.readAll();
@@ -92,7 +92,7 @@ ImportResult importFromFile(const QString& filePath)
     QJsonParseError parseError;
     const QJsonDocument doc = QJsonDocument::fromJson(data, &parseError);
     if (parseError.error != QJsonParseError::NoError) {
-        return {0, PzI18n::tr("Failed to parse KZones JSON: %1").arg(parseError.errorString()), QString()};
+        return {0, PI18n::tr("Failed to parse KZones JSON: %1").arg(parseError.errorString()), QString()};
     }
 
     QJsonArray array;
@@ -102,14 +102,14 @@ ImportResult importFromFile(const QString& filePath)
         // Single layout object — wrap in array.
         array.append(doc.object());
     } else {
-        return {0, PzI18n::tr("KZones file does not contain a JSON array or object"), QString()};
+        return {0, PI18n::tr("KZones file does not contain a JSON array or object"), QString()};
     }
 
     ImportResult result = importLayouts(array);
     if (result.imported > 0) {
-        result.message = PzI18n::tr("Imported %n layout(s) from KZones file", "", result.imported);
+        result.message = PI18n::tr("Imported %n layout(s) from KZones file", "", result.imported);
     } else if (result.message.isEmpty()) {
-        result.message = PzI18n::tr("No valid layouts found in file");
+        result.message = PI18n::tr("No valid layouts found in file");
     }
     return result;
 }

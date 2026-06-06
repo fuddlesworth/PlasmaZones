@@ -198,7 +198,7 @@ QVariantMap SettingsController::localLayoutPreview(const QString& id, int window
 
 void SettingsController::createNewLayout()
 {
-    createNewLayout(PzI18n::tr("New Layout"), QStringLiteral("custom"), -1, true);
+    createNewLayout(PI18n::tr("New Layout"), QStringLiteral("custom"), -1, true);
 }
 
 bool SettingsController::createNewLayout(const QString& name, const QString& type, int aspectRatioClass,
@@ -206,7 +206,7 @@ bool SettingsController::createNewLayout(const QString& name, const QString& typ
 {
     QString sanitizedName = name.trimmed();
     if (sanitizedName.isEmpty())
-        sanitizedName = PzI18n::tr("New Layout");
+        sanitizedName = PI18n::tr("New Layout");
 
     const QString layoutType = type.isEmpty() ? QStringLiteral("custom") : type;
 
@@ -227,8 +227,8 @@ bool SettingsController::createNewLayout(const QString& name, const QString& typ
                     // paths (setLayoutHidden / setLayoutAutoAssign / standalone
                     // setLayoutAspectRatio) which all emit layoutOperationFailed
                     // on partial failure.
-                    Q_EMIT layoutOperationFailed(PzI18n::tr("Layout created, but aspect-ratio class could not be "
-                                                            "applied: %1")
+                    Q_EMIT layoutOperationFailed(PI18n::tr("Layout created, but aspect-ratio class could not be "
+                                                           "applied: %1")
                                                      .arg(arReply.errorMessage()));
                 }
             }
@@ -240,7 +240,7 @@ bool SettingsController::createNewLayout(const QString& name, const QString& typ
             return true;
         }
         // Daemon returned a reply but with an empty layout ID
-        Q_EMIT layoutOperationFailed(PzI18n::tr("Could not create layout — daemon returned an empty layout ID."));
+        Q_EMIT layoutOperationFailed(PI18n::tr("Could not create layout — daemon returned an empty layout ID."));
         scheduleLayoutLoad();
         return false;
     }
@@ -248,7 +248,7 @@ bool SettingsController::createNewLayout(const QString& name, const QString& typ
         qCWarning(lcCore) << "createNewLayout failed:" << reply.errorMessage();
         Q_EMIT layoutOperationFailed(reply.errorMessage());
     } else {
-        Q_EMIT layoutOperationFailed(PzI18n::tr("Could not create layout — the daemon may not be running."));
+        Q_EMIT layoutOperationFailed(PI18n::tr("Could not create layout — the daemon may not be running."));
     }
     // Still refresh — the daemon may have partially processed the request
     scheduleLayoutLoad();
@@ -267,7 +267,7 @@ void SettingsController::deleteLayout(const QString& layoutId)
                                                 QStringLiteral("deleteLayout"), {layoutId});
     if (reply.type() == QDBusMessage::ErrorMessage) {
         qCWarning(lcCore) << "deleteLayout failed:" << reply.errorMessage();
-        Q_EMIT layoutOperationFailed(PzI18n::tr("Could not delete layout: %1").arg(reply.errorMessage()));
+        Q_EMIT layoutOperationFailed(PI18n::tr("Could not delete layout: %1").arg(reply.errorMessage()));
     }
     scheduleLayoutLoad();
 }
@@ -283,7 +283,7 @@ void SettingsController::duplicateLayout(const QString& layoutId)
         }
     } else if (reply.type() == QDBusMessage::ErrorMessage) {
         qCWarning(lcCore) << "duplicateLayout failed:" << reply.errorMessage();
-        Q_EMIT layoutOperationFailed(PzI18n::tr("Could not duplicate layout: %1").arg(reply.errorMessage()));
+        Q_EMIT layoutOperationFailed(PI18n::tr("Could not duplicate layout: %1").arg(reply.errorMessage()));
         // Clear so a stale create's reply doesn't accidentally land
         // a layoutAdded() for an id this failed duplicate never
         // produced — the user has no other context for the emit.
@@ -384,7 +384,7 @@ void SettingsController::importLayout(const QString& filePath)
     const QString safe = sanitizeIOPath(filePath);
     if (safe.isEmpty()) {
         qCWarning(lcCore) << "importLayout: refusing unsafe path" << filePath;
-        Q_EMIT layoutOperationFailed(PzI18n::tr("Import refused: unsafe path"));
+        Q_EMIT layoutOperationFailed(PI18n::tr("Import refused: unsafe path"));
         return;
     }
     QDBusMessage reply = DaemonDBus::callDaemon(QString(PhosphorProtocol::Service::Interface::LayoutRegistry),
@@ -401,7 +401,7 @@ void SettingsController::importLayout(const QString& filePath)
         // pattern that Pass-4 hardening already applied to setLayoutHidden
         // / setLayoutAutoAssign / setLayoutAspectRatio.
         qCWarning(lcCore) << "importLayout failed:" << reply.errorMessage();
-        Q_EMIT layoutOperationFailed(PzI18n::tr("Failed to import layout: %1").arg(reply.errorMessage()));
+        Q_EMIT layoutOperationFailed(PI18n::tr("Failed to import layout: %1").arg(reply.errorMessage()));
     }
     scheduleLayoutLoad();
 }
@@ -427,7 +427,7 @@ void SettingsController::setLayoutHidden(const QString& layoutId, bool hidden)
                                                 QStringLiteral("setLayoutHidden"), {layoutId, hidden});
     if (reply.type() == QDBusMessage::ErrorMessage) {
         qCWarning(lcCore) << "setLayoutHidden failed for" << layoutId << ":" << reply.errorMessage();
-        Q_EMIT layoutOperationFailed(PzI18n::tr("Failed to update layout visibility: %1").arg(reply.errorMessage()));
+        Q_EMIT layoutOperationFailed(PI18n::tr("Failed to update layout visibility: %1").arg(reply.errorMessage()));
     }
     scheduleLayoutLoad();
 }
@@ -440,7 +440,7 @@ void SettingsController::setLayoutAutoAssign(const QString& layoutId, bool enabl
                                                 QStringLiteral("setLayoutAutoAssign"), {layoutId, enabled});
     if (reply.type() == QDBusMessage::ErrorMessage) {
         qCWarning(lcCore) << "setLayoutAutoAssign failed for" << layoutId << ":" << reply.errorMessage();
-        Q_EMIT layoutOperationFailed(PzI18n::tr("Failed to update auto-assign: %1").arg(reply.errorMessage()));
+        Q_EMIT layoutOperationFailed(PI18n::tr("Failed to update auto-assign: %1").arg(reply.errorMessage()));
     }
     scheduleLayoutLoad();
 }
@@ -454,7 +454,7 @@ void SettingsController::setLayoutAspectRatio(const QString& layoutId, int aspec
                                QStringLiteral("setLayoutAspectRatioClass"), {layoutId, aspectRatioClass});
     if (reply.type() == QDBusMessage::ErrorMessage) {
         qCWarning(lcCore) << "setLayoutAspectRatio failed for" << layoutId << ":" << reply.errorMessage();
-        Q_EMIT layoutOperationFailed(PzI18n::tr("Failed to update aspect ratio: %1").arg(reply.errorMessage()));
+        Q_EMIT layoutOperationFailed(PI18n::tr("Failed to update aspect ratio: %1").arg(reply.errorMessage()));
     }
     scheduleLayoutLoad();
 }

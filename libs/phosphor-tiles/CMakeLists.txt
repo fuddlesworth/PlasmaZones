@@ -94,8 +94,8 @@ set(phosphortiles_SRCS
     src/tilescriptmetadata.cpp
     src/tileslogging.h
     src/tileslogging.cpp
-    # The pz Luau standard library, compiled into the binary as a Qt resource.
-    src/pz.qrc
+    # The phosphor_luau Luau standard library, compiled into the binary as a Qt resource.
+    src/phosphor_luau.qrc
 )
 
 add_library(PhosphorTiles SHARED
@@ -169,12 +169,12 @@ if(NOT DEFINED KDE_INSTALL_DATADIR)
     set(KDE_INSTALL_DATADIR ${CMAKE_INSTALL_DATAROOTDIR})
 endif()
 
-# Ship the pz standard-library type definitions so users authoring custom
+# Ship the phosphor_luau standard-library type definitions so users authoring custom
 # `.luau` algorithms get luau-lsp autocomplete and luau-analyze type-checking
 # (see docs/architecture/luau-algorithm-authoring.md). Installed OUTSIDE the
 # scanned algorithms subdirectory — the loader globs `*.luau`, and a `.d.luau`
 # sitting next to the algorithms would be mistaken for one.
-install(FILES src/pz/pz.d.luau
+install(FILES src/phosphor_luau/phosphor_luau.d.luau
     DESTINATION ${KDE_INSTALL_DATADIR}/plasmazones)
 
 install(TARGETS PhosphorTiles

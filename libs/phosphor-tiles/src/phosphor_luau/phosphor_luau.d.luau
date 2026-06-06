@@ -2,7 +2,7 @@
 -- SPDX-FileCopyrightText: 2026 fuddlesworth
 -- SPDX-License-Identifier: LGPL-2.1-or-later
 --
--- Type definitions for the `pz` tiling standard library, for luau-analyze and
+-- Type definitions for the `phosphor_luau` tiling standard library, for luau-analyze and
 -- editor autocomplete. The actual implementation is injected by the host
 -- (LuauTileAlgorithm) and frozen before user scripts run.
 
@@ -89,7 +89,7 @@ export type Pz = {
     rect: (x: number, y: number, w: number, h: number) -> Rect,
     join: (...{ Zone }) -> { Zone },
     algorithm: (def: Algorithm) -> Algorithm,
-    -- geometry builtins (see pz.luau for full signatures)
+    -- geometry builtins (see phosphor_luau.luau for full signatures)
     fillArea: (area: Rect, count: number) -> { Zone },
     fillRegion: (x: number, y: number, w: number, h: number, count: number) -> { Zone },
     equalColumnsLayout: (area: Rect, count: number, gap: number, minSizes: { MinSize }) -> { Zone },
@@ -121,6 +121,6 @@ export type Pz = {
     appendGracefulDegradation: (zones: { Zone }, remaining: Rect, leftover: number, innerGap: number) -> (),
 }
 
-declare pz: Pz
+declare phosphor_luau: Pz
 
 return nil

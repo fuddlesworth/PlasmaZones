@@ -8,11 +8,11 @@
 --   * otherwise tile() returns `added` zones, where `added` is a module-local
 --     counter mutated by the hooks (proves the hooks executed and persisted)
 
-local pz = pz
+local phosphor_luau = phosphor_luau
 
 local added = 0
 
-return pz.algorithm {
+return phosphor_luau.algorithm {
     metadata = {
         id = "memory-hooks",
         name = "Memory Hooks",

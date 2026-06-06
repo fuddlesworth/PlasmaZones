@@ -146,7 +146,7 @@ void AnimationsPageController::openUserShaderDirectory()
         // reason via the chrome toast so the user knows to look at the
         // file manager / disk permissions.
         qCWarning(lcConfig) << "openUserShaderDirectory: mkpath failed for" << dir;
-        Q_EMIT toastRequested(PzI18n::tr("Could not create the user shader directory."));
+        Q_EMIT toastRequested(PI18n::tr("Could not create the user shader directory."));
         return;
     }
     QDesktopServices::openUrl(QUrl::fromLocalFile(dir));

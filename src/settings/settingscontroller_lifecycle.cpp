@@ -168,7 +168,7 @@ void SettingsController::save()
             if (apply.type() == QDBusMessage::ErrorMessage) {
                 qCWarning(lcCore) << "save: applyAssignmentChanges failed:" << apply.errorMessage();
                 Q_EMIT layoutOperationFailed(
-                    PzI18n::tr("Failed to apply assignment changes: %1").arg(apply.errorMessage()));
+                    PI18n::tr("Failed to apply assignment changes: %1").arg(apply.errorMessage()));
                 assignmentsCommitOk = false;
             }
             // Only drop batch mode if we actually entered it. ALWAYS attempt

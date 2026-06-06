@@ -1,9 +1,9 @@
 -- SPDX-FileCopyrightText: 2026 fuddlesworth
 -- SPDX-License-Identifier: GPL-3.0-or-later
 
-local pz = pz
+local phosphor_luau = phosphor_luau
 
-return pz.algorithm {
+return phosphor_luau.algorithm {
     metadata = {
         name = "Monocle",
         id = "monocle",
@@ -20,6 +20,6 @@ return pz.algorithm {
     tile = function(ctx)
         local count = ctx.windowCount
         if count <= 0 then return {} end
-        return pz.fillArea(ctx.area, count)
+        return phosphor_luau.fillArea(ctx.area, count)
     end,
 }

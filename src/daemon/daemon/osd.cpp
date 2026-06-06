@@ -120,7 +120,7 @@ void Daemon::showLayoutOsd(PhosphorZones::Layout* layout, const QString& screenI
         return;
 
     case OsdStyle::Text: {
-        QString displayText = PzI18n::tr("Layout: %1").arg(layoutName);
+        QString displayText = PI18n::tr("Layout: %1").arg(layoutName);
         showKdeTextOsd(QStringLiteral("plasmazones"), displayText);
         qCInfo(lcDaemon) << "Showing text OSD for layout=" << layoutName;
     } break;
@@ -147,7 +147,7 @@ void Daemon::showLockedOsd(const QString& screenId)
         return;
     }
 
-    showKdeTextOsd(QStringLiteral("object-locked"), PzI18n::tr("Layout Locked"));
+    showKdeTextOsd(QStringLiteral("object-locked"), PI18n::tr("Layout Locked"));
     qCInfo(lcDaemon) << "Showing locked text OSD for screen=" << screenId;
 }
 
@@ -196,7 +196,7 @@ void Daemon::showContextDisabledOsd(const QString& screenId, int desktop, const 
     QString reasonText;
     switch (reason) {
     case DisabledReason::MonitorDisabled:
-        reasonText = PzI18n::tr("Disabled on this monitor");
+        reasonText = PI18n::tr("Disabled on this monitor");
         break;
     case DisabledReason::DesktopDisabled: {
         QString desktopLabel;
@@ -207,9 +207,9 @@ void Daemon::showContextDisabledOsd(const QString& screenId, int desktop, const 
             }
         }
         if (desktopLabel.isEmpty()) {
-            desktopLabel = PzI18n::tr("Desktop %1").arg(desktop);
+            desktopLabel = PI18n::tr("Desktop %1").arg(desktop);
         }
-        reasonText = PzI18n::tr("Disabled on %1").arg(desktopLabel);
+        reasonText = PI18n::tr("Disabled on %1").arg(desktopLabel);
         break;
     }
     case DisabledReason::ActivityDisabled: {
@@ -218,9 +218,9 @@ void Daemon::showContextDisabledOsd(const QString& screenId, int desktop, const 
             activityLabel = m_activityManager->activityName(activity);
         }
         if (activityLabel.isEmpty()) {
-            reasonText = PzI18n::tr("Disabled on this activity");
+            reasonText = PI18n::tr("Disabled on this activity");
         } else {
-            reasonText = PzI18n::tr("Disabled on %1").arg(activityLabel);
+            reasonText = PI18n::tr("Disabled on %1").arg(activityLabel);
         }
         break;
     }
@@ -258,7 +258,7 @@ void Daemon::showLayoutOsdForAlgorithm(const QString& algorithmId, const QString
         return;
 
     case OsdStyle::Text: {
-        QString displayText = PzI18n::tr("Tiling: %1").arg(displayName);
+        QString displayText = PI18n::tr("Tiling: %1").arg(displayName);
         showKdeTextOsd(QStringLiteral("plasmazones"), displayText);
         qCInfo(lcDaemon) << "Showing text OSD for algorithm=" << displayName;
     } break;

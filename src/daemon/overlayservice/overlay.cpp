@@ -261,7 +261,7 @@ void OverlayService::initializeOverlay(QScreen* cursorScreen, const QPoint& curs
                     shellSurface->show();
                 }
                 slot->setVisible(true);
-                m_surfaceAnimator->beginShow(shellSurface, slot, PzRoles::ZoneOverlay, []() { });
+                m_surfaceAnimator->beginShow(shellSurface, slot, PRoles::ZoneOverlay, []() { });
                 // Main overlay during drag is purely visual (KWin owns
                 // the drag, daemon receives cursor pushes via D-Bus).
                 // Sync to keep the surface click-through unless a
@@ -444,7 +444,7 @@ void OverlayService::createOverlayWindow(QScreen* screen)
 
 void OverlayService::createOverlayWindow(const QString& screenId, QScreen* physScreen, const QRect& geometry)
 {
-    // Post-shell-migration: the per-screen PzRoles::ZoneOverlay wl_surface
+    // Post-shell-migration: the per-screen PRoles::ZoneOverlay wl_surface
     // is replaced by an Item slot inside the per-screen passive shell.
     // Both overlay modes (rectangles + shader) live as alternative
     // sourceComponents inside the same slot, switched via the slot's
@@ -597,7 +597,7 @@ void OverlayService::dismissOverlayWindow(const QString& screenId)
     // a stale onComplete callback racing the next show.
     auto* shellSurface = it->shell ? it->shell->shellSurface() : nullptr;
     if (shellSurface) {
-        m_shellHost->hideSlot(screenId, PzSlotKeys::MainOverlay(), [this, screenIdCopy = screenId]() {
+        m_shellHost->hideSlot(screenId, PSlotKeys::MainOverlay(), [this, screenIdCopy = screenId]() {
             auto sit = m_screenStates.find(screenIdCopy);
             if (sit == m_screenStates.end() || !sit->mainOverlaySlot()) {
                 return;

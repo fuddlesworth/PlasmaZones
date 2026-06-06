@@ -1,9 +1,9 @@
 -- SPDX-FileCopyrightText: 2026 fuddlesworth
 -- SPDX-License-Identifier: GPL-3.0-or-later
 
-local pz = pz
+local phosphor_luau = phosphor_luau
 
-return pz.algorithm {
+return phosphor_luau.algorithm {
     metadata = {
         name = "Master + Stack",
         id = "master-stack",
@@ -22,7 +22,7 @@ return pz.algorithm {
     tile = function(ctx)
         if ctx.windowCount <= 0 then return {} end
         -- splitRatio is clamped inside masterStackLayout()
-        return pz.masterStackLayout(
+        return phosphor_luau.masterStackLayout(
             ctx.area, ctx.windowCount, ctx.innerGap, ctx.splitRatio, ctx.masterCount, ctx.minSizes, false)
     end,
 }

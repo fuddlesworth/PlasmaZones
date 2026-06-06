@@ -13,7 +13,7 @@ GeneralPageController::GeneralPageController(ISettings& settings, QObject* paren
 {
     // Translate rendering backend display names once at construction.
     for (const auto& name : ConfigDefaults::renderingBackendDisplayNames()) {
-        m_renderingBackendDisplayNames.append(PzI18n::tr(name.toUtf8().constData()));
+        m_renderingBackendDisplayNames.append(PI18n::tr(name.toUtf8().constData()));
     }
 
     // Snapshot current backend so the QML "restart required" message

@@ -18,7 +18,7 @@ BatchUpdateAppearanceCommand::BatchUpdateAppearanceCommand(QPointer<ZoneManager>
                                                            QUndoCommand* parent)
     : BaseZoneCommand(
           zoneManager,
-          text.isEmpty() ? PzI18n::tr("Update Appearance for %1 Zones", "@action").arg(zoneIds.count()) : text, parent)
+          text.isEmpty() ? PI18n::tr("Update Appearance for %1 Zones", "@action").arg(zoneIds.count()) : text, parent)
     , m_zoneIds(zoneIds)
     , m_propertyName(propertyName)
     , m_oldValues(oldValues)
@@ -68,7 +68,7 @@ BatchUpdateColorCommand::BatchUpdateColorCommand(QPointer<ZoneManager> zoneManag
                                                  const QString& colorType, const QMap<QString, QString>& oldColors,
                                                  const QString& newColor, const QString& text, QUndoCommand* parent)
     : BaseZoneCommand(zoneManager,
-                      text.isEmpty() ? PzI18n::tr("Update Color for %1 Zones", "@action").arg(zoneIds.count()) : text,
+                      text.isEmpty() ? PI18n::tr("Update Color for %1 Zones", "@action").arg(zoneIds.count()) : text,
                       parent)
     , m_zoneIds(zoneIds)
     , m_colorType(colorType)
