@@ -909,7 +909,7 @@ public:
     //
     // Every setter below pairs the field-specific signal with the umbrella
     // `settingsChanged()` emit. The concrete Settings class does the same
-    // via the PZ_STORE_SET_{BOOL,STRING,INT,DOUBLE} macros (settings.cpp
+    // via the P_STORE_SET_{BOOL,STRING,INT,DOUBLE} macros (settings.cpp
     // ~2759-2784) — the stub matches so tests can rely on `settingsChanged()`
     // firing on any setter, regardless of which ISettings backend is wired.
     QString editorDuplicateShortcut() const override

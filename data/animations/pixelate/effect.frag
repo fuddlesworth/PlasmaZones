@@ -25,11 +25,11 @@
 
 #include <noise.glsl>
 
-// `pz_maxBlockSize` is generated from metadata.json (the customParams[0].x
+// `p_maxBlockSize` is generated from metadata.json (the customParams[0].x
 // sub-slot) by the harness. It is interpreted in NORMALISED UV units
 // (0..1 across the surface). 0.1 ≈ a 10×10 block grid at peak pixelation.
 
-vec4 pzTransition(vec2 uv, float t)
+vec4 pTransition(vec2 uv, float t)
 {
 
     // iTime is the per-leg progress driven by SurfaceAnimator's
@@ -38,7 +38,7 @@ vec4 pzTransition(vec2 uv, float t)
     // clears at iTime=1, so the visual reads "pixelated → clear" on
     // show and "clear → pixelated" on hide.
     float visibility = clamp(iTime, 0.0, 1.0);
-    float blockPx = (1.0 - visibility) * max(pz_maxBlockSize, 0.0);
+    float blockPx = (1.0 - visibility) * max(p_maxBlockSize, 0.0);
 
     // Floor sub-pixel sizes to the per-pixel grid so the shader doesn't
     // collapse to a single sample point at full visibility. Use the

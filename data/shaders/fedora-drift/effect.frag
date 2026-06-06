@@ -12,7 +12,7 @@
 // The harness supplies #version, <common.glsl> (zone UBO + ZoneCtx + helpers),
 // the vTexCoord/vFragCoord ins, and the fragColor out. audio.glsl is
 // pack-specific, so it stays here. A whole-frame label composite runs after
-// the per-zone loop, so this is a pzImage entry point.
+// the per-zone loop, so this is a pImage entry point.
 
 #include <audio.glsl>
 
@@ -491,42 +491,42 @@ vec4 renderFedoraZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColo
     float borderRadius = max(params.x, 8.0);
     float borderWidth = max(params.y, 2.0);
 
-    // ── Parameters (pz_<id> from metadata.json, sentinel-default fallbacks) ──────
-    float speed         = pz_speed >= 0.0 ? pz_speed : 0.12;
-    float flowSpeed     = pz_flowSpeed >= 0.0 ? pz_flowSpeed : 0.25;
-    float noiseScale    = pz_noiseScale >= 0.0 ? pz_noiseScale : 3.5;
-    int octaves         = int(pz_octaves >= 0.0 ? pz_octaves : 6.0);
+    // ── Parameters (p_<id> from metadata.json, sentinel-default fallbacks) ──────
+    float speed         = p_speed >= 0.0 ? p_speed : 0.12;
+    float flowSpeed     = p_flowSpeed >= 0.0 ? p_flowSpeed : 0.25;
+    float noiseScale    = p_noiseScale >= 0.0 ? p_noiseScale : 3.5;
+    int octaves         = int(p_octaves >= 0.0 ? p_octaves : 6.0);
 
-    float gridScale     = pz_gridScale >= 0.0 ? pz_gridScale : 4.0;
-    float gridStrength  = pz_gridStrength >= 0.0 ? pz_gridStrength : 0.3;
-    float brightness    = pz_brightness >= 0.0 ? pz_brightness : 0.8;
-    float contrast      = pz_contrast >= 0.0 ? pz_contrast : 0.9;
+    float gridScale     = p_gridScale >= 0.0 ? p_gridScale : 4.0;
+    float gridStrength  = p_gridStrength >= 0.0 ? p_gridStrength : 0.3;
+    float brightness    = p_brightness >= 0.0 ? p_brightness : 0.8;
+    float contrast      = p_contrast >= 0.0 ? p_contrast : 0.9;
 
-    float fillOpacity       = pz_fillOpacity >= 0.0 ? pz_fillOpacity : 0.85;
-    float borderGlow        = pz_borderGlow >= 0.0 ? pz_borderGlow : 0.35;
-    float edgeFadeStart     = pz_edgeFadeStart >= 0.0 ? pz_edgeFadeStart : 30.0;
-    float borderBrightness  = pz_borderBrightness >= 0.0 ? pz_borderBrightness : 1.4;
+    float fillOpacity       = p_fillOpacity >= 0.0 ? p_fillOpacity : 0.85;
+    float borderGlow        = p_borderGlow >= 0.0 ? p_borderGlow : 0.35;
+    float edgeFadeStart     = p_edgeFadeStart >= 0.0 ? p_edgeFadeStart : 30.0;
+    float borderBrightness  = p_borderBrightness >= 0.0 ? p_borderBrightness : 1.4;
 
-    float audioReact    = pz_audioReactivity >= 0.0 ? pz_audioReactivity : 1.0;
-    float particleStr   = pz_particleStrength >= 0.0 ? pz_particleStrength : 0.5;
-    float innerGlowStr  = pz_innerGlowStrength >= 0.0 ? pz_innerGlowStrength : 0.45;
-    float sparkleStr    = pz_sparkleIntensity >= 0.0 ? pz_sparkleIntensity : 2.0;
+    float audioReact    = p_audioReactivity >= 0.0 ? p_audioReactivity : 1.0;
+    float particleStr   = p_particleStrength >= 0.0 ? p_particleStrength : 0.5;
+    float innerGlowStr  = p_innerGlowStrength >= 0.0 ? p_innerGlowStrength : 0.45;
+    float sparkleStr    = p_sparkleIntensity >= 0.0 ? p_sparkleIntensity : 2.0;
 
-    float fbmRot        = pz_fbmRotation >= 0.0 ? pz_fbmRotation : 0.6;
+    float fbmRot        = p_fbmRotation >= 0.0 ? p_fbmRotation : 0.6;
 
-    float flowDirection = pz_flowDirection >= 0.0 ? pz_flowDirection : 0.3;
-    float logoScale     = pz_logoScale >= 0.0 ? pz_logoScale : 0.5;
-    float logoIntensity = pz_logoIntensity >= 0.0 ? pz_logoIntensity : 0.85;
-    float logoPulse     = pz_logoPulse >= 0.0 ? pz_logoPulse : 0.8;
+    float flowDirection = p_flowDirection >= 0.0 ? p_flowDirection : 0.3;
+    float logoScale     = p_logoScale >= 0.0 ? p_logoScale : 0.5;
+    float logoIntensity = p_logoIntensity >= 0.0 ? p_logoIntensity : 0.85;
+    float logoPulse     = p_logoPulse >= 0.0 ? p_logoPulse : 0.8;
 
-    int   logoCount     = clamp(int(pz_logoCount >= 0.0 ? pz_logoCount : 4.0), 1, 8);
-    float logoSizeMin   = pz_logoSizeMin >= 0.0 ? pz_logoSizeMin : 0.4;
-    float logoSizeMax   = pz_logoSizeMax >= 0.0 ? pz_logoSizeMax : 1.0;
-    float flowCenterX   = pz_flowCenterX >= -1.5 ? pz_flowCenterX : 0.5;
-    float flowCenterY   = pz_flowCenterY >= -1.5 ? pz_flowCenterY : 0.5;
+    int   logoCount     = clamp(int(p_logoCount >= 0.0 ? p_logoCount : 4.0), 1, 8);
+    float logoSizeMin   = p_logoSizeMin >= 0.0 ? p_logoSizeMin : 0.4;
+    float logoSizeMax   = p_logoSizeMax >= 0.0 ? p_logoSizeMax : 1.0;
+    float flowCenterX   = p_flowCenterX >= -1.5 ? p_flowCenterX : 0.5;
+    float flowCenterY   = p_flowCenterY >= -1.5 ? p_flowCenterY : 0.5;
 
-    float logoSpin      = pz_logoSpin >= 0.0 ? pz_logoSpin : 0.15;
-    float idleStrength  = pz_idleStrength >= 0.0 ? pz_idleStrength : 0.5;
+    float logoSpin      = p_logoSpin >= 0.0 ? p_logoSpin : 0.15;
+    float idleStrength  = p_idleStrength >= 0.0 ? p_idleStrength : 0.5;
 
     // ── Zone geometry ───────────────────────────────────────────
     vec2 rectPos = zoneRectPos(rect);
@@ -541,10 +541,10 @@ vec4 renderFedoraZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColo
     float time = iTime;
 
     // ── Palette from customColors ───────────────────────────────
-    vec3 palPrimary   = colorWithFallback(pz_primaryColor.rgb, FROST_BLUE);
-    vec3 palSecondary = colorWithFallback(pz_secondaryColor.rgb, FROST_DEEP);
-    vec3 palAccent    = colorWithFallback(pz_accentColor.rgb, FROST_ICE);
-    vec3 palGlow      = colorWithFallback(pz_glowColor.rgb, FROST_SILVER);
+    vec3 palPrimary   = colorWithFallback(p_primaryColor.rgb, FROST_BLUE);
+    vec3 palSecondary = colorWithFallback(p_secondaryColor.rgb, FROST_DEEP);
+    vec3 palAccent    = colorWithFallback(p_accentColor.rgb, FROST_ICE);
+    vec3 palGlow      = colorWithFallback(p_glowColor.rgb, FROST_SILVER);
 
     float vitality = isHighlighted ? 1.0 : 0.3;
     float idlePulse = hasAudio ? 0.0 : (0.5 + 0.5 * sin(time * 0.8 * PI)) * idleStrength;
@@ -801,14 +801,14 @@ vec4 compositeFedoraLabels(vec4 color, vec2 fragCoord,
     vec2 px = 1.0 / max(iResolution, vec2(1.0));
     vec4 labels = texture(uZoneLabels, uv);
 
-    vec3 palPrimary   = colorWithFallback(pz_primaryColor.rgb, FROST_BLUE);
-    vec3 palSecondary = colorWithFallback(pz_secondaryColor.rgb, FROST_DEEP);
-    vec3 palAccent    = colorWithFallback(pz_accentColor.rgb, FROST_ICE);
-    vec3 palGlow      = colorWithFallback(pz_glowColor.rgb, FROST_SILVER);
+    vec3 palPrimary   = colorWithFallback(p_primaryColor.rgb, FROST_BLUE);
+    vec3 palSecondary = colorWithFallback(p_secondaryColor.rgb, FROST_DEEP);
+    vec3 palAccent    = colorWithFallback(p_accentColor.rgb, FROST_ICE);
+    vec3 palGlow      = colorWithFallback(p_glowColor.rgb, FROST_SILVER);
 
-    float labelGlowSpread = pz_labelGlowSpread >= 0.0 ? pz_labelGlowSpread : 3.0;
-    float labelBrightness = pz_labelBrightness >= 0.0 ? pz_labelBrightness : 2.5;
-    float labelAudioReact = pz_labelAudioReact >= 0.0 ? pz_labelAudioReact : 1.0;
+    float labelGlowSpread = p_labelGlowSpread >= 0.0 ? p_labelGlowSpread : 3.0;
+    float labelBrightness = p_labelBrightness >= 0.0 ? p_labelBrightness : 2.5;
+    float labelAudioReact = p_labelAudioReact >= 0.0 ? p_labelAudioReact : 1.0;
 
     float time = iTime;
 
@@ -928,7 +928,7 @@ vec4 compositeFedoraLabels(vec4 color, vec2 fragCoord,
 //  ENTRY POINT
 // ═══════════════════════════════════════════════════════════════
 
-vec4 pzImage(vec2 fragCoord) {
+vec4 pImage(vec2 fragCoord) {
     vec4 color = vec4(0.0);
 
     if (zoneCount == 0) {
@@ -950,7 +950,7 @@ vec4 pzImage(vec2 fragCoord) {
         color = blendOver(color, zoneColor);
     }
 
-    if (pz_showLabels > 0.5) {
+    if (p_showLabels > 0.5) {
         color = compositeFedoraLabels(color, fragCoord, bass, mids, treble, hasAudio);
     }
 

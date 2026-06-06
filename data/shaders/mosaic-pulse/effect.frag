@@ -23,8 +23,8 @@
  *   [2].y = fillOpacity     — zone fill alpha
  *
  * Colors:
- *   pz_hueCenter = hue center  (default: steel blue #4488cc)
- *   pz_shapeTint = shape tint  (default: warm white #fffff2)
+ *   p_hueCenter = hue center  (default: steel blue #4488cc)
+ *   p_shapeTint = shape tint  (default: warm white #fffff2)
  */
 
 // ─── Mosaic noise (prefixed to avoid common.glsl collision) ──────
@@ -82,22 +82,22 @@ vec4 renderZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor,
     float borderWidth  = max(params.y, 2.5);
 
     // Parameters with defaults
-    float gridDensity   = pz_gridDensity >= 0.0 ? pz_gridDensity : 64.0;
-    float edgeSoftness  = pz_edgeSoftness >= 0.0 ? pz_edgeSoftness : 0.18;
-    float gridLineW     = pz_gridLineWeight >= 0.0 ? pz_gridLineWeight : 0.75;
-    float posterLevels  = pz_posterize >= 0.0 ? pz_posterize : 8.0;
+    float gridDensity   = p_gridDensity >= 0.0 ? p_gridDensity : 64.0;
+    float edgeSoftness  = p_edgeSoftness >= 0.0 ? p_edgeSoftness : 0.18;
+    float gridLineW     = p_gridLineWeight >= 0.0 ? p_gridLineWeight : 0.75;
+    float posterLevels  = p_posterize >= 0.0 ? p_posterize : 8.0;
     posterLevels = max(posterLevels, 1.0);
-    float shapeChance   = pz_shapeChance >= 0.0 ? pz_shapeChance : 0.62;
-    float shapeSize     = pz_shapeSize >= 0.0 ? pz_shapeSize : 0.26;
-    float sparkleChance = pz_sparkleChance >= 0.0 ? pz_sparkleChance : 0.04;
-    float speed         = pz_speed >= 0.0 ? pz_speed : 1.25;
-    float reactivity    = pz_reactivity >= 0.0 ? pz_reactivity : 1.0;
-    float fillOpacity   = pz_fillOpacity >= 0.0 ? pz_fillOpacity : 0.9;
+    float shapeChance   = p_shapeChance >= 0.0 ? p_shapeChance : 0.62;
+    float shapeSize     = p_shapeSize >= 0.0 ? p_shapeSize : 0.26;
+    float sparkleChance = p_sparkleChance >= 0.0 ? p_sparkleChance : 0.04;
+    float speed         = p_speed >= 0.0 ? p_speed : 1.25;
+    float reactivity    = p_reactivity >= 0.0 ? p_reactivity : 1.0;
+    float fillOpacity   = p_fillOpacity >= 0.0 ? p_fillOpacity : 0.9;
 
     // Colors — fallbacks match the original ShaderToy palette
     // hueCenter: #4099BF ≈ HSL hue 0.55 (cyan-blue, matching the original 0.55 center)
-    vec3 hueCenter = colorWithFallback(pz_hueCenter.rgb, vec3(0.251, 0.6, 0.749));
-    vec3 shapeTint = colorWithFallback(pz_shapeTint.rgb, vec3(1.0, 1.0, 0.949));
+    vec3 hueCenter = colorWithFallback(p_hueCenter.rgb, vec3(0.251, 0.6, 0.749));
+    vec3 shapeTint = colorWithFallback(p_shapeTint.rgb, vec3(1.0, 1.0, 0.949));
 
     // ── Highlighted vs dormant ──────────────────────────────
     float vitality = isHighlighted ? 1.0 : 0.3;
@@ -161,7 +161,7 @@ vec4 renderZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor,
             : 0.0;
 
         // Tile pop: treble causes individual tiles to briefly flash
-        float popFreq = pz_popFrequency >= 0.0 ? pz_popFrequency : 4.0;
+        float popFreq = p_popFrequency >= 0.0 ? p_popFrequency : 4.0;
         float popHash = mosaicHash(cellId + floor(t * popFreq) * 0.1);
         float popActive = smoothstep(0.5, 0.8, treble)
                         * step(popHash, treble * 0.6)
@@ -244,7 +244,7 @@ vec4 renderZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor,
             float sparkBright = 1.0 - smoothstep(0.02, 0.2, sd);
             // Sparkle intensity tracks pop + ripple (spatial, not uniform)
             float sparkIntensity = 0.7 + audioPop * 0.6 + audioRipple * 0.3;
-            vec3 sparkleCol = colorWithFallback(pz_sparkleColor.rgb, vec3(1.0, 0.95, 0.8));
+            vec3 sparkleCol = colorWithFallback(p_sparkleColor.rgb, vec3(1.0, 0.95, 0.8));
             col += sparkleCol * sparkBright * sparkIntensity;
         }
 
@@ -352,15 +352,15 @@ vec4 compositeMosaicLabels(vec4 color, vec2 fragCoord,
     vec4 labels = texture(uZoneLabels, uv);
 
     // Colors — match renderZone palette
-    vec3 hueCenter = colorWithFallback(pz_hueCenter.rgb, vec3(0.251, 0.6, 0.749));
-    vec3 shapeTint = colorWithFallback(pz_shapeTint.rgb, vec3(1.0, 1.0, 0.949));
-    float posterLevels = pz_posterize >= 0.0 ? pz_posterize : 8.0;
+    vec3 hueCenter = colorWithFallback(p_hueCenter.rgb, vec3(0.251, 0.6, 0.749));
+    vec3 shapeTint = colorWithFallback(p_shapeTint.rgb, vec3(1.0, 1.0, 0.949));
+    float posterLevels = p_posterize >= 0.0 ? p_posterize : 8.0;
     posterLevels = max(posterLevels, 1.0);
-    float reactivity = pz_reactivity >= 0.0 ? pz_reactivity : 1.0;
+    float reactivity = p_reactivity >= 0.0 ? p_reactivity : 1.0;
 
-    float labelGlowSpread = pz_leadSpread >= 0.0 ? pz_leadSpread : 2.0;
-    float labelBright = pz_tileIntensity >= 0.0 ? pz_tileIntensity : 0.7;
-    float labelAudioMul = pz_shockReact >= 0.0 ? pz_shockReact : 1.0;
+    float labelGlowSpread = p_leadSpread >= 0.0 ? p_leadSpread : 2.0;
+    float labelBright = p_tileIntensity >= 0.0 ? p_tileIntensity : 0.7;
+    float labelAudioMul = p_shockReact >= 0.0 ? p_shockReact : 1.0;
 
     // Gaussian halo for smooth beveled "lead" border
     float halo = 0.0;
@@ -375,7 +375,7 @@ vec4 compositeMosaicLabels(vec4 color, vec2 fragCoord,
 
     // Lead border: dark metallic with shockwave shimmer
     if (leadBorder > 0.01) {
-        vec3 leadBaseCol = colorWithFallback(pz_leadColor.rgb, vec3(0.25, 0.22, 0.2));
+        vec3 leadBaseCol = colorWithFallback(p_leadColor.rgb, vec3(0.25, 0.22, 0.2));
         vec3 leadCol = leadBaseCol;
         // Approximate audio modulation for label context (shockwave + ripple)
         float shimmer = hasAudio ? bass * 0.6 * labelAudioMul : 0.0;
@@ -399,7 +399,7 @@ vec4 compositeMosaicLabels(vec4 color, vec2 fragCoord,
 
 // ─── Main ───────────────────────────────────────────────────────
 
-vec4 pzImage(vec2 fragCoord) {
+vec4 pImage(vec2 fragCoord) {
     vec4 color = vec4(0.0);
 
     if (zoneCount == 0) {
@@ -423,7 +423,7 @@ vec4 pzImage(vec2 fragCoord) {
         color = blendOver(color, zoneColor);
     }
 
-    if (pz_showLabels > 0.5)
+    if (p_showLabels > 0.5)
         color = compositeMosaicLabels(color, fragCoord, bass, mids, treble, overall, hasAudio);
     return color;
 }

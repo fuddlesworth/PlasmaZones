@@ -143,30 +143,30 @@ vec4 renderBerryZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor
     float d = sdRoundedBox(p, rectSize * 0.5, borderRadius);
 
     // Parameters (sentinel pattern)
-    float speed        = pz_speed >= 0.0 ? pz_speed : 0.06;
-    float blobScale    = pz_blobScale >= 0.0 ? pz_blobScale : 10.0;
-    float blobSoftness = pz_blobSoftness >= 0.0 ? pz_blobSoftness : 0.4;
-    float glowIntensity= pz_glowIntensity >= 0.0 ? pz_glowIntensity : 0.5;
-    float fillOpacity  = pz_fillOpacity >= 0.0 ? pz_fillOpacity : 0.90;
-    float sparkleStr   = pz_sparkleStr >= 0.0 ? pz_sparkleStr : 0.6;
-    float sparkleSize  = pz_sparkleSize >= 0.0 ? pz_sparkleSize : 1.0;
-    float audioSens    = pz_audioSensitivity >= 0.0 ? pz_audioSensitivity : 1.0;
-    float driftSpeed   = pz_driftSpeed >= 0.0 ? pz_driftSpeed : 0.8;
-    float mintIntensity= pz_mintIntensity >= 0.0 ? pz_mintIntensity : 0.4;
-    float bloomWidth   = pz_bloomWidth >= 0.0 ? pz_bloomWidth : 0.06;
-    float vignetteStr  = pz_vignetteStrength >= 0.0 ? pz_vignetteStrength : 0.15;
-    float blobSizeMin  = pz_blobSizeMin >= 0.0 ? pz_blobSizeMin : 0.05;
-    float blobSizeMax  = pz_blobSizeMax >= 0.0 ? pz_blobSizeMax : 0.14;
-    float sparkleGridDensity = pz_sparkleGrid >= 0.0 ? pz_sparkleGrid : 8.0;
-    float rimGlowWidth = pz_rimWidth >= 0.0 ? pz_rimWidth : 0.025;
+    float speed        = p_speed >= 0.0 ? p_speed : 0.06;
+    float blobScale    = p_blobScale >= 0.0 ? p_blobScale : 10.0;
+    float blobSoftness = p_blobSoftness >= 0.0 ? p_blobSoftness : 0.4;
+    float glowIntensity= p_glowIntensity >= 0.0 ? p_glowIntensity : 0.5;
+    float fillOpacity  = p_fillOpacity >= 0.0 ? p_fillOpacity : 0.90;
+    float sparkleStr   = p_sparkleStr >= 0.0 ? p_sparkleStr : 0.6;
+    float sparkleSize  = p_sparkleSize >= 0.0 ? p_sparkleSize : 1.0;
+    float audioSens    = p_audioSensitivity >= 0.0 ? p_audioSensitivity : 1.0;
+    float driftSpeed   = p_driftSpeed >= 0.0 ? p_driftSpeed : 0.8;
+    float mintIntensity= p_mintIntensity >= 0.0 ? p_mintIntensity : 0.4;
+    float bloomWidth   = p_bloomWidth >= 0.0 ? p_bloomWidth : 0.06;
+    float vignetteStr  = p_vignetteStrength >= 0.0 ? p_vignetteStrength : 0.15;
+    float blobSizeMin  = p_blobSizeMin >= 0.0 ? p_blobSizeMin : 0.05;
+    float blobSizeMax  = p_blobSizeMax >= 0.0 ? p_blobSizeMax : 0.14;
+    float sparkleGridDensity = p_sparkleGrid >= 0.0 ? p_sparkleGrid : 8.0;
+    float rimGlowWidth = p_rimWidth >= 0.0 ? p_rimWidth : 0.025;
 
     // Colors (fallback pattern)
-    vec3 berryPink  = colorWithFallback(pz_berryPink.rgb, vec3(1.0, 0.42, 0.616));
-    vec3 mintGreen  = colorWithFallback(pz_mintGreen.rgb, vec3(0.498, 1.0, 0.831));
-    vec3 deepViolet = colorWithFallback(pz_deepViolet.rgb, vec3(0.42, 0.13, 0.659));
-    vec3 bubblegum  = colorWithFallback(pz_bubblegum.rgb, vec3(1.0, 0.62, 0.812));
-    vec3 bgColor    = colorWithFallback(pz_backgroundColor.rgb, vec3(0.082, 0.051, 0.125));
-    vec3 lavender   = colorWithFallback(pz_lavender.rgb, vec3(0.769, 0.71, 0.992));
+    vec3 berryPink  = colorWithFallback(p_berryPink.rgb, vec3(1.0, 0.42, 0.616));
+    vec3 mintGreen  = colorWithFallback(p_mintGreen.rgb, vec3(0.498, 1.0, 0.831));
+    vec3 deepViolet = colorWithFallback(p_deepViolet.rgb, vec3(0.42, 0.13, 0.659));
+    vec3 bubblegum  = colorWithFallback(p_bubblegum.rgb, vec3(1.0, 0.62, 0.812));
+    vec3 bgColor    = colorWithFallback(p_backgroundColor.rgb, vec3(0.082, 0.051, 0.125));
+    vec3 lavender   = colorWithFallback(p_lavender.rgb, vec3(0.769, 0.71, 0.992));
 
     // Audio
     float energy = hasAudio ? overall * audioSens : 0.0;
@@ -417,14 +417,14 @@ vec4 compositeBerryLabels(vec4 color, vec2 fragCoord,
     vec2 px = 1.0 / max(iResolution, vec2(1.0));
     vec4 labels = texture(uZoneLabels, uv);
 
-    float labelGlowSpread = pz_haloRadius >= 0.0 ? pz_haloRadius : 3.0;
-    float labelBrightness = pz_coreGlow >= 0.0 ? pz_coreGlow : 2.0;
-    float labelAudioReact = pz_sparkleReact >= 0.0 ? pz_sparkleReact : 1.0;
+    float labelGlowSpread = p_haloRadius >= 0.0 ? p_haloRadius : 3.0;
+    float labelBrightness = p_coreGlow >= 0.0 ? p_coreGlow : 2.0;
+    float labelAudioReact = p_sparkleReact >= 0.0 ? p_sparkleReact : 1.0;
 
-    vec3 bPink  = colorWithFallback(pz_berryPink.rgb, vec3(1.0, 0.42, 0.616));
-    vec3 mint   = colorWithFallback(pz_mintGreen.rgb, vec3(0.498, 1.0, 0.831));
-    vec3 lavndr = colorWithFallback(pz_lavender.rgb, vec3(0.769, 0.71, 0.992));
-    vec3 bubble = colorWithFallback(pz_bubblegum.rgb, vec3(1.0, 0.62, 0.812));
+    vec3 bPink  = colorWithFallback(p_berryPink.rgb, vec3(1.0, 0.42, 0.616));
+    vec3 mint   = colorWithFallback(p_mintGreen.rgb, vec3(0.498, 1.0, 0.831));
+    vec3 lavndr = colorWithFallback(p_lavender.rgb, vec3(0.769, 0.71, 0.992));
+    vec3 bubble = colorWithFallback(p_bubblegum.rgb, vec3(1.0, 0.62, 0.812));
 
     // Gaussian-weighted halo — soft organic bleed
     float halo = 0.0;
@@ -464,7 +464,7 @@ vec4 compositeBerryLabels(vec4 color, vec2 fragCoord,
 
 // === MAIN ===
 
-vec4 pzImage(vec2 fragCoord) {
+vec4 pImage(vec2 fragCoord) {
     vec4 color = vec4(0.0);
 
     if (zoneCount == 0) {
@@ -488,7 +488,7 @@ vec4 pzImage(vec2 fragCoord) {
         color = blendOver(color, zoneColor);
     }
 
-    if (pz_showLabels > 0.5)
+    if (p_showLabels > 0.5)
         color = compositeBerryLabels(color, fragCoord, bass, treble, hasAudio);
     return color;
 }

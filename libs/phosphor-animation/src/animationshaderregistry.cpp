@@ -437,7 +437,7 @@ QVariantMap AnimationShaderRegistry::translateAnimationParams(const AnimationSha
     QStringList droppedColorParams;
     QStringList droppedFloatParams;
     for (const auto& param : effect.parameters) {
-        // Skip ids the pz_<id> preamble (buildParamPreamble via paramPreamble)
+        // Skip ids the p_<id> preamble (buildParamPreamble via paramPreamble)
         // rejects, so this upload-lane numbering stays identical to the define
         // numbering — a rejected param consumes no lane on either side.
         if (!PhosphorShaders::isValidParamId(param.id)) {
@@ -693,7 +693,7 @@ QString AnimationShaderRegistry::animationEntryPrologue()
 {
     // `#version` first; the animation-uniforms include declares the UBO (both
     // runtime branches) plus the T1.5 direction helpers (legProgress /
-    // pz_reversed) and surfaceColor; then the vertex texcoord in and the
+    // p_reversed) and surfaceColor; then the vertex texcoord in and the
     // fragColor out an entry-only pack no longer declares by hand.
     return QStringLiteral(
         "#version 450\n"
@@ -708,25 +708,25 @@ QList<PhosphorShaders::EntryCandidate> AnimationShaderRegistry::animationEntryCa
     // reverse legs, so the shader auto-mirrors with no direction code).
     static const QString transitionMain = QStringLiteral(
         "void main() {\n"
-        "    fragColor = pzTransition(vTexCoord, iTime);\n"
+        "    fragColor = pTransition(vTexCoord, iTime);\n"
         "}\n");
     // Asymmetric: the harness un-flips iTime (legProgress → forward 0→1) and
     // dispatches by direction, so the author never touches iIsReversed/iTime
     // and the `== 1` footgun is gone.
     static const QString inOutMain = QStringLiteral(
         "void main() {\n"
-        "    float pz_t = legProgress();\n"
-        "    fragColor = pz_reversed ? pzOut(vTexCoord, pz_t) : pzIn(vTexCoord, pz_t);\n"
+        "    float p_t = legProgress();\n"
+        "    fragColor = p_reversed ? pOut(vTexCoord, p_t) : pIn(vTexCoord, p_t);\n"
         "}\n");
 
     PhosphorShaders::EntryCandidate transition;
-    transition.functionName = QStringLiteral("pzTransition");
+    transition.functionName = QStringLiteral("pTransition");
     transition.generatedMain = transitionMain;
 
     PhosphorShaders::EntryCandidate inOut;
-    inOut.functionName = QStringLiteral("pzIn");
+    inOut.functionName = QStringLiteral("pIn");
     inOut.generatedMain = inOutMain;
-    inOut.alsoRequires = {QStringLiteral("pzOut")};
+    inOut.alsoRequires = {QStringLiteral("pOut")};
 
     return {transition, inOut};
 }

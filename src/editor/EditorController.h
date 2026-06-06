@@ -475,7 +475,7 @@ public:
     Q_INVOKABLE QVariantMap getShaderInfo(const QString& shaderId) const;
 
     /**
-     * Build the generated `#define pz_<id> ...` preamble (T1.1) for a shader, so
+     * Build the generated `#define p_<id> ...` preamble (T1.1) for a shader, so
      * the editor's live preview compiles a pack that reads parameters by name.
      * Mirrors what the daemon overlay splices via ShaderRegistry::paramPreamble;
      * the per-param `slot` comes from the same D-Bus shaderInfo the daemon's

@@ -95,7 +95,7 @@ vec4 getBlurredInputColor(vec2 uv, float radius, float samples) {
   return color / max(weight, 1.0);
 }
 
-vec4 pzTransition(vec2 uv, float t) {
+vec4 pTransition(vec2 uv, float t) {
 
     // Calculate the progression value based on the animation direction.
     // If opening, use uProgress as-is; if closing, invert the progression.
@@ -109,11 +109,11 @@ vec4 pzTransition(vec2 uv, float t) {
 
     // Calculate the blur amount by interpolating (mixing) between the maximum blur (uBlurAmount)
     // and zero blur based on the eased progression value.
-    float blurAmount = mix(pz_uBlurAmount, 0.0, easedProgressBlur);
+    float blurAmount = mix(p_uBlurAmount, 0.0, easedProgressBlur);
 
     // Apply the calculated blur effect to the texture at the current texture coordinates.
-    // The blur function uses the blur amount and quality (pz_uBlurQuality) for sampling.
-    vec4 texColor = getBlurredInputColor(iTexCoord.st, blurAmount, pz_uBlurQuality);
+    // The blur function uses the blur amount and quality (p_uBlurQuality) for sampling.
+    vec4 texColor = getBlurredInputColor(iTexCoord.st, blurAmount, p_uBlurQuality);
 
     // Calculate the alpha value for the transition using eased progress.
     // This determines how transparent the final color will appear.

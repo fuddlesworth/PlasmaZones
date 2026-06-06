@@ -46,7 +46,7 @@
 // fall speeds; single-octave noise has too much spatial coherence and
 // the columns end up moving together. Same formulation BMW uses.
 
-vec4 pzTransition(vec2 uv, float t)
+vec4 pTransition(vec2 uv, float t)
 {
     float visibility = clamp(t, 0.0, 1.0);
     float progress   = 1.0 - visibility;  // 0 visible, 1 destroyed
@@ -55,7 +55,7 @@ vec4 pzTransition(vec2 uv, float t)
     // cells; at progress=0 this is `ceil(0+1) = 1` so pixelation is a
     // no-op — sampleUV sits at the per-pixel grid centre and the
     // sampler returns the exact source texel.
-    float pixelSize = max(1.0, ceil(pz_maxPixelSize * progress + 1.0));
+    float pixelSize = max(1.0, ceil(p_maxPixelSize * progress + 1.0));
     // Floor iResolution so an early-frame surface that hasn't reported
     // its size (iResolution.x or .y == 0) doesn't divide-by-zero into
     // an infinite pixelGrid OR collapse hScale below into a constant
@@ -71,7 +71,7 @@ vec4 pzTransition(vec2 uv, float t)
     // Per-column noise via 4-octave fractal. `cellUV.x * hScale`
     // fed as `vec2(x, 0)` collapses to 1D variation along x —
     // same column gets the same noise regardless of y.
-    float hScale = pz_horizontalScale * flooredResolution.x * 0.001;
+    float hScale = p_horizontalScale * flooredResolution.x * 0.001;
     float noise  = simplex2DFractal(vec2(cellUV.x * hScale, 0.0)) * 2.0 - 0.5;
 
     // Vertical shift. The `0.00004` constant folds in BMW's
@@ -81,7 +81,7 @@ vec4 pzTransition(vec2 uv, float t)
     // shift while a few high-noise columns get a small head start.
     // That's the spread that makes adjacent columns separate
     // visibly during the melt.
-    float vScale        = pz_verticalScale * flooredResolution.y * 0.00004;
+    float vScale        = p_verticalScale * flooredResolution.y * 0.00004;
     float shiftProgress = mix(-vScale, 1.0 + vScale, progress);
     float shift         = noise * vScale + shiftProgress;
 

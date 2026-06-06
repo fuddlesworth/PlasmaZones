@@ -25,7 +25,7 @@
 
 #include <noise.glsl>
 
-// `pz_maxPixelSize` / `pz_originX` / `pz_originY` are generated from
+// `p_maxPixelSize` / `p_originX` / `p_originY` are generated from
 // metadata.json (the customParams[0] sub-slots) by the harness.
 
 const float FADE_WIDTH = 1.0;
@@ -36,9 +36,9 @@ float easeOutQuad(float x) { return -1.0 * x * (x - 2.0); }
 // 4-octave fractal simplex gives the chunky "burn pattern" for the
 // dissolve threshold randomness rather than a smooth gradient.
 
-vec4 pzTransition(vec2 uv, float t)
+vec4 pTransition(vec2 uv, float t)
 {
-    vec2 origin = vec2(pz_originX, pz_originY);
+    vec2 origin = vec2(p_originX, p_originY);
 
     // Per-pixel distance from the origin. Window-corner case: max
     // distance is sqrt(2) ≈ 1.414 (diagonal of unit square).
@@ -57,7 +57,7 @@ vec4 pzTransition(vec2 uv, float t)
     // regions stay at their natural pixel size. The max(.., 1.0)
     // defends against a metadata-bypass that pushes maxPixelSize
     // negative; matches sibling pixelate's defence at line 50.
-    float pixelSize = max(ceil(pz_maxPixelSize * dissolve + 1.0), 1.0);
+    float pixelSize = max(ceil(p_maxPixelSize * dissolve + 1.0), 1.0);
     // Floor iResolution so an early-frame zero-sized surface doesn't
     // divide-by-zero into an infinite pixelGrid.
     vec2 pixelGrid  = vec2(pixelSize) / max(iResolution, vec2(1.0));

@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 // The harness supplies #version, <common.glsl> (zone UBO + ZoneCtx + helpers),
-// the vTexCoord/vFragCoord ins, the fragColor out, and the pzImage entry-point
+// the vTexCoord/vFragCoord ins, the fragColor out, and the pImage entry-point
 // dispatch. audio.glsl is pack-specific, so it stays here.
 #include <audio.glsl>
 
@@ -24,11 +24,11 @@
  *   [1].x = idleAnimation    — star pulse when no audio (0–2)
  *
  * Colors:
- *   pz_primaryColor = primary (low freq, default: cyan)
- *   pz_accentColor = accent  (high freq, default: magenta)
- *   pz_warmColor = warm    (bass/core, default: amber)
- *   pz_midColor = mid     (mid freq, default: green)
- *   pz_coolColor = cool    (nebula tint, default: deep violet)
+ *   p_primaryColor = primary (low freq, default: cyan)
+ *   p_accentColor = accent  (high freq, default: magenta)
+ *   p_warmColor = warm    (bass/core, default: amber)
+ *   p_midColor = mid     (mid freq, default: green)
+ *   p_coolColor = cool    (nebula tint, default: deep violet)
  */
 
 
@@ -43,17 +43,17 @@ vec4 renderZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor,
     float borderWidth  = max(params.y, 2.5);
 
     // Parameters with defaults (sentinel: -1.0 = unset -> use default)
-    float reactivity   = pz_reactivity >= 0.0 ? pz_reactivity : 1.5;
-    float contourScale = pz_contourScale >= 0.0 ? pz_contourScale : 0.4;
-    float baseRadius   = pz_baseRadius >= 0.0 ? pz_baseRadius : 0.12;
-    float glowWidth    = pz_glowWidth >= 0.0 ? pz_glowWidth : 0.04;
-    float idleAnim     = pz_idleAnimation >= 0.0 ? pz_idleAnimation : 1.0;
-    float nebulaStr    = pz_nebulaIntensity >= 0.0 ? pz_nebulaIntensity : 0.20;
-    float coreStr      = pz_coreGlowStrength >= 0.0 ? pz_coreGlowStrength : 0.20;
-    float auroraStr    = pz_auroraIntensity >= 0.0 ? pz_auroraIntensity : 0.15;
-    float sparkleScale = pz_sparkleSize >= 0.0 ? pz_sparkleSize : 1.0;
-    float fillOpacity  = pz_fillOpacity >= 0.0 ? pz_fillOpacity : 0.85;
-    float auroraRays   = pz_auroraRayCount >= 0.0 ? pz_auroraRayCount : 12.0;
+    float reactivity   = p_reactivity >= 0.0 ? p_reactivity : 1.5;
+    float contourScale = p_contourScale >= 0.0 ? p_contourScale : 0.4;
+    float baseRadius   = p_baseRadius >= 0.0 ? p_baseRadius : 0.12;
+    float glowWidth    = p_glowWidth >= 0.0 ? p_glowWidth : 0.04;
+    float idleAnim     = p_idleAnimation >= 0.0 ? p_idleAnimation : 1.0;
+    float nebulaStr    = p_nebulaIntensity >= 0.0 ? p_nebulaIntensity : 0.20;
+    float coreStr      = p_coreGlowStrength >= 0.0 ? p_coreGlowStrength : 0.20;
+    float auroraStr    = p_auroraIntensity >= 0.0 ? p_auroraIntensity : 0.15;
+    float sparkleScale = p_sparkleSize >= 0.0 ? p_sparkleSize : 1.0;
+    float fillOpacity  = p_fillOpacity >= 0.0 ? p_fillOpacity : 0.85;
+    float auroraRays   = p_auroraRayCount >= 0.0 ? p_auroraRayCount : 12.0;
 
     // Zone geometry -- KEEP for cutout, border, edge effects
     vec2 rectPos  = zoneRectPos(rect);
@@ -75,11 +75,11 @@ vec4 renderZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor,
     vec2 globalUV = fragCoord / max(iResolution, vec2(1.0));
 
     // Colors — 5-color palette for richer visuals
-    vec3 primary = colorWithFallback(pz_primaryColor.rgb, vec3(0.0, 0.9, 1.0));
-    vec3 accent  = colorWithFallback(pz_accentColor.rgb, vec3(1.0, 0.2, 0.7));
-    vec3 warm    = colorWithFallback(pz_warmColor.rgb, vec3(1.0, 0.6, 0.1));
-    vec3 midCol  = colorWithFallback(pz_midColor.rgb, vec3(0.2, 1.0, 0.4));
-    vec3 cool    = colorWithFallback(pz_coolColor.rgb, vec3(0.4, 0.1, 0.9));
+    vec3 primary = colorWithFallback(p_primaryColor.rgb, vec3(0.0, 0.9, 1.0));
+    vec3 accent  = colorWithFallback(p_accentColor.rgb, vec3(1.0, 0.2, 0.7));
+    vec3 warm    = colorWithFallback(p_warmColor.rgb, vec3(1.0, 0.6, 0.1));
+    vec3 midCol  = colorWithFallback(p_midColor.rgb, vec3(0.2, 1.0, 0.4));
+    vec3 cool    = colorWithFallback(p_coolColor.rgb, vec3(0.4, 0.1, 0.9));
 
     // ── Highlighted vs dormant ─────────────────────────────────────
     float vitality = isHighlighted ? 1.0 : 0.25;
@@ -361,15 +361,15 @@ vec4 compositeBloomLabels(vec4 color, vec2 fragCoord, float bass, bool hasAudio)
     vec2 px = 1.0 / max(iResolution, vec2(1.0));
     vec4 labels = texture(uZoneLabels, uv);
 
-    float labelGlowSpread = pz_outlineSpread >= 0.0 ? pz_outlineSpread : 2.5;
-    float labelBrightness = pz_spectrumBright >= 0.0 ? pz_spectrumBright : 2.2;
-    float labelAudioReact = pz_bassPulse >= 0.0 ? pz_bassPulse : 1.0;
+    float labelGlowSpread = p_outlineSpread >= 0.0 ? p_outlineSpread : 2.5;
+    float labelBrightness = p_spectrumBright >= 0.0 ? p_spectrumBright : 2.2;
+    float labelAudioReact = p_bassPulse >= 0.0 ? p_bassPulse : 1.0;
 
-    vec3 primary = colorWithFallback(pz_primaryColor.rgb, vec3(0.0, 0.9, 1.0));
-    vec3 accent  = colorWithFallback(pz_accentColor.rgb, vec3(1.0, 0.2, 0.7));
-    vec3 warm    = colorWithFallback(pz_warmColor.rgb, vec3(1.0, 0.6, 0.1));
-    vec3 midCol  = colorWithFallback(pz_midColor.rgb, vec3(0.2, 1.0, 0.4));
-    vec3 cool    = colorWithFallback(pz_coolColor.rgb, vec3(0.4, 0.1, 0.9));
+    vec3 primary = colorWithFallback(p_primaryColor.rgb, vec3(0.0, 0.9, 1.0));
+    vec3 accent  = colorWithFallback(p_accentColor.rgb, vec3(1.0, 0.2, 0.7));
+    vec3 warm    = colorWithFallback(p_warmColor.rgb, vec3(1.0, 0.6, 0.1));
+    vec3 midCol  = colorWithFallback(p_midColor.rgb, vec3(0.2, 1.0, 0.4));
+    vec3 cool    = colorWithFallback(p_coolColor.rgb, vec3(0.4, 0.1, 0.9));
 
     // Gaussian halo for smooth outline
     float halo = 0.0;
@@ -412,7 +412,7 @@ vec4 compositeBloomLabels(vec4 color, vec2 fragCoord, float bass, bool hasAudio)
 
 // ─── Main ─────────────────────────────────────────────────────────
 
-vec4 pzImage(vec2 fragCoord) {
+vec4 pImage(vec2 fragCoord) {
     vec4 color = vec4(0.0);
 
     if (zoneCount == 0) {
@@ -437,7 +437,7 @@ vec4 pzImage(vec2 fragCoord) {
         color = blendOver(color, zoneColor);
     }
 
-    if (pz_showLabels > 0.5)
+    if (p_showLabels > 0.5)
         color = compositeBloomLabels(color, fragCoord, bass, hasAudio);
     return color;
 }

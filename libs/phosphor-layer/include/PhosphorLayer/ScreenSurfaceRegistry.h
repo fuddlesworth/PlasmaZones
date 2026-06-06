@@ -28,9 +28,9 @@ class Surface;
  * Template parameter lets consumers subclass Surface and keep their type
  * through the API:
  * @code
- *     class PzOverlaySurface : public Surface { ... };
- *     ScreenSurfaceRegistry<PzOverlaySurface> reg(factory, screens);
- *     auto* s = reg.surfaceForScreen(myScreen);  // typed as PzOverlaySurface*
+ *     class POverlaySurface : public Surface { ... };
+ *     ScreenSurfaceRegistry<POverlaySurface> reg(factory, screens);
+ *     auto* s = reg.surfaceForScreen(myScreen);  // typed as POverlaySurface*
  * @endcode
  *
  * The registry does NOT listen to screensChanged itself — that is the

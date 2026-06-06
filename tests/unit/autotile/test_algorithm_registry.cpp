@@ -38,7 +38,7 @@ private:
 private Q_SLOTS:
     void initTestCase()
     {
-        QVERIFY(m_scriptSetup.init(QStringLiteral(PZ_SOURCE_DIR)));
+        QVERIFY(m_scriptSetup.init(QStringLiteral(P_SOURCE_DIR)));
     }
 
     // =========================================================================
@@ -353,8 +353,8 @@ private Q_SLOTS:
 
     void testFrozenGlobals_reassignmentBlocked()
     {
-        // The pz standard library is frozen via luaL_sandbox before any algorithm
-        // script runs, so a script cannot reassign pz.* constants or helpers.
+        // The pluau standard library is frozen via luaL_sandbox before any algorithm
+        // script runs, so a script cannot reassign pluau.* constants or helpers.
         // Direct mutation can't be probed from here — the lua_State is private to
         // each LuauTileAlgorithm and there is no public script-eval hook — so this
         // validates the guarantee indirectly: two identical calls must produce

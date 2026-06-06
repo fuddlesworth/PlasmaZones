@@ -30,20 +30,20 @@
 // daemon's anchor-sized texture leaves no clamp-to-edge halo.
 //
 // DIRECTION — this is a SYMMETRIC transition, written as a single
-// `pzTransition`. PlasmaZones flips `t` (the leg's iTime) on reverse
+// `pTransition`. PlasmaZones flips `t` (the leg's iTime) on reverse
 // legs (0→1 on open, 1→0 on close), so the close leg plays this motion
-// in reverse automatically — no direction code, no `pzIn`/`pzOut` split.
+// in reverse automatically — no direction code, no `pIn`/`pOut` split.
 
 // The harness supplies #version, <animation_uniforms.glsl>, the in/out,
 // and main(). These two includes are pack-specific, so they stay here.
 #include <noise.glsl>
 #include <anchor_remap.glsl>
 
-// `pz_bounces` is generated from metadata.json (the customParams[0].x lane).
+// `p_bounces` is generated from metadata.json (the customParams[0].x lane).
 //
 // `uv` is the whole-surface vTexCoord; `t` is the leg's iTime (runtime-flipped
 // on the close leg, which is what makes the symmetric bounce auto-reverse).
-vec4 pzTransition(vec2 uv, float t) {
+vec4 pTransition(vec2 uv, float t) {
     t = clamp(t, 0.0, 1.0);
     const float PI = 3.14159265358979;
 
@@ -53,9 +53,9 @@ vec4 pzTransition(vec2 uv, float t) {
     vec2 auv = anchorRemap(uv);
 
     // Decaying bounce: one window-height above the frame at t=0, settling
-    // to 0 at t=1 with `pz_bounces` floor contacts in between.
+    // to 0 at t=1 with `p_bounces` floor contacts in between.
     float decay = (1.0 - t) * (1.0 - t);
-    float offset = decay * abs(cos(t * PI * pz_bounces));
+    float offset = decay * abs(cos(t * PI * p_bounces));
 
     // Rigid vertical translate in anchor space: sampling further down the
     // window (+offset) lifts its content above the frame. The offset swings

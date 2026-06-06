@@ -55,7 +55,7 @@ vec4 getWisps(vec2 texCoords, float gridSize, vec2 seed) {
 
   cellUV += offset;
 
-  vec3 color = tritone(hash12(cellID * seed * 1.256), pz_uColor1.rgb, pz_uColor2.rgb, pz_uColor3.rgb);
+  vec3 color = tritone(hash12(cellID * seed * 1.256), p_uColor1.rgb, p_uColor2.rgb, p_uColor3.rgb);
 
   // Use distance to center of shifted / rotated UV coordinates to draw a glaring point.
   float dist = length(cellUV - 0.5) * gridSize / radius;
@@ -67,7 +67,7 @@ vec4 getWisps(vec2 texCoords, float gridSize, vec2 seed) {
   return vec4(0.0);
 }
 
-vec4 pzTransition(vec2 uv, float t) {
+vec4 pTransition(vec2 uv, float t) {
   float progress = uForOpening ? 1.0 - easeOutQuad(uProgress) : easeOutQuad(uProgress);
 
   // Scale down the window slightly.
@@ -89,10 +89,10 @@ vec4 pzTransition(vec2 uv, float t) {
 
   // Compute several layers of moving wisps.
   vec2 wispUv = (iTexCoord.st - 0.5) / mix(1.0, 0.5, progress) + 0.5;
-  wispUv /= pz_uScale;
+  wispUv /= p_uScale;
   vec4 wisps = vec4(0.0);
   for (float i = 0.0; i < WISPS_LAYERS; ++i) {
-    wisps = alphaOver(wisps, getWisps(wispUv * 0.3, WISPS_SPACING, vec2(pz_uSeedX, pz_uSeedY) * (i + 1.0)));
+    wisps = alphaOver(wisps, getWisps(wispUv * 0.3, WISPS_SPACING, vec2(p_uSeedX, p_uSeedY) * (i + 1.0)));
   }
 
   // Compute shrinking edge mask.

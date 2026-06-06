@@ -8,7 +8,7 @@
 #include "windowruletemplates.h"
 
 #include "../core/logging.h"
-#include "../pz_i18n.h"
+#include "../p_i18n.h"
 
 #include <PhosphorProtocol/ClientHelpers.h>
 #include <PhosphorProtocol/ServiceConstants.h>
@@ -162,7 +162,7 @@ void WindowRuleController::discard()
         this, &WindowRuleController::revertFinished, this,
         [this](bool success) {
             m_discardInFlight = false;
-            Q_EMIT discardResult(success, success ? QString() : PzI18n::tr("Failed to fetch the daemon's rule set."));
+            Q_EMIT discardResult(success, success ? QString() : PI18n::tr("Failed to fetch the daemon's rule set."));
         },
         Qt::SingleShotConnection);
     revert();
@@ -273,7 +273,7 @@ bool WindowRuleController::pushToDaemonAsync(const QList<WindowRule>& rules)
         // failure so the page can stay dirty for retry.
         const bool ok = reply.value();
         if (!ok) {
-            Q_EMIT applyResult(false, PzI18n::tr("The daemon rejected one or more rules."));
+            Q_EMIT applyResult(false, PI18n::tr("The daemon rejected one or more rules."));
             return;
         }
         setDirty(false);
@@ -428,7 +428,7 @@ void WindowRuleController::asyncCommit(bool force)
     // would call setDirty(false) and emit applyResult), and the
     // daemon receives two identical writes for one user action.
     if (m_asyncCommitInFlight) {
-        Q_EMIT applyResult(false, PzI18n::tr("A save is already in flight."));
+        Q_EMIT applyResult(false, PI18n::tr("A save is already in flight."));
         return;
     }
     if (!m_dirty) {
@@ -439,8 +439,8 @@ void WindowRuleController::asyncCommit(bool force)
         qCWarning(lcConfig) << "WindowRuleController::asyncCommit: refusing to push — daemon rules changed while the "
                                "page had staged edits; review or force-overwrite required";
         Q_EMIT applyResult(false,
-                           PzI18n::tr("The daemon's window rules changed while you were editing. Review or use "
-                                      "Save anyway to overwrite."));
+                           PI18n::tr("The daemon's window rules changed while you were editing. Review or use "
+                                     "Save anyway to overwrite."));
         return;
     }
     if (!pushToDaemonAsync(m_model.rules())) {
@@ -450,8 +450,8 @@ void WindowRuleController::asyncCommit(bool force)
         // toast / banner the failure rather than leaving the page in a
         // silent-fail "still dirty" state.
         Q_EMIT applyResult(false,
-                           PzI18n::tr("One or more window rules failed validation and could not be saved. See the "
-                                      "log for details."));
+                           PI18n::tr("One or more window rules failed validation and could not be saved. See the "
+                                     "log for details."));
     }
     // pushToDaemonAsync's QDBusPendingCallWatcher emits applyResult on
     // the reply (success or transport error) — nothing to do here.
@@ -659,7 +659,7 @@ QString WindowRuleController::duplicateRule(const QString& ruleId)
         takenNames.reserve(existing.size());
         for (const WindowRule& r : existing)
             takenNames.insert(r.name);
-        const QString base = PzI18n::tr("%1 (copy)").arg(source.name);
+        const QString base = PI18n::tr("%1 (copy)").arg(source.name);
         QString candidate = base;
         int n = 2;
         while (takenNames.contains(candidate))

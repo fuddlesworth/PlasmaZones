@@ -40,7 +40,7 @@ is **parity with it along five axes**:
 | Parameter access | `ctx.custom.focusBoost` (named, typed) | `customParams[2].x` (hand-computed slot arithmetic) |
 | Entry point | `tile(ctx)` — receive context, return zones | hand-written `main()` + dispatch loop, re-implemented per pack |
 | Pre-load validation | `luau-analyze` catches errors before load | errors surface only at GPU runtime, unmapped |
-| Editor tooling | `.luaurc` + `pz.d.luau` → autocomplete | nothing |
+| Editor tooling | `.luaurc` + `pluau.d.luau` → autocomplete | nothing |
 | Onboarding | 10-line working quick-start | ~89-line frag + vert + JSON minimum, no "hello world" |
 
 ## Non-goals
@@ -197,14 +197,14 @@ synthesizes a `#define` preamble from the parameter list:
 
 ```glsl
 // ---- generated from metadata.json (do not edit) ----
-#define pz_speed          customParams[0].x
-#define pz_chromaStrength customParams[2].x
-#define pz_fillColor      customColors[0]
-#define pz_logoTex        uTexture0
+#define p_speed          customParams[0].x
+#define p_chromaStrength customParams[2].x
+#define p_fillColor      customColors[0]
+#define p_logoTex        uTexture0
 // ----------------------------------------------------
 ```
 
-- Naming: a `pz_<id>` prefix avoids collisions with user locals and makes
+- Naming: a `p_<id>` prefix avoids collisions with user locals and makes
   generated identifiers obvious. (Bikeshed in review — alternative is bare `<id>`,
   but a prefix is safer.)
 - The mapping is derived from the **same** `(type, slot)` logic that
@@ -236,7 +236,7 @@ honored (so the 26 existing packs are untouched), and a slot collision becomes a
 load-time warning surfaced by the validator (T1.2).
 
 **Backward compatibility.** Fully additive. Existing shaders that read
-`customParams[2].x` directly keep working; the new `pz_*` defines are extra
+`customParams[2].x` directly keep working; the new `p_*` defines are extra
 symbols. Existing explicit `slot` declarations keep working.
 
 #### What this actually looks like — `cosmic-flow` before / after
@@ -292,22 +292,22 @@ guards disappear too:
 
 ```glsl
 // ---- generated from metadata.json, injected after <common.glsl> (do not edit) ----
-#define pz_speed        customParams[0].x
-#define pz_flowSpeed    customParams[0].y
-#define pz_noiseScale   customParams[0].z
-#define pz_octaves      customParams[0].w
+#define p_speed        customParams[0].x
+#define p_flowSpeed    customParams[0].y
+#define p_noiseScale   customParams[0].z
+#define p_octaves      customParams[0].w
 // … one #define per parameter …
-#define pz_showLabels   customParams[5].y
-#define pz_paletteColorA customColors[0]
+#define p_showLabels   customParams[5].y
+#define p_paletteColorA customColors[0]
 // -----------------------------------------------------------------------------------
 
 // what the author actually writes now:
-float speed     = pz_speed;
-float flowSpeed = pz_flowSpeed;
-int   octaves   = int(pz_octaves);
-vec3  palA      = pz_paletteColorA.rgb;
+float speed     = p_speed;
+float flowSpeed = p_flowSpeed;
+int   octaves   = int(p_octaves);
+vec3  palA      = p_paletteColorA.rgb;
 // …
-if (pz_showLabels > 0.5)
+if (p_showLabels > 0.5)
     color = compositeCosmicLabels(...);
 ```
 
@@ -347,8 +347,8 @@ $ plasmazones-shader-validate ~/.local/share/plasmazones/shaders/my-shader
 my-shader  (3 params, single-pass)
   metadata     OK
   effect.frag  ERROR
-    effect.frag:42: 'pz_spede' : undeclared identifier
-    (did you mean 'pz_speed'? — declared in metadata.json)
+    effect.frag:42: 'p_spede' : undeclared identifier
+    (did you mean 'p_speed'? — declared in metadata.json)
   → 1 error
 ```
 
@@ -378,7 +378,7 @@ the 26 packs already follow by hand (D6).
 **Two entry shapes** (a single per-zone signature is too narrow — see the cost
 below), plus the existing `main()` as an escape hatch:
 
-1. **`vec4 pzZone(ZoneCtx z)`** — the harness generates the full dispatch:
+1. **`vec4 pZone(ZoneCtx z)`** — the harness generates the full dispatch:
    the `zoneCount == 0` guard, the `for (i < zoneCount && i < 64)` loop with the
    degenerate-rect skip, the `blendOver` accumulate, the optional label composite,
    and `clampFragColor`. `ZoneCtx` is a generated/shared struct carrying the
@@ -397,13 +397,13 @@ below), plus the existing `main()` as an escape hatch:
    ```
 
    Globals (`iTime`, `iResolution`, the audio helpers, the full `zoneRects[]`
-   arrays) stay readable inside `pzZone`, so continuous-field shaders (`cosmic-flow`)
+   arrays) stay readable inside `pZone`, so continuous-field shaders (`cosmic-flow`)
    and cross-zone effects (`plasma-sigil`'s energy bridges, `endeavouros-drift`'s
    proximity network) are still expressible.
 
-2. **`vec4 pzImage(vec2 fragCoord)`** — full-frame entry; the harness generates a
+2. **`vec4 pImage(vec2 fragCoord)`** — full-frame entry; the harness generates a
    trivial `main()` (version, in/out, `clampFragColor`). This is what multipass
-   **buffer passes already are**, so a multipass author writes one `pzImage` per
+   **buffer passes already are**, so a multipass author writes one `pImage` per
    pass with no ceremony, and full-screen / wallpaper effects use it directly.
 
 3. **`void main()`** — retained verbatim. If the author defines `main()`, the
@@ -412,7 +412,7 @@ below), plus the existing `main()` as an escape hatch:
 
 **Dispatch rule.** Exactly the additive pattern T1.1 uses: the registry inspects
 the (include-expanded) source for a `main()` definition; if present, compile as-is;
-otherwise wrap whichever of `pzZone` / `pzImage` is defined. The generated wrapper,
+otherwise wrap whichever of `pZone` / `pImage` is defined. The generated wrapper,
 the `#version`/in/out preamble, the `common.glsl` include, and the T1.1 param
 preamble are all emitted by the same generation step, so the author's file can be
 just the function bodies.
@@ -450,12 +450,12 @@ void main() {
         color = blendOver(color, renderCosmicZone(vFragCoord, rect, zoneFillColors[i],
             zoneBorderColors[i], zoneParams[i], zoneParams[i].z > 0.5, bass, mids, treble, overall, hasAudio));
     }
-    if (pz_showLabels > 0.5) color = compositeCosmicLabels(color, vFragCoord, bass, treble, hasAudio);
+    if (p_showLabels > 0.5) color = compositeCosmicLabels(color, vFragCoord, bass, treble, hasAudio);
     fragColor = clampFragColor(color);
 }
 
 // after: the author writes only the per-zone body; the loop/guard/blend/clamp are generated
-vec4 pzZone(ZoneCtx z) {
+vec4 pZone(ZoneCtx z) {
     // audio helpers are still global; z carries the per-zone data
     return renderCosmicZone(z.fragCoord, z.rect, z.fillColor, z.borderColor,
                             z.params, z.isHighlighted, getBassSoft(), getMidsSoft(),
@@ -465,7 +465,7 @@ vec4 pzZone(ZoneCtx z) {
 
 (The label composite is the one piece that's genuinely whole-frame, not per-zone —
 so a pack that needs it either keeps `main()` or the harness exposes an optional
-`vec4 pzComposite(vec4 frame)` post-hook. Worth deciding in review; the per-zone +
+`vec4 pComposite(vec4 frame)` post-hook. Worth deciding in review; the per-zone +
 full-frame + `main()` triad covers everything else cleanly.)
 
 ---
@@ -477,7 +477,7 @@ full-frame + `main()` triad covers everything else cleanly.)
 - Add a minimal, heavily-commented `data/shaders/hello-world/` pack: one
   fragment shader, two or three named params, no multipass — the shader analogue
   of the 10-line `my-columns.luau` quick-start. With T1.1 its body reads
-  `pz_speed`, `pz_color` directly. The entire pack is two short files:
+  `p_speed`, `p_color` directly. The entire pack is two short files:
 
   `metadata.json`:
 
@@ -494,25 +494,25 @@ full-frame + `main()` triad covers everything else cleanly.)
   ```
 
   `effect.frag` — the whole authored file. With T1.4 the author writes only the
-  per-zone body; the `pz_*` defines, the includes, and `main()` are generated:
+  per-zone body; the `p_*` defines, the includes, and `main()` are generated:
 
   ```glsl
   // Fill each zone with a gently pulsing color. (#version, includes, and the
-  // dispatch loop are generated; pz_color / pz_speed come from metadata.json.)
-  vec4 pzZone(ZoneCtx z) {
+  // dispatch loop are generated; p_color / p_speed come from metadata.json.)
+  vec4 pZone(ZoneCtx z) {
       float halfRadius = z.params.x;
       vec2  center = zoneRectPos(z.rect) + zoneRectSize(z.rect) * 0.5;
       if (sdRoundedBox(z.fragCoord - center, zoneRectSize(z.rect) * 0.5, halfRadius) >= 0.0)
           return vec4(0.0);                              // outside this zone
-      float pulse = 0.5 + 0.5 * sin(iTime * pz_speed);   // 0..1, animated
-      return vec4(pz_color.rgb * pulse, pz_color.a);
+      float pulse = 0.5 + 0.5 * sin(iTime * p_speed);   // 0..1, animated
+      return vec4(p_color.rgb * pulse, p_color.a);
   }
   ```
 
   That is the entire shader — five lines of actual logic. It is the moral
   equivalent of the `my-columns.luau` quick-start, and the thing a "Create shader"
   action stamps out. (A power user who wants the `main()` loop, or a full-frame
-  `pzImage`, can write those instead — see T1.4.)
+  `pImage`, can write those instead — see T1.4.)
 - Add `createFromTemplate(name)` to the shader page controller
   (`src/settings/animationspagecontroller_shaders.cpp`), copying the template into
   the user dir via the existing `ShaderPackInstaller` path — mirroring the
@@ -525,11 +525,11 @@ full-frame + `main()` triad covers everything else cleanly.)
   under `…/share/plasmazones/shaders/shared/`).
 - Document the include search path and a recommended editor config so
   `glsl-language-server` / `glslls` resolves `#include <common.glsl>` and friends.
-- For the generated `pz_*` defines: the validator (T1.2) gains a `--emit-preamble`
+- For the generated `p_*` defines: the validator (T1.2) gains a `--emit-preamble`
   mode that writes the generated `#define` block to a sidecar
-  (e.g. `.pz-generated.glsl`) the author can `#include "…"` while editing for
+  (e.g. `.p-generated.glsl`) the author can `#include "…"` while editing for
   autocomplete, stripped/ignored at load. (This is the pragmatic GLSL-side stand-in
-  for `pz.d.luau`; GLSL LSP tooling is weaker than luau-lsp, so we lean on a
+  for `pluau.d.luau`; GLSL LSP tooling is weaker than luau-lsp, so we lean on a
   generated include rather than a type stub.)
 
 #### T2.3 — Documentation split
@@ -538,7 +538,7 @@ Restructure shader docs to mirror `luau-algorithm-authoring.md`:
 
 - A new `docs/architecture/shader-authoring.md` quick-start: "where shaders live",
   a complete ~15-line hello-world (named params), the metadata table, and the
-  `pz_*` access model — the things a first-time author needs, in order.
+  `p_*` access model — the things a first-time author needs, in order.
 - Keep `PlasmaZones.wiki/Shaders.md` as the exhaustive reference (uniforms,
   multipass, wallpaper, audio, binding tables) and link to it from the quick-start.
 
@@ -584,7 +584,7 @@ PlasmaZones has two shader registries (per `AnimationShaderContract.h`):
 The authoring pain (D1–D4, D6) is identical: T1.1–T1.3 and T2.x apply directly, and
 T1.4's *mechanism* (harness-generated `main()` around a named entry function)
 applies — but with animation-specific entry shapes, defined in A3/T1.5 below rather
-than `pzZone`/`pzImage`. Three things make the animation system different, and two of
+than `pZone`/`pImage`. Three things make the animation system different, and two of
 them change the *shape* of the Tier-1 work — they must be designed in from the start,
 not bolted on.
 
@@ -661,7 +661,7 @@ So there are three layers of boilerplate: the `== 1` footgun, the manual
 **T1.5 — direction ergonomics.** Three additive pieces, mirroring how T1.4 turns
 `main()` into an entry function:
 
-1. **Named `pz_reversed`** (bool, generated alongside the param preamble) replaces
+1. **Named `p_reversed`** (bool, generated alongside the param preamble) replaces
    `iIsReversed == 1` — kills the exact-equality footgun.
 2. **A `legProgress()` helper** in `animation_uniforms.glsl` returns the un-flipped
    0→1 forward progress, so the 24 shaders that hand-roll it
@@ -669,16 +669,16 @@ So there are three layers of boilerplate: the `== 1` footgun, the manual
    helper; cheap; high coverage.
 3. **Direction-dispatched entry points** (the T1.4 entry convention, specialized for
    animations):
-   - **`vec4 pzTransition(vec2 uv, float t)`** — symmetric. One function; the
+   - **`vec4 pTransition(vec2 uv, float t)`** — symmetric. One function; the
      harness keeps the existing `iTime`-flip so it auto-mirrors. `t` is `iTime`.
-   - **`vec4 pzIn(vec2 uv, float t)` + `vec4 pzOut(vec2 uv, float t)`** —
+   - **`vec4 pIn(vec2 uv, float t)` + `vec4 pOut(vec2 uv, float t)`** —
      asymmetric. `t` is **always** 0→1 forward leg progress (the harness applies
      `legProgress()` for you), and the harness calls the right function by leg
      direction. The author **never** touches `iIsReversed`, never un-flips `iTime`,
      and the `== 1` footgun is gone.
 
    The "in/out toggle" thus becomes *which entry functions the author provides*: one
-   `pzTransition` (symmetric) or a `pzIn`/`pzOut` pair (asymmetric). `main()` stays
+   `pTransition` (symmetric) or a `pIn`/`pOut` pair (asymmetric). `main()` stays
    the escape hatch for shaders that want raw `iTime`/`iIsReversed`.
 
 #### `matrix` before / after (asymmetric)
@@ -695,14 +695,14 @@ void main() {
 }
 
 // after — generated #defines + harness-dispatched direction
-//   pz_letterSize / pz_trailColor / pz_reversed are generated; t is forward 0→1
-vec4 pzIn(vec2 uv, float t)  { return matrixRain(uv, t, /*windowFadingIn=*/true);  }
-vec4 pzOut(vec2 uv, float t) { return matrixRain(uv, t, /*windowFadingIn=*/false); }
+//   p_letterSize / p_trailColor / p_reversed are generated; t is forward 0→1
+vec4 pIn(vec2 uv, float t)  { return matrixRain(uv, t, /*windowFadingIn=*/true);  }
+vec4 pOut(vec2 uv, float t) { return matrixRain(uv, t, /*windowFadingIn=*/false); }
 ```
 
 The `iTime` un-flip and both `iIsReversed == 1` branches collapse into the choice of
 which function the harness calls. A symmetric shader like `bounce` instead writes a
-single `pzTransition` and keeps its current auto-mirror behaviour.
+single `pTransition` and keeps its current auto-mirror behaviour.
 
 ### A4 — Definition of done (animation system)
 
@@ -710,12 +710,12 @@ single `pzTransition` and keeps its current auto-mirror behaviour.
   (T1.2/T1.3), generated by a shared component and applied on **both** the daemon
   and kwin-effect paths.
 - Animation packs are gated by `test_animation_shader_preamble_bake.cpp`, which
-  bakes every pack through the full runtime assembly (entry scaffold + `pz_<id>`
+  bakes every pack through the full runtime assembly (entry scaffold + `p_<id>`
   preamble) on the daemon path. *(As shipped, the `plasmazones-shader-validate`
   CLI is zone-only; an animation CLI mode and a kwin-branch `PLASMAZONES_KWIN`
   bake remain future work.)*
-- An author can write `pzTransition` (symmetric) or `pzIn`/`pzOut` (asymmetric) with
-  no `iIsReversed` handling; `pz_reversed` and `legProgress()` exist for authors who
+- An author can write `pTransition` (symmetric) or `pIn`/`pOut` (asymmetric) with
+  no `iIsReversed` handling; `p_reversed` and `legProgress()` exist for authors who
   keep `main()`.
 - All 53 bundled animation packs compile and render identically on both runtimes.
 
@@ -732,12 +732,12 @@ single `pzTransition` and keeps its current auto-mirror behaviour.
 3. **T1.4** (entry-point convention) — builds on T1.1's generation step (same
    harness-wraps-your-code seam); gate on explicit sign-off since it's the most
    opinionated change.
-4. **T1.5** (direction ergonomics: `pz_reversed`, `legProgress()`, `pzIn`/`pzOut`) —
+4. **T1.5** (direction ergonomics: `p_reversed`, `legProgress()`, `pIn`/`pOut`) —
    animation-only; pairs with T1.4's entry convention. Land with or right after T1.4.
 5. **T1.2** (validation CLI + CI gate) — locks in correctness for both bundled sets,
    baking animation packs with **and** without `PLASMAZONES_KWIN` (A2); gives authors
-   the pre-load check; validates that packs defining only `pzZone`/`pzImage`/
-   `pzTransition`/`pzIn`+`pzOut` wrap and compile.
+   the pre-load check; validates that packs defining only `pZone`/`pImage`/
+   `pTransition`/`pIn`+`pOut` wrap and compile.
 6. **T2.1 / T2.3** (hello-world + create action + quick-start docs) — onboarding,
    now that authoring is pleasant. Cover both systems (a zone hello-world and an
    animation hello-world).
@@ -749,7 +749,7 @@ that closes the cross-app gap.
 
 ## Risks & open questions
 
-- **Preamble identifier naming** (`pz_<id>` vs bare `<id>`): prefix is safer
+- **Preamble identifier naming** (`p_<id>` vs bare `<id>`): prefix is safer
   against collisions with author locals; confirm in review.
 - **`#line` filename support** depends on what the bake targets / glslang accept;
   fall back to integer source-index + legend if filenames aren't honored.
@@ -766,8 +766,8 @@ that closes the cross-app gap.
   string. A tolerant-but-correct parse, or simply requiring the entry function at
   top level, needs deciding in review.
 - **The whole-frame label composite** in per-zone shaders (e.g. `cosmic-flow`)
-  doesn't fit `pzZone` cleanly — resolve whether to expose an optional
-  `pzComposite(frame)` post-hook or have such packs keep `main()`.
+  doesn't fit `pZone` cleanly — resolve whether to expose an optional
+  `pComposite(frame)` post-hook or have such packs keep `main()`.
 - **Standalone-validity trade** (T1.4): authoring only the entry function means the
   file isn't compilable in isolation; confirm the `--emit-scaffold` sidecar is an
   acceptable answer for editor tooling, or keep `main()` as the documented default.
@@ -777,12 +777,12 @@ that closes the cross-app gap.
   animation shader on both branches and assert both compile — the std140 offset
   contract is already pinned by `BaseUniforms.h` asserts + `test_animation_shader_bake`,
   so the new surface is the *generated* GLSL, not the UBO layout.
-- **`legProgress()` and the `iTime` flip** (T1.5): `pzIn`/`pzOut` receive forward
-  0→1 `t`, but `pzTransition` receives raw (flipped) `iTime`. Document this
+- **`legProgress()` and the `iTime` flip** (T1.5): `pIn`/`pOut` receive forward
+  0→1 `t`, but `pTransition` receives raw (flipped) `iTime`. Document this
   difference loudly — a symmetric author who assumes `t` is always forward will get
   a reversed out-leg. The asymmetric pair is the "I want forward progress" path.
 - **Per-event direction availability**: whether the settings UI should disable the
-  "out" assignment for a shader that only defines `pzIn`, or fall back to mirroring,
+  "out" assignment for a shader that only defines `pIn`, or fall back to mirroring,
   is a UX decision for the AnimationEventCard work — out of scope here but worth a
   flag so it isn't silently dropped.
 - **What `uv` is in the animation entry points** (T1.5): `bounce` reads
@@ -796,7 +796,7 @@ that closes the cross-app gap.
 ## Definition of done (Tier 1)
 
 - A shader author can declare a param with no `slot` and read it in GLSL by name.
-- A shader author can implement `pzZone` (or `pzImage`) with no `main()` and have
+- A shader author can implement `pZone` (or `pImage`) with no `main()` and have
   it compile and render; packs that define `main()` are wrapped/used unchanged.
 - `plasmazones-shader-validate <pack>` reports per-stage OK/errors over
   `data/shaders/*`, runs in CI (`shader_validate_bundled`), and exits non-zero on
@@ -804,7 +804,7 @@ that closes the cross-app gap.
   `test_animation_shader_preamble_bake`; an animation CLI mode is future work.)*
 - glslang errors reference the author's file/line.
 - All 26 zone packs migrated to the named-param + entry-point API and render
-  identically (25 via pzImage/pzZone; magnetic-field keeps its custom-vertex main()).
+  identically (25 via pImage/pZone; magnetic-field keeps its custom-vertex main()).
 - The animation system meets its own [definition of done](#a4--definition-of-done-animation-system)
-  (cross-runtime generation, both-branch validation, `pzTransition`/`pzIn`/`pzOut`,
+  (cross-runtime generation, both-branch validation, `pTransition`/`pIn`/`pOut`,
   all 53 animation packs migrated and rendering identically).

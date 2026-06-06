@@ -745,8 +745,8 @@ vec4 renderZoneChrome(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColo
                       vec4 zParams, vec3 sceneCol, GlobalParams g, bool isHighlighted) {
     float borderRadius = max(zParams.x, 6.0);
     float borderWidth  = max(zParams.y, 2.5);
-    float fillOpacity  = pz_fillOpacity;
-    float edgeGlow     = pz_edgeGlow;
+    float fillOpacity  = p_fillOpacity;
+    float edgeGlow     = p_edgeGlow;
 
     vec2 rectPos  = zoneRectPos(rect);
     vec2 rectSize = zoneRectSize(rect);
@@ -818,7 +818,7 @@ vec4 renderZoneChrome(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColo
 // Main — render the scene once in screen-space, then loop zones for chrome
 // ──
 
-vec4 pzImage(vec2 fragCoord) {
+vec4 pImage(vec2 fragCoord) {
     bool hasAudio = iAudioSpectrumSize > 0;
     float bass    = getBassSoft();
     float mids    = getMidsSoft();
@@ -826,24 +826,24 @@ vec4 pzImage(vec2 fragCoord) {
     float overall = getOverallSoft();
 
     GlobalParams g;
-    g.chromeCol    = colorWithFallback(pz_chromeColor.rgb, vec3(0.776, 0.831, 0.890));
-    g.dataCol      = colorWithFallback(pz_dataColor.rgb, vec3(0.129, 0.784, 1.000));
-    g.scanCol      = colorWithFallback(pz_scanColor.rgb, vec3(0.918, 0.965, 1.000));
-    g.bgCol        = colorWithFallback(pz_bgColor.rgb, vec3(0.027, 0.043, 0.071));
-    g.ringScale    = pz_ringScale;
-    g.thickPulse   = pz_thicknessPulse;
-    g.audioReact   = pz_audioReactivity;
-    g.bassBreath   = pz_bassBreath;
-    g.trebleGlitch = pz_trebleGlitch;
-    g.surgeThresh  = pz_surgeThreshold;
-    g.hudBright    = pz_hudBrightness;
-    g.spectrumOn   = pz_spectrumBars;
-    g.showOverlay  = pz_showOverlay;
-    g.staticAmt    = pz_staticNoise;
-    g.scanDensity  = pz_scanlineDensity;
-    g.bgStrength   = pz_bgGridStrength;
-    g.mouseInfStr  = pz_mouseTargeting;
-    g.stepCount    = int(max(pz_rayStepCount, 16.0));
+    g.chromeCol    = colorWithFallback(p_chromeColor.rgb, vec3(0.776, 0.831, 0.890));
+    g.dataCol      = colorWithFallback(p_dataColor.rgb, vec3(0.129, 0.784, 1.000));
+    g.scanCol      = colorWithFallback(p_scanColor.rgb, vec3(0.918, 0.965, 1.000));
+    g.bgCol        = colorWithFallback(p_bgColor.rgb, vec3(0.027, 0.043, 0.071));
+    g.ringScale    = p_ringScale;
+    g.thickPulse   = p_thicknessPulse;
+    g.audioReact   = p_audioReactivity;
+    g.bassBreath   = p_bassBreath;
+    g.trebleGlitch = p_trebleGlitch;
+    g.surgeThresh  = p_surgeThreshold;
+    g.hudBright    = p_hudBrightness;
+    g.spectrumOn   = p_spectrumBars;
+    g.showOverlay  = p_showOverlay;
+    g.staticAmt    = p_staticNoise;
+    g.scanDensity  = p_scanlineDensity;
+    g.bgStrength   = p_bgGridStrength;
+    g.mouseInfStr  = p_mouseTargeting;
+    g.stepCount    = int(max(p_rayStepCount, 16.0));
     g.hasAudio     = hasAudio;
     g.aBass   = hasAudio ? bass    * g.audioReact : 0.0;
     g.aMids   = hasAudio ? mids    * g.audioReact : 0.0;
@@ -865,15 +865,15 @@ vec4 pzImage(vec2 fragCoord) {
     // so chrome/data tinting actually survives — labelBright scales glow
     // intensity, not body saturation (a labelBright of 2.4 applied to the
     // body pushed everything past the tonemap ceiling and bleached it white).
-    bool showLabels = pz_showLabels > 0.5;
+    bool showLabels = p_showLabels > 0.5;
     if (showLabels) {
-        float labelSpread = pz_labelGlowSpread;
-        float labelBright = pz_labelBrightness;
-        float labelReact  = pz_labelAudioReact;
+        float labelSpread = p_labelGlowSpread;
+        float labelBright = p_labelBrightness;
+        float labelReact  = p_labelAudioReact;
 
-        vec3 lChromeCol = colorWithFallback(pz_chromeColor.rgb, vec3(0.776, 0.831, 0.890));
-        vec3 lDataCol   = colorWithFallback(pz_dataColor.rgb, vec3(0.129, 0.784, 1.000));
-        vec3 lScanCol   = colorWithFallback(pz_scanColor.rgb, vec3(0.918, 0.965, 1.000));
+        vec3 lChromeCol = colorWithFallback(p_chromeColor.rgb, vec3(0.776, 0.831, 0.890));
+        vec3 lDataCol   = colorWithFallback(p_dataColor.rgb, vec3(0.129, 0.784, 1.000));
+        vec3 lScanCol   = colorWithFallback(p_scanColor.rgb, vec3(0.918, 0.965, 1.000));
 
         vec2 luv = labelsUv(vFragCoord);
         vec2 texPx = 1.0 / max(iResolution, vec2(1.0));

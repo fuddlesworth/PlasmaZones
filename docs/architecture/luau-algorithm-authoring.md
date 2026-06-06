@@ -22,7 +22,7 @@ shape.
 |---|---|
 | **Your algorithms** | `~/.local/share/plasmazones/algorithms/*.luau` |
 | **Bundled (read-only)** | `/usr/share/plasmazones/algorithms/*.luau` |
-| **`pz` type stubs** | `/usr/share/plasmazones/pz.d.luau` |
+| **`pluau` type stubs** | `/usr/share/plasmazones/pluau.d.luau` |
 
 Each `*.luau` file in the user directory is one algorithm. The file name (minus
 extension) is the fallback id; `metadata.id` overrides it. User algorithms
@@ -37,9 +37,9 @@ The settings app's *Algorithms* page can also create, duplicate, and edit them.
 Save this as `~/.local/share/plasmazones/algorithms/my-columns.luau`:
 
 ```lua
-local pz = pz
+local pluau = pluau
 
-return pz.algorithm {
+return pluau.algorithm {
     metadata = {
         name = "My Columns",
         id = "my-columns",
@@ -58,15 +58,15 @@ return pz.algorithm {
 }
 ```
 
-That is a complete algorithm. `pz.algorithm{…}` wraps the table and returns it
-(it adapts `ctx.area` to a `Rect` for your `tile` function); `pz` is a pre-loaded,
+That is a complete algorithm. `pluau.algorithm{…}` wraps the table and returns it
+(it adapts `ctx.area` to a `Rect` for your `tile` function); `pluau` is a pre-loaded,
 **frozen** global (do not reassign it).
 
 ---
 
 ## 3. The algorithm table
 
-`pz.algorithm{}` takes a table with these keys:
+`pluau.algorithm{}` takes a table with these keys:
 
 | Key | Required | Type | Purpose |
 |---|---|---|---|
@@ -128,11 +128,11 @@ A `Zone` is a plain table of **absolute pixel** coordinates:
 ```
 
 Return `{}` for `windowCount <= 0`. Guard tiny areas — when the work area is
-smaller than `pz.MIN_ZONE_SIZE` on either axis, fall back to `pz.fillArea`.
+smaller than `pluau.MIN_ZONE_SIZE` on either axis, fall back to `pluau.fillArea`.
 
 ---
 
-## 6. The `pz` standard library
+## 6. The `pluau` standard library
 
 ### `Rect` (what `ctx.area` is)
 
@@ -151,8 +151,8 @@ local rows         = ctx.area:rows(2, ctx.innerGap)
 
 ### Constants
 
-`pz.MIN_ZONE_SIZE` (50), `pz.MIN_SPLIT` (0.1), `pz.MAX_SPLIT` (0.9),
-`pz.MAX_TREE_DEPTH` (50).
+`pluau.MIN_ZONE_SIZE` (50), `pluau.MIN_SPLIT` (0.1), `pluau.MAX_SPLIT` (0.9),
+`pluau.MAX_TREE_DEPTH` (50).
 
 ### High-level layout helpers
 
@@ -160,22 +160,22 @@ These build a full `{Zone}` list for common patterns (the same ones the built-in
 algorithms use):
 
 ```
-pz.fillArea(area, count)
-pz.equalColumnsLayout(area, count, gap, minSizes)
-pz.masterStackLayout(area, count, gap, splitRatio, masterCount, minSizes, horizontal)
-pz.deckLayout(area, count, focusedFraction, horizontal)
-pz.lShapeLayout(area, count, gap, splitRatio, distribute, bottomWidth, rightHeight)
-pz.dwindleLayout(area, count, splitRatio, innerGap, minSizes)
-pz.threeColumnLayout(area, count, gap, splitRatio, masterCount, minSizes)
-pz.applyTreeGeometry(node, rect, gap)   -- memory algorithms
+pluau.fillArea(area, count)
+pluau.equalColumnsLayout(area, count, gap, minSizes)
+pluau.masterStackLayout(area, count, gap, splitRatio, masterCount, minSizes, horizontal)
+pluau.deckLayout(area, count, focusedFraction, horizontal)
+pluau.lShapeLayout(area, count, gap, splitRatio, distribute, bottomWidth, rightHeight)
+pluau.dwindleLayout(area, count, splitRatio, innerGap, minSizes)
+pluau.threeColumnLayout(area, count, gap, splitRatio, masterCount, minSizes)
+pluau.applyTreeGeometry(node, rect, gap)   -- memory algorithms
 ```
 
 ### Utilities
 
-`pz.rect(x, y, w, h)`, `pz.join(...lists)`, `pz.clampSplitRatio(r)`, and the
-distribution/min-size primitives (`pz.distributeWithGaps`,
-`pz.distributeWithMinSizes`, `pz.extractMinWidths`, …). Full signatures are in
-the type stubs (`pz.d.luau`) and `data/algorithms/*.luau`.
+`pluau.rect(x, y, w, h)`, `pluau.join(...lists)`, `pluau.clampSplitRatio(r)`, and the
+distribution/min-size primitives (`pluau.distributeWithGaps`,
+`pluau.distributeWithMinSizes`, `pluau.extractMinWidths`, …). Full signatures are in
+the type stubs (`pluau.d.luau`) and `data/algorithms/*.luau`.
 
 ---
 
@@ -214,7 +214,7 @@ daemon passes back in `ctx.custom`.
 Set `metadata.supportsMemory = true` to receive a persistent `ctx.tree`
 (`SplitNode`) that survives across window add/remove events, and implement
 `onWindowAdded(state, index)` / `onWindowRemoved(state, index)` to mutate it.
-Use `pz.applyTreeGeometry(ctx.tree, ctx.area, ctx.innerGap)` in `tile` to turn
+Use `pluau.applyTreeGeometry(ctx.tree, ctx.area, ctx.innerGap)` in `tile` to turn
 the tree into zones. See `data/algorithms/dwindle-memory.luau` for a full
 example. Most layouts are stateless and don't need this.
 
@@ -223,7 +223,7 @@ example. Most layouts are stateless and don't need this.
 ## 9. Editor support & validation
 
 Drop a `.luaurc` next to your algorithms so [luau-lsp](https://github.com/JohnnyMorganz/luau-lsp)
-autocomplete and `luau-analyze` know about the injected `pz` global:
+autocomplete and `luau-analyze` know about the injected `pluau` global:
 
 ```jsonc
 // ~/.local/share/plasmazones/algorithms/.luaurc
@@ -231,12 +231,12 @@ autocomplete and `luau-analyze` know about the injected `pz` global:
     "languageMode": "nonstrict",
     "lint": { "*": true },
     "lintErrors": false,
-    "globals": ["pz"]
+    "globals": ["pluau"]
 }
 ```
 
-For full `pz.*` type information, point your editor at the shipped stubs
-(`/usr/share/plasmazones/pz.d.luau`) — e.g. copy them next to your scripts, or
+For full `pluau.*` type information, point your editor at the shipped stubs
+(`/usr/share/plasmazones/pluau.d.luau`) — e.g. copy them next to your scripts, or
 add them to your luau-lsp definitions.
 
 Type-check before relying on a layout (CI runs exactly this over the bundled
@@ -253,7 +253,7 @@ A parse or type error means the daemon will skip the algorithm, so a clean
 
 ## 10. Sandbox & limits
 
-- `pz` and the standard library are **frozen** before your script runs — you
+- `pluau` and the standard library are **frozen** before your script runs — you
   cannot monkey-patch them or reach outside the sandbox (no `io`, `os.execute`,
   filesystem, or network).
 - A long-running or infinite-looping `tile` is **interrupted** by a watchdog, so
@@ -264,4 +264,4 @@ A parse or type error means the daemon will skip the algorithm, so a clean
   running.
 - Keep `tile` pure and fast: it runs on every relevant layout change. Return
   early for `windowCount <= 0`, and guard against tiny areas with
-  `pz.MIN_ZONE_SIZE`.
+  `pluau.MIN_ZONE_SIZE`.

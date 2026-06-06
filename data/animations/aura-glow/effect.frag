@@ -144,7 +144,7 @@ vec4 blurredInputColor(vec2 uv, float radius, float samples)
     return acc / max(totalWeight, 1.0);
 }
 
-vec4 pzTransition(vec2 uv, float t)
+vec4 pTransition(vec2 uv, float t)
 {
     // Aura-glow uses progress=visibility natively, matching iTime.
     float progress = clamp(t, 0.0, 1.0);
@@ -178,7 +178,7 @@ vec4 pzTransition(vec2 uv, float t)
     float shape    = mix(2.0, 100.0, pow(progress, 5.0));
     float gradient = pow(abs(uv.x - 0.5) * 2.0, shape) +
                      pow(abs(uv.y - 0.5) * 2.0, shape);
-    gradient += simplex2D(vTexCoord + vec2(pz_seedX, pz_seedY)) * 0.5;
+    gradient += simplex2D(vTexCoord + vec2(p_seedX, p_seedY)) * 0.5;
 
     // Glow rim mask. `(progress - gradient)/(edge+0.1)` is positive
     // where progress > gradient; after `1 - clamp(..., 0, 1)` the
@@ -186,7 +186,7 @@ vec4 pzTransition(vec2 uv, float t)
     // endpoint easing kills the glow at the visible state (where
     // there's nothing to dissolve from) and ramps it in toward the
     // gone state.
-    float glowMask = (progress - gradient) / (pz_edgeSize + 0.1);
+    float glowMask = (progress - gradient) / (p_edgeSize + 0.1);
     glowMask       = 1.0 - clamp(glowMask, 0.0, 1.0);
     glowMask      *= easeOutSine(min(1.0, (1.0 - progress) * 4.0));
 
@@ -198,8 +198,8 @@ vec4 pzTransition(vec2 uv, float t)
     // anchor windowUV samples (the 1.1× scale at the gone state pushes
     // corners ~5% past the anchor) clip cleanly to transparent instead
     // of smearing the edge texel via clamp-to-edge.
-    vec4 windowCol = (pz_blurAmount > 0.0)
-        ? blurredInputColor(windowUV, (1.0 - progress) * pz_blurAmount, 3.0)
+    vec4 windowCol = (p_blurAmount > 0.0)
+        ? blurredInputColor(windowUV, (1.0 - progress) * p_blurAmount, 3.0)
         : surfaceColor(windowUV) * boundaryMask(windowUV);
 
     // Don't draw glow where the window itself is transparent
@@ -208,13 +208,13 @@ vec4 pzTransition(vec2 uv, float t)
 
     // Hue-cycling glow colour. cos(uv.xyx + offset) gives RGB
     // dancing around 0 with phase offsets (0, 2, 4) producing a
-    // rainbow cycle. `progress * pz_glowSpeed` ramps the cycle as
+    // rainbow cycle. `progress * p_glowSpeed` ramps the cycle as
     // visibility grows — show accelerates, hide decelerates.
-    vec3 glowColor = cos(progress * pz_glowSpeed + uv.xyx + vec3(0.0, 2.0, 4.0));
-    bool useRandom = pz_randomColorFlag > 0.5;
-    float hueShift = useRandom ? hash12(vec2(pz_seedX, pz_seedY)) : pz_startHue;
+    vec3 glowColor = cos(progress * p_glowSpeed + uv.xyx + vec3(0.0, 2.0, 4.0));
+    bool useRandom = p_randomColorFlag > 0.5;
+    float hueShift = useRandom ? hash12(vec2(p_seedX, p_seedY)) : p_startHue;
     glowColor = offsetHue(glowColor, hueShift + 0.1);
-    glowColor = clamp(glowColor * pz_saturation, vec3(0.0), vec3(1.0));
+    glowColor = clamp(glowColor * p_saturation, vec3(0.0), vec3(1.0));
 
     // Add glow additively (light emission), then alphaOver for a
     // non-additive component that helps on light themes.
@@ -222,12 +222,12 @@ vec4 pzTransition(vec2 uv, float t)
     windowCol = alphaOver(windowCol, vec4(glowColor, glowMask * 0.2));
 
     // Crop mask: blend between a soft-edged smoothstep and a hard
-    // smoothstep based on `pz_edgeHardness`. The window content is
+    // smoothstep based on `p_edgeHardness`. The window content is
     // visible where `gradient < progress` — the crop contour sits
     // at gradient=progress, expanding outward as progress grows.
     float softCrop = 1.0 - smoothstep(progress - 0.5, progress + 0.5, gradient);
     float hardCrop = 1.0 - smoothstep(progress - 0.05, progress + 0.05, gradient);
-    float cropMask = mix(softCrop, hardCrop, pz_edgeHardness);
+    float cropMask = mix(softCrop, hardCrop, p_edgeHardness);
 
     // Endpoint easings. The first multiplies the crop down toward
     // the gone state (progress→0) so the crop contour vanishes

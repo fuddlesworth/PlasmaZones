@@ -6,10 +6,10 @@
 // moving edge. Same direction semantics as `slide` (0..3 = left /
 // right / up / down) but the leading edge softens via fadeWidth.
 
-// `pz_direction` / `pz_fadeWidth` resolve to the customParams[0]
+// `p_direction` / `p_fadeWidth` resolve to the customParams[0]
 // sub-slots (declaration order in metadata.json).
 
-vec4 pzTransition(vec2 uv, float t)
+vec4 pTransition(vec2 uv, float t)
 {
     // `t` is per-leg progress: SurfaceAnimator runs it 0→1 on
     // show and 1→0 on hide, so the reveal-and-fade region grows on
@@ -17,14 +17,14 @@ vec4 pzTransition(vec2 uv, float t)
     // through the same code path.
     float visibility = clamp(t, 0.0, 1.0);
 
-    int dir = int(clamp(pz_direction, 0.0, 3.0));
+    int dir = int(clamp(p_direction, 0.0, 3.0));
     float coord;
     if (dir == 0)      coord = uv.x;
     else if (dir == 1) coord = 1.0 - uv.x;
     else if (dir == 2) coord = uv.y;
     else               coord = 1.0 - uv.y;
 
-    float fw = max(pz_fadeWidth, 0.001);
+    float fw = max(p_fadeWidth, 0.001);
     // Scale the smoothstep window to [0, 1+fw] so at visibility=1 the
     // entire surface (coord ∈ [0, 1]) sits BELOW the lower edge of the
     // smoothstep band — alpha = 1 everywhere, fully revealed. The naive

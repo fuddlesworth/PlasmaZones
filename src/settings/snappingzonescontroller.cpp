@@ -5,7 +5,7 @@
 
 #include "../config/configdefaults.h"
 #include "../core/isettings.h"
-#include "../pz_i18n.h"
+#include "../p_i18n.h"
 
 #include <QFile>
 #include <QFileInfo>
@@ -75,7 +75,7 @@ void SnappingZonesController::loadColorsFromFile(const QString& filePath)
     // surface is a public API.
     const QFileInfo info(filePath);
     if (filePath.isEmpty() || !info.exists() || !info.isFile()) {
-        Q_EMIT colorImportError(PzI18n::tr("Color import file does not exist: %1").arg(filePath));
+        Q_EMIT colorImportError(PI18n::tr("Color import file does not exist: %1").arg(filePath));
         return;
     }
     // A symlinked .json colors file (e.g. ~/.cache/wal/colors.json pointing
@@ -92,12 +92,12 @@ void SnappingZonesController::loadColorsFromFile(const QString& filePath)
     const QString canonicalPath = info.canonicalFilePath();
     const QFileInfo canonInfo(canonicalPath);
     if (canonicalPath.isEmpty() || !canonInfo.exists() || !canonInfo.isFile()) {
-        Q_EMIT colorImportError(PzI18n::tr("Color import file does not resolve to a regular file: %1").arg(filePath));
+        Q_EMIT colorImportError(PI18n::tr("Color import file does not resolve to a regular file: %1").arg(filePath));
         return;
     }
     if (info.suffix().compare(QStringLiteral("json"), Qt::CaseInsensitive) != 0
         || canonInfo.suffix().compare(QStringLiteral("json"), Qt::CaseInsensitive) != 0) {
-        Q_EMIT colorImportError(PzI18n::tr("Color import file must be a .json file: %1").arg(filePath));
+        Q_EMIT colorImportError(PI18n::tr("Color import file must be a .json file: %1").arg(filePath));
         return;
     }
 

@@ -10,7 +10,7 @@
 #pragma once
 
 #include "../config/configdefaults.h"
-#include "../pz_i18n.h"
+#include "../p_i18n.h"
 #include "../config/settings.h"
 #include "../config/updatechecker.h"
 #include "../common/daemoncontroller.h"

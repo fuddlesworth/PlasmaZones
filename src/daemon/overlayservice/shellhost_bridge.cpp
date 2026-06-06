@@ -16,8 +16,8 @@
 #include "../overlayservice.h"
 #include "../../core/logging.h"
 #include "../../core/utils.h"
-#include "pz_roles.h"
-#include "pz_slot_keys.h"
+#include "p_roles.h"
+#include "p_slot_keys.h"
 
 #include <PhosphorOverlay/ShellHost.h>
 
@@ -81,7 +81,7 @@ OverlayService::PerScreenOverlayState* OverlayService::ensurePassiveShellFor(con
     // Helper: enforce the "non-null shell pointer ⇒ live surface"
     // contract on either failure-return path by nulling any stale
     // cached pointer (a previous successful ensure may have wired
-    // pzState.shell to a ShellState whose fields have since been
+    // pState.shell to a ShellState whose fields have since been
     // zeroed by destroyShell). Callers gate on shell->shellSurface()
     // today, but keeping the cache true to the contract removes a
     // class of latent bugs.
@@ -118,9 +118,9 @@ OverlayService::PerScreenOverlayState* OverlayService::ensurePassiveShellFor(con
     if (auto* window = shellState->shellWindow()) {
         window->setFlag(Qt::WindowTransparentForInput, true);
     }
-    auto& pzState = m_screenStates[effectiveId];
-    pzState.shell = shellState;
-    return &pzState;
+    auto& pState = m_screenStates[effectiveId];
+    pState.shell = shellState;
+    return &pState;
 }
 
 void OverlayService::wirePassiveShellSlots(const QString& screenId, PhosphorOverlay::ShellState& shellState)
@@ -167,11 +167,11 @@ void OverlayService::wirePassiveShellSlots(const QString& screenId, PhosphorOver
         shellState.slots.insert(slotKey, PhosphorOverlay::SlotEntry{item, role});
     };
 
-    wireSlot(PzSlotKeys::Osd(), "osdSlotItem", PzRoles::Osd, "OSD content writes");
-    wireSlot(PzSlotKeys::SnapAssist(), "snapAssistSlotItem", PzRoles::SnapAssist, "snap-assist on this screen");
-    wireSlot(PzSlotKeys::LayoutPicker(), "layoutPickerSlotItem", PzRoles::LayoutPicker, "picker on this screen");
-    wireSlot(PzSlotKeys::ZoneSelector(), "zoneSelectorSlotItem", PzRoles::ZoneSelector, "selector on this screen");
-    wireSlot(PzSlotKeys::MainOverlay(), "mainOverlaySlotItem", PzRoles::ZoneOverlay, "main overlay on this screen");
+    wireSlot(PSlotKeys::Osd(), "osdSlotItem", PRoles::Osd, "OSD content writes");
+    wireSlot(PSlotKeys::SnapAssist(), "snapAssistSlotItem", PRoles::SnapAssist, "snap-assist on this screen");
+    wireSlot(PSlotKeys::LayoutPicker(), "layoutPickerSlotItem", PRoles::LayoutPicker, "picker on this screen");
+    wireSlot(PSlotKeys::ZoneSelector(), "zoneSelectorSlotItem", PRoles::ZoneSelector, "selector on this screen");
+    wireSlot(PSlotKeys::MainOverlay(), "mainOverlaySlotItem", PRoles::ZoneOverlay, "main overlay on this screen");
 
     // Wire QML signals → animator-driven slot hide / forward.
     // String-based SIGNAL/SLOT macros are required here because the source

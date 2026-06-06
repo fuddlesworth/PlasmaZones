@@ -675,7 +675,7 @@ bool PlasmaZonesEffect::beginShaderTransition(KWin::EffectWindow* window,
         }
         QString includeError;
         const QString currentDir = QFileInfo(eff.fragmentShaderPath).absolutePath();
-        // T1.5: assemble an entry-only animation pack (pzTransition / pzIn+pzOut,
+        // T1.5: assemble an entry-only animation pack (pTransition / pIn+pOut,
         // no main()) into a full translation unit BEFORE expansion — identical to
         // the daemon's loadFragmentShader — so the prologue's `#include` resolves
         // and the generated main() dispatches by direction. A traditional main()
@@ -691,7 +691,7 @@ bool PlasmaZonesEffect::beginShaderTransition(KWin::EffectWindow* window,
             return false;
         }
 
-        // T1.1: splice the generated named-param preamble (`#define pz_<id> ...`)
+        // T1.1: splice the generated named-param preamble (`#define p_<id> ...`)
         // after `#version`, identically to the daemon's loadFragmentShader. The
         // accessors it emits (`customParams[N].xyzw`, `customColors[N]`,
         // `uTexture<N>`) are declared in BOTH branches of animation_uniforms.glsl

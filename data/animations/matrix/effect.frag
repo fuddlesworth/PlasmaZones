@@ -22,7 +22,7 @@
 // DIRECTION — matrix is ASYMMETRIC: rain physically falls top-to-bottom
 // in BOTH directions, but the window-content reveal trajectory inverts
 // (open: invisible → visible; close: visible → invisible). So it is
-// written as a `pzIn`/`pzOut` pair: the harness feeds both a forward
+// written as a `pIn`/`pOut` pair: the harness feeds both a forward
 // 0→1 `t` (it applies `legProgress()` for us, so the rain always falls
 // forward) and dispatches to the right function by leg direction. The
 // only difference between the two is `windowFadingIn`, threaded into the
@@ -32,8 +32,8 @@
 // and main(). noise.glsl (hash22) is pack-specific, so it stays here.
 #include <noise.glsl>
 
-// pz_letterSize / pz_randomness / pz_overshoot (customParams[0].xyz) and
-// pz_trailColor / pz_tipColor (customColors[0..1]) are generated from
+// p_letterSize / p_randomness / p_overshoot (customParams[0].xyz) and
+// p_trailColor / p_tipColor (customColors[0..1]) are generated from
 // metadata.json — no hand-written slot #defines.
 
 const float EDGE_FADE             = 30.0;
@@ -78,7 +78,7 @@ float getText(vec2 fragCoord) {
     // doesn't divide-by-zero into NaN texture UVs. Live metadata
     // declares a min of 5.0 so this is defence in depth against a
     // hand-rolled animation engine bypassing schema validation.
-    float ls = max(pz_letterSize, 1.0);
+    float ls = max(p_letterSize, 1.0);
     vec2 pixelCoords = fragCoord * iResolution;
     vec2 uv          = mod(pixelCoords, ls) / ls;
     vec2 block       = pixelCoords / ls - uv;
@@ -104,7 +104,7 @@ vec2 getRain(vec2 fragCoord, float legProgress, bool windowFadingIn) {
     // Floor letterSize for parity with getText — `mod(column, 0)` is
     // undefined / NaN in GLSL; defence in depth against a metadata
     // bypass that pushes letterSize to zero.
-    float ls = max(pz_letterSize, 1.0);
+    float ls = max(p_letterSize, 1.0);
     // Floor iResolution so a first-frame zero-sized surface doesn't
     // collapse `column` to zero across every fragment — that would
     // synchronize every visible drop to one column for that paint.
@@ -117,7 +117,7 @@ vec2 getRain(vec2 fragCoord, float legProgress, bool windowFadingIn) {
     // Clamp randomness as defence in depth — metadata declares [0,1]
     // but a host that bypasses validation could push it out of range
     // and turn the per-column delay/speed jitter into NaN territory.
-    float r = clamp(pz_randomness, 0.0, 1.0);
+    float r = clamp(p_randomness, 0.0, 1.0);
 
     // Offset `sin(column)` so the leftmost column (column == 0) gets
     // a non-trivial phase. Without the offset, `sin(0) == 0` makes
@@ -142,7 +142,7 @@ vec2 getRain(vec2 fragCoord, float legProgress, bool windowFadingIn) {
     rainAlpha *= edgeMask(EDGE_FADE);
 
     float shorten =
-        fract(sin(column + 42.0) * 33.423) * (r * pz_overshoot * 0.25);
+        fract(sin(column + 42.0) * 33.423) * (r * p_overshoot * 0.25);
     if (shorten > 0.0) {
         rainAlpha *= smoothstep(0.0, 1.0, clamp(fragCoord.y / shorten, 0.0, 1.0));
         rainAlpha *= smoothstep(0.0, 1.0, clamp((1.0 - fragCoord.y) / shorten, 0.0, 1.0));
@@ -201,7 +201,7 @@ vec4 getInputColor(vec2 coords) {
 // window-reveal trajectory. `uv` is vTexCoord.
 vec4 matrixRain(vec2 uv, float t, bool windowFadingIn) {
     vec2 coords = uv;
-    coords.y    = coords.y * (pz_overshoot + 1.0) - pz_overshoot * 0.5;
+    coords.y    = coords.y * (p_overshoot + 1.0) - p_overshoot * 0.5;
 
     vec2 rainMask  = getRain(coords, t, windowFadingIn);
     float textMask = getText(coords);
@@ -228,12 +228,12 @@ vec4 matrixRain(vec2 uv, float t, bool windowFadingIn) {
         1.0 - clamp((t - FINAL_FADE_START_TIME) / (1.0 - FINAL_FADE_START_TIME), 0.0, 1.0);
     float rainAlpha = finalFade * rainMask.x;
 
-    vec4 text = vec4(mix(pz_trailColor.rgb, pz_tipColor.rgb,
+    vec4 text = vec4(mix(p_trailColor.rgb, p_tipColor.rgb,
                          min(1.0, pow(rainAlpha + 0.1, 4.0))),
                      rainAlpha * textMask * surfaceAlpha);
 
     return alphaOver(oColor, text);
 }
 
-vec4 pzIn(vec2 uv, float t)  { return matrixRain(uv, t, true);  }
-vec4 pzOut(vec2 uv, float t) { return matrixRain(uv, t, false); }
+vec4 pIn(vec2 uv, float t)  { return matrixRain(uv, t, true);  }
+vec4 pOut(vec2 uv, float t) { return matrixRain(uv, t, false); }

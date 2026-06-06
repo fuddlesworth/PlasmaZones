@@ -13,8 +13,8 @@
 namespace PlasmaZones {
 
 /// The harness scaffold for zone fragment shaders authored against the T1.4
-/// entry-point convention (scope B): a pack defines only `vec4 pzZone(ZoneCtx)`
-/// or `vec4 pzImage(vec2)` (plus helpers) and the harness supplies `#version`,
+/// entry-point convention (scope B): a pack defines only `vec4 pZone(ZoneCtx)`
+/// or `vec4 pImage(vec2)` (plus helpers) and the harness supplies `#version`,
 /// the `common.glsl` include, the in/out declarations, and `main()`. Packs that
 /// keep their own `main()` are passed through untouched.
 ///
@@ -26,8 +26,8 @@ namespace PlasmaZones {
 /// generated `main()` calls), and the fragment in/out. Newline-terminated.
 PLASMAZONES_RENDERING_EXPORT QString zoneEntryPrologue();
 
-/// The entry candidates the harness recognises, in priority order: `pzZone`
-/// (per-zone dispatch loop) then `pzImage` (full-frame). Each carries the
+/// The entry candidates the harness recognises, in priority order: `pZone`
+/// (per-zone dispatch loop) then `pImage` (full-frame). Each carries the
 /// `main()` the harness appends when that function is defined.
 PLASMAZONES_RENDERING_EXPORT QList<PhosphorShaders::EntryCandidate> zoneEntryCandidates();
 

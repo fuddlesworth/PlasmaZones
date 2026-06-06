@@ -74,8 +74,8 @@ PlasmaZones: window tiling + zone management for KDE Plasma. Qt6, KF6, Kirigami,
 - Wayland only (custom layer-shell QPA plugin for overlays); XWayland windows handled within Wayland session
 
 ## i18n
-- C++: `PzI18n::tr()` — NEVER `KLocalizedString`/`i18n()`/`i18nc()` in C++
-- QML: `i18n()` / `i18nc()` (via `PzLocalizedContext`)
+- C++: `PI18n::tr()` — NEVER `KLocalizedString`/`i18n()`/`i18nc()` in C++
+- QML: `i18n()` / `i18nc()` (via `PLocalizedContext`)
 - Extract: `cmake --build build --target update-ts`
 
 ## Settings

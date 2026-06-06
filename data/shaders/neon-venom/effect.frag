@@ -12,33 +12,33 @@
  * biological/organic feel distinct from digital circuit aesthetics.
  *
  * Parameters:
- *   pz_veinScale = veinScale         — Vein network scale
- *   pz_veinSpeed = veinSpeed         — Pulse animation speed (all effects)
- *   pz_veinSharpness = veinSharpness     — How sharp/defined veins are
- *   pz_veinWarp = veinWarp          — Domain warp intensity
- *   pz_poolIntensity = poolIntensity     — Acid pool surface effect
- *   pz_bubbleCount = bubbleCount       — Number of rising bubbles
- *   pz_bubbleSpeed = bubbleSpeed       — Bubble rise speed
- *   pz_fillOpacity = fillOpacity       — Zone fill opacity
- *   pz_glowStrength = glowStrength      — Neon glow intensity
- *   pz_mistDensity = mistDensity       — Atmospheric venom mist
- *   pz_audioReactivity = audioReactivity   — Audio response strength
- *   pz_sparkIntensity = sparkIntensity    — Audio spark strength
- *   pz_labelGlowSpread = labelGlowSpread
- *   pz_labelBrightness = labelBrightness
- *   pz_labelAudioReact = labelAudioReact
- *   pz_edgeGlow = edgeGlow
- *   pz_warpOctaves = warpOctaves
- *   pz_showLabels = showLabels
- *   pz_poolSpeed = poolSpeed         — Pool/caustic animation speed
- *   pz_surgeThreshold = surgeThreshold    — Bass level to trigger vein surge
- *   pz_mouseInfluence = mouseInfluence    — Cursor interaction strength
- *   pz_bubbleSize = bubbleSize        — Bubble size multiplier
- *   pz_veinFineDetail = veinFineDetail    — Fine vein detail blend
- *   pz_venomColor   — Venom green (default #39FF14)
- *   pz_acidColor   — Acid purple (default #BF00FF)
- *   pz_glowColor   — Glow highlight (default #CCFF00)
- *   pz_mistColor   — Mist tint (default #0D001A)
+ *   p_veinScale = veinScale         — Vein network scale
+ *   p_veinSpeed = veinSpeed         — Pulse animation speed (all effects)
+ *   p_veinSharpness = veinSharpness     — How sharp/defined veins are
+ *   p_veinWarp = veinWarp          — Domain warp intensity
+ *   p_poolIntensity = poolIntensity     — Acid pool surface effect
+ *   p_bubbleCount = bubbleCount       — Number of rising bubbles
+ *   p_bubbleSpeed = bubbleSpeed       — Bubble rise speed
+ *   p_fillOpacity = fillOpacity       — Zone fill opacity
+ *   p_glowStrength = glowStrength      — Neon glow intensity
+ *   p_mistDensity = mistDensity       — Atmospheric venom mist
+ *   p_audioReactivity = audioReactivity   — Audio response strength
+ *   p_sparkIntensity = sparkIntensity    — Audio spark strength
+ *   p_labelGlowSpread = labelGlowSpread
+ *   p_labelBrightness = labelBrightness
+ *   p_labelAudioReact = labelAudioReact
+ *   p_edgeGlow = edgeGlow
+ *   p_warpOctaves = warpOctaves
+ *   p_showLabels = showLabels
+ *   p_poolSpeed = poolSpeed         — Pool/caustic animation speed
+ *   p_surgeThreshold = surgeThreshold    — Bass level to trigger vein surge
+ *   p_mouseInfluence = mouseInfluence    — Cursor interaction strength
+ *   p_bubbleSize = bubbleSize        — Bubble size multiplier
+ *   p_veinFineDetail = veinFineDetail    — Fine vein detail blend
+ *   p_venomColor   — Venom green (default #39FF14)
+ *   p_acidColor   — Acid purple (default #BF00FF)
+ *   p_glowColor   — Glow highlight (default #CCFF00)
+ *   p_mistColor   — Mist tint (default #0D001A)
  */
 
 // ═══════════════════════════════════════════════════════════════════════
@@ -299,36 +299,36 @@ vec4 renderNeonVenomZone(
     return vec4(col, alpha);
 }
 
-vec4 pzImage(vec2 fragCoord) {
+vec4 pImage(vec2 fragCoord) {
     // ─── Read parameters ────────────────────────────────────────────
-    float veinScale      = pz_veinScale;
-    float veinSpeed      = pz_veinSpeed;
-    float veinSharpness  = pz_veinSharpness;
-    float veinWarp       = pz_veinWarp;
-    float poolIntensity  = pz_poolIntensity;
-    int   bubbleCount    = int(pz_bubbleCount);
-    float bubbleSpeed    = pz_bubbleSpeed;
-    float fillOpacity    = pz_fillOpacity;
-    float glowStr        = pz_glowStrength;
-    float mistDensity    = pz_mistDensity;
-    float audioReact     = pz_audioReactivity;
-    float sparkIntensity = pz_sparkIntensity;
-    float labelSpread    = pz_labelGlowSpread;
-    float labelBright    = pz_labelBrightness;
-    float labelReact     = pz_labelAudioReact;
-    float edgeGlow       = pz_edgeGlow;
-    int   warpOctaves    = int(pz_warpOctaves);
-    bool  showLabels     = pz_showLabels > 0.5;
-    float poolSpeed      = pz_poolSpeed;
-    float surgeThreshold = pz_surgeThreshold;
-    float mouseInfluence = pz_mouseInfluence;
-    float bubbleSize     = pz_bubbleSize;
-    float veinFineDetail = pz_veinFineDetail;
+    float veinScale      = p_veinScale;
+    float veinSpeed      = p_veinSpeed;
+    float veinSharpness  = p_veinSharpness;
+    float veinWarp       = p_veinWarp;
+    float poolIntensity  = p_poolIntensity;
+    int   bubbleCount    = int(p_bubbleCount);
+    float bubbleSpeed    = p_bubbleSpeed;
+    float fillOpacity    = p_fillOpacity;
+    float glowStr        = p_glowStrength;
+    float mistDensity    = p_mistDensity;
+    float audioReact     = p_audioReactivity;
+    float sparkIntensity = p_sparkIntensity;
+    float labelSpread    = p_labelGlowSpread;
+    float labelBright    = p_labelBrightness;
+    float labelReact     = p_labelAudioReact;
+    float edgeGlow       = p_edgeGlow;
+    int   warpOctaves    = int(p_warpOctaves);
+    bool  showLabels     = p_showLabels > 0.5;
+    float poolSpeed      = p_poolSpeed;
+    float surgeThreshold = p_surgeThreshold;
+    float mouseInfluence = p_mouseInfluence;
+    float bubbleSize     = p_bubbleSize;
+    float veinFineDetail = p_veinFineDetail;
 
-    vec3 venomCol = pz_venomColor.rgb;
-    vec3 acidCol  = pz_acidColor.rgb;
-    vec3 glowCol  = pz_glowColor.rgb;
-    vec3 mistCol  = pz_mistColor.rgb;
+    vec3 venomCol = p_venomColor.rgb;
+    vec3 acidCol  = p_acidColor.rgb;
+    vec3 glowCol  = p_glowColor.rgb;
+    vec3 mistCol  = p_mistColor.rgb;
 
     // Audio bands
     float bass   = getBassSoft();
@@ -365,7 +365,7 @@ vec4 pzImage(vec2 fragCoord) {
         vec2 texelSize = 1.0 / max(iResolution, vec2(1.0));
         vec4 labels = texture(uZoneLabels, luv);
         float spread = labelSpread * pxScale();
-        float t = iTime * pz_veinSpeed; // veinSpeed
+        float t = iTime * p_veinSpeed; // veinSpeed
 
         bool hasAudio = iAudioSpectrumSize > 0;
         float bassMod = hasAudio ? bass * labelReact : 0.0;

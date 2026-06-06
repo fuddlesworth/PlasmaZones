@@ -71,5 +71,5 @@
 
   <!-- Footer note -->
   <rect x="40" y="350" width="600" height="24" rx="4" fill="#3daee9" opacity="0.06"/>
-  <text x="340" y="366" text-anchor="middle" fill="#3daee9" font-size="10" font-family="Inter, sans-serif" opacity="0.7">Reuses the existing ZoneShaderNodeRHI pipeline with animation-specific uniforms (pz_progress, pz_window_tex, ...)</text>
+  <text x="340" y="366" text-anchor="middle" fill="#3daee9" font-size="10" font-family="Inter, sans-serif" opacity="0.7">Reuses the existing ZoneShaderNodeRHI pipeline with animation-specific uniforms (p_progress, p_window_tex, ...)</text>
 </svg>

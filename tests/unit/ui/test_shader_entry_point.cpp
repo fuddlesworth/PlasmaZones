@@ -21,8 +21,8 @@ class TestShaderEntryPoint : public QObject
 
     static QList<EntryCandidate> zoneCandidates()
     {
-        return {EntryCandidate{QStringLiteral("pzZone"), QStringLiteral("void main() { /* ZONE WRAP */ }\n")},
-                EntryCandidate{QStringLiteral("pzImage"), QStringLiteral("void main() { /* IMAGE WRAP */ }\n")}};
+        return {EntryCandidate{QStringLiteral("pZone"), QStringLiteral("void main() { /* ZONE WRAP */ }\n")},
+                EntryCandidate{QStringLiteral("pImage"), QStringLiteral("void main() { /* IMAGE WRAP */ }\n")}};
     }
 
 private Q_SLOTS:
@@ -40,11 +40,11 @@ private Q_SLOTS:
     }
     void testDefinesMainIgnoresLineComment()
     {
-        QVERIFY(!PhosphorShaders::definesMain(QStringLiteral("// void main() { } is just docs\nvec4 pzZone() { }\n")));
+        QVERIFY(!PhosphorShaders::definesMain(QStringLiteral("// void main() { } is just docs\nvec4 pZone() { }\n")));
     }
     void testDefinesMainIgnoresBlockComment()
     {
-        QVERIFY(!PhosphorShaders::definesMain(QStringLiteral("/* void main() {} */\nvec4 pzImage(vec2 c) { }\n")));
+        QVERIFY(!PhosphorShaders::definesMain(QStringLiteral("/* void main() {} */\nvec4 pImage(vec2 c) { }\n")));
     }
     void testDefinesMainNotSubstring()
     {
@@ -56,24 +56,24 @@ private Q_SLOTS:
 
     void testDefinesFunctionPlain()
     {
-        QVERIFY(PhosphorShaders::definesFunction(QStringLiteral("vec4 pzZone(ZoneCtx z) {\n return z.fillColor;\n}\n"),
-                                                 QStringLiteral("pzZone")));
+        QVERIFY(PhosphorShaders::definesFunction(QStringLiteral("vec4 pZone(ZoneCtx z) {\n return z.fillColor;\n}\n"),
+                                                 QStringLiteral("pZone")));
     }
     void testDefinesFunctionMultilineParams()
     {
-        const QString src = QStringLiteral("vec4 pzZone(\n   ZoneCtx z,\n   float k)\n{\n return vec4(0.0);\n}\n");
-        QVERIFY(PhosphorShaders::definesFunction(src, QStringLiteral("pzZone")));
+        const QString src = QStringLiteral("vec4 pZone(\n   ZoneCtx z,\n   float k)\n{\n return vec4(0.0);\n}\n");
+        QVERIFY(PhosphorShaders::definesFunction(src, QStringLiteral("pZone")));
     }
     void testDefinesFunctionRejectsCall()
     {
         // A call, not a definition — no trailing `{` after the arg list.
-        QVERIFY(!PhosphorShaders::definesFunction(QStringLiteral("void main() {\n color = pzZone(z);\n}\n"),
-                                                  QStringLiteral("pzZone")));
+        QVERIFY(!PhosphorShaders::definesFunction(QStringLiteral("void main() {\n color = pZone(z);\n}\n"),
+                                                  QStringLiteral("pZone")));
     }
     void testDefinesFunctionWholeWord()
     {
-        QVERIFY(!PhosphorShaders::definesFunction(QStringLiteral("vec4 pzZoneHelper(int i) { return vec4(0.0); }\n"),
-                                                  QStringLiteral("pzZone")));
+        QVERIFY(!PhosphorShaders::definesFunction(QStringLiteral("vec4 pZoneHelper(int i) { return vec4(0.0); }\n"),
+                                                  QStringLiteral("pZone")));
     }
 
     // ── composeEntryPoint ─────────────────────────────────────────────────
@@ -81,7 +81,7 @@ private Q_SLOTS:
     void testComposePassThroughWhenMainPresent()
     {
         const QString src = QStringLiteral(
-            "#version 450\nvec4 pzZone(ZoneCtx z) { return z.fillColor; }\n"
+            "#version 450\nvec4 pZone(ZoneCtx z) { return z.fillColor; }\n"
             "void main() { fragColor = vec4(1.0); }\n");
         // Author main() wins: returned unchanged, no wrapper appended.
         const QString out = PhosphorShaders::composeEntryPoint(src, zoneCandidates());
@@ -90,7 +90,7 @@ private Q_SLOTS:
     }
     void testComposeWrapsZoneEntry()
     {
-        const QString src = QStringLiteral("#version 450\nvec4 pzZone(ZoneCtx z) { return z.fillColor; }\n");
+        const QString src = QStringLiteral("#version 450\nvec4 pZone(ZoneCtx z) { return z.fillColor; }\n");
         const QString out = PhosphorShaders::composeEntryPoint(src, zoneCandidates());
         QVERIFY2(out.startsWith(src), qPrintable(out));
         QVERIFY2(out.contains(QStringLiteral("ZONE WRAP")), qPrintable(out));
@@ -98,17 +98,17 @@ private Q_SLOTS:
     }
     void testComposePrefersFirstCandidate()
     {
-        // Both pzZone and pzImage defined → the first candidate (pzZone) wins.
+        // Both pZone and pImage defined → the first candidate (pZone) wins.
         const QString src = QStringLiteral(
-            "vec4 pzZone(ZoneCtx z) { return vec4(0.0); }\n"
-            "vec4 pzImage(vec2 c) { return vec4(0.0); }\n");
+            "vec4 pZone(ZoneCtx z) { return vec4(0.0); }\n"
+            "vec4 pImage(vec2 c) { return vec4(0.0); }\n");
         const QString out = PhosphorShaders::composeEntryPoint(src, zoneCandidates());
         QVERIFY2(out.contains(QStringLiteral("ZONE WRAP")), qPrintable(out));
         QVERIFY2(!out.contains(QStringLiteral("IMAGE WRAP")), qPrintable(out));
     }
     void testComposeWrapsImageWhenOnlyImage()
     {
-        const QString src = QStringLiteral("vec4 pzImage(vec2 fragCoord) { return vec4(fragCoord, 0.0, 1.0); }\n");
+        const QString src = QStringLiteral("vec4 pImage(vec2 fragCoord) { return vec4(fragCoord, 0.0, 1.0); }\n");
         const QString out = PhosphorShaders::composeEntryPoint(src, zoneCandidates());
         QVERIFY2(out.contains(QStringLiteral("IMAGE WRAP")), qPrintable(out));
     }

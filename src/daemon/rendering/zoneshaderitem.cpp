@@ -376,17 +376,17 @@ QSGNode* ZoneShaderItem::updatePaintNode(QSGNode* oldNode, UpdatePaintNodeData* 
 
             node->setShaderIncludePaths(shaderIncludePaths());
             // T1.4: install the zone entry-point scaffold so a pack authored as
-            // just `vec4 pzZone(ZoneCtx)` / `pzImage(vec2)` (no main()) is
+            // just `vec4 pZone(ZoneCtx)` / `pImage(vec2)` (no main()) is
             // assembled — prologue prepended, generated main() appended — before
             // include expansion. A traditional pack with its own main() is left
             // untouched. Must match the warm-bake scaffold (daemon.cpp) so the
             // bake-cache key agrees.
             node->setEntryScaffold(zoneEntryPrologue(), zoneEntryCandidates());
-            // T1.1 (zone): push the generated `#define pz_<id> ...` preamble
+            // T1.1 (zone): push the generated `#define p_<id> ...` preamble
             // (set on this item via the paramPreamble Q_PROPERTY by the overlay)
             // so loadFragmentShader splices it and keys the bake cache on it.
             // Empty when the pack declares no params, or for a pack not yet
-            // migrated to pz_ names — a no-op either way.
+            // migrated to p_ names — a no-op either way.
             node->setParamPreamble(paramPreamble());
             qCDebug(PlasmaZones::lcOverlay)
                 << "Shader include paths:" << shaderIncludePaths() << "vertPath:" << vertPath;

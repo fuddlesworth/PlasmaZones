@@ -1,9 +1,9 @@
 -- SPDX-FileCopyrightText: 2026 fuddlesworth
 -- SPDX-License-Identifier: GPL-3.0-or-later
 
-local pz = pz
+local pluau = pluau
 
-return pz.algorithm {
+return pluau.algorithm {
     metadata = {
         name = "Spiral",
         id = "spiral",
@@ -26,15 +26,15 @@ return pz.algorithm {
         local splitRatio = ctx.splitRatio
         local minSizes = ctx.minSizes
 
-        if area.width < pz.MIN_ZONE_SIZE or area.height < pz.MIN_ZONE_SIZE then
-            return pz.fillArea(area, count)
+        if area.width < pluau.MIN_ZONE_SIZE or area.height < pluau.MIN_ZONE_SIZE then
+            return pluau.fillArea(area, count)
         end
 
-        splitRatio = pz.clampSplitRatio(splitRatio)
+        splitRatio = pluau.clampSplitRatio(splitRatio)
 
         -- dirs 0,2 are vertical (even), 1,3 are horizontal (odd) — matches the
         -- i%2 V/H alternation in computeCumulativeMinDims.
-        local cumMinDims = pz.computeCumulativeMinDims(count, minSizes, gap)
+        local cumMinDims = pluau.computeCumulativeMinDims(count, minSizes, gap)
         local remainingMinW = cumMinDims.minW
         local remainingMinH = cumMinDims.minH
 
@@ -42,10 +42,10 @@ return pz.algorithm {
         local zones = {}
 
         for i = 0, count - 1 do
-            if i == count - 1 or remaining.width < pz.MIN_ZONE_SIZE or remaining.height < pz.MIN_ZONE_SIZE then
+            if i == count - 1 or remaining.width < pluau.MIN_ZONE_SIZE or remaining.height < pluau.MIN_ZONE_SIZE then
                 zones[#zones + 1] =
                     { x = remaining.x, y = remaining.y, width = remaining.width, height = remaining.height }
-                pz.appendGracefulDegradation(zones, remaining, count - i - 1, gap)
+                pluau.appendGracefulDegradation(zones, remaining, count - i - 1, gap)
                 break
             end
 
@@ -56,7 +56,7 @@ return pz.algorithm {
                 if contentWidth <= 0 then
                     zones[#zones + 1] =
                         { x = remaining.x, y = remaining.y, width = remaining.width, height = remaining.height }
-                    pz.appendGracefulDegradation(zones, remaining, count - i - 1, gap)
+                    pluau.appendGracefulDegradation(zones, remaining, count - i - 1, gap)
                     break
                 end
                 local windowWidth = math.floor(contentWidth * splitRatio)
@@ -85,7 +85,7 @@ return pz.algorithm {
                 if contentHeight <= 0 then
                     zones[#zones + 1] =
                         { x = remaining.x, y = remaining.y, width = remaining.width, height = remaining.height }
-                    pz.appendGracefulDegradation(zones, remaining, count - i - 1, gap)
+                    pluau.appendGracefulDegradation(zones, remaining, count - i - 1, gap)
                     break
                 end
                 local windowHeight = math.floor(contentHeight * splitRatio)

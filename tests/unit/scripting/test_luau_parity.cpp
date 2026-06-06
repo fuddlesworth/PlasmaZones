@@ -17,7 +17,7 @@
 // (hand-worked geometry assertions). Keep that test authoritative for bsp.
 //
 // Regenerate the fixture after an intentional output change:
-//   PZ_GENERATE_GOLDEN=1 ./build/bin/test_luau_parity
+//   P_GENERATE_GOLDEN=1 ./build/bin/test_luau_parity
 
 #include <QtTest>
 
@@ -40,7 +40,7 @@ using namespace PhosphorTiles;
 namespace {
 QString goldenPath()
 {
-    return QStringLiteral(PZ_SOURCE_DIR "/tests/unit/scripting/data/golden_zones.txt");
+    return QStringLiteral(P_SOURCE_DIR "/tests/unit/scripting/data/golden_zones.txt");
 }
 
 QString zonesToStr(const QVector<QRect>& zones)
@@ -66,7 +66,7 @@ private:
 
     static QString luaPath(const QString& name)
     {
-        return QStringLiteral(PZ_SOURCE_DIR "/data/algorithms/") + name + QStringLiteral(".luau");
+        return QStringLiteral(P_SOURCE_DIR "/data/algorithms/") + name + QStringLiteral(".luau");
     }
 
     // Record (generate mode) or compare (normal mode) a case's zones.
@@ -92,11 +92,11 @@ private Q_SLOTS:
     void initTestCase()
     {
         m_watchdog = std::make_shared<PhosphorScripting::LuauWatchdog>();
-        m_generate = qEnvironmentVariableIsSet("PZ_GENERATE_GOLDEN");
+        m_generate = qEnvironmentVariableIsSet("P_GENERATE_GOLDEN");
         if (!m_generate) {
             QFile f(goldenPath());
             QVERIFY2(f.open(QIODevice::ReadOnly | QIODevice::Text),
-                     "golden fixture missing — run with PZ_GENERATE_GOLDEN=1 to create it");
+                     "golden fixture missing — run with P_GENERATE_GOLDEN=1 to create it");
             QTextStream in(&f);
             while (!in.atEnd()) {
                 const QString line = in.readLine();

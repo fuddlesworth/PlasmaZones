@@ -4,7 +4,7 @@
 #include "internal.h"
 #include "../overlayservice.h"
 #include "../../core/logging.h"
-#include "pz_slot_keys.h"
+#include "p_slot_keys.h"
 #include <PhosphorOverlay/ShellHost.h>
 #include <PhosphorSurfaces/SurfaceManager.h>
 #include <PhosphorZones/Layout.h>
@@ -25,7 +25,7 @@
 #include <QVector>
 
 #include <PhosphorLayer/Surface.h>
-#include "pz_roles.h"
+#include "p_roles.h"
 #include <PhosphorScreens/ScreenIdentity.h>
 
 namespace PlasmaZones {
@@ -78,7 +78,7 @@ void OverlayService::showZoneSelector(const QString& targetScreenId)
             state->shell->shellSurface()->show();
         }
         slot->setVisible(true);
-        m_surfaceAnimator->beginShow(state->shell->shellSurface(), slot, PzRoles::ZoneSelector, []() { });
+        m_surfaceAnimator->beginShow(state->shell->shellSurface(), slot, PRoles::ZoneSelector, []() { });
         // Zone selector is purely visual during a drag (KWin owns the
         // drag stream and pushes cursor coords via D-Bus
         // updateSelectorPosition). Sync the input region so a stale
@@ -157,7 +157,7 @@ void OverlayService::hideZoneSelector()
             continue;
         }
         QMetaObject::invokeMethod(slot, "resetCursorState");
-        m_shellHost->hideSlot(screenId, PzSlotKeys::ZoneSelector(), [this, screenId]() {
+        m_shellHost->hideSlot(screenId, PSlotKeys::ZoneSelector(), [this, screenId]() {
             onZoneSelectorSlotHideCompleted(screenId);
         });
     }
@@ -448,7 +448,7 @@ void OverlayService::updateSelectorPosition(int cursorX, int cursorY)
 
 void OverlayService::createZoneSelectorWindow(const QString& screenId, QScreen* physScreen, const QRect& geom)
 {
-    // Post-shell-migration: the per-VS PzRoles::ZoneSelector wl_surface
+    // Post-shell-migration: the per-VS PRoles::ZoneSelector wl_surface
     // is replaced by an Item slot inside the per-screen passive shell.
     // This function is now a thin alias for ensurePassiveShellFor +
     // initial property push; the showZoneSelector show-loop already
@@ -541,7 +541,7 @@ void OverlayService::hideZoneSelectorSlotOnScreen(const QString& effectiveId)
     // while it fades out. PZ-specific QML invocation; the animator-leg
     // mechanism itself routes through ShellHost::hideSlot.
     QMetaObject::invokeMethod(slot, "resetCursorState");
-    m_shellHost->hideSlot(effectiveId, PzSlotKeys::ZoneSelector(), [this, effectiveId]() {
+    m_shellHost->hideSlot(effectiveId, PSlotKeys::ZoneSelector(), [this, effectiveId]() {
         onZoneSelectorSlotHideCompleted(effectiveId);
     });
 }
@@ -586,7 +586,7 @@ void OverlayService::showZoneSelectorSlotOnScreen(const QString& effectiveId, QS
         state->shell->shellSurface()->show();
     }
     slot->setVisible(true);
-    m_surfaceAnimator->beginShow(state->shell->shellSurface(), slot, PzRoles::ZoneSelector, []() { });
+    m_surfaceAnimator->beginShow(state->shell->shellSurface(), slot, PRoles::ZoneSelector, []() { });
     syncPassiveShellSurfaceState(effectiveId);
 }
 

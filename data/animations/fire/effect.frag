@@ -93,14 +93,14 @@ vec2 effectMask(float hideTime, float fadeWidth, float edgeFadeWidth) {
   return vec2(windowMask, effectMask);
 }
 
-vec4 pzTransition(vec2 uv, float t) {
+vec4 pTransition(vec2 uv, float t) {
   // Get a noise value which moves vertically in time.
-  vec2 fireUv = iTexCoord.st * uSize / vec2(400, 600) / pz_uScale;
-  fireUv.y += (float(iFrame) / 60.0) * pz_uMovementSpeed;
+  vec2 fireUv = iTexCoord.st * uSize / vec2(400, 600) / p_uScale;
+  fireUv.y += (float(iFrame) / 60.0) * p_uMovementSpeed;
 
   float noise =
-    (int(pz_u3DNoise) != 0)
-      ? simplex3DFractal(vec3(fireUv * 4.0, (float(iFrame) / 60.0) * pz_uMovementSpeed * 1.5))
+    (int(p_u3DNoise) != 0)
+      ? simplex3DFractal(vec3(fireUv * 4.0, (float(iFrame) / 60.0) * p_uMovementSpeed * 1.5))
       : simplex2DFractal(fireUv * 4.0);
 
   // Modulate noise by effect mask.
@@ -110,8 +110,8 @@ vec4 pzTransition(vec2 uv, float t) {
   // Map noise value to color.
   vec4 fire = vec4(0.0);
 
-  if (int(pz_uRandomColor) != 0) {
-    vec3 baseColor0 = offsetHue(vec3(1.0, 0.0, 0.0), hash11(pz_uSeed));
+  if (int(p_uRandomColor) != 0) {
+    vec3 baseColor0 = offsetHue(vec3(1.0, 0.0, 0.0), hash11(p_uSeed));
     vec3 baseColor1 = offsetHue(baseColor0, 0.1);
     vec3 baseColor2 = offsetHue(baseColor1, 0.1);
 
@@ -125,7 +125,7 @@ vec4 pzTransition(vec2 uv, float t) {
     fire = getFireColor(noise, c0, c1, c2, c3, c4);
   } else {
     fire =
-      getFireColor(noise, pz_uGradient1, pz_uGradient2, pz_uGradient3, pz_uGradient4, pz_uGradient5);
+      getFireColor(noise, p_uGradient1, p_uGradient2, p_uGradient3, p_uGradient4, p_uGradient5);
   }
 
   // Get the window texture.

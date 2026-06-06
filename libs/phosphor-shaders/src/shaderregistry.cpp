@@ -212,13 +212,13 @@ ShaderRegistry::ShaderInfo parseShaderMetadata(const QString& shaderDir, const Q
     // Automatic slot assignment (T1.1): a parameter that omits `slot` is packed
     // into the next free lane of its pool in declaration order — float/int/bool
     // → 0..31, color → 0..15, image → 0..3 — so authors no longer hand-number
-    // slots (the `pz_<id>` preamble and the upload both derive from this same
+    // slots (the `p_<id>` preamble and the upload both derive from this same
     // slot). Explicit slots are reserved first, so a pack may mix the two; the
     // migrated zone packs drop slots entirely, becoming pure declaration order.
     // A collision (two explicit params on one lane) is left as-is for the
     // validator (T1.2) to flag, not silently reshuffled.
     {
-        // An id that isn't a valid GLSL identifier can't get a pz_<id> define
+        // An id that isn't a valid GLSL identifier can't get a p_<id> define
         // (buildParamPreamble skips it), so it must claim no lane either: force its
         // slot to -1 (overriding any explicit metadata slot) so it reserves
         // nothing, auto-fills to nothing, AND uploads nothing — uniformName()
@@ -256,7 +256,7 @@ ShaderRegistry::ShaderInfo parseShaderMetadata(const QString& shaderDir, const Q
                 continue;
             }
             // Skip ids buildParamPreamble would reject (invalid GLSL identifier),
-            // so this upload-lane numbering stays byte-identical to the pz_<id>
+            // so this upload-lane numbering stays byte-identical to the p_<id>
             // define numbering — a rejected param gets no define and no lane.
             if (!isValidParamId(p.id)) {
                 continue;
@@ -1002,10 +1002,10 @@ QString ShaderRegistry::paramPreamble(const ShaderInfo& info)
     // (no define) and translateParamsToUniforms (no upload). So each emitted
     // PreambleParam carries a concrete explicit slot (buildParamPreamble's
     // auto-numbering isn't exercised on this zone path). buildParamPreamble turns
-    // each into `#define pz_<id> <glsl-accessor>` using the same slot→accessor rule
+    // each into `#define p_<id> <glsl-accessor>` using the same slot→accessor rule
     // ParameterInfo::uniformName()/translateParamsToUniforms upload to: color →
     // customColors[slot], image → uTexture<slot>, else → customParams[slot/4].
-    // <xyzw>. So pz_<id> reads exactly the lane the value lands in.
+    // <xyzw>. So p_<id> reads exactly the lane the value lands in.
     QList<PreambleParam> params;
     params.reserve(info.parameters.size());
     for (const ParameterInfo& p : info.parameters) {

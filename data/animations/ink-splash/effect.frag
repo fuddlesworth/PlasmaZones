@@ -30,7 +30,7 @@ float is_fbm(vec2 p) {
     return v;
 }
 
-vec4 pzTransition(vec2 uv, float t) {
+vec4 pTransition(vec2 uv, float t) {
     // ── niri OPEN body (handles both legs via runtime iTime flip) ──
     float p = clamp(t, 0.0, 1.0);
     vec4 win = surfaceColor(uv);
@@ -42,16 +42,16 @@ vec4 pzTransition(vec2 uv, float t) {
     // popup vs. maximized windows. Matches niri's reference on full-
     // screen (multiplier = 1.0 there).
     vec2 screenScale = max(iAnchorSize, vec2(1.0)) / max(iSurfaceScreenPos.zw, vec2(1.0));
-    float blob = is_fbm(uv * pz_blobScale * screenScale);
-    float fingers = is_fbm(uv * pz_fingerScale * screenScale);
+    float blob = is_fbm(uv * p_blobScale * screenScale);
+    float fingers = is_fbm(uv * p_fingerScale * screenScale);
     float distortion = (blob - 0.5) * 0.5 + (fingers - 0.5) * 0.18;
     vec2 c = uv - vec2(0.5);
     c.x *= iAnchorSize.x / max(iAnchorSize.y, 0.0001);
     float d = length(c);
     float splash_d = d + distortion;
-    float boundary = p * pz_splashSpeed - 0.15;
+    float boundary = p * p_splashSpeed - 0.15;
     float diff = splash_d - boundary;
-    float reveal = smoothstep(pz_edgeSoftness, -pz_edgeSoftness, diff);
+    float reveal = smoothstep(p_edgeSoftness, -p_edgeSoftness, diff);
 
     return win * reveal;
 }

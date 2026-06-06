@@ -1,9 +1,9 @@
 -- SPDX-FileCopyrightText: 2026 fuddlesworth
 -- SPDX-License-Identifier: GPL-3.0-or-later
 
-local pz = pz
+local pluau = pluau
 
-return pz.algorithm {
+return pluau.algorithm {
     metadata = {
         name = "Rows",
         id = "rows",
@@ -21,13 +21,13 @@ return pz.algorithm {
         local count = ctx.windowCount
         if count <= 0 then return {} end
         local area = ctx.area
-        if area.width < pz.MIN_ZONE_SIZE or area.height < pz.MIN_ZONE_SIZE then
-            return pz.fillArea(area, count)
+        if area.width < pluau.MIN_ZONE_SIZE or area.height < pluau.MIN_ZONE_SIZE then
+            return pluau.fillArea(area, count)
         end
         local gap = ctx.innerGap
 
-        local minHeights = pz.extractMinHeights(ctx.minSizes, count)
-        local rowHeights = pz.distributeWithOptionalMins(area.height, count, gap, minHeights)
+        local minHeights = pluau.extractMinHeights(ctx.minSizes, count)
+        local rowHeights = pluau.distributeWithOptionalMins(area.height, count, gap, minHeights)
 
         local zones = {}
         local currentY = area.y

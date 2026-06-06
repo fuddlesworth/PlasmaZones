@@ -13,7 +13,7 @@
 // `smoothstep(1.0, 0.2, p)` for alpha. These are different curves,
 // not a simple time-reversal, so the iTime flip alone can't express
 // both legs. We branch on `windowFadingIn` (open vs close leg) to select
-// the correct body, exposed as a `pzIn`/`pzOut` pair.
+// the correct body, exposed as a `pIn`/`pOut` pair.
 //
 // Per the entry-point contract, the harness un-flips iTime to an
 // ABSOLUTE forward leg progress `t` in [0,1] running 0→1 on BOTH legs
@@ -30,7 +30,7 @@
 // and main(). noise.glsl (boundaryMask) is pack-specific, so it stays here.
 #include <noise.glsl>
 
-// pz_scaleAmount / pz_revealStart / pz_revealEnd (customParams[0].xyz) are
+// p_scaleAmount / p_revealStart / p_revealEnd (customParams[0].xyz) are
 // generated from metadata.json — no hand-written slot #defines.
 
 // Shared body for both legs. `t` is forward 0→1 leg progress (the harness
@@ -47,13 +47,13 @@ vec4 fadeBody(vec2 uv, float t, bool windowFadingIn) {
         float p = t;
 
         vec2 center = vec2(0.5, 0.5);
-        float scale = mix(1.0, 1.0 - pz_scaleAmount, p);
+        float scale = mix(1.0, 1.0 - p_scaleAmount, p);
         vec2 scaled_uv = (uv - center) / scale + center;
 
         // boundaryMask: see noise.glsl. Crops off-window samples to transparent.
         vec4 color = surfaceColor(scaled_uv) * boundaryMask(scaled_uv);
 
-        float alpha = smoothstep(1.0 - pz_revealStart, 1.0 - pz_revealEnd, p);
+        float alpha = smoothstep(1.0 - p_revealStart, 1.0 - p_revealEnd, p);
 
         result = color * alpha;
     } else {
@@ -63,18 +63,18 @@ vec4 fadeBody(vec2 uv, float t, bool windowFadingIn) {
         float p = t;
 
         vec2 center = vec2(0.5, 0.5);
-        float scale = mix(1.0 - pz_scaleAmount, 1.0, p);
+        float scale = mix(1.0 - p_scaleAmount, 1.0, p);
         vec2 scaled_uv = (uv - center) / scale + center;
 
         // boundaryMask: see noise.glsl. Crops off-window samples to transparent.
         vec4 color = surfaceColor(scaled_uv) * boundaryMask(scaled_uv);
 
-        float alpha = smoothstep(pz_revealStart, pz_revealEnd, p);
+        float alpha = smoothstep(p_revealStart, p_revealEnd, p);
 
         result = color * alpha;
     }
     return result;
 }
 
-vec4 pzIn(vec2 uv, float t)  { return fadeBody(uv, t, true);  }
-vec4 pzOut(vec2 uv, float t) { return fadeBody(uv, t, false); }
+vec4 pIn(vec2 uv, float t)  { return fadeBody(uv, t, true);  }
+vec4 pOut(vec2 uv, float t) { return fadeBody(uv, t, false); }

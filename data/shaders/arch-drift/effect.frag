@@ -287,7 +287,7 @@ vec2 computeInstanceUV(int idx, int totalCount, vec2 globalUV, float aspect, flo
                        float logoScale, float bassEnv, float logoPulse,
                        float sizeMin, float sizeMax, out float instScale) {
     vec2 uv = globalUV;
-    float wobbleAmp = pz_logoWobble >= 0.0 ? pz_logoWobble : 0.12;
+    float wobbleAmp = p_logoWobble >= 0.0 ? p_logoWobble : 0.12;
     uv.x = (uv.x - 0.5) * aspect + 0.5;
     if (totalCount <= 1) {
         vec2 drift = vec2(timeSin(0.11) * 0.015 + timeSin(0.27) * 0.005,
@@ -347,40 +347,40 @@ vec4 renderArchZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor,
     float borderRadius = max(params.x, 8.0);
     float borderWidth = max(params.y, 2.0);
 
-    float speed         = pz_speed >= 0.0 ? pz_speed : 0.10;
-    float flowSpeed     = pz_flowSpeed >= 0.0 ? pz_flowSpeed : 0.20;
-    float noiseScale    = pz_noiseScale >= 0.0 ? pz_noiseScale : 3.5;
-    int octaves         = int(pz_octaves >= 0.0 ? pz_octaves : 6.0);
+    float speed         = p_speed >= 0.0 ? p_speed : 0.10;
+    float flowSpeed     = p_flowSpeed >= 0.0 ? p_flowSpeed : 0.20;
+    float noiseScale    = p_noiseScale >= 0.0 ? p_noiseScale : 3.5;
+    int octaves         = int(p_octaves >= 0.0 ? p_octaves : 6.0);
 
-    float gridScale     = pz_gridScale >= 0.0 ? pz_gridScale : 5.0;
-    float gridStrength  = pz_gridStrength >= 0.0 ? pz_gridStrength : 0.20;
-    float brightness    = pz_brightness >= 0.0 ? pz_brightness : 0.7;
-    float contrast      = pz_contrast >= 0.0 ? pz_contrast : 0.9;
+    float gridScale     = p_gridScale >= 0.0 ? p_gridScale : 5.0;
+    float gridStrength  = p_gridStrength >= 0.0 ? p_gridStrength : 0.20;
+    float brightness    = p_brightness >= 0.0 ? p_brightness : 0.7;
+    float contrast      = p_contrast >= 0.0 ? p_contrast : 0.9;
 
-    float fillOpacity       = pz_fillOpacity >= 0.0 ? pz_fillOpacity : 0.85;
-    float borderGlow        = pz_borderGlow >= 0.0 ? pz_borderGlow : 0.35;
-    float edgeFadeStart     = pz_edgeFadeStart >= 0.0 ? pz_edgeFadeStart : 30.0;
-    float borderBrightness  = pz_borderBrightness >= 0.0 ? pz_borderBrightness : 1.4;
+    float fillOpacity       = p_fillOpacity >= 0.0 ? p_fillOpacity : 0.85;
+    float borderGlow        = p_borderGlow >= 0.0 ? p_borderGlow : 0.35;
+    float edgeFadeStart     = p_edgeFadeStart >= 0.0 ? p_edgeFadeStart : 30.0;
+    float borderBrightness  = p_borderBrightness >= 0.0 ? p_borderBrightness : 1.4;
 
-    float audioReact    = pz_audioReactivity >= 0.0 ? pz_audioReactivity : 1.0;
-    float particleStr   = pz_particleStrength >= 0.0 ? pz_particleStrength : 0.4;
-    float innerGlowStr  = pz_innerGlowStrength >= 0.0 ? pz_innerGlowStrength : 0.35;
-    float sparkleStr    = pz_sparkleIntensity >= 0.0 ? pz_sparkleIntensity : 2.0;
+    float audioReact    = p_audioReactivity >= 0.0 ? p_audioReactivity : 1.0;
+    float particleStr   = p_particleStrength >= 0.0 ? p_particleStrength : 0.4;
+    float innerGlowStr  = p_innerGlowStrength >= 0.0 ? p_innerGlowStrength : 0.35;
+    float sparkleStr    = p_sparkleIntensity >= 0.0 ? p_sparkleIntensity : 2.0;
 
-    float fbmRot        = pz_gridAngle >= 0.0 ? pz_gridAngle : 0.6;
-    float flowDirection = pz_packetDirection >= 0.0 ? pz_packetDirection : 0.25;
+    float fbmRot        = p_gridAngle >= 0.0 ? p_gridAngle : 0.6;
+    float flowDirection = p_packetDirection >= 0.0 ? p_packetDirection : 0.25;
 
-    float logoScale     = pz_logoScale >= 0.0 ? pz_logoScale : 0.5;
-    float logoIntensity = pz_logoIntensity >= 0.0 ? pz_logoIntensity : 0.75;
-    float logoPulse     = pz_logoPulse >= 0.0 ? pz_logoPulse : 0.8;
+    float logoScale     = p_logoScale >= 0.0 ? p_logoScale : 0.5;
+    float logoIntensity = p_logoIntensity >= 0.0 ? p_logoIntensity : 0.75;
+    float logoPulse     = p_logoPulse >= 0.0 ? p_logoPulse : 0.8;
 
-    int   logoCount     = clamp(int(pz_logoCount >= 0.0 ? pz_logoCount : 3.0), 1, 8);
-    float logoSizeMin   = pz_logoSizeMin >= 0.0 ? pz_logoSizeMin : 0.4;
-    float logoSizeMax   = pz_logoSizeMax >= 0.0 ? pz_logoSizeMax : 1.0;
+    int   logoCount     = clamp(int(p_logoCount >= 0.0 ? p_logoCount : 3.0), 1, 8);
+    float logoSizeMin   = p_logoSizeMin >= 0.0 ? p_logoSizeMin : 0.4;
+    float logoSizeMax   = p_logoSizeMax >= 0.0 ? p_logoSizeMax : 1.0;
 
-    float flowCenterX   = pz_focalPointX >= -1.5 ? pz_focalPointX : 0.5;
-    float flowCenterY   = pz_focalPointY >= -1.5 ? pz_focalPointY : 0.5;
-    float idleStrength  = pz_idleStrength >= 0.0 ? pz_idleStrength : 0.5;
+    float flowCenterX   = p_focalPointX >= -1.5 ? p_focalPointX : 0.5;
+    float flowCenterY   = p_focalPointY >= -1.5 ? p_focalPointY : 0.5;
+    float idleStrength  = p_idleStrength >= 0.0 ? p_idleStrength : 0.5;
 
     vec2 rectPos = zoneRectPos(rect);
     vec2 rectSize = zoneRectSize(rect);
@@ -393,10 +393,10 @@ vec4 renderArchZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor,
     float aspect = iResolution.x / max(iResolution.y, 1.0);
     float time = iTime;
 
-    vec3 palPrimary   = colorWithFallback(pz_primaryColor.rgb, ARCH_BLUE);
-    vec3 palSecondary = colorWithFallback(pz_secondaryColor.rgb, ARCH_DEEP);
-    vec3 palAccent    = colorWithFallback(pz_accentColor.rgb, ARCH_ICE);
-    vec3 palGlow      = colorWithFallback(pz_glowColor.rgb, ARCH_SNOW);
+    vec3 palPrimary   = colorWithFallback(p_primaryColor.rgb, ARCH_BLUE);
+    vec3 palSecondary = colorWithFallback(p_secondaryColor.rgb, ARCH_DEEP);
+    vec3 palAccent    = colorWithFallback(p_accentColor.rgb, ARCH_ICE);
+    vec3 palGlow      = colorWithFallback(p_glowColor.rgb, ARCH_SNOW);
 
     float vitality = isHighlighted ? 1.0 : 0.3;
     float idlePulse = hasAudio ? 0.0 : (0.5 + 0.5 * sin(time * 0.8 * PI)) * idleStrength;
@@ -920,14 +920,14 @@ vec4 compositeArchLabels(vec4 color, vec2 fragCoord,
     vec2 px = 1.0 / max(iResolution, vec2(1.0));
     vec4 labels = texture(uZoneLabels, uv);
 
-    vec3 palPrimary   = colorWithFallback(pz_primaryColor.rgb, ARCH_BLUE);
-    vec3 palSecondary = colorWithFallback(pz_secondaryColor.rgb, ARCH_DEEP);
-    vec3 palAccent    = colorWithFallback(pz_accentColor.rgb, ARCH_ICE);
-    vec3 palGlow      = colorWithFallback(pz_glowColor.rgb, ARCH_SNOW);
+    vec3 palPrimary   = colorWithFallback(p_primaryColor.rgb, ARCH_BLUE);
+    vec3 palSecondary = colorWithFallback(p_secondaryColor.rgb, ARCH_DEEP);
+    vec3 palAccent    = colorWithFallback(p_accentColor.rgb, ARCH_ICE);
+    vec3 palGlow      = colorWithFallback(p_glowColor.rgb, ARCH_SNOW);
 
-    float labelGlowSpread = pz_labelGlowSpread >= 0.0 ? pz_labelGlowSpread : 3.0;
-    float labelBrightness = pz_labelBrightness >= 0.0 ? pz_labelBrightness : 2.5;
-    float labelAudioReact = pz_labelAudioReact >= 0.0 ? pz_labelAudioReact : 1.0;
+    float labelGlowSpread = p_labelGlowSpread >= 0.0 ? p_labelGlowSpread : 3.0;
+    float labelBrightness = p_labelBrightness >= 0.0 ? p_labelBrightness : 2.5;
+    float labelAudioReact = p_labelAudioReact >= 0.0 ? p_labelAudioReact : 1.0;
 
     float time = iTime;
 
@@ -1053,7 +1053,7 @@ vec4 compositeArchLabels(vec4 color, vec2 fragCoord,
 //  ENTRY POINT
 // =================================================================
 
-vec4 pzImage(vec2 fragCoord) {
+vec4 pImage(vec2 fragCoord) {
     vec4 color = vec4(0.0);
 
     if (zoneCount == 0) { return vec4(0.0); }
@@ -1073,7 +1073,7 @@ vec4 pzImage(vec2 fragCoord) {
         color = blendOver(color, zoneColor);
     }
 
-    if (pz_showLabels > 0.5)
+    if (p_showLabels > 0.5)
         color = compositeArchLabels(color, fragCoord, bass, mids, treble, hasAudio);
     return color;
 }

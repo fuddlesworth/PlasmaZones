@@ -5,7 +5,7 @@
 
 #include "windowrulemodel.h"
 
-#include "../pz_i18n.h"
+#include "../p_i18n.h"
 
 #include <PhosphorProtocol/WindowTypeEnum.h>
 #include <PhosphorWindowRule/MatchTypes.h>
@@ -31,76 +31,76 @@ using PhosphorWindowRule::RuleAction;
 /// schema (kind, min/max, scale, enum wire values) lives on the LGPL
 /// `ActionDescriptor` in PhosphorWindowRule; the GPL settings layer adds
 /// the user-visible label per `(type, key)` pair so translation runs
-/// through `PzI18n::tr` and `lupdate` extracts the strings. A missing
+/// through `PI18n::tr` and `lupdate` extracts the strings. A missing
 /// entry falls back to the wire key — visible in the picker, so a missing
 /// entry stands out for the next translator pass.
 QString paramLabel(const QString& type, const QString& key)
 {
     namespace ActionParam = PhosphorWindowRule::ActionParam;
     if (type == ActionType::SetEngineMode && key == ActionParam::Mode) {
-        return PzI18n::tr("Engine mode");
+        return PI18n::tr("Engine mode");
     }
     if (type == ActionType::SetSnappingLayout && key == ActionParam::LayoutId) {
-        return PzI18n::tr("Snapping layout");
+        return PI18n::tr("Snapping layout");
     }
     if (type == ActionType::SetTilingAlgorithm && key == ActionParam::Algorithm) {
-        return PzI18n::tr("Tiling algorithm");
+        return PI18n::tr("Tiling algorithm");
     }
     if (type == ActionType::DisableEngine && key == ActionParam::Mode) {
-        return PzI18n::tr("Engine to disable");
+        return PI18n::tr("Engine to disable");
     }
     if (type == ActionType::SetOpacity && key == ActionParam::Value) {
-        return PzI18n::tr("Opacity (%)");
+        return PI18n::tr("Opacity (%)");
     }
     // Border / title-bar overrides (all single-value, keyed ActionParam::Value).
     if (type == ActionType::SetHideTitleBar && key == ActionParam::Value) {
-        return PzI18n::tr("Hide title bars");
+        return PI18n::tr("Hide title bars");
     }
     if (type == ActionType::SetBorderVisible && key == ActionParam::Value) {
-        return PzI18n::tr("Show border");
+        return PI18n::tr("Show border");
     }
     if (type == ActionType::SetBorderWidth && key == ActionParam::Value) {
-        return PzI18n::tr("Border width (px)");
+        return PI18n::tr("Border width (px)");
     }
     if (type == ActionType::SetBorderRadius && key == ActionParam::Value) {
-        return PzI18n::tr("Corner radius (px)");
+        return PI18n::tr("Corner radius (px)");
     }
     if (type == ActionType::SetBorderColor && key == ActionParam::Value) {
-        return PzI18n::tr("Border color");
+        return PI18n::tr("Border color");
     }
     // Per-context gap overrides (all single-value, keyed ActionParam::Value).
     if (type == ActionType::SetZonePadding && key == ActionParam::Value) {
-        return PzI18n::tr("Zone padding (px)");
+        return PI18n::tr("Zone padding (px)");
     }
     if (type == ActionType::SetOuterGap && key == ActionParam::Value) {
-        return PzI18n::tr("Outer gap (px)");
+        return PI18n::tr("Outer gap (px)");
     }
     if (type == ActionType::SetUsePerSideOuterGap && key == ActionParam::Value) {
-        return PzI18n::tr("Per-side outer gaps");
+        return PI18n::tr("Per-side outer gaps");
     }
     if (type == ActionType::SetOuterGapTop && key == ActionParam::Value) {
-        return PzI18n::tr("Top gap (px)");
+        return PI18n::tr("Top gap (px)");
     }
     if (type == ActionType::SetOuterGapBottom && key == ActionParam::Value) {
-        return PzI18n::tr("Bottom gap (px)");
+        return PI18n::tr("Bottom gap (px)");
     }
     if (type == ActionType::SetOuterGapLeft && key == ActionParam::Value) {
-        return PzI18n::tr("Left gap (px)");
+        return PI18n::tr("Left gap (px)");
     }
     if (type == ActionType::SetOuterGapRight && key == ActionParam::Value) {
-        return PzI18n::tr("Right gap (px)");
+        return PI18n::tr("Right gap (px)");
     }
     if (key == ActionParam::Event) {
-        return PzI18n::tr("Event");
+        return PI18n::tr("Event");
     }
     if (key == ActionParam::EffectId) {
-        return PzI18n::tr("Shader effect");
+        return PI18n::tr("Shader effect");
     }
     if (key == ActionParam::DurationMs) {
-        return PzI18n::tr("Duration (ms)");
+        return PI18n::tr("Duration (ms)");
     }
     if (key == ActionParam::Curve) {
-        return PzI18n::tr("Curve");
+        return PI18n::tr("Curve");
     }
     return key;
 }
@@ -113,13 +113,13 @@ QString enumOptionLabel(const QString& type, const QString& key, const QString& 
     namespace ActionParam = PhosphorWindowRule::ActionParam;
     if ((type == ActionType::SetEngineMode || type == ActionType::DisableEngine) && key == ActionParam::Mode) {
         if (wireValue == QLatin1String("snapping")) {
-            return PzI18n::tr("Snapping");
+            return PI18n::tr("Snapping");
         }
         if (wireValue == QLatin1String("autotile")) {
-            return PzI18n::tr("Autotile");
+            return PI18n::tr("Autotile");
         }
         if (wireValue == QLatin1String("scrolling")) {
-            return PzI18n::tr("Scrolling");
+            return PI18n::tr("Scrolling");
         }
     }
     return wireValue;
@@ -180,73 +180,73 @@ QVariantList paramsForActionTypeImpl(const QString& type)
 QString actionTypeLabelImpl(const QString& type)
 {
     if (type == ActionType::SetEngineMode) {
-        return PzI18n::tr("Set engine mode");
+        return PI18n::tr("Set engine mode");
     }
     if (type == ActionType::SetSnappingLayout) {
-        return PzI18n::tr("Set snapping layout");
+        return PI18n::tr("Set snapping layout");
     }
     if (type == ActionType::SetTilingAlgorithm) {
-        return PzI18n::tr("Set tiling algorithm");
+        return PI18n::tr("Set tiling algorithm");
     }
     if (type == ActionType::DisableEngine) {
-        return PzI18n::tr("Disable engine");
+        return PI18n::tr("Disable engine");
     }
     if (type == ActionType::Exclude) {
-        return PzI18n::tr("Exclude window");
+        return PI18n::tr("Exclude window");
     }
     if (type == ActionType::Float) {
-        return PzI18n::tr("Float window");
+        return PI18n::tr("Float window");
     }
     if (type == ActionType::OverrideAnimationShader) {
-        return PzI18n::tr("Override animation shader");
+        return PI18n::tr("Override animation shader");
     }
     if (type == ActionType::OverrideAnimationTiming) {
-        return PzI18n::tr("Override animation duration");
+        return PI18n::tr("Override animation duration");
     }
     if (type == ActionType::OverrideAnimationCurve) {
-        return PzI18n::tr("Override animation curve");
+        return PI18n::tr("Override animation curve");
     }
     if (type == ActionType::SetOpacity) {
-        return PzI18n::tr("Set opacity");
+        return PI18n::tr("Set opacity");
     }
     if (type == ActionType::ExcludeAnimations) {
-        return PzI18n::tr("Exclude from animations");
+        return PI18n::tr("Exclude from animations");
     }
     if (type == ActionType::SetHideTitleBar) {
-        return PzI18n::tr("Hide title bars");
+        return PI18n::tr("Hide title bars");
     }
     if (type == ActionType::SetBorderVisible) {
-        return PzI18n::tr("Show border");
+        return PI18n::tr("Show border");
     }
     if (type == ActionType::SetBorderWidth) {
-        return PzI18n::tr("Set border width");
+        return PI18n::tr("Set border width");
     }
     if (type == ActionType::SetBorderRadius) {
-        return PzI18n::tr("Set corner radius");
+        return PI18n::tr("Set corner radius");
     }
     if (type == ActionType::SetBorderColor) {
-        return PzI18n::tr("Set border color");
+        return PI18n::tr("Set border color");
     }
     if (type == ActionType::SetZonePadding) {
-        return PzI18n::tr("Set zone padding");
+        return PI18n::tr("Set zone padding");
     }
     if (type == ActionType::SetOuterGap) {
-        return PzI18n::tr("Set outer gap");
+        return PI18n::tr("Set outer gap");
     }
     if (type == ActionType::SetUsePerSideOuterGap) {
-        return PzI18n::tr("Use per-side outer gaps");
+        return PI18n::tr("Use per-side outer gaps");
     }
     if (type == ActionType::SetOuterGapTop) {
-        return PzI18n::tr("Set top gap");
+        return PI18n::tr("Set top gap");
     }
     if (type == ActionType::SetOuterGapBottom) {
-        return PzI18n::tr("Set bottom gap");
+        return PI18n::tr("Set bottom gap");
     }
     if (type == ActionType::SetOuterGapLeft) {
-        return PzI18n::tr("Set left gap");
+        return PI18n::tr("Set left gap");
     }
     if (type == ActionType::SetOuterGapRight) {
-        return PzI18n::tr("Set right gap");
+        return PI18n::tr("Set right gap");
     }
     return WindowRuleModel::actionTypeFallbackLabel(type);
 }
@@ -255,23 +255,23 @@ QString operatorLabelImpl(Operator op)
 {
     switch (op) {
     case Operator::Equals:
-        return PzI18n::tr("is");
+        return PI18n::tr("is");
     case Operator::Contains:
-        return PzI18n::tr("contains");
+        return PI18n::tr("contains");
     case Operator::StartsWith:
-        return PzI18n::tr("starts with");
+        return PI18n::tr("starts with");
     case Operator::EndsWith:
-        return PzI18n::tr("ends with");
+        return PI18n::tr("ends with");
     case Operator::Regex:
-        return PzI18n::tr("matches regex");
+        return PI18n::tr("matches regex");
     case Operator::AppIdMatches:
-        return PzI18n::tr("matches app-id");
+        return PI18n::tr("matches app-id");
     case Operator::In:
-        return PzI18n::tr("is one of");
+        return PI18n::tr("is one of");
     case Operator::GreaterThan:
-        return PzI18n::tr("greater than");
+        return PI18n::tr("greater than");
     case Operator::LessThan:
-        return PzI18n::tr("less than");
+        return PI18n::tr("less than");
     }
     return QString();
 }
@@ -332,19 +332,19 @@ QVariantList matchFields()
             // — adding a new WindowType enum value here can't silently
             // drop the trailing entry by mismatching a hardcoded size.
             const std::array kWindowTypes = std::to_array<WindowTypeEntry>({
-                {PhosphorProtocol::WindowType::Unknown, PzI18n::tr("Unknown")},
-                {PhosphorProtocol::WindowType::Normal, PzI18n::tr("Normal window")},
-                {PhosphorProtocol::WindowType::Dialog, PzI18n::tr("Dialog")},
-                {PhosphorProtocol::WindowType::Utility, PzI18n::tr("Utility")},
-                {PhosphorProtocol::WindowType::Toolbar, PzI18n::tr("Toolbar")},
-                {PhosphorProtocol::WindowType::Splash, PzI18n::tr("Splash screen")},
-                {PhosphorProtocol::WindowType::Menu, PzI18n::tr("Menu")},
-                {PhosphorProtocol::WindowType::Tooltip, PzI18n::tr("Tooltip")},
-                {PhosphorProtocol::WindowType::Notification, PzI18n::tr("Notification")},
-                {PhosphorProtocol::WindowType::Dock, PzI18n::tr("Dock / panel")},
-                {PhosphorProtocol::WindowType::Desktop, PzI18n::tr("Desktop")},
-                {PhosphorProtocol::WindowType::OnScreenDisplay, PzI18n::tr("On-screen display")},
-                {PhosphorProtocol::WindowType::Popup, PzI18n::tr("Popup")},
+                {PhosphorProtocol::WindowType::Unknown, PI18n::tr("Unknown")},
+                {PhosphorProtocol::WindowType::Normal, PI18n::tr("Normal window")},
+                {PhosphorProtocol::WindowType::Dialog, PI18n::tr("Dialog")},
+                {PhosphorProtocol::WindowType::Utility, PI18n::tr("Utility")},
+                {PhosphorProtocol::WindowType::Toolbar, PI18n::tr("Toolbar")},
+                {PhosphorProtocol::WindowType::Splash, PI18n::tr("Splash screen")},
+                {PhosphorProtocol::WindowType::Menu, PI18n::tr("Menu")},
+                {PhosphorProtocol::WindowType::Tooltip, PI18n::tr("Tooltip")},
+                {PhosphorProtocol::WindowType::Notification, PI18n::tr("Notification")},
+                {PhosphorProtocol::WindowType::Dock, PI18n::tr("Dock / panel")},
+                {PhosphorProtocol::WindowType::Desktop, PI18n::tr("Desktop")},
+                {PhosphorProtocol::WindowType::OnScreenDisplay, PI18n::tr("On-screen display")},
+                {PhosphorProtocol::WindowType::Popup, PI18n::tr("Popup")},
             });
             for (const auto& opt : kWindowTypes) {
                 QVariantMap option;

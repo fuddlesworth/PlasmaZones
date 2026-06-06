@@ -8,10 +8,10 @@
 
 #include <noise.glsl>
 
-// `pz_scaleFrom` / `pz_overshoot` are generated from metadata.json
+// `p_scaleFrom` / `p_overshoot` are generated from metadata.json
 // (the customParams[0] sub-slots) by the harness.
 
-vec4 pzTransition(vec2 uv, float t)
+vec4 pTransition(vec2 uv, float t)
 {
     // Visibility drives the scale curve. iTime is the per-leg [0,1]
     // progress driven by SurfaceAnimator's shaderTime AnimatedValue.
@@ -27,9 +27,9 @@ vec4 pzTransition(vec2 uv, float t)
     // visible "bounce out" reverse of the show-leg arc.
     float scale;
     if (visibility < 0.7) {
-        scale = mix(pz_scaleFrom, 1.0 + pz_overshoot, visibility / 0.7);
+        scale = mix(p_scaleFrom, 1.0 + p_overshoot, visibility / 0.7);
     } else {
-        scale = mix(1.0 + pz_overshoot, 1.0, (visibility - 0.7) / 0.3);
+        scale = mix(1.0 + p_overshoot, 1.0, (visibility - 0.7) / 0.3);
     }
 
     vec2 center = vec2(0.5);

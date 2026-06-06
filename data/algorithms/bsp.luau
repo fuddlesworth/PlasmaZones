@@ -1,7 +1,7 @@
 -- SPDX-FileCopyrightText: 2026 fuddlesworth
 -- SPDX-License-Identifier: GPL-3.0-or-later
 
-local pz = pz
+local pluau = pluau
 
 -- ─── Node helpers ────────────────────────────────────────────────────────────
 local function makeNode()
@@ -26,20 +26,20 @@ local function clampOrProportionalFallback(ratio, minFirstRatio, maxFirstRatio, 
     local totalMin = firstDim + secondDim
     if totalMin > 0 then
         ratio = firstDim / totalMin
-        return pz.clampSplitRatio(ratio)
+        return pluau.clampSplitRatio(ratio)
     end
     return ratio
 end
 
 local function countLeavesInSubtree(node, depth)
-    if not node or depth > pz.MAX_TREE_DEPTH then return 0 end
+    if not node or depth > pluau.MAX_TREE_DEPTH then return 0 end
     if isLeaf(node) then return 1 end
     return countLeavesInSubtree(node.first, depth + 1) + countLeavesInSubtree(node.second, depth + 1)
 end
 
 local function computeSubtreeMinDims(node, minSizes, leafStartIdx, innerGap, depth)
     depth = depth or 0
-    if not node or depth > pz.MAX_TREE_DEPTH then return { w = 0, h = 0, leafCount = 0 } end
+    if not node or depth > pluau.MAX_TREE_DEPTH then return { w = 0, h = 0, leafCount = 0 } end
     if isLeaf(node) then
         if leafStartIdx < #minSizes then
             local ms = minSizes[leafStartIdx + 1]
@@ -61,7 +61,7 @@ local function computeSubtreeMinDims(node, minSizes, leafStartIdx, innerGap, dep
 end
 
 local function findLargestLeaf(node, depth)
-    if not node or depth > pz.MAX_TREE_DEPTH then return nil end
+    if not node or depth > pluau.MAX_TREE_DEPTH then return nil end
     if isLeaf(node) then return node end
     local left = findLargestLeaf(node.first, depth + 1)
     local right = findLargestLeaf(node.second, depth + 1)
@@ -89,14 +89,14 @@ local function zeroLeaves(node)
 end
 
 local function bspApplyGeometry(node, rect, innerGap, minSizes, leafStartIdx, depth)
-    if not node or depth > pz.MAX_TREE_DEPTH then return end
+    if not node or depth > pluau.MAX_TREE_DEPTH then return end
 
     node.geometry = { x = rect.x, y = rect.y, width = rect.width, height = rect.height }
     node.cachedArea = (rect.width > 0 and rect.height > 0) and (rect.width * rect.height) or 0
 
     if isLeaf(node) then return end
 
-    local ratio = pz.clampSplitRatio(node.splitRatio)
+    local ratio = pluau.clampSplitRatio(node.splitRatio)
 
     if #minSizes > 0 then
         local firstResult = computeSubtreeMinDims(node.first, minSizes, leafStartIdx, innerGap)
@@ -106,19 +106,19 @@ local function bspApplyGeometry(node, rect, innerGap, minSizes, leafStartIdx, de
         if node.splitHorizontal then
             local contentHeight = rect.height - innerGap
             if contentHeight > 0 and (firstResult.h > 0 or secondResult.h > 0) then
-                local minFirstRatio = (firstResult.h > 0) and (firstResult.h / contentHeight) or pz.MIN_SPLIT
-                local maxFirstRatio = (secondResult.h > 0) and (1.0 - secondResult.h / contentHeight) or pz.MAX_SPLIT
-                minFirstRatio = pz.clampSplitRatio(minFirstRatio)
-                maxFirstRatio = pz.clampSplitRatio(maxFirstRatio)
+                local minFirstRatio = (firstResult.h > 0) and (firstResult.h / contentHeight) or pluau.MIN_SPLIT
+                local maxFirstRatio = (secondResult.h > 0) and (1.0 - secondResult.h / contentHeight) or pluau.MAX_SPLIT
+                minFirstRatio = pluau.clampSplitRatio(minFirstRatio)
+                maxFirstRatio = pluau.clampSplitRatio(maxFirstRatio)
                 ratio = clampOrProportionalFallback(ratio, minFirstRatio, maxFirstRatio, firstResult.h, secondResult.h)
             end
         else
             local contentWidth = rect.width - innerGap
             if contentWidth > 0 and (firstResult.w > 0 or secondResult.w > 0) then
-                local minFirstRatio = (firstResult.w > 0) and (firstResult.w / contentWidth) or pz.MIN_SPLIT
-                local maxFirstRatio = (secondResult.w > 0) and (1.0 - secondResult.w / contentWidth) or pz.MAX_SPLIT
-                minFirstRatio = pz.clampSplitRatio(minFirstRatio)
-                maxFirstRatio = pz.clampSplitRatio(maxFirstRatio)
+                local minFirstRatio = (firstResult.w > 0) and (firstResult.w / contentWidth) or pluau.MIN_SPLIT
+                local maxFirstRatio = (secondResult.w > 0) and (1.0 - secondResult.w / contentWidth) or pluau.MAX_SPLIT
+                minFirstRatio = pluau.clampSplitRatio(minFirstRatio)
+                maxFirstRatio = pluau.clampSplitRatio(maxFirstRatio)
                 ratio = clampOrProportionalFallback(ratio, minFirstRatio, maxFirstRatio, firstResult.w, secondResult.w)
             end
         end
@@ -174,7 +174,7 @@ end
 
 local function buildTree(windowCount, defaultRatio, refRect)
     if windowCount <= 0 then return nil end
-    local ratio = math.min(math.max(defaultRatio, pz.MIN_SPLIT), pz.MAX_SPLIT)
+    local ratio = math.min(math.max(defaultRatio, pluau.MIN_SPLIT), pluau.MAX_SPLIT)
     local root = makeNode()
     local buildRect
     if refRect and refRect.width > 0 and refRect.height > 0 then
@@ -196,7 +196,7 @@ local function buildTree(windowCount, defaultRatio, refRect)
 end
 
 local function collectLeaves(node, zones, depth)
-    if not node or depth > pz.MAX_TREE_DEPTH then return end
+    if not node or depth > pluau.MAX_TREE_DEPTH then return end
     if isLeaf(node) then
         zones[#zones + 1] = { x = node.geometry.x, y = node.geometry.y,
             width = node.geometry.width, height = node.geometry.height }
@@ -206,7 +206,7 @@ local function collectLeaves(node, zones, depth)
     end
 end
 
-return pz.algorithm {
+return pluau.algorithm {
     metadata = {
         name = "Binary Split",
         id = "bsp",
@@ -230,8 +230,8 @@ return pz.algorithm {
         local minSizes = ctx.minSizes
         local splitRatio = ctx.splitRatio
 
-        if area.width < pz.MIN_ZONE_SIZE or area.height < pz.MIN_ZONE_SIZE then
-            return pz.fillArea(area, count)
+        if area.width < pluau.MIN_ZONE_SIZE or area.height < pluau.MIN_ZONE_SIZE then
+            return pluau.fillArea(area, count)
         end
 
         local root = buildTree(count, splitRatio, area)
@@ -249,7 +249,7 @@ return pz.algorithm {
         zones = filtered
 
         if #zones == 0 then
-            return pz.equalColumnsLayout(area, count, gap, minSizes)
+            return pluau.equalColumnsLayout(area, count, gap, minSizes)
         end
         -- If the tree could not yield one leaf per window (e.g. a zero-size leaf
         -- was filtered at an extreme window count), fall back to an even split
@@ -257,7 +257,7 @@ return pz.algorithm {
         -- (appendGracefulDegradation expects a genuine leftover rect, which a
         -- whole-area BSP doesn't have, so it can't be used here.)
         if #zones < count then
-            return pz.equalColumnsLayout(area, count, gap, minSizes)
+            return pluau.equalColumnsLayout(area, count, gap, minSizes)
         end
 
         return zones

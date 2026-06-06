@@ -65,28 +65,28 @@ if(PLASMAZONES_SYSTEM_LUAU)
 else()
     # Where the committed tarball lives and where we extract it. Kept out of the
     # NOT-TARGET guard so the licence-install below can find the extracted tree.
-    set(_pz_luau_tarball "${CMAKE_SOURCE_DIR}/extern/luau-${PHOSPHORSCRIPTING_LUAU_VERSION}.tar.gz")
-    set(_pz_luau_src "${CMAKE_BINARY_DIR}/_luau/luau-${PHOSPHORSCRIPTING_LUAU_VERSION}")
+    set(_p_luau_tarball "${CMAKE_SOURCE_DIR}/extern/luau-${PHOSPHORSCRIPTING_LUAU_VERSION}.tar.gz")
+    set(_p_luau_src "${CMAKE_BINARY_DIR}/_luau/luau-${PHOSPHORSCRIPTING_LUAU_VERSION}")
     if(NOT TARGET Luau.VM)
-        if(NOT EXISTS "${_pz_luau_tarball}")
+        if(NOT EXISTS "${_p_luau_tarball}")
             message(FATAL_ERROR
-                "Vendored Luau tarball missing at ${_pz_luau_tarball}. It is committed in "
+                "Vendored Luau tarball missing at ${_p_luau_tarball}. It is committed in "
                 "the repository, so an incomplete checkout is the likely cause — or pass "
                 "-DPLASMAZONES_SYSTEM_LUAU=ON to link a system Luau instead.")
         endif()
         # Verify the committed blob before building unknown source from it.
-        file(SHA256 "${_pz_luau_tarball}" _pz_luau_actual_sha)
-        if(NOT _pz_luau_actual_sha STREQUAL "${PHOSPHORSCRIPTING_LUAU_SHA256}")
+        file(SHA256 "${_p_luau_tarball}" _p_luau_actual_sha)
+        if(NOT _p_luau_actual_sha STREQUAL "${PHOSPHORSCRIPTING_LUAU_SHA256}")
             message(FATAL_ERROR
                 "Vendored Luau tarball SHA256 mismatch:\n  expected ${PHOSPHORSCRIPTING_LUAU_SHA256}\n"
-                "  got      ${_pz_luau_actual_sha}\nThe committed ${_pz_luau_tarball} is corrupt or was swapped.")
+                "  got      ${_p_luau_actual_sha}\nThe committed ${_p_luau_tarball} is corrupt or was swapped.")
         endif()
         # Extract the committed tarball once (a LOCAL file — no network). The
         # archive has a single luau-<ver>/ top-level dir; re-extract only when the
         # target tree is absent so reconfigures stay fast.
-        if(NOT EXISTS "${_pz_luau_src}/CMakeLists.txt")
+        if(NOT EXISTS "${_p_luau_src}/CMakeLists.txt")
             file(MAKE_DIRECTORY "${CMAKE_BINARY_DIR}/_luau")
-            file(ARCHIVE_EXTRACT INPUT "${_pz_luau_tarball}" DESTINATION "${CMAKE_BINARY_DIR}/_luau")
+            file(ARCHIVE_EXTRACT INPUT "${_p_luau_tarball}" DESTINATION "${CMAKE_BINARY_DIR}/_luau")
         endif()
         set(LUAU_BUILD_CLI   OFF CACHE BOOL "" FORCE)
         set(LUAU_BUILD_TESTS OFF CACHE BOOL "" FORCE)
@@ -95,7 +95,7 @@ else()
         # EXCLUDE_FROM_ALL so only the targets we actually link (Luau.VM +
         # Luau.Compiler and their deps) build — never Luau.Analysis/CLI, which we
         # don't use.
-        add_subdirectory("${_pz_luau_src}" "${CMAKE_BINARY_DIR}/extern/luau" EXCLUDE_FROM_ALL)
+        add_subdirectory("${_p_luau_src}" "${CMAKE_BINARY_DIR}/extern/luau" EXCLUDE_FROM_ALL)
         # Luau needs exceptions (lua_pcall uses C++ unwinding) — force -fexceptions
         # on the vendored targets so they build correctly regardless of the
         # project's global exception settings. Luau also breaks under unity builds
@@ -195,8 +195,8 @@ endif()
 # system-Luau build links a separately-installed Luau that carries its own
 # licence, so skip it there.
 if(NOT PLASMAZONES_SYSTEM_LUAU)
-    # _pz_luau_src is the extracted tarball tree (set in the acquisition block).
-    install(FILES ${_pz_luau_src}/LICENSE.txt
+    # _p_luau_src is the extracted tarball tree (set in the acquisition block).
+    install(FILES ${_p_luau_src}/LICENSE.txt
         DESTINATION ${KDE_INSTALL_DATADIR}/licenses/plasmazones
         RENAME LICENSE.Luau)
 endif()

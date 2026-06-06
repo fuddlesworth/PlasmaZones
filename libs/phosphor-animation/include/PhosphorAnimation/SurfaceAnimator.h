@@ -58,7 +58,7 @@ namespace PhosphorAnimationLayer {
  *
  * @code
  *     SurfaceAnimator anim(registry);
- *     anim.registerConfigForRole(PzRoles::LayoutOsd,
+ *     anim.registerConfigForRole(PRoles::LayoutOsd,
  *         {.showProfile  = QStringLiteral("osd.show"),
  *          .showScaleProfile = QStringLiteral("osd.pop"),
  *          .showScaleFrom = 0.8,
@@ -213,7 +213,7 @@ public:
     /// is used as the registration key. Lookup is longest-prefix-match
     /// (with `'-'` boundary) against the surface's `role.scopePrefix`,
     /// so consumers can register a config against a stable base role
-    /// (e.g. `PzRoles::LayoutOsd` with prefix `"plasmazones-layout-osd"`)
+    /// (e.g. `PRoles::LayoutOsd` with prefix `"plasmazones-layout-osd"`)
     /// while the surfaces themselves carry per-instance roles derived via
     /// `withScopePrefix("plasmazones-layout-osd-{screenId}-{gen}")` for
     /// compositor scope uniqueness. Without prefix matching, the unique
