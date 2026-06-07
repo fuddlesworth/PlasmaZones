@@ -210,16 +210,25 @@ void AlgorithmRegistry::registerAlgorithm(const QString& id, TilingAlgorithm* al
         }
     }
 
-    // Double-registration guard: the same pointer already registered under a
-    // different id would be double-owned. Don't delete — it's still owned (and
-    // will be freed) under its existing id.
+    // Double-ownership guard: if THIS exact algorithm object is already owned
+    // by the registry, re-registering it would wrap the already-owned raw
+    // pointer in a SECOND shared_ptr + deferred-delete deleter — and the
+    // Replace below would drop the first owner, scheduling a deleteLater() on a
+    // pointer the new entry still owns → double-free when the new entry later
+    // drops. Reject without deleting (it stays owned under its existing id).
+    // This covers a different id (a real misuse — warn) AND a redundant
+    // re-register under the SAME id (a no-op). A genuine replacement — same id
+    // but a DIFFERENT pointer (the hot-reload case) — has
+    // existing->algorithm() != algorithm and proceeds to Replace normally.
     const QString existingId = algorithm->registryId();
-    if (!existingId.isEmpty() && existingId != id) {
+    if (!existingId.isEmpty()) {
         const auto existing = m_impl->registry.factory(existingId);
         if (existing && existing->algorithm() == algorithm) {
-            qCWarning(PhosphorTiles::lcTilesLib)
-                << "AlgorithmRegistry: algorithm" << algorithm->name() << "is already registered as" << existingId
-                << "- cannot register as" << id;
+            if (existingId != id) {
+                qCWarning(PhosphorTiles::lcTilesLib)
+                    << "AlgorithmRegistry: algorithm" << algorithm->name() << "is already registered as" << existingId
+                    << "- cannot register as" << id;
+            }
             return;
         }
     }
@@ -265,10 +274,12 @@ TilingAlgorithm* AlgorithmRegistry::algorithm(const QString& id) const
 
 QStringList AlgorithmRegistry::availableAlgorithms() const
 {
-    // Sorted for a stable cross-platform order (the registry stores in hash
-    // order). The prior registration-order was a UI nicety, not a contract:
-    // consumers iterate to build a preview list and tests assert membership /
-    // count, never a specific order.
+    // Sorted for a stable, deterministic order. The registry stores in
+    // registration (insertion) order; we re-sort alphabetically so the result
+    // is independent of registration sequence (which varies with priority /
+    // scan order across composition roots). The prior registration-order was a
+    // UI nicety, not a contract: consumers iterate to build a preview list and
+    // tests assert membership / count, never a specific order.
     QStringList ids = m_impl->registry.ids();
     std::sort(ids.begin(), ids.end());
     return ids;

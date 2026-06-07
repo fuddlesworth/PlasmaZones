@@ -170,6 +170,14 @@ private Q_SLOTS:
         QVERIFY(registry->hasAlgorithm(id1));
         QCOMPARE(registry->algorithm(id1), algo);
 
+        // Re-registering the SAME pointer under its OWN id is a safe no-op —
+        // it must NOT fall through to the Replace path, which would wrap the
+        // already-owned pointer in a second shared_ptr and double-free it.
+        registry->registerAlgorithm(id1, algo);
+        QVERIFY(registry->hasAlgorithm(id1));
+        QCOMPARE(registry->algorithm(id1), algo); // still the same, still alive
+        QCOMPARE(spy.count(), 0); // no re-registration signal
+
         registry->unregisterAlgorithm(id1);
     }
 

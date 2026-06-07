@@ -243,8 +243,10 @@ loader enforces this so on-disk layout and registry keys stay aligned.
 
 - `QtCore`, `QtQml`. The library does not link `QtGui` or `QtQuick`;
   consumers that build widgets do.
-- `phosphor-fsloader` (private link): `WatchedDirectorySet` +
-  `IScanStrategy` drive the plugin loader's hot-reload path.
+- `phosphor-fsloader` (PUBLIC link): `WatchedDirectorySet` + `IScanStrategy`
+  back both the plugin loader's hot-reload path and the header-only
+  `MetadataPackLoader<T>` template, which exposes fsloader types in its public
+  interface — so the dependency is transitive (PUBLIC) for consumers.
 
 ## See also
 
