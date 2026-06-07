@@ -23,6 +23,8 @@ import QtQuick
  *       psHelper.writeSetting(key, value, globalSetter)
  */
 QtObject {
+    id: helper
+
     required property var appSettings
     required property string getterMethod
     required property string setterMethod
@@ -30,15 +32,13 @@ QtObject {
     property string selectedScreenName: ""
     readonly property bool isPerScreen: selectedScreenName !== ""
     readonly property bool hasOverrides: isPerScreen && Object.keys(perScreenOverrides).length > 0
-    property var perScreenOverrides: ({
-    })
+    property var perScreenOverrides: ({})
 
     function reload() {
         if (isPerScreen && selectedScreenName !== "")
             perScreenOverrides = appSettings[getterMethod](selectedScreenName);
         else
-            perScreenOverrides = {
-        };
+            perScreenOverrides = {};
     }
 
     function settingValue(key, globalValue) {
@@ -51,8 +51,7 @@ QtObject {
     function writeSetting(key, value, globalSetter) {
         if (isPerScreen) {
             appSettings[setterMethod](selectedScreenName, key, value);
-            var updated = Object.assign({
-            }, perScreenOverrides);
+            var updated = Object.assign({}, perScreenOverrides);
             updated[key] = value;
             perScreenOverrides = updated;
         } else {
@@ -66,4 +65,14 @@ QtObject {
     }
 
     onSelectedScreenNameChanged: reload()
+
+    // Reload when overrides change anywhere for this domain (e.g. a
+    // ScopedGroup Reset clears the current monitor) so bound card values
+    // refresh even though the selected screen didn't change.
+    property Connections _overrideWatch: Connections {
+        target: helper.appSettings
+        function onPerScreenOverridesChanged() {
+            helper.reload();
+        }
+    }
 }
