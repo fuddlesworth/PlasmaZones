@@ -284,8 +284,10 @@ private:
                 // position — a hot-reload must not shuffle the edited pack to
                 // the end of ids()/forEach() (Registry's documented invariant).
                 // It still fires factoryUnregistered(old) + factoryRegistered(new).
-                // (m_strategy->packs() is id-sorted, so a loader-fed registry's
-                // registration order is lexicographic by id, not disk order.)
+                // (m_strategy->packs() is id-sorted, so the INITIAL scan registers
+                // in lexicographic id order; a pack discovered on a later refresh
+                // appends, so consumers that need a sorted order re-sort ids()
+                // themselves rather than relying on loader registration order.)
                 m_registry->registerFactory(e.factory, QString(), DuplicatePolicy::Replace);
             }
             // else: unchanged — leave the registry entry as-is.

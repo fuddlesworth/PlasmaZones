@@ -8,7 +8,6 @@
 #include <PhosphorRegistry/IFactoryBase.h>
 
 #include <QString>
-#include <QStringList>
 
 #include <memory>
 
