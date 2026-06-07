@@ -76,9 +76,11 @@ ColumnLayout {
                         label += " (" + entry.resolution + ")";
 
                     // Mirror screenInfoListToVariantList(): append the connector
-                    // so identical panels stay distinguishable, unless the label
-                    // already IS the connector.
-                    if (entry.connectorName && entry.connectorName !== physId)
+                    // so identical panels stay distinguishable. Skip only when
+                    // the label already IS the connector (no make/model, so the
+                    // base label fell back to physId == connector) — otherwise
+                    // it must be appended even when connector == physId.
+                    if (entry.connectorName && !(parts.length === 0 && entry.connectorName === physId))
                         label += " · " + entry.connectorName;
 
                     entry["displayLabel"] = label;
