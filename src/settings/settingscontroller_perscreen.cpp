@@ -13,6 +13,8 @@
 
 #include "settingscontroller.h"
 
+#include <PhosphorIdentity/VirtualScreenId.h>
+
 namespace PlasmaZones {
 
 // ── Per-monitor editing scope ─────────────────────────────────────────────
@@ -23,6 +25,11 @@ void SettingsController::setScopeScreenName(const QString& name)
         return;
     m_scopeScreenName = name;
     Q_EMIT scopeScreenNameChanged();
+}
+
+QString SettingsController::physicalScreenId(const QString& name) const
+{
+    return PhosphorIdentity::VirtualScreenId::extractPhysicalId(name);
 }
 
 // ── Per-screen autotile overrides ────────────────────────────────────────

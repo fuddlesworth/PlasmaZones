@@ -266,6 +266,12 @@ public:
     }
     void setScopeScreenName(const QString& name);
 
+    /// Physical-output id for a screen name token, collapsing a virtual-screen
+    /// id ("id/vs:N") to its physical parent. Single source of truth for QML
+    /// that needs the physical id — the canonical "/vs:" separator lives in
+    /// C++ (PhosphorIdentity::VirtualScreenId), so QML must not re-spell it.
+    Q_INVOKABLE QString physicalScreenId(const QString& name) const;
+
     // Virtual desktops / activities (reactive via D-Bus signals)
     Q_PROPERTY(int virtualDesktopCount READ virtualDesktopCount NOTIFY virtualDesktopsChanged)
     Q_PROPERTY(QStringList virtualDesktopNames READ virtualDesktopNames NOTIFY virtualDesktopsChanged)

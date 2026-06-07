@@ -60,8 +60,7 @@ ColumnLayout {
         var result = [];
         for (var i = 0; i < all.length; i++) {
             var name = all[i].name || "";
-            var vsIdx = name.indexOf("/vs:");
-            var physId = vsIdx >= 0 ? name.substring(0, vsIdx) : name;
+            var physId = appSettings.physicalScreenId(name);
             if (seen[physId])
                 continue;
             seen[physId] = true;
@@ -91,8 +90,11 @@ ColumnLayout {
     readonly property real _mapHeight: Kirigami.Units.gridUnit * 4
     readonly property real _maxMapWidth: Kirigami.Units.gridUnit * 26
     // Per-tile pixel rects, scaled from real geometry into the map band. When
-    // every screen reports geometry we honour the true arrangement; otherwise
-    // we fall back to an equal-size 16:9 row so the picker still works.
+    // every screen reports geometry we honour the true arrangement; if even one
+    // screen lacks geometry (e.g. a virtual screen whose physical parent can't
+    // be resolved while the daemon is offline) the whole map falls back to an
+    // equal-size 16:9 row so the picker still works — proportional and equal
+    // tiles are never mixed in one map.
     readonly property var _tileRects: {
         var s = _filteredScreens;
         var n = s.length;
@@ -173,11 +175,17 @@ ColumnLayout {
     }
     Component.onCompleted: _refreshOverrides()
     onHasOverridesMethodChanged: _refreshOverrides()
-    on_FilteredScreensChanged: _refreshOverrides()
 
     Connections {
         target: root.appSettings
         function onPerScreenOverridesChanged() {
+            root._refreshOverrides();
+        }
+        // Screen list changed (hot-plug, virtual-screen reshape) → re-poll the
+        // per-output override dots. Driven off the real screensChanged signal
+        // rather than a _filteredScreens property change-handler, whose handler
+        // name is easy to mis-case and then silently never fire.
+        function onScreensChanged() {
             root._refreshOverrides();
         }
     }
@@ -324,7 +332,7 @@ ColumnLayout {
 
                                 anchors.centerIn: parent
                                 text: i18nc("@label primary monitor badge", "Primary")
-                                font.pixelSize: Kirigami.Theme.smallFont.pixelSize - 2
+                                font: Kirigami.Theme.smallFont
                                 color: Kirigami.Theme.positiveTextColor
                             }
                         }

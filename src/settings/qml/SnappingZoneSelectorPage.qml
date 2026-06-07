@@ -9,9 +9,9 @@ import org.kde.kirigami as Kirigami
 // Snapping → Zone Selector. The edge-triggered layout-picker popup: enabled,
 // trigger distance, on-screen position, arrangement and preview size. Kept as a
 // single page (not split into Behavior/Appearance) — its behaviour is just the
-// enable toggle + trigger distance, too small to warrant its own page. Gaps and
-// their monitor selector moved to Window → Appearance; the per-screen popup
-// overrides are handled internally by ZoneSelectorSection's own monitor selector.
+// enable toggle + trigger distance, too small to warrant its own page. Gaps
+// moved to Window → Appearance; the per-screen popup overrides are scoped by the
+// header scope chip on each of ZoneSelectorSection's per-monitor cards.
 SettingsFlickable {
     id: root
 

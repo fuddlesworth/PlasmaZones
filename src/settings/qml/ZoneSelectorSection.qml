@@ -10,9 +10,10 @@ import org.kde.kirigami as Kirigami
  * @brief Zone selector popup settings section with per-monitor overrides
  *
  * Extracted component containing the zone selector popup configuration:
- * info message, enable toggle, monitor selector, position & trigger,
- * layout arrangement, and preview size cards. Supports per-monitor
- * overrides when multiple monitors are detected.
+ * info message, enable toggle, position & trigger, layout arrangement, and
+ * preview size cards. The three per-monitor cards carry a header scope chip,
+ * so per-monitor overrides are scoped to the monitor picked there (shared
+ * app-wide scope) when multiple monitors are detected.
  */
 ColumnLayout {
     // ═══════════════════════════════════════════════════════════════════════

@@ -142,9 +142,7 @@ SettingsFlickable {
         var arr = settingsController.screens || [];
         for (var i = 0; i < arr.length; i++) {
             var nm = arr[i].name || "";
-            var vs = nm.indexOf("/vs:");
-            var phys = vs >= 0 ? nm.substring(0, vs) : nm;
-            if (nm === id || phys === id)
+            if (nm === id || settingsController.physicalScreenId(nm) === id)
                 return true;
         }
         return false;

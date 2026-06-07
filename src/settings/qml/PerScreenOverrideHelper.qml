@@ -67,8 +67,8 @@ QtObject {
     onSelectedScreenNameChanged: reload()
 
     // Reload when overrides change anywhere for this domain (e.g. a
-    // ScopedGroup Reset clears the current monitor) so bound card values
-    // refresh even though the selected screen didn't change.
+    // MonitorScopeChip "Reset this monitor" clears the current monitor) so
+    // bound card values refresh even though the selected screen didn't change.
     property Connections _overrideWatch: Connections {
         target: helper.appSettings
         function onPerScreenOverridesChanged() {

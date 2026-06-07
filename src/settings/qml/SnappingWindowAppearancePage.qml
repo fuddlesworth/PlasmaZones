@@ -12,8 +12,9 @@ SettingsFlickable {
 
     readonly property var settingsBridge: settingsController.snappingWindowAppearancePage
     // Per-screen snapping gap/padding helper. Only the Gaps card below is
-    // per-screen; the colour / decoration / border cards are global. The monitor
-    // selector is placed directly above Gaps so its scope reads unambiguously.
+    // per-screen; the colour / decoration / border cards are global. The Gaps
+    // card opts into the header scope chip, so the global cards above it carry
+    // no scope chrome and read as global.
 
     function snappingSettingValue(key, globalValue) {
         return snappingHelper.settingValue(key, globalValue);

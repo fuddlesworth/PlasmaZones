@@ -62,6 +62,19 @@ private Q_SLOTS:
         const QVariantMap m = screenInfoListToVariantList({left}).first().toMap();
         QCOMPARE(m.value(QStringLiteral("x")).toInt(), -2560);
         QCOMPARE(m.value(QStringLiteral("y")).toInt(), 360);
+
+        // An output stacked ABOVE the primary has a negative y with a
+        // positive x — exercise the y path independently of the x path.
+        ScreenInfo above;
+        above.name = QStringLiteral("DP-3");
+        above.width = 1920;
+        above.height = 1080;
+        above.x = 640;
+        above.y = -1080;
+
+        const QVariantMap a = screenInfoListToVariantList({above}).first().toMap();
+        QCOMPARE(a.value(QStringLiteral("x")).toInt(), 640);
+        QCOMPARE(a.value(QStringLiteral("y")).toInt(), -1080);
     }
 
     void dimensionsStillSkippedWhenNonPositive_butPositionRemains()

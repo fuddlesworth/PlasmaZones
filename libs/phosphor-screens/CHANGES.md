@@ -99,5 +99,14 @@ that key off the shape of the emitted `QVariantMap` should be audited:
    physical-vs-virtual rows will now see the key on every row and must
    switch to testing the boolean value.
 
+4. **`x` / `y` screen-space position are now emitted (always).**
+
+   Each map carries the output's top-left position in the compositor's
+   global coordinate space, so consumers can lay outputs out in their real
+   arrangement (e.g. a proportional multi-monitor map). Unlike `width` /
+   `height`, position has no sentinel: `0` is a valid origin and negative
+   coordinates are normal for outputs placed left of / above the primary,
+   so `x` / `y` are emitted unconditionally — they are always present.
+
 QML consumers that walked the variant map by key set (rather than by
 known-key lookup) are the most likely to regress.

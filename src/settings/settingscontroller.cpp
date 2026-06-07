@@ -600,22 +600,30 @@ SettingsController::SettingsController(QObject* parent)
     // ran first and any same-tick screensChanged was lost, leaving QML
     // bindings stale until the next external daemon-driven refresh.
     m_screenHelper.connectToDaemonSignals();
-    connect(&m_screenHelper, &ScreenHelper::screensChanged, this, &SettingsController::screensChanged);
     // Hot-unplug: if the monitor the per-monitor groups are scoped to goes
     // away, fall back to "All Monitors". Lives here (not in the transient
     // DisplayMap popover) so the scope is pruned even when no scope UI is open.
+    // Connected BEFORE the QML-facing screensChanged forward below so a QML
+    // onScreensChanged handler observes the already-pruned scope rather than a
+    // stale value that only corrects on the trailing scopeScreenNameChanged.
     connect(&m_screenHelper, &ScreenHelper::screensChanged, this, [this]() {
         if (m_scopeScreenName.isEmpty())
             return;
-        const QVariantList screens = m_screenHelper.screens();
-        for (const QVariant& v : screens) {
+        // Compare physical parents on BOTH sides so the scope survives removal
+        // of a sibling virtual child of the same physical output (stripping
+        // only the live name while leaving the stored scope unstripped would
+        // never match a virtual-id scope).
+        const QString scopePhysicalId = PhosphorIdentity::VirtualScreenId::extractPhysicalId(m_scopeScreenName);
+        const QVariantList liveScreens = m_screenHelper.screens();
+        for (const QVariant& v : liveScreens) {
             const QString name = v.toMap().value(QStringLiteral("name")).toString();
             if (name == m_scopeScreenName
-                || PhosphorIdentity::VirtualScreenId::extractPhysicalId(name) == m_scopeScreenName)
+                || PhosphorIdentity::VirtualScreenId::extractPhysicalId(name) == scopePhysicalId)
                 return;
         }
         setScopeScreenName(QString());
     });
+    connect(&m_screenHelper, &ScreenHelper::screensChanged, this, &SettingsController::screensChanged);
     connect(&m_screenHelper, &ScreenHelper::needsSave, this, [this]() {
         // A daemon-driven screen refresh that fires while load()/save() is
         // batching its own state-transitions must not flip the page dirty

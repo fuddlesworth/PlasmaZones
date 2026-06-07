@@ -351,8 +351,9 @@ SettingsFlickable {
 
     // Strip "/vs:N" suffix to get physical screen ID
     function _toPhysicalId(name) {
-        var vsIdx = name.indexOf("/vs:");
-        return vsIdx >= 0 ? name.substring(0, vsIdx) : name;
+        // Canonical "/vs:" collapse lives in C++ (PhosphorIdentity); don't
+        // re-spell the separator here.
+        return settingsController.physicalScreenId(name);
     }
 
     function _autoSelectScreen() {
@@ -390,14 +391,16 @@ SettingsFlickable {
 
     Connections {
         function onScreensChanged() {
-            // Drop a selection whose physical output was unplugged so the
-            // auto-select below re-picks a present one.
+            // Drop a selection whose physical output was unplugged, then re-pick
+            // BEFORE refreshing so geometry/config never run a redundant pass
+            // against an empty selection (mirrors MonitorStatePage's
+            // drop-then-select-then-refresh order).
             if (root._selectedScreen !== "" && !root._screenStillPresent(root._selectedScreen))
                 root._selectedScreen = "";
-            root._updateScreenGeometry();
-            root._refreshConfig();
             if (root._selectedScreen === "" && settingsController.screens.length > 0)
                 root._autoSelectScreen();
+            root._updateScreenGeometry();
+            root._refreshConfig();
         }
 
         target: settingsController
