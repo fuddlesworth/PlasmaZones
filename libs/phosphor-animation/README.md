@@ -143,6 +143,7 @@ QVariantMap params  = sp.parameters.value_or(QVariantMap{});
 ## Dependencies
 
 - `QtCore`, `QtGui`, `QtQuick`, `QtQuickPrivate`, `QtQml`
+- [`phosphor-registry`](../phosphor-registry/README.md) — `Registry<T>` storage + `MetadataPackLoader<T>` backing `AnimationShaderRegistry` and `CurveRegistry`
 - [`phosphor-fsloader`](../phosphor-fsloader/README.md) — directory loaders for curves, profiles, shader packs
 - [`phosphor-shaders`](../phosphor-shaders/README.md) — header-only consumption of `CustomParamsKey.h`
 - [`phosphor-layer`](../phosphor-layer/README.md) — `ISurfaceAnimator` (implemented by `SurfaceAnimator`)

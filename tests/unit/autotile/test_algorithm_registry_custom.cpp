@@ -178,6 +178,16 @@ private Q_SLOTS:
         QCOMPARE(registry->algorithm(id1), algo); // still the same, still alive
         QCOMPARE(spy.count(), 0); // no re-registration signal
 
+        // Re-registering the already-owned pointer under an INVALID id must NOT
+        // delete it (the double-ownership guard runs before the id-validation
+        // delete paths) — it stays owned + alive under id1. Reading its name
+        // would be a use-after-free if the validation path had freed it.
+        registry->registerAlgorithm(QStringLiteral("autotile:bad"), algo);
+        QVERIFY(registry->hasAlgorithm(id1));
+        QCOMPARE(registry->algorithm(id1), algo);
+        QCOMPARE(registry->algorithm(id1)->name(), QStringLiteral("Double Test")); // alive, not freed
+        QVERIFY(!registry->hasAlgorithm(QStringLiteral("autotile:bad")));
+
         registry->unregisterAlgorithm(id1);
     }
 

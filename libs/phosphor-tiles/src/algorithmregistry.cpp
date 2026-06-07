@@ -181,8 +181,36 @@ void AlgorithmRegistry::registerAlgorithm(const QString& id, TilingAlgorithm* al
     if (!algorithm) {
         return;
     }
-    // From here we own `algorithm`; delete it on every validation-failure path
-    // to prevent leaks (matching the prior contract).
+
+    // Double-ownership guard — MUST run BEFORE the id-validation deletes below.
+    // If THIS exact algorithm object is already owned by the registry,
+    // re-registering it would wrap the already-owned raw pointer in a SECOND
+    // shared_ptr + deferred-delete deleter — and the Replace below would drop
+    // the first owner, scheduling a deleteLater() on a pointer the new entry
+    // still owns → double-free when the new entry later drops. Reject WITHOUT
+    // deleting (it stays owned under its existing id). Positioned first so an
+    // already-owned pointer re-registered under an INVALID id is never deleted
+    // out from under its live entry by the validation paths.
+    // This covers a different id (a real misuse — warn) AND a redundant
+    // re-register under the SAME id (a no-op). A genuine replacement — same id
+    // but a DIFFERENT pointer (the hot-reload case) — has
+    // existing->algorithm() != algorithm and proceeds to Replace normally.
+    const QString existingId = algorithm->registryId();
+    if (!existingId.isEmpty()) {
+        const auto existing = m_impl->registry.factory(existingId);
+        if (existing && existing->algorithm() == algorithm) {
+            if (existingId != id) {
+                qCWarning(PhosphorTiles::lcTilesLib)
+                    << "AlgorithmRegistry: algorithm" << algorithm->name() << "is already registered as" << existingId
+                    << "- cannot register as" << id;
+            }
+            return;
+        }
+    }
+
+    // From here `algorithm` is NOT already owned by the registry, so deleting it
+    // on a validation-failure path is safe (prevents leaks, matching the prior
+    // contract).
     if (id.isEmpty()) {
         delete algorithm;
         return;
@@ -206,29 +234,6 @@ void AlgorithmRegistry::registerAlgorithm(const QString& id, TilingAlgorithm* al
             qCWarning(PhosphorTiles::lcTilesLib) << "AlgorithmRegistry: refusing algorithm id with invalid character"
                                                  << id << "(allowed: [A-Za-z0-9._:-])";
             delete algorithm;
-            return;
-        }
-    }
-
-    // Double-ownership guard: if THIS exact algorithm object is already owned
-    // by the registry, re-registering it would wrap the already-owned raw
-    // pointer in a SECOND shared_ptr + deferred-delete deleter — and the
-    // Replace below would drop the first owner, scheduling a deleteLater() on a
-    // pointer the new entry still owns → double-free when the new entry later
-    // drops. Reject without deleting (it stays owned under its existing id).
-    // This covers a different id (a real misuse — warn) AND a redundant
-    // re-register under the SAME id (a no-op). A genuine replacement — same id
-    // but a DIFFERENT pointer (the hot-reload case) — has
-    // existing->algorithm() != algorithm and proceeds to Replace normally.
-    const QString existingId = algorithm->registryId();
-    if (!existingId.isEmpty()) {
-        const auto existing = m_impl->registry.factory(existingId);
-        if (existing && existing->algorithm() == algorithm) {
-            if (existingId != id) {
-                qCWarning(PhosphorTiles::lcTilesLib)
-                    << "AlgorithmRegistry: algorithm" << algorithm->name() << "is already registered as" << existingId
-                    << "- cannot register as" << id;
-            }
             return;
         }
     }
