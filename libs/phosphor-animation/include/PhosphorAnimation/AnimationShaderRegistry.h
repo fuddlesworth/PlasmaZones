@@ -214,9 +214,10 @@ Q_SIGNALS:
 private:
     // Generic id-keyed storage + change-notify for the discovered effect
     // packs. m_loader (below) populates it from disk; the lookup methods
-    // read it. Declared before m_loader so the loader — which holds a
-    // borrowed Registry pointer + unregisters every pack in its dtor —
-    // tears down first.
+    // read it. Declared before m_loader so it is destroyed AFTER the loader:
+    // the loader holds a borrowed Registry pointer (used during live rescans
+    // in reconcile(), not at teardown), which must stay valid for the loader's
+    // whole lifetime.
     PhosphorRegistry::Registry<AnimationPack> m_registry;
     // On-disk scan + hot-reload. Parses each pack's metadata.json into an
     // AnimationPack and reconciles m_registry; its onCommitted hook
