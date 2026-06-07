@@ -53,8 +53,9 @@ public:
     // capabilities, but the domain registries unified onto Registry<T>
     // (shader packs, animation effects, easing curves, tiling
     // algorithms, layout sources) carry no capability metadata and
-    // should not have to fabricate an override returning `{}`. The advisory contract is
-    // unchanged — an entry that declares nothing simply declares nothing.
+    // should not have to fabricate an override returning `{}`. The
+    // advisory contract is unchanged — an entry that declares nothing
+    // simply declares nothing.
     [[nodiscard]] virtual QStringList capabilities() const
     {
         return {};

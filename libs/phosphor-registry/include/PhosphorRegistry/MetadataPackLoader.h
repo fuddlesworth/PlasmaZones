@@ -284,13 +284,23 @@ private:
                 // position — a hot-reload must not shuffle the edited pack to
                 // the end of ids()/forEach() (Registry's documented invariant).
                 // It still fires factoryUnregistered(old) + factoryRegistered(new).
+                // (m_strategy->packs() is id-sorted, so a loader-fed registry's
+                // registration order is lexicographic by id, not disk order.)
                 m_registry->registerFactory(e.factory, QString(), DuplicatePolicy::Replace);
             }
             // else: unchanged — leave the registry entry as-is.
         }
-        for (auto it = m_fingerprints.cbegin(); it != m_fingerprints.cend(); ++it) {
-            if (!fresh.contains(it.key())) {
-                m_registry->unregisterFactory(it.key()); // pack disappeared
+        // Remove packs that disappeared. Walk the registry's ids() — which is
+        // registration order — rather than m_fingerprints (a QHash, hash order)
+        // so the per-removal factoryUnregistered signals stay in registration
+        // order, matching the contract Registry::unregisterByOwner upholds and
+        // consumers rely on. The m_fingerprints.contains() filter restricts the
+        // removal to packs THIS loader registered (it is the sole writer of its
+        // borrowed Registry), never an entry registered out-of-band.
+        const QList<QString> registered = m_registry->ids();
+        for (const QString& id : registered) {
+            if (m_fingerprints.contains(id) && !fresh.contains(id)) {
+                m_registry->unregisterFactory(id); // pack disappeared
             }
         }
         m_fingerprints = std::move(fresh);

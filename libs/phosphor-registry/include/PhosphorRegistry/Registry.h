@@ -56,6 +56,12 @@ namespace PhosphorRegistry {
 // whole contribution. Untagged registrations (the empty tag) are the default
 // and are never matched by unregisterByOwner.
 //
+// A Replace adopts the NEW call's owner tag — it does not preserve the prior
+// entry's tag. A re-registration that wants to keep an entry in its owner
+// group must pass the same ownerTag again (a tag-less Replace moves the entry
+// to the untagged group). The hot-reload callers (MetadataPackLoader, curve /
+// algorithm registries) register untagged, so this is a no-op for them.
+//
 // Header-only by design (no .cpp). The template body must be instantiable
 // from any consuming translation unit.
 

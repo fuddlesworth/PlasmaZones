@@ -195,6 +195,37 @@ private Q_SLOTS:
         QCOMPARE(reg.ids(), orderBefore);
     }
 
+    // Removing several packs in ONE rescan emits factoryUnregistered in
+    // registration order (reconcile walks the registry's ordered ids(), not the
+    // hash-ordered fingerprint map).
+    void testMultiPackRemovalEmitsInRegistrationOrder()
+    {
+        QTemporaryDir dir;
+        QVERIFY(dir.isValid());
+        writePack(dir.path(), "alpha", "alpha", "Alpha", 1);
+        writePack(dir.path(), "beta", "beta", "Beta", 2);
+        writePack(dir.path(), "gamma", "gamma", "Gamma", 3);
+
+        Reg reg;
+        auto loader = makeLoader(&reg);
+        loader->addSearchPaths({dir.path()}, PhosphorFsLoader::LiveReload::Off);
+        QCOMPARE(reg.ids(), (QList<QString>{QStringLiteral("alpha"), QStringLiteral("beta"), QStringLiteral("gamma")}));
+
+        QSignalSpy removed(reg.notifier(), &PhosphorRegistry::RegistryNotifier::factoryUnregistered);
+
+        // Drop alpha + gamma; refresh reconciles both removals in one pass.
+        QVERIFY(QDir(dir.path() + QStringLiteral("/alpha")).removeRecursively());
+        QVERIFY(QDir(dir.path() + QStringLiteral("/gamma")).removeRecursively());
+        loader->refresh();
+
+        QCOMPARE(reg.size(), 1);
+        QVERIFY(reg.factory(QStringLiteral("beta")) != nullptr);
+        QCOMPARE(removed.count(), 2);
+        // Registration order (alpha before gamma), not QHash order.
+        QCOMPARE(removed.at(0).at(0).toString(), QStringLiteral("alpha"));
+        QCOMPARE(removed.at(1).at(0).toString(), QStringLiteral("gamma"));
+    }
+
     // User-path packs win over system-path packs on id collision, and
     // carry the isUser flag.
     void testUserOverridesSystem()

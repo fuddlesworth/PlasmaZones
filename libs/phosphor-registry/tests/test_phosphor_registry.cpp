@@ -252,6 +252,11 @@ void TestRegistry::ownerTag_bulkUnregister()
     QVERIFY(reg.factory(QStringLiteral("c")) != nullptr); // plugin-y untouched
     QVERIFY(reg.factory(QStringLiteral("d")) != nullptr); // untagged untouched
     QCOMPARE(unregSpy.count(), 2);
+    // The bulk-unregister signals arrive in registration order (a before b),
+    // not QHash order — unregisterByOwner walks m_order to uphold the same
+    // ordered-signal contract as signals_fireInRegistrationOrder.
+    QCOMPARE(unregSpy.at(0).at(0).toString(), QStringLiteral("a"));
+    QCOMPARE(unregSpy.at(1).at(0).toString(), QStringLiteral("b"));
 }
 
 // ids() / forEach() iterate in registration (insertion) order — NOT hash

@@ -213,7 +213,7 @@ private Q_SLOTS:
         QCOMPARE(spy.count(), 0);
     }
 
-    void testUnregister_removesFromOrder()
+    void testUnregister_removesFromAvailable()
     {
         auto* registry = m_scriptSetup.registry();
         const QString testId = QStringLiteral("test-order-remove");
@@ -226,10 +226,11 @@ private Q_SLOTS:
     }
 
     // =========================================================================
-    // Registration order tests
+    // Enumeration tests (membership + available/all consistency; order is not
+    // a contract — availableAlgorithms() is sorted, see ITileAlgorithmRegistry)
     // =========================================================================
 
-    void testOrder_preservedInAvailableAlgorithms()
+    void testAllBuiltinsPresentInAvailable()
     {
         auto* registry = m_scriptSetup.registry();
         auto available = registry->availableAlgorithms();
