@@ -36,6 +36,7 @@ function(ps_add_test _name)
 endfunction()
 
 ps_add_test(ps_test_virtualscreen test_virtualscreen.cpp)
+ps_add_test(ps_test_screeninfo_variantlist test_screeninfo_variantlist.cpp)
 ps_add_test(ps_test_inmemoryconfigstore test_inmemoryconfigstore.cpp)
 ps_add_test(ps_test_swapper test_swapper.cpp)
 ps_add_test(ps_test_screenidentity_variants test_screenidentity_variants.cpp)
