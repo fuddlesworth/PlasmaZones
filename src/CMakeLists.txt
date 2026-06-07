@@ -778,8 +778,9 @@ install(TARGETS plasmazones-editor DESTINATION ${KDE_INSTALL_BINDIR})
 # T1.2 — offline shader-pack validator. Parses metadata.json with the daemon's
 # parser, reproduces the runtime GLSL assembly (entry scaffold + p_<id> preamble
 # + includes) and bakes every stage through headless glslang (QShaderBaker — CPU
-# only, no GPU/Wayland). The CI gate for the bundled set; pre-commit-friendly for
-# pack authors. Links plasmazones_rendering for the zone entry scaffold.
+# only, no GPU/Wayland). The CI gate for the bundled sets; pre-commit-friendly for
+# pack authors. Links plasmazones_rendering for the zone entry scaffold and
+# PhosphorAnimation for the animation effect parser + entry scaffold.
 add_executable(plasmazones-shader-validate shadervalidate/main.cpp)
 target_link_libraries(plasmazones-shader-validate
     PRIVATE

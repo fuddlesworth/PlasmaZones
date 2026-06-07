@@ -27,6 +27,7 @@
 
 #include "../daemon/rendering/zoneentryscaffold.h"
 
+#include <PhosphorAnimation/AnimationShaderContract.h>
 #include <PhosphorAnimation/AnimationShaderEffect.h>
 #include <PhosphorAnimation/AnimationShaderRegistry.h>
 #include <PhosphorRendering/ShaderCompiler.h>
@@ -355,11 +356,19 @@ int validateAnimationPack(const QString& packDir, QTextStream& out)
 
     AnimationShaderEffect eff = AnimationShaderEffect::fromJson(doc.object());
     eff.sourceDir = QDir(packDir).absolutePath();
-    eff.fragmentShaderPath = QDir(packDir).filePath(QStringLiteral("effect.frag"));
+    // Mirror AnimationShaderRegistry::parseEffect: the fragment path comes from
+    // the metadata `fragmentShader` field, resolved relative to the pack dir
+    // (QDir::filePath returns an absolute input unchanged). The runtime does NOT
+    // default to effect.frag — a pack that omits the field is unreachable, so an
+    // empty path stays empty and is caught by isValid() below.
+    if (!eff.fragmentShaderPath.isEmpty()) {
+        eff.fragmentShaderPath = QDir(packDir).filePath(eff.fragmentShaderPath);
+    }
     if (!eff.isValid()) {
-        out << name << "\n  metadata      ERROR\n    missing required field (id / effect.frag)\n  → 1 error\n\n";
+        out << name << "\n  metadata      ERROR\n    missing required field (id / fragmentShader)\n  → 1 error\n\n";
         return 1;
     }
+    const QString fragLabel = QFileInfo(eff.fragmentShaderPath).fileName();
 
     out << name << "  (" << eff.parameters.size() << " param" << (eff.parameters.size() == 1 ? "" : "s") << ", "
         << eff.textures.size() << " texture" << (eff.textures.size() == 1 ? "" : "s") << ")\n";
@@ -385,8 +394,22 @@ int validateAnimationPack(const QString& packDir, QTextStream& out)
                 << QStringLiteral("invalid parameter id '%1' (not a GLSL identifier; skipped, no p_ define)").arg(p.id);
         }
     }
+    // Texture lints mirror parseEffect's parse-time journal warnings. fromJson
+    // silently drops these from the in-memory struct, so read the RAW metadata
+    // textures array (same as parseEffect) rather than eff.textures.
+    const QJsonArray declaredTextures = doc.object().value(QLatin1String("textures")).toArray();
+    if (declaredTextures.size() > PhosphorAnimationShaders::AnimationShaderContract::kMaxUserTextureSlots) {
+        lints << QStringLiteral("too many textures: %1 declared, cap is %2 (surplus dropped at load)")
+                     .arg(static_cast<int>(declaredTextures.size()))
+                     .arg(PhosphorAnimationShaders::AnimationShaderContract::kMaxUserTextureSlots);
+    }
+    for (const QJsonValue& v : declaredTextures) {
+        if (v.toObject().value(QLatin1String("path")).toString().isEmpty()) {
+            lints << QStringLiteral("texture entry with empty `path` (dropped at load)");
+        }
+    }
     if (!QFile::exists(eff.fragmentShaderPath)) {
-        lints << QStringLiteral("fragment shader missing: effect.frag");
+        lints << QStringLiteral("fragment shader missing: %1").arg(fragLabel);
     }
 
     if (lints.isEmpty()) {
@@ -403,7 +426,7 @@ int validateAnimationPack(const QString& packDir, QTextStream& out)
     if (QFile::exists(eff.fragmentShaderPath)) {
         QFile frag(eff.fragmentShaderPath);
         if (!frag.open(QIODevice::ReadOnly | QIODevice::Text)) {
-            out << "  effect.frag    ERROR\n    cannot read " << eff.fragmentShaderPath << "\n";
+            out << "  " << fragLabel.leftJustified(14) << "ERROR\n    cannot read " << eff.fragmentShaderPath << "\n";
             ++errors;
         } else {
             const QString raw = QString::fromUtf8(frag.readAll());
@@ -417,13 +440,13 @@ int validateAnimationPack(const QString& packDir, QTextStream& out)
             const QString expanded = ShaderCompiler::expandSource(
                 assembled, QFileInfo(eff.fragmentShaderPath).absolutePath(), includePaths, &err);
             if (expanded.isEmpty()) {
-                out << "  effect.frag    ERROR\n    include expansion failed: " << err << "\n";
+                out << "  " << fragLabel.leftJustified(14) << "ERROR\n    include expansion failed: " << err << "\n";
                 ++errors;
             } else {
                 const QString spliced =
                     PhosphorShaders::spliceAfterVersion(expanded, AnimationShaderRegistry::paramPreamble(eff));
                 const ShaderCompiler::Result result = ShaderCompiler::compile(spliced.toUtf8(), QShader::FragmentStage);
-                errors += reportCompile(out, QStringLiteral("effect.frag"), result, declaredParamNames(eff.parameters));
+                errors += reportCompile(out, fragLabel, result, declaredParamNames(eff.parameters));
             }
         }
     }
