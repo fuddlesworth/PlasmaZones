@@ -778,25 +778,32 @@ install(TARGETS plasmazones-editor DESTINATION ${KDE_INSTALL_BINDIR})
 # T1.2 — offline shader-pack validator. Parses metadata.json with the daemon's
 # parser, reproduces the runtime GLSL assembly (entry scaffold + p_<id> preamble
 # + includes) and bakes every stage through headless glslang (QShaderBaker — CPU
-# only, no GPU/Wayland). The CI gate for the bundled set; pre-commit-friendly for
-# pack authors. Links plasmazones_rendering for the zone entry scaffold.
+# only, no GPU/Wayland). The CI gate for the bundled sets; pre-commit-friendly for
+# pack authors. Links plasmazones_rendering for the zone entry scaffold and
+# PhosphorAnimation for the animation effect parser + entry scaffold.
 add_executable(plasmazones-shader-validate shadervalidate/main.cpp)
 target_link_libraries(plasmazones-shader-validate
     PRIVATE
         plasmazones_rendering
         PhosphorRendering::PhosphorRendering
         PhosphorShaders::PhosphorShaders
+        PhosphorAnimation::PhosphorAnimation
         Qt6::Core
         Qt6::GuiPrivate
         Qt6::ShaderToolsPrivate
 )
 install(TARGETS plasmazones-shader-validate DESTINATION ${KDE_INSTALL_BINDIR})
 
-# CI gate: every bundled zone pack must parse + bake clean. Headless glslang, so
-# this runs in CI with no GPU/Wayland — exactly like luau-analyze for algorithms.
+# CI gate: every bundled pack must parse + bake clean. Headless glslang, so this
+# runs in CI with no GPU/Wayland — exactly like luau-analyze for algorithms. Zone
+# packs (data/shaders) and animation packs (--animation, data/animations) are
+# distinct authoring models with different entry conventions, so each gets its own
+# invocation.
 if(BUILD_TESTING)
     add_test(NAME shader_validate_bundled
-             COMMAND plasmazones-shader-validate ${PROJECT_SOURCE_DIR}/data/shaders)
+             COMMAND plasmazones-shader-validate --overlay ${PROJECT_SOURCE_DIR}/data/shaders)
+    add_test(NAME shader_validate_animations
+             COMMAND plasmazones-shader-validate --animation ${PROJECT_SOURCE_DIR}/data/animations)
 endif()
 
 # Standalone settings app (no KDE Frameworks required)
