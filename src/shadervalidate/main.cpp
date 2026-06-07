@@ -293,7 +293,10 @@ int validatePack(const QString& packDir, QTextStream& out)
     const QString preamble = ShaderRegistry::paramPreamble(info);
 
     if (QFile::exists(info.sourcePath)) {
-        errors += compileStage(out, QStringLiteral("effect.frag"), info.sourcePath, QShader::FragmentStage,
+        // Label by the actual fragment filename — parsePackMetadata honours a
+        // custom `fragmentShader` field (default effect.frag), so the stage label
+        // tracks the real file rather than assuming effect.frag.
+        errors += compileStage(out, QFileInfo(info.sourcePath).fileName(), info.sourcePath, QShader::FragmentStage,
                                includePaths, /*useScaffold=*/true, preamble, info);
     }
     // Only multipass packs bake buffer passes — parseShaderMetadata seeds a
