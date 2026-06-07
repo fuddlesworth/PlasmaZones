@@ -77,7 +77,7 @@ private Q_SLOTS:
         const QStringList testIds = {
             QStringLiteral("test-replace"),  QStringLiteral("test-signal"),     QStringLiteral("test-double-1"),
             QStringLiteral("test-double-2"), QStringLiteral("test-unregister"), QStringLiteral("test-order-remove"),
-            QStringLiteral("test-null"),
+            QStringLiteral("test-null"),     QStringLiteral("test-clearid"),    QStringLiteral("test-replace-clearid"),
         };
         for (const auto& id : testIds) {
             if (registry->hasAlgorithm(id)) {
@@ -211,6 +211,42 @@ private Q_SLOTS:
 
         QVERIFY(!result);
         QCOMPARE(spy.count(), 0);
+    }
+
+    // Unregistering clears the removed algorithm's registry id while the
+    // object is still alive on the deferred-delete queue, so a cached-pointer
+    // holder observes the unregistered state (TilingAlgorithm contract; the
+    // previewFromAlgorithm guard treats an empty id as "not registered").
+    void testUnregister_clearsRegistryId()
+    {
+        auto* registry = m_scriptSetup.registry();
+        const QString testId = QStringLiteral("test-clearid");
+
+        auto* algo = new CustomTestAlgorithm();
+        registry->registerAlgorithm(testId, algo);
+        QCOMPARE(algo->registryId(), testId);
+
+        registry->unregisterAlgorithm(testId);
+        QVERIFY(algo->registryId().isEmpty()); // algo still alive (deleteLater queued)
+    }
+
+    // Replacing an id clears the OLD algorithm's registry id (it lives on past
+    // the replace via deferred delete); the new algorithm holds the id.
+    void testReplace_clearsOldAlgorithmRegistryId()
+    {
+        auto* registry = m_scriptSetup.registry();
+        const QString testId = QStringLiteral("test-replace-clearid");
+
+        auto* algo1 = new CustomTestAlgorithm(QStringLiteral("First"));
+        registry->registerAlgorithm(testId, algo1);
+        QCOMPARE(algo1->registryId(), testId);
+
+        auto* algo2 = new CustomTestAlgorithm(QStringLiteral("Second"));
+        registry->registerAlgorithm(testId, algo2); // replace
+        QVERIFY(algo1->registryId().isEmpty()); // old cleared, still alive
+        QCOMPARE(algo2->registryId(), testId); // new holds the id
+
+        registry->unregisterAlgorithm(testId);
     }
 
     void testUnregister_removesFromAvailable()

@@ -233,9 +233,21 @@ void AlgorithmRegistry::registerAlgorithm(const QString& id, TilingAlgorithm* al
         }
     }
 
-    const bool replacing = m_impl->registry.factory(id) != nullptr;
+    const auto oldEntry = m_impl->registry.factory(id);
+    const bool replacing = oldEntry != nullptr;
+    if (replacing) {
+        // Clear the OLD algorithm's registry id before the entry is dropped —
+        // its deferred delete keeps it alive past the signals below, and a
+        // handler holding a cached pointer must observe the unregistered state
+        // via an empty registryId() (TilingAlgorithm's contract; the
+        // previewFromAlgorithm guard). The double-ownership guard above ensures
+        // the old algorithm is a different object than `algorithm`.
+        if (auto* oldAlgo = oldEntry->algorithm()) {
+            oldAlgo->setRegistryId(QString());
+        }
+    }
     algorithm->setRegistryId(id);
-    // Replace: a prior entry at `id` is dropped here, deferring the old
+    // Replace: the prior entry at `id` is dropped here, deferring the old
     // algorithm's deletion past the signals below (the entry's deleter), with
     // the NEW algorithm already queryable when handlers run.
     m_impl->registry.registerFactory(std::make_shared<TileAlgorithmEntry>(ownAlgorithm(algorithm)), QString(),
@@ -254,9 +266,19 @@ bool AlgorithmRegistry::unregisterAlgorithm(const QString& id)
 {
     Q_ASSERT(!QCoreApplication::instance() || QThread::currentThread() == QCoreApplication::instance()->thread());
 
-    if (!m_impl->registry.unregisterFactory(id)) {
+    const auto entry = m_impl->registry.factory(id);
+    if (!entry) {
         return false;
     }
+    // Clear the removed algorithm's registry id BEFORE dropping the entry. The
+    // entry's deferred delete keeps the object alive past these signals, so a
+    // handler holding a cached pointer must observe the unregistered state via
+    // an empty registryId() (TilingAlgorithm's contract; the
+    // previewFromAlgorithm guard) — not the stale id.
+    if (auto* algo = entry->algorithm()) {
+        algo->setRegistryId(QString());
+    }
+    m_impl->registry.unregisterFactory(id);
     // The entry was dropped above, deferring the algorithm's deletion (the
     // entry's deleteLater deleter) past these signals — so a handler holding a
     // cached algorithm pointer can still safely reference it; algorithm(id)
