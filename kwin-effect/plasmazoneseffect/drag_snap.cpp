@@ -83,7 +83,7 @@ void PlasmaZonesEffect::callEndDrag(KWin::EffectWindow* window, const QString& w
     auto handled = std::make_shared<bool>(false);
     QTimer* timeoutTimer = new QTimer(this);
     timeoutTimer->setSingleShot(true);
-    connect(timeoutTimer, &QTimer::timeout, this, [this, windowId, handled, watcher, timeoutTimer]() {
+    connect(timeoutTimer, &QTimer::timeout, this, [windowId, handled, watcher, timeoutTimer]() {
         if (*handled) {
             return;
         }
