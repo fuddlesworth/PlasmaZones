@@ -12,10 +12,10 @@ SettingsFlickable {
 
     readonly property var settingsBridge: settingsController.tilingAppearancePage
     readonly property int gapMax: root.settingsBridge.autotileGapMax
-    // Per-screen override helper. Only the Gaps group below is per-screen; the
-    // colour / decoration / border cards are global. The ScopedGroup wrapper
-    // draws the scope boundary, so the global cards above it read as global
-    // without needing any per-card scope chrome.
+    // Per-screen override helper. Only the Gaps card below is per-screen; the
+    // colour / decoration / border cards are global. The Gaps card opts into
+    // the header scope chip, so the global cards above carry no scope chrome
+    // and read as global.
     function settingValue(key, globalValue) {
         return psHelper.settingValue(key, globalValue);
     }
