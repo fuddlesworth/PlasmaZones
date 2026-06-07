@@ -123,9 +123,9 @@ QObject::connect(m_registry.notifier(),
 
 QStringList BarController::factoryIds() const
 {
-    // Registry::ids() returns hash order, which is unspecified and
-    // unstable across restarts. Sort for a deterministic bar layout
-    // (a real shell would persist a user-configured order; the
+    // Registry::ids() returns registration (insertion) order, which is
+    // already deterministic. We sort here only to present an alphabetical
+    // bar layout (a real shell would persist a user-configured order; the
     // demos sort alphabetically for simplicity).
     QStringList ids = m_registry.ids();
     ids.sort();
@@ -243,8 +243,10 @@ loader enforces this so on-disk layout and registry keys stay aligned.
 
 - `QtCore`, `QtQml`. The library does not link `QtGui` or `QtQuick`;
   consumers that build widgets do.
-- `phosphor-fsloader` (private link): `WatchedDirectorySet` +
-  `IScanStrategy` drive the plugin loader's hot-reload path.
+- `phosphor-fsloader` (PUBLIC link): `WatchedDirectorySet` + `IScanStrategy`
+  back both the plugin loader's hot-reload path and the header-only
+  `MetadataPackLoader<T>` template, which exposes fsloader types in its public
+  interface — so the dependency is transitive (PUBLIC) for consumers.
 
 ## See also
 

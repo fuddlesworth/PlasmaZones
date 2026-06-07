@@ -112,6 +112,7 @@ function(phosphorregistry_add_test name)
 endfunction()
 
 phosphorregistry_add_test(test_phosphor_registry)
+phosphorregistry_add_test(test_phosphor_registry_metadatapack_loader)
 phosphorregistry_add_test(test_phosphor_registry_manifest)
 phosphorregistry_add_test(test_phosphor_registry_pluginloader)
 # test_phosphor_registry_pluginloader_lifecycle holds the rescan-

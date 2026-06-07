@@ -87,6 +87,7 @@ set(phosphorregistry_public_HDRS
     include/PhosphorRegistry/IDesktopWidgetFactory.h
     include/PhosphorRegistry/Manifest.h
     include/PhosphorRegistry/PluginLoader.h
+    include/PhosphorRegistry/MetadataPackLoader.h
 )
 
 set(phosphorregistry_SRCS
@@ -132,7 +133,11 @@ target_link_libraries(PhosphorRegistry
     PUBLIC
         Qt6::Core
         Qt6::Qml
-    PRIVATE
+        # PUBLIC, not PRIVATE: the header-only MetadataPackLoader<T>
+        # template (consumed by the unified domain registries) includes
+        # MetadataPackScanStrategy.h + WatchedDirectorySet.h in its public
+        # interface, so consumers need fsloader's include dirs + link.
+        # PluginLoader.cpp's use is satisfied by the same public link.
         PhosphorFsLoader::PhosphorFsLoader
 )
 

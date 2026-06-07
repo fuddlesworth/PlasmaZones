@@ -33,6 +33,13 @@ private Q_SLOTS:
     void empty_reportsState();
     void size_tracksCount();
     void signals_fireInRegistrationOrder();
+    void replacePolicy_overwritesAndSignals();
+    void ownerTag_bulkUnregister();
+    void ids_returnRegistrationOrder();
+    void reentrantSlot_noDeadlock();
+    void forEach_mutationDuringVisitIsSafe();
+    void clear_dropsAllWithoutSignals();
+    void replace_adoptsNewOwnerTag();
 };
 
 void TestRegistry::register_addsFactoryAndFiresSignal()
@@ -197,6 +204,182 @@ void TestRegistry::signals_fireInRegistrationOrder()
     QCOMPARE(unregSpy.count(), 2);
     QCOMPARE(unregSpy.at(0).at(0).toString(), QStringLiteral("a"));
     QCOMPARE(unregSpy.at(1).at(0).toString(), QStringLiteral("b"));
+}
+
+// DuplicatePolicy::Replace overwrites an existing entry (and fires
+// unregister(old) + register(new)); the default still rejects.
+void TestRegistry::replacePolicy_overwritesAndSignals()
+{
+    Registry<IBarWidgetFactory> reg;
+    QSignalSpy regSpy(reg.notifier(), &RegistryNotifier::factoryRegistered);
+    QSignalSpy unregSpy(reg.notifier(), &RegistryNotifier::factoryUnregistered);
+
+    QVERIFY(reg.registerFactory(std::make_shared<FakeBarWidgetFactory>(QStringLiteral("clock"), QStringLiteral("V1"))));
+    // Default reject: second registration is a no-op, returns false.
+    QVERIFY(
+        !reg.registerFactory(std::make_shared<FakeBarWidgetFactory>(QStringLiteral("clock"), QStringLiteral("V2"))));
+    QCOMPARE(reg.factory(QStringLiteral("clock"))->displayName(), QStringLiteral("V1"));
+
+    // Replace: overwrite, fires unregister(old) + register(new).
+    QVERIFY(reg.registerFactory(std::make_shared<FakeBarWidgetFactory>(QStringLiteral("clock"), QStringLiteral("V3")),
+                                QString(), DuplicatePolicy::Replace));
+    QCOMPARE(reg.factory(QStringLiteral("clock"))->displayName(), QStringLiteral("V3"));
+    QCOMPARE(reg.size(), 1);
+    QCOMPARE(regSpy.count(), 2); // V1 + V3
+    QCOMPARE(unregSpy.count(), 1); // the replaced V1
+}
+
+// unregisterByOwner drops every entry sharing a tag and nothing else;
+// an empty tag matches nothing.
+void TestRegistry::ownerTag_bulkUnregister()
+{
+    Registry<IBarWidgetFactory> reg;
+    reg.registerFactory(std::make_shared<FakeBarWidgetFactory>(QStringLiteral("a"), QStringLiteral("A")),
+                        QStringLiteral("plugin-x"));
+    reg.registerFactory(std::make_shared<FakeBarWidgetFactory>(QStringLiteral("b"), QStringLiteral("B")),
+                        QStringLiteral("plugin-x"));
+    reg.registerFactory(std::make_shared<FakeBarWidgetFactory>(QStringLiteral("c"), QStringLiteral("C")),
+                        QStringLiteral("plugin-y"));
+    reg.registerFactory(std::make_shared<FakeBarWidgetFactory>(QStringLiteral("d"), QStringLiteral("D"))); // untagged
+
+    QSignalSpy unregSpy(reg.notifier(), &RegistryNotifier::factoryUnregistered);
+
+    QCOMPARE(reg.unregisterByOwner(QString()), 0); // empty tag matches nothing
+    QCOMPARE(reg.size(), 4);
+
+    QCOMPARE(reg.unregisterByOwner(QStringLiteral("plugin-x")), 2);
+    QCOMPARE(reg.size(), 2);
+    QVERIFY(reg.factory(QStringLiteral("a")) == nullptr);
+    QVERIFY(reg.factory(QStringLiteral("b")) == nullptr);
+    QVERIFY(reg.factory(QStringLiteral("c")) != nullptr); // plugin-y untouched
+    QVERIFY(reg.factory(QStringLiteral("d")) != nullptr); // untagged untouched
+    QCOMPARE(unregSpy.count(), 2);
+    // The bulk-unregister signals arrive in registration order (a before b),
+    // not QHash order — unregisterByOwner walks m_order to uphold the same
+    // ordered-signal contract as signals_fireInRegistrationOrder.
+    QCOMPARE(unregSpy.at(0).at(0).toString(), QStringLiteral("a"));
+    QCOMPARE(unregSpy.at(1).at(0).toString(), QStringLiteral("b"));
+}
+
+// ids() / forEach() iterate in registration (insertion) order — NOT hash
+// order. A Replace keeps the original position; an unregister removes it.
+void TestRegistry::ids_returnRegistrationOrder()
+{
+    Registry<IBarWidgetFactory> reg;
+    // Register in a deliberately non-alphabetical order.
+    reg.registerFactory(std::make_shared<FakeBarWidgetFactory>(QStringLiteral("zulu"), QStringLiteral("Z")));
+    reg.registerFactory(std::make_shared<FakeBarWidgetFactory>(QStringLiteral("alpha"), QStringLiteral("A")));
+    reg.registerFactory(std::make_shared<FakeBarWidgetFactory>(QStringLiteral("mike"), QStringLiteral("M")));
+    QCOMPARE(reg.ids(), (QList<QString>{QStringLiteral("zulu"), QStringLiteral("alpha"), QStringLiteral("mike")}));
+
+    // forEach visits in the same order.
+    QStringList visited;
+    reg.forEach([&](const std::shared_ptr<IBarWidgetFactory>& f) {
+        visited.append(f->id());
+    });
+    QCOMPARE(visited, (QStringList{QStringLiteral("zulu"), QStringLiteral("alpha"), QStringLiteral("mike")}));
+
+    // Replace keeps the position (does not move to the end).
+    reg.registerFactory(std::make_shared<FakeBarWidgetFactory>(QStringLiteral("alpha"), QStringLiteral("A2")),
+                        QString(), DuplicatePolicy::Replace);
+    QCOMPARE(reg.ids(), (QList<QString>{QStringLiteral("zulu"), QStringLiteral("alpha"), QStringLiteral("mike")}));
+
+    // Unregister removes from the order; a later register appends.
+    reg.unregisterFactory(QStringLiteral("zulu"));
+    reg.registerFactory(std::make_shared<FakeBarWidgetFactory>(QStringLiteral("bravo"), QStringLiteral("B")));
+    QCOMPARE(reg.ids(), (QList<QString>{QStringLiteral("alpha"), QStringLiteral("mike"), QStringLiteral("bravo")}));
+}
+
+// Thread-safety contract part 1: change signals fire OUTSIDE the registry's
+// (non-recursive) mutex, so a slot may re-enter the registry without a
+// self-deadlock. If an emit ran while the lock was held, the locking calls
+// inside the slot (factory/size) would hang the test.
+void TestRegistry::reentrantSlot_noDeadlock()
+{
+    Registry<IBarWidgetFactory> reg;
+    QObject ctx;
+    bool slotRan = false;
+    QObject::connect(reg.notifier(), &RegistryNotifier::factoryRegistered, &ctx, [&](const QString& id) {
+        slotRan = true;
+        // Both calls take the registry mutex — a deadlock here would hang.
+        QVERIFY(reg.factory(id) != nullptr);
+        QCOMPARE(reg.size(), 1);
+    });
+    reg.registerFactory(std::make_shared<FakeBarWidgetFactory>(QStringLiteral("clock"), QStringLiteral("Clock")));
+    QVERIFY(slotRan);
+}
+
+// Thread-safety contract part 2: forEach iterates a SNAPSHOT taken under the
+// lock and runs the visitor outside it, so mutating the registry from the
+// visitor is safe and does not affect the in-flight iteration (no QHash
+// iterator-invalidation UB).
+void TestRegistry::forEach_mutationDuringVisitIsSafe()
+{
+    Registry<IBarWidgetFactory> reg;
+    reg.registerFactory(std::make_shared<FakeBarWidgetFactory>(QStringLiteral("a"), QStringLiteral("A")));
+    reg.registerFactory(std::make_shared<FakeBarWidgetFactory>(QStringLiteral("b"), QStringLiteral("B")));
+
+    QStringList visited;
+    reg.forEach([&](const std::shared_ptr<IBarWidgetFactory>& f) {
+        visited.append(f->id());
+        // Mutate mid-iteration — must not corrupt the snapshot being visited.
+        reg.unregisterFactory(f->id());
+        reg.registerFactory(std::make_shared<FakeBarWidgetFactory>(QStringLiteral("c"), QStringLiteral("C")), QString(),
+                            DuplicatePolicy::Replace);
+    });
+    visited.sort();
+    // The snapshot saw exactly the two entries present when forEach was called.
+    QCOMPARE(visited, (QStringList{QStringLiteral("a"), QStringLiteral("b")}));
+    // And the mutations did take effect on the live registry.
+    QCOMPARE(reg.ids(), (QList<QString>{QStringLiteral("c")}));
+}
+
+// clear() drops every entry at once and resets ids()/size() in lockstep,
+// WITHOUT firing per-entry factoryUnregistered signals (the bulk-teardown
+// contract used by composition-root shutdown).
+void TestRegistry::clear_dropsAllWithoutSignals()
+{
+    Registry<IBarWidgetFactory> reg;
+    reg.registerFactory(std::make_shared<FakeBarWidgetFactory>(QStringLiteral("a"), QStringLiteral("A")));
+    reg.registerFactory(std::make_shared<FakeBarWidgetFactory>(QStringLiteral("b"), QStringLiteral("B")));
+    QCOMPARE(reg.size(), 2);
+
+    QSignalSpy regSpy(reg.notifier(), &RegistryNotifier::factoryRegistered);
+    QSignalSpy unregSpy(reg.notifier(), &RegistryNotifier::factoryUnregistered);
+
+    reg.clear();
+
+    QCOMPARE(reg.size(), 0);
+    QVERIFY(reg.isEmpty());
+    QVERIFY(reg.ids().isEmpty());
+    QVERIFY(!reg.factory(QStringLiteral("a")));
+    QCOMPARE(unregSpy.count(), 0); // silent — no per-entry signals
+    QCOMPARE(regSpy.count(), 0);
+    // The registry is reusable after clear().
+    reg.registerFactory(std::make_shared<FakeBarWidgetFactory>(QStringLiteral("c"), QStringLiteral("C")));
+    QCOMPARE(reg.ids(), (QList<QString>{QStringLiteral("c")}));
+}
+
+// A DuplicatePolicy::Replace adopts the NEW call's owner tag — a tag-less
+// Replace moves the entry to the untagged group (no longer bulk-removable);
+// a re-tagging Replace moves it into the new owner group.
+void TestRegistry::replace_adoptsNewOwnerTag()
+{
+    Registry<IBarWidgetFactory> reg;
+    reg.registerFactory(std::make_shared<FakeBarWidgetFactory>(QStringLiteral("clock"), QStringLiteral("V1")),
+                        QStringLiteral("plugin-x"));
+
+    // Tag-less Replace → entry leaves the "plugin-x" owner group.
+    reg.registerFactory(std::make_shared<FakeBarWidgetFactory>(QStringLiteral("clock"), QStringLiteral("V2")),
+                        QString(), DuplicatePolicy::Replace);
+    QCOMPARE(reg.unregisterByOwner(QStringLiteral("plugin-x")), 0); // no longer matches
+    QVERIFY(reg.factory(QStringLiteral("clock")) != nullptr); // still registered (untagged)
+
+    // Re-tagging Replace → entry joins the new "plugin-y" owner group.
+    reg.registerFactory(std::make_shared<FakeBarWidgetFactory>(QStringLiteral("clock"), QStringLiteral("V3")),
+                        QStringLiteral("plugin-y"), DuplicatePolicy::Replace);
+    QCOMPARE(reg.unregisterByOwner(QStringLiteral("plugin-y")), 1); // now matches
+    QVERIFY(reg.factory(QStringLiteral("clock")) == nullptr); // removed
 }
 
 QTEST_MAIN(TestRegistry)

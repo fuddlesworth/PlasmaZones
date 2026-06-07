@@ -143,6 +143,7 @@ QVariantMap params  = sp.parameters.value_or(QVariantMap{});
 ## Dependencies
 
 - `QtCore`, `QtGui`, `QtQuick`, `QtQuickPrivate`, `QtQml`
+- [`phosphor-registry`](../phosphor-registry/README.md) — `Registry<T>` storage + `MetadataPackLoader<T>` backing `AnimationShaderRegistry` and `CurveRegistry`
 - [`phosphor-fsloader`](../phosphor-fsloader/README.md) — directory loaders for curves, profiles, shader packs
 - [`phosphor-shaders`](../phosphor-shaders/README.md) — header-only consumption of `CustomParamsKey.h`
 - [`phosphor-layer`](../phosphor-layer/README.md) — `ISurfaceAnimator` (implemented by `SurfaceAnimator`)
@@ -150,6 +151,6 @@ QVariantMap params  = sp.parameters.value_or(QVariantMap{});
 
 ## See also
 
-- [`phosphor-fsloader`](../phosphor-fsloader/README.md) — `MetadataPackRegistryBase` powers the `AnimationShaderRegistry`; profile / curve files come through its `DirectoryLoader`.
+- [`phosphor-fsloader`](../phosphor-fsloader/README.md) — its `MetadataPackScanStrategy` drives the `AnimationShaderRegistry`'s pack discovery (wrapped by [`phosphor-registry`](../phosphor-registry/README.md)'s `MetadataPackLoader<T>` into a `Registry<T>`); profile / curve files come through its `DirectoryLoader`.
 - [`phosphor-rendering`](../phosphor-rendering/README.md) — host items that consume the chosen effect's compiled shader.
 - [`phosphor-shaders`](../phosphor-shaders/README.md) — overlay shader registry; this lib's animation registry uses the same metadata-pack scan strategy.

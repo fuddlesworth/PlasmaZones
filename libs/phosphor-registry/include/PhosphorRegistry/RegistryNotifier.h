@@ -54,9 +54,13 @@ Q_SIGNALS:
     // Fired after a factory has been added to the registry.
     void factoryRegistered(const QString& id);
 
-    // Fired after a factory has been removed from the registry. The
-    // factory is already gone by the time this signal arrives; do
-    // not attempt to look it up via factory(id).
+    // Fired after a factory has been removed from the registry. On a plain
+    // unregister the factory is gone — factory(id) returns null. On a Replace
+    // (DuplicatePolicy::Replace overwrites an existing id) this fires for the
+    // OLD factory immediately before factoryRegistered(id) for the new one,
+    // and the replacement is ALREADY in place — so factory(id) returns the new
+    // factory here, not null. Consumers that key teardown on factory(id)==null
+    // must account for the Replace case.
     void factoryUnregistered(const QString& id);
 };
 

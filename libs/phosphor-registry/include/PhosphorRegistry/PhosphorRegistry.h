@@ -13,6 +13,7 @@
 #include <PhosphorRegistry/ILauncherProviderFactory.h>
 #include <PhosphorRegistry/IOSDFactory.h>
 #include <PhosphorRegistry/Manifest.h>
+#include <PhosphorRegistry/MetadataPackLoader.h>
 #include <PhosphorRegistry/PluginLoader.h>
 #include <PhosphorRegistry/Registry.h>
 #include <PhosphorRegistry/RegistryNotifier.h>

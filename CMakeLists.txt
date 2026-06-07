@@ -293,6 +293,12 @@ add_subdirectory(libs/phosphor-identity)    # stable cross-process window identi
 add_subdirectory(libs/phosphor-dbus)        # generic, service-agnostic D-Bus client utilities (Client, HasDBusStreaming)
 add_subdirectory(libs/phosphor-protocol)    # D-Bus wire types and service constants, needed by phosphor-screens (Resolver endpoint defaults)
 add_subdirectory(libs/phosphor-fsloader)    # filesystem-backed loader scaffolding (WatchedDirectorySet + DirectoryLoader) - Core-only, needed by phosphor-windowrule's store watcher
+# phosphor-registry: generic Registry<T> + 5 factory interfaces + plugin/metadata
+# loaders. Unconditional (third-party hosts + demos consume it without the shell).
+# Moved ahead of phosphor-shaders: ShaderRegistry now composes Registry<T> +
+# MetadataPackLoader<T>, so the in-tree target must exist before shaders configures
+# (else find_package resolves a stale installed copy). Depends on phosphor-fsloader.
+add_subdirectory(libs/phosphor-registry)    # generic Registry<T> + 5 factory interfaces + plugin loader
 add_subdirectory(libs/phosphor-windowrule)  # unified window/context rule engine (MatchExpression, RuleEvaluator) - depends on phosphor-identity + phosphor-protocol + phosphor-fsloader
 add_subdirectory(libs/phosphor-layout-api)  # shared layout-preview contract (LayoutPreview, ILayoutSource)
 add_subdirectory(libs/phosphor-config)      # schema-driven configuration + migration runner - needed by phosphor-zones
@@ -345,11 +351,6 @@ add_subdirectory(libs/phosphor-theme)       # M3 color-token store + Phosphor.Th
 # enabling BUILD_PHOSPHOR_SHELL. Gating phosphor-popout would break
 # the demo target. The shell binary itself stays gated below.
 add_subdirectory(libs/phosphor-popout)      # central popout coordinator (lifetime, focus, scope arbitration)
-# phosphor-registry generalises the factory-by-name pattern across
-# the five UI extension seams. Same rationale as phosphor-popout:
-# unconditional so third-party hosts and the demos can consume it
-# without enabling the shell binary. Phase 1.3 deliverable.
-add_subdirectory(libs/phosphor-registry)    # generic Registry<T> + 5 factory interfaces + plugin loader
 # phosphor-ipc is also unconditional. Same rationale as the prior
 # three Phase-1 libs: third-party hosts and the demos consume it
 # without enabling the shell binary. Phase 1.4 deliverable.
