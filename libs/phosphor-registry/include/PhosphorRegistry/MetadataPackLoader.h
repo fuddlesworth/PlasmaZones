@@ -71,6 +71,12 @@ namespace PhosphorRegistry {
 //   GUI-thread only — inherits WatchedDirectorySet's contract. Every
 //   mutating call (addSearchPaths / setUserPath / refresh) must run on
 //   the construction thread.
+//
+//   Not re-entrant: reconcile() updates m_fingerprints AFTER driving the
+//   Registry, whose change signals fire synchronously on this thread. A
+//   slot that calls back into the loader (refresh / addSearchPaths) from
+//   inside a Registry signal would run a nested reconcile against stale
+//   fingerprints. Registry slots must not mutate the loader re-entrantly.
 template<typename Factory>
 class MetadataPackLoader
 {
@@ -271,8 +277,12 @@ private:
             if (prev == m_fingerprints.cend()) {
                 m_registry->registerFactory(e.factory); // newly discovered
             } else if (prev.value() != fp) {
-                m_registry->unregisterFactory(e.id); // content changed: replace
-                m_registry->registerFactory(e.factory);
+                // Content changed: replace in place. Replace (not a separate
+                // unregister + register) keeps the pack's REGISTRATION-ORDER
+                // position — a hot-reload must not shuffle the edited pack to
+                // the end of ids()/forEach() (Registry's documented invariant).
+                // It still fires factoryUnregistered(old) + factoryRegistered(new).
+                m_registry->registerFactory(e.factory, QString(), DuplicatePolicy::Replace);
             }
             // else: unchanged — leave the registry entry as-is.
         }

@@ -178,6 +178,10 @@ private Q_SLOTS:
         QSignalSpy added(reg.notifier(), &PhosphorRegistry::RegistryNotifier::factoryRegistered);
         QSignalSpy removed(reg.notifier(), &PhosphorRegistry::RegistryNotifier::factoryUnregistered);
 
+        // Capture registration order before the edit so we can prove the edit
+        // keeps the pack's position rather than shuffling it to the end.
+        const QList<QString> orderBefore = reg.ids();
+
         writePack(dir.path(), "alpha", "alpha", "Alpha", 99); // same id, new value
         loader->refresh();
 
@@ -185,6 +189,10 @@ private Q_SLOTS:
         QCOMPARE(removed.count(), 1); // alpha replaced
         QCOMPARE(added.count(), 1);
         QCOMPARE(reg.factory(QStringLiteral("beta"))->value(), 2); // sibling untouched
+        // The content edit reconciles via Registry Replace, which keeps the
+        // pack's insertion-order position — a hot-reload must not reorder the
+        // catalogue. (A plain unregister+register would move alpha to the end.)
+        QCOMPARE(reg.ids(), orderBefore);
     }
 
     // User-path packs win over system-path packs on id collision, and

@@ -441,8 +441,9 @@ std::shared_ptr<const Curve> CurveRegistry::create(const QString& spec) const
 
 QStringList CurveRegistry::knownTypes() const
 {
-    // Sorted for a stable cross-platform order (the registry stores in hash
-    // order). Consumers — only tests today — check membership, not order.
+    // The registry returns ids in insertion order; sort for a stable
+    // alphabetical order. Consumers — only tests today — check membership,
+    // not order.
     QStringList result = m_impl->registry.ids();
     std::sort(result.begin(), result.end());
     return result;

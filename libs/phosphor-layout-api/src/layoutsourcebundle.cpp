@@ -57,7 +57,6 @@ LayoutSourceBundle& LayoutSourceBundle::operator=(LayoutSourceBundle&& other) no
         }
         m_factoryRegistry = std::move(other.m_factoryRegistry);
         m_sources = std::move(other.m_sources);
-        m_sourceNames = std::move(other.m_sourceNames);
         m_sourceIndex = std::move(other.m_sourceIndex);
         m_composite = std::move(other.m_composite);
         // Post-condition: std::move on unique_ptr leaves `other` empty and
@@ -68,7 +67,6 @@ LayoutSourceBundle& LayoutSourceBundle::operator=(LayoutSourceBundle&& other) no
         Q_ASSERT(!other.m_composite);
         Q_ASSERT(other.m_sources.empty());
         Q_ASSERT(!other.m_factoryRegistry);
-        Q_ASSERT(other.m_sourceNames.empty());
         Q_ASSERT(other.m_sourceIndex.isEmpty());
     }
     return *this;
@@ -136,7 +134,6 @@ void LayoutSourceBundle::build()
     const QStringList ids = m_factoryRegistry->ids();
 
     m_sources.reserve(ids.size());
-    m_sourceNames.reserve(ids.size());
     m_sourceIndex.reserve(static_cast<int>(ids.size()));
     QList<ILayoutSource*> raw;
     raw.reserve(static_cast<int>(ids.size()));
@@ -150,14 +147,13 @@ void LayoutSourceBundle::build()
             // A factory returning null is a programmer error (the contract in
             // ILayoutSourceFactory says create() hands back a fresh source).
             // Skip rather than pushing a null into m_sources — doing so would
-            // leave m_sourceNames / m_sources out of index-sync and feed a
-            // null into the composite. We already know the bad factory by
-            // name; log and move on.
+            // leave m_sources / m_sourceIndex out of sync and feed a null
+            // into the composite. We already know the bad factory by name;
+            // log and move on.
             qWarning("LayoutSourceBundle::build: factory '%s' returned null — skipping", qUtf8Printable(name));
             continue;
         }
         const std::size_t idx = m_sources.size();
-        m_sourceNames.push_back(name);
         m_sources.push_back(std::move(source));
         m_sourceIndex.insert(name, idx);
         raw.append(m_sources.back().get());
@@ -240,11 +236,10 @@ void LayoutSourceBundle::buildFromRegistered(const FactoryContext& ctx)
 
 ILayoutSource* LayoutSourceBundle::source(const QString& name) const
 {
-    // O(1) hash lookup — build() populates m_sourceIndex alongside
-    // m_sourceNames with duplicate-name skips already applied, so a
-    // hit maps to exactly one valid index into m_sources. Returns
-    // nullptr when no factory with that name has been registered or
-    // when build() has not run yet.
+    // O(1) hash lookup — build() populates m_sourceIndex with duplicate
+    // names already rejected at addFactory time, so a hit maps to exactly
+    // one valid index into m_sources. Returns nullptr when no factory with
+    // that name has been registered or when build() has not run yet.
     const auto it = m_sourceIndex.constFind(name);
     if (it == m_sourceIndex.constEnd()) {
         return nullptr;

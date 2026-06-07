@@ -150,9 +150,13 @@ public:
         QList<QString> removedIds;
         {
             QMutexLocker locker(&m_mutex);
-            for (auto it = m_entries.cbegin(); it != m_entries.cend(); ++it) {
-                if (it.value().ownerTag == ownerTag) {
-                    removedIds.append(it.key());
+            // Walk m_order (not m_entries) so removedIds — and therefore the
+            // factoryUnregistered signals below — are in registration order,
+            // not QHash's hash order. Consumers rely on the ordered-signal
+            // contract (see signals_fireInRegistrationOrder).
+            for (const QString& id : std::as_const(m_order)) {
+                if (m_entries.value(id).ownerTag == ownerTag) {
+                    removedIds.append(id);
                 }
             }
             for (const QString& id : std::as_const(removedIds)) {

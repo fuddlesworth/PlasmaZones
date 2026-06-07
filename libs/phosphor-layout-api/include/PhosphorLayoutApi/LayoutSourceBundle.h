@@ -73,9 +73,11 @@ public:
     /// release. Each factory's @c create() is invoked exactly once.
     /// Matches the lifecycle discipline on @c addFactory and
     /// @c buildFromRegistered — any second-call into a built bundle is
-    /// a programmer error. Duplicate factory names are detected here
-    /// and logged at @c qWarning so consumer-side @c source(name)
-    /// lookups don't silently target the wrong source.
+    /// a programmer error. Duplicate factory names are rejected earlier, at
+    /// @c addFactory time, by the factory registry's first-wins policy (it
+    /// warns and drops the later registration), so by the time @c build()
+    /// runs every name is already unique and @c source(name) can never
+    /// silently target the wrong source.
     void build();
 
     /// Auto-discovery convenience: drain every provider registered
@@ -109,8 +111,8 @@ public:
     /// Exception contract: provider builder lambdas and factory
     /// @c create() calls MUST NOT throw. The bundle performs no
     /// rollback on partial failure — a thrown builder leaves
-    /// @c m_factories partially populated with already-consumed
-    /// entries and @c m_composite null, and the single-shot gate then
+    /// @c m_factoryRegistry partially populated with already-added
+    /// factories and @c m_composite null, and the single-shot gate then
     /// prevents any retry. Every in-tree builder is a trivial
     /// @c make_unique around a factory that stores a borrowed pointer,
     /// so this is currently impossible; any future builder that wants
@@ -129,11 +131,11 @@ public:
     /// @c name() matches @p name. Returns null when no such factory
     /// has been registered or when @c build() has not run yet.
     ///
-    /// Names are unique within a bundle: @c build() enforces
-    /// first-registration-wins and skips any duplicate-name factory
-    /// (see the warning in @c LayoutSourceBundle::build). Callers may
-    /// therefore treat the returned pointer as the single source for
-    /// @p name — no "first match" disclaimer is needed.
+    /// Names are unique within a bundle: @c addFactory enforces
+    /// first-registration-wins and drops any duplicate-name factory (the
+    /// factory registry warns). Callers may therefore treat the returned
+    /// pointer as the single source for @p name — no "first match"
+    /// disclaimer is needed.
     ///
     /// Primary use case is the autotile-style fast path: composition
     /// roots that want to reuse a long-lived source's preview cache
@@ -156,12 +158,6 @@ private:
     /// operator=).
     std::unique_ptr<PhosphorRegistry::Registry<ILayoutSourceFactory>> m_factoryRegistry;
     std::vector<std::unique_ptr<ILayoutSource>> m_sources;
-    /// Source-name → m_sources index. Populated during @c build();
-    /// the underlying source pointer is borrowed from m_sources.
-    /// Kept in lockstep with @c m_sourceIndex (same entries, same
-    /// ordering) so the composite's iteration order — which mirrors
-    /// registration order — stays observable without a map walk.
-    std::vector<QString> m_sourceNames;
     /// Source-name → index in @c m_sources for O(1) @c source(name)
     /// lookup. Populated during @c build(). Duplicate-name factories
     /// are skipped before reaching this map, so every key maps to

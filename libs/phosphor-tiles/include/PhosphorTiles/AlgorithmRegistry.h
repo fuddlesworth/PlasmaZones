@@ -40,10 +40,13 @@ class TilingAlgorithm;
  * a future compiled-in C++ algorithm, but no in-tree algorithm currently uses
  * it.
  *
- * @note Thread Safety: read operations (@c algorithm, @c availableAlgorithms,
- *       @c hasAlgorithm) are thread-safe once construction has completed.
- *       Registration/unregistration should only occur from the thread
- *       that owns the registry (typically the main thread).
+ * @note Thread Safety: the underlying id-keyed store (a thread-safe
+ *       @c PhosphorRegistry::Registry) makes the read operations
+ *       (@c algorithm, @c availableAlgorithms, @c hasAlgorithm) safe to call
+ *       from any thread. Registration/unregistration must still occur on the
+ *       thread that owns the registry (typically the main thread) — not
+ *       because of the store, but because they drive @c deleteLater() and
+ *       Qt signal emission, which are thread-affine.
  *
  * @see TilingAlgorithm for the algorithm interface
  * @see ITileAlgorithmRegistry for the abstract contract
@@ -62,14 +65,16 @@ public:
      * internals) are destroyed while Qt is still fully alive, avoiding
      * teardown crashes if an instance outlives @c QCoreApplication.
      *
-     * Drains exclusively this registry's own pending @c deleteLater()
-     * algorithms (tracked in @c m_pendingDeletes), never the process-
-     * wide DeferredDelete queue. This narrow scoping is load-bearing
-     * after the singleton kill in PR #343: multiple registries
-     * (daemon, editor, settings) each connect to @c aboutToQuit, and a
-     * process-wide drain from one registry would force-delete pending
-     * @c deleteLater() events for unrelated subsystems whose owners
-     * have not yet run their teardown.
+     * Drains exclusively this registry's own algorithms — it snapshots them
+     * before @c clear()ing the registry (each entry's shared_ptr deleter then
+     * schedules a @c deleteLater()) and calls
+     * @c QCoreApplication::sendPostedEvents(algo, QEvent::DeferredDelete) per
+     * algorithm, never the process-wide DeferredDelete queue. This narrow
+     * scoping is load-bearing after the singleton kill in PR #343: multiple
+     * registries (daemon, editor, settings) each connect to @c aboutToQuit,
+     * and a process-wide drain from one registry would force-delete pending
+     * @c deleteLater() events for unrelated subsystems whose owners have not
+     * yet run their teardown.
      *
      * Safe to call from the destructor as well — idempotent after the
      * first invocation.

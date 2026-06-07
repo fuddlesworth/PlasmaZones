@@ -432,8 +432,8 @@ void AnimationShaderRegistry::refresh()
 
 QList<AnimationShaderEffect> AnimationShaderRegistry::availableEffects() const
 {
-    // Registry iteration is QHash order; sort by id for output stable
-    // across process launches (the legacy strategy returned sorted).
+    // Registry iteration is insertion order; sort by id for alphabetical
+    // output (the legacy strategy returned sorted).
     QList<AnimationShaderEffect> result;
     result.reserve(m_registry.size());
     m_registry.forEach([&result](const std::shared_ptr<AnimationPack>& pack) {

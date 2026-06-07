@@ -517,8 +517,8 @@ void ShaderRegistry::reportShaderBakeFinished(const QString& shaderId, bool succ
 
 QList<ShaderRegistry::ShaderInfo> ShaderRegistry::availableShaders() const
 {
-    // Registry iteration is QHash order; sort by id for output stable
-    // across process launches (the legacy strategy returned sorted).
+    // Registry iteration is insertion order; sort by id for alphabetical
+    // output (the legacy strategy returned sorted).
     QList<ShaderInfo> result;
     result.reserve(m_registry.size());
     m_registry.forEach([&result](const std::shared_ptr<ShaderPack>& pack) {

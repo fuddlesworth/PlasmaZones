@@ -36,6 +36,8 @@ private Q_SLOTS:
     void replacePolicy_overwritesAndSignals();
     void ownerTag_bulkUnregister();
     void ids_returnRegistrationOrder();
+    void reentrantSlot_noDeadlock();
+    void forEach_mutationDuringVisitIsSafe();
 };
 
 void TestRegistry::register_addsFactoryAndFiresSignal()
@@ -279,6 +281,50 @@ void TestRegistry::ids_returnRegistrationOrder()
     reg.unregisterFactory(QStringLiteral("zulu"));
     reg.registerFactory(std::make_shared<FakeBarWidgetFactory>(QStringLiteral("bravo"), QStringLiteral("B")));
     QCOMPARE(reg.ids(), (QList<QString>{QStringLiteral("alpha"), QStringLiteral("mike"), QStringLiteral("bravo")}));
+}
+
+// Thread-safety contract part 1: change signals fire OUTSIDE the registry's
+// (non-recursive) mutex, so a slot may re-enter the registry without a
+// self-deadlock. If an emit ran while the lock was held, the locking calls
+// inside the slot (factory/size) would hang the test.
+void TestRegistry::reentrantSlot_noDeadlock()
+{
+    Registry<IBarWidgetFactory> reg;
+    QObject ctx;
+    bool slotRan = false;
+    QObject::connect(reg.notifier(), &RegistryNotifier::factoryRegistered, &ctx, [&](const QString& id) {
+        slotRan = true;
+        // Both calls take the registry mutex — a deadlock here would hang.
+        QVERIFY(reg.factory(id) != nullptr);
+        QCOMPARE(reg.size(), 1);
+    });
+    reg.registerFactory(std::make_shared<FakeBarWidgetFactory>(QStringLiteral("clock"), QStringLiteral("Clock")));
+    QVERIFY(slotRan);
+}
+
+// Thread-safety contract part 2: forEach iterates a SNAPSHOT taken under the
+// lock and runs the visitor outside it, so mutating the registry from the
+// visitor is safe and does not affect the in-flight iteration (no QHash
+// iterator-invalidation UB).
+void TestRegistry::forEach_mutationDuringVisitIsSafe()
+{
+    Registry<IBarWidgetFactory> reg;
+    reg.registerFactory(std::make_shared<FakeBarWidgetFactory>(QStringLiteral("a"), QStringLiteral("A")));
+    reg.registerFactory(std::make_shared<FakeBarWidgetFactory>(QStringLiteral("b"), QStringLiteral("B")));
+
+    QStringList visited;
+    reg.forEach([&](const std::shared_ptr<IBarWidgetFactory>& f) {
+        visited.append(f->id());
+        // Mutate mid-iteration — must not corrupt the snapshot being visited.
+        reg.unregisterFactory(f->id());
+        reg.registerFactory(std::make_shared<FakeBarWidgetFactory>(QStringLiteral("c"), QStringLiteral("C")), QString(),
+                            DuplicatePolicy::Replace);
+    });
+    visited.sort();
+    // The snapshot saw exactly the two entries present when forEach was called.
+    QCOMPARE(visited, (QStringList{QStringLiteral("a"), QStringLiteral("b")}));
+    // And the mutations did take effect on the live registry.
+    QCOMPARE(reg.ids(), (QList<QString>{QStringLiteral("c")}));
 }
 
 QTEST_MAIN(TestRegistry)
