@@ -56,7 +56,8 @@ public:
     /// Build a curve from @p typeId + JSON parameters. Returns nullptr on failure.
     std::shared_ptr<const Curve> tryCreateFromJson(const QString& typeId, const QJsonObject& parameters) const;
 
-    /// All registered typeIds in insertion order.
+    /// All registered typeIds, sorted alphabetically (a stable, deterministic
+    /// order for membership checks; not registration order).
     QStringList knownTypes() const;
 
     /// True if @p typeId has a registered factory.
