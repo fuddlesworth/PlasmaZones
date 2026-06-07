@@ -123,9 +123,9 @@ QObject::connect(m_registry.notifier(),
 
 QStringList BarController::factoryIds() const
 {
-    // Registry::ids() returns hash order, which is unspecified and
-    // unstable across restarts. Sort for a deterministic bar layout
-    // (a real shell would persist a user-configured order; the
+    // Registry::ids() returns registration (insertion) order, which is
+    // already deterministic. We sort here only to present an alphabetical
+    // bar layout (a real shell would persist a user-configured order; the
     // demos sort alphabetically for simplicity).
     QStringList ids = m_registry.ids();
     ids.sort();

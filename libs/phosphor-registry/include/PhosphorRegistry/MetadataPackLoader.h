@@ -60,8 +60,10 @@ namespace PhosphorRegistry {
 // ## Ownership / lifetime
 //
 //   - Does NOT own the Registry; the caller does, and the Registry MUST
-//     outlive the loader (every removed pack calls
-//     Registry::unregisterFactory in the loader's reconcile + dtor).
+//     outlive the loader. The loader holds a borrowed Registry pointer it
+//     uses during LIVE rescans in reconcile() (where a removed pack calls
+//     Registry::unregisterFactory); the defaulted destructor unregisters
+//     nothing, so the registry simply outlives and is torn down after it.
 //   - Owns the strategy + watcher. Declaration order is load-bearing:
 //     m_strategy is declared before m_watcher so the watcher (which
 //     holds a borrowed reference into the strategy) tears down first.
