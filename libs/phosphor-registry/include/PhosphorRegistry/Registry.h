@@ -68,8 +68,11 @@ namespace PhosphorRegistry {
 // A Replace adopts the NEW call's owner tag — it does not preserve the prior
 // entry's tag. A re-registration that wants to keep an entry in its owner
 // group must pass the same ownerTag again (a tag-less Replace moves the entry
-// to the untagged group). The hot-reload callers (MetadataPackLoader, curve /
-// algorithm registries) register untagged, so this is a no-op for them.
+// to the untagged group). MetadataPackLoader and the algorithm registry
+// re-register untagged, so this is a no-op for them; CurveLoader, by contrast,
+// registers TAGGED (a per-loader owner tag) and deliberately re-passes that tag
+// on every Replace so its entries stay bulk-removable via unregisterByOwner in
+// ~CurveLoader.
 //
 // Header-only by design (no .cpp). The template body must be instantiable
 // from any consuming translation unit.
