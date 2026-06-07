@@ -12,10 +12,7 @@ SettingsFlickable {
     readonly property var settingsBridge: settingsController.tilingAlgorithmPage
     readonly property int algorithmPreviewWidth: Kirigami.Units.gridUnit * 18
     readonly property int algorithmPreviewHeight: Kirigami.Units.gridUnit * 10
-    // Per-screen override helper
-    property alias selectedScreenName: psHelper.selectedScreenName
-    readonly property alias isPerScreen: psHelper.isPerScreen
-    readonly property alias hasOverrides: psHelper.hasOverrides
+    // Per-screen override helper (shared app-wide scope, bound below).
     // m-13: Cache the availableAlgorithms PROPERTY (read, not call — it is both a
     // Q_PROPERTY and a same-named Q_INVOKABLE, so the `()` form errors with
     // "is not a function"). Refreshed via the Connections below on its NOTIFY.
@@ -113,6 +110,9 @@ SettingsFlickable {
         id: psHelper
 
         appSettings: settingsController
+        // Shared app-wide scope — a monitor picked on any per-monitor page
+        // stays picked here.
+        selectedScreenName: settingsController.scopeScreenName
         getterMethod: "getPerScreenAutotileSettings"
         setterMethod: "setPerScreenAutotileSetting"
         clearerMethod: "clearPerScreenAutotileSettings"
@@ -125,24 +125,16 @@ SettingsFlickable {
         spacing: Kirigami.Units.largeSpacing
 
         // =================================================================
-        // Monitor Selector (per-screen overrides)
-        // =================================================================
-        MonitorSelectorSection {
-            Layout.fillWidth: true
-            appSettings: settingsController
-            selectedScreenName: root.selectedScreenName
-            hasOverrides: root.hasOverrides
-            onSelectedScreenNameChanged: root.selectedScreenName = selectedScreenName
-            onResetClicked: psHelper.clearOverrides()
-        }
-
-        // =================================================================
-        // Algorithm Card (per-monitor)
+        // Algorithm Card (per-monitor) — opts into the header scope chip.
         // =================================================================
         SettingsCard {
             Layout.fillWidth: true
             headerText: i18n("Algorithm")
             collapsible: true
+            scopeEnabled: true
+            scopeAppSettings: settingsController
+            scopeHasOverridesMethod: "hasPerScreenAutotileSettings"
+            scopeClearerMethod: "clearPerScreenAutotileSettings"
 
             contentItem: ColumnLayout {
                 spacing: Kirigami.Units.smallSpacing
