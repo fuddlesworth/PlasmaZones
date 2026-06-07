@@ -239,9 +239,29 @@ void Daemon::connectDesktopActivity()
                 showDesktopSwitchOsd(desktop, currentActivity());
             });
 
+    // Autotile keyboard navigation may request a desktop boundary crossing.
+    if (m_autotileEngine) {
+        connect(m_autotileEngine.get(), &PhosphorEngine::PlacementEngineBase::currentDesktopChangeRequested, this,
+                [this](int desktop) {
+                    if (m_virtualDesktopManager) {
+                        m_virtualDesktopManager->setCurrentDesktop(desktop);
+                    }
+                });
+        connect(m_autotileEngine.get(), &PhosphorEngine::PlacementEngineBase::currentDesktopChangeRequestedForScreen,
+                this, [this](const QString& screenId, int desktop) {
+                    if (m_virtualDesktopManager) {
+                        m_virtualDesktopManager->setCurrentDesktopForScreen(screenId, desktop);
+                    }
+                });
+    }
+
     // Prune stale PhosphorTiles::TilingState entries and disabled-desktop numbers when desktops are removed
     connect(m_virtualDesktopManager.get(), &PhosphorWorkspaces::VirtualDesktopManager::desktopCountChanged, this,
             [this](int newCount) {
+                if (m_autotileEngine) {
+                    m_autotileEngine->setDesktopCount(newCount);
+                    m_autotileEngine->setDesktopRows(m_virtualDesktopManager->desktopRows());
+                }
                 // Prune stale disabled-desktop entries (desktop numbers > newCount no longer exist).
                 // NOTE: KDE Plasma renumbers desktops when one in the middle is removed (e.g.
                 // removing desktop 2 of 4 shifts 3→2 and 4→3). We only prune out-of-range
@@ -282,12 +302,21 @@ void Daemon::connectDesktopActivity()
                 pruneContextMapsForDesktop(newCount);
             });
 
+    connect(m_virtualDesktopManager.get(), &PhosphorWorkspaces::VirtualDesktopManager::desktopRowsChanged, this,
+            [this](int rows) {
+                if (m_autotileEngine) {
+                    m_autotileEngine->setDesktopRows(rows);
+                }
+            });
+
     // Set initial virtual desktop on components that maintain their own copy
     // (WindowDragAdaptor reads from PhosphorZones::LayoutRegistry directly via resolveLayoutForScreen())
     const int initialDesktop = m_virtualDesktopManager->currentDesktop();
     m_overlayService->setCurrentVirtualDesktop(initialDesktop);
     m_layoutManager->setCurrentVirtualDesktop(initialDesktop);
     if (m_autotileEngine) {
+        m_autotileEngine->setDesktopCount(m_virtualDesktopManager->desktopCount());
+        m_autotileEngine->setDesktopRows(m_virtualDesktopManager->desktopRows());
         m_autotileEngine->setCurrentDesktop(initialDesktop);
     }
 

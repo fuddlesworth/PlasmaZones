@@ -505,6 +505,15 @@
                 <annotation name="org.gtk.GDBus.DocString" value="Window to activate."/>
             </arg>
         </signal>
+        <signal name="windowDesktopMoveRequested">
+            <annotation name="org.gtk.GDBus.DocString" value="Daemon requests KWin to move a window to another virtual desktop."/>
+            <arg name="windowId" type="s">
+                <annotation name="org.gtk.GDBus.DocString" value="Window to move."/>
+            </arg>
+            <arg name="desktop" type="i">
+                <annotation name="org.gtk.GDBus.DocString" value="1-based virtual desktop number."/>
+            </arg>
+        </signal>
         <signal name="applyGeometriesBatch">
             <annotation name="org.gtk.GDBus.DocString" value="Daemon requests compositor to apply geometries for a batch of windows."/>
             <arg name="geometries" type="a(siiiis)">

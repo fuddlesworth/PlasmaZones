@@ -55,7 +55,8 @@ public:
     /// engine's per-state focusedWindow tracker is stale.
     void swapFocusedInDirection(const QString& direction, const QString& action,
                                 const QString& explicitWindowId = QString());
-    void focusInDirection(const QString& direction, const QString& action, const QString& explicitWindowId = QString());
+    void focusInDirection(const QString& direction, const QString& action, const QString& explicitWindowId = QString(),
+                          const QString& explicitScreenId = QString());
     void moveFocusedToPosition(int position, const QString& explicitWindowId = QString());
 
     // ═══════════════════════════════════════════════════════════════════════════
@@ -83,6 +84,11 @@ private:
     QString resolveActiveScreen() const;
 
     /**
+     * @brief Resolve a screen for navigation when the current desktop has no focused tiled window.
+     */
+    QString resolveFallbackScreenId(const QString& explicitScreenId = QString()) const;
+
+    /**
      * @brief Resolve the PhosphorTiles::TilingState for the currently focused screen
      *
      * Returns nullptr if no active screen or no state exists for it.
@@ -105,6 +111,34 @@ private:
      */
     QStringList tiledWindowsForFocusedScreen(QString& outScreenId, PhosphorTiles::TilingState*& outState,
                                              const QString& explicitWindowId = QString());
+
+    /**
+     * @brief Return the neighboring autotile screen in a keyboard-navigation direction.
+     */
+    QString neighborAutotileScreenInDirection(const QString& sourceScreenId, const QString& direction) const;
+
+    /**
+     * @brief Return the neighboring virtual desktop for a keyboard-navigation direction.
+     */
+    int neighborDesktopInDirection(const QString& sourceScreenId, const QString& direction) const;
+
+    /**
+     * @brief Move a tiled window into another screen/desktop state at its entry edge.
+     */
+    bool moveFocusedToBoundaryTarget(const QString& focused, const QString& sourceScreenId,
+                                     PhosphorTiles::TilingState* sourceState, const QString& targetScreenId,
+                                     int targetDesktop, const QString& direction);
+
+    /**
+     * @brief Handle focus crossing to an output that has no tiled window on its visible desktop.
+     */
+    bool focusEmptyScreenBoundaryTarget(const QString& targetScreenId, const QString& direction, const QString& action);
+
+    /**
+     * @brief Focus the edge window in a neighboring screen/desktop state.
+     */
+    bool focusBoundaryTarget(const QString& targetScreenId, int targetDesktop, const QString& direction,
+                             const QString& action, const QString& feedbackScreenId);
 
     /**
      * @brief Helper to apply an operation to all screen states

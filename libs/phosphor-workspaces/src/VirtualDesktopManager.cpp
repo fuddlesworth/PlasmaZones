@@ -53,6 +53,10 @@ void VirtualDesktopManager::initKWinDBus()
 
         QDBusConnection::sessionBus().connect(QStringLiteral("org.kde.KWin"), QStringLiteral("/VirtualDesktopManager"),
                                               QStringLiteral("org.kde.KWin.VirtualDesktopManager"),
+                                              QStringLiteral("rowsChanged"), this, SLOT(onDesktopRowsChanged(uint)));
+
+        QDBusConnection::sessionBus().connect(QStringLiteral("org.kde.KWin"), QStringLiteral("/VirtualDesktopManager"),
+                                              QStringLiteral("org.kde.KWin.VirtualDesktopManager"),
                                               QStringLiteral("desktopCreated"), this, SLOT(onKWinDesktopCreated()));
 
         QDBusConnection::sessionBus().connect(QStringLiteral("org.kde.KWin"), QStringLiteral("/VirtualDesktopManager"),
@@ -112,6 +116,7 @@ void VirtualDesktopManager::applyDesktopListReply(const QDBusMessage& reply, con
 
     if (!m_desktopIds.isEmpty() && m_desktopIds.size() != m_desktopCount) {
         m_desktopCount = m_desktopIds.size();
+        m_desktopRows = qBound(1, m_desktopRows, m_desktopCount);
     }
 
     if (!currentId.isEmpty() && !m_desktopIds.isEmpty()) {
@@ -134,7 +139,12 @@ void VirtualDesktopManager::refreshFromKWin()
 
     QVariant countVar = m_kwinVDInterface->property("count");
     if (countVar.isValid()) {
-        m_desktopCount = countVar.toInt();
+        m_desktopCount = qMax(1, countVar.toInt());
+    }
+
+    QVariant rowsVar = m_kwinVDInterface->property("rows");
+    if (rowsVar.isValid()) {
+        m_desktopRows = qBound(1, rowsVar.toInt(), m_desktopCount);
     }
 
     QVariant currentVar = m_kwinVDInterface->property("current");
@@ -222,18 +232,47 @@ int VirtualDesktopManager::currentDesktop() const
     return m_useKWinDBus ? m_currentDesktop : 1;
 }
 
+int VirtualDesktopManager::currentDesktopForScreen(const QString& screenId) const
+{
+    Q_UNUSED(screenId)
+    // Plasma versions through the current global-desktop model expose one
+    // active desktop for the session. Keep the output-scoped accessor as the
+    // daemon/engine integration point for KDE's per-output virtual desktops.
+    return currentDesktop();
+}
+
 void VirtualDesktopManager::setCurrentDesktop(int desktop)
 {
     if (desktop < 1 || desktop > m_desktopCount) {
         return;
     }
 
+    bool requestSent = false;
     if (m_useKWinDBus && m_kwinVDInterface) {
         int idx = desktop - 1;
         if (idx >= 0 && idx < m_desktopIds.size()) {
             m_kwinVDInterface->setProperty("current", m_desktopIds.at(idx));
+            requestSent = true;
         }
     }
+
+    // The KWin property change notification is asynchronous. Navigation uses
+    // the daemon's desktop shadow immediately after requesting a boundary
+    // crossing, so update it optimistically for valid requests. When the real
+    // KWin signal arrives, onCurrentDesktopChanged() will no-op if the value
+    // already matches.
+    if (requestSent || !m_useKWinDBus) {
+        onCurrentDesktopChanged(desktop);
+    }
+}
+
+void VirtualDesktopManager::setCurrentDesktopForScreen(const QString& screenId, int desktop)
+{
+    Q_UNUSED(screenId)
+    // Fallback for current KWin: changing one output's desktop is equivalent
+    // to changing the global desktop. Future KWin per-output support should
+    // replace only this method, leaving callers keyed by screenId.
+    setCurrentDesktop(desktop);
 }
 
 void VirtualDesktopManager::onCurrentDesktopChanged(int desktop)
@@ -248,11 +287,13 @@ void VirtualDesktopManager::onCurrentDesktopChanged(int desktop)
 
 void VirtualDesktopManager::onNumberOfDesktopsChanged(int count)
 {
+    count = qMax(1, count);
     if (m_desktopCount == count) {
         return;
     }
 
     m_desktopCount = count;
+    m_desktopRows = qBound(1, m_desktopRows, m_desktopCount);
 
     if (m_useKWinDBus) {
         refreshFromKWin();
@@ -266,9 +307,25 @@ void VirtualDesktopManager::onNumberOfDesktopsChanged(int count)
     Q_EMIT desktopCountChanged(count);
 }
 
+void VirtualDesktopManager::onDesktopRowsChanged(uint rows)
+{
+    const int clampedRows = qBound(1, static_cast<int>(rows), m_desktopCount);
+    if (m_desktopRows == clampedRows) {
+        return;
+    }
+
+    m_desktopRows = clampedRows;
+    Q_EMIT desktopRowsChanged(m_desktopRows);
+}
+
 int VirtualDesktopManager::desktopCount() const
 {
     return m_useKWinDBus ? m_desktopCount : 1;
+}
+
+int VirtualDesktopManager::desktopRows() const
+{
+    return m_useKWinDBus ? m_desktopRows : 1;
 }
 
 QStringList VirtualDesktopManager::desktopNames() const

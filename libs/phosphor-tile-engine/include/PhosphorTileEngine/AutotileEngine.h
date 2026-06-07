@@ -268,6 +268,16 @@ public:
     void setCurrentDesktop(int desktop) override;
 
     /**
+     * @brief Update the number of KWin virtual desktops known to navigation.
+     */
+    void setDesktopCount(int count) override;
+
+    /**
+     * @brief Update the number of virtual desktop rows known to navigation.
+     */
+    void setDesktopRows(int rows) override;
+
+    /**
      * @brief Set the current activity for per-activity tiling state
      *
      * Swaps the active PhosphorTiles::TilingState set without releasing windows. Must be
@@ -317,6 +327,21 @@ public:
     {
         return m_currentDesktop;
     }
+
+    /**
+     * @brief Get the current virtual desktop for a specific screen/output.
+     *
+     * Current KDE releases keep every output on the same desktop, so all
+     * screens are synchronized by setCurrentDesktop(). The per-screen map is
+     * used by navigation so KDE's upcoming per-output virtual desktop mode can
+     * preserve each output's visible desktop independently.
+     */
+    int currentDesktopForScreen(const QString& screenId) const noexcept;
+
+    /**
+     * @brief Set the current virtual desktop for a specific screen/output.
+     */
+    void setCurrentDesktopForScreen(const QString& screenId, int desktop) override;
 
     /**
      * @brief Get the current activity tracked by the engine
@@ -1145,7 +1170,7 @@ private:
     PhosphorEngine::TilingStateKey currentKeyForScreen(const QString& screenId) const
     {
         auto it = m_screenDesktopOverride.constFind(screenId);
-        int desktop = (it != m_screenDesktopOverride.constEnd()) ? it.value() : m_currentDesktop;
+        int desktop = (it != m_screenDesktopOverride.constEnd()) ? it.value() : currentDesktopForScreen(screenId);
         return PhosphorEngine::TilingStateKey{screenId, desktop, m_currentActivity};
     }
 
@@ -1382,6 +1407,9 @@ private:
     // TilingStateKey. Updated by setCurrentDesktop()/setCurrentActivity() BEFORE
     // updateAutotileScreens() runs on desktop/activity switch.
     int m_currentDesktop = 1;
+    QHash<QString, int> m_screenCurrentDesktop;
+    int m_desktopCount = 1;
+    int m_desktopRows = 1;
     QString m_currentActivity;
     bool m_isDesktopContextSwitch = false;
 

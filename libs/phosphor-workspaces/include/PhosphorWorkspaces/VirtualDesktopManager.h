@@ -26,17 +26,22 @@ public:
     void stop();
 
     int currentDesktop() const override;
+    int currentDesktopForScreen(const QString& screenId) const;
     void setCurrentDesktop(int desktop);
+    void setCurrentDesktopForScreen(const QString& screenId, int desktop);
     int desktopCount() const;
+    int desktopRows() const;
     QStringList desktopNames() const;
 
 Q_SIGNALS:
     void currentDesktopChanged(int desktop);
     void desktopCountChanged(int count);
+    void desktopRowsChanged(int rows);
 
 private Q_SLOTS:
     void onCurrentDesktopChanged(int desktop);
     void onNumberOfDesktopsChanged(int count);
+    void onDesktopRowsChanged(uint rows);
     void refreshFromKWin();
     void onKWinCurrentChanged(const QString& desktopId);
     void onKWinDesktopCreated();
@@ -51,6 +56,7 @@ private:
     bool m_useKWinDBus = false;
     int m_currentDesktop = 1;
     int m_desktopCount = 1;
+    int m_desktopRows = 1;
     QStringList m_desktopNames;
     QStringList m_desktopIds;
     uint m_refreshGeneration = 0;

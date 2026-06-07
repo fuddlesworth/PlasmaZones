@@ -408,6 +408,19 @@ public:
     {
         Q_UNUSED(desktop)
     }
+    virtual void setCurrentDesktopForScreen(const QString& screenId, int desktop)
+    {
+        Q_UNUSED(screenId)
+        Q_UNUSED(desktop)
+    }
+    virtual void setDesktopCount(int count)
+    {
+        Q_UNUSED(count)
+    }
+    virtual void setDesktopRows(int rows)
+    {
+        Q_UNUSED(rows)
+    }
     virtual void setCurrentActivity(const QString& activity)
     {
         Q_UNUSED(activity)

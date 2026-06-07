@@ -690,6 +690,15 @@ Q_SIGNALS:
     void activateWindowRequested(const QString& windowId);
 
     /**
+     * @brief Request KWin effect to move a window to another virtual desktop.
+     *
+     * Used by autotile keyboard navigation when a move/swap crosses a desktop
+     * boundary. The daemon owns tiling state; the compositor owns actual
+     * window-desktop membership.
+     */
+    void windowDesktopMoveRequested(const QString& windowId, int desktop);
+
+    /**
      * @brief Daemon requests KWin to apply geometries for a batch of windows
      * @param geometries List of window geometry entries to apply
      * @param action Navigation action type ("rotate", "resnap", "snap_all") for feedback

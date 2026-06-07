@@ -342,6 +342,69 @@ void AutotileHandler::slotScreensChanged(const QStringList& screenIds, bool isDe
 
     m_autotileScreens = newScreens;
 
+    if (isDesktopSwitch && added.isEmpty() && removed.isEmpty() && !m_autotileScreens.isEmpty()) {
+        // Desktop switch between desktops with the same autotile screen set.
+        // The daemon still retiles, but without an autotileScreensChanged
+        // notification the effect-side bookkeeping can leave a window moved
+        // across desktops untracked here after windowDesktopsChanged removed
+        // it from m_notifiedWindows on the source desktop.
+        qCInfo(lcEffect) << "slotScreensChanged: same-screen desktop return for screens:" << m_autotileScreens;
+        for (const QString& screenId : m_autotileScreens) {
+            for (KWin::EffectWindow* w : windows) {
+                if (!w || !m_effect->shouldHandleWindow(w) || !w->isOnCurrentDesktop() || !w->isOnCurrentActivity()
+                    || w->isMinimized()) {
+                    continue;
+                }
+                if (m_effect->getWindowScreenId(w) != screenId) {
+                    continue;
+                }
+                const QString windowId = m_effect->getWindowId(w);
+                if (!m_notifiedWindows.contains(windowId)) {
+                    auto savedIt = m_savedPreAutotileForDesktopMove.find(windowId);
+                    if (savedIt != m_savedPreAutotileForDesktopMove.end()) {
+                        if (savedIt.value().first == screenId) {
+                            m_preAutotileGeometries[screenId][windowId] = savedIt.value().second;
+                        } else {
+                            qCDebug(lcEffect) << "Desktop switch: dropping cross-screen pre-autotile rect for"
+                                              << windowId << "source=" << savedIt.value().first << "dest=" << screenId;
+                        }
+                        m_savedPreAutotileForDesktopMove.erase(savedIt);
+                    }
+                    qCInfo(lcEffect) << "Desktop switch: re-adding moved window to autotile:" << windowId << "on"
+                                     << screenId;
+                    notifyWindowAdded(w);
+                }
+            }
+        }
+
+        if (m_border.hideTitleBars) {
+            for (const QString& screenId : m_autotileScreens) {
+                for (KWin::EffectWindow* w : windows) {
+                    if (!w || !m_effect->shouldHandleWindow(w) || !w->isOnCurrentDesktop() || !w->isOnCurrentActivity()
+                        || w->isMinimized()) {
+                        continue;
+                    }
+                    if (m_effect->getWindowScreenId(w) != screenId) {
+                        continue;
+                    }
+                    const QString windowId = m_effect->getWindowId(w);
+                    if (m_effect->isWindowFloating(windowId)) {
+                        continue;
+                    }
+                    if (AutotileStateHelpers::borderlessOnScreen(m_border, screenId).contains(windowId)) {
+                        KWin::Window* kw = w->window();
+                        if (kw && !kw->noBorder()) {
+                            kw->setNoBorder(true);
+                            qCDebug(lcEffect) << "Desktop return: re-applied setNoBorder for" << windowId;
+                        }
+                    }
+                }
+            }
+        }
+
+        m_effect->updateAllBorders();
+    }
+
     if (!added.isEmpty()) {
         if (isDesktopSwitch) {
             // Desktop/activity return: windows are already tiled on this desktop.

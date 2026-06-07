@@ -105,6 +105,18 @@ Q_SIGNALS:
     void windowFloatingChanged(const QString& windowId, bool floating, const QString& screenId);
     void activateWindowRequested(const QString& windowId);
 
+    /// Emitted when navigation moves a managed window to another virtual desktop.
+    void windowDesktopMoveRequested(const QString& windowId, int desktop);
+
+    /// Emitted when navigation should switch the active virtual desktop.
+    void currentDesktopChangeRequested(int desktop);
+
+    /// Emitted when navigation should switch the active virtual desktop for a specific output/screen.
+    /// Current KWin releases expose a global current desktop, so the daemon maps this to the
+    /// global setter. The screen argument keeps the navigation policy ready for per-output
+    /// virtual desktops.
+    void currentDesktopChangeRequestedForScreen(const QString& screenId, int desktop);
+
     /// Emitted to sync floating state without restoring geometry.
     /// Passive state-sync: engine-internal divergence correction.
     void windowFloatingStateSynced(const QString& windowId, bool floating, const QString& screenId);

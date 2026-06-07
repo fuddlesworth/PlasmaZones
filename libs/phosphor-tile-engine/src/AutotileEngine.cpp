@@ -3,6 +3,7 @@
 
 // Qt headers
 #include <algorithm>
+#include <utility>
 #include <QDebug>
 #include <QJsonArray>
 #include <QJsonDocument>
@@ -179,7 +180,8 @@ void AutotileEngine::onWindowZoneChanged(const QString& windowId, const QString&
         return;
     if (zoneId.isEmpty()) {
         for (auto it = m_screenStates.constBegin(); it != m_screenStates.constEnd(); ++it) {
-            if (it.key().desktop != m_currentDesktop || it.key().activity != m_currentActivity) {
+            if (it.key().desktop != currentDesktopForScreen(it.key().screenId)
+                || it.key().activity != m_currentActivity) {
                 continue;
             }
             if (it.value() && it.value()->isFloating(windowId)) {
@@ -399,11 +401,21 @@ void AutotileEngine::moveToPosition(const QString& windowId, int position, const
 
 void AutotileEngine::setCurrentDesktop(int desktop)
 {
-    if (desktop == m_currentDesktop) {
+    desktop = qMax(1, desktop);
+
+    bool changed = (desktop != m_currentDesktop);
+    for (auto it = m_screenCurrentDesktop.constBegin(); it != m_screenCurrentDesktop.constEnd(); ++it) {
+        if (it.value() != desktop) {
+            changed = true;
+            break;
+        }
+    }
+    if (!changed) {
         return;
     }
+
     qCInfo(PhosphorTileEngine::lcTileEngine)
-        << "Switching autotile context: desktop" << m_currentDesktop << "->" << desktop;
+        << "Switching autotile context globally: desktop" << m_currentDesktop << "->" << desktop;
     // Only flag as desktop switch if we already had a valid context (desktop > 0).
     // Initial setup (desktop 0 → 1 during daemon startup) is NOT a switch — the
     // effect must receive the normal enabledChanged/autotileScreensChanged sequence
@@ -414,7 +426,63 @@ void AutotileEngine::setCurrentDesktop(int desktop)
     // desktop AND activity change simultaneously (e.g., activity-per-desktop).
     m_isDesktopContextSwitch |= (m_currentDesktop > 0);
     m_currentDesktop = desktop;
+
+    // Current KWin exposes a global current desktop. Model that as every output
+    // having the same visible desktop, while keeping navigation keyed by
+    // (screen, desktop) so per-output virtual desktops can diverge later.
+    for (auto it = m_screenCurrentDesktop.begin(); it != m_screenCurrentDesktop.end(); ++it) {
+        it.value() = desktop;
+    }
+    for (const QString& screenId : std::as_const(m_autotileScreens)) {
+        m_screenCurrentDesktop.insert(screenId, desktop);
+    }
+
     schedulePromoteSavedWindowOrders();
+}
+
+int AutotileEngine::currentDesktopForScreen(const QString& screenId) const noexcept
+{
+    if (screenId.isEmpty()) {
+        return m_currentDesktop;
+    }
+    return m_screenCurrentDesktop.value(screenId, m_currentDesktop);
+}
+
+void AutotileEngine::setCurrentDesktopForScreen(const QString& screenId, int desktop)
+{
+    if (screenId.isEmpty()) {
+        setCurrentDesktop(desktop);
+        return;
+    }
+
+    desktop = qMax(1, desktop);
+    const int previous = currentDesktopForScreen(screenId);
+    if (previous == desktop) {
+        return;
+    }
+
+    qCInfo(PhosphorTileEngine::lcTileEngine)
+        << "Switching autotile context for screen" << screenId << ": desktop" << previous << "->" << desktop;
+
+    m_isDesktopContextSwitch |= (previous > 0);
+    m_screenCurrentDesktop.insert(screenId, desktop);
+    m_currentDesktop = desktop;
+    schedulePromoteSavedWindowOrders();
+}
+
+void AutotileEngine::setDesktopCount(int count)
+{
+    m_desktopCount = qMax(1, count);
+    m_desktopRows = qBound(1, m_desktopRows, m_desktopCount);
+    m_currentDesktop = qBound(1, m_currentDesktop, m_desktopCount);
+    for (auto it = m_screenCurrentDesktop.begin(); it != m_screenCurrentDesktop.end(); ++it) {
+        it.value() = qBound(1, it.value(), m_desktopCount);
+    }
+}
+
+void AutotileEngine::setDesktopRows(int rows)
+{
+    m_desktopRows = qBound(1, rows, m_desktopCount);
 }
 
 void AutotileEngine::setCurrentActivity(const QString& activity)
@@ -482,9 +550,10 @@ void AutotileEngine::updateStickyScreenPins(const std::function<bool(const QStri
                     << "Unpinning screen" << screenId << "from desktop" << pinnedDesktop;
 
                 // Migrate PhosphorTiles::TilingState from pinned key to current desktop key
-                if (pinnedDesktop != m_currentDesktop) {
+                const int targetDesktop = currentDesktopForScreen(screenId);
+                if (pinnedDesktop != targetDesktop) {
                     TilingStateKey oldKey{screenId, pinnedDesktop, m_currentActivity};
-                    TilingStateKey newKey{screenId, m_currentDesktop, m_currentActivity};
+                    TilingStateKey newKey{screenId, targetDesktop, m_currentActivity};
 
                     auto oldIt = m_screenStates.find(oldKey);
                     if (oldIt != m_screenStates.end()) {
@@ -516,7 +585,7 @@ void AutotileEngine::updateStickyScreenPins(const std::function<bool(const QStri
 
                         qCInfo(PhosphorTileEngine::lcTileEngine)
                             << "Migrated screen" << screenId << "state from desktop" << pinnedDesktop << "to"
-                            << m_currentDesktop;
+                            << targetDesktop;
                     }
                 }
             }
@@ -532,7 +601,11 @@ void AutotileEngine::setAutotileScreens(const QSet<QString>& screens)
         // autotile screen set leaves the flag set. The NEXT setAutotileScreens
         // call (e.g. from a toggle OFF) then incorrectly reports isDesktopSwitch=true,
         // causing the effect to skip geometry/border restore on toggle OFF.
+        const bool wasDesktopSwitch = m_isDesktopContextSwitch;
         m_isDesktopContextSwitch = false;
+        if (wasDesktopSwitch) {
+            Q_EMIT autotileScreensChanged(QStringList(m_autotileScreens.begin(), m_autotileScreens.end()), true);
+        }
         return;
     }
 
@@ -554,6 +627,9 @@ void AutotileEngine::setAutotileScreens(const QSet<QString>& screens)
     }
 
     m_autotileScreens = screens;
+    for (const QString& screenId : added) {
+        m_screenCurrentDesktop.insert(screenId, m_currentDesktop);
+    }
 
     // R1 fix: Retile newly-added screens without requiring pre-existing state.
     // tilingStateForScreen() creates the PhosphorTiles::TilingState lazily, so windows that arrive
@@ -631,7 +707,7 @@ void AutotileEngine::setAutotileScreens(const QSet<QString>& screens)
         // Only prune states that match the current desktop/activity AND whose
         // screen is no longer in the autotile set. States for other desktops
         // are left untouched — they'll be pruned when that desktop is current.
-        if (key.desktop != m_currentDesktop || key.activity != m_currentActivity) {
+        if (key.desktop != currentDesktopForScreen(key.screenId) || key.activity != m_currentActivity) {
             continue;
         }
         if (!removed.contains(key.screenId)) {
@@ -1443,7 +1519,7 @@ void AutotileEngine::deserializeWindowOrders(const QJsonArray& orders)
         const QString activity = entry[QLatin1String("activity")].toString();
         TilingStateKey loadKey;
         loadKey.screenId = screenId;
-        loadKey.desktop = (desktop > 0) ? desktop : m_currentDesktop;
+        loadKey.desktop = (desktop > 0) ? desktop : currentDesktopForScreen(screenId);
         loadKey.activity = !activity.isEmpty() ? activity : m_currentActivity;
         const QString compositeKey =
             QStringLiteral("%1/%2/%3").arg(loadKey.screenId).arg(loadKey.desktop).arg(loadKey.activity);
@@ -1462,7 +1538,7 @@ void AutotileEngine::deserializeWindowOrders(const QJsonArray& orders)
         }
         if (!windowOrder.isEmpty()) {
             m_savedWindowOrders[loadKey] = windowOrder;
-            const bool isCurrentContext = loadKey.desktop == m_currentDesktop
+            const bool isCurrentContext = loadKey.desktop == currentDesktopForScreen(screenId)
                 && (loadKey.activity.isEmpty() || loadKey.activity == m_currentActivity);
             if (isCurrentContext) {
                 m_pendingInitialOrders[screenId] = windowOrder;
@@ -1902,7 +1978,8 @@ void AutotileEngine::toggleFocusedWindowFloat()
     }
     if (!state) {
         for (auto it = m_screenStates.constBegin(); it != m_screenStates.constEnd(); ++it) {
-            if (it.value() && !it.value()->focusedWindow().isEmpty() && it.key().desktop == m_currentDesktop
+            if (it.value() && !it.value()->focusedWindow().isEmpty()
+                && it.key().desktop == currentDesktopForScreen(it.key().screenId)
                 && it.key().activity == m_currentActivity) {
                 screenId = it.key().screenId;
                 state = it.value();
@@ -1964,7 +2041,8 @@ void AutotileEngine::toggleWindowFloat(const QString& rawWindowId, const QString
     // states only — states for other desktops should not be considered.
     if (!state) {
         for (auto it = m_screenStates.constBegin(); it != m_screenStates.constEnd(); ++it) {
-            if (it.key().desktop != m_currentDesktop || it.key().activity != m_currentActivity) {
+            if (it.key().desktop != currentDesktopForScreen(it.key().screenId)
+                || it.key().activity != m_currentActivity) {
                 continue;
             }
             if (it.value() && it.value()->containsWindow(windowId)) {
@@ -3561,7 +3639,7 @@ void AutotileEngine::propagateGlobalSplitRatio()
     // Only propagate to current desktop/activity states — per-desktop split
     // ratio adjustments (via increaseMasterRatio) are preserved on other desktops.
     for (auto it = m_screenStates.constBegin(); it != m_screenStates.constEnd(); ++it) {
-        if (it.key().desktop != m_currentDesktop || it.key().activity != m_currentActivity) {
+        if (it.key().desktop != currentDesktopForScreen(it.key().screenId) || it.key().activity != m_currentActivity) {
             continue;
         }
         if (it.value() && !hasPerScreenOverride(it.key().screenId, PerScreenKeys::SplitRatio)) {
@@ -3575,7 +3653,7 @@ void AutotileEngine::propagateGlobalMasterCount()
     // Only propagate to current desktop/activity states — per-desktop master
     // count adjustments are preserved on other desktops.
     for (auto it = m_screenStates.constBegin(); it != m_screenStates.constEnd(); ++it) {
-        if (it.key().desktop != m_currentDesktop || it.key().activity != m_currentActivity) {
+        if (it.key().desktop != currentDesktopForScreen(it.key().screenId) || it.key().activity != m_currentActivity) {
             continue;
         }
         if (it.value() && !hasPerScreenOverride(it.key().screenId, PerScreenKeys::MasterCount)) {
@@ -3605,7 +3683,7 @@ void AutotileEngine::backfillWindows()
         // (insertWindow calls m_windowToStateKey.insert which is unsafe during const iteration)
         QStringList candidates;
         for (auto it = m_windowToStateKey.constBegin(); it != m_windowToStateKey.constEnd(); ++it) {
-            if (it.value().screenId == screenId && it.value().desktop == m_currentDesktop
+            if (it.value().screenId == screenId && it.value().desktop == currentDesktopForScreen(screenId)
                 && it.value().activity == m_currentActivity && !state->containsWindow(it.key())
                 && shouldTileWindow(it.key())) {
                 candidates.append(it.key());
@@ -3871,8 +3949,8 @@ void AutotileEngine::promoteSavedWindowOrders()
     // is replaced by desktop 2's order when switching to desktop 2).
     for (auto it = m_savedWindowOrders.begin(); it != m_savedWindowOrders.end();) {
         const TilingStateKey& key = it.key();
-        const bool matchesContext =
-            key.desktop == m_currentDesktop && (key.activity.isEmpty() || key.activity == m_currentActivity);
+        const bool matchesContext = key.desktop == currentDesktopForScreen(key.screenId)
+            && (key.activity.isEmpty() || key.activity == m_currentActivity);
 
         if (matchesContext) {
             m_pendingInitialOrders[key.screenId] = it.value();
@@ -3960,7 +4038,8 @@ void AutotileEngine::focusInDirection(const QString& direction, const Navigation
     // tracker, which can drift when focus moves through floating, snapped, or
     // never-tracked windows that don't update it (same root cause as the
     // toggleFocusedFloat fix).
-    m_navigation->focusInDirection(direction, QStringLiteral("focus"), canonicalizeForLookup(ctx.windowId));
+    m_navigation->focusInDirection(direction, QStringLiteral("focus"), canonicalizeForLookup(ctx.windowId),
+                                   ctx.screenId);
 }
 
 void AutotileEngine::moveFocusedInDirection(const QString& direction, const NavigationContext& ctx)
@@ -4020,7 +4099,7 @@ void AutotileEngine::toggleFocusedFloat(const NavigationContext& ctx)
 void AutotileEngine::cycleFocus(bool forward, const NavigationContext& ctx)
 {
     const QString dir = forward ? QStringLiteral("right") : QStringLiteral("left");
-    m_navigation->focusInDirection(dir, QStringLiteral("cycle"), canonicalizeForLookup(ctx.windowId));
+    m_navigation->focusInDirection(dir, QStringLiteral("cycle"), canonicalizeForLookup(ctx.windowId), ctx.screenId);
 }
 
 void AutotileEngine::pushToEmptyZone(const NavigationContext& /*ctx*/)

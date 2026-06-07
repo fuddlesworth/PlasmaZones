@@ -46,17 +46,23 @@ void Daemon::updateAutotileScreens()
 
     const int desktop = currentDesktop();
     const QString activity = currentActivity();
+    const auto desktopForScreen = [this, desktop](const QString& screenId) {
+        return m_virtualDesktopManager ? m_virtualDesktopManager->currentDesktopForScreen(screenId) : desktop;
+    };
 
     QSet<QString> autotileScreens;
     QHash<QString, QString> screenAlgorithms;
     const QStringList effectiveIds = m_screenManager->effectiveScreenIds();
     for (const QString& screenId : effectiveIds) {
+        const int screenDesktop = desktopForScreen(screenId);
+        m_autotileEngine->setCurrentDesktopForScreen(screenId, screenDesktop);
+
         // Skip screens/desktops/activities where PlasmaZones is disabled
-        if (isContextDisabled(m_settings.get(), PhosphorZones::AssignmentEntry::Autotile, screenId, desktop,
+        if (isContextDisabled(m_settings.get(), PhosphorZones::AssignmentEntry::Autotile, screenId, screenDesktop,
                               activity)) {
             continue;
         }
-        QString assignmentId = m_layoutManager->assignmentIdForScreen(screenId, desktop, activity);
+        QString assignmentId = m_layoutManager->assignmentIdForScreen(screenId, screenDesktop, activity);
         if (PhosphorLayout::LayoutId::isAutotile(assignmentId)) {
             autotileScreens.insert(screenId);
             QString algoId = PhosphorLayout::LayoutId::extractAlgorithmId(assignmentId);
@@ -75,7 +81,7 @@ void Daemon::updateAutotileScreens()
     for (const QString& screenId : removedScreens) {
         QStringList order = m_autotileEngine->managedWindowOrder(screenId);
         if (!order.isEmpty()) {
-            m_lastAutotileOrders[TilingStateKey{screenId, desktop, activity}] = order;
+            m_lastAutotileOrders[TilingStateKey{screenId, desktopForScreen(screenId), activity}] = order;
         }
     }
 
@@ -340,9 +346,11 @@ QHash<TilingStateKey, QStringList> Daemon::captureAutotileOrders() const
     const int desktop = currentDesktop();
     const QString activity = currentActivity();
     for (const QString& screenId : m_autotileEngine->activeScreens()) {
+        const int screenDesktop =
+            m_virtualDesktopManager ? m_virtualDesktopManager->currentDesktopForScreen(screenId) : desktop;
         QStringList order = m_autotileEngine->managedWindowOrder(screenId);
         if (!order.isEmpty()) {
-            orders[TilingStateKey{screenId, desktop, activity}] = order;
+            orders[TilingStateKey{screenId, screenDesktop, activity}] = order;
         }
     }
     return orders;
@@ -459,7 +467,9 @@ void Daemon::seedAutotileOrderForScreen(const QString& screenId)
     // Prefer saved autotile order from last mode toggle (deterministic re-entry).
     // Falls back to zone-ordered window list when no saved order exists (first
     // activation, or windows changed between toggles).
-    TilingStateKey orderKey{screenId, currentDesktop(), currentActivity()};
+    const int desktop =
+        m_virtualDesktopManager ? m_virtualDesktopManager->currentDesktopForScreen(screenId) : currentDesktop();
+    TilingStateKey orderKey{screenId, desktop, currentActivity()};
     QStringList order = m_lastAutotileOrders.value(orderKey);
     if (order.isEmpty()) {
         PhosphorPlacement::WindowTrackingService* wts = m_windowTrackingAdaptor->service();

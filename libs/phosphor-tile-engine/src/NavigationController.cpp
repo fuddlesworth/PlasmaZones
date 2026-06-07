@@ -11,12 +11,52 @@
 #include <PhosphorScreens/Manager.h>
 
 #include <QScreen>
+#include <QRect>
 #include <algorithm>
+#include <limits>
+#include <utility>
 #include <PhosphorScreens/ScreenIdentity.h>
 
 namespace PhosphorTileEngine {
 
 namespace PerScreenKeys = PhosphorEngine::PerScreenKeys;
+
+namespace {
+
+bool isForwardDirection(const QString& direction)
+{
+    return direction == QLatin1String("right") || direction == QLatin1String("down");
+}
+
+bool isHorizontalDirection(const QString& direction)
+{
+    return direction == QLatin1String("left") || direction == QLatin1String("right");
+}
+
+int entryIndexForDirection(const QString& direction, int windowCount)
+{
+    if (windowCount <= 0) {
+        return 0;
+    }
+    // Moving right/down enters a target screen/desktop at its first tiled slot;
+    // moving left/up enters at the opposite edge.
+    return isForwardDirection(direction) ? 0 : windowCount - 1;
+}
+
+int axisOverlap(const QRect& a, const QRect& b, bool horizontalNavigation)
+{
+    if (horizontalNavigation) {
+        return qMax(0, qMin(a.bottom(), b.bottom()) - qMax(a.top(), b.top()) + 1);
+    }
+    return qMax(0, qMin(a.right(), b.right()) - qMax(a.left(), b.left()) + 1);
+}
+
+int orthogonalCenterDistance(const QRect& a, const QRect& b, bool horizontalNavigation)
+{
+    return horizontalNavigation ? qAbs(a.center().y() - b.center().y()) : qAbs(a.center().x() - b.center().x());
+}
+
+} // namespace
 
 NavigationController::NavigationController(AutotileEngine* engine)
     : m_engine(engine)
@@ -119,13 +159,13 @@ void NavigationController::rotateWindowOrder(bool clockwise)
 void NavigationController::swapFocusedInDirection(const QString& direction, const QString& action,
                                                   const QString& explicitWindowId)
 {
-    const bool forward = (direction == QLatin1String("right") || direction == QLatin1String("down"));
+    const bool forward = isForwardDirection(direction);
 
     QString screenId;
     PhosphorTiles::TilingState* state = nullptr;
     const QStringList windows = tiledWindowsForFocusedScreen(screenId, state, explicitWindowId);
 
-    if (windows.size() < 2 || !state) {
+    if (windows.isEmpty() || !state) {
         Q_EMIT m_engine->navigationFeedback(false, action, QStringLiteral("nothing_to_swap"), QString(), QString(),
                                             screenId);
         return;
@@ -143,8 +183,34 @@ void NavigationController::swapFocusedInDirection(const QString& direction, cons
         return;
     }
 
+    const bool atBoundary = forward ? (currentIndex == windows.size() - 1) : (currentIndex == 0);
+    if (atBoundary) {
+        const QString targetScreen = neighborAutotileScreenInDirection(screenId, direction);
+        if (!targetScreen.isEmpty()
+            && moveFocusedToBoundaryTarget(focused, screenId, state, targetScreen,
+                                           m_engine->currentDesktopForScreen(targetScreen), direction)) {
+            Q_EMIT m_engine->navigationFeedback(true, action, QStringLiteral("screen:%1").arg(direction), QString(),
+                                                QString(), targetScreen);
+            return;
+        }
+
+        const int targetDesktop = neighborDesktopInDirection(screenId, direction);
+        if (targetDesktop > 0
+            && moveFocusedToBoundaryTarget(focused, screenId, state, screenId, targetDesktop, direction)) {
+            Q_EMIT m_engine->navigationFeedback(true, action, QStringLiteral("desktop:%1").arg(targetDesktop),
+                                                QString(), QString(), screenId);
+            return;
+        }
+    }
+
+    if (windows.size() < 2) {
+        Q_EMIT m_engine->navigationFeedback(false, action, QStringLiteral("nothing_to_swap"), QString(), QString(),
+                                            screenId);
+        return;
+    }
+
     int targetIndex = forward ? currentIndex + 1 : currentIndex - 1;
-    // Wrap around
+    // Preserve the existing local wrap behavior when there is no boundary target.
     if (targetIndex < 0) {
         targetIndex = windows.size() - 1;
     } else if (targetIndex >= windows.size()) {
@@ -159,22 +225,83 @@ void NavigationController::swapFocusedInDirection(const QString& direction, cons
 }
 
 void NavigationController::focusInDirection(const QString& direction, const QString& action,
-                                            const QString& explicitWindowId)
+                                            const QString& explicitWindowId, const QString& explicitScreenId)
 {
-    const bool forward = (direction == QLatin1String("right") || direction == QLatin1String("down"));
+    const bool forward = isForwardDirection(direction);
 
     QString screenId;
     PhosphorTiles::TilingState* state = nullptr;
     const QStringList windows = tiledWindowsForFocusedScreen(screenId, state, explicitWindowId);
 
     if (windows.isEmpty() || !state) {
+        const QString fallbackScreenId = screenId.isEmpty() ? resolveFallbackScreenId(explicitScreenId) : screenId;
+
+        const QString targetScreen = neighborAutotileScreenInDirection(fallbackScreenId, direction);
+        if (!targetScreen.isEmpty()) {
+            if (focusBoundaryTarget(targetScreen, m_engine->currentDesktopForScreen(targetScreen), direction, action,
+                                    targetScreen)) {
+                return;
+            }
+            if (focusEmptyScreenBoundaryTarget(targetScreen, direction, action)) {
+                return;
+            }
+        }
+
+        const int targetDesktop = neighborDesktopInDirection(fallbackScreenId, direction);
+        if (targetDesktop > 0 && !fallbackScreenId.isEmpty()) {
+            Q_EMIT m_engine->currentDesktopChangeRequestedForScreen(fallbackScreenId, targetDesktop);
+            m_engine->setCurrentDesktopForScreen(fallbackScreenId, targetDesktop);
+            if (focusBoundaryTarget(fallbackScreenId, targetDesktop, direction, action, fallbackScreenId)) {
+                return;
+            }
+
+            // With no tiled window on the source desktop, there is no local
+            // boundary index to inspect. Treat the empty desktop itself as
+            // the boundary: switch desktops and stop rather than reporting
+            // no_windows or wrapping to stale focus state from another context.
+            Q_EMIT m_engine->navigationFeedback(true, action, QStringLiteral("desktop:%1").arg(targetDesktop),
+                                                QString(), QString(), fallbackScreenId);
+            return;
+        }
+
         Q_EMIT m_engine->navigationFeedback(false, action, QStringLiteral("no_windows"), QString(), QString(),
-                                            screenId);
+                                            fallbackScreenId);
         return;
     }
 
     const QString focused = !explicitWindowId.isEmpty() ? explicitWindowId : state->focusedWindow();
     const int currentIndex = qMax(0, windows.indexOf(focused));
+    const bool atBoundary = forward ? (currentIndex == windows.size() - 1) : (currentIndex == 0);
+    if (atBoundary) {
+        const QString targetScreen = neighborAutotileScreenInDirection(screenId, direction);
+        if (!targetScreen.isEmpty()) {
+            if (focusBoundaryTarget(targetScreen, m_engine->currentDesktopForScreen(targetScreen), direction, action,
+                                    targetScreen)) {
+                return;
+            }
+            if (focusEmptyScreenBoundaryTarget(targetScreen, direction, action)) {
+                return;
+            }
+        }
+
+        const int targetDesktop = neighborDesktopInDirection(screenId, direction);
+        if (targetDesktop > 0) {
+            Q_EMIT m_engine->currentDesktopChangeRequestedForScreen(screenId, targetDesktop);
+            m_engine->setCurrentDesktopForScreen(screenId, targetDesktop);
+            if (focusBoundaryTarget(screenId, targetDesktop, direction, action, screenId)) {
+                return;
+            }
+
+            // Desktop traversal should still cross the
+            // boundary when the target desktop currently has no tiled
+            // windows. Switch desktops and stop instead of wrapping focus
+            // back to another window on the source desktop.
+            Q_EMIT m_engine->navigationFeedback(true, action, QStringLiteral("desktop:%1").arg(targetDesktop),
+                                                QString(), QString(), screenId);
+            return;
+        }
+    }
+
     const int targetIndex = (currentIndex + (forward ? 1 : -1) + windows.size()) % windows.size();
 
     Q_EMIT m_engine->activateWindowRequested(windows.at(targetIndex));
@@ -350,6 +477,22 @@ QString NavigationController::resolveActiveScreen() const
     return QString();
 }
 
+QString NavigationController::resolveFallbackScreenId(const QString& explicitScreenId) const
+{
+    if (!explicitScreenId.isEmpty()) {
+        return explicitScreenId;
+    }
+
+    const QString activeScreen = resolveActiveScreen();
+    if (!activeScreen.isEmpty()) {
+        return activeScreen;
+    }
+
+    const Phosphor::Screens::PhysicalScreen primaryScreen =
+        m_engine->m_screenManager ? m_engine->m_screenManager->primaryScreen() : Phosphor::Screens::PhysicalScreen{};
+    return primaryScreen.isValid() ? primaryScreen.identifier : QString();
+}
+
 void NavigationController::emitFocusRequestAtIndex(int indexOffset, bool useFirst)
 {
     QString screenId;
@@ -382,7 +525,8 @@ QStringList NavigationController::tiledWindowsForFocusedScreen(QString& outScree
     // it — using the daemon's value avoids operating on the wrong window.
     if (!explicitWindowId.isEmpty()) {
         for (auto it = m_engine->m_screenStates.constBegin(); it != m_engine->m_screenStates.constEnd(); ++it) {
-            if (it.key().desktop != m_engine->m_currentDesktop || it.key().activity != m_engine->m_currentActivity) {
+            if (it.key().desktop != m_engine->currentDesktopForScreen(it.key().screenId)
+                || it.key().activity != m_engine->m_currentActivity) {
                 continue;
             }
             PhosphorTiles::TilingState* state = it.value();
@@ -413,7 +557,8 @@ QStringList NavigationController::tiledWindowsForFocusedScreen(QString& outScree
 
     // Fallback: scan states for current desktop/activity (e.g., if m_activeScreen is stale)
     for (auto it = m_engine->m_screenStates.constBegin(); it != m_engine->m_screenStates.constEnd(); ++it) {
-        if (it.key().desktop != m_engine->m_currentDesktop || it.key().activity != m_engine->m_currentActivity) {
+        if (it.key().desktop != m_engine->currentDesktopForScreen(it.key().screenId)
+            || it.key().activity != m_engine->m_currentActivity) {
             continue;
         }
         PhosphorTiles::TilingState* state = it.value();
@@ -441,6 +586,232 @@ QStringList NavigationController::tiledWindowsForFocusedScreen(QString& outScree
     return {};
 }
 
+QString NavigationController::neighborAutotileScreenInDirection(const QString& sourceScreenId,
+                                                                const QString& direction) const
+{
+    if (!m_engine || !m_engine->m_screenManager || sourceScreenId.isEmpty()) {
+        return QString();
+    }
+
+    const QRect sourceGeometry = m_engine->screenGeometry(sourceScreenId);
+    if (!sourceGeometry.isValid()) {
+        return QString();
+    }
+
+    const bool horizontal = isHorizontalDirection(direction);
+    QString bestScreen;
+    int bestDistance = std::numeric_limits<int>::max();
+    int bestCenterDistance = std::numeric_limits<int>::max();
+
+    for (const QString& candidate : std::as_const(m_engine->m_autotileScreens)) {
+        if (candidate == sourceScreenId) {
+            continue;
+        }
+
+        const QRect candidateGeometry = m_engine->screenGeometry(candidate);
+        if (!candidateGeometry.isValid() || axisOverlap(sourceGeometry, candidateGeometry, horizontal) <= 0) {
+            continue;
+        }
+
+        int distance = -1;
+        if (direction == QLatin1String("right")) {
+            if (candidateGeometry.left() <= sourceGeometry.right()) {
+                continue;
+            }
+            distance = candidateGeometry.left() - sourceGeometry.right();
+        } else if (direction == QLatin1String("left")) {
+            if (candidateGeometry.right() >= sourceGeometry.left()) {
+                continue;
+            }
+            distance = sourceGeometry.left() - candidateGeometry.right();
+        } else if (direction == QLatin1String("down")) {
+            if (candidateGeometry.top() <= sourceGeometry.bottom()) {
+                continue;
+            }
+            distance = candidateGeometry.top() - sourceGeometry.bottom();
+        } else if (direction == QLatin1String("up")) {
+            if (candidateGeometry.bottom() >= sourceGeometry.top()) {
+                continue;
+            }
+            distance = sourceGeometry.top() - candidateGeometry.bottom();
+        }
+
+        if (distance < 0) {
+            continue;
+        }
+
+        const int centerDistance = orthogonalCenterDistance(sourceGeometry, candidateGeometry, horizontal);
+        if (distance < bestDistance || (distance == bestDistance && centerDistance < bestCenterDistance)) {
+            bestDistance = distance;
+            bestCenterDistance = centerDistance;
+            bestScreen = candidate;
+        }
+    }
+
+    return bestScreen;
+}
+
+int NavigationController::neighborDesktopInDirection(const QString& sourceScreenId, const QString& direction) const
+{
+    if (!m_engine) {
+        return 0;
+    }
+
+    const int count = qMax(1, m_engine->m_desktopCount);
+    const int rows = qBound(1, m_engine->m_desktopRows, count);
+    const int columns = qMax(1, (count + rows - 1) / rows);
+
+    const int sourceDesktop = m_engine->currentDesktopForScreen(sourceScreenId);
+    const int sourceIndex = sourceDesktop - 1; // desktop numbers are 1-based
+    if (sourceIndex < 0 || sourceIndex >= count) {
+        return 0;
+    }
+
+    const int sourceRow = sourceIndex / columns;
+    const int sourceColumn = sourceIndex % columns;
+    int targetIndex = -1;
+
+    if (direction == QLatin1String("left")) {
+        if (sourceColumn == 0) {
+            return 0;
+        }
+        targetIndex = sourceIndex - 1;
+    } else if (direction == QLatin1String("right")) {
+        if (sourceColumn == columns - 1) {
+            return 0;
+        }
+        targetIndex = sourceIndex + 1;
+    } else if (direction == QLatin1String("up")) {
+        if (sourceRow == 0) {
+            return 0;
+        }
+        targetIndex = sourceIndex - columns;
+    } else if (direction == QLatin1String("down")) {
+        if (sourceRow == rows - 1) {
+            return 0;
+        }
+        targetIndex = sourceIndex + columns;
+    }
+
+    if (targetIndex < 0 || targetIndex >= count) {
+        return 0;
+    }
+
+    // Avoid horizontal movement wrapping across rows on partial grids.
+    if ((direction == QLatin1String("left") || direction == QLatin1String("right"))
+        && targetIndex / columns != sourceRow) {
+        return 0;
+    }
+
+    return targetIndex + 1;
+}
+
+bool NavigationController::moveFocusedToBoundaryTarget(const QString& focused, const QString& sourceScreenId,
+                                                       PhosphorTiles::TilingState* sourceState,
+                                                       const QString& targetScreenId, int targetDesktop,
+                                                       const QString& direction)
+{
+    if (!m_engine || focused.isEmpty() || !sourceState || targetScreenId.isEmpty() || targetDesktop < 1) {
+        return false;
+    }
+
+    PhosphorEngine::TilingStateKey targetKey{targetScreenId, targetDesktop, m_engine->m_currentActivity};
+    PhosphorTiles::TilingState* targetState = nullptr;
+    if (targetDesktop == m_engine->currentDesktopForScreen(targetScreenId)) {
+        targetState = m_engine->tilingStateForScreen(targetScreenId);
+    } else {
+        targetState = m_engine->stateForKey(targetKey);
+    }
+    if (!targetState) {
+        return false;
+    }
+
+    const int sourceDesktop = m_engine->currentDesktopForScreen(sourceScreenId);
+    const bool crossDesktop = targetDesktop != sourceDesktop;
+    const bool crossScreen = targetScreenId != sourceScreenId;
+    const int insertPosition = isForwardDirection(direction) ? 0 : -1;
+
+    if (!sourceState->removeWindow(focused)) {
+        return false;
+    }
+    if (!targetState->addWindow(focused, insertPosition)) {
+        sourceState->addWindow(focused);
+        return false;
+    }
+
+    m_engine->m_windowToStateKey[focused] = targetKey;
+    targetState->setFocusedWindow(focused);
+    m_engine->m_activeScreen = targetScreenId;
+
+    m_engine->retileAfterOperation(sourceScreenId, true);
+    if (crossDesktop) {
+        Q_EMIT m_engine->windowDesktopMoveRequested(focused, targetDesktop);
+        if (!crossScreen) {
+            Q_EMIT m_engine->currentDesktopChangeRequestedForScreen(sourceScreenId, targetDesktop);
+            m_engine->setCurrentDesktopForScreen(sourceScreenId, targetDesktop);
+            // The daemon's desktop-change path will retile the new desktop after
+            // the compositor moves the window's desktop membership.
+        } else {
+            // Per-output desktop semantics: crossing onto another output targets
+            // that output's already-visible desktop. There is no desktop switch
+            // to wait for, so retile the destination surface immediately.
+            m_engine->retileAfterOperation(targetScreenId, true);
+        }
+    } else {
+        m_engine->retileAfterOperation(targetScreenId, true);
+    }
+
+    Q_EMIT m_engine->activateWindowRequested(focused);
+    return true;
+}
+
+bool NavigationController::focusBoundaryTarget(const QString& targetScreenId, int targetDesktop,
+                                               const QString& direction, const QString& action,
+                                               const QString& feedbackScreenId)
+{
+    if (!m_engine || targetScreenId.isEmpty() || targetDesktop < 1) {
+        return false;
+    }
+
+    const PhosphorEngine::TilingStateKey targetKey{targetScreenId, targetDesktop, m_engine->m_currentActivity};
+    auto it = m_engine->m_screenStates.constFind(targetKey);
+    if (it == m_engine->m_screenStates.constEnd() || !it.value()) {
+        return false;
+    }
+
+    const QStringList targetWindows = it.value()->tiledWindows();
+    if (targetWindows.isEmpty()) {
+        return false;
+    }
+
+    const int targetIndex = entryIndexForDirection(direction, targetWindows.size());
+    Q_EMIT m_engine->activateWindowRequested(targetWindows.at(targetIndex));
+    Q_EMIT m_engine->navigationFeedback(true, action,
+                                        targetDesktop == m_engine->currentDesktopForScreen(targetScreenId)
+                                            ? QStringLiteral("screen:%1").arg(direction)
+                                            : QStringLiteral("desktop:%1").arg(targetDesktop),
+                                        QString(), QString(), feedbackScreenId);
+    return true;
+}
+
+bool NavigationController::focusEmptyScreenBoundaryTarget(const QString& targetScreenId, const QString& direction,
+                                                          const QString& action)
+{
+    if (!m_engine || targetScreenId.isEmpty()) {
+        return false;
+    }
+
+    // Outputs have priority over virtual desktops at a boundary. If the
+    // neighboring output has no tiled windows on its visible desktop, remember
+    // it as the active navigation surface and stop instead of falling through
+    // to a virtual-desktop transition on the source output. There is no KWin
+    // window to activate in this case.
+    m_engine->m_activeScreen = targetScreenId;
+    Q_EMIT m_engine->navigationFeedback(true, action, QStringLiteral("screen:%1").arg(direction), QString(), QString(),
+                                        targetScreenId);
+    return true;
+}
+
 void NavigationController::applyToAllStates(const std::function<void(PhosphorTiles::TilingState*)>& operation)
 {
     if (m_engine->m_screenStates.isEmpty()) {
@@ -449,8 +820,8 @@ void NavigationController::applyToAllStates(const std::function<void(PhosphorTil
 
     // Only apply to states for the current desktop/activity
     for (auto it = m_engine->m_screenStates.begin(); it != m_engine->m_screenStates.end(); ++it) {
-        if (it.key().desktop == m_engine->m_currentDesktop && it.key().activity == m_engine->m_currentActivity
-            && it.value()) {
+        if (it.key().desktop == m_engine->currentDesktopForScreen(it.key().screenId)
+            && it.key().activity == m_engine->m_currentActivity && it.value()) {
             operation(it.value());
         }
     }

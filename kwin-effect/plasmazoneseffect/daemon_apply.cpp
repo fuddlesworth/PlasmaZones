@@ -130,6 +130,31 @@ void PlasmaZonesEffect::slotMoveSpecificWindowToZoneRequested(const QString& win
 // locally against its active-window + frame-geometry shadow and emits
 // applyGeometryRequested directly. See WindowTrackingAdaptor::toggleWindowFloat.
 
+void PlasmaZonesEffect::slotWindowDesktopMoveRequested(const QString& windowId, int desktop)
+{
+    if (desktop < 1) {
+        qCDebug(lcEffect) << "slotWindowDesktopMoveRequested: invalid desktop" << desktop;
+        return;
+    }
+
+    KWin::EffectWindow* w = findWindowById(windowId);
+    if (!w) {
+        qCDebug(lcEffect) << "slotWindowDesktopMoveRequested: window not found" << windowId;
+        return;
+    }
+
+    const auto desktops = KWin::effects->desktops();
+    if (desktop > desktops.size()) {
+        qCDebug(lcEffect) << "slotWindowDesktopMoveRequested: desktop out of range" << desktop;
+        return;
+    }
+
+    auto targetDesktops = desktops;
+    targetDesktops.clear();
+    targetDesktops.append(desktops.at(desktop - 1));
+    KWin::effects->windowToDesktops(w, targetDesktops);
+}
+
 void PlasmaZonesEffect::slotApplyGeometryRequested(const QString& windowId, int x, int y, int width, int height,
                                                    const QString& zoneId, const QString& screenId, bool sizeOnly)
 {
