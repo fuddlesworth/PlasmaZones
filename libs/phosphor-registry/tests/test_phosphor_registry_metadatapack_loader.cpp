@@ -281,6 +281,48 @@ private Q_SLOTS:
         loader->refresh(); // change → commit fires
         QVERIFY(committed > before);
     }
+
+    // setPerEntryWatchPaths feeds extra per-pack files into the pack signature:
+    // editing a watched sidecar (NOT the metadata.json) still changes the
+    // pack's signature and fires a committed rescan.
+    void testPerEntryWatchPathFeedsSignature()
+    {
+        QTemporaryDir dir;
+        QVERIFY(dir.isValid());
+        writePack(dir.path(), "alpha", "alpha", "Alpha", 1);
+        const QString sidecar = dir.path() + QStringLiteral("/alpha/sidecar.txt");
+        const auto writeSidecar = [&](const QByteArray& bytes) {
+            QFile f(sidecar);
+            QVERIFY(f.open(QIODevice::WriteOnly));
+            f.write(bytes);
+        };
+        writeSidecar("v1");
+
+        Reg reg;
+        auto loader = makeLoader(&reg);
+        int committed = 0;
+        loader->setOnCommitted([&] {
+            ++committed;
+        });
+        // Each pack watches its own sidecar (keyed by id under the temp root).
+        const QString root = dir.path();
+        loader->setPerEntryWatchPaths([root](const FakePack& p) -> QStringList {
+            return {root + QLatin1Char('/') + p.id() + QStringLiteral("/sidecar.txt")};
+        });
+
+        loader->addSearchPaths({root}, PhosphorFsLoader::LiveReload::Off);
+        QVERIFY(committed >= 1);
+        QVERIFY(reg.factory(QStringLiteral("alpha")) != nullptr);
+        const int before = committed;
+
+        // Edit ONLY the watched sidecar, changing its SIZE so the size+mtime
+        // signature shifts deterministically (no mtime-tick flakiness). The
+        // metadata.json is untouched, so the pack is not re-registered, but the
+        // watched-file change must still trigger a committed rescan.
+        writeSidecar("v2-substantially-longer-payload");
+        loader->refresh();
+        QVERIFY(committed > before);
+    }
 };
 
 QTEST_MAIN(TestMetadataPackLoader)

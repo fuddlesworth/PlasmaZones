@@ -306,6 +306,11 @@ bool CurveRegistry::registerFactory(const QString& typeId, Factory stringFactory
     // Returns whether a prior registration was overwritten (the documented
     // contract). The registry's Replace policy overwrites in place; check
     // first since registerFactory(...Replace) returns success, not replaced.
+    // The check + Replace are two separate registry lock acquisitions, so the
+    // returned bool is exact only for single-threaded registration (the
+    // composition-root / loader case — see CurveRegistry.h); a concurrent
+    // mutation of the same typeId between them could make it stale. The
+    // storage itself stays consistent regardless (each call is atomic).
     const bool replaced = m_impl->registry.factory(typeId) != nullptr;
     m_impl->registry.registerFactory(
         std::make_shared<CurveFactoryEntry>(typeId, std::move(stringFactory), std::move(jsonFactory)), ownerTag,

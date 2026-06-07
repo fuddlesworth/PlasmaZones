@@ -33,12 +33,21 @@ namespace PhosphorRegistry {
 //
 // Thread-safe: an internal QMutex guards the store, so registration,
 // unregistration, and lookup may run on any thread (e.g. a worker thread
-// loading a curve concurrently with a GUI-thread lookup). The mutex is
-// uncontended on the common single-threaded GUI path, so the cost there is
-// negligible. Change signals are emitted via the RegistryNotifier AFTER the
-// lock is released, so a slot may safely call back into the registry; the
-// notifier QObject keeps the thread affinity of whoever created the Registry,
-// and cross-thread emissions reach consumers via queued connections.
+// loading a curve concurrently with a GUI-thread lookup) without corrupting
+// the store, and every read (factory/ids/forEach/size) returns a consistent
+// snapshot taken under the lock. The mutex is uncontended on the common
+// single-threaded GUI path, so the cost there is negligible. Change signals
+// are emitted via the RegistryNotifier AFTER the lock is released, so a slot
+// may safely call back into the registry; the notifier QObject keeps the
+// thread affinity of whoever created the Registry, and cross-thread emissions
+// reach consumers via queued connections.
+//
+// One caveat: the registration-ORDER guarantee on the change signals (below)
+// holds only for single-threaded mutation (the common GUI-thread case). Two
+// threads mutating concurrently each emit AFTER releasing the lock, so the
+// relative order of their signals is unspecified even though the store's
+// m_order — and therefore ids()/forEach() — stays correct. No signal is lost;
+// only cross-thread emission ordering is undefined.
 //
 // ## Duplicate id policy
 //
