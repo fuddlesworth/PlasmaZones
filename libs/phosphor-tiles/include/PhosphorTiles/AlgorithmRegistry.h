@@ -7,19 +7,17 @@
 #include "AlgorithmPreviewParams.h"
 #include "AutotileConstants.h"
 #include "ITileAlgorithmRegistry.h"
-#include <QHash>
 #include <QLatin1String>
 #include <QList>
 #include <QMutex>
 #include <QMutexLocker>
 #include <QObject>
-#include <QPointer>
-#include <QRect>
 #include <QString>
 #include <QStringList>
 #include <QVariantList>
 #include <QVariantMap>
 #include <functional>
+#include <memory>
 
 namespace PhosphorTiles {
 
@@ -140,39 +138,14 @@ private:
      */
     void registerBuiltInAlgorithms();
 
-    /**
-     * @brief Remove algorithm from internal data structures
-     *
-     * Does NOT delete the algorithm or emit signals. Used by both
-     * registerAlgorithm (for replacement) and unregisterAlgorithm.
-     *
-     * @param id Algorithm ID to remove
-     * @return Pointer to removed algorithm, or nullptr if not found
-     */
-    TilingAlgorithm* removeAlgorithmInternal(const QString& id);
-
-    /**
-     * @brief Safely delete an algorithm via deleteLater()
-     *
-     * Detaches the algorithm from parent ownership and schedules deferred
-     * deletion to avoid re-entrancy issues during signal emission.
-     *
-     * @param algo Algorithm to delete (nullptr is a safe no-op)
-     */
-    void safeDeleteAlgorithm(TilingAlgorithm* algo);
-
-    QHash<QString, TilingAlgorithm*> m_algorithms;
-    QStringList m_registrationOrder; ///< Preserve order for UI
-
-    /// Algorithms detached from the registry via @c safeDeleteAlgorithm
-    /// and queued for deferred deletion. Tracked so @c cleanup can drain
-    /// only these objects' pending @c QEvent::DeferredDelete events
-    /// rather than the entire process-wide queue. @c QPointer auto-clears
-    /// when Qt finally processes the deferred-delete event, so stale
-    /// entries are harmless.
-    QList<QPointer<TilingAlgorithm>> m_pendingDeletes;
-
-    AlgorithmPreviewParams m_previewParams; ///< User-configured tiling parameters for previews
+    /// Storage + lifetime are now decomposed: the id-keyed catalogue is a
+    /// PhosphorRegistry::Registry<TileAlgorithmEntry> (each entry owns its
+    /// algorithm via a shared_ptr whose deleter defers to deleteLater while
+    /// Qt is alive), and the preview-param config is a plain field — neither
+    /// is registry storage. Held behind a pimpl so this header stays free of
+    /// the registry/entry template + TilingAlgorithm ownership details.
+    class Impl;
+    std::unique_ptr<Impl> m_impl;
 };
 
 /**

@@ -158,6 +158,17 @@ public:
         return static_cast<int>(removedIds.size());
     }
 
+    // Drop every entry at once WITHOUT firing per-entry signals. For bulk
+    // teardown — a composition root shutting down, where consumers are tearing
+    // down too and per-entry unregister notifications are noise. A caller that
+    // needs to finalise object lifetimes (e.g. flush owned QObjects' deferred
+    // deletes) should snapshot the entries via forEach() BEFORE calling clear().
+    void clear()
+    {
+        QMutexLocker locker(&m_mutex);
+        m_entries.clear();
+    }
+
     // Lookup. Returns the registered factory or a null shared_ptr if @p id is
     // unknown. The returned shared_ptr keeps the factory alive even if it is
     // unregistered concurrently.
