@@ -49,6 +49,16 @@ struct PHOSPHORSCREENSCORE_EXPORT ScreenInfo
     QString model;
     int width = 0;
     int height = 0;
+    /**
+     * Screen-space position of the top-left corner, in the compositor's
+     * global coordinate space (the same space width/height are measured in).
+     * Lets a multi-monitor map lay tiles out in their real arrangement.
+     * Unlike width/height, `0` is a legitimate value (the primary output
+     * typically sits at the origin), so screenInfoListToVariantList() emits
+     * x/y unconditionally rather than skipping non-positive values.
+     */
+    int x = 0;
+    int y = 0;
     QString screenId;
     bool isVirtualScreen = false;
     /** Physical connector (e.g. "DP-2"). */
@@ -63,9 +73,10 @@ struct PHOSPHORSCREENSCORE_EXPORT ScreenInfo
  * Convert a ScreenInfo list to QVariantList suitable for QML consumption.
  *
  * Each entry is a QVariantMap with keys: name, isPrimary, manufacturer,
- * model, resolution, width, height, screenId, connectorName, and a
+ * model, resolution, width, height, x, y, screenId, connectorName, and a
  * pre-computed displayLabel that QML selectors / context menus can render
- * without duplicating label-building logic.
+ * without duplicating label-building logic. x/y (screen-space position)
+ * are always present; width/height only when positive.
  */
 [[nodiscard]] PHOSPHORSCREENSCORE_EXPORT QVariantList screenInfoListToVariantList(const QList<ScreenInfo>& screens);
 

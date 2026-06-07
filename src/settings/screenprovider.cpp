@@ -82,6 +82,11 @@ QList<PhosphorScreens::ScreenInfo> fetchScreens(bool* daemonUnavailable)
                         QJsonObject geom = jsonObj[JsonKeys::Geometry].toObject();
                         info.width = geom[::PhosphorZones::ZoneJsonKeys::Width].toInt();
                         info.height = geom[::PhosphorZones::ZoneJsonKeys::Height].toInt();
+                        // Position (top-left in the compositor's global space)
+                        // drives the proportional multi-monitor map. 0 is a
+                        // valid coordinate, so no sentinel check here.
+                        info.x = geom[::PhosphorZones::ZoneJsonKeys::X].toInt();
+                        info.y = geom[::PhosphorZones::ZoneJsonKeys::Y].toInt();
                         // Surface the missing-key edge so a corrupted daemon
                         // reply doesn't silently produce a 0×0 picker tile.
                         // QJsonValue::toInt() of an absent key is 0; a
@@ -149,6 +154,8 @@ QList<PhosphorScreens::ScreenInfo> fetchScreens(bool* daemonUnavailable)
             info.model = screen->model();
             info.width = screen->geometry().width();
             info.height = screen->geometry().height();
+            info.x = screen->geometry().x();
+            info.y = screen->geometry().y();
             info.connectorName = screen->name();
             info.screenId = PhosphorScreens::ScreenIdentity::identifierFor(screen);
             result.append(info);

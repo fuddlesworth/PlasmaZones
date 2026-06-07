@@ -61,6 +61,12 @@ QVariantList screenInfoListToVariantList(const QList<ScreenInfo>& screens)
             map[QStringLiteral("height")] = s.height;
         if (s.width > 0 && s.height > 0)
             map[QStringLiteral("resolution")] = QStringLiteral("%1×%2").arg(s.width).arg(s.height);
+        // Position is always emitted (unlike width/height): 0,0 is a valid
+        // screen-space origin, so the >0 skip used for dimensions would
+        // wrongly drop a monitor sitting at the coordinate origin from a
+        // multi-monitor map.
+        map[QStringLiteral("x")] = s.x;
+        map[QStringLiteral("y")] = s.y;
         if (!s.screenId.isEmpty())
             map[QStringLiteral("screenId")] = s.screenId;
         // Always emit the flag — QML consumers that test
