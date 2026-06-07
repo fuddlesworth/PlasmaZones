@@ -1457,7 +1457,7 @@ void PlasmaZonesEffect::tryBeginShaderForEvent(KWin::EffectWindow* window, const
 void PlasmaZonesEffect::loadShaderProfileFromDbus()
 {
     constexpr QLatin1String kName = PhosphorProtocol::Service::SettingProperty::ShaderProfileTree;
-    PhosphorProtocol::ClientHelpers::loadSettingAsync(this, kName, [this](const QVariant& v) {
+    PhosphorProtocol::ClientHelpers::loadSettingAsync(this, kName, [this, kName](const QVariant& v) {
         dispatchJsonSetting(kName, v,
                             [this](const QJsonObject& obj) {
                                 auto& tree = m_shaderManager.profileTree();
@@ -1473,7 +1473,7 @@ void PlasmaZonesEffect::loadShaderProfileFromDbus()
 void PlasmaZonesEffect::loadAnimationAppRulesFromDbus()
 {
     constexpr QLatin1String kName = PhosphorProtocol::Service::SettingProperty::AnimationAppRules;
-    PhosphorProtocol::ClientHelpers::loadSettingAsync(this, kName, [this](const QVariant& v) {
+    PhosphorProtocol::ClientHelpers::loadSettingAsync(this, kName, [this, kName](const QVariant& v) {
         dispatchJsonSetting(kName, v,
                             /*objectSink=*/{}, [this](const QJsonArray& arr) {
                                 auto& rules = m_shaderManager.appRules();
@@ -1486,7 +1486,7 @@ void PlasmaZonesEffect::loadAnimationAppRulesFromDbus()
 void PlasmaZonesEffect::loadMotionProfileTreeFromDbus()
 {
     constexpr QLatin1String kName = PhosphorProtocol::Service::SettingProperty::MotionProfileTree;
-    PhosphorProtocol::ClientHelpers::loadSettingAsync(this, kName, [this](const QVariant& v) {
+    PhosphorProtocol::ClientHelpers::loadSettingAsync(this, kName, [this, kName](const QVariant& v) {
         dispatchJsonSetting(kName, v,
                             [this](const QJsonObject& obj) {
                                 // ProfileTree::fromJson resolves the optional `curve`
@@ -1520,7 +1520,7 @@ void PlasmaZonesEffect::slotMotionProfileTreeChanged()
 void PlasmaZonesEffect::loadShaderRegistryFromDbus()
 {
     constexpr QLatin1String kName = PhosphorProtocol::Service::SettingProperty::AnimationShaderSearchPaths;
-    PhosphorProtocol::ClientHelpers::loadSettingAsync(this, kName, [this](const QVariant& v) {
+    PhosphorProtocol::ClientHelpers::loadSettingAsync(this, kName, [this, kName](const QVariant& v) {
         dispatchJsonSetting(kName, v,
                             /*objectSink=*/{}, [this](const QJsonArray& arr) {
                                 QStringList paths;
