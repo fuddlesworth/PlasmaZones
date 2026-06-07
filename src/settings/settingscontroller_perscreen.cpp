@@ -59,6 +59,30 @@ bool SettingsController::hasPerScreenAutotileSettings(const QString& screenName)
     return m_settings.hasPerScreenAutotileSettings(screenName);
 }
 
+bool SettingsController::hasPerScreenAutotileGapsSettings(const QString& screenName) const
+{
+    return m_settings.hasPerScreenAutotileGapsSettings(screenName);
+}
+
+void SettingsController::clearPerScreenAutotileGapsSettings(const QString& screenName)
+{
+    m_settings.clearPerScreenAutotileGapsSettings(screenName);
+    setNeedsSave(true);
+    Q_EMIT perScreenOverridesChanged();
+}
+
+bool SettingsController::hasPerScreenAutotileAlgorithmSettings(const QString& screenName) const
+{
+    return m_settings.hasPerScreenAutotileAlgorithmSettings(screenName);
+}
+
+void SettingsController::clearPerScreenAutotileAlgorithmSettings(const QString& screenName)
+{
+    m_settings.clearPerScreenAutotileAlgorithmSettings(screenName);
+    setNeedsSave(true);
+    Q_EMIT perScreenOverridesChanged();
+}
+
 // ── Per-screen snapping overrides ────────────────────────────────────────
 
 QVariantMap SettingsController::getPerScreenSnappingSettings(const QString& screenName) const

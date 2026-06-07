@@ -36,7 +36,6 @@ SettingsFlickable {
         selectedScreenName: settingsController.scopeScreenName
         getterMethod: "getPerScreenSnappingSettings"
         setterMethod: "setPerScreenSnappingSetting"
-        clearerMethod: "clearPerScreenSnappingSettings"
     }
 
     ColumnLayout {

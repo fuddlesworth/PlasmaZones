@@ -36,7 +36,6 @@ SettingsFlickable {
         selectedScreenName: settingsController.scopeScreenName
         getterMethod: "getPerScreenAutotileSettings"
         setterMethod: "setPerScreenAutotileSetting"
-        clearerMethod: "clearPerScreenAutotileSettings"
     }
 
     ColumnLayout {
@@ -194,8 +193,10 @@ SettingsFlickable {
             Layout.fillWidth: true
             scopeEnabled: true
             scopeAppSettings: settingsController
-            scopeHasOverridesMethod: "hasPerScreenAutotileSettings"
-            scopeClearerMethod: "clearPerScreenAutotileSettings"
+            // Gaps sub-domain only — must not report/reset the Algorithm card's
+            // per-monitor overrides (shared autotile map, disjoint key subsets).
+            scopeHasOverridesMethod: "hasPerScreenAutotileGapsSettings"
+            scopeClearerMethod: "clearPerScreenAutotileGapsSettings"
             gapMax: root.gapMax
             gapMin: root.settingsBridge.autotileGapMin
             primaryGapMin: root.settingsBridge.autotileInnerGapMin

@@ -215,10 +215,6 @@ ColumnLayout {
                 color: !root.isPerScreen ? Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g, Kirigami.Theme.highlightColor.b, 0.1) : allMouse.containsMouse ? Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.06) : "transparent"
                 border.width: Math.round(Screen.devicePixelRatio)
                 border.color: !root.isPerScreen ? Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g, Kirigami.Theme.highlightColor.b, 0.5) : allMouse.activeFocus ? Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g, Kirigami.Theme.highlightColor.b, 0.7) : Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.1)
-                Accessible.role: Accessible.RadioButton
-                Accessible.name: i18n("All Monitors")
-                Accessible.checked: !root.isPerScreen
-
                 ColumnLayout {
                     id: allContent
 
@@ -248,6 +244,11 @@ ColumnLayout {
                     cursorShape: Qt.PointingHandCursor
                     hoverEnabled: true
                     activeFocusOnTab: true
+                    // a11y role lives on the focusable item (this MouseArea), so
+                    // assistive tech sees the radio role and the focus together.
+                    Accessible.role: Accessible.RadioButton
+                    Accessible.name: i18n("All Monitors")
+                    Accessible.checked: !root.isPerScreen
                     Keys.onSpacePressed: root.screenPicked("")
                     Keys.onReturnPressed: root.screenPicked("")
                     onClicked: root.screenPicked("")
@@ -299,9 +300,6 @@ ColumnLayout {
                         color: isSelected ? Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g, Kirigami.Theme.highlightColor.b, 0.18) : tileMouse.containsMouse ? Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.08) : Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.04)
                         border.width: isSelected ? Math.round(Screen.devicePixelRatio) * 2 : Math.round(Screen.devicePixelRatio)
                         border.color: isSelected ? Kirigami.Theme.highlightColor : tileMouse.activeFocus ? Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g, Kirigami.Theme.highlightColor.b, 0.7) : Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.2)
-                        Accessible.role: Accessible.RadioButton
-                        Accessible.name: connectorLabel.text
-                        Accessible.checked: isSelected
 
                         // Connector-first label (DP-2); vendor + resolution in tooltip.
                         Label {
@@ -358,6 +356,10 @@ ColumnLayout {
                             cursorShape: Qt.PointingHandCursor
                             hoverEnabled: true
                             activeFocusOnTab: true
+                            // a11y role on the focusable item, not the visual tile.
+                            Accessible.role: Accessible.RadioButton
+                            Accessible.name: connectorLabel.text
+                            Accessible.checked: tile.isSelected
                             Keys.onSpacePressed: root.screenPicked(tile.screenName)
                             Keys.onReturnPressed: root.screenPicked(tile.screenName)
                             onClicked: root.screenPicked(tile.screenName)

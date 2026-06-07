@@ -13,7 +13,8 @@ import org.kde.kirigami as Kirigami
  * info message, enable toggle, position & trigger, layout arrangement, and
  * preview size cards. The three per-monitor cards carry a header scope chip,
  * so per-monitor overrides are scoped to the monitor picked there (shared
- * app-wide scope) when multiple monitors are detected.
+ * app-wide scope). The chip's monitor map only appears with more than one
+ * output; on a single-monitor system the chip stays collapsed on "All".
  */
 ColumnLayout {
     // ═══════════════════════════════════════════════════════════════════════
@@ -71,7 +72,6 @@ ColumnLayout {
         selectedScreenName: root.controller.scopeScreenName
         getterMethod: "getPerScreenZoneSelectorSettings"
         setterMethod: "setPerScreenZoneSelectorSetting"
-        clearerMethod: "clearPerScreenZoneSelectorSettings"
     }
 
     // Info message

@@ -391,16 +391,20 @@ SettingsFlickable {
 
     Connections {
         function onScreensChanged() {
-            // Drop a selection whose physical output was unplugged, then re-pick
-            // BEFORE refreshing so geometry/config never run a redundant pass
-            // against an empty selection (mirrors MonitorStatePage's
-            // drop-then-select-then-refresh order).
-            if (root._selectedScreen !== "" && !root._screenStillPresent(root._selectedScreen))
+            // Drop a selection whose physical output was unplugged, then re-pick.
+            // Changing _selectedScreen fires on_SelectedScreenChanged, which
+            // already refreshes geometry + config — so only refresh explicitly
+            // here when the selection did NOT change (e.g. a non-selected output
+            // hot-plugged), avoiding a redundant double refresh.
+            var before = root._selectedScreen;
+            if (before !== "" && !root._screenStillPresent(before))
                 root._selectedScreen = "";
             if (root._selectedScreen === "" && settingsController.screens.length > 0)
                 root._autoSelectScreen();
-            root._updateScreenGeometry();
-            root._refreshConfig();
+            if (root._selectedScreen === before) {
+                root._updateScreenGeometry();
+                root._refreshConfig();
+            }
         }
 
         target: settingsController

@@ -105,6 +105,36 @@ const QLatin1String kPerScreenAutotileKeys[] = {
     QLatin1String(PerScreenAutotileKey::AnimationEasingCurve),
 };
 
+// Gaps sub-domain of the autotile per-screen keys — the keys the Tiling
+// Appearance "Gaps" card writes. Everything else in kPerScreenAutotileKeys is
+// the Tiling Algorithm card's sub-domain. The two cards live on disjoint key
+// subsets so each card's scope chip reports its override dot and clears its
+// reset against ONLY its own keys; a shared whole-domain clear would wipe the
+// other card's per-monitor overrides (data loss on reset).
+const QLatin1String kPerScreenAutotileGapsKeys[] = {
+    QLatin1String(PerScreenAutotileKey::InnerGap),           QLatin1String(PerScreenAutotileKey::OuterGap),
+    QLatin1String(PerScreenAutotileKey::UsePerSideOuterGap), QLatin1String(PerScreenAutotileKey::OuterGapTop),
+    QLatin1String(PerScreenAutotileKey::OuterGapBottom),     QLatin1String(PerScreenAutotileKey::OuterGapLeft),
+    QLatin1String(PerScreenAutotileKey::OuterGapRight),      QLatin1String(PerScreenAutotileKey::SmartGaps),
+};
+
+bool isPerScreenAutotileGapsKey(const QString& key)
+{
+    // In-memory per-screen autotile keys are short form (the setter and
+    // normalizeAutotileKeys strip the "Autotile" prefix), while
+    // kPerScreenAutotileGapsKeys holds the prefixed disk form — compare on the
+    // short form of both so e.g. stored "InnerGap" matches "AutotileInnerGap".
+    const auto toShort = [](const QString& k) -> QString {
+        return k.startsWith(QLatin1String("Autotile")) ? k.mid(8) : k;
+    };
+    const QString shortKey = toShort(key);
+    for (const QLatin1String& k : kPerScreenAutotileGapsKeys) {
+        if (shortKey == toShort(QString(k)))
+            return true;
+    }
+    return false;
+}
+
 QVariant validatePerScreenAutotileValue(const QString& key, const QVariant& value)
 {
     // Strip "Autotile" prefix so both "Algorithm" and "AutotileAlgorithm" match.
@@ -500,6 +530,71 @@ static bool removePerScreenEntry(QHash<QString, T>& hash, const QString& screenI
     return false;
 }
 
+// Mutable sibling of findPerScreenEntry — same id/connector resolution, used by
+// the autotile sub-domain partial-clear below.
+template<typename T>
+static typename QHash<QString, T>::iterator findPerScreenEntryMutable(QHash<QString, T>& hash,
+                                                                      const QString& screenIdOrName)
+{
+    auto it = hash.find(screenIdOrName);
+    if (it != hash.end())
+        return it;
+    if (PhosphorScreens::ScreenIdentity::isConnectorName(screenIdOrName)) {
+        QString resolved = PhosphorScreens::ScreenIdentity::idForName(screenIdOrName);
+        if (resolved != screenIdOrName) {
+            it = hash.find(resolved);
+            if (it != hash.end())
+                return it;
+        }
+    }
+    QString connector = PhosphorScreens::ScreenIdentity::nameForId(screenIdOrName);
+    if (!connector.isEmpty() && connector != screenIdOrName) {
+        it = hash.find(connector);
+        if (it != hash.end())
+            return it;
+    }
+    return hash.end();
+}
+
+// True if the screen's autotile override map holds any key in the requested
+// sub-domain (gaps when wantGaps, otherwise the algorithm complement).
+static bool hasPerScreenAutotileSubset(const QHash<QString, QVariantMap>& hash, const QString& screenIdOrName,
+                                       bool wantGaps)
+{
+    auto it = findPerScreenEntry(hash, screenIdOrName);
+    if (it == hash.constEnd())
+        return false;
+    for (auto k = it.value().constBegin(); k != it.value().constEnd(); ++k) {
+        if (isPerScreenAutotileGapsKey(k.key()) == wantGaps)
+            return true;
+    }
+    return false;
+}
+
+// Remove only the requested sub-domain's keys from the screen's autotile
+// override map (gaps when clearGaps, otherwise the algorithm complement),
+// dropping the whole entry once empty. Returns true if anything changed.
+static bool clearPerScreenAutotileSubset(QHash<QString, QVariantMap>& hash, const QString& screenIdOrName,
+                                         bool clearGaps)
+{
+    auto it = findPerScreenEntryMutable(hash, screenIdOrName);
+    if (it == hash.end())
+        return false;
+    QVariantMap& overrides = it.value();
+    bool changed = false;
+    for (auto k = overrides.begin(); k != overrides.end();) {
+        if (isPerScreenAutotileGapsKey(k.key()) == clearGaps) {
+            k = overrides.erase(k);
+            changed = true;
+        } else {
+            ++k;
+        }
+    }
+    if (overrides.isEmpty())
+        hash.erase(it);
+    return changed;
+}
+
 // ── Per-Screen PhosphorZones::Zone Selector Config ──────────────────────────────────────────
 
 ZoneSelectorConfig Settings::resolvedZoneSelectorConfig(const QString& screenIdOrName) const
@@ -622,6 +717,35 @@ void Settings::clearPerScreenAutotileSettings(const QString& screenIdOrName)
 bool Settings::hasPerScreenAutotileSettings(const QString& screenIdOrName) const
 {
     return findPerScreenEntry(m_perScreenAutotileSettings, screenIdOrName) != m_perScreenAutotileSettings.constEnd();
+}
+
+// Sub-domain accessors: the Gaps card and the Algorithm card share one
+// per-screen autotile map but must report/reset only their own keys.
+
+bool Settings::hasPerScreenAutotileGapsSettings(const QString& screenIdOrName) const
+{
+    return hasPerScreenAutotileSubset(m_perScreenAutotileSettings, screenIdOrName, /*wantGaps=*/true);
+}
+
+bool Settings::hasPerScreenAutotileAlgorithmSettings(const QString& screenIdOrName) const
+{
+    return hasPerScreenAutotileSubset(m_perScreenAutotileSettings, screenIdOrName, /*wantGaps=*/false);
+}
+
+void Settings::clearPerScreenAutotileGapsSettings(const QString& screenIdOrName)
+{
+    if (clearPerScreenAutotileSubset(m_perScreenAutotileSettings, screenIdOrName, /*clearGaps=*/true)) {
+        Q_EMIT perScreenAutotileSettingsChanged();
+        Q_EMIT settingsChanged();
+    }
+}
+
+void Settings::clearPerScreenAutotileAlgorithmSettings(const QString& screenIdOrName)
+{
+    if (clearPerScreenAutotileSubset(m_perScreenAutotileSettings, screenIdOrName, /*clearGaps=*/false)) {
+        Q_EMIT perScreenAutotileSettingsChanged();
+        Q_EMIT settingsChanged();
+    }
 }
 
 // ── Per-Screen Snapping Config ───────────────────────────────────────────────

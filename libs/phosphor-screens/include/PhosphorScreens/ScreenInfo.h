@@ -76,10 +76,13 @@ struct PHOSPHORSCREENSCORE_EXPORT ScreenInfo
  * Convert a ScreenInfo list to QVariantList suitable for QML consumption.
  *
  * Each entry is a QVariantMap with keys: name, isPrimary, manufacturer,
- * model, resolution, width, height, x, y, screenId, connectorName, and a
- * pre-computed displayLabel that QML selectors / context menus can render
- * without duplicating label-building logic. x/y (screen-space position)
- * are always present; width/height only when positive.
+ * model, resolution, width, height, x, y, screenId, connectorName,
+ * isVirtualScreen, virtualIndex / virtualDisplayName (virtual screens only),
+ * and a pre-computed displayLabel that QML selectors / context menus can
+ * render without duplicating label-building logic. Always present: name,
+ * isPrimary, isVirtualScreen, x, y, displayLabel. Conditional: width/height
+ * (only when positive), resolution (only when both positive), manufacturer /
+ * model / screenId / connectorName (only when non-empty).
  */
 [[nodiscard]] PHOSPHORSCREENSCORE_EXPORT QVariantList screenInfoListToVariantList(const QList<ScreenInfo>& screens);
 

@@ -115,7 +115,6 @@ SettingsFlickable {
         selectedScreenName: settingsController.scopeScreenName
         getterMethod: "getPerScreenAutotileSettings"
         setterMethod: "setPerScreenAutotileSetting"
-        clearerMethod: "clearPerScreenAutotileSettings"
     }
 
     ColumnLayout {
@@ -133,8 +132,10 @@ SettingsFlickable {
             collapsible: true
             scopeEnabled: true
             scopeAppSettings: settingsController
-            scopeHasOverridesMethod: "hasPerScreenAutotileSettings"
-            scopeClearerMethod: "clearPerScreenAutotileSettings"
+            // Algorithm sub-domain only — must not report/reset the Gaps card's
+            // per-monitor overrides (shared autotile map, disjoint key subsets).
+            scopeHasOverridesMethod: "hasPerScreenAutotileAlgorithmSettings"
+            scopeClearerMethod: "clearPerScreenAutotileAlgorithmSettings"
 
             contentItem: ColumnLayout {
                 spacing: Kirigami.Units.smallSpacing

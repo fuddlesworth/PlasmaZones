@@ -88,6 +88,42 @@ private Q_SLOTS:
                  "Per-screen autotile value must be clamped to valid range");
     }
 
+    /**
+     * Per-screen autotile gaps and algorithm sub-domains are independent: the
+     * Gaps card and the Algorithm card share one per-screen map but must report
+     * and clear only their own keys, so resetting one never wipes the other.
+     */
+    void testPerScreenAutotile_gapsAndAlgorithmSubdomainsAreIndependent()
+    {
+        IsolatedConfigGuard guard;
+
+        Settings settings;
+
+        const QString screen = QStringLiteral("test-screen-1");
+
+        // A gaps override (InnerGap) and an algorithm override (MasterCount)
+        // coexist in the one shared per-screen autotile map.
+        settings.setPerScreenAutotileSetting(screen, QStringLiteral("AutotileInnerGap"), 12);
+        settings.setPerScreenAutotileSetting(screen, QStringLiteral("AutotileMasterCount"), 2);
+
+        QVERIFY(settings.hasPerScreenAutotileGapsSettings(screen));
+        QVERIFY(settings.hasPerScreenAutotileAlgorithmSettings(screen));
+
+        // Clearing the gaps sub-domain must leave the algorithm override intact.
+        settings.clearPerScreenAutotileGapsSettings(screen);
+        QVERIFY(!settings.hasPerScreenAutotileGapsSettings(screen));
+        QVERIFY(settings.hasPerScreenAutotileAlgorithmSettings(screen));
+        QVariantMap afterGapsClear = settings.getPerScreenAutotileSettings(screen);
+        QVERIFY2(!afterGapsClear.contains(QStringLiteral("InnerGap")), "gaps key must be cleared");
+        QCOMPARE(afterGapsClear.value(QStringLiteral("MasterCount")).toInt(), 2);
+
+        // Clearing the algorithm sub-domain removes the last remaining key, so
+        // the whole per-screen entry is dropped.
+        settings.clearPerScreenAutotileAlgorithmSettings(screen);
+        QVERIFY(!settings.hasPerScreenAutotileAlgorithmSettings(screen));
+        QVERIFY(!settings.hasPerScreenAutotileSettings(screen));
+    }
+
     // =========================================================================
     // P2: edge cases -- fresh config defaults
     // =========================================================================

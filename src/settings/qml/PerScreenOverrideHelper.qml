@@ -16,11 +16,14 @@ import QtQuick
  *       appSettings: root.appSettings
  *       getterMethod: "getPerScreenAutotileSettings"
  *       setterMethod: "setPerScreenAutotileSetting"
- *       clearerMethod: "clearPerScreenAutotileSettings"
  *   }
  *
  * Then: psHelper.settingValue(key, globalValue)
  *       psHelper.writeSetting(key, value, globalSetter)
+ *
+ * Resetting a monitor's overrides is owned by the card's MonitorScopeChip
+ * (its scopeClearerMethod), not this helper — the helper reloads reactively
+ * via the appSettings.perScreenOverridesChanged signal below.
  */
 QtObject {
     id: helper
@@ -28,7 +31,6 @@ QtObject {
     required property var appSettings
     required property string getterMethod
     required property string setterMethod
-    required property string clearerMethod
     property string selectedScreenName: ""
     readonly property bool isPerScreen: selectedScreenName !== ""
     readonly property bool hasOverrides: isPerScreen && Object.keys(perScreenOverrides).length > 0
@@ -57,11 +59,6 @@ QtObject {
         } else {
             globalSetter(value);
         }
-    }
-
-    function clearOverrides() {
-        appSettings[clearerMethod](selectedScreenName);
-        reload();
     }
 
     onSelectedScreenNameChanged: reload()
