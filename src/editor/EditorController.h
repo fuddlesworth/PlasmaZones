@@ -19,6 +19,7 @@
 #include <PhosphorZones/LayoutRegistry.h>
 #include "../core/logging.h"
 #include "undo/UndoController.h"
+#include "../shaderpreview/ishaderpreviewbackend.h"
 #include <PhosphorLayoutApi/LayoutSourceBundle.h>
 
 #include <memory>
@@ -47,6 +48,7 @@ namespace PlasmaZones {
 
 class ILayoutService;
 class ZoneManager;
+class ShaderPreviewController;
 class SnappingService;
 class TemplateService;
 
@@ -56,7 +58,7 @@ class TemplateService;
  * Manages zone editing operations and communicates with the daemon via D-Bus.
  * Exposed to QML for the editor UI.
  */
-class EditorController : public QObject
+class EditorController : public QObject, public IShaderPreviewBackend
 {
     Q_OBJECT
 
@@ -255,7 +257,7 @@ public:
     int globalOverlayDisplayMode() const;
     bool useFullScreenGeometry() const;
     int aspectRatioClass() const;
-    QSize targetScreenSize() const;
+    QSize targetScreenSize() const override; // also satisfies IShaderPreviewBackend
     QRect virtualScreenRect() const
     {
         return m_virtualScreenRect;
@@ -1050,9 +1052,19 @@ private:
     QString m_currentShaderId; // Empty = no shader effect
     QVariantMap m_currentShaderParams;
 
-    // Audio spectrum (phosphor-audio) for shader preview
-    PhosphorAudio::IAudioSpectrumProvider* m_audioProvider = nullptr;
-    QVector<float> m_audioSpectrum;
+    // IShaderPreviewBackend — the editor's preview data source: shader metadata
+    // via D-Bus to the daemon registry, the live edited layout's zones, and the
+    // audio-visualizer config. Consumed by m_shaderPreview; the QML-facing
+    // preview methods delegate to it. (targetScreenSize() above is the sixth.)
+    QVariantMap shaderInfo(const QString& shaderId) const override;
+    QVariantMap translateParams(const QString& shaderId, const QVariantMap& params) const override;
+    QVariantList previewZones() const override;
+    bool audioVisualizerEnabled() const override;
+    int audioBarCount() const override;
+
+    // Shared zone-shader preview feed (owns the CAVA capture + texture/preamble
+    // helpers). EditorController is its backend; the preview methods delegate.
+    ShaderPreviewController* m_shaderPreview = nullptr;
 
     // Cache for current shader's parameter definitions (avoids repeated D-Bus calls)
     // Updated when shader selection changes
