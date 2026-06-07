@@ -68,8 +68,23 @@ public:
     Q_INVOKABLE void startAudioCapture();
     Q_INVOKABLE void stopAudioCapture();
 
+    // ── Shader presets (shared by the editor + settings preview) ──────
+    /// Writes {name, shaderId, shaderParams} as JSON to @p filePath. Returns
+    /// false and emits shaderPresetSaveFailed on any error.
+    Q_INVOKABLE bool saveShaderPreset(const QString& filePath, const QString& shaderId, const QVariantMap& shaderParams,
+                                      const QString& presetName);
+
+    /// Reads a preset JSON. Returns {name, shaderId, shaderParams} or an empty
+    /// map (emitting shaderPresetLoadFailed) on error / unknown shader.
+    Q_INVOKABLE QVariantMap loadShaderPreset(const QString& filePath);
+
+    /// The shared user preset directory (created if missing).
+    Q_INVOKABLE QString shaderPresetDirectory() const;
+
 Q_SIGNALS:
     void audioSpectrumChanged();
+    void shaderPresetSaveFailed(const QString& error);
+    void shaderPresetLoadFailed(const QString& error);
 
 private:
     IShaderPreviewBackend* m_backend; // borrowed; owner outlives the controller

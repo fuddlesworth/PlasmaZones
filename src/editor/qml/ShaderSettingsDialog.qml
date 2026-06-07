@@ -790,44 +790,38 @@ Kirigami.Dialog {
                     active: root.previewShaderConfig !== null
                     visible: item === null || item.status !== ZoneShaderItem.Error
 
-                    sourceComponent: ZoneShaderItem {
-                        layer.enabled: shaderSource.toString() !== ""
-                        layer.textureMirroring: ShaderEffectSource.NoMirroring
-                        shaderSource: previewBackground.cfg.shaderUrl || ""
-                        paramPreamble: previewBackground.cfg.paramPreamble || ""
-                        bufferShaderPaths: previewBackground.cfg.bufferShaderPaths || []
-                        bufferFeedback: previewBackground.cfg.bufferFeedback || false
-                        bufferScale: previewBackground.cfg.bufferScale !== undefined ? previewBackground.cfg.bufferScale : 1
-                        bufferWrap: previewBackground.cfg.bufferWrap || "clamp"
-                        bufferWraps: previewBackground.cfg.bufferWraps || []
-                        bufferFilter: previewBackground.cfg.bufferFilter || "linear"
-                        bufferFilters: previewBackground.cfg.bufferFilters || []
-                        useDepthBuffer: previewBackground.cfg.useDepthBuffer || false
-                        zones: previewBackground.cfg.zones || []
-                        shaderParams: previewBackground.cfg.shaderParams || ({})
-                        useWallpaper: previewBackground.cfg.useWallpaper || false
-                        iTime: root.previewITime
-                        iTimeDelta: root.previewTimeDelta
-                        iFrame: root.previewFrame
-                        iResolution: Qt.size(width, height)
-                        iMouse: previewBackground.previewMouse
-                        hoveredZoneIndex: previewBackground.previewHoveredZone
-                        audioSpectrum: editorController ? editorController.audioSpectrum : []
+                    // Shared zone-shader renderer (org.plasmazones.common) — the
+                    // single source of truth for the ZoneShaderItem bindings, also
+                    // used by the settings-app preview + the overlay. Kept inside
+                    // this Loader so a shader switch still destroys/recreates the
+                    // render node (NVIDIA EGL 595.x heap-corruption workaround —
+                    // see hideShaderPreview()). The whole feed (incl. label /
+                    // wallpaper textures) rides the config object.
+                    sourceComponent: PZCommon.ZoneShaderRenderer {
+                        config: previewBackground.cfg ? ({
+                                "shaderSource": previewBackground.cfg.shaderUrl || "",
+                                "paramPreamble": previewBackground.cfg.paramPreamble || "",
+                                "bufferShaderPaths": previewBackground.cfg.bufferShaderPaths || [],
+                                "bufferFeedback": previewBackground.cfg.bufferFeedback || false,
+                                "bufferScale": previewBackground.cfg.bufferScale !== undefined ? previewBackground.cfg.bufferScale : 1,
+                                "bufferWrap": previewBackground.cfg.bufferWrap || "clamp",
+                                "bufferWraps": previewBackground.cfg.bufferWraps || [],
+                                "bufferFilter": previewBackground.cfg.bufferFilter || "linear",
+                                "bufferFilters": previewBackground.cfg.bufferFilters || [],
+                                "useDepthBuffer": previewBackground.cfg.useDepthBuffer || false,
+                                "useWallpaper": previewBackground.cfg.useWallpaper || false,
+                                "zones": previewBackground.cfg.zones || [],
+                                "shaderParams": previewBackground.cfg.shaderParams || ({}),
+                                "labelsTexture": previewBackground.cfg.labelsTexture,
+                                "wallpaperTexture": previewBackground.cfg.wallpaperTexture,
+                                "hoveredZoneIndex": previewBackground.previewHoveredZone,
+                                "iTime": root.previewITime,
+                                "iTimeDelta": root.previewTimeDelta,
+                                "iFrame": root.previewFrame,
+                                "iMouse": previewBackground.previewMouse,
+                                "audioSpectrum": editorController ? editorController.audioSpectrum : []
+                            }) : ({})
                     }
-                }
-
-                Binding {
-                    target: shaderPreviewLoader.item
-                    property: "labelsTexture"
-                    value: previewBackground.cfg.labelsTexture
-                    when: shaderPreviewLoader.item !== null && previewBackground.cfg.labelsTexture !== undefined && previewBackground.cfg.labelsTexture !== null
-                }
-
-                Binding {
-                    target: shaderPreviewLoader.item
-                    property: "wallpaperTexture"
-                    value: previewBackground.cfg.wallpaperTexture
-                    when: shaderPreviewLoader.item !== null && previewBackground.cfg.wallpaperTexture !== undefined && previewBackground.cfg.wallpaperTexture !== null
                 }
 
                 Rectangle {

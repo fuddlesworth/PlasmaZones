@@ -68,131 +68,17 @@ QVariantMap EditorController::translateShaderParams(const QString& shaderId, con
 bool EditorController::saveShaderPreset(const QString& filePath, const QString& shaderId,
                                         const QVariantMap& shaderParams, const QString& presetName)
 {
-    if (filePath.isEmpty()) {
-        Q_EMIT shaderPresetSaveFailed(PhosphorI18n::tr("File path cannot be empty", "@info"));
-        return false;
-    }
-
-    if (ShaderRegistry::isNoneShader(shaderId)) {
-        Q_EMIT shaderPresetSaveFailed(PhosphorI18n::tr("No shader selected to save", "@info"));
-        return false;
-    }
-
-    QString name = presetName;
-    if (name.isEmpty()) {
-        name = QFileInfo(filePath).completeBaseName();
-    }
-
-    QJsonObject obj;
-    obj[QLatin1String(::PhosphorZones::ZoneJsonKeys::Name)] = name;
-    obj[QLatin1String(::PhosphorZones::ZoneJsonKeys::ShaderId)] = shaderId;
-    obj[QLatin1String(::PhosphorZones::ZoneJsonKeys::ShaderParams)] = QJsonObject::fromVariantMap(shaderParams);
-
-    QFile file(filePath);
-    if (!file.open(QIODevice::WriteOnly | QIODevice::Text)) {
-        QString error = PhosphorI18n::tr("Failed to save preset: %1", "@info").arg(file.errorString());
-        Q_EMIT shaderPresetSaveFailed(error);
-        qCWarning(lcEditor) << error;
-        return false;
-    }
-
-    QByteArray json = QJsonDocument(obj).toJson(QJsonDocument::Indented);
-    if (file.write(json) != json.size()) {
-        QString error = PhosphorI18n::tr("Failed to write preset file: %1", "@info").arg(file.errorString());
-        Q_EMIT shaderPresetSaveFailed(error);
-        qCWarning(lcEditor) << error;
-        return false;
-    }
-
-    return true;
+    return m_shaderPreview->saveShaderPreset(filePath, shaderId, shaderParams, presetName);
 }
 
 QVariantMap EditorController::loadShaderPreset(const QString& filePath)
 {
-    QVariantMap result;
-
-    if (filePath.isEmpty()) {
-        Q_EMIT shaderPresetLoadFailed(PhosphorI18n::tr("File path cannot be empty", "@info"));
-        return result;
-    }
-
-    QFile file(filePath);
-    if (!file.open(QIODevice::ReadOnly | QIODevice::Text)) {
-        QString error = PhosphorI18n::tr("Failed to open preset file: %1", "@info").arg(file.errorString());
-        Q_EMIT shaderPresetLoadFailed(error);
-        qCWarning(lcEditor) << error;
-        return result;
-    }
-
-    QJsonParseError parseError;
-    QJsonDocument doc = QJsonDocument::fromJson(file.readAll(), &parseError);
-    if (parseError.error != QJsonParseError::NoError) {
-        QString error = PhosphorI18n::tr("Invalid preset file: %1", "@info").arg(parseError.errorString());
-        Q_EMIT shaderPresetLoadFailed(error);
-        qCWarning(lcEditor) << error;
-        return result;
-    }
-
-    if (!doc.isObject()) {
-        QString error = PhosphorI18n::tr("Preset file must contain a JSON object", "@info");
-        Q_EMIT shaderPresetLoadFailed(error);
-        qCWarning(lcEditor) << error;
-        return result;
-    }
-
-    QJsonObject obj = doc.object();
-    QString shaderId = obj[QLatin1String(::PhosphorZones::ZoneJsonKeys::ShaderId)].toString();
-    if (shaderId.isEmpty()) {
-        QString error = PhosphorI18n::tr("Preset file missing shader ID", "@info");
-        Q_EMIT shaderPresetLoadFailed(error);
-        qCWarning(lcEditor) << error;
-        return result;
-    }
-
-    // Validate that shader exists in available shaders
-    bool shaderFound = false;
-    for (const QVariant& shaderVar : m_availableShaders) {
-        QVariantMap shaderMap = shaderVar.toMap();
-        if (shaderMap[QLatin1String("id")].toString() == shaderId) {
-            shaderFound = true;
-            break;
-        }
-    }
-    if (!shaderFound) {
-        QString error = PhosphorI18n::tr("Shader in preset is no longer available", "@info");
-        Q_EMIT shaderPresetLoadFailed(error);
-        qCWarning(lcEditor) << error;
-        return result;
-    }
-
-    QVariantMap shaderParams;
-    if (obj.contains(QLatin1String(::PhosphorZones::ZoneJsonKeys::ShaderParams))) {
-        shaderParams = obj[QLatin1String(::PhosphorZones::ZoneJsonKeys::ShaderParams)].toObject().toVariantMap();
-    }
-
-    result[QLatin1String(::PhosphorZones::ZoneJsonKeys::Name)] =
-        obj[QLatin1String(::PhosphorZones::ZoneJsonKeys::Name)].toString();
-    result[QLatin1String(::PhosphorZones::ZoneJsonKeys::ShaderId)] = shaderId;
-    result[QLatin1String(::PhosphorZones::ZoneJsonKeys::ShaderParams)] = shaderParams;
-
-    return result;
+    return m_shaderPreview->loadShaderPreset(filePath);
 }
 
 QString EditorController::shaderPresetDirectory()
 {
-    QString path = QStandardPaths::writableLocation(QStandardPaths::GenericDataLocation)
-        + QStringLiteral("/plasmazones/shader-presets");
-
-    QDir dir(path);
-    if (!dir.exists()) {
-        if (dir.mkpath(QStringLiteral("."))) {
-            qCDebug(lcEditor) << "Created shader preset directory:" << dir.absolutePath();
-        } else {
-            qCWarning(lcEditor) << "Failed to create shader preset directory:" << path;
-        }
-    }
-
-    return path;
+    return m_shaderPreview->shaderPresetDirectory();
 }
 
 // =============================================================================

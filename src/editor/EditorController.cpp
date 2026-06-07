@@ -70,6 +70,10 @@ EditorController::EditorController(QObject* parent)
     m_shaderPreview = new ShaderPreviewController(this, this);
     connect(m_shaderPreview, &ShaderPreviewController::audioSpectrumChanged, this,
             &EditorController::audioSpectrumChanged);
+    connect(m_shaderPreview, &ShaderPreviewController::shaderPresetSaveFailed, this,
+            &EditorController::shaderPresetSaveFailed);
+    connect(m_shaderPreview, &ShaderPreviewController::shaderPresetLoadFailed, this,
+            &EditorController::shaderPresetLoadFailed);
 
     // Auto-discovery pattern: every linked provider library has
     // already registered a builder via static-init. The editor just

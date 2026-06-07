@@ -1362,7 +1362,13 @@ void ShaderEffect::syncBasePropertiesToNode(ShaderNodeRhi* node)
     }
     node->setResolution(static_cast<float>(m_iResolution.width() * dpr),
                         static_cast<float>(m_iResolution.height() * dpr));
-    node->setMousePosition(m_iMouse);
+    // Scale the mouse by the SAME dpr as the resolution so iMouse.xy (pixels)
+    // and iMouse.zw (normalised by the node's width/height) stay in the
+    // device-pixel space of iResolution / fragCoord. Without this, on a scaled
+    // display a mouse-position shader lands at 1/dpr of the cursor (up-left).
+    // The Q_PROPERTY itself stays logical — QML callers bind logical units,
+    // exactly as they do for iResolution; only the GPU-bound value is scaled.
+    node->setMousePosition(QPointF(m_iMouse.x() * dpr, m_iMouse.y() * dpr));
 
     // ── Custom parameters (indexed API) ──────────────────────────────
     for (int i = 0; i < kMaxCustomParams; ++i)

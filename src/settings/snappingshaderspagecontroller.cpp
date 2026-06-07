@@ -5,6 +5,7 @@
 
 #include "../core/logging.h"
 #include "../core/shaderregistry.h"
+#include "../shaderpreview/shaderpreviewcontroller.h"
 #include "shaderpackinstaller.h"
 
 #include <PhosphorShaders/ShaderRegistry.h>
@@ -19,10 +20,12 @@ namespace PlasmaZones {
 
 SnappingShadersPageController::SnappingShadersPageController(PlasmaZones::ShaderRegistry* shaderRegistry,
                                                              PhosphorZones::IZoneLayoutRegistry* layoutRegistry,
+                                                             ShaderPreviewController* previewController,
                                                              QObject* parent)
     : PhosphorSettingsUi::PageController(QStringLiteral("snapping-shaders"), parent)
     , m_shaderRegistry(shaderRegistry)
     , m_layoutRegistry(layoutRegistry)
+    , m_previewController(previewController)
 {
     if (m_shaderRegistry) {
         connect(m_shaderRegistry, &PhosphorShaders::ShaderRegistry::shadersChanged, this,
@@ -44,6 +47,11 @@ SnappingShadersPageController::SnappingShadersPageController(PlasmaZones::Shader
 }
 
 SnappingShadersPageController::~SnappingShadersPageController() = default;
+
+QObject* SnappingShadersPageController::previewController() const
+{
+    return m_previewController;
+}
 
 void SnappingShadersPageController::connectLayoutSignals()
 {
