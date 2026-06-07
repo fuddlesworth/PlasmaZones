@@ -115,8 +115,14 @@ ColumnLayout {
             var screens = root.appSettings.screens;
             if (screens) {
                 for (var i = 0; i < screens.length; ++i) {
-                    if (screens[i].name === value)
-                        return screens[i].displayLabel || String(value);
+                    if (screens[i].name === value) {
+                        // displayLabel carries make/model/resolution + connector;
+                        // mark the primary monitor to match the editor's picker.
+                        var label = screens[i].displayLabel || String(value);
+                        if (screens[i].isPrimary)
+                            label += " · " + i18n("Primary");
+                        return label;
+                    }
                 }
             }
         }

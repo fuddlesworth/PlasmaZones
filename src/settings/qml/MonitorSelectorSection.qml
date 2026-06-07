@@ -75,6 +75,14 @@ ColumnLayout {
                     if (entry.resolution)
                         label += " (" + entry.resolution + ")";
 
+                    // Mirror screenInfoListToVariantList(): append the connector
+                    // so identical panels stay distinguishable. Skip only when
+                    // the label already IS the connector (no make/model, so the
+                    // base label fell back to physId == connector) — otherwise
+                    // it must be appended even when connector == physId.
+                    if (entry.connectorName && !(parts.length === 0 && entry.connectorName === physId))
+                        label += " · " + entry.connectorName;
+
                     entry["displayLabel"] = label;
                 }
                 result.push(entry);
@@ -228,12 +236,9 @@ ColumnLayout {
 
                             text: {
                                 let s = modelData;
-                                // Use pre-computed displayLabel, append connector name for detail
-                                let label = s.displayLabel || s.name || screenName;
-                                if (s.connectorName)
-                                    label += " · " + s.connectorName;
-
-                                return label;
+                                // displayLabel already carries the connector (see
+                                // screenInfoListToVariantList / the rebuild above).
+                                return s.displayLabel || s.name || screenName;
                             }
                             font: Kirigami.Theme.smallFont
                             Layout.alignment: Qt.AlignHCenter
