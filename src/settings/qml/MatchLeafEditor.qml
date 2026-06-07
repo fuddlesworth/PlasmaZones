@@ -295,20 +295,30 @@ RowLayout {
         id: screenValueEditor
 
         WideComboBox {
+            id: screenCombo
+
             // Drive the picker off `appSettings.screens` so the user picks
             // "LG Ultra HD · DP-2" while the wire value remains the raw
-            // connector / virtual-screen id.
-            model: leaf.appSettings ? leaf.appSettings.screens : []
-            textRole: "displayLabel"
+            // connector / virtual-screen id. displayLabel already carries the
+            // connector; append a Primary marker here (a plain ComboBox has no
+            // badge surface like the monitor tiles do) so the user can tell the
+            // primary monitor and which port each entry is on.
+            readonly property var _screens: leaf.appSettings ? leaf.appSettings.screens : []
+            model: _screens.map(function (s) {
+                var label = s.displayLabel || s.name || "";
+                if (s.isPrimary)
+                    label += " · " + i18n("Primary");
+                return {
+                    "label": label,
+                    "name": s.name
+                };
+            })
+            textRole: "label"
             valueRole: "name"
             currentIndex: {
-                if (!leaf.appSettings)
-                    return -1;
-
                 var target = leaf.node.value;
-                var list = leaf.appSettings.screens;
-                for (var i = 0; i < list.length; ++i) {
-                    if (list[i].name === target)
+                for (var i = 0; i < screenCombo._screens.length; ++i) {
+                    if (screenCombo._screens[i].name === target)
                         return i;
                 }
                 return -1;
