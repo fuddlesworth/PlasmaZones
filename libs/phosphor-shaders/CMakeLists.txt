@@ -37,8 +37,11 @@ include(GenerateExportHeader)
 
 find_package(Qt6 6.6 REQUIRED COMPONENTS Core Gui)
 
-# PhosphorFsLoader — shared filesystem-loader scaffolding (used by
-# ShaderRegistry's WatchedDirectorySet + ShaderScanStrategy).
+# PhosphorFsLoader — shared filesystem-loader scaffolding. The on-disk scan now
+# runs inside PhosphorRegistry's MetadataPackLoader<ShaderPack> (which wraps
+# fsloader's MetadataPackScanStrategy internally), but the direct PUBLIC link
+# stays because ShaderRegistry's public addSearchPath[s] API still exposes the
+# PhosphorFsLoader::LiveReload / RegistrationOrder enums in its signatures.
 # find_package is a no-op when building in-tree (parent CMakeLists adds
 # the target first); the explicit lookup lets the lib stand alone
 # against an installed PhosphorFsLoader.
