@@ -104,7 +104,13 @@ public:
                     qWarning("PhosphorRegistry::Registry::registerFactory: duplicate id '%s' ignored", qPrintable(id));
                     return false;
                 }
+                // Replace keeps the existing order position — a hot-reload that
+                // re-registers an id must not shuffle it to the end of the
+                // catalogue (the layout-source composite + algorithm UI lists
+                // rely on stable order across replacements).
                 replaced = true;
+            } else {
+                m_order.append(id);
             }
             m_entries.insert(id, Entry{std::move(factory), ownerTag});
         }
@@ -126,6 +132,7 @@ public:
             if (m_entries.remove(id) == 0) {
                 return false;
             }
+            m_order.removeOne(id);
         }
         m_notifier.notifyUnregistered(id);
         return true;
@@ -150,6 +157,7 @@ public:
             }
             for (const QString& id : std::as_const(removedIds)) {
                 m_entries.remove(id);
+                m_order.removeOne(id);
             }
         }
         for (const QString& id : std::as_const(removedIds)) {
@@ -167,6 +175,7 @@ public:
     {
         QMutexLocker locker(&m_mutex);
         m_entries.clear();
+        m_order.clear();
     }
 
     // Lookup. Returns the registered factory or a null shared_ptr if @p id is
@@ -179,28 +188,36 @@ public:
         return it == m_entries.cend() ? std::shared_ptr<Factory>() : it.value().factory;
     }
 
-    // Snapshot of currently-registered ids. Iteration order is QHash's hash
-    // order — not registration order. Consumers that need a stable display
-    // order must sort the result themselves.
+    // Snapshot of currently-registered ids in REGISTRATION (insertion) order:
+    // the order registerFactory was first called for each id, with a Replace
+    // keeping the original position and an unregister removing it. Deterministic
+    // and stable — consumers that need a different display order (e.g.
+    // alphabetical) sort the result themselves; consumers that need the
+    // composition / priority order (the layout-source composite, algorithm UI
+    // lists) get it for free.
     [[nodiscard]] QList<QString> ids() const
     {
         QMutexLocker locker(&m_mutex);
-        return m_entries.keys();
+        return m_order;
     }
 
-    // Functional iteration over a SNAPSHOT taken under the lock: the visitor
-    // is called as `visitor(const std::shared_ptr<Factory>&)` for each
-    // factory, outside the lock. Mutating the registry from the visitor is
-    // therefore safe (it affects the next iteration, not this snapshot).
+    // Functional iteration over a SNAPSHOT taken under the lock, in
+    // registration (insertion) order: the visitor is called as
+    // `visitor(const std::shared_ptr<Factory>&)` for each factory, outside the
+    // lock. Mutating the registry from the visitor is therefore safe (it
+    // affects the next iteration, not this snapshot).
     template<typename Visitor>
     void forEach(Visitor&& visitor) const
     {
         QList<std::shared_ptr<Factory>> snapshot;
         {
             QMutexLocker locker(&m_mutex);
-            snapshot.reserve(m_entries.size());
-            for (const Entry& entry : m_entries) {
-                snapshot.append(entry.factory);
+            snapshot.reserve(m_order.size());
+            for (const QString& id : m_order) {
+                const auto it = m_entries.constFind(id);
+                if (it != m_entries.cend()) {
+                    snapshot.append(it.value().factory);
+                }
             }
         }
         for (const std::shared_ptr<Factory>& factory : std::as_const(snapshot)) {
@@ -243,6 +260,11 @@ private:
 
     mutable QMutex m_mutex;
     QHash<QString, Entry> m_entries;
+    // Registration (insertion) order of the ids in m_entries — appended on a
+    // fresh register, position-preserved on a Replace, removed on unregister.
+    // Backs ids() / forEach() so iteration is deterministic and stable rather
+    // than QHash's hash order. Kept in lockstep with m_entries under m_mutex.
+    QList<QString> m_order;
     // Owned by value; default-constructed parentless. notifier() hands out a
     // pointer so consumers can connect, but ownership stays inside the
     // Registry. Signals are emitted outside m_mutex (see registerFactory).

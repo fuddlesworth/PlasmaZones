@@ -35,6 +35,7 @@ private Q_SLOTS:
     void signals_fireInRegistrationOrder();
     void replacePolicy_overwritesAndSignals();
     void ownerTag_bulkUnregister();
+    void ids_returnRegistrationOrder();
 };
 
 void TestRegistry::register_addsFactoryAndFiresSignal()
@@ -249,6 +250,35 @@ void TestRegistry::ownerTag_bulkUnregister()
     QVERIFY(reg.factory(QStringLiteral("c")) != nullptr); // plugin-y untouched
     QVERIFY(reg.factory(QStringLiteral("d")) != nullptr); // untagged untouched
     QCOMPARE(unregSpy.count(), 2);
+}
+
+// ids() / forEach() iterate in registration (insertion) order — NOT hash
+// order. A Replace keeps the original position; an unregister removes it.
+void TestRegistry::ids_returnRegistrationOrder()
+{
+    Registry<IBarWidgetFactory> reg;
+    // Register in a deliberately non-alphabetical order.
+    reg.registerFactory(std::make_shared<FakeBarWidgetFactory>(QStringLiteral("zulu"), QStringLiteral("Z")));
+    reg.registerFactory(std::make_shared<FakeBarWidgetFactory>(QStringLiteral("alpha"), QStringLiteral("A")));
+    reg.registerFactory(std::make_shared<FakeBarWidgetFactory>(QStringLiteral("mike"), QStringLiteral("M")));
+    QCOMPARE(reg.ids(), (QList<QString>{QStringLiteral("zulu"), QStringLiteral("alpha"), QStringLiteral("mike")}));
+
+    // forEach visits in the same order.
+    QStringList visited;
+    reg.forEach([&](const std::shared_ptr<IBarWidgetFactory>& f) {
+        visited.append(f->id());
+    });
+    QCOMPARE(visited, (QStringList{QStringLiteral("zulu"), QStringLiteral("alpha"), QStringLiteral("mike")}));
+
+    // Replace keeps the position (does not move to the end).
+    reg.registerFactory(std::make_shared<FakeBarWidgetFactory>(QStringLiteral("alpha"), QStringLiteral("A2")),
+                        QString(), DuplicatePolicy::Replace);
+    QCOMPARE(reg.ids(), (QList<QString>{QStringLiteral("zulu"), QStringLiteral("alpha"), QStringLiteral("mike")}));
+
+    // Unregister removes from the order; a later register appends.
+    reg.unregisterFactory(QStringLiteral("zulu"));
+    reg.registerFactory(std::make_shared<FakeBarWidgetFactory>(QStringLiteral("bravo"), QStringLiteral("B")));
+    QCOMPARE(reg.ids(), (QList<QString>{QStringLiteral("alpha"), QStringLiteral("mike"), QStringLiteral("bravo")}));
 }
 
 QTEST_MAIN(TestRegistry)

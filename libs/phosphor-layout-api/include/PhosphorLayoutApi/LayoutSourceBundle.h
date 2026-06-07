@@ -10,6 +10,8 @@
 #include <PhosphorLayoutApi/ILayoutSourceFactory.h>
 #include <PhosphorLayoutApi/LayoutSourceProviderRegistry.h>
 
+#include <PhosphorRegistry/Registry.h>
+
 #include <QHash>
 
 #include <memory>
@@ -144,7 +146,15 @@ public:
     ILayoutSource* source(const QString& name) const;
 
 private:
-    std::vector<std::unique_ptr<ILayoutSourceFactory>> m_factories;
+    /// The id-keyed factory catalogue (id == name()). The shared registry
+    /// primitive replaces the former hand-rolled vector + the duplicate-name
+    /// guard — registerFactory rejects a duplicate id (first-registration
+    /// wins) and warns, the same fail-safe the bundle used to implement in
+    /// build(). Held via unique_ptr because Registry<T> is non-movable (it
+    /// owns a mutex) while the bundle is movable. Created in the constructor;
+    /// a moved-from bundle leaves it null (not reused — see the asserts in
+    /// operator=).
+    std::unique_ptr<PhosphorRegistry::Registry<ILayoutSourceFactory>> m_factoryRegistry;
     std::vector<std::unique_ptr<ILayoutSource>> m_sources;
     /// Source-name → m_sources index. Populated during @c build();
     /// the underlying source pointer is borrowed from m_sources.
