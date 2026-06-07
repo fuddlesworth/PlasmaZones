@@ -188,6 +188,9 @@ ColumnLayout {
 
     Item {
         Layout.fillWidth: true
+        // Definite implicit width so the ColumnLayout reports a real size when
+        // hosted in a content-sized container (e.g. the scope-chip popover).
+        implicitWidth: scopeRow.implicitWidth
         implicitHeight: scopeRow.implicitHeight
 
         RowLayout {
