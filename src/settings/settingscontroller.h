@@ -102,6 +102,13 @@ class SettingsController : public QObject
     // Screen management
     Q_PROPERTY(QVariantList screens READ screens NOTIFY screensChanged)
 
+    // Per-monitor scope: which screen the per-monitor setting groups are
+    // currently editing. Empty = "All Monitors" (edit the global default).
+    // App-wide and shared, so a pick persists as the user moves between
+    // per-monitor pages — replaces the old per-page selectedScreenName that
+    // each page tracked independently.
+    Q_PROPERTY(QString scopeScreenName READ scopeScreenName WRITE setScopeScreenName NOTIFY scopeScreenNameChanged)
+
     // Editor page — properties live on EditorPageController, exposed here as a
     // child QObject so QML reads `settingsController.editorPage.duplicateShortcut`.
     Q_PROPERTY(EditorPageController* editorPage READ editorPage CONSTANT)
@@ -252,6 +259,12 @@ public:
         return m_screenHelper.screens();
     }
     Q_INVOKABLE QVariantMap physicalScreenResolution(const QString& screenId) const;
+
+    QString scopeScreenName() const
+    {
+        return m_scopeScreenName;
+    }
+    void setScopeScreenName(const QString& name);
 
     // Virtual desktops / activities (reactive via D-Bus signals)
     Q_PROPERTY(int virtualDesktopCount READ virtualDesktopCount NOTIFY virtualDesktopsChanged)
@@ -507,6 +520,12 @@ Q_SIGNALS:
     /// user knows the change wasn't saved.
     void virtualScreenConfigFailed(const QString& physicalScreenId, const QString& reason);
     void screensChanged();
+    void scopeScreenNameChanged();
+    /// Emitted whenever any per-screen override map changes (set or clear,
+    /// any domain). The monitor scope map re-polls hasPerScreen*Settings()
+    /// to refresh its per-output override dots, which a plain WRITE on an
+    /// individual key can't drive on its own.
+    void perScreenOverridesChanged();
     void dismissedUpdateVersionChanged();
     void lastSeenWhatsNewVersionChanged();
 
@@ -589,6 +608,9 @@ private:
     /// (mainly the no-daemon case). Declared after the store; tears down first.
     std::unique_ptr<PhosphorWindowRule::WindowRuleStoreWatcher> m_localRuleStoreWatcher;
     Settings m_settings;
+    /// Per-monitor editing scope; empty = "All Monitors". See the
+    /// scopeScreenName Q_PROPERTY. Plain UI state, not persisted.
+    QString m_scopeScreenName;
     /// Per-page sub-controllers: expose the Q_PROPERTY surface for a single
     /// settings page each. Parented to `this`, so Qt handles cleanup via
     /// ~QObject AFTER the member destructors below have run. Any

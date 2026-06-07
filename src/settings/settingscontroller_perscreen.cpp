@@ -15,6 +15,16 @@
 
 namespace PlasmaZones {
 
+// ── Per-monitor editing scope ─────────────────────────────────────────────
+
+void SettingsController::setScopeScreenName(const QString& name)
+{
+    if (m_scopeScreenName == name)
+        return;
+    m_scopeScreenName = name;
+    Q_EMIT scopeScreenNameChanged();
+}
+
 // ── Per-screen autotile overrides ────────────────────────────────────────
 
 QVariantMap SettingsController::getPerScreenAutotileSettings(const QString& screenName) const
@@ -27,12 +37,14 @@ void SettingsController::setPerScreenAutotileSetting(const QString& screenName, 
 {
     m_settings.setPerScreenAutotileSetting(screenName, key, value);
     setNeedsSave(true);
+    Q_EMIT perScreenOverridesChanged();
 }
 
 void SettingsController::clearPerScreenAutotileSettings(const QString& screenName)
 {
     m_settings.clearPerScreenAutotileSettings(screenName);
     setNeedsSave(true);
+    Q_EMIT perScreenOverridesChanged();
 }
 
 bool SettingsController::hasPerScreenAutotileSettings(const QString& screenName) const
@@ -52,12 +64,14 @@ void SettingsController::setPerScreenSnappingSetting(const QString& screenName, 
 {
     m_settings.setPerScreenSnappingSetting(screenName, key, value);
     setNeedsSave(true);
+    Q_EMIT perScreenOverridesChanged();
 }
 
 void SettingsController::clearPerScreenSnappingSettings(const QString& screenName)
 {
     m_settings.clearPerScreenSnappingSettings(screenName);
     setNeedsSave(true);
+    Q_EMIT perScreenOverridesChanged();
 }
 
 bool SettingsController::hasPerScreenSnappingSettings(const QString& screenName) const
@@ -77,12 +91,14 @@ void SettingsController::setPerScreenZoneSelectorSetting(const QString& screenNa
 {
     m_settings.setPerScreenZoneSelectorSetting(screenName, key, value);
     setNeedsSave(true);
+    Q_EMIT perScreenOverridesChanged();
 }
 
 void SettingsController::clearPerScreenZoneSelectorSettings(const QString& screenName)
 {
     m_settings.clearPerScreenZoneSelectorSettings(screenName);
     setNeedsSave(true);
+    Q_EMIT perScreenOverridesChanged();
 }
 
 bool SettingsController::hasPerScreenZoneSelectorSettings(const QString& screenName) const
