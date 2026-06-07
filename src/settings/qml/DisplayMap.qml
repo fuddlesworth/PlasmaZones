@@ -36,7 +36,16 @@ ColumnLayout {
     // Empty disables the override dots.
     property string hasOverridesMethod: ""
 
-    readonly property string selectedScreenName: appSettings.scopeScreenName
+    // Current selection, for the highlight. Defaults to the shared scope; a
+    // host that drives a local target (e.g. a monitor-subject page) rebinds it.
+    property string selectedScreenName: appSettings ? appSettings.scopeScreenName : ""
+    // Show the "All Monitors" chip. Off for monitor-subject pickers that always
+    // require a specific output (Monitor State, Virtual Screens).
+    property bool showAll: true
+    // Emitted when the user picks a tile ("" = All Monitors). The host decides
+    // what to do with it (write the shared scope, or a local target).
+    // DisplayMap itself writes nothing.
+    signal screenPicked(string name)
     readonly property bool isPerScreen: selectedScreenName !== ""
     readonly property bool hasMultiple: _filteredScreens.length > 1
 
@@ -171,17 +180,6 @@ ColumnLayout {
         function onPerScreenOverridesChanged() {
             root._refreshOverrides();
         }
-        // Hot-unplug: drop the scope if the selected output disappears.
-        function onScreensChanged() {
-            if (root.selectedScreenName === "")
-                return;
-            var s = root._filteredScreens;
-            for (var i = 0; i < s.length; i++) {
-                if (s[i].name === root.selectedScreenName)
-                    return;
-            }
-            root.appSettings.scopeScreenName = "";
-        }
     }
 
     spacing: Kirigami.Units.smallSpacing
@@ -201,6 +199,7 @@ ColumnLayout {
 
             // "All Monitors" chip — resting default.
             Rectangle {
+                visible: root.showAll
                 Layout.preferredWidth: allContent.implicitWidth + Kirigami.Units.largeSpacing * 2
                 Layout.fillHeight: true
                 Layout.preferredHeight: root._mapHeight + Kirigami.Units.largeSpacing
@@ -241,9 +240,9 @@ ColumnLayout {
                     cursorShape: Qt.PointingHandCursor
                     hoverEnabled: true
                     activeFocusOnTab: true
-                    Keys.onSpacePressed: root.appSettings.scopeScreenName = ""
-                    Keys.onReturnPressed: root.appSettings.scopeScreenName = ""
-                    onClicked: root.appSettings.scopeScreenName = ""
+                    Keys.onSpacePressed: root.screenPicked("")
+                    Keys.onReturnPressed: root.screenPicked("")
+                    onClicked: root.screenPicked("")
                 }
 
                 Behavior on color {
@@ -351,9 +350,9 @@ ColumnLayout {
                             cursorShape: Qt.PointingHandCursor
                             hoverEnabled: true
                             activeFocusOnTab: true
-                            Keys.onSpacePressed: root.appSettings.scopeScreenName = tile.screenName
-                            Keys.onReturnPressed: root.appSettings.scopeScreenName = tile.screenName
-                            onClicked: root.appSettings.scopeScreenName = tile.screenName
+                            Keys.onSpacePressed: root.screenPicked(tile.screenName)
+                            Keys.onReturnPressed: root.screenPicked(tile.screenName)
+                            onClicked: root.screenPicked(tile.screenName)
                         }
 
                         ToolTip.visible: tileMouse.containsMouse && ToolTip.text !== ""

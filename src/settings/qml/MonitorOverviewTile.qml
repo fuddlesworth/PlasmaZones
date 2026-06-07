@@ -11,7 +11,7 @@ import org.phosphor.animation
 /**
  * @brief One monitor tile in the WindowRulesPage MONITORS strip.
  *
- * Visual style mirrors `MonitorSelectorSection`'s per-screen tile — monitor
+ * Visual style mirrors `DisplayMap`'s per-screen tile — monitor
  * icon (rotated for portrait), display label, "Primary" badge — so the
  * page reads consistently with the rest of the app. A small caption row
  * carries the rule-count / assignment summary unique to this view.

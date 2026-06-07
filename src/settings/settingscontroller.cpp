@@ -32,6 +32,7 @@
 #include "settingsstagingdomain.h"
 #include "version.h"
 
+#include <PhosphorIdentity/VirtualScreenId.h>
 #include <PhosphorProtocol/ClientHelpers.h>
 // std::make_unique<WindowRuleStore> in the ctor needs the complete
 // type. The header forward-declares it to avoid pulling the
@@ -600,6 +601,21 @@ SettingsController::SettingsController(QObject* parent)
     // bindings stale until the next external daemon-driven refresh.
     m_screenHelper.connectToDaemonSignals();
     connect(&m_screenHelper, &ScreenHelper::screensChanged, this, &SettingsController::screensChanged);
+    // Hot-unplug: if the monitor the per-monitor groups are scoped to goes
+    // away, fall back to "All Monitors". Lives here (not in the transient
+    // DisplayMap popover) so the scope is pruned even when no scope UI is open.
+    connect(&m_screenHelper, &ScreenHelper::screensChanged, this, [this]() {
+        if (m_scopeScreenName.isEmpty())
+            return;
+        const QVariantList screens = m_screenHelper.screens();
+        for (const QVariant& v : screens) {
+            const QString name = v.toMap().value(QStringLiteral("name")).toString();
+            if (name == m_scopeScreenName
+                || PhosphorIdentity::VirtualScreenId::extractPhysicalId(name) == m_scopeScreenName)
+                return;
+        }
+        setScopeScreenName(QString());
+    });
     connect(&m_screenHelper, &ScreenHelper::needsSave, this, [this]() {
         // A daemon-driven screen refresh that fires while load()/save() is
         // batching its own state-transitions must not flip the page dirty

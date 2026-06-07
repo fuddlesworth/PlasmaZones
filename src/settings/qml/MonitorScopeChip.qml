@@ -163,6 +163,9 @@ Item {
                 Layout.alignment: Qt.AlignHCenter
                 appSettings: chip.appSettings
                 hasOverridesMethod: chip.hasOverridesMethod
+                // Highlight the shared scope; a pick writes it back.
+                selectedScreenName: chip.scope
+                onScreenPicked: name => chip.appSettings.scopeScreenName = name
             }
 
             Button {

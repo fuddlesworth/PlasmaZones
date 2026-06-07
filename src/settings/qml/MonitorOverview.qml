@@ -10,7 +10,7 @@ import org.kde.kirigami as Kirigami
  * @brief Read-only monitor overview strip at the top of WindowRulesPage.
  *
  * Iterates `settingsController.screens` so the visual treatment (icon +
- * displayLabel + Primary badge) matches the canonical `MonitorSelectorSection`
+ * displayLabel + Primary badge) matches the canonical `DisplayMap`
  * used elsewhere in the app. Per-monitor rule data comes from
  * `WindowRuleController.monitorOverview()` keyed by screenId.
  *
@@ -71,10 +71,10 @@ ColumnLayout {
 
     spacing: Kirigami.Units.smallSpacing
 
-    // Centered tile row — mirrors MonitorSelectorSection's wrapper-Item +
+    // Centered tile row — mirrors DisplayMap's wrapper-Item +
     // anchors.horizontalCenter convention so the strip never visually leans
     // to the left edge when there are only one or two monitors. No section
-    // header or hint label — matches the bare placement of MonitorSelectorSection
+    // header or hint label — matches the bare placement of DisplayMap
     // on the other pages.
     Item {
         Layout.fillWidth: true

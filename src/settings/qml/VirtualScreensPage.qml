@@ -33,7 +33,7 @@ SettingsFlickable {
 
     function _refreshConfig() {
         if (_selectedScreen === "")
-            return ;
+            return;
 
         if (settingsController.hasUnsavedVirtualScreenConfig(_selectedScreen))
             _pendingScreens = settingsController.getStagedVirtualScreenConfig(_selectedScreen);
@@ -49,7 +49,7 @@ SettingsFlickable {
 
     function _stageCurrentConfig() {
         if (_selectedScreen === "" || _pendingScreens.length === 0)
-            return ;
+            return;
 
         settingsController.stageVirtualScreenConfig(_selectedScreen, _pendingScreens);
     }
@@ -60,7 +60,7 @@ SettingsFlickable {
         if (_pendingScreens.length <= 1) {
             _columns = 1;
             _rows = 1;
-            return ;
+            return;
         }
         var tol = 0.01;
         var xStarts = [];
@@ -86,7 +86,6 @@ SettingsFlickable {
             }
             if (!foundY)
                 yStarts.push(s.y);
-
         }
         var detectedCols = xStarts.length;
         var detectedRows = yStarts.length;
@@ -154,7 +153,7 @@ SettingsFlickable {
                 if (w && h) {
                     _screenWidth = w;
                     _screenHeight = h;
-                    return ;
+                    return;
                 }
                 break;
             }
@@ -169,15 +168,14 @@ SettingsFlickable {
             var name = screens[j].name || "";
             if (name.indexOf(prefix) === 0 && screens[j].width && screens[j].height)
                 children.push({
-                "w": screens[j].width,
-                "h": screens[j].height
-            });
-
+                    "w": screens[j].width,
+                    "h": screens[j].height
+                });
         }
         if (children.length === 0) {
             _screenWidth = 1920;
             _screenHeight = 1080;
-            return ;
+            return;
         }
         // Group by pixel height (2px tolerance) to separate rows
         var rowHeights = [];
@@ -203,14 +201,13 @@ SettingsFlickable {
         if (rowHeights.length === 1 && _rows > 1 && _columns > 0) {
             _screenWidth = Math.round(rowWidths[0] / _rows);
             _screenHeight = rowHeights[0] * _rows;
-            return ;
+            return;
         }
         // Physical width: any row's total width (should be the same for all rows)
         var maxRowW = 0;
         for (var rw = 0; rw < rowWidths.length; rw++) {
             if (rowWidths[rw] > maxRowW)
                 maxRowW = rowWidths[rw];
-
         }
         // Physical height: sum of all distinct row heights
         var totalH = 0;
@@ -229,7 +226,7 @@ SettingsFlickable {
     // Redistribute to equal grid cells at given dimensions.
     function _redistributeGrid(cols, rows) {
         if (cols <= 0 || rows <= 0)
-            return ;
+            return;
 
         var total = cols * rows;
         if (total <= 1) {
@@ -237,10 +234,10 @@ SettingsFlickable {
             _pendingScreens = [];
             _columns = 1;
             _rows = 1;
-            return ;
+            return;
         }
         if (total > _maxVirtualScreens)
-            return ;
+            return;
 
         var screens = [];
         var cw = 1 / cols;
@@ -271,7 +268,7 @@ SettingsFlickable {
     // Adjusts x/width of all cells straddling that column boundary.
     function _moveColumnDivider(colIndex, newXFraction) {
         if (colIndex < 0 || colIndex >= _columns - 1)
-            return ;
+            return;
 
         var screens = _deepCopy(_pendingScreens);
         var minW = 0.05;
@@ -293,8 +290,7 @@ SettingsFlickable {
         }
         for (var i = 0; i < screens.length; i++) {
             if (screens[i].width < minW)
-                return ;
-
+                return;
         }
         _pendingScreens = screens;
         _stageCurrentConfig();
@@ -304,7 +300,7 @@ SettingsFlickable {
     // Adjusts y/height of all cells straddling that row boundary.
     function _moveRowDivider(rowIndex, newYFraction) {
         if (rowIndex < 0 || rowIndex >= _rows - 1)
-            return ;
+            return;
 
         var screens = _deepCopy(_pendingScreens);
         var minH = 0.05;
@@ -326,8 +322,7 @@ SettingsFlickable {
         }
         for (var i = 0; i < screens.length; i++) {
             if (screens[i].height < minH)
-                return ;
-
+                return;
         }
         _pendingScreens = screens;
         _stageCurrentConfig();
@@ -350,7 +345,6 @@ SettingsFlickable {
 
             if (Math.abs(_pendingScreens[i].height - regions[i].height) > 0.01)
                 return false;
-
         }
         return true;
     }
@@ -366,12 +360,21 @@ SettingsFlickable {
         for (var i = 0; i < screens.length; i++) {
             if (screens[i].isPrimary) {
                 _selectedScreen = _toPhysicalId(screens[i].name || "");
-                return ;
+                return;
             }
         }
         if (screens.length > 0)
             _selectedScreen = _toPhysicalId(screens[0].name || "");
+    }
 
+    // True if `physId` is still a connected physical output.
+    function _screenStillPresent(physId) {
+        var arr = settingsController.screens || [];
+        for (var i = 0; i < arr.length; i++) {
+            if (root._toPhysicalId(arr[i].name || "") === physId)
+                return true;
+        }
+        return false;
     }
 
     contentHeight: content.implicitHeight
@@ -379,7 +382,6 @@ SettingsFlickable {
     Component.onCompleted: {
         if (!_selectedScreen && settingsController.screens.length > 0)
             _autoSelectScreen();
-
     }
     on_SelectedScreenChanged: {
         _updateScreenGeometry();
@@ -388,11 +390,14 @@ SettingsFlickable {
 
     Connections {
         function onScreensChanged() {
+            // Drop a selection whose physical output was unplugged so the
+            // auto-select below re-picks a present one.
+            if (root._selectedScreen !== "" && !root._screenStillPresent(root._selectedScreen))
+                root._selectedScreen = "";
             root._updateScreenGeometry();
             root._refreshConfig();
             if (root._selectedScreen === "" && settingsController.screens.length > 0)
                 root._autoSelectScreen();
-
         }
 
         target: settingsController
@@ -403,7 +408,6 @@ SettingsFlickable {
         function onNeedsSaveChanged() {
             if (!settingsController.needsSave)
                 root._refreshConfig();
-
         }
 
         target: settingsController
@@ -422,16 +426,14 @@ SettingsFlickable {
             visible: true
         }
 
-        // Monitor selector (visual icon bar)
-        MonitorSelectorSection {
+        // Monitor picker (spatial map; physical outputs only, no "All")
+        DisplayMap {
             Layout.fillWidth: true
             appSettings: settingsController
-            showAllMonitors: false
+            showAll: false
             physicalOnly: true
             selectedScreenName: root._selectedScreen
-            onSelectedScreenNameChanged: {
-                root._selectedScreen = selectedScreenName;
-            }
+            onScreenPicked: name => root._selectedScreen = name
         }
 
         // Visual preview with draggable dividers
@@ -479,16 +481,14 @@ SettingsFlickable {
                     screenHeight: root._screenHeight
                     columns: root._columns
                     rows: root._rows
-                    onColumnDividerMoved: function(colIndex, newFraction) {
+                    onColumnDividerMoved: function (colIndex, newFraction) {
                         root._moveColumnDivider(colIndex, newFraction);
                     }
-                    onRowDividerMoved: function(rowIndex, newFraction) {
+                    onRowDividerMoved: function (rowIndex, newFraction) {
                         root._moveRowDivider(rowIndex, newFraction);
                     }
                 }
-
             }
-
         }
 
         // Presets
@@ -551,7 +551,6 @@ SettingsFlickable {
                         onClicked: root._loadPreset(root._horizontalRegions([40, 20, 40], [i18n("Left"), i18n("Center"), i18n("Right")]))
                         Accessible.name: i18n("Preset: %1", text)
                     }
-
                 }
 
                 // Vertical and grid presets
@@ -603,63 +602,70 @@ SettingsFlickable {
                         Layout.fillWidth: true
                         text: i18n("60 / 40 Grid")
                         enabled: root._selectedScreen !== ""
-                        highlighted: root._matchesPreset([{
-                            "x": 0,
-                            "y": 0,
-                            "width": 0.6,
-                            "height": 0.5,
-                            "displayName": ""
-                        }, {
-                            "x": 0.6,
-                            "y": 0,
-                            "width": 0.4,
-                            "height": 0.5,
-                            "displayName": ""
-                        }, {
-                            "x": 0,
-                            "y": 0.5,
-                            "width": 0.6,
-                            "height": 0.5,
-                            "displayName": ""
-                        }, {
-                            "x": 0.6,
-                            "y": 0.5,
-                            "width": 0.4,
-                            "height": 0.5,
-                            "displayName": ""
-                        }])
-                        onClicked: root._loadPreset([{
-                            "x": 0,
-                            "y": 0,
-                            "width": 0.6,
-                            "height": 0.5,
-                            "displayName": i18n("Top-Main")
-                        }, {
-                            "x": 0.6,
-                            "y": 0,
-                            "width": 0.4,
-                            "height": 0.5,
-                            "displayName": i18n("Top-Side")
-                        }, {
-                            "x": 0,
-                            "y": 0.5,
-                            "width": 0.6,
-                            "height": 0.5,
-                            "displayName": i18n("Bottom-Main")
-                        }, {
-                            "x": 0.6,
-                            "y": 0.5,
-                            "width": 0.4,
-                            "height": 0.5,
-                            "displayName": i18n("Bottom-Side")
-                        }])
+                        highlighted: root._matchesPreset([
+                            {
+                                "x": 0,
+                                "y": 0,
+                                "width": 0.6,
+                                "height": 0.5,
+                                "displayName": ""
+                            },
+                            {
+                                "x": 0.6,
+                                "y": 0,
+                                "width": 0.4,
+                                "height": 0.5,
+                                "displayName": ""
+                            },
+                            {
+                                "x": 0,
+                                "y": 0.5,
+                                "width": 0.6,
+                                "height": 0.5,
+                                "displayName": ""
+                            },
+                            {
+                                "x": 0.6,
+                                "y": 0.5,
+                                "width": 0.4,
+                                "height": 0.5,
+                                "displayName": ""
+                            }
+                        ])
+                        onClicked: root._loadPreset([
+                            {
+                                "x": 0,
+                                "y": 0,
+                                "width": 0.6,
+                                "height": 0.5,
+                                "displayName": i18n("Top-Main")
+                            },
+                            {
+                                "x": 0.6,
+                                "y": 0,
+                                "width": 0.4,
+                                "height": 0.5,
+                                "displayName": i18n("Top-Side")
+                            },
+                            {
+                                "x": 0,
+                                "y": 0.5,
+                                "width": 0.6,
+                                "height": 0.5,
+                                "displayName": i18n("Bottom-Main")
+                            },
+                            {
+                                "x": 0.6,
+                                "y": 0.5,
+                                "width": 0.4,
+                                "height": 0.5,
+                                "displayName": i18n("Bottom-Side")
+                            }
+                        ])
                         Accessible.name: i18n("Preset: %1", text)
                     }
-
                 }
-
             }
-
         }
 
         // Custom split editor
@@ -707,7 +713,6 @@ SettingsFlickable {
                             }
                             Accessible.name: i18n("Number of columns")
                         }
-
                     }
 
                     RowLayout {
@@ -740,7 +745,6 @@ SettingsFlickable {
                             }
                             Accessible.name: i18n("Number of rows")
                         }
-
                     }
 
                     Item {
@@ -757,7 +761,6 @@ SettingsFlickable {
                         ToolTip.visible: hovered
                         Accessible.name: i18n("Equalize virtual screen sizes")
                     }
-
                 }
 
                 // Sync spinboxes when grid dimensions change
@@ -835,13 +838,10 @@ SettingsFlickable {
                             color: Kirigami.Theme.disabledTextColor
                             font: Kirigami.Theme.smallFont
                         }
-
                     }
-
                 }
 
-                SettingsSeparator {
-                }
+                SettingsSeparator {}
 
                 Button {
                     Layout.leftMargin: Kirigami.Units.largeSpacing
@@ -862,11 +862,7 @@ SettingsFlickable {
                     ToolTip.visible: hovered
                     Accessible.name: i18n("Remove virtual screen subdivisions")
                 }
-
             }
-
         }
-
     }
-
 }

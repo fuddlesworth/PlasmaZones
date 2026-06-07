@@ -48,7 +48,6 @@ SettingsFlickable {
             constants: root
             isCurrentTab: true
             screenAspectRatio: root.screenAspectRatio
-            showMonitorSelector: true
         }
     }
 }

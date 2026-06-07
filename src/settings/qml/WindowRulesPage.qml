@@ -387,7 +387,7 @@ SettingsFlickable {
         }
 
         // ── Monitor overview strip ──
-        // Bare, no SettingsCard wrapper — mirrors MonitorSelectorSection's
+        // Bare, no SettingsCard wrapper — mirrors DisplayMap's
         // placement on the other pages (Monitor State, Tiling Algorithm,
         // Snapping, Virtual Screens) where the selector is a direct child of
         // the page column with no enclosing card or header strip.

@@ -282,7 +282,6 @@ qt_add_qml_module(plasmazones-settings
         qml/AlgorithmPreview.qml
         qml/LayoutThumbnail.qml
         qml/PerScreenOverrideHelper.qml
-        qml/MonitorSelectorSection.qml
         qml/DisplayMap.qml
         qml/MonitorScopeChip.qml
         qml/LayoutGridDelegate.qml
