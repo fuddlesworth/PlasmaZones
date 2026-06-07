@@ -824,27 +824,13 @@ Kirigami.Dialog {
                     }
                 }
 
-                Rectangle {
-                    visible: shaderPreviewLoader.item !== null && shaderPreviewLoader.item.status === ZoneShaderItem.Error
+                // T3.2: shared in-app compile-error banner (also used by the
+                // settings-app shader browser).
+                PZCommon.ShaderCompileErrorBanner {
                     anchors.centerIn: parent
-                    width: Math.min(parent.width * 0.8, 400)
-                    height: previewErrorText.implicitHeight + Kirigami.Units.gridUnit * 2
-                    color: Kirigami.Theme.backgroundColor
-                    opacity: 0.95
-                    radius: Kirigami.Units.smallSpacing
-                    border.color: Kirigami.Theme.negativeTextColor
-                    border.width: 1
-
-                    Text {
-                        id: previewErrorText
-
-                        Accessible.name: i18n("Shader error details")
-                        anchors.centerIn: parent
-                        text: (shaderPreviewLoader.item && shaderPreviewLoader.item.errorLog) || i18n("Shader error")
-                        color: Kirigami.Theme.textColor
-                        wrapMode: Text.WordWrap
-                        width: parent.width - Kirigami.Units.gridUnit * 2
-                    }
+                    width: Math.min(parent.width - Kirigami.Units.largeSpacing * 2, Kirigami.Units.gridUnit * 22)
+                    height: Math.min(parent.height - Kirigami.Units.largeSpacing * 2, Kirigami.Units.gridUnit * 12)
+                    errorLog: (shaderPreviewLoader.item && shaderPreviewLoader.item.status === ZoneShaderItem.Error) ? ((shaderPreviewLoader.item.errorLog && shaderPreviewLoader.item.errorLog.length > 0) ? shaderPreviewLoader.item.errorLog : i18n("No error details available.")) : ""
                 }
 
                 Label {

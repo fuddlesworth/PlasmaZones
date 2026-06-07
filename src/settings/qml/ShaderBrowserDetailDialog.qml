@@ -569,6 +569,8 @@ Kirigami.Dialog {
                         id: shaderRenderer
 
                         anchors.fill: parent
+                        // Hide the failed render behind the compile-error banner.
+                        visible: status !== ZoneShaderItem.Error
                         config: ({
                                 "shaderSource": root._shaderInfo.shaderUrl || "",
                                 "paramPreamble": livePreviewPane._preamble,
@@ -594,14 +596,13 @@ Kirigami.Dialog {
                             })
                     }
 
-                    Label {
+                    // T3.2: surface the live preview's actual GLSL compile
+                    // error in-app (shared with the editor preview).
+                    PZCommon.ShaderCompileErrorBanner {
                         anchors.centerIn: parent
-                        width: parent.width - Kirigami.Units.largeSpacing * 2
-                        horizontalAlignment: Text.AlignHCenter
-                        wrapMode: Text.WordWrap
-                        color: Kirigami.Theme.disabledTextColor
-                        text: i18nc("@info:placeholder shader preview", "Preview unavailable")
-                        visible: shaderRenderer.status === ZoneShaderItem.Error
+                        width: Math.min(parent.width - Kirigami.Units.largeSpacing * 2, Kirigami.Units.gridUnit * 22)
+                        height: Math.min(parent.height - Kirigami.Units.largeSpacing * 2, Kirigami.Units.gridUnit * 12)
+                        errorLog: shaderRenderer.status === ZoneShaderItem.Error ? ((shaderRenderer.errorLog && shaderRenderer.errorLog.length > 0) ? shaderRenderer.errorLog : i18nc("@info shader preview", "No error details available.")) : ""
                     }
                 }
             }

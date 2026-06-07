@@ -372,6 +372,7 @@ qt_add_resources(plasmazones-settings "shared_common_qml"
         ${CMAKE_SOURCE_DIR}/src/shared/ShaderParameterRow.qml
         ${CMAKE_SOURCE_DIR}/src/shared/ShaderParameterSection.qml
         ${CMAKE_SOURCE_DIR}/src/shared/ShaderParameterEditor.qml
+        ${CMAKE_SOURCE_DIR}/src/shared/ShaderCompileErrorBanner.qml
         ${CMAKE_SOURCE_DIR}/src/shared/ZoneShaderRenderer.qml
 )
 qt_add_resources(plasmazones-settings "shared_common_qmldir"

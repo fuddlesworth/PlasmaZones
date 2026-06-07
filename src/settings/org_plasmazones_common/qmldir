@@ -6,4 +6,5 @@ ShaderPickerButton 1.0 ShaderPickerButton.qml
 ShaderParameterRow 1.0 ShaderParameterRow.qml
 ShaderParameterSection 1.0 ShaderParameterSection.qml
 ShaderParameterEditor 1.0 ShaderParameterEditor.qml
+ShaderCompileErrorBanner 1.0 ShaderCompileErrorBanner.qml
 ZoneShaderRenderer 1.0 ZoneShaderRenderer.qml
