@@ -6,7 +6,6 @@
 #include "../configdefaults.h"
 #include "../../core/constants.h"
 #include "../../core/logging.h"
-#include "../../core/utils.h"
 #include <PhosphorIdentity/VirtualScreenId.h>
 #include <PhosphorScreens/ScreenIdentity.h>
 #include <QSet>
@@ -618,7 +617,8 @@ static bool removePerScreenEntry(QHash<QString, T>& hash, const QString& screenI
 }
 
 // Mutable sibling of findPerScreenEntry — same id/connector resolution, used by
-// the autotile sub-domain partial-clear below.
+// the per-screen setter (applyPerScreenSetting) and the gaps/algorithm
+// sub-domain partial-clears below.
 template<typename T>
 static typename QHash<QString, T>::iterator findPerScreenEntryMutable(QHash<QString, T>& hash,
                                                                       const QString& screenIdOrName)

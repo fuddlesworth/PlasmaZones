@@ -102,13 +102,13 @@ SettingsFlickable {
         var snapping = "";
         var tiling = "";
         if (stateView.localMode === 1) {
-            var algoId = stateView.localAlgorithmId || (state ? state.algorithmId : "");
+            var algoId = stateView.localAlgorithmId || state.algorithmId;
             if (!algoId)
                 return;
 
             tiling = "autotile:" + algoId;
         } else {
-            var layoutId = stateView.localLayoutId || (state ? state.layoutId : "");
+            var layoutId = stateView.localLayoutId || state.layoutId;
             if (!layoutId)
                 return;
 

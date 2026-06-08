@@ -7,8 +7,6 @@
 #include <QJSValue>
 #include <QObject>
 #include <QString>
-#include <QStringList>
-#include <QUuid>
 #include <QVariantList>
 #include <QVariantMap>
 
@@ -130,31 +128,18 @@ public:
     /// is then left empty and `daemonReachable` is false.
     Q_INVOKABLE void reload();
 
-    /// Synchronous push of the staged rule set back to the daemon. Clears the
-    /// dirty bit on a successful write. Returns false if the push failed (daemon
-    /// down, or the daemon rejected/partially dropped rules) — the caller must
-    /// keep the page dirty in that case. The live save path uses the async
-    /// `asyncCommit()` below; this synchronous equivalent has no current caller.
-    ///
-    /// Refuses (returns false, leaves the page dirty) when
-    /// `daemonChangedWhileDirty` is set and @p force is false: the daemon's
-    /// rules changed under the staged edits, so an unconditional push would be
-    /// a silent lost update. The page surfaces the refusal and the user must
-    /// explicitly review (revert) or force the overwrite. Pass @p force true
-    /// once the user has chosen "overwrite anyway".
-    bool commit(bool force = false);
-
-    /// Async sibling of `commit()` — pushes the staged rule set to the
-    /// daemon via QDBusPendingCallWatcher and emits the inherited
-    /// `applyResult(ok, error)` signal on the reply. UI threads no
-    /// longer block waiting for the daemon (a stuck/firewalled daemon
-    /// would freeze the whole Settings window with the sync path).
+    /// Push the staged rule set to the daemon via QDBusPendingCallWatcher and
+    /// emit the inherited `applyResult(ok, error)` signal on the reply. UI
+    /// threads never block waiting for the daemon (a stuck/firewalled daemon
+    /// would otherwise freeze the whole Settings window).
     ///
     /// This is the live save path: `apply()` (the StagingDomain slot
     /// `SettingsController::save()` drives) dispatches through
     /// `asyncCommit(false)`, and the daemon-changed banner forces an
-    /// overwrite via `asyncCommit(true)`. The sync `commit()` above is
-    /// the synchronous equivalent, retained as a non-invokable helper.
+    /// overwrite via `asyncCommit(true)`. Refuses (emits
+    /// `applyResult(false, …)`, leaves the page dirty) when
+    /// `daemonChangedWhileDirty` is set and @p force is false, so an
+    /// unconditional push can't silently clobber the daemon's newer rules.
     Q_INVOKABLE void asyncCommit(bool force = false);
 
     /// Discard staged edits and re-fetch from the daemon. The fetch is async,
@@ -395,15 +380,10 @@ private:
     /// sibling watcher.
     void fetchAndLoad(bool fromRevert = false);
 
-    /// Push @p rules to the daemon via `setAllRules`. Returns true only if the
-    /// daemon accepted every rule (no partial drop).
-    bool pushToDaemon(const QList<PhosphorWindowRule::WindowRule>& rules);
-
-    /// Async sibling of pushToDaemon — dispatches `setAllRules` via
-    /// QDBusPendingCallWatcher and emits applyResult on the reply.
-    /// Returns false ONLY for the up-front validation failure (a rule
-    /// was rejected client-side) — the async leg covers transport
-    /// errors via the applyResult signal.
+    /// Dispatch `setAllRules` to the daemon via QDBusPendingCallWatcher and
+    /// emit applyResult on the reply. Returns false ONLY for the up-front
+    /// validation failure (a rule was rejected client-side) — the async leg
+    /// covers transport errors via the applyResult signal.
     bool pushToDaemonAsync(const QList<PhosphorWindowRule::WindowRule>& rules);
 
     /// Renormalize every rule's priority so descending list order ⇒

@@ -277,10 +277,10 @@ void SettingsController::defaults()
     //
     // "window-rules" is INTENTIONALLY excluded from the blanket-mark:
     // its source of truth is the daemon's `windowrules.json` (not the
-    // KConfig store reset() clears), and `WindowRuleController::commit()`
+    // KConfig store reset() clears), and `WindowRuleController::asyncCommit()`
     // is a no-op when the controller is clean. Marking the page dirty
     // here would surface a stale "unsaved changes" indicator that a
-    // subsequent Save would never actually clear (commit short-circuits,
+    // subsequent Save would never actually clear (asyncCommit short-circuits,
     // leaving the page dirty in perpetuity until the user touches it).
     // Window-rule defaults are out of scope for this entry point —
     // resetting them requires a separate daemon-side "reset rules" path.

@@ -153,7 +153,9 @@ SettingsFlickable {
                                 showLabel: false
                                 algorithmId: root.selectedAlgorithm
                                 algorithmName: root.algoCapabilities ? (root.algoCapabilities.name || "") : ""
-                                windowCount: root.algoCapabilities ? root.algoCapabilities.defaultMaxWindows : 4
+                                // Track the live Max-windows slider so the diagram and the
+                                // "Max N windows" caption below always show the same count.
+                                windowCount: previewWindowSlider.slider.value
                                 splitRatio: root.algoCapabilities ? root.algoCapabilities.defaultSplitRatio : 0.6
                                 masterCount: (root.algoCapabilities && root.algoCapabilities.supportsMasterCount) ? 1 : 0
                                 zoneNumberDisplay: root.algoCapabilities ? (root.algoCapabilities.zoneNumberDisplay || "all") : "all"

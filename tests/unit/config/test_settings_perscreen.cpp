@@ -7,8 +7,11 @@
  *
  * Split from test_settings.cpp. Tests cover:
  * 1. Per-screen zone selector set/clear
- * 2. Per-screen autotile validation
- * 3. Fresh config defaults
+ * 2. Per-screen zone selector no-op-write emit/husk suppression
+ * 3. Per-screen autotile validation
+ * 4. Per-screen autotile gaps/algorithm sub-domain independence
+ * 5. Per-screen snapping gaps sub-domain isolation
+ * 6. Fresh config defaults
  */
 
 #include <QTest>
@@ -86,6 +89,14 @@ private Q_SLOTS:
         settings.setPerScreenZoneSelectorSetting(screen, QStringLiteral("Position"), 4);
         QCOMPARE(spy.count(), 2);
         QCOMPARE(settings.getPerScreenZoneSelectorSettings(screen).value(QStringLiteral("Position")).toInt(), 4);
+
+        // A rejected write (out-of-range value) against a screen with no
+        // existing entry must not emit and must not default-insert an empty
+        // husk that hasPerScreen* would misread as a phantom override.
+        const QString freshScreen = QStringLiteral("test-screen-2");
+        settings.setPerScreenZoneSelectorSetting(freshScreen, QStringLiteral("Position"), 9999);
+        QCOMPARE(spy.count(), 2);
+        QVERIFY(!settings.hasPerScreenZoneSelectorSettings(freshScreen));
     }
 
     // =========================================================================
