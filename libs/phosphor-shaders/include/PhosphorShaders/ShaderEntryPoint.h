@@ -41,7 +41,7 @@ struct EntryCandidate
     /// generatedMain}` aggregate init leaves it empty. All must be present, else
     /// the candidate is skipped (a partial pair falls through to the
     /// missing-`main()` compiler error rather than a dangling call).
-    QStringList alsoRequires;
+    QStringList alsoRequires{};
 
     bool operator==(const EntryCandidate&) const = default;
 };
