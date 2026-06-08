@@ -292,6 +292,12 @@ public:
     /// `{ value: int (Operator enum), wire: QString (JSON wire string), label }`.
     Q_INVOKABLE QVariantList operatorsForField(int fieldValue) const;
 
+    /// Every operator with its translated label, independent of any field —
+    /// the leaf editor uses this to size the operator dropdown to the widest
+    /// possible label so the operator column lines up across condition rows.
+    /// Same entry shape as operatorsForField.
+    Q_INVOKABLE QVariantList allOperators() const;
+
     /// Registered action types for the action-editor dropdown. Each entry:
     /// `{ value: QString (action type id), label, params: [ ... ],
     ///   domain: "context"|"window" }` where each param descriptor is

@@ -410,6 +410,23 @@ QVariantList operatorsForField(int fieldValue)
     return out;
 }
 
+QVariantList allOperators()
+{
+    // Iterate the whole Operator enum via OperatorCount rather than a
+    // hand-maintained list — a new operator auto-surfaces here (and so widens
+    // the leaf editor's operator-column sizing) the moment it's added.
+    QVariantList out;
+    for (int i = 0; i < PhosphorWindowRule::OperatorCount; ++i) {
+        const auto op = static_cast<Operator>(i);
+        QVariantMap entry;
+        entry[QStringLiteral("value")] = i;
+        entry[QStringLiteral("wire")] = PhosphorWindowRule::operatorToString(op);
+        entry[QStringLiteral("label")] = operatorLabelImpl(op);
+        out.append(entry);
+    }
+    return out;
+}
+
 QVariantList actionTypes()
 {
     // The picker order is meaningful (engine-mode first, then layout-shaping,

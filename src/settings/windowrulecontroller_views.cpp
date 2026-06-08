@@ -297,6 +297,11 @@ QVariantList WindowRuleController::operatorsForField(int fieldValue) const
     return WindowRuleAuthoring::operatorsForField(fieldValue);
 }
 
+QVariantList WindowRuleController::allOperators() const
+{
+    return WindowRuleAuthoring::allOperators();
+}
+
 QVariantList WindowRuleController::actionTypes() const
 {
     return WindowRuleAuthoring::actionTypes();
