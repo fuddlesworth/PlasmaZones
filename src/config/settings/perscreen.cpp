@@ -256,6 +256,19 @@ const QLatin1String kPerScreenSnappingKeys[] = {
     PerScreenSnappingKey::OuterGapRight,
 };
 
+// Gaps sub-domain of the per-screen snapping keys — the keys the Snapping →
+// Window → Appearance "Gaps" card writes. The rest of kPerScreenSnappingKeys
+// (SnapAssist / ZoneSelector) is a different concern; the card reports its
+// override dot and clears its reset against ONLY these gap keys so a shared
+// whole-domain clear can't wipe the map's other overrides (data loss on reset).
+// Snapping per-screen keys are stored unprefixed, so this is a direct match.
+bool isPerScreenSnappingGapsKey(const QString& key)
+{
+    namespace K = PerScreenSnappingKey;
+    return key == K::ZonePadding || key == K::OuterGap || key == K::UsePerSideOuterGap || key == K::OuterGapTop
+        || key == K::OuterGapBottom || key == K::OuterGapLeft || key == K::OuterGapRight;
+}
+
 QVariant validatePerScreenSnappingValue(const QString& key, const QVariant& value)
 {
     namespace K = PerScreenSnappingKey;
@@ -595,26 +608,26 @@ static typename QHash<QString, T>::iterator findPerScreenEntryMutable(QHash<QStr
     return hash.end();
 }
 
-// True if the screen's autotile override map holds any key in the requested
-// sub-domain (gaps when wantGaps, otherwise the algorithm complement).
-static bool hasPerScreenAutotileSubset(const QHash<QString, QVariantMap>& hash, const QString& screenIdOrName,
-                                       bool wantGaps)
+// True if the screen's override map holds any key in the requested sub-domain
+// (gaps when wantGaps, otherwise the complement), classified by isGapsKey.
+static bool hasPerScreenKeySubset(const QHash<QString, QVariantMap>& hash, const QString& screenIdOrName,
+                                  bool (*isGapsKey)(const QString&), bool wantGaps)
 {
     auto it = findPerScreenEntry(hash, screenIdOrName);
     if (it == hash.constEnd())
         return false;
     for (auto k = it.value().constBegin(); k != it.value().constEnd(); ++k) {
-        if (isPerScreenAutotileGapsKey(k.key()) == wantGaps)
+        if (isGapsKey(k.key()) == wantGaps)
             return true;
     }
     return false;
 }
 
-// Remove only the requested sub-domain's keys from the screen's autotile
-// override map (gaps when clearGaps, otherwise the algorithm complement),
+// Remove only the requested sub-domain's keys from the screen's override map
+// (gaps when clearGaps, otherwise the complement), classified by isGapsKey,
 // dropping the whole entry once empty. Returns true if anything changed.
-static bool clearPerScreenAutotileSubset(QHash<QString, QVariantMap>& hash, const QString& screenIdOrName,
-                                         bool clearGaps)
+static bool clearPerScreenKeySubset(QHash<QString, QVariantMap>& hash, const QString& screenIdOrName,
+                                    bool (*isGapsKey)(const QString&), bool clearGaps)
 {
     auto it = findPerScreenEntryMutable(hash, screenIdOrName);
     if (it == hash.end())
@@ -622,7 +635,7 @@ static bool clearPerScreenAutotileSubset(QHash<QString, QVariantMap>& hash, cons
     QVariantMap& overrides = it.value();
     bool changed = false;
     for (auto k = overrides.begin(); k != overrides.end();) {
-        if (isPerScreenAutotileGapsKey(k.key()) == clearGaps) {
+        if (isGapsKey(k.key()) == clearGaps) {
             k = overrides.erase(k);
             changed = true;
         } else {
@@ -675,13 +688,16 @@ void Settings::setPerScreenZoneSelectorSetting(const QString& screenIdOrName, co
         return;
     }
 
-    // Resolve to EDID-based screen ID so the key matches daemon lookups
+    // Resolve to EDID-based screen ID so the key matches daemon lookups. Look
+    // up before taking a mutable reference so a no-op write never default-
+    // inserts an empty husk entry (which hasPerScreen*Settings would then read
+    // as a phantom override).
     const QString resolved = canonicalPerScreenKey(screenIdOrName);
-    QVariantMap& screenSettings = m_perScreenZoneSelectorSettings[resolved];
-    if (screenSettings.value(key) == validated) {
+    const auto existing = m_perScreenZoneSelectorSettings.constFind(resolved);
+    if (existing != m_perScreenZoneSelectorSettings.constEnd() && existing.value().value(key) == validated) {
         return;
     }
-    screenSettings[key] = validated;
+    m_perScreenZoneSelectorSettings[resolved][key] = validated;
     Q_EMIT perScreenZoneSelectorSettingsChanged();
     Q_EMIT settingsChanged();
 }
@@ -725,13 +741,15 @@ void Settings::setPerScreenAutotileSetting(const QString& screenIdOrName, const 
     // Animation keys ("AnimationsEnabled", etc.) have no "Autotile" prefix.
     const QString normalizedKey = key.startsWith(QLatin1String("Autotile")) ? key.mid(8) : key;
 
-    // Resolve to EDID-based screen ID so the key matches daemon lookups
+    // Resolve to EDID-based screen ID so the key matches daemon lookups. Look
+    // up before taking a mutable reference so a no-op write never default-
+    // inserts an empty husk entry.
     const QString resolved = canonicalPerScreenKey(screenIdOrName);
-    QVariantMap& screenSettings = m_perScreenAutotileSettings[resolved];
-    if (screenSettings.value(normalizedKey) == validated) {
+    const auto existing = m_perScreenAutotileSettings.constFind(resolved);
+    if (existing != m_perScreenAutotileSettings.constEnd() && existing.value().value(normalizedKey) == validated) {
         return;
     }
-    screenSettings[normalizedKey] = validated;
+    m_perScreenAutotileSettings[resolved][normalizedKey] = validated;
     Q_EMIT perScreenAutotileSettingsChanged();
     Q_EMIT settingsChanged();
 }
@@ -754,17 +772,20 @@ bool Settings::hasPerScreenAutotileSettings(const QString& screenIdOrName) const
 
 bool Settings::hasPerScreenAutotileGapsSettings(const QString& screenIdOrName) const
 {
-    return hasPerScreenAutotileSubset(m_perScreenAutotileSettings, screenIdOrName, /*wantGaps=*/true);
+    return hasPerScreenKeySubset(m_perScreenAutotileSettings, screenIdOrName, isPerScreenAutotileGapsKey,
+                                 /*wantGaps=*/true);
 }
 
 bool Settings::hasPerScreenAutotileAlgorithmSettings(const QString& screenIdOrName) const
 {
-    return hasPerScreenAutotileSubset(m_perScreenAutotileSettings, screenIdOrName, /*wantGaps=*/false);
+    return hasPerScreenKeySubset(m_perScreenAutotileSettings, screenIdOrName, isPerScreenAutotileGapsKey,
+                                 /*wantGaps=*/false);
 }
 
 void Settings::clearPerScreenAutotileGapsSettings(const QString& screenIdOrName)
 {
-    if (clearPerScreenAutotileSubset(m_perScreenAutotileSettings, screenIdOrName, /*clearGaps=*/true)) {
+    if (clearPerScreenKeySubset(m_perScreenAutotileSettings, screenIdOrName, isPerScreenAutotileGapsKey,
+                                /*clearGaps=*/true)) {
         Q_EMIT perScreenAutotileSettingsChanged();
         Q_EMIT settingsChanged();
     }
@@ -772,7 +793,8 @@ void Settings::clearPerScreenAutotileGapsSettings(const QString& screenIdOrName)
 
 void Settings::clearPerScreenAutotileAlgorithmSettings(const QString& screenIdOrName)
 {
-    if (clearPerScreenAutotileSubset(m_perScreenAutotileSettings, screenIdOrName, /*clearGaps=*/false)) {
+    if (clearPerScreenKeySubset(m_perScreenAutotileSettings, screenIdOrName, isPerScreenAutotileGapsKey,
+                                /*clearGaps=*/false)) {
         Q_EMIT perScreenAutotileSettingsChanged();
         Q_EMIT settingsChanged();
     }
@@ -798,13 +820,15 @@ void Settings::setPerScreenSnappingSetting(const QString& screenIdOrName, const 
         return;
     }
 
-    // Resolve to EDID-based screen ID so the key matches daemon lookups
+    // Resolve to EDID-based screen ID so the key matches daemon lookups. Look
+    // up before taking a mutable reference so a no-op write never default-
+    // inserts an empty husk entry.
     const QString resolved = canonicalPerScreenKey(screenIdOrName);
-    QVariantMap& screenSettings = m_perScreenSnappingSettings[resolved];
-    if (screenSettings.value(key) == validated) {
+    const auto existing = m_perScreenSnappingSettings.constFind(resolved);
+    if (existing != m_perScreenSnappingSettings.constEnd() && existing.value().value(key) == validated) {
         return;
     }
-    screenSettings[key] = validated;
+    m_perScreenSnappingSettings[resolved][key] = validated;
     Q_EMIT perScreenSnappingSettingsChanged();
     Q_EMIT settingsChanged();
 }
@@ -820,6 +844,25 @@ void Settings::clearPerScreenSnappingSettings(const QString& screenIdOrName)
 bool Settings::hasPerScreenSnappingSettings(const QString& screenIdOrName) const
 {
     return findPerScreenEntry(m_perScreenSnappingSettings, screenIdOrName) != m_perScreenSnappingSettings.constEnd();
+}
+
+// Gaps sub-domain accessors: the Gaps card reports/clears only the snapping
+// gap keys, leaving the map's other (SnapAssist / ZoneSelector) overrides
+// untouched — mirrors the autotile Gaps/Algorithm split.
+
+bool Settings::hasPerScreenSnappingGapsSettings(const QString& screenIdOrName) const
+{
+    return hasPerScreenKeySubset(m_perScreenSnappingSettings, screenIdOrName, isPerScreenSnappingGapsKey,
+                                 /*wantGaps=*/true);
+}
+
+void Settings::clearPerScreenSnappingGapsSettings(const QString& screenIdOrName)
+{
+    if (clearPerScreenKeySubset(m_perScreenSnappingSettings, screenIdOrName, isPerScreenSnappingGapsKey,
+                                /*clearGaps=*/true)) {
+        Q_EMIT perScreenSnappingSettingsChanged();
+        Q_EMIT settingsChanged();
+    }
 }
 
 } // namespace PlasmaZones

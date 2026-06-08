@@ -36,8 +36,11 @@ class TilingAlgorithmController : public PhosphorSettingsUi::PageController
     Q_PROPERTY(int autotileGapMin READ autotileGapMin CONSTANT)
     Q_PROPERTY(int autotileGapMax READ autotileGapMax CONSTANT)
     Q_PROPERTY(int autotileMaxWindowsMin READ autotileMaxWindowsMin CONSTANT)
+    Q_PROPERTY(int autotileMaxWindowsMax READ autotileMaxWindowsMax CONSTANT)
     Q_PROPERTY(int autotileMasterCountMin READ autotileMasterCountMin CONSTANT)
+    Q_PROPERTY(int autotileMasterCountMax READ autotileMasterCountMax CONSTANT)
     Q_PROPERTY(qreal autotileSplitRatioMin READ autotileSplitRatioMin CONSTANT)
+    Q_PROPERTY(qreal autotileSplitRatioMax READ autotileSplitRatioMax CONSTANT)
     Q_PROPERTY(qreal autotileSplitRatioStepMin READ autotileSplitRatioStepMin CONSTANT)
     Q_PROPERTY(qreal autotileSplitRatioStepMax READ autotileSplitRatioStepMax CONSTANT)
 
@@ -59,8 +62,11 @@ public:
     int autotileGapMin() const;
     int autotileGapMax() const;
     int autotileMaxWindowsMin() const;
+    int autotileMaxWindowsMax() const;
     int autotileMasterCountMin() const;
+    int autotileMasterCountMax() const;
     qreal autotileSplitRatioMin() const;
+    qreal autotileSplitRatioMax() const;
     qreal autotileSplitRatioStepMin() const;
     qreal autotileSplitRatioStepMax() const;
 

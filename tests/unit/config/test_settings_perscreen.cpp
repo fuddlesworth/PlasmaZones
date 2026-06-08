@@ -135,6 +135,45 @@ private Q_SLOTS:
         QVERIFY(!settings.hasPerScreenAutotileSettings(screen));
     }
 
+    /**
+     * The per-screen snapping Gaps card shares one map with the snapping
+     * SnapAssist/ZoneSelector keys but must report and clear only its gap keys,
+     * so resetting the Gaps card never wipes the map's other overrides.
+     */
+    void testPerScreenSnapping_gapsSubdomainIsolatesNonGapsKeys()
+    {
+        IsolatedConfigGuard guard;
+
+        Settings settings;
+
+        const QString screen = QStringLiteral("test-screen-1");
+
+        // A gaps override (ZonePadding) and a non-gaps override
+        // (SnapAssistEnabled) coexist in the one shared per-screen snapping map.
+        settings.setPerScreenSnappingSetting(screen, QStringLiteral("ZonePadding"), 8);
+        settings.setPerScreenSnappingSetting(screen, QStringLiteral("SnapAssistEnabled"), false);
+
+        QVERIFY(settings.hasPerScreenSnappingGapsSettings(screen));
+        QVERIFY(settings.hasPerScreenSnappingSettings(screen));
+
+        QSignalSpy spy(&settings, &Settings::perScreenSnappingSettingsChanged);
+
+        // Clearing the gaps sub-domain emits once and leaves the SnapAssist
+        // override intact (the entry survives because a non-gaps key remains).
+        settings.clearPerScreenSnappingGapsSettings(screen);
+        QCOMPARE(spy.count(), 1);
+        QVERIFY(!settings.hasPerScreenSnappingGapsSettings(screen));
+        QVERIFY(settings.hasPerScreenSnappingSettings(screen));
+        QVariantMap afterGapsClear = settings.getPerScreenSnappingSettings(screen);
+        QVERIFY2(!afterGapsClear.contains(QStringLiteral("ZonePadding")), "gaps key must be cleared");
+        QCOMPARE(afterGapsClear.value(QStringLiteral("SnapAssistEnabled")).toBool(), false);
+
+        // A no-op gaps clear (no gaps remain) changes nothing and does not emit.
+        settings.clearPerScreenSnappingGapsSettings(screen);
+        QCOMPARE(spy.count(), 1);
+        QVERIFY(settings.hasPerScreenSnappingSettings(screen));
+    }
+
     // =========================================================================
     // P2: edge cases -- fresh config defaults
     // =========================================================================

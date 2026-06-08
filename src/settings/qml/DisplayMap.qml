@@ -88,6 +88,10 @@ ColumnLayout {
                 // resolution is rebuilt from the physical geometry below.
                 delete entry["displayLabel"];
                 delete entry["resolution"];
+                // `manufacturer`/`model` survive unchanged: they identify the
+                // physical monitor (shared by every virtual child), so they
+                // stay correct for the demoted entry — unlike the virtual-
+                // derived label/resolution dropped above.
                 var physRes = appSettings.physicalScreenResolution(physId);
                 if (physRes.width > 0 && physRes.height > 0) {
                     entry["width"] = physRes.width;

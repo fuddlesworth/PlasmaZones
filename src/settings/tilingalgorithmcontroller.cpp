@@ -74,6 +74,21 @@ qreal TilingAlgorithmController::autotileSplitRatioMin() const
     return ConfigDefaults::autotileSplitRatioMin();
 }
 
+int TilingAlgorithmController::autotileMaxWindowsMax() const
+{
+    return ConfigDefaults::autotileMaxWindowsMax();
+}
+
+int TilingAlgorithmController::autotileMasterCountMax() const
+{
+    return ConfigDefaults::autotileMasterCountMax();
+}
+
+qreal TilingAlgorithmController::autotileSplitRatioMax() const
+{
+    return ConfigDefaults::autotileSplitRatioMax();
+}
+
 qreal TilingAlgorithmController::autotileSplitRatioStepMin() const
 {
     return ConfigDefaults::autotileSplitRatioStepMin();

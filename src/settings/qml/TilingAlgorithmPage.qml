@@ -134,8 +134,6 @@ SettingsFlickable {
 
                     // Preview container
                     Item {
-                        id: algorithmPreviewContainer
-
                         anchors.horizontalCenter: parent.horizontalCenter
                         anchors.top: parent.top
                         width: root.algorithmPreviewWidth
@@ -260,7 +258,7 @@ SettingsFlickable {
 
                         Accessible.name: i18n("Maximum windows")
                         from: root.settingsBridge.autotileMaxWindowsMin
-                        to: 12
+                        to: root.settingsBridge.autotileMaxWindowsMax
                         stepSize: 1
                         value: root.settingValue("MaxWindows", appSettings.autotileMaxWindows)
                         formatValue: function (v) {
@@ -285,11 +283,9 @@ SettingsFlickable {
                     description: root.algoCenterLayout ? i18n("Width proportion allocated to the center column") : i18n("Width proportion allocated to the master area")
 
                     SettingsSlider {
-                        id: splitRatioSlider
-
                         Accessible.name: root.algoCenterLayout ? i18n("Center ratio") : i18n("Master ratio")
                         from: root.settingsBridge.autotileSplitRatioMin
-                        to: 0.9
+                        to: root.settingsBridge.autotileSplitRatioMax
                         stepSize: 0.05
                         value: root.settingValue("SplitRatio", appSettings.autotileSplitRatio)
                         formatValue: function (v) {
@@ -309,8 +305,6 @@ SettingsFlickable {
                     description: i18n("Amount the ratio changes per keyboard shortcut press")
 
                     SettingsSlider {
-                        id: splitRatioStepSlider
-
                         Accessible.name: i18n("Ratio step size")
                         from: root.settingsBridge.autotileSplitRatioStepMin
                         to: root.settingsBridge.autotileSplitRatioStepMax
@@ -337,11 +331,9 @@ SettingsFlickable {
                     description: root.algoCenterLayout ? i18n("Number of windows in the center column") : i18n("Number of windows in the master area")
 
                     SettingsSlider {
-                        id: masterCountSlider
-
                         Accessible.name: root.algoCenterLayout ? i18n("Center count") : i18n("Master count")
                         from: root.settingsBridge.autotileMasterCountMin
-                        to: 5
+                        to: root.settingsBridge.autotileMasterCountMax
                         stepSize: 1
                         value: root.settingValue("MasterCount", appSettings.autotileMasterCount)
                         formatValue: function (v) {

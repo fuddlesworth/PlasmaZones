@@ -190,8 +190,8 @@ SettingsFlickable {
             Layout.fillWidth: true
             scopeEnabled: true
             scopeAppSettings: settingsController
-            scopeHasOverridesMethod: "hasPerScreenSnappingSettings"
-            scopeClearerMethod: "clearPerScreenSnappingSettings"
+            scopeHasOverridesMethod: "hasPerScreenSnappingGapsSettings"
+            scopeClearerMethod: "clearPerScreenSnappingGapsSettings"
             // Snapping uses "Zone padding" / "Edge gap" labels and has no Smart
             // gaps. Zone-padding bounds come from zonePaddingMin/Max; the edge /
             // per-side gaps from gapMin/Max — each matching its validator clamp.

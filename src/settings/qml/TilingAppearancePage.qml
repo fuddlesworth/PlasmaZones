@@ -124,8 +124,6 @@ SettingsFlickable {
                     description: i18n("Remove window title bars while autotiled, restored when floating")
 
                     SettingsSwitch {
-                        id: hideTitleBarsSwitch
-
                         checked: appSettings.autotileHideTitleBars
                         accessibleName: i18n("Hide title bars on tiled windows")
                         onToggled: function (newValue) {

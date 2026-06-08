@@ -98,6 +98,9 @@ QList<PhosphorScreens::ScreenInfo> fetchScreens(bool* daemonUnavailable)
                                                 << "height=" << info.height << "— picker tile will render as 0×0";
                         }
                     }
+                    // Connector name is optional (the label falls back to
+                    // vendor/model or the raw id), so unlike geometry/virtual-id
+                    // a missing key is not warned.
                     if (jsonObj.contains(::PhosphorZones::ZoneJsonKeys::Name))
                         info.connectorName = jsonObj[::PhosphorZones::ZoneJsonKeys::Name].toString();
                     if (jsonObj.value(JsonKeys::IsVirtualScreen).toBool()) {
