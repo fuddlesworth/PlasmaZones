@@ -13,7 +13,6 @@
 #include <QScreen>
 #include <QQuickWindow>
 #include <QSize>
-#include <QVector>
 #include "../config/configbackends.h"
 #include "../core/constants.h"
 #include <PhosphorZones/LayoutRegistry.h>
@@ -23,10 +22,6 @@
 #include <PhosphorLayoutApi/LayoutSourceBundle.h>
 
 #include <memory>
-
-namespace PhosphorAudio {
-class IAudioSpectrumProvider;
-}
 
 namespace PhosphorTiles {
 class AlgorithmRegistry;
