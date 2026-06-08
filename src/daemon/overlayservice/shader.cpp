@@ -308,10 +308,10 @@ void OverlayService::updateShaderUniforms()
 
     // Update per-frame shader uniforms on the main-overlay slot Item
     // for every screen with main overlay active. iTime/iTimeDelta/
-    // iFrame are properties on mainOverlaySlot in PassiveOverlayShell.qml
-    // (lines 666-668), not on the shell window root - RenderNodeOverlayContent
-    // binds to mainOverlaySlot.iTime, so writes to the window root would
-    // create dynamic properties that QML never observes.
+    // iFrame are properties declared on mainOverlaySlot in
+    // PassiveOverlayShell.qml, not on the shell window root -
+    // RenderNodeOverlayContent binds to mainOverlaySlot.iTime, so writes to the
+    // window root would create dynamic properties that QML never observes.
     for (auto it = m_screenStates.cbegin(); it != m_screenStates.cend(); ++it) {
         if (!it.value().overlayPhysScreen || !it.value().shell) {
             continue;
