@@ -6,12 +6,19 @@
 
 #include "internal.h"
 
+#include <QByteArray>
 #include <QCache>
+#include <QCryptographicHash>
+#include <QDir>
 #include <QFile>
 #include <QFileInfo>
 #include <QMutex>
 #include <QMutexLocker>
+#include <QSaveFile>
+#include <QStandardPaths>
 #include <QTextStream>
+
+#include <mutex>
 
 namespace PhosphorRendering {
 
@@ -66,6 +73,121 @@ QMutex& bakeSerializationMutex()
     return m;
 }
 
+// ═══════════════════════════════════════════════════════════════════════════════
+// Persistent (on-disk) bake cache
+// ═══════════════════════════════════════════════════════════════════════════════
+//
+// The in-memory QCache above is lost on every process exit, so each daemon
+// start re-bakes every shader from scratch (QShaderBaker → glslang/SPIR-V is the
+// single largest allocation source at startup). A serialized QShader survives
+// across runs, so we additionally persist bake results to a content-addressed
+// disk cache: subsequent launches load SPIR-V/GLSL straight from disk and skip
+// glslang entirely.
+//
+// Key = SHA-256 of (stage byte ‖ fully-expanded source). Because the source
+// passed to compile() already has every #include inlined, an edit to a shader
+// OR any of its includes changes the digest, so the cache is self-invalidating —
+// no mtime tracking or explicit eviction on edit needed. Orphaned blobs from
+// old source versions are bounded by a one-shot prune (see below).
+
+constexpr int kMaxDiskCacheEntries = 512;
+
+// Cache directory, resolved + created once. Empty string = disk cache disabled
+// (unset/unwritable cache location, or the opt-out env var).
+QString diskCacheDir()
+{
+    static const QString dir = [] {
+        if (qEnvironmentVariableIsSet("PHOSPHOR_DISABLE_SHADER_DISK_CACHE")) {
+            return QString();
+        }
+        const QString base = QStandardPaths::writableLocation(QStandardPaths::GenericCacheLocation);
+        if (base.isEmpty()) {
+            return QString();
+        }
+        // The QShader serialized format is Qt-version-bound. fromSerialized()
+        // already rejects mismatches (→ treated as a miss + re-bake), but
+        // versioning the directory by Qt version + a local schema tag keeps
+        // stale blobs from a prior Qt from piling up indefinitely.
+        const QString d =
+            base + QLatin1String("/phosphor-shadercache/qt") + QLatin1String(QT_VERSION_STR) + QLatin1String("-v1");
+        if (!QDir().mkpath(d)) {
+            qCWarning(lcShaderNode) << "shader disk cache: cannot create directory" << d << "— disk cache disabled";
+            return QString();
+        }
+        return d;
+    }();
+    return dir;
+}
+
+QString diskCachePath(const QByteArray& source, int stage)
+{
+    const QString dir = diskCacheDir();
+    if (dir.isEmpty()) {
+        return QString();
+    }
+    QCryptographicHash hash(QCryptographicHash::Sha256);
+    const char stageByte = static_cast<char>(stage);
+    hash.addData(QByteArrayView(&stageByte, 1));
+    hash.addData(source);
+    return dir + QLatin1Char('/') + QString::fromLatin1(hash.result().toHex()) + QLatin1String(".qsb");
+}
+
+// Bound disk growth: orphaned blobs only accrue when shaders are edited, so a
+// single prune per process (on first write) is enough. Deletes oldest-by-mtime
+// down to ~90% of the cap when exceeded.
+void pruneDiskCacheOnce()
+{
+    static std::once_flag once;
+    std::call_once(once, [] {
+        const QString dir = diskCacheDir();
+        if (dir.isEmpty()) {
+            return;
+        }
+        QFileInfoList blobs = QDir(dir).entryInfoList({QStringLiteral("*.qsb")}, QDir::Files, QDir::Time);
+        if (blobs.size() <= kMaxDiskCacheEntries) {
+            return;
+        }
+        // entryInfoList(QDir::Time) is newest-first; delete from the tail.
+        const int keep = kMaxDiskCacheEntries * 9 / 10;
+        for (int i = keep; i < blobs.size(); ++i) {
+            QFile::remove(blobs.at(i).absoluteFilePath());
+        }
+        qCInfo(lcShaderNode) << "shader disk cache: pruned" << (blobs.size() - keep) << "stale entries";
+    });
+}
+
+// Returns a valid QShader on hit, an invalid one on miss / corrupt / version
+// mismatch (all treated identically: re-bake).
+QShader readDiskCache(const QString& path)
+{
+    if (path.isEmpty()) {
+        return {};
+    }
+    QFile f(path);
+    if (!f.open(QIODevice::ReadOnly)) {
+        return {};
+    }
+    return QShader::fromSerialized(f.readAll());
+}
+
+void writeDiskCache(const QString& path, const QShader& shader)
+{
+    if (path.isEmpty()) {
+        return;
+    }
+    pruneDiskCacheOnce();
+    // QSaveFile writes to a temp file and atomically renames on commit(), so a
+    // concurrent reader (or another PlasmaZones process baking the same key)
+    // never observes a partial blob; identical keys produce identical bytes, so
+    // last-writer-wins is harmless.
+    QSaveFile f(path);
+    if (!f.open(QIODevice::WriteOnly)) {
+        return;
+    }
+    f.write(shader.serialized());
+    f.commit();
+}
+
 } // namespace
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -108,6 +230,18 @@ ShaderCompiler::Result ShaderCompiler::compile(const QByteArray& source, QShader
         }
     }
 
+    // Persistent-cache check before the (expensive) bake: a serialized QShader
+    // from a previous run skips glslang entirely. Populate the in-memory cache
+    // on a disk hit so repeat lookups this run stay hot.
+    const QString diskPath = diskCachePath(source, static_cast<int>(stage));
+    if (QShader fromDisk = readDiskCache(diskPath); fromDisk.isValid()) {
+        result.shader = fromDisk;
+        result.success = true;
+        QMutexLocker cacheLock(&cache.mutex);
+        cache.entries.insert(key, new QShader(fromDisk));
+        return result;
+    }
+
     QShaderBaker baker;
     baker.setGeneratedShaderVariants({QShader::StandardShader});
     baker.setGeneratedShaders(bakeTargets());
@@ -116,10 +250,16 @@ ShaderCompiler::Result ShaderCompiler::compile(const QByteArray& source, QShader
 
     if (result.shader.isValid()) {
         result.success = true;
-        QMutexLocker cacheLock(&cache.mutex);
-        // QCache::insert evicts the LRU entry when over capacity. Heap-allocate
-        // because QCache owns its values.
-        cache.entries.insert(key, new QShader(result.shader));
+        {
+            QMutexLocker cacheLock(&cache.mutex);
+            // QCache::insert evicts the LRU entry when over capacity. Heap-allocate
+            // because QCache owns its values.
+            cache.entries.insert(key, new QShader(result.shader));
+        }
+        // Persist for future runs. Done after the in-memory insert and outside
+        // the cache mutex (the bake mutex still serializes writers); a failed
+        // write just means a future re-bake, never a wrong result.
+        writeDiskCache(diskPath, result.shader);
     } else {
         result.error = baker.errorMessage();
     }
