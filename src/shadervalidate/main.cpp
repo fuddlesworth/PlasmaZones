@@ -472,7 +472,7 @@ bool isPackDir(const QString& dir)
 // glslls / glsl-language-server autocomplete, and the include resolver skips it
 // at load (ShaderIncludeResolver::GeneratedPreambleInclude), so it neither ships
 // nor affects the compiled shader. Returns 0 on success, 1 on error.
-int emitPreamble(const QString& packDir, bool animationMode, QTextStream& out, QTextStream& errStream)
+int emitPreamble(const QString& packDir, bool animationMode, bool quiet, QTextStream& out, QTextStream& errStream)
 {
     const QString name = QFileInfo(packDir).fileName();
     QString preamble;
@@ -529,7 +529,9 @@ int emitPreamble(const QString& packDir, bool animationMode, QTextStream& out, Q
         return 1;
     }
     f.write(sidecar.toUtf8());
-    out << "wrote " << sidecarPath << "\n";
+    if (!quiet) {
+        out << "wrote " << sidecarPath << "\n";
+    }
     return 0;
 }
 
@@ -603,7 +605,7 @@ int main(int argc, char** argv)
     if (emitMode) {
         int failed = 0;
         for (const QString& pack : packs) {
-            if (emitPreamble(pack, animationMode, out, errStream) != 0) {
+            if (emitPreamble(pack, animationMode, quiet, out, errStream) != 0) {
                 ++failed;
             }
         }

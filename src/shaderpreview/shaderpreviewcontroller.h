@@ -69,6 +69,9 @@ public:
     Q_INVOKABLE void stopAudioCapture();
 
     // ── Shader presets (shared by the editor + settings preview) ──────
+    // CONTRACT: @p filePath is a trusted, user-chosen absolute path (a
+    // FileDialog selection). These methods do NOT sanitize it against directory
+    // traversal — callers must never pass an attacker-influenced path.
     /// Writes {name, shaderId, shaderParams} as JSON to @p filePath. Returns
     /// false and emits shaderPresetSaveFailed on any error.
     Q_INVOKABLE bool saveShaderPreset(const QString& filePath, const QString& shaderId, const QVariantMap& shaderParams,

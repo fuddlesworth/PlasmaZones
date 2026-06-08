@@ -52,13 +52,18 @@ QVariantList ShaderPreviewController::zonesForShaderPreview(int width, int heigh
     if (width <= 0 || height <= 0) {
         return result;
     }
+    // No backend → nothing to preview, and targetScreenSize() below would deref
+    // it; bail symmetrically with translateShaderParams / getShaderInfo.
+    if (!m_backend) {
+        return result;
+    }
 
     const qreal resW = static_cast<qreal>(width);
     const qreal resH = static_cast<qreal>(height);
 
     // Use the backend's zones so the editor preview matches the edited layout;
     // the settings app has none and falls through to the single-zone fallback.
-    const QVariantList zones = m_backend ? m_backend->previewZones() : QVariantList();
+    const QVariantList zones = m_backend->previewZones();
 
     if (zones.isEmpty()) {
         // Fallback: single zone filling the preview area
@@ -284,6 +289,7 @@ bool ShaderPreviewController::saveShaderPreset(const QString& filePath, const QS
         const QString error = PhosphorI18n::tr("Failed to write preset file: %1", "@info").arg(file.errorString());
         Q_EMIT shaderPresetSaveFailed(error);
         qCWarning(lcShaderPreview) << error;
+        file.remove(); // don't leave a half-written preset that later fails to parse
         return false;
     }
     return true;
@@ -346,8 +352,8 @@ QString ShaderPreviewController::shaderPresetDirectory() const
     const QString path = QStandardPaths::writableLocation(QStandardPaths::GenericDataLocation)
         + QStringLiteral("/plasmazones/shader-presets");
     QDir dir(path);
-    if (!dir.exists()) {
-        dir.mkpath(QStringLiteral("."));
+    if (!dir.exists() && !dir.mkpath(QStringLiteral("."))) {
+        qCWarning(lcShaderPreview) << "Failed to create shader-preset directory:" << path;
     }
     return path;
 }

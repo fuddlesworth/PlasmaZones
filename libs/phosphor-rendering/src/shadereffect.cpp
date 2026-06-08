@@ -1368,6 +1368,8 @@ void ShaderEffect::syncBasePropertiesToNode(ShaderNodeRhi* node)
     // display a mouse-position shader lands at 1/dpr of the cursor (up-left).
     // The Q_PROPERTY itself stays logical — QML callers bind logical units,
     // exactly as they do for iResolution; only the GPU-bound value is scaled.
+    // The off-region sentinel (-1,-1) becomes (-dpr,-dpr): still negative, so
+    // any `iMouse.x < 0` region check still reads it as "cursor outside".
     node->setMousePosition(QPointF(m_iMouse.x() * dpr, m_iMouse.y() * dpr));
 
     // ── Custom parameters (indexed API) ──────────────────────────────

@@ -76,7 +76,7 @@ QVariantMap EditorController::loadShaderPreset(const QString& filePath)
     return m_shaderPreview->loadShaderPreset(filePath);
 }
 
-QString EditorController::shaderPresetDirectory()
+QString EditorController::shaderPresetDirectory() const
 {
     return m_shaderPreview->shaderPresetDirectory();
 }

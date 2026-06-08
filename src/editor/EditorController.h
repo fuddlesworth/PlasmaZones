@@ -454,7 +454,7 @@ public:
     Q_INVOKABLE void refreshAvailableShaders();
 
     /**
-     * @brief Convert current zones to format expected by ZoneShaderItem for preview
+     * @brief Convert current zones to the format the ZoneShaderRenderer preview consumes
      * @param width Preview width in pixels
      * @param height Preview height in pixels
      * @return PhosphorZones::Zone data with pixel coords, fillR/G/B/A, borderR/G/B/A, etc.
@@ -462,7 +462,7 @@ public:
     Q_INVOKABLE QVariantList zonesForShaderPreview(int width, int height) const;
 
     /**
-     * @brief Translate shader params from param IDs to uniform names for ZoneShaderItem
+     * @brief Translate shader params from param IDs to the uniform names the renderer reads
      * @param shaderId Shader UUID
      * @param params Map of param IDs to values (e.g. {"intensity": 0.5})
      * @return Map of uniform names to values (e.g. {"customParams1_x": 0.5})
@@ -718,7 +718,7 @@ public Q_SLOTS:
     Q_INVOKABLE bool saveShaderPreset(const QString& filePath, const QString& shaderId, const QVariantMap& shaderParams,
                                       const QString& presetName);
     Q_INVOKABLE QVariantMap loadShaderPreset(const QString& filePath);
-    Q_INVOKABLE QString shaderPresetDirectory();
+    Q_INVOKABLE QString shaderPresetDirectory() const;
 
     /// Look up a metadata-defined preset for @p shaderId by @p presetName.
     /// Returns the preset's parameter map, or an empty map when the

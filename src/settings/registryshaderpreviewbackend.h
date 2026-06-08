@@ -30,6 +30,8 @@ public:
     {
     }
 
+    ~RegistryShaderPreviewBackend() override = default;
+
     QVariantMap shaderInfo(const QString& shaderId) const override
     {
         return m_registry ? m_registry->shaderInfo(shaderId) : QVariantMap();

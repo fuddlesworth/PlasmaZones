@@ -739,6 +739,11 @@ Kirigami.Dialog {
                 id: previewBackground
 
                 readonly property var cfg: root.previewShaderConfig || ({})
+                // Cached so the per-frame (iTime) config rebuild doesn't read the
+                // audio spectrum off editorController every frame (a QVariant
+                // vector copy) and doesn't hand the renderer a fresh container
+                // reference each tick; updates only on audioSpectrumChanged.
+                readonly property var previewAudioSpectrum: editorController ? editorController.audioSpectrum : []
                 property point previewMouse: Qt.point(-1, -1)
                 readonly property int previewHoveredZone: {
                     var mouse = previewBackground.previewMouse;
@@ -798,7 +803,10 @@ Kirigami.Dialog {
                     // see hideShaderPreview()). The whole feed (incl. label /
                     // wallpaper textures) rides the config object.
                     sourceComponent: PZCommon.ZoneShaderRenderer {
-                        config: previewBackground.cfg ? ({
+                        // cfg is `previewShaderConfig || ({})`, so it is never
+                        // null — read it directly; per-key `|| default` covers the
+                        // empty-{} (no-shader) case.
+                        config: ({
                                 "shaderSource": previewBackground.cfg.shaderUrl || "",
                                 "paramPreamble": previewBackground.cfg.paramPreamble || "",
                                 "bufferShaderPaths": previewBackground.cfg.bufferShaderPaths || [],
@@ -819,8 +827,8 @@ Kirigami.Dialog {
                                 "iTimeDelta": root.previewTimeDelta,
                                 "iFrame": root.previewFrame,
                                 "iMouse": previewBackground.previewMouse,
-                                "audioSpectrum": editorController ? editorController.audioSpectrum : []
-                            }) : ({})
+                                "audioSpectrum": previewBackground.previewAudioSpectrum
+                            })
                     }
                 }
 

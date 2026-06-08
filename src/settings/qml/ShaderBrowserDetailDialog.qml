@@ -158,9 +158,10 @@ Kirigami.Dialog {
         // its left and Default anchors to its right edge — lining up under the
         // params/preview split and the per-row lock column above.
         Item {
-            // Width = the params content width (availableWidth minus the
-            // scrollbar and the column's right margin), so Default's right edge
-            // lines up with the per-row lock column rather than the divider.
+            // Width = the params content width: availableWidth already excludes
+            // the scrollbar, and subtracting one largeSpacing matches the params
+            // column's own right margin, so Default's right edge lines up with the
+            // per-row lock column rather than the divider.
             implicitWidth: detailsScroll.availableWidth - Kirigami.Units.largeSpacing
             implicitHeight: presetRow.implicitHeight
             visible: root._livePreview && root._hasParameters
@@ -514,6 +515,9 @@ Kirigami.Dialog {
                     anchors.margins: Kirigami.Units.smallSpacing
                     visible: root._livePreview
                     radius: Kirigami.Units.smallSpacing
+                    // Intentionally a true-black backdrop (not a theme color): the
+                    // shader renders over this, and a tinted background would
+                    // contaminate the previewed colors.
                     color: "black"
                     border.width: Math.max(1, Math.round(Screen.devicePixelRatio))
                     border.color: Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.15)
@@ -576,6 +580,11 @@ Kirigami.Dialog {
                     readonly property string _preamble: (root._livePreview && root.previewController) ? root.previewController.shaderParamPreamble(root.effect.id) : ""
                     readonly property var _labelsTex: (root._livePreview && root.previewController && _zones.length > 0) ? root.previewController.buildLabelsTexture(_zones, Math.max(1, Math.round(width)), Math.max(1, Math.round(height))) : null
                     readonly property var _wallpaperTex: (root._livePreview && root.previewController && root._shaderInfo.wallpaper === true) ? root.previewController.loadWallpaperTexture() : null
+                    // Cached so the per-frame config rebuild below doesn't read it
+                    // off the controller every frame (a QVariant vector copy) and
+                    // doesn't hand the renderer a new container reference each tick;
+                    // updates only on audioSpectrumChanged.
+                    readonly property var _audioSpectrum: root.previewController ? root.previewController.audioSpectrum : []
 
                     // Shared zone-shader renderer (org.plasmazones.common) — the
                     // single source of truth for the ZoneShaderItem bindings (also
@@ -613,7 +622,7 @@ Kirigami.Dialog {
                                     "iTimeDelta": root._previewTimeDelta,
                                     "iFrame": root._previewFrame,
                                     "iMouse": livePreviewPane._mouse,
-                                    "audioSpectrum": root.previewController ? root.previewController.audioSpectrum : [],
+                                    "audioSpectrum": livePreviewPane._audioSpectrum,
                                     "labelsTexture": livePreviewPane._labelsTex,
                                     "wallpaperTexture": livePreviewPane._wallpaperTex
                                 })
