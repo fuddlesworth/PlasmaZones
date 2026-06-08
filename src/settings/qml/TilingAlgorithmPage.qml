@@ -12,10 +12,7 @@ SettingsFlickable {
     readonly property var settingsBridge: settingsController.tilingAlgorithmPage
     readonly property int algorithmPreviewWidth: Kirigami.Units.gridUnit * 18
     readonly property int algorithmPreviewHeight: Kirigami.Units.gridUnit * 10
-    // Per-screen override helper
-    property alias selectedScreenName: psHelper.selectedScreenName
-    readonly property alias isPerScreen: psHelper.isPerScreen
-    readonly property alias hasOverrides: psHelper.hasOverrides
+    // Per-screen override helper (shared app-wide scope, bound below).
     // m-13: Cache the availableAlgorithms PROPERTY (read, not call — it is both a
     // Q_PROPERTY and a same-named Q_INVOKABLE, so the `()` form errors with
     // "is not a function"). Refreshed via the Connections below on its NOTIFY.
@@ -64,31 +61,6 @@ SettingsFlickable {
     // Check capabilities map first (for future extensibility via scripted algorithm metadata),
     // falling back to hardcoded IDs for built-in algorithms. See PR #256 / M13.
     readonly property bool algoCenterLayout: algoCapabilities ? (algoCapabilities.centerLayout === true) : (root.selectedAlgorithm === "three-column" || root.selectedAlgorithm === "centered-master")
-    // Live split ratio — trackable by QML's binding engine (unlike the old
-    // savedAlgoSetting JS function whose conditional branches hid dependencies).
-    readonly property real currentSplitRatio: {
-        if (root.selectedAlgorithm === root.effectiveAlgorithm)
-            return root.settingValue("SplitRatio", appSettings.autotileSplitRatio);
-
-        let perAlgo = appSettings.autotilePerAlgorithmSettings;
-        let entry = perAlgo ? perAlgo[root.selectedAlgorithm] : null;
-        if (entry && entry["splitRatio"] !== undefined)
-            return entry["splitRatio"];
-
-        return root.algoCapabilities ? root.algoCapabilities.defaultSplitRatio : appSettings.autotileSplitRatio;
-    }
-    // Live master count — same pattern as above.
-    readonly property int currentMasterCount: {
-        if (root.selectedAlgorithm === root.effectiveAlgorithm)
-            return root.settingValue("MasterCount", appSettings.autotileMasterCount);
-
-        let perAlgo = appSettings.autotilePerAlgorithmSettings;
-        let entry = perAlgo ? perAlgo[root.selectedAlgorithm] : null;
-        if (entry && entry["masterCount"] !== undefined)
-            return entry["masterCount"];
-
-        return appSettings.autotileMasterCount;
-    }
 
     function settingValue(key, globalValue) {
         return psHelper.settingValue(key, globalValue);
@@ -96,6 +68,18 @@ SettingsFlickable {
 
     function writeSetting(key, value, globalSetter) {
         psHelper.writeSetting(key, value, globalSetter);
+    }
+
+    // Default max-windows for an algorithm id, looked up from the cached
+    // capabilities list. Returns -1 when the id is unknown so the caller can
+    // preserve the current value rather than guess.
+    function _defaultMaxWindowsFor(algoId) {
+        var algos = root._cachedAlgos;
+        for (var i = 0; i < algos.length; i++) {
+            if (algos[i].id === algoId)
+                return algos[i].defaultMaxWindows;
+        }
+        return -1;
     }
 
     contentHeight: content.implicitHeight
@@ -113,9 +97,11 @@ SettingsFlickable {
         id: psHelper
 
         appSettings: settingsController
+        // Shared app-wide scope — a monitor picked on any per-monitor page
+        // stays picked here.
+        selectedScreenName: settingsController.scopeScreenName
         getterMethod: "getPerScreenAutotileSettings"
         setterMethod: "setPerScreenAutotileSetting"
-        clearerMethod: "clearPerScreenAutotileSettings"
     }
 
     ColumnLayout {
@@ -125,24 +111,18 @@ SettingsFlickable {
         spacing: Kirigami.Units.largeSpacing
 
         // =================================================================
-        // Monitor Selector (per-screen overrides)
-        // =================================================================
-        MonitorSelectorSection {
-            Layout.fillWidth: true
-            appSettings: settingsController
-            selectedScreenName: root.selectedScreenName
-            hasOverrides: root.hasOverrides
-            onSelectedScreenNameChanged: root.selectedScreenName = selectedScreenName
-            onResetClicked: psHelper.clearOverrides()
-        }
-
-        // =================================================================
-        // Algorithm Card (per-monitor)
+        // Algorithm Card (per-monitor) — opts into the header scope chip.
         // =================================================================
         SettingsCard {
             Layout.fillWidth: true
             headerText: i18n("Algorithm")
             collapsible: true
+            scopeEnabled: true
+            scopeAppSettings: settingsController
+            // Algorithm sub-domain only — must not report/reset the Gaps card's
+            // per-monitor overrides (shared autotile map, disjoint key subsets).
+            scopeHasOverridesMethod: "hasPerScreenAutotileAlgorithmSettings"
+            scopeClearerMethod: "clearPerScreenAutotileAlgorithmSettings"
 
             contentItem: ColumnLayout {
                 spacing: Kirigami.Units.smallSpacing
@@ -154,8 +134,6 @@ SettingsFlickable {
 
                     // Preview container
                     Item {
-                        id: algorithmPreviewContainer
-
                         anchors.horizontalCenter: parent.horizontalCenter
                         anchors.top: parent.top
                         width: root.algorithmPreviewWidth
@@ -175,7 +153,9 @@ SettingsFlickable {
                                 showLabel: false
                                 algorithmId: root.selectedAlgorithm
                                 algorithmName: root.algoCapabilities ? (root.algoCapabilities.name || "") : ""
-                                windowCount: root.algoCapabilities ? root.algoCapabilities.defaultMaxWindows : 4
+                                // Track the live Max-windows slider so the diagram and the
+                                // "Max N windows" caption below always show the same count.
+                                windowCount: previewWindowSlider.slider.value
                                 splitRatio: root.algoCapabilities ? root.algoCapabilities.defaultSplitRatio : 0.6
                                 masterCount: (root.algoCapabilities && root.algoCapabilities.supportsMasterCount) ? 1 : 0
                                 zoneNumberDisplay: root.algoCapabilities ? (root.algoCapabilities.zoneNumberDisplay || "all") : "all"
@@ -234,22 +214,38 @@ SettingsFlickable {
                                 selectedId = appSettings.defaultAutotileAlgorithm;
                             else if (selectedId.startsWith("autotile:"))
                                 selectedId = selectedId.substring(9);
+                            // Decide BEFORE the switch whether max-windows should
+                            // follow the new algorithm's default. Mirror the
+                            // daemon (AutotileEngine::resetMaxWindowsForAlgorithmSwitch):
+                            // only reset when the user never customized it, i.e. the
+                            // current value still equals the OLD algorithm's default.
+                            // effectiveAlgorithm/settingValue still read the old
+                            // state here (the write below hasn't landed yet).
+                            // Without this guard, switching algorithm would clobber a
+                            // customized value and — when scoped to a monitor — force a
+                            // per-screen MaxWindows override the user never set.
+                            var oldDefaultMax = root._defaultMaxWindowsFor(root.effectiveAlgorithm);
+                            var currentMax = root.settingValue("MaxWindows", appSettings.autotileMaxWindows);
+                            var resetMax = oldDefaultMax >= 0 && currentMax === oldDefaultMax;
                             root.writeSetting("Algorithm", selectedId, function (v) {
                                 appSettings.defaultAutotileAlgorithm = v;
                             });
+                            if (!resetMax)
+                                return;
                             // Reset maxWindows to the new algorithm's default.
                             // Use Qt.callLater so algoCapabilities binding has
                             // re-evaluated with the newly selected algorithm.
                             Qt.callLater(function () {
-                                if (root.algoCapabilities) {
-                                    var newDefault = root.algoCapabilities.defaultMaxWindows || 6;
-                                    if (previewWindowSlider) {
-                                        previewWindowSlider.slider.value = newDefault;
-                                        root.writeSetting("MaxWindows", newDefault, function (v) {
-                                            appSettings.autotileMaxWindows = v;
-                                        });
-                                    }
-                                }
+                                if (!root.algoCapabilities)
+                                    return;
+                                var newDefault = root.algoCapabilities.defaultMaxWindows || 6;
+                                // Writing the setting moves the slider via its
+                                // value binding (settingValue → SettingsSlider);
+                                // an imperative slider write here would just be
+                                // reasserted by that binding, so don't.
+                                root.writeSetting("MaxWindows", newDefault, function (v) {
+                                    appSettings.autotileMaxWindows = v;
+                                });
                             });
                         }
                     }
@@ -267,7 +263,7 @@ SettingsFlickable {
 
                         Accessible.name: i18n("Maximum windows")
                         from: root.settingsBridge.autotileMaxWindowsMin
-                        to: 12
+                        to: root.settingsBridge.autotileMaxWindowsMax
                         stepSize: 1
                         value: root.settingValue("MaxWindows", appSettings.autotileMaxWindows)
                         formatValue: function (v) {
@@ -292,11 +288,9 @@ SettingsFlickable {
                     description: root.algoCenterLayout ? i18n("Width proportion allocated to the center column") : i18n("Width proportion allocated to the master area")
 
                     SettingsSlider {
-                        id: splitRatioSlider
-
                         Accessible.name: root.algoCenterLayout ? i18n("Center ratio") : i18n("Master ratio")
                         from: root.settingsBridge.autotileSplitRatioMin
-                        to: 0.9
+                        to: root.settingsBridge.autotileSplitRatioMax
                         stepSize: 0.05
                         value: root.settingValue("SplitRatio", appSettings.autotileSplitRatio)
                         formatValue: function (v) {
@@ -316,8 +310,6 @@ SettingsFlickable {
                     description: i18n("Amount the ratio changes per keyboard shortcut press")
 
                     SettingsSlider {
-                        id: splitRatioStepSlider
-
                         Accessible.name: i18n("Ratio step size")
                         from: root.settingsBridge.autotileSplitRatioStepMin
                         to: root.settingsBridge.autotileSplitRatioStepMax
@@ -344,11 +336,9 @@ SettingsFlickable {
                     description: root.algoCenterLayout ? i18n("Number of windows in the center column") : i18n("Number of windows in the master area")
 
                     SettingsSlider {
-                        id: masterCountSlider
-
                         Accessible.name: root.algoCenterLayout ? i18n("Center count") : i18n("Master count")
                         from: root.settingsBridge.autotileMasterCountMin
-                        to: 5
+                        to: root.settingsBridge.autotileMasterCountMax
                         stepSize: 1
                         value: root.settingValue("MasterCount", appSettings.autotileMasterCount)
                         formatValue: function (v) {

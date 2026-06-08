@@ -21,17 +21,6 @@ void WindowRuleController::setActivityLookup(WindowRuleModel::LabelLookup fn)
     m_model.setActivityLabelLookup(std::move(fn));
 }
 
-void WindowRuleController::setLayoutLookup(WindowRuleModel::LabelLookup fn)
-{
-    // Back-compat: wire the same resolver into both split lookups. New
-    // callers should prefer setSnappingLayoutLookup +
-    // setTilingAlgorithmLookup so a UUID-shaped algorithm token (or
-    // vice versa) doesn't silently cross-resolve.
-    m_snappingLayoutLookup = fn;
-    m_tilingAlgorithmLookup = std::move(fn);
-    m_model.setLayoutLabelLookup(m_snappingLayoutLookup);
-}
-
 void WindowRuleController::setSnappingLayoutLookup(WindowRuleModel::LabelLookup fn)
 {
     m_snappingLayoutLookup = std::move(fn);

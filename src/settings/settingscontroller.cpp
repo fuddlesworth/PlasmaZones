@@ -34,6 +34,7 @@
 #include "settingsstagingdomain.h"
 #include "version.h"
 
+#include <PhosphorIdentity/VirtualScreenId.h>
 #include <PhosphorProtocol/ClientHelpers.h>
 // std::make_unique<WindowRuleStore> in the ctor needs the complete
 // type. The header forward-declares it to avoid pulling the
@@ -139,19 +140,22 @@ SettingsController::SettingsController(QObject* parent)
     // null on m_settings — it is a value member, not a QObject child of `this`.
     , m_localRuleStore(std::make_unique<PhosphorWindowRule::WindowRuleStore>(ConfigDefaults::windowRulesFilePath()))
     , m_localRuleStoreWatcher(std::make_unique<PhosphorWindowRule::WindowRuleStoreWatcher>(*m_localRuleStore))
+    // Comma-expression: install the library-level screen-id resolver, then store
+    // `true`. Runs BEFORE m_settings (next) whose constructor load()s and
+    // migrates per-screen override keys via idForName — so the very first load
+    // canonicalises connector names to EDID instead of silently no-op'ing.
+    // First call initialises the static; later constructions reuse it.
+    , m_screenIdResolverReady((ensureScreenIdResolver(), true))
     , m_settings(m_localRuleStore.get(), nullptr)
     , m_screenHelper(&m_settings, this)
     , m_localAlgorithmRegistry(std::make_unique<PhosphorTiles::AlgorithmRegistry>(nullptr))
     , m_localLayoutManager(
           std::make_unique<PhosphorZones::LayoutRegistry>(m_localRuleStore.get(), ConfigDefaults::layoutsSubdir()))
 {
-    // Install the library-level screen-id resolver before any layout load
-    // runs. First call initialises the static; subsequent constructions
-    // in the same process reuse it. ensureScreenIdResolver() now lives in
-    // src/common/screenidresolver.{h,cpp} so daemon/editor/settings share
-    // the same install-once helper instead of maintaining three parallel
-    // copies.
-    ensureScreenIdResolver();
+    // The screen-id resolver is installed in the member-init list (see
+    // m_screenIdResolverReady) so it is ready before m_settings load()s. It
+    // lives in src/common/screenidresolver.{h,cpp} so daemon/editor/settings
+    // share one install-once helper.
 
     // Auto-discovery pattern: every linked provider library has
     // already registered a builder via static-init. The KCM just
@@ -325,6 +329,27 @@ SettingsController::SettingsController(QObject* parent)
             connect(&m_settings, prop.notifySignal(), this, settingsChangedSink);
         }
     }
+
+    // Per-screen override maps have no Q_PROPERTY, so the meta-object loop
+    // above never wires their change signals. Connect them explicitly. The
+    // Settings layer emits these ONLY when an override actually changes — a
+    // no-op write (same value) or a rejected key early-returns without
+    // emitting — so routing them through onSettingsPropertyChanged() gives
+    // correct change-only dirty tracking (and load() populates the maps
+    // directly, never via the setters, so this stays quiet during load).
+    // Re-emitting perScreenOverridesChanged() refreshes the scope-chip
+    // override dots and the bound per-screen card values. The Q_INVOKABLE
+    // wrappers in settingscontroller_perscreen.cpp therefore do NOT mark
+    // dirty or emit themselves — this change signal is the single source of
+    // truth, which is also why clicking a value already set no longer flips
+    // the page to "unsaved changes".
+    const auto wirePerScreenOverrideSignal = [this](void (Settings::*signal)()) {
+        connect(&m_settings, signal, this, &SettingsController::onSettingsPropertyChanged);
+        connect(&m_settings, signal, this, &SettingsController::perScreenOverridesChanged);
+    };
+    wirePerScreenOverrideSignal(&Settings::perScreenAutotileSettingsChanged);
+    wirePerScreenOverrideSignal(&Settings::perScreenSnappingSettingsChanged);
+    wirePerScreenOverrideSignal(&Settings::perScreenZoneSelectorSettingsChanged);
 
     // Editor + fill-on-drop settings lack Q_PROPERTY on Settings, so the
     // meta-object loop above misses them. EditorPageController forwards each
@@ -609,6 +634,34 @@ SettingsController::SettingsController(QObject* parent)
     // ran first and any same-tick screensChanged was lost, leaving QML
     // bindings stale until the next external daemon-driven refresh.
     m_screenHelper.connectToDaemonSignals();
+    // Hot-unplug: if the monitor the per-monitor groups are scoped to goes
+    // away, fall back to "All Monitors". Lives here (not in the transient
+    // DisplayMap popover) so the scope is pruned even when no scope UI is open.
+    // Connected BEFORE the QML-facing screensChanged forward below so a QML
+    // onScreensChanged handler observes the already-pruned scope rather than a
+    // stale value that only corrects on the trailing scopeScreenNameChanged.
+    connect(&m_screenHelper, &ScreenHelper::screensChanged, this, [this]() {
+        if (m_scopeScreenName.isEmpty())
+            return;
+        // Compare physical parents on BOTH sides so the scope survives removal
+        // of a sibling virtual child of the same physical output (stripping
+        // only the live name while leaving the stored scope unstripped would
+        // never match a virtual-id scope).
+        const QString scopePhysicalId = PhosphorIdentity::VirtualScreenId::extractPhysicalId(m_scopeScreenName);
+        const QVariantList liveScreens = m_screenHelper.screens();
+        for (const QVariant& v : liveScreens) {
+            const QString name = v.toMap().value(QStringLiteral("name")).toString();
+            // String-equal in the common case (both forms come from the same
+            // daemon payload), physical-parent-equal for virtual siblings, and
+            // screensMatch() as a connector ↔ EDID-id reconciler so a scope
+            // stored in one form survives a live name reported in the other.
+            if (name == m_scopeScreenName
+                || PhosphorIdentity::VirtualScreenId::extractPhysicalId(name) == scopePhysicalId
+                || PhosphorScreens::ScreenIdentity::screensMatch(name, m_scopeScreenName))
+                return;
+        }
+        setScopeScreenName(QString());
+    });
     connect(&m_screenHelper, &ScreenHelper::screensChanged, this, &SettingsController::screensChanged);
     connect(&m_screenHelper, &ScreenHelper::needsSave, this, [this]() {
         // A daemon-driven screen refresh that fires while load()/save() is

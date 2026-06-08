@@ -1,5 +1,9 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<svg width="1024" height="1024" viewBox="96 96 832 832" fill="none" xmlns="http://www.w3.org/2000/svg">
+<!-- SPDX-FileCopyrightText: 2026 fuddlesworth -->
+<!-- SPDX-License-Identifier: GPL-3.0-or-later -->
+<svg width="1024" height="1024" viewBox="96 96 832 832" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="title desc">
+  <title id="title">PlasmaZones Layout Editor</title>
+  <desc id="desc">Icon for the PlasmaZones layout editor, where zone layouts are created and arranged.</desc>
   <defs>
     <linearGradient id="gBorder" x1="120" y1="120" x2="904" y2="904" gradientUnits="userSpaceOnUse">
       <stop offset="0" stop-color="#22D3EE"/>

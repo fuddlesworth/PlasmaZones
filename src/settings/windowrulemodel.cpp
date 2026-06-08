@@ -11,7 +11,6 @@
 
 #include <PhosphorZones/AssignmentEntry.h>
 
-#include <QJsonArray>
 #include <QStringList>
 
 #include <algorithm>
@@ -92,12 +91,17 @@ void collectScreenIds(const MatchExpression& match, QStringList& out)
                         }
                     }
                 }
-            } else {
+            } else if (predicate.op == Operator::Equals) {
                 const QString value = predicate.value.toString();
                 if (!value.isEmpty()) {
                     out.append(value);
                 }
             }
+            // Any operator other than Equals/In (substring, regex, app-id, or
+            // numeric comparison) is not a literal monitor pin — its token never
+            // equals a real connector id, so collecting it would silently
+            // under-count the rule against every tile. Such a rule doesn't pin a
+            // specific monitor, so it contributes no screen id.
         }
         return;
     }
@@ -158,13 +162,13 @@ QString leafLabel(const MatchExpression::Predicate& predicate, const WindowRuleM
     if (predicate.op == Operator::In) {
         QStringList resolved;
         const QVariant& v = predicate.value;
-        if (v.canConvert<QStringList>()) {
+        if (v.metaType().id() == QMetaType::QStringList) {
             const QStringList list = v.toStringList();
             resolved.reserve(list.size());
             for (const QString& raw : list) {
                 resolved.append(resolveOne(raw));
             }
-        } else if (v.canConvert<QVariantList>()) {
+        } else {
             const QVariantList list = v.toList();
             resolved.reserve(list.size());
             for (const QVariant& item : list) {
@@ -721,19 +725,6 @@ void WindowRuleModel::setScreenLabelLookup(LabelLookup fn)
 void WindowRuleModel::setActivityLabelLookup(LabelLookup fn)
 {
     m_activityLookup = std::move(fn);
-}
-
-void WindowRuleModel::setLayoutLabelLookup(LabelLookup fn)
-{
-    // Back-compat shim: wire the same lookup into both split lookups so
-    // callers that haven't migrated to the typed pair keep working. Like
-    // its siblings (setSnappingLayoutLabelLookup, setTilingAlgorithmLabelLookup,
-    // setActivityLabelLookup, setScreenLabelLookup) this setter emits no
-    // signal — the lookups are install-once at controller-construction
-    // time, and any later UI refresh routes through refreshLabels()
-    // emitting `dataChanged` for the affected roles.
-    m_snappingLayoutLookup = fn;
-    m_tilingAlgorithmLookup = std::move(fn);
 }
 
 void WindowRuleModel::setSnappingLayoutLabelLookup(LabelLookup fn)

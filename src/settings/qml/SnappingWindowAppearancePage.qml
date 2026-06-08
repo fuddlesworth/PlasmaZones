@@ -12,8 +12,9 @@ SettingsFlickable {
 
     readonly property var settingsBridge: settingsController.snappingWindowAppearancePage
     // Per-screen snapping gap/padding helper. Only the Gaps card below is
-    // per-screen; the colour / decoration / border cards are global. The monitor
-    // selector is placed directly above Gaps so its scope reads unambiguously.
+    // per-screen; the colour / decoration / border cards are global. The Gaps
+    // card opts into the header scope chip, so the global cards above it carry
+    // no scope chrome and read as global.
 
     function snappingSettingValue(key, globalValue) {
         return snappingHelper.settingValue(key, globalValue);
@@ -30,9 +31,11 @@ SettingsFlickable {
         id: snappingHelper
 
         appSettings: settingsController
+        // Shared app-wide scope — a monitor picked on any per-monitor page
+        // stays picked here.
+        selectedScreenName: settingsController.scopeScreenName
         getterMethod: "getPerScreenSnappingSettings"
         setterMethod: "setPerScreenSnappingSetting"
-        clearerMethod: "clearPerScreenSnappingSettings"
     }
 
     ColumnLayout {
@@ -180,19 +183,15 @@ SettingsFlickable {
         }
 
         // =================================================================
-        // Gaps (per-screen) — monitor selector scopes only the card below.
+        // Gaps (per-screen) — the card opts into the header scope chip; the
+        // global cards above carry no scope chrome.
         // =================================================================
-        MonitorSelectorSection {
-            Layout.fillWidth: true
-            appSettings: settingsController
-            selectedScreenName: snappingHelper.selectedScreenName
-            hasOverrides: snappingHelper.hasOverrides
-            onSelectedScreenNameChanged: snappingHelper.selectedScreenName = selectedScreenName
-            onResetClicked: snappingHelper.clearOverrides()
-        }
-
         GapsSettingsCard {
             Layout.fillWidth: true
+            scopeEnabled: true
+            scopeAppSettings: settingsController
+            scopeHasOverridesMethod: "hasPerScreenSnappingGapsSettings"
+            scopeClearerMethod: "clearPerScreenSnappingGapsSettings"
             // Snapping uses "Zone padding" / "Edge gap" labels and has no Smart
             // gaps. Zone-padding bounds come from zonePaddingMin/Max; the edge /
             // per-side gaps from gapMin/Max — each matching its validator clamp.

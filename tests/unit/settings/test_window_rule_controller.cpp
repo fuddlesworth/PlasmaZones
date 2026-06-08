@@ -44,7 +44,11 @@ private Q_SLOTS:
     void addUpdateRemoveByUuid();
     void dirtyTrackingAndRevert();
     void monitorOverviewSummarises();
+    void monitorOverviewIgnoresDisabledRules();
     void monitorOverviewClassifiesScrollingWithoutLayoutName();
+    void monitorOverviewLayoutFollowsWinnerMode();
+    void monitorOverviewIgnoresBareLayoutRules();
+    void monitorOverviewLayoutFromSingleWinningRule();
     void monitorOverviewDisableEngineMatchesEffectiveMode();
     void engineModePickerExposesAllVocabularyTokens();
     void userAuthorableFilterHidesInternalActions();
@@ -55,7 +59,7 @@ private Q_SLOTS:
     void matchIsContextOnlyClassifies();
     void validationIssuesForJsonFlags();
     void defaultPayloadForSeedsParams();
-    void forceCommitIsInvokable();
+    void asyncCommitAndRevertAreInvokable();
     void curveLabelResolverBridgesQmlNaming();
 };
 
@@ -189,6 +193,34 @@ void TestWindowRuleController::monitorOverviewSummarises()
     QVERIFY(sawEdp1);
 }
 
+void TestWindowRuleController::monitorOverviewIgnoresDisabledRules()
+{
+    WindowRuleController controller;
+
+    // A monitor-scoped rule that, while enabled, would pin DP-2's engine.
+    QVariantMap rule = controller.newEmptyRule(QStringLiteral("monitor"));
+    QVariantMap match = rule.value(QStringLiteral("match")).toMap();
+    match[QStringLiteral("value")] = QStringLiteral("DP-2");
+    rule[QStringLiteral("match")] = match;
+    rule[QStringLiteral("actions")] =
+        QVariantList{QVariantMap{{QStringLiteral("type"), QStringLiteral("setEngineMode")},
+                                 {QStringLiteral("mode"), QStringLiteral("autotile")}}};
+    const QString id = controller.addRuleFromJson(rule);
+    QVERIFY(!id.isEmpty());
+
+    // Disable it. The daemon's RuleEvaluator skips !enabled rules, so the
+    // overview must too — the tile contributes no rule and stays unassigned.
+    QVERIFY(controller.setRuleEnabled(id, false));
+
+    const QVariantList screens{QVariantMap{{QStringLiteral("name"), QStringLiteral("DP-2")}}};
+    const QVariantList overview = controller.monitorOverview(screens);
+    QCOMPARE(overview.size(), 1);
+    const QVariantMap tile = overview.first().toMap();
+    QCOMPARE(tile.value(QStringLiteral("screenId")).toString(), QStringLiteral("DP-2"));
+    QCOMPARE(tile.value(QStringLiteral("ruleCount")).toInt(), 0);
+    QCOMPARE(tile.value(QStringLiteral("assigned")).toBool(), false);
+}
+
 void TestWindowRuleController::monitorOverviewClassifiesScrollingWithoutLayoutName()
 {
     // Pin that a Scrolling-mode rule, even when carrying a stale snapping
@@ -225,6 +257,143 @@ void TestWindowRuleController::monitorOverviewClassifiesScrollingWithoutLayoutNa
     // The Scrolling branch yields no layout/algorithm to label — the tile
     // must read empty here, NOT the stale snapping layout id/name that
     // the pre-fix classifier would have surfaced.
+    QVERIFY2(tile.value(QStringLiteral("layoutName")).toString().isEmpty(),
+             qPrintable(tile.value(QStringLiteral("layoutName")).toString()));
+}
+
+void TestWindowRuleController::monitorOverviewLayoutFollowsWinnerMode()
+{
+    // The per-screen assignment winner (the rule carrying a SetEngineMode
+    // action) supplies the engine mode AND both layout tokens; the tile shows
+    // the token matching the winner's mode — mirroring the daemon's
+    // resolveContextAssignment + entryFromRuleMatchActions (the AssignmentEntry
+    // keeps both layouts, the active mode picks). The same rule shows its
+    // snapping layout under Snapping and its algorithm under Autotile.
+    WindowRuleController controller;
+
+    QVariantMap autoRule = controller.newEmptyRule(QStringLiteral("monitor"));
+    QVariantMap m1 = autoRule.value(QStringLiteral("match")).toMap();
+    m1[QStringLiteral("value")] = QStringLiteral("DP-1");
+    autoRule[QStringLiteral("match")] = m1;
+    autoRule[QStringLiteral("actions")] =
+        QVariantList{QVariantMap{{QStringLiteral("type"), QStringLiteral("setEngineMode")},
+                                 {QStringLiteral("mode"), QStringLiteral("autotile")}},
+                     QVariantMap{{QStringLiteral("type"), QStringLiteral("setSnappingLayout")},
+                                 {QStringLiteral("layoutId"), QStringLiteral("grid")}},
+                     QVariantMap{{QStringLiteral("type"), QStringLiteral("setTilingAlgorithm")},
+                                 {QStringLiteral("algorithm"), QStringLiteral("bsp")}}};
+    QVERIFY(!controller.addRuleFromJson(autoRule).isEmpty());
+
+    QVariantMap snapRule = controller.newEmptyRule(QStringLiteral("monitor"));
+    QVariantMap m2 = snapRule.value(QStringLiteral("match")).toMap();
+    m2[QStringLiteral("value")] = QStringLiteral("DP-2");
+    snapRule[QStringLiteral("match")] = m2;
+    snapRule[QStringLiteral("actions")] =
+        QVariantList{QVariantMap{{QStringLiteral("type"), QStringLiteral("setEngineMode")},
+                                 {QStringLiteral("mode"), QStringLiteral("snapping")}},
+                     QVariantMap{{QStringLiteral("type"), QStringLiteral("setSnappingLayout")},
+                                 {QStringLiteral("layoutId"), QStringLiteral("grid")}},
+                     QVariantMap{{QStringLiteral("type"), QStringLiteral("setTilingAlgorithm")},
+                                 {QStringLiteral("algorithm"), QStringLiteral("bsp")}}};
+    QVERIFY(!controller.addRuleFromJson(snapRule).isEmpty());
+
+    const QVariantList screens{QVariantMap{{QStringLiteral("name"), QStringLiteral("DP-1")}},
+                               QVariantMap{{QStringLiteral("name"), QStringLiteral("DP-2")}}};
+    const QVariantList overview = controller.monitorOverview(screens);
+    QCOMPARE(overview.size(), 2);
+
+    // Autotile winner → shows the tiling algorithm (both tokens kept; mode picks).
+    const QVariantMap dp1 = overview.at(0).toMap();
+    QCOMPARE(dp1.value(QStringLiteral("screenId")).toString(), QStringLiteral("DP-1"));
+    QCOMPARE(dp1.value(QStringLiteral("layoutName")).toString(), QStringLiteral("bsp"));
+
+    // Snapping winner on the SAME action shape → shows the snapping layout.
+    const QVariantMap dp2 = overview.at(1).toMap();
+    QCOMPARE(dp2.value(QStringLiteral("screenId")).toString(), QStringLiteral("DP-2"));
+    QCOMPARE(dp2.value(QStringLiteral("layoutName")).toString(), QStringLiteral("grid"));
+}
+
+void TestWindowRuleController::monitorOverviewIgnoresBareLayoutRules()
+{
+    // A layout rule with NO SetEngineMode action is never the assignment winner
+    // (the daemon's resolveContextAssignment filters to hasEngineModeAction), so
+    // the daemon never applies its layout — and neither does the tile. The rule
+    // still counts toward ruleCount/assigned (it targets the monitor), but
+    // contributes no layout label, for both a bare tiling and a bare snapping rule.
+    WindowRuleController controller;
+
+    QVariantMap algoRule = controller.newEmptyRule(QStringLiteral("monitor"));
+    QVariantMap m1 = algoRule.value(QStringLiteral("match")).toMap();
+    m1[QStringLiteral("value")] = QStringLiteral("DP-1");
+    algoRule[QStringLiteral("match")] = m1;
+    algoRule[QStringLiteral("actions")] =
+        QVariantList{QVariantMap{{QStringLiteral("type"), QStringLiteral("setTilingAlgorithm")},
+                                 {QStringLiteral("algorithm"), QStringLiteral("bsp")}}};
+    QVERIFY(!controller.addRuleFromJson(algoRule).isEmpty());
+
+    QVariantMap snapRule = controller.newEmptyRule(QStringLiteral("monitor"));
+    QVariantMap m2 = snapRule.value(QStringLiteral("match")).toMap();
+    m2[QStringLiteral("value")] = QStringLiteral("DP-2");
+    snapRule[QStringLiteral("match")] = m2;
+    snapRule[QStringLiteral("actions")] =
+        QVariantList{QVariantMap{{QStringLiteral("type"), QStringLiteral("setSnappingLayout")},
+                                 {QStringLiteral("layoutId"), QStringLiteral("grid")}}};
+    QVERIFY(!controller.addRuleFromJson(snapRule).isEmpty());
+
+    const QVariantList screens{QVariantMap{{QStringLiteral("name"), QStringLiteral("DP-1")}},
+                               QVariantMap{{QStringLiteral("name"), QStringLiteral("DP-2")}}};
+    const QVariantList overview = controller.monitorOverview(screens);
+    QCOMPARE(overview.size(), 2);
+
+    const QVariantMap dp1 = overview.at(0).toMap();
+    QCOMPARE(dp1.value(QStringLiteral("ruleCount")).toInt(), 1);
+    QCOMPARE(dp1.value(QStringLiteral("assigned")).toBool(), true);
+    QVERIFY2(dp1.value(QStringLiteral("layoutName")).toString().isEmpty(),
+             qPrintable(dp1.value(QStringLiteral("layoutName")).toString()));
+
+    const QVariantMap dp2 = overview.at(1).toMap();
+    QCOMPARE(dp2.value(QStringLiteral("ruleCount")).toInt(), 1);
+    QCOMPARE(dp2.value(QStringLiteral("assigned")).toBool(), true);
+    QVERIFY2(dp2.value(QStringLiteral("layoutName")).toString().isEmpty(),
+             qPrintable(dp2.value(QStringLiteral("layoutName")).toString()));
+}
+
+void TestWindowRuleController::monitorOverviewLayoutFromSingleWinningRule()
+{
+    // Engine mode and layout must come from the SAME winning rule. An
+    // engine-mode-only rule and a separate layout-only rule on one screen: the
+    // engine rule is the assignment winner (only it has a SetEngineMode action),
+    // and it carries no layout, so the tile shows NO layout — the other rule's
+    // snapping layout never composes in (the daemon takes the whole entry from
+    // the one winner). Both rules still count. The pre-fix independent-slot model
+    // would have shown "grid" here.
+    WindowRuleController controller;
+
+    QVariantMap engineRule = controller.newEmptyRule(QStringLiteral("monitor"));
+    QVariantMap m1 = engineRule.value(QStringLiteral("match")).toMap();
+    m1[QStringLiteral("value")] = QStringLiteral("DP-1");
+    engineRule[QStringLiteral("match")] = m1;
+    engineRule[QStringLiteral("actions")] =
+        QVariantList{QVariantMap{{QStringLiteral("type"), QStringLiteral("setEngineMode")},
+                                 {QStringLiteral("mode"), QStringLiteral("snapping")}}};
+    QVERIFY(!controller.addRuleFromJson(engineRule).isEmpty());
+
+    QVariantMap layoutRule = controller.newEmptyRule(QStringLiteral("monitor"));
+    QVariantMap m2 = layoutRule.value(QStringLiteral("match")).toMap();
+    m2[QStringLiteral("value")] = QStringLiteral("DP-1");
+    layoutRule[QStringLiteral("match")] = m2;
+    layoutRule[QStringLiteral("actions")] =
+        QVariantList{QVariantMap{{QStringLiteral("type"), QStringLiteral("setSnappingLayout")},
+                                 {QStringLiteral("layoutId"), QStringLiteral("grid")}}};
+    QVERIFY(!controller.addRuleFromJson(layoutRule).isEmpty());
+
+    const QVariantList screens{QVariantMap{{QStringLiteral("name"), QStringLiteral("DP-1")}}};
+    const QVariantList overview = controller.monitorOverview(screens);
+    QCOMPARE(overview.size(), 1);
+    const QVariantMap tile = overview.first().toMap();
+    QCOMPARE(tile.value(QStringLiteral("ruleCount")).toInt(), 2);
+    // Winner is the engine-only rule (snapping, no layout); the separate
+    // snapping-layout rule's token must NOT leak into the tile.
     QVERIFY2(tile.value(QStringLiteral("layoutName")).toString().isEmpty(),
              qPrintable(tile.value(QStringLiteral("layoutName")).toString()));
 }
@@ -734,19 +903,19 @@ void TestWindowRuleController::defaultPayloadForSeedsParams()
     QCOMPARE(unknownPayload.size(), 1);
 }
 
-void TestWindowRuleController::forceCommitIsInvokable()
+void TestWindowRuleController::asyncCommitAndRevertAreInvokable()
 {
-    // Pin the post-pass-27 contract — asyncCommit(bool) is the
-    // QML-facing escape hatch the daemonChangedWhileDirty banner
-    // uses. Originally forceCommit() carried the Q_INVOKABLE, but
-    // pass 27 migrated QML to the async path so the test now pins
-    // the live contract. The old test name is preserved so the
-    // history is grep-able; the assertion targets the actual hot
-    // path.
+    // Pin the QML-facing commit contract: asyncCommit(bool) is the
+    // escape hatch the daemonChangedWhileDirty banner uses, and
+    // revert() backs its "Discard and reload" action. Both must
+    // stay Q_INVOKABLE or the banner breaks at runtime.
     WindowRuleController controller;
     const QMetaObject* mo = controller.metaObject();
     QVERIFY2(mo->indexOfMethod("asyncCommit(bool)") >= 0,
              "WindowRuleController::asyncCommit must remain Q_INVOKABLE — QML's daemon-changed banner depends on it");
+    QVERIFY2(mo->indexOfMethod("revert()") >= 0,
+             "WindowRuleController::revert must remain Q_INVOKABLE — the daemon-changed banner's "
+             "'Discard and reload' action calls it directly from QML");
 }
 
 void TestWindowRuleController::curveLabelResolverBridgesQmlNaming()

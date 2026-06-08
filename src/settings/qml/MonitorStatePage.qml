@@ -2,16 +2,14 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 import QtQuick
-import QtQuick.Controls
 import QtQuick.Layouts
 import org.kde.kirigami as Kirigami
-import org.plasmazones.common as QFZCommon
 
 /**
  * @brief Monitor State dashboard — current mode and layout per monitor.
  *
- * Uses the visual monitor selector bar to pick a monitor, then shows
- * a layout preview with mode toggle and layout/algorithm selector.
+ * Uses the spatial DisplayMap to pick a monitor, then shows a layout
+ * preview with mode toggle and layout/algorithm selector.
  */
 SettingsFlickable {
     id: root
@@ -20,11 +18,14 @@ SettingsFlickable {
     // Bridge for LayoutComboBox — exposes only what it accesses.
     // The `layouts` property binding auto-generates a `layoutsChanged` signal,
     // which LayoutComboBox's Connections target listens for.
-    readonly property QtObject
-    _layoutBridge: QtObject {
+    readonly property QtObject _layoutBridge: QtObject {
         readonly property var layouts: settingsController.layouts
         readonly property string defaultLayoutId: appSettings.defaultLayoutId
         readonly property string defaultAutotileAlgorithm: appSettings.defaultAutotileAlgorithm
+        // LayoutComboBox's preview CategoryBadge reads `autoAssignAllLayouts` for
+        // the global-auto-assign indicator; expose it so the Monitor State
+        // dropdowns light it like the rest of the app.
+        readonly property bool autoAssignAllLayouts: appSettings.autoAssignAllLayouts
     }
 
     property var _screenStates: []
@@ -65,7 +66,6 @@ SettingsFlickable {
         for (var i = 0; i < _screenStates.length; i++) {
             if (_screenStates[i].screenId === target)
                 return _screenStates[i];
-
         }
         return _screenStates.length > 0 ? _screenStates[0] : null;
     }
@@ -77,7 +77,6 @@ SettingsFlickable {
         for (var i = 0; i < _layouts.length; i++) {
             if (_layouts[i].id === layoutId)
                 return _layouts[i];
-
         }
         return null;
     }
@@ -92,26 +91,26 @@ SettingsFlickable {
     // context from getScreenStates — most specific context wins.
     function _stageCurrentState() {
         if (!_selectedScreen)
-            return ;
+            return;
 
         var state = stateView.screenState;
         if (!state)
-            return ;
+            return;
 
         var desktop = state.virtualDesktop || 0;
         var activity = state.activity || "";
         var snapping = "";
         var tiling = "";
         if (stateView.localMode === 1) {
-            var algoId = stateView.localAlgorithmId || (state ? state.algorithmId : "");
+            var algoId = stateView.localAlgorithmId || state.algorithmId;
             if (!algoId)
-                return ;
+                return;
 
             tiling = "autotile:" + algoId;
         } else {
-            var layoutId = stateView.localLayoutId || (state ? state.layoutId : "");
+            var layoutId = stateView.localLayoutId || state.layoutId;
             if (!layoutId)
-                return ;
+                return;
 
             snapping = layoutId;
         }
@@ -122,26 +121,50 @@ SettingsFlickable {
     clip: true
     Component.onCompleted: {
         _refresh();
-        // Auto-select primary monitor, fallback to first
-        if (!_selectedScreen && settingsController.screens.length > 0) {
-            var screens = settingsController.screens;
-            for (var i = 0; i < screens.length; i++) {
-                if (screens[i].isPrimary) {
-                    _selectedScreen = screens[i].name || "";
-                    return ;
-                }
+        if (!_selectedScreen && settingsController.screens.length > 0)
+            _autoSelectScreen();
+    }
+
+    // Auto-select primary monitor, fallback to first.
+    function _autoSelectScreen() {
+        var screens = settingsController.screens || [];
+        for (var i = 0; i < screens.length; i++) {
+            if (screens[i].isPrimary) {
+                _selectedScreen = screens[i].name || "";
+                return;
             }
-            _selectedScreen = screens[0].name || "";
         }
+        if (screens.length > 0)
+            _selectedScreen = screens[0].name || "";
+    }
+
+    // True if `id` is still a connected output (physical-id aware, so a
+    // physically-present screen with virtual children still matches).
+    function _screenStillPresent(id) {
+        var arr = settingsController.screens || [];
+        for (var i = 0; i < arr.length; i++) {
+            var nm = arr[i].name || "";
+            if (nm === id || settingsController.physicalScreenId(nm) === id)
+                return true;
+        }
+        return false;
     }
 
     Connections {
+        target: settingsController
+
         function onScreensChanged() {
+            // Drop a selection whose output was unplugged, then re-pick.
+            if (root._selectedScreen !== "" && !root._screenStillPresent(root._selectedScreen))
+                root._selectedScreen = "";
+            if (root._selectedScreen === "" && settingsController.screens.length > 0)
+                root._autoSelectScreen();
             root._refresh();
         }
 
         function onLayoutsChanged() {
-            root._layouts = settingsController.layouts;
+            // _layouts is bound to settingsController.layouts and refreshes on
+            // its own layoutsChanged; only the dependent view needs a nudge.
             root._refresh();
         }
 
@@ -156,8 +179,6 @@ SettingsFlickable {
         function onScreenLayoutChanged() {
             root._refresh();
         }
-
-        target: settingsController
     }
 
     ColumnLayout {
@@ -173,15 +194,14 @@ SettingsFlickable {
             visible: true
         }
 
-        // Monitor selector bar (no "All Monitors" — always show a specific monitor)
-        MonitorSelectorSection {
+        // Monitor picker (spatial map; always a specific monitor, no "All")
+        DisplayMap {
             Layout.fillWidth: true
             appSettings: settingsController
-            showAllMonitors: false
+            showAll: false
+            physicalOnly: false
             selectedScreenName: root._selectedScreen
-            onSelectedScreenNameChanged: {
-                root._selectedScreen = selectedScreenName;
-            }
+            onScreenPicked: name => root._selectedScreen = name
         }
 
         // Daemon offline / no screens message
@@ -214,7 +234,7 @@ SettingsFlickable {
             visible: screenState !== null
             onScreenStateChanged: {
                 if (!screenState)
-                    return ;
+                    return;
 
                 var desktop = screenState.virtualDesktop || 0;
                 var activity = screenState.activity || "";
@@ -237,9 +257,9 @@ SettingsFlickable {
                 Layout.alignment: Qt.AlignHCenter
                 visible: !stateView.isTiling
                 layout: stateView.currentLayout || ({
-                    "name": i18n("Default"),
-                    "zones": root._getZones(stateView.localLayoutId)
-                })
+                        "name": i18n("Default"),
+                        "zones": root._getZones(stateView.localLayoutId)
+                    })
                 isSelected: true
                 baseHeight: Kirigami.Units.gridUnit * 14
                 maxThumbnailWidth: Kirigami.Units.gridUnit * 32
@@ -281,7 +301,7 @@ SettingsFlickable {
                 Layout.alignment: Qt.AlignHCenter
                 model: [i18n("Snapping"), i18n("Tiling")]
                 currentIndex: stateView.localMode
-                onIndexChanged: function(idx) {
+                onIndexChanged: function (idx) {
                     stateView.localMode = idx;
                     root._stageCurrentState();
                 }
@@ -296,7 +316,7 @@ SettingsFlickable {
                 layoutFilter: 0
                 noneText: i18n("Default")
                 showPreview: true
-                onActivated: function(idx) {
+                onActivated: function (idx) {
                     var entry = model[idx];
                     stateView.localLayoutId = entry ? (entry.value || "") : "";
                     root._stageCurrentState();
@@ -312,7 +332,7 @@ SettingsFlickable {
                 layoutFilter: 1
                 noneText: i18n("Default")
                 showPreview: true
-                onActivated: function(idx) {
+                onActivated: function (idx) {
                     var entry = model[idx];
                     var id = entry ? (entry.value || "") : "";
                     if (id.startsWith("autotile:"))
@@ -322,9 +342,6 @@ SettingsFlickable {
                     root._stageCurrentState();
                 }
             }
-
         }
-
     }
-
 }

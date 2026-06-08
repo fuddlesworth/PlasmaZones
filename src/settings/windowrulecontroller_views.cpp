@@ -5,7 +5,6 @@
 //   * sections() — canonical display-order
 //   * rulesSnapshot() — full QML view of every rule
 //   * monitorOverview() — per-screen aggregate tile data
-//   * ruleScreenIds() — screen-id list for a rule
 //   * matchFields/operatorsForField/actionTypes/defaultPayloadFor — author surfaces
 //   * validationIssuesForJson/matchIsContextOnly — editor validation hooks
 //
@@ -112,23 +111,31 @@ QVariantList WindowRuleController::monitorOverview(const QVariantList& screens) 
         // cascade winner; a QSet would over-state by accumulating
         // every matching rule).
         QString disabledEngineMode;
+        // Engine mode + BOTH layout tokens come from ONE rule: the highest-
+        // priority rule on this screen carrying a SetEngineMode action — the
+        // daemon's per-screen assignment winner. LayoutRegistry::
+        // resolveContextAssignment picks it via highestPriorityMatch filtered to
+        // `hasEngineModeAction(rule) && !isCatchAll`, then entryFromRuleMatchActions
+        // reads the whole entry from that one rule, keeping BOTH layout tokens so
+        // the active mode picks which applies. A bare layout rule with NO
+        // SetEngineMode is never that winner, so the daemon never applies its
+        // layout — and neither does the tile. Tracking engineMode and the layout
+        // tokens as independent per-slot first-wins (the previous approach) would
+        // compose an engine from one rule with a layout from another, or surface
+        // a bare-layout rule's token the assignment cascade discards.
+        bool assignmentResolved = false;
+        QString engineMode;
         QString snappingLayout;
         QString tilingAlgorithm;
-        // Mode the rule's `SetEngineMode` action selects (if any). Used to
-        // disambiguate which layout name the overview tile should show
-        // when a rule carries BOTH a snapping layout and a tiling
-        // algorithm — the engine mode is the source of truth for which
-        // engine actually runs.
-        QString engineMode;
     };
     QHash<QString, Summary> byScreen;
 
     // Sort rules by descending priority before accumulation. Multiple
-    // matching context-only rules on the same screen all contribute, but
-    // the "first non-empty wins" guards below (s.engineMode.isEmpty(),
-    // s.snappingLayout.isEmpty(), s.tilingAlgorithm.isEmpty()) mean the
-    // FIRST rule visited pins each slot. Without sorting that's "first
-    // in rule-iteration order"; with sorting it's "highest priority" —
+    // matching enabled context-only rules on the same screen all contribute to
+    // ruleCount, but the "first wins" guards below (s.disabledEngineMode for the
+    // DisableEngine slot, s.assignmentResolved for the engine-mode assignment
+    // winner) mean the FIRST rule visited pins each. Without sorting that's
+    // "first in rule-iteration order"; with sorting it's "highest priority" —
     // which matches the daemon's own resolution order for the same rule
     // set. Sort an index vector rather than the rule list — WindowRule
     // carries the full match tree + actions, so copying the list to
@@ -145,6 +152,13 @@ QVariantList WindowRuleController::monitorOverview(const QVariantList& screens) 
 
     for (qsizetype idx : indices) {
         const WindowRule& rule = rules[idx];
+        // Disabled rules never apply — mirror RuleEvaluator::resolve, which
+        // skips !enabled before filling any slot — so the overview reflects the
+        // effective (enabled-only) per-monitor state rather than inflating
+        // ruleCount or labelling a tile from a rule the daemon ignores.
+        if (!rule.enabled) {
+            continue;
+        }
         // Only context-only rules that pin a monitor count toward a tile.
         if (!rule.match.isContextOnly()) {
             continue;
@@ -156,24 +170,34 @@ QVariantList WindowRuleController::monitorOverview(const QVariantList& screens) 
         for (const QString& screenId : screenIds) {
             Summary& s = byScreen[screenId];
             ++s.ruleCount;
+            // DisableEngine slot: first-non-empty wins, mirroring the daemon's
+            // per-slot cascade (RuleEvaluator resolves the engine-enable slot to
+            // ONE winner; indices are priority-DESC so the first seen IS it).
+            // Output-time resolution against the active mode still stops a
+            // Snapping-disable rule from labelling an Autotile screen "off".
+            // Independent of the assignment winner below — a DisableEngine rule
+            // need not carry a SetEngineMode action.
+            bool ruleHasEngineMode = false;
             for (const RuleAction& a : rule.actions) {
-                if (a.type == ActionType::DisableEngine && s.disabledEngineMode.isEmpty()) {
-                    // First-non-empty wins, mirroring the daemon's per-slot
-                    // cascade resolution: `RuleEvaluator::highestPriorityMatch`
-                    // selects ONE winner per slot, and the `engine-enable`
-                    // slot's winning rule is the only one consulted for
-                    // DisableEngine. Indices here are pre-sorted priority-DESC,
-                    // so the first DisableEngine action seen IS the cascade
-                    // winner. Output-time resolution against the active mode
-                    // still prevents a Snapping-disable rule from labelling
-                    // an Autotile-mode screen as "Engine off".
+                if (a.type == ActionType::DisableEngine && s.disabledEngineMode.isEmpty())
                     s.disabledEngineMode = a.params.value(PhosphorWindowRule::ActionParam::Mode).toString();
-                } else if (a.type == ActionType::SetEngineMode && s.engineMode.isEmpty()) {
-                    s.engineMode = a.params.value(PhosphorWindowRule::ActionParam::Mode).toString();
-                } else if (a.type == ActionType::SetSnappingLayout && s.snappingLayout.isEmpty()) {
-                    s.snappingLayout = a.params.value(PhosphorWindowRule::ActionParam::LayoutId).toString();
-                } else if (a.type == ActionType::SetTilingAlgorithm && s.tilingAlgorithm.isEmpty()) {
-                    s.tilingAlgorithm = a.params.value(PhosphorWindowRule::ActionParam::Algorithm).toString();
+                else if (a.type == ActionType::SetEngineMode)
+                    ruleHasEngineMode = true;
+            }
+            // Engine/layout: capture from the FIRST rule (highest priority) that
+            // carries a SetEngineMode action — the assignment winner. Read its
+            // mode AND both layout tokens together so the tile can never compose
+            // a layout from a different rule than the engine, nor surface a bare
+            // layout rule (no SetEngineMode) the daemon's assignment discards.
+            if (!s.assignmentResolved && ruleHasEngineMode) {
+                s.assignmentResolved = true;
+                for (const RuleAction& a : rule.actions) {
+                    if (a.type == ActionType::SetEngineMode)
+                        s.engineMode = a.params.value(PhosphorWindowRule::ActionParam::Mode).toString();
+                    else if (a.type == ActionType::SetSnappingLayout)
+                        s.snappingLayout = a.params.value(PhosphorWindowRule::ActionParam::LayoutId).toString();
+                    else if (a.type == ActionType::SetTilingAlgorithm)
+                        s.tilingAlgorithm = a.params.value(PhosphorWindowRule::ActionParam::Algorithm).toString();
                 }
             }
         }
@@ -182,11 +206,13 @@ QVariantList WindowRuleController::monitorOverview(const QVariantList& screens) 
     QVariantList out;
     for (const QVariant& sv : screens) {
         const QVariantMap screen = sv.toMap();
-        // Settings screen maps key the connector under "name" (and sometimes
-        // "id"); accept either so the overview never silently drops a tile.
+        // SettingsController::screens maps (screenInfoListToVariantList) key
+        // the connector under "name" (always present) with "screenId" (EDID id)
+        // as the alternate; fall back to it so the overview never silently
+        // drops a tile whose name happens to be empty.
         QString screenId = screen.value(QStringLiteral("name")).toString();
         if (screenId.isEmpty()) {
-            screenId = screen.value(QStringLiteral("id")).toString();
+            screenId = screen.value(QStringLiteral("screenId")).toString();
         }
         if (screenId.isEmpty()) {
             continue;
@@ -198,52 +224,30 @@ QVariantList WindowRuleController::monitorOverview(const QVariantList& screens) 
 
         QVariantMap tile;
         tile[QStringLiteral("screenId")] = screenId;
-        // Pick the layout token that matches the rule's engine mode. When a
-        // rule sets BOTH a snapping layout AND a tiling algorithm (legal —
-        // they live in independent slots) the engine mode decides which
-        // one is actually visible. Without an explicit engine mode we
-        // prefer the snapping layout (the more common case) and fall back
-        // to the algorithm only when no snapping layout is set AT ALL —
-        // crucially we DON'T cross-mix kinds: when the engine mode is
-        // "snapping" but no snapping layout was provided, we leave the
-        // label empty rather than showing a misleading autotile name.
+        // Show the assignment winner's layout, picked by ITS engine mode — a
+        // snapping engine shows the winner's snapping layout, an autotile engine
+        // its algorithm, scrolling neither — mirroring how the daemon's
+        // AssignmentEntry (which carries both tokens) is consumed. No assignment
+        // winner (no rule with a SetEngineMode action) → no engine pin → no
+        // layout label, so a bare layout rule the daemon's cascade discards never
+        // resurfaces. modeFromWireString defaults an unrecognised token to
+        // Snapping, matching entryFromRuleMatchActions.
         QString layoutLabel;
-        // Track WHICH lookup applies — split prevents a UUID-shaped
-        // algorithm token from resolving via the snapping path (or a
-        // tokenised layoutId via the tiling path) just because both
-        // were wired to the same generic resolver.
+        // Track WHICH lookup applies — split prevents a UUID-shaped algorithm
+        // token from resolving via the snapping path (or a tokenised layoutId
+        // via the tiling path) just because both were wired to one resolver.
         const WindowRuleModel::LabelLookup* labelLookup = nullptr;
-        // Route the engineMode wire string through `modeFromWireString` so
-        // every token the validator accepts (snapping / autotile / scrolling
-        // — see `engineModeOptions()` in
-        // libs/phosphor-windowrule/src/ruleaction.cpp) classifies correctly.
-        // The previous inline `== "autotile"` / `== "snapping"` chain
-        // silently collapsed `"scrolling"` into the "no engine pin → prefer
-        // snapping layout" branch, which mis-labelled Scrolling-mode rules
-        // with their leftover snapping layout. Same bug class as the
-        // `entryFromRuleMatchActions` fix in libs/phosphor-zones.
-        const auto mode = PhosphorZones::modeFromWireString(summary.engineMode);
-        if (mode == PhosphorZones::AssignmentEntry::Autotile) {
-            // Autotile engine pinned: only show tiling-algorithm tokens.
-            layoutLabel = summary.tilingAlgorithm;
-            labelLookup = &m_tilingAlgorithmLookup;
-        } else if (mode == PhosphorZones::AssignmentEntry::Snapping) {
-            // Snapping engine pinned: only show snapping-layout tokens.
-            layoutLabel = summary.snappingLayout;
-            labelLookup = &m_snappingLayoutLookup;
-        } else if (mode == PhosphorZones::AssignmentEntry::Scrolling) {
-            // Scrolling engine pinned: neither snapping layout nor tiling
-            // algorithm applies — the rule's intent is "place via the
-            // scrolling engine" and there is no layout/algorithm to label.
-            // Leave layoutLabel empty so the tile renders the engine alone.
-        } else if (!summary.snappingLayout.isEmpty()) {
-            // No engine pin: prefer the snapping layout (more common).
-            layoutLabel = summary.snappingLayout;
-            labelLookup = &m_snappingLayoutLookup;
-        } else {
-            // Last resort: a tiling-algorithm-only rule with no engine pin.
-            layoutLabel = summary.tilingAlgorithm;
-            labelLookup = &m_tilingAlgorithmLookup;
+        if (summary.assignmentResolved) {
+            const auto mode = PhosphorZones::modeFromWireString(summary.engineMode)
+                                  .value_or(PhosphorZones::AssignmentEntry::Snapping);
+            if (mode == PhosphorZones::AssignmentEntry::Snapping) {
+                layoutLabel = summary.snappingLayout;
+                labelLookup = &m_snappingLayoutLookup;
+            } else if (mode == PhosphorZones::AssignmentEntry::Autotile) {
+                layoutLabel = summary.tilingAlgorithm;
+                labelLookup = &m_tilingAlgorithmLookup;
+            }
+            // Scrolling: no layout/algorithm to label.
         }
         // The token is the raw layoutId / algorithm name from the rule's
         // action params — resolve it to a user-facing label when a lookup
@@ -276,15 +280,6 @@ QVariantList WindowRuleController::monitorOverview(const QVariantList& screens) 
         out.append(tile);
     }
     return out;
-}
-
-QStringList WindowRuleController::ruleScreenIds(const QString& ruleId) const
-{
-    const WindowRule rule = m_model.ruleById(QUuid::fromString(ruleId));
-    if (rule.id.isNull()) {
-        return {};
-    }
-    return WindowRuleModel::screenIdsOf(rule.match);
 }
 
 QVariantList WindowRuleController::matchFields() const

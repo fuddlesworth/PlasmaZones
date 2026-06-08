@@ -11,7 +11,7 @@ import org.phosphor.animation
 /**
  * @brief One monitor tile in the WindowRulesPage MONITORS strip.
  *
- * Visual style mirrors `MonitorSelectorSection`'s per-screen tile — monitor
+ * Visual style mirrors `DisplayMap`'s per-screen tile — monitor
  * icon (rotated for portrait), display label, "Primary" badge — so the
  * page reads consistently with the rest of the app. A small caption row
  * carries the rule-count / assignment summary unique to this view.
@@ -26,9 +26,10 @@ Rectangle {
     /// connectorName, isPrimary, width/height, etc.).
     required property var screenData
     /// Rule-related data: `{ screenId, layoutName, tilingEnabled, ruleCount,
-    /// assigned }` from `WindowRuleController.monitorOverview()`. May be
-    /// undefined for a screen with no pinned rules — the tile renders a
-    /// "Not assigned" caption in that case.
+    /// assigned }` from `WindowRuleController.monitorOverview(screens)`, which
+    /// emits a tile for every screen. A screen with no pinned rules carries
+    /// `assigned: false` and renders a "Not assigned" caption; the property only
+    /// stays `undefined` if no overview payload is supplied at all.
     property var tileData: undefined
     /// True when this tile is the active monitor filter.
     property bool selected: false
@@ -94,8 +95,8 @@ Rectangle {
 
         Rectangle {
             Layout.alignment: Qt.AlignHCenter
-            width: primaryLabel.implicitWidth + Kirigami.Units.smallSpacing * 2
-            height: primaryLabel.implicitHeight + 2
+            width: primaryLabel.implicitWidth + Kirigami.Units.smallSpacing
+            height: primaryLabel.implicitHeight + Kirigami.Units.smallSpacing / 2
             radius: height / 2
             color: tile._isPrimary ? Qt.rgba(Kirigami.Theme.positiveTextColor.r, Kirigami.Theme.positiveTextColor.g, Kirigami.Theme.positiveTextColor.b, 0.15) : "transparent"
 
@@ -104,7 +105,7 @@ Rectangle {
 
                 anchors.centerIn: parent
                 text: i18n("Primary")
-                font.pixelSize: Kirigami.Theme.smallFont.pixelSize - 1
+                font: Kirigami.Theme.smallFont
                 color: Kirigami.Theme.positiveTextColor
                 opacity: tile._isPrimary ? 1 : 0
             }
@@ -137,8 +138,12 @@ Rectangle {
                     if (!tile._assigned)
                         return i18n("Not assigned") + " · " + countLabel;
 
+                    // `tilingEnabled` means "the screen's window-management
+                    // engine is NOT disabled" for whatever engine it runs
+                    // (snapping / autotile / scrolling), so the label stays
+                    // engine-agnostic rather than saying "Tiling off".
                     if (!tile.tileData.tilingEnabled)
-                        return i18n("Tiling off") + " · " + countLabel;
+                        return i18n("Engine off") + " · " + countLabel;
 
                     if (tile.tileData.layoutName && tile.tileData.layoutName.length > 0)
                         return tile.tileData.layoutName + " · " + countLabel;

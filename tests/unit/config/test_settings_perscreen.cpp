@@ -7,8 +7,11 @@
  *
  * Split from test_settings.cpp. Tests cover:
  * 1. Per-screen zone selector set/clear
- * 2. Per-screen autotile validation
- * 3. Fresh config defaults
+ * 2. Per-screen zone selector no-op-write emit/husk suppression
+ * 3. Per-screen autotile validation
+ * 4. Per-screen autotile gaps/algorithm sub-domain independence
+ * 5. Per-screen snapping gaps sub-domain isolation
+ * 6. Fresh config defaults
  */
 
 #include <QTest>
@@ -57,6 +60,45 @@ private Q_SLOTS:
         QVERIFY(!settings.hasPerScreenZoneSelectorSettings(screen));
     }
 
+    /**
+     * Per-screen zone selector setter: writing the same value twice emits the
+     * change signal exactly once, and a no-op write against a screen with no
+     * existing entry never default-inserts an empty husk (which hasPerScreen*
+     * would otherwise read as a phantom override).
+     */
+    void testPerScreenZoneSelector_noOpWriteSuppressesEmitAndHusk()
+    {
+        IsolatedConfigGuard guard;
+
+        Settings settings;
+
+        const QString screen = QStringLiteral("test-screen-1");
+
+        QSignalSpy spy(&settings, &Settings::perScreenZoneSelectorSettingsChanged);
+
+        // First write of a real value emits once and creates the entry.
+        settings.setPerScreenZoneSelectorSetting(screen, QStringLiteral("Position"), 3);
+        QCOMPARE(spy.count(), 1);
+        QVERIFY(settings.hasPerScreenZoneSelectorSettings(screen));
+
+        // Re-writing the identical value is a no-op: no second emit.
+        settings.setPerScreenZoneSelectorSetting(screen, QStringLiteral("Position"), 3);
+        QCOMPARE(spy.count(), 1);
+
+        // A different value updates in place and emits again.
+        settings.setPerScreenZoneSelectorSetting(screen, QStringLiteral("Position"), 4);
+        QCOMPARE(spy.count(), 2);
+        QCOMPARE(settings.getPerScreenZoneSelectorSettings(screen).value(QStringLiteral("Position")).toInt(), 4);
+
+        // A rejected write (out-of-range value) against a screen with no
+        // existing entry must not emit and must not default-insert an empty
+        // husk that hasPerScreen* would misread as a phantom override.
+        const QString freshScreen = QStringLiteral("test-screen-2");
+        settings.setPerScreenZoneSelectorSetting(freshScreen, QStringLiteral("Position"), 9999);
+        QCOMPARE(spy.count(), 2);
+        QVERIFY(!settings.hasPerScreenZoneSelectorSettings(freshScreen));
+    }
+
     // =========================================================================
     // Per-screen autotile validation
     // =========================================================================
@@ -86,6 +128,92 @@ private Q_SLOTS:
         QVERIFY2(stored >= PhosphorTiles::AutotileDefaults::MinMasterCount
                      && stored <= PhosphorTiles::AutotileDefaults::MaxMasterCount,
                  "Per-screen autotile value must be clamped to valid range");
+    }
+
+    /**
+     * Per-screen autotile gaps and algorithm sub-domains are independent: the
+     * Gaps card and the Algorithm card share one per-screen map but must report
+     * and clear only their own keys, so resetting one never wipes the other.
+     */
+    void testPerScreenAutotile_gapsAndAlgorithmSubdomainsAreIndependent()
+    {
+        IsolatedConfigGuard guard;
+
+        Settings settings;
+
+        const QString screen = QStringLiteral("test-screen-1");
+
+        // A gaps override (InnerGap) and an algorithm override (MasterCount)
+        // coexist in the one shared per-screen autotile map.
+        settings.setPerScreenAutotileSetting(screen, QStringLiteral("AutotileInnerGap"), 12);
+        settings.setPerScreenAutotileSetting(screen, QStringLiteral("AutotileMasterCount"), 2);
+
+        QVERIFY(settings.hasPerScreenAutotileGapsSettings(screen));
+        QVERIFY(settings.hasPerScreenAutotileAlgorithmSettings(screen));
+
+        // Spy from here so the two setter emits above don't count.
+        QSignalSpy spy(&settings, &Settings::perScreenAutotileSettingsChanged);
+
+        // Clearing the gaps sub-domain emits once and leaves the algorithm
+        // override intact.
+        settings.clearPerScreenAutotileGapsSettings(screen);
+        QCOMPARE(spy.count(), 1);
+        QVERIFY(!settings.hasPerScreenAutotileGapsSettings(screen));
+        QVERIFY(settings.hasPerScreenAutotileAlgorithmSettings(screen));
+        QVariantMap afterGapsClear = settings.getPerScreenAutotileSettings(screen);
+        QVERIFY2(!afterGapsClear.contains(QStringLiteral("InnerGap")), "gaps key must be cleared");
+        QCOMPARE(afterGapsClear.value(QStringLiteral("MasterCount")).toInt(), 2);
+
+        // A no-op gaps clear (no gaps remain) changes nothing and does not emit.
+        settings.clearPerScreenAutotileGapsSettings(screen);
+        QCOMPARE(spy.count(), 1);
+        QVERIFY(settings.hasPerScreenAutotileAlgorithmSettings(screen));
+
+        // Clearing the algorithm sub-domain removes the last remaining key, so
+        // the whole per-screen entry is dropped.
+        settings.clearPerScreenAutotileAlgorithmSettings(screen);
+        QCOMPARE(spy.count(), 2);
+        QVERIFY(!settings.hasPerScreenAutotileAlgorithmSettings(screen));
+        QVERIFY(!settings.hasPerScreenAutotileSettings(screen));
+    }
+
+    /**
+     * The per-screen snapping Gaps card shares one map with the snapping
+     * SnapAssist/ZoneSelector keys but must report and clear only its gap keys,
+     * so resetting the Gaps card never wipes the map's other overrides.
+     */
+    void testPerScreenSnapping_gapsSubdomainIsolatesNonGapsKeys()
+    {
+        IsolatedConfigGuard guard;
+
+        Settings settings;
+
+        const QString screen = QStringLiteral("test-screen-1");
+
+        // A gaps override (ZonePadding) and a non-gaps override
+        // (SnapAssistEnabled) coexist in the one shared per-screen snapping map.
+        settings.setPerScreenSnappingSetting(screen, QStringLiteral("ZonePadding"), 8);
+        settings.setPerScreenSnappingSetting(screen, QStringLiteral("SnapAssistEnabled"), false);
+
+        QVERIFY(settings.hasPerScreenSnappingGapsSettings(screen));
+        QVERIFY(settings.hasPerScreenSnappingSettings(screen));
+
+        QSignalSpy spy(&settings, &Settings::perScreenSnappingSettingsChanged);
+
+        // Clearing the gaps sub-domain emits once and leaves the SnapAssist
+        // override intact (the entry survives because a non-gaps key remains).
+        settings.clearPerScreenSnappingGapsSettings(screen);
+        QCOMPARE(spy.count(), 1);
+        QVERIFY(!settings.hasPerScreenSnappingGapsSettings(screen));
+        QVERIFY(settings.hasPerScreenSnappingSettings(screen));
+        QVariantMap afterGapsClear = settings.getPerScreenSnappingSettings(screen);
+        QVERIFY2(!afterGapsClear.contains(QStringLiteral("ZonePadding")), "gaps key must be cleared");
+        QCOMPARE(afterGapsClear.value(QStringLiteral("SnapAssistEnabled")).toBool(), false);
+
+        // A no-op gaps clear (no gaps remain) changes nothing and does not emit.
+        settings.clearPerScreenSnappingGapsSettings(screen);
+        QCOMPARE(spy.count(), 1);
+        QVERIFY(settings.hasPerScreenSnappingSettings(screen));
     }
 
     // =========================================================================

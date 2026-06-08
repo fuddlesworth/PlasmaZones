@@ -2722,8 +2722,7 @@ bool AutotileEngine::recalculateLayout(const QString& screenId)
     // minSizes is populated iff respectMin (see above); windowCount > 0 is
     // already guaranteed by the early return at the top of this function.
     if (respectMin && !algo->producesOverlappingZones()) {
-        const int threshold =
-            effectiveInnerGap(screenId) + qMax(PhosphorTiles::AutotileDefaults::GapEdgeThresholdPx, 12);
+        const int threshold = effectiveInnerGap(screenId) + PhosphorTiles::AutotileDefaults::GapEdgeThresholdPx;
         const QVector<QRect> preEnforceZones = zones;
         PhosphorGeometry::enforceMinSizes(zones, minSizes, threshold, innerGap);
         if (Q_UNLIKELY(PhosphorTileEngine::lcTileEngine().isDebugEnabled()) && zones != preEnforceZones) {

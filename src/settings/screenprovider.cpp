@@ -11,7 +11,6 @@
 #include <QScreen>
 #include "../core/constants.h"
 #include "../core/isettings.h"
-#include "../core/utils.h"
 #include <PhosphorIdentity/VirtualScreenId.h>
 #include <PhosphorProtocol/ServiceConstants.h>
 #include <PhosphorScreens/ScreenIdentity.h>
@@ -82,17 +81,27 @@ QList<PhosphorScreens::ScreenInfo> fetchScreens(bool* daemonUnavailable)
                         QJsonObject geom = jsonObj[JsonKeys::Geometry].toObject();
                         info.width = geom[::PhosphorZones::ZoneJsonKeys::Width].toInt();
                         info.height = geom[::PhosphorZones::ZoneJsonKeys::Height].toInt();
-                        // Surface the missing-key edge so a corrupted daemon
-                        // reply doesn't silently produce a 0×0 picker tile.
-                        // QJsonValue::toInt() of an absent key is 0; a
-                        // legitimately-0 dimension would mean the screen is
-                        // dimensionless, which the daemon never reports.
-                        if (info.width <= 0 || info.height <= 0) {
-                            qCWarning(lcConfig) << "ScreenProvider: daemon screen" << screenName
-                                                << "returned non-positive geometry width=" << info.width
-                                                << "height=" << info.height << "— picker tile will render as 0×0";
-                        }
+                        // Position (top-left in the compositor's global space)
+                        // drives the proportional multi-monitor map. 0 is a
+                        // valid coordinate, so no sentinel check here.
+                        info.x = geom[::PhosphorZones::ZoneJsonKeys::X].toInt();
+                        info.y = geom[::PhosphorZones::ZoneJsonKeys::Y].toInt();
                     }
+                    // Surface a corrupted reply so it doesn't silently produce a
+                    // 0×0 picker tile. width/height stay 0 when the geometry
+                    // object — or the whole key — is absent (QJsonValue::toInt()
+                    // of an absent key is 0); a legitimately-0 dimension would
+                    // mean a dimensionless screen, which the daemon never
+                    // reports. Runs whether or not the key was present so an
+                    // entirely missing `geometry` is caught too.
+                    if (info.width <= 0 || info.height <= 0) {
+                        qCWarning(lcConfig) << "ScreenProvider: daemon screen" << screenName
+                                            << "returned non-positive geometry width=" << info.width
+                                            << "height=" << info.height << "— picker tile will render as 0×0";
+                    }
+                    // Connector name is optional (the label falls back to
+                    // vendor/model or the raw id), so unlike geometry/virtual-id
+                    // a missing key is not warned.
                     if (jsonObj.contains(::PhosphorZones::ZoneJsonKeys::Name))
                         info.connectorName = jsonObj[::PhosphorZones::ZoneJsonKeys::Name].toString();
                     if (jsonObj.value(JsonKeys::IsVirtualScreen).toBool()) {
@@ -149,6 +158,8 @@ QList<PhosphorScreens::ScreenInfo> fetchScreens(bool* daemonUnavailable)
             info.model = screen->model();
             info.width = screen->geometry().width();
             info.height = screen->geometry().height();
+            info.x = screen->geometry().x();
+            info.y = screen->geometry().y();
             info.connectorName = screen->name();
             info.screenId = PhosphorScreens::ScreenIdentity::identifierFor(screen);
             result.append(info);
@@ -190,9 +201,10 @@ bool setMonitorDisabledFor(ISettings* settings, PhosphorZones::AssignmentEntry::
 
     if (disabled) {
         bool changed = false;
-        // Drop any pre-migration legacy `screenName` entry so a user that
-        // toggles disable/enable on the same row doesn't end up with both
-        // the legacy and canonical entries simultaneously.
+        // A monitor can be referenced by either its connector name or its
+        // canonical screen id; drop any entry under the connector form so a
+        // user toggling disable/enable on the same row doesn't end up with the
+        // monitor listed twice under both identifier forms.
         if (id != screenName)
             changed = list.removeAll(screenName) > 0;
         if (!list.contains(id)) {

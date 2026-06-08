@@ -108,6 +108,7 @@ private Q_SLOTS:
     void addRuleAtInsertsAtIndexWithSingleSignal();
     void validationIssueCountRole();
     void screenIdsRoleHandlesInOperator();
+    void screenIdsOfCollectsOnlyLiteralPinOperators();
     void actionSummaryRendersAllEngineModes();
     void disableEngineNamesTheModeBeingDisabled();
     void setOpacityRendersValidValuesAndGuardsRejectPaths();
@@ -357,6 +358,22 @@ void TestWindowRuleModel::screenIdsRoleHandlesInOperator()
     QCOMPARE(ids2.size(), 2);
     QVERIFY(ids2.contains(QStringLiteral("HDMI-A-1")));
     QVERIFY(ids2.contains(QStringLiteral("eDP-1")));
+}
+
+void TestWindowRuleModel::screenIdsOfCollectsOnlyLiteralPinOperators()
+{
+    // Only Equals and In are literal monitor pins. A substring / regex operator
+    // (StartsWith, Contains, …) never equals a real connector id, so collecting
+    // its token would silently under-count the rule against every monitor tile.
+    // Such rules must contribute NO screen id.
+    const auto eq = MatchExpression::makeLeaf(Field::ScreenId, Operator::Equals, QStringLiteral("DP-1"));
+    QCOMPARE(WindowRuleModel::screenIdsOf(eq), QStringList{QStringLiteral("DP-1")});
+
+    const auto startsWith = MatchExpression::makeLeaf(Field::ScreenId, Operator::StartsWith, QStringLiteral("DP"));
+    QVERIFY(WindowRuleModel::screenIdsOf(startsWith).isEmpty());
+
+    const auto contains = MatchExpression::makeLeaf(Field::ScreenId, Operator::Contains, QStringLiteral("HDMI"));
+    QVERIFY(WindowRuleModel::screenIdsOf(contains).isEmpty());
 }
 
 void TestWindowRuleModel::actionSummaryRendersAllEngineModes()

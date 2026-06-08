@@ -74,6 +74,21 @@ qreal TilingAlgorithmController::autotileSplitRatioMin() const
     return ConfigDefaults::autotileSplitRatioMin();
 }
 
+int TilingAlgorithmController::autotileMaxWindowsMax() const
+{
+    return ConfigDefaults::autotileMaxWindowsMax();
+}
+
+int TilingAlgorithmController::autotileMasterCountMax() const
+{
+    return ConfigDefaults::autotileMasterCountMax();
+}
+
+qreal TilingAlgorithmController::autotileSplitRatioMax() const
+{
+    return ConfigDefaults::autotileSplitRatioMax();
+}
+
 qreal TilingAlgorithmController::autotileSplitRatioStepMin() const
 {
     return ConfigDefaults::autotileSplitRatioStepMin();
@@ -131,7 +146,10 @@ QVariantList TilingAlgorithmController::customParamsForAlgorithm(const QString& 
                     } else {
                         const qreal minVal = paramMap.value(ParamDefKeys::MinValue).toDouble();
                         const qreal maxVal = paramMap.value(ParamDefKeys::MaxValue).toDouble();
-                        paramMap[ParamDefKeys::Value] = std::clamp(num, minVal, maxVal);
+                        // An inverted range (min > max) from a malformed
+                        // (e.g. user-authored Luau) schema is undefined behaviour
+                        // for std::clamp; skip the clamp rather than invoke UB.
+                        paramMap[ParamDefKeys::Value] = (minVal <= maxVal) ? std::clamp(num, minVal, maxVal) : num;
                     }
                 }
             } else if (type == ParamTypes::Enum) {
@@ -202,7 +220,9 @@ void TilingAlgorithmController::setCustomParam(const QString& algorithmId, const
         } else {
             const qreal minVal = defMap.value(ParamDefKeys::MinValue).toDouble();
             const qreal maxVal = defMap.value(ParamDefKeys::MaxValue).toDouble();
-            coerced = std::clamp(num, minVal, maxVal);
+            // An inverted range (min > max) from a malformed schema is UB for
+            // std::clamp; skip the clamp rather than invoke UB.
+            coerced = (minVal <= maxVal) ? std::clamp(num, minVal, maxVal) : num;
         }
     } else if (defType == ParamTypes::Bool) {
         coerced = value.toBool();
@@ -233,14 +253,10 @@ void TilingAlgorithmController::setCustomParam(const QString& algorithmId, const
 
     customParams[paramName] = coerced;
     algoEntry[PhosphorTiles::AutotileJsonKeys::CustomParams] = customParams;
-
-    // Preserve existing splitRatio/masterCount if not already in the entry.
-    if (!algoEntry.contains(PhosphorTiles::AutotileJsonKeys::SplitRatio)) {
-        algoEntry[PhosphorTiles::AutotileJsonKeys::SplitRatio] = algo->defaultSplitRatio();
-    }
-    if (!algoEntry.contains(PhosphorTiles::AutotileJsonKeys::MasterCount)) {
-        algoEntry[PhosphorTiles::AutotileJsonKeys::MasterCount] = ConfigDefaults::autotileMasterCount();
-    }
+    // Persist only the key the user actually set. A missing splitRatio /
+    // masterCount is defaulted by perAlgoFromVariantMap on read, so injecting
+    // them here would just bake a redundant (and potentially-stale) per-algorithm
+    // override into the entry for a value the user never touched.
 
     perAlgo[algorithmId] = algoEntry;
     m_settings->setAutotilePerAlgorithmSettings(perAlgo);

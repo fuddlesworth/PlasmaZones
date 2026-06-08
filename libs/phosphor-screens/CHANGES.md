@@ -70,7 +70,7 @@ The CMake target names (`PhosphorScreens::Core`,
 
 ### `screenInfoListToVariantList()` payload tweaks
 
-Three changes shipped together in the same commit window. QML consumers
+Five changes shipped together in the same commit window. QML consumers
 that key off the shape of the emitted `QVariantMap` should be audited:
 
 1. **`width` / `height` are now emitted independently.**
@@ -98,6 +98,25 @@ that key off the shape of the emitted `QVariantMap` should be audited:
    `Object.keys(map).includes('isVirtualScreen')` to disambiguate
    physical-vs-virtual rows will now see the key on every row and must
    switch to testing the boolean value.
+
+4. **`x` / `y` screen-space position are now emitted (always).**
+
+   Each map carries the output's top-left position in the compositor's
+   global coordinate space, so consumers can lay outputs out in their real
+   arrangement (e.g. a proportional multi-monitor map). Unlike `width` /
+   `height`, position has no sentinel: `0` is a valid origin and negative
+   coordinates are normal for outputs placed left of / above the primary,
+   so `x` / `y` are emitted unconditionally — they are always present.
+
+5. **`displayLabel` is a precomputed, always-present label string.**
+
+   A single source-of-truth label the serializer builds so QML consumers stop
+   duplicating label logic: for a physical screen, vendor + model (falling back
+   to the output name); for a virtual screen, `VS<n> — <monitor>`. Both gain a
+   ` (W×H)` suffix when the resolution is known and a ` · <connector>` suffix to
+   disambiguate otherwise-identical panels. Consumers should bind `displayLabel`
+   rather than reassembling the name / manufacturer / model / resolution fields
+   by hand.
 
 QML consumers that walked the variant map by key set (rather than by
 known-key lookup) are the most likely to regress.
