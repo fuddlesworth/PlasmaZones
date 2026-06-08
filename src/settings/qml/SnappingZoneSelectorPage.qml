@@ -4,6 +4,7 @@
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
+import QtQuick.Window
 import org.kde.kirigami as Kirigami
 
 // Snapping → Zone Selector. The edge-triggered layout-picker popup: enabled,

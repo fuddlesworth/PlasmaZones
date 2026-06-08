@@ -44,6 +44,7 @@ private Q_SLOTS:
     void addUpdateRemoveByUuid();
     void dirtyTrackingAndRevert();
     void monitorOverviewSummarises();
+    void monitorOverviewIgnoresDisabledRules();
     void monitorOverviewClassifiesScrollingWithoutLayoutName();
     void monitorOverviewDisableEngineMatchesEffectiveMode();
     void engineModePickerExposesAllVocabularyTokens();
@@ -187,6 +188,34 @@ void TestWindowRuleController::monitorOverviewSummarises()
     }
     QVERIFY(sawDp2);
     QVERIFY(sawEdp1);
+}
+
+void TestWindowRuleController::monitorOverviewIgnoresDisabledRules()
+{
+    WindowRuleController controller;
+
+    // A monitor-scoped rule that, while enabled, would pin DP-2's engine.
+    QVariantMap rule = controller.newEmptyRule(QStringLiteral("monitor"));
+    QVariantMap match = rule.value(QStringLiteral("match")).toMap();
+    match[QStringLiteral("value")] = QStringLiteral("DP-2");
+    rule[QStringLiteral("match")] = match;
+    rule[QStringLiteral("actions")] =
+        QVariantList{QVariantMap{{QStringLiteral("type"), QStringLiteral("setEngineMode")},
+                                 {QStringLiteral("mode"), QStringLiteral("autotile")}}};
+    const QString id = controller.addRuleFromJson(rule);
+    QVERIFY(!id.isEmpty());
+
+    // Disable it. The daemon's RuleEvaluator skips !enabled rules, so the
+    // overview must too — the tile contributes no rule and stays unassigned.
+    QVERIFY(controller.setRuleEnabled(id, false));
+
+    const QVariantList screens{QVariantMap{{QStringLiteral("name"), QStringLiteral("DP-2")}}};
+    const QVariantList overview = controller.monitorOverview(screens);
+    QCOMPARE(overview.size(), 1);
+    const QVariantMap tile = overview.first().toMap();
+    QCOMPARE(tile.value(QStringLiteral("screenId")).toString(), QStringLiteral("DP-2"));
+    QCOMPARE(tile.value(QStringLiteral("ruleCount")).toInt(), 0);
+    QCOMPARE(tile.value(QStringLiteral("assigned")).toBool(), false);
 }
 
 void TestWindowRuleController::monitorOverviewClassifiesScrollingWithoutLayoutName()
@@ -747,6 +776,9 @@ void TestWindowRuleController::forceCommitIsInvokable()
     const QMetaObject* mo = controller.metaObject();
     QVERIFY2(mo->indexOfMethod("asyncCommit(bool)") >= 0,
              "WindowRuleController::asyncCommit must remain Q_INVOKABLE — QML's daemon-changed banner depends on it");
+    QVERIFY2(mo->indexOfMethod("revert()") >= 0,
+             "WindowRuleController::revert must remain Q_INVOKABLE — the daemon-changed banner's "
+             "'Discard and reload' action calls it directly from QML");
 }
 
 void TestWindowRuleController::curveLabelResolverBridgesQmlNaming()

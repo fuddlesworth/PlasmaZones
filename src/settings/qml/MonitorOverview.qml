@@ -53,9 +53,10 @@ ColumnLayout {
     signal monitorSelected(string screenId)
 
     /// Resolve the tile entry for a given screen. Tiles are keyed by the
-    /// screen's `name` (see _tilesByScreenId), so a plain name lookup suffices.
+    /// screen's `name`, with a `screenId` fallback for a nameless output —
+    /// mirror that here so the lookup matches the controller's keying.
     function _tileForScreen(screen) {
-        return screen ? overview._tilesByScreenId[screen.name] : undefined;
+        return screen ? (overview._tilesByScreenId[screen.name] || overview._tilesByScreenId[screen.screenId]) : undefined;
     }
 
     spacing: Kirigami.Units.smallSpacing

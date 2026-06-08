@@ -237,7 +237,10 @@ SettingsFlickable {
                                 if (!root.algoCapabilities)
                                     return;
                                 var newDefault = root.algoCapabilities.defaultMaxWindows || 6;
-                                previewWindowSlider.slider.value = newDefault;
+                                // Writing the setting moves the slider via its
+                                // value binding (settingValue → SettingsSlider);
+                                // an imperative slider write here would just be
+                                // reasserted by that binding, so don't.
                                 root.writeSetting("MaxWindows", newDefault, function (v) {
                                     appSettings.autotileMaxWindows = v;
                                 });

@@ -410,9 +410,11 @@ SettingsFlickable {
         target: settingsController
     }
 
-    // Refresh when global discard resets needsSave to false
+    // Refresh when a global discard resets needsSave to false. The `needsSave`
+    // property's NOTIFY is `dirtyPagesChanged` (there is no `needsSaveChanged`
+    // signal), so the handler must listen to that.
     Connections {
-        function onNeedsSaveChanged() {
+        function onDirtyPagesChanged() {
             if (!settingsController.needsSave)
                 root._refreshConfig();
         }

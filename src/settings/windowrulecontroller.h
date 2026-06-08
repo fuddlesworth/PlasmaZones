@@ -183,7 +183,12 @@ public:
     /// confirmation, so a user editing during the window is not a realistic
     /// path. Documenting the discard semantics rather than blocking edits
     /// keeps the controller stateless from QML's perspective.
-    void revert();
+    ///
+    /// Q_INVOKABLE so the "Discard and reload" affordance on the
+    /// daemonChangedWhileDirty banner can drive it directly; the
+    /// revertFinished re-marking in SettingsController is wired off the
+    /// signal, so it fires regardless of whether QML or load() calls this.
+    Q_INVOKABLE void revert();
 
     /// True iff there are unsaved staged edits. Mirror of `isDirty()` for the
     /// `SettingsController` pending-changes gate.

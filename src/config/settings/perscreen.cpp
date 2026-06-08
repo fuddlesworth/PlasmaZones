@@ -10,6 +10,8 @@
 #include <PhosphorIdentity/VirtualScreenId.h>
 #include <PhosphorScreens/ScreenIdentity.h>
 #include <QSet>
+#include <QStringList>
+#include <algorithm>
 
 namespace PlasmaZones {
 
@@ -197,8 +199,12 @@ QVariant validatePerScreenAutotileValue(const QString& key, const QVariant& valu
     if (k == PerScreenKeys::InsertPosition)
         return QVariant(qBound(ConfigDefaults::autotileInsertPositionMin(), value.toInt(),
                                ConfigDefaults::autotileInsertPositionMax()));
+    // Algorithm / easing-curve tokens are resolved (with a fallback) at the
+    // daemon, so the registry isn't available here to validate them — but
+    // reject an empty override outright, since a blank per-screen algorithm or
+    // curve is never a meaningful override.
     if (k == PerScreenKeys::Algorithm || k == PerScreenKeys::AnimationEasingCurve)
-        return value;
+        return value.toString().isEmpty() ? QVariant() : value;
     if (k == PerScreenKeys::UsePerSideOuterGap || k == PerScreenKeys::FocusNewWindows || k == PerScreenKeys::SmartGaps
         || k == PerScreenKeys::FocusFollowsMouse || k == PerScreenKeys::RespectMinimumSize
         || k == PerScreenKeys::HideTitleBars || k == PerScreenKeys::AnimationsEnabled)
@@ -377,25 +383,29 @@ void savePerScreenOverrides(PhosphorConfig::IBackend* backend, const QString& pr
 
 void migrateConnectorNames(QHash<QString, QVariantMap>& settings)
 {
-    QHash<QString, QVariantMap> migrated;
-    for (auto it = settings.begin(); it != settings.end();) {
-        // Use the same canonicalization the write path uses, so a connector-form
-        // key (with or without a "/vs:N" suffix) resolves to the identical EDID
-        // form writes produce — no stale duplicate under the connector name.
-        const QString canonical = canonicalPerScreenKey(it.key());
-        if (canonical != it.key()) {
-            if (migrated.contains(canonical)) {
-                qCWarning(lcConfig) << "EDID collision during migration:" << it.key()
-                                    << "and another connector both resolve to" << canonical << "- later entry wins";
-            }
-            migrated[canonical] = it.value();
-            it = settings.erase(it);
-            continue;
-        }
-        ++it;
+    // Canonicalize connector-form keys to the same EDID form writes produce, so
+    // there's no stale duplicate under the connector name. Process the affected
+    // keys in SORTED order: when two connectors resolve to the same EDID (or a
+    // connector resolves to a key already present in canonical form) the
+    // collision is inherently lossy — only one override can keep the slot — so
+    // make the tie-break deterministic (lexicographically-last source key wins)
+    // rather than dependent on QHash iteration order, and warn on every
+    // overwrite so the dropped override is surfaced.
+    QStringList connectorKeys;
+    for (auto it = settings.constBegin(); it != settings.constEnd(); ++it) {
+        if (canonicalPerScreenKey(it.key()) != it.key())
+            connectorKeys.append(it.key());
     }
-    for (auto mit = migrated.constBegin(); mit != migrated.constEnd(); ++mit) {
-        settings.insert(mit.key(), mit.value());
+    std::sort(connectorKeys.begin(), connectorKeys.end());
+
+    for (const QString& key : connectorKeys) {
+        const QString canonical = canonicalPerScreenKey(key);
+        const QVariantMap value = settings.take(key);
+        if (settings.contains(canonical)) {
+            qCWarning(lcConfig) << "EDID collision during per-screen migration:" << key << "resolves to" << canonical
+                                << "which already exists - the later entry wins, the earlier override is dropped";
+        }
+        settings.insert(canonical, value);
     }
 }
 

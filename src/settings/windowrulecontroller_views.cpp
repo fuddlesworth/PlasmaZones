@@ -124,8 +124,8 @@ QVariantList WindowRuleController::monitorOverview(const QVariantList& screens) 
     QHash<QString, Summary> byScreen;
 
     // Sort rules by descending priority before accumulation. Multiple
-    // matching context-only rules on the same screen all contribute, but
-    // the "first non-empty wins" guards below (s.engineMode.isEmpty(),
+    // matching enabled context-only rules on the same screen all contribute,
+    // but the "first non-empty wins" guards below (s.engineMode.isEmpty(),
     // s.snappingLayout.isEmpty(), s.tilingAlgorithm.isEmpty()) mean the
     // FIRST rule visited pins each slot. Without sorting that's "first
     // in rule-iteration order"; with sorting it's "highest priority" —
@@ -145,6 +145,13 @@ QVariantList WindowRuleController::monitorOverview(const QVariantList& screens) 
 
     for (qsizetype idx : indices) {
         const WindowRule& rule = rules[idx];
+        // Disabled rules never apply — mirror RuleEvaluator::resolve, which
+        // skips !enabled before filling any slot — so the overview reflects the
+        // effective (enabled-only) per-monitor state rather than inflating
+        // ruleCount or labelling a tile from a rule the daemon ignores.
+        if (!rule.enabled) {
+            continue;
+        }
         // Only context-only rules that pin a monitor count toward a tile.
         if (!rule.match.isContextOnly()) {
             continue;
