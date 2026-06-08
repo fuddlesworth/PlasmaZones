@@ -80,13 +80,15 @@ public:
 
 private:
     /// Upload labels texture when dirty (called from prepare with a live cb).
+    /// Composites by uploading each sparse glyph tile directly to its position
+    /// in the screen-sized texture (and clearing vacated regions), so no
+    /// full-screen CPU image is ever allocated.
     void uploadLabelsTexture(QRhi* rhi, QRhiCommandBuffer* cb);
-    /// Composite the staged sparse tiles into a full screen-addressed image for
-    /// upload. Returns a 1×1-friendly null image when there are no tiles.
-    QImage compositeLabelsImage() const;
 
     ZoneLabelTexture m_labels;
-    QImage m_transparentFallbackImage;
+    /// Dest rects of the tiles uploaded last time, so the next upload can clear
+    /// exactly the regions being vacated (no full-screen clear per change).
+    QList<QRect> m_prevTileRects;
     std::unique_ptr<QRhiTexture> m_labelsTexture;
     std::unique_ptr<QRhiSampler> m_labelsSampler;
     quint64 m_instanceId = 0;

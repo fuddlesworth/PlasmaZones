@@ -3,7 +3,12 @@
 
 #include <PhosphorRendering/ZoneShaderNodeRhi.h>
 
+#include <QImage>
+#include <QList>
 #include <QLoggingCategory>
+#include <QPoint>
+#include <QRect>
+#include <QSize>
 
 #include <atomic>
 
@@ -33,11 +38,6 @@ ZoneShaderNodeRhi::ZoneShaderNodeRhi(QQuickItem* item)
     // The ZoneUniformExtension is owned by the host item and pushed down each
     // frame through ShaderEffect::syncBasePropertiesToNode(). No extension
     // allocation happens here.
-
-    // 1×1 transparent fallback for when labels are disabled or the image
-    // hasn't been built yet.
-    m_transparentFallbackImage = QImage(1, 1, QImage::Format_RGBA8888);
-    m_transparentFallbackImage.fill(Qt::transparent);
 }
 
 ZoneShaderNodeRhi::~ZoneShaderNodeRhi()
@@ -67,14 +67,6 @@ void ZoneShaderNodeRhi::setLabelsTexture(const ZoneLabelTexture& labels)
     m_labelsTextureDirty = true;
 }
 
-QImage ZoneShaderNodeRhi::compositeLabelsImage() const
-{
-    // The composite is a transient that lives only across an upload (gated by
-    // m_labelsTextureDirty), so the full-screen buffer is never persistently
-    // held — unlike a full image carried through the QML labelsTexture chain.
-    return m_labels.toImage();
-}
-
 void ZoneShaderNodeRhi::uploadLabelsTexture(QRhi* rhi, QRhiCommandBuffer* cb)
 {
     if (!m_labelsTextureDirty) {
@@ -91,17 +83,14 @@ void ZoneShaderNodeRhi::uploadLabelsTexture(QRhi* rhi, QRhiCommandBuffer* cb)
         return;
     }
 
-    // Composite the sparse glyph tiles into the full screen-addressed image
-    // once, here — a transient that lives only for this upload (we're dirty),
-    // never persistently held. Null when there are no labels.
-    const QImage src = compositeLabelsImage();
+    // The payload is sparse and the texture is screen-addressed. An empty
+    // payload needs only a 1×1 transparent texture (no full-screen allocation).
+    const bool hasLabels = !m_labels.isEmpty();
+    const QSize targetSize = hasLabels ? m_labels.size : QSize(1, 1);
 
-    // Pick the target size up-front: a non-empty composite dictates, otherwise
-    // the 1×1 transparent fallback. Used both for the first-init allocation and
-    // the resize branch — without this, the first upload of an N×M image would
-    // allocate a 1×1 texture and immediately throw it away in the resize branch
-    // on the same call.
-    const QSize targetSize = (!src.isNull() && src.width() > 0 && src.height() > 0) ? src.size() : QSize(1, 1);
+    // True when the texture was (re)created this call and therefore holds
+    // undefined contents that must be fully cleared before any tile lands.
+    bool needFullClear = false;
 
     // Initialize labels texture resources on first use. Only flip
     // m_labelsInitialized after BOTH resources create successfully — otherwise
@@ -137,6 +126,7 @@ void ZoneShaderNodeRhi::uploadLabelsTexture(QRhi* rhi, QRhiCommandBuffer* cb)
         m_labelsInitialized = true;
         m_labelsInitFailureCount = 0;
         setExtraBinding(1, m_labelsTexture.get(), m_labelsSampler.get());
+        needFullClear = true;
     } else if (m_labelsTexture->pixelSize() != targetSize) {
         std::unique_ptr<QRhiTexture> resized(rhi->newTexture(QRhiTexture::RGBA8, targetSize));
         if (!resized->create()) {
@@ -148,18 +138,110 @@ void ZoneShaderNodeRhi::uploadLabelsTexture(QRhi* rhi, QRhiCommandBuffer* cb)
         QRhiTexture* newPtr = resized.get();
         setExtraBinding(1, newPtr, m_labelsSampler.get());
         m_labelsTexture = std::move(resized);
+        needFullClear = true;
     }
-    QRhiResourceUpdateBatch* batch = rhi->nextResourceUpdateBatch();
-    if (!batch) {
-        // Pool exhausted (or backend wedged). Leave the dirty flag set so the
-        // next prepare() retries — clearing it here would silently drop the
-        // upload and the SRB would render against an unbacked or stale slot 1.
+
+    // ── Clear entries ────────────────────────────────────────────────────────
+    // Clearing reuses one small transparent block uploaded in sub-regions, so it
+    // never allocates a full-screen image. On (re)allocation the whole texture is
+    // cleared in a grid; otherwise only the rects vacated since the last upload.
+    // clearScratch must outlive the resourceUpdate below (the batch holds an
+    // implicitly-shared ref), so it is function-scoped.
+    QList<QRhiTextureUploadEntry> clearEntries;
+    QImage clearScratch;
+    if (needFullClear) {
+        m_prevTileRects.clear();
+        constexpr int kClearBlock = 512;
+        clearScratch = QImage(qMin(kClearBlock, targetSize.width()), qMin(kClearBlock, targetSize.height()),
+                              QImage::Format_ARGB32_Premultiplied);
+        clearScratch.fill(Qt::transparent);
+        for (int by = 0; by < targetSize.height(); by += clearScratch.height()) {
+            for (int bx = 0; bx < targetSize.width(); bx += clearScratch.width()) {
+                const QSize block(qMin(clearScratch.width(), targetSize.width() - bx),
+                                  qMin(clearScratch.height(), targetSize.height() - by));
+                QRhiTextureSubresourceUploadDescription sub(clearScratch);
+                sub.setSourceSize(block);
+                sub.setDestinationTopLeft(QPoint(bx, by));
+                clearEntries.append(QRhiTextureUploadEntry(0, 0, sub));
+            }
+        }
+    } else if (!m_prevTileRects.isEmpty()) {
+        int maxW = 1;
+        int maxH = 1;
+        for (const QRect& r : m_prevTileRects) {
+            maxW = qMax(maxW, r.width());
+            maxH = qMax(maxH, r.height());
+        }
+        clearScratch = QImage(maxW, maxH, QImage::Format_ARGB32_Premultiplied);
+        clearScratch.fill(Qt::transparent);
+        for (const QRect& r : m_prevTileRects) {
+            QRhiTextureSubresourceUploadDescription sub(clearScratch);
+            sub.setSourceSize(r.size());
+            sub.setDestinationTopLeft(r.topLeft());
+            clearEntries.append(QRhiTextureUploadEntry(0, 0, sub));
+        }
+        m_prevTileRects.clear();
+    }
+
+    // ── Tile entries ───────────────────────────────────────────────────────
+    // Each glyph tile uploads directly to its position; no full-screen image is
+    // ever materialised. Overlapping tiles (only from overlapping-zone layouts)
+    // replace rather than alpha-blend, but zone numbers are centred + small so
+    // they don't overlap in practice.
+    QList<QRhiTextureUploadEntry> tileEntries;
+    QList<QRect> newTileRects;
+    if (hasLabels) {
+        for (const ZoneLabelTile& tile : m_labels.tiles) {
+            if (tile.image.isNull()) {
+                continue;
+            }
+            QRhiTextureSubresourceUploadDescription sub(tile.image);
+            sub.setDestinationTopLeft(tile.dest);
+            tileEntries.append(QRhiTextureUploadEntry(0, 0, sub));
+            newTileRects.append(QRect(tile.dest, tile.image.size()));
+        }
+    }
+
+    if (clearEntries.isEmpty() && tileEntries.isEmpty()) {
+        m_prevTileRects = newTileRects;
+        m_labelsTextureDirty = false;
         return;
     }
-    const QImage& upload = (!src.isNull() && src.width() > 0 && src.height() > 0) ? src : m_transparentFallbackImage;
-    batch->uploadTexture(m_labelsTexture.get(), upload);
-    cb->resourceUpdate(batch);
-    // Only clear the dirty flag after a successful upload completes.
+
+    // Acquire both batches up-front so the upload is all-or-nothing: clears must
+    // precede tiles, and a partially-applied upload would leave the texture with
+    // vacated-but-not-redrawn labels for a frame.
+    QRhiResourceUpdateBatch* clearBatch = clearEntries.isEmpty() ? nullptr : rhi->nextResourceUpdateBatch();
+    QRhiResourceUpdateBatch* tileBatch = tileEntries.isEmpty() ? nullptr : rhi->nextResourceUpdateBatch();
+    if ((!clearEntries.isEmpty() && !clearBatch) || (!tileEntries.isEmpty() && !tileBatch)) {
+        // Pool exhausted — release any acquired batch and retry next frame with
+        // nothing applied (dirty stays set, m_prevTileRects unchanged).
+        if (clearBatch) {
+            clearBatch->release();
+        }
+        if (tileBatch) {
+            tileBatch->release();
+        }
+        return;
+    }
+
+    // Separate batches are applied in resourceUpdate() submission order, so a
+    // tile re-occupying a just-vacated rect is never erased by its own clear.
+    if (clearBatch) {
+        QRhiTextureUploadDescription desc;
+        desc.setEntries(clearEntries.cbegin(), clearEntries.cend());
+        clearBatch->uploadTexture(m_labelsTexture.get(), desc);
+        cb->resourceUpdate(clearBatch);
+    }
+    if (tileBatch) {
+        QRhiTextureUploadDescription desc;
+        desc.setEntries(tileEntries.cbegin(), tileEntries.cend());
+        tileBatch->uploadTexture(m_labelsTexture.get(), desc);
+        cb->resourceUpdate(tileBatch);
+    }
+
+    m_prevTileRects = newTileRects;
+    // Only clear the dirty flag after the upload has been submitted.
     m_labelsTextureDirty = false;
 }
 
@@ -193,6 +275,9 @@ void ZoneShaderNodeRhi::releaseResources()
     // doesn't share.
     m_labelsInitFailureCount = 0;
     m_labelsInitGaveUp = false;
+    // The texture is gone; the next upload re-creates and fully clears it, so
+    // drop the stale vacated-rect tracking from the old texture.
+    m_prevTileRects.clear();
     removeExtraBinding(1);
 
     ShaderNodeRhi::releaseResources();
