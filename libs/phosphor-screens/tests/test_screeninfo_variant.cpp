@@ -3,9 +3,10 @@
 
 /**
  * @file test_screeninfo_variant.cpp
- * @brief Coverage for @c screenInfoListToVariantList — focuses on the
- *        screen-space position (x/y) keys added for the proportional
- *        multi-monitor map.
+ * @brief Coverage for @c screenInfoListToVariantList: the screen-space
+ *        position (x/y) keys added for the proportional multi-monitor map,
+ *        the always-present @c isVirtualScreen flag, and the precomputed
+ *        @c displayLabel (physical, virtual-fallback, and monitor-name forms).
  *
  * The contract that distinguishes x/y from width/height: dimensions are
  * skipped when non-positive (a 0×0 tile must not render), but position is
@@ -118,6 +119,104 @@ private Q_SLOTS:
         QCOMPARE(out.size(), 2);
         QCOMPARE(out.at(0).toMap().value(QStringLiteral("x")).toInt(), 0);
         QCOMPARE(out.at(1).toMap().value(QStringLiteral("x")).toInt(), 3200);
+    }
+
+    void isVirtualScreenFlag_alwaysPresentEvenForPhysical()
+    {
+        // The flag is unconditionally emitted so QML can test `map.isVirtualScreen`
+        // directly instead of guarding against an absent (undefined) key on
+        // physical screens.
+        ScreenInfo s;
+        s.name = QStringLiteral("DP-1");
+        s.isVirtualScreen = false;
+
+        const QVariantMap m = screenInfoListToVariantList({s}).first().toMap();
+        QVERIFY2(m.contains(QStringLiteral("isVirtualScreen")), "isVirtualScreen key must always be present");
+        QCOMPARE(m.value(QStringLiteral("isVirtualScreen")).toBool(), false);
+    }
+
+    void displayLabel_physicalScreen_vendorModelResolution()
+    {
+        // Physical output: the label leads with vendor + model and appends the
+        // resolution. This is the single source of truth QML selectors render.
+        ScreenInfo s;
+        s.name = QStringLiteral("DP-1");
+        s.manufacturer = QStringLiteral("Dell");
+        s.model = QStringLiteral("U2720Q");
+        s.width = 3840;
+        s.height = 2160;
+
+        const QVariantMap m = screenInfoListToVariantList({s}).first().toMap();
+        QCOMPARE(m.value(QStringLiteral("displayLabel")).toString(), QStringLiteral("Dell U2720Q (3840×2160)"));
+    }
+
+    void displayLabel_physicalScreen_fallsBackToNameWhenNoVendor()
+    {
+        // No vendor/model and no geometry: the label degrades to the raw name.
+        ScreenInfo s;
+        s.name = QStringLiteral("HDMI-A-1");
+
+        const QVariantMap m = screenInfoListToVariantList({s}).first().toMap();
+        QCOMPARE(m.value(QStringLiteral("displayLabel")).toString(), QStringLiteral("HDMI-A-1"));
+    }
+
+    void displayLabel_virtualScreen_vsFallbackAndIndexOffset()
+    {
+        // Virtual screen with no friendly name: the label uses the "VS%1"
+        // form with the 1-based index (virtualIndex 0 → "VS1"). With no vendor
+        // parts and no connector, the monitor suffix is dropped entirely.
+        ScreenInfo s;
+        s.name = QStringLiteral("DP-1/vs:0");
+        s.isVirtualScreen = true;
+        s.virtualIndex = 0;
+
+        const QVariantMap m = screenInfoListToVariantList({s}).first().toMap();
+        QCOMPARE(m.value(QStringLiteral("displayLabel")).toString(), QStringLiteral("VS1"));
+    }
+
+    void displayLabel_virtualScreen_appendsMonitorNameWhenKnown()
+    {
+        // A virtual screen that knows its physical parent's vendor/model joins
+        // the "VS%1" prefix to the monitor name with an em-dash separator.
+        ScreenInfo s;
+        s.name = QStringLiteral("DP-1/vs:1");
+        s.isVirtualScreen = true;
+        s.virtualIndex = 1;
+        s.manufacturer = QStringLiteral("LG");
+        s.model = QStringLiteral("27GP950");
+
+        const QVariantMap m = screenInfoListToVariantList({s}).first().toMap();
+        QCOMPARE(m.value(QStringLiteral("displayLabel")).toString(), QStringLiteral("VS2 — LG 27GP950"));
+    }
+
+    void displayLabel_virtualScreen_prefersVirtualDisplayName()
+    {
+        // A friendly virtualDisplayName takes precedence over the "VS%1"
+        // fallback. With no vendor/model/connector, the label is just the name.
+        ScreenInfo s;
+        s.name = QStringLiteral("DP-1/vs:0");
+        s.isVirtualScreen = true;
+        s.virtualIndex = 0;
+        s.virtualDisplayName = QStringLiteral("Workspace 2");
+
+        const QVariantMap m = screenInfoListToVariantList({s}).first().toMap();
+        QCOMPARE(m.value(QStringLiteral("displayLabel")).toString(), QStringLiteral("Workspace 2"));
+        // The friendly name is also emitted as its own key when set.
+        QCOMPARE(m.value(QStringLiteral("virtualDisplayName")).toString(), QStringLiteral("Workspace 2"));
+    }
+
+    void displayLabel_virtualScreen_connectorNameAsMonitorSuffixWhenNoVendor()
+    {
+        // No vendor/model but a known connector: the monitor suffix falls back
+        // to the connector name rather than being dropped.
+        ScreenInfo s;
+        s.name = QStringLiteral("DP-3/vs:0");
+        s.isVirtualScreen = true;
+        s.virtualIndex = 0;
+        s.connectorName = QStringLiteral("DP-3");
+
+        const QVariantMap m = screenInfoListToVariantList({s}).first().toMap();
+        QCOMPARE(m.value(QStringLiteral("displayLabel")).toString(), QStringLiteral("VS1 — DP-3"));
     }
 };
 

@@ -13,8 +13,8 @@ import org.kde.kirigami as Kirigami
  * info message, enable toggle, position & trigger, layout arrangement, and
  * preview size cards. The three per-monitor cards carry a header scope chip,
  * so per-monitor overrides are scoped to the monitor picked there (shared
- * app-wide scope). The chip's monitor map only appears with more than one
- * output; on a single-monitor system the chip stays collapsed on "All".
+ * app-wide scope). The chip rests on "All Monitors" until a specific output
+ * is picked from its popover.
  */
 ColumnLayout {
     // ═══════════════════════════════════════════════════════════════════════
@@ -24,8 +24,11 @@ ColumnLayout {
     id: root
 
     required property var appSettings
-    // Controller with per-screen methods (defaults to appSettings for shared component compatibility)
-    property var controller: appSettings
+    // Controller exposing the per-screen / scope methods (scopeScreenName,
+    // hasPerScreenZoneSelectorSettings, clearPerScreenZoneSelectorSettings).
+    // Required: the raw ISettings object passed as `appSettings` does NOT carry
+    // the scope chip's Q_INVOKABLEs, so the two must be supplied independently.
+    required property var controller
     required property QtObject constants
     // Screen aspect ratio for preview calculations (with safety check)
     property real screenAspectRatio: 16 / 9
@@ -80,7 +83,10 @@ ColumnLayout {
         visible: true
     }
 
-    // Enable toggle
+    // Enable toggle. Intentionally app-wide (not per-monitor): it is the global
+    // gate for the feature. Only the three cards below (Position & Trigger,
+    // Layout, Preview Size) carry the header scope chip and store per-monitor
+    // overrides.
     SettingsRow {
         title: i18n("Zone selector popup")
         description: i18n("Show a layout picker when dragging windows to screen edges")

@@ -325,6 +325,27 @@ SettingsController::SettingsController(QObject* parent)
         }
     }
 
+    // Per-screen override maps have no Q_PROPERTY, so the meta-object loop
+    // above never wires their change signals. Connect them explicitly. The
+    // Settings layer emits these ONLY when an override actually changes — a
+    // no-op write (same value) or a rejected key early-returns without
+    // emitting — so routing them through onSettingsPropertyChanged() gives
+    // correct change-only dirty tracking (and load() populates the maps
+    // directly, never via the setters, so this stays quiet during load).
+    // Re-emitting perScreenOverridesChanged() refreshes the scope-chip
+    // override dots and the bound per-screen card values. The Q_INVOKABLE
+    // wrappers in settingscontroller_perscreen.cpp therefore do NOT mark
+    // dirty or emit themselves — this change signal is the single source of
+    // truth, which is also why clicking a value already set no longer flips
+    // the page to "unsaved changes".
+    const auto wirePerScreenOverrideSignal = [this](void (Settings::*signal)()) {
+        connect(&m_settings, signal, this, &SettingsController::onSettingsPropertyChanged);
+        connect(&m_settings, signal, this, &SettingsController::perScreenOverridesChanged);
+    };
+    wirePerScreenOverrideSignal(&Settings::perScreenAutotileSettingsChanged);
+    wirePerScreenOverrideSignal(&Settings::perScreenSnappingSettingsChanged);
+    wirePerScreenOverrideSignal(&Settings::perScreenZoneSelectorSettingsChanged);
+
     // Editor + fill-on-drop settings lack Q_PROPERTY on Settings, so the
     // meta-object loop above misses them. EditorPageController forwards each
     // NOTIFY to QML and emits changed() which drives dirty tracking here.

@@ -6,9 +6,10 @@ import QtQuick
 /**
  * @brief Reusable per-screen override logic for settings pages
  *
- * Encapsulates the identical per-screen override pattern used across
- * AutotilingTab, ZoneSelectorSection, and ZonesTab. Each tab instantiates
- * this with its feature-specific C++ method names.
+ * Encapsulates the identical per-screen override pattern used across the
+ * per-monitor settings pages (Tiling Algorithm, Tiling Appearance, Snapping
+ * Window Appearance, and ZoneSelectorSection). Each instantiates this with
+ * its feature-specific C++ method names.
  *
  * Usage:
  *   PerScreenOverrideHelper {

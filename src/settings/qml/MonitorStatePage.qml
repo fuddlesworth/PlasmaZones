@@ -159,7 +159,8 @@ SettingsFlickable {
         }
 
         function onLayoutsChanged() {
-            root._layouts = settingsController.layouts;
+            // _layouts is bound to settingsController.layouts and refreshes on
+            // its own layoutsChanged; only the dependent view needs a nudge.
             root._refresh();
         }
 

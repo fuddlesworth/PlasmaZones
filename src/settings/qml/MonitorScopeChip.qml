@@ -22,6 +22,10 @@ import org.phosphor.animation
 Item {
     id: chip
 
+    // The SettingsController (NOT the raw Settings object): the chip reads
+    // `scopeScreenName` and invokes `physicalScreenId`, the override poll, and
+    // the clearer — all of which live on the controller. Binding the bare
+    // Settings object here would make those calls undefined at runtime.
     required property var appSettings
     // Q_INVOKABLE names on appSettings for this card's per-screen domain.
     property string hasOverridesMethod: ""

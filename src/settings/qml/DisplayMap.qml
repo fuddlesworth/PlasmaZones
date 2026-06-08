@@ -28,6 +28,11 @@ import org.phosphor.animation
 ColumnLayout {
     id: root
 
+    // Backing object — must expose: `scopeScreenName` (string), `screens`
+    // (variant list), `physicalScreenId(name)` and `physicalScreenResolution(id)`
+    // (Q_INVOKABLE), plus the `perScreenOverridesChanged` and `screensChanged`
+    // signals the override-dot refresh below relies on. SettingsController
+    // satisfies all of these.
     required property var appSettings
     // When true, collapse virtual screens ("id/vs:0") to their physical
     // parent — per-monitor settings groups always scope by physical output.
@@ -40,7 +45,7 @@ ColumnLayout {
     // Current selection, for the highlight. The default tracks the shared scope
     // for the chip-popover use; monitor-subject hosts (Monitor State, Virtual
     // Screens) rebind this to their own local target, retiring the default.
-    property string selectedScreenName: appSettings ? appSettings.scopeScreenName : ""
+    property string selectedScreenName: appSettings.scopeScreenName
     // Show the "All Monitors" chip. Off for monitor-subject pickers that always
     // require a specific output (Monitor State, Virtual Screens).
     property bool showAll: true
@@ -76,10 +81,18 @@ ColumnLayout {
                 delete entry["isVirtualScreen"];
                 delete entry["virtualIndex"];
                 delete entry["virtualDisplayName"];
+                // The serializer precomputed displayLabel/resolution from the
+                // VIRTUAL child (e.g. "VS1 — …" with half-width geometry). Drop
+                // them so this demoted physical entry never surfaces a virtual
+                // label in the tooltip or the connector-less label fallback;
+                // resolution is rebuilt from the physical geometry below.
+                delete entry["displayLabel"];
+                delete entry["resolution"];
                 var physRes = appSettings.physicalScreenResolution(physId);
                 if (physRes.width > 0 && physRes.height > 0) {
                     entry["width"] = physRes.width;
                     entry["height"] = physRes.height;
+                    entry["resolution"] = physRes.width + "×" + physRes.height;
                 } else {
                     delete entry["width"];
                     delete entry["height"];
@@ -168,7 +181,11 @@ ColumnLayout {
     // ── Override presence per screen (name -> bool) ──
     property var _overrides: ({})
     function _refreshOverrides() {
-        if (hasOverridesMethod === "") {
+        // Dots key by the physical-collapsed `name`, so they only make sense
+        // when physicalOnly is true (per-monitor settings groups always scope
+        // by physical output). Disable them otherwise rather than mis-keying a
+        // raw virtual id against a physical-scoped override lookup.
+        if (hasOverridesMethod === "" || !physicalOnly) {
             _overrides = {};
             return;
         }

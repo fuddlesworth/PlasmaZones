@@ -387,10 +387,9 @@ SettingsFlickable {
         }
 
         // ── Monitor overview strip ──
-        // Bare, no SettingsCard wrapper — mirrors DisplayMap's
-        // placement on the pages that still embed it directly (Monitor State,
-        // Virtual Screens) where the selector is a direct child of the page
-        // column with no enclosing card or header strip.
+        // Bare, no SettingsCard wrapper: a direct child of the page column,
+        // the same placement Monitor State and Virtual Screens use for their
+        // own monitor pickers (no enclosing card or header strip).
         MonitorOverview {
             Layout.fillWidth: true
             screens: settingsController.screens

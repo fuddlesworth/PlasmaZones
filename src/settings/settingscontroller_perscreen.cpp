@@ -2,9 +2,13 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 // Per-screen override accessors for SettingsController. The actual storage
-// lives in Settings; this file's Q_INVOKABLE wrappers thin-forward to it
-// and flip the dirty flag so the active page can re-show the unsaved
-// changes footer.
+// lives in Settings; this file's Q_INVOKABLE wrappers thin-forward to it.
+// Dirty tracking and the perScreenOverridesChanged() refresh are NOT done
+// here: Settings emits perScreen{Autotile,Snapping,ZoneSelector}SettingsChanged
+// only when an override actually changes, and the controller constructor
+// wires those signals to onSettingsPropertyChanged() (dirty) and
+// perScreenOverridesChanged() (UI refresh). Emitting from these wrappers
+// would mark the page dirty even for no-op or rejected writes.
 //
 // Split out of settingscontroller_session.cpp to keep that file under the
 // 800-line cap (see CLAUDE.md). All methods here are members of
@@ -43,15 +47,11 @@ void SettingsController::setPerScreenAutotileSetting(const QString& screenName, 
                                                      const QVariant& value)
 {
     m_settings.setPerScreenAutotileSetting(screenName, key, value);
-    setNeedsSave(true);
-    Q_EMIT perScreenOverridesChanged();
 }
 
 void SettingsController::clearPerScreenAutotileSettings(const QString& screenName)
 {
     m_settings.clearPerScreenAutotileSettings(screenName);
-    setNeedsSave(true);
-    Q_EMIT perScreenOverridesChanged();
 }
 
 bool SettingsController::hasPerScreenAutotileSettings(const QString& screenName) const
@@ -67,8 +67,6 @@ bool SettingsController::hasPerScreenAutotileGapsSettings(const QString& screenN
 void SettingsController::clearPerScreenAutotileGapsSettings(const QString& screenName)
 {
     m_settings.clearPerScreenAutotileGapsSettings(screenName);
-    setNeedsSave(true);
-    Q_EMIT perScreenOverridesChanged();
 }
 
 bool SettingsController::hasPerScreenAutotileAlgorithmSettings(const QString& screenName) const
@@ -79,8 +77,6 @@ bool SettingsController::hasPerScreenAutotileAlgorithmSettings(const QString& sc
 void SettingsController::clearPerScreenAutotileAlgorithmSettings(const QString& screenName)
 {
     m_settings.clearPerScreenAutotileAlgorithmSettings(screenName);
-    setNeedsSave(true);
-    Q_EMIT perScreenOverridesChanged();
 }
 
 // ── Per-screen snapping overrides ────────────────────────────────────────
@@ -94,15 +90,11 @@ void SettingsController::setPerScreenSnappingSetting(const QString& screenName, 
                                                      const QVariant& value)
 {
     m_settings.setPerScreenSnappingSetting(screenName, key, value);
-    setNeedsSave(true);
-    Q_EMIT perScreenOverridesChanged();
 }
 
 void SettingsController::clearPerScreenSnappingSettings(const QString& screenName)
 {
     m_settings.clearPerScreenSnappingSettings(screenName);
-    setNeedsSave(true);
-    Q_EMIT perScreenOverridesChanged();
 }
 
 bool SettingsController::hasPerScreenSnappingSettings(const QString& screenName) const
@@ -121,15 +113,11 @@ void SettingsController::setPerScreenZoneSelectorSetting(const QString& screenNa
                                                          const QVariant& value)
 {
     m_settings.setPerScreenZoneSelectorSetting(screenName, key, value);
-    setNeedsSave(true);
-    Q_EMIT perScreenOverridesChanged();
 }
 
 void SettingsController::clearPerScreenZoneSelectorSettings(const QString& screenName)
 {
     m_settings.clearPerScreenZoneSelectorSettings(screenName);
-    setNeedsSave(true);
-    Q_EMIT perScreenOverridesChanged();
 }
 
 bool SettingsController::hasPerScreenZoneSelectorSettings(const QString& screenName) const

@@ -95,6 +95,18 @@ SettingsFlickable {
         psHelper.writeSetting(key, value, globalSetter);
     }
 
+    // Default max-windows for an algorithm id, looked up from the cached
+    // capabilities list. Returns -1 when the id is unknown so the caller can
+    // preserve the current value rather than guess.
+    function _defaultMaxWindowsFor(algoId) {
+        var algos = root._cachedAlgos;
+        for (var i = 0; i < algos.length; i++) {
+            if (algos[i].id === algoId)
+                return algos[i].defaultMaxWindows;
+        }
+        return -1;
+    }
+
     contentHeight: content.implicitHeight
     clip: true
 
@@ -227,22 +239,35 @@ SettingsFlickable {
                                 selectedId = appSettings.defaultAutotileAlgorithm;
                             else if (selectedId.startsWith("autotile:"))
                                 selectedId = selectedId.substring(9);
+                            // Decide BEFORE the switch whether max-windows should
+                            // follow the new algorithm's default. Mirror the
+                            // daemon (AutotileEngine::resetMaxWindowsForAlgorithmSwitch):
+                            // only reset when the user never customized it, i.e. the
+                            // current value still equals the OLD algorithm's default.
+                            // effectiveAlgorithm/settingValue still read the old
+                            // state here (the write below hasn't landed yet).
+                            // Without this guard, switching algorithm would clobber a
+                            // customized value and — when scoped to a monitor — force a
+                            // per-screen MaxWindows override the user never set.
+                            var oldDefaultMax = root._defaultMaxWindowsFor(root.effectiveAlgorithm);
+                            var currentMax = root.settingValue("MaxWindows", appSettings.autotileMaxWindows);
+                            var resetMax = oldDefaultMax >= 0 && currentMax === oldDefaultMax;
                             root.writeSetting("Algorithm", selectedId, function (v) {
                                 appSettings.defaultAutotileAlgorithm = v;
                             });
+                            if (!resetMax)
+                                return;
                             // Reset maxWindows to the new algorithm's default.
                             // Use Qt.callLater so algoCapabilities binding has
                             // re-evaluated with the newly selected algorithm.
                             Qt.callLater(function () {
-                                if (root.algoCapabilities) {
-                                    var newDefault = root.algoCapabilities.defaultMaxWindows || 6;
-                                    if (previewWindowSlider) {
-                                        previewWindowSlider.slider.value = newDefault;
-                                        root.writeSetting("MaxWindows", newDefault, function (v) {
-                                            appSettings.autotileMaxWindows = v;
-                                        });
-                                    }
-                                }
+                                if (!root.algoCapabilities)
+                                    return;
+                                var newDefault = root.algoCapabilities.defaultMaxWindows || 6;
+                                previewWindowSlider.slider.value = newDefault;
+                                root.writeSetting("MaxWindows", newDefault, function (v) {
+                                    appSettings.autotileMaxWindows = v;
+                                });
                             });
                         }
                     }
