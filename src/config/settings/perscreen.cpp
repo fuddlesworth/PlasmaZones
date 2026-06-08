@@ -8,6 +8,7 @@
 #include "../../core/logging.h"
 #include "../../core/utils.h"
 #include <PhosphorScreens/ScreenIdentity.h>
+#include <QSet>
 
 namespace PlasmaZones {
 
@@ -123,16 +124,19 @@ bool isPerScreenAutotileGapsKey(const QString& key)
     // In-memory per-screen autotile keys are short form (the setter and
     // normalizeAutotileKeys strip the "Autotile" prefix), while
     // kPerScreenAutotileGapsKeys holds the prefixed disk form — compare on the
-    // short form of both so e.g. stored "InnerGap" matches "AutotileInnerGap".
-    const auto toShort = [](const QString& k) -> QString {
-        return k.startsWith(QLatin1String("Autotile")) ? k.mid(8) : k;
-    };
-    const QString shortKey = toShort(key);
-    for (const QLatin1String& k : kPerScreenAutotileGapsKeys) {
-        if (shortKey == toShort(QString(k)))
-            return true;
-    }
-    return false;
+    // short form so e.g. stored "InnerGap" matches "AutotileInnerGap". The short
+    // gaps-key set is a compile-time constant, so strip it once into a static
+    // set rather than re-allocating a QString per disk-form key on every call.
+    static const QSet<QString> shortGapsKeys = []() {
+        QSet<QString> keys;
+        for (const QLatin1String& k : kPerScreenAutotileGapsKeys) {
+            const QString s(k);
+            keys.insert(s.startsWith(QLatin1String("Autotile")) ? s.mid(8) : s);
+        }
+        return keys;
+    }();
+    const QString shortKey = key.startsWith(QLatin1String("Autotile")) ? key.mid(8) : key;
+    return shortGapsKeys.contains(shortKey);
 }
 
 QVariant validatePerScreenAutotileValue(const QString& key, const QVariant& value)
@@ -160,9 +164,12 @@ QVariant validatePerScreenAutotileValue(const QString& key, const QVariant& valu
     // A single startsWith("OuterGap") would apply the uniform-gap bounds to
     // Top/Bottom/Left/Right, which silently clamps to the wrong range whenever
     // those bounds diverge from the uniform ones.
-    if (k == QLatin1String("OuterGap"))
+    if (k == PerScreenKeys::OuterGap)
         return QVariant(
             qBound(ConfigDefaults::autotileOuterGapMin(), value.toInt(), ConfigDefaults::autotileOuterGapMax()));
+    // Per-side keys (OuterGapTop/Bottom/Left/Right) have no short-form named
+    // constant — PerScreenAutotileKey holds only the prefixed disk form and the
+    // value here is already prefix-stripped — so match the short literals.
     if (k == QLatin1String("OuterGapTop"))
         return QVariant(
             qBound(ConfigDefaults::autotileOuterGapTopMin(), value.toInt(), ConfigDefaults::autotileOuterGapTopMax()));
@@ -663,11 +670,6 @@ bool Settings::hasPerScreenZoneSelectorSettings(const QString& screenIdOrName) c
         != m_perScreenZoneSelectorSettings.constEnd();
 }
 
-QStringList Settings::screensWithZoneSelectorOverrides() const
-{
-    return m_perScreenZoneSelectorSettings.keys();
-}
-
 // ── Per-Screen Autotile Config ───────────────────────────────────────────────
 
 QVariantMap Settings::getPerScreenAutotileSettings(const QString& screenIdOrName) const
@@ -684,7 +686,7 @@ void Settings::setPerScreenAutotileSetting(const QString& screenIdOrName, const 
 
     QVariant validated = validatePerScreenAutotileValue(key, value);
     if (!validated.isValid()) {
-        qCWarning(lcConfig) << "Rejected per-screen autotile setting:" << key + QLatin1String("=") << value;
+        qCWarning(lcConfig) << "Rejected per-screen autotile setting:" << (key + QLatin1Char('=') + value.toString());
         return;
     }
 
@@ -764,7 +766,7 @@ void Settings::setPerScreenSnappingSetting(const QString& screenIdOrName, const 
 
     QVariant validated = validatePerScreenSnappingValue(key, value);
     if (!validated.isValid()) {
-        qCWarning(lcConfig) << "Rejected per-screen snapping setting:" << key + QLatin1String("=") << value;
+        qCWarning(lcConfig) << "Rejected per-screen snapping setting:" << (key + QLatin1Char('=') + value.toString());
         return;
     }
 

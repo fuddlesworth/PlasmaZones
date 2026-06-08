@@ -725,7 +725,6 @@ public:
                                                      const QVariant& value) override;
     Q_INVOKABLE void clearPerScreenZoneSelectorSettings(const QString& screenIdOrName) override;
     Q_INVOKABLE bool hasPerScreenZoneSelectorSettings(const QString& screenIdOrName) const override;
-    Q_INVOKABLE QStringList screensWithZoneSelectorOverrides() const;
 
     // Per-screen autotile config (override > global fallback)
     Q_INVOKABLE QVariantMap getPerScreenAutotileSettings(const QString& screenIdOrName) const override;

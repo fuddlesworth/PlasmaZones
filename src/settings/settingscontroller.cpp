@@ -617,8 +617,13 @@ SettingsController::SettingsController(QObject* parent)
         const QVariantList liveScreens = m_screenHelper.screens();
         for (const QVariant& v : liveScreens) {
             const QString name = v.toMap().value(QStringLiteral("name")).toString();
+            // String-equal in the common case (both forms come from the same
+            // daemon payload), physical-parent-equal for virtual siblings, and
+            // screensMatch() as a connector ↔ EDID-id reconciler so a scope
+            // stored in one form survives a live name reported in the other.
             if (name == m_scopeScreenName
-                || PhosphorIdentity::VirtualScreenId::extractPhysicalId(name) == scopePhysicalId)
+                || PhosphorIdentity::VirtualScreenId::extractPhysicalId(name) == scopePhysicalId
+                || PhosphorScreens::ScreenIdentity::screensMatch(name, m_scopeScreenName))
                 return;
         }
         setScopeScreenName(QString());

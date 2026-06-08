@@ -27,8 +27,6 @@ ColumnLayout {
     // Controller with per-screen methods (defaults to appSettings for shared component compatibility)
     property var controller: appSettings
     required property QtObject constants
-    // Whether the parent tab is currently visible (for conditional tooltips)
-    property bool isCurrentTab: false
     // Screen aspect ratio for preview calculations (with safety check)
     property real screenAspectRatio: 16 / 9
     readonly property real safeAspectRatio: screenAspectRatio > 0 ? screenAspectRatio : (16 / 9)

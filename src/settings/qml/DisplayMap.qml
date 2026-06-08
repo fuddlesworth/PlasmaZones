@@ -19,7 +19,8 @@ import org.phosphor.animation
  * The selected output glows in the accent color; any output carrying
  * overrides shows a corner dot (polled via `hasOverridesMethod`). Labels lead
  * with the connector name (DP-2) the way Hyprland/niri configs reference
- * outputs; vendor + resolution live in the tooltip.
+ * outputs; the full display label (vendor + model, or resolution as a
+ * fallback) lives in the tooltip.
  *
  * Pure QML drawing — no SVG asset. Reuses the proportional-geometry idiom
  * from ZonePreview/VirtualScreenPreview.
@@ -47,7 +48,6 @@ ColumnLayout {
     // DisplayMap itself writes nothing.
     signal screenPicked(string name)
     readonly property bool isPerScreen: selectedScreenName !== ""
-    readonly property bool hasMultiple: _filteredScreens.length > 1
 
     // ── Screen list (physical-collapsed copy of the raw screens payload) ──
     // Imperative JS because declarative bindings can't express the
@@ -61,7 +61,10 @@ ColumnLayout {
         for (var i = 0; i < all.length; i++) {
             var name = all[i].name || "";
             var physId = appSettings.physicalScreenId(name);
-            if (seen[physId])
+            // Skip unnamed outputs: an empty physId would bucket every
+            // nameless screen onto one "" tile, lossily collapsing distinct
+            // outputs into a single (un-pickable) entry.
+            if (!physId || seen[physId])
                 continue;
             seen[physId] = true;
             var entry = {};

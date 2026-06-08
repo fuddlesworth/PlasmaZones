@@ -138,7 +138,6 @@
   <!-- callouts -->
   <g font-size="11">
     <!-- one control -->
-    <line x1="600" y1="156" x2="600" y2="200" stroke="#22D3EE" stroke-dasharray="3 4" opacity=".0"/>
     <g transform="translate(700 214)">
       <rect width="356" height="58" rx="10" fill="#070F22" stroke="#22D3EE" opacity=".97"/>
       <text x="14" y="22" font-weight="700" fill="#22D3EE">One scope control for the whole app</text>

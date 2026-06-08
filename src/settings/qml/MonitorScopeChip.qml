@@ -27,6 +27,11 @@ Item {
     property string hasOverridesMethod: ""
     property string clearerMethod: ""
 
+    // The shared scope token. Invariant: it is always a physical-output id
+    // (the popover's DisplayMap is physical-only, so every value written here
+    // is physical-collapsed). The override poll below keys by it directly, so a
+    // future caller that writes a virtual ("id/vs:N") scope would break the
+    // override-dot lookup — keep scope physical.
     readonly property string scope: appSettings.scopeScreenName
     readonly property bool isPerScreen: scope !== ""
     property bool _hasOverride: false

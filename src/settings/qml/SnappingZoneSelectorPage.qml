@@ -46,7 +46,6 @@ SettingsFlickable {
             appSettings: settingsController.settings
             controller: settingsController
             constants: root
-            isCurrentTab: true
             screenAspectRatio: root.screenAspectRatio
         }
     }

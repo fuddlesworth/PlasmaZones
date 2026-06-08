@@ -70,7 +70,7 @@ The CMake target names (`PhosphorScreens::Core`,
 
 ### `screenInfoListToVariantList()` payload tweaks
 
-Three changes shipped together in the same commit window. QML consumers
+Four changes shipped together in the same commit window. QML consumers
 that key off the shape of the emitted `QVariantMap` should be audited:
 
 1. **`width` / `height` are now emitted independently.**
