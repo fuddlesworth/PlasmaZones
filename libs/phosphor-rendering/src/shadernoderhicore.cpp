@@ -17,8 +17,6 @@
 #include <QtMath>
 #include <cstring>
 
-#include <rhi/qshaderbaker.h>
-
 namespace PhosphorRendering {
 
 Q_LOGGING_CATEGORY(lcShaderNode, "phosphorrendering.shadernode")

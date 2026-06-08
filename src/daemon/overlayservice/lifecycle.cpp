@@ -234,12 +234,11 @@ void OverlayService::setIdleForDragPause()
         if (!it.value().overlayPhysScreen) {
             continue;
         }
-        // _idled and the zone-data properties live on
-        // mainOverlaySlot() (PassiveOverlayShell.qml lines
-        // 633, 652, 661-662, etc.), not on the shell window root.
-        // Writing on the window root creates dynamic properties that
-        // QML never observes - the slot's content keeps rendering live
-        // zones while the user expects an idle blank.
+        // _idled and the zone-data properties live on mainOverlaySlot()
+        // (declared on the slot in PassiveOverlayShell.qml), not on the shell
+        // window root. Writing on the window root creates dynamic properties that
+        // QML never observes - the slot's content keeps rendering live zones
+        // while the user expects an idle blank.
         QQuickItem* slot = it.value().mainOverlaySlot();
         if (!slot) {
             continue;
