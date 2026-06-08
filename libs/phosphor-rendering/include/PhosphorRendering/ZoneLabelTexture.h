@@ -46,6 +46,13 @@ struct ZoneLabelTexture
     /// (ARGB32-premultiplied). Returns a null image when empty. Used by the
     /// render node for GPU upload and by QImage-consuming preview paths.
     PHOSPHORRENDERING_EXPORT QImage toImage() const;
+
+    /// Wrap a full-size image as a single tile at (0,0). The inverse of
+    /// toImage() for the common "I already have a full image" case — used by the
+    /// QImage→ZoneLabelTexture metatype converter and by callers (e.g. the
+    /// shader-render tool) that still produce a full QImage. A null/empty image
+    /// yields an empty payload.
+    PHOSPHORRENDERING_EXPORT static ZoneLabelTexture fromImage(const QImage& image);
 };
 
 } // namespace PhosphorRendering

@@ -183,6 +183,13 @@ LuauTileAlgorithm::~LuauTileAlgorithm()
 std::shared_ptr<LuauEngine>
 LuauTileAlgorithm::createSandboxedEngine(std::shared_ptr<PhosphorScripting::LuauWatchdog> watchdog, QString* error)
 {
+    // Isolation note: sandbox() freezes the global + stdlib tables, but every
+    // module loaded into this engine still shares one lua_State / global
+    // environment — modules loaded here are NOT mutually isolated the way a
+    // dedicated per-script VM is, and the engine's memory cap is whole-VM, not
+    // per-module. That is acceptable ONLY for the trusted in-tree bundled
+    // scripts the loader shares one engine across; untrusted user scripts get
+    // their own dedicated, individually-capped engine (one engine per script).
     auto engine = std::make_shared<LuauEngine>(std::move(watchdog));
     if (!engine->init(error)) {
         qCWarning(PhosphorTiles::lcTilesLib)
@@ -233,17 +240,15 @@ void LuauTileAlgorithm::setUserScript(bool isUser)
 
 bool LuauTileAlgorithm::loadScript(const QString& filePath)
 {
+    // loadScript is a private one-shot ctor helper — each LuauTileAlgorithm calls
+    // it exactly once, so there is no prior module/engine to release here (a
+    // reload would need to release the old shared-VM module first; reload is not
+    // a supported operation). m_module is -1 and the engine pointers are null on
+    // entry by construction.
     m_filePath = filePath;
     m_scriptId = QStringLiteral("script:") + QFileInfo(filePath).completeBaseName();
     m_valid = false;
     m_metadata = ScriptedHelpers::ScriptMetadata{};
-
-    // Release any module anchored by a prior load so a re-load doesn't leak the
-    // previous registry ref (today loadScript runs once, from the ctor).
-    if (m_engine && m_module >= 0) {
-        m_engine->releaseModule(m_module);
-        m_module = -1;
-    }
 
     QString error;
     if (m_sharedEngine) {

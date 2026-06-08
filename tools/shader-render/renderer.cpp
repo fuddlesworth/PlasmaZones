@@ -189,7 +189,9 @@ protected:
         }
         zoneNode->setZoneCounts(m_zoneCountTotal, m_zoneCountHighlighted);
         if (m_labelsDirty) {
-            zoneNode->setLabelsTexture(m_labelsImage);
+            // setLabelsTexture now takes a sparse ZoneLabelTexture payload; this
+            // tool produces a single full image, so wrap it as one tile.
+            zoneNode->setLabelsTexture(PhosphorRendering::ZoneLabelTexture::fromImage(m_labelsImage));
             m_labelsDirty = false;
         }
         return node;

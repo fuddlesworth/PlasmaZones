@@ -76,14 +76,8 @@ ZoneShaderItem::ZoneShaderItem(QQuickItem* parent)
     static std::once_flag labelTypeOnce;
     std::call_once(labelTypeOnce, [] {
         qRegisterMetaType<PhosphorRendering::ZoneLabelTexture>();
-        QMetaType::registerConverter<QImage, PhosphorRendering::ZoneLabelTexture>([](const QImage& img) {
-            PhosphorRendering::ZoneLabelTexture t;
-            if (!img.isNull() && img.width() > 0 && img.height() > 0) {
-                t.size = img.size();
-                t.tiles.append(PhosphorRendering::ZoneLabelTile{img, QPoint(0, 0)});
-            }
-            return t;
-        });
+        QMetaType::registerConverter<QImage, PhosphorRendering::ZoneLabelTexture>(
+            &PhosphorRendering::ZoneLabelTexture::fromImage);
     });
 
     // Install our ZoneUniformExtension on the base class. We call the
@@ -348,7 +342,7 @@ QSGNode* ZoneShaderItem::updatePaintNode(QSGNode* oldNode, UpdatePaintNodeData* 
         node = static_cast<PhosphorRendering::ZoneShaderNodeRhi*>(createShaderNode());
         m_zoneRenderNode = node;
         freshNode = true;
-        qCInfo(PlasmaZones::lcOverlay) << "updatePaintNode: created NEW ZoneShaderNodeRhi (oldNode was null)";
+        qCDebug(PlasmaZones::lcOverlay) << "updatePaintNode: created NEW ZoneShaderNodeRhi (oldNode was null)";
     }
     // No per-frame log on the reuse path: updatePaintNode runs on every rendered
     // frame, so logging here floods the journal at the repaint rate.

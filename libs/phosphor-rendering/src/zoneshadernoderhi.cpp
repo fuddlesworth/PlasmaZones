@@ -88,10 +88,6 @@ void ZoneShaderNodeRhi::uploadLabelsTexture(QRhi* rhi, QRhiCommandBuffer* cb)
     const bool hasLabels = !m_labels.isEmpty();
     const QSize targetSize = hasLabels ? m_labels.size : QSize(1, 1);
 
-    // True when the texture was (re)created this call and therefore holds
-    // undefined contents that must be fully cleared before any tile lands.
-    bool needFullClear = false;
-
     // Initialize labels texture resources on first use. Only flip
     // m_labelsInitialized after BOTH resources create successfully — otherwise
     // a transient RHI failure (device lost, OOM) would leave the init block
@@ -126,7 +122,7 @@ void ZoneShaderNodeRhi::uploadLabelsTexture(QRhi* rhi, QRhiCommandBuffer* cb)
         m_labelsInitialized = true;
         m_labelsInitFailureCount = 0;
         setExtraBinding(1, m_labelsTexture.get(), m_labelsSampler.get());
-        needFullClear = true;
+        m_labelsNeedFullClear = true;
     } else if (m_labelsTexture->pixelSize() != targetSize) {
         std::unique_ptr<QRhiTexture> resized(rhi->newTexture(QRhiTexture::RGBA8, targetSize));
         if (!resized->create()) {
@@ -138,19 +134,25 @@ void ZoneShaderNodeRhi::uploadLabelsTexture(QRhi* rhi, QRhiCommandBuffer* cb)
         QRhiTexture* newPtr = resized.get();
         setExtraBinding(1, newPtr, m_labelsSampler.get());
         m_labelsTexture = std::move(resized);
-        needFullClear = true;
+        m_labelsNeedFullClear = true;
     }
+
+    // Snapshot the latched flag; it is reset only after a successful upload so a
+    // pool-exhaustion retry still full-clears the freshly (re)allocated texture.
+    const bool needFullClear = m_labelsNeedFullClear;
 
     // ── Clear entries ────────────────────────────────────────────────────────
     // Clearing reuses one small transparent block uploaded in sub-regions, so it
     // never allocates a full-screen image. On (re)allocation the whole texture is
     // cleared in a grid; otherwise only the rects vacated since the last upload.
-    // clearScratch must outlive the resourceUpdate below (the batch holds an
-    // implicitly-shared ref), so it is function-scoped.
+    // m_prevTileRects / m_labelsNeedFullClear are NOT mutated here — they are
+    // committed only after a successful upload (below), so an early return leaves
+    // the correct regions to be re-cleared on the retry. clearScratch must
+    // outlive the resourceUpdate below (the batch holds an implicitly-shared
+    // ref), so it is function-scoped.
     QList<QRhiTextureUploadEntry> clearEntries;
     QImage clearScratch;
     if (needFullClear) {
-        m_prevTileRects.clear();
         constexpr int kClearBlock = 512;
         clearScratch = QImage(qMin(kClearBlock, targetSize.width()), qMin(kClearBlock, targetSize.height()),
                               QImage::Format_ARGB32_Premultiplied);
@@ -180,7 +182,6 @@ void ZoneShaderNodeRhi::uploadLabelsTexture(QRhi* rhi, QRhiCommandBuffer* cb)
             sub.setDestinationTopLeft(r.topLeft());
             clearEntries.append(QRhiTextureUploadEntry(0, 0, sub));
         }
-        m_prevTileRects.clear();
     }
 
     // ── Tile entries ───────────────────────────────────────────────────────
@@ -204,6 +205,7 @@ void ZoneShaderNodeRhi::uploadLabelsTexture(QRhi* rhi, QRhiCommandBuffer* cb)
 
     if (clearEntries.isEmpty() && tileEntries.isEmpty()) {
         m_prevTileRects = newTileRects;
+        m_labelsNeedFullClear = false;
         m_labelsTextureDirty = false;
         return;
     }
@@ -215,7 +217,8 @@ void ZoneShaderNodeRhi::uploadLabelsTexture(QRhi* rhi, QRhiCommandBuffer* cb)
     QRhiResourceUpdateBatch* tileBatch = tileEntries.isEmpty() ? nullptr : rhi->nextResourceUpdateBatch();
     if ((!clearEntries.isEmpty() && !clearBatch) || (!tileEntries.isEmpty() && !tileBatch)) {
         // Pool exhausted — release any acquired batch and retry next frame with
-        // nothing applied (dirty stays set, m_prevTileRects unchanged).
+        // nothing applied (dirty stays set; m_prevTileRects and
+        // m_labelsNeedFullClear unchanged so the retry re-clears correctly).
         if (clearBatch) {
             clearBatch->release();
         }
@@ -240,8 +243,9 @@ void ZoneShaderNodeRhi::uploadLabelsTexture(QRhi* rhi, QRhiCommandBuffer* cb)
         cb->resourceUpdate(tileBatch);
     }
 
+    // Commit state only now that the upload is fully submitted.
     m_prevTileRects = newTileRects;
-    // Only clear the dirty flag after the upload has been submitted.
+    m_labelsNeedFullClear = false;
     m_labelsTextureDirty = false;
 }
 

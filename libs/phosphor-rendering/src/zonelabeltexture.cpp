@@ -26,4 +26,14 @@ QImage ZoneLabelTexture::toImage() const
     return image;
 }
 
+ZoneLabelTexture ZoneLabelTexture::fromImage(const QImage& image)
+{
+    ZoneLabelTexture t;
+    if (!image.isNull() && image.width() > 0 && image.height() > 0) {
+        t.size = image.size();
+        t.tiles.append(ZoneLabelTile{image, QPoint(0, 0)});
+    }
+    return t;
+}
+
 } // namespace PhosphorRendering

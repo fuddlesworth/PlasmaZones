@@ -63,20 +63,19 @@ QVariantMap parseShaderParamsJson(const QString& json, const char* context)
 
 // parseZonesJson is defined in overlayservice_internal.h (shared inline)
 
-// Build labels texture for shader preview zones. Uses settings for font when available.
-QImage buildLabelsImageForPreviewZones(const QVariantList& zones, const QSize& size,
-                                       const IZoneVisualizationSettings* settings)
+// Build the sparse zone-labels payload for shader preview zones (font from
+// settings when available). Returned as a ZoneLabelTexture rather than a
+// flattened QImage so the preview reuses the same sparse glyph-tile upload path
+// as the live overlay instead of round-tripping through a full-screen image. An
+// empty payload (no zones) is fine — the render node binds the 1×1 transparent
+// fallback.
+PhosphorRendering::ZoneLabelTexture buildLabelsPayloadForPreviewZones(const QVariantList& zones, const QSize& size,
+                                                                      const IZoneVisualizationSettings* settings)
 {
     const LabelFontSettings lfs = extractLabelFontSettings(settings);
-    QImage labelsImage = ZoneLabelTextureBuilder::build(zones, size, lfs.fontColor, true, lfs.backgroundColor,
-                                                        lfs.fontFamily, lfs.fontSizeScale, lfs.fontWeight,
-                                                        lfs.fontItalic, lfs.fontUnderline, lfs.fontStrikeout)
-                             .toImage();
-    if (labelsImage.isNull()) {
-        labelsImage = QImage(1, 1, QImage::Format_ARGB32);
-        labelsImage.fill(Qt::transparent);
-    }
-    return labelsImage;
+    return ZoneLabelTextureBuilder::build(zones, size, lfs.fontColor, true, lfs.backgroundColor, lfs.fontFamily,
+                                          lfs.fontSizeScale, lfs.fontWeight, lfs.fontItalic, lfs.fontUnderline,
+                                          lfs.fontStrikeout);
 }
 
 } // namespace
@@ -226,10 +225,12 @@ void OverlayService::onAudioSpectrumUpdated(const QVector<float>& spectrum)
     // Pass QVector<float> wrapped in QVariant to avoid per-element QVariant boxing.
     // ZoneShaderItem::setAudioSpectrum() detects and unwraps QVector<float> directly.
     const QVariant wrapped = QVariant::fromValue(spectrum);
-    // Only push to the main overlay while it is actually visible. During the
-    // post-hide CAVA grace window the surfaces stay mapped but hidden; pushing
-    // here would repaint them every frame for no visible benefit.
-    if (m_visible) {
+    // Only push to the main overlay while it is actually displaying. During
+    // either grace window — post-hide, or warm-idled after a drag (m_visible
+    // stays true but m_overlayIdled is set, the windows mapped-but-blanked) —
+    // CAVA may still be running; pushing here would repaint invisible surfaces
+    // every frame for no benefit. isOverlayDisplaying() covers both.
+    if (isOverlayDisplaying()) {
         for (auto it = m_screenStates.cbegin(); it != m_screenStates.cend(); ++it) {
             if (!it.value().overlayPhysScreen) {
                 continue;
@@ -434,9 +435,9 @@ void OverlayService::showShaderPreview(int x, int y, int width, int height, cons
     writeQmlProperty(m_shaderPreviewWindow, QString(OverlayQmlPropertyNames::HighlightedCount), 0);
 
     const QSize size(qMax(1, width), qMax(1, height));
-    const QImage labelsImage = buildLabelsImageForPreviewZones(zones, size, m_settings);
+    const PhosphorRendering::ZoneLabelTexture labels = buildLabelsPayloadForPreviewZones(zones, size, m_settings);
     writeQmlProperty(m_shaderPreviewWindow, QString(OverlayQmlPropertyNames::LabelsTexture),
-                     QVariant::fromValue(labelsImage));
+                     QVariant::fromValue(labels));
 
     // applyShaderInfoToWindow sets shaderSource LAST (triggers statusChanged cascade).
     // Pass the preview's sub-rect + the containing physical screen so a
@@ -488,9 +489,10 @@ void OverlayService::updateShaderPreview(int x, int y, int width, int height, co
 
         const int w = qMax(1, m_shaderPreviewWindow->width());
         const int h = qMax(1, m_shaderPreviewWindow->height());
-        const QImage labelsImage = buildLabelsImageForPreviewZones(zones, QSize(w, h), m_settings);
+        const PhosphorRendering::ZoneLabelTexture labels =
+            buildLabelsPayloadForPreviewZones(zones, QSize(w, h), m_settings);
         writeQmlProperty(m_shaderPreviewWindow, QString(OverlayQmlPropertyNames::LabelsTexture),
-                         QVariant::fromValue(labelsImage));
+                         QVariant::fromValue(labels));
     }
 
     if (!shaderParamsJson.isEmpty()) {

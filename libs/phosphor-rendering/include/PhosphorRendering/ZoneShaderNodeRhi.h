@@ -88,7 +88,14 @@ private:
     ZoneLabelTexture m_labels;
     /// Dest rects of the tiles uploaded last time, so the next upload can clear
     /// exactly the regions being vacated (no full-screen clear per change).
+    /// Only committed to the new set after a fully-successful upload, so a
+    /// pool-exhaustion retry re-clears the correct (old) regions.
     QList<QRect> m_prevTileRects;
+    /// Latched true when the texture is (re)created (undefined contents) and
+    /// cleared only after a successful full grid-clear upload. Persisting it
+    /// across frames ensures a pool-exhaustion retry still performs the full
+    /// clear instead of leaving GPU garbage in the non-tile regions.
+    bool m_labelsNeedFullClear = false;
     std::unique_ptr<QRhiTexture> m_labelsTexture;
     std::unique_ptr<QRhiSampler> m_labelsSampler;
     quint64 m_instanceId = 0;

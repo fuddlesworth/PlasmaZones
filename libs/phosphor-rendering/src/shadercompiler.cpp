@@ -18,6 +18,7 @@
 #include <QStandardPaths>
 #include <QTextStream>
 
+#include <algorithm>
 #include <mutex>
 
 namespace PhosphorRendering {
@@ -94,6 +95,12 @@ QMutex& bakeSerializationMutex()
 // OR any of its includes changes the digest, so the cache is self-invalidating —
 // no mtime tracking or explicit eviction on edit needed. Orphaned blobs from
 // old source versions are bounded by a one-shot prune (see below).
+//
+// Trust model: the cache dir lives under the user's own GenericCacheLocation and
+// is trusted implicitly (same-UID). A local process running as the user could
+// substitute a valid-but-wrong blob for a key; that is out of scope here (such a
+// process already controls the daemon). fromSerialized() rejects malformed or
+// version-mismatched data, so corruption degrades to a re-bake, never a crash.
 
 constexpr int kMaxDiskCacheEntries = 512;
 
@@ -148,11 +155,17 @@ void pruneDiskCacheOnce()
         if (dir.isEmpty()) {
             return;
         }
-        QFileInfoList blobs = QDir(dir).entryInfoList({QStringLiteral("*.qsb")}, QDir::Files, QDir::Time);
+        QFileInfoList blobs = QDir(dir).entryInfoList({QStringLiteral("*.qsb")}, QDir::Files, QDir::NoSort);
         if (blobs.size() <= kMaxDiskCacheEntries) {
             return;
         }
-        // entryInfoList(QDir::Time) is newest-first; delete from the tail.
+        // Sort newest-first ourselves rather than trusting QDir::Time's
+        // direction (unspecified across Qt versions/platforms) — getting it
+        // backwards would delete the HOTTEST blobs and force re-bakes of exactly
+        // the active shaders. Delete from the tail (oldest) down to ~90% of cap.
+        std::sort(blobs.begin(), blobs.end(), [](const QFileInfo& a, const QFileInfo& b) {
+            return a.lastModified() > b.lastModified();
+        });
         const int keep = kMaxDiskCacheEntries * 9 / 10;
         for (int i = keep; i < blobs.size(); ++i) {
             QFile::remove(blobs.at(i).absoluteFilePath());
@@ -190,7 +203,12 @@ void writeDiskCache(const QString& path, const QShader& shader)
         return;
     }
     f.write(shader.serialized());
-    f.commit();
+    // commit() failure (disk full, quota) is non-fatal — the entry is simply not
+    // cached and re-bakes next run — but log it so the condition is diagnosable
+    // rather than silent.
+    if (!f.commit()) {
+        qCDebug(lcShaderNode) << "shader disk cache: write failed for" << path;
+    }
 }
 
 } // namespace
@@ -222,51 +240,59 @@ ShaderCompiler::Result ShaderCompiler::compile(const QByteArray& source, QShader
         }
     }
 
-    // Cache miss — bake under the serialization mutex (glslang is not reentrant).
-    // Double-check inside the lock so a concurrent caller that beat us to the
-    // bake doesn't trigger a second redundant bake.
-    QMutexLocker bakeLock(&bakeSerializationMutex());
-    {
-        QMutexLocker cacheLock(&cache.mutex);
-        if (QShader* hit = cache.entries.object(key); hit && hit->isValid()) {
-            result.shader = *hit;
-            result.success = true;
-            return result;
-        }
-    }
-
-    // Persistent-cache check before the (expensive) bake: a serialized QShader
-    // from a previous run skips glslang entirely. Populate the in-memory cache
-    // on a disk hit so repeat lookups this run stay hot.
+    // Persistent-cache check BEFORE taking the bake lock: a serialized QShader
+    // from a previous run skips glslang entirely, and the read is lock-free
+    // (writeDiskCache uses QSaveFile's atomic rename, so a reader sees a whole
+    // file or none). Keeping disk I/O off the bake mutex means a render-thread
+    // miss that resolves from disk never serializes behind a warm-bake thread's
+    // disk I/O. Populate the in-memory cache on a disk hit so repeat lookups
+    // this run stay hot.
     const QString diskPath = diskCachePath(source, static_cast<int>(stage));
     if (QShader fromDisk = readDiskCache(diskPath); fromDisk.isValid()) {
-        result.shader = fromDisk;
-        result.success = true;
         QMutexLocker cacheLock(&cache.mutex);
         cache.entries.insert(key, new QShader(fromDisk));
+        result.shader = fromDisk;
+        result.success = true;
         return result;
     }
 
-    QShaderBaker baker;
-    baker.setGeneratedShaderVariants({QShader::StandardShader});
-    baker.setGeneratedShaders(bakeTargets());
-    baker.setSourceString(source, stage);
-    result.shader = baker.bake();
-
-    if (result.shader.isValid()) {
-        result.success = true;
+    // Disk miss — bake under the serialization mutex (glslang is not reentrant).
+    // The lock is held ONLY across the bake itself; disk I/O stays outside it.
+    {
+        QMutexLocker bakeLock(&bakeSerializationMutex());
+        // Double-check in-memory inside the lock so a concurrent caller that beat
+        // us to the bake (and already inserted) doesn't trigger a second one.
         {
+            QMutexLocker cacheLock(&cache.mutex);
+            if (QShader* hit = cache.entries.object(key); hit && hit->isValid()) {
+                result.shader = *hit;
+                result.success = true;
+                return result;
+            }
+        }
+
+        QShaderBaker baker;
+        baker.setGeneratedShaderVariants({QShader::StandardShader});
+        baker.setGeneratedShaders(bakeTargets());
+        baker.setSourceString(source, stage);
+        result.shader = baker.bake();
+
+        if (result.shader.isValid()) {
+            result.success = true;
             QMutexLocker cacheLock(&cache.mutex);
             // QCache::insert evicts the LRU entry when over capacity. Heap-allocate
             // because QCache owns its values.
             cache.entries.insert(key, new QShader(result.shader));
+        } else {
+            result.error = baker.errorMessage();
         }
-        // Persist for future runs. Done after the in-memory insert and outside
-        // the cache mutex (the bake mutex still serializes writers); a failed
-        // write just means a future re-bake, never a wrong result.
+    } // bake mutex released before disk write
+
+    // Persist for future runs outside the bake lock; the content-addressed key
+    // makes concurrent writers harmless, and a failed write just means a future
+    // re-bake, never a wrong result.
+    if (result.success) {
         writeDiskCache(diskPath, result.shader);
-    } else {
-        result.error = baker.errorMessage();
     }
 
     return result;
