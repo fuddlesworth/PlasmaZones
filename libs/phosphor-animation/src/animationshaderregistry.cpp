@@ -6,9 +6,9 @@
 
 #include <PhosphorShaders/ShaderParamPreamble.h>
 
-#include <PhosphorFsLoader/MetadataPackScanStrategy.h>
-
 #include <QColor>
+#include <QCryptographicHash>
+#include <QDateTime>
 #include <QDir>
 #include <QFile>
 #include <QFileInfo>
@@ -19,6 +19,7 @@
 #include <QRegularExpression>
 #include <QStringList>
 
+#include <algorithm>
 #include <optional>
 
 namespace PhosphorAnimationShaders {
@@ -340,50 +341,89 @@ QStringList effectWatchPaths(const AnimationShaderEffect& e)
     return paths;
 }
 
-} // namespace
-
-// No `setSignatureContrib` is wired in `buildScanStrategy` below — the
-// strategy auto-fingerprints every distinct file `effectWatchPaths`
-// returns (path|size|mtime|), which covers the resolved frag and vertex
-// shader paths in both the "search-path reorder swaps the winning copy"
-// and "in-place content edit" scenarios. A bespoke `SignatureContrib`
-// would be redundant.
-std::unique_ptr<PhosphorFsLoader::IScanStrategy>
-AnimationShaderRegistry::buildScanStrategy(AnimationShaderRegistry* self)
+// Per-entry content signature: path|size|mtime of the pack's metadata.json
+// plus every file effectWatchPaths returns (frag/vert/buffer shaders +
+// declared textures). Drives MetadataPackLoader's per-entry reconcile so an
+// edited pack re-registers with fresh data while unedited siblings stay put;
+// the loader's coarse onCommitted hook re-emits effectsChanged on any
+// committed rescan regardless.
+void effectContentSignature(QCryptographicHash& hasher, const AnimationShaderEffect& e)
 {
-    auto strategy = std::make_unique<ScanStrategy>(parseEffect, [self]() {
-        Q_EMIT self->effectsChanged();
-    });
-    strategy->setPerEntryWatchPaths(effectWatchPaths);
-    strategy->setLoggingCategory(lcRegistry());
-    return strategy;
+    const auto mixFile = [&hasher](const QString& path) {
+        if (path.isEmpty()) {
+            return;
+        }
+        const QFileInfo fi(path);
+        hasher.addData(path.toUtf8());
+        hasher.addData(QByteArray::number(fi.size()));
+        hasher.addData(QByteArray::number(fi.lastModified().toMSecsSinceEpoch()));
+    };
+    if (!e.sourceDir.isEmpty()) {
+        mixFile(e.sourceDir + QStringLiteral("/metadata.json"));
+    }
+    const QStringList watched = effectWatchPaths(e);
+    for (const QString& p : watched) {
+        mixFile(p);
+    }
+    // isUser is set from the user-path classification, NOT from file content —
+    // it can flip (setUserPath after addSearchPaths) with no file change, so
+    // mix it in or the reconcile would keep the stale-classification entry.
+    hasher.addData(e.isUserEffect ? "u" : "s");
 }
 
+} // namespace
+
 AnimationShaderRegistry::AnimationShaderRegistry(QObject* parent)
-    : MetadataPackRegistryBase(lcRegistry(), buildScanStrategy(this), parent)
+    : QObject(parent)
+    , m_loader(std::make_unique<PhosphorRegistry::MetadataPackLoader<AnimationPack>>(
+          &m_registry,
+          // Parser: reuse the existing metadata→AnimationShaderEffect parse,
+          // then wrap the result in an AnimationPack for the registry.
+          [](const QString& subdir, const QJsonObject& root, bool isUser) -> std::shared_ptr<AnimationPack> {
+              std::optional<AnimationShaderEffect> e = parseEffect(subdir, root, isUser);
+              return e ? std::make_shared<AnimationPack>(std::move(*e)) : nullptr;
+          },
+          lcRegistry()))
 {
-    // `buildScanStrategy` is the only path that populates the base's
-    // strategy slot, and it always produces a `ScanStrategy`. Pin that
-    // invariant via dynamic_cast BEFORE storing the typed pointer so a
-    // future refactor that diverts the slot fails loudly instead of
-    // silently UB-ing on lookup. Use `qFatal` rather than `Q_ASSERT_X`
-    // — the assert path compiles to a no-op in release builds, which
-    // would leave `m_typedStrategy` null and crash on the first
-    // `m_typedStrategy->packs()` deref. Failing loudly here is correct
-    // for a contract-violation invariant.
-    auto* typed = dynamic_cast<ScanStrategy*>(strategy());
-    if (!typed) {
-        qFatal(
-            "AnimationShaderRegistry: ScanStrategy contract violation — buildScanStrategy returned non-ScanStrategy*");
-    }
-    m_typedStrategy = typed;
+    m_loader->setPerEntryWatchPaths([](const AnimationPack& p) {
+        return effectWatchPaths(p.effect());
+    });
+    m_loader->setSignatureContrib([](QCryptographicHash& hasher, const AnimationPack& p) {
+        effectContentSignature(hasher, p.effect());
+    });
+    m_loader->setOnCommitted([this]() {
+        Q_EMIT effectsChanged();
+    });
 }
 
 AnimationShaderRegistry::~AnimationShaderRegistry() = default;
 
-void AnimationShaderRegistry::onUserPathChanged(const QString& path)
+// ── Search paths (forwarded to the loader) ───────────────────────────────
+
+void AnimationShaderRegistry::addSearchPath(const QString& path, PhosphorFsLoader::LiveReload liveReload)
 {
-    m_typedStrategy->setUserPath(path);
+    m_loader->addSearchPath(path, liveReload);
+}
+
+void AnimationShaderRegistry::addSearchPaths(const QStringList& paths, PhosphorFsLoader::LiveReload liveReload,
+                                             PhosphorFsLoader::RegistrationOrder order)
+{
+    m_loader->addSearchPaths(paths, liveReload, order);
+}
+
+QStringList AnimationShaderRegistry::searchPaths() const
+{
+    return m_loader->searchPaths();
+}
+
+void AnimationShaderRegistry::setUserPath(const QString& path)
+{
+    m_loader->setUserPath(path);
+}
+
+void AnimationShaderRegistry::refresh()
+{
+    m_loader->refresh();
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -392,24 +432,35 @@ void AnimationShaderRegistry::onUserPathChanged(const QString& path)
 
 QList<AnimationShaderEffect> AnimationShaderRegistry::availableEffects() const
 {
-    // Strategy returns a sorted-by-id snapshot — single source of truth
-    // for QHash-randomisation-stable output.
-    return m_typedStrategy->packs();
+    // Registry iteration is insertion order; sort by id for alphabetical
+    // output (the legacy strategy returned sorted).
+    QList<AnimationShaderEffect> result;
+    result.reserve(m_registry.size());
+    m_registry.forEach([&result](const std::shared_ptr<AnimationPack>& pack) {
+        result.append(pack->effect());
+    });
+    std::sort(result.begin(), result.end(), [](const AnimationShaderEffect& a, const AnimationShaderEffect& b) {
+        return a.id < b.id;
+    });
+    return result;
 }
 
 AnimationShaderEffect AnimationShaderRegistry::effect(const QString& id) const
 {
-    return m_typedStrategy->pack(id);
+    const auto pack = m_registry.factory(id);
+    return pack ? pack->effect() : AnimationShaderEffect{};
 }
 
 bool AnimationShaderRegistry::hasEffect(const QString& id) const
 {
-    return m_typedStrategy->contains(id);
+    return m_registry.factory(id) != nullptr;
 }
 
 QStringList AnimationShaderRegistry::effectIds() const
 {
-    return m_typedStrategy->packIds();
+    QStringList ids = m_registry.ids();
+    std::sort(ids.begin(), ids.end());
+    return ids;
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════

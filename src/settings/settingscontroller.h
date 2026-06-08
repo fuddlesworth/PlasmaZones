@@ -42,6 +42,8 @@ class WindowRuleStoreWatcher;
 
 namespace PlasmaZones {
 class ShaderRegistry;
+class ShaderPreviewController;
+class RegistryShaderPreviewBackend;
 }
 
 #include <QHash>
@@ -357,23 +359,11 @@ public:
         return m_snappingZoneSelectorPage;
     }
     SnappingZonesController* snappingZonesPage() const;
-    SnappingEffectsController* snappingEffectsPage() const
-    {
-        return m_snappingEffectsPage;
-    }
-    SnappingShadersPageController* snappingShadersPage() const
-    {
-        return m_snappingShadersPage.get();
-    }
+    SnappingEffectsController* snappingEffectsPage() const;
+    SnappingShadersPageController* snappingShadersPage() const;
     SnappingWindowAppearanceController* snappingWindowAppearancePage() const;
-    TilingAppearanceController* tilingAppearancePage() const
-    {
-        return m_tilingAppearancePage;
-    }
-    TilingAlgorithmController* tilingAlgorithmPage() const
-    {
-        return m_tilingAlgorithmPage.get();
-    }
+    TilingAppearanceController* tilingAppearancePage() const;
+    TilingAlgorithmController* tilingAlgorithmPage() const;
     GeneralPageController* generalPage() const
     {
         return m_generalPage;
@@ -660,6 +650,15 @@ private:
     /// page borrows the layout registry — see the declaration-order
     /// invariant block below.
     PlasmaZones::ShaderRegistry* m_overlayShaderRegistry = nullptr;
+
+    // Shared zone-shader live-preview feed for the overlay-shader browser
+    // (T3.1). The backend borrows m_overlayShaderRegistry + m_settings; the
+    // controller borrows the backend. Declared backend-before-controller so
+    // reverse member destruction tears the controller down first;
+    // m_snappingShadersPage (declared later) borrows the controller and is
+    // destroyed before it.
+    std::unique_ptr<RegistryShaderPreviewBackend> m_shaderPreviewBackend;
+    std::unique_ptr<ShaderPreviewController> m_shaderPreviewController;
 
     DaemonController m_daemonController;
     UpdateChecker m_updateChecker;

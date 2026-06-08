@@ -18,6 +18,7 @@
 #include <PhosphorWorkspaces/VirtualDesktopManager.h>
 #include <PhosphorWorkspaces/ActivityManager.h>
 #include <PhosphorZones/LayoutRegistry.h>
+#include <PhosphorZones/ZoneJsonKeys.h>
 #include "../core/logging.h"
 #include "../core/shaderregistry.h"
 #include <PhosphorScreens/Manager.h>
@@ -32,8 +33,51 @@
 #include <QScreen>
 #include <QThread>
 #include <PhosphorScreens/ScreenIdentity.h>
+#include <QUuid>
 
 namespace PlasmaZones {
+
+namespace {
+
+// `getLayout` is contractually a *Layout*-schema endpoint: its sole consumer
+// (the editor's loadLayout parser, DBusLayoutService::loadLayout → getLayout)
+// reads the layout name under `name` and each zone's geometry nested under
+// `relativeGeometry`. Autotile "layouts" are synthesized on the fly from a
+// LayoutPreview, whose own wire shape (PlasmaZones::toJson) is the *flat*
+// preview schema consumed by the layout picker / OSD (getLayoutPreview*).
+// Returning that flat shape from getLayout left the editor parsing every zone
+// to a (0,0,0,0) rect — a blank canvas in preview mode. Project the preview
+// into the Layout schema the editor expects instead.
+QJsonObject autotilePreviewToLayoutJson(const PhosphorLayout::LayoutPreview& preview)
+{
+    QJsonObject layout;
+    layout[::PhosphorZones::ZoneJsonKeys::Id] = preview.id;
+    layout[::PhosphorZones::ZoneJsonKeys::Name] = preview.displayName;
+
+    QJsonArray zones;
+    for (int i = 0; i < preview.zones.size(); ++i) {
+        const QRectF& r = preview.zones.at(i);
+        QJsonObject relGeo;
+        relGeo[::PhosphorZones::ZoneJsonKeys::X] = r.x();
+        relGeo[::PhosphorZones::ZoneJsonKeys::Y] = r.y();
+        relGeo[::PhosphorZones::ZoneJsonKeys::Width] = r.width();
+        relGeo[::PhosphorZones::ZoneJsonKeys::Height] = r.height();
+
+        QJsonObject zone;
+        // Synthetic per-zone id: autotile previews are read-only in the editor
+        // (previewMode is forced for autotile ids), but the editor's zone model
+        // and QML key zones by id, never index — so each needs a stable id.
+        zone[::PhosphorZones::ZoneJsonKeys::Id] = QUuid::createUuid().toString();
+        zone[::PhosphorZones::ZoneJsonKeys::ZoneNumber] =
+            (i < preview.zoneNumbers.size()) ? preview.zoneNumbers.at(i) : (i + 1);
+        zone[::PhosphorZones::ZoneJsonKeys::RelativeGeometry] = relGeo;
+        zones.append(zone);
+    }
+    layout[::PhosphorZones::ZoneJsonKeys::Zones] = zones;
+    return layout;
+}
+
+} // namespace
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // Constructor and Signal Setup
@@ -298,7 +342,9 @@ QString LayoutAdaptor::getLayout(const QString& id)
         // non-positive windowCount, so no adapter helper is needed here.
         PhosphorLayout::LayoutPreview preview =
             PhosphorTiles::previewFromAlgorithm(algoId, algo, -1, m_algorithmRegistry);
-        QJsonObject json = PlasmaZones::toJson(preview);
+        // getLayout returns a Layout-schema document (editor parser contract);
+        // the flat preview schema belongs to getLayoutPreview*, not here.
+        QJsonObject json = autotilePreviewToLayoutJson(preview);
         // Apply stored per-algorithm overrides (gaps, visibility, shader)
         QJsonObject overrides = m_layoutManager->loadAutotileOverrides(algoId);
         for (auto it = overrides.constBegin(); it != overrides.constEnd(); ++it) {

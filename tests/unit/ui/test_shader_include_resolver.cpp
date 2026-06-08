@@ -127,6 +127,35 @@ private Q_SLOTS:
         QVERIFY(out.isEmpty());
     }
 
+    // The reserved generated-preamble sidecar (p_generated.glsl) is an
+    // editor-only autocomplete aid: an #include of it is SKIPPED, not resolved —
+    // it neither errors when the file is absent nor inlines its body when
+    // present (the real preamble is spliced at load). See T2.2.
+    void testGeneratedPreambleIncludeSkipped()
+    {
+        QTemporaryDir tmp;
+        QVERIFY(tmp.isValid());
+        const QString sidecarName =
+            QString::fromLatin1(PhosphorShaders::ShaderIncludeResolver::GeneratedPreambleInclude);
+        const QString source =
+            QStringLiteral("#version 450\n#include \"") + sidecarName + QStringLiteral("\"\nvoid main() {}\n");
+
+        // (a) Sidecar ABSENT: skipped, not a "not found" error.
+        QString err;
+        const QString out = PhosphorShaders::ShaderIncludeResolver::expandIncludes(source, tmp.path(), {}, &err);
+        QVERIFY2(err.isEmpty(), qPrintable(err));
+        QVERIFY2(out.contains(QStringLiteral("void main()")), qPrintable(out));
+        QVERIFY2(out.contains(QStringLiteral("[include skipped: generated preamble]")), qPrintable(out));
+
+        // (b) Sidecar PRESENT: still skipped by reserved name, so its body never
+        // reaches the output (no double-define with the spliced preamble).
+        writeFile(tmp.filePath(sidecarName), QStringLiteral("#define p_marker customParams[0].x\n"));
+        QString err2;
+        const QString out2 = PhosphorShaders::ShaderIncludeResolver::expandIncludes(source, tmp.path(), {}, &err2);
+        QVERIFY2(err2.isEmpty(), qPrintable(err2));
+        QVERIFY2(!out2.contains(QStringLiteral("p_marker")), qPrintable(out2));
+    }
+
     // An EMPTY but valid include file must inline cleanly (nothing), NOT be
     // mistaken for a read failure — even with no error sink. readAll() yields a
     // null QString for an empty file, so the resolver must distinguish that from a

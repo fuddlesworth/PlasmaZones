@@ -7,19 +7,17 @@
 #include "AlgorithmPreviewParams.h"
 #include "AutotileConstants.h"
 #include "ITileAlgorithmRegistry.h"
-#include <QHash>
 #include <QLatin1String>
 #include <QList>
 #include <QMutex>
 #include <QMutexLocker>
 #include <QObject>
-#include <QPointer>
-#include <QRect>
 #include <QString>
 #include <QStringList>
 #include <QVariantList>
 #include <QVariantMap>
 #include <functional>
+#include <memory>
 
 namespace PhosphorTiles {
 
@@ -42,10 +40,13 @@ class TilingAlgorithm;
  * a future compiled-in C++ algorithm, but no in-tree algorithm currently uses
  * it.
  *
- * @note Thread Safety: read operations (@c algorithm, @c availableAlgorithms,
- *       @c hasAlgorithm) are thread-safe once construction has completed.
- *       Registration/unregistration should only occur from the thread
- *       that owns the registry (typically the main thread).
+ * @note Thread Safety: the underlying id-keyed store (a thread-safe
+ *       @c PhosphorRegistry::Registry) makes the read operations
+ *       (@c algorithm, @c availableAlgorithms, @c hasAlgorithm) safe to call
+ *       from any thread. Registration/unregistration must still occur on the
+ *       thread that owns the registry (typically the main thread) — not
+ *       because of the store, but because they drive @c deleteLater() and
+ *       Qt signal emission, which are thread-affine.
  *
  * @see TilingAlgorithm for the algorithm interface
  * @see ITileAlgorithmRegistry for the abstract contract
@@ -64,14 +65,16 @@ public:
      * internals) are destroyed while Qt is still fully alive, avoiding
      * teardown crashes if an instance outlives @c QCoreApplication.
      *
-     * Drains exclusively this registry's own pending @c deleteLater()
-     * algorithms (tracked in @c m_pendingDeletes), never the process-
-     * wide DeferredDelete queue. This narrow scoping is load-bearing
-     * after the singleton kill in PR #343: multiple registries
-     * (daemon, editor, settings) each connect to @c aboutToQuit, and a
-     * process-wide drain from one registry would force-delete pending
-     * @c deleteLater() events for unrelated subsystems whose owners
-     * have not yet run their teardown.
+     * Drains exclusively this registry's own algorithms — it snapshots them
+     * before @c clear()ing the registry (each entry's shared_ptr deleter then
+     * schedules a @c deleteLater()) and calls
+     * @c QCoreApplication::sendPostedEvents(algo, QEvent::DeferredDelete) per
+     * algorithm, never the process-wide DeferredDelete queue. This narrow
+     * scoping is load-bearing after the singleton kill in PR #343: multiple
+     * registries (daemon, editor, settings) each connect to @c aboutToQuit,
+     * and a process-wide drain from one registry would force-delete pending
+     * @c deleteLater() events for unrelated subsystems whose owners have not
+     * yet run their teardown.
      *
      * Safe to call from the destructor as well — idempotent after the
      * first invocation.
@@ -140,39 +143,14 @@ private:
      */
     void registerBuiltInAlgorithms();
 
-    /**
-     * @brief Remove algorithm from internal data structures
-     *
-     * Does NOT delete the algorithm or emit signals. Used by both
-     * registerAlgorithm (for replacement) and unregisterAlgorithm.
-     *
-     * @param id Algorithm ID to remove
-     * @return Pointer to removed algorithm, or nullptr if not found
-     */
-    TilingAlgorithm* removeAlgorithmInternal(const QString& id);
-
-    /**
-     * @brief Safely delete an algorithm via deleteLater()
-     *
-     * Detaches the algorithm from parent ownership and schedules deferred
-     * deletion to avoid re-entrancy issues during signal emission.
-     *
-     * @param algo Algorithm to delete (nullptr is a safe no-op)
-     */
-    void safeDeleteAlgorithm(TilingAlgorithm* algo);
-
-    QHash<QString, TilingAlgorithm*> m_algorithms;
-    QStringList m_registrationOrder; ///< Preserve order for UI
-
-    /// Algorithms detached from the registry via @c safeDeleteAlgorithm
-    /// and queued for deferred deletion. Tracked so @c cleanup can drain
-    /// only these objects' pending @c QEvent::DeferredDelete events
-    /// rather than the entire process-wide queue. @c QPointer auto-clears
-    /// when Qt finally processes the deferred-delete event, so stale
-    /// entries are harmless.
-    QList<QPointer<TilingAlgorithm>> m_pendingDeletes;
-
-    AlgorithmPreviewParams m_previewParams; ///< User-configured tiling parameters for previews
+    /// Storage + lifetime are now decomposed: the id-keyed catalogue is a
+    /// PhosphorRegistry::Registry<TileAlgorithmEntry> (each entry owns its
+    /// algorithm via a shared_ptr whose deleter defers to deleteLater while
+    /// Qt is alive), and the preview-param config is a plain field — neither
+    /// is registry storage. Held behind a pimpl so this header stays free of
+    /// the registry/entry template + TilingAlgorithm ownership details.
+    class Impl;
+    std::unique_ptr<Impl> m_impl;
 };
 
 /**

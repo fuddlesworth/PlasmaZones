@@ -89,18 +89,31 @@ QVariantList screenInfoListToVariantList(const QList<ScreenInfo>& screens)
         // selectors, etc.). Single source of truth — avoids duplicating
         // label-building logic in QML.
         QString label;
+        const QStringList parts = vendorModelParts(s);
         if (s.isVirtualScreen) {
             const QString vsName =
                 s.virtualDisplayName.isEmpty() ? QStringLiteral("VS%1").arg(s.virtualIndex + 1) : s.virtualDisplayName;
-            const QStringList parts = vendorModelParts(s);
             const QString monitorName = parts.isEmpty() ? s.connectorName : parts.join(QLatin1Char(' '));
             label = monitorName.isEmpty() ? vsName : vsName + QStringLiteral(" — ") + monitorName;
         } else {
-            const QStringList parts = vendorModelParts(s);
             label = parts.isEmpty() ? s.name : parts.join(QLatin1Char(' '));
         }
         if (s.width > 0 && s.height > 0) {
             label += QStringLiteral(" (%1×%2)").arg(s.width).arg(s.height);
+        }
+        // Disambiguate monitors that share a make/model by appending the
+        // physical connector — two "LG Ultra HD" panels become "… · DP-1" /
+        // "… · HDMI-A-1". This matters for virtual screens too: virtualIndex is
+        // per-physical-monitor (VS1/VS2 repeat on every monitor — see
+        // ScreenInfo.h), so the connector is what distinguishes "VS1 — LG Ultra
+        // HD" on DP-1 from the same on DP-2. Skip only when the connector is
+        // already the label's monitor name (no make/model): a virtual screen
+        // then reads "VS1 — DP-2" and a physical one "DP-2", so "· DP-2" would
+        // be redundant.
+        if (!s.connectorName.isEmpty()) {
+            const bool connectorAlreadyShown = parts.isEmpty() && (s.isVirtualScreen || s.name == s.connectorName);
+            if (!connectorAlreadyShown)
+                label += QStringLiteral(" · ") + s.connectorName;
         }
         map[QStringLiteral("displayLabel")] = label;
 

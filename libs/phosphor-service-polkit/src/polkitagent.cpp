@@ -60,7 +60,15 @@ public:
     QString sessionId; // empty -> current session (resolved from pid at register time)
     QString objectPath;
     bool registered = false;
-    ListenerImpl listener;
+
+    // Created lazily by registerAgent(), never in the constructor. Constructing a
+    // polkit-qt Listener has glib side effects (it allocates and globally tracks a
+    // PolkitAgentListener), and ~Listener calls polkit_agent_listener_unregister(),
+    // which blocks indefinitely when no glib event loop is iterating its context.
+    // Keeping this null until registration makes a bare PolkitAgent genuinely
+    // side-effect-free (and destructible without blocking), as the class contract
+    // promises - and lets it be instantiated from QML purely to read properties.
+    std::unique_ptr<ListenerImpl> listener;
 
     // Active request state. polkit serialises authentication, so at most one is
     // live. The AsyncResult is owned by polkit (we complete it, never delete it);
@@ -71,10 +79,9 @@ public:
     PolkitQt1::Agent::AsyncResult* result = nullptr;
     PolkitQt1::Agent::Session* session = nullptr;
 
-    Private(PolkitAgent* facade, QString sid, QString path)
+    Private(QString sid, QString path)
         : sessionId(std::move(sid))
         , objectPath(std::move(path))
-        , listener(facade)
     {
     }
 };
@@ -86,13 +93,14 @@ PolkitAgent::PolkitAgent(QObject* parent)
 
 PolkitAgent::PolkitAgent(QString sessionId, QString objectPath, QObject* parent)
     : QObject(parent)
-    , d(std::make_unique<Private>(this, std::move(sessionId), std::move(objectPath)))
+    , d(std::make_unique<Private>(std::move(sessionId), std::move(objectPath)))
 {
 }
 
-// Out-of-line: the Private dtor needs ListenerImpl complete, and ~Listener
-// unregisters the agent (there is no explicit unregister API), so destroying
-// this object releases the session.
+// Out-of-line: the Private dtor needs ListenerImpl complete. When the agent
+// registered, ~Listener unregisters it (there is no explicit unregister API), so
+// destroying this object releases the session; when it never registered, the
+// lazy listener is null and teardown does not touch polkit-qt at all.
 PolkitAgent::~PolkitAgent()
 {
     // Complete any in-flight polkit result so a pending authentication does not
@@ -130,7 +138,12 @@ bool PolkitAgent::registerAgent()
         ? PolkitQt1::UnixSessionSubject(static_cast<qint64>(QCoreApplication::applicationPid()))
         : PolkitQt1::UnixSessionSubject(d->sessionId);
 
-    const bool ok = d->listener.registerListener(subject, d->objectPath);
+    // Construct the polkit-qt Listener on first registration (see Private::listener):
+    // this is the first and only point where the agent touches polkit-qt.
+    if (!d->listener)
+        d->listener = std::make_unique<ListenerImpl>(this);
+
+    const bool ok = d->listener->registerListener(subject, d->objectPath);
     if (!ok) {
         qCInfo(lcPolkitAgent) << "could not register as the authentication agent for the session"
                               << "(another agent likely owns it) - staying inert";

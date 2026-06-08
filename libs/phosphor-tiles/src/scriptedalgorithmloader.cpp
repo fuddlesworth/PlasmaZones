@@ -409,11 +409,12 @@ void ScriptedAlgorithmLoader::loadFromDirectory(const QString& dir, bool isUserD
             continue;
         }
         // Create with nullptr parent so the registry takes full ownership
-        // via setParent(this) in registerAlgorithm(). If the algo is invalid,
-        // we delete it explicitly below. Pass the watchdog as shared_ptr
-        // so the algorithm keeps it alive across deferred-delete teardown
-        // (registry uses deleteLater(); algorithm dtor can run after the
-        // loader is gone — see LuauTileAlgorithm.h for the contract).
+        // via the deferred-delete shared_ptr inside its TileAlgorithmEntry
+        // (deleteLater() while Qt is alive) in registerAlgorithm(). If the algo
+        // is invalid, we delete it explicitly below. Pass the watchdog as
+        // shared_ptr so the algorithm keeps it alive across deferred-delete
+        // teardown (the algorithm dtor can run after the loader is gone — see
+        // LuauTileAlgorithm.h for the contract).
         auto* algo = new LuauTileAlgorithm(fullPath, m_watchdog, nullptr);
         if (!algo->isValid()) {
             qCWarning(PhosphorTiles::lcTilesLib) << "Invalid scripted algorithm, skipping:" << fullPath;

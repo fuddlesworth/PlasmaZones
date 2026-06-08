@@ -6,7 +6,9 @@
 #include "editorpagecontroller.h"
 #include "generalpagecontroller.h"
 #include "kzonesimporter.h"
+#include "registryshaderpreviewbackend.h"
 #include "snappingzonescontroller.h"
+#include "../shaderpreview/shaderpreviewcontroller.h"
 #include "snappingbehaviorcontroller.h"
 #include "snappingeffectscontroller.h"
 #include "snappingzoneselectorcontroller.h"
@@ -612,8 +614,16 @@ SettingsController::SettingsController(QObject* parent)
     // borrowed layout registry — a QObject-child parent would defer
     // destruction to ~QObject, dangling the layout-registry pointer.
     m_overlayShaderRegistry = new PlasmaZones::ShaderRegistry(this);
-    m_snappingShadersPage =
-        std::make_unique<SnappingShadersPageController>(m_overlayShaderRegistry, m_localLayoutManager.get());
+
+    // Shared live-preview feed (T3.1): backed by the local overlay registry +
+    // settings (audio-visualizer config). Owned here (unique_ptr, no QObject
+    // parent) so it tears down before m_overlayShaderRegistry / m_settings; the
+    // browser bridge below borrows it.
+    m_shaderPreviewBackend = std::make_unique<RegistryShaderPreviewBackend>(m_overlayShaderRegistry, &m_settings);
+    m_shaderPreviewController = std::make_unique<ShaderPreviewController>(m_shaderPreviewBackend.get());
+
+    m_snappingShadersPage = std::make_unique<SnappingShadersPageController>(
+        m_overlayShaderRegistry, m_localLayoutManager.get(), m_shaderPreviewController.get());
 
     // Screen helper signals — wire BEFORE the initial refreshScreens()
     // so a synchronous screensChanged emit from the refresh reaches our
@@ -738,6 +748,26 @@ SnappingZonesController* SettingsController::snappingZonesPage() const
 SnappingWindowAppearanceController* SettingsController::snappingWindowAppearancePage() const
 {
     return m_snappingWindowAppearancePage;
+}
+
+SnappingEffectsController* SettingsController::snappingEffectsPage() const
+{
+    return m_snappingEffectsPage;
+}
+
+SnappingShadersPageController* SettingsController::snappingShadersPage() const
+{
+    return m_snappingShadersPage.get();
+}
+
+TilingAppearanceController* SettingsController::tilingAppearancePage() const
+{
+    return m_tilingAppearancePage;
+}
+
+TilingAlgorithmController* SettingsController::tilingAlgorithmPage() const
+{
+    return m_tilingAlgorithmPage.get();
 }
 
 // setActivePage / dirty-tracking / external-edit methods live in

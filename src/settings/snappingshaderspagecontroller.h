@@ -12,6 +12,7 @@
 
 namespace PlasmaZones {
 class ShaderRegistry;
+class ShaderPreviewController;
 }
 
 namespace PhosphorZones {
@@ -48,6 +49,12 @@ class SnappingShadersPageController : public PhosphorSettingsUi::PageController
 {
     Q_OBJECT
 
+    /// The shared zone-shader preview feed for this (zone/overlay) browser, or
+    /// null. Present only on the zone-shader bridge — the animation bridge has
+    /// no equivalent, so ShaderBrowserDetailDialog gates its live preview pane
+    /// on `bridge.previewController` being set.
+    Q_PROPERTY(QObject* previewController READ previewController CONSTANT)
+
 public:
     bool isDirty() const override
     {
@@ -82,8 +89,11 @@ public:
     ///        Pass nullptr to disable usage lookup (returns empty).
     explicit SnappingShadersPageController(PlasmaZones::ShaderRegistry* shaderRegistry,
                                            PhosphorZones::IZoneLayoutRegistry* layoutRegistry,
-                                           QObject* parent = nullptr);
+                                           ShaderPreviewController* previewController, QObject* parent = nullptr);
     ~SnappingShadersPageController() override;
+
+    /// The borrowed live-preview controller (see the previewController property).
+    QObject* previewController() const;
 
     /// Installed overlay shader packs flattened to a QML-friendly list.
     /// Each row carries the same shape as the animations bridge so
@@ -170,6 +180,7 @@ private:
 
     PlasmaZones::ShaderRegistry* m_shaderRegistry = nullptr;
     PhosphorZones::IZoneLayoutRegistry* m_layoutRegistry = nullptr;
+    ShaderPreviewController* m_previewController = nullptr; // borrowed; owned by SettingsController
     /// Layouts already wired via @c connectLayoutSignals — tracked so
     /// the O(N) walk on every @c contentsChanged is replaced by an
     /// O(new) walk. Entries are evicted on the layout's destroyed()

@@ -56,6 +56,12 @@ if(NOT TARGET PhosphorFsLoader::PhosphorFsLoader)
     find_package(PhosphorFsLoader 0.1.0 REQUIRED)
 endif()
 
+# phosphor-registry — AlgorithmRegistry's storage is a Registry<TileAlgorithmEntry>.
+# Used only in algorithmregistry.cpp (the header is pimpl), so a PRIVATE link.
+if(NOT TARGET PhosphorRegistry::PhosphorRegistry)
+    find_package(PhosphorRegistry 0.1.0 REQUIRED)
+endif()
+
 # ═══════════════════════════════════════════════════════════════════════════════
 # Library
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -137,6 +143,10 @@ target_link_libraries(PhosphorTiles
         # including `<PhosphorTiles/ScriptedAlgorithmLoader.h>` need
         # its headers on their include path.
         PhosphorFsLoader::PhosphorFsLoader
+    PRIVATE
+        # AlgorithmRegistry composes Registry<TileAlgorithmEntry> in its .cpp
+        # only (pimpl header), so this stays private — not in the public ABI.
+        PhosphorRegistry::PhosphorRegistry
 )
 
 set_target_properties(PhosphorTiles PROPERTIES

@@ -80,11 +80,10 @@ Rectangle {
                 // `Unknown monitor` placeholder guards against the every-
                 // field-empty case so the tile (and the Accessible.name
                 // interpolation that reads this label) never becomes blank.
-                let label = tile.screenData.displayLabel || tile.screenData.name || (tile.tileData ? tile.tileData.screenId : "") || i18n("Unknown monitor");
-                if (tile.screenData.connectorName)
-                    label += " · " + tile.screenData.connectorName;
-
-                return label;
+                // displayLabel already carries the connector (see
+                // screenInfoListToVariantList) — the primary badge below covers
+                // the primary indicator.
+                return tile.screenData.displayLabel || tile.screenData.name || (tile.tileData ? tile.tileData.screenId : "") || i18n("Unknown monitor");
             }
             font: Kirigami.Theme.smallFont
             Layout.alignment: Qt.AlignHCenter
