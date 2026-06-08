@@ -68,6 +68,11 @@ Kirigami.Dialog {
     property var _shaderInfo: ({})
     property var _translatedParams: ({})
     property string _presetError: ""
+    // T3.2: drives the preview-renderer Loader. Toggled off→on in _resetPreview
+    // so the ZoneShaderItem is destroyed and recreated on every shader switch —
+    // a fresh item has no inherited Error/errorLog, so the placeholder covers the
+    // load and the compile-error banner can only reflect the shader in view.
+    property bool _rendererActive: false
     // Animated clock for the preview shader.
     property real _previewITime: 0
     property real _previewTimeDelta: 0
@@ -87,6 +92,13 @@ Kirigami.Dialog {
         _liveParams = p;
         _lockedParams = {};
         _recompute();
+        // Destroy + recreate the renderer so it starts fresh on the new shader
+        // (no previous shader's stale Error). Deactivate now, reactivate next
+        // tick — _shaderInfo is already set above, so the new item loads it.
+        _rendererActive = false;
+        Qt.callLater(function () {
+            root._rendererActive = root._livePreview;
+        });
     }
     function _recompute() {
         if (!_livePreview)
@@ -113,6 +125,10 @@ Kirigami.Dialog {
         }
     }
     onClosed: {
+        // Tear the renderer down on close so its (possibly Error) state can't
+        // survive on the reused dialog and flash on the next shader's open —
+        // the next _resetPreview rebuilds it fresh.
+        _rendererActive = false;
         if (previewController)
             previewController.stopAudioCapture();
     }
@@ -563,46 +579,71 @@ Kirigami.Dialog {
 
                     // Shared zone-shader renderer (org.plasmazones.common) — the
                     // single source of truth for the ZoneShaderItem bindings (also
-                    // used by the overlay). Config-driven; the timer + hover above
-                    // feed it iTime / iMouse / hovered zone.
-                    PZCommon.ZoneShaderRenderer {
-                        id: shaderRenderer
+                    // used by the overlay). Wrapped in a Loader and recreated on
+                    // every shader switch (via _rendererActive, toggled in
+                    // _resetPreview): a fresh item starts at Loading with no
+                    // inherited Error/errorLog, so the placeholder shows during the
+                    // load and the banner only ever reflects THIS shader.
+                    Loader {
+                        id: rendererLoader
 
                         anchors.fill: parent
-                        // Hide the failed render behind the compile-error banner.
-                        visible: status !== ZoneShaderItem.Error
-                        config: ({
-                                "shaderSource": root._shaderInfo.shaderUrl || "",
-                                "paramPreamble": livePreviewPane._preamble,
-                                "bufferShaderPaths": root._shaderInfo.bufferShaderPaths || [],
-                                "bufferFeedback": root._shaderInfo.bufferFeedback || false,
-                                "bufferScale": root._shaderInfo.bufferScale !== undefined ? root._shaderInfo.bufferScale : 1,
-                                "bufferWrap": root._shaderInfo.bufferWrap || "clamp",
-                                "bufferWraps": root._shaderInfo.bufferWraps || [],
-                                "bufferFilter": root._shaderInfo.bufferFilter || "linear",
-                                "bufferFilters": root._shaderInfo.bufferFilters || [],
-                                "useDepthBuffer": root._shaderInfo.depthBuffer || false,
-                                "useWallpaper": root._shaderInfo.wallpaper || false,
-                                "zones": livePreviewPane._zones,
-                                "shaderParams": root._translatedParams,
-                                "hoveredZoneIndex": livePreviewPane._hoveredZone,
-                                "iTime": root._previewITime,
-                                "iTimeDelta": root._previewTimeDelta,
-                                "iFrame": root._previewFrame,
-                                "iMouse": livePreviewPane._mouse,
-                                "audioSpectrum": root.previewController ? root.previewController.audioSpectrum : [],
-                                "labelsTexture": livePreviewPane._labelsTex,
-                                "wallpaperTexture": livePreviewPane._wallpaperTex
-                            })
+                        active: root._rendererActive
+                        // Reveal the surface only once it has actually compiled —
+                        // the placeholder covers loading, the banner covers errors.
+                        visible: item !== null && item.status === ZoneShaderItem.Ready
+
+                        sourceComponent: PZCommon.ZoneShaderRenderer {
+                            config: ({
+                                    "shaderSource": root._shaderInfo.shaderUrl || "",
+                                    "paramPreamble": livePreviewPane._preamble,
+                                    "bufferShaderPaths": root._shaderInfo.bufferShaderPaths || [],
+                                    "bufferFeedback": root._shaderInfo.bufferFeedback || false,
+                                    "bufferScale": root._shaderInfo.bufferScale !== undefined ? root._shaderInfo.bufferScale : 1,
+                                    "bufferWrap": root._shaderInfo.bufferWrap || "clamp",
+                                    "bufferWraps": root._shaderInfo.bufferWraps || [],
+                                    "bufferFilter": root._shaderInfo.bufferFilter || "linear",
+                                    "bufferFilters": root._shaderInfo.bufferFilters || [],
+                                    "useDepthBuffer": root._shaderInfo.depthBuffer || false,
+                                    "useWallpaper": root._shaderInfo.wallpaper || false,
+                                    "zones": livePreviewPane._zones,
+                                    "shaderParams": root._translatedParams,
+                                    "hoveredZoneIndex": livePreviewPane._hoveredZone,
+                                    "iTime": root._previewITime,
+                                    "iTimeDelta": root._previewTimeDelta,
+                                    "iFrame": root._previewFrame,
+                                    "iMouse": livePreviewPane._mouse,
+                                    "audioSpectrum": root.previewController ? root.previewController.audioSpectrum : [],
+                                    "labelsTexture": livePreviewPane._labelsTex,
+                                    "wallpaperTexture": livePreviewPane._wallpaperTex
+                                })
+                        }
                     }
 
-                    // T3.2: surface the live preview's actual GLSL compile
-                    // error in-app (shared with the editor preview).
+                    // Neutral placeholder while the freshly-created renderer is
+                    // still loading / compiling the new shader (the "round trip").
+                    Label {
+                        anchors.centerIn: parent
+                        width: parent.width - Kirigami.Units.largeSpacing * 2
+                        horizontalAlignment: Text.AlignHCenter
+                        wrapMode: Text.WordWrap
+                        color: Kirigami.Theme.disabledTextColor
+                        text: i18nc("@info:placeholder shader preview", "Preview unavailable")
+                        // Shown until the new shader is Ready (or has errored, when
+                        // the banner takes over) — also covers the recreate tick
+                        // when the Loader item is briefly null. The enclosing pane
+                        // is hidden for the animation browser, so no extra gate.
+                        visible: !rendererLoader.item || (rendererLoader.item.status !== ZoneShaderItem.Ready && rendererLoader.item.status !== ZoneShaderItem.Error)
+                    }
+
+                    // T3.2: surface the live preview's actual GLSL compile error
+                    // in-app (shared with the editor preview). The renderer is
+                    // recreated per shader, so its Error is always THIS shader's.
                     PZCommon.ShaderCompileErrorBanner {
                         anchors.centerIn: parent
                         width: Math.min(parent.width - Kirigami.Units.largeSpacing * 2, Kirigami.Units.gridUnit * 22)
                         height: Math.min(parent.height - Kirigami.Units.largeSpacing * 2, Kirigami.Units.gridUnit * 12)
-                        errorLog: shaderRenderer.status === ZoneShaderItem.Error ? ((shaderRenderer.errorLog && shaderRenderer.errorLog.length > 0) ? shaderRenderer.errorLog : i18nc("@info shader preview", "No error details available.")) : ""
+                        errorLog: (rendererLoader.item && rendererLoader.item.status === ZoneShaderItem.Error) ? ((rendererLoader.item.errorLog && rendererLoader.item.errorLog.length > 0) ? rendererLoader.item.errorLog : i18nc("@info shader preview", "No error details available.")) : ""
                     }
                 }
             }
