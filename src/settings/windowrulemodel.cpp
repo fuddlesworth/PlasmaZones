@@ -11,7 +11,6 @@
 
 #include <PhosphorZones/AssignmentEntry.h>
 
-#include <QJsonArray>
 #include <QStringList>
 
 #include <algorithm>

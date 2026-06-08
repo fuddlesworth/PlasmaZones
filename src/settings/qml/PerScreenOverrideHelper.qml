@@ -53,10 +53,12 @@ QtObject {
 
     function writeSetting(key, value, globalSetter) {
         if (isPerScreen) {
+            // The setter emits perScreenOverridesChanged synchronously, so
+            // _overrideWatch.reload() reinstalls the authoritative (validated,
+            // possibly clamped) override map before this returns. Don't write an
+            // optimistic local copy — it would clobber that with the raw input
+            // and diverge from the backend on any clamped/rejected value.
             appSettings[setterMethod](selectedScreenName, key, value);
-            var updated = Object.assign({}, perScreenOverrides);
-            updated[key] = value;
-            perScreenOverrides = updated;
         } else {
             globalSetter(value);
         }

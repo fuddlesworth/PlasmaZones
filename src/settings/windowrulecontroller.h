@@ -11,7 +11,6 @@
 #include <QVariantMap>
 
 #include <PhosphorWindowRule/WindowRule.h>
-#include <PhosphorWindowRule/WindowRuleSet.h>
 
 #include "windowrulemodel.h"
 

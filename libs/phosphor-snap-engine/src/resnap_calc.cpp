@@ -5,23 +5,18 @@
 // Part of SnapEngine — split into its own translation unit for SRP.
 
 #include <PhosphorSnapEngine/SnapEngine.h>
-#include <PhosphorSnapEngine/SnapState.h>
 #include <PhosphorZones/Layout.h>
 #include <PhosphorZones/Zone.h>
 #include <PhosphorZones/LayoutRegistry.h>
 #include <PhosphorScreens/Manager.h>
 #include <PhosphorScreens/ScreenIdentity.h>
-#include <PhosphorScreens/VirtualScreen.h>
 #include <PhosphorIdentity/VirtualScreenId.h>
 #include <PhosphorZones/LayoutUtils.h>
 #include <PhosphorZones/GeometryUtils.h>
-#include <PhosphorSnapEngine/ISnapSettings.h>
 #include "snapenginelogging.h"
 #include <QGuiApplication>
 #include <QScreen>
 #include <QUuid>
-#include <algorithm>
-#include <tuple>
 
 namespace PhosphorSnapEngine {
 

@@ -5,7 +5,6 @@
 
 #include <QAbstractListModel>
 #include <QHash>
-#include <QJsonObject>
 #include <QList>
 #include <QQmlEngine>
 #include <QString>

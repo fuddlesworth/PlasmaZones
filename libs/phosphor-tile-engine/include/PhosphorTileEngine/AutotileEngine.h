@@ -11,7 +11,6 @@
 #include <PhosphorEngine/PlacementEngineBase.h>
 #include <PhosphorTileEngine/IAutotileSettings.h>
 #include <QHash>
-#include <QJsonArray>
 #include <QObject>
 #include <QRect>
 #include <QSet>
@@ -19,6 +18,7 @@
 #include <QString>
 #include <QStringList>
 #include <QTimer>
+#include <cstdint>
 #include <functional>
 #include <memory>
 #include <optional>
@@ -36,8 +36,9 @@ class AutotileConfig;
 
 class NavigationController;
 class PerScreenConfigResolver;
-// PhosphorScreens::ScreenManager moved to libs/phosphor-screens (PhosphorScreens::ScreenManager).
 } // namespace PhosphorTileEngine
+
+// ScreenManager lives in libs/phosphor-screens; forward-declared here.
 namespace PhosphorScreens {
 class ScreenManager;
 }

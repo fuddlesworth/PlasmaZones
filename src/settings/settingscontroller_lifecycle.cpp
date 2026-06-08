@@ -36,6 +36,7 @@
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QProcess>
+#include <QTimer>
 
 namespace PlasmaZones {
 

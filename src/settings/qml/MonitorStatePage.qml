@@ -151,6 +151,8 @@ SettingsFlickable {
     }
 
     Connections {
+        target: settingsController
+
         function onScreensChanged() {
             // Drop a selection whose output was unplugged, then re-pick.
             if (root._selectedScreen !== "" && !root._screenStillPresent(root._selectedScreen))
@@ -177,8 +179,6 @@ SettingsFlickable {
         function onScreenLayoutChanged() {
             root._refresh();
         }
-
-        target: settingsController
     }
 
     ColumnLayout {
