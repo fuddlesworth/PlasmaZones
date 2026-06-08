@@ -211,20 +211,13 @@ public:
     /// call @ref refreshLabels.
     void setActivityLabelLookup(LabelLookup fn);
 
-    /// Inject the layoutId / algorithm-token → display-name resolver used by
+    /// Inject the layoutId / algorithm-token → display-name resolvers used by
     /// the action summary so `SetSnappingLayout` and `SetTilingAlgorithm`
-    /// render "Binary Split" rather than the wire token / UUID.
-    /// Install-once setter; lookups are read live every time `data()` is
-    /// invoked. To refresh visible labels after a lookup-source change,
-    /// call @ref refreshLabels.
-    ///
-    /// Back-compat shim that wires the SAME lookup into both
-    /// setSnappingLayoutLabelLookup and setTilingAlgorithmLabelLookup —
-    /// the legacy single-lookup contract assumed one resolver knew about
-    /// both layoutId UUIDs and tilingAlgorithm tokens. New callers should
-    /// prefer the typed pair below so a mistaken cross-mix surfaces at
-    /// the call site.
-    void setLayoutLabelLookup(LabelLookup fn);
+    /// render "Binary Split" rather than the wire token / UUID. Split into a
+    /// typed pair so a UUID-shaped layoutId and an algorithm token can't
+    /// cross-resolve. Install-once setters; lookups are read live every time
+    /// `data()` is invoked. To refresh visible labels after a lookup-source
+    /// change, call @ref refreshLabels.
     /// Resolver for `SetSnappingLayout` action params (layoutId UUIDs).
     void setSnappingLayoutLabelLookup(LabelLookup fn);
     /// Resolver for `SetTilingAlgorithm` action params (algorithm tokens like "bsp").

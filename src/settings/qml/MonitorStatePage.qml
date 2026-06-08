@@ -24,6 +24,10 @@ SettingsFlickable {
         readonly property var layouts: settingsController.layouts
         readonly property string defaultLayoutId: appSettings.defaultLayoutId
         readonly property string defaultAutotileAlgorithm: appSettings.defaultAutotileAlgorithm
+        // LayoutComboBox's preview CategoryBadge reads `autoAssignAllLayouts` for
+        // the global-auto-assign indicator; expose it so the Monitor State
+        // dropdowns light it like the rest of the app.
+        readonly property bool autoAssignAllLayouts: appSettings.autoAssignAllLayouts
     }
 
     property var _screenStates: []

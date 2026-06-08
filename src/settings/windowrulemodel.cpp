@@ -92,12 +92,17 @@ void collectScreenIds(const MatchExpression& match, QStringList& out)
                         }
                     }
                 }
-            } else {
+            } else if (predicate.op == Operator::Equals) {
                 const QString value = predicate.value.toString();
                 if (!value.isEmpty()) {
                     out.append(value);
                 }
             }
+            // Other operators (Contains / StartsWith / EndsWith / Regex /
+            // NotEquals) are not literal monitor pins — a substring or regex
+            // token never equals a real connector id, so collecting it would
+            // silently under-count the rule against every tile. Such a rule
+            // doesn't pin a specific monitor, so it contributes no screen id.
         }
         return;
     }
@@ -721,19 +726,6 @@ void WindowRuleModel::setScreenLabelLookup(LabelLookup fn)
 void WindowRuleModel::setActivityLabelLookup(LabelLookup fn)
 {
     m_activityLookup = std::move(fn);
-}
-
-void WindowRuleModel::setLayoutLabelLookup(LabelLookup fn)
-{
-    // Back-compat shim: wire the same lookup into both split lookups so
-    // callers that haven't migrated to the typed pair keep working. Like
-    // its siblings (setSnappingLayoutLabelLookup, setTilingAlgorithmLabelLookup,
-    // setActivityLabelLookup, setScreenLabelLookup) this setter emits no
-    // signal — the lookups are install-once at controller-construction
-    // time, and any later UI refresh routes through refreshLabels()
-    // emitting `dataChanged` for the affected roles.
-    m_snappingLayoutLookup = fn;
-    m_tilingAlgorithmLookup = std::move(fn);
 }
 
 void WindowRuleModel::setSnappingLayoutLabelLookup(LabelLookup fn)

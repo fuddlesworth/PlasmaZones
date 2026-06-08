@@ -11,8 +11,9 @@
 
 namespace PhosphorTileEngine {
 
-// Use shared JSON keys and defaults from constants.h
+// Use shared JSON keys, enum-string values, and defaults from constants.h
 using namespace PhosphorTiles::AutotileJsonKeys;
+using namespace PhosphorTiles::AutotileJsonValues;
 using namespace PhosphorTiles::AutotileDefaults;
 
 namespace {

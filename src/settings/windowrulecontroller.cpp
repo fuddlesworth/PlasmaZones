@@ -118,7 +118,7 @@ void WindowRuleController::unsubscribeRulesChanged()
     m_rulesChangedSubscribed = false;
 }
 
-// Label-lookup setters (setScreenLookup, setActivityLookup, setLayoutLookup,
+// Label-lookup setters (setScreenLookup, setActivityLookup,
 // setSnappingLayoutLookup, setTilingAlgorithmLookup, setShaderEffectLookup,
 // setCurveLabelResolver) live in windowrulecontroller_lookups.cpp so this TU
 // stays under the project's 800-line cap.

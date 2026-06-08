@@ -5,7 +5,6 @@
 //   * sections() — canonical display-order
 //   * rulesSnapshot() — full QML view of every rule
 //   * monitorOverview() — per-screen aggregate tile data
-//   * ruleScreenIds() — screen-id list for a rule
 //   * matchFields/operatorsForField/actionTypes/defaultPayloadFor — author surfaces
 //   * validationIssuesForJson/matchIsContextOnly — editor validation hooks
 //
@@ -281,15 +280,6 @@ QVariantList WindowRuleController::monitorOverview(const QVariantList& screens) 
         out.append(tile);
     }
     return out;
-}
-
-QStringList WindowRuleController::ruleScreenIds(const QString& ruleId) const
-{
-    const WindowRule rule = m_model.ruleById(QUuid::fromString(ruleId));
-    if (rule.id.isNull()) {
-        return {};
-    }
-    return WindowRuleModel::screenIdsOf(rule.match);
 }
 
 QVariantList WindowRuleController::matchFields() const

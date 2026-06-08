@@ -188,19 +188,16 @@ QVariant validatePerScreenAutotileValue(const QString& key, const QVariant& valu
     if (k == PerScreenKeys::OuterGap)
         return QVariant(
             qBound(ConfigDefaults::autotileOuterGapMin(), value.toInt(), ConfigDefaults::autotileOuterGapMax()));
-    // Per-side keys (OuterGapTop/Bottom/Left/Right) have no short-form named
-    // constant — PerScreenAutotileKey holds only the prefixed disk form and the
-    // value here is already prefix-stripped — so match the short literals.
-    if (k == QLatin1String("OuterGapTop"))
+    if (k == PerScreenKeys::OuterGapTop)
         return QVariant(
             qBound(ConfigDefaults::autotileOuterGapTopMin(), value.toInt(), ConfigDefaults::autotileOuterGapTopMax()));
-    if (k == QLatin1String("OuterGapBottom"))
+    if (k == PerScreenKeys::OuterGapBottom)
         return QVariant(qBound(ConfigDefaults::autotileOuterGapBottomMin(), value.toInt(),
                                ConfigDefaults::autotileOuterGapBottomMax()));
-    if (k == QLatin1String("OuterGapLeft"))
+    if (k == PerScreenKeys::OuterGapLeft)
         return QVariant(qBound(ConfigDefaults::autotileOuterGapLeftMin(), value.toInt(),
                                ConfigDefaults::autotileOuterGapLeftMax()));
-    if (k == QLatin1String("OuterGapRight"))
+    if (k == PerScreenKeys::OuterGapRight)
         return QVariant(qBound(ConfigDefaults::autotileOuterGapRightMin(), value.toInt(),
                                ConfigDefaults::autotileOuterGapRightMax()));
     if (k == PerScreenKeys::MaxWindows)

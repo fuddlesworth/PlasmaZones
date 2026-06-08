@@ -148,19 +148,6 @@ inline constexpr QLatin1String InsertAfterFocused{"afterFocused"};
 inline constexpr QLatin1String InsertAsMaster{"asMaster"};
 } // namespace AutotileJsonValues
 
-/**
- * @brief Backwards-compat re-exports so existing `using namespace AutotileJsonKeys`
- *        sites (e.g. `src/autotile/AutotileConfig.cpp`) resolve the value names
- *        without a rename cascade. New code should qualify with AutotileJsonValues::.
- */
-namespace AutotileJsonKeys {
-using AutotileJsonValues::InsertAfterFocused;
-using AutotileJsonValues::InsertAsMaster;
-using AutotileJsonValues::InsertEnd;
-using AutotileJsonValues::OverflowFloat;
-using AutotileJsonValues::OverflowUnlimited;
-} // namespace AutotileJsonKeys
-
 enum class AutotileOverflowBehavior {
     Float = 0,
     Unlimited = 1

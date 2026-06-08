@@ -85,12 +85,9 @@ public:
     /// `matchSummary` / `actionSummary` cells — a missing lookup falls
     /// back to printing the raw id/UUID. SettingsController is the
     /// single intended caller and installs all four during page
-    /// registration. The legacy `setLayoutLookup(fn)` wires the same
-    /// resolver into BOTH snappingLayout and tilingAlgorithm; new
-    /// callers should prefer the typed pair below.
+    /// registration via the typed snappingLayout/tilingAlgorithm pair.
     void setScreenLookup(WindowRuleModel::LabelLookup fn);
     void setActivityLookup(WindowRuleModel::LabelLookup fn);
-    void setLayoutLookup(WindowRuleModel::LabelLookup fn);
     /// layoutId UUID → display label resolver for SetSnappingLayout actions.
     void setSnappingLayoutLookup(WindowRuleModel::LabelLookup fn);
     /// Algorithm token ("bsp", …) → display label resolver for SetTilingAlgorithm actions.
@@ -279,12 +276,6 @@ public:
     /// connected monitor — including ones with no rule at all (the "Not
     /// assigned" tile).
     Q_INVOKABLE QVariantList monitorOverview(const QVariantList& screens) const;
-
-    /// The screen-ids a rule pins, or an empty list if it is not a
-    /// monitor-scoped rule. Lets QML filter the list by the rule's actual
-    /// ScreenId predicate(s) rather than substring-scanning the localized
-    /// match summary.
-    Q_INVOKABLE QStringList ruleScreenIds(const QString& ruleId) const;
 
     // ── Authoring metadata for the QML editors ────────────────────────────
 
