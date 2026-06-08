@@ -33,6 +33,12 @@ RowLayout {
     // Operator options depend on the current field's enum value.
     readonly property var _operatorOptions: leaf._fieldEntry !== undefined ? controller.operatorsForField(leaf._fieldEntry.value) : []
     readonly property string _valueKind: leaf._fieldEntry !== undefined ? leaf._fieldEntry.valueKind : "string"
+    // Widest operator label across the FULL operator vocabulary, in pixels —
+    // the operator dropdown is sized to this (not to the current field's
+    // operator subset) so the operator column lines up on every condition row
+    // and doesn't resize when the field changes. Recomputed by
+    // _recalcOperatorWidth() on load and whenever the measuring font changes.
+    property real _widestOperatorTextWidth: 0
 
     signal leafChanged(var updatedLeaf)
     signal removeRequested
@@ -62,6 +68,19 @@ RowLayout {
             "op": op,
             "value": value
         });
+    }
+
+    /// Measure every operator label (the full vocabulary, via
+    /// controller.allOperators()) and cache the widest in pixels. The label
+    /// set is static, so this only needs to run on load and on font change.
+    function _recalcOperatorWidth() {
+        var ops = leaf.controller ? leaf.controller.allOperators() : [];
+        var maxW = 0;
+        for (var i = 0; i < ops.length; ++i) {
+            opMetrics.text = ops[i].label || "";
+            maxW = Math.max(maxW, opMetrics.advanceWidth);
+        }
+        leaf._widestOperatorTextWidth = maxW;
     }
 
     /// True when the running-windows picker has a mode that fills @p wire
@@ -133,6 +152,18 @@ RowLayout {
 
     spacing: Kirigami.Units.smallSpacing
 
+    Component.onCompleted: leaf._recalcOperatorWidth()
+
+    // Non-visual measurer for _recalcOperatorWidth(). Matches the operator
+    // combo's font so the cached widths are pixel-accurate; re-measures if the
+    // font changes (e.g. a theme/scale switch).
+    TextMetrics {
+        id: opMetrics
+
+        font: opCombo.font
+        onFontChanged: leaf._recalcOperatorWidth()
+    }
+
     Kirigami.Icon {
         source: "dialog-information"
         Layout.preferredWidth: Kirigami.Units.iconSizes.small
@@ -188,6 +219,13 @@ RowLayout {
     WideComboBox {
         id: opCombo
 
+        // Fixed to the widest operator label across ALL fields' operator sets
+        // (plus chrome for the dropdown indicator + padding) instead of the
+        // WideComboBox auto-width, which keys off the CURRENT field's operator
+        // subset and so renders a different width per field (e.g. Desktop's
+        // numeric operators vs Monitor's string operators). The gridUnit * 3
+        // chrome allowance mirrors WideComboBox's own popup-width formula.
+        Layout.preferredWidth: leaf._widestOperatorTextWidth + Kirigami.Units.gridUnit * 3
         textRole: "label"
         valueRole: "wire"
         model: leaf._operatorOptions

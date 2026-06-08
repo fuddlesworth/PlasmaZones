@@ -20,6 +20,13 @@ QVariantList matchFields();
 /// Each entry: `{ value: int (Operator enum), wire: QString, label }`.
 QVariantList operatorsForField(int fieldValue);
 
+/// Every operator with its translated label, independent of any field. Same
+/// entry shape as operatorsForField. The leaf editor sizes the operator
+/// dropdown to the widest of these so the operator column lines up across
+/// condition rows and doesn't resize when the field — and thus its valid
+/// operator subset — changes.
+QVariantList allOperators();
+
 /// Registered action types for the action-editor dropdown. Each entry:
 /// `{ value: QString (action type id), label, params: [ ... ],
 ///    domain: "context"|"window" }`. See `WindowRuleController::actionTypes`
