@@ -109,17 +109,28 @@ private Q_SLOTS:
         QVERIFY(settings.hasPerScreenAutotileGapsSettings(screen));
         QVERIFY(settings.hasPerScreenAutotileAlgorithmSettings(screen));
 
-        // Clearing the gaps sub-domain must leave the algorithm override intact.
+        // Spy from here so the two setter emits above don't count.
+        QSignalSpy spy(&settings, &Settings::perScreenAutotileSettingsChanged);
+
+        // Clearing the gaps sub-domain emits once and leaves the algorithm
+        // override intact.
         settings.clearPerScreenAutotileGapsSettings(screen);
+        QCOMPARE(spy.count(), 1);
         QVERIFY(!settings.hasPerScreenAutotileGapsSettings(screen));
         QVERIFY(settings.hasPerScreenAutotileAlgorithmSettings(screen));
         QVariantMap afterGapsClear = settings.getPerScreenAutotileSettings(screen);
         QVERIFY2(!afterGapsClear.contains(QStringLiteral("InnerGap")), "gaps key must be cleared");
         QCOMPARE(afterGapsClear.value(QStringLiteral("MasterCount")).toInt(), 2);
 
+        // A no-op gaps clear (no gaps remain) changes nothing and does not emit.
+        settings.clearPerScreenAutotileGapsSettings(screen);
+        QCOMPARE(spy.count(), 1);
+        QVERIFY(settings.hasPerScreenAutotileAlgorithmSettings(screen));
+
         // Clearing the algorithm sub-domain removes the last remaining key, so
         // the whole per-screen entry is dropped.
         settings.clearPerScreenAutotileAlgorithmSettings(screen);
+        QCOMPARE(spy.count(), 2);
         QVERIFY(!settings.hasPerScreenAutotileAlgorithmSettings(screen));
         QVERIFY(!settings.hasPerScreenAutotileSettings(screen));
     }

@@ -32,7 +32,7 @@ ColumnLayout {
     // parent — per-monitor settings groups always scope by physical output.
     property bool physicalOnly: true
     // Q_INVOKABLE name (on appSettings) returning bool "this screen has
-    // overrides" for the page's domain, e.g. "hasPerScreenAutotileSettings".
+    // overrides" for the page's domain, e.g. "hasPerScreenAutotileGapsSettings".
     // Empty disables the override dots.
     property string hasOverridesMethod: ""
 
