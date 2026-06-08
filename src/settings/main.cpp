@@ -13,6 +13,7 @@
 #include "phosphor_qml_i18n.h"
 
 #include "../core/constants.h"
+#include "../daemon/rendering/zoneshaderitem.h"
 #include <PhosphorProtocol/ServiceConstants.h>
 
 #include <PhosphorAnimation/PhosphorCurve.h>
@@ -152,6 +153,10 @@ int main(int argc, char* argv[])
         qCCritical(PlasmaZones::lcCore) << "Cannot register D-Bus service and cannot reach existing instance; exiting";
         return 1;
     }
+
+    // Register ZoneShaderItem for QML (live zone-shader preview in the settings
+    // shader browser — mirrors daemon/main.cpp + editor/main.cpp).
+    qmlRegisterType<PlasmaZones::ZoneShaderItem>("PlasmaZones", 1, 0, "ZoneShaderItem");
 
     QQmlApplicationEngine engine;
 

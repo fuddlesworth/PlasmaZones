@@ -13,19 +13,15 @@
 #include <QScreen>
 #include <QQuickWindow>
 #include <QSize>
-#include <QVector>
 #include "../config/configbackends.h"
 #include "../core/constants.h"
 #include <PhosphorZones/LayoutRegistry.h>
 #include "../core/logging.h"
 #include "undo/UndoController.h"
+#include "../shaderpreview/ishaderpreviewbackend.h"
 #include <PhosphorLayoutApi/LayoutSourceBundle.h>
 
 #include <memory>
-
-namespace PhosphorAudio {
-class IAudioSpectrumProvider;
-}
 
 namespace PhosphorTiles {
 class AlgorithmRegistry;
@@ -47,6 +43,7 @@ namespace PlasmaZones {
 
 class ILayoutService;
 class ZoneManager;
+class ShaderPreviewController;
 class SnappingService;
 class TemplateService;
 
@@ -56,7 +53,7 @@ class TemplateService;
  * Manages zone editing operations and communicates with the daemon via D-Bus.
  * Exposed to QML for the editor UI.
  */
-class EditorController : public QObject
+class EditorController : public QObject, public IShaderPreviewBackend
 {
     Q_OBJECT
 
@@ -255,7 +252,7 @@ public:
     int globalOverlayDisplayMode() const;
     bool useFullScreenGeometry() const;
     int aspectRatioClass() const;
-    QSize targetScreenSize() const;
+    QSize targetScreenSize() const override; // also satisfies IShaderPreviewBackend
     QRect virtualScreenRect() const
     {
         return m_virtualScreenRect;
@@ -452,7 +449,7 @@ public:
     Q_INVOKABLE void refreshAvailableShaders();
 
     /**
-     * @brief Convert current zones to format expected by ZoneShaderItem for preview
+     * @brief Convert current zones to the format the ZoneShaderRenderer preview consumes
      * @param width Preview width in pixels
      * @param height Preview height in pixels
      * @return PhosphorZones::Zone data with pixel coords, fillR/G/B/A, borderR/G/B/A, etc.
@@ -460,7 +457,7 @@ public:
     Q_INVOKABLE QVariantList zonesForShaderPreview(int width, int height) const;
 
     /**
-     * @brief Translate shader params from param IDs to uniform names for ZoneShaderItem
+     * @brief Translate shader params from param IDs to the uniform names the renderer reads
      * @param shaderId Shader UUID
      * @param params Map of param IDs to values (e.g. {"intensity": 0.5})
      * @return Map of uniform names to values (e.g. {"customParams1_x": 0.5})
@@ -716,7 +713,7 @@ public Q_SLOTS:
     Q_INVOKABLE bool saveShaderPreset(const QString& filePath, const QString& shaderId, const QVariantMap& shaderParams,
                                       const QString& presetName);
     Q_INVOKABLE QVariantMap loadShaderPreset(const QString& filePath);
-    Q_INVOKABLE QString shaderPresetDirectory();
+    Q_INVOKABLE QString shaderPresetDirectory() const;
 
     /// Look up a metadata-defined preset for @p shaderId by @p presetName.
     /// Returns the preset's parameter map, or an empty map when the
@@ -1050,9 +1047,19 @@ private:
     QString m_currentShaderId; // Empty = no shader effect
     QVariantMap m_currentShaderParams;
 
-    // Audio spectrum (phosphor-audio) for shader preview
-    PhosphorAudio::IAudioSpectrumProvider* m_audioProvider = nullptr;
-    QVector<float> m_audioSpectrum;
+    // IShaderPreviewBackend — the editor's preview data source: shader metadata
+    // via D-Bus to the daemon registry, the live edited layout's zones, and the
+    // audio-visualizer config. Consumed by m_shaderPreview; the QML-facing
+    // preview methods delegate to it. (targetScreenSize() above is the sixth.)
+    QVariantMap shaderInfo(const QString& shaderId) const override;
+    QVariantMap translateParams(const QString& shaderId, const QVariantMap& params) const override;
+    QVariantList previewZones() const override;
+    bool audioVisualizerEnabled() const override;
+    int audioBarCount() const override;
+
+    // Shared zone-shader preview feed (owns the CAVA capture + texture/preamble
+    // helpers). EditorController is its backend; the preview methods delegate.
+    ShaderPreviewController* m_shaderPreview = nullptr;
 
     // Cache for current shader's parameter definitions (avoids repeated D-Bus calls)
     // Updated when shader selection changes

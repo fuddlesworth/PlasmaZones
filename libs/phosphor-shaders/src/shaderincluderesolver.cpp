@@ -67,6 +67,16 @@ QString expandIncludesRecursive(const QString& source, const QString& currentFil
             return QString();
         }
 
+        // The generated `p_<id>` autocomplete sidecar is an editor-only aid (the
+        // real preamble is spliced at load), so a reference to it is a no-op
+        // here — skip it by reserved basename rather than resolving or erroring.
+        // One comment line preserves the parent's line numbering, mirroring the
+        // circular-skip below. See ShaderIncludeResolver::GeneratedPreambleInclude.
+        if (QFileInfo(includeName).fileName() == QLatin1String(ShaderIncludeResolver::GeneratedPreambleInclude)) {
+            result += QLatin1String("// [include skipped: generated preamble] ") + line + QLatin1Char('\n');
+            continue;
+        }
+
         QStringList searchDirs;
         if (quote == QLatin1Char('"')) {
             searchDirs.append(currentFileDir);

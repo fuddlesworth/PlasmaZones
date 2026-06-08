@@ -739,6 +739,11 @@ Kirigami.Dialog {
                 id: previewBackground
 
                 readonly property var cfg: root.previewShaderConfig || ({})
+                // Cached so the per-frame (iTime) config rebuild doesn't read the
+                // audio spectrum off editorController every frame (a QVariant
+                // vector copy) and doesn't hand the renderer a fresh container
+                // reference each tick; updates only on audioSpectrumChanged.
+                readonly property var previewAudioSpectrum: editorController ? editorController.audioSpectrum : []
                 property point previewMouse: Qt.point(-1, -1)
                 readonly property int previewHoveredZone: {
                     var mouse = previewBackground.previewMouse;
@@ -790,67 +795,50 @@ Kirigami.Dialog {
                     active: root.previewShaderConfig !== null
                     visible: item === null || item.status !== ZoneShaderItem.Error
 
-                    sourceComponent: ZoneShaderItem {
-                        layer.enabled: shaderSource.toString() !== ""
-                        layer.textureMirroring: ShaderEffectSource.NoMirroring
-                        shaderSource: previewBackground.cfg.shaderUrl || ""
-                        paramPreamble: previewBackground.cfg.paramPreamble || ""
-                        bufferShaderPaths: previewBackground.cfg.bufferShaderPaths || []
-                        bufferFeedback: previewBackground.cfg.bufferFeedback || false
-                        bufferScale: previewBackground.cfg.bufferScale !== undefined ? previewBackground.cfg.bufferScale : 1
-                        bufferWrap: previewBackground.cfg.bufferWrap || "clamp"
-                        bufferWraps: previewBackground.cfg.bufferWraps || []
-                        bufferFilter: previewBackground.cfg.bufferFilter || "linear"
-                        bufferFilters: previewBackground.cfg.bufferFilters || []
-                        useDepthBuffer: previewBackground.cfg.useDepthBuffer || false
-                        zones: previewBackground.cfg.zones || []
-                        shaderParams: previewBackground.cfg.shaderParams || ({})
-                        useWallpaper: previewBackground.cfg.useWallpaper || false
-                        iTime: root.previewITime
-                        iTimeDelta: root.previewTimeDelta
-                        iFrame: root.previewFrame
-                        iResolution: Qt.size(width, height)
-                        iMouse: previewBackground.previewMouse
-                        hoveredZoneIndex: previewBackground.previewHoveredZone
-                        audioSpectrum: editorController ? editorController.audioSpectrum : []
+                    // Shared zone-shader renderer (org.plasmazones.common) — the
+                    // single source of truth for the ZoneShaderItem bindings, also
+                    // used by the settings-app preview + the overlay. Kept inside
+                    // this Loader so a shader switch still destroys/recreates the
+                    // render node (NVIDIA EGL 595.x heap-corruption workaround —
+                    // see hideShaderPreview()). The whole feed (incl. label /
+                    // wallpaper textures) rides the config object.
+                    sourceComponent: PZCommon.ZoneShaderRenderer {
+                        // cfg is `previewShaderConfig || ({})`, so it is never
+                        // null — read it directly; per-key `|| default` covers the
+                        // empty-{} (no-shader) case.
+                        config: ({
+                                "shaderSource": previewBackground.cfg.shaderUrl || "",
+                                "paramPreamble": previewBackground.cfg.paramPreamble || "",
+                                "bufferShaderPaths": previewBackground.cfg.bufferShaderPaths || [],
+                                "bufferFeedback": previewBackground.cfg.bufferFeedback || false,
+                                "bufferScale": previewBackground.cfg.bufferScale !== undefined ? previewBackground.cfg.bufferScale : 1,
+                                "bufferWrap": previewBackground.cfg.bufferWrap || "clamp",
+                                "bufferWraps": previewBackground.cfg.bufferWraps || [],
+                                "bufferFilter": previewBackground.cfg.bufferFilter || "linear",
+                                "bufferFilters": previewBackground.cfg.bufferFilters || [],
+                                "useDepthBuffer": previewBackground.cfg.useDepthBuffer || false,
+                                "useWallpaper": previewBackground.cfg.useWallpaper || false,
+                                "zones": previewBackground.cfg.zones || [],
+                                "shaderParams": previewBackground.cfg.shaderParams || ({}),
+                                "labelsTexture": previewBackground.cfg.labelsTexture,
+                                "wallpaperTexture": previewBackground.cfg.wallpaperTexture,
+                                "hoveredZoneIndex": previewBackground.previewHoveredZone,
+                                "iTime": root.previewITime,
+                                "iTimeDelta": root.previewTimeDelta,
+                                "iFrame": root.previewFrame,
+                                "iMouse": previewBackground.previewMouse,
+                                "audioSpectrum": previewBackground.previewAudioSpectrum
+                            })
                     }
                 }
 
-                Binding {
-                    target: shaderPreviewLoader.item
-                    property: "labelsTexture"
-                    value: previewBackground.cfg.labelsTexture
-                    when: shaderPreviewLoader.item !== null && previewBackground.cfg.labelsTexture !== undefined && previewBackground.cfg.labelsTexture !== null
-                }
-
-                Binding {
-                    target: shaderPreviewLoader.item
-                    property: "wallpaperTexture"
-                    value: previewBackground.cfg.wallpaperTexture
-                    when: shaderPreviewLoader.item !== null && previewBackground.cfg.wallpaperTexture !== undefined && previewBackground.cfg.wallpaperTexture !== null
-                }
-
-                Rectangle {
-                    visible: shaderPreviewLoader.item !== null && shaderPreviewLoader.item.status === ZoneShaderItem.Error
+                // T3.2: shared in-app compile-error banner (also used by the
+                // settings-app shader browser).
+                PZCommon.ShaderCompileErrorBanner {
                     anchors.centerIn: parent
-                    width: Math.min(parent.width * 0.8, 400)
-                    height: previewErrorText.implicitHeight + Kirigami.Units.gridUnit * 2
-                    color: Kirigami.Theme.backgroundColor
-                    opacity: 0.95
-                    radius: Kirigami.Units.smallSpacing
-                    border.color: Kirigami.Theme.negativeTextColor
-                    border.width: 1
-
-                    Text {
-                        id: previewErrorText
-
-                        Accessible.name: i18n("Shader error details")
-                        anchors.centerIn: parent
-                        text: (shaderPreviewLoader.item && shaderPreviewLoader.item.errorLog) || i18n("Shader error")
-                        color: Kirigami.Theme.textColor
-                        wrapMode: Text.WordWrap
-                        width: parent.width - Kirigami.Units.gridUnit * 2
-                    }
+                    width: Math.min(parent.width - Kirigami.Units.largeSpacing * 2, Kirigami.Units.gridUnit * 22)
+                    height: Math.min(parent.height - Kirigami.Units.largeSpacing * 2, Kirigami.Units.gridUnit * 12)
+                    errorLog: (shaderPreviewLoader.item && shaderPreviewLoader.item.status === ZoneShaderItem.Error) ? ((shaderPreviewLoader.item.errorLog && shaderPreviewLoader.item.errorLog.length > 0) ? shaderPreviewLoader.item.errorLog : i18nc("@info shader preview", "No error details available.")) : ""
                 }
 
                 Label {

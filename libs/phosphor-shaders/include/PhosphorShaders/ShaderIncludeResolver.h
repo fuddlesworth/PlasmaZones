@@ -20,6 +20,15 @@ class PHOSPHORSHADERS_EXPORT ShaderIncludeResolver
 public:
     static constexpr int MaxIncludeDepth = 10;
 
+    /// Reserved include name for the generated `p_<id>` autocomplete sidecar
+    /// (`plasmazones-shader-validate --emit-preamble`). An `#include` of a file
+    /// with this basename is skipped (treated as a no-op) during expansion: the
+    /// real param preamble is spliced at load, so the sidecar is an editor-only
+    /// aid that must neither resolve nor error at runtime. Lets an author keep
+    /// `#include "p_generated.glsl"` in the frag for glslls autocomplete while
+    /// shipping it unchanged, with or without the sidecar present.
+    static constexpr const char* GeneratedPreambleInclude = "p_generated.glsl";
+
     /// Expand #include directives in @p source.
     /// @param source Raw shader source (may contain #include "..." or #include <...>)
     /// @param currentFileDir Directory of the file that contains @p source
