@@ -269,9 +269,10 @@ public:
 
     /// Read-only per-monitor summary for the overview strip. Each entry:
     /// `{ screenId, layoutName, tilingEnabled, ruleCount, assigned }`.
-    /// @p screens is the `SettingsController::screens` list (each a map with
-    /// at least a `name`/`id` field) so the overview can list every connected
-    /// monitor — including ones with no rule at all (the "Not assigned" tile).
+    /// @p screens is the `SettingsController::screens` list (each a map with a
+    /// `name` field, and a `screenId` fallback) so the overview can list every
+    /// connected monitor — including ones with no rule at all (the "Not
+    /// assigned" tile).
     Q_INVOKABLE QVariantList monitorOverview(const QVariantList& screens) const;
 
     /// The screen-ids a rule pins, or an empty list if it is not a

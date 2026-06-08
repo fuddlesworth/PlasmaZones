@@ -61,31 +61,6 @@ SettingsFlickable {
     // Check capabilities map first (for future extensibility via scripted algorithm metadata),
     // falling back to hardcoded IDs for built-in algorithms. See PR #256 / M13.
     readonly property bool algoCenterLayout: algoCapabilities ? (algoCapabilities.centerLayout === true) : (root.selectedAlgorithm === "three-column" || root.selectedAlgorithm === "centered-master")
-    // Live split ratio — trackable by QML's binding engine (unlike the old
-    // savedAlgoSetting JS function whose conditional branches hid dependencies).
-    readonly property real currentSplitRatio: {
-        if (root.selectedAlgorithm === root.effectiveAlgorithm)
-            return root.settingValue("SplitRatio", appSettings.autotileSplitRatio);
-
-        let perAlgo = appSettings.autotilePerAlgorithmSettings;
-        let entry = perAlgo ? perAlgo[root.selectedAlgorithm] : null;
-        if (entry && entry["splitRatio"] !== undefined)
-            return entry["splitRatio"];
-
-        return root.algoCapabilities ? root.algoCapabilities.defaultSplitRatio : appSettings.autotileSplitRatio;
-    }
-    // Live master count — same pattern as above.
-    readonly property int currentMasterCount: {
-        if (root.selectedAlgorithm === root.effectiveAlgorithm)
-            return root.settingValue("MasterCount", appSettings.autotileMasterCount);
-
-        let perAlgo = appSettings.autotilePerAlgorithmSettings;
-        let entry = perAlgo ? perAlgo[root.selectedAlgorithm] : null;
-        if (entry && entry["masterCount"] !== undefined)
-            return entry["masterCount"];
-
-        return appSettings.autotileMasterCount;
-    }
 
     function settingValue(key, globalValue) {
         return psHelper.settingValue(key, globalValue);

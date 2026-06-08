@@ -182,11 +182,13 @@ QVariantList WindowRuleController::monitorOverview(const QVariantList& screens) 
     QVariantList out;
     for (const QVariant& sv : screens) {
         const QVariantMap screen = sv.toMap();
-        // Settings screen maps key the connector under "name" (and sometimes
-        // "id"); accept either so the overview never silently drops a tile.
+        // SettingsController::screens maps (screenInfoListToVariantList) key
+        // the connector under "name" (always present) with "screenId" (EDID id)
+        // as the alternate; fall back to it so the overview never silently
+        // drops a tile whose name happens to be empty.
         QString screenId = screen.value(QStringLiteral("name")).toString();
         if (screenId.isEmpty()) {
-            screenId = screen.value(QStringLiteral("id")).toString();
+            screenId = screen.value(QStringLiteral("screenId")).toString();
         }
         if (screenId.isEmpty()) {
             continue;
