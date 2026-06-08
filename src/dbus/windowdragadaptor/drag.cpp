@@ -83,11 +83,10 @@ void WindowDragAdaptor::dragStarted(const QString& windowId, double x, double y,
     // and is also commonly the configured snap activation trigger). The user
     // must perform a real release→press cycle to toggle.
     m_prevTriggerHeld = true;
-    // Zone span toggle latch (#563) follows the same reset/seed contract as the
-    // activation latch above: cleared each drag, prev seeded true so a span
-    // trigger already held at drag start isn't read as a rising edge.
-    m_zoneSpanToggled = false;
-    m_prevZoneSpanTriggerHeld = true;
+    // Zone span toggle latch (#563) reset lives in beginDrag, not here — the
+    // bypass path (autotile-only) never calls dragStarted, so resetting it
+    // here would leave the latch stale across bypass drags (same hazard the
+    // autotile drag-insert latch and m_modifierConflictWarned avoid).
     m_overlayShown = false;
     // m_overlayIdled is NOT reset here. The previous drag's end sets it:
     // a normal drop (hideOverlayAndSelector) leaves it true because the

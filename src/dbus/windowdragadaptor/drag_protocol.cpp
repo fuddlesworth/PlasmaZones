@@ -115,6 +115,13 @@ PhosphorProtocol::DragPolicy WindowDragAdaptor::beginDrag(const QString& windowI
     // release and re-press to toggle.
     m_autotileDragInsertToggled = false;
     m_prevAutotileDragInsertHeld = true;
+    // Zone span toggle latch (#563), same rationale and seed contract as the
+    // autotile drag-insert latch above: reset on every beginDrag so it covers
+    // both the bypass path (dragStarted never runs) and the snap path. Prev is
+    // seeded true so a span trigger already held at drag start is not read as a
+    // rising edge on the first dragMoved tick.
+    m_zoneSpanToggled = false;
+    m_prevZoneSpanTriggerHeld = true;
     // Reset the modifier-conflict warning latch on every beginDrag,
     // not just the snap-path dragStarted further down. Bypass-path drags
     // never call dragStarted, so without this reset a previously latched
