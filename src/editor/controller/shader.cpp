@@ -8,6 +8,7 @@
 #include "../undo/commands/UpdateShaderParamsCommand.h"
 #include "../helpers/ShaderDbusQueries.h"
 #include "../helpers/SettingsDbusQueries.h"
+#include "../../config/configdefaults.h"
 #include "../../core/shaderregistry.h"
 #include "../../core/logging.h"
 #include "../../shaderpreview/shaderpreviewcontroller.h"
@@ -43,12 +44,14 @@ QVariantMap EditorController::translateParams(const QString& shaderId, const QVa
 
 bool EditorController::audioVisualizerEnabled() const
 {
-    return SettingsDbusQueries::queryBoolSetting(QStringLiteral("enableAudioVisualizer"), false);
+    return SettingsDbusQueries::queryBoolSetting(QStringLiteral("enableAudioVisualizer"),
+                                                 ConfigDefaults::enableAudioVisualizer());
 }
 
 int EditorController::audioBarCount() const
 {
-    return SettingsDbusQueries::queryIntSetting(QStringLiteral("audioSpectrumBarCount"), 64);
+    return SettingsDbusQueries::queryIntSetting(QStringLiteral("audioSpectrumBarCount"),
+                                                ConfigDefaults::audioSpectrumBarCount());
 }
 
 QVariantMap EditorController::translateShaderParams(const QString& shaderId, const QVariantMap& params) const

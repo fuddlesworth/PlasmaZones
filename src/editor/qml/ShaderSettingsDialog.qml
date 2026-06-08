@@ -838,7 +838,7 @@ Kirigami.Dialog {
                     anchors.centerIn: parent
                     width: Math.min(parent.width - Kirigami.Units.largeSpacing * 2, Kirigami.Units.gridUnit * 22)
                     height: Math.min(parent.height - Kirigami.Units.largeSpacing * 2, Kirigami.Units.gridUnit * 12)
-                    errorLog: (shaderPreviewLoader.item && shaderPreviewLoader.item.status === ZoneShaderItem.Error) ? ((shaderPreviewLoader.item.errorLog && shaderPreviewLoader.item.errorLog.length > 0) ? shaderPreviewLoader.item.errorLog : i18n("No error details available.")) : ""
+                    errorLog: (shaderPreviewLoader.item && shaderPreviewLoader.item.status === ZoneShaderItem.Error) ? ((shaderPreviewLoader.item.errorLog && shaderPreviewLoader.item.errorLog.length > 0) ? shaderPreviewLoader.item.errorLog : i18nc("@info shader preview", "No error details available.")) : ""
                 }
 
                 Label {

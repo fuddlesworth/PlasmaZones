@@ -36,6 +36,24 @@ bool zoneIsFixedMode(const QVariantMap& zone)
     return zone.value(::PhosphorZones::ZoneJsonKeys::GeometryMode, 0).toInt()
         == static_cast<int>(::PhosphorZones::ZoneGeometryMode::Fixed);
 }
+
+// Single source of truth for the premultiplied fill/border appearance channels
+// a ZoneShaderItem preview consumes — keeps the C++→QML key strings spelled once
+// rather than duplicated across the fallback and per-zone branches below.
+void writeZoneAppearance(QVariantMap& out, const QColor& fill, qreal fillAlpha, const QColor& border,
+                         qreal borderRadius, qreal borderWidth)
+{
+    out[QLatin1String("fillR")] = fill.redF() * fillAlpha;
+    out[QLatin1String("fillG")] = fill.greenF() * fillAlpha;
+    out[QLatin1String("fillB")] = fill.blueF() * fillAlpha;
+    out[QLatin1String("fillA")] = fillAlpha;
+    out[QLatin1String("borderR")] = border.redF();
+    out[QLatin1String("borderG")] = border.greenF();
+    out[QLatin1String("borderB")] = border.blueF();
+    out[QLatin1String("borderA")] = border.alphaF();
+    out[QLatin1String("shaderBorderRadius")] = borderRadius;
+    out[QLatin1String("shaderBorderWidth")] = borderWidth;
+}
 } // namespace
 
 ShaderPreviewController::ShaderPreviewController(IShaderPreviewBackend* backend, QObject* parent)
@@ -44,7 +62,16 @@ ShaderPreviewController::ShaderPreviewController(IShaderPreviewBackend* backend,
 {
 }
 
-ShaderPreviewController::~ShaderPreviewController() = default;
+ShaderPreviewController::~ShaderPreviewController()
+{
+    // Symmetric teardown: stop CAVA capture explicitly rather than relying on
+    // ~CavaSpectrumProvider (a QObject child destroyed after this body) to halt
+    // the external process. Stop the provider directly — no signal emission
+    // during destruction.
+    if (m_audioProvider && m_audioProvider->isRunning()) {
+        m_audioProvider->stop();
+    }
+}
 
 QVariantList ShaderPreviewController::zonesForShaderPreview(int width, int height) const
 {
@@ -78,19 +105,10 @@ QVariantList ShaderPreviewController::zonesForShaderPreview(int width, int heigh
         out[QLatin1String(::PhosphorZones::ZoneJsonKeys::Height)] = resH - 8.0;
         out[QLatin1String(::PhosphorZones::ZoneJsonKeys::ZoneNumber)] = 1;
         out[QLatin1String(::PhosphorZones::ZoneJsonKeys::IsHighlighted)] = false;
-        const QColor fc = ::PhosphorZones::ZoneDefaults::HighlightColor;
-        const qreal a = ::PhosphorZones::ZoneDefaults::Opacity;
-        out[QLatin1String("fillR")] = fc.redF() * a;
-        out[QLatin1String("fillG")] = fc.greenF() * a;
-        out[QLatin1String("fillB")] = fc.blueF() * a;
-        out[QLatin1String("fillA")] = a;
-        const QColor bc = ::PhosphorZones::ZoneDefaults::BorderColor;
-        out[QLatin1String("borderR")] = bc.redF();
-        out[QLatin1String("borderG")] = bc.greenF();
-        out[QLatin1String("borderB")] = bc.blueF();
-        out[QLatin1String("borderA")] = bc.alphaF();
-        out[QLatin1String("shaderBorderRadius")] = static_cast<qreal>(::PhosphorZones::ZoneDefaults::BorderRadius);
-        out[QLatin1String("shaderBorderWidth")] = static_cast<qreal>(::PhosphorZones::ZoneDefaults::BorderWidth);
+        writeZoneAppearance(out, ::PhosphorZones::ZoneDefaults::HighlightColor, ::PhosphorZones::ZoneDefaults::Opacity,
+                            ::PhosphorZones::ZoneDefaults::BorderColor,
+                            static_cast<qreal>(::PhosphorZones::ZoneDefaults::BorderRadius),
+                            static_cast<qreal>(::PhosphorZones::ZoneDefaults::BorderWidth));
         result.append(out);
         return result;
     }
@@ -141,29 +159,23 @@ QVariantList ShaderPreviewController::zonesForShaderPreview(int width, int heigh
         const qreal alpha = useCustom
             ? zone.value(::PhosphorZones::ZoneJsonKeys::ActiveOpacity, ::PhosphorZones::ZoneDefaults::Opacity).toReal()
             : ::PhosphorZones::ZoneDefaults::Opacity;
-        out[QLatin1String("fillR")] = fillColor.redF() * alpha;
-        out[QLatin1String("fillG")] = fillColor.greenF() * alpha;
-        out[QLatin1String("fillB")] = fillColor.blueF() * alpha;
-        out[QLatin1String("fillA")] = alpha;
 
         // Border color
         QColor borderColor(zone.value(::PhosphorZones::ZoneJsonKeys::BorderColor).toString());
         if (!useCustom || !borderColor.isValid())
             borderColor = ::PhosphorZones::ZoneDefaults::BorderColor;
-        out[QLatin1String("borderR")] = borderColor.redF();
-        out[QLatin1String("borderG")] = borderColor.greenF();
-        out[QLatin1String("borderB")] = borderColor.blueF();
-        out[QLatin1String("borderA")] = borderColor.alphaF();
 
         // Border dimensions
-        out[QLatin1String("shaderBorderRadius")] = useCustom
+        const qreal borderRadius = useCustom
             ? zone.value(::PhosphorZones::ZoneJsonKeys::BorderRadius, ::PhosphorZones::ZoneDefaults::BorderRadius)
                   .toReal()
             : static_cast<qreal>(::PhosphorZones::ZoneDefaults::BorderRadius);
-        out[QLatin1String("shaderBorderWidth")] = useCustom
+        const qreal borderWidth = useCustom
             ? zone.value(::PhosphorZones::ZoneJsonKeys::BorderWidth, ::PhosphorZones::ZoneDefaults::BorderWidth)
                   .toReal()
             : static_cast<qreal>(::PhosphorZones::ZoneDefaults::BorderWidth);
+
+        writeZoneAppearance(out, fillColor, alpha, borderColor, borderRadius, borderWidth);
 
         result.append(out);
     }

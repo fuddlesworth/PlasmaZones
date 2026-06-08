@@ -3,6 +3,7 @@
 
 #pragma once
 
+#include "../config/configdefaults.h"
 #include "../core/settings_interfaces.h"
 #include "../shaderpreview/ishaderpreviewbackend.h"
 
@@ -79,7 +80,7 @@ public:
 
     int audioBarCount() const override
     {
-        return m_settings ? m_settings->audioSpectrumBarCount() : 64;
+        return m_settings ? m_settings->audioSpectrumBarCount() : ConfigDefaults::audioSpectrumBarCount();
     }
 
 private:

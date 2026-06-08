@@ -723,6 +723,13 @@ Kirigami.Dialog {
             var r = root.previewController.loadShaderPreset(root._filePathFromUrl(selectedFile));
             if (!r || !r.shaderParams)
                 return;
+            // This detail dialog is bound to a single shader (root.effect) and
+            // cannot switch shaders, so a preset saved for a different shader
+            // would silently apply mismatched params. Reject it loudly instead.
+            if (r.shaderId && r.shaderId !== root.effect.id) {
+                root._presetError = i18nc("@info", "This preset was saved for a different shader.");
+                return;
+            }
             // Apply the preset's values onto the current shader's parameter set
             // (preset value where present, else the param default), so a preset
             // saved for a slightly different param list still loads cleanly.

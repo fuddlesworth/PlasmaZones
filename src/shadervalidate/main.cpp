@@ -493,6 +493,14 @@ int emitPreamble(const QString& packDir, bool animationMode, bool quiet, QTextSt
         }
         AnimationShaderEffect eff = AnimationShaderEffect::fromJson(doc.object());
         eff.sourceDir = QDir(packDir).absolutePath();
+        // Mirror the validate path: reject metadata missing the required id /
+        // fragmentShader fields rather than silently emitting a sidecar from a
+        // half-parsed pack. (isValid() checks field presence, not file
+        // existence, so emit-preamble-before-writing-the-shader still works.)
+        if (!eff.isValid()) {
+            errStream << name << ": invalid metadata.json (missing required field id / fragmentShader)\n";
+            return 1;
+        }
         preamble = AnimationShaderRegistry::paramPreamble(eff);
         baseHeader = QStringLiteral("animation_uniforms.glsl");
     } else {
