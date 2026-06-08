@@ -118,6 +118,9 @@ Kirigami.Dialog {
     }
 
     onOpened: {
+        // The dialog instance is reused per shader, so clear any preset error
+        // left over from the previous shader's session before showing this one.
+        _presetError = "";
         if (_livePreview) {
             _resetPreview();
             previewController.startAudioCapture();

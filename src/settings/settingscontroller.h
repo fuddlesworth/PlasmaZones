@@ -340,23 +340,11 @@ public:
         return m_snappingZoneSelectorPage;
     }
     SnappingZonesController* snappingZonesPage() const;
-    SnappingEffectsController* snappingEffectsPage() const
-    {
-        return m_snappingEffectsPage;
-    }
-    SnappingShadersPageController* snappingShadersPage() const
-    {
-        return m_snappingShadersPage.get();
-    }
+    SnappingEffectsController* snappingEffectsPage() const;
+    SnappingShadersPageController* snappingShadersPage() const;
     SnappingWindowAppearanceController* snappingWindowAppearancePage() const;
-    TilingAppearanceController* tilingAppearancePage() const
-    {
-        return m_tilingAppearancePage;
-    }
-    TilingAlgorithmController* tilingAlgorithmPage() const
-    {
-        return m_tilingAlgorithmPage.get();
-    }
+    TilingAppearanceController* tilingAppearancePage() const;
+    TilingAlgorithmController* tilingAlgorithmPage() const;
     GeneralPageController* generalPage() const
     {
         return m_generalPage;

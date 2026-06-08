@@ -700,6 +700,26 @@ SnappingWindowAppearanceController* SettingsController::snappingWindowAppearance
     return m_snappingWindowAppearancePage;
 }
 
+SnappingEffectsController* SettingsController::snappingEffectsPage() const
+{
+    return m_snappingEffectsPage;
+}
+
+SnappingShadersPageController* SettingsController::snappingShadersPage() const
+{
+    return m_snappingShadersPage.get();
+}
+
+TilingAppearanceController* SettingsController::tilingAppearancePage() const
+{
+    return m_tilingAppearancePage;
+}
+
+TilingAlgorithmController* SettingsController::tilingAlgorithmPage() const
+{
+    return m_tilingAlgorithmPage.get();
+}
+
 // setActivePage / dirty-tracking / external-edit methods live in
 // settingscontroller_pagestate.cpp (split to keep this file under the
 // 800-line cap).
