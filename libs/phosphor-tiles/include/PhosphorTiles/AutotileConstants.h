@@ -126,8 +126,6 @@ inline constexpr QLatin1String InsertPosition{"insertPosition"};
 inline constexpr QLatin1String RespectMinimumSize{"respectMinimumSize"};
 inline constexpr QLatin1String MaxWindows{"maxWindows"};
 inline constexpr QLatin1String OverflowBehavior{"overflowBehavior"};
-inline constexpr QLatin1String CenteredMasterSplitRatio{"centeredMasterSplitRatio"};
-inline constexpr QLatin1String CenteredMasterMasterCount{"centeredMasterMasterCount"};
 inline constexpr QLatin1String SplitTreeKey{"splitTree"};
 } // namespace AutotileJsonKeys
 

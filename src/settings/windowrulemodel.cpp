@@ -163,13 +163,13 @@ QString leafLabel(const MatchExpression::Predicate& predicate, const WindowRuleM
     if (predicate.op == Operator::In) {
         QStringList resolved;
         const QVariant& v = predicate.value;
-        if (v.canConvert<QStringList>()) {
+        if (v.metaType().id() == QMetaType::QStringList) {
             const QStringList list = v.toStringList();
             resolved.reserve(list.size());
             for (const QString& raw : list) {
                 resolved.append(resolveOne(raw));
             }
-        } else if (v.canConvert<QVariantList>()) {
+        } else {
             const QVariantList list = v.toList();
             resolved.reserve(list.size());
             for (const QVariant& item : list) {

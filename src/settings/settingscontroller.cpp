@@ -140,19 +140,22 @@ SettingsController::SettingsController(QObject* parent)
     // null on m_settings — it is a value member, not a QObject child of `this`.
     , m_localRuleStore(std::make_unique<PhosphorWindowRule::WindowRuleStore>(ConfigDefaults::windowRulesFilePath()))
     , m_localRuleStoreWatcher(std::make_unique<PhosphorWindowRule::WindowRuleStoreWatcher>(*m_localRuleStore))
+    // Comma-expression: install the library-level screen-id resolver, then store
+    // `true`. Runs BEFORE m_settings (next) whose constructor load()s and
+    // migrates per-screen override keys via idForName — so the very first load
+    // canonicalises connector names to EDID instead of silently no-op'ing.
+    // First call initialises the static; later constructions reuse it.
+    , m_screenIdResolverReady((ensureScreenIdResolver(), true))
     , m_settings(m_localRuleStore.get(), nullptr)
     , m_screenHelper(&m_settings, this)
     , m_localAlgorithmRegistry(std::make_unique<PhosphorTiles::AlgorithmRegistry>(nullptr))
     , m_localLayoutManager(
           std::make_unique<PhosphorZones::LayoutRegistry>(m_localRuleStore.get(), ConfigDefaults::layoutsSubdir()))
 {
-    // Install the library-level screen-id resolver before any layout load
-    // runs. First call initialises the static; subsequent constructions
-    // in the same process reuse it. ensureScreenIdResolver() now lives in
-    // src/common/screenidresolver.{h,cpp} so daemon/editor/settings share
-    // the same install-once helper instead of maintaining three parallel
-    // copies.
-    ensureScreenIdResolver();
+    // The screen-id resolver is installed in the member-init list (see
+    // m_screenIdResolverReady) so it is ready before m_settings load()s. It
+    // lives in src/common/screenidresolver.{h,cpp} so daemon/editor/settings
+    // share one install-once helper.
 
     // Auto-discovery pattern: every linked provider library has
     // already registered a builder via static-init. The KCM just

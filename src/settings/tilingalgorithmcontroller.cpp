@@ -248,14 +248,10 @@ void TilingAlgorithmController::setCustomParam(const QString& algorithmId, const
 
     customParams[paramName] = coerced;
     algoEntry[PhosphorTiles::AutotileJsonKeys::CustomParams] = customParams;
-
-    // Preserve existing splitRatio/masterCount if not already in the entry.
-    if (!algoEntry.contains(PhosphorTiles::AutotileJsonKeys::SplitRatio)) {
-        algoEntry[PhosphorTiles::AutotileJsonKeys::SplitRatio] = algo->defaultSplitRatio();
-    }
-    if (!algoEntry.contains(PhosphorTiles::AutotileJsonKeys::MasterCount)) {
-        algoEntry[PhosphorTiles::AutotileJsonKeys::MasterCount] = ConfigDefaults::autotileMasterCount();
-    }
+    // Persist only the key the user actually set. A missing splitRatio /
+    // masterCount is defaulted by perAlgoFromVariantMap on read, so injecting
+    // them here would just bake a redundant (and potentially-stale) per-algorithm
+    // override into the entry for a value the user never touched.
 
     perAlgo[algorithmId] = algoEntry;
     m_settings->setAutotilePerAlgorithmSettings(perAlgo);

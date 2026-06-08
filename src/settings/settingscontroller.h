@@ -611,6 +611,12 @@ private:
     /// Opt-in cross-process auto-reload of m_localRuleStore on external writes
     /// (mainly the no-daemon case). Declared after the store; tears down first.
     std::unique_ptr<PhosphorWindowRule::WindowRuleStoreWatcher> m_localRuleStoreWatcher;
+    /// Installs the process-global screen-id resolver before `m_settings`, whose
+    /// constructor load()s and canonicalises per-screen override keys via
+    /// `idForName`. Declared (and initialised) immediately before `m_settings`
+    /// so member-init order guarantees the resolver is ready for that first
+    /// migration on EVERY construction path. The stored value is unused.
+    [[maybe_unused]] const bool m_screenIdResolverReady;
     Settings m_settings;
     /// Per-monitor editing scope; empty = "All Monitors". See the
     /// scopeScreenName Q_PROPERTY. Plain UI state, not persisted.

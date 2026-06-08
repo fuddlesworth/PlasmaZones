@@ -290,10 +290,10 @@ SettingsFlickable {
             screens[rightIdx].x = newDivPos;
             screens[rightIdx].width = newRightWidth;
         }
-        for (var i = 0; i < screens.length; i++) {
-            if (screens[i].width < minW)
-                return;
-        }
+        // The clamp bounds newDivPos to [minX, maxX], so both moved cells keep
+        // width >= minW and unmoved cells are untouched — no post-mutation
+        // re-check is needed (a float-edge one would spuriously reject a
+        // boundary drag).
         _pendingScreens = screens;
         _stageCurrentConfig();
     }
@@ -322,10 +322,9 @@ SettingsFlickable {
             screens[bottomIdx].y = newDivPos;
             screens[bottomIdx].height = newBottomHeight;
         }
-        for (var i = 0; i < screens.length; i++) {
-            if (screens[i].height < minH)
-                return;
-        }
+        // The clamp bounds newDivPos to [minY, maxY], so both moved cells keep
+        // height >= minH and unmoved cells are untouched — no post-mutation
+        // re-check is needed.
         _pendingScreens = screens;
         _stageCurrentConfig();
     }
