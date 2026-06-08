@@ -624,18 +624,17 @@ void OverlayService::dismissOverlayWindow(const QString& screenId)
             sit->overlayGeomConnection = {};
             sit->overlayPhysScreen = nullptr;
             sit->overlayGeometry = QRect();
-            // Release the full-screen labels QImage the persistent slot
-            // property would otherwise keep resident for the whole session
-            // while hidden (the wallpaper reset is symmetric only - its image
-            // is pinned by ShaderRegistry's static cache; see
+            // Release the labels payload (the sparse glyph-tile ZoneLabelTexture)
+            // the persistent slot property would otherwise keep resident for the
+            // whole session while hidden (the wallpaper reset is symmetric only -
+            // its image is pinned by ShaderRegistry's static cache; see
             // releaseOverlaySlotTextures). Zeroing labelsTextureHash forces
             // updateLabelsTextureForWindow to rebuild on the next show()
             // instead of short-circuiting on the now-1x1 placeholder (which
             // would render no labels). The trade is one ZoneLabelTextureBuilder
             // rebuild per drag-start vs. the sparse glyph-tile payload held idle
             // per screen; the warm drag-pause path (setIdleForDragPause) is
-            // untouched and keeps
-            // the texture warm mid-drag.
+            // untouched and keeps the texture warm mid-drag.
             releaseOverlaySlotTextures(sit->mainOverlaySlot());
             sit->labelsTextureHash = 0;
             writeQmlProperty(sit->mainOverlaySlot(), QStringLiteral("loaded"), false);
@@ -650,8 +649,8 @@ void OverlayService::dismissOverlayWindow(const QString& screenId)
         it->overlayGeomConnection = {};
         it->overlayPhysScreen = nullptr;
         it->overlayGeometry = QRect();
-        // Mirror the shell-surface path: release the full-screen texture
-        // buffers and reset the hash so the next show() rebuilds correctly.
+        // Mirror the shell-surface path: release the slot's labels + wallpaper
+        // textures and reset the hash so the next show() rebuilds correctly.
         releaseOverlaySlotTextures(slot);
         it->labelsTextureHash = 0;
         writeQmlProperty(slot, QStringLiteral("loaded"), false);
@@ -683,11 +682,11 @@ void OverlayService::destroyOverlayWindow(const QString& screenId)
     it->overlayPhysScreen = nullptr;
     it->overlayGeometry = QRect();
     it->overlayGeomConnection = {};
-    // Release the slot's full-screen labels buffer too. A shader->non-shader
+    // Release the slot's labels payload too. A shader->non-shader
     // type flip routes through here (destroyIfTypeMismatch) and the
     // non-shader createOverlayWindow reload does NOT overwrite labelsTexture,
-    // so without this the slot would pin the last shader-mode QImage for the
-    // screen's whole non-shader session. The screen-teardown callers
+    // so without this the slot would pin the last shader-mode labels payload for
+    // the screen's whole non-shader session. The screen-teardown callers
     // immediately destroyPassiveShell, where this is a harmless no-op on an
     // about-to-be-freed slot. Mirrors dismissOverlayWindow's release.
     releaseOverlaySlotTextures(it->mainOverlaySlot());
