@@ -12,9 +12,8 @@ import org.kde.kirigami as Kirigami
  * Iterates `settingsController.screens` so the visual treatment (icon +
  * displayLabel + Primary badge) matches the canonical `DisplayMap`
  * used elsewhere in the app. Per-monitor rule data comes from
- * `WindowRuleController.monitorOverview()`, whose tiles carry a `screenId`
- * field set to each screen's `name` (or its stable id when the screen is
- * nameless).
+ * `WindowRuleController.monitorOverview()`, whose tiles are keyed by each
+ * screen's `name` (the controller omits a tile for any screen with no name).
  *
  * Clicking a tile sets the page's monitor filter; clicking the active tile
  * again clears it.
@@ -31,11 +30,8 @@ ColumnLayout {
     required property var tiles
     /// The currently-selected monitor filter (empty = no filter).
     property string selectedScreenId: ""
-    /// Indexed by each tile's `screenId` field for O(1) lookup during tile
-    /// rendering. The controller sets that field to the screen's `name`, or its
-    /// stable id when the screen has no name, so the render-time lookup in
-    /// `_tileForScreen` tries `screen.name` first and falls back to
-    /// `screen.screenId` to cover the nameless-screen keying defensively.
+    /// Indexed by each tile's `screenId` field — which the controller sets to
+    /// the screen's `name` — for O(1) lookup by `screen.name` during rendering.
     readonly property var _tilesByScreenId: {
         var map = {};
         // Guard `tiles` itself — the binding can transiently produce
@@ -54,20 +50,10 @@ ColumnLayout {
 
     signal monitorSelected(string screenId)
 
-    /// Resolve the tile entry for a given screen, falling back through the
-    /// candidate identifiers the controller may have used as the tile key.
+    /// Resolve the tile entry for a given screen. Tiles are keyed by the
+    /// screen's `name` (see _tilesByScreenId), so a plain name lookup suffices.
     function _tileForScreen(screen) {
-        if (!screen)
-            return undefined;
-
-        var byName = overview._tilesByScreenId[screen.name];
-        if (byName)
-            return byName;
-
-        if (screen.screenId)
-            return overview._tilesByScreenId[screen.screenId];
-
-        return undefined;
+        return screen ? overview._tilesByScreenId[screen.name] : undefined;
     }
 
     spacing: Kirigami.Units.smallSpacing
