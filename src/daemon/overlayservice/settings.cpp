@@ -13,6 +13,7 @@
 #include <PhosphorZones/IZoneLayoutRegistry.h>
 #include "../../core/shaderregistry.h"
 #include "../../core/utils.h"
+#include <QQuickItem>
 #include <QQuickWindow>
 #include <QScreen>
 #include <QTimer>
@@ -395,6 +396,22 @@ void OverlayService::scheduleIdleQuiesce()
             stopShaderAnimation();
             if (m_audioProvider && m_audioProvider->isRunning()) {
                 m_audioProvider->stop();
+            }
+            // Return each overlay window's scene-graph GPU/host resources (glyph
+            // atlases, batch + pipeline buffers, staging pools) to the driver
+            // while idle. This keeps the QQuickWindow + QRhi device ALIVE — only
+            // cached resources are freed, never vkDestroyDevice — so it avoids
+            // the NVIDIA teardown deadlock that motivates keeping windows warm.
+            // The scene graph re-creates them on the next rendered frame after
+            // refreshFromIdle()/show().
+            for (auto it = m_screenStates.constBegin(); it != m_screenStates.constEnd(); ++it) {
+                if (!it.value().overlayPhysScreen) {
+                    continue;
+                }
+                QQuickItem* slot = it.value().mainOverlaySlot();
+                if (slot && slot->window()) {
+                    slot->window()->releaseResources();
+                }
             }
         });
     }
