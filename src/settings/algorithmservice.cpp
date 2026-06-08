@@ -485,7 +485,7 @@ void AlgorithmService::openLayoutFile(const QString& layoutId)
 bool AlgorithmService::deleteAlgorithm(const QString& algorithmId)
 {
     if (algorithmId.isEmpty()) {
-        Q_EMIT algorithmOperationFailed(PhosphorI18n::tr("Cannot delete algorithm — no algorithm selected."));
+        Q_EMIT algorithmOperationFailed(PhosphorI18n::tr("No algorithm is selected to delete."));
         return false;
     }
 
@@ -513,9 +513,9 @@ bool AlgorithmService::deleteAlgorithm(const QString& algorithmId)
     if (rawUserDir.isEmpty() || canonicalPath.isEmpty() || !canonicalPath.startsWith(userDir)) {
         qCWarning(PlasmaZones::lcCore) << "Refusing to delete non-user algorithm file:" << filePath
                                        << "userDir=" << rawUserDir << "canonical=" << canonicalPath;
-        Q_EMIT algorithmOperationFailed(
-            rawUserDir.isEmpty() ? PhosphorI18n::tr("Cannot delete — user algorithms directory does not exist.")
-                                 : PhosphorI18n::tr("Cannot delete — file is outside the user algorithms directory."));
+        Q_EMIT algorithmOperationFailed(rawUserDir.isEmpty()
+                                            ? PhosphorI18n::tr("The user algorithms directory does not exist.")
+                                            : PhosphorI18n::tr("That file is outside the user algorithms directory."));
         return false;
     }
 
@@ -538,14 +538,14 @@ bool AlgorithmService::duplicateAlgorithm(const QString& algorithmId)
 {
     const QString sourcePath = scriptedFilePath(algorithmId);
     if (sourcePath.isEmpty()) {
-        Q_EMIT algorithmOperationFailed(PhosphorI18n::tr("Cannot duplicate — algorithm file not found."));
+        Q_EMIT algorithmOperationFailed(PhosphorI18n::tr("The algorithm file could not be found."));
         return false;
     }
 
     auto* registry = m_registry;
     PhosphorTiles::TilingAlgorithm* algo = registry->algorithm(algorithmId);
     if (!algo) {
-        Q_EMIT algorithmOperationFailed(PhosphorI18n::tr("Cannot duplicate — algorithm is no longer registered."));
+        Q_EMIT algorithmOperationFailed(PhosphorI18n::tr("That algorithm is no longer registered."));
         return false;
     }
 
@@ -560,15 +560,15 @@ bool AlgorithmService::duplicateAlgorithm(const QString& algorithmId)
     if (destPath.isEmpty()) {
         qCWarning(PlasmaZones::lcCore) << "Could not find unique filename for duplicate:" << baseName;
         Q_EMIT algorithmOperationFailed(
-            PhosphorI18n::tr("Could not duplicate algorithm — too many copies exist. "
-                             "Please rename or delete existing copies."));
+            PhosphorI18n::tr("Too many copies of this algorithm already exist. "
+                             "Rename or delete some before duplicating."));
         return false;
     }
 
     // Canonicalize source path to follow symlinks and ensure we read the actual file
     const QString canonicalSource = QFileInfo(sourcePath).canonicalFilePath();
     if (canonicalSource.isEmpty()) {
-        Q_EMIT algorithmOperationFailed(PhosphorI18n::tr("Cannot duplicate — could not resolve algorithm file path."));
+        Q_EMIT algorithmOperationFailed(PhosphorI18n::tr("The algorithm file path could not be resolved."));
         return false;
     }
 
@@ -608,7 +608,7 @@ bool AlgorithmService::duplicateAlgorithm(const QString& algorithmId)
                                        << "(nameMatch=" << nameMatch.hasMatch() << "idMatch=" << idMatch.hasMatch()
                                        << ")";
         Q_EMIT algorithmOperationFailed(
-            PhosphorI18n::tr("Could not duplicate algorithm — its metadata format is not recognised. "
+            PhosphorI18n::tr("Could not duplicate the algorithm. Its metadata format is not recognised. "
                              "Expected `name = \"...\"` and `id = \"...\"` on separate lines."));
         return false;
     }
@@ -619,7 +619,7 @@ bool AlgorithmService::duplicateAlgorithm(const QString& algorithmId)
     const QRegularExpressionMatch idMatch2 = idRe.match(content);
     if (!idMatch2.hasMatch()) {
         qCWarning(PlasmaZones::lcCore) << "duplicateAlgorithm: id match disappeared after name replacement";
-        Q_EMIT algorithmOperationFailed(PhosphorI18n::tr("Could not duplicate algorithm — metadata rewrite failed."));
+        Q_EMIT algorithmOperationFailed(PhosphorI18n::tr("Could not rewrite the algorithm's metadata."));
         return false;
     }
     content.replace(idMatch2.capturedStart(), idMatch2.capturedLength(),
@@ -658,7 +658,7 @@ bool AlgorithmService::exportAlgorithm(const QString& algorithmId, const QString
 
     const QString sourcePath = scriptedFilePath(algorithmId);
     if (sourcePath.isEmpty()) {
-        Q_EMIT algorithmOperationFailed(PhosphorI18n::tr("Cannot export — algorithm file not found."));
+        Q_EMIT algorithmOperationFailed(PhosphorI18n::tr("The algorithm file could not be found."));
         return false;
     }
 
@@ -736,8 +736,8 @@ QString AlgorithmService::createNewAlgorithm(const QString& name, const QString&
         qCWarning(PlasmaZones::lcCore) << "Could not find unique filename for algorithm:" << filename
                                        << "— all 999 slots exhausted";
         Q_EMIT algorithmOperationFailed(
-            PhosphorI18n::tr("Could not create algorithm — too many files with the same name. "
-                             "Please rename or delete existing algorithms."));
+            PhosphorI18n::tr("Too many algorithms already share this name. "
+                             "Rename or delete some before creating another."));
         return QString();
     }
     // Update filename to match the final path (may have -N suffix)

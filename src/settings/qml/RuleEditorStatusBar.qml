@@ -41,7 +41,7 @@ ColumnLayout {
         wrapMode: Text.WordWrap
         font.italic: true
         opacity: 0.6
-        text: i18n("The first rule (by priority) to fill each action slot wins that slot — actions in different slots stack.")
+        text: i18n("The first rule (by priority) to fill each action slot wins that slot. Actions in different slots stack.")
     }
 
     // Completeness gate — shown when Save is blocked for a structural

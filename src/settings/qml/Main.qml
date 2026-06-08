@@ -210,9 +210,9 @@ PhosphorUi.SettingsAppWindow {
             if (errors && errors.length > 0)
                 window.showToast(i18n("Save did not complete: %1", errors.join("; ")));
             else if (titles.length === 0)
-                window.showToast(i18n("Save did not complete — some pages remain dirty."));
+                window.showToast(i18n("Save did not complete. Some pages still have unsaved changes."));
             else
-                window.showToast(i18n("Save did not complete — still unsaved on: %1", titles.join(", ")));
+                window.showToast(i18n("Save did not complete. Still unsaved on: %1", titles.join(", ")));
         }
 
         function onDiscardOnCloseFailed(errors) {

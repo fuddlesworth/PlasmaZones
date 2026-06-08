@@ -49,19 +49,19 @@ SettingsFlickable {
         AnimationEventCard {
             Layout.fillWidth: true
             eventPath: "widget.badgeShow"
-            eventLabel: i18n("Badge — Show")
+            eventLabel: i18n("Show (badge)")
         }
 
         AnimationEventCard {
             Layout.fillWidth: true
             eventPath: "widget.badgeHide"
-            eventLabel: i18n("Badge — Hide")
+            eventLabel: i18n("Hide (badge)")
         }
 
         AnimationEventCard {
             Layout.fillWidth: true
             eventPath: "widget.badgePulse"
-            eventLabel: i18n("Badge — Pulse")
+            eventLabel: i18n("Pulse (badge)")
         }
 
         AnimationEventCard {
@@ -97,13 +97,13 @@ SettingsFlickable {
         AnimationEventCard {
             Layout.fillWidth: true
             eventPath: "widget.accordionExpand"
-            eventLabel: i18n("Accordion — Expand")
+            eventLabel: i18n("Expand (accordion)")
         }
 
         AnimationEventCard {
             Layout.fillWidth: true
             eventPath: "widget.accordionCollapse"
-            eventLabel: i18n("Accordion — Collapse")
+            eventLabel: i18n("Collapse (accordion)")
         }
 
         AnimationEventCard {
@@ -153,7 +153,5 @@ SettingsFlickable {
             eventPath: "cursor.click"
             eventLabel: i18n("Cursor Click")
         }
-
     }
-
 }

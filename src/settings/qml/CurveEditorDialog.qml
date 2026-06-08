@@ -36,7 +36,7 @@ Kirigami.Dialog {
     signal curveApplied(string curve)
     signal springApplied(real omega, real zeta)
 
-    title: i18n("Customize Curve — %1", eventLabel)
+    title: i18n("Customize Curve: %1", eventLabel)
     preferredWidth: Math.min(Kirigami.Units.gridUnit * 40, parent ? parent.width * 0.85 : Kirigami.Units.gridUnit * 40)
     preferredHeight: Math.min(Kirigami.Units.gridUnit * 32, parent ? parent.height * 0.8 : Kirigami.Units.gridUnit * 32)
     standardButtons: Kirigami.Dialog.Apply | Kirigami.Dialog.Cancel
@@ -85,7 +85,7 @@ Kirigami.Dialog {
             curve: root._workingCurve
             animationDuration: settingsController.settings.animationDuration
             previewEnabled: root.visible && root.timingMode === CurvePresets.timingModeEasing
-            onCurveEdited: function(newCurve) {
+            onCurveEdited: function (newCurve) {
                 root._workingCurve = newCurve;
                 root._dirty = true;
             }
@@ -105,11 +105,11 @@ Kirigami.Dialog {
 
                 Accessible.name: i18n("Easing preset")
                 displayText: currentIndex < 0 ? i18n("Custom") : currentText
-                model: CurvePresets.easingStyles.map((s) => {
+                model: CurvePresets.easingStyles.map(s => {
                     return s.label;
                 })
                 currentIndex: CurvePresets.findIndices(root._workingCurve).styleIndex
-                onActivated: (index) => {
+                onActivated: index => {
                     var dirIdx = dialogDirection.currentIndex >= 0 ? dialogDirection.currentIndex : 1;
                     var curve = CurvePresets.curveForSelection(index, dirIdx);
                     if (curve) {
@@ -118,7 +118,6 @@ Kirigami.Dialog {
                     }
                 }
             }
-
         }
 
         SettingsSeparator {
@@ -140,11 +139,11 @@ Kirigami.Dialog {
                 // dead control is visually grey rather than misleading.
                 enabled: dialogCurvePreset.currentIndex !== 0
                 Accessible.name: i18n("Easing direction")
-                model: CurvePresets.easingDirections.map((d) => {
+                model: CurvePresets.easingDirections.map(d => {
                     return d.label;
                 })
                 currentIndex: CurvePresets.findIndices(root._workingCurve).dirIndex
-                onActivated: (index) => {
+                onActivated: index => {
                     var styleIdx = dialogCurvePreset.currentIndex;
                     if (styleIdx >= 0) {
                         var curve = CurvePresets.curveForSelection(styleIdx, index);
@@ -155,7 +154,6 @@ Kirigami.Dialog {
                     }
                 }
             }
-
         }
 
         SettingsSeparator {
@@ -174,10 +172,10 @@ Kirigami.Dialog {
                 to: 3
                 stepSize: 0.1
                 value: easingPreviewInDialog.curveAmplitude
-                formatValue: function(v) {
+                formatValue: function (v) {
                     return v.toFixed(1);
                 }
-                onMoved: (value) => {
+                onMoved: value => {
                     var ct = easingPreviewInDialog.curveType;
                     var amp = value.toFixed(2);
                     if (ct.indexOf("elastic") >= 0) {
@@ -189,14 +187,13 @@ Kirigami.Dialog {
                     root._dirty = true;
                 }
             }
-
         }
 
         // Period (elastic only)
         SettingsRow {
             visible: root.timingMode === CurvePresets.timingModeEasing && easingPreviewInDialog.curveType.indexOf("elastic") >= 0
             title: i18n("Period")
-            description: i18n("Oscillation speed — lower is faster wobble")
+            description: i18n("Lower values wobble faster")
 
             SettingsSlider {
                 Accessible.name: i18n("Period")
@@ -204,17 +201,16 @@ Kirigami.Dialog {
                 to: 1
                 stepSize: 0.05
                 value: easingPreviewInDialog.elasticPeriod
-                formatValue: function(v) {
+                formatValue: function (v) {
                     return v.toFixed(2);
                 }
-                onMoved: (value) => {
+                onMoved: value => {
                     var ct = easingPreviewInDialog.curveType;
                     var amp = easingPreviewInDialog.curveAmplitude.toFixed(2);
                     root._workingCurve = ct + ":" + amp + "," + value.toFixed(2);
                     root._dirty = true;
                 }
             }
-
         }
 
         // Bounces (bounce only)
@@ -230,14 +226,13 @@ Kirigami.Dialog {
                 stepSize: 1
                 value: easingPreviewInDialog.bouncesCount
                 valueSuffix: ""
-                onMoved: (value) => {
+                onMoved: value => {
                     var ct = easingPreviewInDialog.curveType;
                     var amp = easingPreviewInDialog.curveAmplitude.toFixed(2);
                     root._workingCurve = ct + ":" + amp + "," + Math.round(value);
                     root._dirty = true;
                 }
             }
-
         }
 
         // ── Spring mode ─────────────────────────────────────────────
@@ -263,11 +258,11 @@ Kirigami.Dialog {
 
                 Accessible.name: i18n("Spring preset")
                 displayText: currentIndex < 0 ? i18n("Custom") : currentText
-                model: CurvePresets.springPresets.map((p) => {
+                model: CurvePresets.springPresets.map(p => {
                     return p.label;
                 })
                 currentIndex: CurvePresets.springPresetIndex(root._workingOmega, root._workingZeta)
-                onActivated: (index) => {
+                onActivated: index => {
                     if (index >= 0 && index < CurvePresets.springPresets.length) {
                         var p = CurvePresets.springPresets[index];
                         root._workingOmega = p.omega;
@@ -276,7 +271,6 @@ Kirigami.Dialog {
                     }
                 }
             }
-
         }
 
         SettingsSeparator {
@@ -294,15 +288,14 @@ Kirigami.Dialog {
                 to: settingsController.animationsPage.springOmegaMax
                 stepSize: 0.5
                 value: root._workingOmega
-                formatValue: function(v) {
+                formatValue: function (v) {
                     return v.toFixed(1);
                 }
-                onMoved: (value) => {
+                onMoved: value => {
                     root._workingOmega = value;
                     root._dirty = true;
                 }
             }
-
         }
 
         SettingsSeparator {
@@ -320,17 +313,15 @@ Kirigami.Dialog {
                 to: settingsController.animationsPage.springZetaMax
                 stepSize: 0.05
                 value: root._workingZeta
-                formatValue: function(v) {
+                formatValue: function (v) {
                     return v.toFixed(2);
                 }
-                onMoved: (value) => {
+                onMoved: value => {
                     root._workingZeta = value;
                     root._dirty = true;
                 }
             }
-
         }
-
     }
 
     // Save-as-preset footer.
@@ -362,7 +353,7 @@ Kirigami.Dialog {
                 onAccepted: {
                     var trimmed = text.trim();
                     if (trimmed.length === 0)
-                        return ;
+                        return;
 
                     // Build a Profile JSON shaped like Profile::toJson():
                     // a single `curve` string (easing wire format or
@@ -384,7 +375,6 @@ Kirigami.Dialog {
                     // success.
                     if (settingsController.animationsPage.addUserPreset(trimmed, profile))
                         root._savingPreset = false;
-
                 }
                 Keys.onEscapePressed: root._savingPreset = false
             }
@@ -407,9 +397,6 @@ Kirigami.Dialog {
                 ToolTip.text: i18n("Cancel")
                 ToolTip.visible: hovered
             }
-
         }
-
     }
-
 }

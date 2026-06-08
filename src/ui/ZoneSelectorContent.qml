@@ -494,7 +494,7 @@ Item {
                                 anchors.fill: parent
                                 hoverEnabled: true
                                 cursorShape: Qt.ForbiddenCursor
-                                Accessible.name: i18nc("@info:whatsthis zone selector lock overlay", "Layout is locked — switch to this layout before selecting a zone")
+                                Accessible.name: i18nc("@info:whatsthis zone selector lock overlay", "Layout is locked. Switch to this layout before selecting a zone.")
                                 onClicked: function (mouse) {
                                     mouse.accepted = true;
                                 }

@@ -460,7 +460,7 @@ ColumnLayout {
                         // "NONE of") per mockup — literal cased strings
                         // since font.capitalization can't selectively
                         // upper-case only the first word.
-                        text: delegate.kind === "all" ? i18nc("Match-tree group — every child must match", "ALL of") : delegate.kind === "any" ? i18nc("Match-tree group — at least one child must match", "ANY of") : i18nc("Match-tree group — no child may match", "NONE of")
+                        text: delegate.kind === "all" ? i18nc("Match-tree group where every child must match", "ALL of") : delegate.kind === "any" ? i18nc("Match-tree group where at least one child must match", "ANY of") : i18nc("Match-tree group where no child may match", "NONE of")
                         font.bold: true
                         font.pointSize: Kirigami.Theme.smallFont.pointSize
                         // Foreground textColor guarantees high contrast

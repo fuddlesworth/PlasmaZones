@@ -121,7 +121,7 @@ ColumnLayout {
 
     Label {
         visible: editor.actions.length === 0
-        text: i18n("No actions yet — add at least one.")
+        text: i18n("No actions yet. Add at least one.")
         opacity: 0.6
         font.italic: true
     }

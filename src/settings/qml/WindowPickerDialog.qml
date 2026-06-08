@@ -265,7 +265,7 @@ Kirigami.Dialog {
                 highlighted: ListView.isCurrentItem
                 enabled: valueAvailable
                 opacity: valueAvailable ? 1 : 0.5
-                Accessible.name: primaryText + (secondaryText.length > 0 ? " — " + secondaryText : "")
+                Accessible.name: primaryText + (secondaryText.length > 0 ? ", " + secondaryText : "")
                 onClicked: {
                     dialog.picked(rawValue);
                     dialog.close();

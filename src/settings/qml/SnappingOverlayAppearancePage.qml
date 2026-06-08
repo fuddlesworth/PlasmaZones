@@ -456,7 +456,7 @@ SettingsFlickable {
 
                     SettingsRow {
                         title: i18n("Audio spectrum")
-                        description: root.effectsBridge.cavaAvailable ? i18n("Feed audio spectrum data to shaders that support it") : i18n("CAVA is not installed — install cava to enable audio visualization")
+                        description: root.effectsBridge.cavaAvailable ? i18n("Feed audio spectrum data to shaders that support it") : i18n("CAVA is not installed. Install cava to enable audio visualization.")
 
                         SettingsSwitch {
                             id: audioVizSwitch

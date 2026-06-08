@@ -395,7 +395,7 @@ Item {
             opacity: isLocked ? 1 : 0.4
             display: ToolButton.IconOnly
             Accessible.name: isLocked ? i18nc("@action:button", "Unlock %1", paramDelegate.paramData ? (paramDelegate.paramData.name || paramDelegate.paramData.id || "") : "") : i18nc("@action:button", "Lock %1", paramDelegate.paramData ? (paramDelegate.paramData.name || paramDelegate.paramData.id || "") : "")
-            ToolTip.text: isLocked ? i18nc("@info:tooltip", "Locked — preserved during randomize") : i18nc("@info:tooltip", "Unlocked — will be randomized")
+            ToolTip.text: isLocked ? i18nc("@info:tooltip", "Won't be randomized") : i18nc("@info:tooltip", "Will be randomized")
             ToolTip.visible: hovered
             ToolTip.delay: Kirigami.Units.toolTipDelay
             onClicked: {

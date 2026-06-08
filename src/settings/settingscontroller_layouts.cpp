@@ -240,7 +240,8 @@ bool SettingsController::createNewLayout(const QString& name, const QString& typ
             return true;
         }
         // Daemon returned a reply but with an empty layout ID
-        Q_EMIT layoutOperationFailed(PhosphorI18n::tr("Could not create layout — daemon returned an empty layout ID."));
+        Q_EMIT layoutOperationFailed(
+            PhosphorI18n::tr("Could not create the layout. The daemon returned an empty layout ID."));
         scheduleLayoutLoad();
         return false;
     }
@@ -248,7 +249,7 @@ bool SettingsController::createNewLayout(const QString& name, const QString& typ
         qCWarning(lcCore) << "createNewLayout failed:" << reply.errorMessage();
         Q_EMIT layoutOperationFailed(reply.errorMessage());
     } else {
-        Q_EMIT layoutOperationFailed(PhosphorI18n::tr("Could not create layout — the daemon may not be running."));
+        Q_EMIT layoutOperationFailed(PhosphorI18n::tr("Could not create the layout. The daemon may not be running."));
     }
     // Still refresh — the daemon may have partially processed the request
     scheduleLayoutLoad();

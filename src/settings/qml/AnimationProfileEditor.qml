@@ -57,16 +57,14 @@ ColumnLayout {
     property string shaderEffectId: ""
     /// Current per-effect parameter overrides. Keys are the effect's
     /// `parameters` schema ids; values are the user's overrides.
-    property var shaderParams: ({
-    })
+    property var shaderParams: ({})
     /// Per-card lock state for the parameter editor's lock toolbar.
     /// UI affordance only — not persisted. The per-event card
     /// rewires this on shader switch (same-named ids in different
     /// shader schemas are unrelated); App Rules leaves locking off.
-    property var lockedShaderParams: ({
-    })
+    property var lockedShaderParams: ({})
     // ── Configuration inputs ────────────────────────────────────────
-    /// Title for the curve dialog ("Customize Curve — <eventLabel>").
+    /// Title for the curve dialog ("Customize Curve: <eventLabel>").
     property string eventLabel: ""
     /// Whether the shader section is rendered at all. The per-event
     /// card sets this false for events whose runtime path doesn't
@@ -126,7 +124,7 @@ ColumnLayout {
     /// side-effects like dropping the previous effect's params).
     /// Per-event card connects this to its imperative commit path;
     /// App Rules leaves it disconnected (commits on Add click).
-    signal valueChanged()
+    signal valueChanged
     /// Emitted when the user activates a shader from the picker.
     /// Distinct from `valueChanged` so the consumer can persist a
     /// shader switch (which carries side-effects: dropping the
@@ -267,7 +265,6 @@ ColumnLayout {
                     color: Kirigami.Theme.disabledTextColor
                     elide: Text.ElideRight
                 }
-
             }
 
             Button {
@@ -276,11 +273,9 @@ ColumnLayout {
                 Accessible.name: root.eventLabel.length > 0 ? i18n("Customize curve for %1", root.eventLabel) : i18n("Customize curve")
                 onClicked: curveDialog.open()
             }
-
         }
 
-        SettingsSeparator {
-        }
+        SettingsSeparator {}
 
         // Timing mode — Easing vs Spring discriminator.
         SettingsRow {
@@ -291,12 +286,11 @@ ColumnLayout {
                 Accessible.name: i18n("Timing mode")
                 model: [i18n("Easing"), i18n("Spring")]
                 currentIndex: root.timingMode
-                onActivated: function(index) {
+                onActivated: function (index) {
                     root.timingMode = index;
                     root.valueChanged();
                 }
             }
-
         }
 
         // Duration (easing only — spring derives its own settle time).
@@ -332,14 +326,12 @@ ColumnLayout {
                 Accessible.name: i18n("Animation duration")
                 labelWidth: Kirigami.Units.gridUnit * 4
                 value: root.duration
-                onMoved: function(value) {
+                onMoved: function (value) {
                     root.duration = Math.round(value);
                     root.valueChanged();
                 }
             }
-
         }
-
     }
 
     // ── Shader section ──────────────────────────────────────────────
@@ -368,12 +360,11 @@ ColumnLayout {
             noneShaderId: ""
             includeNoneEntry: true
             placeholderText: i18nc("@action:button", "Select shader…")
-            onShaderSelected: function(id) {
+            onShaderSelected: function (id) {
                 var sid = id || "";
                 root.shaderEffectActivated(sid);
             }
         }
-
     }
 
     // Inline parameter editor surfaces only when an effect is
@@ -396,10 +387,10 @@ ColumnLayout {
         enableGroups: true
         enableImage: root.enableImage
         compact: true
-        onValueChanged: function(paramId, value) {
+        onValueChanged: function (paramId, value) {
             root.shaderParamWriteRequested(root.shaderEffectId, paramId, value);
         }
-        onLockToggled: function(paramId, locked) {
+        onLockToggled: function (paramId, locked) {
             // Editor owns `lockedShaderParams` — self-update before
             // emitting so subscribers reading the property see the
             // post-toggle map. Consumers that just want to persist the
@@ -408,7 +399,7 @@ ColumnLayout {
             root.lockedShaderParams = paramEditor.lockedAfterToggle(paramId, locked);
             root.lockToggleRequested(paramId, locked);
         }
-        onLockAllRequested: function(lock) {
+        onLockAllRequested: function (lock) {
             root.lockedShaderParams = paramEditor.lockedAfterAllToggle(lock);
             root.lockAllToggleRequested(lock);
         }
@@ -421,7 +412,7 @@ ColumnLayout {
             root.shaderParams = rolled;
             root.randomizeRequested(rolled);
         }
-        onRequestColorPicker: function(paramId, paramName, current) {
+        onRequestColorPicker: function (paramId, paramName, current) {
             colorDialog.effectId = root.shaderEffectId;
             colorDialog.paramId = paramId;
             colorDialog.paramName = paramName;
@@ -444,12 +435,12 @@ ColumnLayout {
         easingCurve: root.easingCurve
         springOmega: root.springOmega
         springZeta: root.springZeta
-        onCurveApplied: function(curve) {
+        onCurveApplied: function (curve) {
             root.easingCurve = curve;
             root.timingMode = CurvePresets.timingModeEasing;
             root.valueChanged();
         }
-        onSpringApplied: function(omega, zeta) {
+        onSpringApplied: function (omega, zeta) {
             root.springOmega = omega;
             root.springZeta = zeta;
             root.timingMode = CurvePresets.timingModeSpring;
@@ -473,10 +464,9 @@ ColumnLayout {
         title: paramName.length > 0 ? i18nc("@title:window", "Choose %1", paramName) : i18nc("@title:window", "Pick color")
         onAccepted: {
             if (paramId === "" || effectId === "")
-                return ;
+                return;
 
             root.shaderParamWriteRequested(effectId, paramId, selectedColor.toString());
         }
     }
-
 }

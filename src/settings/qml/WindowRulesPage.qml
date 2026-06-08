@@ -319,14 +319,14 @@ SettingsFlickable {
             Layout.fillWidth: true
             type: Kirigami.MessageType.Warning
             visible: !page.controller.daemonReachable
-            text: i18n("The PlasmaZones daemon is not running — window rules cannot be loaded or saved until it starts.")
+            text: i18n("The PlasmaZones daemon is not running. Window rules cannot be loaded or saved until it starts.")
         }
 
         Kirigami.InlineMessage {
             Layout.fillWidth: true
             type: Kirigami.MessageType.Warning
             visible: page.controller.daemonChangedWhileDirty
-            text: i18n("The window rules changed on disk while you were editing — saving now will overwrite those changes. Review your edits before saving, or discard them to reload.")
+            text: i18n("The window rules changed on disk while you were editing. Saving now will overwrite those changes. Review your edits before saving, or discard them to reload.")
             // Escape hatch — the controller's normal asyncCommit(false)
             // refuses when daemonChangedWhileDirty is set so the user doesn't
             // silently overwrite. `asyncCommit(true)` (the QML-callable
@@ -510,7 +510,7 @@ SettingsFlickable {
                 headerTrailingText: {
                     var count = modelData.rules ? modelData.rules.length : 0;
                     var base = i18np("%n rule", "%n rules", count);
-                    return i18nc("Suffix in section header — count followed by reorder hint", "%1 · drag to set precedence", base);
+                    return i18nc("Suffix in a section header showing the count and a reorder hint", "%1 · drag to set precedence", base);
                 }
 
                 contentItem: ColumnLayout {

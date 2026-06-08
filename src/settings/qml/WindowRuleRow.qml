@@ -137,7 +137,7 @@ ItemDelegate {
                 Accessible.name: i18np("%n validation issue", "%n validation issues", row.validationIssueCount)
                 ToolTip.visible: warningHover.hovered
                 ToolTip.delay: 300
-                ToolTip.text: i18n("This rule has %1 validation issue(s) — open the editor to see the details. The rule will not fire as written.", row.validationIssueCount)
+                ToolTip.text: i18n("This rule has %1 validation issue(s). Open the editor to see the details. The rule will not fire as written.", row.validationIssueCount)
 
                 HoverHandler {
                     id: warningHover
@@ -185,7 +185,7 @@ ItemDelegate {
                     // "Conditions", "Actions", "Priority …"). Same in the
                     // condition/action/priority badges below — keeping them
                     // consistent so the eye reads the badge cluster as a unit.
-                    text: i18nc("Badge — the rule's match is a composite expression", "Composite")
+                    text: i18nc("Badge shown when the rule's match is a composite expression", "Composite")
                     font.pointSize: Kirigami.Theme.smallFont.pointSize
                     opacity: 0.7
                 }
@@ -245,7 +245,7 @@ ItemDelegate {
                     id: priorityLabel
 
                     anchors.centerIn: parent
-                    text: i18nc("Badge — the rule's raw priority integer", "Priority %1", row.priority)
+                    text: i18nc("Badge showing the rule's raw priority integer", "Priority %1", row.priority)
                     font.pointSize: Kirigami.Theme.smallFont.pointSize
                     opacity: 0.7
                 }

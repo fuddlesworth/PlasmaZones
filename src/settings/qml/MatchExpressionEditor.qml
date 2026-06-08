@@ -155,15 +155,15 @@ ColumnLayout {
                     model: [
                         {
                             "value": "all",
-                            "label": i18nc("match composite — every child must match", "ALL of")
+                            "label": i18nc("composite match where every child must match", "ALL of")
                         },
                         {
                             "value": "any",
-                            "label": i18nc("match composite — at least one child must match", "ANY of")
+                            "label": i18nc("composite match where at least one child must match", "ANY of")
                         },
                         {
                             "value": "none",
-                            "label": i18nc("match composite — no child may match", "NONE of")
+                            "label": i18nc("composite match where no child may match", "NONE of")
                         }
                     ]
                     textRole: "label"

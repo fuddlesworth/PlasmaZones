@@ -121,7 +121,7 @@ SettingsFlickable {
 
                 SettingsRow {
                     title: i18n("Minimum window width")
-                    description: appSettings.minimumWindowWidth === 0 ? i18n("Disabled — no width threshold") : i18n("Windows narrower than this are excluded")
+                    description: appSettings.minimumWindowWidth === 0 ? i18n("Disabled (no width threshold)") : i18n("Windows narrower than this are excluded")
 
                     SettingsSpinBox {
                         // Schema-driven bounds — see GeneralPageController's
@@ -148,7 +148,7 @@ SettingsFlickable {
 
                 SettingsRow {
                     title: i18n("Minimum window height")
-                    description: appSettings.minimumWindowHeight === 0 ? i18n("Disabled — no height threshold") : i18n("Windows shorter than this are excluded")
+                    description: appSettings.minimumWindowHeight === 0 ? i18n("Disabled (no height threshold)") : i18n("Windows shorter than this are excluded")
 
                     SettingsSpinBox {
                         from: settingsController.generalPage.minimumWindowHeightMin

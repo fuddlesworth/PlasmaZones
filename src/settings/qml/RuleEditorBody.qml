@@ -204,9 +204,9 @@ ColumnLayout {
             spacing: Kirigami.Units.largeSpacing
 
             SpinBox {
-                Accessible.name: i18n("Rule priority — higher rules are evaluated first")
+                Accessible.name: i18n("Rule priority. Higher rules are evaluated first.")
                 ToolTip.delay: 500
-                ToolTip.text: i18n("Priority bands — 100: Animation, 200: Application, 300: Context, 500: Advanced. Higher numbers win within a band.")
+                ToolTip.text: i18n("Priority bands. 100: Animation, 200: Application, 300: Context, 500: Advanced. Higher numbers win within a band.")
                 ToolTip.visible: hovered
                 from: 0
                 to: 100000

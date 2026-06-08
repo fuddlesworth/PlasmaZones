@@ -48,10 +48,12 @@ ColumnLayout {
     QtObject {
         id: easingData
 
-        readonly property var styles: [{
-            "label": i18n("Custom"),
-            "key": "custom"
-        }].concat(CurvePresets.easingStyles)
+        readonly property var styles: [
+            {
+                "label": i18n("Custom"),
+                "key": "custom"
+            }
+        ].concat(CurvePresets.easingStyles)
         readonly property var directions: CurvePresets.easingDirections
         readonly property var curves: CurvePresets.easingCurves
 
@@ -120,9 +122,9 @@ ColumnLayout {
             var norm = normalizeCurve(curve);
             if (norm === "")
                 return {
-                "styleIndex": 0,
-                "dirIndex": 1
-            };
+                    "styleIndex": 0,
+                    "dirIndex": 1
+                };
 
             for (var si = 1; si < styles.length; si++) {
                 var key = styles[si].key;
@@ -133,10 +135,9 @@ ColumnLayout {
                     var dirKey = directions[di].key;
                     if (normalizeCurve(curves[key][dirKey]) === norm)
                         return {
-                        "styleIndex": si,
-                        "dirIndex": di
-                    };
-
+                            "styleIndex": si,
+                            "dirIndex": di
+                        };
                 }
             }
             return {
@@ -153,7 +154,6 @@ ColumnLayout {
             var dirKey = directions[dirIndex].key;
             return curves[key] ? curves[key][dirKey] : "";
         }
-
     }
 
     // Amplitude/bounce/elastic visibility helper
@@ -167,7 +167,7 @@ ColumnLayout {
     // ── Style ───────────────────────────────────────────────────────────────
     SettingsRow {
         title: i18n("Style")
-        description: i18n("Animation curve style — controls how acceleration feels")
+        description: i18n("Controls how acceleration feels")
 
         WideComboBox {
             id: easingStyleCombo
@@ -176,18 +176,17 @@ ColumnLayout {
 
             Accessible.name: i18n("Easing style")
             enabled: easingRoot.animationsEnabled
-            model: easingData.styles.map((s) => {
+            model: easingData.styles.map(s => {
                 return s.label;
             })
             currentIndex: easingData.findIndices(easingRoot.appSettings.animationEasingCurve).styleIndex
-            onActivated: (index) => {
+            onActivated: index => {
                 if (updating || index <= 0)
-                    return ;
+                    return;
 
                 var curve = easingData.curveForSelection(index, easingDirectionCombo.currentIndex);
                 if (curve)
                     easingRoot.appSettings.animationEasingCurve = curve;
-
             }
 
             Connections {
@@ -199,13 +198,10 @@ ColumnLayout {
 
                 target: easingRoot.appSettings
             }
-
         }
-
     }
 
-    SettingsSeparator {
-    }
+    SettingsSeparator {}
 
     // ── Direction ───────────────────────────────────────────────────────────
     SettingsRow {
@@ -220,22 +216,21 @@ ColumnLayout {
 
             Accessible.name: i18n("Easing direction")
             enabled: easingRoot.animationsEnabled && easingStyleCombo.currentIndex > 0
-            model: easingData.directions.map((d) => {
+            model: easingData.directions.map(d => {
                 return d.label;
             })
             currentIndex: easingData.findIndices(easingRoot.appSettings.animationEasingCurve).dirIndex
-            onActivated: (index) => {
+            onActivated: index => {
                 if (updating)
-                    return ;
+                    return;
 
                 var styleIdx = easingStyleCombo.currentIndex;
                 if (styleIdx <= 0)
-                    return ;
+                    return;
 
                 var curve = easingData.curveForSelection(styleIdx, index);
                 if (curve)
                     easingRoot.appSettings.animationEasingCurve = curve;
-
             }
 
             Connections {
@@ -247,9 +242,7 @@ ColumnLayout {
 
                 target: easingRoot.appSettings
             }
-
         }
-
     }
 
     // ── Amplitude (elastic + bounce) ────────────────────────────────────────
@@ -265,10 +258,10 @@ ColumnLayout {
             to: 3
             stepSize: 0.1
             value: easingRoot.easingPreview.curveAmplitude
-            formatValue: function(v) {
+            formatValue: function (v) {
                 return v.toFixed(1);
             }
-            onMoved: (value) => {
+            onMoved: value => {
                 var ct = easingRoot.easingPreview.curveType;
                 var amp = value.toFixed(2);
                 if (curveInfo.isElastic) {
@@ -279,7 +272,6 @@ ColumnLayout {
                 }
             }
         }
-
     }
 
     // ── Bounces (bounce only) ───────────────────────────────────────────────
@@ -295,20 +287,19 @@ ColumnLayout {
             to: 8
             value: easingRoot.easingPreview.bouncesCount
             valueSuffix: ""
-            onMoved: (value) => {
+            onMoved: value => {
                 var ct = easingRoot.easingPreview.curveType;
                 var amp = easingRoot.easingPreview.curveAmplitude.toFixed(2);
                 easingRoot.appSettings.animationEasingCurve = ct + ":" + amp + "," + Math.round(value);
             }
         }
-
     }
 
     // ── Period (elastic only) ───────────────────────────────────────────────
     SettingsRow {
         visible: curveInfo.isElastic
         title: i18n("Period")
-        description: i18n("Oscillation speed — lower is faster wobble")
+        description: i18n("Lower values wobble faster")
 
         SettingsSlider {
             Accessible.name: i18n("Period")
@@ -317,20 +308,18 @@ ColumnLayout {
             to: 1
             stepSize: 0.05
             value: easingRoot.easingPreview.elasticPeriod
-            formatValue: function(v) {
+            formatValue: function (v) {
                 return v.toFixed(2);
             }
-            onMoved: (value) => {
+            onMoved: value => {
                 var ct = easingRoot.easingPreview.curveType;
                 var amp = easingRoot.easingPreview.curveAmplitude.toFixed(2);
                 easingRoot.appSettings.animationEasingCurve = ct + ":" + amp + "," + value.toFixed(2);
             }
         }
-
     }
 
-    SettingsSeparator {
-    }
+    SettingsSeparator {}
 
     // ── Duration ────────────────────────────────────────────────────────────
     SettingsRow {
@@ -346,11 +335,9 @@ ColumnLayout {
             value: easingRoot.appSettings.animationDuration
             valueSuffix: " ms"
             labelWidth: Kirigami.Units.gridUnit * 4
-            onMoved: (value) => {
+            onMoved: value => {
                 return easingRoot.appSettings.animationDuration = Math.round(value);
             }
         }
-
     }
-
 }
