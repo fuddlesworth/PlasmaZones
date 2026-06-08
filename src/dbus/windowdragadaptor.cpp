@@ -569,8 +569,8 @@ void WindowDragAdaptor::hideOverlayAndSelector()
     // Next-drag resume: dragMoved's first activationActive tick sees
     // m_overlayIdled == true and calls refreshFromIdle() to re-push
     // zone data via updateZonesForAllWindows() — cheap because L2's
-    // labels-texture hash cache skips the 23 MB QImage rebuild when
-    // inputs are unchanged. m_overlayShown stays true because the
+    // labels-texture hash cache skips the sparse glyph-tile payload rebuild
+    // when inputs are unchanged. m_overlayShown stays true because the
     // underlying QQuickWindow + wl_surface are still alive.
     //
     // Destructive teardown is still needed for real lifecycle events

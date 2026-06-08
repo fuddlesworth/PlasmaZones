@@ -139,9 +139,9 @@ public:
         QMetaObject::Connection overlayGeomConnection; ///< geometryChanged connection for overlay
         // Cache key for the last successful labelsTexture rebuild on this window.
         // Hashes (size, showNumbers, font settings, per-zone {number,x,y,w,h}). When
-        // updateLabelsTextureForWindow is called with the same hash, both the 23 MB
-        // QImage rebuild AND Qt's QVariant(QImage) property-write equality compare
-        // are skipped. 0 = never computed / cache invalid.
+        // updateLabelsTextureForWindow is called with the same hash, both the sparse
+        // glyph-tile payload rebuild AND the labelsTexture property write (with its
+        // value compare) are skipped. 0 = never computed / cache invalid.
         quint64 labelsTextureHash = 0;
         QScreen* zoneSelectorPhysScreen = nullptr;
         /// Intended geometry of the zone selector inside its shell. On

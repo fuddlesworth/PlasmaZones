@@ -34,10 +34,10 @@ namespace PlasmaZones {
 
 namespace {
 
-// Collapse a dismissed overlay slot's full-screen labels texture to a 1x1
-// placeholder so the labels QImage - up to tens of MB per shader-enabled
-// screen at 4K - is released while the overlay is hidden rather than pinned
-// on the persistent slot property for the whole session. The wallpaperTexture
+// Collapse a dismissed overlay slot's labels texture to a 1x1 placeholder so
+// the labels payload (the sparse glyph-tile ZoneLabelTexture) is released while
+// the overlay is hidden rather than pinned on the persistent slot property for
+// the whole session. The wallpaperTexture
 // is reset for symmetry and to drop the slot's stale reference across a
 // wallpaper change, but the bulk wallpaper image is owned by ShaderRegistry's
 // static cache (s_cachedWallpaperImage / crops) and is COW-shared, so that
@@ -632,8 +632,9 @@ void OverlayService::dismissOverlayWindow(const QString& screenId)
             // updateLabelsTextureForWindow to rebuild on the next show()
             // instead of short-circuiting on the now-1x1 placeholder (which
             // would render no labels). The trade is one ZoneLabelTextureBuilder
-            // rebuild per drag-start vs. tens of MB held idle per screen; the
-            // warm drag-pause path (setIdleForDragPause) is untouched and keeps
+            // rebuild per drag-start vs. the sparse glyph-tile payload held idle
+            // per screen; the warm drag-pause path (setIdleForDragPause) is
+            // untouched and keeps
             // the texture warm mid-drag.
             releaseOverlaySlotTextures(sit->mainOverlaySlot());
             sit->labelsTextureHash = 0;

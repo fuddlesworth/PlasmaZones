@@ -247,11 +247,11 @@ void OverlayService::setIdleForDragPause()
         // of sync with what anyInputGrabbing reports.
         syncPassiveShellSurfaceState(it.key());
         // NOTE: labelsTextureHash is intentionally NOT cleared here. The QML
-        // side's labelsTexture property still holds the previously-built image
+        // side's labelsTexture property still holds the previously-built payload
         // (setProperty was never called with a new one); it just isn't sampled
         // while zoneCount is 0. Keeping the hash means refreshFromIdle() with
         // unchanged zones hits the cache and costs one hash compute instead
-        // of rebuilding 23 MB of pixels.
+        // of rebuilding the sparse glyph-tile payload.
     }
     // CRITICAL: mark zone data CLEAN, not dirty. updateShaderUniforms
     // re-runs updateZonesForAllWindows() whenever m_zoneDataDirty is
