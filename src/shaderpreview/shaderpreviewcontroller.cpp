@@ -61,8 +61,10 @@ QVariantList ShaderPreviewController::zonesForShaderPreview(int width, int heigh
     const qreal resW = static_cast<qreal>(width);
     const qreal resH = static_cast<qreal>(height);
 
-    // Use the backend's zones so the editor preview matches the edited layout;
-    // the settings app has none and falls through to the single-zone fallback.
+    // Use the backend's zones so the preview matches what each backend wants:
+    // the editor returns the live edited layout, the settings app the shipped
+    // master-stack. A backend with no zones falls through to the single-zone
+    // fallback below.
     const QVariantList zones = m_backend->previewZones();
 
     if (zones.isEmpty()) {

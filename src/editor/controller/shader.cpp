@@ -8,7 +8,6 @@
 #include "../undo/commands/UpdateShaderParamsCommand.h"
 #include "../helpers/ShaderDbusQueries.h"
 #include "../helpers/SettingsDbusQueries.h"
-#include "../../core/constants.h"
 #include "../../core/shaderregistry.h"
 #include "../../core/logging.h"
 #include "../../shaderpreview/shaderpreviewcontroller.h"
@@ -24,8 +23,8 @@ QVariantList EditorController::zonesForShaderPreview(int width, int height) cons
 
 // ── IShaderPreviewBackend: the editor's preview data source ──
 // D-Bus shader metadata from the daemon registry + the live edited layout's
-// zones + the audio-visualizer config. (targetScreenSize() lives in the main
-// EditorController.cpp and is the sixth backend method.)
+// zones + the audio-visualizer config. (targetScreenSize() lives in
+// controller/gaps.cpp and is the sixth backend method.)
 
 QVariantList EditorController::previewZones() const
 {
