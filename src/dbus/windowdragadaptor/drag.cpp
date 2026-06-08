@@ -83,6 +83,10 @@ void WindowDragAdaptor::dragStarted(const QString& windowId, double x, double y,
     // and is also commonly the configured snap activation trigger). The user
     // must perform a real release→press cycle to toggle.
     m_prevTriggerHeld = true;
+    // Zone span toggle latch (#563) reset lives in beginDrag, not here — the
+    // bypass path (autotile-only) never calls dragStarted, so resetting it
+    // here would leave the latch stale across bypass drags (same hazard the
+    // autotile drag-insert latch and m_modifierConflictWarned avoid).
     m_overlayShown = false;
     // m_overlayIdled is NOT reset here. The previous drag's end sets it:
     // a normal drop (hideOverlayAndSelector) leaves it true because the
@@ -624,8 +628,20 @@ void WindowDragAdaptor::dragMoved(const QString& windowId, int cursorX, int curs
         m_overlayIdled = false;
     }
 
-    // Check all configured zone span triggers (multi-bind support)
-    const bool zoneSpanModifierHeld = anyTriggerHeld(m_cachedZoneSpanTriggers, mods, mouseButtons);
+    // Check all configured zone span triggers (multi-bind support). In toggle
+    // mode the raw held-state is resolved through the same rising-edge latch as
+    // activation (#563): tap the span modifier once to start spanning, tap
+    // again to stop, instead of holding it. alwaysActiveOnDrag is always false
+    // here — zone span has no always-active sentinel. The latch is evaluated
+    // every tick (not just when the overlay is active) so a release→press while
+    // the overlay is off is still seen on the next active tick.
+    const bool rawZoneSpanHeld = anyTriggerHeld(m_cachedZoneSpanTriggers, mods, mouseButtons);
+    const ActivationDecision zoneSpanDecision =
+        resolveActivationActive(rawZoneSpanHeld, m_settings->zoneSpanToggleMode(), /*alwaysActiveOnDrag=*/false,
+                                m_prevZoneSpanTriggerHeld, m_zoneSpanToggled);
+    m_prevZoneSpanTriggerHeld = zoneSpanDecision.nextPrevTriggerHeld;
+    m_zoneSpanToggled = zoneSpanDecision.nextActivationToggled;
+    const bool zoneSpanModifierHeld = zoneSpanDecision.active;
 
     // Conflict detection: warn once per drag when activation and zone span
     // can both fire on the same physical input. Runtime semantics are AND

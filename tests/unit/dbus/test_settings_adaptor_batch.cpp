@@ -296,6 +296,43 @@ private Q_SLOTS:
     }
 
     // ─────────────────────────────────────────────────────────────────────
+    // Drag-activation toggle keys. The KWin effect fetches these three bools
+    // (via loadSettingAsync → getSetting, the singular form of this batch) to
+    // decide whether to keep streaming drag-cursor ticks while no trigger is
+    // physically held, so the daemon's rising-edge toggle latches still fire.
+    // If the adaptor registry drops any registration the effect silently reads
+    // false and that toggle feature dies — zoneSpanToggleMode shipped
+    // unregistered until PR #595's audit caught it, so pin the whole set here
+    // to break the test gate on any future omission. Mirrors the snap-window
+    // batch test above: every requested key must come back, valid, Bool-typed,
+    // and wired to its own ISettings accessor.
+    // ─────────────────────────────────────────────────────────────────────
+    void testGetSettings_dragToggleKeys_allReturnedWithTypes()
+    {
+        const QStringList keys{
+            QStringLiteral("toggleActivation"),
+            QStringLiteral("autotileDragInsertToggle"),
+            QStringLiteral("zoneSpanToggleMode"),
+        };
+
+        const QVariantMap result = m_adaptor->getSettings(keys);
+
+        QCOMPARE(result.size(), keys.size());
+        for (const QString& k : keys) {
+            QVERIFY2(result.contains(k), qPrintable(QStringLiteral("missing key: %1").arg(k)));
+            QVERIFY2(result.value(k).isValid(), qPrintable(QStringLiteral("invalid variant for: %1").arg(k)));
+            QCOMPARE(result.value(k).metaType().id(), QMetaType::Bool);
+        }
+
+        // Each key resolves to its own ISettings accessor rather than collapsing
+        // onto a neighbour.
+        QCOMPARE(result.value(QStringLiteral("toggleActivation")).toBool(), m_settings->toggleActivation());
+        QCOMPARE(result.value(QStringLiteral("autotileDragInsertToggle")).toBool(),
+                 m_settings->autotileDragInsertToggle());
+        QCOMPARE(result.value(QStringLiteral("zoneSpanToggleMode")).toBool(), m_settings->zoneSpanToggleMode());
+    }
+
+    // ─────────────────────────────────────────────────────────────────────
     // Phase 5: setPerScreenSettings batch surface.
     //
     // The contract mirrors setSettings (global batch): empty map returns

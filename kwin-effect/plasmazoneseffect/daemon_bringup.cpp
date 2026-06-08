@@ -620,6 +620,9 @@ void PlasmaZonesEffect::loadCachedSettings()
     loadSettingAsync(QStringLiteral("autotileDragInsertToggle"), [this](const QVariant& v) {
         m_cachedAutotileDragInsertToggle = v.toBool();
     });
+    loadSettingAsync(QStringLiteral("zoneSpanToggleMode"), [this](const QVariant& v) {
+        m_cachedZoneSpanToggleMode = v.toBool();
+    });
     loadSettingAsync(QStringLiteral("autotileDragBehavior"), [this](const QVariant& v) {
         // Clamp unknown values to the safe default (Float) rather than the
         // highest known value — an older effect build against a newer daemon
@@ -783,7 +786,12 @@ bool PlasmaZonesEffect::detectActivationAndGrab()
     // started on a non-autotile screen and the user hasn't held any snap
     // trigger. Without this, the cross-to-autotile policy flip never fires
     // because the gate below (drag lambda, slotMouseChanged) swallows ticks.
-    if (anyLocalTriggerHeld() || m_cachedToggleActivation || m_cachedAutotileDragInsertToggle) {
+    // Zone-span toggle mode (#563) forces activation for the same reason: the
+    // daemon's span rising-edge latch needs the release→press ticks even when
+    // no key is currently held (e.g. activation itself is toggled on and the
+    // user tapped, then released, the activation trigger).
+    if (anyLocalTriggerHeld() || m_cachedToggleActivation || m_cachedAutotileDragInsertToggle
+        || m_cachedZoneSpanToggleMode) {
         m_dragActivationDetected = true;
         if (!m_keyboardGrabbed) {
             KWin::effects->grabKeyboard(this);

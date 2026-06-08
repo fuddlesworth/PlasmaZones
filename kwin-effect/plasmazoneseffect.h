@@ -900,6 +900,7 @@ private:
         false; // false until D-Bus reply arrives — permissive default bypasses trigger gating (#175)
     bool m_cachedToggleActivation = false;
     bool m_cachedAutotileDragInsertToggle = false;
+    bool m_cachedZoneSpanToggleMode = false;
     // AutotileDragBehavior cached so the synchronous drag-start fast path can
     // decide whether to skip the handleDragToFloat(immediate=true) call.
     // Refreshed by loadCachedSettings on every settingsChanged D-Bus

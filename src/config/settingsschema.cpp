@@ -708,6 +708,7 @@ void appendActivationSchema(PhosphorConfig::Schema& schema)
                      static_cast<int>(DragModifier::CtrlAltMeta)},
                     static_cast<int>(DragModifier::Disabled))},
         {CD::triggersKey(), CD::zoneSpanTriggers(), QMetaType::QVariantList, {}, canonicalTriggerList},
+        {CD::toggleActivationKey(), CD::zoneSpanToggleMode(), QMetaType::Bool},
     };
 }
 

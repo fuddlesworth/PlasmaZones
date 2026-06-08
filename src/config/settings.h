@@ -99,6 +99,8 @@ public:
         int zoneSpanModifier READ zoneSpanModifierInt WRITE setZoneSpanModifierInt NOTIFY zoneSpanModifierChanged)
     Q_PROPERTY(
         QVariantList zoneSpanTriggers READ zoneSpanTriggers WRITE setZoneSpanTriggers NOTIFY zoneSpanTriggersChanged)
+    Q_PROPERTY(
+        bool zoneSpanToggleMode READ zoneSpanToggleMode WRITE setZoneSpanToggleMode NOTIFY zoneSpanToggleModeChanged)
     Q_PROPERTY(bool toggleActivation READ toggleActivation WRITE setToggleActivation NOTIFY toggleActivationChanged)
     Q_PROPERTY(bool snappingEnabled READ snappingEnabled WRITE setSnappingEnabled NOTIFY snappingEnabledChanged)
 
@@ -531,6 +533,8 @@ public:
     void setZoneSpanModifierInt(int modifier);
     QVariantList zoneSpanTriggers() const override;
     void setZoneSpanTriggers(const QVariantList& triggers) override;
+    bool zoneSpanToggleMode() const override;
+    void setZoneSpanToggleMode(bool enable) override;
     bool toggleActivation() const override;
     void setToggleActivation(bool enable) override;
     bool snappingEnabled() const override;

@@ -150,6 +150,21 @@ SettingsFlickable {
                     SettingsSeparator {}
 
                     SettingsRow {
+                        title: i18n("Toggle mode")
+                        description: i18n("Tap the span modifier once to start spanning, tap again to stop, instead of holding it")
+
+                        SettingsSwitch {
+                            checked: appSettings.zoneSpanToggleMode
+                            accessibleName: i18n("Zone span toggle mode")
+                            onToggled: function (newValue) {
+                                appSettings.zoneSpanToggleMode = newValue;
+                            }
+                        }
+                    }
+
+                    SettingsSeparator {}
+
+                    SettingsRow {
                         title: i18n("Edge threshold")
                         description: i18n("Distance from zone edge for multi-zone selection")
 

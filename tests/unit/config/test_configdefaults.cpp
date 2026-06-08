@@ -193,6 +193,15 @@ private Q_SLOTS:
     }
 
     /**
+     * Zone span toggle mode (#563) is opt-in: the default must be false so the
+     * span modifier keeps its hold-to-span behaviour unless the user enables it.
+     */
+    void testZoneSpanToggleMode_default_isFalse()
+    {
+        QCOMPARE(ConfigDefaults::zoneSpanToggleMode(), false);
+    }
+
+    /**
      * Snapped-window appearance defaults must be IDENTICAL to the autotile*
      * window appearance defaults — the two modes start a window from the same
      * chrome (every snapWindow* default delegates to its autotile* counterpart).

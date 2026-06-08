@@ -177,6 +177,7 @@ private Q_SLOTS:
         settings.setInactiveOpacity(0.2);
         settings.setShowZoneNumbers(false);
         settings.setToggleActivation(true);
+        settings.setZoneSpanToggleMode(true);
         settings.setZoneSelectorEnabled(false);
         settings.setZoneSelectorTriggerDistance(100);
         settings.setZoneSelectorGridColumns(3);
@@ -232,6 +233,11 @@ private Q_SLOTS:
         {
             auto behavior = backend->group(ConfigDefaults::snappingBehaviorGroup());
             QCOMPARE(behavior->readBool(ConfigDefaults::toggleActivationKey(), false), true);
+        }
+
+        {
+            auto zoneSpan = backend->group(ConfigDefaults::snappingBehaviorZoneSpanGroup());
+            QCOMPARE(zoneSpan->readBool(ConfigDefaults::toggleActivationKey(), false), true);
         }
 
         {
