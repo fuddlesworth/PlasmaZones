@@ -188,8 +188,10 @@ void OverlayService::startShaderAnimation()
 
 void OverlayService::stopShaderAnimation()
 {
-    // Don't stop CAVA here - it stays warm for instant audio data on next show().
-    // Just clear the spectrum from overlay windows so they don't render stale data.
+    // Don't stop CAVA here — winding it down is owned by syncCavaState /
+    // scheduleIdleQuiesce (deferred a grace period so a quick re-show keeps it
+    // warm, then stopped once the overlay is no longer displaying). This function
+    // only clears stale spectrum from the overlay windows.
     // audioSpectrum lives on mainOverlaySlot() (the slot
     // Item that hosts the shader content), not on the shell window
     // root. PassiveOverlayShell.qml's mainOverlaySlot declares

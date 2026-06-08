@@ -204,10 +204,11 @@ void writeDiskCache(const QString& path, const QShader& shader)
     }
     f.write(shader.serialized());
     // commit() failure (disk full, quota) is non-fatal — the entry is simply not
-    // cached and re-bakes next run — but log it so the condition is diagnosable
-    // rather than silent.
+    // cached and re-bakes next run — but warn (matching the directory-create
+    // diagnostic) so a persistent "re-bakes every launch" condition is visible
+    // at default log levels rather than silent.
     if (!f.commit()) {
-        qCDebug(lcShaderNode) << "shader disk cache: write failed for" << path;
+        qCWarning(lcShaderNode) << "shader disk cache: write failed for" << path;
     }
 }
 
@@ -286,7 +287,7 @@ ShaderCompiler::Result ShaderCompiler::compile(const QByteArray& source, QShader
         } else {
             result.error = baker.errorMessage();
         }
-    } // bake mutex released before disk write
+    } // bakeSerializationMutex released here, before the disk write below
 
     // Persist for future runs outside the bake lock; the content-addressed key
     // makes concurrent writers harmless, and a failed write just means a future

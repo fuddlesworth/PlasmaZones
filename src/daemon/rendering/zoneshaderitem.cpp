@@ -21,7 +21,6 @@
 #include <QImage>
 #include <QMetaType>
 #include <QMutexLocker>
-#include <QPoint>
 #include <QStandardPaths>
 #include <QVariantMap>
 
