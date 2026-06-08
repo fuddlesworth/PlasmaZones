@@ -135,14 +135,14 @@ void OverlayService::updateLabelsTextureForWindow(QQuickItem* slot, const QVaria
         return;
     }
 
-    QImage labelsImage = ZoneLabelTextureBuilder::build(patched, size, lfs.fontColor, showNumbers, lfs.backgroundColor,
-                                                        lfs.fontFamily, lfs.fontSizeScale, lfs.fontWeight,
-                                                        lfs.fontItalic, lfs.fontUnderline, lfs.fontStrikeout);
-    if (labelsImage.isNull()) {
-        labelsImage = QImage(1, 1, QImage::Format_ARGB32);
-        labelsImage.fill(Qt::transparent);
-    }
-    slot->setProperty("labelsTexture", QVariant::fromValue(labelsImage));
+    // Sparse glyph-tile payload (a few hundred KB) instead of a full-overlay
+    // image; the render node composites it into the screen-addressed texture.
+    // An empty payload (numbers off / no zones) is fine: the node binds a 1×1
+    // transparent fallback, so no full-screen texture is allocated.
+    const PhosphorRendering::ZoneLabelTexture labels = ZoneLabelTextureBuilder::build(
+        patched, size, lfs.fontColor, showNumbers, lfs.backgroundColor, lfs.fontFamily, lfs.fontSizeScale,
+        lfs.fontWeight, lfs.fontItalic, lfs.fontUnderline, lfs.fontStrikeout);
+    slot->setProperty("labelsTexture", QVariant::fromValue(labels));
     if (state) {
         state->labelsTextureHash = newHash;
     }

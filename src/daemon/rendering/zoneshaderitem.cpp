@@ -18,9 +18,14 @@
 #include <QDir>
 #include <QFile>
 #include <QFileInfo>
+#include <QImage>
+#include <QMetaType>
 #include <QMutexLocker>
+#include <QPoint>
 #include <QStandardPaths>
 #include <QVariantMap>
+
+#include <mutex>
 
 // Lock the assumption made in updatePaintNode() that the base
 // ShaderEffect's syncBasePropertiesToNode covers all 4 user-texture
@@ -61,6 +66,26 @@ ZoneShaderItem::ZoneShaderItem(QQuickItem* parent)
     : PhosphorRendering::ShaderEffect(parent)
     , m_zoneExtension(std::make_shared<PhosphorRendering::ZoneUniformExtension>())
 {
+    // Register the labels payload metatype + a QImage→ZoneLabelTexture converter
+    // once per process. The daemon overlay path assigns a sparse payload
+    // directly, but the editor/settings shader previews still hand a full QImage
+    // to the (now ZoneLabelTexture-typed) labelsTexture property; the converter
+    // wraps such an image as a single full-size tile so those paths keep working
+    // unchanged. Done here so any process that uses ZoneShaderItem gets it
+    // without touching its main().
+    static std::once_flag labelTypeOnce;
+    std::call_once(labelTypeOnce, [] {
+        qRegisterMetaType<PhosphorRendering::ZoneLabelTexture>();
+        QMetaType::registerConverter<QImage, PhosphorRendering::ZoneLabelTexture>([](const QImage& img) {
+            PhosphorRendering::ZoneLabelTexture t;
+            if (!img.isNull() && img.width() > 0 && img.height() > 0) {
+                t.size = img.size();
+                t.tiles.append(PhosphorRendering::ZoneLabelTile{img, QPoint(0, 0)});
+            }
+            return t;
+        });
+    });
+
     // Install our ZoneUniformExtension on the base class. We call the
     // qualified base setter to bypass our own setUniformExtension() override
     // (which rejects caller-supplied extensions). Thereafter, every

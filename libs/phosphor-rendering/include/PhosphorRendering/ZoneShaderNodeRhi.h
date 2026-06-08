@@ -4,6 +4,7 @@
 #pragma once
 
 #include <PhosphorRendering/ShaderNodeRhi.h>
+#include <PhosphorRendering/ZoneLabelTexture.h>
 #include <PhosphorRendering/ZoneShaderCommon.h>
 #include <PhosphorRendering/phosphorrendering_export.h>
 
@@ -64,14 +65,15 @@ public:
     void setZoneCounts(int total, int highlighted);
 
     /**
-     * @brief Stage a labels texture image. Upload happens in prepare().
+     * @brief Stage the sparse zone-labels payload. Upload happens in prepare().
      *
-     * The host item builds an RGBA image with zone numbers drawn at zone
-     * centres; the shader samples it at binding 1 (uZoneLabels). A null /
-     * empty image binds a 1×1 transparent fallback so the descriptor set
-     * stays well-formed.
+     * The host item supplies glyph tiles + their positions (see
+     * ZoneLabelTexture); the node composites them into a screen-sized texture
+     * the shader samples at binding 1 (uZoneLabels). An empty payload binds a
+     * 1×1 transparent fallback so the descriptor set stays well-formed (and no
+     * full-screen texture is allocated when numbers are off).
      */
-    void setLabelsTexture(const QImage& image);
+    void setLabelsTexture(const ZoneLabelTexture& labels);
 
     void prepare() override;
     void releaseResources() override;
@@ -79,8 +81,11 @@ public:
 private:
     /// Upload labels texture when dirty (called from prepare with a live cb).
     void uploadLabelsTexture(QRhi* rhi, QRhiCommandBuffer* cb);
+    /// Composite the staged sparse tiles into a full screen-addressed image for
+    /// upload. Returns a 1×1-friendly null image when there are no tiles.
+    QImage compositeLabelsImage() const;
 
-    QImage m_labelsImage;
+    ZoneLabelTexture m_labels;
     QImage m_transparentFallbackImage;
     std::unique_ptr<QRhiTexture> m_labelsTexture;
     std::unique_ptr<QRhiSampler> m_labelsSampler;

@@ -70,7 +70,8 @@ QImage buildLabelsImageForPreviewZones(const QVariantList& zones, const QSize& s
     const LabelFontSettings lfs = extractLabelFontSettings(settings);
     QImage labelsImage = ZoneLabelTextureBuilder::build(zones, size, lfs.fontColor, true, lfs.backgroundColor,
                                                         lfs.fontFamily, lfs.fontSizeScale, lfs.fontWeight,
-                                                        lfs.fontItalic, lfs.fontUnderline, lfs.fontStrikeout);
+                                                        lfs.fontItalic, lfs.fontUnderline, lfs.fontStrikeout)
+                             .toImage();
     if (labelsImage.isNull()) {
         labelsImage = QImage(1, 1, QImage::Format_ARGB32);
         labelsImage.fill(Qt::transparent);

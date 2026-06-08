@@ -59,22 +59,20 @@ void ZoneShaderItem::setHoveredZoneIndex(int index)
 // Labels Texture
 // ============================================================================
 
-QImage ZoneShaderItem::labelsTexture() const
+PhosphorRendering::ZoneLabelTexture ZoneShaderItem::labelsTexture() const
 {
     QMutexLocker lock(&m_labelsTextureMutex);
     return m_labelsTexture;
 }
 
-void ZoneShaderItem::setLabelsTexture(const QImage& image)
+void ZoneShaderItem::setLabelsTexture(const PhosphorRendering::ZoneLabelTexture& labels)
 {
-    // No cacheKey() short-circuit: every detached copy of an identical QImage
-    // gets a new cacheKey, so the guard would almost never hit and would hide
-    // the ordinary case where rebuilds always flow through. Size/format/hash
-    // dedupe is already handled upstream in OverlayService::updateLabelsTextureForWindow
-    // via labelsTextureHash; here we just accept the incoming image.
+    // No dedupe short-circuit here: size/hash dedupe is already handled upstream
+    // in OverlayService::updateLabelsTextureForWindow via labelsTextureHash, so
+    // this only ever runs on a genuine change — just accept the incoming payload.
     {
         QMutexLocker lock(&m_labelsTextureMutex);
-        m_labelsTexture = image;
+        m_labelsTexture = labels;
     }
     Q_EMIT labelsTextureChanged();
     update();

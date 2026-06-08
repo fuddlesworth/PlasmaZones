@@ -61,10 +61,18 @@ void ZoneShaderNodeRhi::setZoneCounts(int total, int highlighted)
     setAppField1(clampedHighlighted);
 }
 
-void ZoneShaderNodeRhi::setLabelsTexture(const QImage& image)
+void ZoneShaderNodeRhi::setLabelsTexture(const ZoneLabelTexture& labels)
 {
-    m_labelsImage = image;
+    m_labels = labels;
     m_labelsTextureDirty = true;
+}
+
+QImage ZoneShaderNodeRhi::compositeLabelsImage() const
+{
+    // The composite is a transient that lives only across an upload (gated by
+    // m_labelsTextureDirty), so the full-screen buffer is never persistently
+    // held — unlike a full image carried through the QML labelsTexture chain.
+    return m_labels.toImage();
 }
 
 void ZoneShaderNodeRhi::uploadLabelsTexture(QRhi* rhi, QRhiCommandBuffer* cb)
@@ -83,14 +91,17 @@ void ZoneShaderNodeRhi::uploadLabelsTexture(QRhi* rhi, QRhiCommandBuffer* cb)
         return;
     }
 
-    // Pick the target size up-front: a non-empty staged image dictates,
-    // otherwise the 1×1 transparent fallback. Used both for the first-init
-    // allocation and the resize branch — without this, the first upload of
-    // an N×M image would allocate a 1×1 texture and immediately throw it
-    // away in the resize branch on the same call.
-    const QSize targetSize = (!m_labelsImage.isNull() && m_labelsImage.width() > 0 && m_labelsImage.height() > 0)
-        ? m_labelsImage.size()
-        : QSize(1, 1);
+    // Composite the sparse glyph tiles into the full screen-addressed image
+    // once, here — a transient that lives only for this upload (we're dirty),
+    // never persistently held. Null when there are no labels.
+    const QImage src = compositeLabelsImage();
+
+    // Pick the target size up-front: a non-empty composite dictates, otherwise
+    // the 1×1 transparent fallback. Used both for the first-init allocation and
+    // the resize branch — without this, the first upload of an N×M image would
+    // allocate a 1×1 texture and immediately throw it away in the resize branch
+    // on the same call.
+    const QSize targetSize = (!src.isNull() && src.width() > 0 && src.height() > 0) ? src.size() : QSize(1, 1);
 
     // Initialize labels texture resources on first use. Only flip
     // m_labelsInitialized after BOTH resources create successfully — otherwise
@@ -145,10 +156,8 @@ void ZoneShaderNodeRhi::uploadLabelsTexture(QRhi* rhi, QRhiCommandBuffer* cb)
         // upload and the SRB would render against an unbacked or stale slot 1.
         return;
     }
-    const QImage& src = (!m_labelsImage.isNull() && m_labelsImage.width() > 0 && m_labelsImage.height() > 0)
-        ? m_labelsImage
-        : m_transparentFallbackImage;
-    batch->uploadTexture(m_labelsTexture.get(), src);
+    const QImage& upload = (!src.isNull() && src.width() > 0 && src.height() > 0) ? src : m_transparentFallbackImage;
+    batch->uploadTexture(m_labelsTexture.get(), upload);
     cb->resourceUpdate(batch);
     // Only clear the dirty flag after a successful upload completes.
     m_labelsTextureDirty = false;
