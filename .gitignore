@@ -338,3 +338,6 @@ ruvector/
 # Generated shader autocomplete sidecar (plasmazones-shader-validate
 # --emit-preamble) — an editor-only aid, never committed or shipped.
 p_generated.glsl
+
+# heaptrack memory-profiling captures (local profiling artifacts, never committed)
+heaptrack.*.zst
