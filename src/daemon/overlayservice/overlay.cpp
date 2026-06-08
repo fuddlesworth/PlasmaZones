@@ -296,6 +296,10 @@ void OverlayService::initializeOverlay(QScreen* cursorScreen, const QPoint& curs
 
     m_visible = true;
 
+    // Spin up the audio-visualizer capture now that the overlay is visible
+    // (no-op if audio-viz is disabled). syncCavaState gates on m_visible.
+    syncCavaState();
+
     if (anyScreenUsesShader()) {
         updateZonesForAllWindows(); // Push initial zone data
         startShaderAnimation();

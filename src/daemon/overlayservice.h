@@ -428,8 +428,13 @@ private Q_SLOTS:
     void onLayoutPickerDismissRequested();
 
 private:
-    // Sync CAVA service state (start/stop/reconfigure) with current settings.
+    // Sync CAVA service state (start/stop/reconfigure) with current settings AND
+    // overlay visibility — CAVA runs only while the overlay or shader preview is
+    // on screen, so an idle daemon does no continuous audio capture / repaint.
     void syncCavaState();
+    // Defer stopping CAVA by a short grace period so rapid hide/show keeps it
+    // warm; the deferred stop re-checks visibility before acting.
+    void scheduleCavaStop();
 
     // Refresh zone selector and overlay windows that are currently visible.
     // Skips hidden windows - showZoneSelector()/show() refresh before showing.
@@ -1065,6 +1070,9 @@ private:
 
     // Audio spectrum provider (CAVA backend via phosphor-audio)
     std::unique_ptr<PhosphorAudio::IAudioSpectrumProvider> m_audioProvider;
+    // Single-shot grace timer that stops CAVA after the overlay hides (see
+    // scheduleCavaStop). Cancelled if the overlay reappears within the window.
+    QTimer* m_cavaStopTimer = nullptr;
 
     // PhosphorZones::Zone data version for shader synchronization
     int m_zoneDataVersion = 0;

@@ -137,7 +137,9 @@ void OverlayService::setSettings(ISettings* settings)
                 });
             }
 
-            // Eagerly start CAVA at daemon boot so spectrum data is warm when overlay shows
+            // Reconcile CAVA with current settings + visibility. At boot the
+            // overlay is hidden, so this no longer starts CAVA — it spins up on
+            // the first show() and stops (after a grace period) on hide().
             syncCavaState();
         }
     }
@@ -306,18 +308,42 @@ void OverlayService::refreshVisibleWindows()
     }
 }
 
+// Grace period after the overlay hides before CAVA is actually stopped, so a
+// rapid hide/show (modifier thrash, quick re-trigger) keeps it warm and avoids
+// paying the ~100-200ms capture spin-up on every show.
+static constexpr int kCavaIdleGraceMs = 5000;
+
 void OverlayService::syncCavaState()
 {
     if (!m_audioProvider || !m_settings) {
         return;
     }
-    if (m_settings->enableAudioVisualizer()) {
+
+    // CAVA is a continuous audio-capture + FFT child process feeding a per-frame
+    // spectrum; running it while nothing can display it burns CPU on capture AND
+    // on per-frame overlay repaints. Run it only while audio-viz is enabled AND
+    // the overlay (or the editor's shader preview) is actually on screen.
+    const bool previewVisible = m_shaderPreviewWindow && m_shaderPreviewWindow->isVisible();
+    const bool wantRun = m_settings->enableAudioVisualizer() && (m_visible || previewVisible);
+
+    if (wantRun) {
+        if (m_cavaStopTimer) {
+            m_cavaStopTimer->stop(); // cancel any pending grace-period stop
+        }
         m_audioProvider->setBarCount(m_settings->audioSpectrumBarCount());
         m_audioProvider->setFramerate(m_settings->shaderFrameRate());
         if (!m_audioProvider->isRunning()) {
             m_audioProvider->start();
         }
-    } else {
+        return;
+    }
+
+    // Audio-viz turned OFF entirely: stop now and clear any stale spectrum from
+    // the surfaces. Merely hidden (still enabled): defer via the grace timer.
+    if (!m_settings->enableAudioVisualizer()) {
+        if (m_cavaStopTimer) {
+            m_cavaStopTimer->stop();
+        }
         if (m_audioProvider->isRunning()) {
             m_audioProvider->stop();
             for (auto it_ = m_screenStates.constBegin(); it_ != m_screenStates.constEnd(); ++it_) {
@@ -334,7 +360,34 @@ void OverlayService::syncCavaState()
                                  QVariantList());
             }
         }
+        return;
     }
+    scheduleCavaStop();
+}
+
+void OverlayService::scheduleCavaStop()
+{
+    if (!m_audioProvider || !m_audioProvider->isRunning()) {
+        return;
+    }
+    if (!m_cavaStopTimer) {
+        m_cavaStopTimer = new QTimer(this);
+        m_cavaStopTimer->setSingleShot(true);
+        m_cavaStopTimer->setInterval(kCavaIdleGraceMs);
+        connect(m_cavaStopTimer, &QTimer::timeout, this, [this]() {
+            // Re-check visibility at fire time: a show() within the grace window
+            // both cancels this timer and re-starts CAVA, but guard anyway.
+            if (!m_audioProvider || !m_settings) {
+                return;
+            }
+            const bool previewVisible = m_shaderPreviewWindow && m_shaderPreviewWindow->isVisible();
+            const bool wantRun = m_settings->enableAudioVisualizer() && (m_visible || previewVisible);
+            if (!wantRun && m_audioProvider->isRunning()) {
+                m_audioProvider->stop();
+            }
+        });
+    }
+    m_cavaStopTimer->start();
 }
 
 } // namespace PlasmaZones

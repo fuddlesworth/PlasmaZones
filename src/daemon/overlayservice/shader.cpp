@@ -226,13 +226,18 @@ void OverlayService::onAudioSpectrumUpdated(const QVector<float>& spectrum)
     // Pass QVector<float> wrapped in QVariant to avoid per-element QVariant boxing.
     // ZoneShaderItem::setAudioSpectrum() detects and unwraps QVector<float> directly.
     const QVariant wrapped = QVariant::fromValue(spectrum);
-    for (auto it = m_screenStates.cbegin(); it != m_screenStates.cend(); ++it) {
-        if (!it.value().overlayPhysScreen) {
-            continue;
-        }
-        auto* slot = it.value().mainOverlaySlot();
-        if (slot && useShaderForScreen(it.key())) {
-            writeQmlProperty(slot, QString(OverlayQmlPropertyNames::AudioSpectrum), wrapped);
+    // Only push to the main overlay while it is actually visible. During the
+    // post-hide CAVA grace window the surfaces stay mapped but hidden; pushing
+    // here would repaint them every frame for no visible benefit.
+    if (m_visible) {
+        for (auto it = m_screenStates.cbegin(); it != m_screenStates.cend(); ++it) {
+            if (!it.value().overlayPhysScreen) {
+                continue;
+            }
+            auto* slot = it.value().mainOverlaySlot();
+            if (slot && useShaderForScreen(it.key())) {
+                writeQmlProperty(slot, QString(OverlayQmlPropertyNames::AudioSpectrum), wrapped);
+            }
         }
     }
     // Shader preview (editor dialog) when visible and audio viz enabled
@@ -448,6 +453,9 @@ void OverlayService::showShaderPreview(int x, int y, int width, int height, cons
     startShaderAnimation();
 
     m_shaderPreviewWindow->show();
+    // The preview is now visible, so the audio visualizer should run for it
+    // (syncCavaState gates on overlay/preview visibility).
+    syncCavaState();
     qCDebug(lcOverlay) << "showShaderPreview: x=" << x << "y=" << y << "size=" << width << "x" << height
                        << "shader=" << shaderId << "zones=" << zones.size();
 }
@@ -495,6 +503,8 @@ void OverlayService::updateShaderPreview(int x, int y, int width, int height, co
 void OverlayService::hideShaderPreview()
 {
     destroyShaderPreviewWindow();
+    // Preview gone — wind down CAVA unless the main overlay still needs it.
+    syncCavaState();
 }
 
 void OverlayService::createShaderPreviewWindow(QScreen* screen, const QString& screenId)

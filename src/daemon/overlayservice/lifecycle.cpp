@@ -159,6 +159,10 @@ void OverlayService::hide()
 
     // Stop shader animation
     stopShaderAnimation();
+    // Wind down the audio-visualizer capture (deferred by a grace period in
+    // syncCavaState so a quick re-show keeps it warm), so an idle daemon does
+    // no continuous audio capture or repaint.
+    syncCavaState();
 
     // Do NOT invalidate m_shaderTimer - keeping iTime continuous across
     // show/hide cycles prevents the shader phase from restarting at 0
