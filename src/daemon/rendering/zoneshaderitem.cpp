@@ -333,6 +333,9 @@ QSGNode* ZoneShaderItem::updatePaintNode(QSGNode* oldNode, UpdatePaintNodeData* 
         return nullptr;
     }
 
+    // freshNode covers SG-deletion + first-call: a brand-new node has no shader
+    // baked, so it must trigger a load even when nothing is dirty.
+    bool freshNode = false;
     auto* node = static_cast<PhosphorRendering::ZoneShaderNodeRhi*>(oldNode);
     if (!node) {
         // Scene graph deleted the previous node, or first call. Route node
@@ -344,11 +347,11 @@ QSGNode* ZoneShaderItem::updatePaintNode(QSGNode* oldNode, UpdatePaintNodeData* 
         m_zoneRenderNode = nullptr;
         node = static_cast<PhosphorRendering::ZoneShaderNodeRhi*>(createShaderNode());
         m_zoneRenderNode = node;
+        freshNode = true;
         qCInfo(PlasmaZones::lcOverlay) << "updatePaintNode: created NEW ZoneShaderNodeRhi (oldNode was null)";
-    } else {
-        qCDebug(PlasmaZones::lcOverlay) << "updatePaintNode: reusing existing node, shaderReady:"
-                                        << node->isShaderReady();
     }
+    // No per-frame log on the reuse path: updatePaintNode runs on every rendered
+    // frame, so logging here floods the journal at the repaint rate.
 
     // ── Sync base properties (time, params, colors, audio, multipass, depth, wallpaper) ──
     // syncBasePropertiesToNode now also pushes m_uniformExtension down to the
@@ -366,15 +369,19 @@ QSGNode* ZoneShaderItem::updatePaintNode(QSGNode* oldNode, UpdatePaintNodeData* 
     }
 
     // ── Sync shader source ───────────────────────────────────────────
-    // Consume the parent's atomic dirty flag so runtime setShaderSource /
-    // setShaderIncludePaths / reloadShader() calls actually trigger a reload —
-    // without this, only status transitions reached the reload branch.
+    // Reload only on an actual dirty flag (runtime setShaderSource /
+    // setShaderIncludePaths / reloadShader, or device-loss via
+    // sceneGraphAboutToStop) or a freshly created node. This mirrors
+    // ShaderEffect::updatePaintNode and its warning: do NOT reload on
+    // !node->isShaderReady() — a permanent load/compile failure leaves the node
+    // un-ready forever, so reloading on it re-runs the loader + glslang bake on
+    // EVERY frame (hard CPU spike + journal flood). A transient failure retries
+    // on the next genuine shaderSource/param change, which sets the dirty flag.
     const bool wasDirty = consumeShaderDirty();
-    const bool needLoad = !node->isShaderReady();
+    const bool needLoad = wasDirty || freshNode;
     const bool shaderSourceValid = shaderSource().isValid() && !shaderSource().isEmpty();
-    const bool statusIsLoading = (status() == Status::Loading);
 
-    if (wasDirty || statusIsLoading || needLoad) {
+    if (needLoad) {
         if (shaderSourceValid) {
             QString fragPath = shaderSource().toLocalFile();
             if (shaderSource().scheme() == QLatin1String("qrc")) {
