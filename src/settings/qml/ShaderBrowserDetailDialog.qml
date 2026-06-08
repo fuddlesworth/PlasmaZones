@@ -158,13 +158,17 @@ Kirigami.Dialog {
         // its left and Default anchors to its right edge — lining up under the
         // params/preview split and the per-row lock column above.
         Item {
+            visible: root._livePreview && root._hasParameters
             // Width = the params content width: availableWidth already excludes
             // the scrollbar, and subtracting one largeSpacing matches the params
             // column's own right margin, so Default's right edge lines up with the
-            // per-row lock column rather than the divider.
-            implicitWidth: detailsScroll.availableWidth - Kirigami.Units.largeSpacing
-            implicitHeight: presetRow.implicitHeight
-            visible: root._livePreview && root._hasParameters
+            // per-row lock column rather than the divider. MUST be 0 when hidden:
+            // the animation dialog has no preview column, so availableWidth is
+            // nearly the full dialog width — claiming that here would make the
+            // footer wider than the dialog and feed back into availableWidth, a
+            // runaway layout loop that freezes the dialog.
+            implicitWidth: visible ? detailsScroll.availableWidth - Kirigami.Units.largeSpacing : 0
+            implicitHeight: visible ? presetRow.implicitHeight : 0
 
             RowLayout {
                 id: presetRow
@@ -377,38 +381,45 @@ Kirigami.Dialog {
                         level: 4
                     }
 
-                    PZCommon.ShaderParameterEditor {
-                        id: paramEditor
-
-                        visible: root._livePreview && root._hasParameters
+                    // Editable editor — live (zone/overlay) browser only. Wrapped
+                    // in a Loader so it is NOT instantiated for the animation
+                    // browser (which uses the read-only Repeater below); otherwise
+                    // it eagerly builds slider rows for params it never shows.
+                    Loader {
                         Layout.fillWidth: true
-                        compact: false
-                        enableLocking: true
-                        enableRandomize: true
-                        enableGroups: true
-                        enableImage: true
-                        parameters: root.effect && root.effect.parameters ? root.effect.parameters : []
-                        currentValues: root._liveParams
-                        lockedParams: root._lockedParams
-                        onValueChanged: function (id, value) {
-                            root._setLiveParam(id, value);
-                        }
-                        onLockToggled: function (id, locked) {
-                            root._lockedParams = paramEditor.lockedAfterToggle(id, locked);
-                        }
-                        onLockAllRequested: function (locked) {
-                            root._lockedParams = paramEditor.lockedAfterAllToggle(locked);
-                        }
-                        onRandomizeRequested: {
-                            root._liveParams = paramEditor.computeRandomized();
-                            root._recompute();
-                        }
-                        onRequestColorPicker: function (id, name, current) {
-                            shaderColorDialog.openFor(id, current);
-                        }
-                        onRequestImagePicker: function (id) {
-                            shaderImageDialog.paramId = id;
-                            shaderImageDialog.open();
+                        active: root._livePreview && root._hasParameters
+
+                        sourceComponent: PZCommon.ShaderParameterEditor {
+                            id: paramEditor
+
+                            compact: false
+                            enableLocking: true
+                            enableRandomize: true
+                            enableGroups: true
+                            enableImage: true
+                            parameters: root.effect && root.effect.parameters ? root.effect.parameters : []
+                            currentValues: root._liveParams
+                            lockedParams: root._lockedParams
+                            onValueChanged: function (id, value) {
+                                root._setLiveParam(id, value);
+                            }
+                            onLockToggled: function (id, locked) {
+                                root._lockedParams = paramEditor.lockedAfterToggle(id, locked);
+                            }
+                            onLockAllRequested: function (locked) {
+                                root._lockedParams = paramEditor.lockedAfterAllToggle(locked);
+                            }
+                            onRandomizeRequested: {
+                                root._liveParams = paramEditor.computeRandomized();
+                                root._recompute();
+                            }
+                            onRequestColorPicker: function (id, name, current) {
+                                shaderColorDialog.openFor(id, current);
+                            }
+                            onRequestImagePicker: function (id) {
+                                shaderImageDialog.paramId = id;
+                                shaderImageDialog.open();
+                            }
                         }
                     }
 
