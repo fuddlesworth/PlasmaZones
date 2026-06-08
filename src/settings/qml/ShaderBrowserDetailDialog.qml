@@ -54,7 +54,6 @@ Kirigami.Dialog {
         return bridge.shaderEffectUsages(id);
     }
     readonly property bool _hasParameters: effect && effect.parameters && effect.parameters.length > 0
-    readonly property bool _hasPreviewImage: effect && effect.previewPath && effect.previewPath.length > 0
 
     // ── T3.1 live preview (zone/overlay browser only) ──────────────────
     // The zone-shader bridge exposes a shared ShaderPreviewController; the
@@ -180,6 +179,7 @@ Kirigami.Dialog {
                 Button {
                     text: i18nc("@action:button", "Load Preset…")
                     icon.name: "document-open"
+                    Accessible.name: text
                     onClicked: {
                         shaderPresetLoadDialog.currentFolder = Qt.resolvedUrl("file://" + root.previewController.shaderPresetDirectory());
                         shaderPresetLoadDialog.open();
@@ -189,6 +189,7 @@ Kirigami.Dialog {
                 Button {
                     text: i18nc("@action:button", "Save Preset…")
                     icon.name: "document-save"
+                    Accessible.name: text
                     onClicked: {
                         shaderPresetSaveDialog.currentFolder = Qt.resolvedUrl("file://" + root.previewController.shaderPresetDirectory());
                         shaderPresetSaveDialog.open();
@@ -201,6 +202,7 @@ Kirigami.Dialog {
                 anchors.verticalCenter: parent.verticalCenter
                 text: i18nc("@action:button reset shader parameters", "Default")
                 icon.name: "edit-reset"
+                Accessible.name: text
                 onClicked: root._resetPreview()
             }
         }
@@ -493,30 +495,6 @@ Kirigami.Dialog {
                 Layout.preferredWidth: Kirigami.Units.gridUnit * 24
                 Layout.minimumWidth: Kirigami.Units.gridUnit * 20
                 Layout.fillHeight: true
-
-                // Static thumbnail (animation browser / no live preview).
-                Rectangle {
-                    anchors.fill: parent
-                    anchors.margins: Kirigami.Units.smallSpacing
-                    visible: root._hasPreviewImage && !root._livePreview
-                    radius: Kirigami.Units.smallSpacing
-                    color: Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.08)
-                    border.width: Math.max(1, Math.round(Screen.devicePixelRatio))
-                    border.color: Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.15)
-                    clip: true
-
-                    Image {
-                        anchors.fill: parent
-                        anchors.margins: Math.max(1, Math.round(Screen.devicePixelRatio))
-                        source: root._hasPreviewImage ? "file://" + encodeURI(root.effect.previewPath) : ""
-                        fillMode: Image.PreserveAspectFit
-                        sourceSize.width: width * 2
-                        sourceSize.height: height * 2
-                        asynchronous: true
-                        cache: true
-                        visible: status === Image.Ready
-                    }
-                }
 
                 // Live ZoneShaderItem preview (zone/overlay browser).
                 Rectangle {

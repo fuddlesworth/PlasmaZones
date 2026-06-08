@@ -285,7 +285,10 @@ bool ShaderPreviewController::saveShaderPreset(const QString& filePath, const QS
         return false;
     }
     const QByteArray json = QJsonDocument(obj).toJson(QJsonDocument::Indented);
-    if (file.write(json) != json.size()) {
+    // flush() forces the buffered write out so a deferred failure (e.g. disk
+    // full) surfaces here rather than silently on close, leaving a truncated
+    // preset that later fails to parse with no error reported.
+    if (file.write(json) != json.size() || !file.flush()) {
         const QString error = PhosphorI18n::tr("Failed to write preset file: %1", "@info").arg(file.errorString());
         Q_EMIT shaderPresetSaveFailed(error);
         qCWarning(lcShaderPreview) << error;
@@ -337,7 +340,14 @@ QVariantMap ShaderPreviewController::loadShaderPreset(const QString& filePath)
 
     QVariantMap shaderParams;
     if (obj.contains(QLatin1String(::PhosphorZones::ZoneJsonKeys::ShaderParams))) {
-        shaderParams = obj[QLatin1String(::PhosphorZones::ZoneJsonKeys::ShaderParams)].toObject().toVariantMap();
+        const QJsonValue paramsValue = obj[QLatin1String(::PhosphorZones::ZoneJsonKeys::ShaderParams)];
+        // A present-but-non-object params field is a corrupt/hand-edited file —
+        // fail loudly rather than silently dropping the user's saved values.
+        if (!paramsValue.isObject()) {
+            Q_EMIT shaderPresetLoadFailed(PhosphorI18n::tr("Preset file has malformed parameters", "@info"));
+            return result;
+        }
+        shaderParams = paramsValue.toObject().toVariantMap();
     }
 
     result[QLatin1String(::PhosphorZones::ZoneJsonKeys::Name)] =

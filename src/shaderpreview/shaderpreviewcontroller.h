@@ -90,7 +90,13 @@ Q_SIGNALS:
     void shaderPresetLoadFailed(const QString& error);
 
 private:
-    IShaderPreviewBackend* m_backend; // borrowed; owner outlives the controller
+    // Borrowed. In the settings app the owner (a unique_ptr backend declared
+    // before the controller) outlives it. In the editor the backend IS the
+    // EditorController, which owns the controller as a QObject child — there the
+    // IShaderPreviewBackend base subobject is destroyed BEFORE the child
+    // controller, so this destructor must never dereference m_backend (it does
+    // not: ~ShaderPreviewController only tears down its own CAVA provider).
+    IShaderPreviewBackend* m_backend;
     PhosphorAudio::CavaSpectrumProvider* m_audioProvider = nullptr;
     QVector<float> m_audioSpectrum;
 };
