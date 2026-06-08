@@ -3,7 +3,6 @@
 
 #include "windowrulecontroller.h"
 
-#include "dbusutils.h"
 #include "windowruleauthoring.h"
 #include "windowruletemplates.h"
 
@@ -16,14 +15,13 @@
 #include <PhosphorWindowRule/WindowRuleSet.h>
 
 #include <QDBusConnection>
-#include <QDBusMessage>
 #include <QDBusPendingCallWatcher>
 #include <QDBusPendingReply>
 #include <QHash>
 #include <QSet>
-#include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
+#include <QUuid>
 
 namespace PlasmaZones {
 
@@ -35,8 +33,9 @@ using PhosphorWindowRule::WindowRuleSet;
 // Priority bands live next to the seeded templates (windowruletemplates.h) so
 // the renormalize logic here shares the exact bands the templates /
 // empty-rule seeds land in — a single source of truth keeps section ordering
-// (Advanced > Monitor > Application > Animation) consistent between newly-
-// authored rules and post-reorder priority stamps.
+// (Advanced > Monitor/Activity > Application > Animation; Monitor and Activity
+// share the Context band) consistent between newly-authored rules and
+// post-reorder priority stamps.
 using WindowRuleTemplates::kAdvancedBandBase;
 using WindowRuleTemplates::kAnimationBandBase;
 using WindowRuleTemplates::kApplicationBandBase;
@@ -118,7 +117,7 @@ void WindowRuleController::unsubscribeRulesChanged()
     m_rulesChangedSubscribed = false;
 }
 
-// Label-lookup setters (setScreenLookup, setActivityLookup, setLayoutLookup,
+// Label-lookup setters (setScreenLookup, setActivityLookup,
 // setSnappingLayoutLookup, setTilingAlgorithmLookup, setShaderEffectLookup,
 // setCurveLabelResolver) live in windowrulecontroller_lookups.cpp so this TU
 // stays under the project's 800-line cap.
@@ -148,7 +147,7 @@ void WindowRuleController::discard()
     // discardResult twice, breaking the StagingDomain contract that
     // promises one terminal signal per discard() invocation.
     if (m_discardInFlight) {
-        Q_EMIT discardResult(false, QStringLiteral("Discard already in flight"));
+        Q_EMIT discardResult(false, PhosphorI18n::tr("Discard already in flight."));
         return;
     }
     m_discardInFlight = true;
@@ -206,33 +205,6 @@ void WindowRuleController::setDaemonChangedWhileDirty(bool changed)
     }
     m_daemonChangedWhileDirty = changed;
     Q_EMIT daemonChangedWhileDirtyChanged();
-}
-
-bool WindowRuleController::pushToDaemon(const QList<WindowRule>& rules)
-{
-    WindowRuleSet set;
-    // setRules() drops invalid rules with a logged diagnostic and returns the
-    // accepted count. Bail out BEFORE pushing if any rule was rejected — the
-    // earlier code would push a truncated set to the daemon and only fail
-    // the return, leaving the daemon persisting a divergent rule set the
-    // model would never refresh (the next reload is guarded by the dirty
-    // bit, which stays set on failure → permanent divergence).
-    const int accepted = set.setRules(rules);
-    if (accepted != rules.size()) {
-        qCWarning(lcConfig) << "WindowRuleController::pushToDaemon: rejecting push —" << (rules.size() - accepted)
-                            << "of" << rules.size() << "rules failed client-side validation; daemon NOT updated";
-        return false;
-    }
-    const QJsonDocument doc(set.toJson());
-    const QDBusMessage reply =
-        DaemonDBus::callDaemon(QString(PhosphorProtocol::Service::Interface::WindowRules),
-                               QStringLiteral("setAllRules"), {QString::fromUtf8(doc.toJson(QJsonDocument::Compact))});
-    if (reply.type() != QDBusMessage::ReplyMessage) {
-        setDaemonReachable(false);
-        return false;
-    }
-    setDaemonReachable(true);
-    return !reply.arguments().isEmpty() && reply.arguments().constFirst().toBool();
 }
 
 bool WindowRuleController::pushToDaemonAsync(const QList<WindowRule>& rules)
@@ -339,8 +311,8 @@ void WindowRuleController::fetchAndLoad(bool fromRevert)
         // If the user staged edits between dispatch and reply (e.g. an
         // initial-load fetch that races a fast user action), do not stomp
         // them on the non-revert path. Mirror reload()'s dirty-guard:
-        // flag daemonChangedWhileDirty so the page can warn before any
-        // commit() overwrites the daemon's newer set, and leave the staged
+        // flag daemonChangedWhileDirty so the page can warn before a save
+        // overwrites the daemon's newer set, and leave the staged
         // model intact. The explicit revert path is allowed to clobber.
         //
         // Do NOT emit rulesLoaded here — we did not actually load anything,
@@ -371,7 +343,7 @@ void WindowRuleController::reload()
     // directly so it bypasses this guard.
     if (m_dirty) {
         // The staged set is now divergent from the daemon's newer rules. Flag
-        // it so the page can warn the user before a commit() silently
+        // it so the page can warn the user before a save silently
         // overwrites the daemon-side changes (lost update).
         setDaemonChangedWhileDirty(true);
         return;
@@ -379,49 +351,10 @@ void WindowRuleController::reload()
     fetchAndLoad();
 }
 
-bool WindowRuleController::forceCommit()
-{
-    return commit(/*force=*/true);
-}
-
-bool WindowRuleController::commit(bool force)
-{
-    if (m_asyncCommitInFlight) {
-        // A sync commit() landing while an async push is still mid-flight
-        // would race the in-flight reply — both paths call setDirty(false)
-        // on success, and the daemon receives two parallel setAllRules
-        // writes for one user action. Refuse the sync path; the caller
-        // can wait for applyResult and retry.
-        qCWarning(lcConfig) << "WindowRuleController::commit: refusing — asyncCommit already in flight";
-        return false;
-    }
-    if (!m_dirty) {
-        return true;
-    }
-    if (m_daemonChangedWhileDirty && !force) {
-        // The daemon's rules changed under the staged edits. Pushing now would
-        // silently overwrite the daemon's newer set (lost update). Refuse and
-        // keep the page dirty — the page surfaces `daemonChangedWhileDirty` so
-        // the user can review/revert or force the overwrite via commit(true).
-        qCWarning(lcConfig) << "WindowRuleController::commit: refusing to push — daemon rules changed while the page "
-                               "had staged edits; review or force-overwrite required";
-        return false;
-    }
-    if (!pushToDaemon(m_model.rules())) {
-        // The push failed (daemon down or a partial drop). Keep the dirty bit
-        // set so the user can retry — the bool return tells
-        // SettingsController::save() to keep the page dirty.
-        return false;
-    }
-    setDirty(false);
-    setDaemonChangedWhileDirty(false);
-    return true;
-}
-
 void WindowRuleController::asyncCommit(bool force)
 {
-    // Mirror commit(force) but emit applyResult on the reply instead
-    // of returning bool. Clean state is emitted as applyResult(true, "");
+    // Push the staged rule set to the daemon and emit applyResult on the
+    // reply. Clean state is emitted as applyResult(true, "");
     // refusals + transport errors carry an explanatory message.
     //
     // Refuse re-entrant invocation while a prior setAllRules push is
@@ -483,7 +416,8 @@ void WindowRuleController::renormalizePriorities()
     // Walk the model's list order and re-stamp priority so list order maps
     // monotonically onto evaluation order. Higher list index ⇒ lower
     // priority within the rule's band; the bands keep the section ordering
-    // (Advanced > Monitor > Application > Animation) stable.
+    // (Advanced > Monitor/Activity > Application > Animation; Monitor and
+    // Activity share the Context band) stable.
     //
     // This is invoked ONLY when list order changes — on a drag-reorder
     // (moveRule) and when a new rule is appended (addRuleFromJson). An in-place

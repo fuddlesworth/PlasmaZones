@@ -89,7 +89,7 @@ divergence is deliberately reconciled by the migration.
 ### 2.5 Design-doc note: `LayoutFilterBar.qml` / `LayoutFilterLogic.js` are retained
 
 These are consumed by `LayoutsPage.qml` (the layout gallery), not by any assignment page —
-they survive Phase 4. `LayoutComboBox.qml`, `ScreenComboBox.qml`, `WindowPickerDialog.qml`
+they survive Phase 4. `LayoutComboBox.qml` and `WindowPickerDialog.qml`
 are likewise retained and reused by the new page.
 
 ---
@@ -423,7 +423,7 @@ must pass unchanged — that is the disable-list parity proof.
   `AppRulesCard.qml`, `AnimationsAppRulesPage.qml` (after relocation), `AssignmentRow.qml`,
   `SnappingBridge.qml`, `TilingBridge.qml`, `SharedBridge.qml` (verify no other consumer).
 - **Do NOT delete:** `LayoutFilterBar.qml`, `LayoutFilterLogic.js`, `LayoutComboBox.qml`,
-  `ScreenComboBox.qml`, `WindowPickerDialog.qml` (all retained / reused).
+  `WindowPickerDialog.qml` (all retained / reused).
 
 ### Key decisions
 

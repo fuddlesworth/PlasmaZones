@@ -19,8 +19,10 @@
  * cross-layer headers along.
  *
  * Non-algorithm consumers (`src/dbus/autotileadaptor`, `src/core/geometryutils`,
- * etc.) reach these symbols transparently via `core/constants.h`, which
- * re-includes this header for backward source compatibility.
+ * etc.) that genuinely need these symbols include this header directly. There
+ * is no transitive re-export from `core/constants.h` — that backward-source
+ * compatibility chain was removed so unrelated layers no longer resolve the
+ * PhosphorTiles include path.
  */
 namespace PhosphorTiles {
 
@@ -126,8 +128,6 @@ inline constexpr QLatin1String InsertPosition{"insertPosition"};
 inline constexpr QLatin1String RespectMinimumSize{"respectMinimumSize"};
 inline constexpr QLatin1String MaxWindows{"maxWindows"};
 inline constexpr QLatin1String OverflowBehavior{"overflowBehavior"};
-inline constexpr QLatin1String CenteredMasterSplitRatio{"centeredMasterSplitRatio"};
-inline constexpr QLatin1String CenteredMasterMasterCount{"centeredMasterMasterCount"};
 inline constexpr QLatin1String SplitTreeKey{"splitTree"};
 } // namespace AutotileJsonKeys
 
@@ -147,19 +147,6 @@ inline constexpr QLatin1String InsertEnd{"end"};
 inline constexpr QLatin1String InsertAfterFocused{"afterFocused"};
 inline constexpr QLatin1String InsertAsMaster{"asMaster"};
 } // namespace AutotileJsonValues
-
-/**
- * @brief Backwards-compat re-exports so existing `using namespace AutotileJsonKeys`
- *        sites (e.g. `src/autotile/AutotileConfig.cpp`) resolve the value names
- *        without a rename cascade. New code should qualify with AutotileJsonValues::.
- */
-namespace AutotileJsonKeys {
-using AutotileJsonValues::InsertAfterFocused;
-using AutotileJsonValues::InsertAsMaster;
-using AutotileJsonValues::InsertEnd;
-using AutotileJsonValues::OverflowFloat;
-using AutotileJsonValues::OverflowUnlimited;
-} // namespace AutotileJsonKeys
 
 enum class AutotileOverflowBehavior {
     Float = 0,

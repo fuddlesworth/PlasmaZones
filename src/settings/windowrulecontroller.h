@@ -7,13 +7,10 @@
 #include <QJSValue>
 #include <QObject>
 #include <QString>
-#include <QStringList>
-#include <QUuid>
 #include <QVariantList>
 #include <QVariantMap>
 
 #include <PhosphorWindowRule/WindowRule.h>
-#include <PhosphorWindowRule/WindowRuleSet.h>
 
 #include "windowrulemodel.h"
 
@@ -30,15 +27,17 @@ namespace PlasmaZones {
  *      page is clean) it fetches the rule set from
  *      `org.plasmazones.WindowRules` and loads it into the model.
  *   2. Every QML CRUD call mutates the in-memory model and flips the dirty bit.
- *   3. On `commit()` the staged rule set is pushed back to the daemon via
- *      `setAllRules` — the daemon stays the sole writer of `windowrules.json`.
+ *   3. On `apply()` the staged rule set is pushed back to the daemon
+ *      asynchronously (`asyncCommit` → `setAllRules`) — the daemon stays the
+ *      sole writer of `windowrules.json`.
  *   4. On `revert()` the staged set is re-fetched from the daemon and the
  *      staged edits discarded — but only if the daemon is reachable; a failed
  *      re-fetch leaves the page dirty rather than silently dropping the edits.
  *
  * Dirty-tracking + revert/commit mirror `AnimationsPageController`'s
  * pending-changes contract: `SettingsController` connects `dirtyChanged` to
- * `setNeedsSave`, calls `commit()` from `save()`, and `revert()` from `load()`.
+ * `setNeedsSave`, drives `apply()` (which dispatches `asyncCommit`) from
+ * `save()`, and `revert()` from `load()`.
  *
  * The controller is the only thing on the settings side that knows the D-Bus
  * shape; the model and QML never touch the wire.
@@ -55,17 +54,17 @@ class WindowRuleController : public PhosphorSettingsUi::PageController
     /// unsaved staged edits — `reload()` skipped the refresh to avoid stomping
     /// them, so the staged set is now divergent from the daemon's. The page
     /// surfaces a "rules changed on disk — review before saving" notice. While
-    /// this flag is set, `commit(false)` refuses the push (returns false) so it
-    /// cannot silently overwrite the daemon's newer rules — the user must
-    /// review/revert or call `commit(true)` to force the overwrite.
+    /// this flag is set, `asyncCommit(false)` refuses the push so it cannot
+    /// silently overwrite the daemon's newer rules — the user must review/revert
+    /// or call `asyncCommit(true)` to force the overwrite.
     Q_PROPERTY(bool daemonChangedWhileDirty READ daemonChangedWhileDirty NOTIFY daemonChangedWhileDirtyChanged)
 
 public:
     explicit WindowRuleController(QObject* parent = nullptr);
     ~WindowRuleController() override;
 
-    /// PhosphorSettingsUi::StagingDomain contract. apply() forwards to
-    /// commit() (the staged set goes to the daemon); discard() forwards to
+    /// PhosphorSettingsUi::StagingDomain contract. apply() dispatches
+    /// asyncCommit() (the staged set goes to the daemon); discard() forwards to
     /// revert() (the daemon's set is re-fetched into the model).
     bool isDirty() const override;
     void apply() override;
@@ -85,12 +84,9 @@ public:
     /// `matchSummary` / `actionSummary` cells — a missing lookup falls
     /// back to printing the raw id/UUID. SettingsController is the
     /// single intended caller and installs all four during page
-    /// registration. The legacy `setLayoutLookup(fn)` wires the same
-    /// resolver into BOTH snappingLayout and tilingAlgorithm; new
-    /// callers should prefer the typed pair below.
+    /// registration via the typed snappingLayout/tilingAlgorithm pair.
     void setScreenLookup(WindowRuleModel::LabelLookup fn);
     void setActivityLookup(WindowRuleModel::LabelLookup fn);
-    void setLayoutLookup(WindowRuleModel::LabelLookup fn);
     /// layoutId UUID → display label resolver for SetSnappingLayout actions.
     void setSnappingLayoutLookup(WindowRuleModel::LabelLookup fn);
     /// Algorithm token ("bsp", …) → display label resolver for SetTilingAlgorithm actions.
@@ -131,38 +127,18 @@ public:
     /// is then left empty and `daemonReachable` is false.
     Q_INVOKABLE void reload();
 
-    /// Push the staged rule set back to the daemon. Clears the dirty bit on a
-    /// successful write. Called by `SettingsController::save()`. Returns false
-    /// if the push failed (daemon down, or the daemon rejected/partially
-    /// dropped rules) — the caller must keep the page dirty in that case.
+    /// Push the staged rule set to the daemon via QDBusPendingCallWatcher and
+    /// emit the inherited `applyResult(ok, error)` signal on the reply. UI
+    /// threads never block waiting for the daemon (a stuck/firewalled daemon
+    /// would otherwise freeze the whole Settings window).
     ///
-    /// Refuses (returns false, leaves the page dirty) when
-    /// `daemonChangedWhileDirty` is set and @p force is false: the daemon's
-    /// rules changed under the staged edits, so an unconditional push would be
-    /// a silent lost update. The page surfaces the refusal and the user must
-    /// explicitly review (revert) or force the overwrite. Pass @p force true
-    /// once the user has chosen "overwrite anyway".
-    bool commit(bool force = false);
-
-    /// C++ helper that forwards to `commit(true)`. Was Q_INVOKABLE in
-    /// pass 17 when the QML daemonChangedWhileDirty banner called it
-    /// directly; pass 27 migrated that banner to the async path
-    /// (`asyncCommit(true)`), so the QML-facing escape hatch now lives
-    /// on `asyncCommit`. Kept as a public sync helper for tests and
-    /// any future internal caller — the Q_INVOKABLE marker is gone.
-    bool forceCommit();
-
-    /// Async sibling of `commit()` — pushes the staged rule set to the
-    /// daemon via QDBusPendingCallWatcher and emits the inherited
-    /// `applyResult(ok, error)` signal on the reply. UI threads no
-    /// longer block waiting for the daemon (a stuck/firewalled daemon
-    /// would freeze the whole Settings window with the sync path).
-    ///
-    /// The sync `commit()` above stays callable for back-compat:
-    /// `SettingsController::save()` and the inherited `apply()` slot
-    /// still use it. Once the chrome footer surfaces the async
-    /// applyResult state-machine, the sync helper can become an
-    /// internal implementation detail.
+    /// This is the live save path: `apply()` (the StagingDomain slot
+    /// `SettingsController::save()` drives) dispatches through
+    /// `asyncCommit(false)`, and the daemon-changed banner forces an
+    /// overwrite via `asyncCommit(true)`. Refuses (emits
+    /// `applyResult(false, …)`, leaves the page dirty) when
+    /// `daemonChangedWhileDirty` is set and @p force is false, so an
+    /// unconditional push can't silently clobber the daemon's newer rules.
     Q_INVOKABLE void asyncCommit(bool force = false);
 
     /// Discard staged edits and re-fetch from the daemon. The fetch is async,
@@ -183,7 +159,12 @@ public:
     /// confirmation, so a user editing during the window is not a realistic
     /// path. Documenting the discard semantics rather than blocking edits
     /// keeps the controller stateless from QML's perspective.
-    void revert();
+    ///
+    /// Q_INVOKABLE so the "Discard and reload" affordance on the
+    /// daemonChangedWhileDirty banner can drive it directly; the
+    /// revertFinished re-marking in SettingsController is wired off the
+    /// signal, so it fires regardless of whether QML or load() calls this.
+    Q_INVOKABLE void revert();
 
     /// True iff there are unsaved staged edits. Mirror of `isDirty()` for the
     /// `SettingsController` pending-changes gate.
@@ -259,26 +240,21 @@ public:
     Q_INVOKABLE QVariantList sections() const;
 
     /// A snapshot of every rule as a map keyed by the model's role names
-    /// (`ruleId`, `name`, `enabled`, `section`, `matchSummary`,
+    /// (`ruleId`, `name`, `enabled`, `priority`, `section`, `matchSummary`,
     /// `actionSummary`, `conditionCount`, `actionCount`, `isComposite`,
-    /// `screenIds`). Lets the page bucket / filter rules without ever
-    /// referencing raw `Qt.UserRole + N` integers.
+    /// `screenIds`, `validationIssueCount`). Lets the page bucket / filter
+    /// rules without ever referencing raw `Qt.UserRole + N` integers.
     Q_INVOKABLE QVariantList rulesSnapshot() const;
 
     // ── Monitor overview strip ────────────────────────────────────────────
 
     /// Read-only per-monitor summary for the overview strip. Each entry:
     /// `{ screenId, layoutName, tilingEnabled, ruleCount, assigned }`.
-    /// @p screens is the `SettingsController::screens` list (each a map with
-    /// at least a `name`/`id` field) so the overview can list every connected
-    /// monitor — including ones with no rule at all (the "Not assigned" tile).
+    /// @p screens is the `SettingsController::screens` list (each a map with a
+    /// `name` field, and a `screenId` fallback) so the overview can list every
+    /// connected monitor — including ones with no rule at all (the "Not
+    /// assigned" tile).
     Q_INVOKABLE QVariantList monitorOverview(const QVariantList& screens) const;
-
-    /// The screen-ids a rule pins, or an empty list if it is not a
-    /// monitor-scoped rule. Lets QML filter the list by the rule's actual
-    /// ScreenId predicate(s) rather than substring-scanning the localized
-    /// match summary.
-    Q_INVOKABLE QStringList ruleScreenIds(const QString& ruleId) const;
 
     // ── Authoring metadata for the QML editors ────────────────────────────
 
@@ -403,15 +379,10 @@ private:
     /// sibling watcher.
     void fetchAndLoad(bool fromRevert = false);
 
-    /// Push @p rules to the daemon via `setAllRules`. Returns true only if the
-    /// daemon accepted every rule (no partial drop).
-    bool pushToDaemon(const QList<PhosphorWindowRule::WindowRule>& rules);
-
-    /// Async sibling of pushToDaemon — dispatches `setAllRules` via
-    /// QDBusPendingCallWatcher and emits applyResult on the reply.
-    /// Returns false ONLY for the up-front validation failure (a rule
-    /// was rejected client-side) — the async leg covers transport
-    /// errors via the applyResult signal.
+    /// Dispatch `setAllRules` to the daemon via QDBusPendingCallWatcher and
+    /// emit applyResult on the reply. Returns false ONLY for the up-front
+    /// validation failure (a rule was rejected client-side) — the async leg
+    /// covers transport errors via the applyResult signal.
     bool pushToDaemonAsync(const QList<PhosphorWindowRule::WindowRule>& rules);
 
     /// Renormalize every rule's priority so descending list order ⇒
@@ -444,9 +415,10 @@ private:
     /// apply() dispatches a duplicate setAllRules push, and the reply
     /// lambdas race on setDirty(false) + applyResult emission.
     bool m_asyncCommitInFlight = false;
-    /// Split lookups: monitorOverview's tile picks one based on the rule's
-    /// engineMode, so a SetSnappingLayout with a UUID-shaped value can't
-    /// accidentally hit the tiling-algorithm path and vice versa.
+    /// Split lookups: monitorOverview's tile picks one by the assignment
+    /// winner's engine mode (snapping layout vs tiling algorithm), so a
+    /// SetSnappingLayout with a UUID-shaped value can't accidentally hit the
+    /// tiling-algorithm path and vice versa.
     WindowRuleModel::LabelLookup m_snappingLayoutLookup;
     WindowRuleModel::LabelLookup m_tilingAlgorithmLookup;
     /// JS resolver supplied by the QML rules page (CurvePresets.curveLabel).

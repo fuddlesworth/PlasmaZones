@@ -51,6 +51,16 @@ Item {
     property bool showToggle: false
     property bool toggleChecked: false
 
+    // Per-monitor scope chip (optional). When scopeEnabled, the header shows a
+    // monitor scope chip right after the title, collapsed to "All Monitors",
+    // opening a spatial popover to switch outputs. The card body is expected to
+    // bind its values to scopeAppSettings.scopeScreenName via a
+    // PerScreenOverrideHelper, so it reflects the chosen monitor.
+    property bool scopeEnabled: false
+    property var scopeAppSettings: null
+    property string scopeHasOverridesMethod: ""
+    property string scopeClearerMethod: ""
+
     signal toggleClicked(bool checked)
 
     onCollapsedChanged: {
@@ -168,6 +178,30 @@ Item {
                         level: 3
                         padding: Kirigami.Units.smallSpacing
                         leftPadding: Kirigami.Units.smallSpacing
+                    }
+
+                    // Per-monitor scope chip, title-adjacent. Kept clear of the
+                    // collapse chevron / enable toggle on the right edge. Loaded
+                    // only on scoped cards so its appSettings bindings never
+                    // evaluate against null on the (many) non-scoped cards.
+                    Loader {
+                        active: root.scopeEnabled && root.scopeAppSettings !== null
+                        visible: active
+                        Layout.leftMargin: active ? Kirigami.Units.smallSpacing : 0
+                        Layout.alignment: Qt.AlignVCenter
+                        sourceComponent: Component {
+                            MonitorScopeChip {
+                                appSettings: root.scopeAppSettings
+                                hasOverridesMethod: root.scopeHasOverridesMethod
+                                clearerMethod: root.scopeClearerMethod
+                            }
+                        }
+                    }
+
+                    // Spacer — pushes the trailing controls to the right edge
+                    // (replaces the Heading's former Layout.fillWidth so the
+                    // scope chip can sit next to the title instead).
+                    Item {
                         Layout.fillWidth: true
                     }
 

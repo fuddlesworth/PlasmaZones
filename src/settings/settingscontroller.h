@@ -104,6 +104,13 @@ class SettingsController : public QObject
     // Screen management
     Q_PROPERTY(QVariantList screens READ screens NOTIFY screensChanged)
 
+    // Per-monitor scope: which screen the per-monitor setting groups are
+    // currently editing. Empty = "All Monitors" (edit the global default).
+    // App-wide and shared, so a pick persists as the user moves between
+    // per-monitor pages — replaces the old per-page selectedScreenName that
+    // each page tracked independently.
+    Q_PROPERTY(QString scopeScreenName READ scopeScreenName WRITE setScopeScreenName NOTIFY scopeScreenNameChanged)
+
     // Editor page — properties live on EditorPageController, exposed here as a
     // child QObject so QML reads `settingsController.editorPage.duplicateShortcut`.
     Q_PROPERTY(EditorPageController* editorPage READ editorPage CONSTANT)
@@ -254,6 +261,18 @@ public:
         return m_screenHelper.screens();
     }
     Q_INVOKABLE QVariantMap physicalScreenResolution(const QString& screenId) const;
+
+    QString scopeScreenName() const
+    {
+        return m_scopeScreenName;
+    }
+    void setScopeScreenName(const QString& name);
+
+    /// Physical-output id for a screen name token, collapsing a virtual-screen
+    /// id ("id/vs:N") to its physical parent. Single source of truth for QML
+    /// that needs the physical id — the canonical "/vs:" separator lives in
+    /// C++ (PhosphorIdentity::VirtualScreenId), so QML must not re-spell it.
+    Q_INVOKABLE QString physicalScreenId(const QString& name) const;
 
     // Virtual desktops / activities (reactive via D-Bus signals)
     Q_PROPERTY(int virtualDesktopCount READ virtualDesktopCount NOTIFY virtualDesktopsChanged)
@@ -440,12 +459,20 @@ public:
     Q_INVOKABLE void setPerScreenAutotileSetting(const QString& screenName, const QString& key, const QVariant& value);
     Q_INVOKABLE void clearPerScreenAutotileSettings(const QString& screenName);
     Q_INVOKABLE bool hasPerScreenAutotileSettings(const QString& screenName) const;
+    // Per-card sub-domains (Gaps vs Algorithm) of the shared autotile map, so
+    // each card's scope chip dot/reset only touches its own keys.
+    Q_INVOKABLE bool hasPerScreenAutotileGapsSettings(const QString& screenName) const;
+    Q_INVOKABLE void clearPerScreenAutotileGapsSettings(const QString& screenName);
+    Q_INVOKABLE bool hasPerScreenAutotileAlgorithmSettings(const QString& screenName) const;
+    Q_INVOKABLE void clearPerScreenAutotileAlgorithmSettings(const QString& screenName);
 
     // ── Per-screen snapping overrides ────────────────────────────────────────
     Q_INVOKABLE QVariantMap getPerScreenSnappingSettings(const QString& screenName) const;
     Q_INVOKABLE void setPerScreenSnappingSetting(const QString& screenName, const QString& key, const QVariant& value);
     Q_INVOKABLE void clearPerScreenSnappingSettings(const QString& screenName);
     Q_INVOKABLE bool hasPerScreenSnappingSettings(const QString& screenName) const;
+    Q_INVOKABLE bool hasPerScreenSnappingGapsSettings(const QString& screenName) const;
+    Q_INVOKABLE void clearPerScreenSnappingGapsSettings(const QString& screenName);
 
     // ── Virtual screen configuration ──────────────────────────────────────────
     Q_INVOKABLE QStringList getPhysicalScreens() const;
@@ -497,6 +524,12 @@ Q_SIGNALS:
     /// user knows the change wasn't saved.
     void virtualScreenConfigFailed(const QString& physicalScreenId, const QString& reason);
     void screensChanged();
+    void scopeScreenNameChanged();
+    /// Emitted whenever any per-screen override map changes (set or clear,
+    /// any domain). The monitor scope map re-polls hasPerScreen*Settings()
+    /// to refresh its per-output override dots, which a plain WRITE on an
+    /// individual key can't drive on its own.
+    void perScreenOverridesChanged();
     void dismissedUpdateVersionChanged();
     void lastSeenWhatsNewVersionChanged();
 
@@ -578,7 +611,16 @@ private:
     /// Opt-in cross-process auto-reload of m_localRuleStore on external writes
     /// (mainly the no-daemon case). Declared after the store; tears down first.
     std::unique_ptr<PhosphorWindowRule::WindowRuleStoreWatcher> m_localRuleStoreWatcher;
+    /// Installs the process-global screen-id resolver before `m_settings`, whose
+    /// constructor load()s and canonicalises per-screen override keys via
+    /// `idForName`. Declared (and initialised) immediately before `m_settings`
+    /// so member-init order guarantees the resolver is ready for that first
+    /// migration on EVERY construction path. The stored value is unused.
+    [[maybe_unused]] const bool m_screenIdResolverReady;
     Settings m_settings;
+    /// Per-monitor editing scope; empty = "All Monitors". See the
+    /// scopeScreenName Q_PROPERTY. Plain UI state, not persisted.
+    QString m_scopeScreenName;
     /// Per-page sub-controllers: expose the Q_PROPERTY surface for a single
     /// settings page each. Parented to `this`, so Qt handles cleanup via
     /// ~QObject AFTER the member destructors below have run. Any

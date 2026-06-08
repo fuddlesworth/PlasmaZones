@@ -13,11 +13,9 @@ SettingsFlickable {
     readonly property var settingsBridge: settingsController.tilingAppearancePage
     readonly property int gapMax: root.settingsBridge.autotileGapMax
     // Per-screen override helper. Only the Gaps card below is per-screen; the
-    // colour / decoration / border cards are global. The monitor selector is
-    // placed directly above Gaps so its scope reads unambiguously.
-    property alias selectedScreenName: psHelper.selectedScreenName
-    readonly property alias hasOverrides: psHelper.hasOverrides
-
+    // colour / decoration / border cards are global. The Gaps card opts into
+    // the header scope chip, so the global cards above carry no scope chrome
+    // and read as global.
     function settingValue(key, globalValue) {
         return psHelper.settingValue(key, globalValue);
     }
@@ -33,9 +31,11 @@ SettingsFlickable {
         id: psHelper
 
         appSettings: settingsController
+        // Shared app-wide scope — a monitor picked on any per-monitor page
+        // stays picked here.
+        selectedScreenName: settingsController.scopeScreenName
         getterMethod: "getPerScreenAutotileSettings"
         setterMethod: "setPerScreenAutotileSetting"
-        clearerMethod: "clearPerScreenAutotileSettings"
     }
 
     ColumnLayout {
@@ -124,8 +124,6 @@ SettingsFlickable {
                     description: i18n("Remove window title bars while autotiled, restored when floating")
 
                     SettingsSwitch {
-                        id: hideTitleBarsSwitch
-
                         checked: appSettings.autotileHideTitleBars
                         accessibleName: i18n("Hide title bars on tiled windows")
                         onToggled: function (newValue) {
@@ -185,19 +183,18 @@ SettingsFlickable {
         }
 
         // =================================================================
-        // Gaps (per-screen) — monitor selector scopes only the card below.
+        // Gaps (per-screen) — the card opts into the header scope chip, so it
+        // reads as a normal global card until you pick a monitor. The global
+        // cards above carry no scope chrome, keeping their scope unambiguous.
         // =================================================================
-        MonitorSelectorSection {
-            Layout.fillWidth: true
-            appSettings: settingsController
-            selectedScreenName: root.selectedScreenName
-            hasOverrides: root.hasOverrides
-            onSelectedScreenNameChanged: root.selectedScreenName = selectedScreenName
-            onResetClicked: psHelper.clearOverrides()
-        }
-
         GapsSettingsCard {
             Layout.fillWidth: true
+            scopeEnabled: true
+            scopeAppSettings: settingsController
+            // Gaps sub-domain only — must not report/reset the Algorithm card's
+            // per-monitor overrides (shared autotile map, disjoint key subsets).
+            scopeHasOverridesMethod: "hasPerScreenAutotileGapsSettings"
+            scopeClearerMethod: "clearPerScreenAutotileGapsSettings"
             gapMax: root.gapMax
             gapMin: root.settingsBridge.autotileGapMin
             primaryGapMin: root.settingsBridge.autotileInnerGapMin

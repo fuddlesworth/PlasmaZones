@@ -2,9 +2,13 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 // Per-screen override accessors for SettingsController. The actual storage
-// lives in Settings; this file's Q_INVOKABLE wrappers thin-forward to it
-// and flip the dirty flag so the active page can re-show the unsaved
-// changes footer.
+// lives in Settings; this file's Q_INVOKABLE wrappers thin-forward to it.
+// Dirty tracking and the perScreenOverridesChanged() refresh are NOT done
+// here: Settings emits perScreen{Autotile,Snapping,ZoneSelector}SettingsChanged
+// only when an override actually changes, and the controller constructor
+// wires those signals to onSettingsPropertyChanged() (dirty) and
+// perScreenOverridesChanged() (UI refresh). Emitting from these wrappers
+// would mark the page dirty even for no-op or rejected writes.
 //
 // Split out of settingscontroller_session.cpp to keep that file under the
 // 800-line cap (see CLAUDE.md). All methods here are members of
@@ -13,7 +17,24 @@
 
 #include "settingscontroller.h"
 
+#include <PhosphorIdentity/VirtualScreenId.h>
+
 namespace PlasmaZones {
+
+// ── Per-monitor editing scope ─────────────────────────────────────────────
+
+void SettingsController::setScopeScreenName(const QString& name)
+{
+    if (m_scopeScreenName == name)
+        return;
+    m_scopeScreenName = name;
+    Q_EMIT scopeScreenNameChanged();
+}
+
+QString SettingsController::physicalScreenId(const QString& name) const
+{
+    return PhosphorIdentity::VirtualScreenId::extractPhysicalId(name);
+}
 
 // ── Per-screen autotile overrides ────────────────────────────────────────
 
@@ -26,18 +47,36 @@ void SettingsController::setPerScreenAutotileSetting(const QString& screenName, 
                                                      const QVariant& value)
 {
     m_settings.setPerScreenAutotileSetting(screenName, key, value);
-    setNeedsSave(true);
 }
 
 void SettingsController::clearPerScreenAutotileSettings(const QString& screenName)
 {
     m_settings.clearPerScreenAutotileSettings(screenName);
-    setNeedsSave(true);
 }
 
 bool SettingsController::hasPerScreenAutotileSettings(const QString& screenName) const
 {
     return m_settings.hasPerScreenAutotileSettings(screenName);
+}
+
+bool SettingsController::hasPerScreenAutotileGapsSettings(const QString& screenName) const
+{
+    return m_settings.hasPerScreenAutotileGapsSettings(screenName);
+}
+
+void SettingsController::clearPerScreenAutotileGapsSettings(const QString& screenName)
+{
+    m_settings.clearPerScreenAutotileGapsSettings(screenName);
+}
+
+bool SettingsController::hasPerScreenAutotileAlgorithmSettings(const QString& screenName) const
+{
+    return m_settings.hasPerScreenAutotileAlgorithmSettings(screenName);
+}
+
+void SettingsController::clearPerScreenAutotileAlgorithmSettings(const QString& screenName)
+{
+    m_settings.clearPerScreenAutotileAlgorithmSettings(screenName);
 }
 
 // ── Per-screen snapping overrides ────────────────────────────────────────
@@ -51,18 +90,26 @@ void SettingsController::setPerScreenSnappingSetting(const QString& screenName, 
                                                      const QVariant& value)
 {
     m_settings.setPerScreenSnappingSetting(screenName, key, value);
-    setNeedsSave(true);
 }
 
 void SettingsController::clearPerScreenSnappingSettings(const QString& screenName)
 {
     m_settings.clearPerScreenSnappingSettings(screenName);
-    setNeedsSave(true);
 }
 
 bool SettingsController::hasPerScreenSnappingSettings(const QString& screenName) const
 {
     return m_settings.hasPerScreenSnappingSettings(screenName);
+}
+
+bool SettingsController::hasPerScreenSnappingGapsSettings(const QString& screenName) const
+{
+    return m_settings.hasPerScreenSnappingGapsSettings(screenName);
+}
+
+void SettingsController::clearPerScreenSnappingGapsSettings(const QString& screenName)
+{
+    m_settings.clearPerScreenSnappingGapsSettings(screenName);
 }
 
 // ── Per-screen zone selector overrides ───────────────────────────────────
@@ -76,13 +123,11 @@ void SettingsController::setPerScreenZoneSelectorSetting(const QString& screenNa
                                                          const QVariant& value)
 {
     m_settings.setPerScreenZoneSelectorSetting(screenName, key, value);
-    setNeedsSave(true);
 }
 
 void SettingsController::clearPerScreenZoneSelectorSettings(const QString& screenName)
 {
     m_settings.clearPerScreenZoneSelectorSettings(screenName);
-    setNeedsSave(true);
 }
 
 bool SettingsController::hasPerScreenZoneSelectorSettings(const QString& screenName) const

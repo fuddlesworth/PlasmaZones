@@ -10,9 +10,11 @@ import org.kde.kirigami as Kirigami
  * @brief Zone selector popup settings section with per-monitor overrides
  *
  * Extracted component containing the zone selector popup configuration:
- * info message, enable toggle, monitor selector, position & trigger,
- * layout arrangement, and preview size cards. Supports per-monitor
- * overrides when multiple monitors are detected.
+ * info message, enable toggle, position & trigger, layout arrangement, and
+ * preview size cards. The three per-monitor cards carry a header scope chip,
+ * so per-monitor overrides are scoped to the monitor picked there (shared
+ * app-wide scope). The chip rests on "All Monitors" until a specific output
+ * is picked from its popover.
  */
 ColumnLayout {
     // ═══════════════════════════════════════════════════════════════════════
@@ -22,20 +24,15 @@ ColumnLayout {
     id: root
 
     required property var appSettings
-    // Controller with per-screen methods (defaults to appSettings for shared component compatibility)
-    property var controller: appSettings
+    // Controller exposing the per-screen / scope methods (scopeScreenName,
+    // hasPerScreenZoneSelectorSettings, clearPerScreenZoneSelectorSettings).
+    // Required: the raw ISettings object passed as `appSettings` does NOT carry
+    // the scope chip's Q_INVOKABLEs, so the two must be supplied independently.
+    required property var controller
     required property QtObject constants
-    // Whether the parent tab is currently visible (for conditional tooltips)
-    property bool isCurrentTab: false
-    // Whether to show the internal MonitorSelectorSection (hide when parent provides one)
-    property bool showMonitorSelector: true
     // Screen aspect ratio for preview calculations (with safety check)
     property real screenAspectRatio: 16 / 9
     readonly property real safeAspectRatio: screenAspectRatio > 0 ? screenAspectRatio : (16 / 9)
-    // Per-screen override helper
-    property alias selectedScreenName: psHelper.selectedScreenName
-    readonly property alias isPerScreen: psHelper.isPerScreen
-    readonly property alias hasOverrides: psHelper.hasOverrides
     // Effective values that resolve per-screen > global
     readonly property int effectivePosition: settingValue("Position", appSettings.zoneSelectorPosition)
     readonly property int effectiveLayoutMode: settingValue("LayoutMode", appSettings.zoneSelectorLayoutMode)
@@ -58,10 +55,6 @@ ColumnLayout {
     }
     readonly property int effectiveTriggerDistance: settingValue("TriggerDistance", appSettings.zoneSelectorTriggerDistance)
 
-    function resetOverrides() {
-        psHelper.clearOverrides();
-    }
-
     function settingValue(key, globalValue) {
         return psHelper.settingValue(key, globalValue);
     }
@@ -76,9 +69,10 @@ ColumnLayout {
         id: psHelper
 
         appSettings: root.controller
+        // Shared app-wide scope — a monitor picked anywhere stays picked here.
+        selectedScreenName: root.controller.scopeScreenName
         getterMethod: "getPerScreenZoneSelectorSettings"
         setterMethod: "setPerScreenZoneSelectorSetting"
-        clearerMethod: "clearPerScreenZoneSelectorSettings"
     }
 
     // Info message
@@ -89,7 +83,10 @@ ColumnLayout {
         visible: true
     }
 
-    // Enable toggle
+    // Enable toggle. Intentionally app-wide (not per-monitor): it is the global
+    // gate for the feature. Only the three cards below (Position & Trigger,
+    // Layout, Preview Size) carry the header scope chip and store per-monitor
+    // overrides.
     SettingsRow {
         title: i18n("Zone selector popup")
         description: i18n("Show a layout picker when dragging windows to screen edges")
@@ -101,16 +98,6 @@ ColumnLayout {
                 appSettings.zoneSelectorEnabled = newValue;
             }
         }
-    }
-
-    MonitorSelectorSection {
-        Layout.fillWidth: true
-        visible: root.showMonitorSelector
-        appSettings: root.controller
-        selectedScreenName: root.selectedScreenName
-        hasOverrides: root.hasOverrides
-        onSelectedScreenNameChanged: root.selectedScreenName = selectedScreenName
-        onResetClicked: psHelper.clearOverrides()
     }
 
     // Position & Trigger card - wrapped in Item for stable sizing
@@ -125,6 +112,10 @@ ColumnLayout {
             enabled: appSettings.zoneSelectorEnabled
             headerText: i18n("Position & Trigger")
             collapsible: true
+            scopeEnabled: true
+            scopeAppSettings: root.controller
+            scopeHasOverridesMethod: "hasPerScreenZoneSelectorSettings"
+            scopeClearerMethod: "clearPerScreenZoneSelectorSettings"
 
             contentItem: ColumnLayout {
                 spacing: Kirigami.Units.largeSpacing
@@ -213,6 +204,10 @@ ColumnLayout {
             enabled: appSettings.zoneSelectorEnabled
             headerText: i18n("Layout Arrangement")
             collapsible: true
+            scopeEnabled: true
+            scopeAppSettings: root.controller
+            scopeHasOverridesMethod: "hasPerScreenZoneSelectorSettings"
+            scopeClearerMethod: "clearPerScreenZoneSelectorSettings"
 
             contentItem: ColumnLayout {
                 spacing: Kirigami.Units.smallSpacing
@@ -307,6 +302,10 @@ ColumnLayout {
             enabled: appSettings.zoneSelectorEnabled
             headerText: i18n("Preview Size")
             collapsible: true
+            scopeEnabled: true
+            scopeAppSettings: root.controller
+            scopeHasOverridesMethod: "hasPerScreenZoneSelectorSettings"
+            scopeClearerMethod: "clearPerScreenZoneSelectorSettings"
 
             contentItem: ColumnLayout {
                 spacing: Kirigami.Units.largeSpacing

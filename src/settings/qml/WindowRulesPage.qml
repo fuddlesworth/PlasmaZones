@@ -101,25 +101,13 @@ SettingsFlickable {
     // the controller. The C++ Section enum order is never duplicated in QML.
     readonly property var sectionDescriptors: page.controller.sections()
     // Cached `matchFields()` table — threaded down to every WindowRuleRow's
-    // expansion view so the per-row Q_INVOKABLE doesn't fire on every
-    // expand. Same caching rationale as the RuleEditorBody cache.
-    // Static-catalogue controllers never fire authoringCatalogueChanged
-    // so this stays a one-shot read; a plugin-driven controller wanting
-    // runtime catalogue refresh just needs to emit the signal.
+    // expansion view so the per-row Q_INVOKABLE doesn't fire on every expand.
+    // The authoring catalogue is static, so this is a one-shot read.
     property var matchFieldOptions: page.controller.matchFields()
     // Cached `actionTypes()` — same caching rationale as matchFieldOptions;
     // threaded down to WindowRuleRow's expansion so each row doesn't re-invoke
     // the Q_INVOKABLE.
     property var actionTypeOptions: page.controller.actionTypes()
-
-    Connections {
-        function onAuthoringCatalogueChanged() {
-            page.matchFieldOptions = page.controller.matchFields();
-            page.actionTypeOptions = page.controller.actionTypes();
-        }
-        target: page.controller
-        ignoreUnknownSignals: true
-    }
     // Bumped whenever the underlying model changes so sectionModel re-evaluates
     // without QML hardcoding the model's role layout.
     property int modelRevision: 0
@@ -255,6 +243,17 @@ SettingsFlickable {
 
         function onScreensChanged() {
             page.tilesRevision++;
+            // Drop a monitor filter whose screen was unplugged — otherwise the
+            // rule list stays empty with no way to clear it (the MonitorOverview
+            // tile that toggles the filter is gone with the screen). Mirrors
+            // VirtualScreensPage's _selectedScreen re-validation.
+            if (page.monitorFilter.length > 0) {
+                var stillPresent = settingsController.screens.some(function (s) {
+                    return s.name === page.monitorFilter || s.screenId === page.monitorFilter;
+                });
+                if (!stillPresent)
+                    page.monitorFilter = "";
+            }
         }
 
         target: settingsController
@@ -328,8 +327,8 @@ SettingsFlickable {
             type: Kirigami.MessageType.Warning
             visible: page.controller.daemonChangedWhileDirty
             text: i18n("The window rules changed on disk while you were editing — saving now will overwrite those changes. Review your edits before saving, or discard them to reload.")
-            // Escape hatch — the controller's normal commit() refuses
-            // when daemonChangedWhileDirty is set so the user doesn't
+            // Escape hatch — the controller's normal asyncCommit(false)
+            // refuses when daemonChangedWhileDirty is set so the user doesn't
             // silently overwrite. `asyncCommit(true)` (the QML-callable
             // force variant on WindowRuleController) bypasses the guard
             // for the "I know, save anyway" path; mirrors the SettingsCard
@@ -387,10 +386,9 @@ SettingsFlickable {
         }
 
         // ── Monitor overview strip ──
-        // Bare, no SettingsCard wrapper — mirrors MonitorSelectorSection's
-        // placement on the other pages (Monitor State, Tiling Algorithm,
-        // Snapping, Virtual Screens) where the selector is a direct child of
-        // the page column with no enclosing card or header strip.
+        // Bare, no SettingsCard wrapper: a direct child of the page column,
+        // the same placement Monitor State and Virtual Screens use for their
+        // own monitor pickers (no enclosing card or header strip).
         MonitorOverview {
             Layout.fillWidth: true
             screens: settingsController.screens

@@ -271,7 +271,6 @@ qt_add_qml_module(plasmazones-settings
         qml/QuickLayoutSlotsCard.qml
         qml/WindowPickerDialog.qml
         qml/LayoutComboBox.qml
-        qml/ScreenComboBox.qml
         qml/WideComboBox.qml
         qml/FontPickerDialog.qml
         qml/ColorButton.qml
@@ -282,7 +281,8 @@ qt_add_qml_module(plasmazones-settings
         qml/AlgorithmPreview.qml
         qml/LayoutThumbnail.qml
         qml/PerScreenOverrideHelper.qml
-        qml/MonitorSelectorSection.qml
+        qml/DisplayMap.qml
+        qml/MonitorScopeChip.qml
         qml/LayoutGridDelegate.qml
         qml/LayoutToolbar.qml
         qml/LayoutFilterBar.qml
