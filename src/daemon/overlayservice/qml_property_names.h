@@ -64,13 +64,9 @@ inline constexpr QLatin1String HighlightedZoneId{"highlightedZoneId"};
 /// (e.g. zone-selector multi-select preview).
 inline constexpr QLatin1String HighlightedZoneIds{"highlightedZoneIds"};
 
-/// Hash of the labels-texture image; QML side compares against its
-/// last-uploaded hash to suppress redundant uploads when the shader
-/// re-runs without label changes.
-inline constexpr QLatin1String LabelsTextureHash{"labelsTextureHash"};
-
-/// QImage payload for the rendered zone labels. Bound to the shader's
-/// `iLabelsTexture` sampler.
+/// Sparse ZoneLabelTexture (glyph-tile) payload for the rendered zone labels.
+/// Bound to the shader's `iLabelsTexture` sampler. Redundant-rebuild dedupe is
+/// done C++-side via PerScreenOverlayState::labelsTextureHash, not on the QML side.
 inline constexpr QLatin1String LabelsTexture{"labelsTexture"};
 
 } // namespace OverlayQmlPropertyNames

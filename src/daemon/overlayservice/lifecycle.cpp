@@ -138,7 +138,18 @@ void OverlayService::showAtPosition(int cursorX, int cursorY)
             cursorMainOverlay != nullptr && !qFuzzyCompare(cursorMainOverlay->opacity(), 0.0);
         if ((cursorVsHasWindow && cursorSlotVisible) || m_excludedScreens.contains(cursorEffectiveId)) {
             m_currentOverlayScreenId = showOnAllMonitors ? QString() : cursorEffectiveId;
-            applyIdleStateForCursor(cursorEffectiveId, showOnAllMonitors);
+            if (m_overlayIdled) {
+                // A trigger-show arriving while warm-idled (a drag-end kept the
+                // windows alive but blanked: zones=[], shader + CAVA quiesced).
+                // applyIdleStateForCursor() alone only flips _idled, so it would
+                // un-blank the slot but leave it showing the empty zone data with
+                // a frozen shader. refreshFromIdle() clears m_overlayIdled,
+                // restarts the render loop + CAVA, re-pushes zone data, and then
+                // applies the cursor idle state (via m_currentOverlayScreenId).
+                refreshFromIdle();
+            } else {
+                applyIdleStateForCursor(cursorEffectiveId, showOnAllMonitors);
+            }
             return;
         }
         // Fall through - initializeOverlay will (re)build the per-VS window

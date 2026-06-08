@@ -319,7 +319,14 @@ void OverlayService::initializeOverlay(QScreen* cursorScreen, const QPoint& curs
 void OverlayService::updateLayout(PhosphorZones::Layout* layout)
 {
     setLayout(layout);
-    if (m_visible) {
+    // Gate the window-side push on isOverlayDisplaying(), not m_visible: while
+    // warm-idled (drag-end kept the windows alive but blanked), a layout switch
+    // must NOT touch the live overlay. updateGeometries() → updateOverlayWindow()
+    // re-pushes real zone data and the shader block would restart the render
+    // loop — both undo the idle quiesce + blank. setLayout() above still records
+    // the new layout; the next refreshFromIdle() on resume pushes it via
+    // updateZonesForAllWindows().
+    if (isOverlayDisplaying()) {
         updateGeometries();
 
         // Flash zones to indicate layout change if enabled
@@ -337,20 +344,13 @@ void OverlayService::updateLayout(PhosphorZones::Layout* layout)
 
         // Shader state management - MUST be outside flashZonesOnSwitch block
         // to ensure shader animations work regardless of flash setting.
-        // Gate on isOverlayDisplaying(): while warm-idled (drag-end kept the
-        // windows alive but blanked), a layout switch must NOT restart the
-        // render loop or repopulate zones — that would undo the idle quiesce and
-        // un-blank the overlay. The next refreshFromIdle() on show repopulates
-        // and restarts.
         if (anyScreenUsesShader()) {
-            if (isOverlayDisplaying()) {
-                // Ensure shader timing + updates continue after layout switch
-                ensureShaderTimerStarted(m_shaderTimer, m_shaderTimerMutex, m_lastFrameTime, m_frameCount);
-                m_zoneDataDirty = true;
-                updateZonesForAllWindows();
-                if (!m_shaderUpdateTimer || !m_shaderUpdateTimer->isActive()) {
-                    startShaderAnimation();
-                }
+            // Ensure shader timing + updates continue after layout switch
+            ensureShaderTimerStarted(m_shaderTimer, m_shaderTimerMutex, m_lastFrameTime, m_frameCount);
+            m_zoneDataDirty = true;
+            updateZonesForAllWindows();
+            if (!m_shaderUpdateTimer || !m_shaderUpdateTimer->isActive()) {
+                startShaderAnimation();
             }
         } else {
             stopShaderAnimation();

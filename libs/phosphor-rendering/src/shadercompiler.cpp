@@ -167,10 +167,16 @@ void pruneDiskCacheOnce()
             return a.lastModified() > b.lastModified();
         });
         const int keep = kMaxDiskCacheEntries * 9 / 10;
+        int removed = 0;
         for (int i = keep; i < blobs.size(); ++i) {
-            QFile::remove(blobs.at(i).absoluteFilePath());
+            // QFile::remove can fail (permissions, race with another process
+            // pruning the same dir); count only actual removals so the log
+            // reflects what was deleted, not what was attempted.
+            if (QFile::remove(blobs.at(i).absoluteFilePath())) {
+                ++removed;
+            }
         }
-        qCInfo(lcShaderNode) << "shader disk cache: pruned" << (blobs.size() - keep) << "stale entries";
+        qCInfo(lcShaderNode) << "shader disk cache: pruned" << removed << "stale entries";
     });
 }
 
@@ -202,7 +208,16 @@ void writeDiskCache(const QString& path, const QShader& shader)
     if (!f.open(QIODevice::WriteOnly)) {
         return;
     }
-    f.write(shader.serialized());
+    const QByteArray blob = shader.serialized();
+    // A short write (disk full mid-write) followed by a successful commit() would
+    // atomically install a TRUNCATED blob — fromSerialized() rejects it (degrades
+    // to a re-bake) but a corrupt entry needlessly occupies a cache slot. Abandon
+    // the temp file on a short write so no truncated blob is ever published.
+    if (f.write(blob) != blob.size()) {
+        qCWarning(lcShaderNode) << "shader disk cache: short write for" << path;
+        f.cancelWriting();
+        return;
+    }
     // commit() failure (disk full, quota) is non-fatal — the entry is simply not
     // cached and re-bakes next run — but warn (matching the directory-create
     // diagnostic) so a persistent "re-bakes every launch" condition is visible
