@@ -21,6 +21,7 @@
 
 #include <QJSEngine>
 #include <QJsonObject>
+#include <QSet>
 #include <QSignalSpy>
 #include <QTest>
 #include <QUuid>
@@ -511,6 +512,29 @@ void TestWindowRuleController::authoringMetadata()
     // AppId (Field enum 0) supports the AppIdMatches operator.
     const QVariantList appOps = controller.operatorsForField(0);
     QVERIFY(!appOps.isEmpty());
+
+    // allOperators() surfaces the FULL operator vocabulary (not a field
+    // subset). The leaf editor sizes the operator dropdown to the widest
+    // allOperators() label so the operator column lines up across condition
+    // rows — that sizing is only correct if allOperators() is a SUPERSET of
+    // every field's operator set (otherwise a field operator wider than any
+    // measured label would size the column too narrow and elide). Assert the
+    // {value, wire, label} shape with non-empty labels and the superset
+    // relationship so a regression that drops an operator is caught.
+    const QVariantList allOps = controller.allOperators();
+    QVERIFY(!allOps.isEmpty());
+    QSet<QString> allOperatorWires;
+    for (const QVariant& v : allOps) {
+        const QVariantMap m = v.toMap();
+        QVERIFY(m.contains(QStringLiteral("value")));
+        QVERIFY(!m.value(QStringLiteral("wire")).toString().isEmpty());
+        QVERIFY(!m.value(QStringLiteral("label")).toString().isEmpty());
+        allOperatorWires.insert(m.value(QStringLiteral("wire")).toString());
+    }
+    for (const QVariant& v : appOps) {
+        QVERIFY2(allOperatorWires.contains(v.toMap().value(QStringLiteral("wire")).toString()),
+                 "operatorsForField returned an operator absent from allOperators()");
+    }
 
     const QVariantList actions = controller.actionTypes();
     QVERIFY(!actions.isEmpty());
