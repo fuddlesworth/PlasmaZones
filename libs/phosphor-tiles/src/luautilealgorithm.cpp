@@ -154,11 +154,69 @@ LuauTileAlgorithm::LuauTileAlgorithm(const QString& filePath, std::shared_ptr<Ph
     : TilingAlgorithm(parent)
     , m_watchdog(std::move(watchdog))
 {
-    m_engine = std::make_unique<LuauEngine>(m_watchdog);
+    // Owned-engine path: m_sharedEngine stays null, so loadScript() builds an
+    // isolated, per-engine-capped VM for this (untrusted) script.
     loadScript(filePath);
 }
 
-LuauTileAlgorithm::~LuauTileAlgorithm() = default;
+LuauTileAlgorithm::LuauTileAlgorithm(const QString& filePath,
+                                     std::shared_ptr<PhosphorScripting::LuauEngine> sharedEngine,
+                                     std::shared_ptr<PhosphorScripting::LuauWatchdog> watchdog, QObject* parent)
+    : TilingAlgorithm(parent)
+    , m_sharedEngine(std::move(sharedEngine))
+    , m_watchdog(std::move(watchdog))
+{
+    // Shared-engine path: loadScript() loads this module into the shared VM.
+    loadScript(filePath);
+}
+
+LuauTileAlgorithm::~LuauTileAlgorithm()
+{
+    // A module loaded into the shared VM must be released explicitly — the VM
+    // outlives this algorithm. An owned VM frees its module when m_ownedEngine
+    // drops, so no explicit release is needed there.
+    if (m_sharedEngine && m_module >= 0) {
+        m_sharedEngine->releaseModule(m_module);
+    }
+}
+
+std::shared_ptr<LuauEngine>
+LuauTileAlgorithm::createSandboxedEngine(std::shared_ptr<PhosphorScripting::LuauWatchdog> watchdog, QString* error)
+{
+    // Isolation note: sandbox() freezes the global + stdlib tables, but every
+    // module loaded into this engine still shares one lua_State / global
+    // environment — modules loaded here are NOT mutually isolated the way a
+    // dedicated per-script VM is, and the engine's memory cap is whole-VM, not
+    // per-module. That is acceptable ONLY for the trusted in-tree bundled
+    // scripts the loader shares one engine across; untrusted user scripts get
+    // their own dedicated, individually-capped engine (one engine per script).
+    auto engine = std::make_shared<LuauEngine>(std::move(watchdog));
+    if (!engine->init(error)) {
+        qCWarning(PhosphorTiles::lcTilesLib)
+            << "LuauTileAlgorithm: engine init failed:" << (error ? *error : QString());
+        return nullptr;
+    }
+
+    // Inject + freeze the pluau standard library before any (untrusted) module loads.
+    QFile preludeFile(QStringLiteral(":/pluau/pluau.luau"));
+    if (!preludeFile.open(QIODevice::ReadOnly)) {
+        qCCritical(PhosphorTiles::lcTilesLib) << "LuauTileAlgorithm: missing bundled pluau.luau prelude";
+        if (error) {
+            *error = QStringLiteral("missing bundled pluau.luau prelude");
+        }
+        return nullptr;
+    }
+    QString localErr;
+    if (!engine->runPrelude(QStringLiteral("pluau"), preludeFile.readAll(), &localErr)) {
+        qCWarning(PhosphorTiles::lcTilesLib) << "LuauTileAlgorithm: pluau prelude failed:" << localErr;
+        if (error) {
+            *error = localErr;
+        }
+        return nullptr;
+    }
+    engine->sandbox();
+    return engine;
+}
 
 bool LuauTileAlgorithm::isValid() const
 {
@@ -182,35 +240,31 @@ void LuauTileAlgorithm::setUserScript(bool isUser)
 
 bool LuauTileAlgorithm::loadScript(const QString& filePath)
 {
+    // loadScript is a private one-shot ctor helper — each LuauTileAlgorithm calls
+    // it exactly once, so there is no prior module/engine to release here (a
+    // reload would need to release the old shared-VM module first; reload is not
+    // a supported operation). m_module is -1 and the engine pointers are null on
+    // entry by construction.
     m_filePath = filePath;
     m_scriptId = QStringLiteral("script:") + QFileInfo(filePath).completeBaseName();
     m_valid = false;
     m_metadata = ScriptedHelpers::ScriptMetadata{};
 
-    // Release any module anchored by a prior load so a re-load doesn't leak the
-    // previous registry ref (today loadScript runs once, from the ctor).
-    if (m_module >= 0) {
-        m_engine->releaseModule(m_module);
-        m_module = -1;
-    }
-
     QString error;
-    if (!m_engine->init(&error)) {
-        qCWarning(PhosphorTiles::lcTilesLib) << "LuauTileAlgorithm: engine init failed:" << error;
-        return false;
+    if (m_sharedEngine) {
+        // Trusted bundled script: load into the shared, already-sandboxed VM so
+        // the prelude + VM baseline are paid once across all bundled scripts.
+        m_engine = m_sharedEngine.get();
+    } else {
+        // Untrusted user script: own fault-isolated, per-engine-capped VM.
+        m_ownedEngine = createSandboxedEngine(m_watchdog, &error);
+        if (!m_ownedEngine) {
+            qCWarning(PhosphorTiles::lcTilesLib)
+                << "LuauTileAlgorithm: engine setup failed file=" << filePath << ":" << error;
+            return false;
+        }
+        m_engine = m_ownedEngine.get();
     }
-
-    // Inject + freeze the pluau standard library before loading the (untrusted) script.
-    QFile preludeFile(QStringLiteral(":/pluau/pluau.luau"));
-    if (!preludeFile.open(QIODevice::ReadOnly)) {
-        qCCritical(PhosphorTiles::lcTilesLib) << "LuauTileAlgorithm: missing bundled pluau.luau prelude";
-        return false;
-    }
-    if (!m_engine->runPrelude(QStringLiteral("pluau"), preludeFile.readAll(), &error)) {
-        qCWarning(PhosphorTiles::lcTilesLib) << "LuauTileAlgorithm: pluau prelude failed:" << error;
-        return false;
-    }
-    m_engine->sandbox();
 
     QFile scriptFile(filePath);
     if (!scriptFile.open(QIODevice::ReadOnly | QIODevice::Text)) {

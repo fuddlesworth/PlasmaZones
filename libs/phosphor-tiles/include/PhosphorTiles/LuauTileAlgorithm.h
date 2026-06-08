@@ -25,9 +25,21 @@ class SplitNode;
 /**
  * @brief A tiling algorithm backed by a user-provided Luau script.
  *
- * Each instance owns a
- * PhosphorScripting::LuauEngine into which the `pluau` standard library is injected
- * (and frozen) before the script module is loaded. The script is a Luau chunk
+ * The script's module is loaded into a PhosphorScripting::LuauEngine whose
+ * `pluau` standard library has been injected and frozen. There are two engine
+ * modes, chosen by which constructor is used:
+ *
+ *  - **Owned engine** (single-arg ctor): the instance creates and owns its own
+ *    sandboxed VM. Used for *untrusted* user scripts so each gets its own
+ *    fault-isolated heap and per-engine memory cap — a runaway script can only
+ *    exhaust its own VM.
+ *  - **Shared engine** (engine-arg ctor): the module is loaded into a VM shared
+ *    across many *trusted* bundled scripts, so the ~per-VM baseline + 42 KB
+ *    `pluau` prelude is paid once instead of per script. The shared engine is
+ *    held by `shared_ptr` so a deferred-deleted algorithm keeps it alive until
+ *    its own teardown (which releases just this algorithm's module handle).
+ *
+ * The script is a Luau chunk
  * that returns a module table, conventionally via `pluau.algorithm{...}`:
  *
  *     return pluau.algorithm {
@@ -46,10 +58,25 @@ class PHOSPHORTILES_EXPORT LuauTileAlgorithm : public TilingAlgorithm
     Q_OBJECT
 
 public:
+    /// Owned-engine ctor: creates an isolated, per-engine-capped VM for this
+    /// script. Use for untrusted user scripts.
     explicit LuauTileAlgorithm(const QString& filePath,
                                std::shared_ptr<PhosphorScripting::LuauWatchdog> watchdog = nullptr,
                                QObject* parent = nullptr);
+    /// Shared-engine ctor: loads this script's module into @p sharedEngine (an
+    /// already init+prelude+sandbox'd VM) instead of creating its own. Use for
+    /// trusted bundled scripts so the VM baseline + prelude are shared. The
+    /// engine must be created via createSandboxedEngine().
+    LuauTileAlgorithm(const QString& filePath, std::shared_ptr<PhosphorScripting::LuauEngine> sharedEngine,
+                      std::shared_ptr<PhosphorScripting::LuauWatchdog> watchdog, QObject* parent = nullptr);
     ~LuauTileAlgorithm() override;
+
+    /// Build a sandboxed VM with the `pluau` standard library installed and
+    /// frozen, ready for loadModule(). Returns nullptr (and sets @p error) on
+    /// failure. Shared by the owned-engine path and the shared-engine factory
+    /// in ScriptedAlgorithmLoader so the prelude is loaded identically.
+    static std::shared_ptr<PhosphorScripting::LuauEngine>
+    createSandboxedEngine(std::shared_ptr<PhosphorScripting::LuauWatchdog> watchdog, QString* error = nullptr);
 
     /// Whether the script loaded and exposes a callable tile() function.
     bool isValid() const;
@@ -99,7 +126,14 @@ private:
     /// Marshal a TilingState into the `state` table lifecycle hooks receive.
     QVariantMap buildStateMap(const TilingState* state, bool includeCountAfterRemoval) const;
 
-    std::unique_ptr<PhosphorScripting::LuauEngine> m_engine;
+    // Engine ownership: exactly one of m_ownedEngine / m_sharedEngine is set,
+    // and m_engine is a non-owning view of whichever is active. Both are
+    // shared_ptr so the active engine survives this object's deferred-delete
+    // teardown (see class docs); m_sharedEngine additionally keeps the
+    // loader's shared VM alive until this algorithm releases its module.
+    std::shared_ptr<PhosphorScripting::LuauEngine> m_ownedEngine;
+    std::shared_ptr<PhosphorScripting::LuauEngine> m_sharedEngine;
+    PhosphorScripting::LuauEngine* m_engine = nullptr;
     std::shared_ptr<PhosphorScripting::LuauWatchdog> m_watchdog;
     int m_module = -1;
 

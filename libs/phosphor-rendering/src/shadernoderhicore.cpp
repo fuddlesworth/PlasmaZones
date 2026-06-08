@@ -17,8 +17,6 @@
 #include <QtMath>
 #include <cstring>
 
-#include <rhi/qshaderbaker.h>
-
 namespace PhosphorRendering {
 
 Q_LOGGING_CATEGORY(lcShaderNode, "phosphorrendering.shadernode")
@@ -51,7 +49,17 @@ QMutex& filenameShaderCacheMutex()
     return m;
 }
 
-constexpr int kShaderCacheMaxSize = 64;
+// Bound on the final vertex+fragment QShader pairs for actively-rendering
+// shaders. A miss re-bakes via ShaderCompiler, which now hits the persistent
+// on-disk cache (a fast deserialize, not a glslang compile), so a tight bound
+// trades a little disk I/O on shader switches for markedly lower resident memory
+// (each entry is two multi-variant QShaders). Eviction here is arbitrary-order
+// (shaderCacheEvictOne erases an unspecified QHash entry, not the LRU), so the
+// bound must comfortably exceed the live working set — one pair per screen per
+// active shader/animation pass — to avoid evicting a hot entry. 24 covers
+// realistic multi-monitor setups with margin; a disk-backed re-bake is the
+// worst case if it ever overflows.
+constexpr int kShaderCacheMaxSize = 24;
 
 static void shaderCacheEvictOne()
 {
@@ -444,10 +452,6 @@ void ShaderNodeRhi::prepare()
         }
 
         if (!m_shaderReady) {
-            const QList<QShaderBaker::GeneratedShader>& targets = ShaderCompiler::bakeTargets();
-            QShaderBaker vertexBaker;
-            vertexBaker.setGeneratedShaderVariants({QShader::StandardShader});
-            vertexBaker.setGeneratedShaders(targets);
             auto vertResult = ShaderCompiler::compile(m_vertexShaderSource.toUtf8(), QShader::VertexStage);
             m_vertexShader = vertResult.shader;
             if (!m_vertexShader.isValid()) {

@@ -617,8 +617,8 @@ void WindowDragAdaptor::dragMoved(const QString& windowId, int cursorX, int curs
     // Keeping this independent of the logging predicate above means a
     // missed transition log (or a coalesced dragMoved) can still refresh
     // the overlay. refreshFromIdle() is cheap when inputs are unchanged —
-    // L2's labels-texture hash cache skips the 23 MB QImage rebuild, and
-    // the QVariantList zones push is small.
+    // L2's labels-texture hash cache skips the sparse glyph-tile payload
+    // rebuild, and the QVariantList zones push is small.
     if (activationActive && m_overlayIdled && m_overlayService) {
         m_overlayService->refreshFromIdle();
         m_overlayIdled = false;

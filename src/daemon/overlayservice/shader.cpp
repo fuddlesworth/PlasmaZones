@@ -63,19 +63,19 @@ QVariantMap parseShaderParamsJson(const QString& json, const char* context)
 
 // parseZonesJson is defined in overlayservice_internal.h (shared inline)
 
-// Build labels texture for shader preview zones. Uses settings for font when available.
-QImage buildLabelsImageForPreviewZones(const QVariantList& zones, const QSize& size,
-                                       const IZoneVisualizationSettings* settings)
+// Build the sparse zone-labels payload for shader preview zones (font from
+// settings when available). Returned as a ZoneLabelTexture rather than a
+// flattened QImage so the preview reuses the same sparse glyph-tile upload path
+// as the live overlay instead of round-tripping through a full-screen image. An
+// empty payload (no zones) is fine — the render node binds the 1×1 transparent
+// fallback.
+PhosphorRendering::ZoneLabelTexture buildLabelsPayloadForPreviewZones(const QVariantList& zones, const QSize& size,
+                                                                      const IZoneVisualizationSettings* settings)
 {
     const LabelFontSettings lfs = extractLabelFontSettings(settings);
-    QImage labelsImage = ZoneLabelTextureBuilder::build(zones, size, lfs.fontColor, true, lfs.backgroundColor,
-                                                        lfs.fontFamily, lfs.fontSizeScale, lfs.fontWeight,
-                                                        lfs.fontItalic, lfs.fontUnderline, lfs.fontStrikeout);
-    if (labelsImage.isNull()) {
-        labelsImage = QImage(1, 1, QImage::Format_ARGB32);
-        labelsImage.fill(Qt::transparent);
-    }
-    return labelsImage;
+    return ZoneLabelTextureBuilder::build(zones, size, lfs.fontColor, true, lfs.backgroundColor, lfs.fontFamily,
+                                          lfs.fontSizeScale, lfs.fontWeight, lfs.fontItalic, lfs.fontUnderline,
+                                          lfs.fontStrikeout);
 }
 
 } // namespace
@@ -188,8 +188,10 @@ void OverlayService::startShaderAnimation()
 
 void OverlayService::stopShaderAnimation()
 {
-    // Don't stop CAVA here - it stays warm for instant audio data on next show().
-    // Just clear the spectrum from overlay windows so they don't render stale data.
+    // Don't stop CAVA here — winding it down is owned by syncCavaState /
+    // scheduleIdleQuiesce (deferred a grace period so a quick re-show keeps it
+    // warm, then stopped once the overlay is no longer displaying). This function
+    // only clears stale spectrum from the overlay windows.
     // audioSpectrum lives on mainOverlaySlot() (the slot
     // Item that hosts the shader content), not on the shell window
     // root. PassiveOverlayShell.qml's mainOverlaySlot declares
@@ -225,13 +227,20 @@ void OverlayService::onAudioSpectrumUpdated(const QVector<float>& spectrum)
     // Pass QVector<float> wrapped in QVariant to avoid per-element QVariant boxing.
     // ZoneShaderItem::setAudioSpectrum() detects and unwraps QVector<float> directly.
     const QVariant wrapped = QVariant::fromValue(spectrum);
-    for (auto it = m_screenStates.cbegin(); it != m_screenStates.cend(); ++it) {
-        if (!it.value().overlayPhysScreen) {
-            continue;
-        }
-        auto* slot = it.value().mainOverlaySlot();
-        if (slot && useShaderForScreen(it.key())) {
-            writeQmlProperty(slot, QString(OverlayQmlPropertyNames::AudioSpectrum), wrapped);
+    // Only push to the main overlay while it is actually displaying. During
+    // either grace window — post-hide, or warm-idled after a drag (m_visible
+    // stays true but m_overlayIdled is set, the windows mapped-but-blanked) —
+    // CAVA may still be running; pushing here would repaint invisible surfaces
+    // every frame for no benefit. isOverlayDisplaying() covers both.
+    if (isOverlayDisplaying()) {
+        for (auto it = m_screenStates.cbegin(); it != m_screenStates.cend(); ++it) {
+            if (!it.value().overlayPhysScreen) {
+                continue;
+            }
+            auto* slot = it.value().mainOverlaySlot();
+            if (slot && useShaderForScreen(it.key())) {
+                writeQmlProperty(slot, QString(OverlayQmlPropertyNames::AudioSpectrum), wrapped);
+            }
         }
     }
     // Shader preview (editor dialog) when visible and audio viz enabled
@@ -299,10 +308,10 @@ void OverlayService::updateShaderUniforms()
 
     // Update per-frame shader uniforms on the main-overlay slot Item
     // for every screen with main overlay active. iTime/iTimeDelta/
-    // iFrame are properties on mainOverlaySlot in PassiveOverlayShell.qml
-    // (lines 666-668), not on the shell window root - RenderNodeOverlayContent
-    // binds to mainOverlaySlot.iTime, so writes to the window root would
-    // create dynamic properties that QML never observes.
+    // iFrame are properties declared on mainOverlaySlot in
+    // PassiveOverlayShell.qml, not on the shell window root -
+    // RenderNodeOverlayContent binds to mainOverlaySlot.iTime, so writes to the
+    // window root would create dynamic properties that QML never observes.
     for (auto it = m_screenStates.cbegin(); it != m_screenStates.cend(); ++it) {
         if (!it.value().overlayPhysScreen || !it.value().shell) {
             continue;
@@ -428,9 +437,9 @@ void OverlayService::showShaderPreview(int x, int y, int width, int height, cons
     writeQmlProperty(m_shaderPreviewWindow, QString(OverlayQmlPropertyNames::HighlightedCount), 0);
 
     const QSize size(qMax(1, width), qMax(1, height));
-    const QImage labelsImage = buildLabelsImageForPreviewZones(zones, size, m_settings);
+    const PhosphorRendering::ZoneLabelTexture labels = buildLabelsPayloadForPreviewZones(zones, size, m_settings);
     writeQmlProperty(m_shaderPreviewWindow, QString(OverlayQmlPropertyNames::LabelsTexture),
-                     QVariant::fromValue(labelsImage));
+                     QVariant::fromValue(labels));
 
     // applyShaderInfoToWindow sets shaderSource LAST (triggers statusChanged cascade).
     // Pass the preview's sub-rect + the containing physical screen so a
@@ -447,6 +456,9 @@ void OverlayService::showShaderPreview(int x, int y, int width, int height, cons
     startShaderAnimation();
 
     m_shaderPreviewWindow->show();
+    // The preview is now visible, so the audio visualizer should run for it
+    // (syncCavaState gates on overlay/preview visibility).
+    syncCavaState();
     qCDebug(lcOverlay) << "showShaderPreview: x=" << x << "y=" << y << "size=" << width << "x" << height
                        << "shader=" << shaderId << "zones=" << zones.size();
 }
@@ -479,9 +491,10 @@ void OverlayService::updateShaderPreview(int x, int y, int width, int height, co
 
         const int w = qMax(1, m_shaderPreviewWindow->width());
         const int h = qMax(1, m_shaderPreviewWindow->height());
-        const QImage labelsImage = buildLabelsImageForPreviewZones(zones, QSize(w, h), m_settings);
+        const PhosphorRendering::ZoneLabelTexture labels =
+            buildLabelsPayloadForPreviewZones(zones, QSize(w, h), m_settings);
         writeQmlProperty(m_shaderPreviewWindow, QString(OverlayQmlPropertyNames::LabelsTexture),
-                         QVariant::fromValue(labelsImage));
+                         QVariant::fromValue(labels));
     }
 
     if (!shaderParamsJson.isEmpty()) {
@@ -494,6 +507,8 @@ void OverlayService::updateShaderPreview(int x, int y, int width, int height, co
 void OverlayService::hideShaderPreview()
 {
     destroyShaderPreviewWindow();
+    // Preview gone — wind down CAVA unless the main overlay still needs it.
+    syncCavaState();
 }
 
 void OverlayService::createShaderPreviewWindow(QScreen* screen, const QString& screenId)

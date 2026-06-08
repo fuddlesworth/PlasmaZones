@@ -52,6 +52,16 @@ QString expandIncludesRecursive(const QString& source, const QString& currentFil
     // `li` is the 0-based index into `lines`; source line number is `li + 1`.
     for (int li = 0; li < lines.size(); ++li) {
         const QString& line = lines.at(li);
+        // Cheap reject before the regex: the vast majority of shader lines are
+        // not #include directives, and QRegularExpression::match() allocates a
+        // fresh pcre2 match-data block per call. A substring pre-check skips the
+        // matcher for ~all non-include lines, cutting the dominant source of
+        // temporary allocations during shader warm-bake. The regex still does
+        // the authoritative validation for any line that passes this guard.
+        if (!line.contains(QLatin1String("#include"))) {
+            result += line + QLatin1Char('\n');
+            continue;
+        }
         QRegularExpressionMatch match = includeRegex.match(line);
         if (!match.hasMatch()) {
             result += line + QLatin1Char('\n');

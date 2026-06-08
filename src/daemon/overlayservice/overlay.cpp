@@ -34,10 +34,10 @@ namespace PlasmaZones {
 
 namespace {
 
-// Collapse a dismissed overlay slot's full-screen labels texture to a 1x1
-// placeholder so the labels QImage - up to tens of MB per shader-enabled
-// screen at 4K - is released while the overlay is hidden rather than pinned
-// on the persistent slot property for the whole session. The wallpaperTexture
+// Collapse a dismissed overlay slot's labels texture to a 1x1 placeholder so
+// the labels payload (the sparse glyph-tile ZoneLabelTexture) is released while
+// the overlay is hidden rather than pinned on the persistent slot property for
+// the whole session. The wallpaperTexture
 // is reset for symmetry and to drop the slot's stale reference across a
 // wallpaper change, but the bulk wallpaper image is owned by ShaderRegistry's
 // static cache (s_cachedWallpaperImage / crops) and is COW-shared, so that
@@ -295,6 +295,11 @@ void OverlayService::initializeOverlay(QScreen* cursorScreen, const QPoint& curs
     }
 
     m_visible = true;
+    m_overlayIdled = false; // a fresh show is displaying content
+
+    // Spin up the audio-visualizer capture now that the overlay is displaying
+    // (no-op if audio-viz is disabled). syncCavaState gates on isOverlayDisplaying.
+    syncCavaState();
 
     if (anyScreenUsesShader()) {
         updateZonesForAllWindows(); // Push initial zone data
@@ -315,6 +320,15 @@ void OverlayService::updateLayout(PhosphorZones::Layout* layout)
 {
     setLayout(layout);
     if (m_visible) {
+        // Apply the new layout to the windows even while warm-idled:
+        // updateGeometries() → updateOverlayWindow() re-applies each window's
+        // shader source/params + geometry, which MUST be current for the next
+        // refreshFromIdle() resume — refreshFromIdle() re-pushes zones but NOT
+        // shader info, so deferring this would leave the previous shader
+        // rendering after a mid-idle active-layout switch. The zone data
+        // updateOverlayWindow also writes is hidden by _idled while idled and
+        // re-pushed by refreshFromIdle() on resume, and updateGeometries() does
+        // not set m_zoneDataDirty, so the drag-pause blank is preserved.
         updateGeometries();
 
         // Flash zones to indicate layout change if enabled
@@ -331,14 +345,20 @@ void OverlayService::updateLayout(PhosphorZones::Layout* layout)
         }
 
         // Shader state management - MUST be outside flashZonesOnSwitch block
-        // to ensure shader animations work regardless of flash setting
+        // to ensure shader animations work regardless of flash setting.
+        // Gate the render-loop restart on isOverlayDisplaying(): while warm-idled
+        // a layout switch must NOT start the 60 Hz loop or re-push zones — that
+        // would undo the idle quiesce and un-blank the overlay. refreshFromIdle()
+        // restarts the loop and re-pushes zones on resume.
         if (anyScreenUsesShader()) {
-            // Ensure shader timing + updates continue after layout switch
-            ensureShaderTimerStarted(m_shaderTimer, m_shaderTimerMutex, m_lastFrameTime, m_frameCount);
-            m_zoneDataDirty = true;
-            updateZonesForAllWindows();
-            if (!m_shaderUpdateTimer || !m_shaderUpdateTimer->isActive()) {
-                startShaderAnimation();
+            if (isOverlayDisplaying()) {
+                // Ensure shader timing + updates continue after layout switch
+                ensureShaderTimerStarted(m_shaderTimer, m_shaderTimerMutex, m_lastFrameTime, m_frameCount);
+                m_zoneDataDirty = true;
+                updateZonesForAllWindows();
+                if (!m_shaderUpdateTimer || !m_shaderUpdateTimer->isActive()) {
+                    startShaderAnimation();
+                }
             }
         } else {
             stopShaderAnimation();
@@ -545,7 +565,13 @@ void OverlayService::recreateOverlayWindowsOnTypeMismatch()
         createOverlayWindow(screenId, physScreen, geom.isValid() ? geom : physScreen->geometry());
         updateOverlayWindow(screenId, physScreen);
     }
-    if (wasVisible && anyScreenUsesShader()) {
+    // Gate the render-loop restart + zone repopulation on isOverlayDisplaying(),
+    // not wasVisible: while warm-idled (m_visible but m_overlayIdled — windows
+    // kept alive after a drag), a settings toggle or live-edit reaches here, and
+    // restarting the 60 Hz loop + re-pushing zones would un-blank the overlay and
+    // undo the idle quiesce. The next refreshFromIdle() on the following drag
+    // repopulates and restarts. Mirrors the same gate in updateLayout().
+    if (isOverlayDisplaying() && anyScreenUsesShader()) {
         updateZonesForAllWindows();
         startShaderAnimation();
     }
@@ -606,17 +632,17 @@ void OverlayService::dismissOverlayWindow(const QString& screenId)
             sit->overlayGeomConnection = {};
             sit->overlayPhysScreen = nullptr;
             sit->overlayGeometry = QRect();
-            // Release the full-screen labels QImage the persistent slot
-            // property would otherwise keep resident for the whole session
-            // while hidden (the wallpaper reset is symmetric only - its image
-            // is pinned by ShaderRegistry's static cache; see
+            // Release the labels payload (the sparse glyph-tile ZoneLabelTexture)
+            // the persistent slot property would otherwise keep resident for the
+            // whole session while hidden (the wallpaper reset is symmetric only -
+            // its image is pinned by ShaderRegistry's static cache; see
             // releaseOverlaySlotTextures). Zeroing labelsTextureHash forces
             // updateLabelsTextureForWindow to rebuild on the next show()
             // instead of short-circuiting on the now-1x1 placeholder (which
             // would render no labels). The trade is one ZoneLabelTextureBuilder
-            // rebuild per drag-start vs. tens of MB held idle per screen; the
-            // warm drag-pause path (setIdleForDragPause) is untouched and keeps
-            // the texture warm mid-drag.
+            // rebuild per drag-start vs. the sparse glyph-tile payload held idle
+            // per screen; the warm drag-pause path (setIdleForDragPause) is
+            // untouched and keeps the texture warm mid-drag.
             releaseOverlaySlotTextures(sit->mainOverlaySlot());
             sit->labelsTextureHash = 0;
             writeQmlProperty(sit->mainOverlaySlot(), QStringLiteral("loaded"), false);
@@ -631,8 +657,8 @@ void OverlayService::dismissOverlayWindow(const QString& screenId)
         it->overlayGeomConnection = {};
         it->overlayPhysScreen = nullptr;
         it->overlayGeometry = QRect();
-        // Mirror the shell-surface path: release the full-screen texture
-        // buffers and reset the hash so the next show() rebuilds correctly.
+        // Mirror the shell-surface path: release the slot's labels + wallpaper
+        // textures and reset the hash so the next show() rebuilds correctly.
         releaseOverlaySlotTextures(slot);
         it->labelsTextureHash = 0;
         writeQmlProperty(slot, QStringLiteral("loaded"), false);
@@ -664,11 +690,11 @@ void OverlayService::destroyOverlayWindow(const QString& screenId)
     it->overlayPhysScreen = nullptr;
     it->overlayGeometry = QRect();
     it->overlayGeomConnection = {};
-    // Release the slot's full-screen labels buffer too. A shader->non-shader
+    // Release the slot's labels payload too. A shader->non-shader
     // type flip routes through here (destroyIfTypeMismatch) and the
     // non-shader createOverlayWindow reload does NOT overwrite labelsTexture,
-    // so without this the slot would pin the last shader-mode QImage for the
-    // screen's whole non-shader session. The screen-teardown callers
+    // so without this the slot would pin the last shader-mode labels payload for
+    // the screen's whole non-shader session. The screen-teardown callers
     // immediately destroyPassiveShell, where this is a harmless no-op on an
     // about-to-be-freed slot. Mirrors dismissOverlayWindow's release.
     releaseOverlaySlotTextures(it->mainOverlaySlot());

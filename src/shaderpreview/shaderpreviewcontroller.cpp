@@ -221,7 +221,7 @@ QImage ShaderPreviewController::buildLabelsTexture(const QVariantList& zones, in
     if (zones.isEmpty() || width <= 0 || height <= 0) {
         return QImage();
     }
-    return ZoneLabelTextureBuilder::build(zones, QSize(width, height), Qt::white, true);
+    return ZoneLabelTextureBuilder::build(zones, QSize(width, height), Qt::white, true).toImage();
 }
 
 QImage ShaderPreviewController::loadWallpaperTexture() const

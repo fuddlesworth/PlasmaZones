@@ -139,9 +139,9 @@ public:
         QMetaObject::Connection overlayGeomConnection; ///< geometryChanged connection for overlay
         // Cache key for the last successful labelsTexture rebuild on this window.
         // Hashes (size, showNumbers, font settings, per-zone {number,x,y,w,h}). When
-        // updateLabelsTextureForWindow is called with the same hash, both the 23 MB
-        // QImage rebuild AND Qt's QVariant(QImage) property-write equality compare
-        // are skipped. 0 = never computed / cache invalid.
+        // updateLabelsTextureForWindow is called with the same hash, both the sparse
+        // glyph-tile payload rebuild AND the labelsTexture property write (with its
+        // value compare) are skipped. 0 = never computed / cache invalid.
         quint64 labelsTextureHash = 0;
         QScreen* zoneSelectorPhysScreen = nullptr;
         /// Intended geometry of the zone selector inside its shell. On
@@ -428,8 +428,20 @@ private Q_SLOTS:
     void onLayoutPickerDismissRequested();
 
 private:
-    // Sync CAVA service state (start/stop/reconfigure) with current settings.
+    // Sync CAVA service state (start/stop/reconfigure) with current settings AND
+    // whether the overlay is actually displaying content — CAVA runs only while
+    // the overlay (un-idled) or shader preview is on screen.
     void syncCavaState();
+    // Whether the overlay is actively displaying content right now: visible and
+    // not in the warm-idled drag-pause/drag-end state (or the shader preview is
+    // up). The overlay QQuickWindows are kept alive across drags to dodge an
+    // NVIDIA teardown deadlock, so "visible" alone stays true at rest — this is
+    // the predicate that gates the 60 Hz shader render loop + CAVA.
+    bool isOverlayDisplaying() const;
+    // Defer stopping the render loop + CAVA by a short grace period after the
+    // overlay goes idle, so rapid drag thrash keeps everything warm; the
+    // deferred stop re-checks isOverlayDisplaying() before acting.
+    void scheduleIdleQuiesce();
 
     // Refresh zone selector and overlay windows that are currently visible.
     // Skips hidden windows - showZoneSelector()/show() refresh before showing.
@@ -1065,6 +1077,14 @@ private:
 
     // Audio spectrum provider (CAVA backend via phosphor-audio)
     std::unique_ptr<PhosphorAudio::IAudioSpectrumProvider> m_audioProvider;
+    // Single-shot grace timer that quiesces the render loop + CAVA after the
+    // overlay goes idle (see scheduleIdleQuiesce). Cancelled if the overlay
+    // displays again within the grace window.
+    QTimer* m_idleQuiesceTimer = nullptr;
+    // True while the overlay is in the warm-idled state (blanked + _idled, but
+    // its QQuickWindows kept alive). Distinct from m_visible, which stays true
+    // across drags because the windows are never torn down.
+    bool m_overlayIdled = false;
 
     // PhosphorZones::Zone data version for shader synchronization
     int m_zoneDataVersion = 0;

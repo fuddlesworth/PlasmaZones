@@ -13,6 +13,7 @@
 #include <PhosphorTiles/TilingParams.h>
 #include <PhosphorTiles/TilingState.h>
 
+#include <PhosphorScripting/LuauEngine.h>
 #include <PhosphorScripting/LuauWatchdog.h>
 
 #include "../helpers/ScriptTestHelpers.h"
@@ -61,6 +62,7 @@ private Q_SLOTS:
     void metadataInfiniteSplitRatioClamped();
     void erroringOverrideFallsBack();
     void customParamValueReachesTile();
+    void sharedEngineHostsIndependentModules();
 };
 
 void TestLuauTileAlgorithm::loadsAndExposesMetadata()
@@ -548,6 +550,69 @@ void TestLuauTileAlgorithm::customParamValueReachesTile()
 
     // tile() returns `cols` (4) zones, proving ctx.custom.cols flowed through.
     QCOMPARE(algo.calculateZones(p).size(), 4);
+}
+
+// The shared-engine ctor is how the loader hosts all trusted bundled scripts in
+// one VM. Verify two different modules sharing one engine each compute their own
+// correct zones (no cross-contamination), that destroying one (which releases
+// only its module from the shared engine) leaves the other working, and that the
+// shared engine outlives both algorithms via their shared_ptr copies.
+void TestLuauTileAlgorithm::sharedEngineHostsIndependentModules()
+{
+    QString err;
+    std::shared_ptr<PhosphorScripting::LuauEngine> shared = LuauTileAlgorithm::createSandboxedEngine(m_watchdog, &err);
+    QVERIFY2(shared != nullptr, qPrintable(err));
+
+    TilingState state(QStringLiteral("screen-1"));
+    state.setSplitRatio(0.6);
+    TilingParams p;
+    p.windowCount = 5;
+    p.screenGeometry = QRect(0, 0, 1920, 1080);
+    p.state = &state;
+    p.innerGap = 8;
+    p.outerGaps = EdgeGaps::uniform(0);
+
+    {
+        // Two distinct modules in the SAME shared engine.
+        auto masterStack = std::make_unique<LuauTileAlgorithm>(scriptPath(QStringLiteral("master-stack.luau")), shared,
+                                                               m_watchdog, nullptr);
+        QVERIFY(masterStack->isValid());
+
+        TilingState memState(QStringLiteral("screen-2"));
+        auto memTree = std::make_unique<SplitTree>();
+        memTree->insertAtEnd(QStringLiteral("w1"));
+        memTree->insertAtEnd(QStringLiteral("w2"));
+        memTree->insertAtEnd(QStringLiteral("w3"));
+        memState.setSplitTree(std::move(memTree));
+
+        auto memoryHooks = std::make_unique<LuauTileAlgorithm>(scriptPath(QStringLiteral("memory-hooks.luau")), shared,
+                                                               m_watchdog, nullptr);
+        QVERIFY(memoryHooks->isValid());
+
+        // Each module computes its own result through the shared VM, uncontaminated
+        // by the other: master-stack → one zone per window (5); memory-hooks → one
+        // zone per split-tree leaf (3).
+        QCOMPARE(masterStack->calculateZones(p).size(), 5);
+
+        TilingParams memP;
+        memP.windowCount = 5; // != leafCount, to prove the tree marshalled
+        memP.screenGeometry = QRect(0, 0, 1920, 1080);
+        memP.state = &memState;
+        memP.innerGap = 8;
+        QCOMPARE(memoryHooks->calculateZones(memP).size(), 3);
+
+        // Destroying one algorithm releases only ITS module from the shared engine
+        // (dtor → releaseModule); the other must keep working on the same engine.
+        memoryHooks.reset();
+        QCOMPARE(masterStack->calculateZones(p).size(), 5);
+    }
+
+    // Both algorithms destroyed; the shared engine is still alive via our local
+    // shared_ptr, and a fresh module can still be loaded into it.
+    QVERIFY(shared->isValid());
+    LuauTileAlgorithm late(scriptPath(QStringLiteral("master-stack.luau")), shared, m_watchdog, nullptr);
+    QVERIFY(late.isValid());
+    QCOMPARE(late.calculateZones(p).size(), 5);
 }
 
 QTEST_MAIN(TestLuauTileAlgorithm)

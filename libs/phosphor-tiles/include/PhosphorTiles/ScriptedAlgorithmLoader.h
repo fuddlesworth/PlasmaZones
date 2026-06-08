@@ -13,6 +13,7 @@
 #include <memory>
 
 namespace PhosphorScripting {
+class LuauEngine;
 class LuauWatchdog;
 }
 
@@ -109,6 +110,11 @@ private:
     QStringList algorithmDirectories() const;
     QStringList validatedLuauFiles(const QString& dirPath, int maxFiles) const;
 
+    /// Lazily build the VM shared by all trusted bundled scripts (init + pluau
+    /// prelude + sandbox, paid once). Returns nullptr if VM setup fails, in
+    /// which case bundled scripts fall back to their own per-script VMs.
+    std::shared_ptr<PhosphorScripting::LuauEngine> ensureSharedEngine();
+
     QString m_subdirectory; ///< XDG-relative path (e.g. "plasmazones/algorithms")
     ITileAlgorithmRegistry* m_registry = nullptr; ///< Borrowed; owner outlives loader
     /// Per-loader watchdog. Held via shared_ptr because the registry's
@@ -122,6 +128,14 @@ private:
     /// process-wide singleton means each composition root (daemon,
     /// editor, settings) gets its own supervisor thread.
     std::shared_ptr<PhosphorScripting::LuauWatchdog> m_watchdog;
+    /// VM shared by all trusted bundled scripts so the ~per-VM baseline + 42 KB
+    /// pluau prelude is paid once instead of per script. shared_ptr because a
+    /// deferred-deleted algorithm may outlive this loader and still hold (and
+    /// on teardown, release its module from) this engine. Untrusted user
+    /// scripts get their own isolated engines instead (not this one). Created
+    /// lazily by ensureSharedEngine() on the first bundled script.
+    std::shared_ptr<PhosphorScripting::LuauEngine> m_sharedEngine;
+    bool m_sharedEngineFailed = false; ///< Latches a failed setup so we don't retry every scan.
     std::unique_ptr<LuauScanStrategy> m_strategy;
     std::unique_ptr<PhosphorFsLoader::WatchedDirectorySet> m_watcher;
     QHash<QString, QString> m_scriptIdToPath; ///< script ID -> file path
