@@ -47,7 +47,12 @@ namespace {
 
 struct BakeCache
 {
-    static constexpr int kMaxSize = 256;
+    // Small in-memory LRU: only the actively-rendering shaders (a handful) need
+    // to resolve without touching disk. Everything else is backed by the
+    // persistent on-disk cache below, so an eviction costs a fast disk read
+    // (deserialize), not a glslang re-bake. Kept small to bound resident memory
+    // — a baked QShader carries SPIR-V + several GLSL variants.
+    static constexpr int kMaxSize = 32;
     using Key = QPair<QByteArray, int>;
     QMutex mutex;
     // QCache provides LRU eviction (touched on object()), unlike a plain QHash

@@ -51,7 +51,12 @@ QMutex& filenameShaderCacheMutex()
     return m;
 }
 
-constexpr int kShaderCacheMaxSize = 64;
+// Small bound: this holds the final vertex+fragment QShader pairs for the
+// actively-rendering shaders. A miss re-bakes via ShaderCompiler, which now
+// hits the persistent on-disk cache (a fast deserialize, not a glslang
+// compile), so a tight bound trades a little disk I/O on shader switches for
+// markedly lower resident memory (each entry is two multi-variant QShaders).
+constexpr int kShaderCacheMaxSize = 16;
 
 static void shaderCacheEvictOne()
 {
