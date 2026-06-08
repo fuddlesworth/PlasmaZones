@@ -370,8 +370,8 @@ Lands when the first out-of-tree consumer needs it.
 based on `rule.engineMode`. WindowRuleModel mirrors the split:
 `setSnappingLayoutLabelLookup` / `setTilingAlgorithmLabelLookup`;
 `actionLabel` takes both and picks per ActionType. The combined
-`setLayoutLookup` / `setLayoutLabelLookup` setters survive as
-back-compat shims that wire both targets to the same resolver.
+`setLayoutLookup` / `setLayoutLabelLookup` back-compat shims were
+later removed in favor of the typed pair (no legacy shims).
 
 ### 13.1 Original spec
 

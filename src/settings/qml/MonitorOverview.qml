@@ -2,7 +2,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 import QtQuick
-import QtQuick.Controls
 import QtQuick.Layouts
 import org.kde.kirigami as Kirigami
 
@@ -82,13 +81,17 @@ ColumnLayout {
                 MonitorOverviewTile {
                     required property var modelData
 
+                    // Key by name with a screenId fallback — matching the
+                    // controller's tile keying and `_tileForScreen` — so a
+                    // nameless output can still be selected/filtered.
+                    readonly property string _key: modelData.name || modelData.screenId || ""
+
                     screenData: modelData
                     tileData: overview._tileForScreen(modelData)
-                    selected: overview.selectedScreenId === modelData.name
+                    selected: overview.selectedScreenId === _key
                     onClicked: {
                         // Click the active tile to clear the filter.
-                        var next = overview.selectedScreenId === modelData.name ? "" : modelData.name;
-                        overview.monitorSelected(next);
+                        overview.monitorSelected(overview.selectedScreenId === _key ? "" : _key);
                     }
                 }
             }

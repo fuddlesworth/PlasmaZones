@@ -98,11 +98,11 @@ void collectScreenIds(const MatchExpression& match, QStringList& out)
                     out.append(value);
                 }
             }
-            // Other operators (Contains / StartsWith / EndsWith / Regex /
-            // NotEquals) are not literal monitor pins — a substring or regex
-            // token never equals a real connector id, so collecting it would
-            // silently under-count the rule against every tile. Such a rule
-            // doesn't pin a specific monitor, so it contributes no screen id.
+            // Any operator other than Equals/In (substring, regex, app-id, or
+            // numeric comparison) is not a literal monitor pin — its token never
+            // equals a real connector id, so collecting it would silently
+            // under-count the rule against every tile. Such a rule doesn't pin a
+            // specific monitor, so it contributes no screen id.
         }
         return;
     }
