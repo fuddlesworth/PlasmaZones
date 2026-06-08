@@ -23,8 +23,8 @@ import org.plasmazones.common as PZCommon
  * only — see SnappingShadersPageController), the right pane is a LIVE
  * ZoneShaderItem preview and the left column an editable
  * ShaderParameterEditor whose changes are transient (never persisted). The
- * animation browser has no previewController, so it shows the static
- * thumbnail + a read-only parameter list.
+ * animation browser has no previewController, so it shows no preview pane —
+ * just a read-only parameter list.
  *
  * Required:
  *   - `effect`: var — set by the host before calling `open()`.

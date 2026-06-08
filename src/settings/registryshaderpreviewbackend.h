@@ -16,8 +16,9 @@ namespace PlasmaZones {
 /// Feeds ShaderPreviewController from the settings process's own local overlay
 /// ShaderRegistry (no D-Bus round-trip — the settings app already scans the
 /// shader dirs for its browser) and ISettings (audio-visualizer config). The
-/// settings app has no edited layout, so previewZones() is empty and the
-/// controller renders the shader over its single-zone fallback.
+/// settings app has no edited layout, so previewZones() returns the shipped
+/// master-stack layout so the live preview matches the baked preview.png
+/// thumbnails (see previewZones() below).
 ///
 /// Both pointers are borrowed; SettingsController owns the registry + settings
 /// and outlives this backend.

@@ -14,14 +14,6 @@
 #include "../../shaderpreview/shaderpreviewcontroller.h"
 
 #include "phosphor_i18n.h"
-#include <QColor>
-#include <QDir>
-#include <QFile>
-#include <QFileInfo>
-#include <QJsonArray>
-#include <QJsonDocument>
-#include <QJsonObject>
-#include <QStandardPaths>
 
 namespace PlasmaZones {
 

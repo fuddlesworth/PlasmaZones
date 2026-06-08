@@ -39,8 +39,9 @@ public:
 
     /// Raw zone maps the preview renders over. The editor returns the live
     /// layout so the preview matches what the user is editing; the settings app
-    /// returns an empty list, and the controller falls back to a single
-    /// full-area zone.
+    /// returns the shipped master-stack layout so the preview matches the baked
+    /// preview.png thumbnails. An empty list makes the controller fall back to a
+    /// single full-area zone.
     virtual QVariantList previewZones() const = 0;
 
     /// Target screen size used to convert fixed-geometry pixel coordinates into
