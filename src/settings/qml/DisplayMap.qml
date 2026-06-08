@@ -401,7 +401,9 @@ ColumnLayout {
                             activeFocusOnTab: true
                             // a11y role on the focusable item, not the visual tile.
                             Accessible.role: Accessible.RadioButton
-                            Accessible.name: connectorLabel.text
+                            // Fall back so a screen reader never announces an empty
+                            // name for an output with no connector/label/name.
+                            Accessible.name: connectorLabel.text || i18n("Unknown monitor")
                             Accessible.checked: tile.isSelected
                             Keys.onSpacePressed: root.screenPicked(tile.screenName)
                             Keys.onReturnPressed: root.screenPicked(tile.screenName)
