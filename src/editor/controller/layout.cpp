@@ -416,18 +416,34 @@ void EditorController::loadLayout(const QString& layoutId)
     m_layoutId = layoutObj[QLatin1String(::PhosphorZones::ZoneJsonKeys::Id)].toString();
     m_layoutName = layoutObj[QLatin1String(::PhosphorZones::ZoneJsonKeys::Name)].toString();
 
-    // Resolve the final reference size before building zones. Fixed-geometry
-    // layouts normalize against their own zone bounding box (which may differ
-    // from the current screen — e.g. a 3840x2160 layout shown on a 3840x2126
-    // panel-reduced screen). Use a throwaway Layout to ask the canonical
-    // helper rather than re-walking the JSON here. Relative-only layouts
-    // clear the override so targetScreenSize() falls back to the screen
-    // geometry setTargetScreen already cached — no extra D-Bus call.
+    // Resolve the final reference size before building zones. The editor
+    // canvas fills the live screen, and EditorZone scales each fixed zone by
+    // targetScreenSize (fixedPixels / targetScreenSize.width * canvasWidth),
+    // so the reference MUST share the live screen's aspect ratio or fixed
+    // zones stretch. The raw fixed-zone bounding box is the wrong reference
+    // whenever the zones don't span the full screen — a 16:9 layout whose
+    // fixed zones only reach 2560px wide yields a 2560x2160 bbox and renders
+    // 1.5x too wide (discussion #593).
+    //
+    // Clear the override first so targetScreenSize() reports the live
+    // screen/VS size, then re-pin only when the layout's fixed zones
+    // genuinely exceed that size (e.g. a 3840x2160 layout on a 3840x2126
+    // panel-reduced screen). fixedZoneReferenceGeometry() encodes exactly
+    // this "use the recalc geometry unless the bbox overflows it" rule, the
+    // same helper the preview path uses — seed it by recalculating the
+    // throwaway Layout against the live screen first.
     const QSize prevSize = targetScreenSize();
     {
+        m_layoutBoundsOverride = QSize();
+        const QSize screenSize = targetScreenSize();
         std::unique_ptr<PhosphorZones::Layout> tmp(PhosphorZones::Layout::fromJson(layoutObj));
-        const QRectF bbox = tmp ? tmp->fixedZoneBoundingBox() : QRectF();
-        m_layoutBoundsOverride = bbox.isEmpty() ? QSize() : QSize(qRound(bbox.width()), qRound(bbox.height()));
+        if (tmp && screenSize.isValid()) {
+            tmp->recalculateZoneGeometries(QRectF(QPointF(), screenSize));
+            const QRectF refGeo = tmp->fixedZoneReferenceGeometry();
+            if (!refGeo.isEmpty() && refGeo.size().toSize() != screenSize) {
+                m_layoutBoundsOverride = refGeo.size().toSize();
+            }
+        }
     }
     const QSize newSize = targetScreenSize();
     if (newSize != prevSize) {
