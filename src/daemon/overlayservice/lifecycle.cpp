@@ -155,6 +155,7 @@ void OverlayService::hide()
     }
 
     m_visible = false;
+    m_overlayIdled = false; // not "warm-idled" — fully hidden
     m_currentOverlayScreenId.clear();
 
     // Stop shader animation
@@ -258,14 +259,16 @@ void OverlayService::setIdleForDragPause()
     // idle state is "what we just wrote, do not re-derive from layout
     // data until refreshFromIdle() is called."
     m_zoneDataDirty = false;
-    // NOTE: we deliberately do NOT call stopShaderAnimation() here. The
-    // shader timer keeps ticking at ~60 Hz while idled, but with zoneCount
-    // set to 0 the per-frame work collapses to a handful of uniform uploads
-    // to a surface that's rendering no visible geometry - bounded cost, O(1)
-    // per screen. Pausing and restarting the timer across the idle cycle
-    // would require additional state tracking in refreshFromIdle() and add
-    // a startup transient on every modifier re-press. The bounded per-frame
-    // cost is the cheaper trade.
+
+    // Real drag-end routes here too (the QQuickWindows are kept alive to dodge
+    // an NVIDIA teardown deadlock — see WindowDragAdaptor), so without this the
+    // 60 Hz shader render loop + CAVA would run for the daemon's whole lifetime
+    // after the first drag. Mark idle and schedule a grace-period quiesce: a
+    // quick re-trigger (modifier thrash) cancels it via refreshFromIdle() and
+    // keeps everything warm; a genuine rest stops the render loop + CAVA after
+    // the grace window. The windows stay alive, so no teardown cost on resume.
+    m_overlayIdled = true;
+    scheduleIdleQuiesce();
 }
 
 void OverlayService::refreshFromIdle()
@@ -281,6 +284,19 @@ void OverlayService::refreshFromIdle()
     if (!m_visible) {
         return;
     }
+
+    // Coming back from the warm-idled state: cancel any pending quiesce and
+    // resume the render loop + CAVA that scheduleIdleQuiesce() may have stopped.
+    m_overlayIdled = false;
+    if (m_idleQuiesceTimer) {
+        m_idleQuiesceTimer->stop();
+    }
+    if (anyScreenUsesShader() && (!m_shaderUpdateTimer || !m_shaderUpdateTimer->isActive())) {
+        ensureShaderTimerStarted(m_shaderTimer, m_shaderTimerMutex, m_lastFrameTime, m_frameCount);
+        startShaderAnimation();
+    }
+    syncCavaState();
+
     updateZonesForAllWindows();
     // Resolve the cursor's current VS - the drag adaptor keeps
     // m_currentOverlayScreenId updated via showAtPosition, so this

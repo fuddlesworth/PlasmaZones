@@ -295,9 +295,10 @@ void OverlayService::initializeOverlay(QScreen* cursorScreen, const QPoint& curs
     }
 
     m_visible = true;
+    m_overlayIdled = false; // a fresh show is displaying content
 
-    // Spin up the audio-visualizer capture now that the overlay is visible
-    // (no-op if audio-viz is disabled). syncCavaState gates on m_visible.
+    // Spin up the audio-visualizer capture now that the overlay is displaying
+    // (no-op if audio-viz is disabled). syncCavaState gates on isOverlayDisplaying.
     syncCavaState();
 
     if (anyScreenUsesShader()) {
@@ -335,14 +336,21 @@ void OverlayService::updateLayout(PhosphorZones::Layout* layout)
         }
 
         // Shader state management - MUST be outside flashZonesOnSwitch block
-        // to ensure shader animations work regardless of flash setting
+        // to ensure shader animations work regardless of flash setting.
+        // Gate on isOverlayDisplaying(): while warm-idled (drag-end kept the
+        // windows alive but blanked), a layout switch must NOT restart the
+        // render loop or repopulate zones — that would undo the idle quiesce and
+        // un-blank the overlay. The next refreshFromIdle() on show repopulates
+        // and restarts.
         if (anyScreenUsesShader()) {
-            // Ensure shader timing + updates continue after layout switch
-            ensureShaderTimerStarted(m_shaderTimer, m_shaderTimerMutex, m_lastFrameTime, m_frameCount);
-            m_zoneDataDirty = true;
-            updateZonesForAllWindows();
-            if (!m_shaderUpdateTimer || !m_shaderUpdateTimer->isActive()) {
-                startShaderAnimation();
+            if (isOverlayDisplaying()) {
+                // Ensure shader timing + updates continue after layout switch
+                ensureShaderTimerStarted(m_shaderTimer, m_shaderTimerMutex, m_lastFrameTime, m_frameCount);
+                m_zoneDataDirty = true;
+                updateZonesForAllWindows();
+                if (!m_shaderUpdateTimer || !m_shaderUpdateTimer->isActive()) {
+                    startShaderAnimation();
+                }
             }
         } else {
             stopShaderAnimation();
