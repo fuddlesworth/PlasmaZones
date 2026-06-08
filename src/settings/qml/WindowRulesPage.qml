@@ -101,25 +101,13 @@ SettingsFlickable {
     // the controller. The C++ Section enum order is never duplicated in QML.
     readonly property var sectionDescriptors: page.controller.sections()
     // Cached `matchFields()` table — threaded down to every WindowRuleRow's
-    // expansion view so the per-row Q_INVOKABLE doesn't fire on every
-    // expand. Same caching rationale as the RuleEditorBody cache.
-    // Static-catalogue controllers never fire authoringCatalogueChanged
-    // so this stays a one-shot read; a plugin-driven controller wanting
-    // runtime catalogue refresh just needs to emit the signal.
+    // expansion view so the per-row Q_INVOKABLE doesn't fire on every expand.
+    // The authoring catalogue is static, so this is a one-shot read.
     property var matchFieldOptions: page.controller.matchFields()
     // Cached `actionTypes()` — same caching rationale as matchFieldOptions;
     // threaded down to WindowRuleRow's expansion so each row doesn't re-invoke
     // the Q_INVOKABLE.
     property var actionTypeOptions: page.controller.actionTypes()
-
-    Connections {
-        function onAuthoringCatalogueChanged() {
-            page.matchFieldOptions = page.controller.matchFields();
-            page.actionTypeOptions = page.controller.actionTypes();
-        }
-        target: page.controller
-        ignoreUnknownSignals: true
-    }
     // Bumped whenever the underlying model changes so sectionModel re-evaluates
     // without QML hardcoding the model's role layout.
     property int modelRevision: 0

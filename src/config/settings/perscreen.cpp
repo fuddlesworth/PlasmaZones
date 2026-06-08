@@ -130,6 +130,19 @@ const QLatin1String kPerScreenAutotileGapsKeys[] = {
     QLatin1String(PerScreenAutotileKey::OuterGapRight),      QLatin1String(PerScreenAutotileKey::SmartGaps),
 };
 
+// The "Autotile" prefix distinguishing the prefixed disk form of autotile
+// per-screen keys ("AutotileInnerGap") from the short in-memory form QML uses
+// ("InnerGap"). Centralized so the strip/expand sites can't desync on the
+// literal or its length.
+constexpr QLatin1String kAutotilePrefix{"Autotile"};
+
+// Strip the "Autotile" prefix to the short in-memory key form, returning the
+// key unchanged when it carries no prefix (e.g. the unprefixed Animation keys).
+QString stripAutotilePrefix(const QString& key)
+{
+    return key.startsWith(kAutotilePrefix) ? key.mid(kAutotilePrefix.size()) : key;
+}
+
 bool isPerScreenAutotileGapsKey(const QString& key)
 {
     // In-memory per-screen autotile keys are short form (the setter and
@@ -140,21 +153,18 @@ bool isPerScreenAutotileGapsKey(const QString& key)
     // set rather than re-allocating a QString per disk-form key on every call.
     static const QSet<QString> shortGapsKeys = []() {
         QSet<QString> keys;
-        for (const QLatin1String& k : kPerScreenAutotileGapsKeys) {
-            const QString s(k);
-            keys.insert(s.startsWith(QLatin1String("Autotile")) ? s.mid(8) : s);
-        }
+        for (const QLatin1String& k : kPerScreenAutotileGapsKeys)
+            keys.insert(stripAutotilePrefix(QString(k)));
         return keys;
     }();
-    const QString shortKey = key.startsWith(QLatin1String("Autotile")) ? key.mid(8) : key;
-    return shortGapsKeys.contains(shortKey);
+    return shortGapsKeys.contains(stripAutotilePrefix(key));
 }
 
 QVariant validatePerScreenAutotileValue(const QString& key, const QVariant& value)
 {
     // Strip "Autotile" prefix so both "Algorithm" and "AutotileAlgorithm" match.
     // QML PerScreenOverrideHelper sends short keys; config storage uses prefixed keys.
-    const QString k = key.startsWith(QLatin1String("Autotile")) ? key.mid(8) : key;
+    const QString k = stripAutotilePrefix(key);
 
     if (k == PerScreenKeys::SplitRatio) {
         double v = value.toDouble();
@@ -267,12 +277,24 @@ const QLatin1String kPerScreenSnappingKeys[] = {
 // (SnapAssist / ZoneSelector) is a different concern; the card reports its
 // override dot and clears its reset against ONLY these gap keys so a shared
 // whole-domain clear can't wipe the map's other overrides (data loss on reset).
-// Snapping per-screen keys are stored unprefixed, so this is a direct match.
+const QLatin1String kPerScreenSnappingGapsKeys[] = {
+    PerScreenSnappingKey::ZonePadding,   PerScreenSnappingKey::OuterGap,       PerScreenSnappingKey::UsePerSideOuterGap,
+    PerScreenSnappingKey::OuterGapTop,   PerScreenSnappingKey::OuterGapBottom, PerScreenSnappingKey::OuterGapLeft,
+    PerScreenSnappingKey::OuterGapRight,
+};
+
 bool isPerScreenSnappingGapsKey(const QString& key)
 {
-    namespace K = PerScreenSnappingKey;
-    return key == K::ZonePadding || key == K::OuterGap || key == K::UsePerSideOuterGap || key == K::OuterGapTop
-        || key == K::OuterGapBottom || key == K::OuterGapLeft || key == K::OuterGapRight;
+    // Snapping per-screen keys are stored unprefixed, so this is a direct
+    // membership test against the gaps-key set (derived once into a static set,
+    // mirroring isPerScreenAutotileGapsKey).
+    static const QSet<QString> gapsKeys = []() {
+        QSet<QString> keys;
+        for (const QLatin1String& k : kPerScreenSnappingGapsKeys)
+            keys.insert(QString(k));
+        return keys;
+    }();
+    return gapsKeys.contains(key);
 }
 
 QVariant validatePerScreenSnappingValue(const QString& key, const QVariant& value)
@@ -459,14 +481,8 @@ static void normalizeAutotileKeys(QHash<QString, QVariantMap>& settings)
 {
     for (auto it = settings.begin(); it != settings.end(); ++it) {
         QVariantMap normalized;
-        for (auto kit = it.value().constBegin(); kit != it.value().constEnd(); ++kit) {
-            const QString& key = kit.key();
-            if (key.startsWith(QLatin1String("Autotile"))) {
-                normalized[key.mid(8)] = kit.value(); // Strip "Autotile" prefix
-            } else {
-                normalized[key] = kit.value();
-            }
-        }
+        for (auto kit = it.value().constBegin(); kit != it.value().constEnd(); ++kit)
+            normalized[stripAutotilePrefix(kit.key())] = kit.value();
         it.value() = normalized;
     }
 }
@@ -504,7 +520,7 @@ static QHash<QString, QVariantMap> expandAutotileKeys(const QHash<QString, QVari
         QSet<QString> keys;
         for (const QLatin1String& k : kPerScreenAutotileKeys) {
             const QString s(k);
-            if (!s.startsWith(QLatin1String("Autotile")))
+            if (!s.startsWith(kAutotilePrefix))
                 keys.insert(s);
         }
         return keys;
@@ -515,10 +531,10 @@ static QHash<QString, QVariantMap> expandAutotileKeys(const QHash<QString, QVari
         QVariantMap expandedMap;
         for (auto kit = it.value().constBegin(); kit != it.value().constEnd(); ++kit) {
             const QString& key = kit.key();
-            if (key.startsWith(QLatin1String("Autotile")) || unprefixedKeys.contains(key)) {
+            if (key.startsWith(kAutotilePrefix) || unprefixedKeys.contains(key)) {
                 expandedMap[key] = kit.value();
             } else {
-                expandedMap[QStringLiteral("Autotile") + key] = kit.value();
+                expandedMap[kAutotilePrefix + key] = kit.value();
             }
         }
         expanded[it.key()] = expandedMap;
@@ -698,16 +714,21 @@ void Settings::setPerScreenZoneSelectorSetting(const QString& screenIdOrName, co
         return;
     }
 
-    // Resolve to EDID-based screen ID so the key matches daemon lookups. Look
-    // up before taking a mutable reference so a no-op write never default-
-    // inserts an empty husk entry (which hasPerScreen*Settings would then read
-    // as a phantom override).
+    // Match any existing entry under either the connector or EDID id form (the
+    // same resolution the getters/clearers use) and update it in place, so a
+    // write never creates a duplicate under the alternate form and a no-op
+    // write never default-inserts an empty husk entry (which hasPerScreen*
+    // Settings would read as a phantom override). New entries key by canonical
+    // EDID form.
     const QString resolved = canonicalPerScreenKey(screenIdOrName);
-    const auto existing = m_perScreenZoneSelectorSettings.constFind(resolved);
-    if (existing != m_perScreenZoneSelectorSettings.constEnd() && existing.value().value(key) == validated) {
-        return;
+    auto it = findPerScreenEntryMutable(m_perScreenZoneSelectorSettings, screenIdOrName);
+    if (it != m_perScreenZoneSelectorSettings.end()) {
+        if (it.value().value(key) == validated)
+            return;
+        it.value()[key] = validated;
+    } else {
+        m_perScreenZoneSelectorSettings[resolved][key] = validated;
     }
-    m_perScreenZoneSelectorSettings[resolved][key] = validated;
     Q_EMIT perScreenZoneSelectorSettingsChanged();
     Q_EMIT settingsChanged();
 }
@@ -749,17 +770,20 @@ void Settings::setPerScreenAutotileSetting(const QString& screenIdOrName, const 
     // Normalize to short form: strip "Autotile" prefix so the in-memory map
     // always uses short keys ("Algorithm", "SplitRatio") matching QML lookups.
     // Animation keys ("AnimationsEnabled", etc.) have no "Autotile" prefix.
-    const QString normalizedKey = key.startsWith(QLatin1String("Autotile")) ? key.mid(8) : key;
+    const QString normalizedKey = stripAutotilePrefix(key);
 
-    // Resolve to EDID-based screen ID so the key matches daemon lookups. Look
-    // up before taking a mutable reference so a no-op write never default-
-    // inserts an empty husk entry.
+    // Match any existing entry under either id form and update in place (no
+    // duplicate under the alternate form, no empty husk on a no-op write); new
+    // entries key by the canonical EDID form.
     const QString resolved = canonicalPerScreenKey(screenIdOrName);
-    const auto existing = m_perScreenAutotileSettings.constFind(resolved);
-    if (existing != m_perScreenAutotileSettings.constEnd() && existing.value().value(normalizedKey) == validated) {
-        return;
+    auto it = findPerScreenEntryMutable(m_perScreenAutotileSettings, screenIdOrName);
+    if (it != m_perScreenAutotileSettings.end()) {
+        if (it.value().value(normalizedKey) == validated)
+            return;
+        it.value()[normalizedKey] = validated;
+    } else {
+        m_perScreenAutotileSettings[resolved][normalizedKey] = validated;
     }
-    m_perScreenAutotileSettings[resolved][normalizedKey] = validated;
     Q_EMIT perScreenAutotileSettingsChanged();
     Q_EMIT settingsChanged();
 }
@@ -830,15 +854,18 @@ void Settings::setPerScreenSnappingSetting(const QString& screenIdOrName, const 
         return;
     }
 
-    // Resolve to EDID-based screen ID so the key matches daemon lookups. Look
-    // up before taking a mutable reference so a no-op write never default-
-    // inserts an empty husk entry.
+    // Match any existing entry under either id form and update in place (no
+    // duplicate under the alternate form, no empty husk on a no-op write); new
+    // entries key by the canonical EDID form.
     const QString resolved = canonicalPerScreenKey(screenIdOrName);
-    const auto existing = m_perScreenSnappingSettings.constFind(resolved);
-    if (existing != m_perScreenSnappingSettings.constEnd() && existing.value().value(key) == validated) {
-        return;
+    auto it = findPerScreenEntryMutable(m_perScreenSnappingSettings, screenIdOrName);
+    if (it != m_perScreenSnappingSettings.end()) {
+        if (it.value().value(key) == validated)
+            return;
+        it.value()[key] = validated;
+    } else {
+        m_perScreenSnappingSettings[resolved][key] = validated;
     }
-    m_perScreenSnappingSettings[resolved][key] = validated;
     Q_EMIT perScreenSnappingSettingsChanged();
     Q_EMIT settingsChanged();
 }
