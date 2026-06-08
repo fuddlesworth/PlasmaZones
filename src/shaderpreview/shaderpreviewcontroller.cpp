@@ -87,8 +87,8 @@ QVariantList ShaderPreviewController::zonesForShaderPreview(int width, int heigh
         out[QLatin1String("borderG")] = bc.greenF();
         out[QLatin1String("borderB")] = bc.blueF();
         out[QLatin1String("borderA")] = bc.alphaF();
-        out[QLatin1String("shaderBorderRadius")] = 8.0;
-        out[QLatin1String("shaderBorderWidth")] = 2.0;
+        out[QLatin1String("shaderBorderRadius")] = static_cast<qreal>(::PhosphorZones::ZoneDefaults::BorderRadius);
+        out[QLatin1String("shaderBorderWidth")] = static_cast<qreal>(::PhosphorZones::ZoneDefaults::BorderWidth);
         result.append(out);
         return result;
     }
