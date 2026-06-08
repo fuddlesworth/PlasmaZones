@@ -450,8 +450,8 @@ private:
     /// apply() dispatches a duplicate setAllRules push, and the reply
     /// lambdas race on setDirty(false) + applyResult emission.
     bool m_asyncCommitInFlight = false;
-    /// Split lookups: monitorOverview's tile picks one by the Layout-slot
-    /// winner's kind (snapping layout vs tiling algorithm), so a
+    /// Split lookups: monitorOverview's tile picks one by the assignment
+    /// winner's engine mode (snapping layout vs tiling algorithm), so a
     /// SetSnappingLayout with a UUID-shaped value can't accidentally hit the
     /// tiling-algorithm path and vice versa.
     WindowRuleModel::LabelLookup m_snappingLayoutLookup;
