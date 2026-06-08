@@ -259,10 +259,10 @@ public:
     Q_INVOKABLE QVariantList sections() const;
 
     /// A snapshot of every rule as a map keyed by the model's role names
-    /// (`ruleId`, `name`, `enabled`, `section`, `matchSummary`,
+    /// (`ruleId`, `name`, `enabled`, `priority`, `section`, `matchSummary`,
     /// `actionSummary`, `conditionCount`, `actionCount`, `isComposite`,
-    /// `screenIds`). Lets the page bucket / filter rules without ever
-    /// referencing raw `Qt.UserRole + N` integers.
+    /// `screenIds`, `validationIssueCount`). Lets the page bucket / filter
+    /// rules without ever referencing raw `Qt.UserRole + N` integers.
     Q_INVOKABLE QVariantList rulesSnapshot() const;
 
     // ── Monitor overview strip ────────────────────────────────────────────

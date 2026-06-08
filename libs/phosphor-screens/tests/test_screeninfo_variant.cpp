@@ -218,6 +218,33 @@ private Q_SLOTS:
         const QVariantMap m = screenInfoListToVariantList({s}).first().toMap();
         QCOMPARE(m.value(QStringLiteral("displayLabel")).toString(), QStringLiteral("VS1 — DP-3"));
     }
+
+    void displayLabel_virtualScreen_negativeIndexDegradesToVS0()
+    {
+        // Contract violation (isVirtualScreen with virtualIndex < 0): the
+        // serializer warns and the label degrades to "VS0" via virtualIndex+1.
+        // Assert the degraded label rather than crashing or emitting garbage.
+        ScreenInfo s;
+        s.name = QStringLiteral("DP-9/vs:0");
+        s.isVirtualScreen = true;
+        s.virtualIndex = -1;
+
+        const QVariantMap m = screenInfoListToVariantList({s}).first().toMap();
+        QCOMPARE(m.value(QStringLiteral("displayLabel")).toString(), QStringLiteral("VS0"));
+    }
+
+    void connectorName_emittedOnPhysicalScreen()
+    {
+        // connectorName is emitted whenever it is set, independent of the
+        // virtual flag — QML reads it as the connector-first tile label.
+        ScreenInfo s;
+        s.name = QStringLiteral("DP-5");
+        s.connectorName = QStringLiteral("DP-5");
+
+        const QVariantMap m = screenInfoListToVariantList({s}).first().toMap();
+        QVERIFY2(m.contains(QStringLiteral("connectorName")), "connectorName must be present when set");
+        QCOMPARE(m.value(QStringLiteral("connectorName")).toString(), QStringLiteral("DP-5"));
+    }
 };
 
 QTEST_MAIN(TestScreenInfoVariant)

@@ -13,6 +13,14 @@
 
 namespace PlasmaZones {
 
+// Forward-declared so migrateConnectorNames (in the anonymous namespace below)
+// can reuse the write-side key canonicalization, defined among the file-scope
+// helpers further down. Load and write MUST use the same transform: gating on
+// isConnectorName(wholeKey) would skip a virtual-suffixed connector key like
+// "DP-2/vs:0" (isConnectorName rejects it for the ':' in "vs:0") on load, while
+// a later write canonicalizes it to EDID form — leaving a stale duplicate.
+static QString canonicalPerScreenKey(const QString& screenIdOrName);
+
 namespace {
 
 QVariant validatePerScreenValue(const QString& key, const QVariant& value)
@@ -358,17 +366,18 @@ void migrateConnectorNames(QHash<QString, QVariantMap>& settings)
 {
     QHash<QString, QVariantMap> migrated;
     for (auto it = settings.begin(); it != settings.end();) {
-        if (PhosphorScreens::ScreenIdentity::isConnectorName(it.key())) {
-            QString resolved = PhosphorScreens::ScreenIdentity::idForName(it.key());
-            if (resolved != it.key()) {
-                if (migrated.contains(resolved)) {
-                    qCWarning(lcConfig) << "EDID collision during migration:" << it.key()
-                                        << "and another connector both resolve to" << resolved << "- later entry wins";
-                }
-                migrated[resolved] = it.value();
-                it = settings.erase(it);
-                continue;
+        // Use the same canonicalization the write path uses, so a connector-form
+        // key (with or without a "/vs:N" suffix) resolves to the identical EDID
+        // form writes produce — no stale duplicate under the connector name.
+        const QString canonical = canonicalPerScreenKey(it.key());
+        if (canonical != it.key()) {
+            if (migrated.contains(canonical)) {
+                qCWarning(lcConfig) << "EDID collision during migration:" << it.key()
+                                    << "and another connector both resolve to" << canonical << "- later entry wins";
             }
+            migrated[canonical] = it.value();
+            it = settings.erase(it);
+            continue;
         }
         ++it;
     }

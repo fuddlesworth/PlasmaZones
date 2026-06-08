@@ -13,7 +13,8 @@ import org.kde.kirigami as Kirigami
  * displayLabel + Primary badge) matches the canonical `DisplayMap`
  * used elsewhere in the app. Per-monitor rule data comes from
  * `WindowRuleController.monitorOverview()`, whose tiles are keyed by each
- * screen's `name` (the controller omits a tile for any screen with no name).
+ * screen's `name`, with a `screenId` fallback for a nameless output (a
+ * screen with neither is omitted).
  *
  * Clicking a tile sets the page's monitor filter; clicking the active tile
  * again clears it.
@@ -31,7 +32,8 @@ ColumnLayout {
     /// The currently-selected monitor filter (empty = no filter).
     property string selectedScreenId: ""
     /// Indexed by each tile's `screenId` field — which the controller sets to
-    /// the screen's `name` — for O(1) lookup by `screen.name` during rendering.
+    /// the screen's `name` (or `screenId` when the name is empty) — for O(1)
+    /// lookup by `screen.name` during rendering.
     readonly property var _tilesByScreenId: {
         var map = {};
         // Guard `tiles` itself — the binding can transiently produce

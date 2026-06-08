@@ -138,8 +138,12 @@ Rectangle {
                     if (!tile._assigned)
                         return i18n("Not assigned") + " · " + countLabel;
 
+                    // `tilingEnabled` means "the screen's window-management
+                    // engine is NOT disabled" for whatever engine it runs
+                    // (snapping / autotile / scrolling), so the label stays
+                    // engine-agnostic rather than saying "Tiling off".
                     if (!tile.tileData.tilingEnabled)
-                        return i18n("Tiling off") + " · " + countLabel;
+                        return i18n("Engine off") + " · " + countLabel;
 
                     if (tile.tileData.layoutName && tile.tileData.layoutName.length > 0)
                         return tile.tileData.layoutName + " · " + countLabel;
