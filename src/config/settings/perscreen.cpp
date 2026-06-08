@@ -7,6 +7,7 @@
 #include "../../core/constants.h"
 #include "../../core/logging.h"
 #include "../../core/utils.h"
+#include <PhosphorIdentity/VirtualScreenId.h>
 #include <PhosphorScreens/ScreenIdentity.h>
 #include <QSet>
 
@@ -463,19 +464,26 @@ void Settings::loadPerScreenOverrides(PhosphorConfig::IBackend* backend)
  */
 static QHash<QString, QVariantMap> expandAutotileKeys(const QHash<QString, QVariantMap>& settings)
 {
-    // Short keys that should NOT get the "Autotile" prefix
-    static const QStringList animationKeys = {
-        QLatin1String(PerScreenAutotileKey::AnimationsEnabled),
-        QLatin1String(PerScreenAutotileKey::AnimationDuration),
-        QLatin1String(PerScreenAutotileKey::AnimationEasingCurve),
-    };
+    // Keys stored on disk WITHOUT the "Autotile" prefix (the animation keys).
+    // Derived from the canonical key list rather than spelled out a second time,
+    // so a new unprefixed key added to kPerScreenAutotileKeys can't desync this
+    // expand step from normalizeAutotileKeys (which strips by prefix-presence).
+    static const QSet<QString> unprefixedKeys = []() {
+        QSet<QString> keys;
+        for (const QLatin1String& k : kPerScreenAutotileKeys) {
+            const QString s(k);
+            if (!s.startsWith(QLatin1String("Autotile")))
+                keys.insert(s);
+        }
+        return keys;
+    }();
 
     QHash<QString, QVariantMap> expanded;
     for (auto it = settings.constBegin(); it != settings.constEnd(); ++it) {
         QVariantMap expandedMap;
         for (auto kit = it.value().constBegin(); kit != it.value().constEnd(); ++kit) {
             const QString& key = kit.key();
-            if (key.startsWith(QLatin1String("Autotile")) || animationKeys.contains(key)) {
+            if (key.startsWith(QLatin1String("Autotile")) || unprefixedKeys.contains(key)) {
                 expandedMap[key] = kit.value();
             } else {
                 expandedMap[QStringLiteral("Autotile") + key] = kit.value();
@@ -495,25 +503,59 @@ void Settings::saveAllPerScreenOverrides(PhosphorConfig::IBackend* backend)
     savePerScreenOverrides(backend, ConfigDefaults::snappingScreenGroupPrefix(), m_perScreenSnappingSettings);
 }
 
+// Canonical storage-key form of a screen identifier: resolve a connector name
+// (e.g. "DP-2") to its stable EDID id so the key matches daemon lookups,
+// preserving any virtual "/vs:N" suffix — only the physical parent is
+// translated, e.g. "DP-2/vs:0" → "Dell:U2722D:115107/vs:0". Identifiers already
+// in id form (physical or virtual) pass through unchanged, as do connectors
+// that don't currently resolve to a connected screen.
+static QString canonicalPerScreenKey(const QString& screenIdOrName)
+{
+    namespace VS = PhosphorIdentity::VirtualScreenId;
+    namespace SI = PhosphorScreens::ScreenIdentity;
+    const QString physical = VS::extractPhysicalId(screenIdOrName);
+    if (!SI::isConnectorName(physical))
+        return screenIdOrName;
+    const QString resolved = SI::idForName(physical);
+    if (resolved == physical)
+        return screenIdOrName;
+    const int vsIndex = VS::extractIndex(screenIdOrName);
+    return vsIndex >= 0 ? VS::make(resolved, vsIndex) : resolved;
+}
+
+// Ordered, de-duplicated storage-key forms an entry could be keyed under: the
+// queried form first, then its connector ↔ EDID-id translation (with the
+// virtual "/vs:N" suffix preserved). Lets a lookup find an entry stored under
+// the alternate form regardless of which one was written.
+static QStringList perScreenKeyVariants(const QString& screenIdOrName)
+{
+    namespace VS = PhosphorIdentity::VirtualScreenId;
+    namespace SI = PhosphorScreens::ScreenIdentity;
+    QStringList variants;
+    if (screenIdOrName.isEmpty())
+        return variants;
+    variants.append(screenIdOrName);
+
+    const QString physical = VS::extractPhysicalId(screenIdOrName);
+    const int vsIndex = VS::extractIndex(screenIdOrName);
+    // Translate the physical part to its alternate form and re-attach the
+    // virtual suffix (connector→id when queried by connector, id→connector
+    // otherwise) so reads match writes across both keying conventions.
+    const QString altPhysical = SI::isConnectorName(physical) ? SI::idForName(physical) : SI::nameForId(physical);
+    if (!altPhysical.isEmpty() && altPhysical != physical) {
+        const QString form = vsIndex >= 0 ? VS::make(altPhysical, vsIndex) : altPhysical;
+        if (!form.isEmpty() && !variants.contains(form))
+            variants.append(form);
+    }
+    return variants;
+}
+
 template<typename T>
 static typename QHash<QString, T>::const_iterator findPerScreenEntry(const QHash<QString, T>& hash,
                                                                      const QString& screenIdOrName)
 {
-    auto it = hash.constFind(screenIdOrName);
-    if (it != hash.constEnd()) {
-        return it;
-    }
-    if (PhosphorScreens::ScreenIdentity::isConnectorName(screenIdOrName)) {
-        QString resolved = PhosphorScreens::ScreenIdentity::idForName(screenIdOrName);
-        if (resolved != screenIdOrName) {
-            it = hash.constFind(resolved);
-            if (it != hash.constEnd())
-                return it;
-        }
-    }
-    QString connector = PhosphorScreens::ScreenIdentity::nameForId(screenIdOrName);
-    if (!connector.isEmpty() && connector != screenIdOrName) {
-        it = hash.constFind(connector);
+    for (const QString& key : perScreenKeyVariants(screenIdOrName)) {
+        auto it = hash.constFind(key);
         if (it != hash.constEnd())
             return it;
     }
@@ -523,17 +565,10 @@ static typename QHash<QString, T>::const_iterator findPerScreenEntry(const QHash
 template<typename T>
 static bool removePerScreenEntry(QHash<QString, T>& hash, const QString& screenIdOrName)
 {
-    if (hash.remove(screenIdOrName)) {
-        return true;
-    }
-    if (PhosphorScreens::ScreenIdentity::isConnectorName(screenIdOrName)) {
-        QString resolved = PhosphorScreens::ScreenIdentity::idForName(screenIdOrName);
-        if (resolved != screenIdOrName && hash.remove(resolved))
+    for (const QString& key : perScreenKeyVariants(screenIdOrName)) {
+        if (hash.remove(key))
             return true;
     }
-    QString connector = PhosphorScreens::ScreenIdentity::nameForId(screenIdOrName);
-    if (!connector.isEmpty() && connector != screenIdOrName && hash.remove(connector))
-        return true;
     return false;
 }
 
@@ -543,20 +578,8 @@ template<typename T>
 static typename QHash<QString, T>::iterator findPerScreenEntryMutable(QHash<QString, T>& hash,
                                                                       const QString& screenIdOrName)
 {
-    auto it = hash.find(screenIdOrName);
-    if (it != hash.end())
-        return it;
-    if (PhosphorScreens::ScreenIdentity::isConnectorName(screenIdOrName)) {
-        QString resolved = PhosphorScreens::ScreenIdentity::idForName(screenIdOrName);
-        if (resolved != screenIdOrName) {
-            it = hash.find(resolved);
-            if (it != hash.end())
-                return it;
-        }
-    }
-    QString connector = PhosphorScreens::ScreenIdentity::nameForId(screenIdOrName);
-    if (!connector.isEmpty() && connector != screenIdOrName) {
-        it = hash.find(connector);
+    for (const QString& key : perScreenKeyVariants(screenIdOrName)) {
+        auto it = hash.find(key);
         if (it != hash.end())
             return it;
     }
@@ -644,9 +667,7 @@ void Settings::setPerScreenZoneSelectorSetting(const QString& screenIdOrName, co
     }
 
     // Resolve to EDID-based screen ID so the key matches daemon lookups
-    const QString resolved = PhosphorScreens::ScreenIdentity::isConnectorName(screenIdOrName)
-        ? PhosphorScreens::ScreenIdentity::idForName(screenIdOrName)
-        : screenIdOrName;
+    const QString resolved = canonicalPerScreenKey(screenIdOrName);
     QVariantMap& screenSettings = m_perScreenZoneSelectorSettings[resolved];
     if (screenSettings.value(key) == validated) {
         return;
@@ -696,9 +717,7 @@ void Settings::setPerScreenAutotileSetting(const QString& screenIdOrName, const 
     const QString normalizedKey = key.startsWith(QLatin1String("Autotile")) ? key.mid(8) : key;
 
     // Resolve to EDID-based screen ID so the key matches daemon lookups
-    const QString resolved = PhosphorScreens::ScreenIdentity::isConnectorName(screenIdOrName)
-        ? PhosphorScreens::ScreenIdentity::idForName(screenIdOrName)
-        : screenIdOrName;
+    const QString resolved = canonicalPerScreenKey(screenIdOrName);
     QVariantMap& screenSettings = m_perScreenAutotileSettings[resolved];
     if (screenSettings.value(normalizedKey) == validated) {
         return;
@@ -771,9 +790,7 @@ void Settings::setPerScreenSnappingSetting(const QString& screenIdOrName, const 
     }
 
     // Resolve to EDID-based screen ID so the key matches daemon lookups
-    const QString resolved = PhosphorScreens::ScreenIdentity::isConnectorName(screenIdOrName)
-        ? PhosphorScreens::ScreenIdentity::idForName(screenIdOrName)
-        : screenIdOrName;
+    const QString resolved = canonicalPerScreenKey(screenIdOrName);
     QVariantMap& screenSettings = m_perScreenSnappingSettings[resolved];
     if (screenSettings.value(key) == validated) {
         return;

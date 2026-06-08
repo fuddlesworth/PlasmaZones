@@ -37,8 +37,9 @@ ColumnLayout {
     // Empty disables the override dots.
     property string hasOverridesMethod: ""
 
-    // Current selection, for the highlight. Defaults to the shared scope; a
-    // host that drives a local target (e.g. a monitor-subject page) rebinds it.
+    // Current selection, for the highlight. The default tracks the shared scope
+    // for the chip-popover use; monitor-subject hosts (Monitor State, Virtual
+    // Screens) rebind this to their own local target, retiring the default.
     property string selectedScreenName: appSettings ? appSettings.scopeScreenName : ""
     // Show the "All Monitors" chip. Off for monitor-subject pickers that always
     // require a specific output (Monitor State, Virtual Screens).
@@ -312,7 +313,10 @@ ColumnLayout {
                             width: parent.width - Kirigami.Units.smallSpacing * 2
                             horizontalAlignment: Text.AlignHCenter
                             elide: Text.ElideRight
-                            text: tile.modelData.connectorName || tile.modelData.name || ""
+                            // Connector first; fall back to the friendly display
+                            // label (vendor + model) before the raw screen id so
+                            // an output with no connector name still reads sanely.
+                            text: tile.modelData.connectorName || tile.modelData.displayLabel || tile.modelData.name || ""
                             font: Kirigami.Theme.smallFont
                             opacity: tile.isSelected ? 1 : 0.7
                         }
