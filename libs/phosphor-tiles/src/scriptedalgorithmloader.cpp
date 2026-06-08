@@ -6,6 +6,7 @@
 #include <PhosphorTiles/LuauTileAlgorithm.h>
 #include "tileslogging.h"
 
+#include <PhosphorScripting/LuauEngine.h>
 #include <PhosphorScripting/LuauWatchdog.h>
 
 #include <PhosphorFsLoader/IScanStrategy.h>
@@ -382,6 +383,29 @@ QStringList ScriptedAlgorithmLoader::performScan(const QStringList& directoriesI
     return desiredFileWatches;
 }
 
+std::shared_ptr<PhosphorScripting::LuauEngine> ScriptedAlgorithmLoader::ensureSharedEngine()
+{
+    if (m_sharedEngine) {
+        return m_sharedEngine;
+    }
+    // Latch failure: a VM that couldn't init/sandbox once won't succeed on a
+    // later rescan, and retrying would re-log the same error on every inotify
+    // wake. Bundled scripts fall back to their own VMs in that case.
+    if (m_sharedEngineFailed) {
+        return nullptr;
+    }
+    QString error;
+    m_sharedEngine = LuauTileAlgorithm::createSandboxedEngine(m_watchdog, &error);
+    if (!m_sharedEngine) {
+        m_sharedEngineFailed = true;
+        qCWarning(PhosphorTiles::lcTilesLib) << "ScriptedAlgorithmLoader: shared VM setup failed (" << error
+                                             << ") — bundled scripts will each use their own VM";
+        return nullptr;
+    }
+    qCInfo(PhosphorTiles::lcTilesLib) << "ScriptedAlgorithmLoader: created shared VM for bundled algorithms";
+    return m_sharedEngine;
+}
+
 void ScriptedAlgorithmLoader::loadFromDirectory(const QString& dir, bool isUserDir, const QString& canonicalUserDir)
 {
     const QStringList validFiles = validatedLuauFiles(dir, MaxWatchedFilesPerDir);
@@ -415,7 +439,19 @@ void ScriptedAlgorithmLoader::loadFromDirectory(const QString& dir, bool isUserD
         // shared_ptr so the algorithm keeps it alive across deferred-delete
         // teardown (the algorithm dtor can run after the loader is gone — see
         // LuauTileAlgorithm.h for the contract).
-        auto* algo = new LuauTileAlgorithm(fullPath, m_watchdog, nullptr);
+        // Trusted bundled scripts share one sandboxed VM (prelude + baseline
+        // paid once); untrusted user scripts each get their own isolated,
+        // per-engine-capped VM. If the shared VM can't be built, bundled
+        // scripts fall back to their own VMs (correct, just less memory-frugal).
+        LuauTileAlgorithm* algo = nullptr;
+        if (!isUserDir) {
+            if (const std::shared_ptr<PhosphorScripting::LuauEngine> shared = ensureSharedEngine()) {
+                algo = new LuauTileAlgorithm(fullPath, shared, m_watchdog, nullptr);
+            }
+        }
+        if (!algo) {
+            algo = new LuauTileAlgorithm(fullPath, m_watchdog, nullptr);
+        }
         if (!algo->isValid()) {
             qCWarning(PhosphorTiles::lcTilesLib) << "Invalid scripted algorithm, skipping:" << fullPath;
             delete algo;
