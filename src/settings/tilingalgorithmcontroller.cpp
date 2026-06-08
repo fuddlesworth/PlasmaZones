@@ -146,7 +146,10 @@ QVariantList TilingAlgorithmController::customParamsForAlgorithm(const QString& 
                     } else {
                         const qreal minVal = paramMap.value(ParamDefKeys::MinValue).toDouble();
                         const qreal maxVal = paramMap.value(ParamDefKeys::MaxValue).toDouble();
-                        paramMap[ParamDefKeys::Value] = std::clamp(num, minVal, maxVal);
+                        // An inverted range (min > max) from a malformed
+                        // (e.g. user-authored Luau) schema is undefined behaviour
+                        // for std::clamp; skip the clamp rather than invoke UB.
+                        paramMap[ParamDefKeys::Value] = (minVal <= maxVal) ? std::clamp(num, minVal, maxVal) : num;
                     }
                 }
             } else if (type == ParamTypes::Enum) {
@@ -217,7 +220,9 @@ void TilingAlgorithmController::setCustomParam(const QString& algorithmId, const
         } else {
             const qreal minVal = defMap.value(ParamDefKeys::MinValue).toDouble();
             const qreal maxVal = defMap.value(ParamDefKeys::MaxValue).toDouble();
-            coerced = std::clamp(num, minVal, maxVal);
+            // An inverted range (min > max) from a malformed schema is UB for
+            // std::clamp; skip the clamp rather than invoke UB.
+            coerced = (minVal <= maxVal) ? std::clamp(num, minVal, maxVal) : num;
         }
     } else if (defType == ParamTypes::Bool) {
         coerced = value.toBool();

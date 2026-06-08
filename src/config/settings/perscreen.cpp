@@ -11,6 +11,7 @@
 #include <QSet>
 #include <QStringList>
 #include <algorithm>
+#include <iterator>
 
 namespace PlasmaZones {
 

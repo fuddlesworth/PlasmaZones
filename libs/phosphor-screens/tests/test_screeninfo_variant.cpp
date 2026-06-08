@@ -244,6 +244,10 @@ private Q_SLOTS:
         const QVariantMap m = screenInfoListToVariantList({s}).first().toMap();
         QVERIFY2(m.contains(QStringLiteral("connectorName")), "connectorName must be present when set");
         QCOMPARE(m.value(QStringLiteral("connectorName")).toString(), QStringLiteral("DP-5"));
+        // When the monitor name already equals the connector (and there is no
+        // vendor/model), the displayLabel must NOT append a redundant
+        // " · DP-5" suffix — it stays the bare connector name.
+        QCOMPARE(m.value(QStringLiteral("displayLabel")).toString(), QStringLiteral("DP-5"));
     }
 };
 
