@@ -520,6 +520,28 @@ private Q_SLOTS:
         QCOMPARE(got.tiles.first().dest, QPoint(0, 0));
         QCOMPARE(got.tiles.first().image.size(), img.size());
     }
+
+    void testZoneShaderItem_labelsTextureSamePayloadSuppressesSignal()
+    {
+        ZoneShaderItem item;
+        const PhosphorRendering::ZoneLabelTexture labels =
+            ZoneLabelTextureBuilder::build(makeFourZoneLayout(), QSize(1920, 1080), Qt::white, /*showNumbers=*/true);
+
+        item.setLabelsTexture(labels); // first set: genuine change from the empty default
+
+        QSignalSpy spy(&item, &ZoneShaderItem::labelsTextureChanged);
+        // Re-setting an equal payload must be suppressed by the operator== guard
+        // (the "emit only on change" rule). Without the guard this would fire.
+        item.setLabelsTexture(labels);
+        QCOMPARE(spy.count(), 0);
+
+        // A genuinely different payload (same geometry, different glyph color →
+        // different tile pixels) still emits.
+        const PhosphorRendering::ZoneLabelTexture other =
+            ZoneLabelTextureBuilder::build(makeFourZoneLayout(), QSize(1920, 1080), Qt::red, /*showNumbers=*/true);
+        item.setLabelsTexture(other);
+        QCOMPARE(spy.count(), 1);
+    }
 };
 
 QTEST_MAIN(TestZoneShaderItem)

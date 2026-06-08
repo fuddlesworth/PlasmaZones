@@ -12,7 +12,6 @@
 #include "zoneshadernoderhi.h"
 
 #include <plasmazones_rendering_export.h>
-#include <QImage>
 #include <QMutex>
 #include <QVariantList>
 #include <QVector>

@@ -63,6 +63,16 @@ void ZoneShaderNodeRhi::setZoneCounts(int total, int highlighted)
 
 void ZoneShaderNodeRhi::setLabelsTexture(const ZoneLabelTexture& labels)
 {
+    // The host item pushes the payload on every updatePaintNode (i.e. every
+    // animated-shader repaint), but the GPU texture only needs re-uploading when
+    // the labels actually change. Skip redundant re-uploads via value compare.
+    // The m_labelsInitialized guard ensures the first push (and any push after
+    // releaseResources) always uploads so the texture + slot-1 binding get
+    // created; an already-pending dirty upload of the same payload still
+    // completes on the next prepare(), so it's safe to skip here.
+    if (m_labelsInitialized && labels == m_labels) {
+        return;
+    }
     m_labels = labels;
     m_labelsTextureDirty = true;
 }
@@ -73,12 +83,15 @@ void ZoneShaderNodeRhi::uploadLabelsTexture(QRhi* rhi, QRhiCommandBuffer* cb)
         return;
     }
 
-    // After K consecutive init failures we stop trying. This keeps prepare()
-    // from running newTexture/newSampler + logging on every frame forever
-    // when the underlying RHI has wedged. Once we give up, the SRB has no
-    // binding at slot 1 — the pipeline still renders, just without labels.
+    // After K consecutive texture/sampler-create failures (whether on first
+    // init OR on a later resize) we stop trying. This keeps prepare() from
+    // running newTexture/newSampler + logging on every frame forever when the
+    // underlying RHI has wedged. After an init give-up the SRB has no binding at
+    // slot 1 (pipeline renders without labels); after a resize give-up the old
+    // texture stays bound (labels frozen at the old size). releaseResources()
+    // clears the latch so a fresh scene-graph cycle can recover.
     constexpr int kMaxInitAttempts = 5;
-    if (!m_labelsInitialized && m_labelsInitGaveUp) {
+    if (m_labelsInitGaveUp) {
         m_labelsTextureDirty = false;
         return;
     }
@@ -126,8 +139,20 @@ void ZoneShaderNodeRhi::uploadLabelsTexture(QRhi* rhi, QRhiCommandBuffer* cb)
     } else if (m_labelsTexture->pixelSize() != targetSize) {
         std::unique_ptr<QRhiTexture> resized(rhi->newTexture(QRhiTexture::RGBA8, targetSize));
         if (!resized->create()) {
+            // Same give-up cap as init: a persistently-failing resize would
+            // otherwise re-run newTexture/create every repaint forever. On
+            // give-up the old (wrong-size) texture stays bound — labels frozen
+            // at the old size — rather than churning the GPU each frame.
+            ++m_labelsInitFailureCount;
+            if (m_labelsInitFailureCount >= kMaxInitAttempts) {
+                qCWarning(lcZoneShader) << "labels texture resize failed" << kMaxInitAttempts
+                                        << "times — giving up; labels frozen at the previous size";
+                m_labelsInitGaveUp = true;
+                m_labelsTextureDirty = false;
+            }
             return; // keep dirty; retry next frame with old texture still bound
         }
+        m_labelsInitFailureCount = 0; // recovered
         // Register the new binding BEFORE dropping the old texture. setExtraBinding
         // resets the SRB (in resetAllBindingsAndPipelines), so the SRB never
         // transiently holds a binding to the freed old QRhiTexture pointer.

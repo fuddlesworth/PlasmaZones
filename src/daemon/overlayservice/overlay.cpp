@@ -557,7 +557,13 @@ void OverlayService::recreateOverlayWindowsOnTypeMismatch()
         createOverlayWindow(screenId, physScreen, geom.isValid() ? geom : physScreen->geometry());
         updateOverlayWindow(screenId, physScreen);
     }
-    if (wasVisible && anyScreenUsesShader()) {
+    // Gate the render-loop restart + zone repopulation on isOverlayDisplaying(),
+    // not wasVisible: while warm-idled (m_visible but m_overlayIdled — windows
+    // kept alive after a drag), a settings toggle or live-edit reaches here, and
+    // restarting the 60 Hz loop + re-pushing zones would un-blank the overlay and
+    // undo the idle quiesce. The next refreshFromIdle() on the following drag
+    // repopulates and restarts. Mirrors the same gate in updateLayout().
+    if (isOverlayDisplaying() && anyScreenUsesShader()) {
         updateZonesForAllWindows();
         startShaderAnimation();
     }
