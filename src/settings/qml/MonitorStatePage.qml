@@ -8,8 +8,8 @@ import org.kde.kirigami as Kirigami
 /**
  * @brief Monitor State dashboard — current mode and layout per monitor.
  *
- * Uses the visual monitor selector bar to pick a monitor, then shows
- * a layout preview with mode toggle and layout/algorithm selector.
+ * Uses the spatial DisplayMap to pick a monitor, then shows a layout
+ * preview with mode toggle and layout/algorithm selector.
  */
 SettingsFlickable {
     id: root

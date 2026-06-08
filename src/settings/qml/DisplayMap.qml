@@ -21,7 +21,8 @@ import org.phosphor.animation
  * overrides shows a corner dot (polled via `hasOverridesMethod`). Labels lead
  * with the connector name (DP-2) the way Hyprland/niri configs reference
  * outputs; the full display label (vendor + model, or resolution as a
- * fallback) lives in the tooltip.
+ * fallback) lives in the tooltip when one is known — a connector-only output
+ * with no richer label suppresses the tooltip, since the face already shows it.
  *
  * Pure QML drawing — no SVG asset. Reuses the proportional-geometry idiom
  * from ZonePreview/VirtualScreenPreview.

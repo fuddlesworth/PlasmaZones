@@ -30,15 +30,17 @@ namespace PlasmaZones {
  *      page is clean) it fetches the rule set from
  *      `org.plasmazones.WindowRules` and loads it into the model.
  *   2. Every QML CRUD call mutates the in-memory model and flips the dirty bit.
- *   3. On `commit()` the staged rule set is pushed back to the daemon via
- *      `setAllRules` — the daemon stays the sole writer of `windowrules.json`.
+ *   3. On `apply()` the staged rule set is pushed back to the daemon
+ *      asynchronously (`asyncCommit` → `setAllRules`) — the daemon stays the
+ *      sole writer of `windowrules.json`.
  *   4. On `revert()` the staged set is re-fetched from the daemon and the
  *      staged edits discarded — but only if the daemon is reachable; a failed
  *      re-fetch leaves the page dirty rather than silently dropping the edits.
  *
  * Dirty-tracking + revert/commit mirror `AnimationsPageController`'s
  * pending-changes contract: `SettingsController` connects `dirtyChanged` to
- * `setNeedsSave`, calls `commit()` from `save()`, and `revert()` from `load()`.
+ * `setNeedsSave`, drives `apply()` (which dispatches `asyncCommit`) from
+ * `save()`, and `revert()` from `load()`.
  *
  * The controller is the only thing on the settings side that knows the D-Bus
  * shape; the model and QML never touch the wire.
@@ -55,17 +57,17 @@ class WindowRuleController : public PhosphorSettingsUi::PageController
     /// unsaved staged edits — `reload()` skipped the refresh to avoid stomping
     /// them, so the staged set is now divergent from the daemon's. The page
     /// surfaces a "rules changed on disk — review before saving" notice. While
-    /// this flag is set, `commit(false)` refuses the push (returns false) so it
-    /// cannot silently overwrite the daemon's newer rules — the user must
-    /// review/revert or call `commit(true)` to force the overwrite.
+    /// this flag is set, `asyncCommit(false)` refuses the push so it cannot
+    /// silently overwrite the daemon's newer rules — the user must review/revert
+    /// or call `asyncCommit(true)` to force the overwrite.
     Q_PROPERTY(bool daemonChangedWhileDirty READ daemonChangedWhileDirty NOTIFY daemonChangedWhileDirtyChanged)
 
 public:
     explicit WindowRuleController(QObject* parent = nullptr);
     ~WindowRuleController() override;
 
-    /// PhosphorSettingsUi::StagingDomain contract. apply() forwards to
-    /// commit() (the staged set goes to the daemon); discard() forwards to
+    /// PhosphorSettingsUi::StagingDomain contract. apply() dispatches
+    /// asyncCommit() (the staged set goes to the daemon); discard() forwards to
     /// revert() (the daemon's set is re-fetched into the model).
     bool isDirty() const override;
     void apply() override;
@@ -128,10 +130,11 @@ public:
     /// is then left empty and `daemonReachable` is false.
     Q_INVOKABLE void reload();
 
-    /// Push the staged rule set back to the daemon. Clears the dirty bit on a
-    /// successful write. Called by `SettingsController::save()`. Returns false
-    /// if the push failed (daemon down, or the daemon rejected/partially
-    /// dropped rules) — the caller must keep the page dirty in that case.
+    /// Synchronous push of the staged rule set back to the daemon. Clears the
+    /// dirty bit on a successful write. Returns false if the push failed (daemon
+    /// down, or the daemon rejected/partially dropped rules) — the caller must
+    /// keep the page dirty in that case. The live save path uses the async
+    /// `asyncCommit()` below; this synchronous equivalent has no current caller.
     ///
     /// Refuses (returns false, leaves the page dirty) when
     /// `daemonChangedWhileDirty` is set and @p force is false: the daemon's
@@ -141,25 +144,17 @@ public:
     /// once the user has chosen "overwrite anyway".
     bool commit(bool force = false);
 
-    /// C++ helper that forwards to `commit(true)`. Was Q_INVOKABLE in
-    /// pass 17 when the QML daemonChangedWhileDirty banner called it
-    /// directly; pass 27 migrated that banner to the async path
-    /// (`asyncCommit(true)`), so the QML-facing escape hatch now lives
-    /// on `asyncCommit`. Kept as a public sync helper for tests and
-    /// any future internal caller — the Q_INVOKABLE marker is gone.
-    bool forceCommit();
-
     /// Async sibling of `commit()` — pushes the staged rule set to the
     /// daemon via QDBusPendingCallWatcher and emits the inherited
     /// `applyResult(ok, error)` signal on the reply. UI threads no
     /// longer block waiting for the daemon (a stuck/firewalled daemon
     /// would freeze the whole Settings window with the sync path).
     ///
-    /// The sync `commit()` above stays callable for back-compat:
-    /// `SettingsController::save()` and the inherited `apply()` slot
-    /// still use it. Once the chrome footer surfaces the async
-    /// applyResult state-machine, the sync helper can become an
-    /// internal implementation detail.
+    /// This is the live save path: `apply()` (the StagingDomain slot
+    /// `SettingsController::save()` drives) dispatches through
+    /// `asyncCommit(false)`, and the daemon-changed banner forces an
+    /// overwrite via `asyncCommit(true)`. The sync `commit()` above is
+    /// the synchronous equivalent, retained as a non-invokable helper.
     Q_INVOKABLE void asyncCommit(bool force = false);
 
     /// Discard staged edits and re-fetch from the daemon. The fetch is async,

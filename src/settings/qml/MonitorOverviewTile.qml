@@ -26,9 +26,10 @@ Rectangle {
     /// connectorName, isPrimary, width/height, etc.).
     required property var screenData
     /// Rule-related data: `{ screenId, layoutName, tilingEnabled, ruleCount,
-    /// assigned }` from `WindowRuleController.monitorOverview(screens)`. May be
-    /// undefined for a screen with no pinned rules — the tile renders a
-    /// "Not assigned" caption in that case.
+    /// assigned }` from `WindowRuleController.monitorOverview(screens)`, which
+    /// emits a tile for every screen. A screen with no pinned rules carries
+    /// `assigned: false` and renders a "Not assigned" caption; the property only
+    /// stays `undefined` if no overview payload is supplied at all.
     property var tileData: undefined
     /// True when this tile is the active monitor filter.
     property bool selected: false

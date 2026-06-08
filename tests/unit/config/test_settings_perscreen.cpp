@@ -57,6 +57,37 @@ private Q_SLOTS:
         QVERIFY(!settings.hasPerScreenZoneSelectorSettings(screen));
     }
 
+    /**
+     * Per-screen zone selector setter: writing the same value twice emits the
+     * change signal exactly once, and a no-op write against a screen with no
+     * existing entry never default-inserts an empty husk (which hasPerScreen*
+     * would otherwise read as a phantom override).
+     */
+    void testPerScreenZoneSelector_noOpWriteSuppressesEmitAndHusk()
+    {
+        IsolatedConfigGuard guard;
+
+        Settings settings;
+
+        const QString screen = QStringLiteral("test-screen-1");
+
+        QSignalSpy spy(&settings, &Settings::perScreenZoneSelectorSettingsChanged);
+
+        // First write of a real value emits once and creates the entry.
+        settings.setPerScreenZoneSelectorSetting(screen, QStringLiteral("Position"), 3);
+        QCOMPARE(spy.count(), 1);
+        QVERIFY(settings.hasPerScreenZoneSelectorSettings(screen));
+
+        // Re-writing the identical value is a no-op: no second emit.
+        settings.setPerScreenZoneSelectorSetting(screen, QStringLiteral("Position"), 3);
+        QCOMPARE(spy.count(), 1);
+
+        // A different value updates in place and emits again.
+        settings.setPerScreenZoneSelectorSetting(screen, QStringLiteral("Position"), 4);
+        QCOMPARE(spy.count(), 2);
+        QCOMPARE(settings.getPerScreenZoneSelectorSettings(screen).value(QStringLiteral("Position")).toInt(), 4);
+    }
+
     // =========================================================================
     // Per-screen autotile validation
     // =========================================================================

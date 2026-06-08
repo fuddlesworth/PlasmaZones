@@ -2,16 +2,14 @@
 // SPDX-License-Identifier: LGPL-2.1-or-later
 
 #include <PhosphorTileEngine/AutotileConfig.h>
-#include <PhosphorTiles/AlgorithmRegistry.h>
-#include <PhosphorEngine/PerScreenKeys.h>
 #include <PhosphorTiles/AutotileConstants.h>
 #include "tileenginelogging.h"
 #include <QRegularExpression>
-#include <QtMath>
+#include <algorithm>
 
 namespace PhosphorTileEngine {
 
-// Use shared JSON keys, enum-string values, and defaults from constants.h
+// Use shared JSON keys, enum-string values, and defaults from AutotileConstants.h
 using namespace PhosphorTiles::AutotileJsonKeys;
 using namespace PhosphorTiles::AutotileJsonValues;
 using namespace PhosphorTiles::AutotileDefaults;

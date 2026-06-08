@@ -327,8 +327,8 @@ SettingsFlickable {
             type: Kirigami.MessageType.Warning
             visible: page.controller.daemonChangedWhileDirty
             text: i18n("The window rules changed on disk while you were editing — saving now will overwrite those changes. Review your edits before saving, or discard them to reload.")
-            // Escape hatch — the controller's normal commit() refuses
-            // when daemonChangedWhileDirty is set so the user doesn't
+            // Escape hatch — the controller's normal asyncCommit(false)
+            // refuses when daemonChangedWhileDirty is set so the user doesn't
             // silently overwrite. `asyncCommit(true)` (the QML-callable
             // force variant on WindowRuleController) bypasses the guard
             // for the "I know, save anyway" path; mirrors the SettingsCard

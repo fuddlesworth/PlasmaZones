@@ -25,8 +25,11 @@ SettingsFlickable {
     property var _pendingScreens: []
     // Array of {x, y, width, height, displayName} — last-saved virtual screen definitions
     property var _savedScreens: []
-    property int _screenWidth: 1920
-    property int _screenHeight: 1080
+    // Sentinel physical resolution used when no real geometry can be inferred.
+    readonly property int _fallbackScreenWidth: 1920
+    readonly property int _fallbackScreenHeight: 1080
+    property int _screenWidth: _fallbackScreenWidth
+    property int _screenHeight: _fallbackScreenHeight
     // Grid dimensions inferred from pending screens
     property int _columns: 1
     property int _rows: 1
@@ -173,8 +176,8 @@ SettingsFlickable {
                 });
         }
         if (children.length === 0) {
-            _screenWidth = 1920;
-            _screenHeight = 1080;
+            _screenWidth = _fallbackScreenWidth;
+            _screenHeight = _fallbackScreenHeight;
             return;
         }
         // Group by pixel height (2px tolerance) to separate rows
@@ -220,8 +223,8 @@ SettingsFlickable {
             _screenWidth = maxRowW;
             _screenHeight = totalH;
         } else {
-            _screenWidth = 1920;
-            _screenHeight = 1080;
+            _screenWidth = _fallbackScreenWidth;
+            _screenHeight = _fallbackScreenHeight;
         }
     }
 

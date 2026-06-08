@@ -379,11 +379,6 @@ void WindowRuleController::reload()
     fetchAndLoad();
 }
 
-bool WindowRuleController::forceCommit()
-{
-    return commit(/*force=*/true);
-}
-
 bool WindowRuleController::commit(bool force)
 {
     if (m_asyncCommitInFlight) {

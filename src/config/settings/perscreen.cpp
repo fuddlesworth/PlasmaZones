@@ -670,6 +670,26 @@ static bool clearPerScreenKeySubset(QHash<QString, QVariantMap>& hash, const QSt
     return changed;
 }
 
+// Store a single validated per-screen override under `key`. Matches any existing
+// entry under either the connector or EDID id form and updates it in place, so a
+// write never creates a duplicate under the alternate form and a no-op write
+// never default-inserts an empty husk entry (which the hasPerScreen* readers
+// would treat as a phantom override). New entries key by the canonical EDID
+// form. Returns true if the map was mutated (caller emits the change signals).
+static bool applyPerScreenSetting(QHash<QString, QVariantMap>& hash, const QString& screenIdOrName, const QString& key,
+                                  const QVariant& validated)
+{
+    auto it = findPerScreenEntryMutable(hash, screenIdOrName);
+    if (it != hash.end()) {
+        if (it.value().value(key) == validated)
+            return false;
+        it.value()[key] = validated;
+    } else {
+        hash[canonicalPerScreenKey(screenIdOrName)][key] = validated;
+    }
+    return true;
+}
+
 // ── Per-Screen PhosphorZones::Zone Selector Config ──────────────────────────────────────────
 
 ZoneSelectorConfig Settings::resolvedZoneSelectorConfig(const QString& screenIdOrName) const
@@ -711,23 +731,10 @@ void Settings::setPerScreenZoneSelectorSetting(const QString& screenIdOrName, co
         return;
     }
 
-    // Match any existing entry under either the connector or EDID id form (the
-    // same resolution the getters/clearers use) and update it in place, so a
-    // write never creates a duplicate under the alternate form and a no-op
-    // write never default-inserts an empty husk entry (which hasPerScreen*
-    // Settings would read as a phantom override). New entries key by canonical
-    // EDID form.
-    const QString resolved = canonicalPerScreenKey(screenIdOrName);
-    auto it = findPerScreenEntryMutable(m_perScreenZoneSelectorSettings, screenIdOrName);
-    if (it != m_perScreenZoneSelectorSettings.end()) {
-        if (it.value().value(key) == validated)
-            return;
-        it.value()[key] = validated;
-    } else {
-        m_perScreenZoneSelectorSettings[resolved][key] = validated;
+    if (applyPerScreenSetting(m_perScreenZoneSelectorSettings, screenIdOrName, key, validated)) {
+        Q_EMIT perScreenZoneSelectorSettingsChanged();
+        Q_EMIT settingsChanged();
     }
-    Q_EMIT perScreenZoneSelectorSettingsChanged();
-    Q_EMIT settingsChanged();
 }
 
 void Settings::clearPerScreenZoneSelectorSettings(const QString& screenIdOrName)
@@ -769,20 +776,10 @@ void Settings::setPerScreenAutotileSetting(const QString& screenIdOrName, const 
     // Animation keys ("AnimationsEnabled", etc.) have no "Autotile" prefix.
     const QString normalizedKey = stripAutotilePrefix(key);
 
-    // Match any existing entry under either id form and update in place (no
-    // duplicate under the alternate form, no empty husk on a no-op write); new
-    // entries key by the canonical EDID form.
-    const QString resolved = canonicalPerScreenKey(screenIdOrName);
-    auto it = findPerScreenEntryMutable(m_perScreenAutotileSettings, screenIdOrName);
-    if (it != m_perScreenAutotileSettings.end()) {
-        if (it.value().value(normalizedKey) == validated)
-            return;
-        it.value()[normalizedKey] = validated;
-    } else {
-        m_perScreenAutotileSettings[resolved][normalizedKey] = validated;
+    if (applyPerScreenSetting(m_perScreenAutotileSettings, screenIdOrName, normalizedKey, validated)) {
+        Q_EMIT perScreenAutotileSettingsChanged();
+        Q_EMIT settingsChanged();
     }
-    Q_EMIT perScreenAutotileSettingsChanged();
-    Q_EMIT settingsChanged();
 }
 
 void Settings::clearPerScreenAutotileSettings(const QString& screenIdOrName)
@@ -851,20 +848,10 @@ void Settings::setPerScreenSnappingSetting(const QString& screenIdOrName, const 
         return;
     }
 
-    // Match any existing entry under either id form and update in place (no
-    // duplicate under the alternate form, no empty husk on a no-op write); new
-    // entries key by the canonical EDID form.
-    const QString resolved = canonicalPerScreenKey(screenIdOrName);
-    auto it = findPerScreenEntryMutable(m_perScreenSnappingSettings, screenIdOrName);
-    if (it != m_perScreenSnappingSettings.end()) {
-        if (it.value().value(key) == validated)
-            return;
-        it.value()[key] = validated;
-    } else {
-        m_perScreenSnappingSettings[resolved][key] = validated;
+    if (applyPerScreenSetting(m_perScreenSnappingSettings, screenIdOrName, key, validated)) {
+        Q_EMIT perScreenSnappingSettingsChanged();
+        Q_EMIT settingsChanged();
     }
-    Q_EMIT perScreenSnappingSettingsChanged();
-    Q_EMIT settingsChanged();
 }
 
 void Settings::clearPerScreenSnappingSettings(const QString& screenIdOrName)

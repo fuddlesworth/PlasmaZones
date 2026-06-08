@@ -202,9 +202,10 @@ bool setMonitorDisabledFor(ISettings* settings, PhosphorZones::AssignmentEntry::
 
     if (disabled) {
         bool changed = false;
-        // Drop any pre-migration legacy `screenName` entry so a user that
-        // toggles disable/enable on the same row doesn't end up with both
-        // the legacy and canonical entries simultaneously.
+        // A monitor can be referenced by either its connector name or its
+        // canonical screen id; drop any entry under the connector form so a
+        // user toggling disable/enable on the same row doesn't end up with the
+        // monitor listed twice under both identifier forms.
         if (id != screenName)
             changed = list.removeAll(screenName) > 0;
         if (!list.contains(id)) {

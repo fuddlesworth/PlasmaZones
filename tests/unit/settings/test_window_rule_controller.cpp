@@ -59,7 +59,7 @@ private Q_SLOTS:
     void matchIsContextOnlyClassifies();
     void validationIssuesForJsonFlags();
     void defaultPayloadForSeedsParams();
-    void forceCommitIsInvokable();
+    void asyncCommitAndRevertAreInvokable();
     void curveLabelResolverBridgesQmlNaming();
 };
 
@@ -903,15 +903,12 @@ void TestWindowRuleController::defaultPayloadForSeedsParams()
     QCOMPARE(unknownPayload.size(), 1);
 }
 
-void TestWindowRuleController::forceCommitIsInvokable()
+void TestWindowRuleController::asyncCommitAndRevertAreInvokable()
 {
-    // Pin the post-pass-27 contract — asyncCommit(bool) is the
-    // QML-facing escape hatch the daemonChangedWhileDirty banner
-    // uses. Originally forceCommit() carried the Q_INVOKABLE, but
-    // pass 27 migrated QML to the async path so the test now pins
-    // the live contract. The old test name is preserved so the
-    // history is grep-able; the assertion targets the actual hot
-    // path.
+    // Pin the QML-facing commit contract: asyncCommit(bool) is the
+    // escape hatch the daemonChangedWhileDirty banner uses, and
+    // revert() backs its "Discard and reload" action. Both must
+    // stay Q_INVOKABLE or the banner breaks at runtime.
     WindowRuleController controller;
     const QMetaObject* mo = controller.metaObject();
     QVERIFY2(mo->indexOfMethod("asyncCommit(bool)") >= 0,
