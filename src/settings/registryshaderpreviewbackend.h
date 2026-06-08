@@ -64,8 +64,9 @@ public:
                 makeZone(0.6, 0.333333, 0.4, 0.333334, 3), makeZone(0.6, 0.666667, 0.4, 0.333333, 4)};
     }
 
-    // Only consulted for fixed-geometry zones, of which the fallback has none; a
-    // sane default keeps the contract total.
+    // Only consulted for fixed-geometry zones, of which this backend's
+    // master-stack zones (all relative geometry) have none; a sane default keeps
+    // the contract total.
     QSize targetScreenSize() const override
     {
         return QSize(1920, 1080);
