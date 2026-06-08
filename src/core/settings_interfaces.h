@@ -128,6 +128,8 @@ public:
     virtual void setZoneSpanModifier(DragModifier modifier) = 0;
     virtual QVariantList zoneSpanTriggers() const = 0;
     virtual void setZoneSpanTriggers(const QVariantList& triggers) = 0;
+    virtual bool zoneSpanToggleMode() const = 0;
+    virtual void setZoneSpanToggleMode(bool enable) = 0;
     virtual bool toggleActivation() const = 0;
     virtual void setToggleActivation(bool enable) = 0;
     virtual bool snappingEnabled() const = 0;

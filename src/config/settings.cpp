@@ -1856,6 +1856,8 @@ P_STORE_GET(bool, snappingEnabled, snappingGroup, enabledKey, bool)
 P_STORE_SET_BOOL(setSnappingEnabled, snappingGroup, enabledKey, snappingEnabledChanged)
 P_STORE_GET(bool, toggleActivation, snappingBehaviorGroup, toggleActivationKey, bool)
 P_STORE_SET_BOOL(setToggleActivation, snappingBehaviorGroup, toggleActivationKey, toggleActivationChanged)
+P_STORE_GET(bool, zoneSpanToggleMode, snappingBehaviorZoneSpanGroup, toggleActivationKey, bool)
+P_STORE_SET_BOOL(setZoneSpanToggleMode, snappingBehaviorZoneSpanGroup, toggleActivationKey, zoneSpanToggleModeChanged)
 
 // Shared helper for the three "plain" trigger-list setters (activation,
 // snap-assist, autotile-insert). Post-write compare — the schema's

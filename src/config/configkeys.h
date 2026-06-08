@@ -194,7 +194,7 @@ public:
     P_CONFIG_KEY(toggleActivationKey, "ToggleActivation")
 
     // Snapping.Behavior.ZoneSpan
-    // (uses enabledKey and triggersKey)
+    // (uses enabledKey, modifierKey, triggersKey and toggleActivationKey)
 
     // Snapping.Behavior.SnapAssist
     P_CONFIG_KEY(featureEnabledKey, "FeatureEnabled")

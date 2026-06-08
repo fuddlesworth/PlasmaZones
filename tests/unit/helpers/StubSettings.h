@@ -97,6 +97,13 @@ public:
     void setZoneSpanTriggers(const QVariantList&) override
     {
     }
+    bool zoneSpanToggleMode() const override
+    {
+        return false;
+    }
+    void setZoneSpanToggleMode(bool) override
+    {
+    }
     bool toggleActivation() const override
     {
         return false;

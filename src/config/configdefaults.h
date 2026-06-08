@@ -91,6 +91,10 @@ public:
     {
         return makeSingleTriggerList(zoneSpanModifier());
     }
+    static bool zoneSpanToggleMode()
+    {
+        return false;
+    }
     static QVariantList autotileDragInsertTriggers()
     {
         // Held while dragging a window to dynamically insert it into the
