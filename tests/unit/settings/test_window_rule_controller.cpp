@@ -46,6 +46,7 @@ private Q_SLOTS:
     void monitorOverviewSummarises();
     void monitorOverviewIgnoresDisabledRules();
     void monitorOverviewClassifiesScrollingWithoutLayoutName();
+    void monitorOverviewSharesOneLayoutSlot();
     void monitorOverviewDisableEngineMatchesEffectiveMode();
     void engineModePickerExposesAllVocabularyTokens();
     void userAuthorableFilterHidesInternalActions();
@@ -254,6 +255,39 @@ void TestWindowRuleController::monitorOverviewClassifiesScrollingWithoutLayoutNa
     // The Scrolling branch yields no layout/algorithm to label — the tile
     // must read empty here, NOT the stale snapping layout id/name that
     // the pre-fix classifier would have surfaced.
+    QVERIFY2(tile.value(QStringLiteral("layoutName")).toString().isEmpty(),
+             qPrintable(tile.value(QStringLiteral("layoutName")).toString()));
+}
+
+void TestWindowRuleController::monitorOverviewSharesOneLayoutSlot()
+{
+    // SetSnappingLayout and SetTilingAlgorithm share ONE daemon Layout slot
+    // (ActionSlot::Layout), filled first-wins. A rule that sets BOTH (tiling
+    // first, so it wins the slot) under a Snapping engine: the tiling algorithm
+    // mismatches the active engine, so the tile shows NO layout — the
+    // lower-precedence snapping layout must not resurface (the daemon discarded
+    // it, and a snapping engine can't render the tiling token). The pre-fix
+    // two-slot model would have surfaced the snapping layout here.
+    WindowRuleController controller;
+
+    QVariantMap rule = controller.newEmptyRule(QStringLiteral("monitor"));
+    QVariantMap match = rule.value(QStringLiteral("match")).toMap();
+    match[QStringLiteral("value")] = QStringLiteral("DP-2");
+    rule[QStringLiteral("match")] = match;
+    rule[QStringLiteral("actions")] =
+        QVariantList{QVariantMap{{QStringLiteral("type"), QStringLiteral("setTilingAlgorithm")},
+                                 {QStringLiteral("algorithm"), QStringLiteral("bsp")}},
+                     QVariantMap{{QStringLiteral("type"), QStringLiteral("setSnappingLayout")},
+                                 {QStringLiteral("layoutId"), QStringLiteral("grid")}},
+                     QVariantMap{{QStringLiteral("type"), QStringLiteral("setEngineMode")},
+                                 {QStringLiteral("mode"), QStringLiteral("snapping")}}};
+    QVERIFY(!controller.addRuleFromJson(rule).isEmpty());
+
+    const QVariantList screens{QVariantMap{{QStringLiteral("name"), QStringLiteral("DP-2")}}};
+    const QVariantList overview = controller.monitorOverview(screens);
+    QCOMPARE(overview.size(), 1);
+    const QVariantMap tile = overview.first().toMap();
+    QCOMPARE(tile.value(QStringLiteral("assigned")).toBool(), true);
     QVERIFY2(tile.value(QStringLiteral("layoutName")).toString().isEmpty(),
              qPrintable(tile.value(QStringLiteral("layoutName")).toString()));
 }

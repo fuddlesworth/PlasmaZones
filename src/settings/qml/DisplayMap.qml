@@ -84,15 +84,10 @@ ColumnLayout {
                 delete entry["virtualDisplayName"];
                 // The serializer precomputed displayLabel/resolution from the
                 // VIRTUAL child (e.g. "VS1 — …" with half-width geometry). Drop
-                // them so this demoted physical entry never surfaces a virtual
-                // label in the tooltip or the connector-less label fallback;
-                // resolution is rebuilt from the physical geometry below.
+                // them and rebuild for the demoted PHYSICAL entry below, so the
+                // tooltip/label never surfaces a virtual-screen label.
                 delete entry["displayLabel"];
                 delete entry["resolution"];
-                // `manufacturer`/`model` survive unchanged: they identify the
-                // physical monitor (shared by every virtual child), so they
-                // stay correct for the demoted entry — unlike the virtual-
-                // derived label/resolution dropped above.
                 var physRes = appSettings.physicalScreenResolution(physId);
                 if (physRes.width > 0 && physRes.height > 0) {
                     entry["width"] = physRes.width;
@@ -101,6 +96,24 @@ ColumnLayout {
                 } else {
                     delete entry["width"];
                     delete entry["height"];
+                }
+                // Rebuild a physical displayLabel from the surviving
+                // manufacturer/model (they identify the physical monitor, shared
+                // by every virtual child) + the physical resolution, so the
+                // demoted tile's tooltip reads like a real physical screen
+                // ("LG UltraFine (3840×2160)") instead of bare resolution. With
+                // no vendor/model the tooltip falls back to resolution and the
+                // tile leads with connectorName.
+                var vendorModel = [entry["manufacturer"], entry["model"]].filter(Boolean).join(" ");
+                if (vendorModel) {
+                    var rebuilt = vendorModel + (entry["resolution"] ? " (" + entry["resolution"] + ")" : "");
+                    // Mirror the C++ builder's ` · <connector>` disambiguation
+                    // suffix (appended whenever the label carries a make/model)
+                    // so two identical make/model/resolution panels stay
+                    // distinguishable in the tooltip.
+                    if (entry["connectorName"])
+                        rebuilt += " · " + entry["connectorName"];
+                    entry["displayLabel"] = rebuilt;
                 }
             }
             result.push(entry);

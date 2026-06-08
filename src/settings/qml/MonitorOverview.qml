@@ -12,7 +12,7 @@ import org.kde.kirigami as Kirigami
  * Iterates `settingsController.screens` so the visual treatment (icon +
  * displayLabel + Primary badge) matches the canonical `DisplayMap`
  * used elsewhere in the app. Per-monitor rule data comes from
- * `WindowRuleController.monitorOverview()`, whose tiles are keyed by each
+ * `WindowRuleController.monitorOverview(screens)`, whose tiles are keyed by each
  * screen's `name`, with a `screenId` fallback for a nameless output (a
  * screen with neither is omitted).
  *

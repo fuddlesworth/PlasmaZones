@@ -26,7 +26,7 @@ Rectangle {
     /// connectorName, isPrimary, width/height, etc.).
     required property var screenData
     /// Rule-related data: `{ screenId, layoutName, tilingEnabled, ruleCount,
-    /// assigned }` from `WindowRuleController.monitorOverview()`. May be
+    /// assigned }` from `WindowRuleController.monitorOverview(screens)`. May be
     /// undefined for a screen with no pinned rules — the tile renders a
     /// "Not assigned" caption in that case.
     property var tileData: undefined
@@ -94,8 +94,8 @@ Rectangle {
 
         Rectangle {
             Layout.alignment: Qt.AlignHCenter
-            width: primaryLabel.implicitWidth + Kirigami.Units.smallSpacing * 2
-            height: primaryLabel.implicitHeight + 2
+            width: primaryLabel.implicitWidth + Kirigami.Units.smallSpacing
+            height: primaryLabel.implicitHeight + Kirigami.Units.smallSpacing / 2
             radius: height / 2
             color: tile._isPrimary ? Qt.rgba(Kirigami.Theme.positiveTextColor.r, Kirigami.Theme.positiveTextColor.g, Kirigami.Theme.positiveTextColor.b, 0.15) : "transparent"
 
@@ -104,7 +104,7 @@ Rectangle {
 
                 anchors.centerIn: parent
                 text: i18n("Primary")
-                font.pixelSize: Kirigami.Theme.smallFont.pixelSize - 1
+                font: Kirigami.Theme.smallFont
                 color: Kirigami.Theme.positiveTextColor
                 opacity: tile._isPrimary ? 1 : 0
             }

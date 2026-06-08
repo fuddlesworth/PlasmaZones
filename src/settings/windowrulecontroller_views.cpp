@@ -112,13 +112,17 @@ QVariantList WindowRuleController::monitorOverview(const QVariantList& screens) 
         // cascade winner; a QSet would over-state by accumulating
         // every matching rule).
         QString disabledEngineMode;
-        QString snappingLayout;
-        QString tilingAlgorithm;
-        // Mode the rule's `SetEngineMode` action selects (if any). Used to
-        // disambiguate which layout name the overview tile should show
-        // when a rule carries BOTH a snapping layout and a tiling
-        // algorithm — the engine mode is the source of truth for which
-        // engine actually runs.
+        // SetSnappingLayout and SetTilingAlgorithm both target ONE shared
+        // `ActionSlot::Layout` in the daemon (ruleaction.cpp), filled first-wins
+        // by priority — so the overview tracks a single Layout-slot winner (the
+        // token plus whether it's a tiling algorithm) rather than two
+        // independent slots, which would let it surface a lower-priority layout
+        // the daemon's cascade discarded.
+        QString layoutToken;
+        bool layoutIsTiling = false;
+        // Mode the rule's `SetEngineMode` action selects (if any). The tile
+        // shows the Layout-slot token only when its kind matches the active
+        // engine (a snapping engine can't render a tiling-algorithm token).
         QString engineMode;
     };
     QHash<QString, Summary> byScreen;
@@ -126,7 +130,7 @@ QVariantList WindowRuleController::monitorOverview(const QVariantList& screens) 
     // Sort rules by descending priority before accumulation. Multiple
     // matching enabled context-only rules on the same screen all contribute,
     // but the "first non-empty wins" guards below (s.engineMode.isEmpty(),
-    // s.snappingLayout.isEmpty(), s.tilingAlgorithm.isEmpty()) mean the
+    // s.disabledEngineMode.isEmpty(), s.layoutToken.isEmpty()) mean the
     // FIRST rule visited pins each slot. Without sorting that's "first
     // in rule-iteration order"; with sorting it's "highest priority" —
     // which matches the daemon's own resolution order for the same rule
@@ -177,10 +181,15 @@ QVariantList WindowRuleController::monitorOverview(const QVariantList& screens) 
                     s.disabledEngineMode = a.params.value(PhosphorWindowRule::ActionParam::Mode).toString();
                 } else if (a.type == ActionType::SetEngineMode && s.engineMode.isEmpty()) {
                     s.engineMode = a.params.value(PhosphorWindowRule::ActionParam::Mode).toString();
-                } else if (a.type == ActionType::SetSnappingLayout && s.snappingLayout.isEmpty()) {
-                    s.snappingLayout = a.params.value(PhosphorWindowRule::ActionParam::LayoutId).toString();
-                } else if (a.type == ActionType::SetTilingAlgorithm && s.tilingAlgorithm.isEmpty()) {
-                    s.tilingAlgorithm = a.params.value(PhosphorWindowRule::ActionParam::Algorithm).toString();
+                } else if ((a.type == ActionType::SetSnappingLayout || a.type == ActionType::SetTilingAlgorithm)
+                           && s.layoutToken.isEmpty()) {
+                    // One shared Layout slot, first-wins by priority — record
+                    // the winning token and its kind.
+                    s.layoutIsTiling = a.type == ActionType::SetTilingAlgorithm;
+                    s.layoutToken = a.params
+                                        .value(s.layoutIsTiling ? PhosphorWindowRule::ActionParam::Algorithm
+                                                                : PhosphorWindowRule::ActionParam::LayoutId)
+                                        .toString();
                 }
             }
         }
@@ -207,52 +216,31 @@ QVariantList WindowRuleController::monitorOverview(const QVariantList& screens) 
 
         QVariantMap tile;
         tile[QStringLiteral("screenId")] = screenId;
-        // Pick the layout token that matches the rule's engine mode. When a
-        // rule sets BOTH a snapping layout AND a tiling algorithm (legal —
-        // they live in independent slots) the engine mode decides which
-        // one is actually visible. Without an explicit engine mode we
-        // prefer the snapping layout (the more common case) and fall back
-        // to the algorithm only when no snapping layout is set AT ALL —
-        // crucially we DON'T cross-mix kinds: when the engine mode is
-        // "snapping" but no snapping layout was provided, we leave the
-        // label empty rather than showing a misleading autotile name.
-        QString layoutLabel;
-        // Track WHICH lookup applies — split prevents a UUID-shaped
-        // algorithm token from resolving via the snapping path (or a
-        // tokenised layoutId via the tiling path) just because both
-        // were wired to the same generic resolver.
-        const WindowRuleModel::LabelLookup* labelLookup = nullptr;
-        // Route the engineMode wire string through `modeFromWireString` so
-        // every token the validator accepts (snapping / autotile / scrolling
-        // — see `engineModeOptions()` in
+        // The daemon keeps ONE Layout-slot winner (first by priority). Show it
+        // only when its kind matches the active engine — a snapping engine
+        // can't render a tiling-algorithm token and vice versa — so a
+        // lower-priority layout the cascade discarded never resurfaces, and a
+        // mismatched-kind winner renders the engine alone rather than a
+        // misleading name. Route the engineMode wire string through
+        // `modeFromWireString` so every validator token (snapping / autotile /
+        // scrolling — see `engineModeOptions()` in
         // libs/phosphor-windowrule/src/ruleaction.cpp) classifies correctly.
-        // The previous inline `== "autotile"` / `== "snapping"` chain
-        // silently collapsed `"scrolling"` into the "no engine pin → prefer
-        // snapping layout" branch, which mis-labelled Scrolling-mode rules
-        // with their leftover snapping layout. Same bug class as the
-        // `entryFromRuleMatchActions` fix in libs/phosphor-zones.
+        QString layoutLabel;
+        // Track WHICH lookup applies — split prevents a UUID-shaped algorithm
+        // token from resolving via the snapping path (or a tokenised layoutId
+        // via the tiling path) just because both were wired to one resolver.
+        const WindowRuleModel::LabelLookup* labelLookup = nullptr;
         const auto mode = PhosphorZones::modeFromWireString(summary.engineMode);
-        if (mode == PhosphorZones::AssignmentEntry::Autotile) {
-            // Autotile engine pinned: only show tiling-algorithm tokens.
-            layoutLabel = summary.tilingAlgorithm;
-            labelLookup = &m_tilingAlgorithmLookup;
-        } else if (mode == PhosphorZones::AssignmentEntry::Snapping) {
-            // Snapping engine pinned: only show snapping-layout tokens.
-            layoutLabel = summary.snappingLayout;
-            labelLookup = &m_snappingLayoutLookup;
-        } else if (mode == PhosphorZones::AssignmentEntry::Scrolling) {
-            // Scrolling engine pinned: neither snapping layout nor tiling
-            // algorithm applies — the rule's intent is "place via the
-            // scrolling engine" and there is no layout/algorithm to label.
-            // Leave layoutLabel empty so the tile renders the engine alone.
-        } else if (!summary.snappingLayout.isEmpty()) {
-            // No engine pin: prefer the snapping layout (more common).
-            layoutLabel = summary.snappingLayout;
-            labelLookup = &m_snappingLayoutLookup;
-        } else {
-            // Last resort: a tiling-algorithm-only rule with no engine pin.
-            layoutLabel = summary.tilingAlgorithm;
-            labelLookup = &m_tilingAlgorithmLookup;
+        if (mode != PhosphorZones::AssignmentEntry::Scrolling && !summary.layoutToken.isEmpty()) {
+            // Scrolling pins no layout; otherwise show the slot winner when its
+            // kind matches the engine (or no engine is pinned).
+            const bool kindMatches = mode == PhosphorZones::AssignmentEntry::Autotile ? summary.layoutIsTiling
+                : mode == PhosphorZones::AssignmentEntry::Snapping                    ? !summary.layoutIsTiling
+                                                                                      : true;
+            if (kindMatches) {
+                layoutLabel = summary.layoutToken;
+                labelLookup = summary.layoutIsTiling ? &m_tilingAlgorithmLookup : &m_snappingLayoutLookup;
+            }
         }
         // The token is the raw layoutId / algorithm name from the rule's
         // action params — resolve it to a user-facing label when a lookup

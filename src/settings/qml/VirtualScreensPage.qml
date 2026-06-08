@@ -195,9 +195,11 @@ SettingsFlickable {
                 rowWidths.push(children[ci].w);
             }
         }
-        // Uniform grid fallback: when all cells have the same height (e.g. 2x2),
-        // grouping merges everything into one "row". Use the grid dimensions
-        // (cols/rows) to split the summed width and infer the correct height.
+        // Uniform grid fallback: when all cells share one height (e.g. 2x2),
+        // height-grouping collapses every row into a single group, so
+        // rowWidths[0] is the summed width of ALL cells = _rows × (one row's
+        // full width). Dividing by _rows recovers one physical row's width;
+        // multiplying the shared cell height by _rows recovers the full height.
         if (rowHeights.length === 1 && _rows > 1 && _columns > 0) {
             _screenWidth = Math.round(rowWidths[0] / _rows);
             _screenHeight = rowHeights[0] * _rows;

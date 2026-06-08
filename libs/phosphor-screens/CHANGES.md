@@ -108,5 +108,15 @@ that key off the shape of the emitted `QVariantMap` should be audited:
    coordinates are normal for outputs placed left of / above the primary,
    so `x` / `y` are emitted unconditionally — they are always present.
 
+5. **`displayLabel` is a precomputed, always-present label string.**
+
+   A single source-of-truth label the serializer builds so QML consumers stop
+   duplicating label logic: for a physical screen, vendor + model (falling back
+   to the output name); for a virtual screen, `VS<n> — <monitor>`. Both gain a
+   ` (W×H)` suffix when the resolution is known and a ` · <connector>` suffix to
+   disambiguate otherwise-identical panels. Consumers should bind `displayLabel`
+   rather than reassembling the name / manufacturer / model / resolution fields
+   by hand.
+
 QML consumers that walked the variant map by key set (rather than by
 known-key lookup) are the most likely to regress.

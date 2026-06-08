@@ -243,6 +243,17 @@ SettingsFlickable {
 
         function onScreensChanged() {
             page.tilesRevision++;
+            // Drop a monitor filter whose screen was unplugged — otherwise the
+            // rule list stays empty with no way to clear it (the MonitorOverview
+            // tile that toggles the filter is gone with the screen). Mirrors
+            // VirtualScreensPage's _selectedScreen re-validation.
+            if (page.monitorFilter.length > 0) {
+                var stillPresent = settingsController.screens.some(function (s) {
+                    return s.name === page.monitorFilter || s.screenId === page.monitorFilter;
+                });
+                if (!stillPresent)
+                    page.monitorFilter = "";
+            }
         }
 
         target: settingsController

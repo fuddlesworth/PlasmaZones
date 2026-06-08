@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: LGPL-2.1-or-later
 
-// QML payload shape — four changes consumers should audit:
+// QML payload shape — five changes consumers should audit:
 //   1. `width` / `height` keys are emitted independently when only one
 //      dimension is positive (previously: all-or-nothing).
 //   2. `resolution` is only emitted when BOTH width and height are positive.
@@ -10,6 +10,10 @@
 //   4. `x` / `y` (screen-space origin) are ALWAYS present, including 0,0
 //      and negative coordinates — unlike width/height they are never
 //      skipped, so spatial-arrangement consumers see every monitor.
+//   5. `displayLabel` is ALWAYS present — a precomputed make/model + ` (W×H)`
+//      label (or `VS<n> — <monitor>` for a virtual screen) with a
+//      ` · <connector>` disambiguation suffix; bind it instead of reassembling
+//      the name / manufacturer / model / resolution fields.
 // QML consumers relying on `Object.keys(map).includes('isVirtualScreen')`
 // semantics for physical-vs-virtual disambiguation must be audited; see
 // libs/phosphor-screens/CHANGES.md for full rationale.
