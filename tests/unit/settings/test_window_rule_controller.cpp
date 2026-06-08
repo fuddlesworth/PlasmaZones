@@ -47,6 +47,7 @@ private Q_SLOTS:
     void monitorOverviewIgnoresDisabledRules();
     void monitorOverviewClassifiesScrollingWithoutLayoutName();
     void monitorOverviewSharesOneLayoutSlot();
+    void monitorOverviewBareLayoutResolvesToSnapping();
     void monitorOverviewDisableEngineMatchesEffectiveMode();
     void engineModePickerExposesAllVocabularyTokens();
     void userAuthorableFilterHidesInternalActions();
@@ -290,6 +291,50 @@ void TestWindowRuleController::monitorOverviewSharesOneLayoutSlot()
     QCOMPARE(tile.value(QStringLiteral("assigned")).toBool(), true);
     QVERIFY2(tile.value(QStringLiteral("layoutName")).toString().isEmpty(),
              qPrintable(tile.value(QStringLiteral("layoutName")).toString()));
+}
+
+void TestWindowRuleController::monitorOverviewBareLayoutResolvesToSnapping()
+{
+    // A layout-slot rule with NO SetEngineMode resolves against the cascade's
+    // Snapping default (the same default the engineDisabled path applies), not
+    // "show regardless of kind". So a bare SetTilingAlgorithm shows NO layout (a
+    // tiling token can't render under the snapping default), while a bare
+    // SetSnappingLayout shows its layout. Locks the unset-engine semantics.
+    WindowRuleController controller;
+
+    QVariantMap algoRule = controller.newEmptyRule(QStringLiteral("monitor"));
+    QVariantMap m1 = algoRule.value(QStringLiteral("match")).toMap();
+    m1[QStringLiteral("value")] = QStringLiteral("DP-1");
+    algoRule[QStringLiteral("match")] = m1;
+    algoRule[QStringLiteral("actions")] =
+        QVariantList{QVariantMap{{QStringLiteral("type"), QStringLiteral("setTilingAlgorithm")},
+                                 {QStringLiteral("algorithm"), QStringLiteral("bsp")}}};
+    QVERIFY(!controller.addRuleFromJson(algoRule).isEmpty());
+
+    QVariantMap snapRule = controller.newEmptyRule(QStringLiteral("monitor"));
+    QVariantMap m2 = snapRule.value(QStringLiteral("match")).toMap();
+    m2[QStringLiteral("value")] = QStringLiteral("DP-2");
+    snapRule[QStringLiteral("match")] = m2;
+    snapRule[QStringLiteral("actions")] =
+        QVariantList{QVariantMap{{QStringLiteral("type"), QStringLiteral("setSnappingLayout")},
+                                 {QStringLiteral("layoutId"), QStringLiteral("grid")}}};
+    QVERIFY(!controller.addRuleFromJson(snapRule).isEmpty());
+
+    const QVariantList screens{QVariantMap{{QStringLiteral("name"), QStringLiteral("DP-1")}},
+                               QVariantMap{{QStringLiteral("name"), QStringLiteral("DP-2")}}};
+    const QVariantList overview = controller.monitorOverview(screens);
+    QCOMPARE(overview.size(), 2);
+
+    const QVariantMap dp1 = overview.at(0).toMap();
+    QCOMPARE(dp1.value(QStringLiteral("screenId")).toString(), QStringLiteral("DP-1"));
+    // Bare tiling algorithm → hidden under the Snapping default.
+    QVERIFY2(dp1.value(QStringLiteral("layoutName")).toString().isEmpty(),
+             qPrintable(dp1.value(QStringLiteral("layoutName")).toString()));
+
+    const QVariantMap dp2 = overview.at(1).toMap();
+    QCOMPARE(dp2.value(QStringLiteral("screenId")).toString(), QStringLiteral("DP-2"));
+    // Bare snapping layout → shown (raw token; no lookup wired in this test).
+    QCOMPARE(dp2.value(QStringLiteral("layoutName")).toString(), QStringLiteral("grid"));
 }
 
 void TestWindowRuleController::monitorOverviewDisableEngineMatchesEffectiveMode()

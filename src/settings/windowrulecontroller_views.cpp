@@ -221,19 +221,25 @@ QVariantList WindowRuleController::monitorOverview(const QVariantList& screens) 
         // can't render a tiling-algorithm token and vice versa — so a
         // lower-priority layout the cascade discarded never resurfaces, and a
         // mismatched-kind winner renders the engine alone rather than a
-        // misleading name. Route the engineMode wire string through
-        // `modeFromWireString` so every validator token (snapping / autotile /
-        // scrolling — see `engineModeOptions()` in
-        // libs/phosphor-windowrule/src/ruleaction.cpp) classifies correctly.
+        // misleading name. An unset engine mode resolves to Snapping (the
+        // cascade default the engineDisabled check below also applies), so a
+        // bare layout/algorithm rule with no SetEngineMode is judged against
+        // Snapping. Route the wire string through `modeFromWireString` so every
+        // validator token (snapping / autotile / scrolling — see
+        // `engineModeOptions()` in libs/phosphor-windowrule/src/ruleaction.cpp)
+        // classifies correctly.
         QString layoutLabel;
         // Track WHICH lookup applies — split prevents a UUID-shaped algorithm
         // token from resolving via the snapping path (or a tokenised layoutId
         // via the tiling path) just because both were wired to one resolver.
         const WindowRuleModel::LabelLookup* labelLookup = nullptr;
-        const auto mode = PhosphorZones::modeFromWireString(summary.engineMode);
+        const std::optional<PhosphorZones::AssignmentEntry::Mode> mode = summary.engineMode.isEmpty()
+            ? std::optional<PhosphorZones::AssignmentEntry::Mode>(PhosphorZones::AssignmentEntry::Snapping)
+            : PhosphorZones::modeFromWireString(summary.engineMode);
         if (mode != PhosphorZones::AssignmentEntry::Scrolling && !summary.layoutToken.isEmpty()) {
             // Scrolling pins no layout; otherwise show the slot winner when its
-            // kind matches the engine (or no engine is pinned).
+            // kind matches the engine. A nullopt mode (an unrecognised non-empty
+            // token) falls through to showing the winner.
             const bool kindMatches = mode == PhosphorZones::AssignmentEntry::Autotile ? summary.layoutIsTiling
                 : mode == PhosphorZones::AssignmentEntry::Snapping                    ? !summary.layoutIsTiling
                                                                                       : true;

@@ -87,16 +87,18 @@ QList<PhosphorScreens::ScreenInfo> fetchScreens(bool* daemonUnavailable)
                         // valid coordinate, so no sentinel check here.
                         info.x = geom[::PhosphorZones::ZoneJsonKeys::X].toInt();
                         info.y = geom[::PhosphorZones::ZoneJsonKeys::Y].toInt();
-                        // Surface the missing-key edge so a corrupted daemon
-                        // reply doesn't silently produce a 0×0 picker tile.
-                        // QJsonValue::toInt() of an absent key is 0; a
-                        // legitimately-0 dimension would mean the screen is
-                        // dimensionless, which the daemon never reports.
-                        if (info.width <= 0 || info.height <= 0) {
-                            qCWarning(lcConfig) << "ScreenProvider: daemon screen" << screenName
-                                                << "returned non-positive geometry width=" << info.width
-                                                << "height=" << info.height << "— picker tile will render as 0×0";
-                        }
+                    }
+                    // Surface a corrupted reply so it doesn't silently produce a
+                    // 0×0 picker tile. width/height stay 0 when the geometry
+                    // object — or the whole key — is absent (QJsonValue::toInt()
+                    // of an absent key is 0); a legitimately-0 dimension would
+                    // mean a dimensionless screen, which the daemon never
+                    // reports. Runs whether or not the key was present so an
+                    // entirely missing `geometry` is caught too.
+                    if (info.width <= 0 || info.height <= 0) {
+                        qCWarning(lcConfig) << "ScreenProvider: daemon screen" << screenName
+                                            << "returned non-positive geometry width=" << info.width
+                                            << "height=" << info.height << "— picker tile will render as 0×0";
                     }
                     // Connector name is optional (the label falls back to
                     // vendor/model or the raw id), so unlike geometry/virtual-id
