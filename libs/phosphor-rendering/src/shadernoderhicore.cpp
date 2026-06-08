@@ -454,10 +454,6 @@ void ShaderNodeRhi::prepare()
         }
 
         if (!m_shaderReady) {
-            const QList<QShaderBaker::GeneratedShader>& targets = ShaderCompiler::bakeTargets();
-            QShaderBaker vertexBaker;
-            vertexBaker.setGeneratedShaderVariants({QShader::StandardShader});
-            vertexBaker.setGeneratedShaders(targets);
             auto vertResult = ShaderCompiler::compile(m_vertexShaderSource.toUtf8(), QShader::VertexStage);
             m_vertexShader = vertResult.shader;
             if (!m_vertexShader.isValid()) {

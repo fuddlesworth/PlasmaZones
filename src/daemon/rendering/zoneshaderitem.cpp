@@ -112,9 +112,9 @@ ZoneShaderItem::ZoneShaderItem(QQuickItem* parent)
 
 ZoneShaderItem::~ZoneShaderItem()
 {
-    // The parent destructor handles invalidateItem() on the render node.
-    // We just need to clear our zone-specific tracking pointer.
-    m_zoneRenderNode = nullptr;
+    // Nothing to do: the scene graph owns the render node and the zero-size
+    // branch in updatePaintNode severs its back-pointer (invalidateItem) before
+    // deleting it. ZoneShaderItem holds no owning node pointer of its own.
 }
 
 // ============================================================================
@@ -313,11 +313,10 @@ QSGNode* ZoneShaderItem::updatePaintNode(QSGNode* oldNode, UpdatePaintNodeData* 
 
     if (width() <= 0 || height() <= 0) {
         if (oldNode) {
-            // Mirror the parent ShaderEffect's zero-size branch: invalidate
-            // both our zone-specific pointer AND the base m_renderNode before
-            // deleting. Without the parent's nullification, a subsequent
-            // syncBasePropertiesToNode would walk a dangling pointer.
-            m_zoneRenderNode = nullptr;
+            // Mirror the parent ShaderEffect's zero-size branch: sever the
+            // node's back-pointer to this item via invalidateItem() before
+            // deleting it, so any in-flight render-thread access fails safe
+            // instead of walking a freed item.
             if (auto* rhiNode = static_cast<PhosphorRendering::ZoneShaderNodeRhi*>(oldNode)) {
                 rhiNode->invalidateItem();
             }
@@ -337,9 +336,7 @@ QSGNode* ZoneShaderItem::updatePaintNode(QSGNode* oldNode, UpdatePaintNodeData* 
         // RenderEffect) follow the same factory pattern — and a future
         // refactor to delegate updatePaintNode to the parent picks up the
         // right node type for free.
-        m_zoneRenderNode = nullptr;
         node = static_cast<PhosphorRendering::ZoneShaderNodeRhi*>(createShaderNode());
-        m_zoneRenderNode = node;
         freshNode = true;
         qCDebug(PlasmaZones::lcOverlay) << "updatePaintNode: created NEW ZoneShaderNodeRhi (oldNode was null)";
     }

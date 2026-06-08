@@ -19,6 +19,17 @@ struct ZoneLabelTile
 {
     QImage image; ///< Small ARGB32-premultiplied glyph tile (glyph bounds + outline margin).
     QPoint dest; ///< Top-left of @ref image within the screen-addressed labels texture.
+
+    bool operator==(const ZoneLabelTile& other) const
+    {
+        // dest first: a cheap mismatch short-circuits the deep QImage pixel
+        // compare in the common "tiles moved" case.
+        return dest == other.dest && image == other.image;
+    }
+    bool operator!=(const ZoneLabelTile& other) const
+    {
+        return !(*this == other);
+    }
 };
 
 /// Sparse zone-labels payload: the full screen-addressed texture size plus only
@@ -40,6 +51,18 @@ struct ZoneLabelTexture
     bool isEmpty() const
     {
         return tiles.isEmpty() || size.isEmpty();
+    }
+
+    /// Value equality — lets consumers (e.g. ZoneShaderItem::setLabelsTexture)
+    /// skip a redundant change signal + repaint when the payload is unchanged.
+    /// size is compared first to short-circuit before the per-tile deep compare.
+    bool operator==(const ZoneLabelTexture& other) const
+    {
+        return size == other.size && tiles == other.tiles;
+    }
+    bool operator!=(const ZoneLabelTexture& other) const
+    {
+        return !(*this == other);
     }
 
     /// Composite the sparse tiles into one full screen-addressed image

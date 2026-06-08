@@ -213,9 +213,6 @@ private:
     mutable QMutex m_zoneDataMutex;
     PhosphorRendering::ZoneDataSnapshot m_zoneData;
 
-    // Render node tracking for safe teardown
-    PhosphorRendering::ZoneShaderNodeRhi* m_zoneRenderNode = nullptr;
-
     // ZoneUniformExtension owned HERE (not on the node) so its lifetime
     // matches the QML-visible item rather than the transient QSGRenderNode.
     // Registered on the base class via ShaderEffect::setUniformExtension in
