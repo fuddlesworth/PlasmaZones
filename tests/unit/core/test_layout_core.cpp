@@ -406,6 +406,65 @@ private Q_SLOTS:
         QCOMPARE(copy.minAspectRatio(), 0.3);
         QCOMPARE(copy.maxAspectRatio(), 0.9);
     }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // Fixed-zone reference geometry (editor canvas reference — discussion #593)
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    // The editor canvas scales fixed zones by its reference size, so the
+    // reference must match the live screen unless the fixed zones overflow it.
+    // fixedZoneReferenceGeometry() encodes that rule: keep the recalc
+    // (screen) geometry when the fixed-zone bounding box fits inside it.
+    void testLayout_fixedZoneReference_partialZonesKeepScreen()
+    {
+        // A 16:9 layout whose two fixed zones only reach 2560px wide on a
+        // 3840x2160 screen (the discussion #593 "4K" layout). The raw bbox is
+        // 2560x2160 (near-square); pinning to it would stretch the canvas 1.5x
+        // horizontally. The reference must stay the full 3840x2160 screen.
+        PhosphorZones::Layout layout(QStringLiteral("4K"));
+        auto* z1 = new PhosphorZones::Zone();
+        z1->setGeometryMode(PhosphorZones::ZoneGeometryMode::Fixed);
+        z1->setFixedGeometry(QRectF(0, 1080, 1920, 1080));
+        layout.addZone(z1);
+        auto* z2 = new PhosphorZones::Zone();
+        z2->setGeometryMode(PhosphorZones::ZoneGeometryMode::Fixed);
+        z2->setFixedGeometry(QRectF(0, 720, 2560, 1440));
+        layout.addZone(z2);
+
+        QCOMPARE(layout.fixedZoneBoundingBox(), QRectF(0, 0, 2560, 2160));
+
+        layout.recalculateZoneGeometries(QRectF(0, 0, 3840, 2160));
+        QCOMPARE(layout.fixedZoneReferenceGeometry(), QRectF(0, 0, 3840, 2160));
+    }
+
+    // When the fixed zones genuinely exceed the live screen (a 3840x2160
+    // layout on a 3840x2126 panel-reduced screen), the reference keeps the
+    // authored bounding box so fixed pixels stay accurate.
+    void testLayout_fixedZoneReference_overflowKeepsBbox()
+    {
+        PhosphorZones::Layout layout(QStringLiteral("FullScreen"));
+        auto* z = new PhosphorZones::Zone();
+        z->setGeometryMode(PhosphorZones::ZoneGeometryMode::Fixed);
+        z->setFixedGeometry(QRectF(0, 0, 3840, 2160));
+        layout.addZone(z);
+
+        layout.recalculateZoneGeometries(QRectF(0, 0, 3840, 2126));
+        QCOMPARE(layout.fixedZoneReferenceGeometry(), QRectF(0, 0, 3840, 2160));
+    }
+
+    // Relative-only layouts have no fixed-zone bounding box, so the editor
+    // falls back to the live screen (empty reference → no canvas override).
+    void testLayout_fixedZoneReference_relativeOnlyIsEmpty()
+    {
+        PhosphorZones::Layout layout(QStringLiteral("Relative"));
+        auto* z = new PhosphorZones::Zone();
+        z->setRelativeGeometry(QRectF(0, 0, 0.5, 1.0));
+        layout.addZone(z);
+
+        QVERIFY(layout.fixedZoneBoundingBox().isEmpty());
+        layout.recalculateZoneGeometries(QRectF(0, 0, 3840, 2160));
+        QVERIFY(layout.fixedZoneReferenceGeometry().isEmpty());
+    }
 };
 
 QTEST_MAIN(TestLayoutCore)
