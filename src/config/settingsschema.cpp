@@ -231,35 +231,31 @@ void appendAppearanceSchema(PhosphorConfig::Schema& schema)
     // decoration (parallel to Tiling.Appearance.* in appendAutotilingSchema;
     // defaults via snapWindow* in ConfigDefaults).
     schema.groups[CD::snappingAppearanceColorsGroup()] = {
-        {CD::activeKey(),
-         CD::snapWindowBorderColor(),
-         QMetaType::QColor,
-         {},
-         validColorOr(CD::snapWindowBorderColor())},
+        {CD::activeKey(), CD::snappingBorderColor(), QMetaType::QColor, {}, validColorOr(CD::snappingBorderColor())},
         {CD::inactiveKey(),
-         CD::snapWindowInactiveBorderColor(),
+         CD::snappingInactiveBorderColor(),
          QMetaType::QColor,
          {},
-         validColorOr(CD::snapWindowInactiveBorderColor())},
-        {CD::useSystemKey(), CD::snapWindowUseSystemBorderColors(), QMetaType::Bool},
+         validColorOr(CD::snappingInactiveBorderColor())},
+        {CD::useSystemKey(), CD::snappingUseSystemBorderColors(), QMetaType::Bool},
     };
 
     schema.groups[CD::snappingAppearanceDecorationsGroup()] = {
-        {CD::hideTitleBarsKey(), CD::snapWindowHideTitleBars(), QMetaType::Bool},
+        {CD::hideTitleBarsKey(), CD::snappingHideTitleBars(), QMetaType::Bool},
     };
 
     schema.groups[CD::snappingAppearanceBordersGroup()] = {
-        {CD::showBorderKey(), CD::snapWindowShowBorder(), QMetaType::Bool},
+        {CD::showBorderKey(), CD::snappingShowBorder(), QMetaType::Bool},
         {CD::widthKey(),
-         CD::snapWindowBorderWidth(),
+         CD::snappingBorderWidth(),
          QMetaType::Int,
          {},
-         clampInt(CD::snapWindowBorderWidthMin(), CD::snapWindowBorderWidthMax())},
+         clampInt(CD::snappingBorderWidthMin(), CD::snappingBorderWidthMax())},
         {CD::radiusKey(),
-         CD::snapWindowBorderRadius(),
+         CD::snappingBorderRadius(),
          QMetaType::Int,
          {},
-         clampInt(CD::snapWindowBorderRadiusMin(), CD::snapWindowBorderRadiusMax())},
+         clampInt(CD::snappingBorderRadiusMin(), CD::snappingBorderRadiusMax())},
     };
 }
 

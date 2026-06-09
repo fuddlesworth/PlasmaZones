@@ -72,7 +72,7 @@ public:
     /// bar if we hid it, and remove its border.
     void clearWindowSnapped(const QString& windowId);
     /// Apply/restore title-bar hiding across all currently snap-committed
-    /// windows when the snapWindowHideTitleBars setting toggles.
+    /// windows when the snappingHideTitleBars setting toggles.
     void updateSnapHideTitleBars(bool hide);
     /// Restore every snap-hidden title bar and drop the snap border set.
     /// Called on daemon loss / effect teardown (symmetric with

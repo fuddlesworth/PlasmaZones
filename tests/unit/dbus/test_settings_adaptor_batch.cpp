@@ -250,10 +250,10 @@ private Q_SLOTS:
     void testGetSettings_snapWindowKeys_allReturnedWithTypes()
     {
         const QStringList keys{
-            QStringLiteral("snapWindowHideTitleBars"),         QStringLiteral("snapWindowShowBorder"),
-            QStringLiteral("snapWindowBorderWidth"),           QStringLiteral("snapWindowBorderRadius"),
-            QStringLiteral("snapWindowBorderColor"),           QStringLiteral("snapWindowInactiveBorderColor"),
-            QStringLiteral("snapWindowUseSystemBorderColors"),
+            QStringLiteral("snappingHideTitleBars"),         QStringLiteral("snappingShowBorder"),
+            QStringLiteral("snappingBorderWidth"),           QStringLiteral("snappingBorderRadius"),
+            QStringLiteral("snappingBorderColor"),           QStringLiteral("snappingInactiveBorderColor"),
+            QStringLiteral("snappingUseSystemBorderColors"),
         };
 
         const QVariantMap result = m_adaptor->getSettings(keys);
@@ -265,13 +265,13 @@ private Q_SLOTS:
         }
         // Bool / int / color wire types — color keys serialize to a string via
         // the REGISTER_COLOR_SETTING getter (QColor::name(HexArgb)).
-        QCOMPARE(result.value(QStringLiteral("snapWindowHideTitleBars")).metaType().id(), QMetaType::Bool);
-        QCOMPARE(result.value(QStringLiteral("snapWindowShowBorder")).metaType().id(), QMetaType::Bool);
-        QCOMPARE(result.value(QStringLiteral("snapWindowUseSystemBorderColors")).metaType().id(), QMetaType::Bool);
-        QCOMPARE(result.value(QStringLiteral("snapWindowBorderWidth")).metaType().id(), QMetaType::Int);
-        QCOMPARE(result.value(QStringLiteral("snapWindowBorderRadius")).metaType().id(), QMetaType::Int);
-        QCOMPARE(result.value(QStringLiteral("snapWindowBorderColor")).metaType().id(), QMetaType::QString);
-        QCOMPARE(result.value(QStringLiteral("snapWindowInactiveBorderColor")).metaType().id(), QMetaType::QString);
+        QCOMPARE(result.value(QStringLiteral("snappingHideTitleBars")).metaType().id(), QMetaType::Bool);
+        QCOMPARE(result.value(QStringLiteral("snappingShowBorder")).metaType().id(), QMetaType::Bool);
+        QCOMPARE(result.value(QStringLiteral("snappingUseSystemBorderColors")).metaType().id(), QMetaType::Bool);
+        QCOMPARE(result.value(QStringLiteral("snappingBorderWidth")).metaType().id(), QMetaType::Int);
+        QCOMPARE(result.value(QStringLiteral("snappingBorderRadius")).metaType().id(), QMetaType::Int);
+        QCOMPARE(result.value(QStringLiteral("snappingBorderColor")).metaType().id(), QMetaType::QString);
+        QCOMPARE(result.value(QStringLiteral("snappingInactiveBorderColor")).metaType().id(), QMetaType::QString);
 
         // Values mirror the stub's snapWindow* getters, proving each key is
         // wired to its own accessor rather than collapsed onto a neighbour. The
@@ -282,17 +282,16 @@ private Q_SLOTS:
         // bool mirrors catch any swap involving showBorder; a hideTitleBars↔
         // useSystem swap is instead pinned by the verified-correct production
         // registration and the per-key metaType assertions above.
-        QCOMPARE(result.value(QStringLiteral("snapWindowBorderWidth")).toInt(), m_settings->snapWindowBorderWidth());
-        QCOMPARE(result.value(QStringLiteral("snapWindowBorderRadius")).toInt(), m_settings->snapWindowBorderRadius());
-        QCOMPARE(QColor(result.value(QStringLiteral("snapWindowBorderColor")).toString()),
-                 m_settings->snapWindowBorderColor());
-        QCOMPARE(QColor(result.value(QStringLiteral("snapWindowInactiveBorderColor")).toString()),
-                 m_settings->snapWindowInactiveBorderColor());
-        QCOMPARE(result.value(QStringLiteral("snapWindowHideTitleBars")).toBool(),
-                 m_settings->snapWindowHideTitleBars());
-        QCOMPARE(result.value(QStringLiteral("snapWindowShowBorder")).toBool(), m_settings->snapWindowShowBorder());
-        QCOMPARE(result.value(QStringLiteral("snapWindowUseSystemBorderColors")).toBool(),
-                 m_settings->snapWindowUseSystemBorderColors());
+        QCOMPARE(result.value(QStringLiteral("snappingBorderWidth")).toInt(), m_settings->snappingBorderWidth());
+        QCOMPARE(result.value(QStringLiteral("snappingBorderRadius")).toInt(), m_settings->snappingBorderRadius());
+        QCOMPARE(QColor(result.value(QStringLiteral("snappingBorderColor")).toString()),
+                 m_settings->snappingBorderColor());
+        QCOMPARE(QColor(result.value(QStringLiteral("snappingInactiveBorderColor")).toString()),
+                 m_settings->snappingInactiveBorderColor());
+        QCOMPARE(result.value(QStringLiteral("snappingHideTitleBars")).toBool(), m_settings->snappingHideTitleBars());
+        QCOMPARE(result.value(QStringLiteral("snappingShowBorder")).toBool(), m_settings->snappingShowBorder());
+        QCOMPARE(result.value(QStringLiteral("snappingUseSystemBorderColors")).toBool(),
+                 m_settings->snappingUseSystemBorderColors());
     }
 
     // ─────────────────────────────────────────────────────────────────────

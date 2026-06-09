@@ -62,10 +62,10 @@ SettingsFlickable {
                     SettingsSwitch {
                         id: useSystemColorsSwitch
 
-                        checked: appSettings.snapWindowUseSystemBorderColors
+                        checked: appSettings.snappingUseSystemBorderColors
                         accessibleName: i18n("Use system accent color")
                         onToggled: function (newValue) {
-                            appSettings.snapWindowUseSystemBorderColors = newValue;
+                            appSettings.snappingUseSystemBorderColors = newValue;
                         }
                     }
                 }
@@ -80,9 +80,9 @@ SettingsFlickable {
                     description: i18n("Border color for the focused snapped window")
 
                     ColorSwatchRow {
-                        color: appSettings.snapWindowBorderColor
+                        color: appSettings.snappingBorderColor
                         onClicked: {
-                            activeBorderColorDialog.selectedColor = appSettings.snapWindowBorderColor;
+                            activeBorderColorDialog.selectedColor = appSettings.snappingBorderColor;
                             activeBorderColorDialog.open();
                         }
                     }
@@ -98,9 +98,9 @@ SettingsFlickable {
                     description: i18n("Border color for unfocused snapped windows")
 
                     ColorSwatchRow {
-                        color: appSettings.snapWindowInactiveBorderColor
+                        color: appSettings.snappingInactiveBorderColor
                         onClicked: {
-                            inactiveBorderColorDialog.selectedColor = appSettings.snapWindowInactiveBorderColor;
+                            inactiveBorderColorDialog.selectedColor = appSettings.snappingInactiveBorderColor;
                             inactiveBorderColorDialog.open();
                         }
                     }
@@ -124,10 +124,10 @@ SettingsFlickable {
                     description: i18n("Remove window title bars while snapped, restored when floating")
 
                     SettingsSwitch {
-                        checked: appSettings.snapWindowHideTitleBars
+                        checked: appSettings.snappingHideTitleBars
                         accessibleName: i18n("Hide title bars on snapped windows")
                         onToggled: function (newValue) {
-                            appSettings.snapWindowHideTitleBars = newValue;
+                            appSettings.snappingHideTitleBars = newValue;
                         }
                     }
                 }
@@ -141,9 +141,9 @@ SettingsFlickable {
             Layout.fillWidth: true
             headerText: i18n("Borders")
             showToggle: true
-            toggleChecked: appSettings.snapWindowShowBorder
+            toggleChecked: appSettings.snappingShowBorder
             onToggleClicked: checked => {
-                return appSettings.snapWindowShowBorder = checked;
+                return appSettings.snappingShowBorder = checked;
             }
             collapsible: true
 
@@ -155,11 +155,11 @@ SettingsFlickable {
                     description: i18n("Thickness of colored borders around snapped windows")
 
                     SettingsSpinBox {
-                        from: root.settingsBridge.snapWindowBorderWidthMin
-                        to: root.settingsBridge.snapWindowBorderWidthMax
-                        value: appSettings.snapWindowBorderWidth
+                        from: root.settingsBridge.snappingBorderWidthMin
+                        to: root.settingsBridge.snappingBorderWidthMax
+                        value: appSettings.snappingBorderWidth
                         onValueModified: value => {
-                            return appSettings.snapWindowBorderWidth = value;
+                            return appSettings.snappingBorderWidth = value;
                         }
                     }
                 }
@@ -171,11 +171,11 @@ SettingsFlickable {
                     description: i18n("Roundness of border corners (0 for square)")
 
                     SettingsSpinBox {
-                        from: root.settingsBridge.snapWindowBorderRadiusMin
-                        to: root.settingsBridge.snapWindowBorderRadiusMax
-                        value: appSettings.snapWindowBorderRadius
+                        from: root.settingsBridge.snappingBorderRadiusMin
+                        to: root.settingsBridge.snappingBorderRadiusMax
+                        value: appSettings.snappingBorderRadius
                         onValueModified: value => {
-                            return appSettings.snapWindowBorderRadius = value;
+                            return appSettings.snappingBorderRadius = value;
                         }
                     }
                 }
@@ -257,13 +257,13 @@ SettingsFlickable {
         id: activeBorderColorDialog
 
         title: i18n("Choose Active Border Color")
-        onAccepted: appSettings.snapWindowBorderColor = selectedColor
+        onAccepted: appSettings.snappingBorderColor = selectedColor
     }
 
     ColorDialog {
         id: inactiveBorderColorDialog
 
         title: i18n("Choose Inactive Border Color")
-        onAccepted: appSettings.snapWindowInactiveBorderColor = selectedColor
+        onAccepted: appSettings.snappingInactiveBorderColor = selectedColor
     }
 }

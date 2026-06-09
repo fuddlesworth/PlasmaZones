@@ -2049,10 +2049,10 @@ private Q_SLOTS:
         // End-state collision check: the NEW snap-window appearance settings reuse the
         // freed Snapping.Appearance.Colors namespace. The v3 zone-overlay value
         // (UseSystem=false) was relocated to Snapping.Zones above, so a Settings loaded
-        // from the migrated config must read snapWindowUseSystemBorderColors() as the
+        // from the migrated config must read snappingUseSystemBorderColors() as the
         // SHIPPED DEFAULT — proving no stale v3 zone value bleeds into the new key.
         Settings settings;
-        QCOMPARE(settings.snapWindowUseSystemBorderColors(), ConfigDefaults::snapWindowUseSystemBorderColors());
+        QCOMPARE(settings.snappingUseSystemBorderColors(), ConfigDefaults::snappingUseSystemBorderColors());
     }
 
     void testZoneRename_absentSourceIsNoOp()
