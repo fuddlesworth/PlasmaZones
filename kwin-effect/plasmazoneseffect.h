@@ -887,7 +887,6 @@ private:
     bool m_dragStartedSent = false;
     QString m_pendingDragWindowId;
     QRectF m_pendingDragGeometry;
-    QString m_snapDragStartScreenId; // Virtual screen at snap-mode drag start (for VS crossing on drop)
 
     /// Monotonic per-drag generation. Bumped on every drag start. The async
     /// beginDrag reply lambda captures the generation at dispatch time and
@@ -905,9 +904,6 @@ private:
     QSet<QString> m_dragFloatedWindowIds;
 
     // Autotile: true when the current drag was started on an autotile screen
-
-    // Snap-mode: windows floated due to minimize (mirrors autotile's m_minimizeFloatedWindows)
-    QSet<QString> m_minimizeFloatedWindows;
 
     // Cached daemon D-Bus service registration state.
     // Updated via QDBusServiceWatcher signals (registration/unregistration) to avoid

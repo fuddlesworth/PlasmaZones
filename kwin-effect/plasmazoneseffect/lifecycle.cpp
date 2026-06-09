@@ -355,7 +355,6 @@ PlasmaZonesEffect::PlasmaZonesEffect()
             m_dragStartedSent = false;
             m_pendingDragWindowId = windowId;
             m_pendingDragGeometry = geometry;
-            m_snapDragStartScreenId = getWindowScreenId(w);
 
             // beginDrag already initialized daemon-side snap-drag state
             // (called internally from the adaptor). The effect only needs
@@ -454,7 +453,6 @@ PlasmaZonesEffect::PlasmaZonesEffect()
                 m_currentDragPolicy = PhosphorProtocol::DragPolicy{};
                 m_dragBypassedForAutotile = false;
                 m_dragBypassScreenId.clear();
-                m_snapDragStartScreenId.clear();
                 m_dragActivationDetected = false;
                 m_dragStartedSent = false;
                 m_pendingDragWindowId.clear();

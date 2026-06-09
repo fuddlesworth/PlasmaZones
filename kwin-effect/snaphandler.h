@@ -12,6 +12,7 @@
 #include <QPointF>
 #include <QRect>
 #include <QRectF>
+#include <QSet>
 #include <QString>
 
 #include <functional>
@@ -143,6 +144,19 @@ public:
     /// external event). The daemon discards the in-flight snap.
     void callCancelSnap();
 
+    // ── Snap minimize-float tracking (mirrors AutotileHandler's set) ──
+    /// Record @p windowId as floated because it was minimized in snap mode.
+    void addMinimizeFloated(const QString& windowId)
+    {
+        m_minimizeFloatedWindows.insert(windowId);
+    }
+    /// Drop @p windowId from the minimize-float set. Returns true if it was
+    /// present (i.e. the window had been snap-minimize-floated).
+    bool removeMinimizeFloated(const QString& windowId)
+    {
+        return m_minimizeFloatedWindows.remove(windowId);
+    }
+
     // ── Border rendering accessors — delegate to shared AutotileStateHelpers ──
     bool isBorderlessWindow(const QString& windowId) const
     {
@@ -232,6 +246,9 @@ private:
     // Single-shot instant-restore latency cache (appId → saved zone geometry +
     // screen), populated on daemon-ready and consumed on window-open.
     QHash<QString, CachedSnapRestore> m_restoreCache;
+    // Snap-mode windows floated because they were minimized (mirrors
+    // AutotileHandler::m_minimizeFloatedWindows). Removed on unminimize / close.
+    QSet<QString> m_minimizeFloatedWindows;
 };
 
 } // namespace PlasmaZones

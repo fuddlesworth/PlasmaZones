@@ -441,9 +441,9 @@ void PlasmaZonesEffect::slotWindowMinimizedChanged(KWin::EffectWindow* w)
             qCDebug(lcEffect) << "Snap: minimized already-floating window, skipping float:" << windowId;
             return;
         }
-        m_minimizeFloatedWindows.insert(windowId);
+        m_snapHandler->addMinimizeFloated(windowId);
     } else {
-        if (!m_minimizeFloatedWindows.remove(windowId)) {
+        if (!m_snapHandler->removeMinimizeFloated(windowId)) {
             qCDebug(lcEffect) << "Snap: unminimized window was not minimize-floated, skipping unfloat:" << windowId;
             return;
         }

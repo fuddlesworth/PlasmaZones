@@ -302,7 +302,7 @@ void PlasmaZonesEffect::slotWindowClosed(KWin::EffectWindow* w)
     const QString closedScreenId = getWindowScreenId(w);
 
     // Clean up snap-mode minimize tracking
-    m_minimizeFloatedWindows.remove(closedWindowId);
+    m_snapHandler->removeMinimizeFloated(closedWindowId);
     m_dragFloatedWindowIds.remove(closedWindowId);
 
     // Notify autotile handler for cleanup (tracking sets + autotile D-Bus)
