@@ -678,6 +678,37 @@ void TestWindowRuleController::authoringMetadata()
     QVERIFY(sawActivityKind);
     QVERIFY(sawWindowTypeKind);
 
+    // The four match conditions added for the animation-gate fold must be
+    // authorable: present in the picker with the correct value kind, and with
+    // the operators their category implies (bool -> Equals only; numeric ->
+    // Equals/GreaterThan/LessThan). Guards the category-driven editor wiring
+    // against a future deny-set or classifier regression.
+    QHash<QString, QString> kindByWire;
+    QHash<QString, int> valueByWire;
+    for (const QVariant& v : fields) {
+        const QVariantMap f = v.toMap();
+        const QString wire = f.value(QStringLiteral("wire")).toString();
+        kindByWire.insert(wire, f.value(QStringLiteral("valueKind")).toString());
+        valueByWire.insert(wire, f.value(QStringLiteral("value")).toInt());
+    }
+    QCOMPARE(kindByWire.value(QStringLiteral("isTransient")), QStringLiteral("bool"));
+    QCOMPARE(kindByWire.value(QStringLiteral("isNotification")), QStringLiteral("bool"));
+    QCOMPARE(kindByWire.value(QStringLiteral("width")), QStringLiteral("number"));
+    QCOMPARE(kindByWire.value(QStringLiteral("height")), QStringLiteral("number"));
+
+    const auto opWires = [&](const QString& wire) {
+        QSet<QString> s;
+        for (const QVariant& v : controller.operatorsForField(valueByWire.value(wire))) {
+            s.insert(v.toMap().value(QStringLiteral("wire")).toString());
+        }
+        return s;
+    };
+    const QSet<QString> widthOps = opWires(QStringLiteral("width"));
+    QVERIFY(widthOps.contains(QStringLiteral("lessThan")));
+    QVERIFY(widthOps.contains(QStringLiteral("greaterThan")));
+    QVERIFY(widthOps.contains(QStringLiteral("equals")));
+    QCOMPARE(opWires(QStringLiteral("isTransient")), QSet<QString>{QStringLiteral("equals")});
+
     // AppId (Field enum 0) supports the AppIdMatches operator.
     const QVariantList appOps = controller.operatorsForField(0);
     QVERIFY(!appOps.isEmpty());

@@ -212,7 +212,13 @@ RowLayout {
             if (!opStillValid)
                 carryOp = newOps.length > 0 ? newOps[0].wire : "";
 
-            leaf._emit(currentValue, carryOp, "");
+            // Seed a value of the new field's kind so the leaf is immediately
+            // well-typed rather than carrying an empty string a bool/number
+            // field would coerce: bool -> false, number -> 0, everything else
+            // (string / screen / activity / windowType picker) -> "".
+            var newKind = newFieldEntry !== undefined ? newFieldEntry.valueKind : "string";
+            var seedValue = newKind === "bool" ? false : (newKind === "number" ? 0 : "");
+            leaf._emit(currentValue, carryOp, seedValue);
         }
     }
 
