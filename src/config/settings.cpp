@@ -2208,6 +2208,18 @@ P_STORE_SET_BOOL(setAutotileFocusNewWindows, tilingBehaviorGroup, focusNewWindow
 P_STORE_GET(bool, autotileFocusFollowsMouse, tilingBehaviorGroup, focusFollowsMouseKey, bool)
 P_STORE_SET_BOOL(setAutotileFocusFollowsMouse, tilingBehaviorGroup, focusFollowsMouseKey,
                  autotileFocusFollowsMouseChanged)
+P_STORE_GET(bool, snappingFocusNewWindows, snappingBehaviorGroup, focusNewWindowsKey, bool)
+P_STORE_SET_BOOL(setSnappingFocusNewWindows, snappingBehaviorGroup, focusNewWindowsKey, snappingFocusNewWindowsChanged)
+P_STORE_GET(bool, snappingFocusFollowsMouse, snappingBehaviorGroup, focusFollowsMouseKey, bool)
+P_STORE_SET_BOOL(setSnappingFocusFollowsMouse, snappingBehaviorGroup, focusFollowsMouseKey,
+                 snappingFocusFollowsMouseChanged)
+
+// ISnapSettings hook for the snap engine — same Snapping.Behavior value, surfaced
+// under the interface name the engine consults on AutoRestored commits.
+bool Settings::focusNewWindows() const
+{
+    return snappingFocusNewWindows();
+}
 P_STORE_GET(bool, autotileRespectMinimumSize, tilingBehaviorGroup, respectMinimumSizeKey, bool)
 P_STORE_SET_BOOL(setAutotileRespectMinimumSize, tilingBehaviorGroup, respectMinimumSizeKey,
                  autotileRespectMinimumSizeChanged)

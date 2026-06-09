@@ -1010,6 +1010,17 @@ public:
     {
         return false;
     }
+    // Snapping focus behavior. Both default off: snapping is more manual than
+    // autotile, and auto-focusing windows that the daemon places on open (e.g.
+    // a session restore that opens many windows at once) would thrash focus.
+    static bool snappingFocusNewWindows()
+    {
+        return false;
+    }
+    static bool snappingFocusFollowsMouse()
+    {
+        return false;
+    }
     static bool autotileRespectMinimumSize()
     {
         return true;

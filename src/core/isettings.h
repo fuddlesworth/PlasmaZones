@@ -143,6 +143,13 @@ public:
     // Autotile decoration settings (fetched by KWin effect via D-Bus)
     virtual bool autotileFocusFollowsMouse() const = 0;
     virtual void setAutotileFocusFollowsMouse(bool enabled) = 0;
+    // Snapping focus behavior. focusNewWindows is read daemon-side by SnapAdaptor
+    // to activate auto-placed-on-open windows; focusFollowsMouse is fetched by the
+    // KWin effect via D-Bus.
+    virtual bool snappingFocusNewWindows() const = 0;
+    virtual void setSnappingFocusNewWindows(bool enabled) = 0;
+    virtual bool snappingFocusFollowsMouse() const = 0;
+    virtual void setSnappingFocusFollowsMouse(bool enabled) = 0;
     virtual bool autotileHideTitleBars() const = 0;
     virtual void setAutotileHideTitleBars(bool hide) = 0;
     virtual bool autotileShowBorder() const = 0;
@@ -525,6 +532,8 @@ Q_SIGNALS:
     void autotileInsertPositionChanged();
     void autotileRespectMinimumSizeChanged();
     void autotileFocusFollowsMouseChanged();
+    void snappingFocusNewWindowsChanged();
+    void snappingFocusFollowsMouseChanged();
     void autotileHideTitleBarsChanged();
     void autotileShowBorderChanged();
     void autotileBorderWidthChanged();

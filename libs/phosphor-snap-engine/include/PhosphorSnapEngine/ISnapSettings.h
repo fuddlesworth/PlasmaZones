@@ -31,6 +31,13 @@ public:
     virtual bool moveNewWindowsToLastZone() const = 0;
     virtual bool restoreWindowsToZonesOnLogin() const = 0;
 
+    // When true, a window that is auto-placed into a zone on open (session
+    // restore, app rule, empty-zone auto-assign, last-used-zone) is given focus.
+    // Read only on the AutoRestored commit path in SnapEngine::commitSnapImpl, so
+    // it never affects manual drag or keyboard snaps (those use UserInitiated).
+    // Mirrors AutotileConfig::focusNewWindows. Default false.
+    virtual bool focusNewWindows() const = 0;
+
     // Force-on master toggle: when true, every layout reaching the snap-to-
     // empty-zone path auto-assigns new windows to its first empty zone
     // regardless of its individual `autoAssign` flag. Effective behavior is

@@ -265,6 +265,9 @@ bool SnapAdaptor::applySnapResult(const SnapResult& result, const QString& windo
     } else {
         m_engine->commitSnap(windowId, zoneIds.first(), result.screenId, SnapIntent::AutoRestored);
     }
+    // Focus-new-windows is handled inside SnapEngine::commitSnapImpl on the
+    // AutoRestored path (mirrors AutotileEngine), so it covers every auto-snap-on-open
+    // entry point in one place — not just this D-Bus facade.
     return true;
 }
 

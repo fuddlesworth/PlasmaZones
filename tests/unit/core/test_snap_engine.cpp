@@ -883,6 +883,78 @@ private Q_SLOTS:
     }
 
     // =========================================================================
+    // focus-new-windows — commitSnapImpl emits activateWindowRequested only for
+    // AutoRestored commits when ISnapSettings::focusNewWindows() is on. Manual
+    // (UserInitiated) commits never request focus, regardless of the setting.
+    // =========================================================================
+
+    void testFocusNewWindows_autoRestored_emitsWhenEnabled()
+    {
+        SnapEngine engine(m_layoutManager, m_wts, nullptr, nullptr, nullptr);
+        engine.setEngineSettings(m_settings);
+        m_wts->setSnapState(engine.snapState());
+        m_settings->setSnappingFocusNewWindows(true);
+
+        QSignalSpy spy(&engine, &SnapEngine::activateWindowRequested);
+        engine.commitSnap(QStringLiteral("win-focus-1"), QStringLiteral("zone-1"), QStringLiteral("DP-1"),
+                          PhosphorEngine::SnapIntent::AutoRestored);
+
+        QCOMPARE(spy.count(), 1);
+        QCOMPARE(spy.first().first().toString(), QStringLiteral("win-focus-1"));
+        m_wts->setSnapState(nullptr);
+    }
+
+    void testFocusNewWindows_autoRestored_silentWhenDisabled()
+    {
+        SnapEngine engine(m_layoutManager, m_wts, nullptr, nullptr, nullptr);
+        engine.setEngineSettings(m_settings);
+        m_wts->setSnapState(engine.snapState());
+        m_settings->setSnappingFocusNewWindows(false);
+
+        QSignalSpy spy(&engine, &SnapEngine::activateWindowRequested);
+        engine.commitSnap(QStringLiteral("win-focus-2"), QStringLiteral("zone-1"), QStringLiteral("DP-1"),
+                          PhosphorEngine::SnapIntent::AutoRestored);
+
+        QCOMPARE(spy.count(), 0);
+        m_wts->setSnapState(nullptr);
+    }
+
+    void testFocusNewWindows_userInitiated_neverEmits()
+    {
+        SnapEngine engine(m_layoutManager, m_wts, nullptr, nullptr, nullptr);
+        engine.setEngineSettings(m_settings);
+        m_wts->setSnapState(engine.snapState());
+        // Even with the setting on, a user-initiated snap (drag, keyboard) must
+        // not steal focus — the window is already where the user put it.
+        m_settings->setSnappingFocusNewWindows(true);
+
+        QSignalSpy spy(&engine, &SnapEngine::activateWindowRequested);
+        engine.commitSnap(QStringLiteral("win-focus-3"), QStringLiteral("zone-1"), QStringLiteral("DP-1"),
+                          PhosphorEngine::SnapIntent::UserInitiated);
+
+        QCOMPARE(spy.count(), 0);
+        m_wts->setSnapState(nullptr);
+    }
+
+    void testFocusNewWindows_multiZone_autoRestored_emitsOnce()
+    {
+        // A multi-zone auto-restore (zone span) routes through the same
+        // commitSnapImpl chokepoint, so it must request focus exactly once.
+        SnapEngine engine(m_layoutManager, m_wts, nullptr, nullptr, nullptr);
+        engine.setEngineSettings(m_settings);
+        m_wts->setSnapState(engine.snapState());
+        m_settings->setSnappingFocusNewWindows(true);
+
+        QSignalSpy spy(&engine, &SnapEngine::activateWindowRequested);
+        engine.commitMultiZoneSnap(QStringLiteral("win-focus-4"), {QStringLiteral("zone-1"), QStringLiteral("zone-2")},
+                                   QStringLiteral("DP-1"), PhosphorEngine::SnapIntent::AutoRestored);
+
+        QCOMPARE(spy.count(), 1);
+        QCOMPARE(spy.first().first().toString(), QStringLiteral("win-focus-4"));
+        m_wts->setSnapState(nullptr);
+    }
+
+    // =========================================================================
     // resolveWindowRestore — disabled-context gate (ShouldRestorePredicate,
     // discussion #461 item 7)
     //

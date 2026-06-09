@@ -595,6 +595,12 @@ public:
     void setMoveNewWindowsToLastZone(bool) override
     {
     }
+    // ISnapSettings::focusNewWindows() — shares the ISettings snappingFocusNewWindows
+    // member so a test can drive the snap engine's focus-new path.
+    bool focusNewWindows() const override
+    {
+        return m_snappingFocusNewWindows;
+    }
     bool restoreOriginalSizeOnUnsnap() const override
     {
         return true;
@@ -751,6 +757,22 @@ public:
     }
     void setAutotileFocusFollowsMouse(bool) override
     {
+    }
+    bool snappingFocusNewWindows() const override
+    {
+        return m_snappingFocusNewWindows;
+    }
+    void setSnappingFocusNewWindows(bool v) override
+    {
+        m_snappingFocusNewWindows = v;
+    }
+    bool snappingFocusFollowsMouse() const override
+    {
+        return m_snappingFocusFollowsMouse;
+    }
+    void setSnappingFocusFollowsMouse(bool v) override
+    {
+        m_snappingFocusFollowsMouse = v;
     }
     bool autotileHideTitleBars() const override
     {
@@ -1105,6 +1127,8 @@ private:
     bool m_snapAssistFeatureEnabled = false;
     bool m_snapAssistEnabled = false;
     bool m_autoAssignAllLayouts = false;
+    bool m_snappingFocusNewWindows = false;
+    bool m_snappingFocusFollowsMouse = false;
     QStringList m_snappingLayoutOrder;
     QStringList m_tilingAlgorithmOrder;
     QVariantList m_dragActivationTriggers;

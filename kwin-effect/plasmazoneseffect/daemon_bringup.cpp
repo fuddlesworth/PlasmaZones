@@ -699,6 +699,10 @@ void PlasmaZonesEffect::loadCachedSettings()
         m_autotileHandler->setFocusFollowsMouse(v.toBool());
     });
 
+    loadSettingAsync(QStringLiteral("snappingFocusFollowsMouse"), [this](const QVariant& v) {
+        m_snappingFocusFollowsMouse = v.toBool();
+    });
+
     // Snapped-window border settings — feed the effect's parallel snap
     // BorderState (m_snapBorder), mirroring the autotile* block above. When
     // snapWindowUseSystemBorderColors is on the daemon writes the resolved
