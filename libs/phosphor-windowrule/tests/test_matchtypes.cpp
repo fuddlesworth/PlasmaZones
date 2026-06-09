@@ -121,6 +121,10 @@ private Q_SLOTS:
         QVERIFY(!fieldIsContext(Field::IsMinimized));
         QVERIFY(!fieldIsContext(Field::IsMaximized));
         QVERIFY(!fieldIsContext(Field::IsFocused));
+        QVERIFY(!fieldIsContext(Field::IsTransient));
+        QVERIFY(!fieldIsContext(Field::IsNotification));
+        QVERIFY(!fieldIsContext(Field::Width));
+        QVERIFY(!fieldIsContext(Field::Height));
     }
 
     void testFieldIsContext_coversAllFields_data()

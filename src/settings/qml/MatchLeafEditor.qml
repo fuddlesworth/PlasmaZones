@@ -438,9 +438,9 @@ RowLayout {
             // hand-edited rule or a newer schema version) when no option
             // matches, mirroring the screen / activity pickers above. The
             // empty-string sentinel is the "no value yet" state the field
-            // combo emits when the user switches FROM another field's
-            // string value INTO WindowType (MatchLeafEditor.qml:184) — treat
-            // it as no-value so the placeholder shows. Plain `||` would also
+            // combo's onActivated seeds for picker-kind fields (windowType /
+            // screen / activity) when the user switches in from another field —
+            // treat it as no-value so the placeholder shows. Plain `||` would also
             // map int 0 (WindowType::Unknown) to the placeholder when no
             // option matched it, but that path is unreachable: 0 always
             // matches the Unknown option so currentIndex >= 0 and the
