@@ -272,6 +272,7 @@ qt_add_qml_module(plasmazones-settings
         qml/WindowPickerDialog.qml
         qml/LayoutComboBox.qml
         qml/WideComboBox.qml
+        qml/CategoryPickerField.qml
         qml/FontPickerDialog.qml
         qml/ColorButton.qml
         qml/InputCapture.qml

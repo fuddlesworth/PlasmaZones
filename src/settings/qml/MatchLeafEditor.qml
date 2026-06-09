@@ -172,23 +172,21 @@ RowLayout {
         color: Kirigami.Theme.highlightColor
     }
 
-    // `WideComboBox` (not plain `ComboBox`) — sizes the popup to fit the
-    // widest item so options like "starts with" / "is one of" don't truncate.
-    // `implicitContentWidthPolicy: WidestTextWhenCompleted` (set on the
-    // WideComboBox base) also widens the closed combo to fit the longest
-    // current label, so we drop the fixed `Layout.preferredWidth` here.
-    WideComboBox {
+    // Categorized field picker — the field list is long, so it's grouped into
+    // Identity / State / Size / Context (CategoryPickerField). Keyed on the
+    // field's `wire` string, matching `leaf.node.field`.
+    CategoryPickerField {
         id: fieldCombo
 
-        textRole: "label"
+        Layout.preferredWidth: Kirigami.Units.gridUnit * 9
+        options: leaf.fieldOptions
         valueRole: "wire"
-        model: leaf.fieldOptions
-        // -1 for an unknown / legacy field — show no selection rather than
-        // silently coercing it to the first field.
-        currentIndex: leaf._indexForWire(leaf.fieldOptions, leaf.node.field)
-        Accessible.name: i18n("Match field")
-        onActivated: function (index) {
-            if (currentValue === leaf.node.field)
+        textRole: "label"
+        currentValue: leaf.node.field
+        placeholderText: i18n("Choose…")
+        accessibleName: i18n("Match field")
+        onActivated: function (value) {
+            if (value === leaf.node.field)
                 return;
 
             // Changing the field invalidates the carried-over value and
@@ -199,7 +197,7 @@ RowLayout {
             //   valid operator for Title, leaving the rule un-saveable.
             // So we reset the value to empty and only carry the operator
             // if the new field's allowed-operator set still includes it.
-            var newFieldEntry = leaf._entryForWire(leaf.fieldOptions, currentValue);
+            var newFieldEntry = leaf._entryForWire(leaf.fieldOptions, value);
             var newOps = newFieldEntry !== undefined ? leaf.controller.operatorsForField(newFieldEntry.value) : [];
             var carryOp = leaf.node.op;
             var opStillValid = false;
@@ -218,7 +216,7 @@ RowLayout {
             // (string / screen / activity / windowType picker) -> "".
             var newKind = newFieldEntry !== undefined ? newFieldEntry.valueKind : "string";
             var seedValue = newKind === "bool" ? false : (newKind === "number" ? 0 : "");
-            leaf._emit(currentValue, carryOp, seedValue);
+            leaf._emit(value, carryOp, seedValue);
         }
     }
 

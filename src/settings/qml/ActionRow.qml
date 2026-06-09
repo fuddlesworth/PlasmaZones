@@ -203,16 +203,6 @@ ColumnLayout {
         return undefined;
     }
 
-    /// The index of the current action's type — -1 for an unknown / legacy
-    /// type so the combo shows no selection rather than coercing to index 0.
-    function _typeIndex() {
-        for (var i = 0; i < row.actionTypeOptions.length; ++i) {
-            if (row.actionTypeOptions[i].value === row.action.type)
-                return i;
-        }
-        return -1;
-    }
-
     spacing: Kirigami.Units.smallSpacing
 
     // Reset session locks when the user switches the effect. Tracking via
@@ -247,86 +237,37 @@ ColumnLayout {
             Layout.alignment: Qt.AlignVCenter
         }
 
-        // The delegate is overridden so context-domain entries render as
-        // disabled with an explanatory tooltip when the rule's match
-        // references window-property fields (the silently-never-fires
-        // combination). Selecting an incompatible entry is still possible —
-        // the per-row warning chip and the RuleEditorSheet's InlineMessage
-        // explain the consequence — but the picker visually signals the
-        // mismatch up front. Aligns with the disabled+tooltip UX chosen for
-        // this control (cleaner than hiding entries that change set as the
-        // user edits the match).
-        WideComboBox {
+        // Categorized action-type picker — grouped into Layout & engine / Gaps
+        // / Window / Appearance / Animation (CategoryPickerField). Context-domain
+        // entries render dimmed (but still selectable) with an explanatory
+        // tooltip when the rule's match references window properties — the
+        // silently-never-fires combination the per-row chip + the sheet's
+        // InlineMessage also explain. The dim re-evaluates each time the popup
+        // opens (delegates re-instantiate), which is when the user picks.
+        CategoryPickerField {
             id: typeCombo
 
-            textRole: "label"
-            valueRole: "value"
-            model: row.actionTypeOptions
-            currentIndex: row._typeIndex()
-            Accessible.name: i18n("Action type")
-            onActivated: function (index) {
+            Layout.preferredWidth: Kirigami.Units.gridUnit * 11
+            options: row.actionTypeOptions
+            currentValue: row.action.type
+            placeholderText: i18n("Choose…")
+            accessibleName: i18n("Action type")
+            dimPredicate: function (opt) {
+                return opt.domain === "context" && !row.matchIsContextOnly;
+            }
+            dimTooltip: i18n("This action runs during context resolution and cannot match window properties. Remove the window conditions from the rule's match, or pick a different action.")
+            onActivated: function (value) {
                 // Type-switch must seed the new param set's defaults — emitting
                 // a bare `{ type: newType }` left every parameter undefined,
                 // which a SpinBox renders as 0 and `canSave` then gates the
                 // rule on. Route through the controller's `defaultPayloadFor`
-                // so the same kind→default mapping that drives ActionListEditor
-                // ._append also drives a type change here (single source of
-                // truth — adding a new param kind no longer needs two edits).
-                if (currentValue === row.action.type)
+                // (via row._payloadForType) so the same kind→default mapping
+                // that drives ActionListEditor._append also drives a type
+                // change here.
+                if (value === row.action.type)
                     return;
 
-                row.actionEdited(row._payloadForType(currentValue));
-            }
-
-            delegate: ItemDelegate {
-                id: optionDelegate
-
-                required property var modelData
-                required property int index
-                readonly property bool isCurrentSelection: typeCombo.currentIndex === index
-                /// Per-option compatibility derived from the action descriptor's
-                /// `domain` and the match-domain prop threaded down from the
-                /// editor sheet. Context-domain entries are incompatible iff
-                /// the match has any window-property leaf.
-                readonly property bool _incompatible: modelData && modelData.domain === "context" && !row.matchIsContextOnly
-
-                width: typeCombo.popup.availableWidth
-                highlighted: typeCombo.highlightedIndex === index
-                // Visually disable the row but DO NOT set `enabled: false`:
-                // a disabled ItemDelegate doesn't trigger the ComboBox's
-                // activation, which would hide the picker UX entirely. The
-                // user is allowed to pick the incompatible entry (the row's
-                // warning chip and the sheet's InlineMessage explain why
-                // it never fires); we just lower the opacity so the
-                // incompatibility is obvious.
-                opacity: _incompatible ? 0.45 : 1
-                ToolTip.delay: 300
-                ToolTip.visible: hovered && _incompatible
-                ToolTip.text: i18n("This action runs during context resolution and cannot match window properties. Remove the window conditions from the rule's match, or pick a different action.")
-
-                background: Rectangle {
-                    color: optionDelegate.highlighted ? Kirigami.Theme.highlightColor : optionDelegate.isCurrentSelection ? Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g, Kirigami.Theme.highlightColor.b, 0.15) : Kirigami.Theme.backgroundColor
-                }
-
-                contentItem: RowLayout {
-                    spacing: Kirigami.Units.smallSpacing
-
-                    Label {
-                        Layout.fillWidth: true
-                        text: optionDelegate.modelData.label
-                        color: optionDelegate.highlighted ? Kirigami.Theme.highlightedTextColor : Kirigami.Theme.textColor
-                        font.weight: (optionDelegate.highlighted || optionDelegate.isCurrentSelection) ? Font.DemiBold : Font.Normal
-                        elide: Text.ElideRight
-                        verticalAlignment: Text.AlignVCenter
-                    }
-
-                    Kirigami.Icon {
-                        visible: optionDelegate._incompatible
-                        source: "dialog-warning"
-                        Layout.preferredWidth: Kirigami.Units.iconSizes.small
-                        Layout.preferredHeight: Kirigami.Units.iconSizes.small
-                    }
-                }
+                row.actionEdited(row._payloadForType(value));
             }
         }
 
