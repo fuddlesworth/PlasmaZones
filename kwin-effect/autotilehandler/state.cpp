@@ -98,7 +98,6 @@ void AutotileHandler::restoreAllBorderless()
     // Clear all border tracking (orphans included)
     m_border.borderlessWindowsByScreen.clear();
     m_border.tiledWindowsByScreen.clear();
-    m_border.zoneGeometries.clear();
 }
 
 void AutotileHandler::drainPendingBorderlessRestore()
@@ -162,7 +161,6 @@ bool AutotileHandler::updateHideTitleBarsSetting(bool enabled)
     m_border.hideTitleBars = enabled;
     if (!enabled) {
         // Turning OFF — restore title bars for all borderless windows
-        m_border.zoneGeometries.clear();
         const auto pairs = AutotileStateHelpers::allBorderlessPairs(m_border);
         for (const auto& p : pairs) {
             KWin::EffectWindow* win = m_effect->findWindowById(p.first);
@@ -310,7 +308,6 @@ void AutotileHandler::setWindowBorderless(KWin::EffectWindow* w, const QString& 
             return;
         }
         if (!AutotileStateHelpers::isBorderlessWindow(m_border, windowId)) {
-            m_border.zoneGeometries.remove(windowId);
             kw->setNoBorder(false);
             qCDebug(lcEffect) << "Autotile: restored title bar for" << windowId << "(was on screen:" << screenId << ")";
             m_effect->removeWindowBorder(windowId);

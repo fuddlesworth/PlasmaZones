@@ -806,7 +806,6 @@ void AutotileHandler::slotWindowFullScreenChanged(KWin::EffectWindow* w)
     }
     const QString windowId = m_effect->getWindowId(w);
     // Clear border and borderless tracking so borders are not drawn over fullscreen content
-    m_border.zoneGeometries.remove(windowId);
     const bool wasBorderlessAnywhere = AutotileStateHelpers::isBorderlessWindow(m_border, windowId);
     AutotileStateHelpers::removeFromAllScreens(m_border, windowId);
     if (wasBorderlessAnywhere) {
