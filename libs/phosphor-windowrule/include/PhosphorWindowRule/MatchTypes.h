@@ -59,8 +59,8 @@ enum class Operator : int {
     Regex = 4, ///< QRegularExpression, precompiled & cached per predicate
     AppIdMatches = 5, ///< segment-aware reverse-DNS match (AppId only)
     In = 6, ///< value is a set; membership test
-    GreaterThan = 7, ///< numeric compare (Pid / VirtualDesktop)
-    LessThan = 8, ///< numeric compare (Pid / VirtualDesktop)
+    GreaterThan = 7, ///< numeric compare (Pid / VirtualDesktop / Width / Height)
+    LessThan = 8, ///< numeric compare (Pid / VirtualDesktop / Width / Height)
 };
 
 /// The number of distinct `Operator` enumerators. `Operator` is a contiguous
