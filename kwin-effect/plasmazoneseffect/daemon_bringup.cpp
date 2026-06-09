@@ -573,6 +573,7 @@ void PlasmaZonesEffect::loadCachedSettings()
     // rule can re-enable animation for an otherwise-excluded app.
     loadSettingAsync(QStringLiteral("animationExcludeTransientWindows"), [this](const QVariant& v) {
         m_animationExcludeTransientWindows = v.toBool();
+        rebuildAnimationExclusionRuleSet();
     });
     // Default true (exclude). Guard on isValid() so a failed reply
     // leaves the member at its `true` init rather than `toBool()`'s
@@ -581,6 +582,7 @@ void PlasmaZonesEffect::loadCachedSettings()
     loadSettingAsync(QStringLiteral("animationExcludeNotificationsAndOsd"), [this](const QVariant& v) {
         if (v.isValid()) {
             m_animationExcludeNotificationsAndOsd = v.toBool();
+            rebuildAnimationExclusionRuleSet();
         }
     });
     // Clamp on the effect side as a defence-in-depth — the daemon's
@@ -591,9 +593,11 @@ void PlasmaZonesEffect::loadCachedSettings()
     // `animationDuration`'s `qBound` clamp above.
     loadSettingAsync(QStringLiteral("animationMinimumWindowWidth"), [this](const QVariant& v) {
         m_animationMinWindowWidth = qBound(0, v.toInt(), 2000);
+        rebuildAnimationExclusionRuleSet();
     });
     loadSettingAsync(QStringLiteral("animationMinimumWindowHeight"), [this](const QVariant& v) {
         m_animationMinWindowHeight = qBound(0, v.toInt(), 2000);
+        rebuildAnimationExclusionRuleSet();
     });
     // animationExcludedApplications / animationExcludedWindowClasses are
     // GONE — the v4 migration folded those lists into the unified

@@ -1707,9 +1707,12 @@ void PlasmaZonesEffect::loadWindowRuleAnimationsFromDbus()
         // Same refresh for the animation-side exclusion rule set, sliced
         // for `ExcludeAnimations`-action rules. The two slices stay
         // independent so a user can have a window excluded from animations
-        // but NOT from snap (or vice versa).
-        m_animationExclusionRuleSet.setRules(
-            PhosphorWindowRule::ExclusionRules::excludeAnimationsRulesFrom(*setOpt).rules());
+        // but NOT from snap (or vice versa). Keep the user rules verbatim and
+        // rebuild the combined set (user rules + synthesized config-gate base
+        // layer) so the notification/transient/min-size gates resolve through
+        // the same RuleEvaluator path — see rebuildAnimationExclusionRuleSet.
+        m_animationExclusionUserRules = PhosphorWindowRule::ExclusionRules::excludeAnimationsRulesFrom(*setOpt).rules();
+        rebuildAnimationExclusionRuleSet();
         // Force a full repaint on EITHER bookend so a user-authored rule
         // applies to static (un-damaged) windows immediately AND so a
         // removed rule reverts previously-dimmed windows immediately, not

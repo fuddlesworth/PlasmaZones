@@ -831,6 +831,21 @@ private:
     // outlive) the evaluator that binds a reference to it.
     PhosphorWindowRule::WindowRuleSet m_animationExclusionRuleSet;
     PhosphorWindowRule::RuleEvaluator m_animationExclusionEvaluator{m_animationExclusionRuleSet};
+    // The user-authored ExcludeAnimations rules, kept verbatim so a config-gate
+    // change (notification / transient / min-size) can recombine them with the
+    // synthesized base layer without a D-Bus round-trip:
+    //   m_animationExclusionRuleSet = m_animationExclusionUserRules + gate rules.
+    QList<PhosphorWindowRule::WindowRule> m_animationExclusionUserRules;
+    // Rebuild m_animationExclusionRuleSet from the user rules + the synthesized
+    // config-gate base layer. Called whenever either input changes (the
+    // rule-store push in loadWindowRuleAnimationsFromDbus, or a gate config
+    // value in the daemon-bringup settings load).
+    void rebuildAnimationExclusionRuleSet();
+    // Synthesize ephemeral ExcludeAnimations base rules from the animation
+    // window-filtering config gates: notification/OSD, transient, and the
+    // min-width/height thresholds become IsNotification / IsTransient /
+    // Width<N / Height<N exclusion predicates. Empty when every gate is off.
+    QList<PhosphorWindowRule::WindowRule> synthesizeAnimationGateRules() const;
 
     // Autotile: true when the current drag was started on an autotile screen
     // (callDragStarted was skipped). Captured at drag start so the drag end
