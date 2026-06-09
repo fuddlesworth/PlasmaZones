@@ -27,6 +27,78 @@ using PhosphorWindowRule::Field;
 using PhosphorWindowRule::Operator;
 using PhosphorWindowRule::RuleAction;
 
+/// One picker category: a translated label + a stable sort order. The field
+/// and action pickers group their (otherwise long, flat) entry lists into
+/// fly-out submenus keyed by this.
+struct PickerCategory
+{
+    QString label;
+    int order;
+};
+
+/// Group a match Field into a picker category. The `Field` enum interleaves
+/// state and context (e.g. IsMaximized sits after Activity), so the picker
+/// groups by THIS classification, never by enum / emit order.
+PickerCategory fieldCategory(Field f)
+{
+    switch (f) {
+    case Field::AppId:
+    case Field::WindowClass:
+    case Field::DesktopFile:
+    case Field::WindowRole:
+    case Field::Pid:
+    case Field::Title:
+        return {PhosphorI18n::tr("Identity"), 0};
+    case Field::WindowType:
+    case Field::IsSticky:
+    case Field::IsFullscreen:
+    case Field::IsMinimized:
+    case Field::IsMaximized:
+    case Field::IsFocused:
+    case Field::IsTransient:
+    case Field::IsNotification:
+        return {PhosphorI18n::tr("State"), 1};
+    case Field::Width:
+    case Field::Height:
+        return {PhosphorI18n::tr("Size"), 2};
+    case Field::ScreenId:
+    case Field::VirtualDesktop:
+    case Field::Activity:
+        return {PhosphorI18n::tr("Context"), 3};
+    }
+    return {PhosphorI18n::tr("Other"), 99};
+}
+
+/// Group an action type (wire string) into a picker category. Mirrors the
+/// preferred-order clustering in actionTypes(): engine/layout, gaps, window
+/// management, appearance, animation.
+PickerCategory actionCategory(const QString& type)
+{
+    if (type == ActionType::SetEngineMode || type == ActionType::SetSnappingLayout
+        || type == ActionType::SetTilingAlgorithm || type == ActionType::DisableEngine) {
+        return {PhosphorI18n::tr("Layout & engine"), 0};
+    }
+    if (type == ActionType::SetZonePadding || type == ActionType::SetOuterGap
+        || type == ActionType::SetUsePerSideOuterGap || type == ActionType::SetOuterGapTop
+        || type == ActionType::SetOuterGapBottom || type == ActionType::SetOuterGapLeft
+        || type == ActionType::SetOuterGapRight) {
+        return {PhosphorI18n::tr("Gaps"), 1};
+    }
+    if (type == ActionType::Exclude || type == ActionType::Float) {
+        return {PhosphorI18n::tr("Window"), 2};
+    }
+    if (type == ActionType::SetOpacity || type == ActionType::SetHideTitleBar || type == ActionType::SetBorderVisible
+        || type == ActionType::SetBorderWidth || type == ActionType::SetBorderRadius
+        || type == ActionType::SetBorderColor) {
+        return {PhosphorI18n::tr("Appearance"), 3};
+    }
+    if (type == ActionType::OverrideAnimationShader || type == ActionType::OverrideAnimationCurve
+        || type == ActionType::OverrideAnimationTiming || type == ActionType::ExcludeAnimations) {
+        return {PhosphorI18n::tr("Animation"), 4};
+    }
+    return {PhosphorI18n::tr("Other"), 99};
+}
+
 /// Translated label for one param key on action @p type. The structural
 /// schema (kind, min/max, scale, enum wire values) lives on the LGPL
 /// `ActionDescriptor` in PhosphorWindowRule; the GPL settings layer adds
@@ -310,6 +382,9 @@ QVariantList matchFields()
         // reconstructing the enum↔string table itself.
         entry[QStringLiteral("wire")] = PhosphorWindowRule::fieldToString(f);
         entry[QStringLiteral("label")] = WindowRuleModel::fieldLabel(f);
+        const PickerCategory fcat = fieldCategory(f);
+        entry[QStringLiteral("category")] = fcat.label;
+        entry[QStringLiteral("categoryOrder")] = fcat.order;
         QString kind = QStringLiteral("string");
         if (f == Field::WindowType) {
             // WindowType is stored as the int underlying the
@@ -495,6 +570,9 @@ QVariantList actionTypes()
         entry[QStringLiteral("value")] = typeStr;
         entry[QStringLiteral("label")] = actionTypeLabelImpl(typeStr);
         entry[QStringLiteral("params")] = paramsForActionTypeImpl(typeStr);
+        const PickerCategory acat = actionCategory(typeStr);
+        entry[QStringLiteral("category")] = acat.label;
+        entry[QStringLiteral("categoryOrder")] = acat.order;
         // Domain wire string drives the picker's compatibility flag — the
         // QML side disables a context-domain action type when the current
         // match references window-property fields (the silently-never-fires

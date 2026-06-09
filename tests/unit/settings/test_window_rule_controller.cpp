@@ -678,6 +678,26 @@ void TestWindowRuleController::authoringMetadata()
     QVERIFY(sawActivityKind);
     QVERIFY(sawWindowTypeKind);
 
+    // Picker categories drive the fly-out submenu grouping. Every field carries
+    // a non-empty category label + a categoryOrder int. The Field enum
+    // interleaves state/context, so assert grouping is by CATEGORY (via the
+    // language-independent order), not by enum position: Identity=0, State=1,
+    // Size=2, Context=3.
+    QHash<QString, int> fieldCategoryOrder;
+    for (const QVariant& v : fields) {
+        const QVariantMap f = v.toMap();
+        QVERIFY(!f.value(QStringLiteral("category")).toString().isEmpty());
+        QVERIFY(f.contains(QStringLiteral("categoryOrder")));
+        fieldCategoryOrder.insert(f.value(QStringLiteral("wire")).toString(),
+                                  f.value(QStringLiteral("categoryOrder")).toInt());
+    }
+    QCOMPARE(fieldCategoryOrder.value(QStringLiteral("appId")), 0); // Identity
+    QCOMPARE(fieldCategoryOrder.value(QStringLiteral("isFullscreen")), 1); // State
+    QCOMPARE(fieldCategoryOrder.value(QStringLiteral("isMaximized")), 1); // State (after Context in enum order)
+    QCOMPARE(fieldCategoryOrder.value(QStringLiteral("width")), 2); // Size
+    QCOMPARE(fieldCategoryOrder.value(QStringLiteral("height")), 2); // Size
+    QCOMPARE(fieldCategoryOrder.value(QStringLiteral("screenId")), 3); // Context
+
     // The four match conditions (IsTransient/IsNotification/Width/Height) must be
     // authorable: present in the picker with the correct value kind, and with
     // the operators their category implies (bool -> Equals only; numeric ->
@@ -739,11 +759,25 @@ void TestWindowRuleController::authoringMetadata()
     const QVariantList actions = controller.actionTypes();
     QVERIFY(!actions.isEmpty());
     bool sawFloat = false;
+    // Every action carries a picker category; collect the order per wire so the
+    // grouping can be spot-checked (Layout & engine=0, Gaps=1, Window=2,
+    // Appearance=3, Animation=4).
+    QHash<QString, int> actionCategoryOrder;
     for (const QVariant& v : actions) {
-        if (v.toMap().value(QStringLiteral("value")).toString() == QLatin1String("float"))
+        const QVariantMap a = v.toMap();
+        if (a.value(QStringLiteral("value")).toString() == QLatin1String("float"))
             sawFloat = true;
+        QVERIFY(!a.value(QStringLiteral("category")).toString().isEmpty());
+        QVERIFY(a.contains(QStringLiteral("categoryOrder")));
+        actionCategoryOrder.insert(a.value(QStringLiteral("value")).toString(),
+                                   a.value(QStringLiteral("categoryOrder")).toInt());
     }
     QVERIFY(sawFloat);
+    QCOMPARE(actionCategoryOrder.value(QStringLiteral("setEngineMode")), 0); // Layout & engine
+    QCOMPARE(actionCategoryOrder.value(QStringLiteral("setZonePadding")), 1); // Gaps
+    QCOMPARE(actionCategoryOrder.value(QStringLiteral("exclude")), 2); // Window
+    QCOMPARE(actionCategoryOrder.value(QStringLiteral("setOpacity")), 3); // Appearance
+    QCOMPARE(actionCategoryOrder.value(QStringLiteral("excludeAnimations")), 4); // Animation
 }
 
 void TestWindowRuleController::templatesProduceSeededRules()
