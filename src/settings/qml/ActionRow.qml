@@ -237,26 +237,30 @@ ColumnLayout {
             Layout.alignment: Qt.AlignVCenter
         }
 
-        // Categorized action-type picker — grouped into Layout & engine / Gaps
-        // / Window / Appearance / Animation (CategoryPickerField). Context-domain
-        // entries render dimmed (but still selectable) with an explanatory
-        // tooltip when the rule's match references window properties — the
-        // silently-never-fires combination the per-row chip + the sheet's
-        // InlineMessage also explain. The dim re-evaluates each time the popup
-        // opens (delegates re-instantiate), which is when the user picks.
-        CategoryPickerField {
+        // Categorized action-type picker — the shared cascading category-menu
+        // button (PZCommon.CategoryMenuButton). Grouped into Layout & engine /
+        // Gaps / Window / Appearance / Animation. The context-action
+        // incompatibility (silently-never-fires when the match references window
+        // properties) is surfaced by the per-row warning chip below + the
+        // sheet's InlineMessage, so the picker itself stays a plain menu.
+        PZCommon.CategoryMenuButton {
             id: typeCombo
 
             Layout.preferredWidth: Kirigami.Units.gridUnit * 11
-            options: row.actionTypeOptions
-            currentValue: row.action.type
+            // Map the action metadata to the picker's { id, name, category,
+            // categoryOrder } item shape.
+            items: row.actionTypeOptions.map(function (o) {
+                return {
+                    "id": o.value,
+                    "name": o.label,
+                    "category": o.category,
+                    "categoryOrder": o.categoryOrder
+                };
+            })
+            currentId: row.action.type
             placeholderText: i18n("Choose…")
-            accessibleName: i18n("Action type")
-            dimPredicate: function (opt) {
-                return opt.domain === "context" && !row.matchIsContextOnly;
-            }
-            dimTooltip: i18n("This action runs during context resolution and cannot match window properties. Remove the window conditions from the rule's match, or pick a different action.")
-            onActivated: function (value) {
+            Accessible.description: i18n("Action type")
+            onSelected: function (value) {
                 // Type-switch must seed the new param set's defaults — emitting
                 // a bare `{ type: newType }` left every parameter undefined,
                 // which a SpinBox renders as 0 and `canSave` then gates the

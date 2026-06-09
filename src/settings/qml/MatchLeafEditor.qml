@@ -5,6 +5,7 @@ import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
 import org.kde.kirigami as Kirigami
+import org.plasmazones.common as PZCommon
 
 /**
  * @brief One leaf predicate row — `{ field, op, value }`.
@@ -172,20 +173,28 @@ RowLayout {
         color: Kirigami.Theme.highlightColor
     }
 
-    // Categorized field picker — the field list is long, so it's grouped into
-    // Identity / State / Size / Context (CategoryPickerField). Keyed on the
+    // Categorized field picker — the same cascading category-menu button the
+    // shader choosers use (PZCommon.CategoryMenuButton). The field list is long,
+    // so it's grouped into Identity / State / Size / Context. Keyed on the
     // field's `wire` string, matching `leaf.node.field`.
-    CategoryPickerField {
+    PZCommon.CategoryMenuButton {
         id: fieldCombo
 
         Layout.preferredWidth: Kirigami.Units.gridUnit * 9
-        options: leaf.fieldOptions
-        valueRole: "wire"
-        textRole: "label"
-        currentValue: leaf.node.field
+        // Map the field metadata to the picker's { id, name, category,
+        // categoryOrder } item shape.
+        items: leaf.fieldOptions.map(function (o) {
+            return {
+                "id": o.wire,
+                "name": o.label,
+                "category": o.category,
+                "categoryOrder": o.categoryOrder
+            };
+        })
+        currentId: leaf.node.field
         placeholderText: i18n("Choose…")
-        accessibleName: i18n("Match field")
-        onActivated: function (value) {
+        Accessible.description: i18n("Match field")
+        onSelected: function (value) {
             if (value === leaf.node.field)
                 return;
 

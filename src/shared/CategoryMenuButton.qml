@@ -8,12 +8,12 @@ import QtQuick.Templates as T
 import org.kde.kirigami as Kirigami
 
 /**
- * @brief Reusable shader picker with cascading category menu.
+ * @brief Reusable button that opens a cascading category menu.
  *
- * Drives both the editor's overlay-shader chooser and the animation
- * settings' transition-shader chooser. The host owns the data: pass in a
- * flat `shaders` list (each entry: `{ id, name, category? }`), bind
- * `currentShaderId`, and react to `shaderSelected(id)`.
+ * Drives the editor/settings shader choosers and the rule editor's match-
+ * field / action-type pickers. The host owns the data: pass in a flat
+ * `items` list (each entry: `{ id, name, category? }`), bind `currentId`,
+ * and react to `selected(id)`.
  *
  * ## Visual style
  *
@@ -22,20 +22,20 @@ import org.kde.kirigami as Kirigami
  * rounded border) and lines up next to other settings-page combos
  * (e.g. the timing-mode picker). We replace the default flat-list popup
  * with our cascading category menu by zero-sizing the built-in `popup`
- * and opening `shaderCategoryMenu` from `onPressedChanged`.
+ * and opening `categoryMenu` from `onPressedChanged`.
  *
  * ## Categories
  *
  * The `category` field is split on `/` to build a two-level tree
  * (`"Audio/Reactive"` → `Audio` submenu containing a `Reactive` submenu).
- * Shaders without a category land in a flat tail below the category
+ * Items without a category land in a flat tail below the category
  * submenus.
  *
  * ## "None" entry
  *
  * For hosts where clearing the selection is a first-class action (animation
  * settings), set `includeNoneEntry: true` to prepend an explicit `noneText`
- * row. Selecting it emits `shaderSelected("")`. The editor leaves it off
+ * row. Selecting it emits `selected("")`. The editor leaves it off
  * because its dialog uses a separate "Enable effect" checkbox.
  *
  * ## Menu lifecycle (Qt 6 use-after-free workaround)
@@ -47,15 +47,15 @@ import org.kde.kirigami as Kirigami
  * `Qt.callLater` so the click handler returns before the menu hides.
  *
  * Required:
- *   - `shaders`: var — list of shader-info maps
+ *   - `items`: var — list of `{ id, name, category? }` maps
  *
  * Optional:
- *   - `currentShaderId`: string — drives the checkmark and button label
- *   - `noneShaderId`: string — id treated as "no effect"; checkmark is shown
- *      on this entry when `currentShaderId` matches
+ *   - `currentId`: string — drives the checkmark and button label
+ *   - `noneId`: string — id treated as "no effect"; checkmark is shown
+ *      on this entry when `currentId` matches
  *   - `includeNoneEntry`: bool — prepend a "None" item that selects ""
  *   - `noneText`: string — label for the "None" entry
- *   - `placeholderText`: string — button label when no shader is selected
+ *   - `placeholderText`: string — button label when nothing is selected
  */
 ComboBox {
     // No `Component.onDestruction` cleanup — Qt's parent-child ownership
@@ -68,50 +68,47 @@ ComboBox {
 
     id: root
 
-    required property var shaders
-    property string currentShaderId: ""
-    property string noneShaderId: ""
+    required property var items
+    property string currentId: ""
+    property string noneId: ""
     property bool includeNoneEntry: false
     property string noneText: i18nc("@item:inlistbox", "None")
-    property string placeholderText: i18nc("@action:button", "Select shader…")
+    property string placeholderText: i18nc("@action:button", "Select…")
     // Re-entry guard against rapid press / Space-down events queueing two
     // `showMenu` callbacks before the first one returns. `_opening` is set
     // when we hand off to `Qt.callLater` and cleared on `aboutToShow`.
     property bool _opening: false
-    readonly property var _currentShaderInfo: {
-        if (!shaders || !currentShaderId)
+    readonly property var _currentItemInfo: {
+        if (!items || !currentId)
             return null;
 
-        for (var i = 0; i < shaders.length; i++) {
-            if (shaders[i] && shaders[i].id === currentShaderId)
-                return shaders[i];
-
+        for (var i = 0; i < items.length; i++) {
+            if (items[i] && items[i].id === currentId)
+                return items[i];
         }
         return null;
     }
-    readonly property var _sortedShaders: {
-        if (!shaders || shaders.length === 0)
+    readonly property var _sortedItems: {
+        if (!items || items.length === 0)
             return [];
 
         var arr = [];
-        for (var i = 0; i < shaders.length; i++) {
-            if (shaders[i])
-                arr.push(shaders[i]);
-
+        for (var i = 0; i < items.length; i++) {
+            if (items[i])
+                arr.push(items[i]);
         }
-        arr.sort(function(a, b) {
+        arr.sort(function (a, b) {
             var na = (a && a.name !== undefined) ? String(a.name) : "";
             var nb = (b && b.name !== undefined) ? String(b.name) : "";
             return na.localeCompare(nb);
         });
         return arr;
     }
-    // { categories: [{name, shaders, subcategories: [{name, shaders}]}],
+    // { categories: [{name, items, subcategories: [{name, items}]}],
     //   uncategorized: [...] }
     readonly property var _categoryTree: {
-        var sorted = root._sortedShaders;
-        var tree = {
-        };
+        var sorted = root._sortedItems;
+        var tree = {};
         var uncategorized = [];
         for (var i = 0; i < sorted.length; i++) {
             var s = sorted[i];
@@ -129,10 +126,18 @@ ComboBox {
             }
             if (!tree[top])
                 tree[top] = {
-                "direct": [],
-                "subcats": {
-                }
-            };
+                    "direct": [],
+                    "subcats": {},
+                    "order": Infinity
+                };
+
+            // Track the smallest explicit `categoryOrder` seen for this top
+            // category — hosts that supply it (the rule editor's field/action
+            // pickers) get that order; hosts that don't (shaders) fall back to
+            // alphabetical via the Infinity default.
+            var ord = (s.categoryOrder !== undefined && s.categoryOrder !== null) ? Number(s.categoryOrder) : Infinity;
+            if (ord < tree[top].order)
+                tree[top].order = ord;
 
             if (sub === "") {
                 tree[top].direct.push(s);
@@ -144,26 +149,31 @@ ComboBox {
             }
         }
         var keys = Object.keys(tree);
-        keys.sort(function(a, b) {
+        keys.sort(function (a, b) {
+            // Explicit categoryOrder first (rule editor pickers), then
+            // alphabetical (shaders, and ties).
+            var oa = tree[a].order, ob = tree[b].order;
+            if (oa !== ob)
+                return oa - ob;
             return a.localeCompare(b);
         });
         var categories = [];
         for (var k = 0; k < keys.length; k++) {
             var node = tree[keys[k]];
             var subKeys = Object.keys(node.subcats);
-            subKeys.sort(function(a, b) {
+            subKeys.sort(function (a, b) {
                 return a.localeCompare(b);
             });
             var subcategories = [];
             for (var si = 0; si < subKeys.length; si++) {
                 subcategories.push({
                     "name": subKeys[si],
-                    "shaders": node.subcats[subKeys[si]]
+                    "items": node.subcats[subKeys[si]]
                 });
             }
             categories.push({
                 "name": keys[k],
-                "shaders": node.direct,
+                "items": node.direct,
                 "subcategories": subcategories
             });
         }
@@ -173,14 +183,14 @@ ComboBox {
         };
     }
 
-    signal shaderSelected(string id)
+    signal selected(string id)
 
     function _requestOpenMenu() {
-        if (_opening || shaderCategoryMenu.visible)
-            return ;
+        if (_opening || categoryMenu.visible)
+            return;
 
         _opening = true;
-        Qt.callLater(shaderCategoryMenu.showMenu);
+        Qt.callLater(categoryMenu.showMenu);
     }
 
     // Empty model — the click opens our cascading menu instead of the
@@ -194,66 +204,64 @@ ComboBox {
     // "select-from-flat-list combo". Setting role explicitly stops AT-SPI
     // from announcing "combobox 0 of 0" against our zero-sized internal
     // popup; instead screen readers announce the picker as a button whose
-    // label is the currently-selected shader name.
+    // label is the currently-selected item's name.
     Accessible.role: Accessible.Button
     Accessible.name: displayText
-    ToolTip.text: i18nc("@info:tooltip", "Choose a shader effect from categorized list")
-    ToolTip.visible: hovered && !shaderCategoryMenu.visible
+    ToolTip.text: i18nc("@info:tooltip", "Choose from the categorized list")
+    ToolTip.visible: hovered && !categoryMenu.visible
     ToolTip.delay: Kirigami.Units.toolTipDelay
     displayText: {
-        var info = root._currentShaderInfo;
+        var info = root._currentItemInfo;
         if (info && info.name)
             return info.name;
 
-        if (root.includeNoneEntry && (root.currentShaderId === "" || root.currentShaderId === root.noneShaderId))
+        if (root.includeNoneEntry && (root.currentId === "" || root.currentId === root.noneId))
             return root.noneText;
 
-        // Non-empty `currentShaderId` that doesn't match any entry in the
-        // shaders list — pack uninstalled out from under us. Make it
+        // Non-empty `currentId` that doesn't match any entry in the
+        // items list — pack uninstalled out from under us. Make it
         // visible rather than silently rendering the placeholder.
-        if (root.currentShaderId !== "" && root.currentShaderId !== root.noneShaderId)
-            return i18nc("@info shader missing", "(missing: %1)", root.currentShaderId);
+        if (root.currentId !== "" && root.currentId !== root.noneId)
+            return i18nc("@info item missing", "(missing: %1)", root.currentId);
 
         return root.placeholderText;
     }
     onPressedChanged: {
         if (pressed)
             _requestOpenMenu();
-
     }
     // Keyboard activation — the default ComboBox path opens its (suppressed)
     // popup on Space / Return / Enter; without an explicit handler, keyboard
     // users would focus the picker but be unable to open it. Mirror the
     // mouse path through `_requestOpenMenu`.
-    Keys.onSpacePressed: function(event) {
+    Keys.onSpacePressed: function (event) {
         _requestOpenMenu();
         event.accepted = true;
     }
-    Keys.onReturnPressed: function(event) {
+    Keys.onReturnPressed: function (event) {
         _requestOpenMenu();
         event.accepted = true;
     }
-    Keys.onEnterPressed: function(event) {
+    Keys.onEnterPressed: function (event) {
         _requestOpenMenu();
         event.accepted = true;
     }
-    // Force rebuild on shaders change (registry reload) — _built guard would
+    // Force rebuild on items change (registry reload) — _built guard would
     // otherwise pin the menu to whatever was loaded at first popup.
-    onShadersChanged: shaderCategoryMenu.markDirty()
+    onItemsChanged: categoryMenu.markDirty()
 
     // Use ItemDelegate (not MenuItem) so Qt's onItemTriggered → dismiss()
     // cascade never fires; the menu hides via explicit Qt.callLater below.
     Component {
-        id: shaderMenuItemComponent
+        id: menuItemComponent
 
         ItemDelegate {
-            property string shaderId
+            property string itemId
             property bool isSelected: false
 
             icon.name: isSelected ? "checkmark" : ""
-            onClicked: shaderCategoryMenu.selectShader(shaderId)
+            onClicked: categoryMenu.selectItem(itemId)
         }
-
     }
 
     Component {
@@ -265,31 +273,25 @@ ComboBox {
             palette.window: Kirigami.Theme.backgroundColor
 
             // Empty transitions keep finalizeExitTransition synchronous.
-            enter: Transition {
-            }
+            enter: Transition {}
 
-            exit: Transition {
-            }
-
+            exit: Transition {}
         }
-
     }
 
     Component {
         id: menuSeparatorComponent
 
-        MenuSeparator {
-        }
-
+        MenuSeparator {}
     }
 
     Menu {
-        id: shaderCategoryMenu
+        id: categoryMenu
 
         // Two buckets: `_allItems` is the flat list of selectable
         // ItemDelegates (the picker iterates it on every open to refresh
         // checkmarks). `_owned` is the union of every dynamically-created
-        // child, kind-tagged so markDirty() / selectShader can dispatch
+        // child, kind-tagged so markDirty() / selectItem can dispatch
         // explicitly instead of inferring child kind from runtime
         // properties. Each entry: `{ obj, owner, kind }` where `owner`
         // is the Menu the child was added to. `Menu.addMenu(submenu)`
@@ -328,23 +330,22 @@ ComboBox {
             root._opening = false;
         }
 
-        function selectShader(id) {
+        function selectItem(id) {
             // Defer everything so the click handler returns before
             // setting visible = false. Setting visible mid-event triggers
             // finalizeExitTransition on a still-active event pipeline.
-            Qt.callLater(function() {
+            Qt.callLater(function () {
                 for (var i = 0; i < _owned.length; i++) {
                     var entry = _owned[i];
                     if (entry && entry.kind === "submenu" && entry.obj)
                         entry.obj.visible = false;
-
                 }
-                shaderCategoryMenu.visible = false;
+                categoryMenu.visible = false;
                 // Emit AFTER closing so any host-side reaction (registry
                 // reload, refresh) sees a settled menu state. If the host
-                // mutates `shaders` synchronously from the handler, the
+                // mutates `items` synchronously from the handler, the
                 // resulting `markDirty()` runs against a fully-hidden tree.
-                root.shaderSelected(id);
+                root.selected(id);
             });
         }
 
@@ -355,10 +356,10 @@ ComboBox {
                     continue;
 
                 var sel;
-                if (it.shaderId === "")
-                    sel = (root.currentShaderId === "" || root.currentShaderId === root.noneShaderId);
+                if (it.itemId === "")
+                    sel = (root.currentId === "" || root.currentId === root.noneId);
                 else
-                    sel = (it.shaderId === root.currentShaderId);
+                    sel = (it.itemId === root.currentId);
                 it.isSelected = sel;
             }
         }
@@ -371,7 +372,7 @@ ComboBox {
         // `Menu.addMenu` reparent-to-placeholder ambiguity that was
         // letting old submenus persist across markDirty.
         function _addItem(menu, props) {
-            var item = shaderMenuItemComponent.createObject(menu, props);
+            var item = menuItemComponent.createObject(menu, props);
             menu.addItem(item);
             _allItems.push(item);
             _owned.push({
@@ -408,70 +409,70 @@ ComboBox {
             if (!_built) {
                 _built = true;
                 if (root.includeNoneEntry) {
-                    _addItem(shaderCategoryMenu, {
+                    _addItem(categoryMenu, {
                         "text": root.noneText,
-                        "shaderId": ""
+                        "itemId": ""
                     });
-                    _addSeparator(shaderCategoryMenu);
+                    _addSeparator(categoryMenu);
                 }
                 var categories = root._categoryTree.categories;
                 for (var c = 0; c < categories.length; c++) {
                     var cat = categories[c];
-                    var catShaders = cat.shaders || [];
+                    var catItems = cat.items || [];
                     var subcats = cat.subcategories || [];
                     // Skip empty top-level categories — produces an empty
                     // submenu the user can hover into for no reason.
-                    if (catShaders.length === 0 && subcats.length === 0)
+                    if (catItems.length === 0 && subcats.length === 0)
                         continue;
 
-                    var subMenu = _addSubmenu(shaderCategoryMenu, {
+                    var subMenu = _addSubmenu(categoryMenu, {
                         "title": cat.name
                     });
-                    for (var s = 0; s < catShaders.length; s++) _addItem(subMenu, {
-                        "text": catShaders[s].name,
-                        "shaderId": catShaders[s].id
-                    })
+                    for (var s = 0; s < catItems.length; s++)
+                        _addItem(subMenu, {
+                            "text": catItems[s].name,
+                            "itemId": catItems[s].id
+                        });
                     for (var sc = 0; sc < subcats.length; sc++) {
-                        var subShaders = subcats[sc].shaders || [];
-                        if (subShaders.length === 0)
+                        var subItems = subcats[sc].items || [];
+                        if (subItems.length === 0)
                             continue;
 
                         var subSubMenu = _addSubmenu(subMenu, {
                             "title": subcats[sc].name
                         });
-                        for (var ss = 0; ss < subShaders.length; ss++) _addItem(subSubMenu, {
-                            "text": subShaders[ss].name,
-                            "shaderId": subShaders[ss].id
-                        })
+                        for (var ss = 0; ss < subItems.length; ss++)
+                            _addItem(subSubMenu, {
+                                "text": subItems[ss].name,
+                                "itemId": subItems[ss].id
+                            });
                     }
                 }
                 var uncategorized = root._categoryTree.uncategorized;
                 if (uncategorized.length > 0 && categories.length > 0)
-                    _addSeparator(shaderCategoryMenu);
+                    _addSeparator(categoryMenu);
 
-                for (var u = 0; u < uncategorized.length; u++) _addItem(shaderCategoryMenu, {
-                    "text": uncategorized[u].name,
-                    "shaderId": uncategorized[u].id
-                })
+                for (var u = 0; u < uncategorized.length; u++)
+                    _addItem(categoryMenu, {
+                        "text": uncategorized[u].name,
+                        "itemId": uncategorized[u].id
+                    });
             }
             updateChecks();
-            shaderCategoryMenu.popup(root, 0, root.height);
+            categoryMenu.popup(root, 0, root.height);
         }
 
         onAboutToShow: root._opening = false
         palette.window: Kirigami.Theme.backgroundColor
 
-        enter: Transition {
-        }
+        enter: Transition {}
 
-        exit: Transition {
-        }
-
+        exit: Transition {}
     }
 
     // Suppress the default popup — `visible: false` plus zero size keeps
     // it inert while still satisfying ComboBox's invariant that
-    // `popup` is a real Popup. Our cascading menu is `shaderCategoryMenu`
+    // `popup` is a real Popup. Our cascading menu is `categoryMenu`
     // below; it opens from `onPressedChanged` (mouse press) and from the
     // Keys handler (Space / Return / Enter on focused ComboBox).
     popup: T.Popup {
@@ -479,5 +480,4 @@ ComboBox {
         width: 0
         height: 0
     }
-
 }

@@ -272,7 +272,6 @@ qt_add_qml_module(plasmazones-settings
         qml/WindowPickerDialog.qml
         qml/LayoutComboBox.qml
         qml/WideComboBox.qml
-        qml/CategoryPickerField.qml
         qml/FontPickerDialog.qml
         qml/ColorButton.qml
         qml/InputCapture.qml
@@ -369,7 +368,7 @@ qt_add_resources(plasmazones-settings "shared_common_qml"
         ${CMAKE_SOURCE_DIR}/src/shared/AspectRatioBadge.qml
         ${CMAKE_SOURCE_DIR}/src/shared/ZonePreview.qml
         ${CMAKE_SOURCE_DIR}/src/shared/CategoryBadge.qml
-        ${CMAKE_SOURCE_DIR}/src/shared/ShaderPickerButton.qml
+        ${CMAKE_SOURCE_DIR}/src/shared/CategoryMenuButton.qml
         ${CMAKE_SOURCE_DIR}/src/shared/ShaderParameterRow.qml
         ${CMAKE_SOURCE_DIR}/src/shared/ShaderParameterSection.qml
         ${CMAKE_SOURCE_DIR}/src/shared/ShaderParameterEditor.qml
