@@ -4,6 +4,7 @@
 #pragma once
 
 #include <PhosphorCompositor/AutotileState.h>
+#include <PhosphorProtocol/ZoneTypes.h>
 
 #include <QColor>
 #include <QHash>
@@ -138,6 +139,9 @@ public:
     /// snap commit, so a later float toggle restores the original position.
     void ensurePreSnapGeometryStored(KWin::EffectWindow* w, const QString& windowId,
                                      const QRectF& preCapturedGeometry = QRectF());
+    /// Send the one-way cancelSnap D-Bus call (drag cancelled by Escape or an
+    /// external event). The daemon discards the in-flight snap.
+    void callCancelSnap();
 
     // ── Border rendering accessors — delegate to shared AutotileStateHelpers ──
     bool isBorderlessWindow(const QString& windowId) const
@@ -203,6 +207,17 @@ public:
     {
         m_border.inactiveColor = c;
     }
+
+public Q_SLOTS:
+    // Snap D-Bus signal handlers, connected in
+    // PlasmaZonesEffect::connectNavigationSignals (receiver = the SnapHandler
+    // instance). Each delegates effect-level work back through m_effect.
+    void slotSnapAllWindowsRequested(const QString& screenId);
+    void slotMoveSpecificWindowToZoneRequested(const QString& windowId, const QString& zoneId, int x, int y, int width,
+                                               int height);
+    void slotPendingRestoresAvailable();
+    void slotSnapAssistReady(const QString& windowId, const QString& releaseScreenId,
+                             const PhosphorProtocol::EmptyZoneList& emptyZones);
 
 private:
     PlasmaZonesEffect* m_effect;

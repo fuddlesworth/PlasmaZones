@@ -844,19 +844,19 @@ void PlasmaZonesEffect::connectNavigationSignals()
     // Snap-all: daemon triggers effect to collect candidates
     QDBusConnection::sessionBus().connect(PhosphorProtocol::Service::Name, PhosphorProtocol::Service::ObjectPath,
                                           PhosphorProtocol::Service::Interface::WindowTracking,
-                                          QStringLiteral("snapAllWindowsRequested"), this,
+                                          QStringLiteral("snapAllWindowsRequested"), m_snapHandler.get(),
                                           SLOT(slotSnapAllWindowsRequested(QString)));
 
     // Move specific window (Snap Assist selection)
     QDBusConnection::sessionBus().connect(
         PhosphorProtocol::Service::Name, PhosphorProtocol::Service::ObjectPath,
-        PhosphorProtocol::Service::Interface::WindowTracking, QStringLiteral("moveSpecificWindowToZoneRequested"), this,
-        SLOT(slotMoveSpecificWindowToZoneRequested(QString, QString, int, int, int, int)));
+        PhosphorProtocol::Service::Interface::WindowTracking, QStringLiteral("moveSpecificWindowToZoneRequested"),
+        m_snapHandler.get(), SLOT(slotMoveSpecificWindowToZoneRequested(QString, QString, int, int, int, int)));
 
     // Pending restores on daemon startup
     QDBusConnection::sessionBus().connect(PhosphorProtocol::Service::Name, PhosphorProtocol::Service::ObjectPath,
                                           PhosphorProtocol::Service::Interface::WindowTracking,
-                                          QStringLiteral("pendingRestoresAvailable"), this,
+                                          QStringLiteral("pendingRestoresAvailable"), m_snapHandler.get(),
                                           SLOT(slotPendingRestoresAvailable()));
 
     // Screen geometry reapply
@@ -897,7 +897,7 @@ void PlasmaZonesEffect::connectNavigationSignals()
     // after endDrag returns, so the compositor is unblocked first.
     QDBusConnection::sessionBus().connect(PhosphorProtocol::Service::Name, PhosphorProtocol::Service::ObjectPath,
                                           PhosphorProtocol::Service::Interface::WindowDrag,
-                                          QStringLiteral("snapAssistReady"), this,
+                                          QStringLiteral("snapAssistReady"), m_snapHandler.get(),
                                           SLOT(slotSnapAssistReady(QString, QString, PhosphorProtocol::EmptyZoneList)));
 
     qCInfo(lcEffect) << "Connected to navigation D-Bus signals";

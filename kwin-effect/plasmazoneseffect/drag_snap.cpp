@@ -15,7 +15,6 @@
 #include <PhosphorProtocol/ClientHelpers.h>
 #include <PhosphorProtocol/ServiceConstants.h>
 #include <PhosphorProtocol/DragMarshalling.h>
-#include <PhosphorProtocol/ZoneMarshalling.h>
 
 #include <effect/effecthandler.h>
 #include <window.h>
@@ -254,13 +253,6 @@ void PlasmaZonesEffect::callEndDrag(KWin::EffectWindow* window, const QString& w
                     m_snapAssistHandler->asyncShow(windowId, outcome.targetScreenId, outcome.emptyZones);
                 }
             });
-}
-
-void PlasmaZonesEffect::callCancelSnap()
-{
-    qCInfo(lcEffect) << "Calling cancelSnap (drag cancelled by Escape or external event)";
-    PhosphorProtocol::ClientHelpers::sendOneWay(PhosphorProtocol::Service::Interface::WindowDrag,
-                                                QStringLiteral("cancelSnap"));
 }
 
 void PlasmaZonesEffect::tryAsyncSnapCall(const QString& interface, const QString& method, const QList<QVariant>& args,
@@ -669,22 +661,6 @@ void PlasmaZonesEffect::slotRestoreSizeDuringDrag(const QString& windowId, int w
                       PhosphorAnimation::ProfilePaths::WindowSnapOut);
 }
 
-void PlasmaZonesEffect::slotSnapAssistReady(const QString& windowId, const QString& releaseScreenId,
-                                            const PhosphorProtocol::EmptyZoneList& emptyZones)
-{
-    // Discard if a new drag has already started — this signal was from a
-    // prior drop. The daemon defers the compute to after endDrag returns,
-    // so by the time this slot fires the user may already be dragging again.
-    if (m_dragTracker->isDragging()) {
-        qCDebug(lcEffect) << "Discarding snapAssistReady: new drag in progress";
-        return;
-    }
-    if (emptyZones.isEmpty() || releaseScreenId.isEmpty()) {
-        return;
-    }
-    m_snapAssistHandler->asyncShow(windowId, releaseScreenId, emptyZones);
-}
-
 void PlasmaZonesEffect::slotDragPolicyChanged(const QString& windowId, const PhosphorProtocol::DragPolicy& newPolicy)
 {
     // Daemon-owned cross-VS flip. The daemon's updateDragCursor
@@ -735,7 +711,7 @@ void PlasmaZonesEffect::slotDragPolicyChanged(const QString& windowId, const Pho
         // effect-side flip block's "snap→autotile" branch, but driven by
         // daemon truth rather than an effect-cached screen set.
         if (!m_dragBypassedForAutotile) {
-            callCancelSnap();
+            m_snapHandler->callCancelSnap();
             m_dragBypassedForAutotile = true;
             m_dragBypassScreenId = newPolicy.screenId;
             m_dragStartedSent = false;

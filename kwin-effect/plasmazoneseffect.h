@@ -176,16 +176,9 @@ private Q_SLOTS:
     void slotApplyGeometriesBatch(const PhosphorProtocol::WindowGeometryList& geometries, const QString& action);
     void slotRaiseWindowsRequested(const QStringList& windowIds);
 
-    // Snap-all (effect collects candidates, daemon computes assignments)
-    void slotSnapAllWindowsRequested(const QString& screenId);
-    void slotPendingRestoresAvailable();
     void slotWindowFloatingChanged(const QString& windowId, bool isFloating, const QString& screenId);
     void slotRunningWindowsRequested();
     void slotRestoreSizeDuringDrag(const QString& windowId, int width, int height);
-    void slotSnapAssistReady(const QString& windowId, const QString& releaseScreenId,
-                             const PhosphorProtocol::EmptyZoneList& emptyZones);
-    void slotMoveSpecificWindowToZoneRequested(const QString& windowId, const QString& zoneId, int x, int y, int width,
-                                               int height);
 
     // Snap-mode minimize/unminimize float tracking
     void slotWindowMinimizedChanged(KWin::EffectWindow* w);
@@ -384,7 +377,6 @@ private:
      * @param cancelled True if the drag was cancelled (Escape / external)
      */
     void callEndDrag(KWin::EffectWindow* window, const QString& windowId, bool cancelled);
-    void callCancelSnap();
     void connectNavigationSignals();
     void syncFloatingWindowsFromDaemon();
 

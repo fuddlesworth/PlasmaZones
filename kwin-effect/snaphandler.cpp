@@ -4,17 +4,28 @@
 #include "snaphandler.h"
 
 #include "autotilehandler.h"
+#include "dragtracker.h"
 #include "plasmazoneseffect.h"
+#include "snapassisthandler.h"
 
+#include <PhosphorIdentity/WindowId.h>
 #include <PhosphorProtocol/ClientHelpers.h>
+#include <PhosphorProtocol/NavigationMarshalling.h>
 #include <PhosphorProtocol/ServiceConstants.h>
+#include <PhosphorProtocol/WindowMarshalling.h>
+#include <PhosphorProtocol/ZoneMarshalling.h>
 
 #include <effect/effecthandler.h>
 #include <effect/effectwindow.h>
 #include <window.h>
 
+#include <QDBusPendingCall>
+#include <QDBusPendingCallWatcher>
+#include <QDBusPendingReply>
 #include <QLoggingCategory>
 #include <QPointer>
+#include <QSet>
+#include <QStringList>
 
 namespace PlasmaZones {
 
@@ -385,6 +396,304 @@ void SnapHandler::handleCursorMoved(const QPointF& pos, const QString& screenId)
         KWin::effects->activateWindow(w);
         return;
     }
+}
+
+void SnapHandler::callCancelSnap()
+{
+    qCInfo(lcEffect) << "Calling cancelSnap (drag cancelled by Escape or external event)";
+    PhosphorProtocol::ClientHelpers::sendOneWay(PhosphorProtocol::Service::Interface::WindowDrag,
+                                                QStringLiteral("cancelSnap"));
+}
+
+void SnapHandler::slotSnapAssistReady(const QString& windowId, const QString& releaseScreenId,
+                                      const PhosphorProtocol::EmptyZoneList& emptyZones)
+{
+    // Discard if a new drag has already started — this signal was from a
+    // prior drop. The daemon defers the compute to after endDrag returns,
+    // so by the time this slot fires the user may already be dragging again.
+    if (m_effect->m_dragTracker->isDragging()) {
+        qCDebug(lcEffect) << "Discarding snapAssistReady: new drag in progress";
+        return;
+    }
+    if (emptyZones.isEmpty() || releaseScreenId.isEmpty()) {
+        return;
+    }
+    m_effect->m_snapAssistHandler->asyncShow(windowId, releaseScreenId, emptyZones);
+}
+
+void SnapHandler::slotMoveSpecificWindowToZoneRequested(const QString& windowId, const QString& zoneId, int x, int y,
+                                                        int width, int height)
+{
+    QRect geometry(x, y, width, height);
+    if (!geometry.isValid()) {
+        qCWarning(lcEffect) << "slotMoveSpecificWindowToZoneRequested: invalid geometry" << geometry;
+        return;
+    }
+
+    // Match by exact full window ID (appId|uuid) to distinguish
+    // multiple windows of the same application. Fall back to appId only if
+    // the exact match fails (e.g. window was recreated between candidate build
+    // and selection).
+    KWin::EffectWindow* targetWindow = nullptr;
+    const auto windows = KWin::effects->stackingOrder();
+    for (KWin::EffectWindow* w : windows) {
+        if (w && m_effect->shouldHandleWindow(w) && m_effect->getWindowId(w) == windowId) {
+            targetWindow = w;
+            break;
+        }
+    }
+    if (!targetWindow) {
+        QString appId = ::PhosphorIdentity::WindowId::extractAppId(windowId);
+        for (KWin::EffectWindow* w : windows) {
+            if (w && m_effect->shouldHandleWindow(w)
+                && ::PhosphorIdentity::WindowId::extractAppId(m_effect->getWindowId(w)) == appId) {
+                targetWindow = w;
+                break;
+            }
+        }
+    }
+
+    if (!targetWindow) {
+        qCWarning(lcEffect) << "slotMoveSpecificWindowToZoneRequested: window not found" << windowId;
+        m_effect->emitNavigationFeedback(false, QStringLiteral("snap_assist"), QStringLiteral("window_not_found"));
+        return;
+    }
+
+    // Capture geometry BEFORE applySnapGeometry resizes the window. The async D-Bus
+    // callback in ensurePreSnapGeometryStored would read frameGeometry() after the
+    // resize, corrupting the pre-tile entry with zone dimensions.
+    ensurePreSnapGeometryStored(targetWindow, m_effect->getWindowId(targetWindow), targetWindow->frameGeometry());
+    m_effect->applySnapGeometry(targetWindow, geometry);
+
+    // Derive screen from the applied geometry center. Use resolveEffectiveScreenId
+    // to get the virtual screen ID (not just the physical output).
+    QPoint geoCenter = geometry.center();
+    const auto* output = KWin::effects->screenAt(geoCenter);
+    QString screenId =
+        output ? m_effect->resolveEffectiveScreenId(geoCenter, output) : m_effect->getWindowScreenId(targetWindow);
+
+    if (m_effect->isDaemonReady("snap assist windowSnapped")) {
+        PhosphorProtocol::ClientHelpers::fireAndForget(m_effect, PhosphorProtocol::Service::Interface::Snap,
+                                                       QStringLiteral("windowSnapped"),
+                                                       {m_effect->getWindowId(targetWindow), zoneId, screenId});
+        PhosphorProtocol::ClientHelpers::fireAndForget(m_effect, PhosphorProtocol::Service::Interface::Snap,
+                                                       QStringLiteral("recordSnapIntent"),
+                                                       {m_effect->getWindowId(targetWindow), true});
+
+        // Snap-assist placed the window in a zone — record it in snapping's
+        // border set, but only for a resolved snap-mode screen. An empty
+        // (unresolved) or autotile-managed screen is owned by AutotileHandler,
+        // so recording it here would double-track the window — same
+        // discriminator as slotApplyGeometryRequested / the async snap path.
+        if (!screenId.isEmpty() && !m_effect->autotileHandler()->isAutotileScreen(screenId)) {
+            markWindowSnapped(m_effect->getWindowId(targetWindow), screenId);
+        }
+
+        // Snap Assist continuation: only for manual-mode screens.
+        // Autotile screens manage their own window placement; showing snap assist
+        // after an autotile resnap is incorrect (the daemon silently ignores the
+        // selection anyway via the isAutotileScreen guard in signals.cpp).
+        if (!m_effect->autotileHandler()->isAutotileScreen(screenId)) {
+            m_effect->m_snapAssistHandler->showContinuationIfNeeded(screenId);
+        }
+    }
+}
+
+void SnapHandler::slotSnapAllWindowsRequested(const QString& screenId)
+{
+    qCInfo(lcEffect) << "Snap all windows requested for screen:" << screenId;
+
+    if (!m_effect->isDaemonReady("snap all windows")) {
+        return;
+    }
+
+    // Async fetch all snapped windows to filter already-snapped ones locally
+    QDBusPendingCall snapCall = PhosphorProtocol::ClientHelpers::asyncCall(
+        PhosphorProtocol::Service::Interface::WindowTracking, QStringLiteral("getSnappedWindows"));
+    auto* snapWatcher = new QDBusPendingCallWatcher(snapCall, this);
+
+    connect(snapWatcher, &QDBusPendingCallWatcher::finished, this, [this, screenId](QDBusPendingCallWatcher* sw) {
+        sw->deleteLater();
+
+        QDBusPendingReply<QStringList> snapReply = *sw;
+        QSet<QString> snappedFullIds;
+        QSet<QString> snappedAppIds;
+        if (snapReply.isValid()) {
+            for (const QString& id : snapReply.value()) {
+                snappedFullIds.insert(id);
+                snappedAppIds.insert(::PhosphorIdentity::WindowId::extractAppId(id));
+            }
+        }
+
+        // Collect unsnapped, non-floating windows on this screen in stacking order
+        // (bottom-to-top) so lower windows get lower-numbered zones deterministically
+        QStringList unsnappedWindowIds;
+        const auto windows = KWin::effects->stackingOrder();
+        for (KWin::EffectWindow* w : windows) {
+            if (!w || !m_effect->shouldHandleWindow(w)) {
+                continue;
+            }
+
+            QString windowId = m_effect->getWindowId(w);
+            QString appId = ::PhosphorIdentity::WindowId::extractAppId(windowId);
+
+            // User-initiated snap commands override floating state.
+            // windowSnapped() on the daemon clears floating inside SnapEngine::commitSnap (clearFloatingForSnap).
+
+            // Always use EDID-based screen ID for comparison
+            QString winScreen = m_effect->getWindowScreenId(w);
+            if (winScreen != screenId) {
+                qCDebug(lcEffect) << "snap-all: skipping window on different screen" << appId;
+                continue;
+            }
+
+            if (w->isMinimized() || !w->isOnCurrentDesktop() || !w->isOnCurrentActivity()) {
+                qCDebug(lcEffect) << "snap-all: skipping minimized/other-desktop window" << appId;
+                continue;
+            }
+
+            // Full ID match first (distinguishes multi-instance apps),
+            // appId fallback for single-instance apps
+            if (snappedFullIds.contains(windowId)) {
+                qCDebug(lcEffect) << "snap-all: skipping already-snapped window" << appId;
+                continue;
+            }
+            if (!m_effect->hasOtherWindowOfClassWithDifferentPid(w) && snappedAppIds.contains(appId)) {
+                qCDebug(lcEffect) << "snap-all: skipping already-snapped window (appId match)" << appId;
+                continue;
+            }
+
+            unsnappedWindowIds.append(windowId);
+        }
+
+        qCDebug(lcEffect) << "snap-all: found" << unsnappedWindowIds.size() << "unsnapped windows to snap";
+
+        if (unsnappedWindowIds.isEmpty()) {
+            qCDebug(lcEffect) << "No unsnapped windows to snap on screen" << screenId;
+            m_effect->emitNavigationFeedback(false, QStringLiteral("snap_all"), QStringLiteral("no_unsnapped_windows"),
+                                             QString(), QString(), screenId);
+            return;
+        }
+
+        if (!m_effect->isDaemonReady("snap all windows calculation")) {
+            return;
+        }
+
+        // Ask daemon to calculate zone assignments
+        QDBusPendingCall calcCall = PhosphorProtocol::ClientHelpers::asyncCall(
+            PhosphorProtocol::Service::Interface::Snap, QStringLiteral("calculateSnapAllWindows"),
+            {QVariant::fromValue(unsnappedWindowIds), screenId});
+        auto* calcWatcher = new QDBusPendingCallWatcher(calcCall, this);
+
+        connect(calcWatcher, &QDBusPendingCallWatcher::finished, this, [this, screenId](QDBusPendingCallWatcher* cw) {
+            cw->deleteLater();
+
+            QDBusPendingReply<PhosphorProtocol::SnapAllResultList> calcReply = *cw;
+            if (calcReply.isError()) {
+                qCWarning(lcEffect) << "calculateSnapAllWindows failed:" << calcReply.error().message();
+                m_effect->emitNavigationFeedback(false, QStringLiteral("snap_all"), QStringLiteral("calculation_error"),
+                                                 QString(), QString(), screenId);
+                return;
+            }
+
+            PhosphorProtocol::SnapAllResultList snapResults = calcReply.value();
+
+            // Build WindowGeometryList for the batch geometry path
+            PhosphorProtocol::WindowGeometryList snapGeometries;
+            snapGeometries.reserve(snapResults.size());
+            for (const auto& r : snapResults) {
+                snapGeometries.append(r.toGeometryEntry());
+            }
+            m_effect->slotApplyGeometriesBatch(snapGeometries, QStringLiteral("snap_all"));
+
+            // Confirm snap assignments with daemon
+            if (m_effect->isDaemonReady("snap-all confirmation")) {
+                PhosphorProtocol::SnapConfirmationList confirmEntries;
+                for (const auto& r : snapResults) {
+                    PhosphorProtocol::SnapConfirmationEntry entry;
+                    entry.windowId = r.windowId;
+                    entry.zoneId = r.targetZoneId;
+                    entry.screenId = screenId;
+                    entry.isRestore = false;
+                    confirmEntries.append(entry);
+                }
+                if (!confirmEntries.isEmpty()) {
+                    PhosphorProtocol::ClientHelpers::fireAndForget(
+                        m_effect, PhosphorProtocol::Service::Interface::Snap, QStringLiteral("windowsSnappedBatch"),
+                        {QVariant::fromValue(confirmEntries)}, QStringLiteral("windowsSnappedBatch"));
+                }
+            }
+        });
+    });
+}
+
+void SnapHandler::slotPendingRestoresAvailable()
+{
+    // If slotDaemonReady already dispatched snap restores for this daemon
+    // session, skip — both signals fire during restart, and the second round
+    // of moveResize() calls would disrupt the stacking order that the first
+    // round carefully preserves via activateWindow(previouslyActive).
+    if (m_effect->m_daemonReadyRestoresDone) {
+        qCInfo(lcEffect) << "Pending restores: already handled by slotDaemonReady, skipping";
+        return;
+    }
+
+    qCInfo(lcEffect) << "Pending restores: retrying restoration for all visible windows";
+
+    if (!m_effect->isDaemonReady("pending restores")) {
+        return;
+    }
+
+    // Use ASYNC batch call to get all tracked windows at once
+    QDBusPendingCall pendingCall = PhosphorProtocol::ClientHelpers::asyncCall(
+        PhosphorProtocol::Service::Interface::WindowTracking, QStringLiteral("getSnappedWindows"));
+    auto* watcher = new QDBusPendingCallWatcher(pendingCall, this);
+
+    connect(watcher, &QDBusPendingCallWatcher::finished, this, [this](QDBusPendingCallWatcher* w) {
+        w->deleteLater();
+
+        QDBusPendingReply<QStringList> reply = *w;
+        QSet<QString> trackedAppIds;
+
+        if (reply.isValid()) {
+            // Extract app IDs from tracked windows for comparison
+            const QStringList trackedWindows = reply.value();
+            for (const QString& windowId : trackedWindows) {
+                QString appId = ::PhosphorIdentity::WindowId::extractAppId(windowId);
+                if (!appId.isEmpty()) {
+                    trackedAppIds.insert(appId);
+                }
+            }
+            qCDebug(lcEffect) << "Got" << trackedAppIds.size() << "tracked windows from daemon";
+        } else {
+            qCWarning(lcEffect) << "Failed to get tracked windows:" << reply.error().message();
+            // Continue anyway - will try to restore all windows (daemon will handle duplicates)
+        }
+
+        // Now iterate through all visible windows and restore untracked ones
+        const auto windows = KWin::effects->stackingOrder();
+        for (KWin::EffectWindow* window : windows) {
+            if (!window || !m_effect->shouldHandleWindow(window)) {
+                continue;
+            }
+
+            // Skip minimized or invisible windows
+            if (window->isMinimized() || !window->isOnCurrentDesktop() || !window->isOnCurrentActivity()) {
+                continue;
+            }
+
+            // Check if this window is already tracked using local set lookup (O(1))
+            QString windowId = m_effect->getWindowId(window);
+            QString appId = ::PhosphorIdentity::WindowId::extractAppId(windowId);
+            if (trackedAppIds.contains(appId)) {
+                continue; // Already tracked
+            }
+
+            // Window is not tracked - try to restore it
+            qCDebug(lcEffect) << "Retrying restoration for untracked window:" << windowId;
+            callResolveWindowRestore(window);
+        }
+    });
 }
 
 } // namespace PlasmaZones
