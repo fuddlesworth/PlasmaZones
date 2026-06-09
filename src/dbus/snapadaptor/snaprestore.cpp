@@ -265,6 +265,15 @@ bool SnapAdaptor::applySnapResult(const SnapResult& result, const QString& windo
     } else {
         m_engine->commitSnap(windowId, zoneIds.first(), result.screenId, SnapIntent::AutoRestored);
     }
+
+    // Focus-new-windows for snapping. Only the auto-snap-on-open path funnels
+    // through applySnapResult (SnapIntent::AutoRestored), so this never fires for
+    // manual drag or keyboard snap-to-zone (SnapIntent::UserInitiated) — those
+    // keep KWin's normal focus handling. The effect handles activateWindowRequested
+    // by calling KWin::effects->activateWindow(), the same path autotile uses.
+    if (m_settings && m_settings->snappingFocusNewWindows()) {
+        Q_EMIT m_adaptor->activateWindowRequested(windowId);
+    }
     return true;
 }
 

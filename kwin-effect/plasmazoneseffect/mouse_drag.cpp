@@ -118,6 +118,49 @@ void PlasmaZonesEffect::slotMouseChanged(const QPointF& pos, const QPointF& oldp
     // Reuse effectiveScreenId computed above to avoid redundant resolveEffectiveScreenId call.
     if (!m_dragTracker->isDragging() && output) {
         m_autotileHandler->handleCursorMoved(pos, effectiveScreenId);
+        // Snapping FFM runs alongside autotile FFM. The two are disjoint: autotile FFM
+        // bails when the cursor screen is not an autotile screen, and snapping FFM only
+        // acts on windows in the snap tiled set (which live on snapping-mode screens), so
+        // at most one of them activates a window for any given cursor position.
+        handleSnapCursorMoved(pos);
+    }
+}
+
+void PlasmaZonesEffect::handleSnapCursorMoved(const QPointF& pos)
+{
+    if (!m_snappingFocusFollowsMouse) {
+        return;
+    }
+
+    // Find the topmost snapped window under the cursor (stacking order top → bottom).
+    const auto windows = KWin::effects->stackingOrder();
+    for (int i = windows.size() - 1; i >= 0; --i) {
+        KWin::EffectWindow* w = windows[i];
+        if (!w || w->isMinimized() || !w->isOnCurrentDesktop() || !w->isOnCurrentActivity()) {
+            continue;
+        }
+        // Cheap geometry test before the windowClass()/windowId allocations below.
+        if (!w->frameGeometry().contains(pos)) {
+            continue;
+        }
+        // Look through our own overlay/editor layer-shell surfaces — they are full-screen
+        // and always topmost, so a bail here would kill FFM whenever an overlay is up
+        // (mirrors the autotile FFM guard).
+        if (isOwnOverlayClass(w->windowClass())) {
+            continue;
+        }
+        // The window directly under the cursor is not snapped (a floating dialog, popup,
+        // or excluded app occluding a snapped window beneath). Don't look through it to
+        // focus the snapped window — that would steal focus from what the user is pointing
+        // at. Mirrors AutotileHandler::handleCursorMoved's occlusion guard.
+        if (!isWindowMarkedSnapped(getWindowId(w))) {
+            return;
+        }
+        if (w == KWin::effects->activeWindow()) {
+            return; // Already focused — no-op.
+        }
+        KWin::effects->activateWindow(w);
+        return;
     }
 }
 
