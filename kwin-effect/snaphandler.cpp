@@ -337,30 +337,24 @@ void SnapHandler::handleCursorMoved(const QPointF& pos, const QString& screenId)
         return;
     }
 
-    // Pause FFM while a transient/popup/special window is active so hovering a
-    // snapped window beneath it does not dismiss it — e.g. an emoji picker or
-    // notification opened over a snapped window, where moving the cursor across
-    // the underlying window's exposed area would otherwise activate it and send
-    // the popup to the background. A snapped or normal tileable active window
-    // does not pause FFM. Scoped to the cursor's screen (mirrors
-    // AutotileHandler::handleCursorMoved, discussion #461): a transient window
-    // active on another monitor must not freeze FFM on the monitor the cursor is
-    // on. Our own full-screen overlays never count as the kind of active window
-    // worth protecting.
+    // Pause FFM whenever the active window is NOT snapped into a zone. Any
+    // non-snapped active window — a popup/dialog/excluded app, a window the user
+    // deliberately floated, or a free window they simply have not snapped — is
+    // one the user is working in on top of the snap stack; wandering the cursor
+    // over a snapped window beneath it must not steal its focus. FFM resumes
+    // (follows the cursor between snapped windows) once a snapped window is
+    // active. Scoped to the cursor's screen (mirrors AutotileHandler::
+    // handleCursorMoved, discussion #461 + follow-up): a window active on another
+    // monitor must not freeze FFM on the monitor the cursor is on. Our own
+    // full-screen overlays never count as the kind of active window worth
+    // protecting. (Autotile pauses on the same principle — floated/popup/under-
+    // min-size — but everything else there is tiled, so it has no never-managed
+    // "free" case; snap does, hence the single not-snapped predicate.)
     if (KWin::EffectWindow* active = KWin::effects->activeWindow()) {
         // Cheap overlay-class check first, then the heavier screen resolution
-        // (mirrors the autotile guard's predicate ordering). The predicate is
-        // deliberately wider than the under-cursor occlusion guard below: there
-        // we only look *through* a snapped window, but here a normal tileable
-        // active window (a regular app the user is working in, not a popup) must
-        // not pause FFM either. Only a non-snapped, non-tileable active window
-        // (dialog/popup/excluded app) is worth protecting. Both of autotile's
-        // guards key off the same tileable/shouldHandle membership; snap's managed
-        // set (snapped) is narrower than tileable, so here the pause guard accepts
-        // the extra isTileableWindow case the occlusion guard below does not.
+        // (mirrors the autotile guard's predicate ordering).
         if (!PlasmaZonesEffect::isOwnOverlayClass(active->windowClass())
-            && m_effect->getWindowScreenId(active) == screenId && !isTiledWindow(m_effect->getWindowId(active))
-            && !m_effect->isTileableWindow(active)) {
+            && m_effect->getWindowScreenId(active) == screenId && !isTiledWindow(m_effect->getWindowId(active))) {
             return;
         }
     }
