@@ -87,7 +87,8 @@ QVariantList ruleTemplates()
     // before the unified rule store: monitor → layout / algorithm
     // (assignments) and app → exclusion (per-mode disable + animation
     // exclusion lists). That's where the bulk of real-world rules live, so
-    // these three give one-click starting points for the common cases.
+    // these give one-click starting points for the common cases — plus a
+    // size-based animation-exclusion showcase for the Width match field.
     QVariantList out;
     out.append(entry(QLatin1String("layoutOnMonitor"), PhosphorI18n::tr("Set a layout on a monitor"),
                      PhosphorI18n::tr("Pick a snapping layout to use on one monitor."), QLatin1String("view-grid")));
@@ -96,6 +97,10 @@ QVariantList ruleTemplates()
                      QLatin1String("view-list-tree")));
     out.append(entry(QLatin1String("excludeApp"), PhosphorI18n::tr("Exclude an app from tiling"),
                      PhosphorI18n::tr("Keep one application's windows out of the snap and autotile engines entirely."),
+                     QLatin1String("edit-delete-remove")));
+    out.append(entry(QLatin1String("excludeSmallFromAnimations"), PhosphorI18n::tr("Don't animate small windows"),
+                     PhosphorI18n::tr("Skip open and close animations for windows narrower than a chosen width — handy "
+                                      "for tiny popups and tool windows."),
                      QLatin1String("edit-delete-remove")));
     return out;
 }
@@ -145,6 +150,17 @@ QVariantMap newRuleFromTemplate(const QString& templateId)
         rule.match = MatchExpression::makeLeaf(Field::AppId, Operator::AppIdMatches, QString());
         RuleAction action;
         action.type = QString::fromLatin1(ActionType::Exclude);
+        rule.actions.append(action);
+    } else if (templateId == QLatin1String("excludeSmallFromAnimations")) {
+        rule.name = PhosphorI18n::tr("Don't animate small windows");
+        rule.priority = kAnimationBandBase;
+        // Seed a 300px width threshold; the user adjusts it in the editor.
+        // ExcludeAnimations is terminal, so any matching window skips its
+        // open/close animation. Showcases the Width numeric match field added
+        // for the animation-gate fold.
+        rule.match = MatchExpression::makeLeaf(Field::Width, Operator::LessThan, 300);
+        RuleAction action;
+        action.type = QString::fromLatin1(ActionType::ExcludeAnimations);
         rule.actions.append(action);
     } else {
         return {};
