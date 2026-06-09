@@ -41,6 +41,10 @@ struct WindowQuery
     std::optional<bool> isMinimized;
     std::optional<bool> isMaximized;
     std::optional<bool> isFocused;
+    std::optional<bool> isTransient; ///< dialog/utility/popup/menu/tooltip/splash family, or has a transient parent
+    std::optional<bool> isNotification; ///< notification / critical-notification / on-screen-display surface
+    std::optional<int> width; ///< frame width in px
+    std::optional<int> height; ///< frame height in px
 
     // ── Context attributes — always present ──
     QString screenId;
@@ -53,7 +57,8 @@ struct WindowQuery
     {
         return appId.has_value() || windowClass.has_value() || title.has_value() || windowRole.has_value()
             || desktopFile.has_value() || pid.has_value() || windowType.has_value() || isSticky.has_value()
-            || isFullscreen.has_value() || isMinimized.has_value() || isMaximized.has_value() || isFocused.has_value();
+            || isFullscreen.has_value() || isMinimized.has_value() || isMaximized.has_value() || isFocused.has_value()
+            || isTransient.has_value() || isNotification.has_value() || width.has_value() || height.has_value();
     }
 
     /**
@@ -100,6 +105,14 @@ struct WindowQuery
             return isMaximized ? std::optional<QVariant>(*isMaximized) : std::nullopt;
         case Field::IsFocused:
             return isFocused ? std::optional<QVariant>(*isFocused) : std::nullopt;
+        case Field::IsTransient:
+            return isTransient ? std::optional<QVariant>(*isTransient) : std::nullopt;
+        case Field::IsNotification:
+            return isNotification ? std::optional<QVariant>(*isNotification) : std::nullopt;
+        case Field::Width:
+            return width ? std::optional<QVariant>(*width) : std::nullopt;
+        case Field::Height:
+            return height ? std::optional<QVariant>(*height) : std::nullopt;
         }
         return std::nullopt;
     }

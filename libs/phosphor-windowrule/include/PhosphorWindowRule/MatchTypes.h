@@ -37,12 +37,17 @@ enum class Field : int {
     // Window state (appended — keeping enum values stable across versions)
     IsMaximized = 13,
     IsFocused = 14, ///< true when the window is the focused / active window
+    IsTransient = 15, ///< dialog/utility/popup/menu/tooltip/splash family, or has a transient parent
+    IsNotification = 16, ///< notification / critical-notification / on-screen-display surface
+    // Window geometry (numeric)
+    Width = 17, ///< frame width in px
+    Height = 18, ///< frame height in px
 };
 
 /// The number of distinct `Field` enumerators. `Field` is a contiguous range
 /// `[0, FieldCount)`; bump this whenever an enumerator is added — round-trip
 /// tests iterate the range using it as the upper bound.
-inline constexpr int FieldCount = static_cast<int>(Field::IsFocused) + 1;
+inline constexpr int FieldCount = static_cast<int>(Field::Height) + 1;
 
 /// Match operators. Not every operator is valid against every field —
 /// validity is enforced by Predicate::isValid(), not the parser.
@@ -96,6 +101,14 @@ inline QString fieldToString(Field field)
         return QStringLiteral("isMaximized");
     case Field::IsFocused:
         return QStringLiteral("isFocused");
+    case Field::IsTransient:
+        return QStringLiteral("isTransient");
+    case Field::IsNotification:
+        return QStringLiteral("isNotification");
+    case Field::Width:
+        return QStringLiteral("width");
+    case Field::Height:
+        return QStringLiteral("height");
     }
     return QStringLiteral("appId");
 }
@@ -120,6 +133,10 @@ inline std::optional<Field> fieldFromString(QStringView s)
         {QLatin1StringView("activity"), Field::Activity},
         {QLatin1StringView("isMaximized"), Field::IsMaximized},
         {QLatin1StringView("isFocused"), Field::IsFocused},
+        {QLatin1StringView("isTransient"), Field::IsTransient},
+        {QLatin1StringView("isNotification"), Field::IsNotification},
+        {QLatin1StringView("width"), Field::Width},
+        {QLatin1StringView("height"), Field::Height},
     };
     for (const auto& [token, field] : kTable) {
         if (s.compare(token, Qt::CaseInsensitive) == 0) {
@@ -198,22 +215,27 @@ inline bool fieldIsString(Field field)
     case Field::IsMinimized:
     case Field::IsMaximized:
     case Field::IsFocused:
+    case Field::IsTransient:
+    case Field::IsNotification:
+    case Field::Width:
+    case Field::Height:
         return false;
     }
     return false;
 }
 
-/// True if @p field carries a numeric value (Pid / VirtualDesktop).
+/// True if @p field carries a numeric value (Pid / VirtualDesktop / Width / Height).
 inline bool fieldIsNumeric(Field field)
 {
-    return field == Field::Pid || field == Field::VirtualDesktop;
+    return field == Field::Pid || field == Field::VirtualDesktop || field == Field::Width || field == Field::Height;
 }
 
 /// True if @p field carries a boolean value (window-state flags).
 inline bool fieldIsBool(Field field)
 {
     return field == Field::IsSticky || field == Field::IsFullscreen || field == Field::IsMinimized
-        || field == Field::IsMaximized || field == Field::IsFocused;
+        || field == Field::IsMaximized || field == Field::IsFocused || field == Field::IsTransient
+        || field == Field::IsNotification;
 }
 
 /// True if @p field describes the **context** a window appears in

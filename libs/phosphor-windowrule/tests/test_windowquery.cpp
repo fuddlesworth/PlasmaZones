@@ -78,6 +78,28 @@ private Q_SLOTS:
         QVERIFY(v.has_value()); // present even though false
         QCOMPARE(v->toBool(), false);
     }
+
+    void testValueForField_newTransientNotificationSizeFields()
+    {
+        WindowQuery q;
+        // Absent by default — inert during windowless context resolution.
+        QVERIFY(!q.valueForField(Field::IsTransient).has_value());
+        QVERIFY(!q.valueForField(Field::IsNotification).has_value());
+        QVERIFY(!q.valueForField(Field::Width).has_value());
+        QVERIFY(!q.valueForField(Field::Height).has_value());
+
+        q.isTransient = true;
+        q.isNotification = false;
+        q.width = 320;
+        q.height = 240;
+        QCOMPARE(q.valueForField(Field::IsTransient)->toBool(), true);
+        // Present even though false (mirrors the bool-field contract above).
+        QVERIFY(q.valueForField(Field::IsNotification).has_value());
+        QCOMPARE(q.valueForField(Field::IsNotification)->toBool(), false);
+        QCOMPARE(q.valueForField(Field::Width)->toInt(), 320);
+        QCOMPARE(q.valueForField(Field::Height)->toInt(), 240);
+        QVERIFY(q.hasWindow());
+    }
 };
 
 QTEST_MAIN(TestWindowQuery)
