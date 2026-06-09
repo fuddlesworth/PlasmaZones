@@ -143,6 +143,24 @@ PhosphorWindowRule::WindowQuery windowRuleQueryFor(KWin::EffectWindow* w, const 
     // it on KWin's windowActivated signal (see slotWindowActivated), exactly
     // as they already do for windowClass / desktopFile changes.
     query.isFocused = (w == KWin::effects->activeWindow());
+    // Transient / notification family + live frame size. Engaged so the
+    // animation-exclusion base layer — ExcludeAnimations rules synthesized from
+    // the animationExcludeTransientWindows / animationExcludeNotificationsAndOsd
+    // / animationMinWindowWidth/Height config gates — resolves through the same
+    // RuleEvaluator path as user rules. Each predicate mirrors the legacy inline
+    // gate in shouldAnimateWindow VERBATIM so the fold is behaviour-preserving:
+    //   transient    → the dialog/utility/popup/menu/tooltip/splash + transient-
+    //                   parent bucket the transient toggle filtered.
+    //   notification → notification / critical-notification / on-screen-display.
+    //   width/height → frame extent; a `Width LessThan N` leaf reproduces the
+    //                  `frame.width() < N` strict-less-than gate (integer
+    //                  truncation is safe at integer thresholds).
+    query.isTransient = w->isDialog() || w->isUtility() || w->isPopupWindow() || w->isPopupMenu() || w->isDropdownMenu()
+        || w->isTooltip() || w->isMenu() || w->isSplash() || w->transientFor() != nullptr;
+    query.isNotification = w->isNotification() || w->isCriticalNotification() || w->isOnScreenDisplay();
+    const QRectF frame = w->frameGeometry();
+    query.width = static_cast<int>(frame.width());
+    query.height = static_cast<int>(frame.height());
     // virtualDesktop: first desktop's 1-based x11 number (0 = all/unknown).
     // activity: first activity UUID (empty = all/unknown). Both mirror the
     // daemon-side setWindowMetadata derivation in window_identity.cpp so a
