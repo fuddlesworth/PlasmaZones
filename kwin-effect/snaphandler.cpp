@@ -13,7 +13,6 @@
 #include <PhosphorProtocol/NavigationMarshalling.h>
 #include <PhosphorProtocol/ServiceConstants.h>
 #include <PhosphorProtocol/WindowMarshalling.h>
-#include <PhosphorProtocol/ZoneMarshalling.h>
 
 #include <effect/effecthandler.h>
 #include <effect/effectwindow.h>

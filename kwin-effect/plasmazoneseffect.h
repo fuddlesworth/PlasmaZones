@@ -10,7 +10,6 @@
 #include <PhosphorEngine/EngineTypes.h>
 #include <PhosphorProtocol/DragMarshalling.h>
 #include <PhosphorProtocol/WindowMarshalling.h>
-#include <PhosphorProtocol/ZoneMarshalling.h>
 #include <PhosphorCompositor/TriggerParser.h>
 
 #include <PhosphorAnimation/AnimationLimits.h>
