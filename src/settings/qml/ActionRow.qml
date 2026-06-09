@@ -246,7 +246,9 @@ ColumnLayout {
         PZCommon.CategoryMenuButton {
             id: typeCombo
 
-            Layout.preferredWidth: Kirigami.Units.gridUnit * 11
+            // Wide enough for the longest action label ("Override animation
+            // duration") so the closed picker never elides its current value.
+            Layout.preferredWidth: Kirigami.Units.gridUnit * 13
             // Map the action metadata to the picker's { id, name, category,
             // categoryOrder } item shape.
             items: row.actionTypeOptions.map(function (o) {

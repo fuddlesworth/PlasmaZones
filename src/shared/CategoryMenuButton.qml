@@ -198,7 +198,9 @@ ComboBox {
     // when `model` is undefined, so an empty array is the canonical
     // "no items, but I'm still a ComboBox" form.
     model: []
-    Layout.fillWidth: true
+    // Layout attachment is the caller's call — the shader choosers want
+    // `Layout.fillWidth: true`; the rule editor's field/action pickers want a
+    // content-sized width. So this component does NOT force fillWidth.
     // We borrow ComboBox visuals but the user-facing semantics — and the
     // accessibility role — are "button that opens a categorised menu", not
     // "select-from-flat-list combo". Setting role explicitly stops AT-SPI
