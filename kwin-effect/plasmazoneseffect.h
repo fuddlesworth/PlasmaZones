@@ -27,18 +27,14 @@
 #include <opengl/gltexture.h>
 #include <effect/globals.h> // For ElectricBorder enum
 #include <scene/borderradius.h>
-#include <QJsonArray>
 #include <QObject>
 #include <QVector>
 #include <QSet>
-#include <QSize>
 #include <QTimer>
-#include <QDBusPendingCall>
 #include <QHash>
 #include <QPointer>
 #include <QRect>
 
-#include <array>
 #include <functional>
 #include <memory>
 #include <unordered_map>
