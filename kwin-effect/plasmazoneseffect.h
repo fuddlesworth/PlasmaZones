@@ -475,7 +475,7 @@ private:
      * so a dialog/popup floating over a snapped window keeps focus (occlusion guard,
      * mirroring AutotileHandler::handleCursorMoved).
      */
-    void handleSnapCursorMoved(const QPointF& pos);
+    void handleSnapCursorMoved(const QPointF& pos, const QString& screenId);
 
     void notifyWindowClosed(KWin::EffectWindow* w);
     void notifyWindowActivated(KWin::EffectWindow* w);

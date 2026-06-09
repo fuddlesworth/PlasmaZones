@@ -122,11 +122,11 @@ void PlasmaZonesEffect::slotMouseChanged(const QPointF& pos, const QPointF& oldp
         // bails when the cursor screen is not an autotile screen, and snapping FFM only
         // acts on windows in the snap tiled set (which live on snapping-mode screens), so
         // at most one of them activates a window for any given cursor position.
-        handleSnapCursorMoved(pos);
+        handleSnapCursorMoved(pos, effectiveScreenId);
     }
 }
 
-void PlasmaZonesEffect::handleSnapCursorMoved(const QPointF& pos)
+void PlasmaZonesEffect::handleSnapCursorMoved(const QPointF& pos, const QString& screenId)
 {
     if (!m_snappingFocusFollowsMouse) {
         return;
@@ -137,12 +137,14 @@ void PlasmaZonesEffect::handleSnapCursorMoved(const QPointF& pos)
     // notification opened over a snapped window, where moving the cursor across
     // the underlying window's exposed area would otherwise activate it and send
     // the popup to the background. A snapped or normal tileable active window
-    // does not pause FFM. Mirrors AutotileHandler::handleCursorMoved's
-    // active-window guard (discussion #461). Our own full-screen overlays never
-    // count as the kind of active window worth protecting.
+    // does not pause FFM. Scoped to the cursor's screen (mirrors
+    // AutotileHandler::handleCursorMoved, discussion #461): a transient window
+    // active on another monitor must not freeze FFM on the monitor the cursor is
+    // on. Our own full-screen overlays never count as the kind of active window
+    // worth protecting.
     if (KWin::EffectWindow* active = KWin::effects->activeWindow()) {
-        if (!isOwnOverlayClass(active->windowClass()) && !isWindowMarkedSnapped(getWindowId(active))
-            && !isTileableWindow(active)) {
+        if (getWindowScreenId(active) == screenId && !isOwnOverlayClass(active->windowClass())
+            && !isWindowMarkedSnapped(getWindowId(active)) && !isTileableWindow(active)) {
             return;
         }
     }
