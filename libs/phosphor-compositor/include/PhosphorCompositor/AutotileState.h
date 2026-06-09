@@ -17,7 +17,7 @@ namespace PhosphorCompositor {
 /**
  * @brief Compositor-agnostic autotile border state
  *
- * Tracks which windows are borderless/tiled and their zone geometries.
+ * Tracks which windows are borderless/tiled.
  * Per-screen keyed so per-VS retiles can update tracking in isolation
  * without cross-contaminating with windows on sibling virtual screens.
  * Shared across compositor plugins to avoid duplicating state management.
