@@ -426,7 +426,7 @@ public:
     {
         return true;
     }
-    static int stickyWindowHandling()
+    static int snappingStickyWindowHandling()
     {
         return 0;
     }
@@ -1074,47 +1074,47 @@ public:
     // decoration (stored under Snapping.Appearance.*). Every default delegates to
     // its autotile* counterpart so the two modes start from identical window
     // appearance: a single edit to the autotile default moves both in lockstep.
-    static bool snapWindowHideTitleBars()
+    static bool snappingHideTitleBars()
     {
         return autotileHideTitleBars();
     }
-    static bool snapWindowShowBorder()
+    static bool snappingShowBorder()
     {
         return autotileShowBorder();
     }
-    static int snapWindowBorderWidth()
+    static int snappingBorderWidth()
     {
         return autotileBorderWidth();
     }
-    static constexpr int snapWindowBorderWidthMin()
+    static constexpr int snappingBorderWidthMin()
     {
         return autotileBorderWidthMin();
     }
-    static constexpr int snapWindowBorderWidthMax()
+    static constexpr int snappingBorderWidthMax()
     {
         return autotileBorderWidthMax();
     }
-    static int snapWindowBorderRadius()
+    static int snappingBorderRadius()
     {
         return autotileBorderRadius();
     }
-    static constexpr int snapWindowBorderRadiusMin()
+    static constexpr int snappingBorderRadiusMin()
     {
         return autotileBorderRadiusMin();
     }
-    static constexpr int snapWindowBorderRadiusMax()
+    static constexpr int snappingBorderRadiusMax()
     {
         return autotileBorderRadiusMax();
     }
-    static QColor snapWindowBorderColor()
+    static QColor snappingBorderColor()
     {
         return autotileBorderColor();
     }
-    static QColor snapWindowInactiveBorderColor()
+    static QColor snappingInactiveBorderColor()
     {
         return autotileInactiveBorderColor();
     }
-    static bool snapWindowUseSystemBorderColors()
+    static bool snappingUseSystemBorderColors()
     {
         return autotileUseSystemBorderColors();
     }

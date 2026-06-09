@@ -76,68 +76,68 @@ private Q_SLOTS:
      * shape as the autotile border keys but can regress independently, so they
      * get their own coverage.
      */
-    void testReadValidatedInt_snapWindowBorderWidth_outOfRange_returnsMax()
+    void testReadValidatedInt_snappingBorderWidth_outOfRange_returnsMax()
     {
         IsolatedConfigGuard guard;
 
         {
             auto backend = PlasmaZones::createDefaultConfigBackend();
             auto borders = backend->group(ConfigDefaults::snappingAppearanceBordersGroup());
-            borders->writeInt(ConfigDefaults::widthKey(), 999); // clamp max is snapWindowBorderWidthMax()
+            borders->writeInt(ConfigDefaults::widthKey(), 999); // clamp max is snappingBorderWidthMax()
             borders.reset();
             backend->sync();
         }
 
         Settings settings;
-        QCOMPARE(settings.snapWindowBorderWidth(), ConfigDefaults::snapWindowBorderWidthMax());
+        QCOMPARE(settings.snappingBorderWidth(), ConfigDefaults::snappingBorderWidthMax());
     }
 
-    void testReadValidatedInt_snapWindowBorderRadius_outOfRange_returnsMax()
+    void testReadValidatedInt_snappingBorderRadius_outOfRange_returnsMax()
     {
         IsolatedConfigGuard guard;
 
         {
             auto backend = PlasmaZones::createDefaultConfigBackend();
             auto borders = backend->group(ConfigDefaults::snappingAppearanceBordersGroup());
-            borders->writeInt(ConfigDefaults::radiusKey(), 999); // clamp max is snapWindowBorderRadiusMax()
+            borders->writeInt(ConfigDefaults::radiusKey(), 999); // clamp max is snappingBorderRadiusMax()
             borders.reset();
             backend->sync();
         }
 
         Settings settings;
-        QCOMPARE(settings.snapWindowBorderRadius(), ConfigDefaults::snapWindowBorderRadiusMax());
+        QCOMPARE(settings.snappingBorderRadius(), ConfigDefaults::snappingBorderRadiusMax());
     }
 
-    void testReadValidatedInt_snapWindowBorderWidth_negative_returnsMin()
+    void testReadValidatedInt_snappingBorderWidth_negative_returnsMin()
     {
         IsolatedConfigGuard guard;
 
         {
             auto backend = PlasmaZones::createDefaultConfigBackend();
             auto borders = backend->group(ConfigDefaults::snappingAppearanceBordersGroup());
-            borders->writeInt(ConfigDefaults::widthKey(), -5); // clamp min is snapWindowBorderWidthMin()
+            borders->writeInt(ConfigDefaults::widthKey(), -5); // clamp min is snappingBorderWidthMin()
             borders.reset();
             backend->sync();
         }
 
         Settings settings;
-        QCOMPARE(settings.snapWindowBorderWidth(), ConfigDefaults::snapWindowBorderWidthMin());
+        QCOMPARE(settings.snappingBorderWidth(), ConfigDefaults::snappingBorderWidthMin());
     }
 
-    void testReadValidatedInt_snapWindowBorderRadius_negative_returnsMin()
+    void testReadValidatedInt_snappingBorderRadius_negative_returnsMin()
     {
         IsolatedConfigGuard guard;
 
         {
             auto backend = PlasmaZones::createDefaultConfigBackend();
             auto borders = backend->group(ConfigDefaults::snappingAppearanceBordersGroup());
-            borders->writeInt(ConfigDefaults::radiusKey(), -5); // clamp min is snapWindowBorderRadiusMin()
+            borders->writeInt(ConfigDefaults::radiusKey(), -5); // clamp min is snappingBorderRadiusMin()
             borders.reset();
             backend->sync();
         }
 
         Settings settings;
-        QCOMPARE(settings.snapWindowBorderRadius(), ConfigDefaults::snapWindowBorderRadiusMin());
+        QCOMPARE(settings.snappingBorderRadius(), ConfigDefaults::snappingBorderRadiusMin());
     }
 
     /**
@@ -147,7 +147,7 @@ private Q_SLOTS:
      * Settings::load() doesn't overwrite the validated value with the
      * accent-derived system color.
      */
-    void testReadValidatedColor_snapWindowBorderColor_invalidColor_returnsDefault()
+    void testReadValidatedColor_snappingBorderColor_invalidColor_returnsDefault()
     {
         IsolatedConfigGuard guard;
 
@@ -161,7 +161,7 @@ private Q_SLOTS:
         }
 
         Settings settings;
-        QCOMPARE(settings.snapWindowBorderColor(), ConfigDefaults::snapWindowBorderColor());
+        QCOMPARE(settings.snappingBorderColor(), ConfigDefaults::snappingBorderColor());
     }
 
     /**
@@ -172,7 +172,7 @@ private Q_SLOTS:
      * its own coverage. useSystemBorderColors is disabled so Settings::load()
      * doesn't overwrite the validated value with the accent-derived color.
      */
-    void testReadValidatedColor_snapWindowInactiveBorderColor_invalidColor_returnsDefault()
+    void testReadValidatedColor_snappingInactiveBorderColor_invalidColor_returnsDefault()
     {
         IsolatedConfigGuard guard;
 
@@ -186,18 +186,18 @@ private Q_SLOTS:
         }
 
         Settings settings;
-        QCOMPARE(settings.snapWindowInactiveBorderColor(), ConfigDefaults::snapWindowInactiveBorderColor());
+        QCOMPARE(settings.snappingInactiveBorderColor(), ConfigDefaults::snappingInactiveBorderColor());
     }
 
     /**
      * The inverse of the validator tests above: with useSystemBorderColors ENABLED,
-     * Settings::load() routes through applySnapWindowBorderSystemColor(), overriding the
+     * Settings::load() routes through applySnappingBorderSystemColor(), overriding the
      * stored Active color with the accent-derived highlight color. A hand-seeded
      * explicit Active color must NOT survive the load — proving the system-color
      * override fires for the snap-window border (the load path the disabled tests
      * deliberately avoid).
      */
-    void testReadValidatedColor_snapWindowBorderColor_systemColorsEnabled_overridesStored()
+    void testReadValidatedColor_snappingBorderColor_systemColorsEnabled_overridesStored()
     {
         IsolatedConfigGuard guard;
 
@@ -211,8 +211,8 @@ private Q_SLOTS:
         }
 
         Settings settings;
-        QCOMPARE(settings.snapWindowBorderColor(), settings.highlightColor());
-        QVERIFY(settings.snapWindowBorderColor() != QColor(QStringLiteral("#010203")));
+        QCOMPARE(settings.snappingBorderColor(), settings.highlightColor());
+        QVERIFY(settings.snappingBorderColor() != QColor(QStringLiteral("#010203")));
     }
 
     // =========================================================================

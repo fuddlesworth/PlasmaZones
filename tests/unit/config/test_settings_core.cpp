@@ -121,36 +121,36 @@ private Q_SLOTS:
      * value. reset() reverts them via its group-delete + reload path (like every
      * other store-backed setting), so this pins dedicated reset coverage for them.
      */
-    void testReset_restoresSnapWindowAppearanceDefaults()
+    void testReset_restoresSnappingWindowAppearanceDefaults()
     {
         IsolatedConfigGuard guard;
 
         Settings settings;
 
-        // Drive every snapWindow* setting away from its default.
-        settings.setSnapWindowHideTitleBars(!ConfigDefaults::snapWindowHideTitleBars());
-        settings.setSnapWindowShowBorder(!ConfigDefaults::snapWindowShowBorder());
-        settings.setSnapWindowUseSystemBorderColors(!ConfigDefaults::snapWindowUseSystemBorderColors());
-        settings.setSnapWindowBorderWidth(ConfigDefaults::snapWindowBorderWidth() + 1);
-        settings.setSnapWindowBorderRadius(ConfigDefaults::snapWindowBorderRadius() + 1);
-        settings.setSnapWindowBorderColor(QColor(10, 20, 30));
-        settings.setSnapWindowInactiveBorderColor(QColor(40, 50, 60));
+        // Drive every snapping* setting away from its default.
+        settings.setSnappingHideTitleBars(!ConfigDefaults::snappingHideTitleBars());
+        settings.setSnappingShowBorder(!ConfigDefaults::snappingShowBorder());
+        settings.setSnappingUseSystemBorderColors(!ConfigDefaults::snappingUseSystemBorderColors());
+        settings.setSnappingBorderWidth(ConfigDefaults::snappingBorderWidth() + 1);
+        settings.setSnappingBorderRadius(ConfigDefaults::snappingBorderRadius() + 1);
+        settings.setSnappingBorderColor(QColor(10, 20, 30));
+        settings.setSnappingInactiveBorderColor(QColor(40, 50, 60));
 
         settings.reset();
 
-        QCOMPARE(settings.snapWindowHideTitleBars(), ConfigDefaults::snapWindowHideTitleBars());
-        QCOMPARE(settings.snapWindowShowBorder(), ConfigDefaults::snapWindowShowBorder());
-        QCOMPARE(settings.snapWindowUseSystemBorderColors(), ConfigDefaults::snapWindowUseSystemBorderColors());
-        QCOMPARE(settings.snapWindowBorderWidth(), ConfigDefaults::snapWindowBorderWidth());
-        QCOMPARE(settings.snapWindowBorderRadius(), ConfigDefaults::snapWindowBorderRadius());
-        // The default snapWindowUseSystemBorderColors is true, so reset()'s
+        QCOMPARE(settings.snappingHideTitleBars(), ConfigDefaults::snappingHideTitleBars());
+        QCOMPARE(settings.snappingShowBorder(), ConfigDefaults::snappingShowBorder());
+        QCOMPARE(settings.snappingUseSystemBorderColors(), ConfigDefaults::snappingUseSystemBorderColors());
+        QCOMPARE(settings.snappingBorderWidth(), ConfigDefaults::snappingBorderWidth());
+        QCOMPARE(settings.snappingBorderRadius(), ConfigDefaults::snappingBorderRadius());
+        // The default snappingUseSystemBorderColors is true, so reset()'s
         // reload drives the snap border colors to the (also-reset) zone
-        // highlight/inactive colors via applySnapWindowBorderSystemColor().
+        // highlight/inactive colors via applySnappingBorderSystemColor().
         // Assert against the live zone colors — the actual contract when
         // system colors are enabled — rather than the static ConfigDefaults
         // border colors, which only apply when system colors are off.
-        QCOMPARE(settings.snapWindowBorderColor(), settings.highlightColor());
-        QCOMPARE(settings.snapWindowInactiveBorderColor(), settings.inactiveColor());
+        QCOMPARE(settings.snappingBorderColor(), settings.highlightColor());
+        QCOMPARE(settings.snappingInactiveBorderColor(), settings.inactiveColor());
     }
 
     /**
@@ -218,13 +218,13 @@ private Q_SLOTS:
         // Snapped-window appearance (Snapping.Appearance.{Borders,Decorations,Colors}).
         // useSystemBorderColors=false so the explicit colors persist instead of
         // being overwritten by the accent-derived system colors on load.
-        settings.setSnapWindowShowBorder(false);
-        settings.setSnapWindowHideTitleBars(false);
-        settings.setSnapWindowBorderWidth(4);
-        settings.setSnapWindowBorderRadius(8);
-        settings.setSnapWindowUseSystemBorderColors(false);
-        settings.setSnapWindowBorderColor(QColor(10, 20, 30));
-        settings.setSnapWindowInactiveBorderColor(QColor(40, 50, 60));
+        settings.setSnappingShowBorder(false);
+        settings.setSnappingHideTitleBars(false);
+        settings.setSnappingBorderWidth(4);
+        settings.setSnappingBorderRadius(8);
+        settings.setSnappingUseSystemBorderColors(false);
+        settings.setSnappingBorderColor(QColor(10, 20, 30));
+        settings.setSnappingInactiveBorderColor(QColor(40, 50, 60));
 
         settings.save();
 
@@ -328,18 +328,18 @@ private Q_SLOTS:
 
         {
             // Load-side getter round-trip: a freshly-constructed Settings must
-            // read every snapWindow* value back through its OWN getter. The
+            // read every snapping* value back through its OWN getter. The
             // on-disk assertions above only prove save() wrote the right keys;
             // a getter wired to the wrong group/key would still pass them.
             // Reading through the getters pins the read path too.
             Settings reloaded;
-            QCOMPARE(reloaded.snapWindowShowBorder(), false);
-            QCOMPARE(reloaded.snapWindowHideTitleBars(), false);
-            QCOMPARE(reloaded.snapWindowBorderWidth(), 4);
-            QCOMPARE(reloaded.snapWindowBorderRadius(), 8);
-            QCOMPARE(reloaded.snapWindowUseSystemBorderColors(), false);
-            QCOMPARE(reloaded.snapWindowBorderColor(), QColor(10, 20, 30));
-            QCOMPARE(reloaded.snapWindowInactiveBorderColor(), QColor(40, 50, 60));
+            QCOMPARE(reloaded.snappingShowBorder(), false);
+            QCOMPARE(reloaded.snappingHideTitleBars(), false);
+            QCOMPARE(reloaded.snappingBorderWidth(), 4);
+            QCOMPARE(reloaded.snappingBorderRadius(), 8);
+            QCOMPARE(reloaded.snappingUseSystemBorderColors(), false);
+            QCOMPARE(reloaded.snappingBorderColor(), QColor(10, 20, 30));
+            QCOMPARE(reloaded.snappingInactiveBorderColor(), QColor(40, 50, 60));
         }
     }
 
@@ -407,28 +407,28 @@ private Q_SLOTS:
     }
 
     /**
-     * The hand-written setSnapWindowUseSystemBorderColors setter (not
+     * The hand-written setSnappingUseSystemBorderColors setter (not
      * macro-generated) must emit both its specific
-     * snapWindowUseSystemBorderColorsChanged signal and settingsChanged() on a
+     * snappingUseSystemBorderColorsChanged signal and settingsChanged() on a
      * real change, and stay silent on a no-op (set to the same value twice).
      */
-    void testSetSnapWindowUseSystemBorderColors_emitsAndGuards()
+    void testSetSnappingUseSystemBorderColors_emitsAndGuards()
     {
         IsolatedConfigGuard guard;
 
         Settings settings;
 
-        const bool current = settings.snapWindowUseSystemBorderColors();
+        const bool current = settings.snappingUseSystemBorderColors();
         const bool toggled = !current;
-        settings.setSnapWindowUseSystemBorderColors(current); // force known value
+        settings.setSnappingUseSystemBorderColors(current); // force known value
 
         QSignalSpy generalSpy(&settings, &Settings::settingsChanged);
-        QSignalSpy specificSpy(&settings, &Settings::snapWindowUseSystemBorderColorsChanged);
+        QSignalSpy specificSpy(&settings, &Settings::snappingUseSystemBorderColorsChanged);
         QVERIFY(generalSpy.isValid());
         QVERIFY(specificSpy.isValid());
 
         // Real change emits both signals.
-        settings.setSnapWindowUseSystemBorderColors(toggled);
+        settings.setSnappingUseSystemBorderColors(toggled);
         QCOMPARE(specificSpy.count(), 1);
         QVERIFY(generalSpy.count() >= 1);
 
@@ -436,7 +436,7 @@ private Q_SLOTS:
         const int generalBefore = generalSpy.count();
 
         // No-op (same value again) emits nothing.
-        settings.setSnapWindowUseSystemBorderColors(toggled);
+        settings.setSnappingUseSystemBorderColors(toggled);
         QCOMPARE(specificSpy.count(), specificBefore);
         QCOMPARE(generalSpy.count(), generalBefore);
     }

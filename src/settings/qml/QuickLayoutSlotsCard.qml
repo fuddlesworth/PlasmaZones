@@ -27,7 +27,7 @@ SettingsCard {
             appSettings.setQuickLayoutSlot(slotNumber, value);
     }
 
-    headerText: root.viewMode === 1 ? i18n("Tiling Quick Shortcuts") : i18n("Quick Layout Shortcuts")
+    headerText: root.viewMode === 1 ? i18n("Tiling Quick Shortcuts") : i18n("Snapping Quick Shortcuts")
     collapsible: true
 
     contentItem: ColumnLayout {
@@ -67,7 +67,7 @@ SettingsCard {
                         spacing: Kirigami.Units.smallSpacing / 2
 
                         Label {
-                            text: root.viewMode === 1 ? i18n("Quick Tiling %1", slotDelegate.slotNumber) : i18n("Quick Layout %1", slotDelegate.slotNumber)
+                            text: root.viewMode === 1 ? i18n("Quick Tiling %1", slotDelegate.slotNumber) : i18n("Quick Snapping %1", slotDelegate.slotNumber)
                             Layout.fillWidth: true
                             elide: Text.ElideRight
                         }

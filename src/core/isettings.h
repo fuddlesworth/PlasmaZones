@@ -167,20 +167,20 @@ public:
 
     // Snapping window decoration settings (fetched by KWin effect via D-Bus).
     // Parallel to autotile* — the snapped window's border / title-bar.
-    virtual bool snapWindowHideTitleBars() const = 0;
-    virtual void setSnapWindowHideTitleBars(bool hide) = 0;
-    virtual bool snapWindowShowBorder() const = 0;
-    virtual void setSnapWindowShowBorder(bool show) = 0;
-    virtual int snapWindowBorderWidth() const = 0;
-    virtual void setSnapWindowBorderWidth(int width) = 0;
-    virtual int snapWindowBorderRadius() const = 0;
-    virtual void setSnapWindowBorderRadius(int radius) = 0;
-    virtual QColor snapWindowBorderColor() const = 0;
-    virtual void setSnapWindowBorderColor(const QColor& color) = 0;
-    virtual QColor snapWindowInactiveBorderColor() const = 0;
-    virtual void setSnapWindowInactiveBorderColor(const QColor& color) = 0;
-    virtual bool snapWindowUseSystemBorderColors() const = 0;
-    virtual void setSnapWindowUseSystemBorderColors(bool use) = 0;
+    virtual bool snappingHideTitleBars() const = 0;
+    virtual void setSnappingHideTitleBars(bool hide) = 0;
+    virtual bool snappingShowBorder() const = 0;
+    virtual void setSnappingShowBorder(bool show) = 0;
+    virtual int snappingBorderWidth() const = 0;
+    virtual void setSnappingBorderWidth(int width) = 0;
+    virtual int snappingBorderRadius() const = 0;
+    virtual void setSnappingBorderRadius(int radius) = 0;
+    virtual QColor snappingBorderColor() const = 0;
+    virtual void setSnappingBorderColor(const QColor& color) = 0;
+    virtual QColor snappingInactiveBorderColor() const = 0;
+    virtual void setSnappingInactiveBorderColor(const QColor& color) = 0;
+    virtual bool snappingUseSystemBorderColors() const = 0;
+    virtual void setSnappingUseSystemBorderColors(bool use) = 0;
 
     virtual StickyWindowHandling autotileStickyWindowHandling() const = 0;
     virtual void setAutotileStickyWindowHandling(StickyWindowHandling handling) = 0;
@@ -381,7 +381,7 @@ Q_SIGNALS:
     void keepWindowsInZonesOnResolutionChangeChanged();
     void moveNewWindowsToLastZoneChanged();
     void restoreOriginalSizeOnUnsnapChanged();
-    void stickyWindowHandlingChanged();
+    void snappingStickyWindowHandlingChanged();
     void restoreWindowsToZonesOnLoginChanged();
     void autoAssignAllLayoutsChanged();
     void snapAssistFeatureEnabledChanged();
@@ -541,13 +541,13 @@ Q_SIGNALS:
     void autotileBorderColorChanged();
     void autotileInactiveBorderColorChanged();
     void autotileUseSystemBorderColorsChanged();
-    void snapWindowHideTitleBarsChanged();
-    void snapWindowShowBorderChanged();
-    void snapWindowBorderWidthChanged();
-    void snapWindowBorderRadiusChanged();
-    void snapWindowBorderColorChanged();
-    void snapWindowInactiveBorderColorChanged();
-    void snapWindowUseSystemBorderColorsChanged();
+    void snappingHideTitleBarsChanged();
+    void snappingShowBorderChanged();
+    void snappingBorderWidthChanged();
+    void snappingBorderRadiusChanged();
+    void snappingBorderColorChanged();
+    void snappingInactiveBorderColorChanged();
+    void snappingUseSystemBorderColorsChanged();
     void autotileStickyWindowHandlingChanged();
     void autotileDragBehaviorChanged();
     void autotileOverflowBehaviorChanged();

@@ -21,7 +21,7 @@ namespace PlasmaZones {
  * Also inherits PhosphorEngine::ISnapSettings so SnapEngine's
  * dynamic_cast<ISnapSettings*>(engineSettings()) succeeds when a stub is wired
  * via setEngineSettings(). The remaining ISnapSettings methods
- * (stickyWindowHandling, moveNewWindowsToLastZone,
+ * (snappingStickyWindowHandling, moveNewWindowsToLastZone,
  * restoreWindowsToZonesOnLogin, autoAssignAllLayouts) are already
  * implemented for ISettings — the multiple inheritance just registers
  * the second base so the cast resolves.
@@ -608,11 +608,11 @@ public:
     void setRestoreOriginalSizeOnUnsnap(bool) override
     {
     }
-    StickyWindowHandling stickyWindowHandling() const override
+    StickyWindowHandling snappingStickyWindowHandling() const override
     {
         return StickyWindowHandling::TreatAsNormal;
     }
-    void setStickyWindowHandling(StickyWindowHandling) override
+    void setSnappingStickyWindowHandling(StickyWindowHandling) override
     {
     }
     bool restoreWindowsToZonesOnLogin() const override
@@ -823,58 +823,58 @@ public:
     void setAutotileUseSystemBorderColors(bool) override
     {
     }
-    bool snapWindowHideTitleBars() const override
+    bool snappingHideTitleBars() const override
     {
-        // Distinct from snapWindowShowBorder so the D-Bus batch test can detect a
+        // Distinct from snappingShowBorder so the D-Bus batch test can detect a
         // registration swap between the two adjacent bool keys via value-mirroring.
         return true;
     }
-    void setSnapWindowHideTitleBars(bool) override
+    void setSnappingHideTitleBars(bool) override
     {
     }
-    bool snapWindowShowBorder() const override
+    bool snappingShowBorder() const override
     {
         return false;
     }
-    void setSnapWindowShowBorder(bool) override
+    void setSnappingShowBorder(bool) override
     {
     }
-    int snapWindowBorderWidth() const override
+    int snappingBorderWidth() const override
     {
         return 2;
     }
-    void setSnapWindowBorderWidth(int) override
+    void setSnappingBorderWidth(int) override
     {
     }
-    int snapWindowBorderRadius() const override
+    int snappingBorderRadius() const override
     {
         return 0;
     }
-    void setSnapWindowBorderRadius(int) override
+    void setSnappingBorderRadius(int) override
     {
     }
-    QColor snapWindowBorderColor() const override
+    QColor snappingBorderColor() const override
     {
         return Qt::white;
     }
-    void setSnapWindowBorderColor(const QColor&) override
+    void setSnappingBorderColor(const QColor&) override
     {
     }
-    QColor snapWindowInactiveBorderColor() const override
+    QColor snappingInactiveBorderColor() const override
     {
         // A distinct, valid color (active is white) so the D-Bus batch test can
         // round-trip it through HexArgb and catch an active/inactive swap.
         return Qt::black;
     }
-    void setSnapWindowInactiveBorderColor(const QColor&) override
+    void setSnappingInactiveBorderColor(const QColor&) override
     {
     }
-    bool snapWindowUseSystemBorderColors() const override
+    bool snappingUseSystemBorderColors() const override
     {
-        // Distinct from snapWindowShowBorder for the same batch-test swap detection.
+        // Distinct from snappingShowBorder for the same batch-test swap detection.
         return true;
     }
-    void setSnapWindowUseSystemBorderColors(bool) override
+    void setSnappingUseSystemBorderColors(bool) override
     {
     }
     StickyWindowHandling autotileStickyWindowHandling() const override

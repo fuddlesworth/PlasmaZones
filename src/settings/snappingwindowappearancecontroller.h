@@ -14,16 +14,16 @@ namespace PlasmaZones {
 ///
 /// CONSTANT bounds for the snapped-window border-width / border-radius sliders
 /// (parallel to TilingAppearanceController). Live border values are on Settings
-/// (Q_PROPERTY) and bind via `appSettings.snapWindowBorderWidth` /
-/// `appSettings.snapWindowBorderRadius`.
+/// (Q_PROPERTY) and bind via `appSettings.snappingBorderWidth` /
+/// `appSettings.snappingBorderRadius`.
 class SnappingWindowAppearanceController : public PhosphorSettingsUi::PageController
 {
     Q_OBJECT
 
-    Q_PROPERTY(int snapWindowBorderWidthMin READ snapWindowBorderWidthMin CONSTANT)
-    Q_PROPERTY(int snapWindowBorderWidthMax READ snapWindowBorderWidthMax CONSTANT)
-    Q_PROPERTY(int snapWindowBorderRadiusMin READ snapWindowBorderRadiusMin CONSTANT)
-    Q_PROPERTY(int snapWindowBorderRadiusMax READ snapWindowBorderRadiusMax CONSTANT)
+    Q_PROPERTY(int snappingBorderWidthMin READ snappingBorderWidthMin CONSTANT)
+    Q_PROPERTY(int snappingBorderWidthMax READ snappingBorderWidthMax CONSTANT)
+    Q_PROPERTY(int snappingBorderRadiusMin READ snappingBorderRadiusMin CONSTANT)
+    Q_PROPERTY(int snappingBorderRadiusMax READ snappingBorderRadiusMax CONSTANT)
     // Snapping gaps (zone padding + outer/edge gaps) moved onto Window →
     // Appearance (per-screen, beside the global border/title-bar cards). Each
     // field is bounded by the SAME ConfigDefaults accessor the per-screen
@@ -52,21 +52,21 @@ public:
     {
     }
 
-    int snapWindowBorderWidthMin() const
+    int snappingBorderWidthMin() const
     {
-        return ConfigDefaults::snapWindowBorderWidthMin();
+        return ConfigDefaults::snappingBorderWidthMin();
     }
-    int snapWindowBorderWidthMax() const
+    int snappingBorderWidthMax() const
     {
-        return ConfigDefaults::snapWindowBorderWidthMax();
+        return ConfigDefaults::snappingBorderWidthMax();
     }
-    int snapWindowBorderRadiusMin() const
+    int snappingBorderRadiusMin() const
     {
-        return ConfigDefaults::snapWindowBorderRadiusMin();
+        return ConfigDefaults::snappingBorderRadiusMin();
     }
-    int snapWindowBorderRadiusMax() const
+    int snappingBorderRadiusMax() const
     {
-        return ConfigDefaults::snapWindowBorderRadiusMax();
+        return ConfigDefaults::snappingBorderRadiusMax();
     }
     int zonePaddingMin() const
     {

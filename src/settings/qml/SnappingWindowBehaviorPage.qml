@@ -202,8 +202,8 @@ SettingsFlickable {
                                     "value": 2
                                 }
                             ]
-                            currentIndex: Math.max(0, indexOfValue(appSettings.stickyWindowHandling))
-                            onActivated: appSettings.stickyWindowHandling = currentValue
+                            currentIndex: Math.max(0, indexOfValue(appSettings.snappingStickyWindowHandling))
+                            onActivated: appSettings.snappingStickyWindowHandling = currentValue
                         }
                     }
                 }

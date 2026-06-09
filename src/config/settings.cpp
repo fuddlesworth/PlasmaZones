@@ -229,8 +229,8 @@ void Settings::load()
     if (autotileUseSystemBorderColors()) {
         applyAutotileBorderSystemColor();
     }
-    if (snapWindowUseSystemBorderColors()) {
-        applySnapWindowBorderSystemColor();
+    if (snappingUseSystemBorderColors()) {
+        applySnappingBorderSystemColor();
     }
 
     qCInfo(lcConfig) << "Settings loaded";
@@ -2040,16 +2040,16 @@ P_STORE_GET(bool, restoreOriginalSizeOnUnsnap, snappingBehaviorWindowHandlingGro
 P_STORE_SET_BOOL(setRestoreOriginalSizeOnUnsnap, snappingBehaviorWindowHandlingGroup, restoreOnUnsnapKey,
                  restoreOriginalSizeOnUnsnapChanged)
 
-StickyWindowHandling Settings::stickyWindowHandling() const
+StickyWindowHandling Settings::snappingStickyWindowHandling() const
 {
     return static_cast<StickyWindowHandling>(m_store->read<int>(ConfigDefaults::snappingBehaviorWindowHandlingGroup(),
                                                                 ConfigDefaults::stickyWindowHandlingKey()));
 }
-int Settings::stickyWindowHandlingInt() const
+int Settings::snappingStickyWindowHandlingInt() const
 {
-    return static_cast<int>(stickyWindowHandling());
+    return static_cast<int>(snappingStickyWindowHandling());
 }
-void Settings::setStickyWindowHandling(StickyWindowHandling handling)
+void Settings::setSnappingStickyWindowHandling(StickyWindowHandling handling)
 {
     const int before = m_store->read<int>(ConfigDefaults::snappingBehaviorWindowHandlingGroup(),
                                           ConfigDefaults::stickyWindowHandlingKey());
@@ -2060,14 +2060,14 @@ void Settings::setStickyWindowHandling(StickyWindowHandling handling)
     if (after == before) {
         return;
     }
-    Q_EMIT stickyWindowHandlingChanged();
+    Q_EMIT snappingStickyWindowHandlingChanged();
     Q_EMIT settingsChanged();
 }
-void Settings::setStickyWindowHandlingInt(int handling)
+void Settings::setSnappingStickyWindowHandlingInt(int handling)
 {
     if (handling >= static_cast<int>(StickyWindowHandling::TreatAsNormal)
         && handling <= static_cast<int>(StickyWindowHandling::IgnoreAll)) {
-        setStickyWindowHandling(static_cast<StickyWindowHandling>(handling));
+        setSnappingStickyWindowHandling(static_cast<StickyWindowHandling>(handling));
     }
 }
 
@@ -2479,35 +2479,35 @@ P_STORE_SET_INT(setAutotileBorderRadius, tilingAppearanceBordersGroup, radiusKey
 
 // Snapping.Appearance — the snapped window's border / title-bar (parallel to
 // Tiling.Appearance above; distinct from the Snapping.Zones.* drag overlay).
-P_STORE_GET(QColor, snapWindowBorderColor, snappingAppearanceColorsGroup, activeKey, QColor)
-P_STORE_SET_COLOR(setSnapWindowBorderColor, snappingAppearanceColorsGroup, activeKey, snapWindowBorderColorChanged)
-P_STORE_GET(QColor, snapWindowInactiveBorderColor, snappingAppearanceColorsGroup, inactiveKey, QColor)
-P_STORE_SET_COLOR(setSnapWindowInactiveBorderColor, snappingAppearanceColorsGroup, inactiveKey,
-                  snapWindowInactiveBorderColorChanged)
+P_STORE_GET(QColor, snappingBorderColor, snappingAppearanceColorsGroup, activeKey, QColor)
+P_STORE_SET_COLOR(setSnappingBorderColor, snappingAppearanceColorsGroup, activeKey, snappingBorderColorChanged)
+P_STORE_GET(QColor, snappingInactiveBorderColor, snappingAppearanceColorsGroup, inactiveKey, QColor)
+P_STORE_SET_COLOR(setSnappingInactiveBorderColor, snappingAppearanceColorsGroup, inactiveKey,
+                  snappingInactiveBorderColorChanged)
 
-P_STORE_GET(bool, snapWindowUseSystemBorderColors, snappingAppearanceColorsGroup, useSystemKey, bool)
-void Settings::setSnapWindowUseSystemBorderColors(bool use)
+P_STORE_GET(bool, snappingUseSystemBorderColors, snappingAppearanceColorsGroup, useSystemKey, bool)
+void Settings::setSnappingUseSystemBorderColors(bool use)
 {
-    if (snapWindowUseSystemBorderColors() == use) {
+    if (snappingUseSystemBorderColors() == use) {
         return;
     }
     m_store->write(ConfigDefaults::snappingAppearanceColorsGroup(), ConfigDefaults::useSystemKey(), use);
     if (use) {
-        applySnapWindowBorderSystemColor();
+        applySnappingBorderSystemColor();
     }
-    Q_EMIT snapWindowUseSystemBorderColorsChanged();
+    Q_EMIT snappingUseSystemBorderColorsChanged();
     Q_EMIT settingsChanged();
 }
 
-P_STORE_GET(bool, snapWindowHideTitleBars, snappingAppearanceDecorationsGroup, hideTitleBarsKey, bool)
-P_STORE_SET_BOOL(setSnapWindowHideTitleBars, snappingAppearanceDecorationsGroup, hideTitleBarsKey,
-                 snapWindowHideTitleBarsChanged)
-P_STORE_GET(bool, snapWindowShowBorder, snappingAppearanceBordersGroup, showBorderKey, bool)
-P_STORE_SET_BOOL(setSnapWindowShowBorder, snappingAppearanceBordersGroup, showBorderKey, snapWindowShowBorderChanged)
-P_STORE_GET(int, snapWindowBorderWidth, snappingAppearanceBordersGroup, widthKey, int)
-P_STORE_SET_INT(setSnapWindowBorderWidth, snappingAppearanceBordersGroup, widthKey, snapWindowBorderWidthChanged)
-P_STORE_GET(int, snapWindowBorderRadius, snappingAppearanceBordersGroup, radiusKey, int)
-P_STORE_SET_INT(setSnapWindowBorderRadius, snappingAppearanceBordersGroup, radiusKey, snapWindowBorderRadiusChanged)
+P_STORE_GET(bool, snappingHideTitleBars, snappingAppearanceDecorationsGroup, hideTitleBarsKey, bool)
+P_STORE_SET_BOOL(setSnappingHideTitleBars, snappingAppearanceDecorationsGroup, hideTitleBarsKey,
+                 snappingHideTitleBarsChanged)
+P_STORE_GET(bool, snappingShowBorder, snappingAppearanceBordersGroup, showBorderKey, bool)
+P_STORE_SET_BOOL(setSnappingShowBorder, snappingAppearanceBordersGroup, showBorderKey, snappingShowBorderChanged)
+P_STORE_GET(int, snappingBorderWidth, snappingAppearanceBordersGroup, widthKey, int)
+P_STORE_SET_INT(setSnappingBorderWidth, snappingAppearanceBordersGroup, widthKey, snappingBorderWidthChanged)
+P_STORE_GET(int, snappingBorderRadius, snappingAppearanceBordersGroup, radiusKey, int)
+P_STORE_SET_INT(setSnappingBorderRadius, snappingAppearanceBordersGroup, radiusKey, snappingBorderRadiusChanged)
 
 // ── reset / color helpers ────────────────────────────────────────────────────
 
@@ -2934,14 +2934,14 @@ void Settings::applyAutotileBorderSystemColor()
     setAutotileInactiveBorderColor(inactiveColor());
 }
 
-void Settings::applySnapWindowBorderSystemColor()
+void Settings::applySnappingBorderSystemColor()
 {
     // Mirror applyAutotileBorderSystemColor: adopt the zone highlight/inactive
     // colors (which themselves track the system accent) so the snapped-window
     // border follows the system accent. Route through the setters so the Store
     // stays the source of truth and NOTIFY signals fire.
-    setSnapWindowBorderColor(highlightColor());
-    setSnapWindowInactiveBorderColor(inactiveColor());
+    setSnappingBorderColor(highlightColor());
+    setSnappingInactiveBorderColor(inactiveColor());
 }
 
 #undef P_STORE_GET

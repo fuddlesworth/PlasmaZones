@@ -103,8 +103,8 @@ private Q_SLOTS:
         QVERIFY(ConfigDefaults::minimumZoneDisplaySizePx() <= ConfigDefaults::minimumZoneDisplaySizePxMax());
 
         // Behavior
-        QVERIFY(ConfigDefaults::stickyWindowHandling() >= 0);
-        QVERIFY(ConfigDefaults::stickyWindowHandling() <= 2);
+        QVERIFY(ConfigDefaults::snappingStickyWindowHandling() >= 0);
+        QVERIFY(ConfigDefaults::snappingStickyWindowHandling() <= 2);
         QVERIFY(ConfigDefaults::minimumWindowWidth() >= ConfigDefaults::minimumWindowWidthMin());
         QVERIFY(ConfigDefaults::minimumWindowWidth() <= ConfigDefaults::minimumWindowWidthMax());
         QVERIFY(ConfigDefaults::minimumWindowHeight() >= ConfigDefaults::minimumWindowHeightMin());
@@ -152,10 +152,10 @@ private Q_SLOTS:
         QVERIFY(ConfigDefaults::autotileBorderWidth() <= ConfigDefaults::autotileBorderWidthMax());
         QVERIFY(ConfigDefaults::autotileBorderRadius() >= ConfigDefaults::autotileBorderRadiusMin());
         QVERIFY(ConfigDefaults::autotileBorderRadius() <= ConfigDefaults::autotileBorderRadiusMax());
-        QVERIFY(ConfigDefaults::snapWindowBorderWidth() >= ConfigDefaults::snapWindowBorderWidthMin());
-        QVERIFY(ConfigDefaults::snapWindowBorderWidth() <= ConfigDefaults::snapWindowBorderWidthMax());
-        QVERIFY(ConfigDefaults::snapWindowBorderRadius() >= ConfigDefaults::snapWindowBorderRadiusMin());
-        QVERIFY(ConfigDefaults::snapWindowBorderRadius() <= ConfigDefaults::snapWindowBorderRadiusMax());
+        QVERIFY(ConfigDefaults::snappingBorderWidth() >= ConfigDefaults::snappingBorderWidthMin());
+        QVERIFY(ConfigDefaults::snappingBorderWidth() <= ConfigDefaults::snappingBorderWidthMax());
+        QVERIFY(ConfigDefaults::snappingBorderRadius() >= ConfigDefaults::snappingBorderRadiusMin());
+        QVERIFY(ConfigDefaults::snappingBorderRadius() <= ConfigDefaults::snappingBorderRadiusMax());
         QVERIFY(ConfigDefaults::autotileOuterGapTop() >= ConfigDefaults::autotileOuterGapTopMin());
         QVERIFY(ConfigDefaults::autotileOuterGapTop() <= ConfigDefaults::autotileOuterGapTopMax());
         QVERIFY(ConfigDefaults::autotileOuterGapBottom() >= ConfigDefaults::autotileOuterGapBottomMin());
@@ -204,30 +204,30 @@ private Q_SLOTS:
     /**
      * Snapped-window appearance defaults must be IDENTICAL to the autotile*
      * window appearance defaults — the two modes start a window from the same
-     * chrome (every snapWindow* default delegates to its autotile* counterpart).
+     * chrome (every snapping* default delegates to its autotile* counterpart).
      * Assert each pair is equal rather than pinning literals so a single change
      * to an autotile default moves both in lockstep without staling this test.
      * The concrete shipped values are pinned separately below.
      */
-    void testSnapWindowAppearance_defaults()
+    void testSnappingWindowAppearance_defaults()
     {
-        QCOMPARE(ConfigDefaults::snapWindowHideTitleBars(), ConfigDefaults::autotileHideTitleBars());
-        QCOMPARE(ConfigDefaults::snapWindowShowBorder(), ConfigDefaults::autotileShowBorder());
-        QCOMPARE(ConfigDefaults::snapWindowUseSystemBorderColors(), ConfigDefaults::autotileUseSystemBorderColors());
-        QCOMPARE(ConfigDefaults::snapWindowBorderColor(), ConfigDefaults::autotileBorderColor());
-        QCOMPARE(ConfigDefaults::snapWindowInactiveBorderColor(), ConfigDefaults::autotileInactiveBorderColor());
-        QCOMPARE(ConfigDefaults::snapWindowBorderWidth(), ConfigDefaults::autotileBorderWidth());
-        QCOMPARE(ConfigDefaults::snapWindowBorderRadius(), ConfigDefaults::autotileBorderRadius());
+        QCOMPARE(ConfigDefaults::snappingHideTitleBars(), ConfigDefaults::autotileHideTitleBars());
+        QCOMPARE(ConfigDefaults::snappingShowBorder(), ConfigDefaults::autotileShowBorder());
+        QCOMPARE(ConfigDefaults::snappingUseSystemBorderColors(), ConfigDefaults::autotileUseSystemBorderColors());
+        QCOMPARE(ConfigDefaults::snappingBorderColor(), ConfigDefaults::autotileBorderColor());
+        QCOMPARE(ConfigDefaults::snappingInactiveBorderColor(), ConfigDefaults::autotileInactiveBorderColor());
+        QCOMPARE(ConfigDefaults::snappingBorderWidth(), ConfigDefaults::autotileBorderWidth());
+        QCOMPARE(ConfigDefaults::snappingBorderRadius(), ConfigDefaults::autotileBorderRadius());
 
         // Pin the concrete shipped defaults (shared by both modes): title bars
         // and the border are OFF, width 2, radius 8. Colors are compared against
         // the zone color accessors so a palette change can't stale the test.
-        QCOMPARE(ConfigDefaults::snapWindowHideTitleBars(), false);
-        QCOMPARE(ConfigDefaults::snapWindowShowBorder(), false);
-        QCOMPARE(ConfigDefaults::snapWindowBorderColor(), ConfigDefaults::highlightColor());
-        QCOMPARE(ConfigDefaults::snapWindowInactiveBorderColor(), ConfigDefaults::inactiveColor());
-        QCOMPARE(ConfigDefaults::snapWindowBorderWidth(), ::PhosphorZones::ZoneDefaults::BorderWidth);
-        QCOMPARE(ConfigDefaults::snapWindowBorderRadius(), ::PhosphorZones::ZoneDefaults::BorderRadius);
+        QCOMPARE(ConfigDefaults::snappingHideTitleBars(), false);
+        QCOMPARE(ConfigDefaults::snappingShowBorder(), false);
+        QCOMPARE(ConfigDefaults::snappingBorderColor(), ConfigDefaults::highlightColor());
+        QCOMPARE(ConfigDefaults::snappingInactiveBorderColor(), ConfigDefaults::inactiveColor());
+        QCOMPARE(ConfigDefaults::snappingBorderWidth(), ::PhosphorZones::ZoneDefaults::BorderWidth);
+        QCOMPARE(ConfigDefaults::snappingBorderRadius(), ::PhosphorZones::ZoneDefaults::BorderRadius);
     }
 };
 
