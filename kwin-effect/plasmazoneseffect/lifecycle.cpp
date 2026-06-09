@@ -740,7 +740,7 @@ PlasmaZonesEffect::PlasmaZonesEffect()
 
         // Restore borderless and monocle-maximized windows — daemon state is gone
         m_autotileHandler->restoreAllBorderless();
-        restoreAllSnapBorderless();
+        m_snapHandler->restoreAllSnapBorderless();
         restoreAllRuleHiddenTitleBars();
         m_autotileHandler->restoreAllMonocleMaximized();
         clearAllBorders();
@@ -854,7 +854,7 @@ PlasmaZonesEffect::~PlasmaZonesEffect()
     // Guard against compositor teardown — effects may outlive the stacking order.
     if (KWin::effects) {
         m_autotileHandler->restoreAllBorderless();
-        restoreAllSnapBorderless();
+        m_snapHandler->restoreAllSnapBorderless();
         restoreAllRuleHiddenTitleBars();
         m_autotileHandler->restoreAllMonocleMaximized();
         clearAllBorders();

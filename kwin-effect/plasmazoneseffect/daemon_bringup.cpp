@@ -7,6 +7,7 @@
 #include "../navigationhandler.h"
 #include "../screenchangehandler.h"
 #include "../snapassisthandler.h"
+#include "../snaphandler.h"
 #include "../windowanimator.h"
 
 #include <PhosphorAnimation/AnimationLimits.h>
@@ -703,8 +704,8 @@ void PlasmaZonesEffect::loadCachedSettings()
         m_snappingFocusFollowsMouse = v.toBool();
     });
 
-    // Snapped-window border settings — feed the effect's parallel snap
-    // BorderState (m_snapBorder), mirroring the autotile* block above. When
+    // Snapped-window border settings — feed SnapHandler's parallel snap
+    // BorderState, mirroring the autotile* block above. When
     // snapWindowUseSystemBorderColors is on the daemon writes the resolved
     // accent into the colour keys, so (like autotile) the effect only reads the
     // resolved colours and never the use-system flag.
@@ -713,42 +714,42 @@ void PlasmaZonesEffect::loadCachedSettings()
     // "only act on change" convention the autotile width/radius setters use.
     loadSettingAsync(QStringLiteral("snapWindowHideTitleBars"), [this](const QVariant& v) {
         const bool hide = v.toBool();
-        if (m_snapBorder.hideTitleBars != hide) {
-            updateSnapHideTitleBars(hide);
+        if (m_snapHandler->hideTitleBars() != hide) {
+            m_snapHandler->updateSnapHideTitleBars(hide);
         }
     });
     loadSettingAsync(QStringLiteral("snapWindowShowBorder"), [this](const QVariant& v) {
         const bool show = v.toBool();
-        if (m_snapBorder.showBorder != show) {
-            m_snapBorder.showBorder = show;
+        if (m_snapHandler->showBorder() != show) {
+            m_snapHandler->setShowBorder(show);
             updateAllBorders();
         }
     });
     loadSettingAsync(QStringLiteral("snapWindowBorderWidth"), [this](const QVariant& v) {
         const int bw = qBound(0, v.toInt(), 10);
-        if (m_snapBorder.width != bw) {
-            m_snapBorder.width = bw;
+        if (m_snapHandler->borderWidth() != bw) {
+            m_snapHandler->setBorderWidth(bw);
             updateAllBorders();
         }
     });
     loadSettingAsync(QStringLiteral("snapWindowBorderRadius"), [this](const QVariant& v) {
         const int br = qBound(0, v.toInt(), 20);
-        if (m_snapBorder.radius != br) {
-            m_snapBorder.radius = br;
+        if (m_snapHandler->borderRadius() != br) {
+            m_snapHandler->setBorderRadius(br);
             updateAllBorders();
         }
     });
     loadSettingAsync(QStringLiteral("snapWindowBorderColor"), [this](const QVariant& v) {
         const QColor c(v.toString());
-        if (m_snapBorder.color != c) {
-            m_snapBorder.color = c;
+        if (m_snapHandler->borderColor() != c) {
+            m_snapHandler->setBorderColor(c);
             updateAllBorders();
         }
     });
     loadSettingAsync(QStringLiteral("snapWindowInactiveBorderColor"), [this](const QVariant& v) {
         const QColor c(v.toString());
-        if (m_snapBorder.inactiveColor != c) {
-            m_snapBorder.inactiveColor = c;
+        if (m_snapHandler->inactiveBorderColor() != c) {
+            m_snapHandler->setInactiveBorderColor(c);
             updateAllBorders();
         }
     });

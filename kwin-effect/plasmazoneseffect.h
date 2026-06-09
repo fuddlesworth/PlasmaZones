@@ -453,10 +453,7 @@ private:
      * fast paths, or the snap zone poisons the autotile float-back (per-mode float
      * independence). Backed by the shared snap BorderState tiled set.
      */
-    bool isWindowMarkedSnapped(const QString& windowId) const
-    {
-        return PhosphorCompositor::AutotileStateHelpers::isTiledWindow(m_snapBorder, windowId);
-    }
+    bool isWindowMarkedSnapped(const QString& windowId) const;
 
     /**
      * @brief True if SNAP is currently hiding this window's title bar (it is in the
@@ -464,10 +461,7 @@ private:
      * drops its own tracking without calling setNoBorder(false) — which would un-hide
      * a title bar the per-mode snapping appearance wants hidden.
      */
-    bool isWindowSnapBorderless(const QString& windowId) const
-    {
-        return PhosphorCompositor::AutotileStateHelpers::isBorderlessWindow(m_snapBorder, windowId);
-    }
+    bool isWindowSnapBorderless(const QString& windowId) const;
 
     /**
      * @brief Snapping focus-follows-mouse: activate the topmost snapped window under
@@ -636,13 +630,6 @@ private:
     // stops matching, without fighting snap/autotile borderless ownership.
     QSet<QString> m_ruleHiddenTitleBars;
 
-    // Snapping's own managed-window border state, parallel to
-    // AutotileHandler::m_border. Built on the shared PhosphorCompositor
-    // BorderState + AutotileStateHelpers so snap and autotile share one
-    // standardized border mechanism (and a future mode reuses the same
-    // machinery). Populated at snap commit, cleared on float / unsnap / close.
-    PhosphorCompositor::BorderState m_snapBorder;
-
     // Policy returned from the daemon's beginDrag for the currently-active
     // drag. Async-populated a few ms after the
     // drag starts; until then, conservative defaults apply (snap-path
@@ -671,20 +658,6 @@ private:
     void updateAllBorders();
     void clearAllBorders();
 
-    // ── Snapping border-state tracking (mirrors AutotileHandler's set) ──
-    /// Record @p windowId as snap-committed on @p screenId (idempotent), apply
-    /// title-bar hiding if enabled, and (re)draw its border.
-    void markWindowSnapped(const QString& windowId, const QString& screenId);
-    /// Drop @p windowId from the snap set on every screen, restore its title
-    /// bar if we hid it, and remove its border.
-    void clearWindowSnapped(const QString& windowId);
-    /// Apply/restore title-bar hiding across all currently snap-committed
-    /// windows when the snapWindowHideTitleBars setting toggles.
-    void updateSnapHideTitleBars(bool hide);
-    /// Restore every snap-hidden title bar and drop the snap border set.
-    /// Called on daemon loss / effect teardown (symmetric with
-    /// AutotileHandler::restoreAllBorderless).
-    void restoreAllSnapBorderless();
     /// Resolve which mode's BorderState manages @p windowId — autotile first,
     /// then snap — or nullptr if neither draws a border for it.
     const PhosphorCompositor::BorderState* resolveBorderStateFor(const QString& windowId) const;

@@ -11,6 +11,7 @@
 #include <window.h>
 
 #include "../autotilehandler.h"
+#include "../snaphandler.h"
 #include "shader_resolve.h"
 #include "window_query.h"
 
@@ -19,34 +20,6 @@
 #include <optional>
 
 namespace PlasmaZones {
-
-namespace {
-// Drop the server-side decoration while keeping the window filling its zone.
-// KWin holds the CLIENT size constant across a decoration change, so calling
-// setNoBorder(true) AFTER the zone geometry was applied shrinks the frame by the
-// title-bar height and leaves a gap at the bottom of the zone. Re-assert the
-// zone rect after dropping the decoration so the content grows to fill it.
-//
-// CRITICAL: use moveResizeGeometry(), NOT frameGeometry(). On Wayland the latter
-// lags behind moveResize() until the client acks the configure, so right after
-// applySnapGeometry's moveResize it still reports the window's PRE-snap frame —
-// capturing and re-applying that would clobber the snap (the window reverts to
-// its floating size/position; this broke snap restore entirely). moveResizeGeometry()
-// is the zone rect KWin is already moving toward, set synchronously by moveResize.
-// The setNoBorder→moveResize ordering mirrors autotile hiding the title bar
-// BEFORE its moveResize (autotilehandler/state.cpp::setWindowBorderless).
-void hideTitleBarFillingZone(KWin::Window* kw)
-{
-    const KWin::RectF zoneTarget = kw->moveResizeGeometry();
-    kw->setNoBorder(true);
-    // Only re-assert a real target. A degenerate move-resize geometry would
-    // otherwise resize the window to nothing; in that case leave the decoration
-    // change to settle on its own.
-    if (zoneTarget.isValid() && !zoneTarget.isEmpty()) {
-        kw->moveResize(zoneTarget);
-    }
-}
-} // namespace
 
 void PlasmaZonesEffect::removeWindowBorder(const QString& windowId)
 {
@@ -282,8 +255,8 @@ void PlasmaZonesEffect::reconcileRuleHiddenTitleBar(const QString& windowId, KWi
     const bool weHidIt = m_ruleHiddenTitleBars.contains(windowId);
     // A window snap/autotile already manages borderless must not be physically
     // toggled by the rule layer (it owns the decoration); we only track intent.
-    const bool modeBorderless = AutotileStateHelpers::isBorderlessWindow(m_snapBorder, windowId)
-        || m_autotileHandler->isBorderlessWindow(windowId);
+    const bool modeBorderless =
+        m_snapHandler->isBorderlessWindow(windowId) || m_autotileHandler->isBorderlessWindow(windowId);
 
     if (ruleWantsHide) {
         if (!weHidIt && kw && kw->userCanSetNoBorder()) {
@@ -301,6 +274,16 @@ void PlasmaZonesEffect::reconcileRuleHiddenTitleBar(const QString& windowId, KWi
     }
 }
 
+bool PlasmaZonesEffect::isWindowMarkedSnapped(const QString& windowId) const
+{
+    return m_snapHandler->isTiledWindow(windowId);
+}
+
+bool PlasmaZonesEffect::isWindowSnapBorderless(const QString& windowId) const
+{
+    return m_snapHandler->isBorderlessWindow(windowId);
+}
+
 const PhosphorCompositor::BorderState* PlasmaZonesEffect::resolveBorderStateFor(const QString& windowId) const
 {
     using namespace PhosphorCompositor;
@@ -313,171 +296,10 @@ const PhosphorCompositor::BorderState* PlasmaZonesEffect::resolveBorderStateFor(
     if (AutotileStateHelpers::shouldShowBorderForWindow(autotile, windowId)) {
         return &autotile;
     }
-    if (AutotileStateHelpers::shouldShowBorderForWindow(m_snapBorder, windowId)) {
-        return &m_snapBorder;
+    if (m_snapHandler->shouldShowBorderForWindow(windowId)) {
+        return &m_snapHandler->borderState();
     }
     return nullptr;
-}
-
-void PlasmaZonesEffect::markWindowSnapped(const QString& windowId, const QString& screenId)
-{
-    using namespace PhosphorCompositor;
-    // An empty screenId is never a valid snap owner: the per-screen buckets are
-    // keyed by screenId, so recording under "" would pollute the set with an
-    // entry that the per-screen stripOtherScreens cleanup can never reclaim.
-    // Callers route unresolved/float windows through clearWindowSnapped instead;
-    // this guard is defensive depth for any path that slips an empty screen in.
-    if (windowId.isEmpty() || screenId.isEmpty()) {
-        return;
-    }
-    // A window can only be snap-managed by one screen at a time. Strip stale
-    // tracking from any OTHER screen — both the tiled and borderless buckets —
-    // before recording the new owner (mirrors the autotile cross-screen-transfer
-    // cleanup in tiling.cpp).
-    const auto stripOtherScreens = [&](QHash<QString, QSet<QString>>& byScreen) {
-        for (auto it = byScreen.begin(); it != byScreen.end();) {
-            if (it.key() != screenId) {
-                it.value().remove(windowId);
-            }
-            if (it.value().isEmpty() && it.key() != screenId) {
-                it = byScreen.erase(it);
-            } else {
-                ++it;
-            }
-        }
-    };
-    stripOtherScreens(m_snapBorder.tiledWindowsByScreen);
-    stripOtherScreens(m_snapBorder.borderlessWindowsByScreen);
-    AutotileStateHelpers::addTiledOnScreen(m_snapBorder, screenId, windowId);
-
-    KWin::EffectWindow* w = findWindowById(windowId);
-    KWin::Window* kw = w ? w->window() : nullptr;
-    // userCanSetNoBorder() — not hasDecoration() — is the correct test for "may
-    // this window's server-side title bar be toggled off." It reports whether KWin
-    // ALLOWS the no-border toggle, so it stays true for a normal SSD window even
-    // while that window is CURRENTLY borderless — exactly the autotile→snap handoff
-    // case, where the window arrives already borderless (autotile stripped its
-    // decoration) and hasDecoration() therefore reads false. It is false for windows
-    // that have no server-side title bar to hide in the first place — client-side-
-    // decorated apps (GTK/Electron) and other non-toggleable windows (override-
-    // redirect, or decoration forced by a window rule). Using hasDecoration() here
-    // skipped the handoff, so snap never recorded the borderless ownership and the
-    // deferred restoreWindowBorders un-hid the title bar autotile had hidden.
-    // (AutotileHandler::setWindowBorderless still gates on hasDecoration(); the snap
-    // side intentionally diverges because only it must survive the already-borderless
-    // handoff.)
-    if (m_snapBorder.hideTitleBars && kw && kw->userCanSetNoBorder()) {
-        const bool wasBorderless = AutotileStateHelpers::isBorderlessWindow(m_snapBorder, windowId);
-        AutotileStateHelpers::addBorderlessOnScreen(m_snapBorder, screenId, windowId);
-        if (!wasBorderless) {
-            hideTitleBarFillingZone(kw);
-        }
-    }
-    // A null w means the window is gone (closed mid-snap); the bucket entry
-    // recorded above is then harmless — if the window later closes, slotWindowClosed
-    // clears m_snapBorder for it. No border is drawn (nothing to draw on) and none
-    // is needed; updateAllBorders() iterates only live windows so it simply skips it.
-    //
-    // Border overlays are visual-only, so skip the off-desktop case (consistent
-    // with updateAllBorders): an OutlinedBorderItem for an invisible window is
-    // wasted work. When the user switches to that window's desktop, the
-    // desktopChanged → updateAllBorders connection rebuilds its border.
-    if (w && w->isOnCurrentDesktop()) {
-        updateWindowBorder(windowId, w);
-    }
-}
-
-void PlasmaZonesEffect::clearWindowSnapped(const QString& windowId)
-{
-    using namespace PhosphorCompositor;
-    if (windowId.isEmpty()) {
-        return;
-    }
-    const bool wasBorderless = AutotileStateHelpers::isBorderlessWindow(m_snapBorder, windowId);
-    AutotileStateHelpers::removeFromAllScreens(m_snapBorder, windowId);
-    // Restore the title bar only if snap had hidden it AND autotile doesn't
-    // still want it borderless. A window mid-transition between modes can be in
-    // both sets briefly; un-hiding here would fight autotile's authoritative
-    // borderless management and flash the title bar.
-    if (wasBorderless && !m_autotileHandler->isBorderlessWindow(windowId)) {
-        if (KWin::EffectWindow* w = findWindowById(windowId)) {
-            if (KWin::Window* kw = w->window()) {
-                kw->setNoBorder(false);
-            }
-        }
-    }
-    removeWindowBorder(windowId);
-}
-
-void PlasmaZonesEffect::updateSnapHideTitleBars(bool hide)
-{
-    using namespace PhosphorCompositor;
-    m_snapBorder.hideTitleBars = hide;
-    if (hide) {
-        // Hide on every currently snap-committed window.
-        const auto pairs = AutotileStateHelpers::allTiledPairs(m_snapBorder);
-        for (const auto& p : pairs) {
-            KWin::EffectWindow* w = findWindowById(p.first);
-            if (!w || !w->hasDecoration()) {
-                continue;
-            }
-            if (!AutotileStateHelpers::isBorderlessWindow(m_snapBorder, p.first)) {
-                AutotileStateHelpers::addBorderlessOnScreen(m_snapBorder, p.second, p.first);
-                if (KWin::Window* kw = w->window()) {
-                    hideTitleBarFillingZone(kw);
-                }
-            }
-        }
-    } else {
-        // Restore every window snap had made borderless, except one autotile
-        // still wants borderless. A window mid-transition between modes can be in
-        // both sets briefly; un-hiding here would fight autotile's authoritative
-        // borderless management and flash the title bar (mirrors the guard in
-        // clearWindowSnapped / restoreAllSnapBorderless).
-        const auto pairs = AutotileStateHelpers::allBorderlessPairs(m_snapBorder);
-        for (const auto& p : pairs) {
-            AutotileStateHelpers::removeBorderlessOnScreen(m_snapBorder, p.second, p.first);
-            if (m_autotileHandler->isBorderlessWindow(p.first)) {
-                continue;
-            }
-            if (KWin::EffectWindow* w = findWindowById(p.first)) {
-                if (KWin::Window* kw = w->window()) {
-                    kw->setNoBorder(false);
-                }
-            }
-        }
-    }
-    updateAllBorders();
-}
-
-void PlasmaZonesEffect::restoreAllSnapBorderless()
-{
-    using namespace PhosphorCompositor;
-    // Symmetric with AutotileHandler::restoreAllBorderless: on daemon loss or
-    // effect teardown the authoritative snap state is gone, so restore every
-    // title bar snapping hid and drop the whole snap border set. Without this,
-    // snap-hidden windows would keep their title bars hidden until a new snap
-    // event or app restart. The isBorderlessWindow guard below is the live
-    // protection in the per-window path (clearWindowSnapped); at the teardown
-    // call sites AutotileHandler::restoreAllBorderless() runs first and clears
-    // its set, so the guard is a belt-and-braces no-op here (a window autotile
-    // shares is already un-hidden by then, and a second setNoBorder(false) is
-    // harmless/idempotent).
-    // This drops the snap border STATE only; callers pair it with
-    // clearAllBorders() to tear down the OutlinedBorderItem scene items.
-    const auto pairs = AutotileStateHelpers::allBorderlessPairs(m_snapBorder);
-    for (const auto& p : pairs) {
-        if (m_autotileHandler->isBorderlessWindow(p.first)) {
-            continue;
-        }
-        if (KWin::EffectWindow* w = findWindowById(p.first)) {
-            if (KWin::Window* kw = w->window()) {
-                kw->setNoBorder(false);
-            }
-        }
-    }
-    m_snapBorder.borderlessWindowsByScreen.clear();
-    m_snapBorder.tiledWindowsByScreen.clear();
 }
 
 void PlasmaZonesEffect::restoreAllRuleHiddenTitleBars()
@@ -490,8 +312,7 @@ void PlasmaZonesEffect::restoreAllRuleHiddenTitleBars()
     // AutotileHandler::restoreAllBorderless) owns its restore, and a double
     // setNoBorder(false) would fight it.
     for (const QString& windowId : m_ruleHiddenTitleBars) {
-        if (AutotileStateHelpers::isBorderlessWindow(m_snapBorder, windowId)
-            || m_autotileHandler->isBorderlessWindow(windowId)) {
+        if (m_snapHandler->isBorderlessWindow(windowId) || m_autotileHandler->isBorderlessWindow(windowId)) {
             continue;
         }
         if (KWin::EffectWindow* w = findWindowById(windowId)) {

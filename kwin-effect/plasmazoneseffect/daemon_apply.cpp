@@ -31,6 +31,7 @@
 #include "../autotilehandler.h"
 #include "../navigationhandler.h"
 #include "../snapassisthandler.h"
+#include "../snaphandler.h"
 
 namespace PlasmaZones {
 
@@ -122,7 +123,7 @@ void PlasmaZonesEffect::slotMoveSpecificWindowToZoneRequested(const QString& win
         // so recording it here would double-track the window — same
         // discriminator as slotApplyGeometryRequested / the async snap path.
         if (!screenId.isEmpty() && !m_autotileHandler->isAutotileScreen(screenId)) {
-            markWindowSnapped(getWindowId(targetWindow), screenId);
+            m_snapHandler->markWindowSnapped(getWindowId(targetWindow), screenId);
         }
 
         // Snap Assist continuation: only for manual-mode screens.
@@ -163,7 +164,7 @@ void PlasmaZonesEffect::slotApplyGeometryRequested(const QString& windowId, int 
             applySnapGeometry(w, sizeOnlyGeo, /*allowDuringDrag=*/false, /*skipAnimation=*/false,
                               PhosphorAnimation::ProfilePaths::WindowSnapOut);
             // Drag-out unsnap: the window left zone-managed sizing.
-            clearWindowSnapped(windowId);
+            m_snapHandler->clearWindowSnapped(windowId);
         }
         return;
     }
@@ -233,9 +234,9 @@ void PlasmaZonesEffect::slotApplyGeometryRequested(const QString& windowId, int 
     //                             (AutotileHandler tracks autotile-screen windows)
     //   - snap-mode screen      → snap commit
     if (zoneId.isEmpty() || screenId.isEmpty() || m_autotileHandler->isAutotileScreen(screenId)) {
-        clearWindowSnapped(windowId);
+        m_snapHandler->clearWindowSnapped(windowId);
     } else {
-        markWindowSnapped(windowId, screenId);
+        m_snapHandler->markWindowSnapped(windowId, screenId);
     }
     // Note: windowSnapped/recordSnapIntent are NOT called here. For daemon-driven
     // navigation, the daemon handles zone bookkeeping internally before emitting
@@ -359,7 +360,7 @@ void PlasmaZonesEffect::slotApplyGeometriesBatch(const PhosphorProtocol::WindowG
             //   - snap-mode screen     → snap commit (unless floating)
             const QString batchWid = getWindowId(p.window);
             if (p.screenId.isEmpty() || m_autotileHandler->isAutotileScreen(p.screenId)) {
-                clearWindowSnapped(batchWid);
+                m_snapHandler->clearWindowSnapped(batchWid);
             } else {
                 // Real snap commit on a snap-mode screen. The daemon emits a non-empty
                 // authoritative screenId ONLY for genuine placements; float/restore
@@ -375,7 +376,7 @@ void PlasmaZonesEffect::slotApplyGeometriesBatch(const PhosphorProtocol::WindowG
                 // is an idempotent local FloatingCache write (no signal/D-Bus), so it is
                 // called unconditionally — no need to read-guard a no-op overwrite.
                 m_navigationHandler->setWindowFloating(batchWid, false);
-                markWindowSnapped(batchWid, p.screenId);
+                m_snapHandler->markWindowSnapped(batchWid, p.screenId);
             }
         },
         [this, savedStack, action]() {
@@ -657,7 +658,7 @@ void PlasmaZonesEffect::slotWindowFloatingChanged(const QString& windowId, bool 
         // empty zoneId (e.g. a float toggle when no pre-tile geometry is
         // stored, so applyGeometryForFloat sends nothing). Idempotent — a
         // no-op if the window wasn't snap-tracked.
-        clearWindowSnapped(windowId);
+        m_snapHandler->clearWindowSnapped(windowId);
 
         // Invalidate any stale instant-restore entry for this app. The
         // m_snapRestoreCache is a single-shot latency cache populated at

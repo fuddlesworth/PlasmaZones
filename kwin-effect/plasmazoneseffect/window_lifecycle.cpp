@@ -17,6 +17,7 @@
 #include <QPointer>
 
 #include "../autotilehandler.h"
+#include "../snaphandler.h"
 #include "../dragtracker.h"
 #include "../navigationhandler.h"
 #include "../screenchangehandler.h"
@@ -383,7 +384,7 @@ void PlasmaZonesEffect::slotWindowClosed(KWin::EffectWindow* w)
     // the window is being destroyed, so no setNoBorder/removeWindowBorder is
     // needed here (the border item is removed just below and the title bar
     // dies with the window).
-    PhosphorCompositor::AutotileStateHelpers::removeFromAllScreens(m_snapBorder, closedWindowId);
+    m_snapHandler->onWindowClosed(closedWindowId);
     // Drop any rule-hidden-title-bar tracking for the dying window. No
     // setNoBorder restore is needed (the title bar dies with the window); this
     // just prevents a stale windowId lingering in the set.
