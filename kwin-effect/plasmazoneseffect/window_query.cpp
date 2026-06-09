@@ -143,14 +143,13 @@ PhosphorWindowRule::WindowQuery windowRuleQueryFor(KWin::EffectWindow* w, const 
     // it on KWin's windowActivated signal (see slotWindowActivated), exactly
     // as they already do for windowClass / desktopFile changes.
     query.isFocused = (w == KWin::effects->activeWindow());
-    // Transient / notification family + live frame size. Engaged so the
-    // animation-exclusion base layer — ExcludeAnimations rules synthesized from
-    // the animationExcludeTransientWindows / animationExcludeNotificationsAndOsd
-    // / animationMinWindowWidth/Height config gates — resolves through the same
-    // RuleEvaluator path as user rules. Each predicate mirrors the legacy inline
-    // gate in shouldAnimateWindow VERBATIM so the fold is behaviour-preserving:
+    // Transient / notification family + live frame size — engaged so user rules
+    // can match on them (e.g. the built-in "Don't animate small windows"
+    // template's `Width < 300` ExcludeAnimations rule). Each predicate is defined
+    // to match shouldAnimateWindow's inline animation gate, so a user rule and the
+    // config toggle classify the same windows:
     //   transient    → the dialog/utility/popup/menu/tooltip/splash + transient-
-    //                   parent bucket the transient toggle filtered.
+    //                   parent bucket the transient toggle filters.
     //   notification → notification / critical-notification / on-screen-display.
     //   width/height → frame extent; a `Width LessThan N` leaf reproduces the
     //                  `frame.width() < N` strict-less-than gate (integer

@@ -678,7 +678,7 @@ void TestWindowRuleController::authoringMetadata()
     QVERIFY(sawActivityKind);
     QVERIFY(sawWindowTypeKind);
 
-    // The four match conditions added for the animation-gate fold must be
+    // The four match conditions (IsTransient/IsNotification/Width/Height) must be
     // authorable: present in the picker with the correct value kind, and with
     // the operators their category implies (bool -> Equals only; numeric ->
     // Equals/GreaterThan/LessThan). Guards the category-driven editor wiring

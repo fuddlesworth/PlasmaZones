@@ -39,11 +39,10 @@ private Q_SLOTS:
         QVERIFY(!result.isExcluded());
     }
 
-    // Validates the effect's animation-gate fold: config gates synthesized as
-    // ExcludeAnimations base rules over the IsNotification / IsTransient /
-    // Width fields resolve to isExcluded() through the full evaluator, exactly
-    // as PlasmaZonesEffect::synthesizeAnimationGateRules builds them.
-    void testAnimationGateFold_excludesViaNewFields()
+    // ExcludeAnimations rules authored over the new IsNotification / IsTransient
+    // / Width match fields resolve to isExcluded() through the full evaluator —
+    // e.g. the built-in "Don't animate small windows" template (Width < 300).
+    void testExcludeAnimationsOverNewFields()
     {
         const auto excludeAnimations = []() {
             RuleAction a;
@@ -52,11 +51,11 @@ private Q_SLOTS:
         };
         WindowRuleSet set;
         set.setRules({
-            makeRule(QStringLiteral("[system] notifications"), 0,
+            makeRule(QStringLiteral("exclude notifications"), 0,
                      MatchExpression::makeLeaf(Field::IsNotification, Operator::Equals, true), {excludeAnimations()}),
-            makeRule(QStringLiteral("[system] transient"), 0,
+            makeRule(QStringLiteral("exclude transient"), 0,
                      MatchExpression::makeLeaf(Field::IsTransient, Operator::Equals, true), {excludeAnimations()}),
-            makeRule(QStringLiteral("[system] sub-300px-wide"), 0,
+            makeRule(QStringLiteral("exclude sub-300px-wide"), 0,
                      MatchExpression::makeLeaf(Field::Width, Operator::LessThan, 300), {excludeAnimations()}),
         });
         RuleEvaluator eval(set);
@@ -82,8 +81,8 @@ private Q_SLOTS:
         normal.width = 1200;
         QVERIFY(!eval.resolve(normal).isExcluded());
 
-        // Windowless context query — every new field is absent, so no gate
-        // matches (the base rules are inert during context resolution).
+        // Windowless context query — every new field is absent, so no rule
+        // matches (window-property predicates are inert during context resolution).
         WindowQuery ctx;
         ctx.screenId = QStringLiteral("DP-1");
         QVERIFY(!eval.resolve(ctx).isExcluded());

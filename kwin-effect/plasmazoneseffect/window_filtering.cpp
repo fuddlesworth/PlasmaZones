@@ -6,16 +6,10 @@
 #include <PhosphorProtocol/ClientHelpers.h>
 #include <PhosphorProtocol/ServiceConstants.h>
 
-#include <PhosphorWindowRule/MatchExpression.h>
-#include <PhosphorWindowRule/MatchTypes.h>
-#include <PhosphorWindowRule/RuleAction.h>
-#include <PhosphorWindowRule/WindowRule.h>
-
 #include <effect/effecthandler.h>
 #include <window.h>
 
 #include <QLoggingCategory>
-#include <QUuid>
 
 #include <optional>
 
@@ -244,19 +238,54 @@ bool PlasmaZonesEffect::shouldAnimateWindow(KWin::EffectWindow* w) const
         }
     }
 
-    // Exclusion gate — a single resolve over the unified animation exclusion
-    // rule set covers BOTH user-authored ExcludeAnimations rules AND the
-    // notification / transient / min-size config gates. The three gates are
-    // synthesized as ephemeral ExcludeAnimations base rules
-    // (IsNotification / IsTransient / Width<N / Height<N) folded into
-    // m_animationExclusionRuleSet — see synthesizeAnimationGateRules /
-    // rebuildAnimationExclusionRuleSet — so the query's IsNotification /
-    // IsTransient / Width / Height attributes (populated in windowRuleQueryFor)
-    // reproduce the former inline predicates verbatim. Placed after the
-    // rule-override path above so a positive animation rule still re-enables a
-    // window any gate would exclude. The `!isEmpty()` fast path keeps a window
-    // with no user rules AND every gate off free (notification/OSD is excluded
-    // by default, so the set is normally non-empty).
+    // Notification and OSD surfaces — excluded by default via the
+    // Window Filtering toggle (animationExcludeNotificationsAndOsd).
+    // Most shell notifications/OSDs are layer-shell surfaces already
+    // rejected by the structural block above; this catches the
+    // remainder — notification windows some apps spawn as ordinary
+    // toplevels. Placed after the rule-override so a class-targeted
+    // rule can still re-enable them, mirroring the transient filter.
+    if (m_animationExcludeNotificationsAndOsd
+        && (w->isNotification() || w->isCriticalNotification() || w->isOnScreenDisplay())) {
+        return false;
+    }
+
+    // Transient-window filter — covers dialogs / popups / tooltips /
+    // dropdowns / menus / utility windows. Mirrors the snapping
+    // exclusion's transient bucket, plus the popup-window family that
+    // KWin distinguishes (PopupMenu, DropdownMenu, Tooltip) so a user
+    // who wants the popup category animated can still opt out of these
+    // sub-types via the toggle.
+    if (m_animationExcludeTransientWindows) {
+        if (w->isDialog() || w->isUtility() || w->isPopupWindow() || w->isPopupMenu() || w->isDropdownMenu()
+            || w->isTooltip() || w->isMenu() || w->isSplash() || w->transientFor()) {
+            return false;
+        }
+    }
+
+    // Min-size filter — windows narrower or shorter than the threshold
+    // are excluded. Zero (the default) disables each axis independently
+    // so a user can set just one bound. Frame geometry is read live —
+    // during minimize/close lifecycle a window may already be collapsed
+    // when this fires, which is acceptable: the user opted into the
+    // size threshold so a transient sub-threshold frame should suppress
+    // the animation consistently with explicit-size cases.
+    const QRectF frame = w->frameGeometry();
+    if (m_animationMinWindowWidth > 0 && frame.width() < m_animationMinWindowWidth) {
+        return false;
+    }
+    if (m_animationMinWindowHeight > 0 && frame.height() < m_animationMinWindowHeight) {
+        return false;
+    }
+
+    // User-configured exclusion lists — routed through the unified
+    // RuleEvaluator over the animation exclusion rule set, the same path
+    // `shouldHandleWindow` uses for the snapping exclusions. Both filter
+    // sets walk the full WindowQuery match expression (AppId / WindowClass /
+    // Title / WindowRole / DesktopFile / WindowType / Pid / state flags),
+    // so the two are in lockstep on match semantics even though their rule
+    // sets are independent. The `!isEmpty()` fast path keeps a no-exclusions
+    // user free.
     if (!m_animationExclusionRuleSet.isEmpty()) {
         if (m_animationExclusionEvaluator.resolve(query()).isExcluded()) {
             return false;
@@ -264,63 +293,6 @@ bool PlasmaZonesEffect::shouldAnimateWindow(KWin::EffectWindow* w) const
     }
 
     return true;
-}
-
-QList<PhosphorWindowRule::WindowRule> PlasmaZonesEffect::synthesizeAnimationGateRules() const
-{
-    using namespace PhosphorWindowRule;
-    QList<WindowRule> rules;
-
-    // Each enabled gate becomes one ephemeral ExcludeAnimations rule whose
-    // match reproduces the former inline predicate. Fixed ids keep the rules
-    // stable across rebuilds; priority 0 = base layer (ExcludeAnimations is
-    // terminal, so any match excludes — priority among exclusion rules does not
-    // change the isExcluded() outcome). These rules are never persisted.
-    const auto makeGate = [](const QString& id, const QString& name, const MatchExpression& match) {
-        WindowRule r;
-        r.id = QUuid(id);
-        r.name = name;
-        r.enabled = true;
-        r.priority = 0;
-        r.match = match;
-        RuleAction action;
-        action.type = ActionType::ExcludeAnimations;
-        r.actions.append(action);
-        return r;
-    };
-
-    if (m_animationExcludeNotificationsAndOsd) {
-        rules.append(makeGate(QStringLiteral("{b1f7a6c0-0000-4000-8000-000000000001}"),
-                              QStringLiteral("[system] exclude notifications from animations"),
-                              MatchExpression::makeLeaf(Field::IsNotification, Operator::Equals, true)));
-    }
-    if (m_animationExcludeTransientWindows) {
-        rules.append(makeGate(QStringLiteral("{b1f7a6c0-0000-4000-8000-000000000002}"),
-                              QStringLiteral("[system] exclude transient windows from animations"),
-                              MatchExpression::makeLeaf(Field::IsTransient, Operator::Equals, true)));
-    }
-    if (m_animationMinWindowWidth > 0) {
-        rules.append(makeGate(QStringLiteral("{b1f7a6c0-0000-4000-8000-000000000003}"),
-                              QStringLiteral("[system] exclude sub-minimum-width windows from animations"),
-                              MatchExpression::makeLeaf(Field::Width, Operator::LessThan, m_animationMinWindowWidth)));
-    }
-    if (m_animationMinWindowHeight > 0) {
-        rules.append(
-            makeGate(QStringLiteral("{b1f7a6c0-0000-4000-8000-000000000004}"),
-                     QStringLiteral("[system] exclude sub-minimum-height windows from animations"),
-                     MatchExpression::makeLeaf(Field::Height, Operator::LessThan, m_animationMinWindowHeight)));
-    }
-    return rules;
-}
-
-void PlasmaZonesEffect::rebuildAnimationExclusionRuleSet()
-{
-    QList<PhosphorWindowRule::WindowRule> combined = m_animationExclusionUserRules;
-    combined.append(synthesizeAnimationGateRules());
-    // setRules bumps the bound set's revision so the evaluator's per-revision
-    // sort index rebuilds on its next walk (this evaluator calls uncached
-    // resolve(), so there is no per-window match cache to drop).
-    m_animationExclusionRuleSet.setRules(combined);
 }
 
 bool PlasmaZonesEffect::isTileableWindow(KWin::EffectWindow* w, QString* rejectReason) const

@@ -156,8 +156,7 @@ QVariantMap newRuleFromTemplate(const QString& templateId)
         rule.priority = kAnimationBandBase;
         // Seed a 300px width threshold; the user adjusts it in the editor.
         // ExcludeAnimations is terminal, so any matching window skips its
-        // open/close animation. Showcases the Width numeric match field added
-        // for the animation-gate fold.
+        // open/close animation. Showcases the Width numeric match field.
         rule.match = MatchExpression::makeLeaf(Field::Width, Operator::LessThan, 300);
         RuleAction action;
         action.type = QString::fromLatin1(ActionType::ExcludeAnimations);
