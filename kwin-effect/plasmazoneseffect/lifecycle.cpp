@@ -705,7 +705,7 @@ PlasmaZonesEffect::PlasmaZonesEffect()
         m_bridgeRegistrationInFlight = false;
         m_daemonReadyRestoresDone = false;
         m_daemonReadyWindowStateProcessed = false;
-        m_snapRestoreCache.clear();
+        m_snapHandler->clearRestoreCache();
         // Reset the rules-subscription gate so the next daemon's
         // `rulesChanged` broadcasts can be re-subscribed. Without this,
         // the daemonReady disconnect+reconnect dance below would re-wire

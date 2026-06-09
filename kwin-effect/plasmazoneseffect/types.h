@@ -300,19 +300,6 @@ struct ShaderTransition
     std::unique_ptr<KWin::GLTexture> oldSnapshot;
 };
 
-/// Pre-computed snap restore target for a pending app
-/// (appId → geometry + saved screen).
-/// Fetched once from daemon on ready; consumed in slotWindowAdded for
-/// instant teleport (no D-Bus round-trip visible flash). The screenId
-/// lets the effect tell "cached saved zone is on snap-mode screen X" from
-/// "current KWin placement is autotile screen Y" — we trust the saved
-/// screen, not the placement, so cross-VS / cross-monitor restores work.
-struct CachedSnapRestore
-{
-    QRect geometry;
-    QString screenId;
-};
-
 /// First-frame suppression bookkeeping for a window that is about to be
 /// repositioned on open (snap-restore or autotile).
 ///

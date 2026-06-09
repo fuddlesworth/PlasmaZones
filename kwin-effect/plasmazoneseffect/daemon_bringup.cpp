@@ -333,7 +333,7 @@ void PlasmaZonesEffect::processDaemonReadyWindowState()
                 return;
             }
             QJsonObject obj = doc.object();
-            m_snapRestoreCache.clear();
+            m_snapHandler->clearRestoreCache();
             for (auto it = obj.constBegin(); it != obj.constEnd(); ++it) {
                 QJsonObject geo = it.value().toObject();
                 int x = geo[QLatin1String("x")].toInt();
@@ -342,10 +342,10 @@ void PlasmaZonesEffect::processDaemonReadyWindowState()
                 int h = geo[QLatin1String("height")].toInt();
                 QString savedScreen = geo[QLatin1String("screenId")].toString();
                 if (w > 0 && h > 0) {
-                    m_snapRestoreCache.insert(it.key(), CachedSnapRestore{QRect(x, y, w, h), savedScreen});
+                    m_snapHandler->cacheRestore(it.key(), CachedSnapRestore{QRect(x, y, w, h), savedScreen});
                 }
             }
-            qCDebug(lcEffect) << "Cached" << m_snapRestoreCache.size() << "pending restore geometries";
+            qCDebug(lcEffect) << "Cached" << m_snapHandler->restoreCacheSize() << "pending restore geometries";
         });
     }
 

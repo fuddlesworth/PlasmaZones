@@ -156,16 +156,18 @@ void PlasmaZonesEffect::slotWindowAdded(KWin::EffectWindow* w)
     // Rare race: the saved screen may have flipped from snap→autotile between
     // when the cache was populated and when the window opens. Re-check the
     // entry's screen mode via the autotile handler before applying.
-    if (canSnapRestore && !m_snapRestoreCache.isEmpty()) {
-        QString appId = ::PhosphorIdentity::WindowId::extractAppId(windowId);
-        auto cacheIt = m_snapRestoreCache.find(appId);
-        if (cacheIt != m_snapRestoreCache.end()) {
-            const CachedSnapRestore& cached = cacheIt.value();
+    if (canSnapRestore && !m_snapHandler->restoreCacheEmpty()) {
+        const QString appId = ::PhosphorIdentity::WindowId::extractAppId(windowId);
+        // Single-shot semantics: takeRestore erases the entry on lookup, so any
+        // entry seen here is consumed regardless of which branch below runs (the
+        // entry has been considered for routing whether or not it was applied,
+        // so the next open of the same appId won't re-evaluate a dead entry).
+        if (const std::optional<CachedSnapRestore> cached = m_snapHandler->takeRestore(appId)) {
             const bool savedScreenNowAutotile =
-                !cached.screenId.isEmpty() && m_autotileHandler->isAutotileScreen(cached.screenId);
-            if (cached.geometry.isValid() && !savedScreenNowAutotile) {
-                qCInfo(lcEffect) << "Instant snap restore for" << appId << "to:" << cached.geometry
-                                 << "screen:" << cached.screenId;
+                !cached->screenId.isEmpty() && m_autotileHandler->isAutotileScreen(cached->screenId);
+            if (cached->geometry.isValid() && !savedScreenNowAutotile) {
+                qCInfo(lcEffect) << "Instant snap restore for" << appId << "to:" << cached->geometry
+                                 << "screen:" << cached->screenId;
                 // skipAnimation=true: teleport straight into the zone.
                 // First-frame open suppression (beginRestoreSuppression
                 // above in slotWindowAdded) withholds the window from
@@ -174,28 +176,20 @@ void PlasmaZonesEffect::slotWindowAdded(KWin::EffectWindow* w)
                 // already reports the resolved zone — the surface-extent
                 // open shader (bounce, fly-in) plays into the zone from
                 // the first painted frame without any anchor pinning.
-                applySnapGeometry(w, cached.geometry, false, /*skipAnimation=*/true);
+                applySnapGeometry(w, cached->geometry, false, /*skipAnimation=*/true);
                 // Re-evaluate screen after teleport — cross-VS/cross-monitor
                 // moveResize updates KWin's output assignment, so the window
                 // may no longer be on an autotile screen.
                 onAutotileScreen = m_autotileHandler->isAutotileScreen(getWindowScreenId(w));
             } else if (savedScreenNowAutotile) {
                 qCDebug(lcEffect) << "Skipping instant snap restore for" << appId
-                                  << "- saved screen now autotile:" << cached.screenId;
+                                  << "- saved screen now autotile:" << cached->screenId;
             } else {
                 // Cached geometry is invalid (corrupt / zero-size persisted
-                // rect on a snap-mode screen). The cache is single-shot
-                // per app-open: any entry seen here has been considered
-                // for routing, regardless of whether it was actually
-                // applied. Drop it so the next open of the same appId
-                // doesn't re-evaluate this same dead entry forever.
+                // rect on a snap-mode screen).
                 qCDebug(lcEffect) << "Discarding instant snap restore entry for" << appId
-                                  << "- geometry invalid:" << cached.geometry << "screen:" << cached.screenId;
+                                  << "- geometry invalid:" << cached->geometry << "screen:" << cached->screenId;
             }
-            // Single-shot semantics: the entry is consumed regardless of
-            // which branch ran, so erase unconditionally once we've
-            // looked at it.
-            m_snapRestoreCache.erase(cacheIt);
         }
     }
 
@@ -255,9 +249,9 @@ void PlasmaZonesEffect::slotWindowAdded(KWin::EffectWindow* w)
         // nothing got registered (zones=1 of 7 in the field logs).
         //
         // The earlier skip of this call after an instant restore assumed the
-        // daemon "would just answer no zone" once the effect's m_snapRestoreCache
-        // entry was consumed. That is false: m_snapRestoreCache is an effect-side
-        // latency cache, separate from the daemon's pending-restore queue.
+        // daemon "would just answer no zone" once the snap restore cache
+        // entry was consumed. That is false: the snap restore cache is an
+        // effect-side latency cache, separate from the daemon's pending-restore queue.
         // pendingRestoreGeometries() (which populates the cache) is a const
         // read and does NOT consume the daemon queue, so resolveWindowRestore
         // still matches the pending entry, consumes it, and commits. When

@@ -6,15 +6,32 @@
 #include <PhosphorCompositor/AutotileState.h>
 
 #include <QColor>
+#include <QHash>
 #include <QObject>
 #include <QPointF>
+#include <QRect>
 #include <QString>
+
+#include <optional>
 
 namespace PlasmaZones {
 
 using namespace PhosphorCompositor;
 
 class PlasmaZonesEffect;
+
+/// Pre-computed snap restore target for a pending app (appId → geometry + saved
+/// screen). Fetched once from the daemon on ready; consumed single-shot in
+/// PlasmaZonesEffect::slotWindowAdded for instant teleport (no D-Bus round-trip
+/// visible flash). The screenId lets the effect tell "cached saved zone is on
+/// snap-mode screen X" from "current KWin placement is autotile screen Y" — we
+/// trust the saved screen, not the placement, so cross-VS / cross-monitor
+/// restores work.
+struct CachedSnapRestore
+{
+    QRect geometry;
+    QString screenId;
+};
 
 /**
  * @brief Handles snapping integration for PlasmaZones.
@@ -64,6 +81,43 @@ public:
     /// guard), so a dialog/popup floating over a snapped window keeps focus.
     /// Called from PlasmaZonesEffect::slotMouseChanged when not dragging.
     void handleCursorMoved(const QPointF& pos, const QString& screenId);
+
+    // ── Snap restore cache (instant snap-restore-on-open latency cache) ──
+    // Populated from the daemon's pending restores on daemon-ready; consumed
+    // single-shot in PlasmaZonesEffect::slotWindowAdded for flash-free teleport.
+    void clearRestoreCache()
+    {
+        m_restoreCache.clear();
+    }
+    void cacheRestore(const QString& appId, const CachedSnapRestore& entry)
+    {
+        m_restoreCache.insert(appId, entry);
+    }
+    bool restoreCacheEmpty() const
+    {
+        return m_restoreCache.isEmpty();
+    }
+    int restoreCacheSize() const
+    {
+        return m_restoreCache.size();
+    }
+    void invalidateRestore(const QString& appId)
+    {
+        m_restoreCache.remove(appId);
+    }
+    /// Look up and REMOVE the restore entry for @p appId (single-shot consume).
+    /// Returns nullopt if none. The entry is erased on lookup regardless of
+    /// whether the caller ends up applying it.
+    std::optional<CachedSnapRestore> takeRestore(const QString& appId)
+    {
+        auto it = m_restoreCache.find(appId);
+        if (it == m_restoreCache.end()) {
+            return std::nullopt;
+        }
+        const CachedSnapRestore entry = it.value();
+        m_restoreCache.erase(it);
+        return entry;
+    }
 
     // ── Border rendering accessors — delegate to shared AutotileStateHelpers ──
     bool isBorderlessWindow(const QString& windowId) const
@@ -140,6 +194,9 @@ private:
     // AutotileHandler::m_border. Populated at snap commit, cleared on
     // float / unsnap / close.
     BorderState m_border;
+    // Single-shot instant-restore latency cache (appId → saved zone geometry +
+    // screen), populated on daemon-ready and consumed on window-open.
+    QHash<QString, CachedSnapRestore> m_restoreCache;
 };
 
 } // namespace PlasmaZones

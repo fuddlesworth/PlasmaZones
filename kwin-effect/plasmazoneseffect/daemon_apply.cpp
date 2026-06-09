@@ -660,8 +660,8 @@ void PlasmaZonesEffect::slotWindowFloatingChanged(const QString& windowId, bool 
         // no-op if the window wasn't snap-tracked.
         m_snapHandler->clearWindowSnapped(windowId);
 
-        // Invalidate any stale instant-restore entry for this app. The
-        // m_snapRestoreCache is a single-shot latency cache populated at
+        // Invalidate any stale instant-restore entry for this app. The snap
+        // restore cache (SnapHandler) is a single-shot latency cache populated at
         // daemon-ready from the daemon's pending restores. Once a window
         // floats, its saved zone no longer applies: windowClosed() will NOT
         // persist a PendingRestore for a floating window (it should reopen
@@ -671,7 +671,7 @@ void PlasmaZonesEffect::slotWindowFloatingChanged(const QString& windowId, bool 
         // snapped but untracked. Dropping the entry makes the reopen take the
         // authoritative daemon path so the window stays floating. Keyed by
         // appId to survive the window's identity change across close/reopen.
-        m_snapRestoreCache.remove(::PhosphorIdentity::WindowId::extractAppId(windowId));
+        m_snapHandler->invalidateRestore(::PhosphorIdentity::WindowId::extractAppId(windowId));
     }
 }
 

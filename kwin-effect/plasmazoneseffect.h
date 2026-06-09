@@ -950,13 +950,6 @@ private:
     bool m_bridgeRegistrationInFlight = false;
     bool m_daemonReadyRestoresDone = false; ///< set after slotDaemonReady snap restores dispatched
 
-    /// Pre-computed snap restore target for a pending app (appId → geometry + saved screen).
-    /// Fetched once from daemon on ready; consumed in slotWindowAdded for instant
-    /// teleport (no D-Bus round-trip visible flash). The screenId lets the effect
-    /// tell "cached saved zone is on snap-mode screen X" from "current KWin
-    /// placement is autotile screen Y" — we trust the saved screen, not the
-    /// placement, so cross-VS / cross-monitor restores work.
-    QHash<QString, CachedSnapRestore> m_snapRestoreCache;
     bool m_virtualScreensReady = false; ///< set after all fetchVirtualScreenConfig replies arrive
     /// True while a daemon-driven geometry apply (slotApplyGeometriesBatch / slotWindowsTileRequested)
     /// is moving a window. Suppresses the windowFrameGeometryChanged crossing-detection paths so a
