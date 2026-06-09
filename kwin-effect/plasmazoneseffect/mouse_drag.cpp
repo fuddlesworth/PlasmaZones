@@ -144,7 +144,15 @@ void PlasmaZonesEffect::handleSnapCursorMoved(const QPointF& pos, const QString&
     // worth protecting.
     if (KWin::EffectWindow* active = KWin::effects->activeWindow()) {
         // Cheap overlay-class check first, then the heavier screen resolution
-        // (mirrors the autotile guard's predicate ordering).
+        // (mirrors the autotile guard's predicate ordering). The predicate is
+        // deliberately wider than the under-cursor occlusion guard below: there
+        // we only look *through* a snapped window, but here a normal tileable
+        // active window (a regular app the user is working in, not a popup) must
+        // not pause FFM either. Only a non-snapped, non-tileable active window
+        // (dialog/popup/excluded app) is worth protecting. Both of autotile's
+        // guards key off the same tileable/shouldHandle membership; snap's managed
+        // set (snapped) is narrower than tileable, so here the pause guard accepts
+        // the extra isTileableWindow case the occlusion guard below does not.
         if (!isOwnOverlayClass(active->windowClass()) && getWindowScreenId(active) == screenId
             && !isWindowMarkedSnapped(getWindowId(active)) && !isTileableWindow(active)) {
             return;
