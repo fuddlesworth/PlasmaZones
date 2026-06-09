@@ -647,6 +647,14 @@ QString WindowRuleModel::fieldLabel(Field field)
         return PhosphorI18n::tr("Desktop");
     case Field::Activity:
         return PhosphorI18n::tr("Activity");
+    case Field::IsTransient:
+        return PhosphorI18n::tr("Transient");
+    case Field::IsNotification:
+        return PhosphorI18n::tr("Notification");
+    case Field::Width:
+        return PhosphorI18n::tr("Width");
+    case Field::Height:
+        return PhosphorI18n::tr("Height");
     }
     return QString();
 }

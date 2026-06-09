@@ -148,6 +148,38 @@ private Q_SLOTS:
         QVERIFY(isFalse.evaluate(firefoxQuery()));
     }
 
+    void testTransientNotificationFields()
+    {
+        WindowQuery q;
+        q.windowClass = QStringLiteral("plasmashell");
+        q.isTransient = true;
+        q.isNotification = false;
+
+        QVERIFY(MatchExpression::makeLeaf(Field::IsTransient, Operator::Equals, true).evaluate(q));
+        QVERIFY(!MatchExpression::makeLeaf(Field::IsTransient, Operator::Equals, false).evaluate(q));
+        QVERIFY(MatchExpression::makeLeaf(Field::IsNotification, Operator::Equals, false).evaluate(q));
+        // Absent on a query that never set the flag — inert, never matches.
+        WindowQuery noFlags;
+        noFlags.appId = QStringLiteral("firefox");
+        QVERIFY(!MatchExpression::makeLeaf(Field::IsTransient, Operator::Equals, true).evaluate(noFlags));
+    }
+
+    void testWindowSizeFields()
+    {
+        WindowQuery q;
+        q.appId = QStringLiteral("firefox");
+        q.width = 250;
+        q.height = 600;
+
+        // "Smaller than 300px wide" — the min-size exclusion gate as a rule.
+        QVERIFY(MatchExpression::makeLeaf(Field::Width, Operator::LessThan, 300).evaluate(q));
+        QVERIFY(!MatchExpression::makeLeaf(Field::Height, Operator::LessThan, 300).evaluate(q));
+        QVERIFY(MatchExpression::makeLeaf(Field::Width, Operator::GreaterThan, 100).evaluate(q));
+        QVERIFY(MatchExpression::makeLeaf(Field::Width, Operator::Equals, 250).evaluate(q));
+        // String/regex operators are invalid on a numeric field.
+        QVERIFY(!MatchExpression::makeLeaf(Field::Width, Operator::Contains, QStringLiteral("25")).isValid());
+    }
+
     void testWindowTypeField()
     {
         const auto expr =

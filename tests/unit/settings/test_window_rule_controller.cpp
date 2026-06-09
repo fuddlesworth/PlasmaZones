@@ -678,6 +678,37 @@ void TestWindowRuleController::authoringMetadata()
     QVERIFY(sawActivityKind);
     QVERIFY(sawWindowTypeKind);
 
+    // The four match conditions (IsTransient/IsNotification/Width/Height) must be
+    // authorable: present in the picker with the correct value kind, and with
+    // the operators their category implies (bool -> Equals only; numeric ->
+    // Equals/GreaterThan/LessThan). Guards the category-driven editor wiring
+    // against a future deny-set or classifier regression.
+    QHash<QString, QString> kindByWire;
+    QHash<QString, int> valueByWire;
+    for (const QVariant& v : fields) {
+        const QVariantMap f = v.toMap();
+        const QString wire = f.value(QStringLiteral("wire")).toString();
+        kindByWire.insert(wire, f.value(QStringLiteral("valueKind")).toString());
+        valueByWire.insert(wire, f.value(QStringLiteral("value")).toInt());
+    }
+    QCOMPARE(kindByWire.value(QStringLiteral("isTransient")), QStringLiteral("bool"));
+    QCOMPARE(kindByWire.value(QStringLiteral("isNotification")), QStringLiteral("bool"));
+    QCOMPARE(kindByWire.value(QStringLiteral("width")), QStringLiteral("number"));
+    QCOMPARE(kindByWire.value(QStringLiteral("height")), QStringLiteral("number"));
+
+    const auto opWires = [&](const QString& wire) {
+        QSet<QString> s;
+        for (const QVariant& v : controller.operatorsForField(valueByWire.value(wire))) {
+            s.insert(v.toMap().value(QStringLiteral("wire")).toString());
+        }
+        return s;
+    };
+    const QSet<QString> widthOps = opWires(QStringLiteral("width"));
+    QVERIFY(widthOps.contains(QStringLiteral("lessThan")));
+    QVERIFY(widthOps.contains(QStringLiteral("greaterThan")));
+    QVERIFY(widthOps.contains(QStringLiteral("equals")));
+    QCOMPARE(opWires(QStringLiteral("isTransient")), QSet<QString>{QStringLiteral("equals")});
+
     // AppId (Field enum 0) supports the AppIdMatches operator.
     const QVariantList appOps = controller.operatorsForField(0);
     QVERIFY(!appOps.isEmpty());
@@ -763,6 +794,19 @@ void TestWindowRuleController::templatesProduceSeededRules()
     const QVariantList excludeActions = excludeRule.value(QStringLiteral("actions")).toList();
     QCOMPARE(excludeActions.size(), 1);
     QCOMPARE(excludeActions.at(0).toMap().value(QStringLiteral("type")).toString(), QStringLiteral("exclude"));
+
+    // `excludeSmallFromAnimations` showcases the new Width numeric match field:
+    // a `Width LessThan 300` leaf + a single terminal ExcludeAnimations action.
+    // Regression here means the quick-start that demonstrates the new fields is
+    // broken or silently authoring the wrong predicate.
+    const QVariantMap smallRule = controller.newRuleFromTemplate(QStringLiteral("excludeSmallFromAnimations"));
+    const QVariantMap smallMatch = smallRule.value(QStringLiteral("match")).toMap();
+    QCOMPARE(smallMatch.value(QStringLiteral("field")).toString(), QStringLiteral("width"));
+    QCOMPARE(smallMatch.value(QStringLiteral("op")).toString(), QStringLiteral("lessThan"));
+    QCOMPARE(smallMatch.value(QStringLiteral("value")).toInt(), 300);
+    const QVariantList smallActions = smallRule.value(QStringLiteral("actions")).toList();
+    QCOMPARE(smallActions.size(), 1);
+    QCOMPARE(smallActions.at(0).toMap().value(QStringLiteral("type")).toString(), QStringLiteral("excludeAnimations"));
 
     // An unknown id must return an empty map — the AddRuleSheet would
     // otherwise commit a UUID-less rule on a typo in the template id.

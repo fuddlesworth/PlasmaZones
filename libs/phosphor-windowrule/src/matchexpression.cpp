@@ -350,7 +350,7 @@ bool MatchExpression::evaluateLeaf(const WindowQuery& query) const
         return subject.toBool() == value.toBool();
     }
 
-    // ── Numeric fields (Pid / VirtualDesktop) ──
+    // ── Numeric fields (Pid / VirtualDesktop / Width / Height) ──
     if (fieldIsNumeric(m_predicate.field)) {
         const int lhs = subject.toInt();
         const int rhs = value.toInt();

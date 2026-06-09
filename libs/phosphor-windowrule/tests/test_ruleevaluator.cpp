@@ -39,6 +39,55 @@ private Q_SLOTS:
         QVERIFY(!result.isExcluded());
     }
 
+    // ExcludeAnimations rules authored over the new IsNotification / IsTransient
+    // / Width match fields resolve to isExcluded() through the full evaluator —
+    // e.g. the built-in "Don't animate small windows" template (Width < 300).
+    void testExcludeAnimationsOverNewFields()
+    {
+        const auto excludeAnimations = []() {
+            RuleAction a;
+            a.type = QString(ActionType::ExcludeAnimations);
+            return a;
+        };
+        WindowRuleSet set;
+        set.setRules({
+            makeRule(QStringLiteral("exclude notifications"), 0,
+                     MatchExpression::makeLeaf(Field::IsNotification, Operator::Equals, true), {excludeAnimations()}),
+            makeRule(QStringLiteral("exclude transient"), 0,
+                     MatchExpression::makeLeaf(Field::IsTransient, Operator::Equals, true), {excludeAnimations()}),
+            makeRule(QStringLiteral("exclude sub-300px-wide"), 0,
+                     MatchExpression::makeLeaf(Field::Width, Operator::LessThan, 300), {excludeAnimations()}),
+        });
+        RuleEvaluator eval(set);
+
+        WindowQuery notif;
+        notif.appId = QStringLiteral("app");
+        notif.isNotification = true;
+        notif.isTransient = false;
+        notif.width = 800;
+        QVERIFY(eval.resolve(notif).isExcluded());
+
+        WindowQuery tiny;
+        tiny.appId = QStringLiteral("app");
+        tiny.isNotification = false;
+        tiny.isTransient = false;
+        tiny.width = 250;
+        QVERIFY(eval.resolve(tiny).isExcluded());
+
+        WindowQuery normal;
+        normal.appId = QStringLiteral("app");
+        normal.isNotification = false;
+        normal.isTransient = false;
+        normal.width = 1200;
+        QVERIFY(!eval.resolve(normal).isExcluded());
+
+        // Windowless context query — every new field is absent, so no rule
+        // matches (window-property predicates are inert during context resolution).
+        WindowQuery ctx;
+        ctx.screenId = QStringLiteral("DP-1");
+        QVERIFY(!eval.resolve(ctx).isExcluded());
+    }
+
     void testNoMatchingRule_resolvesEmpty()
     {
         WindowRuleSet set;

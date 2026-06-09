@@ -18,7 +18,7 @@ private Q_SLOTS:
         // Canary: the loop bound is derived from FieldCount, not hard-coded.
         // If this fails, an enumerator was added/removed without updating
         // FieldCount in MatchTypes.h.
-        QCOMPARE(FieldCount, 15);
+        QCOMPARE(FieldCount, 19);
         QTest::addColumn<int>("fieldValue");
         for (int v = 0; v < FieldCount; ++v) {
             QTest::addRow("field-%d", v) << v;
@@ -121,6 +121,10 @@ private Q_SLOTS:
         QVERIFY(!fieldIsContext(Field::IsMinimized));
         QVERIFY(!fieldIsContext(Field::IsMaximized));
         QVERIFY(!fieldIsContext(Field::IsFocused));
+        QVERIFY(!fieldIsContext(Field::IsTransient));
+        QVERIFY(!fieldIsContext(Field::IsNotification));
+        QVERIFY(!fieldIsContext(Field::Width));
+        QVERIFY(!fieldIsContext(Field::Height));
     }
 
     void testFieldIsContext_coversAllFields_data()
