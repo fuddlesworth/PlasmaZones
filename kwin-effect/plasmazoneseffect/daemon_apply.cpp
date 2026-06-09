@@ -430,33 +430,9 @@ void PlasmaZonesEffect::slotWindowMinimizedChanged(KWin::EffectWindow* w)
                                /*reverse=*/false);
     }
 
-    // Snap-mode-only float bookkeeping below: the autotile handler runs
-    // its own snap-state / float-state machine for autotile screens.
-    if (m_autotileHandler->isAutotileScreen(screenId)) {
-        return;
-    }
-
-    if (minimized) {
-        if (isWindowFloating(windowId)) {
-            qCDebug(lcEffect) << "Snap: minimized already-floating window, skipping float:" << windowId;
-            return;
-        }
-        m_snapHandler->addMinimizeFloated(windowId);
-    } else {
-        if (!m_snapHandler->removeMinimizeFloated(windowId)) {
-            qCDebug(lcEffect) << "Snap: unminimized window was not minimize-floated, skipping unfloat:" << windowId;
-            return;
-        }
-    }
-
-    qCInfo(lcEffect) << "Snap: window" << (minimized ? "minimized, floating:" : "unminimized, unfloating:") << windowId
-                     << "on" << screenId;
-
-    if (m_daemonServiceRegistered) {
-        PhosphorProtocol::ClientHelpers::fireAndForget(
-            this, PhosphorProtocol::Service::Interface::WindowTracking, QStringLiteral("setWindowFloatingForScreen"),
-            {windowId, screenId, minimized}, QStringLiteral("setWindowFloatingForScreen"));
-    }
+    // Snap-mode-only minimize→float bookkeeping is owned by SnapHandler (mirrors
+    // AutotileHandler running its own minimize→float machine for autotile screens).
+    m_snapHandler->handleMinimizeChanged(windowId, screenId, minimized);
 }
 
 void PlasmaZonesEffect::slotRunningWindowsRequested()

@@ -404,6 +404,38 @@ void SnapHandler::callCancelSnap()
                                                 QStringLiteral("cancelSnap"));
 }
 
+void SnapHandler::handleMinimizeChanged(const QString& windowId, const QString& screenId, bool minimized)
+{
+    // Snap-mode-only: the autotile handler runs its own snap-state / float-state
+    // machine for autotile screens.
+    if (m_effect->autotileHandler()->isAutotileScreen(screenId)) {
+        return;
+    }
+
+    if (minimized) {
+        if (m_effect->isWindowFloating(windowId)) {
+            qCDebug(lcEffect) << "Snap: minimized already-floating window, skipping float:" << windowId;
+            return;
+        }
+        m_minimizeFloatedWindows.insert(windowId);
+    } else {
+        if (!m_minimizeFloatedWindows.remove(windowId)) {
+            qCDebug(lcEffect) << "Snap: unminimized window was not minimize-floated, skipping unfloat:" << windowId;
+            return;
+        }
+    }
+
+    qCInfo(lcEffect) << "Snap: window" << (minimized ? "minimized, floating:" : "unminimized, unfloating:") << windowId
+                     << "on" << screenId;
+
+    if (m_effect->m_daemonServiceRegistered) {
+        PhosphorProtocol::ClientHelpers::fireAndForget(m_effect, PhosphorProtocol::Service::Interface::WindowTracking,
+                                                       QStringLiteral("setWindowFloatingForScreen"),
+                                                       {windowId, screenId, minimized},
+                                                       QStringLiteral("setWindowFloatingForScreen"));
+    }
+}
+
 void SnapHandler::slotSnapAssistReady(const QString& windowId, const QString& releaseScreenId,
                                       const PhosphorProtocol::EmptyZoneList& emptyZones)
 {

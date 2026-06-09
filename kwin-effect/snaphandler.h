@@ -144,14 +144,15 @@ public:
     /// external event). The daemon discards the in-flight snap.
     void callCancelSnap();
 
-    // ── Snap minimize-float tracking (mirrors AutotileHandler's set) ──
-    /// Record @p windowId as floated because it was minimized in snap mode.
-    void addMinimizeFloated(const QString& windowId)
-    {
-        m_minimizeFloatedWindows.insert(windowId);
-    }
-    /// Drop @p windowId from the minimize-float set. Returns true if it was
-    /// present (i.e. the window had been snap-minimize-floated).
+    // ── Snap minimize-float (mirrors AutotileHandler's minimize→float machine) ──
+    /// Drive the snap-mode minimize→float state machine: on a snapping-mode
+    /// screen, float a window when it minimizes and unfloat it when it
+    /// unminimizes (autotile screens run AutotileHandler's own machine). Called
+    /// from PlasmaZonesEffect::slotWindowMinimizedChanged after the shared
+    /// minimize shader event.
+    void handleMinimizeChanged(const QString& windowId, const QString& screenId, bool minimized);
+    /// Drop @p windowId from the minimize-float set (window closed). Returns
+    /// true if it was present.
     bool removeMinimizeFloated(const QString& windowId)
     {
         return m_minimizeFloatedWindows.remove(windowId);
