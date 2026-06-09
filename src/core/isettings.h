@@ -381,7 +381,7 @@ Q_SIGNALS:
     void keepWindowsInZonesOnResolutionChangeChanged();
     void moveNewWindowsToLastZoneChanged();
     void restoreOriginalSizeOnUnsnapChanged();
-    void stickyWindowHandlingChanged();
+    void snappingStickyWindowHandlingChanged();
     void restoreWindowsToZonesOnLoginChanged();
     void autoAssignAllLayoutsChanged();
     void snapAssistFeatureEnabledChanged();

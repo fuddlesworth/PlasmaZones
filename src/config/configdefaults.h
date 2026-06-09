@@ -426,7 +426,7 @@ public:
     {
         return true;
     }
-    static int stickyWindowHandling()
+    static int snappingStickyWindowHandling()
     {
         return 0;
     }

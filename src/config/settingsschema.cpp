@@ -722,7 +722,7 @@ void appendBehaviorSchema(PhosphorConfig::Schema& schema)
         {CD::moveNewToLastZoneKey(), CD::moveNewWindowsToLastZone(), QMetaType::Bool},
         {CD::restoreOnUnsnapKey(), CD::restoreOriginalSizeOnUnsnap(), QMetaType::Bool},
         {CD::stickyWindowHandlingKey(),
-         CD::stickyWindowHandling(),
+         CD::snappingStickyWindowHandling(),
          QMetaType::Int,
          {},
          clampInt(static_cast<int>(StickyWindowHandling::TreatAsNormal),

@@ -103,8 +103,8 @@ private Q_SLOTS:
         QVERIFY(ConfigDefaults::minimumZoneDisplaySizePx() <= ConfigDefaults::minimumZoneDisplaySizePxMax());
 
         // Behavior
-        QVERIFY(ConfigDefaults::stickyWindowHandling() >= 0);
-        QVERIFY(ConfigDefaults::stickyWindowHandling() <= 2);
+        QVERIFY(ConfigDefaults::snappingStickyWindowHandling() >= 0);
+        QVERIFY(ConfigDefaults::snappingStickyWindowHandling() <= 2);
         QVERIFY(ConfigDefaults::minimumWindowWidth() >= ConfigDefaults::minimumWindowWidthMin());
         QVERIFY(ConfigDefaults::minimumWindowWidth() <= ConfigDefaults::minimumWindowWidthMax());
         QVERIFY(ConfigDefaults::minimumWindowHeight() >= ConfigDefaults::minimumWindowHeightMin());

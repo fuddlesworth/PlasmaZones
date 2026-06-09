@@ -21,7 +21,7 @@ namespace PlasmaZones {
  * Also inherits PhosphorEngine::ISnapSettings so SnapEngine's
  * dynamic_cast<ISnapSettings*>(engineSettings()) succeeds when a stub is wired
  * via setEngineSettings(). The remaining ISnapSettings methods
- * (stickyWindowHandling, moveNewWindowsToLastZone,
+ * (snappingStickyWindowHandling, moveNewWindowsToLastZone,
  * restoreWindowsToZonesOnLogin, autoAssignAllLayouts) are already
  * implemented for ISettings — the multiple inheritance just registers
  * the second base so the cast resolves.
@@ -608,11 +608,11 @@ public:
     void setRestoreOriginalSizeOnUnsnap(bool) override
     {
     }
-    StickyWindowHandling stickyWindowHandling() const override
+    StickyWindowHandling snappingStickyWindowHandling() const override
     {
         return StickyWindowHandling::TreatAsNormal;
     }
-    void setStickyWindowHandling(StickyWindowHandling) override
+    void setSnappingStickyWindowHandling(StickyWindowHandling) override
     {
     }
     bool restoreWindowsToZonesOnLogin() const override

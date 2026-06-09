@@ -27,7 +27,7 @@ public:
     // SnapEngine via `setExcludeRuleSet`; consumers that previously called
     // these accessors evaluate against the rule set instead.
 
-    virtual StickyWindowHandling stickyWindowHandling() const = 0;
+    virtual StickyWindowHandling snappingStickyWindowHandling() const = 0;
     virtual bool moveNewWindowsToLastZone() const = 0;
     virtual bool restoreWindowsToZonesOnLogin() const = 0;
 

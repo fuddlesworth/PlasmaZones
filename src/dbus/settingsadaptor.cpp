@@ -444,19 +444,19 @@ void SettingsAdaptor::initializeRegistry()
                           setKeepWindowsInZonesOnResolutionChange)
     REGISTER_BOOL_SETTING("moveNewWindowsToLastZone", moveNewWindowsToLastZone, setMoveNewWindowsToLastZone)
     REGISTER_BOOL_SETTING("restoreOriginalSizeOnUnsnap", restoreOriginalSizeOnUnsnap, setRestoreOriginalSizeOnUnsnap)
-    // stickyWindowHandling: enum (0=TreatAsNormal, 1=RestoreOnly, 2=IgnoreAll)
-    m_getters[QStringLiteral("stickyWindowHandling")] = [this]() {
-        return static_cast<int>(m_settings->stickyWindowHandling());
+    // snappingStickyWindowHandling: enum (0=TreatAsNormal, 1=RestoreOnly, 2=IgnoreAll)
+    m_getters[QStringLiteral("snappingStickyWindowHandling")] = [this]() {
+        return static_cast<int>(m_settings->snappingStickyWindowHandling());
     };
-    m_setters[QStringLiteral("stickyWindowHandling")] = [this](const QVariant& v) {
+    m_setters[QStringLiteral("snappingStickyWindowHandling")] = [this](const QVariant& v) {
         int val = v.toInt();
         if (val >= 0 && val <= 2) {
-            m_settings->setStickyWindowHandling(static_cast<StickyWindowHandling>(val));
+            m_settings->setSnappingStickyWindowHandling(static_cast<StickyWindowHandling>(val));
             return true;
         }
         return false;
     };
-    m_schemas[QStringLiteral("stickyWindowHandling")] = QStringLiteral("int");
+    m_schemas[QStringLiteral("snappingStickyWindowHandling")] = QStringLiteral("int");
     REGISTER_BOOL_SETTING("restoreWindowsToZonesOnLogin", restoreWindowsToZonesOnLogin, setRestoreWindowsToZonesOnLogin)
     REGISTER_BOOL_SETTING("autoAssignAllLayouts", autoAssignAllLayouts, setAutoAssignAllLayouts)
     REGISTER_BOOL_SETTING("snapAssistFeatureEnabled", snapAssistFeatureEnabled, setSnapAssistFeatureEnabled)

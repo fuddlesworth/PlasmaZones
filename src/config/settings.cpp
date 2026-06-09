@@ -2040,16 +2040,16 @@ P_STORE_GET(bool, restoreOriginalSizeOnUnsnap, snappingBehaviorWindowHandlingGro
 P_STORE_SET_BOOL(setRestoreOriginalSizeOnUnsnap, snappingBehaviorWindowHandlingGroup, restoreOnUnsnapKey,
                  restoreOriginalSizeOnUnsnapChanged)
 
-StickyWindowHandling Settings::stickyWindowHandling() const
+StickyWindowHandling Settings::snappingStickyWindowHandling() const
 {
     return static_cast<StickyWindowHandling>(m_store->read<int>(ConfigDefaults::snappingBehaviorWindowHandlingGroup(),
                                                                 ConfigDefaults::stickyWindowHandlingKey()));
 }
-int Settings::stickyWindowHandlingInt() const
+int Settings::snappingStickyWindowHandlingInt() const
 {
-    return static_cast<int>(stickyWindowHandling());
+    return static_cast<int>(snappingStickyWindowHandling());
 }
-void Settings::setStickyWindowHandling(StickyWindowHandling handling)
+void Settings::setSnappingStickyWindowHandling(StickyWindowHandling handling)
 {
     const int before = m_store->read<int>(ConfigDefaults::snappingBehaviorWindowHandlingGroup(),
                                           ConfigDefaults::stickyWindowHandlingKey());
@@ -2060,14 +2060,14 @@ void Settings::setStickyWindowHandling(StickyWindowHandling handling)
     if (after == before) {
         return;
     }
-    Q_EMIT stickyWindowHandlingChanged();
+    Q_EMIT snappingStickyWindowHandlingChanged();
     Q_EMIT settingsChanged();
 }
-void Settings::setStickyWindowHandlingInt(int handling)
+void Settings::setSnappingStickyWindowHandlingInt(int handling)
 {
     if (handling >= static_cast<int>(StickyWindowHandling::TreatAsNormal)
         && handling <= static_cast<int>(StickyWindowHandling::IgnoreAll)) {
-        setStickyWindowHandling(static_cast<StickyWindowHandling>(handling));
+        setSnappingStickyWindowHandling(static_cast<StickyWindowHandling>(handling));
     }
 }
 

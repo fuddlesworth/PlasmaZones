@@ -168,8 +168,8 @@ public:
                    moveNewWindowsToLastZoneChanged)
     Q_PROPERTY(bool restoreOriginalSizeOnUnsnap READ restoreOriginalSizeOnUnsnap WRITE setRestoreOriginalSizeOnUnsnap
                    NOTIFY restoreOriginalSizeOnUnsnapChanged)
-    Q_PROPERTY(int stickyWindowHandling READ stickyWindowHandlingInt WRITE setStickyWindowHandlingInt NOTIFY
-                   stickyWindowHandlingChanged)
+    Q_PROPERTY(int snappingStickyWindowHandling READ snappingStickyWindowHandlingInt WRITE
+                   setSnappingStickyWindowHandlingInt NOTIFY snappingStickyWindowHandlingChanged)
     Q_PROPERTY(bool restoreWindowsToZonesOnLogin READ restoreWindowsToZonesOnLogin WRITE setRestoreWindowsToZonesOnLogin
                    NOTIFY restoreWindowsToZonesOnLoginChanged)
     Q_PROPERTY(bool autoAssignAllLayouts READ autoAssignAllLayouts WRITE setAutoAssignAllLayouts NOTIFY
@@ -650,10 +650,10 @@ public:
     void setMoveNewWindowsToLastZone(bool move) override;
     bool restoreOriginalSizeOnUnsnap() const override;
     void setRestoreOriginalSizeOnUnsnap(bool restore) override;
-    StickyWindowHandling stickyWindowHandling() const override;
-    void setStickyWindowHandling(StickyWindowHandling handling) override;
-    int stickyWindowHandlingInt() const;
-    void setStickyWindowHandlingInt(int handling);
+    StickyWindowHandling snappingStickyWindowHandling() const override;
+    void setSnappingStickyWindowHandling(StickyWindowHandling handling) override;
+    int snappingStickyWindowHandlingInt() const;
+    void setSnappingStickyWindowHandlingInt(int handling);
     bool restoreWindowsToZonesOnLogin() const override;
     void setRestoreWindowsToZonesOnLogin(bool restore) override;
     bool autoAssignAllLayouts() const override;
