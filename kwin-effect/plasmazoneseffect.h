@@ -81,6 +81,7 @@ static_assert(
 
 // Forward declarations for helper classes
 class AutotileHandler;
+class SnapHandler;
 class KWinCompositorBridge;
 class NavigationHandler;
 class ScreenChangeHandler;
@@ -507,6 +508,10 @@ private:
     {
         return m_autotileHandler.get();
     }
+    SnapHandler* snapHandler() const
+    {
+        return m_snapHandler.get();
+    }
 
     /**
      * @brief Emit navigationFeedback D-Bus signal
@@ -602,6 +607,7 @@ public:
 private:
     // Friend classes for helpers
     friend class AutotileHandler;
+    friend class SnapHandler;
     friend class NavigationHandler;
     friend class ScreenChangeHandler;
     friend class SnapAssistHandler;
@@ -613,6 +619,7 @@ private:
     // Helper class instances
     // ═══════════════════════════════════════════════════════════════════════════════
     std::unique_ptr<AutotileHandler> m_autotileHandler;
+    std::unique_ptr<SnapHandler> m_snapHandler;
 
     QHash<QString, WindowBorder> m_windowBorders; // windowId → border
 

@@ -31,6 +31,7 @@
 #include "../navigationhandler.h"
 #include "../screenchangehandler.h"
 #include "../snapassisthandler.h"
+#include "../snaphandler.h"
 #include "../windowanimator.h"
 
 namespace PlasmaZones {
@@ -42,6 +43,7 @@ Q_DECLARE_LOGGING_CATEGORY(lcEffect)
 PlasmaZonesEffect::PlasmaZonesEffect()
     : OffscreenEffect()
     , m_autotileHandler(std::make_unique<AutotileHandler>(this))
+    , m_snapHandler(std::make_unique<SnapHandler>(this))
     , m_navigationHandler(std::make_unique<NavigationHandler>(this))
     , m_screenChangeHandler(std::make_unique<ScreenChangeHandler>(this))
     , m_snapAssistHandler(std::make_unique<SnapAssistHandler>(this))
