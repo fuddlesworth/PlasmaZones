@@ -127,7 +127,7 @@ private Q_SLOTS:
 
         Settings settings;
 
-        // Drive every snapWindow* setting away from its default.
+        // Drive every snapping* setting away from its default.
         settings.setSnappingHideTitleBars(!ConfigDefaults::snappingHideTitleBars());
         settings.setSnappingShowBorder(!ConfigDefaults::snappingShowBorder());
         settings.setSnappingUseSystemBorderColors(!ConfigDefaults::snappingUseSystemBorderColors());
@@ -328,7 +328,7 @@ private Q_SLOTS:
 
         {
             // Load-side getter round-trip: a freshly-constructed Settings must
-            // read every snapWindow* value back through its OWN getter. The
+            // read every snapping* value back through its OWN getter. The
             // on-disk assertions above only prove save() wrote the right keys;
             // a getter wired to the wrong group/key would still pass them.
             // Reading through the getters pins the read path too.

@@ -66,7 +66,7 @@ current code, so nothing is missed during implementation.
 | Surface | UI title | Config group | C++ accessors |
 |---|---|---|---|
 | Zone overlay (existing) | **Zones** (was "Appearance") | `Snapping.Zones.{Colors,Opacity,Border,Labels}` (migrated from `Snapping.Appearance.*`) | unchanged (`borderWidth()`, `activeOpacity()`, …) — only the *group* accessor renames |
-| Snap window appearance (new) | **Window Appearance** | `Snapping.Appearance.{Colors,Decorations,Borders}` (freed by the migration) | `snapWindow*` (parallel to `autotile*`) |
+| Snap window appearance (new) | **Window Appearance** | `Snapping.Appearance.{Colors,Decorations,Borders}` (freed by the migration) | `snapping*` (parallel to `autotile*`) |
 | Tiling window appearance (existing) | **Window Appearance** (was "Appearance") | `Tiling.Appearance.*` (unchanged) | `autotile*` (unchanged) |
 
 Rationale: moving the zone overlay to `Snapping.Zones.*` makes `Snapping.Appearance.*` mean
@@ -166,13 +166,13 @@ Move the zone-overlay sub-groups `Snapping.Appearance.*` → `Snapping.Zones.*` 
 
 ## 6. Phase 1b — Snap window-appearance config keys
 
-Add 7 `snapWindow*` keys under the freed `Snapping.Appearance.{Colors,Decorations,Borders}`,
+Add 7 `snapping*` keys under the freed `Snapping.Appearance.{Colors,Decorations,Borders}`,
 full add-a-setting chain mirroring `autotile*`.
 
 ### Keys
-`snapWindowHideTitleBars` (bool), `snapWindowShowBorder` (bool), `snapWindowBorderWidth`
-(+Min/Max), `snapWindowBorderRadius` (+Min/Max), `snapWindowBorderColor`,
-`snapWindowInactiveBorderColor`, `snapWindowUseSystemBorderColors`.
+`snappingHideTitleBars` (bool), `snappingShowBorder` (bool), `snappingBorderWidth`
+(+Min/Max), `snappingBorderRadius` (+Min/Max), `snappingBorderColor`,
+`snappingInactiveBorderColor`, `snappingUseSystemBorderColors`.
 
 ### Tasks (ordered)
 1. `configkeys.h`: new `Snapping.Appearance.{Colors,Decorations,Borders}` groups; reuse generic
@@ -181,7 +181,7 @@ full add-a-setting chain mirroring `autotile*`.
 2. `configdefaults.h`: default + bounds accessors (mirror `autotile*` defaults).
 3. `isettings.h`: 7 virtuals + NOTIFY signals.
 4. `settings.{h,cpp}`: Q_PROPERTY/getter/setter/member via `P_STORE_*`;
-   `applySnapWindowBorderSystemColor()` accent helper; load/save/reset.
+   `applySnappingBorderSystemColor()` accent helper; load/save/reset.
 5. `settingsadaptor.cpp`: `REGISTER_*_SETTING` entries (D-Bus by-name).
 6. `tests/unit/helpers/StubSettings.h`: add the 7 overrides.
 
@@ -191,7 +191,7 @@ full add-a-setting chain mirroring `autotile*`.
 
 ### Top gotchas
 - Config KEY strings are generic (group disambiguates); only the **C++ accessor names** are
-  `snapWindow*`-prefixed to stay distinct from zone (`borderWidth`) and autotile (`autotileBorderWidth`).
+  `snapping*`-prefixed to stay distinct from zone (`borderWidth`) and autotile (`autotileBorderWidth`).
 
 ---
 
@@ -199,7 +199,7 @@ full add-a-setting chain mirroring `autotile*`.
 
 ### Tasks (ordered)
 1. New `src/settings/qml/SnappingWindowAppearancePage.qml` — Colors / Decorations / Borders cards
-   binding `appSettings.snapWindow*`, mirroring `TilingAppearancePage.qml`.
+   binding `appSettings.snapping*`, mirroring `TilingAppearancePage.qml`.
 2. New `SnappingWindowAppearanceController` (bounds facade like `TilingAppearanceController`).
 3. `settingscontroller.{h,cpp}`: member + getter + `Q_PROPERTY CONSTANT` + ctor construction.
 4. Register `snapping-window-appearance` under `snapping-visual-cat` (regPage); update
@@ -210,7 +210,7 @@ full add-a-setting chain mirroring `autotile*`.
   `settingscontroller.{h,cpp}`, `settingscontroller_pageregistration.cpp`, `CMakeLists.txt`.
 
 ### Tests / verify
-- Build + run: new page edits persist to the `snapWindow*` keys (effect consumption lands in Phase 3).
+- Build + run: new page edits persist to the `snapping*` keys (effect consumption lands in Phase 3).
 
 ---
 
@@ -229,7 +229,7 @@ settings of the **mode that manages it** (snap vs autotile). Reuse `OutlinedBord
    commit/release path.
 3. Make `shouldShowBorderForWindow` / `updateWindowBorder` (`borders.cpp`) mode-parameterised:
    resolve the window's managing mode, then read that mode's width/radius/colour/show/hide.
-4. Extend `daemon_bringup.cpp::loadCachedSettings()` to fetch the `snapWindow*` keys into the
+4. Extend `daemon_bringup.cpp::loadCachedSettings()` to fetch the `snapping*` keys into the
    snap border state (same shape as the `autotile*` block; re-run on `settingsChanged`).
 5. Title-bar hiding for snapped windows via `setNoBorder`, mirroring `setWindowBorderless`.
 

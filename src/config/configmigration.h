@@ -46,7 +46,7 @@ namespace PlasmaZones {
 ///     Additionally renames the drag-time zone-overlay groups
 ///     Snapping.Appearance.{Colors,Opacity,Border,Labels} → Snapping.Zones.*,
 ///     freeing the Snapping.Appearance.* namespace for the new per-window
-///     snapped-window decoration settings (snapWindow*). See moveGroupAtPath
+///     snapped-window decoration settings (snapping*). See moveGroupAtPath
 ///     in configmigration.cpp.
 inline constexpr int ConfigSchemaVersion = 4;
 

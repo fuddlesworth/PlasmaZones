@@ -204,7 +204,7 @@ private Q_SLOTS:
     /**
      * Snapped-window appearance defaults must be IDENTICAL to the autotile*
      * window appearance defaults — the two modes start a window from the same
-     * chrome (every snapWindow* default delegates to its autotile* counterpart).
+     * chrome (every snapping* default delegates to its autotile* counterpart).
      * Assert each pair is equal rather than pinning literals so a single change
      * to an autotile default moves both in lockstep without staling this test.
      * The concrete shipped values are pinned separately below.

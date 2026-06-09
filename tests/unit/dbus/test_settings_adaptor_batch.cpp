@@ -273,7 +273,7 @@ private Q_SLOTS:
         QCOMPARE(result.value(QStringLiteral("snappingBorderColor")).metaType().id(), QMetaType::QString);
         QCOMPARE(result.value(QStringLiteral("snappingInactiveBorderColor")).metaType().id(), QMetaType::QString);
 
-        // Values mirror the stub's snapWindow* getters, proving each key is
+        // Values mirror the stub's snapping* getters, proving each key is
         // wired to its own accessor rather than collapsed onto a neighbour. The
         // int (width 2 / radius 0) and color (white / black) keys hold mutually
         // distinct values, so any swap among them flips a mirror. Among the three
@@ -445,7 +445,7 @@ private Q_SLOTS:
 private:
     std::unique_ptr<IsolatedConfigGuard> m_guard;
     CountingStubSettings* m_settings = nullptr;
-    // CountingStubSettings publicly inherits StubSettings, whose snapWindow*
+    // CountingStubSettings publicly inherits StubSettings, whose snapping*
     // getters back the value assertions in testGetSettings_snapWindowKeys_*.
     QObject* m_parent = nullptr;
     SettingsAdaptor* m_adaptor = nullptr;

@@ -229,7 +229,7 @@ void appendAppearanceSchema(PhosphorConfig::Schema& schema)
 
     // Snapping.Appearance.* — the snapped window's border / title-bar
     // decoration (parallel to Tiling.Appearance.* in appendAutotilingSchema;
-    // defaults via snapWindow* in ConfigDefaults).
+    // defaults via snapping* in ConfigDefaults).
     schema.groups[CD::snappingAppearanceColorsGroup()] = {
         {CD::activeKey(), CD::snappingBorderColor(), QMetaType::QColor, {}, validColorOr(CD::snappingBorderColor())},
         {CD::inactiveKey(),
