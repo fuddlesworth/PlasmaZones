@@ -7,6 +7,7 @@
 #include "../navigationhandler.h"
 #include "../screenchangehandler.h"
 #include "../snapassisthandler.h"
+#include "../snaphandler.h"
 #include "../windowanimator.h"
 
 #include <PhosphorAnimation/AnimationLimits.h>
@@ -332,7 +333,7 @@ void PlasmaZonesEffect::processDaemonReadyWindowState()
                 return;
             }
             QJsonObject obj = doc.object();
-            m_snapRestoreCache.clear();
+            m_snapHandler->clearRestoreCache();
             for (auto it = obj.constBegin(); it != obj.constEnd(); ++it) {
                 QJsonObject geo = it.value().toObject();
                 int x = geo[QLatin1String("x")].toInt();
@@ -341,10 +342,10 @@ void PlasmaZonesEffect::processDaemonReadyWindowState()
                 int h = geo[QLatin1String("height")].toInt();
                 QString savedScreen = geo[QLatin1String("screenId")].toString();
                 if (w > 0 && h > 0) {
-                    m_snapRestoreCache.insert(it.key(), CachedSnapRestore{QRect(x, y, w, h), savedScreen});
+                    m_snapHandler->cacheRestore(it.key(), CachedSnapRestore{QRect(x, y, w, h), savedScreen});
                 }
             }
-            qCDebug(lcEffect) << "Cached" << m_snapRestoreCache.size() << "pending restore geometries";
+            qCDebug(lcEffect) << "Cached" << m_snapHandler->restoreCacheSize() << "pending restore geometries";
         });
     }
 
@@ -455,7 +456,7 @@ void PlasmaZonesEffect::processDaemonReadyWindowState()
                 // applySnapGeometry, we know a moveResize happened.
                 QRectF geoBefore = safeWindow->frameGeometry();
 
-                callResolveWindowRestore(
+                m_snapHandler->callResolveWindowRestore(
                     safeWindow.data(), [pending, movedCount, safeWindow, geoBefore, savedStackingOrder]() {
                         // Detect whether moveResize actually fired by comparing geometry.
                         if (safeWindow && !safeWindow->isDeleted() && safeWindow->frameGeometry() != geoBefore) {
@@ -700,11 +701,11 @@ void PlasmaZonesEffect::loadCachedSettings()
     });
 
     loadSettingAsync(QStringLiteral("snappingFocusFollowsMouse"), [this](const QVariant& v) {
-        m_snappingFocusFollowsMouse = v.toBool();
+        m_snapHandler->setFocusFollowsMouse(v.toBool());
     });
 
-    // Snapped-window border settings — feed the effect's parallel snap
-    // BorderState (m_snapBorder), mirroring the autotile* block above. When
+    // Snapped-window border settings — feed SnapHandler's parallel snap
+    // BorderState, mirroring the autotile* block above. When
     // snapWindowUseSystemBorderColors is on the daemon writes the resolved
     // accent into the colour keys, so (like autotile) the effect only reads the
     // resolved colours and never the use-system flag.
@@ -713,42 +714,42 @@ void PlasmaZonesEffect::loadCachedSettings()
     // "only act on change" convention the autotile width/radius setters use.
     loadSettingAsync(QStringLiteral("snapWindowHideTitleBars"), [this](const QVariant& v) {
         const bool hide = v.toBool();
-        if (m_snapBorder.hideTitleBars != hide) {
-            updateSnapHideTitleBars(hide);
+        if (m_snapHandler->hideTitleBars() != hide) {
+            m_snapHandler->updateSnapHideTitleBars(hide);
         }
     });
     loadSettingAsync(QStringLiteral("snapWindowShowBorder"), [this](const QVariant& v) {
         const bool show = v.toBool();
-        if (m_snapBorder.showBorder != show) {
-            m_snapBorder.showBorder = show;
+        if (m_snapHandler->showBorder() != show) {
+            m_snapHandler->setShowBorder(show);
             updateAllBorders();
         }
     });
     loadSettingAsync(QStringLiteral("snapWindowBorderWidth"), [this](const QVariant& v) {
         const int bw = qBound(0, v.toInt(), 10);
-        if (m_snapBorder.width != bw) {
-            m_snapBorder.width = bw;
+        if (m_snapHandler->borderWidth() != bw) {
+            m_snapHandler->setBorderWidth(bw);
             updateAllBorders();
         }
     });
     loadSettingAsync(QStringLiteral("snapWindowBorderRadius"), [this](const QVariant& v) {
         const int br = qBound(0, v.toInt(), 20);
-        if (m_snapBorder.radius != br) {
-            m_snapBorder.radius = br;
+        if (m_snapHandler->borderRadius() != br) {
+            m_snapHandler->setBorderRadius(br);
             updateAllBorders();
         }
     });
     loadSettingAsync(QStringLiteral("snapWindowBorderColor"), [this](const QVariant& v) {
         const QColor c(v.toString());
-        if (m_snapBorder.color != c) {
-            m_snapBorder.color = c;
+        if (m_snapHandler->borderColor() != c) {
+            m_snapHandler->setBorderColor(c);
             updateAllBorders();
         }
     });
     loadSettingAsync(QStringLiteral("snapWindowInactiveBorderColor"), [this](const QVariant& v) {
         const QColor c(v.toString());
-        if (m_snapBorder.inactiveColor != c) {
-            m_snapBorder.inactiveColor = c;
+        if (m_snapHandler->inactiveBorderColor() != c) {
+            m_snapHandler->setInactiveBorderColor(c);
             updateAllBorders();
         }
     });
@@ -843,19 +844,19 @@ void PlasmaZonesEffect::connectNavigationSignals()
     // Snap-all: daemon triggers effect to collect candidates
     QDBusConnection::sessionBus().connect(PhosphorProtocol::Service::Name, PhosphorProtocol::Service::ObjectPath,
                                           PhosphorProtocol::Service::Interface::WindowTracking,
-                                          QStringLiteral("snapAllWindowsRequested"), this,
+                                          QStringLiteral("snapAllWindowsRequested"), m_snapHandler.get(),
                                           SLOT(slotSnapAllWindowsRequested(QString)));
 
     // Move specific window (Snap Assist selection)
     QDBusConnection::sessionBus().connect(
         PhosphorProtocol::Service::Name, PhosphorProtocol::Service::ObjectPath,
-        PhosphorProtocol::Service::Interface::WindowTracking, QStringLiteral("moveSpecificWindowToZoneRequested"), this,
-        SLOT(slotMoveSpecificWindowToZoneRequested(QString, QString, int, int, int, int)));
+        PhosphorProtocol::Service::Interface::WindowTracking, QStringLiteral("moveSpecificWindowToZoneRequested"),
+        m_snapHandler.get(), SLOT(slotMoveSpecificWindowToZoneRequested(QString, QString, int, int, int, int)));
 
     // Pending restores on daemon startup
     QDBusConnection::sessionBus().connect(PhosphorProtocol::Service::Name, PhosphorProtocol::Service::ObjectPath,
                                           PhosphorProtocol::Service::Interface::WindowTracking,
-                                          QStringLiteral("pendingRestoresAvailable"), this,
+                                          QStringLiteral("pendingRestoresAvailable"), m_snapHandler.get(),
                                           SLOT(slotPendingRestoresAvailable()));
 
     // Screen geometry reapply
@@ -896,7 +897,7 @@ void PlasmaZonesEffect::connectNavigationSignals()
     // after endDrag returns, so the compositor is unblocked first.
     QDBusConnection::sessionBus().connect(PhosphorProtocol::Service::Name, PhosphorProtocol::Service::ObjectPath,
                                           PhosphorProtocol::Service::Interface::WindowDrag,
-                                          QStringLiteral("snapAssistReady"), this,
+                                          QStringLiteral("snapAssistReady"), m_snapHandler.get(),
                                           SLOT(slotSnapAssistReady(QString, QString, PhosphorProtocol::EmptyZoneList)));
 
     qCInfo(lcEffect) << "Connected to navigation D-Bus signals";

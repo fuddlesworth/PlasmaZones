@@ -216,22 +216,6 @@ public:
     {
         return m_border;
     }
-    QRect applyBorderInset(const QRect& geo) const
-    {
-        return AutotileStateHelpers::applyBorderInset(geo, m_border.width);
-    }
-    bool shouldInsetForBorder(const QString& windowId, const QRect& geo) const
-    {
-        return AutotileStateHelpers::shouldInsetForBorder(m_border, windowId, geo);
-    }
-    std::optional<QRect> borderZoneGeometry(const QString& windowId) const
-    {
-        return AutotileStateHelpers::borderZoneGeometry(m_border, windowId);
-    }
-    QVector<QRect> allBorderZoneGeometries() const
-    {
-        return AutotileStateHelpers::allBorderZoneGeometries(m_border);
-    }
 
     /**
      * @brief Extract pre-autotile geometry from one screen and inject into another.

@@ -11,14 +11,13 @@
 #include <QSet>
 #include <QString>
 #include <QVector>
-#include <optional>
 
 namespace PhosphorCompositor {
 
 /**
  * @brief Compositor-agnostic autotile border state
  *
- * Tracks which windows are borderless/tiled and their zone geometries.
+ * Tracks which windows are borderless/tiled.
  * Per-screen keyed so per-VS retiles can update tracking in isolation
  * without cross-contaminating with windows on sibling virtual screens.
  * Shared across compositor plugins to avoid duplicating state management.
@@ -31,9 +30,6 @@ struct BorderState
     QHash<QString, QSet<QString>> borderlessWindowsByScreen;
     /// Same shape for the full tiled set (superset of borderless).
     QHash<QString, QSet<QString>> tiledWindowsByScreen;
-    /// PhosphorZones::Zone geometries remain windowId-keyed — a window only lives in
-    /// one zone at a time, regardless of which screen owns it.
-    QHash<QString, QRect> zoneGeometries;
     bool hideTitleBars = false;
     bool showBorder = false;
     int width = 2;
@@ -106,47 +102,6 @@ inline bool shouldShowBorderForWindow(const BorderState& border, const QString& 
     return isBorderlessWindow(border, windowId) || isTiledWindow(border, windowId);
 }
 
-inline bool shouldApplyBorderInset(const BorderState& border, const QString& windowId)
-{
-    return border.hideTitleBars && border.width > 0 && isBorderlessWindow(border, windowId);
-}
-
-inline std::optional<QRect> borderZoneGeometry(const BorderState& border, const QString& windowId)
-{
-    auto it = border.zoneGeometries.constFind(windowId);
-    if (it != border.zoneGeometries.constEnd()) {
-        return it.value();
-    }
-    return std::nullopt;
-}
-
-inline QVector<QRect> allBorderZoneGeometries(const BorderState& border)
-{
-    QVector<QRect> result;
-    result.reserve(border.zoneGeometries.size());
-    for (auto it = border.zoneGeometries.constBegin(); it != border.zoneGeometries.constEnd(); ++it) {
-        result.append(it.value());
-    }
-    return result;
-}
-
-/**
- * @brief Apply border inset to a geometry (shrink by border width on all sides)
- */
-inline QRect applyBorderInset(const QRect& geo, int borderWidth)
-{
-    return geo.adjusted(borderWidth, borderWidth, -borderWidth, -borderWidth);
-}
-
-/**
- * @brief Check if border inset should be applied for a window's geometry
- */
-inline bool shouldInsetForBorder(const BorderState& border, const QString& windowId, const QRect& geo)
-{
-    return shouldApplyBorderInset(border, windowId) && geo.width() > border.width * 2
-        && geo.height() > border.width * 2;
-}
-
 // ═══════════════════════════════════════════════════════════════════════════════
 // Window closed cleanup (pure state bookkeeping)
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -201,7 +156,6 @@ inline void cleanupClosedWindowState(const QString& windowId, const QString& scr
             ++it;
         }
     }
-    border.zoneGeometries.remove(windowId);
 
     if (!screenId.isEmpty()) {
         auto it = state.preAutotileGeometries.find(screenId);

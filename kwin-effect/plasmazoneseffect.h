@@ -10,7 +10,6 @@
 #include <PhosphorEngine/EngineTypes.h>
 #include <PhosphorProtocol/DragMarshalling.h>
 #include <PhosphorProtocol/WindowMarshalling.h>
-#include <PhosphorProtocol/ZoneMarshalling.h>
 #include <PhosphorCompositor/TriggerParser.h>
 
 #include <PhosphorAnimation/AnimationLimits.h>
@@ -28,18 +27,14 @@
 #include <opengl/gltexture.h>
 #include <effect/globals.h> // For ElectricBorder enum
 #include <scene/borderradius.h>
-#include <QJsonArray>
 #include <QObject>
 #include <QVector>
 #include <QSet>
-#include <QSize>
 #include <QTimer>
-#include <QDBusPendingCall>
 #include <QHash>
 #include <QPointer>
 #include <QRect>
 
-#include <array>
 #include <functional>
 #include <memory>
 #include <unordered_map>
@@ -81,6 +76,7 @@ static_assert(
 
 // Forward declarations for helper classes
 class AutotileHandler;
+class SnapHandler;
 class KWinCompositorBridge;
 class NavigationHandler;
 class ScreenChangeHandler;
@@ -175,16 +171,9 @@ private Q_SLOTS:
     void slotApplyGeometriesBatch(const PhosphorProtocol::WindowGeometryList& geometries, const QString& action);
     void slotRaiseWindowsRequested(const QStringList& windowIds);
 
-    // Snap-all (effect collects candidates, daemon computes assignments)
-    void slotSnapAllWindowsRequested(const QString& screenId);
-    void slotPendingRestoresAvailable();
     void slotWindowFloatingChanged(const QString& windowId, bool isFloating, const QString& screenId);
     void slotRunningWindowsRequested();
     void slotRestoreSizeDuringDrag(const QString& windowId, int width, int height);
-    void slotSnapAssistReady(const QString& windowId, const QString& releaseScreenId,
-                             const PhosphorProtocol::EmptyZoneList& emptyZones);
-    void slotMoveSpecificWindowToZoneRequested(const QString& windowId, const QString& zoneId, int x, int y, int width,
-                                               int height);
 
     // Snap-mode minimize/unminimize float tracking
     void slotWindowMinimizedChanged(KWin::EffectWindow* w);
@@ -383,14 +372,6 @@ private:
      * @param cancelled True if the drag was cancelled (Escape / external)
      */
     void callEndDrag(KWin::EffectWindow* window, const QString& windowId, bool cancelled);
-    void callCancelSnap();
-    // releaseSuppressionOnMiss: when the daemon resolves no zone for the
-    // window, release its first-frame suppression (see RestoreSuppression).
-    // Pass false when something else will still reposition the window on a
-    // miss (the autotile-screen path tiles it via onComplete) — there the
-    // suppression must hold through that reposition instead.
-    void callResolveWindowRestore(KWin::EffectWindow* window, std::function<void()> onComplete = nullptr,
-                                  bool releaseSuppressionOnMiss = true);
     void connectNavigationSignals();
     void syncFloatingWindowsFromDaemon();
 
@@ -404,15 +385,6 @@ private:
     // ═══════════════════════════════════════════════════════════════════════════════
     // Helper Methods
     // ═══════════════════════════════════════════════════════════════════════════════
-
-    /**
-     * @brief Ensure pre-snap geometry is stored for a window before snapping
-     * @param w The effect window
-     * @param windowId The window identifier
-     * @note Checks if geometry exists, stores current geometry if not
-     */
-    void ensurePreSnapGeometryStored(KWin::EffectWindow* w, const QString& windowId,
-                                     const QRectF& preCapturedGeometry = QRectF());
 
     /**
      * @brief Build a map of full window IDs to EffectWindow pointers
@@ -452,10 +424,7 @@ private:
      * fast paths, or the snap zone poisons the autotile float-back (per-mode float
      * independence). Backed by the shared snap BorderState tiled set.
      */
-    bool isWindowMarkedSnapped(const QString& windowId) const
-    {
-        return PhosphorCompositor::AutotileStateHelpers::isTiledWindow(m_snapBorder, windowId);
-    }
+    bool isWindowMarkedSnapped(const QString& windowId) const;
 
     /**
      * @brief True if SNAP is currently hiding this window's title bar (it is in the
@@ -463,19 +432,7 @@ private:
      * drops its own tracking without calling setNoBorder(false) — which would un-hide
      * a title bar the per-mode snapping appearance wants hidden.
      */
-    bool isWindowSnapBorderless(const QString& windowId) const
-    {
-        return PhosphorCompositor::AutotileStateHelpers::isBorderlessWindow(m_snapBorder, windowId);
-    }
-
-    /**
-     * @brief Snapping focus-follows-mouse: activate the topmost snapped window under
-     * the cursor. Gated by m_snappingFocusFollowsMouse and called from slotMouseChanged
-     * when not dragging. No-op unless the window directly under the cursor is snapped,
-     * so a dialog/popup floating over a snapped window keeps focus (occlusion guard,
-     * mirroring AutotileHandler::handleCursorMoved).
-     */
-    void handleSnapCursorMoved(const QPointF& pos, const QString& screenId);
+    bool isWindowSnapBorderless(const QString& windowId) const;
 
     void notifyWindowClosed(KWin::EffectWindow* w);
     void notifyWindowActivated(KWin::EffectWindow* w);
@@ -506,6 +463,10 @@ private:
     AutotileHandler* autotileHandler() const
     {
         return m_autotileHandler.get();
+    }
+    SnapHandler* snapHandler() const
+    {
+        return m_snapHandler.get();
     }
 
     /**
@@ -602,6 +563,7 @@ public:
 private:
     // Friend classes for helpers
     friend class AutotileHandler;
+    friend class SnapHandler;
     friend class NavigationHandler;
     friend class ScreenChangeHandler;
     friend class SnapAssistHandler;
@@ -613,6 +575,7 @@ private:
     // Helper class instances
     // ═══════════════════════════════════════════════════════════════════════════════
     std::unique_ptr<AutotileHandler> m_autotileHandler;
+    std::unique_ptr<SnapHandler> m_snapHandler;
 
     QHash<QString, WindowBorder> m_windowBorders; // windowId → border
 
@@ -628,13 +591,6 @@ private:
     // so reconcileRuleHiddenTitleBar can restore the decoration when the rule
     // stops matching, without fighting snap/autotile borderless ownership.
     QSet<QString> m_ruleHiddenTitleBars;
-
-    // Snapping's own managed-window border state, parallel to
-    // AutotileHandler::m_border. Built on the shared PhosphorCompositor
-    // BorderState + AutotileStateHelpers so snap and autotile share one
-    // standardized border mechanism (and a future mode reuses the same
-    // machinery). Populated at snap commit, cleared on float / unsnap / close.
-    PhosphorCompositor::BorderState m_snapBorder;
 
     // Policy returned from the daemon's beginDrag for the currently-active
     // drag. Async-populated a few ms after the
@@ -664,20 +620,6 @@ private:
     void updateAllBorders();
     void clearAllBorders();
 
-    // ── Snapping border-state tracking (mirrors AutotileHandler's set) ──
-    /// Record @p windowId as snap-committed on @p screenId (idempotent), apply
-    /// title-bar hiding if enabled, and (re)draw its border.
-    void markWindowSnapped(const QString& windowId, const QString& screenId);
-    /// Drop @p windowId from the snap set on every screen, restore its title
-    /// bar if we hid it, and remove its border.
-    void clearWindowSnapped(const QString& windowId);
-    /// Apply/restore title-bar hiding across all currently snap-committed
-    /// windows when the snapWindowHideTitleBars setting toggles.
-    void updateSnapHideTitleBars(bool hide);
-    /// Restore every snap-hidden title bar and drop the snap border set.
-    /// Called on daemon loss / effect teardown (symmetric with
-    /// AutotileHandler::restoreAllBorderless).
-    void restoreAllSnapBorderless();
     /// Resolve which mode's BorderState manages @p windowId — autotile first,
     /// then snap — or nullptr if neither draws a border for it.
     const PhosphorCompositor::BorderState* resolveBorderStateFor(const QString& windowId) const;
@@ -910,10 +852,6 @@ private:
     bool m_cachedToggleActivation = false;
     bool m_cachedAutotileDragInsertToggle = false;
     bool m_cachedZoneSpanToggleMode = false;
-    // Snapping focus-follows-mouse (Snapping.Behavior.FocusFollowsMouse). When on,
-    // moving the cursor over a snapped window activates it. Mirrors autotile FFM but
-    // scoped to the snap BorderState tiled set instead of autotile screens.
-    bool m_snappingFocusFollowsMouse = false;
     // AutotileDragBehavior cached so the synchronous drag-start fast path can
     // decide whether to skip the handleDragToFloat(immediate=true) call.
     // Refreshed by loadCachedSettings on every settingsChanged D-Bus
@@ -945,7 +883,6 @@ private:
     bool m_dragStartedSent = false;
     QString m_pendingDragWindowId;
     QRectF m_pendingDragGeometry;
-    QString m_snapDragStartScreenId; // Virtual screen at snap-mode drag start (for VS crossing on drop)
 
     /// Monotonic per-drag generation. Bumped on every drag start. The async
     /// beginDrag reply lambda captures the generation at dispatch time and
@@ -964,9 +901,6 @@ private:
 
     // Autotile: true when the current drag was started on an autotile screen
 
-    // Snap-mode: windows floated due to minimize (mirrors autotile's m_minimizeFloatedWindows)
-    QSet<QString> m_minimizeFloatedWindows;
-
     // Cached daemon D-Bus service registration state.
     // Updated via QDBusServiceWatcher signals (registration/unregistration) to avoid
     // synchronous isServiceRegistered() calls that block the compositor thread.
@@ -983,13 +917,6 @@ private:
     bool m_bridgeRegistrationInFlight = false;
     bool m_daemonReadyRestoresDone = false; ///< set after slotDaemonReady snap restores dispatched
 
-    /// Pre-computed snap restore target for a pending app (appId → geometry + saved screen).
-    /// Fetched once from daemon on ready; consumed in slotWindowAdded for instant
-    /// teleport (no D-Bus round-trip visible flash). The screenId lets the effect
-    /// tell "cached saved zone is on snap-mode screen X" from "current KWin
-    /// placement is autotile screen Y" — we trust the saved screen, not the
-    /// placement, so cross-VS / cross-monitor restores work.
-    QHash<QString, CachedSnapRestore> m_snapRestoreCache;
     bool m_virtualScreensReady = false; ///< set after all fetchVirtualScreenConfig replies arrive
     /// True while a daemon-driven geometry apply (slotApplyGeometriesBatch / slotWindowsTileRequested)
     /// is moving a window. Suppresses the windowFrameGeometryChanged crossing-detection paths so a

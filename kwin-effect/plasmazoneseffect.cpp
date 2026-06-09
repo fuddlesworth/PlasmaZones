@@ -10,6 +10,7 @@
 #include <effect/effect.h>
 
 #include "dragtracker.h"
+#include "snaphandler.h"
 #include "windowanimator.h"
 
 namespace PlasmaZones {
@@ -91,7 +92,7 @@ void PlasmaZonesEffect::grabbedKeyboardEvent(QKeyEvent* e)
         // hides the overlay and sets snapCancelled; the drag continues as
         // a plain window move without zone snapping.
         qCInfo(lcEffect) << "Drag escape: overlay hidden, drag continues";
-        callCancelSnap();
+        m_snapHandler->callCancelSnap();
     }
     // All other keys are silently consumed by the grab. Modifier state is
     // unaffected because mouseChanged reads xkb state directly.

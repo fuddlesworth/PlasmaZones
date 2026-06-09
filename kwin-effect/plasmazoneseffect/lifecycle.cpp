@@ -31,6 +31,7 @@
 #include "../navigationhandler.h"
 #include "../screenchangehandler.h"
 #include "../snapassisthandler.h"
+#include "../snaphandler.h"
 #include "../windowanimator.h"
 
 namespace PlasmaZones {
@@ -42,6 +43,7 @@ Q_DECLARE_LOGGING_CATEGORY(lcEffect)
 PlasmaZonesEffect::PlasmaZonesEffect()
     : OffscreenEffect()
     , m_autotileHandler(std::make_unique<AutotileHandler>(this))
+    , m_snapHandler(std::make_unique<SnapHandler>(this))
     , m_navigationHandler(std::make_unique<NavigationHandler>(this))
     , m_screenChangeHandler(std::make_unique<ScreenChangeHandler>(this))
     , m_snapAssistHandler(std::make_unique<SnapAssistHandler>(this))
@@ -353,7 +355,6 @@ PlasmaZonesEffect::PlasmaZonesEffect()
             m_dragStartedSent = false;
             m_pendingDragWindowId = windowId;
             m_pendingDragGeometry = geometry;
-            m_snapDragStartScreenId = getWindowScreenId(w);
 
             // beginDrag already initialized daemon-side snap-drag state
             // (called internally from the adaptor). The effect only needs
@@ -452,7 +453,6 @@ PlasmaZonesEffect::PlasmaZonesEffect()
                 m_currentDragPolicy = PhosphorProtocol::DragPolicy{};
                 m_dragBypassedForAutotile = false;
                 m_dragBypassScreenId.clear();
-                m_snapDragStartScreenId.clear();
                 m_dragActivationDetected = false;
                 m_dragStartedSent = false;
                 m_pendingDragWindowId.clear();
@@ -703,7 +703,7 @@ PlasmaZonesEffect::PlasmaZonesEffect()
         m_bridgeRegistrationInFlight = false;
         m_daemonReadyRestoresDone = false;
         m_daemonReadyWindowStateProcessed = false;
-        m_snapRestoreCache.clear();
+        m_snapHandler->clearRestoreCache();
         // Reset the rules-subscription gate so the next daemon's
         // `rulesChanged` broadcasts can be re-subscribed. Without this,
         // the daemonReady disconnect+reconnect dance below would re-wire
@@ -738,7 +738,7 @@ PlasmaZonesEffect::PlasmaZonesEffect()
 
         // Restore borderless and monocle-maximized windows — daemon state is gone
         m_autotileHandler->restoreAllBorderless();
-        restoreAllSnapBorderless();
+        m_snapHandler->restoreAllSnapBorderless();
         restoreAllRuleHiddenTitleBars();
         m_autotileHandler->restoreAllMonocleMaximized();
         clearAllBorders();
@@ -852,7 +852,7 @@ PlasmaZonesEffect::~PlasmaZonesEffect()
     // Guard against compositor teardown — effects may outlive the stacking order.
     if (KWin::effects) {
         m_autotileHandler->restoreAllBorderless();
-        restoreAllSnapBorderless();
+        m_snapHandler->restoreAllSnapBorderless();
         restoreAllRuleHiddenTitleBars();
         m_autotileHandler->restoreAllMonocleMaximized();
         clearAllBorders();
