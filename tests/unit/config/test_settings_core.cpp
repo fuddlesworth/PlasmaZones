@@ -154,6 +154,32 @@ private Q_SLOTS:
     }
 
     /**
+     * Snapping focus-behavior settings default off and return to the default on
+     * reset(). Both gate runtime focus changes (the daemon focus-new-windows emit
+     * and the effect focus-follows-mouse), so a flipped default would silently
+     * change focus behavior for every user.
+     */
+    void testSnappingFocusSettings_defaultsAndReset()
+    {
+        IsolatedConfigGuard guard;
+
+        Settings settings;
+        QCOMPARE(settings.snappingFocusNewWindows(), ConfigDefaults::snappingFocusNewWindows());
+        QCOMPARE(settings.snappingFocusFollowsMouse(), ConfigDefaults::snappingFocusFollowsMouse());
+        QCOMPARE(settings.snappingFocusNewWindows(), false);
+        QCOMPARE(settings.snappingFocusFollowsMouse(), false);
+
+        settings.setSnappingFocusNewWindows(true);
+        settings.setSnappingFocusFollowsMouse(true);
+        QCOMPARE(settings.snappingFocusNewWindows(), true);
+        QCOMPARE(settings.snappingFocusFollowsMouse(), true);
+
+        settings.reset();
+        QCOMPARE(settings.snappingFocusNewWindows(), ConfigDefaults::snappingFocusNewWindows());
+        QCOMPARE(settings.snappingFocusFollowsMouse(), ConfigDefaults::snappingFocusFollowsMouse());
+    }
+
+    /**
      * After save() then load(), every property must equal what was set.
      * This validates the full round-trip for a representative subset of settings
      * across all config groups.
@@ -177,6 +203,8 @@ private Q_SLOTS:
         settings.setInactiveOpacity(0.2);
         settings.setShowZoneNumbers(false);
         settings.setToggleActivation(true);
+        settings.setSnappingFocusNewWindows(true);
+        settings.setSnappingFocusFollowsMouse(true);
         settings.setZoneSpanToggleMode(true);
         settings.setZoneSelectorEnabled(false);
         settings.setZoneSelectorTriggerDistance(100);
@@ -233,6 +261,8 @@ private Q_SLOTS:
         {
             auto behavior = backend->group(ConfigDefaults::snappingBehaviorGroup());
             QCOMPARE(behavior->readBool(ConfigDefaults::toggleActivationKey(), false), true);
+            QCOMPARE(behavior->readBool(ConfigDefaults::focusNewWindowsKey(), false), true);
+            QCOMPARE(behavior->readBool(ConfigDefaults::focusFollowsMouseKey(), false), true);
         }
 
         {

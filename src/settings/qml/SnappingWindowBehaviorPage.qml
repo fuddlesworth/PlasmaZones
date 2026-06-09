@@ -209,5 +209,53 @@ SettingsFlickable {
                 }
             }
         }
+
+        // =================================================================
+        // FOCUS
+        // =================================================================
+        Item {
+            Layout.fillWidth: true
+            implicitHeight: focusCard.implicitHeight
+
+            SettingsCard {
+                id: focusCard
+
+                anchors.fill: parent
+                headerText: i18n("Focus")
+                collapsible: true
+
+                contentItem: ColumnLayout {
+                    spacing: Kirigami.Units.smallSpacing
+
+                    SettingsRow {
+                        title: i18n("Focus new windows")
+                        description: i18n("Focus a window when it is automatically placed into a zone on open")
+
+                        SettingsSwitch {
+                            checked: appSettings.snappingFocusNewWindows
+                            accessibleName: i18n("Focus newly placed windows")
+                            onToggled: function (newValue) {
+                                appSettings.snappingFocusNewWindows = newValue;
+                            }
+                        }
+                    }
+
+                    SettingsSeparator {}
+
+                    SettingsRow {
+                        title: i18n("Focus follows mouse")
+                        description: i18n("Moving the mouse pointer over a snapped window gives it focus")
+
+                        SettingsSwitch {
+                            checked: appSettings.snappingFocusFollowsMouse
+                            accessibleName: i18n("Snapped window focus follows mouse pointer")
+                            onToggled: function (newValue) {
+                                appSettings.snappingFocusFollowsMouse = newValue;
+                            }
+                        }
+                    }
+                }
+            }
+        }
     }
 }
