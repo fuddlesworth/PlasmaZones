@@ -100,16 +100,22 @@ void WindowTrackingAdaptor::setWindowFloating(const QString& windowId, bool floa
     if (!validateWindowId(windowId, QStringLiteral("set float state"))) {
         return;
     }
-    // Gate the signal emissions on a real state change. WTS::setWindowFloating
-    // is itself a no-op on unchanged input, but the two signal emits below
-    // would otherwise fire on every redundant call — violating the project's
-    // "only emit signals when value actually changes" rule and waking up
-    // every D-Bus subscriber for no reason.
-    const bool wasFloating = m_service->isWindowFloating(windowId);
     m_service->setWindowFloating(windowId, floating);
-    if (floating == wasFloating) {
+    // Gate the signal emissions on a real change in what we last BROADCAST, not
+    // on a re-query of the service's float state. Under the per-engine float
+    // model the owning engine flips its float bit BEFORE the daemon's sync slot
+    // reaches this writer (e.g. AutotileEngine::performToggleFloat toggles then
+    // emits windowFloatingChanged, which Daemon::syncAutotileFloatState relays
+    // here), so m_service->isWindowFloating() already reports the post-transition
+    // value — the old `floating == wasFloating` gate then suppressed every
+    // autotile float broadcast, leaving subscribers (the effect's float cache,
+    // which the autotile FFM float-pause depends on) permanently stale.
+    // Tracking the last-broadcast value detects the real edge regardless of when
+    // the engine updated its bit, and still honours "only emit when changed".
+    if (m_broadcastFloating.value(windowId, false) == floating) {
         return;
     }
+    m_broadcastFloating[windowId] = floating;
     qCInfo(lcDbusWindow) << "Window" << windowId << "is now" << (floating ? "floating" : "not floating");
     // Notify effect so it can update its local cache (use full windowId for per-instance tracking).
     // Use the window's tracked screen if available, otherwise fall back to last active screen.

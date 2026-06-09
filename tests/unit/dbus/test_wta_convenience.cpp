@@ -634,6 +634,44 @@ private Q_SLOTS:
         QVERIFY(foundFloated);
     }
 
+    // Regression: under the per-engine float model the owning engine flips its
+    // float bit BEFORE the daemon's sync slot reaches WTA::setWindowFloating
+    // (e.g. AutotileEngine::performToggleFloat toggles then emits
+    // windowFloatingChanged → Daemon::syncAutotileFloatState → here). A re-query
+    // of the service therefore already reports floating==true, so the old
+    // broadcast gate (which compared against m_service->isWindowFloating())
+    // suppressed EVERY autotile float broadcast — leaving the effect's float
+    // cache stale and silently breaking the autotile FFM float-pause. The gate
+    // must instead compare against the last value WTA broadcast.
+    void testSetWindowFloating_broadcastsWhenServiceAlreadyReportsFloating()
+    {
+        const QString windowId = QStringLiteral("firefox|12345");
+
+        // Simulate the engine having ALREADY set the float bit: the resolver
+        // (consulted by m_service->isWindowFloating) reports floating regardless
+        // of WTS's own set.
+        m_wta->service()->setEngineFloatResolver([windowId](const QString& id) {
+            return id == windowId;
+        });
+
+        QSignalSpy spy(m_wta, &WindowTrackingAdaptor::windowFloatingChanged);
+
+        // The real float edge must broadcast even though a re-query says true.
+        m_wta->setWindowFloating(windowId, true);
+        QCOMPARE(spy.count(), 1);
+        QCOMPARE(spy.first().at(0).toString(), windowId);
+        QCOMPARE(spy.first().at(1).toBool(), true);
+
+        // Dedup still holds: setting the same broadcast value again is a no-op.
+        m_wta->setWindowFloating(windowId, true);
+        QCOMPARE(spy.count(), 1);
+
+        // The unfloat edge broadcasts.
+        m_wta->setWindowFloating(windowId, false);
+        QCOMPARE(spy.count(), 2);
+        QCOMPARE(spy.at(1).at(1).toBool(), false);
+    }
+
 private:
     std::unique_ptr<IsolatedConfigGuard> m_guard;
     PhosphorZones::LayoutRegistry* m_layoutManager = nullptr;

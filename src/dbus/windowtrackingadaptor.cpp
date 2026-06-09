@@ -571,6 +571,8 @@ void WindowTrackingAdaptor::windowClosed(const QString& windowId, int windowKind
 
     // Drop frame-geometry shadow entry for this window.
     m_frameGeometry.remove(windowId);
+    // Drop the last-broadcast floating state for this window.
+    m_broadcastFloating.remove(windowId);
 
     m_service->windowClosed(windowId, kind);
 
@@ -854,6 +856,16 @@ void WindowTrackingAdaptor::pruneStaleWindows(const QStringList& aliveWindowIds)
         if (!alive.contains(it.key())) {
             it = m_frameGeometry.erase(it);
             ++frameGeoPruned;
+        } else {
+            ++it;
+        }
+    }
+    // Same defensive sweep for the last-broadcast floating shadow: an entry
+    // would otherwise leak if the window died without a windowClosed signal.
+    // Not persisted, so it does not feed the save-scheduling decision below.
+    for (auto it = m_broadcastFloating.begin(); it != m_broadcastFloating.end();) {
+        if (!alive.contains(it.key())) {
+            it = m_broadcastFloating.erase(it);
         } else {
             ++it;
         }
