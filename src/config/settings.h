@@ -643,6 +643,10 @@ public:
     bool keepWindowsInZonesOnResolutionChange() const override;
     void setKeepWindowsInZonesOnResolutionChange(bool keep) override;
     bool moveNewWindowsToLastZone() const override;
+    // ISnapSettings::focusNewWindows() — delegates to the Snapping.Behavior store
+    // value (snappingFocusNewWindows). The snap engine reads this on AutoRestored
+    // commits to focus auto-placed-on-open windows.
+    bool focusNewWindows() const override;
     void setMoveNewWindowsToLastZone(bool move) override;
     bool restoreOriginalSizeOnUnsnap() const override;
     void setRestoreOriginalSizeOnUnsnap(bool restore) override;

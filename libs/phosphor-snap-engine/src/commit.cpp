@@ -61,6 +61,19 @@ void SnapEngine::commitSnapImpl(const QString& windowId, const QStringList& zone
     Q_EMIT windowSnapStateChanged(windowId,
                                   PhosphorProtocol::WindowStateEntry{windowId, primaryZoneId, screenId, false,
                                                                      QStringLiteral("snapped"), zoneIds, false});
+
+    // Focus-new-windows: activate a window that was just auto-placed into a zone on
+    // open. AutoRestored is used only by the auto-snap-on-open paths (windowOpened and
+    // the D-Bus resolveWindowRestore facade); manual drag, keyboard snap, snap-all,
+    // unfloat, and navigation all use UserInitiated, so they keep KWin's normal focus.
+    // Mirrors AutotileEngine, which emits activateWindowRequested for newly-inserted
+    // windows when focusNewWindows is set. Single chokepoint for both single- and
+    // multi-zone auto-restored commits.
+    if (intent == SnapIntent::AutoRestored) {
+        if (auto* settings = snapSettings(); settings && settings->focusNewWindows()) {
+            Q_EMIT activateWindowRequested(windowId);
+        }
+    }
 }
 
 void SnapEngine::commitSnap(const QString& windowId, const QString& zoneId, const QString& screenId, SnapIntent intent)

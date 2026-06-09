@@ -595,6 +595,12 @@ public:
     void setMoveNewWindowsToLastZone(bool) override
     {
     }
+    // ISnapSettings::focusNewWindows() — shares the ISettings snappingFocusNewWindows
+    // member so a test can drive the snap engine's focus-new path.
+    bool focusNewWindows() const override
+    {
+        return m_snappingFocusNewWindows;
+    }
     bool restoreOriginalSizeOnUnsnap() const override
     {
         return true;
