@@ -143,7 +143,9 @@ void PlasmaZonesEffect::handleSnapCursorMoved(const QPointF& pos, const QString&
     // on. Our own full-screen overlays never count as the kind of active window
     // worth protecting.
     if (KWin::EffectWindow* active = KWin::effects->activeWindow()) {
-        if (getWindowScreenId(active) == screenId && !isOwnOverlayClass(active->windowClass())
+        // Cheap overlay-class check first, then the heavier screen resolution
+        // (mirrors the autotile guard's predicate ordering).
+        if (!isOwnOverlayClass(active->windowClass()) && getWindowScreenId(active) == screenId
             && !isWindowMarkedSnapped(getWindowId(active)) && !isTileableWindow(active)) {
             return;
         }
