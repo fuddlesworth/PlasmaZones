@@ -192,12 +192,13 @@ SettingsFlickable {
             scopeAppSettings: settingsController
             scopeHasOverridesMethod: "hasPerScreenSnappingGapsSettings"
             scopeClearerMethod: "clearPerScreenSnappingGapsSettings"
-            // Snapping uses "Zone padding" / "Edge gap" labels and has no Smart
-            // gaps. Zone-padding bounds come from zonePaddingMin/Max; the edge /
-            // per-side gaps from gapMin/Max — each matching its validator clamp.
-            primaryGapLabel: i18n("Zone padding")
+            // Snapping shares the "Inner gap" / "Outer gap" labels with tiling
+            // (consistent cross-mode wording) but has no Smart gaps. Inner-gap
+            // bounds come from zonePaddingMin/Max; the outer / per-side gaps from
+            // gapMin/Max — each matching its validator clamp.
+            primaryGapLabel: i18n("Inner gap")
             primaryGapDescription: i18n("Space between snapped windows")
-            outerGapLabel: i18n("Edge gap")
+            outerGapLabel: i18n("Outer gap")
             outerGapDescription: i18n("Space from screen edges to snapped windows")
             showSmartGaps: false
             gapMin: root.settingsBridge.gapMin

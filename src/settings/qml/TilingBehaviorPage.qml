@@ -43,15 +43,13 @@ SettingsFlickable {
 
                         checked: root.settingsBridge.alwaysReinsertIntoStack
                         accessibleName: i18n("Always re-insert into stack on drag")
-                        onToggled: function(newValue) {
+                        onToggled: function (newValue) {
                             root.settingsBridge.alwaysReinsertIntoStack = newValue;
                         }
                     }
-
                 }
 
-                SettingsSeparator {
-                }
+                SettingsSeparator {}
 
                 SettingsRow {
                     title: i18n("Hold to re-insert into stack")
@@ -66,15 +64,13 @@ SettingsFlickable {
                         triggers: root.settingsBridge.autotileDragInsertTriggers
                         defaultTriggers: root.settingsBridge.defaultAutotileDragInsertTriggers
                         tooltipEnabled: false
-                        onTriggersModified: (triggers) => {
+                        onTriggersModified: triggers => {
                             root.settingsBridge.autotileDragInsertTriggers = triggers;
                         }
                     }
-
                 }
 
-                SettingsSeparator {
-                }
+                SettingsSeparator {}
 
                 SettingsRow {
                     title: i18n("Toggle mode")
@@ -85,23 +81,20 @@ SettingsFlickable {
                     SettingsSwitch {
                         checked: appSettings.autotileDragInsertToggle
                         accessibleName: i18n("Toggle mode for re-insert into stack")
-                        onToggled: function(newValue) {
+                        onToggled: function (newValue) {
                             appSettings.autotileDragInsertToggle = newValue;
                         }
                     }
-
                 }
-
             }
-
         }
 
         // =================================================================
-        // Behavior Card
+        // Window Handling Card
         // =================================================================
         SettingsCard {
             Layout.fillWidth: true
-            headerText: i18n("Behavior")
+            headerText: i18n("Window Handling")
             collapsible: true
 
             contentItem: ColumnLayout {
@@ -116,58 +109,26 @@ SettingsFlickable {
                         Accessible.name: i18n("New window placement")
                         textRole: "text"
                         valueRole: "value"
-                        model: [{
-                            "text": i18n("After existing"),
-                            "value": 0
-                        }, {
-                            "text": i18n("After focused"),
-                            "value": 1
-                        }, {
-                            "text": i18n("As main window"),
-                            "value": 2
-                        }]
+                        model: [
+                            {
+                                "text": i18n("After existing"),
+                                "value": 0
+                            },
+                            {
+                                "text": i18n("After focused"),
+                                "value": 1
+                            },
+                            {
+                                "text": i18n("As main window"),
+                                "value": 2
+                            }
+                        ]
                         currentIndex: Math.max(0, indexOfValue(appSettings.autotileInsertPosition))
                         onActivated: appSettings.autotileInsertPosition = currentValue
                     }
-
                 }
 
-                SettingsSeparator {
-                }
-
-                SettingsRow {
-                    title: i18n("Focus new windows")
-                    description: i18n("Automatically focus windows when they open")
-
-                    SettingsSwitch {
-                        checked: appSettings.autotileFocusNewWindows
-                        accessibleName: i18n("Focus newly opened windows")
-                        onToggled: function(newValue) {
-                            appSettings.autotileFocusNewWindows = newValue;
-                        }
-                    }
-
-                }
-
-                SettingsSeparator {
-                }
-
-                SettingsRow {
-                    title: i18n("Focus follows mouse")
-                    description: i18n("Moving the mouse pointer over a window gives it focus")
-
-                    SettingsSwitch {
-                        checked: appSettings.autotileFocusFollowsMouse
-                        accessibleName: i18n("Focus follows mouse pointer")
-                        onToggled: function(newValue) {
-                            appSettings.autotileFocusFollowsMouse = newValue;
-                        }
-                    }
-
-                }
-
-                SettingsSeparator {
-                }
+                SettingsSeparator {}
 
                 SettingsRow {
                     title: i18n("Respect minimum size")
@@ -176,15 +137,13 @@ SettingsFlickable {
                     SettingsSwitch {
                         checked: appSettings.autotileRespectMinimumSize
                         accessibleName: i18n("Respect window minimum size")
-                        onToggled: function(newValue) {
+                        onToggled: function (newValue) {
                             appSettings.autotileRespectMinimumSize = newValue;
                         }
                     }
-
                 }
 
-                SettingsSeparator {
-                }
+                SettingsSeparator {}
 
                 SettingsRow {
                     title: i18n("Sticky windows")
@@ -194,24 +153,26 @@ SettingsFlickable {
                         Accessible.name: i18n("Sticky windows")
                         textRole: "text"
                         valueRole: "value"
-                        model: [{
-                            "text": i18n("Treat as normal"),
-                            "value": 0
-                        }, {
-                            "text": i18n("Restore only"),
-                            "value": 1
-                        }, {
-                            "text": i18n("Ignore all"),
-                            "value": 2
-                        }]
+                        model: [
+                            {
+                                "text": i18n("Treat as normal"),
+                                "value": 0
+                            },
+                            {
+                                "text": i18n("Restore only"),
+                                "value": 1
+                            },
+                            {
+                                "text": i18n("Ignore all"),
+                                "value": 2
+                            }
+                        ]
                         currentIndex: Math.max(0, indexOfValue(appSettings.autotileStickyWindowHandling))
                         onActivated: appSettings.autotileStickyWindowHandling = currentValue
                     }
-
                 }
 
-                SettingsSeparator {
-                }
+                SettingsSeparator {}
 
                 SettingsRow {
                     title: i18n("Drag behavior")
@@ -222,21 +183,22 @@ SettingsFlickable {
                         Accessible.description: i18n("Selects how dragging a tiled window on an autotile screen behaves: Float converts it to free-floating, Reorder keeps it tiled and swaps it into the drop slot.")
                         textRole: "text"
                         valueRole: "value"
-                        model: [{
-                            "text": i18n("Float on drag"),
-                            "value": 0
-                        }, {
-                            "text": i18n("Reorder on drag"),
-                            "value": 1
-                        }]
+                        model: [
+                            {
+                                "text": i18n("Float on drag"),
+                                "value": 0
+                            },
+                            {
+                                "text": i18n("Reorder on drag"),
+                                "value": 1
+                            }
+                        ]
                         currentIndex: Math.max(0, indexOfValue(appSettings.autotileDragBehavior))
                         onActivated: appSettings.autotileDragBehavior = currentValue
                     }
-
                 }
 
-                SettingsSeparator {
-                }
+                SettingsSeparator {}
 
                 SettingsRow {
                     title: i18n("Overflow behavior")
@@ -247,23 +209,62 @@ SettingsFlickable {
                         Accessible.description: i18n("Selects how windows beyond the max-windows cap are handled: Float excess windows, or Unlimited to tile every window regardless of count.")
                         textRole: "text"
                         valueRole: "value"
-                        model: [{
-                            "text": i18n("Float excess"),
-                            "value": 0
-                        }, {
-                            "text": i18n("Unlimited"),
-                            "value": 1
-                        }]
+                        model: [
+                            {
+                                "text": i18n("Float excess"),
+                                "value": 0
+                            },
+                            {
+                                "text": i18n("Unlimited"),
+                                "value": 1
+                            }
+                        ]
                         currentIndex: Math.max(0, indexOfValue(appSettings.autotileOverflowBehavior))
                         onActivated: appSettings.autotileOverflowBehavior = currentValue
                     }
-
                 }
-
             }
-
         }
 
-    }
+        // =================================================================
+        // Focus Card
+        // =================================================================
+        SettingsCard {
+            Layout.fillWidth: true
+            headerText: i18n("Focus")
+            collapsible: true
 
+            contentItem: ColumnLayout {
+                spacing: Kirigami.Units.smallSpacing
+
+                SettingsRow {
+                    title: i18n("Focus new windows")
+                    description: i18n("Focus a window when it opens")
+
+                    SettingsSwitch {
+                        checked: appSettings.autotileFocusNewWindows
+                        accessibleName: i18n("Focus newly opened windows")
+                        onToggled: function (newValue) {
+                            appSettings.autotileFocusNewWindows = newValue;
+                        }
+                    }
+                }
+
+                SettingsSeparator {}
+
+                SettingsRow {
+                    title: i18n("Focus follows mouse")
+                    description: i18n("Moving the mouse pointer over a window gives it focus")
+
+                    SettingsSwitch {
+                        checked: appSettings.autotileFocusFollowsMouse
+                        accessibleName: i18n("Focus follows mouse pointer")
+                        onToggled: function (newValue) {
+                            appSettings.autotileFocusFollowsMouse = newValue;
+                        }
+                    }
+                }
+            }
+        }
+    }
 }
