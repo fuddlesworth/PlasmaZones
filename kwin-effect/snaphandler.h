@@ -7,6 +7,7 @@
 
 #include <QColor>
 #include <QObject>
+#include <QPointF>
 #include <QString>
 
 namespace PlasmaZones {
@@ -55,6 +56,14 @@ public:
     /// Drop snap border/title-bar tracking for a window being destroyed. Pure
     /// bookkeeping — no setNoBorder/removeWindowBorder, the window is going away.
     void onWindowClosed(const QString& windowId);
+
+    // ── Snapping focus-follows-mouse (mirrors AutotileHandler) ──
+    void setFocusFollowsMouse(bool enabled);
+    /// Activate the topmost snapped window under the cursor when FFM is on.
+    /// No-op unless the window directly under the cursor is snapped (occlusion
+    /// guard), so a dialog/popup floating over a snapped window keeps focus.
+    /// Called from PlasmaZonesEffect::slotMouseChanged when not dragging.
+    void handleCursorMoved(const QPointF& pos, const QString& screenId);
 
     // ── Border rendering accessors — delegate to shared AutotileStateHelpers ──
     bool isBorderlessWindow(const QString& windowId) const
@@ -123,6 +132,10 @@ public:
 
 private:
     PlasmaZonesEffect* m_effect;
+    // Snapping focus-follows-mouse (Snapping.Behavior.FocusFollowsMouse). When
+    // on, moving the cursor over a snapped window activates it. Mirrors autotile
+    // FFM but scoped to the snap BorderState tiled set instead of autotile screens.
+    bool m_focusFollowsMouse = false;
     // Snapping's own managed-window border state, parallel to
     // AutotileHandler::m_border. Populated at snap commit, cleared on
     // float / unsnap / close.

@@ -463,15 +463,6 @@ private:
      */
     bool isWindowSnapBorderless(const QString& windowId) const;
 
-    /**
-     * @brief Snapping focus-follows-mouse: activate the topmost snapped window under
-     * the cursor. Gated by m_snappingFocusFollowsMouse and called from slotMouseChanged
-     * when not dragging. No-op unless the window directly under the cursor is snapped,
-     * so a dialog/popup floating over a snapped window keeps focus (occlusion guard,
-     * mirroring AutotileHandler::handleCursorMoved).
-     */
-    void handleSnapCursorMoved(const QPointF& pos, const QString& screenId);
-
     void notifyWindowClosed(KWin::EffectWindow* w);
     void notifyWindowActivated(KWin::EffectWindow* w);
     KWin::EffectWindow* findWindowById(const QString& windowId) const;
@@ -890,10 +881,6 @@ private:
     bool m_cachedToggleActivation = false;
     bool m_cachedAutotileDragInsertToggle = false;
     bool m_cachedZoneSpanToggleMode = false;
-    // Snapping focus-follows-mouse (Snapping.Behavior.FocusFollowsMouse). When on,
-    // moving the cursor over a snapped window activates it. Mirrors autotile FFM but
-    // scoped to the snap BorderState tiled set instead of autotile screens.
-    bool m_snappingFocusFollowsMouse = false;
     // AutotileDragBehavior cached so the synchronous drag-start fast path can
     // decide whether to skip the handleDragToFloat(immediate=true) call.
     // Refreshed by loadCachedSettings on every settingsChanged D-Bus

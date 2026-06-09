@@ -701,7 +701,7 @@ void PlasmaZonesEffect::loadCachedSettings()
     });
 
     loadSettingAsync(QStringLiteral("snappingFocusFollowsMouse"), [this](const QVariant& v) {
-        m_snappingFocusFollowsMouse = v.toBool();
+        m_snapHandler->setFocusFollowsMouse(v.toBool());
     });
 
     // Snapped-window border settings — feed SnapHandler's parallel snap
