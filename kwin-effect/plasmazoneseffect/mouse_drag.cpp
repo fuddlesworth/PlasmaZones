@@ -132,6 +132,21 @@ void PlasmaZonesEffect::handleSnapCursorMoved(const QPointF& pos)
         return;
     }
 
+    // Pause FFM while a transient/popup/special window is active so hovering a
+    // snapped window beneath it does not dismiss it — e.g. an emoji picker or
+    // notification opened over a snapped window, where moving the cursor across
+    // the underlying window's exposed area would otherwise activate it and send
+    // the popup to the background. A snapped or normal tileable active window
+    // does not pause FFM. Mirrors AutotileHandler::handleCursorMoved's
+    // active-window guard (discussion #461). Our own full-screen overlays never
+    // count as the kind of active window worth protecting.
+    if (KWin::EffectWindow* active = KWin::effects->activeWindow()) {
+        if (!isOwnOverlayClass(active->windowClass()) && !isWindowMarkedSnapped(getWindowId(active))
+            && !isTileableWindow(active)) {
+            return;
+        }
+    }
+
     // Find the topmost snapped window under the cursor (stacking order top → bottom).
     const auto windows = KWin::effects->stackingOrder();
     for (int i = windows.size() - 1; i >= 0; --i) {
