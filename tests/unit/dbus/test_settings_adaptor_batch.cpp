@@ -247,7 +247,7 @@ private Q_SLOTS:
     // test above: every requested key must come back, valid, with the right
     // wire type (color keys serialize to a HexArgb string).
     // ─────────────────────────────────────────────────────────────────────
-    void testGetSettings_snapWindowKeys_allReturnedWithTypes()
+    void testGetSettings_snappingKeys_allReturnedWithTypes()
     {
         const QStringList keys{
             QStringLiteral("snappingHideTitleBars"),         QStringLiteral("snappingShowBorder"),
@@ -446,7 +446,7 @@ private:
     std::unique_ptr<IsolatedConfigGuard> m_guard;
     CountingStubSettings* m_settings = nullptr;
     // CountingStubSettings publicly inherits StubSettings, whose snapping*
-    // getters back the value assertions in testGetSettings_snapWindowKeys_*.
+    // getters back the value assertions in testGetSettings_snappingKeys_*.
     QObject* m_parent = nullptr;
     SettingsAdaptor* m_adaptor = nullptr;
 };
