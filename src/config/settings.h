@@ -302,6 +302,10 @@ public:
     // Autotile Behavior and Visual Settings
     Q_PROPERTY(bool autotileFocusFollowsMouse READ autotileFocusFollowsMouse WRITE setAutotileFocusFollowsMouse NOTIFY
                    autotileFocusFollowsMouseChanged)
+    Q_PROPERTY(bool snappingFocusNewWindows READ snappingFocusNewWindows WRITE setSnappingFocusNewWindows NOTIFY
+                   snappingFocusNewWindowsChanged)
+    Q_PROPERTY(bool snappingFocusFollowsMouse READ snappingFocusFollowsMouse WRITE setSnappingFocusFollowsMouse NOTIFY
+                   snappingFocusFollowsMouseChanged)
     Q_PROPERTY(bool autotileRespectMinimumSize READ autotileRespectMinimumSize WRITE setAutotileRespectMinimumSize
                    NOTIFY autotileRespectMinimumSizeChanged)
     Q_PROPERTY(bool autotileHideTitleBars READ autotileHideTitleBars WRITE setAutotileHideTitleBars NOTIFY
@@ -864,6 +868,10 @@ public:
     // Additional Autotiling Settings — PhosphorConfig::Store-backed.
     bool autotileFocusFollowsMouse() const override;
     void setAutotileFocusFollowsMouse(bool focus) override;
+    bool snappingFocusNewWindows() const override;
+    void setSnappingFocusNewWindows(bool focus) override;
+    bool snappingFocusFollowsMouse() const override;
+    void setSnappingFocusFollowsMouse(bool focus) override;
     bool autotileRespectMinimumSize() const override;
     void setAutotileRespectMinimumSize(bool respect);
     bool autotileHideTitleBars() const override;

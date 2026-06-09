@@ -752,6 +752,22 @@ public:
     void setAutotileFocusFollowsMouse(bool) override
     {
     }
+    bool snappingFocusNewWindows() const override
+    {
+        return m_snappingFocusNewWindows;
+    }
+    void setSnappingFocusNewWindows(bool v) override
+    {
+        m_snappingFocusNewWindows = v;
+    }
+    bool snappingFocusFollowsMouse() const override
+    {
+        return m_snappingFocusFollowsMouse;
+    }
+    void setSnappingFocusFollowsMouse(bool v) override
+    {
+        m_snappingFocusFollowsMouse = v;
+    }
     bool autotileHideTitleBars() const override
     {
         return false;
@@ -1105,6 +1121,8 @@ private:
     bool m_snapAssistFeatureEnabled = false;
     bool m_snapAssistEnabled = false;
     bool m_autoAssignAllLayouts = false;
+    bool m_snappingFocusNewWindows = false;
+    bool m_snappingFocusFollowsMouse = false;
     QStringList m_snappingLayoutOrder;
     QStringList m_tilingAlgorithmOrder;
     QVariantList m_dragActivationTriggers;

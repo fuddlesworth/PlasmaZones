@@ -686,6 +686,8 @@ void appendActivationSchema(PhosphorConfig::Schema& schema)
     schema.groups[CD::snappingBehaviorGroup()] = {
         {CD::triggersKey(), CD::dragActivationTriggers(), QMetaType::QVariantList, {}, canonicalTriggerList},
         {CD::toggleActivationKey(), CD::toggleActivation(), QMetaType::Bool},
+        {CD::focusNewWindowsKey(), CD::snappingFocusNewWindows(), QMetaType::Bool},
+        {CD::focusFollowsMouseKey(), CD::snappingFocusFollowsMouse(), QMetaType::Bool},
     };
     schema.groups[CD::snappingBehaviorZoneSpanGroup()] = {
         {CD::enabledKey(), CD::zoneSpanEnabled(), QMetaType::Bool},
