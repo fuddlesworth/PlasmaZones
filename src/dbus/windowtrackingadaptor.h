@@ -899,7 +899,8 @@ private:
     // engine flips its float bit BEFORE the daemon's sync slot reaches the
     // writer, so a re-query already reports the post-transition value and would
     // suppress every autotile float broadcast. Absent entry == not-floating.
-    // Entries are removed on windowClosed.
+    // Entries are removed on windowClosed and swept by pruneStaleWindows
+    // (defensive, for a window that died without a close signal).
     QHash<QString, bool> m_broadcastFloating;
 
     // ═══════════════════════════════════════════════════════════════════════════════

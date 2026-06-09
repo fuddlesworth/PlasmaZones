@@ -860,6 +860,16 @@ void WindowTrackingAdaptor::pruneStaleWindows(const QStringList& aliveWindowIds)
             ++it;
         }
     }
+    // Same defensive sweep for the last-broadcast floating shadow: an entry
+    // would otherwise leak if the window died without a windowClosed signal.
+    // Not persisted, so it does not feed the save-scheduling decision below.
+    for (auto it = m_broadcastFloating.begin(); it != m_broadcastFloating.end();) {
+        if (!alive.contains(it.key())) {
+            it = m_broadcastFloating.erase(it);
+        } else {
+            ++it;
+        }
+    }
     const int totalPruned = persistedPruned + frameGeoPruned;
     if (totalPruned > 0) {
         qCInfo(lcDbusWindow) << "Pruned" << totalPruned << "stale window assignments (not in KWin)";
