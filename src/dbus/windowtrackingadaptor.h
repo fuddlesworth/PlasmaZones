@@ -893,6 +893,15 @@ private:
     // fresh geometry without round-tripping through the effect.
     QHash<QString, QRect> m_frameGeometry;
 
+    // Last floating value broadcast via windowFloatingChanged, per window. The
+    // setWindowFloating broadcast gate compares against THIS, not a re-query of
+    // the service's float state: with the per-engine float model the owning
+    // engine flips its float bit BEFORE the daemon's sync slot reaches the
+    // writer, so a re-query already reports the post-transition value and would
+    // suppress every autotile float broadcast. Absent entry == not-floating.
+    // Entries are removed on windowClosed.
+    QHash<QString, bool> m_broadcastFloating;
+
     // ═══════════════════════════════════════════════════════════════════════════════
     // Dependencies (kept for signal connections and settings access)
     // ═══════════════════════════════════════════════════════════════════════════════

@@ -571,6 +571,8 @@ void WindowTrackingAdaptor::windowClosed(const QString& windowId, int windowKind
 
     // Drop frame-geometry shadow entry for this window.
     m_frameGeometry.remove(windowId);
+    // Drop the last-broadcast floating state for this window.
+    m_broadcastFloating.remove(windowId);
 
     m_service->windowClosed(windowId, kind);
 
