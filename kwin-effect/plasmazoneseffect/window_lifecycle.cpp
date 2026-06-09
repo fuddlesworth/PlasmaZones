@@ -209,7 +209,7 @@ void PlasmaZonesEffect::slotWindowAdded(KWin::EffectWindow* w)
         // window, daemon decided not to tile, already-notified), nothing
         // further will move the window, so release suppression immediately
         // rather than waiting for the 250ms deadline.
-        callResolveWindowRestore(
+        m_snapHandler->callResolveWindowRestore(
             w,
             [this, safeW]() {
                 if (!safeW || safeW->isDeleted()) {
@@ -258,74 +258,8 @@ void PlasmaZonesEffect::slotWindowAdded(KWin::EffectWindow* w)
         // instant restore already placed the window the daemon returns the
         // same zone rect, so the re-apply is a no-op moveResize to the
         // current geometry — the price of correct registration.
-        callResolveWindowRestore(w);
+        m_snapHandler->callResolveWindowRestore(w);
     }
-}
-
-// Window-restore-on-open: when a window we handle is mapped, ask the daemon
-// whether it has a saved zone to restore it into, and apply it. This is the
-// async counterpart of slotWindowAdded's instant cache restore. It lives
-// here, next to slotWindowAdded (its only caller), rather than in
-// drag_snap.cpp — it has nothing to do with drag-to-snap; it only happens to
-// build on the shared applySnapGeometry / tryAsyncSnapCall machinery.
-void PlasmaZonesEffect::callResolveWindowRestore(KWin::EffectWindow* window, std::function<void()> onComplete,
-                                                 bool releaseSuppressionOnMiss)
-{
-    if (!window) {
-        if (onComplete) {
-            onComplete();
-        }
-        return;
-    }
-
-    if (!isDaemonReady("resolve window restore")) {
-        // No daemon means no snap-restore (and no autotile either — it
-        // needs the daemon too). Release first-frame suppression so the
-        // window is not held invisible waiting on a reposition that will
-        // never come.
-        endRestoreSuppression(window);
-        if (onComplete) {
-            onComplete();
-        }
-        return;
-    }
-
-    QPointer<KWin::EffectWindow> safeWindow = window;
-    QString windowId = getWindowId(window);
-    QString screenId = getWindowScreenId(window);
-    bool sticky = isWindowSticky(window);
-
-    // On a resolve miss (daemon found no zone) release first-frame
-    // suppression — unless the caller says another path will still
-    // reposition the window (autotile-screen path), in which case the
-    // suppression must hold until that reposition's geometry settles.
-    std::function<void()> onMiss;
-    if (releaseSuppressionOnMiss) {
-        onMiss = [this, safeWindow]() {
-            if (safeWindow) {
-                endRestoreSuppression(safeWindow);
-            }
-        };
-    }
-
-    // Single D-Bus call — daemon runs the full appRule → persisted → emptyZone → lastZone chain.
-    //
-    // skipAnimation=true: teleport the window straight into the resolved
-    // zone. The animated morph path tweens the window from its spawn
-    // position, which both reads as "KDE opened the window, then we moved
-    // it" and collides with any in-flight surface-extent window.open
-    // shader (bounce / fly-in) — the morph translates the output-spanning
-    // shader quad. Placing the window directly lets the open shader play
-    // cleanly into the zone.
-    //
-    // storePreSnap=false: the window is already at its snap/zone position (from before
-    // daemon restart or from KWin session restore), so its current frameGeometry is the
-    // zone geometry — NOT the free-floating geometry. Storing it as pre-tile would cause
-    // float toggle to restore to the zone geometry instead of the original free-floating position.
-    const int kindInt = static_cast<int>(classifyWindowKind(window));
-    tryAsyncSnapCall(PhosphorProtocol::Service::Interface::Snap, QStringLiteral("resolveWindowRestore"),
-                     {windowId, screenId, sticky, kindInt}, safeWindow, windowId, false, onMiss, nullptr,
-                     /*skipAnimation=*/true, onComplete);
 }
 
 void PlasmaZonesEffect::slotWindowClosed(KWin::EffectWindow* w)

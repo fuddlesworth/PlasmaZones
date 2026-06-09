@@ -10,9 +10,15 @@
 #include <QObject>
 #include <QPointF>
 #include <QRect>
+#include <QRectF>
 #include <QString>
 
+#include <functional>
 #include <optional>
+
+namespace KWin {
+class EffectWindow;
+}
 
 namespace PlasmaZones {
 
@@ -118,6 +124,20 @@ public:
         m_restoreCache.erase(it);
         return entry;
     }
+
+    // ── Snap restore-on-open orchestration ──
+    /// Ask the daemon whether @p window has a saved zone and apply it (async) —
+    /// the async counterpart of the instant restore-cache teleport.
+    /// releaseSuppressionOnMiss: when the daemon resolves no zone, release the
+    /// window's first-frame suppression. Pass false when something else will
+    /// still reposition it on a miss (the autotile-screen path tiles it via
+    /// onComplete) — there the suppression must hold through that reposition.
+    void callResolveWindowRestore(KWin::EffectWindow* window, std::function<void()> onComplete = nullptr,
+                                  bool releaseSuppressionOnMiss = true);
+    /// Store a window's pre-snap (free-float) geometry with the daemon before a
+    /// snap commit, so a later float toggle restores the original position.
+    void ensurePreSnapGeometryStored(KWin::EffectWindow* w, const QString& windowId,
+                                     const QRectF& preCapturedGeometry = QRectF());
 
     // ── Border rendering accessors — delegate to shared AutotileStateHelpers ──
     bool isBorderlessWindow(const QString& windowId) const

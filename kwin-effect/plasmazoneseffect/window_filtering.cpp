@@ -36,43 +36,6 @@ bool rejectedBecause(QString* out, const char* reason)
 }
 } // namespace
 
-void PlasmaZonesEffect::ensurePreSnapGeometryStored(KWin::EffectWindow* w, const QString& windowId,
-                                                    const QRectF& preCapturedGeometry)
-{
-    if (!w || windowId.isEmpty()) {
-        return;
-    }
-
-    if (!isDaemonReady("ensure pre-snap geometry")) {
-        return;
-    }
-
-    // Use pre-captured geometry if provided, otherwise read from window.
-    QRectF geom = preCapturedGeometry.isValid() ? preCapturedGeometry : w->frameGeometry();
-    if (geom.width() <= 0 || geom.height() <= 0) {
-        return;
-    }
-
-    // Use virtual-screen-aware ID — getWindowScreenId() falls back to the physical
-    // ID when virtual screen defs haven't loaded yet, so it is safe to call
-    // unconditionally. Using it here ensures the stored screen ID always matches
-    // the ID used by later lookups.
-    const QString screenId = getWindowScreenId(w);
-
-    // Post the store directly with overwrite=false. The daemon's storePreTileGeometry
-    // enforces per-windowId idempotency — a second capture for the same runtime
-    // instance is a no-op. We deliberately skip the prior async hasPreTileGeometry
-    // pre-check: that path matched on appId too, so a stale cross-session entry from
-    // a prior window instance (keyed by appId) would block the fresh per-instance
-    // capture and freeze float-restore at ancient coordinates.
-    PhosphorProtocol::ClientHelpers::fireAndForget(
-        this, PhosphorProtocol::Service::Interface::WindowTracking, QStringLiteral("storePreTileGeometry"),
-        {windowId, static_cast<int>(geom.x()), static_cast<int>(geom.y()), static_cast<int>(geom.width()),
-         static_cast<int>(geom.height()), screenId, false},
-        QStringLiteral("storePreTileGeometry"));
-    qCInfo(lcEffect) << "Stored pre-tile geometry for window" << windowId << "geom=" << geom;
-}
-
 QHash<QString, KWin::EffectWindow*> PlasmaZonesEffect::buildWindowMap() const
 {
     const auto windows = KWin::effects->stackingOrder();

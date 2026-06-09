@@ -100,7 +100,7 @@ void PlasmaZonesEffect::slotMoveSpecificWindowToZoneRequested(const QString& win
     // Capture geometry BEFORE applySnapGeometry resizes the window. The async D-Bus
     // callback in ensurePreSnapGeometryStored would read frameGeometry() after the
     // resize, corrupting the pre-tile entry with zone dimensions.
-    ensurePreSnapGeometryStored(targetWindow, getWindowId(targetWindow), targetWindow->frameGeometry());
+    m_snapHandler->ensurePreSnapGeometryStored(targetWindow, getWindowId(targetWindow), targetWindow->frameGeometry());
     applySnapGeometry(targetWindow, geometry);
 
     // Derive screen from the applied geometry center. Use resolveEffectiveScreenId
@@ -212,7 +212,7 @@ void PlasmaZonesEffect::slotApplyGeometryRequested(const QString& windowId, int 
         // ensurePreSnapGeometryStored is async (D-Bus hasPreTileGeometry check) — without
         // pre-capturing, the callback would read the post-move geometry instead of the
         // original free-floating position.
-        ensurePreSnapGeometryStored(w, getWindowId(w), w->frameGeometry());
+        m_snapHandler->ensurePreSnapGeometryStored(w, getWindowId(w), w->frameGeometry());
     }
 
     // Empty zoneId = float-restore (daemon placing the window back at its pre-snap geometry, e.g.
@@ -633,7 +633,7 @@ void PlasmaZonesEffect::slotPendingRestoresAvailable()
 
             // Window is not tracked - try to restore it
             qCDebug(lcEffect) << "Retrying restoration for untracked window:" << windowId;
-            callResolveWindowRestore(window);
+            m_snapHandler->callResolveWindowRestore(window);
         }
     });
 }

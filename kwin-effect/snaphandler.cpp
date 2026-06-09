@@ -6,11 +6,19 @@
 #include "autotilehandler.h"
 #include "plasmazoneseffect.h"
 
+#include <PhosphorProtocol/ClientHelpers.h>
+#include <PhosphorProtocol/ServiceConstants.h>
+
 #include <effect/effecthandler.h>
 #include <effect/effectwindow.h>
 #include <window.h>
 
+#include <QLoggingCategory>
+#include <QPointer>
+
 namespace PlasmaZones {
+
+Q_DECLARE_LOGGING_CATEGORY(lcEffect)
 
 namespace {
 // Drop the server-side decoration while keeping the window filling its zone.
@@ -214,6 +222,103 @@ void SnapHandler::onWindowClosed(const QString& windowId)
 void SnapHandler::setFocusFollowsMouse(bool enabled)
 {
     m_focusFollowsMouse = enabled;
+}
+
+void SnapHandler::callResolveWindowRestore(KWin::EffectWindow* window, std::function<void()> onComplete,
+                                           bool releaseSuppressionOnMiss)
+{
+    if (!window) {
+        if (onComplete) {
+            onComplete();
+        }
+        return;
+    }
+
+    if (!m_effect->isDaemonReady("resolve window restore")) {
+        // No daemon means no snap-restore (and no autotile either — it
+        // needs the daemon too). Release first-frame suppression so the
+        // window is not held invisible waiting on a reposition that will
+        // never come.
+        m_effect->endRestoreSuppression(window);
+        if (onComplete) {
+            onComplete();
+        }
+        return;
+    }
+
+    QPointer<KWin::EffectWindow> safeWindow = window;
+    QString windowId = m_effect->getWindowId(window);
+    QString screenId = m_effect->getWindowScreenId(window);
+    bool sticky = m_effect->isWindowSticky(window);
+
+    // On a resolve miss (daemon found no zone) release first-frame
+    // suppression — unless the caller says another path will still
+    // reposition the window (autotile-screen path), in which case the
+    // suppression must hold until that reposition's geometry settles.
+    std::function<void()> onMiss;
+    if (releaseSuppressionOnMiss) {
+        onMiss = [this, safeWindow]() {
+            if (safeWindow) {
+                m_effect->endRestoreSuppression(safeWindow);
+            }
+        };
+    }
+
+    // Single D-Bus call — daemon runs the full appRule → persisted → emptyZone → lastZone chain.
+    //
+    // skipAnimation=true: teleport the window straight into the resolved
+    // zone. The animated morph path tweens the window from its spawn
+    // position, which both reads as "KDE opened the window, then we moved
+    // it" and collides with any in-flight surface-extent window.open
+    // shader (bounce / fly-in) — the morph translates the output-spanning
+    // shader quad. Placing the window directly lets the open shader play
+    // cleanly into the zone.
+    //
+    // storePreSnap=false: the window is already at its snap/zone position (from before
+    // daemon restart or from KWin session restore), so its current frameGeometry is the
+    // zone geometry — NOT the free-floating geometry. Storing it as pre-tile would cause
+    // float toggle to restore to the zone geometry instead of the original free-floating position.
+    const int kindInt = static_cast<int>(m_effect->classifyWindowKind(window));
+    m_effect->tryAsyncSnapCall(PhosphorProtocol::Service::Interface::Snap, QStringLiteral("resolveWindowRestore"),
+                               {windowId, screenId, sticky, kindInt}, safeWindow, windowId, false, onMiss, nullptr,
+                               /*skipAnimation=*/true, onComplete);
+}
+
+void SnapHandler::ensurePreSnapGeometryStored(KWin::EffectWindow* w, const QString& windowId,
+                                              const QRectF& preCapturedGeometry)
+{
+    if (!w || windowId.isEmpty()) {
+        return;
+    }
+
+    if (!m_effect->isDaemonReady("ensure pre-snap geometry")) {
+        return;
+    }
+
+    // Use pre-captured geometry if provided, otherwise read from window.
+    QRectF geom = preCapturedGeometry.isValid() ? preCapturedGeometry : w->frameGeometry();
+    if (geom.width() <= 0 || geom.height() <= 0) {
+        return;
+    }
+
+    // Use virtual-screen-aware ID — getWindowScreenId() falls back to the physical
+    // ID when virtual screen defs haven't loaded yet, so it is safe to call
+    // unconditionally. Using it here ensures the stored screen ID always matches
+    // the ID used by later lookups.
+    const QString screenId = m_effect->getWindowScreenId(w);
+
+    // Post the store directly with overwrite=false. The daemon's storePreTileGeometry
+    // enforces per-windowId idempotency — a second capture for the same runtime
+    // instance is a no-op. We deliberately skip the prior async hasPreTileGeometry
+    // pre-check: that path matched on appId too, so a stale cross-session entry from
+    // a prior window instance (keyed by appId) would block the fresh per-instance
+    // capture and freeze float-restore at ancient coordinates.
+    PhosphorProtocol::ClientHelpers::fireAndForget(
+        m_effect, PhosphorProtocol::Service::Interface::WindowTracking, QStringLiteral("storePreTileGeometry"),
+        {windowId, static_cast<int>(geom.x()), static_cast<int>(geom.y()), static_cast<int>(geom.width()),
+         static_cast<int>(geom.height()), screenId, false},
+        QStringLiteral("storePreTileGeometry"));
+    qCInfo(lcEffect) << "Stored pre-tile geometry for window" << windowId << "geom=" << geom;
 }
 
 void SnapHandler::handleCursorMoved(const QPointF& pos, const QString& screenId)

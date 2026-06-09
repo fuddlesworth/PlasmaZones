@@ -385,13 +385,6 @@ private:
      */
     void callEndDrag(KWin::EffectWindow* window, const QString& windowId, bool cancelled);
     void callCancelSnap();
-    // releaseSuppressionOnMiss: when the daemon resolves no zone for the
-    // window, release its first-frame suppression (see RestoreSuppression).
-    // Pass false when something else will still reposition the window on a
-    // miss (the autotile-screen path tiles it via onComplete) — there the
-    // suppression must hold through that reposition instead.
-    void callResolveWindowRestore(KWin::EffectWindow* window, std::function<void()> onComplete = nullptr,
-                                  bool releaseSuppressionOnMiss = true);
     void connectNavigationSignals();
     void syncFloatingWindowsFromDaemon();
 
@@ -405,15 +398,6 @@ private:
     // ═══════════════════════════════════════════════════════════════════════════════
     // Helper Methods
     // ═══════════════════════════════════════════════════════════════════════════════
-
-    /**
-     * @brief Ensure pre-snap geometry is stored for a window before snapping
-     * @param w The effect window
-     * @param windowId The window identifier
-     * @note Checks if geometry exists, stores current geometry if not
-     */
-    void ensurePreSnapGeometryStored(KWin::EffectWindow* w, const QString& windowId,
-                                     const QRectF& preCapturedGeometry = QRectF());
 
     /**
      * @brief Build a map of full window IDs to EffectWindow pointers

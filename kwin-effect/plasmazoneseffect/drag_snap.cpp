@@ -292,7 +292,7 @@ void PlasmaZonesEffect::tryAsyncSnapCall(const QString& interface, const QString
                         // `window` is non-null inside this branch (guarded by the
                         // `reply.argumentAt<4>() && window` check above), so the
                         // ternary fall-through to QRectF() is unreachable.
-                        ensurePreSnapGeometryStored(window, windowId, window->frameGeometry());
+                        m_snapHandler->ensurePreSnapGeometryStored(window, windowId, window->frameGeometry());
                     applySnapGeometry(window, geo, false, skipAnimation);
                     // Async snap (keyboard / empty-zone / last-zone / auto-fill)
                     // committed — record in snapping's border set, but only for
