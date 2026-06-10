@@ -1,0 +1,143 @@
+// SPDX-FileCopyrightText: 2026 fuddlesworth
+// SPDX-License-Identifier: GPL-3.0-or-later
+import QtQuick
+import QtQuick.Layouts
+import org.kde.kirigami as Kirigami
+
+/**
+ * A SettingsFlickable that renders a list of AnimationEventCards with
+ * viewport-gated lazy construction: only cards whose slot intersects the
+ * visible viewport (plus a build-ahead buffer) are instantiated. Each
+ * AnimationEventCard embeds a heavy AnimationProfileEditor (curve Canvas,
+ * shader picker, sliders, dialogs), so building a whole page of them
+ * eagerly was the dominant first-visit cost on the animation-event pages.
+ *
+ * The root stays a SettingsFlickable so the Kirigami.WheelHandler (Plasma
+ * wheel-scroll speed, bug 385836) is preserved untouched — no ListView,
+ * no re-derived wheel math. Cards are recycle-safe: AnimationEventCard
+ * holds no persistent state of its own (its Component.onCompleted re-reads
+ * from settingsController.animationsPage), so a freshly-built card always
+ * shows the committed tree state. Each Loader LATCHES active once it
+ * enters the viewport and never unloads, so no transient UI (open dialogs,
+ * focus, master-toggle collapse state) is lost on scroll.
+ *
+ * Consumers provide `eventModel` (and an Accessible.name):
+ *
+ *   AnimationEventCardList {
+ *       Accessible.name: i18n("Window animation events")
+ *       eventModel: [ { eventPath, eventLabel, isParentNode }, ... ]
+ *   }
+ */
+SettingsFlickable {
+    id: page
+
+    /// Ordered list of `{ eventPath: string, eventLabel: string,
+    /// isParentNode: bool }` — one AnimationEventCard per entry, in order.
+    property var eventModel: []
+
+    // Build-ahead margin above/below the visible viewport so a card is
+    // built slightly before it scrolls into view — keeps a fast flick from
+    // landing on an un-built placeholder.
+    readonly property real buildBuffer: Kirigami.Units.gridUnit * 20
+    // Placeholder height a not-yet-built card reserves in the layout so
+    // contentHeight (and scroll position) stays stable until the real card
+    // materialises. Sized to a collapsed card (header + inheritance banner
+    // + "Current:" line).
+    readonly property real placeholderHeight: Kirigami.Units.gridUnit * 7
+
+    contentHeight: col.implicitHeight
+    clip: true
+
+    ColumnLayout {
+        id: col
+
+        width: page.width
+        spacing: Kirigami.Units.smallSpacing
+
+        Repeater {
+            model: page.eventModel
+
+            // One latching, viewport-gated Loader per event. The Loader is
+            // the layout participant — it carries the placeholder height
+            // until built, then tracks the card's real height.
+            Loader {
+                id: cardLoader
+
+                required property var modelData
+
+                // Latch: once the card has entered the viewport it stays
+                // built. `_everInView` flips true and never back.
+                property bool _everInView: false
+
+                Layout.fillWidth: true
+                // Reserve the real card height once built (a Loader's
+                // implicitHeight reflects its loaded item's implicitHeight),
+                // placeholder otherwise. Reading `cardLoader.implicitHeight`
+                // rather than `item.implicitHeight` keeps the access typed —
+                // `Loader.item` is an untyped QtObject. `> 0` covers the
+                // async window where active is true but item not yet built.
+                Layout.preferredHeight: cardLoader.active && cardLoader.implicitHeight > 0 ? cardLoader.implicitHeight : page.placeholderHeight
+                active: _everInView
+                asynchronous: true
+                // Deliberately NOT `visible: active`. QtQuick.Layouts
+                // excludes invisible items from layout entirely, so an
+                // inactive (not-yet-built) Loader marked invisible would
+                // reserve ZERO height instead of `placeholderHeight`. Every
+                // card's `y` would then collapse toward 0, the viewport test
+                // below would see them all on-screen, and the whole page
+                // would build at once — defeating the virtualization. An
+                // inactive Loader has no `item`, so it paints nothing while
+                // visible; leaving it visible keeps it a layout participant
+                // that carries the placeholder height.
+
+                // Imperative one-shot latch. A declarative `Binding { when:
+                // <reads y> }` loops: building the card changes
+                // Layout.preferredHeight, which makes the ColumnLayout
+                // re-assign every child's `y` in the same pass, re-firing
+                // the `when` that reads `y` — Qt flags that as a binding
+                // loop. Checking imperatively on the relevant change signals
+                // and returning once latched breaks the cycle. `y` is read
+                // live but never bound; placeholderHeight (constant)
+                // estimates the slot's bottom so the build height never
+                // feeds back in. A ColumnLayout derives a child's `y` from
+                // the items ABOVE it, never from this Loader's own
+                // height/active, so reading `y` here is safe.
+                function _checkInView() {
+                    if (cardLoader._everInView)
+                        return;
+                    const top = cardLoader.y;
+                    if ((top + page.placeholderHeight) >= (page.contentY - page.buildBuffer) && top <= (page.contentY + page.height + page.buildBuffer))
+                        cardLoader._everInView = true;
+                }
+                onYChanged: cardLoader._checkInView()
+                // Deferred one tick: a ColumnLayout assigns child `y` on a
+                // polish pass AFTER Component.onCompleted runs, so a check
+                // here would read the pre-layout `y` (0 for every card) and
+                // latch the whole page in-view. Qt.callLater runs the first
+                // check once layout has positioned this Loader, so the
+                // viewport test sees the real slot position. Later re-checks
+                // come from onYChanged / the page Connections below.
+                Component.onCompleted: Qt.callLater(cardLoader._checkInView)
+
+                Connections {
+                    target: page
+                    function onContentYChanged() {
+                        cardLoader._checkInView();
+                    }
+                    function onHeightChanged() {
+                        cardLoader._checkInView();
+                    }
+                }
+
+                sourceComponent: AnimationEventCard {
+                    // Width is driven by the Loader (Layout.fillWidth →
+                    // Loader.width → item.width); the card's implicitHeight
+                    // drives Layout.preferredHeight above.
+                    eventPath: cardLoader.modelData.eventPath
+                    eventLabel: cardLoader.modelData.eventLabel
+                    isParentNode: cardLoader.modelData.isParentNode === true
+                }
+            }
+        }
+    }
+}
