@@ -70,7 +70,13 @@ SettingsFlickable {
                 property bool _everInView: false
 
                 Layout.fillWidth: true
-                Layout.preferredHeight: active && item ? item.implicitHeight : page.placeholderHeight
+                // Reserve the real card height once built (a Loader's
+                // implicitHeight reflects its loaded item's implicitHeight),
+                // placeholder otherwise. Reading `cardLoader.implicitHeight`
+                // rather than `item.implicitHeight` keeps the access typed —
+                // `Loader.item` is an untyped QtObject. `> 0` covers the
+                // async window where active is true but item not yet built.
+                Layout.preferredHeight: cardLoader.active && cardLoader.implicitHeight > 0 ? cardLoader.implicitHeight : page.placeholderHeight
                 active: _everInView
                 asynchronous: true
                 visible: active
