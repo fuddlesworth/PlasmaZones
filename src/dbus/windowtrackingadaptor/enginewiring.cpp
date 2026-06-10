@@ -205,7 +205,9 @@ void WindowTrackingAdaptor::setWindowRuleStore(PhosphorWindowRule::WindowRuleSto
 
 bool WindowTrackingAdaptor::shouldRestoreUnsnappedPosition(const QString& windowId)
 {
-    const bool globalDefault = m_settings && m_settings->restoreUnsnappedWindowsOnLogin();
+    // m_settings is a hard ctor dependency (qFatal on null), so it is non-null
+    // here — deref unguarded like every other method in this class.
+    const bool globalDefault = m_settings->restoreUnsnappedWindowsOnLogin();
 
     // No rule store / metadata → the global setting is the whole policy.
     if (!m_windowRuleStore || m_windowRegistry.isNull()) {

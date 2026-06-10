@@ -37,10 +37,12 @@
 #include <PhosphorWindowRule/MatchTypes.h>
 #include <PhosphorWindowRule/RuleAction.h>
 #include <PhosphorWindowRule/WindowRule.h>
+#include <PhosphorIdentity/WindowId.h>
 #include <PhosphorWindowRule/WindowRuleStore.h>
 #include <PhosphorZones/Zone.h>
 #include "dbus/windowtrackingadaptor.h"
 
+#include <QScopeGuard>
 #include <QTemporaryDir>
 #include <QUuid>
 
@@ -308,26 +310,66 @@ private Q_SLOTS:
         QVERIFY(store.addRule(rule));
 
         m_wta->setWindowRuleStore(&store);
+        // Sever the borrow on ANY exit path (incl. an early QVERIFY2 return)
+        // before the stack-local store above is destroyed — a dangling borrow
+        // would be deref'd during teardown.
+        const auto detach = qScopeGuard([this] {
+            m_wta->setWindowRuleStore(nullptr);
+        });
         m_settings->setRestoreUnsnappedWindowsOnLogin(true); // global default ON
 
         // Dolphin's metadata is registered under the BARE instance id.
         const QString dolphinInstance = QStringLiteral("dolphin-uuid-1");
         m_registry->upsert(dolphinInstance, {QStringLiteral("org.kde.dolphin"), QString(), QString()});
 
-        // The engine consults the predicate with the COMPOSITE windowId — the rule
-        // must still resolve (false) and override the global ON. On the pre-fix code
-        // metadata() missed and this returned the global default (true).
-        QVERIFY2(!m_wta->shouldRestoreUnsnappedPosition(QStringLiteral("org.kde.dolphin|") + dolphinInstance),
+        // The engine consults the predicate with the COMPOSITE windowId (built via
+        // the same identity helper the daemon uses) — the rule must still resolve
+        // (false) and override the global ON. On the pre-fix code metadata() missed
+        // and this returned the global default (true).
+        QVERIFY2(!m_wta->shouldRestoreUnsnappedPosition(
+                     PhosphorIdentity::WindowId::buildCompositeId(QStringLiteral("org.kde.dolphin"), dolphinInstance)),
                  "a matched RestorePosition(false) rule must override the global ON setting");
 
         // An unmatched window falls back to the global setting (ON).
         const QString konsoleInstance = QStringLiteral("konsole-uuid-1");
         m_registry->upsert(konsoleInstance, {QStringLiteral("org.kde.konsole"), QString(), QString()});
-        QVERIFY2(m_wta->shouldRestoreUnsnappedPosition(QStringLiteral("org.kde.konsole|") + konsoleInstance),
+        QVERIFY2(m_wta->shouldRestoreUnsnappedPosition(
+                     PhosphorIdentity::WindowId::buildCompositeId(QStringLiteral("org.kde.konsole"), konsoleInstance)),
                  "an unmatched window falls back to the global restoreUnsnappedWindowsOnLogin = true");
+    }
 
-        // Detach the borrow before the stack-local store is destroyed.
+    // ────────────────────────────────────────────────────────────────────
+    // The no-rule fallback branches: with no store, or a store that has no
+    // metadata for the window, the global restoreUnsnappedWindowsOnLogin
+    // setting is the whole policy. Guards the early-outs in
+    // shouldRestoreUnsnappedPosition (null store / registry, metadata miss) —
+    // a regression flipping either to a hardcoded false would silently disable
+    // restore for every not-yet-registered window at session start.
+    // ────────────────────────────────────────────────────────────────────
+    void restorePositionRule_fallsBackToGlobal_withoutMatchingMetadata()
+    {
+        const QString unseen = PhosphorIdentity::WindowId::buildCompositeId(QStringLiteral("org.kde.dolphin"),
+                                                                            QStringLiteral("unseen-uuid"));
+
+        // No store wired → global setting decides, both polarities.
         m_wta->setWindowRuleStore(nullptr);
+        m_settings->setRestoreUnsnappedWindowsOnLogin(true);
+        QVERIFY2(m_wta->shouldRestoreUnsnappedPosition(unseen), "no store → global ON restores");
+        m_settings->setRestoreUnsnappedWindowsOnLogin(false);
+        QVERIFY2(!m_wta->shouldRestoreUnsnappedPosition(unseen), "no store → global OFF suppresses");
+
+        // Store wired, but this window was never registered → metadata miss →
+        // still the global setting (no rule can match a window with no query).
+        QTemporaryDir dir;
+        QVERIFY(dir.isValid());
+        PhosphorWindowRule::WindowRuleStore store(dir.filePath(QStringLiteral("windowrules.json")));
+        m_wta->setWindowRuleStore(&store);
+        const auto detach = qScopeGuard([this] {
+            m_wta->setWindowRuleStore(nullptr);
+        });
+        m_settings->setRestoreUnsnappedWindowsOnLogin(true);
+        QVERIFY2(m_wta->shouldRestoreUnsnappedPosition(unseen),
+                 "store wired but no metadata for this window → global ON");
     }
 
 private:

@@ -38,7 +38,6 @@ using namespace PhosphorSnapEngine;
 #include "../helpers/StubZoneDetector.h"
 
 using PlasmaZones::TestHelpers::IsolatedConfigGuard;
-using StubSettingsSnap = StubSettings;
 
 class StubZoneDetectorSnap : public PhosphorZones::IZoneDetector
 {
@@ -104,7 +103,7 @@ private:
     // showing up duplicated in the layout picker overlay.
     std::unique_ptr<IsolatedConfigGuard> m_guard;
     PhosphorZones::LayoutRegistry* m_layoutManager = nullptr;
-    StubSettingsSnap* m_settings = nullptr;
+    StubSettings* m_settings = nullptr;
     StubZoneDetectorSnap* m_zoneDetector = nullptr;
     PhosphorPlacement::WindowTrackingService* m_wts = nullptr;
     PhosphorSnapEngine::SnapState* m_snapState = nullptr;
@@ -115,7 +114,7 @@ private Q_SLOTS:
     {
         m_guard = std::make_unique<IsolatedConfigGuard>();
         m_layoutManager = PlasmaZones::TestHelpers::makeLayoutRegistry(QStringLiteral("plasmazones/layouts"));
-        m_settings = new StubSettingsSnap(nullptr);
+        m_settings = new StubSettings(nullptr);
         m_zoneDetector = new StubZoneDetectorSnap(nullptr);
         m_wts = new PhosphorPlacement::WindowTrackingService(m_layoutManager, m_zoneDetector, nullptr, nullptr);
         m_snapState = new PhosphorSnapEngine::SnapState(QString(), nullptr);
@@ -1243,6 +1242,10 @@ private Q_SLOTS:
         // A FIFO-reopened record (live id != recorded id) is CONSUMED, not re-recorded.
         QVERIFY2(!m_wts->placementStore().contains(QStringLiteral("app|orig"), QStringLiteral("app")),
                  "a cross-screen floating restore must consume the record");
+        // Consumption must not leak a duplicate under the live id either — the
+        // record is gone, not silently re-recorded against app|new.
+        QVERIFY2(!m_wts->placementStore().contains(QStringLiteral("app|new"), QStringLiteral("app")),
+                 "consuming a floating record must not re-record it under the live window id");
         m_wts->setSnapState(nullptr);
     }
 

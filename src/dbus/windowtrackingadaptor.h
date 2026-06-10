@@ -990,7 +990,8 @@ private:
     // Unified window-rule store (daemon-owned, not owned here) + a lazily-built
     // evaluator over its full rule set, used only by shouldRestoreUnsnappedPosition.
     // The evaluator self-invalidates on in-place rule edits via the set revision,
-    // so it is built once on first use. Rebound (and reset) in setWindowRuleStore.
+    // so it is built once on first use. Reset in setWindowRuleStore only when the
+    // store pointer actually changes (a same-store rebind keeps the evaluator).
     PhosphorWindowRule::WindowRuleStore* m_windowRuleStore = nullptr;
     std::unique_ptr<PhosphorWindowRule::RuleEvaluator> m_restorePositionEvaluator;
 

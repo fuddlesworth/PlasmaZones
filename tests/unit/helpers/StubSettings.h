@@ -628,7 +628,11 @@ public:
     }
     void setRestoreUnsnappedWindowsOnLogin(bool value) override
     {
+        if (m_restoreUnsnappedWindowsOnLogin == value)
+            return;
         m_restoreUnsnappedWindowsOnLogin = value;
+        Q_EMIT restoreUnsnappedWindowsOnLoginChanged();
+        Q_EMIT settingsChanged();
     }
     bool autoAssignAllLayouts() const override
     {

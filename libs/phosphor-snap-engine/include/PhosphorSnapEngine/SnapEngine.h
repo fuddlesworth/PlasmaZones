@@ -145,11 +145,24 @@ public:
      *
      * Returns true to restore the recorded position (cross-screen allowed —
      * stored geometry is in global compositor coordinates, so re-applying it
-     * lands the window back on its original monitor). When the predicate is
-     * UNSET (default), the engine preserves its historical behaviour: free
-     * records are inert and floating records restore only on the screen they
-     * reopen on — the path unit tests rely on. This gate governs ONLY the
-     * free/floating geometry restore; snapped-to-zone restore is unaffected.
+     * lands the window back on its original monitor).
+     *
+     * The gate governs two distinct things, both ONLY for free/floating records
+     * (snapped-to-zone restore is unaffected):
+     *   - cross-screen CONSUMPTION eligibility — a record whose recorded screen
+     *     differs from the reopening screen is only consumed when the predicate
+     *     opts the window in; otherwise consumption stays gated on the opening
+     *     screen (free and floating alike);
+     *   - the free branch additionally re-gates the geometry MOVE on the
+     *     predicate (a same-screen free record is consumed but only repositioned
+     *     when opted in). The floating branch does NOT re-gate the move — once a
+     *     floating record is consumed it always re-emits its recorded position
+     *     on restoreScreen (historical float-restore behaviour).
+     *
+     * When the predicate is UNSET (default), the engine preserves its historical
+     * behaviour: free records are inert (consumed on the opening screen, no move)
+     * and floating records restore only on the screen they reopen on — the path
+     * unit tests rely on.
      */
     using RestorePositionPredicate = std::function<bool(const QString& windowId)>;
 
@@ -259,11 +272,13 @@ public:
     /**
      * @brief Resolve auto-snap for a newly opened window
      *
-     * Runs the 4-level fallback chain:
+     * First consults the unified WindowPlacementStore: a snapped / floating /
+     * free record reopens the window from its stored placement (cross-screen
+     * where the predicates allow). If no stored record applies, runs the
+     * fallback chain:
      *   1. App rules (highest priority)
-     *   2. Persisted zone (session restore)
-     *   3. Auto-assign to empty zone
-     *   4. Snap to last zone (final fallback)
+     *   2. Auto-assign to empty zone
+     *   3. Snap to last zone (final fallback)
      *
      * Returns a PhosphorEngine::SnapResult so the D-Bus adaptor can unpack geometry for the
      * KWin effect. Also handles floating windows (skips snap, emits feedback).

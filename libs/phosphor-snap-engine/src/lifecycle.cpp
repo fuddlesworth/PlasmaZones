@@ -79,23 +79,28 @@ void SnapEngine::windowOpened(const QString& windowId, const QString& screenId, 
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// resolveWindowRestore — 4-level auto-snap fallback chain
+// resolveWindowRestore — WindowPlacementStore restore + auto-snap fallback chain
+//
+// Consults the unified WindowPlacementStore first (snapped / floating / free
+// record); if none applies, runs the legacy fallback chain (1. app rules,
+// 2. vacated — session restore moved into the store block above, 3. empty zone,
+// 4. last zone).
 //
 // Mostly decision logic: returns a SnapResult for the caller to apply geometry.
-// Side effects: consumePendingAssignment (step 2), navigationFeedback emit
-// (floating windows). The caller (windowOpened or WTA D-Bus facade) handles
-// zone assignment and geometry application.
+// Side effects: consumePendingAssignment, navigationFeedback emit (floating
+// windows). The caller (windowOpened or WTA D-Bus facade) handles zone
+// assignment and geometry application.
 //
 // Screen mode semantics:
-//   - The placement-store restore (level 2) and app rules (level 1) may
+//   - The placement-store restore and app rules (chain level 1) may
 //     cross-screen migrate: a stored record's own screenId or an app rule can
 //     route a window to a different screen, and the store's take() accept
 //     predicate / snapped-branch screen check keep an autotile-mode screen from
 //     being snapped onto (autotile on that screen will own it).
-//   - Levels 3 (empty zone) and 4 (last zone) inherently use the caller
-//     screen as the target, so they are ONLY valid when the caller's screen
-//     is in snap mode. On autotile screens they're short-circuited — stale
-//     snap zones on a now-autotile screen must not bleed into placement.
+//   - The empty-zone (level 3) and last-zone (level 4) fallbacks inherently use
+//     the caller screen as the target, so they are ONLY valid when the caller's
+//     screen is in snap mode. On autotile screens they're short-circuited —
+//     stale snap zones on a now-autotile screen must not bleed into placement.
 // ═══════════════════════════════════════════════════════════════════════════════
 
 SnapResult SnapEngine::resolveWindowRestore(const QString& windowId, const QString& screenId, bool sticky,
