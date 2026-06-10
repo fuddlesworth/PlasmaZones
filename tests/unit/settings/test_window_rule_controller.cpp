@@ -850,9 +850,9 @@ void TestWindowRuleController::templatesProduceSeededRules()
 
 void TestWindowRuleController::actionTypesCarryDomain()
 {
-    // The picker keys off this field to disable context-domain actions when
+    // The action row keys off this field to flag context-domain actions when
     // the match references window-property leaves — a regression that drops
-    // the domain would silently re-enable the silently-never-fires
+    // the domain would silently lose the warning for the silently-never-fires
     // combination.
     WindowRuleController controller;
     const QVariantList actions = controller.actionTypes();
@@ -954,7 +954,7 @@ void TestWindowRuleController::validationIssuesForJsonFlags()
 void TestWindowRuleController::defaultPayloadForSeedsParams()
 {
     // The QML action row uses `defaultPayloadFor` when the user switches the
-    // type combo to a new action — a stale regression that returned a bare
+    // type picker to a new action — a stale regression that returned a bare
     // `{type: X}` map would leave SpinBoxes anchored at 0 and `canSave`
     // would gate the rule on params the user never had a chance to fill.
     WindowRuleController controller;
