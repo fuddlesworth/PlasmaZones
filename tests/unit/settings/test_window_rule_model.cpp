@@ -112,6 +112,7 @@ private Q_SLOTS:
     void actionSummaryRendersAllEngineModes();
     void disableEngineNamesTheModeBeingDisabled();
     void setOpacityRendersValidValuesAndGuardsRejectPaths();
+    void restorePositionRendersValueAwareLabel();
     void shaderAndCurveLabelsResolveThroughLookups();
 };
 
@@ -494,6 +495,40 @@ void TestWindowRuleModel::setOpacityRendersValidValuesAndGuardsRejectPaths()
     QVERIFY2(labelAt(3).contains(QStringLiteral("invalid")), qPrintable(labelAt(3)));
     // Out-of-range: same marker
     QVERIFY2(labelAt(4).contains(QStringLiteral("invalid")), qPrintable(labelAt(4)));
+}
+
+void TestWindowRuleModel::restorePositionRendersValueAwareLabel()
+{
+    // Pin that the RestorePosition actionLabel is value-aware: true and false
+    // render distinct, human-readable chips (not the raw "restorePosition" wire
+    // string). Guards picker↔model label consistency for the bool action.
+    const auto buildRule = [](bool value) {
+        WindowRule rule;
+        rule.id = QUuid::createUuid();
+        rule.priority = 200;
+        rule.match = MatchExpression::makeLeaf(Field::AppId, Operator::Equals, QStringLiteral("org.kde.dolphin"));
+        RuleAction action;
+        action.type = QString(ActionType::RestorePosition);
+        action.params.insert(ActionParam::Value, value);
+        rule.actions = {action};
+        return rule;
+    };
+
+    WindowRuleModel model;
+    model.setRules({buildRule(true), buildRule(false)});
+
+    const auto labelAt = [&](int row) {
+        return model.data(model.index(row, 0), WindowRuleModel::ActionSummaryRole).toString();
+    };
+    // Never the raw wire token.
+    QVERIFY2(!labelAt(0).contains(QStringLiteral("restorePosition")), qPrintable(labelAt(0)));
+    QVERIFY2(!labelAt(1).contains(QStringLiteral("restorePosition")), qPrintable(labelAt(1)));
+    // true vs false produce distinct labels.
+    QVERIFY(labelAt(0) != labelAt(1));
+    // Pin BOTH branches' text, not just the false case: true reads as the
+    // affirmative "Restore …", false as the negated "Don't restore …".
+    QVERIFY2(labelAt(0).contains(QStringLiteral("Restore position")), qPrintable(labelAt(0)));
+    QVERIFY2(labelAt(1).contains(QStringLiteral("Don't")), qPrintable(labelAt(1)));
 }
 
 void TestWindowRuleModel::shaderAndCurveLabelsResolveThroughLookups()

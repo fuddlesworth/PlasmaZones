@@ -51,6 +51,11 @@ class VirtualDesktopManager;
 class ActivityManager;
 }
 
+namespace PhosphorWindowRule {
+class WindowRuleStore;
+class RuleEvaluator;
+}
+
 namespace PlasmaZones {
 
 class ScreenModeRouter;
@@ -140,6 +145,18 @@ public:
      * the app class (e.g. last-used-zone class tag).
      */
     void setWindowRegistry(PhosphorEngine::WindowRegistry* registry);
+
+    /**
+     * @brief Bind the unified window-rule store (daemon-owned) for per-window
+     *        RestorePosition evaluation.
+     *
+     * Non-owning. Used by the restore-position predicate (see enginewiring.cpp)
+     * to override the global `restoreUnsnappedWindowsOnLogin` setting for a
+     * matched window. A lazily-built RuleEvaluator binds to the store's full
+     * rule set; it self-invalidates on in-place rule edits via the set's
+     * revision counter, so no rulesChanged subscription is required.
+     */
+    void setWindowRuleStore(PhosphorWindowRule::WindowRuleStore* store);
 
     /**
      * @brief Set engine references for routing operations per-screen
@@ -579,6 +596,14 @@ public:
     // `WindowDragAdaptor::clearForCompositorReconnect` /
     // `handleWindowClosed`. Every caller is in-process and reaches them
     // via direct C++ invocation through the daemon, NOT through D-Bus.
+
+    /// Resolve whether an unsnapped (free / snap-floated) window should have its
+    /// previous position restored on open. Consulted by the restore-position
+    /// predicate the daemon injects into SnapEngine (in-process, not via D-Bus).
+    /// A matched RestorePosition window rule wins; otherwise the global
+    /// `restoreUnsnappedWindowsOnLogin` setting decides. Builds a WindowQuery
+    /// from the window registry metadata.
+    bool shouldRestoreUnsnappedPosition(const QString& windowId);
     /**
      * @brief Drop unified WindowPlacement records for excluded appIds.
      *
@@ -961,6 +986,14 @@ private:
     // Not owned (daemon root owns it). Populated via setWindowMetadata D-Bus calls
     // and cleared from the windowClosed path.
     QPointer<PhosphorEngine::WindowRegistry> m_windowRegistry;
+
+    // Unified window-rule store (daemon-owned, not owned here) + a lazily-built
+    // evaluator over its full rule set, used only by shouldRestoreUnsnappedPosition.
+    // The evaluator self-invalidates on in-place rule edits via the set revision,
+    // so it is built once on first use. Reset in setWindowRuleStore only when the
+    // store pointer actually changes (a same-store rebind keeps the evaluator).
+    PhosphorWindowRule::WindowRuleStore* m_windowRuleStore = nullptr;
+    std::unique_ptr<PhosphorWindowRule::RuleEvaluator> m_restorePositionEvaluator;
 
     // ═══════════════════════════════════════════════════════════════════════════════
     // Persistence (adaptor responsibility: session.json save/load)

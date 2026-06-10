@@ -12,9 +12,15 @@
 #include "../windowtrackingadaptor.h"
 
 #include "../zonedetectionadaptor.h"
+#include "core/isettings.h"
 #include <PhosphorEngine/IPlacementEngine.h>
+#include <PhosphorIdentity/WindowId.h>
 #include <PhosphorSnapEngine/SnapEngine.h>
 #include <PhosphorTileEngine/AutotileEngine.h>
+#include <PhosphorWindowRule/RuleAction.h>
+#include <PhosphorWindowRule/RuleEvaluator.h>
+#include <PhosphorWindowRule/WindowQuery.h>
+#include <PhosphorWindowRule/WindowRuleStore.h>
 
 namespace PlasmaZones {
 
@@ -49,6 +55,7 @@ void WindowTrackingAdaptor::setEngines(PhosphorEngine::PlacementEngineBase* snap
     // order.
     if (m_cachedSnapEngine) {
         m_cachedSnapEngine->setShouldRestorePredicate({});
+        m_cachedSnapEngine->setRestorePositionPredicate({});
     }
 
     m_snapEngine = snapEngine;
@@ -91,6 +98,17 @@ void WindowTrackingAdaptor::setEngines(PhosphorEngine::PlacementEngineBase* snap
         // by the current desktop's disable state rather than the target's.
         snap->setShouldRestorePredicate([this](const QString& screenId) -> bool {
             return !isPersistedContextDisabled(screenId, currentDesktop());
+        });
+
+        // Unsnapped-position restore gate (free / snap-floated windows). On open
+        // the engine asks whether THIS window should return to its recorded global
+        // position — which, being in compositor-global coords, brings it back to
+        // its original monitor even when KWin's session restore reopened it on
+        // another output. shouldRestoreUnsnappedPosition resolves the per-window
+        // RestorePosition rule when one matches, otherwise the global
+        // `restoreUnsnappedWindowsOnLogin` setting.
+        snap->setRestorePositionPredicate([this](const QString& windowId) -> bool {
+            return shouldRestoreUnsnappedPosition(windowId);
         });
 
         // Snap-specific signal: carries PhosphorProtocol::WindowStateEntry which is snap-mode-only.
@@ -172,6 +190,73 @@ void WindowTrackingAdaptor::setEngines(PhosphorEngine::PlacementEngineBase* snap
         connect(autotileEngine, &PhosphorEngine::PlacementEngineBase::geometryRestoreRequested, this,
                 floatRestoreRelay);
     }
+}
+
+void WindowTrackingAdaptor::setWindowRuleStore(PhosphorWindowRule::WindowRuleStore* store)
+{
+    if (m_windowRuleStore == store) {
+        return;
+    }
+    m_windowRuleStore = store;
+    // Drop the evaluator bound to the previous set; it rebuilds lazily against
+    // the new one on the next shouldRestoreUnsnappedPosition call.
+    m_restorePositionEvaluator.reset();
+}
+
+bool WindowTrackingAdaptor::shouldRestoreUnsnappedPosition(const QString& windowId)
+{
+    // m_settings is a hard ctor dependency (qFatal on null), so it is non-null
+    // here — deref unguarded like every other method in this class.
+    const bool globalDefault = m_settings->restoreUnsnappedWindowsOnLogin();
+
+    // No rule store / metadata → the global setting is the whole policy.
+    if (!m_windowRuleStore || m_windowRegistry.isNull()) {
+        return globalDefault;
+    }
+    // WindowRegistry is keyed by the BARE instance id; the engine hands us the
+    // composite `appId|instanceId`. Extract first — every other registry reader
+    // (currentAppIdFor, windowClosed, AutotileEngine) does the same. Looking up by
+    // the composite id always misses, which would silently make RestorePosition
+    // rules inert and collapse the feature to the global setting.
+    const QString instanceId = PhosphorIdentity::WindowId::extractInstanceId(windowId);
+    const std::optional<PhosphorEngine::WindowMetadata> meta = m_windowRegistry->metadata(instanceId);
+    if (!meta) {
+        return globalDefault;
+    }
+
+    // Build a per-window query from the registry metadata. windowClass is not
+    // tracked daemon-side (the compositor reports appId, which is class-derived),
+    // so RestorePosition rules match on appId / title / role / type — the common
+    // per-app case. Context fields come from the window's recorded desktop /
+    // activity; screenId stays empty (a window-domain rule does not pin a screen).
+    PhosphorWindowRule::WindowQuery query;
+    query.appId = meta->appId;
+    if (!meta->title.isEmpty()) {
+        query.title = meta->title;
+    }
+    if (!meta->windowRole.isEmpty()) {
+        query.windowRole = meta->windowRole;
+    }
+    if (!meta->desktopFile.isEmpty()) {
+        query.desktopFile = meta->desktopFile;
+    }
+    if (meta->pid > 0) {
+        query.pid = meta->pid;
+    }
+    query.windowType = meta->windowType;
+    query.virtualDesktop = meta->virtualDesktop;
+    query.activity = meta->activity;
+
+    if (!m_restorePositionEvaluator) {
+        m_restorePositionEvaluator = std::make_unique<PhosphorWindowRule::RuleEvaluator>(m_windowRuleStore->ruleSet());
+    }
+    const PhosphorWindowRule::ResolvedActions resolved = m_restorePositionEvaluator->resolveCached(windowId, query);
+    if (const std::optional<PhosphorWindowRule::RuleAction> action =
+            resolved.slot(QString(PhosphorWindowRule::ActionSlot::RestorePosition))) {
+        // A matched RestorePosition rule overrides the global setting.
+        return action->params.value(QString(PhosphorWindowRule::ActionParam::Value)).toBool();
+    }
+    return globalDefault;
 }
 
 } // namespace PlasmaZones

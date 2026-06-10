@@ -49,6 +49,7 @@ private Q_SLOTS:
         QVERIFY(reg.isRegistered(QString(ActionType::OverrideAnimationTiming)));
         QVERIFY(reg.isRegistered(QString(ActionType::OverrideAnimationCurve)));
         QVERIFY(reg.isRegistered(QString(ActionType::SetOpacity)));
+        QVERIFY(reg.isRegistered(QString(ActionType::RestorePosition)));
     }
 
     void testSlots()
@@ -96,9 +97,10 @@ private Q_SLOTS:
     void testTerminalFlag()
     {
         const ActionRegistry& reg = ActionRegistry::instance();
-        // Exclude is the only terminal builtin — every other builtin must be
-        // non-terminal, so evaluation continues past a matching rule.
+        // Exclude and ExcludeAnimations are the terminal builtins — every other
+        // builtin must be non-terminal, so evaluation continues past a match.
         QVERIFY(reg.isTerminal(makeAction(ActionType::Exclude)));
+        QVERIFY(reg.isTerminal(makeAction(ActionType::ExcludeAnimations)));
         QVERIFY(!reg.isTerminal(makeAction(ActionType::Float)));
         QVERIFY(!reg.isTerminal(makeAction(ActionType::SetEngineMode)));
         QVERIFY(!reg.isTerminal(makeAction(ActionType::SetSnappingLayout)));
@@ -108,6 +110,7 @@ private Q_SLOTS:
         QVERIFY(!reg.isTerminal(makeAction(ActionType::OverrideAnimationTiming)));
         QVERIFY(!reg.isTerminal(makeAction(ActionType::OverrideAnimationCurve)));
         QVERIFY(!reg.isTerminal(makeAction(ActionType::SetOpacity)));
+        QVERIFY(!reg.isTerminal(makeAction(ActionType::RestorePosition)));
     }
 
     void testValidateAcceptsWellFormedRegisteredAction()
@@ -137,6 +140,30 @@ private Q_SLOTS:
         QJsonObject badOpacity;
         badOpacity.insert(QStringLiteral("value"), 1.5);
         QVERIFY(!reg.validate(makeAction(ActionType::SetOpacity, badOpacity)));
+    }
+
+    void testRestorePositionAction()
+    {
+        const ActionRegistry& reg = ActionRegistry::instance();
+        QVERIFY(reg.isRegistered(QString(ActionType::RestorePosition)));
+
+        QJsonObject on;
+        on.insert(QStringLiteral("value"), true);
+        QJsonObject off;
+        off.insert(QStringLiteral("value"), false);
+
+        // Window-domain boolean action filling the dedicated restore-position slot.
+        QCOMPARE(reg.slotFor(makeAction(ActionType::RestorePosition, on)), QString(ActionSlot::RestorePosition));
+        QCOMPARE(reg.domainFor(makeAction(ActionType::RestorePosition, on)), ActionDomain::Window);
+        QVERIFY(!reg.isTerminal(makeAction(ActionType::RestorePosition, on)));
+
+        // Requires a boolean `value`; both true and false are well-formed.
+        QVERIFY(reg.validate(makeAction(ActionType::RestorePosition, on)));
+        QVERIFY(reg.validate(makeAction(ActionType::RestorePosition, off)));
+        QVERIFY2(!reg.validate(makeAction(ActionType::RestorePosition)), "missing value must fail validation");
+        QJsonObject notBool;
+        notBool.insert(QStringLiteral("value"), 1);
+        QVERIFY2(!reg.validate(makeAction(ActionType::RestorePosition, notBool)), "non-bool value must fail");
     }
 
     void testRegisterCustomAction()

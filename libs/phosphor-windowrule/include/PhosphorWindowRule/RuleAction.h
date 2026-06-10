@@ -139,7 +139,7 @@ struct PHOSPHORWINDOWRULE_EXPORT ActionDescriptor
     /// Function shape that resolves the slot for a concrete action's params.
     /// Hoisted to a type alias so the registry initialiser body stays
     /// readable (the std::function template is verbose enough that inlining
-    /// it twelve times pushes the descriptor literal off-screen).
+    /// it at every descriptor pushes the literal off-screen).
     using SlotResolver = std::function<QString(const QJsonObject& params)>;
     using Validator = std::function<bool(const QJsonObject& params)>;
 
@@ -260,6 +260,15 @@ inline constexpr QLatin1StringView SetOpacity{"setOpacity"};
 /// settings lists by the v3→v4 chain.
 inline constexpr QLatin1StringView ExcludeAnimations{"excludeAnimations"};
 
+/// Per-window override for unsnapped-position restore on login. A boolean
+/// `value` action: true forces the window's previous free/floating position
+/// (and original monitor) to be restored, false suppresses it. Overrides the
+/// global `restoreUnsnappedWindowsOnLogin` setting for matched windows —
+/// resolved by the daemon-injected restore-position predicate and consulted
+/// inside SnapEngine::resolveWindowRestore. Domain Window (matches window
+/// properties).
+inline constexpr QLatin1StringView RestorePosition{"restorePosition"};
+
 // ── Per-window border / title-bar appearance overrides (domain Window) ──
 // Effect-side per-window overrides of the global snap appearance. Each is its
 // own slot so independent rules cascade per-property (a width rule and a
@@ -358,6 +367,7 @@ inline constexpr QLatin1StringView EngineEnable{"engine-enable"};
 inline constexpr QLatin1StringView Manage{"manage"};
 inline constexpr QLatin1StringView Float{"float"};
 inline constexpr QLatin1StringView Opacity{"opacity"};
+inline constexpr QLatin1StringView RestorePosition{"restore-position"};
 // Per-window border / title-bar appearance slots (one per property so
 // independent rules cascade per-property).
 inline constexpr QLatin1StringView HideTitleBar{"hide-title-bar"};

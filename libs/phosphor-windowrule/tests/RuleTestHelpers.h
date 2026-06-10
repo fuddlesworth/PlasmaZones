@@ -105,6 +105,14 @@ inline RuleAction zonePadding(int px)
     return a;
 }
 
+inline RuleAction restorePosition(bool value)
+{
+    RuleAction a;
+    a.type = QString(ActionType::RestorePosition);
+    a.params.insert(ActionParam::Value, value);
+    return a;
+}
+
 inline WindowRule makeRule(const QString& name, int priority, const MatchExpression& match,
                            const QList<RuleAction>& actions)
 {

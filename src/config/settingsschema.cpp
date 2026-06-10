@@ -728,6 +728,7 @@ void appendBehaviorSchema(PhosphorConfig::Schema& schema)
          clampInt(static_cast<int>(StickyWindowHandling::TreatAsNormal),
                   static_cast<int>(StickyWindowHandling::IgnoreAll))},
         {CD::restoreOnLoginKey(), CD::restoreWindowsToZonesOnLogin(), QMetaType::Bool},
+        {CD::restoreUnsnappedOnLoginKey(), CD::restoreUnsnappedWindowsOnLogin(), QMetaType::Bool},
         {CD::autoAssignAllLayoutsKey(), CD::autoAssignAllLayouts(), QMetaType::Bool},
         {CD::defaultLayoutIdKey(), QString(), QMetaType::QString},
     };

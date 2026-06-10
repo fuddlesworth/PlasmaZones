@@ -509,6 +509,25 @@ void ActionRegistry::registerBuiltins()
                      .defaultDisplay = 100.0}},
     });
 
+    // RestorePosition is window-domain but NOT a border/appearance slot — it is
+    // consumed daemon-side (SnapEngine restore-position predicate), not by the
+    // effect. Unlike the border bools below it seeds FALSE: the global
+    // `restoreUnsnappedWindowsOnLogin` setting defaults ON, so a fresh rule that
+    // re-asserted true would be a no-op the user has to flip. Seeding false lands
+    // the rule on its only meaningful value — opt this window OUT of restore.
+    registerAction(ActionDescriptor{
+        .type = QString(ActionType::RestorePosition),
+        .slotFor = constantSlot(ActionSlot::RestorePosition),
+        .validate =
+            [](const QJsonObject& p) {
+                return hasBool(p, ActionParam::Value);
+            },
+        .terminal = false,
+        .allowedKeys = {QString(ActionParam::Value)},
+        .domain = ActionDomain::Window,
+        .params = {P{.key = QString(ActionParam::Value), .kind = QStringLiteral("bool"), .defaultDisplay = 0.0}},
+    });
+
     // ── per-window border / title-bar appearance slots (domain Window) ──
     // One slot per property so independent rules cascade per-property. The
     // effect (resolveWindowAppearance) reads these slots and merges them over
