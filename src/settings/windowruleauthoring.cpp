@@ -573,11 +573,12 @@ QVariantList actionTypes()
         const PickerCategory acat = actionCategory(typeStr);
         entry[QStringLiteral("category")] = acat.label;
         entry[QStringLiteral("categoryOrder")] = acat.order;
-        // Domain wire string drives the picker's compatibility flag — the
-        // QML side disables a context-domain action type when the current
-        // match references window-property fields (the silently-never-fires
-        // combination). Looked up via a probe RuleAction so the descriptor's
-        // own `domain` field stays the single source of truth.
+        // Domain wire string drives the action row's incompatibility warning —
+        // the QML side flags a context-domain action as never-firing when the
+        // match references window-property fields (ActionRow's
+        // `_currentTypeIncompatible` chip + the sheet's InlineMessage). Looked
+        // up via a probe RuleAction so the descriptor's own `domain` field
+        // stays the single source of truth.
         RuleAction probe;
         probe.type = typeStr;
         const auto domain = PhosphorWindowRule::ActionRegistry::instance().domainFor(probe);

@@ -40,10 +40,10 @@ ColumnLayout {
     /// picker dropdowns.
     required property var appSettings
     /// True when the current match references only context fields — passed in
-    /// from ActionListEditor. Drives the type-picker delegate: context-domain
-    /// action types are disabled with a tooltip when this is false, so the
-    /// user sees the picker but cannot pick a combination that silently never
-    /// fires.
+    /// from ActionListEditor. Drives `_currentTypeIncompatible`: a context-
+    /// domain action against a window-property match is flagged with the
+    /// per-row warning chip + the sheet's InlineMessage (the combination that
+    /// silently never fires), while the picker itself stays a plain menu.
     required property bool matchIsContextOnly
     /// True when the action's currently-selected type is incompatible with
     /// the rule's match (a context action against a window-property match).
