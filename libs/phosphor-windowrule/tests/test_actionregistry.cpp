@@ -139,6 +139,30 @@ private Q_SLOTS:
         QVERIFY(!reg.validate(makeAction(ActionType::SetOpacity, badOpacity)));
     }
 
+    void testRestorePositionAction()
+    {
+        const ActionRegistry& reg = ActionRegistry::instance();
+        QVERIFY(reg.isRegistered(QString(ActionType::RestorePosition)));
+
+        QJsonObject on;
+        on.insert(QStringLiteral("value"), true);
+        QJsonObject off;
+        off.insert(QStringLiteral("value"), false);
+
+        // Window-domain boolean action filling the dedicated restore-position slot.
+        QCOMPARE(reg.slotFor(makeAction(ActionType::RestorePosition, on)), QString(ActionSlot::RestorePosition));
+        QCOMPARE(reg.domainFor(makeAction(ActionType::RestorePosition, on)), ActionDomain::Window);
+        QVERIFY(!reg.isTerminal(makeAction(ActionType::RestorePosition, on)));
+
+        // Requires a boolean `value`; both true and false are well-formed.
+        QVERIFY(reg.validate(makeAction(ActionType::RestorePosition, on)));
+        QVERIFY(reg.validate(makeAction(ActionType::RestorePosition, off)));
+        QVERIFY2(!reg.validate(makeAction(ActionType::RestorePosition)), "missing value must fail validation");
+        QJsonObject notBool;
+        notBool.insert(QStringLiteral("value"), 1);
+        QVERIFY2(!reg.validate(makeAction(ActionType::RestorePosition, notBool)), "non-bool value must fail");
+    }
+
     void testRegisterCustomAction()
     {
         ActionRegistry& reg = ActionRegistry::instance();

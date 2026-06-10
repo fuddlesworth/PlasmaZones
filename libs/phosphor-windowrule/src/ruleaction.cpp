@@ -528,6 +528,18 @@ void ActionRegistry::registerBuiltins()
         .params = {P{.key = QString(ActionParam::Value), .kind = QStringLiteral("bool"), .defaultDisplay = 1.0}},
     });
     registerAction(ActionDescriptor{
+        .type = QString(ActionType::RestorePosition),
+        .slotFor = constantSlot(ActionSlot::RestorePosition),
+        .validate =
+            [](const QJsonObject& p) {
+                return hasBool(p, ActionParam::Value);
+            },
+        .terminal = false,
+        .allowedKeys = {QString(ActionParam::Value)},
+        .domain = ActionDomain::Window,
+        .params = {P{.key = QString(ActionParam::Value), .kind = QStringLiteral("bool"), .defaultDisplay = 1.0}},
+    });
+    registerAction(ActionDescriptor{
         .type = QString(ActionType::SetBorderVisible),
         .slotFor = constantSlot(ActionSlot::BorderVisible),
         .validate =

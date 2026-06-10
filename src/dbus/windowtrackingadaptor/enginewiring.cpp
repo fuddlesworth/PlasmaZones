@@ -12,9 +12,14 @@
 #include "../windowtrackingadaptor.h"
 
 #include "../zonedetectionadaptor.h"
+#include "core/isettings.h"
 #include <PhosphorEngine/IPlacementEngine.h>
 #include <PhosphorSnapEngine/SnapEngine.h>
 #include <PhosphorTileEngine/AutotileEngine.h>
+#include <PhosphorWindowRule/RuleAction.h>
+#include <PhosphorWindowRule/RuleEvaluator.h>
+#include <PhosphorWindowRule/WindowQuery.h>
+#include <PhosphorWindowRule/WindowRuleStore.h>
 
 namespace PlasmaZones {
 
@@ -102,8 +107,7 @@ void WindowTrackingAdaptor::setEngines(PhosphorEngine::PlacementEngineBase* snap
         // one matches, otherwise the global `restoreUnsnappedWindowsOnLogin`
         // setting. (Phase 2 layers the rule lookup on top of this setting read.)
         snap->setRestorePositionPredicate([this](const QString& windowId) -> bool {
-            Q_UNUSED(windowId)
-            return m_settings && m_settings->restoreUnsnappedWindowsOnLogin();
+            return shouldRestoreUnsnappedPosition(windowId);
         });
 
         // Snap-specific signal: carries PhosphorProtocol::WindowStateEntry which is snap-mode-only.
@@ -185,6 +189,65 @@ void WindowTrackingAdaptor::setEngines(PhosphorEngine::PlacementEngineBase* snap
         connect(autotileEngine, &PhosphorEngine::PlacementEngineBase::geometryRestoreRequested, this,
                 floatRestoreRelay);
     }
+}
+
+void WindowTrackingAdaptor::setWindowRuleStore(PhosphorWindowRule::WindowRuleStore* store)
+{
+    if (m_windowRuleStore == store) {
+        return;
+    }
+    m_windowRuleStore = store;
+    // Drop the evaluator bound to the previous set; it rebuilds lazily against
+    // the new one on the next shouldRestoreUnsnappedPosition call.
+    m_restorePositionEvaluator.reset();
+}
+
+bool WindowTrackingAdaptor::shouldRestoreUnsnappedPosition(const QString& windowId)
+{
+    const bool globalDefault = m_settings && m_settings->restoreUnsnappedWindowsOnLogin();
+
+    // No rule store / metadata → the global setting is the whole policy.
+    if (!m_windowRuleStore || m_windowRegistry.isNull()) {
+        return globalDefault;
+    }
+    const std::optional<PhosphorEngine::WindowMetadata> meta = m_windowRegistry->metadata(windowId);
+    if (!meta) {
+        return globalDefault;
+    }
+
+    // Build a per-window query from the registry metadata. windowClass is not
+    // tracked daemon-side (the compositor reports appId, which is class-derived),
+    // so RestorePosition rules match on appId / title / role / type — the common
+    // per-app case. Context fields come from the window's recorded desktop /
+    // activity; screenId stays empty (a window-domain rule does not pin a screen).
+    PhosphorWindowRule::WindowQuery query;
+    query.appId = meta->appId;
+    if (!meta->title.isEmpty()) {
+        query.title = meta->title;
+    }
+    if (!meta->windowRole.isEmpty()) {
+        query.windowRole = meta->windowRole;
+    }
+    if (!meta->desktopFile.isEmpty()) {
+        query.desktopFile = meta->desktopFile;
+    }
+    if (meta->pid > 0) {
+        query.pid = meta->pid;
+    }
+    query.windowType = meta->windowType;
+    query.virtualDesktop = meta->virtualDesktop;
+    query.activity = meta->activity;
+
+    if (!m_restorePositionEvaluator) {
+        m_restorePositionEvaluator = std::make_unique<PhosphorWindowRule::RuleEvaluator>(m_windowRuleStore->ruleSet());
+    }
+    const PhosphorWindowRule::ResolvedActions resolved = m_restorePositionEvaluator->resolveCached(windowId, query);
+    if (const std::optional<PhosphorWindowRule::RuleAction> action =
+            resolved.slot(QString(PhosphorWindowRule::ActionSlot::RestorePosition))) {
+        // A matched RestorePosition rule overrides the global setting.
+        return action->params.value(QString(PhosphorWindowRule::ActionParam::Value)).toBool();
+    }
+    return globalDefault;
 }
 
 } // namespace PlasmaZones

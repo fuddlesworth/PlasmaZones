@@ -999,6 +999,9 @@ bool Daemon::init()
                                   m_virtualDesktopManager.get(), m_activityManager.get(), this);
     m_windowTrackingAdaptor->setZoneDetectionAdaptor(m_zoneDetectionAdaptor);
     m_windowTrackingAdaptor->setWindowRegistry(m_windowRegistry.get());
+    // Full rule set for per-window RestorePosition evaluation (overrides the
+    // global restoreUnsnappedWindowsOnLogin setting for matched windows).
+    m_windowTrackingAdaptor->setWindowRuleStore(m_windowRuleStore.get());
 
     // Drop closed windows from m_lastAutotileOrders so a manual→autotile toggle
     // doesn't replay a ghost id into the TilingState (recalculateLayout would
@@ -1984,6 +1987,13 @@ void Daemon::stop()
     // narrowing in the autotile-toggle branch above (~ line 893).
     if (auto* concreteSnap = qobject_cast<PhosphorSnapEngine::SnapEngine*>(m_snapEngine.get())) {
         concreteSnap->setExcludeRuleSet(nullptr);
+    }
+
+    // Likewise sever WindowTrackingAdaptor's borrow of m_windowRuleStore (used by
+    // its restore-position evaluator) before the store is destroyed. Same
+    // grep-discoverable teardown contract as the SnapEngine exclude borrow above.
+    if (m_windowTrackingAdaptor) {
+        m_windowTrackingAdaptor->setWindowRuleStore(nullptr);
     }
 
     // Destroy engines now (during stop(), before Qt child destruction order).
