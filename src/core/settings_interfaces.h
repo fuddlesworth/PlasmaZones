@@ -356,10 +356,10 @@ public:
     virtual void setRestoreWindowsToZonesOnLogin(bool restore) = 0;
     /// When true, the daemon restores an UNSNAPPED window (genuinely free, or
     /// snap-floated) to its previous global position on login — including back
-    /// to the monitor it was on at logout, which KWin's own session restore may
-    /// place it on a different output. Snapped-to-zone restore is governed
-    /// separately by @ref restoreWindowsToZonesOnLogin. Per-window overrides via
-    /// the RestorePosition window rule.
+    /// to the monitor it was on at logout, whereas KWin's own session restore
+    /// may otherwise place it on a different output. Snapped-to-zone restore is
+    /// governed separately by @ref restoreWindowsToZonesOnLogin. Per-window
+    /// overrides via the RestorePosition window rule.
     virtual bool restoreUnsnappedWindowsOnLogin() const = 0;
     virtual void setRestoreUnsnappedWindowsOnLogin(bool restore) = 0;
     virtual bool autoAssignAllLayouts() const = 0;
