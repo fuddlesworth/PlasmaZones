@@ -114,16 +114,36 @@ Item {
             enabled: pageLoader.isCurrent
             z: pageLoader.isCurrent ? 1 : 0
 
-            // Fade the current page up. Bound to isCurrent so a cached
-            // re-show fades exactly like a first build; the Behavior is the
-            // only per-page animation object, so the cache stays cheap.
-            opacity: pageLoader.isCurrent ? 1 : 0
-            Behavior on opacity {
-                enabled: pageLoader.isCurrent
-                PhosphorMotionAnimation {
-                    profile: "widget.fadeIn"
-                    durationOverride: 180
+            // Fade the page up when it becomes the current one. Pinned to 0
+            // and driven imperatively (not `opacity: isCurrent ? 1 : 0` with
+            // a `Behavior`): a Behavior never animates the INITIAL value, so
+            // the first build — whose Loader is created already-current —
+            // would snap to 1 with no fade; and on a cached re-show the
+            // unspecified eval order of the opacity binding vs the Behavior's
+            // `enabled` would drop the animation. Restarting the animation
+            // from the state transition covers first load (onLoaded), cached
+            // re-show (onIsCurrentChanged while already Ready), and resets to
+            // 0 on hide so the next show fades again.
+            opacity: 0
+            onIsCurrentChanged: {
+                if (pageLoader.isCurrent) {
+                    if (pageLoader.status === Loader.Ready)
+                        pageFadeIn.restart();
+                } else {
+                    pageFadeIn.stop();
+                    pageLoader.opacity = 0;
                 }
+            }
+
+            PhosphorMotionAnimation {
+                id: pageFadeIn
+
+                target: pageLoader
+                properties: "opacity"
+                from: 0
+                to: 1
+                profile: "widget.fadeIn"
+                durationOverride: 180
             }
 
             onLoaded: {
@@ -138,6 +158,11 @@ Item {
                 // the rest.
                 PhosphorLoaderHelpers.injectIfAssignable(pageLoader.item, "controller", pageController);
                 PhosphorLoaderHelpers.injectIfAssignable(pageLoader.item, "settingsApp", root.controller);
+
+                // Fade in if this page is the one being shown (covers the
+                // common first-visit case: built async while current).
+                if (pageLoader.isCurrent)
+                    pageFadeIn.restart();
             }
         }
     }
