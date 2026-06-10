@@ -10,9 +10,9 @@ import org.plasmazones.common as PZCommon
 /**
  * @brief One leaf predicate row — `{ field, op, value }`.
  *
- * Field and operator are dropdowns; the value field shape adapts to the
- * field's value kind (string / number / bool). Two-way: edits emit
- * `leafChanged(updatedLeaf)`.
+ * The field is a categorized picker and the operator is a dropdown; the value
+ * field shape adapts to the field's value kind (string / number / bool).
+ * Two-way: edits emit `leafChanged(updatedLeaf)`.
  */
 RowLayout {
     id: leaf
@@ -445,7 +445,7 @@ RowLayout {
             // hand-edited rule or a newer schema version) when no option
             // matches, mirroring the screen / activity pickers above. The
             // empty-string sentinel is the "no value yet" state the field
-            // combo's onActivated seeds for picker-kind fields (windowType /
+            // picker's onSelected seeds for picker-kind fields (windowType /
             // screen / activity) when the user switches in from another field —
             // treat it as no-value so the placeholder shows. Plain `||` would also
             // map int 0 (WindowType::Unknown) to the placeholder when no

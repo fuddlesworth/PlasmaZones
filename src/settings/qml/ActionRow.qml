@@ -13,7 +13,7 @@ import org.plasmazones.common as PZCommon
  * @brief One editable action row inside ActionListEditor.
  *
  * An action is a `{ type, ...params }` JSON object. The row exposes a type
- * dropdown and one editor per parameter, both driven entirely by the
+ * picker and one editor per parameter, both driven entirely by the
  * `actionTypeOptions` metadata from `WindowRuleController.actionTypes()` —
  * there is no per-type `if (t === "...")` ladder here. Two-way: edits emit
  * `actionEdited(updatedAction)`; the parent owns the list.
@@ -34,7 +34,7 @@ ColumnLayout {
     /// Registered action types from `WindowRuleController.actionTypes()` —
     /// each entry: `{ value, label, params: [{ key, kind, label, ... }],
     /// domain: "context"|"window" }`. The `domain` field is consulted by the
-    /// per-option compatibility flag below.
+    /// row-level incompatibility flag below (`_currentTypeIncompatible`).
     required property var actionTypeOptions
     /// The SettingsController — drives the snappingLayout / tilingAlgorithm
     /// picker dropdowns.
@@ -47,9 +47,9 @@ ColumnLayout {
     required property bool matchIsContextOnly
     /// True when the action's currently-selected type is incompatible with
     /// the rule's match (a context action against a window-property match).
-    /// Surfaces a small inline warning next to the type combo so the user
+    /// Surfaces a small inline warning next to the type picker so the user
     /// sees the mismatch on the existing action even before opening the
-    /// type dropdown — mirrors the RuleEditorSheet's whole-rule
+    /// type menu — mirrors the RuleEditorSheet's whole-rule
     /// InlineMessage but scoped to this single action row.
     readonly property bool _currentTypeIncompatible: {
         if (row._typeEntry === undefined)
@@ -221,11 +221,11 @@ ColumnLayout {
         target: row
     }
 
-    // ── Top: action-type combo + per-param editors + delete ──────────────
+    // ── Top: action-type picker + per-param editors + delete ─────────────
     RowLayout {
-        // `WideComboBox` — popup sizes to fit the widest action-type label
-        // ("Override animation shader" etc.) and the closed combo sizes to
-        // its current label via `implicitContentWidthPolicy`.
+        // The action-type picker is `PZCommon.CategoryMenuButton` (a cascading
+        // category menu, declared further below); it gets a fixed
+        // `Layout.preferredWidth` wide enough for the longest action label.
 
         Layout.fillWidth: true
         spacing: Kirigami.Units.smallSpacing
