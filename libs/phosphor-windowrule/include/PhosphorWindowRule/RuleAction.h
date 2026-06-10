@@ -139,7 +139,7 @@ struct PHOSPHORWINDOWRULE_EXPORT ActionDescriptor
     /// Function shape that resolves the slot for a concrete action's params.
     /// Hoisted to a type alias so the registry initialiser body stays
     /// readable (the std::function template is verbose enough that inlining
-    /// it twelve times pushes the descriptor literal off-screen).
+    /// it at every descriptor pushes the literal off-screen).
     using SlotResolver = std::function<QString(const QJsonObject& params)>;
     using Validator = std::function<bool(const QJsonObject& params)>;
 
