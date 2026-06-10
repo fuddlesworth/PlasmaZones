@@ -79,7 +79,16 @@ SettingsFlickable {
                 Layout.preferredHeight: cardLoader.active && cardLoader.implicitHeight > 0 ? cardLoader.implicitHeight : page.placeholderHeight
                 active: _everInView
                 asynchronous: true
-                visible: active
+                // Deliberately NOT `visible: active`. QtQuick.Layouts
+                // excludes invisible items from layout entirely, so an
+                // inactive (not-yet-built) Loader marked invisible would
+                // reserve ZERO height instead of `placeholderHeight`. Every
+                // card's `y` would then collapse toward 0, the viewport test
+                // below would see them all on-screen, and the whole page
+                // would build at once — defeating the virtualization. An
+                // inactive Loader has no `item`, so it paints nothing while
+                // visible; leaving it visible keeps it a layout participant
+                // that carries the placeholder height.
 
                 // Imperative one-shot latch. A declarative `Binding { when:
                 // <reads y> }` loops: building the card changes
@@ -101,7 +110,14 @@ SettingsFlickable {
                         cardLoader._everInView = true;
                 }
                 onYChanged: cardLoader._checkInView()
-                Component.onCompleted: cardLoader._checkInView()
+                // Deferred one tick: a ColumnLayout assigns child `y` on a
+                // polish pass AFTER Component.onCompleted runs, so a check
+                // here would read the pre-layout `y` (0 for every card) and
+                // latch the whole page in-view. Qt.callLater runs the first
+                // check once layout has positioned this Loader, so the
+                // viewport test sees the real slot position. Later re-checks
+                // come from onYChanged / the page Connections below.
+                Component.onCompleted: Qt.callLater(cardLoader._checkInView)
 
                 Connections {
                     target: page
