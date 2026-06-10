@@ -1,49 +1,35 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: GPL-3.0-or-later
 import QtQuick
-import QtQuick.Layouts
-import org.kde.kirigami as Kirigami
 
 // Layout-editor zone-manipulation animations. Fires only inside the
-// PlasmaZones layout editor (fill-preview, snap-resize-preview).
-// Runtime window snapping is KWin's compositor-level domain and is
-// NOT controlled here.
-SettingsFlickable {
-    contentHeight: col.implicitHeight
-    clip: true
+// PlasmaZones layout editor (fill-preview, snap-resize-preview). Runtime
+// window snapping is KWin's compositor-level domain and is NOT controlled
+// here.
+//
+// Card list is viewport-virtualized by AnimationEventCardList.
+AnimationEventCardList {
     Accessible.name: i18n("Layout editor animation events")
-
-    ColumnLayout {
-        id: col
-
-        width: parent.width
-        spacing: Kirigami.Units.smallSpacing
-
-        AnimationEventCard {
-            Layout.fillWidth: true
-            eventPath: "editor"
-            eventLabel: i18n("All Editor Events")
-            isParentNode: true
+    eventModel: [
+        {
+            "eventPath": "editor",
+            "eventLabel": i18n("All Editor Events"),
+            "isParentNode": true
+        },
+        {
+            "eventPath": "editor.snapIn",
+            "eventLabel": i18n("Snap Into Zone (Fill Preview)"),
+            "isParentNode": false
+        },
+        {
+            "eventPath": "editor.snapOut",
+            "eventLabel": i18n("Snap Out of Zone"),
+            "isParentNode": false
+        },
+        {
+            "eventPath": "editor.snapResize",
+            "eventLabel": i18n("Snap Resize (Drag Preview)"),
+            "isParentNode": false
         }
-
-        AnimationEventCard {
-            Layout.fillWidth: true
-            eventPath: "editor.snapIn"
-            eventLabel: i18n("Snap Into Zone (Fill Preview)")
-        }
-
-        AnimationEventCard {
-            Layout.fillWidth: true
-            eventPath: "editor.snapOut"
-            eventLabel: i18n("Snap Out of Zone")
-        }
-
-        AnimationEventCard {
-            Layout.fillWidth: true
-            eventPath: "editor.snapResize"
-            eventLabel: i18n("Snap Resize (Drag Preview)")
-        }
-
-    }
-
+    ]
 }

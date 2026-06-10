@@ -299,6 +299,7 @@ qt_add_qml_module(plasmazones-settings
         # consumed by every Animations sub-page and the editor dialog.
         qml/AnimatedBoxTrack.qml
         qml/AnimationEventCard.qml
+        qml/AnimationEventCardList.qml
         qml/AnimationProfileEditor.qml
         qml/AnimationsWindowsPage.qml
         qml/AnimationsEditorPage.qml

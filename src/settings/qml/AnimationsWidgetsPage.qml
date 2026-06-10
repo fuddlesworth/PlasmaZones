@@ -1,25 +1,12 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: GPL-3.0-or-later
 import QtQuick
-import QtQuick.Layouts
-import org.kde.kirigami as Kirigami
 
-SettingsFlickable {
-    id: page
-
-    // Viewport-gated lazy build: only AnimationEventCards whose y-range
-    // intersects the visible viewport (plus a buffer) are instantiated.
-    // Each card embeds a heavy AnimationProfileEditor (curve Canvas,
-    // shader picker, sliders, dialogs); this page lists ~22 events, so
-    // building them all eagerly was the dominant first-visit cost. The
-    // page stays a SettingsFlickable so the Kirigami.WheelHandler (Plasma
-    // wheel-scroll speed, bug 385836) is preserved untouched. Cards are
-    // recycle-safe: AnimationEventCard holds no persistent state of its
-    // own (Component.onCompleted re-reads from settingsController.
-    // animationsPage), and each Loader latches active once it enters the
-    // viewport and never unloads — so no transient UI is lost on scroll.
-    // See AnimationsWindowsPage.qml for the same pattern + rationale.
-    readonly property var eventModel: [
+// Widget animation events. Viewport-virtualized via AnimationEventCardList
+// (only visible AnimationEventCards build) — see that component.
+AnimationEventCardList {
+    Accessible.name: i18n("Widget animation events")
+    eventModel: [
         {
             "eventPath": "widget",
             "eventLabel": i18n("All Widget Events"),
@@ -137,73 +124,4 @@ SettingsFlickable {
             "isParentNode": false
         }
     ]
-    // Build-ahead margin above/below the viewport so a card is built
-    // slightly before it scrolls into view.
-    readonly property real buildBuffer: Kirigami.Units.gridUnit * 20
-    // Placeholder height a not-yet-built card reserves so contentHeight
-    // (and scroll position) stays stable until the real card materialises.
-    readonly property real placeholderHeight: Kirigami.Units.gridUnit * 7
-
-    contentHeight: col.implicitHeight
-    clip: true
-    Accessible.name: i18n("Widget animation events")
-
-    ColumnLayout {
-        id: col
-
-        width: page.width
-        spacing: Kirigami.Units.smallSpacing
-
-        Repeater {
-            model: page.eventModel
-
-            // One latching, viewport-gated Loader per event.
-            Loader {
-                id: cardLoader
-
-                required property var modelData
-
-                // Latch: once the card has entered the viewport it stays
-                // built. `_everInView` flips true and never back.
-                property bool _everInView: false
-
-                Layout.fillWidth: true
-                Layout.preferredHeight: active && item ? item.implicitHeight : page.placeholderHeight
-                active: _everInView
-                asynchronous: true
-                visible: active
-
-                // Imperative one-shot latch — see AnimationsWindowsPage.qml
-                // for why a declarative `Binding { when: <reads y> }` forms a
-                // binding loop here. `y` read live but never bound;
-                // placeholderHeight (constant) estimates the slot bottom so
-                // the build height never feeds back in.
-                function _checkInView() {
-                    if (cardLoader._everInView)
-                        return;
-                    const top = cardLoader.y;
-                    if ((top + page.placeholderHeight) >= (page.contentY - page.buildBuffer) && top <= (page.contentY + page.height + page.buildBuffer))
-                        cardLoader._everInView = true;
-                }
-                onYChanged: cardLoader._checkInView()
-                Component.onCompleted: cardLoader._checkInView()
-
-                Connections {
-                    target: page
-                    function onContentYChanged() {
-                        cardLoader._checkInView();
-                    }
-                    function onHeightChanged() {
-                        cardLoader._checkInView();
-                    }
-                }
-
-                sourceComponent: AnimationEventCard {
-                    eventPath: cardLoader.modelData.eventPath
-                    eventLabel: cardLoader.modelData.eventLabel
-                    isParentNode: cardLoader.modelData.isParentNode === true
-                }
-            }
-        }
-    }
 }
