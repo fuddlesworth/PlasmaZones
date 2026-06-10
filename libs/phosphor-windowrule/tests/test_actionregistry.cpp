@@ -97,8 +97,8 @@ private Q_SLOTS:
     void testTerminalFlag()
     {
         const ActionRegistry& reg = ActionRegistry::instance();
-        // Exclude is the only terminal builtin — every other builtin must be
-        // non-terminal, so evaluation continues past a matching rule.
+        // Exclude and ExcludeAnimations are the terminal builtins — every other
+        // builtin must be non-terminal, so evaluation continues past a match.
         QVERIFY(reg.isTerminal(makeAction(ActionType::Exclude)));
         QVERIFY(!reg.isTerminal(makeAction(ActionType::Float)));
         QVERIFY(!reg.isTerminal(makeAction(ActionType::SetEngineMode)));

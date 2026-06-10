@@ -302,7 +302,7 @@ QString actionLabel(const RuleAction& action, const WindowRuleModel::LabelLookup
                                : PhosphorI18n::tr("Curve: %1").arg(resolveWith(curve, curveLookup));
     }
     // ── single-value actions keyed on ActionParam::Value (restore-position,
-    //    border / title-bar overrides, per-side gap) ──
+    //    border / title-bar overrides, per-context gap overrides) ──
     {
         const QJsonValue raw = action.params.value(PhosphorWindowRule::ActionParam::Value);
         if (action.type == ActionType::RestorePosition) {
