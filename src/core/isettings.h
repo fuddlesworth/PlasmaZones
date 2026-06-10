@@ -383,6 +383,7 @@ Q_SIGNALS:
     void restoreOriginalSizeOnUnsnapChanged();
     void snappingStickyWindowHandlingChanged();
     void restoreWindowsToZonesOnLoginChanged();
+    void restoreUnsnappedWindowsOnLoginChanged();
     void autoAssignAllLayoutsChanged();
     void snapAssistFeatureEnabledChanged();
     void snapAssistEnabledChanged();

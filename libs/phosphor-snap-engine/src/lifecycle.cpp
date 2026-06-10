@@ -189,6 +189,15 @@ SnapResult SnapEngine::resolveWindowRestore(const QString& windowId, const QStri
     // store has no record (windows persisted under the old keys before migration).
     if (m_windowTracker) {
         const QString appId = m_windowTracker->currentAppIdFor(windowId);
+        // Whether an UNSNAPPED record (free / snap-floated) for THIS window may
+        // restore its recorded global position on open — the daemon resolves the
+        // global `restoreUnsnappedWindowsOnLogin` setting plus the per-window
+        // RestorePosition rule. When true the free/floating record is eligible
+        // regardless of the opening screen, so a window KWin reopened on the wrong
+        // monitor returns to its recorded one (stored geometry is global, so
+        // re-applying it lands on the original output). When false the historical
+        // opening-screen gate stands. Snapped records are never governed by this.
+        const bool restoreUnsnappedPosition = m_restorePositionPredicate && m_restorePositionPredicate(windowId);
         // ONE record per window (both engines' slots + the shared free geometry).
         // take() consumes it (multi-instance FIFO); we then re-record it bound to
         // the LIVE windowId so the OTHER engine's slot and the per-screen free
@@ -212,10 +221,16 @@ SnapResult SnapEngine::resolveWindowRestore(const QString& windowId, const QStri
                 // on the wrong monitor, unsnapped. The RECORDED screen must still be
                 // in snapping mode, though: a snapped record whose own screen is now
                 // autotile-owned must not snap-restore there (the early gate leaves it
-                // for autotile). A floating/free position is screen-local, so those
-                // records stay gated on the opening screen.
+                // for autotile). A floating/free position is screen-local UNLESS the
+                // user opted into unsnapped-position restore (global setting / rule),
+                // in which case the record is eligible cross-screen so the window
+                // returns to its recorded monitor; otherwise it stays gated on the
+                // opening screen.
                 if (p.slotFor(engineId()).state == WindowPlacement::stateSnapped()) {
                     return recordedSnapScreenIsSnapping(p);
+                }
+                if (restoreUnsnappedPosition) {
+                    return true;
                 }
                 return p.screenId.isEmpty() || p.screenId == screenId;
             },
@@ -296,6 +311,19 @@ SnapResult SnapEngine::resolveWindowRestore(const QString& windowId, const QStri
                 return SnapResult::noSnap();
             } else if (slot.state == WindowPlacement::stateFree()) {
                 // free geometry already lives in the record; nothing to re-seed.
+                // When the user opted into unsnapped-position restore, move the
+                // window back to its recorded global position (which, being in
+                // compositor-global coords, returns it to its original monitor —
+                // KWin may have reopened the session window elsewhere). The window
+                // stays genuinely unmanaged; this is a one-shot placement, not a
+                // snap. Eligibility above already required restoreUnsnappedPosition
+                // to consume a cross-screen record, but a same-screen free record is
+                // consumed unconditionally — so gate the move itself here too.
+                if (restoreUnsnappedPosition && freeGeo.isValid()) {
+                    Q_EMIT geometryRestoreRequested(windowId, freeGeo, restoreScreen);
+                    qCInfo(PhosphorSnapEngine::lcSnapEngine)
+                        << "resolveWindowRestore: placement(free) reposition for" << windowId << "->" << freeGeo;
+                }
                 return SnapResult::noSnap();
             }
         }

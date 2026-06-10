@@ -434,6 +434,10 @@ public:
     {
         return true;
     }
+    static bool restoreUnsnappedWindowsOnLogin()
+    {
+        return true;
+    }
     static bool autoAssignAllLayouts()
     {
         return false;

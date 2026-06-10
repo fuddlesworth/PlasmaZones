@@ -2074,6 +2074,9 @@ void Settings::setSnappingStickyWindowHandlingInt(int handling)
 P_STORE_GET(bool, restoreWindowsToZonesOnLogin, snappingBehaviorWindowHandlingGroup, restoreOnLoginKey, bool)
 P_STORE_SET_BOOL(setRestoreWindowsToZonesOnLogin, snappingBehaviorWindowHandlingGroup, restoreOnLoginKey,
                  restoreWindowsToZonesOnLoginChanged)
+P_STORE_GET(bool, restoreUnsnappedWindowsOnLogin, snappingBehaviorWindowHandlingGroup, restoreUnsnappedOnLoginKey, bool)
+P_STORE_SET_BOOL(setRestoreUnsnappedWindowsOnLogin, snappingBehaviorWindowHandlingGroup, restoreUnsnappedOnLoginKey,
+                 restoreUnsnappedWindowsOnLoginChanged)
 P_STORE_GET(bool, autoAssignAllLayouts, snappingBehaviorWindowHandlingGroup, autoAssignAllLayoutsKey, bool)
 P_STORE_SET_BOOL(setAutoAssignAllLayouts, snappingBehaviorWindowHandlingGroup, autoAssignAllLayoutsKey,
                  autoAssignAllLayoutsChanged)

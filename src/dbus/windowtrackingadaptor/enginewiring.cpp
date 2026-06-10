@@ -49,6 +49,7 @@ void WindowTrackingAdaptor::setEngines(PhosphorEngine::PlacementEngineBase* snap
     // order.
     if (m_cachedSnapEngine) {
         m_cachedSnapEngine->setShouldRestorePredicate({});
+        m_cachedSnapEngine->setRestorePositionPredicate({});
     }
 
     m_snapEngine = snapEngine;
@@ -91,6 +92,18 @@ void WindowTrackingAdaptor::setEngines(PhosphorEngine::PlacementEngineBase* snap
         // by the current desktop's disable state rather than the target's.
         snap->setShouldRestorePredicate([this](const QString& screenId) -> bool {
             return !isPersistedContextDisabled(screenId, currentDesktop());
+        });
+
+        // Unsnapped-position restore gate (free / snap-floated windows). On open
+        // the engine asks whether THIS window should return to its recorded global
+        // position — which, being in compositor-global coords, brings it back to
+        // its original monitor even when KWin's session restore reopened it on
+        // another output. The decision is the per-window RestorePosition rule when
+        // one matches, otherwise the global `restoreUnsnappedWindowsOnLogin`
+        // setting. (Phase 2 layers the rule lookup on top of this setting read.)
+        snap->setRestorePositionPredicate([this](const QString& windowId) -> bool {
+            Q_UNUSED(windowId)
+            return m_settings && m_settings->restoreUnsnappedWindowsOnLogin();
         });
 
         // Snap-specific signal: carries PhosphorProtocol::WindowStateEntry which is snap-mode-only.

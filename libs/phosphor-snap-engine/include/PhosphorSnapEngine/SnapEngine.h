@@ -132,6 +132,38 @@ public:
         m_shouldRestorePredicate = std::move(predicate);
     }
 
+    /**
+     * @brief Predicate consulted in `resolveWindowRestore` to decide whether an
+     *        UNSNAPPED window (a genuinely free record, or a snap-floated one)
+     *        should have its previous global position restored on open.
+     *
+     * Keyed by the live windowId so the daemon closure can build a full
+     * WindowQuery (window class / title / role) from its WindowRegistry and
+     * evaluate the per-window RestorePosition rule, falling back to the global
+     * `restoreUnsnappedWindowsOnLogin` setting. Like @ref ShouldRestorePredicate
+     * the engine stays settings-agnostic (LGPL boundary) — it only asks.
+     *
+     * Returns true to restore the recorded position (cross-screen allowed —
+     * stored geometry is in global compositor coordinates, so re-applying it
+     * lands the window back on its original monitor). When the predicate is
+     * UNSET (default), the engine preserves its historical behaviour: free
+     * records are inert and floating records restore only on the screen they
+     * reopen on — the path unit tests rely on. This gate governs ONLY the
+     * free/floating geometry restore; snapped-to-zone restore is unaffected.
+     */
+    using RestorePositionPredicate = std::function<bool(const QString& windowId)>;
+
+    /**
+     * @brief Inject the unsnapped-position-restore gate. See
+     *        RestorePositionPredicate. Same lifetime contract as
+     *        setShouldRestorePredicate — clear with `{}` before destroying any
+     *        captured state.
+     */
+    void setRestorePositionPredicate(RestorePositionPredicate predicate)
+    {
+        m_restorePositionPredicate = std::move(predicate);
+    }
+
     void windowClosed(const QString& windowId) override;
     void windowFocused(const QString& windowId, const QString& screenId) override;
     void toggleWindowFloat(const QString& windowId, const QString& screenId) override;
@@ -657,6 +689,12 @@ private:
     // call time, not passed in here; see ShouldRestorePredicate doc
     // above and discussion #461 item 7.)
     ShouldRestorePredicate m_shouldRestorePredicate{};
+
+    // Unsnapped-position-restore gate. Empty until the daemon wires it; while
+    // empty the engine restores no free positions and floating positions only
+    // on the reopening screen — the historical behaviour unit tests rely on.
+    // See RestorePositionPredicate doc above.
+    RestorePositionPredicate m_restorePositionPredicate{};
 };
 
 } // namespace PhosphorSnapEngine

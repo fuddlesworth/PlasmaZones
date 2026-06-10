@@ -1126,6 +1126,124 @@ private Q_SLOTS:
     }
 
     // =========================================================================
+    // resolveWindowRestore — unsnapped-position restore gate
+    // (RestorePositionPredicate)
+    //
+    // A FREE (never-snapped) or snap-FLOATED window persists its global
+    // position keyed by its recorded screen. KWin's session restore can reopen
+    // it on a DIFFERENT monitor at login. When the daemon's restore-position
+    // predicate opts the window in, the record becomes eligible cross-screen and
+    // the engine emits geometryRestoreRequested with the RECORDED screen's
+    // geometry — which, being in global compositor coordinates, returns the
+    // window to its original monitor. With the predicate unset/false the
+    // historical behaviour stands: free positions are inert and a cross-screen
+    // record is not consumed.
+    // =========================================================================
+
+    void testResolveWindowRestore_freeCrossScreen_restoresWhenPredicateOptsIn()
+    {
+        SnapEngine engine(m_layoutManager, m_wts, nullptr, nullptr, nullptr);
+        engine.setEngineSettings(m_settings);
+        m_wts->setSnapState(engine.snapState());
+        engine.setRestorePositionPredicate([](const QString&) {
+            return true;
+        });
+
+        // A genuinely-free window last seen on DP-1 at a recorded global rect.
+        const QRect dp1Geo(120, 80, 800, 600);
+        PhosphorEngine::WindowPlacement rec;
+        rec.windowId = QStringLiteral("app|orig");
+        rec.appId = QStringLiteral("app");
+        rec.screenId = QStringLiteral("DP-1");
+        PhosphorEngine::EngineSlot slot;
+        slot.state = PhosphorEngine::WindowPlacement::stateFree();
+        rec.engines.insert(QStringLiteral("snap"), slot);
+        rec.freeGeometryByScreen.insert(QStringLiteral("DP-1"), dp1Geo);
+        m_wts->placementStore().record(rec);
+
+        QSignalSpy geoSpy(&engine, &PhosphorEngine::PlacementEngineBase::geometryRestoreRequested);
+
+        // KWin reopens the window (new uuid) on DP-2.
+        const PhosphorEngine::SnapResult result =
+            engine.resolveWindowRestore(QStringLiteral("app|new"), QStringLiteral("DP-2"), /*sticky*/ false);
+
+        QVERIFY2(!result.shouldSnap, "a free window is repositioned, never snapped into a zone");
+        QCOMPARE(geoSpy.count(), 1);
+        const QList<QVariant> args = geoSpy.takeFirst();
+        QCOMPARE(args.at(1).toRect(), dp1Geo);
+        QCOMPARE(args.at(2).toString(), QStringLiteral("DP-1"));
+        m_wts->setSnapState(nullptr);
+    }
+
+    void testResolveWindowRestore_freeCrossScreen_inertWhenPredicateAbsent()
+    {
+        SnapEngine engine(m_layoutManager, m_wts, nullptr, nullptr, nullptr);
+        engine.setEngineSettings(m_settings);
+        m_wts->setSnapState(engine.snapState());
+        // No restore-position predicate — historical behaviour.
+
+        PhosphorEngine::WindowPlacement rec;
+        rec.windowId = QStringLiteral("app|orig");
+        rec.appId = QStringLiteral("app");
+        rec.screenId = QStringLiteral("DP-1");
+        PhosphorEngine::EngineSlot slot;
+        slot.state = PhosphorEngine::WindowPlacement::stateFree();
+        rec.engines.insert(QStringLiteral("snap"), slot);
+        rec.freeGeometryByScreen.insert(QStringLiteral("DP-1"), QRect(120, 80, 800, 600));
+        m_wts->placementStore().record(rec);
+
+        QSignalSpy geoSpy(&engine, &PhosphorEngine::PlacementEngineBase::geometryRestoreRequested);
+
+        const PhosphorEngine::SnapResult result =
+            engine.resolveWindowRestore(QStringLiteral("app|new"), QStringLiteral("DP-2"), /*sticky*/ false);
+
+        QVERIFY(!result.shouldSnap);
+        QCOMPARE(geoSpy.count(), 0);
+        QVERIFY2(m_wts->placementStore().contains(QStringLiteral("app|orig"), QStringLiteral("app")),
+                 "without opt-in, a cross-screen free record stays gated on the opening screen and is not consumed");
+        m_wts->setSnapState(nullptr);
+    }
+
+    void testResolveWindowRestore_floatingCrossScreen_restoresToRecordedMonitor()
+    {
+        SnapEngine engine(m_layoutManager, m_wts, nullptr, nullptr, nullptr);
+        engine.setEngineSettings(m_settings);
+        m_wts->setSnapState(engine.snapState());
+        engine.setRestorePositionPredicate([](const QString&) {
+            return true;
+        });
+
+        // A snap-floated window: state floating, carrying its pre-float zone, with
+        // a recorded free position on DP-1.
+        const QRect dp1Geo(200, 150, 640, 480);
+        PhosphorEngine::WindowPlacement rec;
+        rec.windowId = QStringLiteral("app|orig");
+        rec.appId = QStringLiteral("app");
+        rec.screenId = QStringLiteral("DP-1");
+        PhosphorEngine::EngineSlot slot;
+        slot.state = PhosphorEngine::WindowPlacement::stateFloating();
+        slot.zoneIds = QStringList{QStringLiteral("z1")};
+        rec.engines.insert(QStringLiteral("snap"), slot);
+        rec.freeGeometryByScreen.insert(QStringLiteral("DP-1"), dp1Geo);
+        m_wts->placementStore().record(rec);
+
+        QSignalSpy floatSpy(&engine, &PhosphorEngine::PlacementEngineBase::windowFloatingChanged);
+        QSignalSpy geoSpy(&engine, &PhosphorEngine::PlacementEngineBase::geometryRestoreRequested);
+
+        const PhosphorEngine::SnapResult result =
+            engine.resolveWindowRestore(QStringLiteral("app|new"), QStringLiteral("DP-2"), /*sticky*/ false);
+
+        QVERIFY2(!result.shouldSnap, "a floated window restores its float position, not a snap");
+        QCOMPARE(geoSpy.count(), 1);
+        QCOMPARE(geoSpy.takeFirst().at(1).toRect(), dp1Geo);
+        QCOMPARE(floatSpy.count(), 1);
+        const QList<QVariant> floatArgs = floatSpy.takeFirst();
+        QCOMPARE(floatArgs.at(1).toBool(), true);
+        QCOMPARE(floatArgs.at(2).toString(), QStringLiteral("DP-1"));
+        m_wts->setSnapState(nullptr);
+    }
+
+    // =========================================================================
     // setExcludeRuleSet + isAppIdExcluded wiring tests
     //
     // Daemon owns the filtered Exclude rule set and pushes its address into

@@ -179,6 +179,21 @@ SettingsFlickable {
                     SettingsSeparator {}
 
                     SettingsRow {
+                        title: i18n("Restore unsnapped windows to their previous position")
+                        description: i18n("When an unsnapped window reopens after a logout, return it to the position and monitor it was on — overriding where the compositor places it. Use a per-window rule to opt specific windows out.")
+
+                        SettingsSwitch {
+                            checked: appSettings.restoreUnsnappedWindowsOnLogin
+                            accessibleName: i18n("Restore unsnapped windows to their previous position")
+                            onToggled: function (newValue) {
+                                appSettings.restoreUnsnappedWindowsOnLogin = newValue;
+                            }
+                        }
+                    }
+
+                    SettingsSeparator {}
+
+                    SettingsRow {
                         title: i18n("Sticky windows")
                         description: i18n("How to handle windows that appear on all desktops")
 
