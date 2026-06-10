@@ -166,11 +166,25 @@ RowLayout {
     }
 
     Kirigami.Icon {
+        id: fieldInfoIcon
+
         source: "dialog-information"
         Layout.preferredWidth: Kirigami.Units.iconSizes.small
         Layout.preferredHeight: Kirigami.Units.iconSizes.small
         Layout.alignment: Qt.AlignVCenter
         color: Kirigami.Theme.highlightColor
+        // Hover help describing the selected field. An unknown / legacy field
+        // (_fieldEntry undefined) yields no text, so the tooltip just doesn't
+        // appear rather than showing an empty bubble.
+        readonly property string _fieldDesc: leaf._fieldEntry !== undefined ? (leaf._fieldEntry.description || "") : ""
+        Accessible.name: _fieldDesc
+        ToolTip.text: _fieldDesc
+        ToolTip.visible: fieldInfoHover.hovered && _fieldDesc !== ""
+        ToolTip.delay: Kirigami.Units.toolTipDelay
+
+        HoverHandler {
+            id: fieldInfoHover
+        }
     }
 
     // Categorized field picker — the same cascading category-menu button the

@@ -69,6 +69,55 @@ PickerCategory fieldCategory(Field f)
     return {PhosphorI18n::tr("Other"), 99};
 }
 
+/// Short, user-facing help for one match Field — surfaced as the hover
+/// tooltip on the leaf editor's info icon. Kept concise (one line); the
+/// switch is exhaustive so every field, including the picker-hidden ones,
+/// has a description.
+QString fieldDescription(Field f)
+{
+    switch (f) {
+    case Field::AppId:
+        return PhosphorI18n::tr("The application's ID (Wayland app_id / desktop entry), e.g. org.kde.konsole.");
+    case Field::WindowClass:
+        return PhosphorI18n::tr("The window's class (WM_CLASS resource class), e.g. konsole.");
+    case Field::DesktopFile:
+        return PhosphorI18n::tr("The application's desktop entry file name.");
+    case Field::WindowRole:
+        return PhosphorI18n::tr("The window's X11 role (WM_WINDOW_ROLE); empty for Wayland-native windows.");
+    case Field::Pid:
+        return PhosphorI18n::tr("The window's process ID.");
+    case Field::Title:
+        return PhosphorI18n::tr("The window's title-bar text.");
+    case Field::WindowType:
+        return PhosphorI18n::tr("The window's type (Normal, Dialog, Utility, Notification, …).");
+    case Field::IsSticky:
+        return PhosphorI18n::tr("Whether the window is shown on all virtual desktops.");
+    case Field::IsFullscreen:
+        return PhosphorI18n::tr("Whether the window is fullscreen.");
+    case Field::IsMinimized:
+        return PhosphorI18n::tr("Whether the window is minimized.");
+    case Field::IsMaximized:
+        return PhosphorI18n::tr("Whether the window is maximized.");
+    case Field::IsFocused:
+        return PhosphorI18n::tr("Whether the window currently has keyboard focus.");
+    case Field::IsTransient:
+        return PhosphorI18n::tr("Whether the window is a transient (a dialog or popup owned by another window).");
+    case Field::IsNotification:
+        return PhosphorI18n::tr("Whether the window is a notification or on-screen display.");
+    case Field::Width:
+        return PhosphorI18n::tr("The window's width in pixels.");
+    case Field::Height:
+        return PhosphorI18n::tr("The window's height in pixels.");
+    case Field::ScreenId:
+        return PhosphorI18n::tr("The monitor the window is on.");
+    case Field::VirtualDesktop:
+        return PhosphorI18n::tr("The virtual desktop the window is on.");
+    case Field::Activity:
+        return PhosphorI18n::tr("The KDE Activity the window is on.");
+    }
+    return QString();
+}
+
 /// Group an action type (wire string) into a picker category. Mirrors the
 /// preferred-order clustering in actionTypes(): engine/layout, gaps, window
 /// management, appearance, animation.
@@ -385,6 +434,8 @@ QVariantList matchFields()
         const PickerCategory fcat = fieldCategory(f);
         entry[QStringLiteral("category")] = fcat.label;
         entry[QStringLiteral("categoryOrder")] = fcat.order;
+        // One-line help surfaced as the leaf editor's info-icon tooltip.
+        entry[QStringLiteral("description")] = fieldDescription(f);
         QString kind = QStringLiteral("string");
         if (f == Field::WindowType) {
             // WindowType is stored as the int underlying the

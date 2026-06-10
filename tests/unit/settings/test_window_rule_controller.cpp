@@ -688,6 +688,11 @@ void TestWindowRuleController::authoringMetadata()
         const QVariantMap f = v.toMap();
         QVERIFY(!f.value(QStringLiteral("category")).toString().isEmpty());
         QVERIFY(f.contains(QStringLiteral("categoryOrder")));
+        // Every field carries one-line help (the leaf editor's info-icon
+        // tooltip) — a missing description would render the icon mute again.
+        QVERIFY2(
+            !f.value(QStringLiteral("description")).toString().isEmpty(),
+            qPrintable(QStringLiteral("field %1 has no description").arg(f.value(QStringLiteral("wire")).toString())));
         fieldCategoryOrder.insert(f.value(QStringLiteral("wire")).toString(),
                                   f.value(QStringLiteral("categoryOrder")).toInt());
     }
