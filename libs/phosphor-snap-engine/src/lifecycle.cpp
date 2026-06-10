@@ -82,9 +82,9 @@ void SnapEngine::windowOpened(const QString& windowId, const QString& screenId, 
 // resolveWindowRestore — WindowPlacementStore restore + auto-snap fallback chain
 //
 // Consults the unified WindowPlacementStore first (snapped / floating / free
-// record); if none applies, runs the legacy fallback chain (1. app rules,
-// 2. vacated — session restore moved into the store block above, 3. empty zone,
-// 4. last zone).
+// record); if none applies, runs the fallback chain (1. app rules, 2. empty
+// zone, 3. last zone). Persisted session restore is now served by the store
+// block above, not a chain level.
 //
 // Mostly decision logic: returns a SnapResult for the caller to apply geometry.
 // Side effects: consumePendingAssignment, navigationFeedback emit (floating
@@ -97,7 +97,7 @@ void SnapEngine::windowOpened(const QString& windowId, const QString& screenId, 
 //     route a window to a different screen, and the store's take() accept
 //     predicate / snapped-branch screen check keep an autotile-mode screen from
 //     being snapped onto (autotile on that screen will own it).
-//   - The empty-zone (level 3) and last-zone (level 4) fallbacks inherently use
+//   - The empty-zone (level 2) and last-zone (level 3) fallbacks inherently use
 //     the caller screen as the target, so they are ONLY valid when the caller's
 //     screen is in snap mode. On autotile screens they're short-circuited —
 //     stale snap zones on a now-autotile screen must not bleed into placement.
@@ -391,7 +391,8 @@ SnapResult SnapEngine::resolveWindowRestore(const QString& windowId, const QStri
         return SnapResult::noSnap();
     }
 
-    // 0. Floating windows should not be auto-snapped — emit OSD feedback
+    // Floating windows should not be auto-snapped — emit OSD feedback. (A skip
+    // guard, not a fallback level.)
     if (m_snapState->isFloating(windowId)) {
         qCInfo(PhosphorSnapEngine::lcSnapEngine)
             << "resolveWindowRestore: window" << windowId << "is floating, skipping snap";
@@ -420,12 +421,12 @@ SnapResult SnapEngine::resolveWindowRestore(const QString& windowId, const QStri
         }
     }
 
-    // 2. Persisted session restore is now served entirely by the unified
-    // WindowPlacementStore block at the top of this function (a snapped window
-    // reopens from its WindowPlacement record). The legacy
-    // PendingRestoreQueues / calculateRestoreFromSession path is gone.
+    // (Persisted session restore is now served entirely by the unified
+    // WindowPlacementStore block at the top of this function — a snapped window
+    // reopens from its WindowPlacement record. It is no longer a chain level; the
+    // legacy PendingRestoreQueues / calculateRestoreFromSession path is gone.)
 
-    // Levels 3 and 4 inherently target the caller's screen (the empty-zone /
+    // Levels 2 and 3 inherently target the caller's screen (the empty-zone /
     // last-zone lookups are scoped to screenId, not to a saved zone). If the
     // caller's screen is now in autotile mode, skip them — stale snap zones
     // on an autotile screen must not be auto-assigned, autotile owns
@@ -440,7 +441,7 @@ SnapResult SnapEngine::resolveWindowRestore(const QString& windowId, const QStri
         }
     }
 
-    // 3. Auto-assign to empty zone
+    // 2. Auto-assign to empty zone
     {
         SnapResult result = calculateSnapToEmptyZone(windowId, screenId, sticky);
         if (result.shouldSnap) {
@@ -450,7 +451,7 @@ SnapResult SnapEngine::resolveWindowRestore(const QString& windowId, const QStri
         }
     }
 
-    // 4. Snap to last zone (final fallback)
+    // 3. Snap to last zone (final fallback)
     {
         SnapResult result = calculateSnapToLastZone(windowId, screenId, sticky);
         if (result.shouldSnap) {

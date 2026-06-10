@@ -1323,6 +1323,90 @@ private Q_SLOTS:
         m_wts->setSnapState(nullptr);
     }
 
+    // The floating branch deliberately does NOT re-gate the geometry move on the
+    // restore-position predicate (unlike the free branch): once a floating record
+    // is consumed it always re-emits its recorded position. Pin that the move
+    // fires even when the predicate DENIES — proving the floating restore is the
+    // historical float-back path, independent of the unsnapped-restore opt-in.
+    void testResolveWindowRestore_floatingSameScreen_restoresEvenWhenPredicateDenies()
+    {
+        SnapEngine engine(m_layoutManager, m_wts, nullptr, nullptr, nullptr);
+        engine.setEngineSettings(m_settings);
+        m_wts->setSnapState(engine.snapState());
+        engine.setRestorePositionPredicate([](const QString&) {
+            return false;
+        });
+
+        const QRect dp1Geo(200, 150, 640, 480);
+        PhosphorEngine::WindowPlacement rec;
+        rec.windowId = QStringLiteral("app|orig");
+        rec.appId = QStringLiteral("app");
+        rec.screenId = QStringLiteral("DP-1");
+        PhosphorEngine::EngineSlot slot;
+        slot.state = PhosphorEngine::WindowPlacement::stateFloating();
+        slot.zoneIds = QStringList{QStringLiteral("z1")};
+        rec.engines.insert(QStringLiteral("snap"), slot);
+        rec.freeGeometryByScreen.insert(QStringLiteral("DP-1"), dp1Geo);
+        m_wts->placementStore().record(rec);
+
+        QSignalSpy floatSpy(&engine, &PhosphorEngine::PlacementEngineBase::windowFloatingChanged);
+        QSignalSpy geoSpy(&engine, &PhosphorEngine::PlacementEngineBase::geometryRestoreRequested);
+
+        // Reopens on its own recorded screen DP-1, predicate denying.
+        const PhosphorEngine::SnapResult result =
+            engine.resolveWindowRestore(QStringLiteral("app|new"), QStringLiteral("DP-1"), /*sticky*/ false);
+
+        QVERIFY(!result.shouldSnap);
+        QVERIFY2(geoSpy.count() == 1, "floating restore re-emits its position regardless of the restore predicate");
+        QCOMPARE(geoSpy.takeFirst().at(1).toRect(), dp1Geo);
+        QCOMPARE(floatSpy.count(), 1);
+        const QList<QVariant> floatArgs = floatSpy.takeFirst();
+        QCOMPARE(floatArgs.at(1).toBool(), true);
+        QCOMPARE(floatArgs.at(2).toString(), QStringLiteral("DP-1"));
+        m_wts->setSnapState(nullptr);
+    }
+
+    // Opt-in cross-screen eligibility (consumption) and the geometry move are
+    // SEPARATELY gated. A free record reopening cross-screen is consumed purely on
+    // the predicate opt-in, but the move only fires when restoreScreen has a
+    // recorded position. With geometry captured on a THIRD screen (not the
+    // record's own restoreScreen), freeGeometryFor(restoreScreen) is invalid, so
+    // the record is consumed without a move — the removed anyFreeGeometry()
+    // cross-screen fallback must NOT resurrect some other screen's rect.
+    void testResolveWindowRestore_freeCrossScreen_optInNoGeometryForRestoreScreen_consumesWithoutMove()
+    {
+        SnapEngine engine(m_layoutManager, m_wts, nullptr, nullptr, nullptr);
+        engine.setEngineSettings(m_settings);
+        m_wts->setSnapState(engine.snapState());
+        engine.setRestorePositionPredicate([](const QString&) {
+            return true;
+        });
+
+        PhosphorEngine::WindowPlacement rec;
+        rec.windowId = QStringLiteral("app|orig");
+        rec.appId = QStringLiteral("app");
+        rec.screenId = QStringLiteral("DP-1"); // restoreScreen resolves to DP-1
+        PhosphorEngine::EngineSlot slot;
+        slot.state = PhosphorEngine::WindowPlacement::stateFree();
+        rec.engines.insert(QStringLiteral("snap"), slot);
+        // Geometry recorded on DP-3, NOT on the record's own screen DP-1.
+        rec.freeGeometryByScreen.insert(QStringLiteral("DP-3"), QRect(10, 10, 800, 600));
+        m_wts->placementStore().record(rec);
+
+        QSignalSpy geoSpy(&engine, &PhosphorEngine::PlacementEngineBase::geometryRestoreRequested);
+
+        // KWin reopens on DP-2; opt-in makes the cross-screen record eligible.
+        const PhosphorEngine::SnapResult result =
+            engine.resolveWindowRestore(QStringLiteral("app|new"), QStringLiteral("DP-2"), /*sticky*/ false);
+
+        QVERIFY(!result.shouldSnap);
+        QVERIFY2(geoSpy.count() == 0,
+                 "no recorded position for restoreScreen → move skipped (no anyFreeGeometry fallback)");
+        QVERIFY2(!m_wts->placementStore().contains(QStringLiteral("app|orig"), QStringLiteral("app")),
+                 "opt-in consumes the cross-screen free record even when the move is skipped");
+        m_wts->setSnapState(nullptr);
+    }
+
     // =========================================================================
     // setExcludeRuleSet + isAppIdExcluded wiring tests
     //

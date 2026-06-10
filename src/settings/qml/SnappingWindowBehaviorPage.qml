@@ -180,7 +180,7 @@ SettingsFlickable {
 
                     SettingsRow {
                         title: i18n("Restore unsnapped windows to their previous position")
-                        description: i18n("When an unsnapped window reopens after a logout, return it to the position and monitor it was on — overriding where the compositor places it. Use a per-window rule to opt specific windows out.")
+                        description: i18n("When an unsnapped window reopens after a logout, it returns to the position and monitor it was on instead of wherever the compositor would place it. A per-window rule can override this either way, opting individual windows in or out.")
 
                         SettingsSwitch {
                             checked: appSettings.restoreUnsnappedWindowsOnLogin
