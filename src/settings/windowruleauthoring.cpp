@@ -27,6 +27,127 @@ using PhosphorWindowRule::Field;
 using PhosphorWindowRule::Operator;
 using PhosphorWindowRule::RuleAction;
 
+/// One picker category: a translated label + a stable sort order. The field
+/// and action pickers group their (otherwise long, flat) entry lists into
+/// fly-out submenus keyed by this.
+struct PickerCategory
+{
+    QString label;
+    int order;
+};
+
+/// Group a match Field into a picker category. The `Field` enum interleaves
+/// state and context (e.g. IsMaximized sits after Activity), so the picker
+/// groups by THIS classification, never by enum / emit order.
+PickerCategory fieldCategory(Field f)
+{
+    switch (f) {
+    case Field::AppId:
+    case Field::WindowClass:
+    case Field::DesktopFile:
+    case Field::WindowRole:
+    case Field::Pid:
+    case Field::Title:
+        return {PhosphorI18n::tr("Identity"), 0};
+    case Field::WindowType:
+    case Field::IsSticky:
+    case Field::IsFullscreen:
+    case Field::IsMinimized:
+    case Field::IsMaximized:
+    case Field::IsFocused:
+    case Field::IsTransient:
+    case Field::IsNotification:
+        return {PhosphorI18n::tr("State"), 1};
+    case Field::Width:
+    case Field::Height:
+        return {PhosphorI18n::tr("Size"), 2};
+    case Field::ScreenId:
+    case Field::VirtualDesktop:
+    case Field::Activity:
+        return {PhosphorI18n::tr("Context"), 3};
+    }
+    return {PhosphorI18n::tr("Other"), 99};
+}
+
+/// Short, user-facing help for one match Field — surfaced as the hover
+/// tooltip on the leaf editor's info icon. Kept concise (one line); the
+/// switch is exhaustive so every field, including the picker-hidden ones,
+/// has a description.
+QString fieldDescription(Field f)
+{
+    switch (f) {
+    case Field::AppId:
+        return PhosphorI18n::tr("The application's ID (Wayland app_id / desktop entry), e.g. org.kde.konsole.");
+    case Field::WindowClass:
+        return PhosphorI18n::tr("The window's class (WM_CLASS resource class), e.g. konsole.");
+    case Field::DesktopFile:
+        return PhosphorI18n::tr("The application's desktop entry file name.");
+    case Field::WindowRole:
+        return PhosphorI18n::tr("The window's X11 role (WM_WINDOW_ROLE); empty for Wayland-native windows.");
+    case Field::Pid:
+        return PhosphorI18n::tr("The window's process ID.");
+    case Field::Title:
+        return PhosphorI18n::tr("The window's title-bar text.");
+    case Field::WindowType:
+        return PhosphorI18n::tr("The window's type (Normal, Dialog, Utility, Notification, …).");
+    case Field::IsSticky:
+        return PhosphorI18n::tr("Whether the window is shown on all virtual desktops.");
+    case Field::IsFullscreen:
+        return PhosphorI18n::tr("Whether the window is fullscreen.");
+    case Field::IsMinimized:
+        return PhosphorI18n::tr("Whether the window is minimized.");
+    case Field::IsMaximized:
+        return PhosphorI18n::tr("Whether the window is maximized.");
+    case Field::IsFocused:
+        return PhosphorI18n::tr("Whether the window currently has keyboard focus.");
+    case Field::IsTransient:
+        return PhosphorI18n::tr("Whether the window is a transient (a dialog or popup owned by another window).");
+    case Field::IsNotification:
+        return PhosphorI18n::tr("Whether the window is a notification or on-screen display.");
+    case Field::Width:
+        return PhosphorI18n::tr("The window's width in pixels.");
+    case Field::Height:
+        return PhosphorI18n::tr("The window's height in pixels.");
+    case Field::ScreenId:
+        return PhosphorI18n::tr("The monitor the window is on.");
+    case Field::VirtualDesktop:
+        return PhosphorI18n::tr("The virtual desktop the window is on.");
+    case Field::Activity:
+        return PhosphorI18n::tr("The KDE Activity the window is on.");
+    }
+    return QString();
+}
+
+/// Group an action type (wire string) into a picker category. Mirrors the
+/// preferred-order clustering in actionTypes(): engine/layout, gaps, window
+/// management, appearance, animation.
+PickerCategory actionCategory(const QString& type)
+{
+    if (type == ActionType::SetEngineMode || type == ActionType::SetSnappingLayout
+        || type == ActionType::SetTilingAlgorithm || type == ActionType::DisableEngine) {
+        return {PhosphorI18n::tr("Layout & engine"), 0};
+    }
+    if (type == ActionType::SetZonePadding || type == ActionType::SetOuterGap
+        || type == ActionType::SetUsePerSideOuterGap || type == ActionType::SetOuterGapTop
+        || type == ActionType::SetOuterGapBottom || type == ActionType::SetOuterGapLeft
+        || type == ActionType::SetOuterGapRight) {
+        return {PhosphorI18n::tr("Gaps"), 1};
+    }
+    if (type == ActionType::Exclude || type == ActionType::Float) {
+        return {PhosphorI18n::tr("Window"), 2};
+    }
+    if (type == ActionType::SetOpacity || type == ActionType::SetHideTitleBar || type == ActionType::SetBorderVisible
+        || type == ActionType::SetBorderWidth || type == ActionType::SetBorderRadius
+        || type == ActionType::SetBorderColor) {
+        return {PhosphorI18n::tr("Appearance"), 3};
+    }
+    if (type == ActionType::OverrideAnimationShader || type == ActionType::OverrideAnimationCurve
+        || type == ActionType::OverrideAnimationTiming || type == ActionType::ExcludeAnimations) {
+        return {PhosphorI18n::tr("Animation"), 4};
+    }
+    return {PhosphorI18n::tr("Other"), 99};
+}
+
 /// Translated label for one param key on action @p type. The structural
 /// schema (kind, min/max, scale, enum wire values) lives on the LGPL
 /// `ActionDescriptor` in PhosphorWindowRule; the GPL settings layer adds
@@ -310,6 +431,11 @@ QVariantList matchFields()
         // reconstructing the enum↔string table itself.
         entry[QStringLiteral("wire")] = PhosphorWindowRule::fieldToString(f);
         entry[QStringLiteral("label")] = WindowRuleModel::fieldLabel(f);
+        const PickerCategory fcat = fieldCategory(f);
+        entry[QStringLiteral("category")] = fcat.label;
+        entry[QStringLiteral("categoryOrder")] = fcat.order;
+        // One-line help surfaced as the leaf editor's info-icon tooltip.
+        entry[QStringLiteral("description")] = fieldDescription(f);
         QString kind = QStringLiteral("string");
         if (f == Field::WindowType) {
             // WindowType is stored as the int underlying the
@@ -495,11 +621,15 @@ QVariantList actionTypes()
         entry[QStringLiteral("value")] = typeStr;
         entry[QStringLiteral("label")] = actionTypeLabelImpl(typeStr);
         entry[QStringLiteral("params")] = paramsForActionTypeImpl(typeStr);
-        // Domain wire string drives the picker's compatibility flag — the
-        // QML side disables a context-domain action type when the current
-        // match references window-property fields (the silently-never-fires
-        // combination). Looked up via a probe RuleAction so the descriptor's
-        // own `domain` field stays the single source of truth.
+        const PickerCategory acat = actionCategory(typeStr);
+        entry[QStringLiteral("category")] = acat.label;
+        entry[QStringLiteral("categoryOrder")] = acat.order;
+        // Domain wire string drives the action row's incompatibility warning —
+        // the QML side flags a context-domain action as never-firing when the
+        // match references window-property fields (ActionRow's
+        // `_currentTypeIncompatible` chip + the sheet's InlineMessage). Looked
+        // up via a probe RuleAction so the descriptor's own `domain` field
+        // stays the single source of truth.
         RuleAction probe;
         probe.type = typeStr;
         const auto domain = PhosphorWindowRule::ActionRegistry::instance().domainFor(probe);
