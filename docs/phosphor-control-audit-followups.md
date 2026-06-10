@@ -329,7 +329,7 @@ on the wire is still a string), but localises the marshalling.
 
 ## 12. PhosphorControlQml SHARED-variant install (Pass 10 — CLOSED pass 20)
 
-**Resolution:** Pass 20 added the `PHOSPHOR_SETTINGS_UI_QML_INSTALL`
+**Resolution:** Pass 20 added the `PHOSPHOR_CONTROL_QML_INSTALL`
 option (default OFF). When enabled it builds a parallel
 `PhosphorControlQmlShared` target alongside the STATIC variant +
 installs the plugin .so / qmldir / qmltypes under
@@ -357,7 +357,7 @@ contract is explicit rather than misleading.
 PHOSPHOR_ANIMATION_QML_INSTALL pattern — add a parallel
 `PhosphorControlQmlShared` target whose plugin .so + qmldir +
 qmltypes are installed under `${KDE_INSTALL_QMLDIR}/org/phosphor/control/`.
-Gated behind a PHOSPHOR_SETTINGS_UI_QML_INSTALL option, default false.
+Gated behind a PHOSPHOR_CONTROL_QML_INSTALL option, default false.
 Lands when the first out-of-tree consumer needs it.
 
 ---

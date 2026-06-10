@@ -61,10 +61,10 @@ find_package(Qt6 6.6 REQUIRED COMPONENTS Core DBus Gui Qml Quick)
 # embedded / single-binary builds where the LGPL relinking obligation
 # is handled out-of-band (e.g. shipping the .o files alongside the
 # binary). Mirrors libs/phosphor-config's pattern.
-option(PHOSPHOR_SETTINGS_UI_BUILD_SHARED
+option(PHOSPHOR_CONTROL_BUILD_SHARED
     "Build phosphor-control as a shared library (LGPL relinking-friendly)"
     ON)
-if(PHOSPHOR_SETTINGS_UI_BUILD_SHARED)
+if(PHOSPHOR_CONTROL_BUILD_SHARED)
     set(_phosphor_control_lib_type SHARED)
 else()
     set(_phosphor_control_lib_type STATIC)
@@ -327,11 +327,11 @@ set_target_properties(PhosphorControlQml PROPERTIES
 # Qt only loads QML modules from the QML module search path
 # (KDE_INSTALL_QMLDIR/org/phosphor/control/), which requires a
 # SHARED plugin .so. Mirror phosphor-animation's pattern — build a
-# parallel SHARED target gated behind PHOSPHOR_SETTINGS_UI_QML_INSTALL
+# parallel SHARED target gated behind PHOSPHOR_CONTROL_QML_INSTALL
 # so packagers can opt in to shipping the QML module separately from
 # in-tree consumers that don't need it.
 
-option(PHOSPHOR_SETTINGS_UI_QML_INSTALL
+option(PHOSPHOR_CONTROL_QML_INSTALL
     "Also build a SHARED variant of org.phosphor.control and install it"
     OFF)
 
@@ -351,7 +351,7 @@ function(_phosphor_control_apply_plugin_rpath plugin_target)
     set_target_properties(${plugin_target} PROPERTIES INSTALL_RPATH "$ORIGIN")
 endfunction()
 
-if(PHOSPHOR_SETTINGS_UI_QML_INSTALL)
+if(PHOSPHOR_CONTROL_QML_INSTALL)
     qt_add_qml_module(PhosphorControlQmlShared
         URI org.phosphor.control
         VERSION 1.0
@@ -419,14 +419,14 @@ if(PHOSPHOR_SETTINGS_UI_QML_INSTALL)
 endif()
 
 # ═══════════════════════════════════════════════════════════════════════════════
-# Examples — opt-in via -DBUILD_PHOSPHOR_SETTINGS_UI_EXAMPLES=ON
+# Examples — opt-in via -DBUILD_PHOSPHOR_CONTROL_EXAMPLES=ON
 # ═══════════════════════════════════════════════════════════════════════════════
 
-option(BUILD_PHOSPHOR_SETTINGS_UI_EXAMPLES
+option(BUILD_PHOSPHOR_CONTROL_EXAMPLES
     "Build the phosphor-control example apps"
     ${PROJECT_IS_TOP_LEVEL})
 
-if(BUILD_PHOSPHOR_SETTINGS_UI_EXAMPLES AND
+if(BUILD_PHOSPHOR_CONTROL_EXAMPLES AND
    EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/examples/CMakeLists.txt")
     add_subdirectory(examples)
 endif()
@@ -485,7 +485,7 @@ install(FILES ${CMAKE_CURRENT_BINARY_DIR}/phosphorcontrol_export.h
 )
 
 # QML module install (SHARED variant) — gated behind the option above.
-if(PHOSPHOR_SETTINGS_UI_QML_INSTALL)
+if(PHOSPHOR_CONTROL_QML_INSTALL)
     if(NOT DEFINED KDE_INSTALL_QMLDIR)
         # Without ECM the QML dir falls back to a Qt-side install
         # location. Match the freedesktop convention so the consumer
