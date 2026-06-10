@@ -9,7 +9,7 @@
 namespace PlasmaZones {
 
 EditorPageController::EditorPageController(ISettings& settings, QObject* parent)
-    : PhosphorSettingsUi::PageController(QStringLiteral("editor"), parent)
+    : PhosphorControl::PageController(QStringLiteral("editor"), parent)
     , m_settings(&settings)
 {
     // Forward each Settings NOTIFY to the local Q_PROPERTY NOTIFY + the

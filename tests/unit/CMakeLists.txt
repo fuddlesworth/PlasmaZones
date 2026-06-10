@@ -608,7 +608,7 @@ add_executable(test_snapping_behavior_controller
     ${CMAKE_SOURCE_DIR}/src/settings/triggerutils.cpp
 )
 target_link_libraries(test_snapping_behavior_controller PRIVATE Qt6::Test Qt6::Core plasmazones_core
-    PhosphorSettingsUi::PhosphorSettingsUi)
+    PhosphorControl::PhosphorControl)
 add_test(NAME test_snapping_behavior_controller COMMAND test_snapping_behavior_controller)
 
 # Phase 0 of the animation-settings UI rework: AnimationsPageController
@@ -633,7 +633,7 @@ target_link_libraries(test_animations_page_controller
         Qt6::Test
         Qt6::Core
         PhosphorAnimation::PhosphorAnimation
-        PhosphorSettingsUi::PhosphorSettingsUi
+        PhosphorControl::PhosphorControl
         plasmazones_core
 )
 add_test(NAME test_animations_page_controller COMMAND test_animations_page_controller)
@@ -657,7 +657,7 @@ target_link_libraries(test_animations_motion_sets
         Qt6::Test
         Qt6::Core
         PhosphorAnimation::PhosphorAnimation
-        PhosphorSettingsUi::PhosphorSettingsUi
+        PhosphorControl::PhosphorControl
         plasmazones_core
 )
 add_test(NAME test_animations_motion_sets COMMAND test_animations_motion_sets)
@@ -681,7 +681,7 @@ target_link_libraries(test_animations_shader_overrides
         Qt6::Test
         Qt6::Core
         PhosphorAnimation::PhosphorAnimation
-        PhosphorSettingsUi::PhosphorSettingsUi
+        PhosphorControl::PhosphorControl
         plasmazones_core
 )
 add_test(NAME test_animations_shader_overrides COMMAND test_animations_shader_overrides)
@@ -726,7 +726,7 @@ target_link_libraries(test_window_rule_controller
         Qt6::Core
         Qt6::DBus
         PhosphorWindowRule::PhosphorWindowRule
-        PhosphorSettingsUi::PhosphorSettingsUi
+        PhosphorControl::PhosphorControl
         plasmazones_core
 )
 add_test(NAME test_window_rule_controller COMMAND test_window_rule_controller)

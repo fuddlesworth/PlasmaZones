@@ -7,7 +7,7 @@ import QtQuick.Controls
 import QtQuick.Layouts
 import org.kde.kirigami as Kirigami
 import org.phosphor.animation
-import org.phosphor.settings.ui as PhosphorUi
+import org.phosphor.control as PhosphorUi
 
 // Top-level settings window. Chrome (sidebar, breadcrumbs, apply/discard
 // footer, "select a page" placeholder) comes from

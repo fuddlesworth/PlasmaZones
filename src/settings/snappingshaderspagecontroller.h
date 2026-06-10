@@ -3,7 +3,7 @@
 
 #pragma once
 
-#include <PhosphorSettingsUi/PageController.h>
+#include <PhosphorControl/PageController.h>
 #include <QObject>
 #include <QSet>
 #include <QString>
@@ -45,7 +45,7 @@ namespace PlasmaZones {
 /// independently, FS watching keeps each in sync. The settings-side
 /// registry instance is borrowed (constructor parameter); composition
 /// is owned by `SettingsController`.
-class SnappingShadersPageController : public PhosphorSettingsUi::PageController
+class SnappingShadersPageController : public PhosphorControl::PageController
 {
     Q_OBJECT
 

@@ -10,7 +10,7 @@
 namespace PlasmaZones {
 
 TilingBehaviorController::TilingBehaviorController(ISettings& settings, QObject* parent)
-    : PhosphorSettingsUi::PageController(QStringLiteral("tiling-behavior"), parent)
+    : PhosphorControl::PageController(QStringLiteral("tiling-behavior"), parent)
     , m_settings(&settings)
 {
     m_lastAlwaysReinsertIntoStack = alwaysReinsertIntoStack();

@@ -22,7 +22,7 @@ SnappingShadersPageController::SnappingShadersPageController(PlasmaZones::Shader
                                                              PhosphorZones::IZoneLayoutRegistry* layoutRegistry,
                                                              ShaderPreviewController* previewController,
                                                              QObject* parent)
-    : PhosphorSettingsUi::PageController(QStringLiteral("snapping-shaders"), parent)
+    : PhosphorControl::PageController(QStringLiteral("snapping-shaders"), parent)
     , m_shaderRegistry(shaderRegistry)
     , m_layoutRegistry(layoutRegistry)
     , m_previewController(previewController)

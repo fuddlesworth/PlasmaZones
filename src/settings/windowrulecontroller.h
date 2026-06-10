@@ -3,7 +3,7 @@
 
 #pragma once
 
-#include <PhosphorSettingsUi/PageController.h>
+#include <PhosphorControl/PageController.h>
 #include <QJSValue>
 #include <QObject>
 #include <QString>
@@ -42,13 +42,13 @@ namespace PlasmaZones {
  * The controller is the only thing on the settings side that knows the D-Bus
  * shape; the model and QML never touch the wire.
  */
-class WindowRuleController : public PhosphorSettingsUi::PageController
+class WindowRuleController : public PhosphorControl::PageController
 {
     Q_OBJECT
 
     Q_PROPERTY(WindowRuleModel* model READ model CONSTANT)
     // `dirty` Q_PROPERTY + `dirtyChanged()` signal are inherited from
-    // PhosphorSettingsUi::StagingDomain via PageController — do not redeclare.
+    // PhosphorControl::StagingDomain via PageController — do not redeclare.
     Q_PROPERTY(bool daemonReachable READ daemonReachable NOTIFY daemonReachableChanged)
     /// True when a daemon `rulesChanged` broadcast arrived while the page had
     /// unsaved staged edits — `reload()` skipped the refresh to avoid stomping
@@ -63,7 +63,7 @@ public:
     explicit WindowRuleController(QObject* parent = nullptr);
     ~WindowRuleController() override;
 
-    /// PhosphorSettingsUi::StagingDomain contract. apply() dispatches
+    /// PhosphorControl::StagingDomain contract. apply() dispatches
     /// asyncCommit() (the staged set goes to the daemon); discard() forwards to
     /// revert() (the daemon's set is re-fetched into the model).
     bool isDirty() const override;

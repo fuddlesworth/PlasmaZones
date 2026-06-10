@@ -3,12 +3,12 @@
 
 #pragma once
 
-#include <PhosphorSettingsUi/PageController.h>
+#include <PhosphorControl/PageController.h>
 #include <QObject>
 
 namespace PlasmaZones {
 
-/// Thin PhosphorSettingsUi::PageController wrapper that lets SettingsController
+/// Thin PhosphorControl::PageController wrapper that lets SettingsController
 /// register virtual / parent pages with the framework's PageRegistry without
 /// providing a concrete controller.
 ///
@@ -20,7 +20,7 @@ namespace PlasmaZones {
 /// Per-page apply/discard semantics are deliberately no-ops here — dirty
 /// tracking is centralised in SettingsController and orchestrated through
 /// the single SettingsStagingDomain registered alongside these adapters.
-class PageAdapter : public PhosphorSettingsUi::PageController
+class PageAdapter : public PhosphorControl::PageController
 {
     Q_OBJECT
 
