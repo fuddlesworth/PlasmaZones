@@ -264,8 +264,9 @@ inline constexpr QLatin1StringView ExcludeAnimations{"excludeAnimations"};
 /// `value` action: true forces the window's previous free/floating position
 /// (and original monitor) to be restored, false suppresses it. Overrides the
 /// global `restoreUnsnappedWindowsOnLogin` setting for matched windows —
-/// consumed daemon-side in SnapEngine::resolveWindowRestore via the
-/// restore-position predicate. Domain Window (matches window properties).
+/// resolved by the daemon-injected restore-position predicate and consulted
+/// inside SnapEngine::resolveWindowRestore. Domain Window (matches window
+/// properties).
 inline constexpr QLatin1StringView RestorePosition{"restorePosition"};
 
 // ── Per-window border / title-bar appearance overrides (domain Window) ──

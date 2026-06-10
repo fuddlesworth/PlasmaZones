@@ -128,8 +128,9 @@ ColumnLayout {
     // writes it back to `action.params`. Image picking is disabled because
     // shader-image uniforms aren't part of the rule wire format here.
     property Component _shaderParamsEditor
-    // Toggle editor for `kind == "bool"` params (SetHideTitleBar / SetBorderVisible
-    // / SetUsePerSideOuterGap). Stores a JSON bool.
+    // Toggle editor for `kind == "bool"` params (e.g. SetHideTitleBar /
+    // SetBorderVisible / SetUsePerSideOuterGap / RestorePosition — dispatch is by
+    // `kind`, not this list). Stores a JSON bool.
     property Component _boolParamEditor
     // Colour swatch + picker for `kind == "color"` params (SetBorderColor).
     // Stores a `#RRGGBB` wire string — the validator

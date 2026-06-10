@@ -14,6 +14,7 @@
 #include "../zonedetectionadaptor.h"
 #include "core/isettings.h"
 #include <PhosphorEngine/IPlacementEngine.h>
+#include <PhosphorIdentity/WindowId.h>
 #include <PhosphorSnapEngine/SnapEngine.h>
 #include <PhosphorTileEngine/AutotileEngine.h>
 #include <PhosphorWindowRule/RuleAction.h>
@@ -103,9 +104,9 @@ void WindowTrackingAdaptor::setEngines(PhosphorEngine::PlacementEngineBase* snap
         // the engine asks whether THIS window should return to its recorded global
         // position — which, being in compositor-global coords, brings it back to
         // its original monitor even when KWin's session restore reopened it on
-        // another output. The decision is the per-window RestorePosition rule when
-        // one matches, otherwise the global `restoreUnsnappedWindowsOnLogin`
-        // setting. (Phase 2 layers the rule lookup on top of this setting read.)
+        // another output. shouldRestoreUnsnappedPosition resolves the per-window
+        // RestorePosition rule when one matches, otherwise the global
+        // `restoreUnsnappedWindowsOnLogin` setting.
         snap->setRestorePositionPredicate([this](const QString& windowId) -> bool {
             return shouldRestoreUnsnappedPosition(windowId);
         });
@@ -210,7 +211,13 @@ bool WindowTrackingAdaptor::shouldRestoreUnsnappedPosition(const QString& window
     if (!m_windowRuleStore || m_windowRegistry.isNull()) {
         return globalDefault;
     }
-    const std::optional<PhosphorEngine::WindowMetadata> meta = m_windowRegistry->metadata(windowId);
+    // WindowRegistry is keyed by the BARE instance id; the engine hands us the
+    // composite `appId|instanceId`. Extract first — every other registry reader
+    // (currentAppIdFor, windowClosed, AutotileEngine) does the same. Looking up by
+    // the composite id always misses, which would silently make RestorePosition
+    // rules inert and collapse the feature to the global setting.
+    const QString instanceId = PhosphorIdentity::WindowId::extractInstanceId(windowId);
+    const std::optional<PhosphorEngine::WindowMetadata> meta = m_windowRegistry->metadata(instanceId);
     if (!meta) {
         return globalDefault;
     }

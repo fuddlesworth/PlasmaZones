@@ -575,13 +575,6 @@ public Q_SLOTS:
     /// current position across a daemon restart.
     void refreshOpenWindowPlacements();
 
-    /// Resolve whether an unsnapped (free / snap-floated) window should have its
-    /// previous position restored on open. Consulted by the restore-position
-    /// predicate the daemon injects into SnapEngine. A matched RestorePosition
-    /// window rule wins; otherwise the global `restoreUnsnappedWindowsOnLogin`
-    /// setting decides. Builds a WindowQuery from the window registry metadata.
-    bool shouldRestoreUnsnappedPosition(const QString& windowId);
-
     /**
      * @brief Load window tracking state from disk
      *
@@ -603,6 +596,14 @@ public:
     // `WindowDragAdaptor::clearForCompositorReconnect` /
     // `handleWindowClosed`. Every caller is in-process and reaches them
     // via direct C++ invocation through the daemon, NOT through D-Bus.
+
+    /// Resolve whether an unsnapped (free / snap-floated) window should have its
+    /// previous position restored on open. Consulted by the restore-position
+    /// predicate the daemon injects into SnapEngine (in-process, not via D-Bus).
+    /// A matched RestorePosition window rule wins; otherwise the global
+    /// `restoreUnsnappedWindowsOnLogin` setting decides. Builds a WindowQuery
+    /// from the window registry metadata.
+    bool shouldRestoreUnsnappedPosition(const QString& windowId);
     /**
      * @brief Drop unified WindowPlacement records for excluded appIds.
      *

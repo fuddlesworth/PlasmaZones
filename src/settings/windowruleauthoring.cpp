@@ -173,6 +173,10 @@ QString paramLabel(const QString& type, const QString& key)
     if (type == ActionType::SetOpacity && key == ActionParam::Value) {
         return PhosphorI18n::tr("Opacity (%)");
     }
+    // Unsnapped-position restore override (window-domain, single bool value).
+    if (type == ActionType::RestorePosition && key == ActionParam::Value) {
+        return PhosphorI18n::tr("Restore position on login");
+    }
     // Border / title-bar overrides (all single-value, keyed ActionParam::Value).
     if (type == ActionType::SetHideTitleBar && key == ActionParam::Value) {
         return PhosphorI18n::tr("Hide title bars");
@@ -188,9 +192,6 @@ QString paramLabel(const QString& type, const QString& key)
     }
     if (type == ActionType::SetBorderColor && key == ActionParam::Value) {
         return PhosphorI18n::tr("Border color");
-    }
-    if (type == ActionType::RestorePosition && key == ActionParam::Value) {
-        return PhosphorI18n::tr("Restore position on login");
     }
     // Per-context gap overrides (all single-value, keyed ActionParam::Value).
     if (type == ActionType::SetZonePadding && key == ActionParam::Value) {

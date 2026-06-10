@@ -304,6 +304,10 @@ QString actionLabel(const RuleAction& action, const WindowRuleModel::LabelLookup
     // ── border / title-bar overrides (single-value, keyed ActionParam::Value) ──
     {
         const QJsonValue raw = action.params.value(PhosphorWindowRule::ActionParam::Value);
+        if (action.type == ActionType::RestorePosition) {
+            return raw.toBool() ? PhosphorI18n::tr("Restore position on login")
+                                : PhosphorI18n::tr("Don't restore position on login");
+        }
         if (action.type == ActionType::SetHideTitleBar) {
             return raw.toBool() ? PhosphorI18n::tr("Hide title bars") : PhosphorI18n::tr("Show title bars");
         }

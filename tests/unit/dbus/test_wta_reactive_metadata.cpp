@@ -33,8 +33,16 @@
 #include <PhosphorPlacement/WindowTrackingService.h>
 #include <PhosphorSnapEngine/SnapEngine.h>
 #include <PhosphorSnapEngine/SnapState.h>
+#include <PhosphorWindowRule/MatchExpression.h>
+#include <PhosphorWindowRule/MatchTypes.h>
+#include <PhosphorWindowRule/RuleAction.h>
+#include <PhosphorWindowRule/WindowRule.h>
+#include <PhosphorWindowRule/WindowRuleStore.h>
 #include <PhosphorZones/Zone.h>
 #include "dbus/windowtrackingadaptor.h"
+
+#include <QTemporaryDir>
+#include <QUuid>
 
 #include "../helpers/IsolatedConfigGuard.h"
 #include "../helpers/LayoutRegistryTestHelpers.h"
@@ -269,6 +277,57 @@ private Q_SLOTS:
         QCoreApplication::processEvents();
 
         QCOMPARE(service->lastUsedZoneClass(), QStringLiteral("firefox"));
+    }
+
+    // ────────────────────────────────────────────────────────────────────
+    // RestorePosition rule override resolves through the composite windowId.
+    //
+    // Regression: shouldRestoreUnsnappedPosition must extract the BARE instance
+    // id from the composite `appId|instanceId` before the WindowRegistry lookup
+    // (the registry is keyed by instance id). Looking up by the composite id
+    // always misses, which would silently disable every RestorePosition rule and
+    // collapse the feature to the global setting.
+    // ────────────────────────────────────────────────────────────────────
+    void restorePositionRule_overridesGlobalSetting_viaCompositeWindowId()
+    {
+        QTemporaryDir dir;
+        QVERIFY(dir.isValid());
+        PhosphorWindowRule::WindowRuleStore store(dir.filePath(QStringLiteral("windowrules.json")));
+
+        PhosphorWindowRule::WindowRule rule;
+        rule.id = QUuid::createUuid();
+        rule.name = QStringLiteral("no-restore-dolphin");
+        rule.enabled = true;
+        rule.priority = 100;
+        rule.match = PhosphorWindowRule::MatchExpression::makeLeaf(
+            PhosphorWindowRule::Field::AppId, PhosphorWindowRule::Operator::Equals, QStringLiteral("org.kde.dolphin"));
+        PhosphorWindowRule::RuleAction action;
+        action.type = QString(PhosphorWindowRule::ActionType::RestorePosition);
+        action.params.insert(QString(PhosphorWindowRule::ActionParam::Value), false);
+        rule.actions.append(action);
+        QVERIFY(store.addRule(rule));
+
+        m_wta->setWindowRuleStore(&store);
+        m_settings->setRestoreUnsnappedWindowsOnLogin(true); // global default ON
+
+        // Dolphin's metadata is registered under the BARE instance id.
+        const QString dolphinInstance = QStringLiteral("dolphin-uuid-1");
+        m_registry->upsert(dolphinInstance, {QStringLiteral("org.kde.dolphin"), QString(), QString()});
+
+        // The engine consults the predicate with the COMPOSITE windowId — the rule
+        // must still resolve (false) and override the global ON. On the pre-fix code
+        // metadata() missed and this returned the global default (true).
+        QVERIFY2(!m_wta->shouldRestoreUnsnappedPosition(QStringLiteral("org.kde.dolphin|") + dolphinInstance),
+                 "a matched RestorePosition(false) rule must override the global ON setting");
+
+        // An unmatched window falls back to the global setting (ON).
+        const QString konsoleInstance = QStringLiteral("konsole-uuid-1");
+        m_registry->upsert(konsoleInstance, {QStringLiteral("org.kde.konsole"), QString(), QString()});
+        QVERIFY2(m_wta->shouldRestoreUnsnappedPosition(QStringLiteral("org.kde.konsole|") + konsoleInstance),
+                 "an unmatched window falls back to the global restoreUnsnappedWindowsOnLogin = true");
+
+        // Detach the borrow before the stack-local store is destroyed.
+        m_wta->setWindowRuleStore(nullptr);
     }
 
 private:

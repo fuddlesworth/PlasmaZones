@@ -1240,6 +1240,83 @@ private Q_SLOTS:
         const QList<QVariant> floatArgs = floatSpy.takeFirst();
         QCOMPARE(floatArgs.at(1).toBool(), true);
         QCOMPARE(floatArgs.at(2).toString(), QStringLiteral("DP-1"));
+        // A FIFO-reopened record (live id != recorded id) is CONSUMED, not re-recorded.
+        QVERIFY2(!m_wts->placementStore().contains(QStringLiteral("app|orig"), QStringLiteral("app")),
+                 "a cross-screen floating restore must consume the record");
+        m_wts->setSnapState(nullptr);
+    }
+
+    // Same-screen free restore (option #2: restore the full position, not only the
+    // monitor). With the predicate opted in, a free record reopening on its OWN
+    // recorded screen still gets its global position re-applied.
+    void testResolveWindowRestore_freeSameScreen_restoresWhenPredicateOptsIn()
+    {
+        SnapEngine engine(m_layoutManager, m_wts, nullptr, nullptr, nullptr);
+        engine.setEngineSettings(m_settings);
+        m_wts->setSnapState(engine.snapState());
+        engine.setRestorePositionPredicate([](const QString&) {
+            return true;
+        });
+
+        const QRect dp1Geo(60, 40, 1024, 768);
+        PhosphorEngine::WindowPlacement rec;
+        rec.windowId = QStringLiteral("app|orig");
+        rec.appId = QStringLiteral("app");
+        rec.screenId = QStringLiteral("DP-1");
+        PhosphorEngine::EngineSlot slot;
+        slot.state = PhosphorEngine::WindowPlacement::stateFree();
+        rec.engines.insert(QStringLiteral("snap"), slot);
+        rec.freeGeometryByScreen.insert(QStringLiteral("DP-1"), dp1Geo);
+        m_wts->placementStore().record(rec);
+
+        QSignalSpy geoSpy(&engine, &PhosphorEngine::PlacementEngineBase::geometryRestoreRequested);
+
+        // Reopens on its own recorded screen DP-1.
+        const PhosphorEngine::SnapResult result =
+            engine.resolveWindowRestore(QStringLiteral("app|new"), QStringLiteral("DP-1"), /*sticky*/ false);
+
+        QVERIFY(!result.shouldSnap);
+        QCOMPARE(geoSpy.count(), 1);
+        const QList<QVariant> args = geoSpy.takeFirst();
+        QCOMPARE(args.at(1).toRect(), dp1Geo);
+        QCOMPARE(args.at(2).toString(), QStringLiteral("DP-1"));
+        m_wts->setSnapState(nullptr);
+    }
+
+    // The predicate's RETURN VALUE is honored (not merely its presence): a free
+    // record reopening on its own screen with the predicate returning false is
+    // still consumed (same-screen eligibility) but its position is NOT re-applied.
+    // This is the load-bearing consume-but-gate-move boundary the free branch
+    // documents.
+    void testResolveWindowRestore_freeSameScreen_consumesButSkipsMoveWhenPredicateDenies()
+    {
+        SnapEngine engine(m_layoutManager, m_wts, nullptr, nullptr, nullptr);
+        engine.setEngineSettings(m_settings);
+        m_wts->setSnapState(engine.snapState());
+        engine.setRestorePositionPredicate([](const QString&) {
+            return false;
+        });
+
+        PhosphorEngine::WindowPlacement rec;
+        rec.windowId = QStringLiteral("app|orig");
+        rec.appId = QStringLiteral("app");
+        rec.screenId = QStringLiteral("DP-1");
+        PhosphorEngine::EngineSlot slot;
+        slot.state = PhosphorEngine::WindowPlacement::stateFree();
+        rec.engines.insert(QStringLiteral("snap"), slot);
+        rec.freeGeometryByScreen.insert(QStringLiteral("DP-1"), QRect(60, 40, 1024, 768));
+        m_wts->placementStore().record(rec);
+
+        QSignalSpy geoSpy(&engine, &PhosphorEngine::PlacementEngineBase::geometryRestoreRequested);
+
+        const PhosphorEngine::SnapResult result =
+            engine.resolveWindowRestore(QStringLiteral("app|new"), QStringLiteral("DP-1"), /*sticky*/ false);
+
+        QVERIFY(!result.shouldSnap);
+        // A predicate that denies restore must skip the geometry move.
+        QCOMPARE(geoSpy.count(), 0);
+        QVERIFY2(!m_wts->placementStore().contains(QStringLiteral("app|orig"), QStringLiteral("app")),
+                 "a same-screen free record is still consumed even when the move is skipped");
         m_wts->setSnapState(nullptr);
     }
 

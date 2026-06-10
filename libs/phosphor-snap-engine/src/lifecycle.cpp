@@ -250,10 +250,16 @@ SnapResult SnapEngine::resolveWindowRestore(const QString& windowId, const QStri
             const bool wasExact = (rec->windowId == windowId);
             const QString restoreScreen = rec->screenId.isEmpty() ? screenId : rec->screenId;
             const PhosphorEngine::EngineSlot slot = rec->slotFor(engineId());
-            QRect freeGeo = rec->freeGeometryFor(restoreScreen);
-            if (!freeGeo.isValid()) {
-                freeGeo = rec->anyFreeGeometry();
-            }
+            // The SCREEN-LOCAL recorded position for restoreScreen — deliberately NOT
+            // the anyFreeGeometry() cross-screen fallback. A free/floating reposition
+            // emits global compositor coordinates: they only land the window back on
+            // restoreScreen if the rect was captured on restoreScreen. Applying some
+            // other screen's rect would put the window on a third monitor while the
+            // floating-on-screen tracking (set to restoreScreen) says otherwise — a
+            // visible/state desync. If restoreScreen has no recorded position, there is
+            // nothing meaningful to restore, so the move is skipped. (Snapped restore
+            // places by zone geometry and never consults this.)
+            const QRect freeGeo = rec->freeGeometryFor(restoreScreen);
             if (wasExact) {
                 m_windowTracker->placementStore().record(*rec);
             }
