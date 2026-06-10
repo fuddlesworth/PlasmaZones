@@ -6,7 +6,7 @@
 namespace PlasmaZones {
 
 PageAdapter::PageAdapter(QString id, QObject* parent)
-    : PhosphorSettingsUi::PageController(std::move(id), parent)
+    : PhosphorControl::PageController(std::move(id), parent)
 {
 }
 

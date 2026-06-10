@@ -717,7 +717,7 @@ SettingsController::SettingsController(QObject* parent)
         }
     }
 
-    // PhosphorSettingsUi integration — must run AFTER every page controller
+    // PhosphorControl integration — must run AFTER every page controller
     // has been constructed (the registry holds stable pointers to them).
     buildApplicationController();
 

@@ -3,7 +3,7 @@
 
 #pragma once
 
-#include <PhosphorSettingsUi/PageController.h>
+#include <PhosphorControl/PageController.h>
 #include <QObject>
 #include <QVariantList>
 
@@ -36,7 +36,7 @@ class ISettings;
 /// — a Q_PROPERTY — so the meta-loop still catches the dirty flip
 /// even though `alwaysActivateOnDrag` itself isn't a Q_PROPERTY on
 /// Settings. Same trick for TilingBehaviorController::alwaysReinsertIntoStack.
-class SnappingBehaviorController : public PhosphorSettingsUi::PageController
+class SnappingBehaviorController : public PhosphorControl::PageController
 {
     Q_OBJECT
 

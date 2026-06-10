@@ -70,7 +70,7 @@ AnimationsPageController::AnimationsPageController(PhosphorAnimationShaders::Ani
     // the two ids separate means QML / D-Bus callers can address the nav
     // parent ("animations", which redirects to "animations-general") without
     // colliding with this staging controller's own identity.
-    : PhosphorSettingsUi::PageController(QStringLiteral("animations-staging"), parent)
+    : PhosphorControl::PageController(QStringLiteral("animations-staging"), parent)
     , m_shaderRegistry(shaderRegistry)
     , m_settings(settings)
 {

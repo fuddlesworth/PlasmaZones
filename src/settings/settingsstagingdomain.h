@@ -3,14 +3,14 @@
 
 #pragma once
 
-#include <PhosphorSettingsUi/StagingDomain.h>
+#include <PhosphorControl/StagingDomain.h>
 #include <QPointer>
 
 namespace PlasmaZones {
 
 class SettingsController;
 
-/// PhosphorSettingsUi::StagingDomain that wraps SettingsController's existing
+/// PhosphorControl::StagingDomain that wraps SettingsController's existing
 /// save()/load() lifecycle so the framework's UnsavedChangesFooter can
 /// trigger them.
 ///
@@ -18,7 +18,7 @@ class SettingsController;
 /// not per-page. This domain is the single source of dirty/apply/discard that
 /// ApplicationController orchestrates; per-page PageAdapters report clean
 /// alongside it.
-class SettingsStagingDomain : public PhosphorSettingsUi::StagingDomain
+class SettingsStagingDomain : public PhosphorControl::StagingDomain
 {
     Q_OBJECT
 
