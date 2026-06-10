@@ -239,24 +239,30 @@ ColumnLayout {
 
         // Categorized action-type picker — the shared cascading category-menu
         // button (PZCommon.CategoryMenuButton). Grouped into Layout & engine /
-        // Gaps / Window / Appearance / Animation. The context-action
-        // incompatibility (silently-never-fires when the match references window
-        // properties) is surfaced by the per-row warning chip below + the
-        // sheet's InlineMessage, so the picker itself stays a plain menu.
+        // Gaps / Window / Appearance / Animation. Context-domain actions that
+        // can't fire against a window-property match render dimmed with a
+        // warning tooltip (the picker's `dimmed` item flag); the per-row chip
+        // below + the sheet's InlineMessage reinforce it for an action that's
+        // already selected.
         PZCommon.CategoryMenuButton {
             id: typeCombo
 
             // Wide enough for the longest action label ("Override animation
             // duration") so the closed picker never elides its current value.
             Layout.preferredWidth: Kirigami.Units.gridUnit * 13
-            // Map the action metadata to the picker's { id, name, category,
-            // categoryOrder } item shape.
+            // Map the action metadata to the picker's item shape. A context-
+            // domain action against a non-context-only match never fires, so
+            // mark it dimmed (with a warning tooltip) — the binding re-reads
+            // `matchIsContextOnly`, so the dim state follows match edits.
             items: row.actionTypeOptions.map(function (o) {
+                var incompatible = o.domain === "context" && !row.matchIsContextOnly;
                 return {
                     "id": o.value,
                     "name": o.label,
                     "category": o.category,
-                    "categoryOrder": o.categoryOrder
+                    "categoryOrder": o.categoryOrder,
+                    "dimmed": incompatible,
+                    "dimReason": incompatible ? i18n("This action runs during context resolution and cannot match window properties. Remove the window conditions from the rule's match, or pick a different action.") : ""
                 };
             })
             currentId: row.action.type

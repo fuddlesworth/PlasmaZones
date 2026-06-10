@@ -47,7 +47,9 @@ import org.kde.kirigami as Kirigami
  * `Qt.callLater` so the click handler returns before the menu hides.
  *
  * Required:
- *   - `items`: var — list of `{ id, name, category? }` maps
+ *   - `items`: var — list of `{ id, name, category?, dimmed?, dimReason? }`
+ *     maps. A `dimmed` item renders greyed with a warning icon + `dimReason`
+ *     tooltip (still selectable — the host surfaces the consequence).
  *
  * Optional:
  *   - `currentId`: string — drives the checkmark and button label
@@ -260,8 +262,19 @@ ComboBox {
         ItemDelegate {
             property string itemId
             property bool isSelected: false
+            // Optional per-item "incompatible" state — dimmed + a warning icon
+            // + an explanatory tooltip. The item stays selectable (the host
+            // surfaces the consequence elsewhere, e.g. the rule editor's row
+            // chip); the picker just signals the mismatch up front. The
+            // checkmark wins on the current selection so it's still findable.
+            property bool itemDimmed: false
+            property string dimReason: ""
 
-            icon.name: isSelected ? "checkmark" : ""
+            opacity: itemDimmed ? 0.45 : 1
+            icon.name: isSelected ? "checkmark" : (itemDimmed ? "dialog-warning" : "")
+            ToolTip.text: dimReason
+            ToolTip.visible: itemDimmed && hovered && dimReason !== ""
+            ToolTip.delay: Kirigami.Units.toolTipDelay
             onClicked: categoryMenu.selectItem(itemId)
         }
     }
@@ -407,6 +420,19 @@ ComboBox {
             return sep;
         }
 
+        // Build the delegate props for one item — carries the optional
+        // `dimmed` / `dimReason` fields the host may set (e.g. the action
+        // picker marks context-domain actions incompatible with a
+        // window-property match).
+        function _itemProps(obj) {
+            return {
+                "text": obj.name,
+                "itemId": obj.id,
+                "itemDimmed": obj.dimmed === true,
+                "dimReason": obj.dimReason || ""
+            };
+        }
+
         function showMenu() {
             if (!_built) {
                 _built = true;
@@ -431,10 +457,7 @@ ComboBox {
                         "title": cat.name
                     });
                     for (var s = 0; s < catItems.length; s++)
-                        _addItem(subMenu, {
-                            "text": catItems[s].name,
-                            "itemId": catItems[s].id
-                        });
+                        _addItem(subMenu, _itemProps(catItems[s]));
                     for (var sc = 0; sc < subcats.length; sc++) {
                         var subItems = subcats[sc].items || [];
                         if (subItems.length === 0)
@@ -444,10 +467,7 @@ ComboBox {
                             "title": subcats[sc].name
                         });
                         for (var ss = 0; ss < subItems.length; ss++)
-                            _addItem(subSubMenu, {
-                                "text": subItems[ss].name,
-                                "itemId": subItems[ss].id
-                            });
+                            _addItem(subSubMenu, _itemProps(subItems[ss]));
                     }
                 }
                 var uncategorized = root._categoryTree.uncategorized;
@@ -455,10 +475,7 @@ ComboBox {
                     _addSeparator(categoryMenu);
 
                 for (var u = 0; u < uncategorized.length; u++)
-                    _addItem(categoryMenu, {
-                        "text": uncategorized[u].name,
-                        "itemId": uncategorized[u].id
-                    });
+                    _addItem(categoryMenu, _itemProps(uncategorized[u]));
             }
             updateChecks();
             categoryMenu.popup(root, 0, root.height);
