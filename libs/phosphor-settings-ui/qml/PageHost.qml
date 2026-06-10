@@ -14,13 +14,12 @@ import "LoaderHelpers.js" as PhosphorLoaderHelpers
  * (hidden), so navigating back to it is an instant visibility flip rather
  * than a rebuild. This mirrors how `systemsettings` caches loaded KCMs.
  *
- * Two cost-reduction mechanisms work together:
- *   - Compile warm-up: shortly after startup every page's component is
- *     compiled (not instantiated) on the background type-loader thread and
- *     held, so the first navigation to a page pays instance construction
- *     only, not first-time QML compilation + type resolution.
- *   - Instance cache: a page, once built, stays in the cache and is shown
- *     / hidden on navigation instead of destroyed and rebuilt.
+ * First-visit construction cost is reduced elsewhere — the settings app's
+ * composition root (main.cpp) background-compiles every settings QML unit
+ * (pages AND their child component types) after startup, so the first
+ * navigation here pays instance construction only, not first-time
+ * compilation of the page and its children. This Item only handles the
+ * instance cache.
  *
  * Each loaded item gets two injections if it declares them:
  *   - controller: the registered PageController for that page id
@@ -50,25 +49,6 @@ Item {
         return (data && data.id) ? data : null;
     }
 
-    // ── First-navigation compile warm-up ─────────────────────────────
-    // Page hosting is a lazy, URL-loaded Loader, so the first navigation
-    // to each page would otherwise pay a one-time QML compilation +
-    // type-resolution cost (hundreds of ms for content-heavy pages) that
-    // the previous inline-component chrome paid once at startup. Compile
-    // every registered page in the background just after startup — via
-    // Qt.createComponent WITHOUT instantiating, so no page `onCompleted`
-    // side effects run — and hold the Components so the engine keeps the
-    // compiled units cached. Asynchronous: compilation runs on the
-    // type-loader thread, never blocking the UI thread.
-    property var _warmComponents: []
-    function _warmAllPages() {
-        const all = root.controller.registry.allPagesData();
-        for (let i = 0; i < all.length; ++i) {
-            if (all[i].hasQmlSource === true && all[i].qmlSource)
-                root._warmComponents.push(Qt.createComponent(all[i].qmlSource, Component.Asynchronous));
-        }
-    }
-
     // ── Instance cache ───────────────────────────────────────────────
     // Ordered list of page ids that have a live (built, cached) Loader.
     // Appended to the first time each page becomes current; the Repeater
@@ -93,12 +73,7 @@ Item {
         root.cachedPageIds = next;
     }
 
-    Component.onCompleted: {
-        root.cachePage(root.controller.currentPageId);
-        // Defer the warm-up so the first real page + chrome paint before
-        // we start compiling the rest in the background.
-        Qt.callLater(root._warmAllPages);
-    }
+    Component.onCompleted: root.cachePage(root.controller.currentPageId)
 
     // Cache the page the instant it becomes current (covers normal
     // navigation, restored-on-startup ids, programmatic switches).
