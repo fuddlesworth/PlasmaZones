@@ -14,7 +14,7 @@
 namespace PlasmaZones {
 
 SnappingZonesController::SnappingZonesController(ISettings& settings, QObject* parent)
-    : PhosphorSettingsUi::PageController(QStringLiteral("snapping-zones"), parent)
+    : PhosphorControl::PageController(QStringLiteral("snapping-zones"), parent)
     , m_settings(&settings)
 {
 }

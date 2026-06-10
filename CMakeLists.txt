@@ -444,7 +444,7 @@ endif()
 
 add_subdirectory(libs/phosphor-placement)   # window placement state tracking
 add_subdirectory(libs/phosphor-compositor)  # compositor-plugin SDK
-add_subdirectory(libs/phosphor-settings-ui) # reusable Qt6/QML/Kirigami settings-app framework (page controllers, registry, chrome)
+add_subdirectory(libs/phosphor-control) # reusable Qt6/QML/Kirigami settings-app framework (page controllers, registry, chrome)
 if(BUILD_PHOSPHOR_SHELL)
     # Order: icontheme is consumed by sni (SNI publisher uses the
     # image provider + theme resolver), so configure it first. The

@@ -29,7 +29,7 @@ current code, so nothing is missed during implementation.
   `isettings.h` (virtuals + NOTIFY) → `settings.{h,cpp}` (Q_PROPERTY/getter/setter via
   `P_STORE_*` macros; `applyAutotileBorderSystemColor()` accent helper) →
   `settingsadaptor.cpp` (`REGISTER_*_SETTING` — D-Bus by-name, how the effect reads them).
-- **Settings UI:** `TilingAppearanceController` (thin `PhosphorSettingsUi::PageController`,
+- **Settings UI:** `TilingAppearanceController` (thin `PhosphorControl::PageController`,
   CONSTANT bounds only) + `TilingAppearancePage.qml` (Colors / Decorations / Borders cards,
   binding directly to `appSettings.autotile*`). Registered `regPage(m_tilingAppearancePage,
   "tiling-visual-cat", "Appearance", "TilingAppearancePage.qml", …)`.

@@ -39,10 +39,10 @@ and shed the `PhosphorWayland` dependency. `Manager.h`'s export macro changed
 from `PHOSPHORSCREENSCORE_EXPORT` to `PHOSPHORSCREENSRUNTIME_EXPORT` (this macro
 name is internal to the header — no source change at call sites).
 
-## Phase: phosphor-settings-ui scaffolding
+## Phase: phosphor-control scaffolding
 
 Context: lift-and-shift refactor extracting common QML/Qt6 settings
-chrome and helpers (see `libs/phosphor-settings-ui/`). The phosphor-screens
+chrome and helpers (see `libs/phosphor-control/`). The phosphor-screens
 side picked up several QML-payload tweaks in the same window so the new
 settings chrome could render screen pickers from the library's POD without
 duplicating label-building logic in QML.
@@ -50,8 +50,8 @@ duplicating label-building logic in QML.
 ### Namespace flattened: `Phosphor::Screens` → `PhosphorScreens`
 
 `phosphor-screens` previously declared its types in the nested namespace
-`Phosphor::Screens`. To align with `phosphor-settings-ui` (which uses the
-single-level `PhosphorSettingsUi`) and to keep consumer code symmetric
+`Phosphor::Screens`. To align with `phosphor-control` (which uses the
+single-level `PhosphorControl`) and to keep consumer code symmetric
 across phosphor-* libs, the entire surface has moved to a single-level
 `PhosphorScreens` namespace.
 
