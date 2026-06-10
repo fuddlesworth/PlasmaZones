@@ -3,10 +3,19 @@
         {
             "version": "Unreleased",
             "highlights": [
-                "New Window Rules page: one place to manage everything that used to live across Snapping Assignments, Tiling Assignments, Animations App Rules, and the per-mode disabled-apps lists",
-                "Browse, add, edit, duplicate, drag-reorder, and disable rules from a single list. Each rule matches windows by class, title, role, app ID, desktop, activity, or screen — combined with AND, OR, and NOT — and applies snapping, tiling, animation, or exclusion actions",
-                "What you'll see different: the old Snapping Assignments, Tiling Assignments, and Animations → App Rules pages are gone. Everything they did now lives at Settings → Window Rules",
-                "Your existing assignments, animation app rules, and per-monitor / per-desktop / per-activity disable settings were migrated automatically on first launch. If something looks off, your old configuration is preserved on disk under your config folder and can be restored manually"
+                "New Window Rules page: one place to manage everything that used to live across Snapping Assignments, Tiling Assignments, Animations App Rules, and the per-mode disabled-apps lists. Browse, add, edit, duplicate, drag-reorder, and disable rules from a single list",
+                "Each rule matches windows by class, title, role, app ID, desktop, activity, screen — and now also by transient/notification kind, window size, and focus — combined with AND, OR, and NOT, then applies snapping, tiling, animation, appearance (borders, title bars, corner radius, accent color, gaps, opacity), or exclusion actions",
+                "Your existing assignments, animation app rules, and per-monitor / per-desktop / per-activity disable settings were migrated automatically on first launch. If something looks off, your old configuration is preserved on disk and can be restored manually",
+                "Snapping focus options to match autotiling: optionally focus a window when it snaps into a zone on open, and focus-follows-mouse over snapped windows (both off by default)",
+                "Per-window appearance for snapping: borders, corner radius, hidden title bars, and accent colors, mirroring the tiling options (the old Snapping → Appearance page is now called Zones)",
+                "Zone span toggle mode: tap the span modifier to start and stop spanning instead of holding it down for the whole drag",
+                "Unsnapped windows now return to the monitor and spot they closed on after you log back in (on by default; can be turned off globally or per app)",
+                "Smoother animations: window move, resize, and snap now play a shader-driven morph, and the on-screen popups fade and scale in and out",
+                "Live, interactive shader preview in the Shaders browser, with save/load presets and inline error messages so you can see a shader before applying it",
+                "Settings get easier to navigate: a collapsible sidebar, a per-monitor scope chip with a spatial map of your displays, and consistent Snapping/Tiling layouts",
+                "Faster and lighter: substantially lower memory and idle CPU use, and settings pages that used to lag on first open now load quickly",
+                "Scripted tiling algorithms are now written in Luau (a safe, sandboxed language) instead of JavaScript. All built-in algorithms are ported; custom JavaScript scripts must be rewritten in Luau",
+                "Fixed: layouts no longer render stretched when editing on a 16:9 or 4K screen, and a zone-spanning window no longer jumps to fullscreen when you switch layouts"
             ]
         },
         {
