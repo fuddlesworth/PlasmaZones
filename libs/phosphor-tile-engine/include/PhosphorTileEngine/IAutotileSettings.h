@@ -37,6 +37,14 @@ public:
     virtual bool autotileFocusFollowsMouse() const = 0;
     virtual bool autotileRespectMinimumSize() const = 0;
 
+    /// Whether the KWin effect draws a border on each autotiled window's edge.
+    /// When true, the engine insets each tile rect by autotileBorderWidth() so
+    /// the border sits inside the tile, separating adjacent tiles by the border
+    /// width. The autotile border is a single global width for every tiled
+    /// window (no per-screen/per-window override), so a flat accessor suffices.
+    virtual bool autotileShowBorder() const = 0;
+    virtual int autotileBorderWidth() const = 0;
+
     virtual int autotileMaxWindows() const = 0;
 
     virtual PhosphorTiles::AutotileInsertPosition autotileInsertPosition() const = 0;

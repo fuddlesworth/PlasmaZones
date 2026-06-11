@@ -50,8 +50,49 @@ using PlasmaZones::TestHelpers::IsolatedConfigGuard;
 
 #include "../helpers/StubSettings.h"
 #include "../helpers/StubZoneDetector.h"
+#include <PhosphorPlacement/IGeometryResolver.h>
+#include <PhosphorEngine/IGeometrySettings.h>
 
 using StubSettingsQueries = StubSettings;
+
+// =========================================================================
+// Stub geometry resolver: returns a fixed snap-border inset so the snapped
+// frame-geometry inset can be exercised independently of ISettings wiring.
+// All gap/padding accessors fall through to defaults (matching the daemon
+// resolver's null-settings behaviour) so geometry maths stay deterministic.
+// =========================================================================
+class StubBorderInsetResolver : public PhosphorPlacement::IGeometryResolver
+{
+public:
+    explicit StubBorderInsetResolver(int inset)
+        : m_inset(inset)
+    {
+    }
+
+    int resolveZonePadding(PhosphorZones::Layout*, const QString&) const override
+    {
+        return PhosphorEngine::GeometryDefaults::ZonePadding;
+    }
+    PhosphorLayout::EdgeGaps resolveOuterGaps(PhosphorZones::Layout*, const QString&) const override
+    {
+        return PhosphorLayout::EdgeGaps::uniform(PhosphorEngine::GeometryDefaults::OuterGap);
+    }
+    int defaultBorderWidth() const override
+    {
+        return 2;
+    }
+    int defaultBorderRadius() const override
+    {
+        return 0;
+    }
+    int snapBorderInset() const override
+    {
+        return m_inset;
+    }
+
+private:
+    int m_inset;
+};
 
 // =========================================================================
 // Stub PhosphorZones::Zone Detector + createTestLayout come from the shared
@@ -245,6 +286,65 @@ private Q_SLOTS:
         QVERIFY(geo.isValid());
         QVERIFY(geo.contains(zone0));
         QVERIFY(geo.contains(zone1));
+    }
+
+    // =====================================================================
+    // P1: Snap-border frame inset
+    //
+    // When the snap show-border setting is on, a snapped window's frame is
+    // shrunk by the border width on every side so the border the KWin effect
+    // draws on the window edge sits INSIDE the zone, separating adjacent tiles.
+    // The fixture m_service has a null resolver (snapBorderInset() == 0), so it
+    // is the un-inset baseline; a fresh service with a stub resolver supplies
+    // the inset. Same layout + null screen manager → the only delta is the
+    // inset.
+    // =====================================================================
+
+    void testZoneGeometry_insetBySnapBorder()
+    {
+        constexpr int kInset = 4;
+        StubBorderInsetResolver resolver(kInset);
+        auto* insetService =
+            new PhosphorPlacement::WindowTrackingService(m_layoutManager, m_zoneDetector, nullptr, nullptr, &resolver);
+
+        const QRect baseline = m_service->zoneGeometry(m_zoneIds[0], QString());
+        const QRect inset = insetService->zoneGeometry(m_zoneIds[0], QString());
+        QVERIFY(baseline.isValid());
+        QVERIFY(inset.isValid());
+        QCOMPARE(inset, baseline.adjusted(kInset, kInset, -kInset, -kInset));
+
+        delete insetService;
+    }
+
+    void testZoneGeometry_noInsetWhenBorderOff()
+    {
+        // Inset 0 mirrors snappingShowBorder == false: geometry is unchanged.
+        StubBorderInsetResolver resolver(0);
+        auto* service =
+            new PhosphorPlacement::WindowTrackingService(m_layoutManager, m_zoneDetector, nullptr, nullptr, &resolver);
+
+        QCOMPARE(service->zoneGeometry(m_zoneIds[0], QString()), m_service->zoneGeometry(m_zoneIds[0], QString()));
+
+        delete service;
+    }
+
+    void testMultiZoneGeometry_insetSpanOnce()
+    {
+        constexpr int kInset = 4;
+        StubBorderInsetResolver resolver(kInset);
+        auto* insetService =
+            new PhosphorPlacement::WindowTrackingService(m_layoutManager, m_zoneDetector, nullptr, nullptr, &resolver);
+
+        const QStringList multiZones = {m_zoneIds[0], m_zoneIds[1]};
+        const QRect baseline = m_service->multiZoneGeometry(multiZones, QString());
+        const QRect inset = insetService->multiZoneGeometry(multiZones, QString());
+        QVERIFY(baseline.isValid());
+        QVERIFY(inset.isValid());
+        // The COMBINED span is inset once (not per sub-zone): exactly kInset per
+        // side off the union rect.
+        QCOMPARE(inset, baseline.adjusted(kInset, kInset, -kInset, -kInset));
+
+        delete insetService;
     }
 
     // =====================================================================

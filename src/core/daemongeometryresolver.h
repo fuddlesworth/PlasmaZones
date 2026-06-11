@@ -42,6 +42,7 @@ public:
     PhosphorLayout::EdgeGaps resolveOuterGaps(PhosphorZones::Layout* layout, const QString& screenId) const override;
     int defaultBorderWidth() const override;
     int defaultBorderRadius() const override;
+    int snapBorderInset() const override;
 
 private:
     /// Build a PerScreenSnappingKey-shaped override map from the context rules

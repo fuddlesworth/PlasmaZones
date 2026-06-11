@@ -51,4 +51,18 @@ int DaemonGeometryResolver::defaultBorderRadius() const
     return m_settings ? m_settings->borderRadius() : 0;
 }
 
+int DaemonGeometryResolver::snapBorderInset() const
+{
+    // No settings → no border drawn → no inset.
+    if (!m_settings || !m_settings->snappingShowBorder()) {
+        return 0;
+    }
+    // Mirror the effect's snap border width exactly: the global snapping border
+    // width applied to every snapped window's frame edge (snaphandler's single
+    // per-mode BorderState::width, fed from snappingBorderWidth via
+    // daemon_bringup.cpp). Zone custom widths only style snap-assist previews,
+    // not committed frames, so they must NOT drive the inset.
+    return qMax(0, m_settings->snappingBorderWidth());
+}
+
 } // namespace PlasmaZones

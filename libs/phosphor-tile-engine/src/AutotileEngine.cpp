@@ -3139,12 +3139,42 @@ void AutotileEngine::applyTiling(const QString& screenId)
     const bool useMonocleMode = tileCount >= 2 && std::all_of(zones.begin() + 1, zones.end(), [&](const QRect& z) {
                                     return z == zones[0];
                                 });
+
+    // Per-side inset so the KWin effect's autotile border, drawn on each tiled
+    // window's own edge, sits INSIDE the tile — separating adjacent tiles by the
+    // border width. Mirrors exactly what the effect borders autotiled windows
+    // with: a single global autotile border width for every tiled window (the
+    // effect's autotile BorderState carries one per-mode width; no per-window
+    // override). Zero when the autotile show-border setting is off, so this is a
+    // no-op then and tile geometry is unchanged. Resolved once per pass.
+    // Per-window SetBorderVisible rules on otherwise-borderless windows are out
+    // of scope (resolved compositor-side, not reachable here) and are not inset.
+    int borderInset = 0;
+    if (auto* s = autotileSettings(); s && s->autotileShowBorder()) {
+        borderInset = qMax(0, s->autotileBorderWidth());
+    }
+    auto insetTile = [borderInset](QRect geo) -> QRect {
+        if (borderInset <= 0 || geo.isEmpty()) {
+            return geo;
+        }
+        QRect r = geo.adjusted(borderInset, borderInset, -borderInset, -borderInset);
+        // Degenerate clamp: a tile too small to absorb 2*inset keeps a >= 1 px
+        // extent rather than collapsing to an empty or inverted rect.
+        if (r.width() < 1) {
+            r.setWidth(1);
+        }
+        if (r.height() < 1) {
+            r.setHeight(1);
+        }
+        return r;
+    };
+
     QJsonArray arr;
     for (int i = 0; i < tileCount; ++i) {
         if (filterForPreview && windows[i] == filteredWindowId) {
             continue;
         }
-        const QRect& geo = zones[i];
+        const QRect geo = insetTile(zones[i]);
         QJsonObject obj;
         obj[QLatin1String("windowId")] = windows[i];
         obj[QLatin1String("screenId")] = screenId;
