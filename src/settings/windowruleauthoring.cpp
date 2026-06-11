@@ -723,10 +723,10 @@ QVariantMap defaultPayloadFor(const QString& typeWire)
             payload[key] = defaultDisplay.isValid() ? QVariant(defaultDisplay.toBool()) : QVariant(false);
         } else if (kind == QLatin1String("color")) {
             // Colour kind has no numeric `defaultDisplay` (that field is a
-            // double); seed a valid `#RRGGBB` so a fresh rule passes the
+            // double); seed a valid `#AARRGGBB` so a fresh rule passes the
             // SetBorderColor validator before the user opens the picker.
-            // Neutral KDE accent blue.
-            payload[key] = QStringLiteral("#3daee9");
+            // Neutral KDE accent blue, fully opaque.
+            payload[key] = QStringLiteral("#FF3DAEE9");
         } else {
             // Picker kinds (snappingLayout, tilingAlgorithm, animationEvent,
             // shaderEffect, curveEditor) and plain strings all start empty —

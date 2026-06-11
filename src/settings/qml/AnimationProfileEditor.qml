@@ -457,6 +457,8 @@ ColumnLayout {
     ColorDialog {
         id: colorDialog
 
+        options: ColorDialog.ShowAlphaChannel
+
         property string effectId: ""
         property string paramId: ""
         property string paramName: ""

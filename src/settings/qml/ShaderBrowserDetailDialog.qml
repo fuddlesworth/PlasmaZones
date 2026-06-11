@@ -656,6 +656,8 @@ Kirigami.Dialog {
     ColorDialog {
         id: shaderColorDialog
 
+        options: ColorDialog.ShowAlphaChannel
+
         property string paramId: ""
 
         function openFor(id, current) {

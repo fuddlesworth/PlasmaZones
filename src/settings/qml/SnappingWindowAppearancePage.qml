@@ -256,6 +256,7 @@ SettingsFlickable {
     ColorDialog {
         id: activeBorderColorDialog
 
+        options: ColorDialog.ShowAlphaChannel
         title: i18n("Choose Active Border Color")
         onAccepted: appSettings.snappingBorderColor = selectedColor
     }
@@ -263,6 +264,7 @@ SettingsFlickable {
     ColorDialog {
         id: inactiveBorderColorDialog
 
+        options: ColorDialog.ShowAlphaChannel
         title: i18n("Choose Inactive Border Color")
         onAccepted: appSettings.snappingInactiveBorderColor = selectedColor
     }
