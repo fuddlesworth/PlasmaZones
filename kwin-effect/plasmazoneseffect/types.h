@@ -9,7 +9,7 @@
 #include <opengl/gltexture.h>
 #include <scene/borderradius.h>
 
-#include <QMetaObject>
+#include <QColor>
 #include <QPointer>
 #include <QRect>
 #include <QString>
@@ -21,18 +21,29 @@
 namespace KWin {
 class EffectWindow;
 class Item;
-class OutlinedBorderItem;
 }
 
 namespace PlasmaZones {
 
-/// Per-window native border (scene graph item).
-/// `item` is a QPointer because OutlinedBorderItem is parented to WindowItem —
-/// Qt parent-child ownership may destroy it before removeWindowBorder() runs.
+/// Per-window border, rendered by recolouring the redirected window's edge
+/// pixels through an offscreen MapTexture fragment shader (the proven
+/// KDE-Rounded-Corners / LightlyShaders technique) rather than a scene-graph
+/// `OutlinedBorderItem`.
+///
+/// A scene-graph child item composites against KWin's own decoration frame +
+/// drop shadow, so on server-side-decorated windows the outline looks "inset"
+/// (drawn under the decoration). Recolouring through the offscreen shader runs
+/// over the decoration with KWin's own MVP, so the outline is always flush.
+///
+/// The resolved appearance (width / radius / colour in LOGICAL pixels) is
+/// stored here and pushed as shader uniforms per-frame in paintWindow. The
+/// existing `Item::setBorderRadius` corner-clip on the window container +
+/// decoration is RETAINED — it rounds the window content corners so squared
+/// pixels don't peek past the rounded outline. The shader is OUTLINE-ONLY: it
+/// recolours the outermost `width` band to the border colour at full alpha and
+/// leaves interior pixels untouched, so no translucency is required.
 struct WindowBorder
 {
-    QPointer<KWin::OutlinedBorderItem> item;
-    QMetaObject::Connection geometryConnection;
     QPointer<KWin::Item> clippedContainer;
     KWin::BorderRadius savedContainerRadius;
     /// Server-side decoration item rounded to match the outline so a SHOWN title
@@ -40,6 +51,19 @@ struct WindowBorder
     /// the decoration's render branch). Null for borderless / CSD windows.
     QPointer<KWin::Item> clippedDecoration;
     KWin::BorderRadius savedDecorationRadius;
+
+    /// Resolved border appearance in LOGICAL pixels (the paint path multiplies
+    /// width/radius by `viewport.scale()` to reach device px for the shader).
+    int width = 0;
+    int radius = 0;
+    QColor color;
+
+    /// True when THIS border owns the window's OffscreenEffect redirect +
+    /// border shader slot. False while an animation transition has taken over
+    /// the slot (the animation path's begin/end coordinates the handover) —
+    /// the per-frame uniform push and the transition-end re-apply both consult
+    /// this so the border path never fights the transition lifecycle.
+    bool shaderApplied = false;
 };
 
 /// User-texture cache entry. Owns the uploaded `GLTexture` and tracks the wrap
