@@ -35,6 +35,11 @@ struct WindowBorder
     QMetaObject::Connection geometryConnection;
     QPointer<KWin::Item> clippedContainer;
     KWin::BorderRadius savedContainerRadius;
+    /// Server-side decoration item rounded to match the outline so a SHOWN title
+    /// bar's corners follow the rounded border (the container radius doesn't reach
+    /// the decoration's render branch). Null for borderless / CSD windows.
+    QPointer<KWin::Item> clippedDecoration;
+    KWin::BorderRadius savedDecorationRadius;
 };
 
 /// User-texture cache entry. Owns the uploaded `GLTexture` and tracks the wrap

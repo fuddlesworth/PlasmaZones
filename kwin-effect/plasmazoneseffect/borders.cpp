@@ -6,6 +6,7 @@
 #include <effect/effecthandler.h>
 #include <effect/effectwindow.h>
 #include <scene/borderoutline.h>
+#include <scene/decorationitem.h>
 #include <scene/outlinedborderitem.h>
 #include <scene/windowitem.h>
 #include <window.h>
@@ -30,6 +31,9 @@ void PlasmaZonesEffect::removeWindowBorder(const QString& windowId)
     WindowBorder& wb = it.value();
     if (wb.clippedContainer) {
         wb.clippedContainer->setBorderRadius(wb.savedContainerRadius);
+    }
+    if (wb.clippedDecoration) {
+        wb.clippedDecoration->setBorderRadius(wb.savedDecorationRadius);
     }
     // QPointer: item may already be null if Qt parent-child ownership destroyed it.
     // Use deleteLater() rather than raw delete — OutlinedBorderItem is a QObject
@@ -174,12 +178,20 @@ void PlasmaZonesEffect::updateWindowBorder(const QString& windowId, KWin::Effect
     // and any other tiled window whose squared corners would peek past the
     // rounded outline.
     if (bw > 0) {
-        KWin::Item* container = windowItem->windowContainer();
-        if (container) {
-            const int containerRadius = br + bw;
+        const KWin::BorderRadius corner(br + bw);
+        if (KWin::Item* container = windowItem->windowContainer()) {
             wb.savedContainerRadius = container->borderRadius();
-            container->setBorderRadius(KWin::BorderRadius(containerRadius));
+            container->setBorderRadius(corner);
             wb.clippedContainer = container;
+        }
+        // The container radius does NOT reach the server-side decoration's render
+        // branch, so a SHOWN title bar keeps square corners and pokes past the
+        // rounded outline. Round the decoration item directly so its corners
+        // follow the outline too. Null (skipped) for borderless / CSD windows.
+        if (KWin::DecorationItem* deco = windowItem->decorationItem()) {
+            wb.savedDecorationRadius = deco->borderRadius();
+            deco->setBorderRadius(corner);
+            wb.clippedDecoration = deco;
         }
     }
 
