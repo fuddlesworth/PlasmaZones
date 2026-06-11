@@ -348,6 +348,121 @@ private Q_SLOTS:
     }
 
     // =====================================================================
+    // P1: Commit-path inset — rotate + snap-all
+    //
+    // The snap border inset must be applied to the COMMITTED frame geometry of
+    // every snap-engine path that produces a real window frame, not just the
+    // WTS wrapper in isolation. SnapEngine::calculateRotation and
+    // calculateSnapAllWindowEntries build entry.targetGeometry — the rect that
+    // becomes the window's frame via applyGeometriesBatch — so both must route
+    // through the inset-applying WTS wrapper. Earlier they called the raw
+    // GeometryUtils::getZoneGeometryForScreen, which bypassed the inset and
+    // shrank the inter-tile gap on every rotate (the login-then-rotate
+    // whack-a-mole the user hit). These tests pin the contract by wiring a
+    // SnapEngine to an inset WTS and an un-inset WTS and comparing the produced
+    // targetGeometry against each service's own zoneGeometry().
+    // =====================================================================
+
+    // Build a SnapEngine whose WTS carries the given border-inset resolver,
+    // sharing the fixture layout. Caller owns the returned engine + service
+    // via the out-ptr.
+    SnapEngine* makeEngineWithResolver(PhosphorPlacement::IGeometryResolver* resolver,
+                                       PhosphorPlacement::WindowTrackingService** outService)
+    {
+        auto* service =
+            new PhosphorPlacement::WindowTrackingService(m_layoutManager, m_zoneDetector, nullptr, nullptr, resolver);
+        auto* engine = new SnapEngine(m_layoutManager, service, m_zoneDetector, nullptr, nullptr);
+        engine->setEngineSettings(m_settings);
+        service->setSnapState(engine->snapState());
+        service->setSnapEngine(engine);
+        *outService = service;
+        return engine;
+    }
+
+    void testCalculateRotation_committedFrameInsetWhenBorderOn()
+    {
+        constexpr int kInset = 4;
+        StubBorderInsetResolver resolver(kInset);
+        PhosphorPlacement::WindowTrackingService* service = nullptr;
+        SnapEngine* engine = makeEngineWithResolver(&resolver, &service);
+
+        // Snap one window to zone 0, then rotate clockwise → it targets zone 1.
+        const QString windowId = QStringLiteral("app:win:rotate-inset");
+        service->assignWindowToZone(windowId, m_zoneIds[0], QString(), 0);
+
+        const QVector<ZoneAssignmentEntry> entries = engine->calculateRotation(/*clockwise=*/true, QString());
+        QCOMPARE(entries.size(), 1);
+
+        const QString targetZoneId = entries[0].targetZoneId;
+        // The committed frame must equal the INSET zone geometry, not the raw
+        // zone rect — proving the rotate path routes through the wrapper.
+        QCOMPARE(entries[0].targetGeometry, service->zoneGeometry(targetZoneId, QString()));
+        QCOMPARE(entries[0].targetGeometry,
+                 m_service->zoneGeometry(targetZoneId, QString()).adjusted(kInset, kInset, -kInset, -kInset));
+
+        delete engine;
+        delete service;
+    }
+
+    void testCalculateRotation_committedFrameNotInsetWhenBorderOff()
+    {
+        StubBorderInsetResolver resolver(0);
+        PhosphorPlacement::WindowTrackingService* service = nullptr;
+        SnapEngine* engine = makeEngineWithResolver(&resolver, &service);
+
+        const QString windowId = QStringLiteral("app:win:rotate-noinset");
+        service->assignWindowToZone(windowId, m_zoneIds[0], QString(), 0);
+
+        const QVector<ZoneAssignmentEntry> entries = engine->calculateRotation(/*clockwise=*/true, QString());
+        QCOMPARE(entries.size(), 1);
+
+        const QString targetZoneId = entries[0].targetGeometry.isValid() ? entries[0].targetZoneId : QString();
+        // Inset 0 (border off) → committed frame equals the full zone rect.
+        QCOMPARE(entries[0].targetGeometry, m_service->zoneGeometry(targetZoneId, QString()));
+
+        delete engine;
+        delete service;
+    }
+
+    void testCalculateSnapAllWindows_committedFrameInsetWhenBorderOn()
+    {
+        constexpr int kInset = 4;
+        StubBorderInsetResolver resolver(kInset);
+        PhosphorPlacement::WindowTrackingService* service = nullptr;
+        SnapEngine* engine = makeEngineWithResolver(&resolver, &service);
+
+        const QStringList windows = {QStringLiteral("new1:win:111")};
+        const QVector<ZoneAssignmentEntry> entries = engine->calculateSnapAllWindowEntries(windows, QString());
+        QCOMPARE(entries.size(), 1);
+
+        // The fill-empty-zone commit must inset the frame exactly like the
+        // wrapper — same proof as the rotate path.
+        QCOMPARE(entries[0].targetGeometry, service->zoneGeometry(entries[0].targetZoneId, QString()));
+        QCOMPARE(
+            entries[0].targetGeometry,
+            m_service->zoneGeometry(entries[0].targetZoneId, QString()).adjusted(kInset, kInset, -kInset, -kInset));
+
+        delete engine;
+        delete service;
+    }
+
+    void testCalculateSnapAllWindows_committedFrameNotInsetWhenBorderOff()
+    {
+        StubBorderInsetResolver resolver(0);
+        PhosphorPlacement::WindowTrackingService* service = nullptr;
+        SnapEngine* engine = makeEngineWithResolver(&resolver, &service);
+
+        const QStringList windows = {QStringLiteral("new1:win:222")};
+        const QVector<ZoneAssignmentEntry> entries = engine->calculateSnapAllWindowEntries(windows, QString());
+        QCOMPARE(entries.size(), 1);
+
+        QCOMPARE(entries[0].targetGeometry, m_service->zoneGeometry(entries[0].targetZoneId, QString()));
+
+        delete engine;
+        delete service;
+    }
+
+    // =====================================================================
     // P2: App ID Fallbacks
     // =====================================================================
 

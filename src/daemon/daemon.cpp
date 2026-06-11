@@ -1018,6 +1018,14 @@ bool Daemon::init()
     connect(&m_reapplyGeometriesTimer, &QTimer::timeout, m_windowTrackingAdaptor,
             &WindowTrackingAdaptor::requestReapplyWindowGeometries);
 
+    // Startup inset correction debounce (see daemon.h). Armed by the first
+    // post-startup window-zone commit (connectOverlaySignals), fires once.
+    // 400ms matches GEOMETRY_UPDATE_DEBOUNCE_MS so the whole login restore
+    // burst settles into a single corrective pass.
+    m_startupInsetCorrectionTimer.setSingleShot(true);
+    m_startupInsetCorrectionTimer.setInterval(GEOMETRY_UPDATE_DEBOUNCE_MS);
+    connect(&m_startupInsetCorrectionTimer, &QTimer::timeout, this, &Daemon::applyStartupInsetCorrection);
+
     // DBusScreenAdaptor::setVirtualScreenConfig writes to Settings (the source
     // of truth) via the IConfigStore — the daemon's single SettingsConfigStore
     // instance, shared with m_screenManager (as its Config::configStore) and

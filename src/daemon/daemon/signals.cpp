@@ -755,6 +755,11 @@ void Daemon::connectOverlaySignals()
                 if (m_overlayService->isSnapAssistVisible()) {
                     m_overlayService->hideSnapAssist();
                 }
+                // A zone commit landed — on the first one after startup this is a
+                // login session-restore commit. Arm the one-shot startup inset
+                // correction so the restored windows are re-resolved against the
+                // fully loaded snap/autotile show-border state (see daemon.h).
+                scheduleStartupInsetCorrection();
             });
 
     // Mid-drag close cleanup: WindowDragAdaptor holds transient drag state
@@ -888,6 +893,51 @@ void Daemon::finalizeStartup()
                 showOsdForAllScreens(currentDesktop(), activity);
             });
         }
+    }
+}
+
+void Daemon::scheduleStartupInsetCorrection()
+{
+    // Once-per-session. After the first correction has run (or while it is
+    // already armed) further zone commits are ordinary user activity, not the
+    // login restore burst, and must not re-trigger the corrective pass.
+    if (m_startupInsetCorrectionDone || m_startupInsetCorrectionTimer.isActive()) {
+        return;
+    }
+    // Only meaningful once the daemon is fully started — the commit signals that
+    // fire during start()'s own restore priming (before m_running) are part of
+    // the same pass we are about to correct, so wait for the started state.
+    if (!m_running) {
+        return;
+    }
+    m_startupInsetCorrectionTimer.start();
+}
+
+void Daemon::applyStartupInsetCorrection()
+{
+    // Idempotent latch: the timer is single-shot, but guard so a future caller
+    // can never re-enter and double-resnap.
+    if (m_startupInsetCorrectionDone) {
+        return;
+    }
+    m_startupInsetCorrectionDone = true;
+
+    // Re-resolve every snapped window's frame against the now fully loaded
+    // snapping show-border / border-width settings. resnapCurrentAssignments
+    // recomputes each target via WindowTrackingService::resolveZoneGeometry,
+    // which applies insetSnapFrame — so a window the effect restored to the
+    // un-inset full-zone rect is corrected to the inset frame. No-op (and a
+    // single suppressed feedback) when there are no snapped windows.
+    if (m_snapAdaptor && m_snapEngine) {
+        m_suppressResnapOsd = 1; // resnapCurrentAssignments emits one feedback
+        m_snapAdaptor->resnapCurrentAssignments();
+    }
+
+    // Mirror for autotile: retile every autotile screen so applyTiling re-runs
+    // its per-tile border inset against the loaded autotile show-border state.
+    // Guarded on isEnabled() so this is inert when autotile is off.
+    if (m_autotileEngine && m_autotileEngine->isEnabled()) {
+        m_autotileEngine->retile();
     }
 }
 

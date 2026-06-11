@@ -9,7 +9,6 @@
 #include <PhosphorSnapEngine/ISnapSettings.h>
 #include <PhosphorEngine/IWindowTrackingService.h>
 #include <PhosphorEngine/PlacementEngineBase.h>
-#include <PhosphorLayoutApi/EdgeGaps.h>
 #include <PhosphorProtocol/NavigationTypes.h>
 #include <PhosphorProtocol/WindowTypes.h>
 #include <PhosphorWindowRule/RuleEvaluator.h>
@@ -602,13 +601,6 @@ Q_SIGNALS:
 
 private:
     PhosphorEngine::ISnapSettings* snapSettings() const;
-
-    struct GapParams
-    {
-        int zonePadding;
-        ::PhosphorLayout::EdgeGaps outerGaps;
-    };
-    GapParams resolveGapParams() const;
 
     void commitSnapImpl(const QString& windowId, const QStringList& zoneIds, const QString& screenId,
                         PhosphorEngine::SnapIntent intent);
