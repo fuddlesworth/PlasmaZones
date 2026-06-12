@@ -86,7 +86,7 @@ public:
     }
     static int zoneSpanModifier()
     {
-        return 2;
+        return static_cast<int>(DragModifier::Ctrl);
     }
     static QVariantList zoneSpanTriggers()
     {

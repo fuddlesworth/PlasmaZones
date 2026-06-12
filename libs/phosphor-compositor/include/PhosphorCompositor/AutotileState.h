@@ -116,11 +116,10 @@ inline void cleanupClosedWindowState(const QString& windowId, BorderState& borde
         }
     }
 
-    // Sweep the pre-autotile geometry out of EVERY screen bucket, not just
-    // the supplied one — the same cross-screen-stale scenario the tiled
-    // sweep above defends against (the window crossed screens before
-    // closing) would otherwise leak a geometry entry in the old screen's
-    // bucket forever.
+    // Sweep the pre-autotile geometry out of EVERY screen bucket — the same
+    // cross-screen-stale scenario the tiled sweep above defends against
+    // (the window crossed screens before closing) would otherwise leak a
+    // geometry entry in the old screen's bucket forever.
     for (auto it = state.preAutotileGeometries.begin(); it != state.preAutotileGeometries.end();) {
         it->remove(windowId);
         if (it->isEmpty()) {

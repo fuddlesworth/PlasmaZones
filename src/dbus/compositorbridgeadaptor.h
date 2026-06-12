@@ -70,9 +70,13 @@ public Q_SLOTS:
     /**
      * @brief Register a compositor bridge
      * @param compositorName Name of the compositor (e.g. "kwin", "hyprland", "sway")
-     * @param version Compositor version string
+     * @param version Protocol API version as a decimal integer string
+     *        (PhosphorProtocol::Service::ApiVersion) — NOT the compositor's
+     *        release version; peers below the daemon's minimum are rejected
      * @param capabilities List of supported capabilities
-     * @return PhosphorProtocol::BridgeRegistrationResult struct: {apiVersion, bridgeName, sessionId}
+     * @return PhosphorProtocol::BridgeRegistrationResult struct: {apiVersion,
+     *         bridgeName, sessionId}; sessionId == "REJECTED" signals a
+     *         protocol-version mismatch the caller MUST check
      *
      * Capabilities:
      *   "borderless"  — bridge manages window decorations (title-bar hiding
@@ -95,43 +99,14 @@ public Q_SLOTS:
 
 Q_SIGNALS:
     // ═══════════════════════════════════════════════════════════════════════════
-    // Window geometry commands (daemon → compositor)
-    // ═══════════════════════════════════════════════════════════════════════════
-
-    /**
-     * @brief Apply geometry to a single window
-     */
-    void applyWindowGeometry(const QString& windowId, int x, int y, int width, int height, const QString& zoneId,
-                             bool skipAnimation);
-
-    /**
-     * @brief Apply geometry to a batch of windows
-     * @param geometries Batch of (windowId, x, y, width, height, screenId)
-     *        entries — empty screenId marks a float/restore entry
-     * @param action Operation type ("rotate", "resnap", "snap_all")
-     */
-    void applyWindowGeometriesBatch(const PhosphorProtocol::WindowGeometryList& geometries, const QString& action);
-
-    // ═══════════════════════════════════════════════════════════════════════════
-    // Window focus and stacking commands (daemon → compositor)
-    // ═══════════════════════════════════════════════════════════════════════════
-
-    void activateWindow(const QString& windowId);
-    void raiseWindows(const QStringList& windowIds);
-
-    // ═══════════════════════════════════════════════════════════════════════════
-    // Window decoration commands (daemon → compositor)
-    // ═══════════════════════════════════════════════════════════════════════════
-
-    /**
-     * @brief Maximize or restore a window
-     * @param windowId Window to modify
-     * @param mode 0=restore, 3=full maximize
-     */
-    void maximizeWindow(const QString& windowId, int mode);
-
-    // ═══════════════════════════════════════════════════════════════════════════
     // Bridge lifecycle
+    //
+    // NOTE: this interface deliberately carries NO window-manipulation
+    // command signals. Geometry/focus/stacking commands flow over
+    // org.plasmazones.WindowTracking (applyGeometryRequested,
+    // applyGeometriesBatch, raiseWindowsRequested, ...) — a set of dead,
+    // never-emitted command signals used to live here and misled bridge
+    // implementers into subscribing to a channel that never fired.
     // ═══════════════════════════════════════════════════════════════════════════
 
     void bridgeRegistered(const QString& compositorName, const QString& version, const QStringList& capabilities);

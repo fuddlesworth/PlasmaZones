@@ -40,7 +40,8 @@ struct ZoneSelectorConfig
 /**
  * @brief Config key names for per-screen zone selector overrides
  *
- * Used in KConfig group keys ([ZoneSelector:ScreenName]), QVariantMap
+ * Used in config group keys ([ZoneSelector:ScreenName], stored via the
+ * pluggable PhosphorConfig::IBackend — JSON by default), QVariantMap
  * override storage, and QML writeSetting() calls.
  */
 namespace ZoneSelectorConfigKey {

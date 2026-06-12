@@ -12,6 +12,7 @@
 #include <QTest>
 
 #include "../../../src/config/configdefaults.h"
+#include "../../../src/core/settings_interfaces.h" // ZoneSelectorConfig struct tripwire
 
 #include <PhosphorCompositor/DecorationDefaults.h>
 
@@ -242,6 +243,26 @@ private Q_SLOTS:
         QCOMPARE(ConfigDefaults::snappingBorderWidthMax(), ::PhosphorCompositor::DecorationDefaults::BorderWidthMax);
         QCOMPARE(ConfigDefaults::snappingBorderRadiusMin(), ::PhosphorCompositor::DecorationDefaults::BorderRadiusMin);
         QCOMPARE(ConfigDefaults::snappingBorderRadiusMax(), ::PhosphorCompositor::DecorationDefaults::BorderRadiusMax);
+    }
+
+    /**
+     * ZoneSelectorConfig's in-struct fallback defaults duplicate the
+     * ConfigDefaults accessors by value (core cannot include the config layer
+     * to delegate). This tripwire keeps a retuned ConfigDefault from silently
+     * diverging from the struct fallback the overlay falls back to.
+     */
+    void testZoneSelectorConfigStructDefaultsMatchAccessors()
+    {
+        const ZoneSelectorConfig cfg;
+        QCOMPARE(cfg.position, ConfigDefaults::position());
+        QCOMPARE(cfg.layoutMode, ConfigDefaults::layoutMode());
+        QCOMPARE(cfg.sizeMode, ConfigDefaults::sizeMode());
+        QCOMPARE(cfg.maxRows, ConfigDefaults::maxRows());
+        QCOMPARE(cfg.previewWidth, ConfigDefaults::previewWidth());
+        QCOMPARE(cfg.previewHeight, ConfigDefaults::previewHeight());
+        QCOMPARE(cfg.previewLockAspect, ConfigDefaults::previewLockAspect());
+        QCOMPARE(cfg.gridColumns, ConfigDefaults::gridColumns());
+        QCOMPARE(cfg.triggerDistance, ConfigDefaults::triggerDistance());
     }
 };
 

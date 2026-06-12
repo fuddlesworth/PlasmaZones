@@ -117,8 +117,9 @@ void PlasmaZonesEffect::slotApplyGeometryRequested(const QString& windowId, int 
     // Skip float-restore geometry for drag-to-float: when the user drags a window
     // off the autotile layout, the daemon restores pre-autotile geometry. But the
     // user expects the window to stay where they dropped it, not snap back.
-    if (zoneId.isEmpty() && m_dragFloatedWindowIds.remove(windowId)) {
-        qCInfo(lcEffect) << "slotApplyGeometryRequested: skipping float-restore for drag-floated window:" << windowId;
+    if (zoneId.isEmpty() && m_dragFloatedWindowIds.remove(liveWindowId)) {
+        qCInfo(lcEffect) << "slotApplyGeometryRequested: skipping float-restore for drag-floated window:"
+                         << liveWindowId;
         return;
     }
     qCInfo(lcEffect) << "slotApplyGeometryRequested:" << windowId << "geo:" << geometry << "zoneId:" << zoneId
@@ -167,6 +168,11 @@ void PlasmaZonesEffect::slotApplyGeometryRequested(const QString& windowId, int 
     if (zoneId.isEmpty() || screenId.isEmpty() || m_autotileHandler->isAutotileScreen(screenId)) {
         m_snapHandler->clearWindowSnapped(liveWindowId);
     } else {
+        // Clear any stale float marker before marking snapped (mirrors the
+        // batch path): a surviving float flag poisons the next pre-tile /
+        // float-back capture and wrongly exempts the window from the
+        // drain-time restore veto. Idempotent local FloatingCache write.
+        m_navigationHandler->setWindowFloating(liveWindowId, false);
         m_snapHandler->markWindowSnapped(liveWindowId, screenId);
     }
     // Note: windowSnapped/recordSnapIntent are NOT called here. For daemon-driven

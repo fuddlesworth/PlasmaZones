@@ -193,14 +193,20 @@ void AutotileHandler::savePreAutotileForDesktopMove(const QString& windowId, con
     // When the window is re-added on the target desktop, this geometry is restored
     // so that float-restore returns to the original position, not the tiled frame.
     //
-    // Stamped with the source screen so the restore path can detect a
-    // cross-screen desktop move and decline to apply a saved rect that
-    // belongs to a different monitor's coordinate space.
-    const auto screenIt = m_preAutotileGeometries.constFind(screenId);
-    if (screenIt != m_preAutotileGeometries.constEnd() && screenIt->contains(windowId)) {
-        m_savedPreAutotileForDesktopMove[windowId] = {screenId, screenIt->value(windowId)};
-        qCDebug(lcEffect) << "Preserved pre-autotile geometry for desktop move:" << windowId << "on" << screenId
-                          << "rect=" << m_savedPreAutotileForDesktopMove[windowId].second;
+    // Stamped with the BUCKET's screen (not the caller's) so the restore
+    // path can detect a cross-screen desktop move and decline a saved rect
+    // from a different monitor's coordinate space. Scan all buckets: a VS
+    // config change can re-resolve the window's screen without re-keying the
+    // geometry bucket (same all-bucket policy as the desktop-switch Pass-2
+    // scan and the cross-monitor snapshot).
+    for (auto sgIt = m_preAutotileGeometries.constBegin(); sgIt != m_preAutotileGeometries.constEnd(); ++sgIt) {
+        const QRectF rect = sgIt->value(windowId);
+        if (rect.isValid()) {
+            m_savedPreAutotileForDesktopMove[windowId] = {sgIt.key(), rect};
+            qCDebug(lcEffect) << "Preserved pre-autotile geometry for desktop move:" << windowId << "bucket"
+                              << sgIt.key() << "rect=" << rect;
+            return;
+        }
     }
 }
 

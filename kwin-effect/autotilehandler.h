@@ -212,14 +212,6 @@ public:
         return m_border;
     }
 
-    /**
-     * @brief Take the saved global stacking order snapshot (move semantics).
-     *
-     * Called by handleResnapToNewLayout to restore z-order after resnap.
-     * Returns and clears the snapshot captured by slotScreensChanged.
-     */
-    QVector<QPointer<KWin::EffectWindow>> takeSavedGlobalStack();
-
     // Set a window to re-activate after the next autotile raise loop completes.
     // Used by slotDaemonReady() to preserve focus of non-tiled windows (e.g. KCM).
     void setPendingReactivateWindow(KWin::EffectWindow* w)
@@ -356,7 +348,6 @@ private:
     /// plasmashell notification popups transiently change stacking.
     QHash<QString, QPointer<QTimer>> m_pendingMinimizeFloat;
     uint64_t m_autotileStaggerGeneration = 0;
-    QVector<QPointer<KWin::EffectWindow>> m_savedGlobalStackForResnap; ///< z-order snapshot for resnap restore
     QHash<QString, QRect> m_autotileTargetZones;
     QHash<QString, QRect> m_centeredWaylandZones; ///< zones where Wayland windows were last centered
     QString m_pendingAutotileFocusWindowId;

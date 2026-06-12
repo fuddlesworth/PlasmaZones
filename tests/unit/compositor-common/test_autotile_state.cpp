@@ -101,6 +101,35 @@ private Q_SLOTS:
     }
 
     // =================================================================
+    // AutotileStateHelpers: removeFromOtherScreens
+    // =================================================================
+
+    void testRemoveFromOtherScreens()
+    {
+        const QString windowId = QStringLiteral("app|1");
+        const QString other = QStringLiteral("other|1");
+        const QString keep = QStringLiteral("screen-keep");
+        const QString shared = QStringLiteral("screen-shared");
+        const QString solo = QStringLiteral("screen-solo");
+
+        PhosphorCompositor::BorderState border;
+        PhosphorCompositor::AutotileStateHelpers::addTiledOnScreen(border, keep, windowId);
+        PhosphorCompositor::AutotileStateHelpers::addTiledOnScreen(border, shared, windowId);
+        PhosphorCompositor::AutotileStateHelpers::addTiledOnScreen(border, shared, other);
+        PhosphorCompositor::AutotileStateHelpers::addTiledOnScreen(border, solo, windowId);
+
+        PhosphorCompositor::AutotileStateHelpers::removeFromOtherScreens(border, windowId, keep);
+
+        // Window survives only on the keep screen; the sibling that still
+        // holds another window survives; the window-only sibling bucket is
+        // erased entirely.
+        QVERIFY(border.tiledWindowsByScreen.value(keep).contains(windowId));
+        QVERIFY(!border.tiledWindowsByScreen.value(shared).contains(windowId));
+        QVERIFY(border.tiledWindowsByScreen.value(shared).contains(other));
+        QVERIFY(!border.tiledWindowsByScreen.contains(solo));
+    }
+
+    // =================================================================
     // BorderState: defaults drift tripwire
     // =================================================================
 

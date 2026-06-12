@@ -336,13 +336,15 @@ void PlasmaZonesEffect::processDaemonReadyWindowState()
             m_snapHandler->clearRestoreCache();
             for (auto it = obj.constBegin(); it != obj.constEnd(); ++it) {
                 QJsonObject geo = it.value().toObject();
-                int x = geo[QLatin1String("x")].toInt();
-                int y = geo[QLatin1String("y")].toInt();
-                int w = geo[QLatin1String("width")].toInt();
-                int h = geo[QLatin1String("height")].toInt();
+                // gw/gh, not w/h — `w` would shadow the lambda's watcher
+                // parameter above.
+                const int gx = geo[QLatin1String("x")].toInt();
+                const int gy = geo[QLatin1String("y")].toInt();
+                const int gw = geo[QLatin1String("width")].toInt();
+                const int gh = geo[QLatin1String("height")].toInt();
                 QString savedScreen = geo[QLatin1String("screenId")].toString();
-                if (w > 0 && h > 0) {
-                    m_snapHandler->cacheRestore(it.key(), CachedSnapRestore{QRect(x, y, w, h), savedScreen});
+                if (gw > 0 && gh > 0) {
+                    m_snapHandler->cacheRestore(it.key(), CachedSnapRestore{QRect(gx, gy, gw, gh), savedScreen});
                 }
             }
             qCDebug(lcEffect) << "Cached" << m_snapHandler->restoreCacheSize() << "pending restore geometries";
@@ -362,17 +364,25 @@ void PlasmaZonesEffect::processDaemonReadyWindowState()
         connect(watcher, &QDBusPendingCallWatcher::finished, this, [this](QDBusPendingCallWatcher* w) {
             w->deleteLater();
 
+            QDBusPendingReply<QStringList> reply = *w;
+            if (!reply.isValid()) {
+                // Leave m_daemonReadyRestoresDone false: `finished` fires for
+                // ERROR replies too, and latching the guard on a failed
+                // getSnappedWindows would permanently disable the
+                // slotPendingRestoresAvailable fallback for the session.
+                qCWarning(lcEffect) << "getSnappedWindows failed at daemon-ready:" << reply.error().message()
+                                    << "— deferring restores to pendingRestoresAvailable";
+                return;
+            }
             // Guard: prevent slotPendingRestoresAvailable from double-processing
-            // the same windows. Set inside the callback so that if this D-Bus call
-            // fails, the flag stays false and slotPendingRestoresAvailable can
-            // still function as a fallback.
+            // the same windows. Set only on a VALID reply so a failed call
+            // keeps the fallback alive.
             m_daemonReadyRestoresDone = true;
 
             // Re-drive per-window chrome (snap border / hidden title bar,
             // autotile border) for windows the daemon already considers managed.
-            QDBusPendingReply<QStringList> reply = *w;
             QSet<QString> trackedAppIds;
-            if (reply.isValid()) {
+            {
                 // On daemon loss the effect cleared its window-appearance state
                 // (DecorationManager::restoreAll + the handlers' tiled-tracking
                 // clears) and restored every title bar; already-tracked windows are NOT in

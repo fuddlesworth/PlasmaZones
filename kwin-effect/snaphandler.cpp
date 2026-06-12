@@ -388,13 +388,22 @@ void SnapHandler::slotMoveSpecificWindowToZoneRequested(const QString& windowId,
         }
     }
     if (!targetWindow) {
-        QString appId = ::PhosphorIdentity::WindowId::extractAppId(windowId);
+        // appId fallback (window recreated between candidate build and
+        // selection) — only when UNAMBIGUOUS: with two same-app windows,
+        // taking the first stacking-order match would snap (and track) the
+        // wrong sibling. Mirrors findWindowById's matchCount guard.
+        const QString appId = ::PhosphorIdentity::WindowId::extractAppId(windowId);
+        KWin::EffectWindow* appMatch = nullptr;
+        int matchCount = 0;
         for (KWin::EffectWindow* w : windows) {
-            if (w && m_effect->shouldHandleWindow(w)
+            if (w && !w->isDeleted() && m_effect->shouldHandleWindow(w)
                 && ::PhosphorIdentity::WindowId::extractAppId(m_effect->getWindowId(w)) == appId) {
-                targetWindow = w;
-                break;
+                appMatch = w;
+                ++matchCount;
             }
+        }
+        if (matchCount == 1) {
+            targetWindow = appMatch;
         }
     }
 

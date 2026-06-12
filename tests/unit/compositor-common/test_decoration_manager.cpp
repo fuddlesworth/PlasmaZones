@@ -19,6 +19,13 @@
 
 #include "fake_compositor_bridge.h"
 
+#include <memory>
+
+namespace {
+/// Shrunk fallback interval for the timer-interplay tests (production: 500 ms).
+constexpr int TestFallbackMs = 25;
+} // namespace
+
 using PhosphorCompositor::DecorationManager;
 using OwnerKind = PhosphorCompositor::DecorationManager::OwnerKind;
 using Placement = PhosphorCompositor::DecorationManager::Placement;
@@ -29,6 +36,9 @@ const QString Win1 = QStringLiteral("app|1");
 const QString Screen1 = QStringLiteral("screen-1");
 const QString Screen2 = QStringLiteral("screen-2");
 const QRectF Zone(100, 100, 640, 480);
+/// Mirror of the implementation's private MaxVetoRetries constant — the
+/// retry-budget tests pin the contract value.
+constexpr int ExpectedMaxVetoRetries = 6;
 } // namespace
 
 class TestDecorationManager : public QObject
@@ -274,6 +284,7 @@ private Q_SLOTS:
         FakeCompositorBridge bridge;
         bridge.addWindow(Win1);
         DecorationManager mgr(bridge);
+        mgr.setFallbackIntervalForTesting(TestFallbackMs);
         mgr.setRestoreVeto([](const QString&) {
             return true;
         });
@@ -281,7 +292,7 @@ private Q_SLOTS:
         mgr.acquire(Win1, DecorationManager::autotile(Screen1));
         mgr.releaseKind(Win1, OwnerKind::Autotile, Restore::Deferred);
         mgr.drainPendingRestores(); // vetoed → re-queued + fallback armed
-        QTest::qWait(50); // let the chain finish
+        QTest::qWait(10); // let the chain finish
 
         // The expected re-acquire lands: it cancels the re-queued restore.
         mgr.acquire(Win1, DecorationManager::autotile(Screen1));
@@ -289,7 +300,7 @@ private Q_SLOTS:
 
         // The armed fallback fires into an empty queue and self-cancels —
         // the window must stay hidden under the new claim.
-        QTest::qWait(700); // past the 500 ms fallback interval
+        QTest::qWait(TestFallbackMs * 4);
         QVERIFY(!bridge.callLog.contains(QStringLiteral("setNoBorder(app|1,false)")));
         QVERIFY(mgr.isBorderless(Win1));
         QCOMPARE(bridge.window(Win1)->noBorder, true);
@@ -300,6 +311,7 @@ private Q_SLOTS:
         FakeCompositorBridge bridge;
         bridge.addWindow(Win1);
         DecorationManager mgr(bridge);
+        mgr.setFallbackIntervalForTesting(TestFallbackMs);
         int vetoCalls = 0;
         mgr.setRestoreVeto([&vetoCalls](const QString&) {
             ++vetoCalls;
@@ -310,10 +322,64 @@ private Q_SLOTS:
         mgr.releaseKind(Win1, OwnerKind::Autotile, Restore::Deferred);
 
         // A veto that never lifts must not strand the window: after the
-        // bounded number of fallback retries the restore happens anyway.
-        QTRY_COMPARE_WITH_TIMEOUT(bridge.window(Win1)->noBorder, false, 10000);
-        QVERIFY(vetoCalls > 1);
+        // bounded number of FALLBACK retries the restore happens anyway —
+        // the (MaxVetoRetries+1)th fallback cycle overrides.
+        QTRY_COMPARE(bridge.window(Win1)->noBorder, false);
+        QCOMPARE(vetoCalls, ExpectedMaxVetoRetries + 1);
         QVERIFY(!mgr.isOwned(Win1));
+    }
+
+    void testVetoRetryBudgetResetsPerEpoch()
+    {
+        FakeCompositorBridge bridge;
+        bridge.addWindow(Win1);
+        DecorationManager mgr(bridge);
+        mgr.setFallbackIntervalForTesting(TestFallbackMs);
+        int vetoCalls = 0;
+        mgr.setRestoreVeto([&vetoCalls](const QString&) {
+            ++vetoCalls;
+            return true;
+        });
+
+        // First epoch: burn part of the retry budget via fallback cycles.
+        mgr.acquire(Win1, DecorationManager::autotile(Screen1));
+        mgr.releaseKind(Win1, OwnerKind::Autotile, Restore::Deferred);
+        QTRY_VERIFY(vetoCalls >= 2);
+
+        // Cancel the epoch (re-acquire), then let any in-flight chain/timer
+        // settle against the now-empty queue so epoch 2's count is clean.
+        mgr.acquire(Win1, DecorationManager::autotile(Screen1));
+        QTest::qWait(TestFallbackMs * 3);
+
+        // Fresh deferred epoch: the counter must restart — a budget
+        // inherited from the cancelled epoch would override the veto early
+        // and flicker the decoration.
+        const int callsAtSecondEpoch = vetoCalls;
+        mgr.releaseKind(Win1, OwnerKind::Autotile, Restore::Deferred);
+        QTRY_COMPARE(bridge.window(Win1)->noBorder, false);
+        QCOMPARE(vetoCalls - callsAtSecondEpoch, ExpectedMaxVetoRetries + 1);
+    }
+
+    void testForceShowCancelsQueuedRestore()
+    {
+        FakeCompositorBridge bridge;
+        bridge.addWindow(Win1);
+        DecorationManager mgr(bridge);
+        QSignalSpy restored(&mgr, &DecorationManager::windowDecorationRestored);
+
+        mgr.acquire(Win1, DecorationManager::snap(Screen1));
+        mgr.releaseKind(Win1, OwnerKind::Snap, Restore::Deferred);
+
+        // A force-show rule arrives while the restore is queued: the veto
+        // restores synchronously AND cancels the queued entry — without the
+        // cancel, the next drain would restore a second time (duplicate
+        // setNoBorder(false) + duplicate signal).
+        mgr.setRuleOverride(Win1, false);
+        QCOMPARE(restored.count(), 1);
+        mgr.drainPendingRestores();
+        QTest::qWait(10);
+        QCOMPARE(restored.count(), 1);
+        QCOMPARE(bridge.callLog.filter(QStringLiteral("setNoBorder(app|1,false)")).size(), 1);
     }
 
     void testStaleSnapshotRefreshedOnOwnerlessReacquire()
@@ -362,11 +428,12 @@ private Q_SLOTS:
         bridge.clearLog();
 
         // A rule HIDE starts a new ownership epoch through the same refresh:
-        // the fresh snapshot sees priorNoBorder=true, so removing the rule
-        // must not force-decorate the user's window.
+        // the fresh snapshot sees priorNoBorder=true (already borderless —
+        // no physical call at all), so removing the rule must not
+        // force-decorate the user's window.
         mgr.setRuleOverride(Win1, true);
         mgr.setRuleOverride(Win1, std::nullopt);
-        QVERIFY(!bridge.callLog.contains(QStringLiteral("setNoBorder(app|1,false)")));
+        QVERIFY(bridge.callLog.isEmpty());
         QCOMPARE(fw->noBorder, true);
     }
 
@@ -446,6 +513,7 @@ private Q_SLOTS:
         FakeCompositorBridge bridge;
         bridge.addWindow(Win1);
         DecorationManager mgr(bridge);
+        mgr.setFallbackIntervalForTesting(TestFallbackMs);
 
         mgr.acquire(Win1, DecorationManager::autotile(Screen1));
         mgr.releaseKind(Win1, OwnerKind::Autotile, Restore::Deferred);
@@ -674,6 +742,7 @@ private Q_SLOTS:
         bridge.addWindow(QStringLiteral("a|1"));
         bridge.addWindow(QStringLiteral("b|1"));
         DecorationManager mgr(bridge);
+        mgr.setFallbackIntervalForTesting(TestFallbackMs);
         QSignalSpy restored(&mgr, &DecorationManager::windowDecorationRestored);
 
         mgr.acquire(QStringLiteral("a|1"), DecorationManager::autotile(Screen1));
@@ -688,7 +757,7 @@ private Q_SLOTS:
         QCOMPARE(bridge.window(QStringLiteral("b|1"))->noBorder, false);
         QCOMPARE(restored.count(), 2);
         const int callsAfterRestoreAll = bridge.callLog.size();
-        QTest::qWait(700); // past the 500 ms fallback interval
+        QTest::qWait(TestFallbackMs * 4); // past the fallback interval
         QCOMPARE(bridge.callLog.size(), callsAfterRestoreAll);
     }
 

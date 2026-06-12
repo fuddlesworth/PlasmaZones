@@ -308,7 +308,7 @@
                 <annotation name="org.gtk.GDBus.DocString" value="Array of (windowId, x, y, width, height, screenId). screenId is the daemon-authoritative target screen — compositor uses it to seed its tracked-screen cache without re-deriving from geometry. Empty screenId means no authoritative answer (fall back to geometry-based resolution)."/>
             </arg>
             <arg name="action" type="s">
-                <annotation name="org.gtk.GDBus.DocString" value="Navigation action type (rotate, resnap, snap_all) for feedback."/>
+                <annotation name="org.gtk.GDBus.DocString" value="Navigation action type (rotate, resnap, vs_reconfigure) for feedback."/>
             </arg>
         </signal>
         <signal name="raiseWindowsRequested">

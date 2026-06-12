@@ -902,6 +902,14 @@ KWin::EffectWindow* PlasmaZonesEffect::findWindowById(const QString& windowId) c
 
     const auto windows = KWin::effects->stackingOrder();
     for (KWin::EffectWindow* w : windows) {
+        // Skip dying windows: close-shader grabs (WindowClosedGrabRole) keep
+        // deleted windows in the stacking order between windowClosed and
+        // windowDeleted, and matching one would both resolve a dead window
+        // AND re-insert its just-scrubbed id into the caches via getWindowId.
+        // The exact-match path above enforces the same !isDeleted().
+        if (!w || w->isDeleted()) {
+            continue;
+        }
         const QString wId = getWindowId(w);
         if (::PhosphorIdentity::WindowId::extractAppId(wId) == targetAppId) {
             appMatch = w;
@@ -933,6 +941,12 @@ QVector<KWin::EffectWindow*> PlasmaZonesEffect::findAllWindowsById(const QString
     const QString targetAppId = ::PhosphorIdentity::WindowId::extractAppId(windowId);
     const auto windows = KWin::effects->stackingOrder();
     for (KWin::EffectWindow* w : windows) {
+        // Skip dying windows — same rationale as findWindowById's fuzzy walk
+        // (close-grabbed deleted windows linger in the stacking order, and
+        // getWindowId would re-pollute the just-scrubbed caches).
+        if (!w || w->isDeleted()) {
+            continue;
+        }
         const QString wId = getWindowId(w);
         if (wId == windowId) {
             // Exact match — discard any appId matches accumulated from earlier

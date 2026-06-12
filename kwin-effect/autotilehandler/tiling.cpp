@@ -113,14 +113,21 @@ void AutotileHandler::slotWindowsTileRequested(const PhosphorProtocol::TileReque
             qCInfo(lcEffect) << "Autotile batch float:" << windowId << "screen:" << screenId;
             applyFloatCleanup(windowId);
 
-            // Restore pre-autotile geometry from effect's local cache
+            // Restore pre-autotile geometry from the effect's local cache.
+            // Scan all screen buckets (all-bucket reader policy — a VS
+            // config change can re-key the window's screen without moving
+            // its geometry bucket).
             KWin::EffectWindow* floatWin = m_effect->findWindowById(windowId);
-            if (floatWin && !screenId.isEmpty()) {
-                auto screenIt = m_preAutotileGeometries.constFind(screenId);
-                if (screenIt != m_preAutotileGeometries.constEnd() && screenIt->contains(windowId)) {
-                    const QRectF savedGeo = screenIt->value(windowId);
-                    m_effect->applySnapGeometry(floatWin, savedGeo.toRect());
-                    qCInfo(lcEffect) << "Restored pre-autotile geometry for overflow" << windowId << savedGeo.toRect();
+            if (floatWin) {
+                for (auto sgIt = m_preAutotileGeometries.constBegin(); sgIt != m_preAutotileGeometries.constEnd();
+                     ++sgIt) {
+                    const QRectF savedGeo = sgIt->value(windowId);
+                    if (savedGeo.isValid()) {
+                        m_effect->applySnapGeometry(floatWin, savedGeo.toRect());
+                        qCInfo(lcEffect) << "Restored pre-autotile geometry for overflow" << windowId
+                                         << savedGeo.toRect();
+                        break;
+                    }
                 }
             }
             continue;

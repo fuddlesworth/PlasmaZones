@@ -156,6 +156,12 @@ public:
     /// Drain queued restores, one decoration toggle per event-loop tick.
     /// Cancels the fallback timer. Re-entrant safe (snapshot-and-clear).
     void drainPendingRestores();
+    /// Test seam: shrink the fallback-retry interval (default 500 ms) so
+    /// timer-interplay tests run in milliseconds. Production never calls it.
+    void setFallbackIntervalForTesting(int ms)
+    {
+        m_fallbackIntervalMs = ms;
+    }
     /// Extra authoritative re-check evaluated per window at drain-step time
     /// (in addition to the built-in "window has owners again" check).
     /// Returning true keeps the restore QUEUED (re-armed via the fallback
@@ -205,11 +211,13 @@ private:
         bool priorNoBorder = false; ///< decoration state before our first hide
         bool physicallyHidden = false;
         bool pendingRestore = false;
-        /// Consecutive drain steps whose restore the veto re-queued. Bounds
-        /// the veto: after MaxVetoRetries fallback cycles with no re-acquire
-        /// the restore happens anyway — bounded staleness beats stranding an
-        /// ownerless hidden window when the effect-side "a re-acquire is
-        /// coming" prediction turns out wrong.
+        /// Consecutive FALLBACK-TIMER drain cycles whose restore the veto
+        /// re-queued (explicit batch-completion drains re-queue without
+        /// counting — multi-batch resnap churn must not burn the budget).
+        /// Bounds the veto: after MaxVetoRetries fallback cycles with no
+        /// re-acquire the restore happens anyway — bounded staleness beats
+        /// stranding an ownerless hidden window when the effect-side
+        /// "a re-acquire is coming" prediction turns out wrong.
         int vetoRetries = 0;
     };
 
@@ -222,6 +230,14 @@ private:
     /// Cancel a queued deferred restore (flag + queue set + retry counter
     /// together — the three must never desync across the cancel sites).
     void cancelPendingRestore(const QString& windowId, Entry& entry);
+    /// The drain implementation. @p fromFallback marks fallback-timer-
+    /// initiated drains — only those count against the bounded-veto budget.
+    void drainPendingRestoresInternal(bool fromFallback);
+    /// Resolve @p windowId to a handle whose CURRENT id matches exactly.
+    /// Bridge lookups may fall back to fuzzy app-level matching and resolve
+    /// a same-app sibling for a dead id — physical decoration toggles must
+    /// never act on a window other than the one the entry tracks.
+    WindowHandle resolveExact(const QString& windowId) const;
     void hideNow(WindowHandle w, Placement placement);
     void restoreNow(const QString& windowId, Entry& entry, bool reassertGeometry);
     /// Drop the entry if it carries no information anymore.
@@ -233,6 +249,7 @@ private:
     QHash<QString, Entry> m_windows;
     QSet<QString> m_pendingRestore;
     QPointer<QTimer> m_pendingFallback;
+    int m_fallbackIntervalMs; // FallbackDrainMs unless shrunk for tests
     std::function<bool(const QString&)> m_restoreVeto;
     /// In-flight drain chains (re-entrant drains snapshot-and-clear, so
     /// several can coexist). A chain removes itself on termination; the

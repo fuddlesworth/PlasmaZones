@@ -299,15 +299,6 @@ void AutotileHandler::slotScreensChanged(const QStringList& screenIds, bool isDe
                 unmaximizeMonocleWindow(m_effect->getWindowId(w));
             }
 
-            // Snapshot global stacking order for z-order restore after resnap.
-            // The daemon emits ONE batched resnapToNewLayoutRequested signal;
-            // handleResnapToNewLayout uses this snapshot to re-raise windows
-            // in their original order after applying zone geometries.
-            m_savedGlobalStackForResnap.clear();
-            for (KWin::EffectWindow* w : windows) {
-                m_savedGlobalStackForResnap.append(QPointer<KWin::EffectWindow>(w));
-            }
-
             // Clear autotile zone state (stagger timers were already
             // invalidated by the unconditional bump at function entry; no
             // stagger can have been scheduled since).
@@ -337,8 +328,14 @@ void AutotileHandler::slotScreensChanged(const QStringList& screenIds, bool isDe
                         const QString windowId = m_effect->getWindowId(w);
                         if (m_savedNotifiedForDesktopReturn.contains(windowId)
                             || m_notifiedWindows.contains(windowId)) {
-                            // Previously tracked — re-add without re-notifying daemon
+                            // Previously tracked — re-add without re-notifying the
+                            // daemon. Restore the SCREEN record too: the demotion
+                            // dropped both, and a window tracked with an empty
+                            // screen record never detects cross-monitor / cross-VS
+                            // transfers again (handleWindowOutputChanged
+                            // early-returns on an unknown old screen).
                             m_notifiedWindows.insert(windowId);
+                            m_notifiedWindowScreens[windowId] = screenId;
                         } else {
                             // Genuinely new window opened while this desktop was
                             // not active — notify daemon so it's added to PhosphorTiles::TilingState
@@ -359,12 +356,16 @@ void AutotileHandler::slotScreensChanged(const QStringList& screenIds, bool isDe
                 }
             }
 
-            // Catch windows moved to this desktop while the user was on another.
-            // When both desktops share the same autotile screens, `added` is empty
-            // and the loop above doesn't run. Scan ALL autotile screens for windows
-            // on the current desktop that aren't tracked — they were removed from
-            // tiling by windowDesktopsChanged on the source desktop and need to be
-            // re-added here. notifyWindowAdded is idempotent (checks m_notifiedWindows).
+            // Catch windows moved to this desktop while the user was on
+            // another — they were removed from tiling by windowDesktopsChanged
+            // on the source desktop and need re-adding here. This covers
+            // PARTIAL-overlap desktop switches (the moved window sits on a
+            // shared screen that isn't in `added`). When the two desktops'
+            // autotile sets are IDENTICAL the daemon suppresses the
+            // screens-changed signal entirely (engine early-returns on an
+            // unchanged set) and this code never runs — that gap is the
+            // daemon-side half of discussion #219. notifyWindowAdded is
+            // idempotent (checks m_notifiedWindows).
             for (const QString& screenId : m_autotileScreens) {
                 for (KWin::EffectWindow* w : windows) {
                     if (!w || !m_effect->shouldHandleWindow(w) || !w->isOnCurrentDesktop() || !w->isOnCurrentActivity()
@@ -740,11 +741,6 @@ void AutotileHandler::slotWindowFullScreenChanged(KWin::EffectWindow* w)
         qCInfo(lcEffect) << "Monocle window went fullscreen:" << windowId << "- removed from tracking";
     }
     m_effect->removeWindowBorder(windowId);
-}
-
-QVector<QPointer<KWin::EffectWindow>> AutotileHandler::takeSavedGlobalStack()
-{
-    return std::move(m_savedGlobalStackForResnap);
 }
 
 } // namespace PlasmaZones

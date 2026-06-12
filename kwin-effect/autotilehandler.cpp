@@ -557,60 +557,64 @@ void AutotileHandler::handleDragToFloat(KWin::EffectWindow* w, const QString& wi
     // before setWindowFloatingForScreen processes).
     applyFloatCleanup(windowId);
 
-    // Restore pre-autotile SIZE at the window's current position.
+    // Restore pre-autotile SIZE at the window's current position. Scan all
+    // screen buckets (all-bucket reader policy — a VS config change can
+    // re-key the window's screen without moving its geometry bucket; size
+    // is coordinate-space-independent, so any bucket's rect is safe).
     if (w) {
-        auto screenIt = m_preAutotileGeometries.constFind(screenId);
-        if (screenIt != m_preAutotileGeometries.constEnd()) {
-            if (screenIt->contains(windowId)) {
-                const QRectF savedGeo = screenIt->value(windowId);
-                if (savedGeo.isValid()) {
-                    const int savedW = qRound(savedGeo.width());
-                    const int savedH = qRound(savedGeo.height());
+        QRectF savedGeo;
+        for (auto sgIt = m_preAutotileGeometries.constBegin(); sgIt != m_preAutotileGeometries.constEnd(); ++sgIt) {
+            const QRectF rect = sgIt->value(windowId);
+            if (rect.isValid()) {
+                savedGeo = rect;
+                break;
+            }
+        }
+        if (savedGeo.isValid()) {
+            const int savedW = qRound(savedGeo.width());
+            const int savedH = qRound(savedGeo.height());
 
-                    if (immediate) {
-                        // Drag-start path: apply synchronously during the
-                        // interactive move (allowDuringDrag=true) so the user
-                        // sees the window return to its free-floating size the
-                        // moment they start dragging — matches snap-mode behavior.
-                        // Re-center horizontally under the cursor so the window
-                        // doesn't "jump away" from the grab point when it shrinks.
-                        QRectF currentFrame = w->frameGeometry();
-                        const QPointF cursor = KWin::effects->cursorPos();
-                        int newX = qRound(currentFrame.x());
-                        int newY = qRound(currentFrame.y());
-                        if (currentFrame.width() > 0 && savedW < currentFrame.width()) {
-                            const qreal cursorOffsetRatio = (cursor.x() - currentFrame.x()) / currentFrame.width();
-                            newX = qRound(cursor.x() - cursorOffsetRatio * savedW);
-                        }
-                        QRect sizeRestored(newX, newY, savedW, savedH);
-                        m_effect->applySnapGeometry(w, sizeRestored, /*allowDuringDrag=*/true);
-                        qCInfo(lcEffect) << "Drag-start float: restored pre-autotile size for" << windowId << savedW
-                                         << "x" << savedH;
-                    } else {
-                        // Drag-stop path: defer to next event loop tick so
-                        // KWin has finished the interactive move and the window's
-                        // frame geometry reflects the actual drop position.
-                        QPointer<KWin::EffectWindow> wp = w;
-                        PlasmaZonesEffect* effect = m_effect;
-                        QTimer::singleShot(0, effect, [effect, wp, windowId, savedW, savedH]() {
-                            if (!wp || wp->isDeleted()) {
-                                return;
-                            }
-                            // Skip if the window was re-snapped during the deferred tick
-                            // (e.g., dropped on a zone on a snap screen during cross-VS drag).
-                            if (!effect->isWindowFloating(effect->getWindowId(wp))) {
-                                qCDebug(lcEffect)
-                                    << "Drag-to-float: skipping size restore for re-snapped window" << windowId;
-                                return;
-                            }
-                            QRectF currentFrame = wp->frameGeometry();
-                            QRect sizeRestored(qRound(currentFrame.x()), qRound(currentFrame.y()), savedW, savedH);
-                            effect->applySnapGeometry(wp, sizeRestored);
-                            qCInfo(lcEffect) << "Drag-to-float: restored pre-autotile size for" << windowId << savedW
-                                             << "x" << savedH;
-                        });
-                    }
+            if (immediate) {
+                // Drag-start path: apply synchronously during the
+                // interactive move (allowDuringDrag=true) so the user
+                // sees the window return to its free-floating size the
+                // moment they start dragging — matches snap-mode behavior.
+                // Re-center horizontally under the cursor so the window
+                // doesn't "jump away" from the grab point when it shrinks.
+                QRectF currentFrame = w->frameGeometry();
+                const QPointF cursor = KWin::effects->cursorPos();
+                int newX = qRound(currentFrame.x());
+                int newY = qRound(currentFrame.y());
+                if (currentFrame.width() > 0 && savedW < currentFrame.width()) {
+                    const qreal cursorOffsetRatio = (cursor.x() - currentFrame.x()) / currentFrame.width();
+                    newX = qRound(cursor.x() - cursorOffsetRatio * savedW);
                 }
+                QRect sizeRestored(newX, newY, savedW, savedH);
+                m_effect->applySnapGeometry(w, sizeRestored, /*allowDuringDrag=*/true);
+                qCInfo(lcEffect) << "Drag-start float: restored pre-autotile size for" << windowId << savedW << "x"
+                                 << savedH;
+            } else {
+                // Drag-stop path: defer to next event loop tick so
+                // KWin has finished the interactive move and the window's
+                // frame geometry reflects the actual drop position.
+                QPointer<KWin::EffectWindow> wp = w;
+                PlasmaZonesEffect* effect = m_effect;
+                QTimer::singleShot(0, effect, [effect, wp, windowId, savedW, savedH]() {
+                    if (!wp || wp->isDeleted()) {
+                        return;
+                    }
+                    // Skip if the window was re-snapped during the deferred tick
+                    // (e.g., dropped on a zone on a snap screen during cross-VS drag).
+                    if (!effect->isWindowFloating(effect->getWindowId(wp))) {
+                        qCDebug(lcEffect) << "Drag-to-float: skipping size restore for re-snapped window" << windowId;
+                        return;
+                    }
+                    QRectF currentFrame = wp->frameGeometry();
+                    QRect sizeRestored(qRound(currentFrame.x()), qRound(currentFrame.y()), savedW, savedH);
+                    effect->applySnapGeometry(wp, sizeRestored);
+                    qCInfo(lcEffect) << "Drag-to-float: restored pre-autotile size for" << windowId << savedW << "x"
+                                     << savedH;
+                });
             }
         }
     }
@@ -628,17 +632,15 @@ void AutotileHandler::onDaemonReady()
     m_savedPreAutotileForDesktopMove.clear();
     m_pendingCloses.clear();
 
-    // Re-send the effect's durable pre-autotile geometry cache to the freshly
-    // (re)connected daemon. The daemon's pre-tile / float-back store
-    // (m_unmanagedGeometries) is an in-session cache it does NOT persist on its
-    // own, so a daemon restart wipes it — and saveGeometryForWindow's idempotency
-    // guard means the effect never re-sends on its own. The effect survives daemon
-    // restarts and still holds each window's true pre-autotile frame here, so it is
-    // the authoritative source to repopulate the daemon. Without this, windows
-    // already auto-tiled when the daemon restarts have no pre-autotile position to
-    // return to on autotile→snap or drag-to-float — they stay stranded at their
-    // tiled rect. overwrite=false so anything the daemon already restored from its
-    // own persisted records wins.
+    // Re-send the effect's pre-autotile geometry cache to the freshly
+    // (re)connected daemon as a backstop. storePreTileGeometry lands in the
+    // unified WindowPlacementStore record (which IS persisted), but a record
+    // the store had not flushed before the daemon died — or a daemon started
+    // with wiped state — would leave already-tiled windows with no
+    // pre-autotile position to return to on autotile→snap or drag-to-float.
+    // The effect survives daemon restarts and still holds each window's true
+    // pre-autotile frame here. overwrite=false so anything the daemon
+    // restored from its own persisted records wins.
     if (m_effect->m_daemonServiceRegistered) {
         int resent = 0;
         for (auto scrIt = m_preAutotileGeometries.constBegin(); scrIt != m_preAutotileGeometries.constEnd(); ++scrIt) {

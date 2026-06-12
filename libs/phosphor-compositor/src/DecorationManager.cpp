@@ -17,14 +17,16 @@ namespace {
 /// resnap geometry batch) never arrives — e.g. a mode toggle with no
 /// resnappable windows.
 constexpr int FallbackDrainMs = 500;
-/// How many consecutive fallback cycles a vetoed restore stays queued
-/// before it happens anyway. The veto predicts "a re-acquire is imminent";
-/// if it is wrong this bounds the strand to ~MaxVetoRetries × FallbackDrainMs.
+/// How many consecutive fallback-timer cycles a vetoed restore stays queued
+/// before it happens anyway (explicit drains re-queue without counting).
+/// The veto predicts "a re-acquire is imminent"; if it is wrong this bounds
+/// the strand to ~MaxVetoRetries × the fallback interval.
 constexpr int MaxVetoRetries = 6;
 } // namespace
 
 DecorationManager::DecorationManager(ICompositorBridge& bridge, QObject* parent)
     : QObject(parent)
+    , m_fallbackIntervalMs(FallbackDrainMs)
     , m_bridge(bridge)
 {
 }
@@ -153,7 +155,7 @@ void DecorationManager::restoreAll()
             // the new epoch owns its decoration now — leave it hidden.
             continue;
         }
-        if (WindowHandle w = m_bridge.findWindowById(windowId)) {
+        if (WindowHandle w = resolveExact(windowId)) {
             m_bridge.setNoBorder(w, false);
             Q_EMIT windowDecorationRestored(windowId);
         }
@@ -232,6 +234,11 @@ void DecorationManager::clearAllRuleOverrides()
 
 void DecorationManager::drainPendingRestores()
 {
+    drainPendingRestoresInternal(/*fromFallback=*/false);
+}
+
+void DecorationManager::drainPendingRestoresInternal(bool fromFallback)
+{
     // Cancel the fallback FIRST — even when the queue is already empty
     // (acquire/setRuleOverride may have emptied it after the timer was
     // armed), so a stale timer never fires a pointless drain later.
@@ -256,7 +263,7 @@ void DecorationManager::drainPendingRestores()
     auto step = std::make_shared<std::function<void()>>();
     auto didWork = std::make_shared<bool>(false);
     m_liveDrainChains.append(step);
-    *step = [this, pending, step, didWork]() {
+    *step = [this, pending, step, didWork, fromFallback]() {
         if (pending->isEmpty()) {
             // Emit only when the chain actually processed a restore: an
             // all-vetoed cycle changed nothing, and signalling it would make
@@ -281,13 +288,17 @@ void DecorationManager::drainPendingRestores()
         // Re-acquired (acquire cleared the flag) or already forgotten: the
         // queued restore is stale — leave the decoration alone.
         if (it != m_windows.end() && it->pendingRestore) {
-            if (m_restoreVeto && m_restoreVeto(windowId) && ++it->vetoRetries <= MaxVetoRetries) {
+            // Only FALLBACK cycles count against the veto budget: explicit
+            // batch-completion drains can arrive in quick succession during
+            // multi-batch resnap churn and must not burn the bound.
+            const bool vetoHolds = m_restoreVeto && m_restoreVeto(windowId);
+            if (vetoHolds && (!fromFallback || ++it->vetoRetries <= MaxVetoRetries)) {
                 // Authoritative state says the window should stay hidden
                 // (e.g. its screen re-entered autotile mid-drain). Keep the
                 // restore QUEUED instead of dropping it: the expected
                 // re-acquire cancels it, and if that re-acquire never lands
                 // (the retile declined the window) the fallback timer
-                // retries. After MaxVetoRetries cycles the veto is
+                // retries. After MaxVetoRetries fallback cycles the veto is
                 // overridden and the restore happens anyway — bounded
                 // staleness beats stranding an ownerless hidden window when
                 // the "re-acquire is coming" prediction was wrong.
@@ -324,7 +335,7 @@ void DecorationManager::resyncWindow(const QString& windowId)
     if (!desired || !it->physicallyHidden) {
         return;
     }
-    WindowHandle w = m_bridge.findWindowById(windowId);
+    WindowHandle w = resolveExact(windowId);
     if (!w || m_bridge.isNoBorder(w)) {
         return; // gone, or still suppressed — nothing drifted
     }
@@ -369,7 +380,7 @@ void DecorationManager::reconcile(const QString& windowId, Entry& entry, Placeme
     const bool desired = !entry.vetoed && !entry.owners.isEmpty();
 
     if (desired && !entry.physicallyHidden) {
-        WindowHandle w = m_bridge.findWindowById(windowId);
+        WindowHandle w = resolveExact(windowId);
         if (!w) {
             // Intent recorded; the window is gone or not yet resolvable.
             // A later acquire retries while ownership persists (resyncWindow
@@ -437,6 +448,18 @@ void DecorationManager::finishRelease(const QString& windowId, Entry& entry, Res
     armFallbackTimer();
 }
 
+WindowHandle DecorationManager::resolveExact(const QString& windowId) const
+{
+    WindowHandle w = m_bridge.findWindowById(windowId);
+    if (!w || m_bridge.windowId(w) != windowId) {
+        // Bridge fuzzy fallbacks (appId matching for cross-session restore)
+        // can resolve a same-app SIBLING for a dead id — never toggle a
+        // window other than the one this entry tracks.
+        return nullptr;
+    }
+    return w;
+}
+
 void DecorationManager::cancelPendingRestore(const QString& windowId, Entry& entry)
 {
     if (!entry.pendingRestore) {
@@ -481,7 +504,7 @@ void DecorationManager::restoreNow(const QString& windowId, Entry& entry, bool r
     if (entry.priorNoBorder) {
         return; // defensive: we never hid such a window physically
     }
-    WindowHandle w = m_bridge.findWindowById(windowId);
+    WindowHandle w = resolveExact(windowId);
     if (!w) {
         return; // window gone — decoration died with it
     }
@@ -514,8 +537,10 @@ void DecorationManager::armFallbackTimer()
     if (!m_pendingFallback) {
         m_pendingFallback = new QTimer(this);
         m_pendingFallback->setSingleShot(true);
-        m_pendingFallback->setInterval(FallbackDrainMs);
-        connect(m_pendingFallback, &QTimer::timeout, this, &DecorationManager::drainPendingRestores);
+        m_pendingFallback->setInterval(m_fallbackIntervalMs);
+        connect(m_pendingFallback, &QTimer::timeout, this, [this]() {
+            drainPendingRestoresInternal(/*fromFallback=*/true);
+        });
     }
     m_pendingFallback->start();
 }

@@ -71,7 +71,10 @@ struct WindowInfo
  * Design principles:
  * - Methods take WindowHandle (void*) — plugins static_cast to their native type
  * - Bulk operations use WindowInfo snapshots to avoid virtual call overhead
- * - Only methods actually needed by shared code are included (no speculative API)
+ * - The surface is the compositor-plugin SDK contract: some methods are
+ *   consumed by shared code today (DecorationManager, SnapAssistFilter),
+ *   the rest define what a non-KWin plugin must provide to host the shared
+ *   handlers — they are forward-looking SDK API, not dead code
  * - D-Bus helpers (fireAndForget, asyncCall) are free functions, not on this interface
  */
 class PHOSPHORCOMPOSITOR_EXPORT ICompositorBridge
