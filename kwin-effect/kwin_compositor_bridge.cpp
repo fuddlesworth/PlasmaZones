@@ -122,6 +122,33 @@ bool KWinCompositorBridge::hasDecoration(WindowHandle w) const
     return ew && ew->hasDecoration();
 }
 
+bool KWinCompositorBridge::userCanSetNoBorder(WindowHandle w) const
+{
+    auto* ew = toEffectWindow(w);
+    if (!ew)
+        return false;
+    auto* kw = ew->window();
+    return kw && kw->userCanSetNoBorder();
+}
+
+bool KWinCompositorBridge::isNoBorder(WindowHandle w) const
+{
+    auto* ew = toEffectWindow(w);
+    if (!ew)
+        return false;
+    auto* kw = ew->window();
+    return kw && kw->noBorder();
+}
+
+QRectF KWinCompositorBridge::moveResizeGeometry(WindowHandle w) const
+{
+    auto* ew = toEffectWindow(w);
+    if (!ew)
+        return QRectF();
+    auto* kw = ew->window();
+    return kw ? QRectF(kw->moveResizeGeometry()) : QRectF();
+}
+
 WindowInfo KWinCompositorBridge::windowInfo(WindowHandle w) const
 {
     auto* ew = toEffectWindow(w);

@@ -55,6 +55,9 @@ public:
     bool isOnCurrentDesktop(WindowHandle w) const override;
     bool isOnCurrentActivity(WindowHandle w) const override;
     bool hasDecoration(WindowHandle w) const override;
+    bool userCanSetNoBorder(WindowHandle w) const override;
+    bool isNoBorder(WindowHandle w) const override;
+    QRectF moveResizeGeometry(WindowHandle w) const override;
     WindowInfo windowInfo(WindowHandle w) const override;
 
     bool shouldHandleWindow(WindowHandle w) const override;

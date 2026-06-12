@@ -119,6 +119,24 @@ public:
     virtual bool isOnCurrentActivity(WindowHandle w) const = 0;
     virtual bool hasDecoration(WindowHandle w) const = 0;
 
+    /// May this window's server-side decoration be toggled off?
+    /// True for SSD windows even while they are CURRENTLY borderless (the
+    /// toggle remains available); false for windows with no server-side title
+    /// bar to hide — client-side-decorated apps (GTK/Electron), override-
+    /// redirect surfaces, or decorations forced by a compositor rule.
+    /// (KWin: Window::userCanSetNoBorder)
+    virtual bool userCanSetNoBorder(WindowHandle w) const = 0;
+
+    /// Is the server-side decoration currently suppressed?
+    /// (KWin: Window::noBorder)
+    virtual bool isNoBorder(WindowHandle w) const = 0;
+
+    /// Geometry the compositor is currently moving the window toward.
+    /// On Wayland this is set synchronously by moveResize(), unlike
+    /// frameGeometry() which lags until the client acks the configure.
+    /// (KWin: Window::moveResizeGeometry)
+    virtual QRectF moveResizeGeometry(WindowHandle w) const = 0;
+
     /// Fill a WindowInfo snapshot (for bulk operations)
     virtual WindowInfo windowInfo(WindowHandle w) const = 0;
 
