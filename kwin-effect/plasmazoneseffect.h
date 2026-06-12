@@ -58,7 +58,16 @@ class IMotionClock;
 
 namespace PlasmaZones {
 
-using namespace PhosphorCompositor;
+// Targeted using-declarations, not a namespace-wide directive: headers must
+// not leak the whole PhosphorCompositor namespace into every includer.
+// (Re-declaring the same alias/using in a sibling header is well-formed.)
+using PhosphorCompositor::BorderState;
+using PhosphorCompositor::DecorationManager;
+using PhosphorCompositor::ICompositorBridge;
+using PhosphorCompositor::ParsedTrigger;
+namespace AutotileStateHelpers = PhosphorCompositor::AutotileStateHelpers;
+namespace DecorationDefaults = PhosphorCompositor::DecorationDefaults;
+namespace TriggerParser = PhosphorCompositor::TriggerParser;
 
 // Mirror of PhosphorTiles::AutotileDragBehavior (re-exported via core/enums.h).
 // The effect can't include daemon headers (KWin plugin ABI constraints), so the

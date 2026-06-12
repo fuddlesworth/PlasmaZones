@@ -24,7 +24,11 @@ class EffectWindow;
 
 namespace PlasmaZones {
 
-using namespace PhosphorCompositor;
+// Targeted using-declarations, not a namespace-wide directive: headers must
+// not leak the whole PhosphorCompositor namespace into every includer.
+// (Re-declaring the same alias/using in a sibling header is well-formed.)
+using PhosphorCompositor::BorderState;
+namespace AutotileStateHelpers = PhosphorCompositor::AutotileStateHelpers;
 
 class PlasmaZonesEffect;
 

@@ -344,7 +344,11 @@ QString actionTypeLabelImpl(const QString& type)
         return PhosphorI18n::tr("Exclude from animations");
     }
     if (type == ActionType::SetHideTitleBar) {
-        return PhosphorI18n::tr("Hide title bars");
+        // Tri-state at the effect (true = hide, false = force visible) — the
+        // picker label hints both directions so a user looking to FORCE a
+        // title bar finds the action; the parameter toggle's "(off = force
+        // visible)" wording carries the detail.
+        return PhosphorI18n::tr("Hide or show title bars");
     }
     if (type == ActionType::SetBorderVisible) {
         return PhosphorI18n::tr("Show border");

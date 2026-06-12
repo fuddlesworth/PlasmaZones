@@ -508,6 +508,7 @@ install(FILES
     dbus/org.plasmazones.Settings.xml
     dbus/org.plasmazones.SettingsApp.xml
     dbus/org.plasmazones.Shader.xml
+    dbus/org.plasmazones.Snap.xml
     dbus/org.plasmazones.WindowDrag.xml
     dbus/org.plasmazones.WindowRules.xml
     dbus/org.plasmazones.WindowTracking.xml

@@ -225,32 +225,15 @@ void AutotileEngine::connectSignals()
                         if (newVsSet.contains(sid)) {
                             continue;
                         }
-                        // This virtual screen no longer exists — release its windows.
-                        // Snapshot each window's autotile slot into the unified record
-                        // (single source of truth) before teardown — same as setAutotileScreens.
+                        // This virtual screen no longer exists — release its
+                        // windows via the shared teardown body. Unlike the
+                        // toggle-off path, an orphaned VS id is never reused,
+                        // so BOTH override layers go: the resolver's
+                        // in-memory map here, the persisted settings below
+                        // (clearPerScreenAutotileSettings).
                         orphanedVsIds.insert(sid);
-                        const QStringList vsTiled = it.value()->tiledWindows();
-                        const QStringList floated = it.value()->floatingWindows();
-                        if (m_windowTracker) {
-                            for (const QString& wid : floated + vsTiled) {
-                                auto rec = capturePlacement(wid);
-                                if (!rec) {
-                                    continue;
-                                }
-                                m_windowTracker->placementStore().record(*rec);
-                            }
-                        }
-                        // Drop the overflow set AFTER capture (see setAutotileScreens):
-                        // isOverflow must still distinguish overflow floats from user
-                        // floats during capture, else overflow windows stick floating
-                        // instead of re-tiling on re-entry.
-                        m_overflow.takeForScreen(sid);
-                        releasedWindows.append(vsTiled);
-                        releasedWindows.append(floated);
-                        m_pendingInitialOrders.remove(sid);
-                        m_pendingOrderGeneration.remove(sid);
-                        m_strictInitialOrderScreens.remove(sid);
-                        it.value()->deleteLater();
+                        releaseScreenStateForTeardown(sid, it.value(), releasedWindows);
+                        m_configResolver->removeOverridesForScreen(sid);
                         it.remove();
                     }
                     for (const QString& windowId : std::as_const(releasedWindows)) {
@@ -671,35 +654,14 @@ void AutotileEngine::setAutotileScreens(const QSet<QString>& screens)
         if (!removed.contains(key.screenId)) {
             continue;
         }
-        // Snapshot each window's autotile slot into the unified record BEFORE the
-        // PhosphorTiles::TilingState is torn down — the record is the SINGLE source
-        // of truth for cross-mode state (no parallel saved-floating set). capturePlacement
-        // records a USER float as floating and a tiled/overflow window as tiled (so it
-        // re-tiles on re-entry); the shared free geometry rides from the engine's own
-        // float-back cache.
-        const QStringList tiled = it.value()->tiledWindows();
-        const QStringList floated = it.value()->floatingWindows();
-        if (m_windowTracker) {
-            for (const QString& wid : floated + tiled) {
-                auto rec = capturePlacement(wid);
-                if (!rec) {
-                    continue;
-                }
-                m_windowTracker->placementStore().record(*rec);
-            }
-        }
-        // Drop the overflow set AFTER capture: capturePlacement's overflow-vs-user-float
-        // discriminator (isOverflow) must still see this screen's overflow windows, or
-        // they'd be mis-recorded as user floats and stick floating instead of re-tiling
-        // on re-entry.
-        m_overflow.takeForScreen(key.screenId);
-        releasedWindows.append(tiled);
-        releasedWindows.append(floated);
+        releaseScreenStateForTeardown(key.screenId, it.value(), releasedWindows);
+        // Toggle-off drops only the resolver's IN-MEMORY overrides (they are
+        // re-derived from settings on re-enable); the persisted per-screen
+        // settings deliberately survive — a user toggling autotile off must
+        // not lose their per-monitor configuration. Contrast with the
+        // orphaned-virtual-screen teardown, which purges both layers because
+        // a dead VS id is never reused.
         m_configResolver->removeOverridesForScreen(key.screenId);
-        m_pendingInitialOrders.remove(key.screenId);
-        m_pendingOrderGeneration.remove(key.screenId);
-        m_strictInitialOrderScreens.remove(key.screenId);
-        it.value()->deleteLater();
         it.remove();
     }
     // Clean up m_windowToStateKey entries for released windows BEFORE emitting
@@ -2280,6 +2242,39 @@ void AutotileEngine::windowFocused(const QString& rawWindowId, const QString& sc
     }
 
     onWindowFocused(windowId);
+}
+
+void AutotileEngine::releaseScreenStateForTeardown(const QString& screenId, PhosphorTiles::TilingState* state,
+                                                   QStringList& releasedWindows)
+{
+    // Snapshot each window's autotile slot into the unified record BEFORE the
+    // PhosphorTiles::TilingState is torn down — the record is the SINGLE
+    // source of truth for cross-mode state (no parallel saved-floating set).
+    // capturePlacement records a USER float as floating and a tiled/overflow
+    // window as tiled (so it re-tiles on re-entry); the shared free geometry
+    // rides from the engine's own float-back cache.
+    const QStringList tiled = state->tiledWindows();
+    const QStringList floated = state->floatingWindows();
+    if (m_windowTracker) {
+        for (const QString& wid : floated + tiled) {
+            auto rec = capturePlacement(wid);
+            if (!rec) {
+                continue;
+            }
+            m_windowTracker->placementStore().record(*rec);
+        }
+    }
+    // Drop the overflow set AFTER capture: capturePlacement's
+    // overflow-vs-user-float discriminator (isOverflow) must still see this
+    // screen's overflow windows, or they'd be mis-recorded as user floats and
+    // stick floating instead of re-tiling on re-entry.
+    m_overflow.takeForScreen(screenId);
+    releasedWindows.append(tiled);
+    releasedWindows.append(floated);
+    m_pendingInitialOrders.remove(screenId);
+    m_pendingOrderGeneration.remove(screenId);
+    m_strictInitialOrderScreens.remove(screenId);
+    state->deleteLater();
 }
 
 void AutotileEngine::migrateWindowBetweenKeys(const QString& windowId, const TilingStateKey& oldKey,

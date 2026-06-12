@@ -1,5 +1,5 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
-// SPDX-License-Identifier: GPL-3.0-or-later
+// SPDX-License-Identifier: LGPL-2.1-or-later
 
 // Tests for libs/phosphor-shell/qml/Phosphor/Shell/PerScreen.qml.
 // The key invariants are about delegate identity surviving ScreenModel's

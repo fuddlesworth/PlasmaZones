@@ -41,205 +41,210 @@ class TestDecorationManagerTimers : public QObject
 {
     Q_OBJECT
 
+    // Per-test fixture: a fresh fake bridge + manager before every test
+    // (init() / cleanup()). Tests shrink the fallback interval and install
+    // vetoes themselves where the scenario needs them.
+    std::unique_ptr<FakeCompositorBridge> m_bridge;
+    std::unique_ptr<DecorationManager> m_mgr;
+
 private Q_SLOTS:
+
+    void init()
+    {
+        m_bridge = std::make_unique<FakeCompositorBridge>();
+        m_mgr = std::make_unique<DecorationManager>(*m_bridge);
+    }
+
+    void cleanup()
+    {
+        // Manager references the bridge — destroy it first.
+        m_mgr.reset();
+        m_bridge.reset();
+    }
 
     void testDeferredDrainOnePerTick()
     {
-        FakeCompositorBridge bridge;
-        bridge.addWindow(QStringLiteral("a|1"));
-        bridge.addWindow(QStringLiteral("b|1"));
-        bridge.addWindow(QStringLiteral("c|1"));
-        DecorationManager mgr(bridge);
-        QSignalSpy finished(&mgr, &DecorationManager::drainFinished);
+        m_bridge->addWindow(QStringLiteral("a|1"));
+        m_bridge->addWindow(QStringLiteral("b|1"));
+        m_bridge->addWindow(QStringLiteral("c|1"));
+        QSignalSpy finished(m_mgr.get(), &DecorationManager::drainFinished);
 
         for (const QString& id : {QStringLiteral("a|1"), QStringLiteral("b|1"), QStringLiteral("c|1")}) {
-            mgr.acquire(id, DecorationManager::autotile(Screen1));
-            mgr.releaseKind(id, OwnerKind::Autotile, Restore::Deferred);
+            m_mgr->acquire(id, DecorationManager::autotile(Screen1));
+            m_mgr->releaseKind(id, OwnerKind::Autotile, Restore::Deferred);
         }
-        bridge.clearLog();
+        m_bridge->clearLog();
 
-        mgr.drainPendingRestores();
+        m_mgr->drainPendingRestores();
         // First restore runs synchronously, the rest one per event-loop tick.
-        QCOMPARE(bridge.callLog.size(), 1);
+        QCOMPARE(m_bridge->callLog.size(), 1);
         QTRY_COMPARE(finished.count(), 1);
-        QCOMPARE(bridge.callLog.size(), 3);
-        for (const QString& call : std::as_const(bridge.callLog)) {
+        QCOMPARE(m_bridge->callLog.size(), 3);
+        for (const QString& call : std::as_const(m_bridge->callLog)) {
             QVERIFY(call.endsWith(QStringLiteral(",false)")));
         }
     }
 
     void testDrainSkipsReacquired()
     {
-        FakeCompositorBridge bridge;
-        bridge.addWindow(Win1);
-        bridge.addWindow(QStringLiteral("sentinel|1"));
-        DecorationManager mgr(bridge);
-        QSignalSpy finished(&mgr, &DecorationManager::drainFinished);
+        m_bridge->addWindow(Win1);
+        m_bridge->addWindow(QStringLiteral("sentinel|1"));
+        QSignalSpy finished(m_mgr.get(), &DecorationManager::drainFinished);
 
         // A sentinel with a legitimate deferred restore forces the drain
         // chain to actually run (and emit drainFinished deterministically) —
         // without it a regressed implementation could pass by never
         // scheduling anything.
-        mgr.acquire(QStringLiteral("sentinel|1"), DecorationManager::autotile(Screen1));
-        mgr.releaseKind(QStringLiteral("sentinel|1"), OwnerKind::Autotile, Restore::Deferred);
+        m_mgr->acquire(QStringLiteral("sentinel|1"), DecorationManager::autotile(Screen1));
+        m_mgr->releaseKind(QStringLiteral("sentinel|1"), OwnerKind::Autotile, Restore::Deferred);
 
-        mgr.acquire(Win1, DecorationManager::autotile(Screen1));
-        mgr.releaseKind(Win1, OwnerKind::Autotile, Restore::Deferred);
+        m_mgr->acquire(Win1, DecorationManager::autotile(Screen1));
+        m_mgr->releaseKind(Win1, OwnerKind::Autotile, Restore::Deferred);
         // Rapid re-toggle: re-acquired before the drain runs.
-        mgr.acquire(Win1, DecorationManager::autotile(Screen1));
+        m_mgr->acquire(Win1, DecorationManager::autotile(Screen1));
 
-        bridge.clearLog();
-        mgr.drainPendingRestores();
+        m_bridge->clearLog();
+        m_mgr->drainPendingRestores();
         QTRY_COMPARE(finished.count(), 1);
         // The sentinel restored; the re-acquired window saw NO restore.
-        QVERIFY(bridge.callLog.contains(QStringLiteral("setNoBorder(sentinel|1,false)")));
-        QVERIFY(!bridge.callLog.contains(QStringLiteral("setNoBorder(app|1,false)")));
-        QVERIFY(mgr.isBorderless(Win1));
-        QCOMPARE(bridge.window(Win1)->noBorder, true);
+        QVERIFY(m_bridge->callLog.contains(QStringLiteral("setNoBorder(sentinel|1,false)")));
+        QVERIFY(!m_bridge->callLog.contains(QStringLiteral("setNoBorder(app|1,false)")));
+        QVERIFY(m_mgr->isBorderless(Win1));
+        QCOMPARE(m_bridge->window(Win1)->noBorder, true);
     }
 
     void testDrainRestoreVetoRequeuesUntilVetoLifts()
     {
-        FakeCompositorBridge bridge;
-        bridge.addWindow(Win1);
-        DecorationManager mgr(bridge);
-        QSignalSpy finished(&mgr, &DecorationManager::drainFinished);
+        m_bridge->addWindow(Win1);
+        QSignalSpy finished(m_mgr.get(), &DecorationManager::drainFinished);
         bool vetoActive = true; // screen re-entered autotile
-        mgr.setRestoreVeto([&vetoActive](const QString&) {
+        m_mgr->setRestoreVeto([&vetoActive](const QString&) {
             return vetoActive;
         });
 
-        mgr.acquire(Win1, DecorationManager::autotile(Screen1));
-        mgr.releaseKind(Win1, OwnerKind::Autotile, Restore::Deferred);
-        bridge.clearLog();
+        m_mgr->acquire(Win1, DecorationManager::autotile(Screen1));
+        m_mgr->releaseKind(Win1, OwnerKind::Autotile, Restore::Deferred);
+        m_bridge->clearLog();
 
-        mgr.drainPendingRestores();
+        m_mgr->drainPendingRestores();
         // An all-vetoed chain restores nothing and therefore does NOT emit
         // drainFinished (a rebuild would be pure churn). Let the chain run.
         QTest::qWait(50);
         QCOMPARE(finished.count(), 0);
-        QVERIFY(bridge.callLog.isEmpty());
-        QCOMPARE(bridge.window(Win1)->noBorder, true); // stays hidden
+        QVERIFY(m_bridge->callLog.isEmpty());
+        QCOMPARE(m_bridge->window(Win1)->noBorder, true); // stays hidden
 
         // The vetoed restore stays QUEUED — when the veto lifts (the
         // expected re-acquire never landed) the next drain restores instead
         // of stranding an ownerless hidden window forever.
         vetoActive = false;
-        mgr.drainPendingRestores();
+        m_mgr->drainPendingRestores();
         QTRY_COMPARE(finished.count(), 1);
-        QCOMPARE(bridge.window(Win1)->noBorder, false);
-        QVERIFY(!mgr.isOwned(Win1));
+        QCOMPARE(m_bridge->window(Win1)->noBorder, false);
+        QVERIFY(!m_mgr->isOwned(Win1));
     }
 
     void testVetoRequeuedRestoreCancelledByReacquire()
     {
-        FakeCompositorBridge bridge;
-        bridge.addWindow(Win1);
-        DecorationManager mgr(bridge);
-        mgr.setFallbackIntervalForTesting(TestFallbackMs);
-        mgr.setRestoreVeto([](const QString&) {
+        m_bridge->addWindow(Win1);
+        m_mgr->setFallbackIntervalForTesting(TestFallbackMs);
+        m_mgr->setRestoreVeto([](const QString&) {
             return true;
         });
 
-        mgr.acquire(Win1, DecorationManager::autotile(Screen1));
-        mgr.releaseKind(Win1, OwnerKind::Autotile, Restore::Deferred);
-        mgr.drainPendingRestores(); // vetoed → re-queued + fallback armed
+        m_mgr->acquire(Win1, DecorationManager::autotile(Screen1));
+        m_mgr->releaseKind(Win1, OwnerKind::Autotile, Restore::Deferred);
+        m_mgr->drainPendingRestores(); // vetoed → re-queued + fallback armed
         QTest::qWait(10); // let the chain finish
 
         // The expected re-acquire lands: it cancels the re-queued restore.
-        mgr.acquire(Win1, DecorationManager::autotile(Screen1));
-        bridge.clearLog();
+        m_mgr->acquire(Win1, DecorationManager::autotile(Screen1));
+        m_bridge->clearLog();
 
         // The armed fallback fires into an empty queue and self-cancels —
         // the window must stay hidden under the new claim.
         QTest::qWait(TestFallbackMs * 4);
-        QVERIFY(!bridge.callLog.contains(QStringLiteral("setNoBorder(app|1,false)")));
-        QVERIFY(mgr.isBorderless(Win1));
-        QCOMPARE(bridge.window(Win1)->noBorder, true);
+        QVERIFY(!m_bridge->callLog.contains(QStringLiteral("setNoBorder(app|1,false)")));
+        QVERIFY(m_mgr->isBorderless(Win1));
+        QCOMPARE(m_bridge->window(Win1)->noBorder, true);
     }
 
     void testVetoOverriddenAfterRetryBound()
     {
-        FakeCompositorBridge bridge;
-        bridge.addWindow(Win1);
-        DecorationManager mgr(bridge);
-        mgr.setFallbackIntervalForTesting(TestFallbackMs);
+        m_bridge->addWindow(Win1);
+        m_mgr->setFallbackIntervalForTesting(TestFallbackMs);
         int vetoCalls = 0;
-        mgr.setRestoreVeto([&vetoCalls](const QString&) {
+        m_mgr->setRestoreVeto([&vetoCalls](const QString&) {
             ++vetoCalls;
             return true; // never lifts — the prediction is simply wrong
         });
 
-        mgr.acquire(Win1, DecorationManager::autotile(Screen1));
-        mgr.releaseKind(Win1, OwnerKind::Autotile, Restore::Deferred);
+        m_mgr->acquire(Win1, DecorationManager::autotile(Screen1));
+        m_mgr->releaseKind(Win1, OwnerKind::Autotile, Restore::Deferred);
 
         // A veto that never lifts must not strand the window: after the
         // bounded number of FALLBACK retries the restore happens anyway —
         // the (MaxVetoRetries+1)th fallback cycle overrides.
-        QTRY_COMPARE(bridge.window(Win1)->noBorder, false);
+        QTRY_COMPARE(m_bridge->window(Win1)->noBorder, false);
         QCOMPARE(vetoCalls, ExpectedMaxVetoRetries + 1);
-        QVERIFY(!mgr.isOwned(Win1));
+        QVERIFY(!m_mgr->isOwned(Win1));
     }
 
     void testVetoRetryBudgetResetsPerEpoch()
     {
-        FakeCompositorBridge bridge;
-        bridge.addWindow(Win1);
-        DecorationManager mgr(bridge);
-        mgr.setFallbackIntervalForTesting(TestFallbackMs);
+        m_bridge->addWindow(Win1);
+        m_mgr->setFallbackIntervalForTesting(TestFallbackMs);
         int vetoCalls = 0;
-        mgr.setRestoreVeto([&vetoCalls](const QString&) {
+        m_mgr->setRestoreVeto([&vetoCalls](const QString&) {
             ++vetoCalls;
             return true;
         });
 
         // First epoch: burn part of the retry budget via fallback cycles.
-        mgr.acquire(Win1, DecorationManager::autotile(Screen1));
-        mgr.releaseKind(Win1, OwnerKind::Autotile, Restore::Deferred);
+        m_mgr->acquire(Win1, DecorationManager::autotile(Screen1));
+        m_mgr->releaseKind(Win1, OwnerKind::Autotile, Restore::Deferred);
         QTRY_VERIFY(vetoCalls >= 2);
 
         // Cancel the epoch (re-acquire), then let any in-flight chain/timer
         // settle against the now-empty queue so epoch 2's count is clean.
-        mgr.acquire(Win1, DecorationManager::autotile(Screen1));
+        m_mgr->acquire(Win1, DecorationManager::autotile(Screen1));
         QTest::qWait(TestFallbackMs * 3);
 
         // Fresh deferred epoch: the counter must restart — a budget
         // inherited from the cancelled epoch would override the veto early
         // and flicker the decoration.
         const int callsAtSecondEpoch = vetoCalls;
-        mgr.releaseKind(Win1, OwnerKind::Autotile, Restore::Deferred);
-        QTRY_COMPARE(bridge.window(Win1)->noBorder, false);
+        m_mgr->releaseKind(Win1, OwnerKind::Autotile, Restore::Deferred);
+        QTRY_COMPARE(m_bridge->window(Win1)->noBorder, false);
         QCOMPARE(vetoCalls - callsAtSecondEpoch, ExpectedMaxVetoRetries + 1);
     }
 
     void testForceShowCancelsQueuedRestore()
     {
-        FakeCompositorBridge bridge;
-        bridge.addWindow(Win1);
-        DecorationManager mgr(bridge);
-        QSignalSpy restored(&mgr, &DecorationManager::windowDecorationRestored);
+        m_bridge->addWindow(Win1);
+        QSignalSpy restored(m_mgr.get(), &DecorationManager::windowDecorationRestored);
 
-        mgr.acquire(Win1, DecorationManager::snap(Screen1));
-        mgr.releaseKind(Win1, OwnerKind::Snap, Restore::Deferred);
+        m_mgr->acquire(Win1, DecorationManager::snap(Screen1));
+        m_mgr->releaseKind(Win1, OwnerKind::Snap, Restore::Deferred);
 
         // A force-show rule arrives while the restore is queued: the veto
         // restores synchronously AND cancels the queued entry — without the
         // cancel, the next drain would restore a second time (duplicate
         // setNoBorder(false) + duplicate signal).
-        mgr.setRuleOverride(Win1, false);
+        m_mgr->setRuleOverride(Win1, false);
         QCOMPARE(restored.count(), 1);
-        mgr.drainPendingRestores();
+        m_mgr->drainPendingRestores();
         QTest::qWait(10);
         QCOMPARE(restored.count(), 1);
-        QCOMPARE(bridge.callLog.filter(QStringLiteral("setNoBorder(app|1,false)")).size(), 1);
+        QCOMPARE(m_bridge->callLog.filter(QStringLiteral("setNoBorder(app|1,false)")).size(), 1);
     }
 
     void testDestructionMidDrainIsSafe()
     {
-        FakeCompositorBridge bridge;
-        bridge.addWindow(QStringLiteral("a|1"));
-        bridge.addWindow(QStringLiteral("b|1"));
-        auto mgr = std::make_unique<DecorationManager>(bridge);
+        m_bridge->addWindow(QStringLiteral("a|1"));
+        m_bridge->addWindow(QStringLiteral("b|1"));
+        // Own manager (not the fixture's) — this test destroys it mid-drain.
+        auto mgr = std::make_unique<DecorationManager>(*m_bridge);
 
         mgr->acquire(QStringLiteral("a|1"), DecorationManager::autotile(Screen1));
         mgr->acquire(QStringLiteral("b|1"), DecorationManager::autotile(Screen1));
@@ -252,46 +257,42 @@ private Q_SLOTS:
         // (leak half is ASAN/LSAN-visible) — observable here: no stray
         // compositor call after destruction.
         mgr->drainPendingRestores();
-        const int callsBeforeDestruction = bridge.callLog.size();
+        const int callsBeforeDestruction = m_bridge->callLog.size();
         mgr.reset();
         QTest::qWait(50);
-        QCOMPARE(bridge.callLog.size(), callsBeforeDestruction);
+        QCOMPARE(m_bridge->callLog.size(), callsBeforeDestruction);
     }
 
     void testRestoreAllDuringDrainDoesNotDoubleRestore()
     {
-        FakeCompositorBridge bridge;
-        bridge.addWindow(QStringLiteral("a|1"));
-        bridge.addWindow(QStringLiteral("b|1"));
-        DecorationManager mgr(bridge);
+        m_bridge->addWindow(QStringLiteral("a|1"));
+        m_bridge->addWindow(QStringLiteral("b|1"));
 
-        mgr.acquire(QStringLiteral("a|1"), DecorationManager::autotile(Screen1));
-        mgr.acquire(QStringLiteral("b|1"), DecorationManager::autotile(Screen1));
-        mgr.releaseKind(QStringLiteral("a|1"), OwnerKind::Autotile, Restore::Deferred);
-        mgr.releaseKind(QStringLiteral("b|1"), OwnerKind::Autotile, Restore::Deferred);
+        m_mgr->acquire(QStringLiteral("a|1"), DecorationManager::autotile(Screen1));
+        m_mgr->acquire(QStringLiteral("b|1"), DecorationManager::autotile(Screen1));
+        m_mgr->releaseKind(QStringLiteral("a|1"), OwnerKind::Autotile, Restore::Deferred);
+        m_mgr->releaseKind(QStringLiteral("b|1"), OwnerKind::Autotile, Restore::Deferred);
 
         // The drain restores one window synchronously; restoreAll() then
         // clears all tracking before the chain's second tick — that tick
         // must find its entry gone and skip, not restore twice.
-        mgr.drainPendingRestores();
-        mgr.restoreAll();
+        m_mgr->drainPendingRestores();
+        m_mgr->restoreAll();
         QTest::qWait(50);
-        const int aRestores = bridge.callLog.filter(QStringLiteral("setNoBorder(a|1,false)")).size();
-        const int bRestores = bridge.callLog.filter(QStringLiteral("setNoBorder(b|1,false)")).size();
+        const int aRestores = m_bridge->callLog.filter(QStringLiteral("setNoBorder(a|1,false)")).size();
+        const int bRestores = m_bridge->callLog.filter(QStringLiteral("setNoBorder(b|1,false)")).size();
         QCOMPARE(aRestores, 1);
         QCOMPARE(bRestores, 1);
     }
 
     void testWindowGoneWithoutForgetIsSkippedAndPruned()
     {
-        FakeCompositorBridge bridge;
-        bridge.addWindow(Win1);
-        DecorationManager mgr(bridge);
-        QSignalSpy restored(&mgr, &DecorationManager::windowDecorationRestored);
-        QSignalSpy finished(&mgr, &DecorationManager::drainFinished);
+        m_bridge->addWindow(Win1);
+        QSignalSpy restored(m_mgr.get(), &DecorationManager::windowDecorationRestored);
+        QSignalSpy finished(m_mgr.get(), &DecorationManager::drainFinished);
 
-        mgr.acquire(Win1, DecorationManager::autotile(Screen1));
-        mgr.releaseKind(Win1, OwnerKind::Autotile, Restore::Deferred);
+        m_mgr->acquire(Win1, DecorationManager::autotile(Screen1));
+        m_mgr->releaseKind(Win1, OwnerKind::Autotile, Restore::Deferred);
 
         // The window vanishes without a forgetWindow (defensive path —
         // production always forgets on close): the drain step must perform
@@ -300,72 +301,66 @@ private Q_SLOTS:
         // fire drainFinished either (the effect would rebuild every border
         // for nothing — the signal doc's "zero decorations changed → emits
         // nothing" contract).
-        bridge.removeWindow(Win1);
-        bridge.clearLog();
-        mgr.drainPendingRestores();
+        m_bridge->removeWindow(Win1);
+        m_bridge->clearLog();
+        m_mgr->drainPendingRestores();
         QTest::qWait(50);
-        QVERIFY(bridge.callLog.isEmpty());
+        QVERIFY(m_bridge->callLog.isEmpty());
         QCOMPARE(restored.count(), 0);
         QCOMPARE(finished.count(), 0);
-        QVERIFY(!mgr.isOwned(Win1));
-        QVERIFY(!mgr.isBorderless(Win1));
+        QVERIFY(!m_mgr->isOwned(Win1));
+        QVERIFY(!m_mgr->isBorderless(Win1));
     }
 
     void testFallbackTimerDrains()
     {
-        FakeCompositorBridge bridge;
-        bridge.addWindow(Win1);
-        DecorationManager mgr(bridge);
-        mgr.setFallbackIntervalForTesting(TestFallbackMs);
+        m_bridge->addWindow(Win1);
+        m_mgr->setFallbackIntervalForTesting(TestFallbackMs);
 
-        mgr.acquire(Win1, DecorationManager::autotile(Screen1));
-        mgr.releaseKind(Win1, OwnerKind::Autotile, Restore::Deferred);
+        m_mgr->acquire(Win1, DecorationManager::autotile(Screen1));
+        m_mgr->releaseKind(Win1, OwnerKind::Autotile, Restore::Deferred);
         // Nobody calls drainPendingRestores() — the fallback must.
-        QTRY_COMPARE(bridge.window(Win1)->noBorder, false);
+        QTRY_COMPARE(m_bridge->window(Win1)->noBorder, false);
     }
 
     void testReleaseAllOfKindDeferredDrains()
     {
-        FakeCompositorBridge bridge;
-        bridge.addWindow(QStringLiteral("a|1"));
-        bridge.addWindow(QStringLiteral("b|1"));
-        DecorationManager mgr(bridge);
-        QSignalSpy finished(&mgr, &DecorationManager::drainFinished);
+        m_bridge->addWindow(QStringLiteral("a|1"));
+        m_bridge->addWindow(QStringLiteral("b|1"));
+        QSignalSpy finished(m_mgr.get(), &DecorationManager::drainFinished);
 
-        mgr.acquire(QStringLiteral("a|1"), DecorationManager::autotile(Screen1));
-        mgr.acquire(QStringLiteral("b|1"), DecorationManager::autotile(Screen1));
+        m_mgr->acquire(QStringLiteral("a|1"), DecorationManager::autotile(Screen1));
+        m_mgr->acquire(QStringLiteral("b|1"), DecorationManager::autotile(Screen1));
 
         // The settings-toggle-off path: deferred release + immediate drain
         // keeps each restore on its own event-loop tick.
-        mgr.releaseAllOfKind(OwnerKind::Autotile, Restore::Deferred);
-        QCOMPARE(bridge.window(QStringLiteral("a|1"))->noBorder, true); // not yet
-        mgr.drainPendingRestores();
+        m_mgr->releaseAllOfKind(OwnerKind::Autotile, Restore::Deferred);
+        QCOMPARE(m_bridge->window(QStringLiteral("a|1"))->noBorder, true); // not yet
+        m_mgr->drainPendingRestores();
         QTRY_COMPARE(finished.count(), 1);
-        QCOMPARE(bridge.window(QStringLiteral("a|1"))->noBorder, false);
-        QCOMPARE(bridge.window(QStringLiteral("b|1"))->noBorder, false);
+        QCOMPARE(m_bridge->window(QStringLiteral("a|1"))->noBorder, false);
+        QCOMPARE(m_bridge->window(QStringLiteral("b|1"))->noBorder, false);
     }
 
     void testDrainMixedDeadAndLiveEmitsOnce()
     {
-        FakeCompositorBridge bridge;
-        bridge.addWindow(QStringLiteral("a|1"));
-        bridge.addWindow(QStringLiteral("b|1"));
-        DecorationManager mgr(bridge);
-        QSignalSpy finished(&mgr, &DecorationManager::drainFinished);
+        m_bridge->addWindow(QStringLiteral("a|1"));
+        m_bridge->addWindow(QStringLiteral("b|1"));
+        QSignalSpy finished(m_mgr.get(), &DecorationManager::drainFinished);
 
-        mgr.acquire(QStringLiteral("a|1"), DecorationManager::autotile(Screen1));
-        mgr.acquire(QStringLiteral("b|1"), DecorationManager::autotile(Screen1));
-        mgr.releaseKind(QStringLiteral("a|1"), OwnerKind::Autotile, Restore::Deferred);
-        mgr.releaseKind(QStringLiteral("b|1"), OwnerKind::Autotile, Restore::Deferred);
+        m_mgr->acquire(QStringLiteral("a|1"), DecorationManager::autotile(Screen1));
+        m_mgr->acquire(QStringLiteral("b|1"), DecorationManager::autotile(Screen1));
+        m_mgr->releaseKind(QStringLiteral("a|1"), OwnerKind::Autotile, Restore::Deferred);
+        m_mgr->releaseKind(QStringLiteral("b|1"), OwnerKind::Autotile, Restore::Deferred);
 
         // One window dies before the drain: the chain sweeps it with zero
         // physical work, restores the survivor, and that single real restore
         // makes the chain emit drainFinished exactly once — the middle
         // ground between the all-dead (no emit) and all-live (one emit)
         // extremes.
-        bridge.removeWindow(QStringLiteral("a|1"));
-        mgr.drainPendingRestores();
-        QTRY_COMPARE(bridge.window(QStringLiteral("b|1"))->noBorder, false);
+        m_bridge->removeWindow(QStringLiteral("a|1"));
+        m_mgr->drainPendingRestores();
+        QTRY_COMPARE(m_bridge->window(QStringLiteral("b|1"))->noBorder, false);
         QTRY_COMPARE(finished.count(), 1);
         QTest::qWait(30); // absence check: no second emission follows
         QCOMPARE(finished.count(), 1);
@@ -373,57 +368,53 @@ private Q_SLOTS:
 
     void testRestoreAllFlushesQueuedDeferred()
     {
-        FakeCompositorBridge bridge;
-        bridge.addWindow(QStringLiteral("a|1"));
-        bridge.addWindow(QStringLiteral("b|1"));
-        DecorationManager mgr(bridge);
-        mgr.setFallbackIntervalForTesting(TestFallbackMs);
-        QSignalSpy restored(&mgr, &DecorationManager::windowDecorationRestored);
+        m_bridge->addWindow(QStringLiteral("a|1"));
+        m_bridge->addWindow(QStringLiteral("b|1"));
+        m_mgr->setFallbackIntervalForTesting(TestFallbackMs);
+        QSignalSpy restored(m_mgr.get(), &DecorationManager::windowDecorationRestored);
 
-        mgr.acquire(QStringLiteral("a|1"), DecorationManager::autotile(Screen1));
-        mgr.acquire(QStringLiteral("b|1"), DecorationManager::autotile(Screen1));
-        mgr.releaseKind(QStringLiteral("a|1"), OwnerKind::Autotile, Restore::Deferred);
+        m_mgr->acquire(QStringLiteral("a|1"), DecorationManager::autotile(Screen1));
+        m_mgr->acquire(QStringLiteral("b|1"), DecorationManager::autotile(Screen1));
+        m_mgr->releaseKind(QStringLiteral("a|1"), OwnerKind::Autotile, Restore::Deferred);
 
         // Teardown with a deferred restore still queued: everything restores
         // synchronously, the per-window signal fires for each, and no
         // fallback-timer activity remains afterwards.
-        mgr.restoreAll();
-        QCOMPARE(bridge.window(QStringLiteral("a|1"))->noBorder, false);
-        QCOMPARE(bridge.window(QStringLiteral("b|1"))->noBorder, false);
+        m_mgr->restoreAll();
+        QCOMPARE(m_bridge->window(QStringLiteral("a|1"))->noBorder, false);
+        QCOMPARE(m_bridge->window(QStringLiteral("b|1"))->noBorder, false);
         QCOMPARE(restored.count(), 2);
-        const int callsAfterRestoreAll = bridge.callLog.size();
+        const int callsAfterRestoreAll = m_bridge->callLog.size();
         QTest::qWait(TestFallbackMs * 4); // past the fallback interval
-        QCOMPARE(bridge.callLog.size(), callsAfterRestoreAll);
+        QCOMPARE(m_bridge->callLog.size(), callsAfterRestoreAll);
     }
 
     void testForgetWindowMidDrainSkipsIt()
     {
-        FakeCompositorBridge bridge;
-        bridge.addWindow(QStringLiteral("a|1"));
-        bridge.addWindow(QStringLiteral("b|1"));
-        DecorationManager mgr(bridge);
-        QSignalSpy finished(&mgr, &DecorationManager::drainFinished);
+        m_bridge->addWindow(QStringLiteral("a|1"));
+        m_bridge->addWindow(QStringLiteral("b|1"));
+        QSignalSpy finished(m_mgr.get(), &DecorationManager::drainFinished);
 
-        mgr.acquire(QStringLiteral("a|1"), DecorationManager::autotile(Screen1));
-        mgr.acquire(QStringLiteral("b|1"), DecorationManager::autotile(Screen1));
-        mgr.releaseKind(QStringLiteral("a|1"), OwnerKind::Autotile, Restore::Deferred);
-        mgr.releaseKind(QStringLiteral("b|1"), OwnerKind::Autotile, Restore::Deferred);
-        bridge.clearLog();
+        m_mgr->acquire(QStringLiteral("a|1"), DecorationManager::autotile(Screen1));
+        m_mgr->acquire(QStringLiteral("b|1"), DecorationManager::autotile(Screen1));
+        m_mgr->releaseKind(QStringLiteral("a|1"), OwnerKind::Autotile, Restore::Deferred);
+        m_mgr->releaseKind(QStringLiteral("b|1"), OwnerKind::Autotile, Restore::Deferred);
+        m_bridge->clearLog();
 
         // Start the drain: the first step runs synchronously and restores
         // ONE window; the other is still held in the chain's snapshot.
-        mgr.drainPendingRestores();
-        QCOMPARE(bridge.callLog.size(), 1);
+        m_mgr->drainPendingRestores();
+        QCOMPARE(m_bridge->callLog.size(), 1);
 
         // The still-queued window closes MID-DRAIN. The in-flight snapshot
         // still holds its id — the next step must skip it via the entry
         // lookup rather than restore a forgotten window.
         const QString stillQueued =
-            bridge.callLog.first().contains(QStringLiteral("a|1")) ? QStringLiteral("b|1") : QStringLiteral("a|1");
-        mgr.forgetWindow(stillQueued);
+            m_bridge->callLog.first().contains(QStringLiteral("a|1")) ? QStringLiteral("b|1") : QStringLiteral("a|1");
+        m_mgr->forgetWindow(stillQueued);
         QTRY_COMPARE(finished.count(), 1);
-        QCOMPARE(bridge.callLog.size(), 1); // no second restore happened
-        QVERIFY(!bridge.callLog.contains(QStringLiteral("setNoBorder(%1,false)").arg(stillQueued)));
+        QCOMPARE(m_bridge->callLog.size(), 1); // no second restore happened
+        QVERIFY(!m_bridge->callLog.contains(QStringLiteral("setNoBorder(%1,false)").arg(stillQueued)));
     }
 };
 

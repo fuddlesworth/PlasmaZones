@@ -1,5 +1,5 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
-// SPDX-License-Identifier: GPL-3.0-or-later
+// SPDX-License-Identifier: LGPL-2.1-or-later
 //
 // Facade test for the public IdleService. The compositor-driven idle advance
 // needs a live session, but the wiring that does not (stage configuration round

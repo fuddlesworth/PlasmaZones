@@ -21,6 +21,8 @@
 
 #include "fake_compositor_bridge.h"
 
+#include <memory>
+
 using PhosphorCompositor::DecorationManager;
 using OwnerKind = PhosphorCompositor::DecorationManager::OwnerKind;
 using Placement = PhosphorCompositor::DecorationManager::Placement;
@@ -37,489 +39,461 @@ class TestDecorationManager : public QObject
 {
     Q_OBJECT
 
+    // Per-test fixture: a fresh fake bridge + manager before every test
+    // (init() / cleanup()). Tests add their own windows; the heap-manager
+    // destruction test constructs its own manager against m_bridge.
+    std::unique_ptr<FakeCompositorBridge> m_bridge;
+    std::unique_ptr<DecorationManager> m_mgr;
+
 private Q_SLOTS:
+
+    void init()
+    {
+        m_bridge = std::make_unique<FakeCompositorBridge>();
+        m_mgr = std::make_unique<DecorationManager>(*m_bridge);
+    }
+
+    void cleanup()
+    {
+        // Manager references the bridge — destroy it first.
+        m_mgr.reset();
+        m_bridge.reset();
+    }
 
     void testRefcounting()
     {
-        FakeCompositorBridge bridge;
-        bridge.addWindow(Win1);
-        DecorationManager mgr(bridge);
+        m_bridge->addWindow(Win1);
 
-        mgr.acquire(Win1, DecorationManager::autotile(Screen1), Placement::CallerWillPlace);
-        QVERIFY(mgr.isBorderless(Win1));
-        QCOMPARE(bridge.callLog, QStringList{QStringLiteral("setNoBorder(app|1,true)")});
+        m_mgr->acquire(Win1, DecorationManager::autotile(Screen1), Placement::CallerWillPlace);
+        QVERIFY(m_mgr->isBorderless(Win1));
+        QCOMPARE(m_bridge->callLog, QStringList{QStringLiteral("setNoBorder(app|1,true)")});
 
         // Second owner: bookkeeping only, no second physical hide.
-        mgr.acquire(Win1, DecorationManager::snap(Screen1), Placement::AlreadyPlaced);
-        QCOMPARE(bridge.callLog.size(), 1);
+        m_mgr->acquire(Win1, DecorationManager::snap(Screen1), Placement::AlreadyPlaced);
+        QCOMPARE(m_bridge->callLog.size(), 1);
 
         // First release: an owner remains, decoration stays hidden.
-        mgr.release(Win1, DecorationManager::autotile(Screen1));
-        QVERIFY(mgr.isBorderless(Win1));
-        QCOMPARE(bridge.callLog.size(), 1);
+        m_mgr->release(Win1, DecorationManager::autotile(Screen1));
+        QVERIFY(m_mgr->isBorderless(Win1));
+        QCOMPARE(m_bridge->callLog.size(), 1);
 
         // Last release: exactly one restore.
-        mgr.release(Win1, DecorationManager::snap(Screen1));
-        QVERIFY(!mgr.isBorderless(Win1));
-        QVERIFY(!mgr.isOwned(Win1));
-        QCOMPARE(bridge.callLog.last(), QStringLiteral("setNoBorder(app|1,false)"));
-        QCOMPARE(bridge.window(Win1)->noBorder, false);
+        m_mgr->release(Win1, DecorationManager::snap(Screen1));
+        QVERIFY(!m_mgr->isBorderless(Win1));
+        QVERIFY(!m_mgr->isOwned(Win1));
+        QCOMPARE(m_bridge->callLog.last(), QStringLiteral("setNoBorder(app|1,false)"));
+        QCOMPARE(m_bridge->window(Win1)->noBorder, false);
     }
 
     void testPerScreenGranularityAndTransfer()
     {
-        FakeCompositorBridge bridge;
-        bridge.addWindow(Win1);
-        DecorationManager mgr(bridge);
+        m_bridge->addWindow(Win1);
 
-        mgr.acquire(Win1, DecorationManager::autotile(Screen1));
-        mgr.acquire(Win1, DecorationManager::autotile(Screen2));
-        QCOMPARE(bridge.window(Win1)->noBorder, true);
+        m_mgr->acquire(Win1, DecorationManager::autotile(Screen1));
+        m_mgr->acquire(Win1, DecorationManager::autotile(Screen2));
+        QCOMPARE(m_bridge->window(Win1)->noBorder, true);
 
         // Releasing one screen's claim keeps the sibling's intact.
-        mgr.release(Win1, DecorationManager::autotile(Screen1));
-        QVERIFY(mgr.isBorderless(Win1));
+        m_mgr->release(Win1, DecorationManager::autotile(Screen1));
+        QVERIFY(m_mgr->isBorderless(Win1));
 
         // Cross-screen transfer: drop everything except the target screen —
         // never a physical toggle.
-        bridge.clearLog();
-        mgr.releaseOthersOfKind(Win1, OwnerKind::Autotile, Screen2);
-        QVERIFY(bridge.callLog.isEmpty());
-        QVERIFY(mgr.isOwnedBy(Win1, DecorationManager::autotile(Screen2)));
+        m_bridge->clearLog();
+        m_mgr->releaseOthersOfKind(Win1, OwnerKind::Autotile, Screen2);
+        QVERIFY(m_bridge->callLog.isEmpty());
+        QVERIFY(m_mgr->isOwnedBy(Win1, DecorationManager::autotile(Screen2)));
 
-        mgr.releaseKind(Win1, OwnerKind::Autotile);
-        QCOMPARE(bridge.window(Win1)->noBorder, false);
+        m_mgr->releaseKind(Win1, OwnerKind::Autotile);
+        QCOMPARE(m_bridge->window(Win1)->noBorder, false);
     }
 
     void testCsdIntentOnly()
     {
-        FakeCompositorBridge bridge;
-        auto* fw = bridge.addWindow(Win1);
+        auto* fw = m_bridge->addWindow(Win1);
         // userCanSetNoBorder alone gates eligibility — the manager never
         // reads hasDecoration (the CSD/SSD distinction is folded into the
         // toggleability test).
         fw->userCanSetNoBorder = false; // GTK/Electron CSD
-        DecorationManager mgr(bridge);
 
-        mgr.acquire(Win1, DecorationManager::autotile(Screen1));
-        QVERIFY(mgr.isOwned(Win1));
-        QVERIFY(!mgr.isBorderless(Win1));
-        QVERIFY(bridge.callLog.isEmpty());
+        m_mgr->acquire(Win1, DecorationManager::autotile(Screen1));
+        QVERIFY(m_mgr->isOwned(Win1));
+        QVERIFY(!m_mgr->isBorderless(Win1));
+        QVERIFY(m_bridge->callLog.isEmpty());
 
-        mgr.releaseKind(Win1, OwnerKind::Autotile);
-        mgr.restoreAll();
-        QVERIFY(bridge.callLog.isEmpty()); // never physically touched
+        m_mgr->releaseKind(Win1, OwnerKind::Autotile);
+        m_mgr->restoreAll();
+        QVERIFY(m_bridge->callLog.isEmpty()); // never physically touched
     }
 
     void testAlreadyBorderlessPreserved()
     {
-        FakeCompositorBridge bridge;
-        auto* fw = bridge.addWindow(Win1);
+        auto* fw = m_bridge->addWindow(Win1);
         fw->noBorder = true; // user's own compositor rule made it borderless
-        DecorationManager mgr(bridge);
 
-        mgr.acquire(Win1, DecorationManager::snap(Screen1));
-        QVERIFY(bridge.callLog.isEmpty()); // nothing to hide
+        m_mgr->acquire(Win1, DecorationManager::snap(Screen1));
+        QVERIFY(m_bridge->callLog.isEmpty()); // nothing to hide
 
         // Release restores to PRIOR state — which was borderless: no call.
-        mgr.releaseKind(Win1, OwnerKind::Snap);
-        QVERIFY(bridge.callLog.isEmpty());
-        QCOMPARE(bridge.window(Win1)->noBorder, true);
+        m_mgr->releaseKind(Win1, OwnerKind::Snap);
+        QVERIFY(m_bridge->callLog.isEmpty());
+        QCOMPARE(m_bridge->window(Win1)->noBorder, true);
     }
 
     void testAutotileToSnapHandoff()
     {
-        FakeCompositorBridge bridge;
-        bridge.addWindow(Win1);
-        DecorationManager mgr(bridge);
+        m_bridge->addWindow(Win1);
 
         // Autotile hides; the window then arrives at snap already borderless.
-        mgr.acquire(Win1, DecorationManager::autotile(Screen1), Placement::CallerWillPlace);
-        mgr.acquire(Win1, DecorationManager::snap(Screen1), Placement::AlreadyPlaced);
-        mgr.releaseKind(Win1, OwnerKind::Autotile);
+        m_mgr->acquire(Win1, DecorationManager::autotile(Screen1), Placement::CallerWillPlace);
+        m_mgr->acquire(Win1, DecorationManager::snap(Screen1), Placement::AlreadyPlaced);
+        m_mgr->releaseKind(Win1, OwnerKind::Autotile);
 
         // Decoration stayed hidden through the handoff: one hide, no restore.
-        const int restores = bridge.callLog.filter(QStringLiteral("setNoBorder(app|1,false)")).size();
+        const int restores = m_bridge->callLog.filter(QStringLiteral("setNoBorder(app|1,false)")).size();
         QCOMPARE(restores, 0);
-        QVERIFY(mgr.isBorderless(Win1));
-        QCOMPARE(bridge.window(Win1)->noBorder, true);
+        QVERIFY(m_mgr->isBorderless(Win1));
+        QCOMPARE(m_bridge->window(Win1)->noBorder, true);
     }
 
     void testAlreadyPlacedOrdering()
     {
-        FakeCompositorBridge bridge;
-        auto* fw = bridge.addWindow(Win1);
+        auto* fw = m_bridge->addWindow(Win1);
         fw->moveResizeGeo = Zone; // the zone rect the compositor is moving toward
-        DecorationManager mgr(bridge);
 
-        mgr.acquire(Win1, DecorationManager::snap(Screen1), Placement::AlreadyPlaced);
+        m_mgr->acquire(Win1, DecorationManager::snap(Screen1), Placement::AlreadyPlaced);
         const QStringList expected{
             QStringLiteral("setNoBorder(app|1,true)"),
             QStringLiteral("moveResize(app|1,640x480)"),
         };
-        QCOMPARE(bridge.callLog, expected);
-        QCOMPARE(bridge.window(Win1)->moveResizeGeo, Zone); // re-asserted target
+        QCOMPARE(m_bridge->callLog, expected);
+        QCOMPARE(m_bridge->window(Win1)->moveResizeGeo, Zone); // re-asserted target
     }
 
     void testAlreadyPlacedDegenerateTargetSkipsReassert()
     {
-        FakeCompositorBridge bridge;
-        auto* fw = bridge.addWindow(Win1);
+        auto* fw = m_bridge->addWindow(Win1);
         fw->moveResizeGeo = QRectF(); // degenerate
-        DecorationManager mgr(bridge);
 
-        mgr.acquire(Win1, DecorationManager::snap(Screen1), Placement::AlreadyPlaced);
-        QCOMPARE(bridge.callLog, QStringList{QStringLiteral("setNoBorder(app|1,true)")});
+        m_mgr->acquire(Win1, DecorationManager::snap(Screen1), Placement::AlreadyPlaced);
+        QCOMPARE(m_bridge->callLog, QStringList{QStringLiteral("setNoBorder(app|1,true)")});
     }
 
     void testCallerWillPlaceSkipsReassert()
     {
-        FakeCompositorBridge bridge;
-        auto* fw = bridge.addWindow(Win1);
+        auto* fw = m_bridge->addWindow(Win1);
         fw->moveResizeGeo = Zone;
-        DecorationManager mgr(bridge);
 
-        mgr.acquire(Win1, DecorationManager::autotile(Screen1), Placement::CallerWillPlace);
-        QCOMPARE(bridge.callLog, QStringList{QStringLiteral("setNoBorder(app|1,true)")});
+        m_mgr->acquire(Win1, DecorationManager::autotile(Screen1), Placement::CallerWillPlace);
+        QCOMPARE(m_bridge->callLog, QStringList{QStringLiteral("setNoBorder(app|1,true)")});
     }
 
     void testStaleSnapshotRefreshedOnOwnerlessReacquire()
     {
-        FakeCompositorBridge bridge;
-        auto* fw = bridge.addWindow(Win1);
-        DecorationManager mgr(bridge);
+        auto* fw = m_bridge->addWindow(Win1);
 
         // Hide, then force-show via rule veto, then drop the owner — the
         // veto-only entry persists with the ORIGINAL snapshot
         // (priorNoBorder=false).
-        mgr.acquire(Win1, DecorationManager::snap(Screen1));
-        mgr.setRuleOverride(Win1, false);
-        mgr.releaseKind(Win1, OwnerKind::Snap);
+        m_mgr->acquire(Win1, DecorationManager::snap(Screen1));
+        m_mgr->setRuleOverride(Win1, false);
+        m_mgr->releaseKind(Win1, OwnerKind::Snap);
         QCOMPARE(fw->noBorder, false);
 
         // The user makes the window borderless THEMSELVES while we hold no
         // claim, then a mode re-acquires under the veto and the veto lifts.
         fw->noBorder = true;
-        bridge.clearLog();
-        mgr.acquire(Win1, DecorationManager::snap(Screen1));
-        mgr.setRuleOverride(Win1, std::nullopt);
+        m_bridge->clearLog();
+        m_mgr->acquire(Win1, DecorationManager::snap(Screen1));
+        m_mgr->setRuleOverride(Win1, std::nullopt);
 
         // The refreshed snapshot sees priorNoBorder=true: nothing to hide
         // (already borderless — no physical call at all), and the final
         // release must NOT force-decorate the user's window. A stale
         // snapshot would setNoBorder(false) here.
-        mgr.releaseKind(Win1, OwnerKind::Snap);
-        QVERIFY(bridge.callLog.isEmpty());
+        m_mgr->releaseKind(Win1, OwnerKind::Snap);
+        QVERIFY(m_bridge->callLog.isEmpty());
         QCOMPARE(fw->noBorder, true);
     }
 
     void testRuleHideAlsoRefreshesStaleSnapshot()
     {
-        FakeCompositorBridge bridge;
-        auto* fw = bridge.addWindow(Win1);
-        DecorationManager mgr(bridge);
+        auto* fw = m_bridge->addWindow(Win1);
 
         // Same staleness as the acquire() case, reached via the RULE path:
         // ownerless veto-only entry with priorNoBorder=false captured, then
         // the user makes the window borderless themselves.
-        mgr.acquire(Win1, DecorationManager::snap(Screen1));
-        mgr.setRuleOverride(Win1, false);
-        mgr.releaseKind(Win1, OwnerKind::Snap);
+        m_mgr->acquire(Win1, DecorationManager::snap(Screen1));
+        m_mgr->setRuleOverride(Win1, false);
+        m_mgr->releaseKind(Win1, OwnerKind::Snap);
         fw->noBorder = true;
-        bridge.clearLog();
+        m_bridge->clearLog();
 
         // A rule HIDE starts a new ownership epoch through the same refresh:
         // the fresh snapshot sees priorNoBorder=true (already borderless —
         // no physical call at all), so removing the rule must not
         // force-decorate the user's window.
-        mgr.setRuleOverride(Win1, true);
-        mgr.setRuleOverride(Win1, std::nullopt);
-        QVERIFY(bridge.callLog.isEmpty());
+        m_mgr->setRuleOverride(Win1, true);
+        m_mgr->setRuleOverride(Win1, std::nullopt);
+        QVERIFY(m_bridge->callLog.isEmpty());
         QCOMPARE(fw->noBorder, true);
     }
 
     void testResyncAfterExternalReset()
     {
-        FakeCompositorBridge bridge;
-        auto* fw = bridge.addWindow(Win1);
+        auto* fw = m_bridge->addWindow(Win1);
         fw->moveResizeGeo = Zone;
-        DecorationManager mgr(bridge);
 
-        mgr.acquire(Win1, DecorationManager::autotile(Screen1));
+        m_mgr->acquire(Win1, DecorationManager::autotile(Screen1));
         QCOMPARE(fw->noBorder, true);
 
         // KWin silently resets noBorder on a desktop switch.
         fw->noBorder = false;
-        bridge.clearLog();
-        mgr.resyncWindow(Win1);
+        m_bridge->clearLog();
+        m_mgr->resyncWindow(Win1);
         const QStringList expected{
             QStringLiteral("setNoBorder(app|1,true)"),
             QStringLiteral("moveResize(app|1,640x480)"),
         };
-        QCOMPARE(bridge.callLog, expected);
+        QCOMPARE(m_bridge->callLog, expected);
 
         // Unowned window: no-op.
-        bridge.clearLog();
-        mgr.resyncWindow(QStringLiteral("ghost|9"));
-        QVERIFY(bridge.callLog.isEmpty());
+        m_bridge->clearLog();
+        m_mgr->resyncWindow(QStringLiteral("ghost|9"));
+        QVERIFY(m_bridge->callLog.isEmpty());
     }
 
     void testVetoWinsOverOwners()
     {
-        FakeCompositorBridge bridge;
-        auto* fw = bridge.addWindow(Win1);
-        DecorationManager mgr(bridge);
+        auto* fw = m_bridge->addWindow(Win1);
 
-        mgr.acquire(Win1, DecorationManager::snap(Screen1), Placement::AlreadyPlaced);
+        m_mgr->acquire(Win1, DecorationManager::snap(Screen1), Placement::AlreadyPlaced);
         QCOMPARE(fw->noBorder, true);
         fw->moveResizeGeo = Zone;
 
         // Rule force-show: restore + geometry re-assert (window is zone-placed).
-        bridge.clearLog();
-        mgr.setRuleOverride(Win1, false);
+        m_bridge->clearLog();
+        m_mgr->setRuleOverride(Win1, false);
         const QStringList restoreSeq{
             QStringLiteral("setNoBorder(app|1,false)"),
             QStringLiteral("moveResize(app|1,640x480)"),
         };
-        QCOMPARE(bridge.callLog, restoreSeq);
-        QVERIFY(mgr.isVetoed(Win1));
-        QVERIFY(mgr.isOwned(Win1)); // mode owner persists under the veto
+        QCOMPARE(m_bridge->callLog, restoreSeq);
+        QVERIFY(m_mgr->isVetoed(Win1));
+        QVERIFY(m_mgr->isOwned(Win1)); // mode owner persists under the veto
 
         // Acquiring while vetoed must not hide.
-        bridge.clearLog();
-        mgr.acquire(Win1, DecorationManager::snap(Screen2), Placement::AlreadyPlaced);
-        QVERIFY(bridge.callLog.isEmpty());
+        m_bridge->clearLog();
+        m_mgr->acquire(Win1, DecorationManager::snap(Screen2), Placement::AlreadyPlaced);
+        QVERIFY(m_bridge->callLog.isEmpty());
 
         // Veto lifted: owners re-assert with geometry re-assert.
-        mgr.setRuleOverride(Win1, std::nullopt);
+        m_mgr->setRuleOverride(Win1, std::nullopt);
         const QStringList hideSeq{
             QStringLiteral("setNoBorder(app|1,true)"),
             QStringLiteral("moveResize(app|1,640x480)"),
         };
-        QCOMPARE(bridge.callLog, hideSeq);
-        QVERIFY(!mgr.isVetoed(Win1));
+        QCOMPARE(m_bridge->callLog, hideSeq);
+        QVERIFY(!m_mgr->isVetoed(Win1));
     }
 
     void testRuleOwnerHidesAndReleases()
     {
-        FakeCompositorBridge bridge;
-        bridge.addWindow(Win1);
-        DecorationManager mgr(bridge);
+        m_bridge->addWindow(Win1);
 
         // Rule hide on an otherwise unmanaged (floating) window.
-        mgr.setRuleOverride(Win1, true);
-        QVERIFY(mgr.isBorderless(Win1));
+        m_mgr->setRuleOverride(Win1, true);
+        QVERIFY(m_mgr->isBorderless(Win1));
 
         // Mode owner joins; rule goes away — mode keeps it hidden.
-        mgr.acquire(Win1, DecorationManager::autotile(Screen1));
-        mgr.setRuleOverride(Win1, std::nullopt);
-        QVERIFY(mgr.isBorderless(Win1));
-        QCOMPARE(bridge.window(Win1)->noBorder, true);
+        m_mgr->acquire(Win1, DecorationManager::autotile(Screen1));
+        m_mgr->setRuleOverride(Win1, std::nullopt);
+        QVERIFY(m_mgr->isBorderless(Win1));
+        QCOMPARE(m_bridge->window(Win1)->noBorder, true);
 
         // Mode releases — now it restores.
-        mgr.releaseKind(Win1, OwnerKind::Autotile);
-        QCOMPARE(bridge.window(Win1)->noBorder, false);
+        m_mgr->releaseKind(Win1, OwnerKind::Autotile);
+        QCOMPARE(m_bridge->window(Win1)->noBorder, false);
     }
 
     void testClearAllRuleOverrides()
     {
-        FakeCompositorBridge bridge;
-        bridge.addWindow(QStringLiteral("a|1"));
-        bridge.addWindow(QStringLiteral("b|1"));
-        DecorationManager mgr(bridge);
+        m_bridge->addWindow(QStringLiteral("a|1"));
+        m_bridge->addWindow(QStringLiteral("b|1"));
 
-        mgr.setRuleOverride(QStringLiteral("a|1"), true); // rule-only hide
-        mgr.acquire(QStringLiteral("b|1"), DecorationManager::snap(Screen1));
-        mgr.setRuleOverride(QStringLiteral("b|1"), true); // rule + mode
+        m_mgr->setRuleOverride(QStringLiteral("a|1"), true); // rule-only hide
+        m_mgr->acquire(QStringLiteral("b|1"), DecorationManager::snap(Screen1));
+        m_mgr->setRuleOverride(QStringLiteral("b|1"), true); // rule + mode
 
-        mgr.clearAllRuleOverrides();
-        QCOMPARE(bridge.window(QStringLiteral("a|1"))->noBorder, false); // restored
-        QCOMPARE(bridge.window(QStringLiteral("b|1"))->noBorder, true); // mode still owns
+        m_mgr->clearAllRuleOverrides();
+        QCOMPARE(m_bridge->window(QStringLiteral("a|1"))->noBorder, false); // restored
+        QCOMPARE(m_bridge->window(QStringLiteral("b|1"))->noBorder, true); // mode still owns
     }
 
     void testRestoreAllAndForget()
     {
-        FakeCompositorBridge bridge;
-        bridge.addWindow(QStringLiteral("a|1"));
-        bridge.addWindow(QStringLiteral("b|1"));
-        auto* csd = bridge.addWindow(QStringLiteral("csd|1"));
+        m_bridge->addWindow(QStringLiteral("a|1"));
+        m_bridge->addWindow(QStringLiteral("b|1"));
+        auto* csd = m_bridge->addWindow(QStringLiteral("csd|1"));
         csd->userCanSetNoBorder = false;
-        DecorationManager mgr(bridge);
 
-        mgr.acquire(QStringLiteral("a|1"), DecorationManager::autotile(Screen1));
-        mgr.acquire(QStringLiteral("b|1"), DecorationManager::snap(Screen1));
-        mgr.acquire(QStringLiteral("csd|1"), DecorationManager::autotile(Screen1));
+        m_mgr->acquire(QStringLiteral("a|1"), DecorationManager::autotile(Screen1));
+        m_mgr->acquire(QStringLiteral("b|1"), DecorationManager::snap(Screen1));
+        m_mgr->acquire(QStringLiteral("csd|1"), DecorationManager::autotile(Screen1));
 
         // forgetWindow: zero compositor calls, state dropped.
-        bridge.clearLog();
-        mgr.forgetWindow(QStringLiteral("a|1"));
-        QVERIFY(bridge.callLog.isEmpty());
-        QVERIFY(!mgr.isOwned(QStringLiteral("a|1")));
+        m_bridge->clearLog();
+        m_mgr->forgetWindow(QStringLiteral("a|1"));
+        QVERIFY(m_bridge->callLog.isEmpty());
+        QVERIFY(!m_mgr->isOwned(QStringLiteral("a|1")));
 
-        mgr.restoreAll();
-        QCOMPARE(bridge.window(QStringLiteral("b|1"))->noBorder, false);
-        QCOMPARE(bridge.window(QStringLiteral("a|1"))->noBorder, true); // forgotten — untouched
-        QVERIFY(!mgr.isOwned(QStringLiteral("b|1")));
+        m_mgr->restoreAll();
+        QCOMPARE(m_bridge->window(QStringLiteral("b|1"))->noBorder, false);
+        QCOMPARE(m_bridge->window(QStringLiteral("a|1"))->noBorder, true); // forgotten — untouched
+        QVERIFY(!m_mgr->isOwned(QStringLiteral("b|1")));
         // CSD window: still zero physical calls.
-        QVERIFY(!bridge.callLog.contains(QStringLiteral("setNoBorder(csd|1,false)")));
+        QVERIFY(!m_bridge->callLog.contains(QStringLiteral("setNoBorder(csd|1,false)")));
     }
 
     void testReleaseAllOfKindImmediate()
     {
-        FakeCompositorBridge bridge;
-        bridge.addWindow(QStringLiteral("a|1"));
-        bridge.addWindow(QStringLiteral("b|1"));
-        DecorationManager mgr(bridge);
+        m_bridge->addWindow(QStringLiteral("a|1"));
+        m_bridge->addWindow(QStringLiteral("b|1"));
 
         // a is autotile-owned on two screens; b is snap-owned.
-        mgr.acquire(QStringLiteral("a|1"), DecorationManager::autotile(Screen1));
-        mgr.acquire(QStringLiteral("a|1"), DecorationManager::autotile(Screen2));
-        mgr.acquire(QStringLiteral("b|1"), DecorationManager::snap(Screen1));
+        m_mgr->acquire(QStringLiteral("a|1"), DecorationManager::autotile(Screen1));
+        m_mgr->acquire(QStringLiteral("a|1"), DecorationManager::autotile(Screen2));
+        m_mgr->acquire(QStringLiteral("b|1"), DecorationManager::snap(Screen1));
 
         // The per-mode hide-title-bars-OFF path: all owners of ONE kind drop
         // (across every screen); the other kind is untouched.
-        mgr.releaseAllOfKind(OwnerKind::Autotile);
-        QCOMPARE(bridge.window(QStringLiteral("a|1"))->noBorder, false);
-        QVERIFY(!mgr.isOwned(QStringLiteral("a|1")));
-        QCOMPARE(bridge.window(QStringLiteral("b|1"))->noBorder, true);
+        m_mgr->releaseAllOfKind(OwnerKind::Autotile);
+        QCOMPARE(m_bridge->window(QStringLiteral("a|1"))->noBorder, false);
+        QVERIFY(!m_mgr->isOwned(QStringLiteral("a|1")));
+        QCOMPARE(m_bridge->window(QStringLiteral("b|1"))->noBorder, true);
     }
 
     void testRuleOverrideClearOnVetoOnlyEntryPrunes()
     {
-        FakeCompositorBridge bridge;
-        auto* fw = bridge.addWindow(Win1);
-        DecorationManager mgr(bridge);
+        auto* fw = m_bridge->addWindow(Win1);
 
         // Veto-only entry: a force-show rule on an unowned window.
-        mgr.setRuleOverride(Win1, false);
-        QVERIFY(mgr.isVetoed(Win1));
-        QVERIFY(!mgr.isOwned(Win1));
-        QVERIFY(bridge.callLog.isEmpty()); // nothing was hidden — nothing to do
+        m_mgr->setRuleOverride(Win1, false);
+        QVERIFY(m_mgr->isVetoed(Win1));
+        QVERIFY(!m_mgr->isOwned(Win1));
+        QVERIFY(m_bridge->callLog.isEmpty()); // nothing was hidden — nothing to do
 
         // Rule removed: the veto-only entry must clear (and prune) with no
         // physical toggle.
-        mgr.setRuleOverride(Win1, std::nullopt);
-        QVERIFY(!mgr.isVetoed(Win1));
-        QVERIFY(bridge.callLog.isEmpty());
+        m_mgr->setRuleOverride(Win1, std::nullopt);
+        QVERIFY(!m_mgr->isVetoed(Win1));
+        QVERIFY(m_bridge->callLog.isEmpty());
         QCOMPARE(fw->noBorder, false);
     }
 
     void testResyncNoopWhileVetoedOrPending()
     {
-        FakeCompositorBridge bridge;
-        auto* fw = bridge.addWindow(Win1);
+        auto* fw = m_bridge->addWindow(Win1);
         fw->moveResizeGeo = Zone;
-        DecorationManager mgr(bridge);
 
         // Vetoed: the decoration is deliberately visible — resync must not
         // re-hide it.
-        mgr.acquire(Win1, DecorationManager::snap(Screen1));
-        mgr.setRuleOverride(Win1, false);
-        bridge.clearLog();
-        mgr.resyncWindow(Win1);
-        QVERIFY(bridge.callLog.isEmpty());
-        mgr.setRuleOverride(Win1, std::nullopt); // re-hides via owner re-assert
+        m_mgr->acquire(Win1, DecorationManager::snap(Screen1));
+        m_mgr->setRuleOverride(Win1, false);
+        m_bridge->clearLog();
+        m_mgr->resyncWindow(Win1);
+        QVERIFY(m_bridge->callLog.isEmpty());
+        m_mgr->setRuleOverride(Win1, std::nullopt); // re-hides via owner re-assert
 
         // Deferred-release state: the hide is on its way OUT — resync must
         // not fight the queued restore. (The no-op follows from the emptied
         // owner set; the pendingRestore term in resync's guard is defensive
         // redundancy, since pendingRestore is only ever set once the owner
         // set emptied.)
-        mgr.releaseKind(Win1, OwnerKind::Snap, Restore::Deferred);
-        bridge.clearLog();
+        m_mgr->releaseKind(Win1, OwnerKind::Snap, Restore::Deferred);
+        m_bridge->clearLog();
         fw->noBorder = false; // simulate an external reset mid-defer
-        mgr.resyncWindow(Win1);
-        QVERIFY(bridge.callLog.isEmpty());
+        m_mgr->resyncWindow(Win1);
+        QVERIFY(m_bridge->callLog.isEmpty());
     }
 
     void testAcquireIntentOnlyThenResolvedHides()
     {
-        FakeCompositorBridge bridge;
-        DecorationManager mgr(bridge);
-
         // Window not resolvable at first acquire: intent recorded, no calls.
-        mgr.acquire(Win1, DecorationManager::autotile(Screen1), Placement::CallerWillPlace);
-        QVERIFY(mgr.isOwned(Win1));
-        QVERIFY(!mgr.isBorderless(Win1));
-        QVERIFY(bridge.callLog.isEmpty());
+        m_mgr->acquire(Win1, DecorationManager::autotile(Screen1), Placement::CallerWillPlace);
+        QVERIFY(m_mgr->isOwned(Win1));
+        QVERIFY(!m_mgr->isBorderless(Win1));
+        QVERIFY(m_bridge->callLog.isEmpty());
 
         // Window appears and a later acquire retries: the hide lands.
-        bridge.addWindow(Win1);
-        mgr.acquire(Win1, DecorationManager::autotile(Screen1), Placement::CallerWillPlace);
-        QVERIFY(mgr.isBorderless(Win1));
-        QCOMPARE(bridge.window(Win1)->noBorder, true);
+        m_bridge->addWindow(Win1);
+        m_mgr->acquire(Win1, DecorationManager::autotile(Screen1), Placement::CallerWillPlace);
+        QVERIFY(m_mgr->isBorderless(Win1));
+        QCOMPARE(m_bridge->window(Win1)->noBorder, true);
     }
 
     void testWindowDecorationRestoredSignalPayload()
     {
-        FakeCompositorBridge bridge;
-        bridge.addWindow(Win1);
-        DecorationManager mgr(bridge);
-        QSignalSpy restored(&mgr, &DecorationManager::windowDecorationRestored);
+        m_bridge->addWindow(Win1);
+        QSignalSpy restored(m_mgr.get(), &DecorationManager::windowDecorationRestored);
 
-        mgr.acquire(Win1, DecorationManager::autotile(Screen1));
+        m_mgr->acquire(Win1, DecorationManager::autotile(Screen1));
         QCOMPARE(restored.count(), 0); // hides never emit it
-        mgr.releaseKind(Win1, OwnerKind::Autotile);
+        m_mgr->releaseKind(Win1, OwnerKind::Autotile);
         QCOMPARE(restored.count(), 1);
         QCOMPARE(restored.first().first().toString(), Win1);
     }
 
     void testReleaseNonOwnerIsNoop()
     {
-        FakeCompositorBridge bridge;
-        bridge.addWindow(Win1);
-        DecorationManager mgr(bridge);
+        m_bridge->addWindow(Win1);
 
-        mgr.acquire(Win1, DecorationManager::autotile(Screen1));
-        bridge.clearLog();
+        m_mgr->acquire(Win1, DecorationManager::autotile(Screen1));
+        m_bridge->clearLog();
         // Untile-diff calls release for windows that may not be owned here.
-        mgr.release(Win1, DecorationManager::snap(Screen1));
-        mgr.release(Win1, DecorationManager::autotile(Screen2));
-        mgr.releaseKind(QStringLiteral("ghost|9"), OwnerKind::Autotile);
-        QVERIFY(bridge.callLog.isEmpty());
-        QVERIFY(mgr.isBorderless(Win1));
+        m_mgr->release(Win1, DecorationManager::snap(Screen1));
+        m_mgr->release(Win1, DecorationManager::autotile(Screen2));
+        m_mgr->releaseKind(QStringLiteral("ghost|9"), OwnerKind::Autotile);
+        QVERIFY(m_bridge->callLog.isEmpty());
+        QVERIFY(m_mgr->isBorderless(Win1));
     }
 
     void testReleaseOthersOfKindToUnregisteredScreen()
     {
-        FakeCompositorBridge bridge;
-        bridge.addWindow(Win1);
-        DecorationManager mgr(bridge);
+        m_bridge->addWindow(Win1);
 
         // Transfer toward a screen whose owner is NOT registered yet (the
         // contract: the caller acquires it next). The owner set empties but
         // the surgery must stay non-physical and the still-hidden entry must
         // survive the prune — the decoration staying hidden across the hop
         // is exactly the point.
-        mgr.acquire(Win1, DecorationManager::autotile(Screen1));
-        bridge.clearLog();
-        mgr.releaseOthersOfKind(Win1, OwnerKind::Autotile, Screen2);
-        QVERIFY(bridge.callLog.isEmpty());
-        QVERIFY(!mgr.isOwned(Win1));
-        QVERIFY(mgr.isBorderless(Win1)); // ownerless but still hidden
+        m_mgr->acquire(Win1, DecorationManager::autotile(Screen1));
+        m_bridge->clearLog();
+        m_mgr->releaseOthersOfKind(Win1, OwnerKind::Autotile, Screen2);
+        QVERIFY(m_bridge->callLog.isEmpty());
+        QVERIFY(!m_mgr->isOwned(Win1));
+        QVERIFY(m_mgr->isBorderless(Win1)); // ownerless but still hidden
 
         // The expected follow-up acquire re-claims with no physical flap.
-        mgr.acquire(Win1, DecorationManager::autotile(Screen2), Placement::CallerWillPlace);
-        QVERIFY(bridge.callLog.isEmpty());
-        QVERIFY(mgr.isOwnedBy(Win1, DecorationManager::autotile(Screen2)));
+        m_mgr->acquire(Win1, DecorationManager::autotile(Screen2), Placement::CallerWillPlace);
+        QVERIFY(m_bridge->callLog.isEmpty());
+        QVERIFY(m_mgr->isOwnedBy(Win1, DecorationManager::autotile(Screen2)));
 
         // If the follow-up acquire never lands (retile declined the window),
         // restoreAll() is the safety net that recovers the hidden orphan.
-        mgr.releaseOthersOfKind(Win1, OwnerKind::Autotile, Screen1);
-        QVERIFY(mgr.isBorderless(Win1));
-        mgr.restoreAll();
-        QCOMPARE(bridge.window(Win1)->noBorder, false);
+        m_mgr->releaseOthersOfKind(Win1, OwnerKind::Autotile, Screen1);
+        QVERIFY(m_mgr->isBorderless(Win1));
+        m_mgr->restoreAll();
+        QCOMPARE(m_bridge->window(Win1)->noBorder, false);
     }
 
     void testRestoreAllReentrantAcquireKeepsNewClaimHidden()
     {
-        FakeCompositorBridge bridge;
-        bridge.addWindow(QStringLiteral("a|1"));
-        bridge.addWindow(QStringLiteral("b|1"));
-        DecorationManager mgr(bridge);
+        m_bridge->addWindow(QStringLiteral("a|1"));
+        m_bridge->addWindow(QStringLiteral("b|1"));
 
-        mgr.acquire(QStringLiteral("a|1"), DecorationManager::autotile(Screen1));
-        mgr.acquire(QStringLiteral("b|1"), DecorationManager::autotile(Screen1));
+        m_mgr->acquire(QStringLiteral("a|1"), DecorationManager::autotile(Screen1));
+        m_mgr->acquire(QStringLiteral("b|1"), DecorationManager::autotile(Screen1));
 
         // A windowDecorationRestored handler re-acquires the SIBLING of each
         // restored window mid-teardown (e.g. a snap takeover racing the
@@ -529,65 +503,63 @@ private Q_SLOTS:
         // window restores first triggers a re-claim of the other while it
         // is still hidden, and the loop must then skip it (re-entrant
         // m_windows entry) instead of force-restoring the new epoch's claim.
-        connect(&mgr, &DecorationManager::windowDecorationRestored, &mgr, [&mgr](const QString& windowId) {
-            mgr.acquire(windowId == QStringLiteral("a|1") ? QStringLiteral("b|1") : QStringLiteral("a|1"),
-                        DecorationManager::snap(Screen1));
-        });
+        connect(m_mgr.get(), &DecorationManager::windowDecorationRestored, m_mgr.get(),
+                [this](const QString& windowId) {
+                    m_mgr->acquire(windowId == QStringLiteral("a|1") ? QStringLiteral("b|1") : QStringLiteral("a|1"),
+                                   DecorationManager::snap(Screen1));
+                });
 
-        mgr.restoreAll();
-        const bool aRestored = !bridge.window(QStringLiteral("a|1"))->noBorder;
-        const bool bRestored = !bridge.window(QStringLiteral("b|1"))->noBorder;
+        m_mgr->restoreAll();
+        const bool aRestored = !m_bridge->window(QStringLiteral("a|1"))->noBorder;
+        const bool bRestored = !m_bridge->window(QStringLiteral("b|1"))->noBorder;
         // Exactly one window restored; the sibling was re-claimed mid-burst
         // and the skip-guard left it hidden and owned.
         QVERIFY(aRestored != bRestored);
         const QString reclaimed = aRestored ? QStringLiteral("b|1") : QStringLiteral("a|1");
-        QVERIFY(mgr.isOwnedBy(reclaimed, DecorationManager::snap(Screen1)));
-        QCOMPARE(bridge.window(reclaimed)->noBorder, true);
+        QVERIFY(m_mgr->isOwnedBy(reclaimed, DecorationManager::snap(Screen1)));
+        QCOMPARE(m_bridge->window(reclaimed)->noBorder, true);
         // The re-claimed window must never have been force-decorated.
-        QVERIFY(!bridge.callLog.contains(QStringLiteral("setNoBorder(%1,false)").arg(reclaimed)));
+        QVERIFY(!m_bridge->callLog.contains(QStringLiteral("setNoBorder(%1,false)").arg(reclaimed)));
 
         // The physical hide was TRANSFERRED to the new epoch (the re-entrant
         // acquire evaluated against our own old hide and would otherwise have
         // latched priorNoBorder=true): the manager still reports the window
         // borderless, and the new owner's release must restore it — the
         // reclaim must never strand the title bar.
-        QVERIFY(mgr.isBorderless(reclaimed));
-        mgr.releaseKind(reclaimed, OwnerKind::Snap);
-        QCOMPARE(bridge.window(reclaimed)->noBorder, false);
+        QVERIFY(m_mgr->isBorderless(reclaimed));
+        m_mgr->releaseKind(reclaimed, OwnerKind::Snap);
+        QCOMPARE(m_bridge->window(reclaimed)->noBorder, false);
     }
 
     void testOverlappingDrainsNeitherDoubleRestoreNorDoubleEmit()
     {
-        FakeCompositorBridge bridge;
-        bridge.addWindow(QStringLiteral("a|1"));
-        bridge.addWindow(QStringLiteral("b|1"));
-        DecorationManager mgr(bridge);
-        QSignalSpy finished(&mgr, &DecorationManager::drainFinished);
-        QSignalSpy restored(&mgr, &DecorationManager::windowDecorationRestored);
+        m_bridge->addWindow(QStringLiteral("a|1"));
+        m_bridge->addWindow(QStringLiteral("b|1"));
+        QSignalSpy finished(m_mgr.get(), &DecorationManager::drainFinished);
+        QSignalSpy restored(m_mgr.get(), &DecorationManager::windowDecorationRestored);
 
-        mgr.acquire(QStringLiteral("a|1"), DecorationManager::autotile(Screen1));
-        mgr.acquire(QStringLiteral("b|1"), DecorationManager::autotile(Screen1));
-        mgr.releaseKind(QStringLiteral("a|1"), OwnerKind::Autotile, Restore::Deferred);
+        m_mgr->acquire(QStringLiteral("a|1"), DecorationManager::autotile(Screen1));
+        m_mgr->acquire(QStringLiteral("b|1"), DecorationManager::autotile(Screen1));
+        m_mgr->releaseKind(QStringLiteral("a|1"), OwnerKind::Autotile, Restore::Deferred);
 
         // First drain starts a chain (restores a|1 synchronously on tick 1);
         // a second deferred release + drain mid-flight must snapshot a FRESH
         // queue — no double-restore of a|1, no extra drainFinished.
-        mgr.drainPendingRestores();
-        mgr.releaseKind(QStringLiteral("b|1"), OwnerKind::Autotile, Restore::Deferred);
-        mgr.drainPendingRestores();
-        QTRY_COMPARE(bridge.window(QStringLiteral("b|1"))->noBorder, false);
+        m_mgr->drainPendingRestores();
+        m_mgr->releaseKind(QStringLiteral("b|1"), OwnerKind::Autotile, Restore::Deferred);
+        m_mgr->drainPendingRestores();
+        QTRY_COMPARE(m_bridge->window(QStringLiteral("b|1"))->noBorder, false);
         QTRY_COMPARE(finished.count(), 2);
         QCOMPARE(restored.count(), 2);
-        QCOMPARE(bridge.callLog.filter(QStringLiteral("setNoBorder(a|1,false)")).size(), 1);
-        QCOMPARE(bridge.callLog.filter(QStringLiteral("setNoBorder(b|1,false)")).size(), 1);
+        QCOMPARE(m_bridge->callLog.filter(QStringLiteral("setNoBorder(a|1,false)")).size(), 1);
+        QCOMPARE(m_bridge->callLog.filter(QStringLiteral("setNoBorder(b|1,false)")).size(), 1);
     }
 
     void testRestoreAllSurvivesManagerDestructionFromSlot()
     {
-        FakeCompositorBridge bridge;
-        bridge.addWindow(QStringLiteral("a|1"));
-        bridge.addWindow(QStringLiteral("b|1"));
-        auto* mgr = new DecorationManager(bridge);
+        m_bridge->addWindow(QStringLiteral("a|1"));
+        m_bridge->addWindow(QStringLiteral("b|1"));
+        auto* mgr = new DecorationManager(*m_bridge);
 
         mgr->acquire(QStringLiteral("a|1"), DecorationManager::autotile(Screen1));
         mgr->acquire(QStringLiteral("b|1"), DecorationManager::autotile(Screen1));
@@ -600,72 +572,66 @@ private Q_SLOTS:
         });
         mgr->restoreAll();
 
-        const int restores = bridge.callLog.filter(QStringLiteral(",false)")).size();
+        const int restores = m_bridge->callLog.filter(QStringLiteral(",false)")).size();
         QCOMPARE(restores, 1);
     }
 
     void testReleaseOthersOfKindLeavesOtherKindsAlone()
     {
-        FakeCompositorBridge bridge;
-        bridge.addWindow(Win1);
-        DecorationManager mgr(bridge);
+        m_bridge->addWindow(Win1);
 
-        mgr.acquire(Win1, DecorationManager::autotile(Screen1));
-        mgr.acquire(Win1, DecorationManager::snap(Screen1));
-        bridge.clearLog();
+        m_mgr->acquire(Win1, DecorationManager::autotile(Screen1));
+        m_mgr->acquire(Win1, DecorationManager::snap(Screen1));
+        m_bridge->clearLog();
 
         // Kind-filtered surgery: an autotile cross-screen transfer must not
         // disturb a coexisting snap owner (mid mode-handoff).
-        mgr.releaseOthersOfKind(Win1, OwnerKind::Autotile, Screen2);
-        QVERIFY(bridge.callLog.isEmpty());
-        QVERIFY(mgr.isOwnedBy(Win1, DecorationManager::snap(Screen1)));
-        QVERIFY(!mgr.isOwnedBy(Win1, DecorationManager::autotile(Screen1)));
-        QVERIFY(mgr.isBorderless(Win1));
+        m_mgr->releaseOthersOfKind(Win1, OwnerKind::Autotile, Screen2);
+        QVERIFY(m_bridge->callLog.isEmpty());
+        QVERIFY(m_mgr->isOwnedBy(Win1, DecorationManager::snap(Screen1)));
+        QVERIFY(!m_mgr->isOwnedBy(Win1, DecorationManager::autotile(Screen1)));
+        QVERIFY(m_mgr->isBorderless(Win1));
 
         // Releasing the surviving snap owner now restores — no autotile
         // owner remains.
-        mgr.releaseKind(Win1, OwnerKind::Snap);
-        QCOMPARE(bridge.window(Win1)->noBorder, false);
+        m_mgr->releaseKind(Win1, OwnerKind::Snap);
+        QCOMPARE(m_bridge->window(Win1)->noBorder, false);
     }
 
     void testResolveExactNeverTogglesFuzzySibling()
     {
-        FakeCompositorBridge bridge;
-        bridge.fuzzyFindByAppId = true;
-        bridge.addWindow(QStringLiteral("app|1"));
-        bridge.addWindow(QStringLiteral("app|2"));
-        DecorationManager mgr(bridge);
+        m_bridge->fuzzyFindByAppId = true;
+        m_bridge->addWindow(QStringLiteral("app|1"));
+        m_bridge->addWindow(QStringLiteral("app|2"));
 
-        mgr.acquire(QStringLiteral("app|1"), DecorationManager::autotile(Screen1));
-        QCOMPARE(bridge.window(QStringLiteral("app|1"))->noBorder, true);
+        m_mgr->acquire(QStringLiteral("app|1"), DecorationManager::autotile(Screen1));
+        QCOMPARE(m_bridge->window(QStringLiteral("app|1"))->noBorder, true);
 
         // The hidden window dies; the bridge's fuzzy fallback now resolves
         // the dead id to the same-app SIBLING. The release's restore must
         // detect the id mismatch (resolveExact) and touch nothing — toggling
         // the sibling under the dead key would be unreleasable.
-        bridge.removeWindow(QStringLiteral("app|1"));
-        bridge.clearLog();
-        mgr.releaseKind(QStringLiteral("app|1"), OwnerKind::Autotile);
-        QVERIFY(bridge.callLog.isEmpty());
-        QCOMPARE(bridge.window(QStringLiteral("app|2"))->noBorder, false);
+        m_bridge->removeWindow(QStringLiteral("app|1"));
+        m_bridge->clearLog();
+        m_mgr->releaseKind(QStringLiteral("app|1"), OwnerKind::Autotile);
+        QVERIFY(m_bridge->callLog.isEmpty());
+        QCOMPARE(m_bridge->window(QStringLiteral("app|2"))->noBorder, false);
     }
 
     void testResyncNoopWhileStillSuppressed()
     {
-        FakeCompositorBridge bridge;
-        auto* fw = bridge.addWindow(Win1);
+        auto* fw = m_bridge->addWindow(Win1);
         fw->moveResizeGeo = Zone;
-        DecorationManager mgr(bridge);
 
-        mgr.acquire(Win1, DecorationManager::autotile(Screen1));
+        m_mgr->acquire(Win1, DecorationManager::autotile(Screen1));
         QCOMPARE(fw->noBorder, true);
 
         // No external reset happened: the compositor still reports
         // noBorder=true, so resync must detect "nothing drifted" and stay
         // silent — no redundant re-hide / geometry churn.
-        bridge.clearLog();
-        mgr.resyncWindow(Win1);
-        QVERIFY(bridge.callLog.isEmpty());
+        m_bridge->clearLog();
+        m_mgr->resyncWindow(Win1);
+        QVERIFY(m_bridge->callLog.isEmpty());
     }
 };
 

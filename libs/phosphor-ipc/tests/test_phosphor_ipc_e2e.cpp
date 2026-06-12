@@ -1,5 +1,5 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
-// SPDX-License-Identifier: GPL-3.0-or-later
+// SPDX-License-Identifier: LGPL-2.1-or-later
 
 // Full socket roundtrip. Spins up an IpcRouter on a temp socket
 // path, opens a QLocalSocket client in the same process, sends

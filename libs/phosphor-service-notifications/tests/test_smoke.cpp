@@ -1,5 +1,5 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
-// SPDX-License-Identifier: GPL-3.0-or-later
+// SPDX-License-Identifier: LGPL-2.1-or-later
 //
 // Smoke test for phosphor-service-notifications. Pins the plumbing contract
 // (QML-registration idempotency, the static spec identifiers, server info,

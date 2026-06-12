@@ -564,6 +564,16 @@ add_executable(test_compositor_bridge dbus/test_compositor_bridge.cpp)
 target_link_libraries(test_compositor_bridge PRIVATE Qt6::Test Qt6::Core Qt6::DBus plasmazones_core)
 add_test(NAME test_compositor_bridge COMMAND test_compositor_bridge)
 
+# XML ↔ adaptor contract tripwire: the dbus/*.xml files are the installed
+# public contract while the adaptors are handwritten — this compares each
+# adaptor's staticMetaObject (bus-exposed slots/invokables, signals,
+# properties) against its XML so drift fails CI instead of shipping.
+add_executable(test_dbus_contract_sync dbus/test_dbus_contract_sync.cpp)
+target_compile_definitions(test_dbus_contract_sync
+                           PRIVATE PLASMAZONES_DBUS_XML_DIR="${CMAKE_SOURCE_DIR}/dbus")
+target_link_libraries(test_dbus_contract_sync PRIVATE Qt6::Test Qt6::Core Qt6::DBus plasmazones_core)
+add_test(NAME test_dbus_contract_sync COMMAND test_dbus_contract_sync)
+
 # End-to-end adaptor routing test: verifies typed-struct slot dispatch works
 # over a real QDBusConnection. Regression guard for the 2026-04-10 resnap
 # crash (moc recorded unqualified type names, metatype lookup failed).

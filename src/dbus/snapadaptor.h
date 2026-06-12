@@ -290,8 +290,13 @@ public Q_SLOTS:
      */
     void windowUnsnappedForFloat(const QString& windowId);
 
+public:
     // ═══════════════════════════════════════════════════════════════════════════
-    // Internal (not D-Bus, but callable from daemon C++ code)
+    // Internal — plain `public:` (NOT Q_SLOTS, no Q_INVOKABLE) so
+    // QDBusAbstractAdaptor's introspection does not expose them on the bus.
+    // Every caller is in-process and reaches these via direct C++ invocation
+    // through the daemon (same pattern as
+    // WindowDragAdaptor::handleWindowClosed).
     // ═══════════════════════════════════════════════════════════════════════════
 
     /**

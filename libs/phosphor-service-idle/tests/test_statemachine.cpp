@@ -1,5 +1,5 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
-// SPDX-License-Identifier: GPL-3.0-or-later
+// SPDX-License-Identifier: LGPL-2.1-or-later
 //
 // Unit test for the idle stage state machine. It drives the machine with a fake
 // idle source that fires the idled / resumed edges directly, so the whole ladder

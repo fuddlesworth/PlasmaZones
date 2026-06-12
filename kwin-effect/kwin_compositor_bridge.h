@@ -11,7 +11,11 @@ class EffectWindow;
 
 namespace PlasmaZones {
 
-using namespace PhosphorCompositor;
+// Targeted using-declarations, not a namespace-wide directive: headers must
+// not leak the whole PhosphorCompositor namespace into every includer.
+using PhosphorCompositor::ICompositorBridge;
+using PhosphorCompositor::WindowHandle;
+using PhosphorCompositor::WindowInfo;
 
 class PlasmaZonesEffect;
 

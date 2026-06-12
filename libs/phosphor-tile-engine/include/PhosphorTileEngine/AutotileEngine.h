@@ -1025,6 +1025,20 @@ private:
     bool isKnownScreen(const QString& screenId) const;
 
     /**
+     * @brief Shared per-state teardown body for screen removal.
+     *
+     * Captures every window's placement into the unified record, drops the
+     * overflow set (AFTER capture — the discriminator needs it), appends the
+     * released windows, clears the pending-order bookkeeping, and
+     * deleteLater()s the state. Callers own the divergent parts: removing
+     * the state from m_screenStates (they iterate it) and the per-path
+     * override policy — toggle-off drops only the resolver's in-memory
+     * overrides, the orphaned-VS teardown purges persisted settings too.
+     */
+    void releaseScreenStateForTeardown(const QString& screenId, PhosphorTiles::TilingState* state,
+                                       QStringList& releasedWindows);
+
+    /**
      * @brief Shared key-migration body for focus-driven window moves.
      *
      * Removes @p windowId from @p oldKey's TilingState (running the
