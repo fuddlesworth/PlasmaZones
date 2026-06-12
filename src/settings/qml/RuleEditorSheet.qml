@@ -50,6 +50,11 @@ Kirigami.Dialog {
     /// and order-stable (parsed from / written to the same `JSON.parse`
     /// output, so key order is preserved).
     property string _initialSnapshot: ""
+    /// True while Kirigami.Dialog's internal ScrollView is reserving space for
+    /// a vertical scrollbar (its `rightPadding` is the scrollbar's width, 0
+    /// otherwise). Fill-width content keys its right gutter off this so the
+    /// gap only appears when there's a scrollbar to clear.
+    readonly property bool _scrollBarReserved: contentItem ? contentItem.rightPadding > 0 : false
 
     signal ruleSaved(var ruleJson)
 
@@ -149,6 +154,11 @@ Kirigami.Dialog {
             id: editorBody
 
             Layout.fillWidth: true
+            // When the dialog scrolls, its ScrollView reserves the scrollbar's
+            // width and fill-width content ends flush against it. Inset the
+            // right edge to mirror the left padding — only while a scrollbar
+            // is present, else a short dialog gets a lopsided gutter.
+            Layout.rightMargin: sheet._scrollBarReserved ? Kirigami.Units.largeSpacing : 0
             controller: sheet.controller
             appSettings: sheet.appSettings
             // Bind workingRule to the dialog's seed — the body emits
@@ -177,6 +187,7 @@ Kirigami.Dialog {
 
         RuleEditorStatusBar {
             Layout.fillWidth: true
+            Layout.rightMargin: sheet._scrollBarReserved ? Kirigami.Units.largeSpacing : 0
             canSave: editorBody.canSave
             validationIssues: editorBody.validationIssues
             workingRule: editorBody.workingRule
