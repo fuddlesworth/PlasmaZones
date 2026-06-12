@@ -340,19 +340,33 @@ void AutotileHandler::handleWindowOutputChanged(KWin::EffectWindow* w)
     const bool newIsAutotile = m_autotileScreens.contains(newScreenId);
 
     if (!oldIsAutotile && !newIsAutotile) {
-        return; // Neither screen is autotiled — snapping unsnap handled by effect's outputChanged
+        // Neither screen is autotiled — snapping unsnap is handled by the
+        // effect's outputChanged. Still refresh the notified-screen record:
+        // a window that left autotile via the desktop-switch float skip
+        // stays tracked, and a stale screen here would make every later
+        // frameGeometryChanged re-detect a phantom VS crossing.
+        if (m_notifiedWindowScreens.contains(windowId)) {
+            m_notifiedWindowScreens[windowId] = newScreenId;
+        }
+        return;
     }
 
     qCInfo(lcEffect) << "Window moved between monitors:" << windowId << oldScreenId << "->" << newScreenId;
 
-    // Snapshot the pre-autotile geometry BEFORE onWindowClosed clears it.
-    // onWindowClosed removes m_preAutotileGeometries AND m_savedPreAutotileForDesktopMove,
-    // so we must hold onto the geometry locally.
+    // Snapshot the pre-autotile geometry BEFORE onWindowClosed clears it
+    // (the close-cleanup sweeps the geometry out of EVERY screen bucket).
+    // Scan all buckets ourselves too: the rect may be keyed under a screen
+    // other than oldScreenId if the notified screen was re-resolved after a
+    // VS config change without the geometry bucket moving (mirrors the
+    // desktop-switch Pass-2 scan in signals.cpp).
     QRectF savedPreAutotileGeo;
     if (oldIsAutotile) {
-        const auto screenIt = m_preAutotileGeometries.constFind(oldScreenId);
-        if (screenIt != m_preAutotileGeometries.constEnd()) {
-            savedPreAutotileGeo = screenIt->value(windowId);
+        for (auto sgIt = m_preAutotileGeometries.constBegin(); sgIt != m_preAutotileGeometries.constEnd(); ++sgIt) {
+            const QRectF rect = sgIt->value(windowId);
+            if (rect.isValid()) {
+                savedPreAutotileGeo = rect;
+                break;
+            }
         }
     }
 
@@ -508,9 +522,13 @@ void AutotileHandler::onWindowClosed(const QString& windowId, const QString& scr
     // against a destroyed window.
     cancelPendingMinimizeFloat(windowId);
 
-    // KWin-specific cleanup not covered by the shared helper
+    // KWin-specific cleanup not covered by the shared helper.
+    // NOTE: m_savedPreAutotileForDesktopMove is deliberately NOT cleared
+    // here — the desktop-move path calls savePreAutotileForDesktopMove
+    // immediately before this function, so clearing it would wipe the stash
+    // the instant it was created (the consume site erases it, and
+    // clearDesktopMoveStash covers genuine window destruction).
     m_savedNotifiedForDesktopReturn.remove(windowId);
-    m_savedPreAutotileForDesktopMove.remove(windowId);
     auto pendingConn = m_pendingCrossScreenRestore.find(windowId);
     if (pendingConn != m_pendingCrossScreenRestore.end()) {
         QObject::disconnect(pendingConn.value());

@@ -53,11 +53,7 @@ void DecorationManager::acquire(const QString& windowId, const Owner& owner, Pla
     // Re-acquire cancels a queued deferred restore: the new claim is
     // authoritative and the decoration must stay hidden. This is the
     // unified form of the drain-time "screen re-entered autotile" re-check.
-    if (entry.pendingRestore) {
-        entry.pendingRestore = false;
-        entry.vetoRetries = 0;
-        m_pendingRestore.remove(windowId);
-    }
+    cancelPendingRestore(windowId, entry);
     if (entry.owners.isEmpty() && !entry.physicallyHidden) {
         // Re-acquired from an ownerless, un-hidden state (veto-only or
         // intent-only entry): the capability/prior-state snapshot may be
@@ -202,14 +198,13 @@ void DecorationManager::setRuleOverride(const QString& windowId, std::optional<b
     Entry& entry = m_windows[windowId];
     if (*ruleValue) {
         entry.vetoed = false;
-        if (entry.pendingRestore) {
-            entry.pendingRestore = false;
-            m_pendingRestore.remove(windowId);
-        }
-        if (!entry.owners.contains(rule())) {
-            entry.owners.append(rule());
-        }
-        reconcile(windowId, entry, Placement::AlreadyPlaced);
+        // Route the hide through acquire(): it owns the pending-restore
+        // cancellation AND the stale-snapshot refresh for a new ownership
+        // epoch (an ownerless veto-only entry re-claimed here has the same
+        // staleness acquire's epoch refresh exists for — without it a rule
+        // hide could later force-decorate a window the user made borderless
+        // while we held no claim).
+        acquire(windowId, rule(), Placement::AlreadyPlaced);
     } else {
         // Force-show: the veto wins over every owner and pins the decoration
         // visible until the rule changes or goes away.
@@ -217,10 +212,7 @@ void DecorationManager::setRuleOverride(const QString& windowId, std::optional<b
         entry.owners.removeIf([](const Owner& o) {
             return o.kind == OwnerKind::Rule;
         });
-        if (entry.pendingRestore) {
-            entry.pendingRestore = false;
-            m_pendingRestore.remove(windowId);
-        }
+        cancelPendingRestore(windowId, entry);
         reconcile(windowId, entry, Placement::AlreadyPlaced);
         pruneIfEmpty(windowId);
     }
@@ -437,8 +429,22 @@ void DecorationManager::finishRelease(const QString& windowId, Entry& entry, Res
         return;
     }
     entry.pendingRestore = true;
+    // A fresh deferred release starts a fresh retry epoch: the bounded-veto
+    // counter must count consecutive vetoes of THIS restore, not remnants of
+    // an earlier cancelled one.
+    entry.vetoRetries = 0;
     m_pendingRestore.insert(windowId);
     armFallbackTimer();
+}
+
+void DecorationManager::cancelPendingRestore(const QString& windowId, Entry& entry)
+{
+    if (!entry.pendingRestore) {
+        return;
+    }
+    entry.pendingRestore = false;
+    entry.vetoRetries = 0;
+    m_pendingRestore.remove(windowId);
 }
 
 void DecorationManager::hideNow(WindowHandle w, Placement placement)

@@ -44,9 +44,9 @@
         </signal>
         <signal name="applyWindowGeometriesBatch">
             <annotation name="org.gtk.GDBus.DocString" value="Apply geometry to a batch of windows."/>
-            <arg name="geometries" type="a(siiii)">
+            <arg name="geometries" type="a(siiiis)">
                 <annotation name="org.qtproject.QtDBus.QtTypeName.Out0" value="PhosphorProtocol::WindowGeometryList"/>
-                <annotation name="org.gtk.GDBus.DocString" value="Array of (windowId, x, y, width, height)."/>
+                <annotation name="org.gtk.GDBus.DocString" value="Array of (windowId, x, y, width, height, screenId). Empty screenId = float/restore entry."/>
             </arg>
             <arg name="action" type="s">
                 <annotation name="org.gtk.GDBus.DocString" value="Operation type: rotate, resnap, snap_all."/>

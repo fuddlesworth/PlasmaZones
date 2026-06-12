@@ -75,6 +75,14 @@ public:
                                  bool resetNotified = false);
 
     void onWindowClosed(const QString& windowId, const QString& screenId);
+    /// Drop a destroyed window's desktop-move geometry stash. Separate from
+    /// onWindowClosed because the desktop-MOVE path calls onWindowClosed
+    /// right after creating the stash (the window must look "closed" to this
+    /// desktop's tiling) — only genuine destruction may clear it.
+    void clearDesktopMoveStash(const QString& windowId)
+    {
+        m_savedPreAutotileForDesktopMove.remove(windowId);
+    }
     void onDaemonReady();
 
     /**
@@ -205,21 +213,6 @@ public:
     }
 
     /**
-     * @brief Extract pre-autotile geometry from one screen and inject into another.
-     *
-     * Used during virtual screen drag transfers where handleWindowOutputChanged
-     * won't fire (same physical monitor). Snapshots the geometry before
-     * onWindowClosed clears it, then injects into the target screen's map
-     * after notifyWindowAdded.
-     *
-     * @param windowId The window being transferred
-     * @param fromScreenId Source screen to extract geometry from
-     * @param toScreenId Target screen to inject geometry into
-     * @return true if geometry was transferred
-     */
-    bool transferPreAutotileGeometry(const QString& windowId, const QString& fromScreenId, const QString& toScreenId);
-
-    /**
      * @brief Take the saved global stacking order snapshot (move semantics).
      *
      * Called by handleResnapToNewLayout to restore z-order after resnap.
@@ -329,10 +322,12 @@ private:
     /// frame instantly when the window leaves autotile mode (untile, mode
     /// switch, screen change) without waiting on a D-Bus round-trip.
     ///
-    /// Layout: per-screen bucket mirrors `BorderState` so swap/rotate and
-    /// cross-screen moves can transplant or drop a window's record by
-    /// looking only at the source screen's bucket — see
-    /// `transferPreAutotileGeometry()` in autotilehandler/state.cpp.
+    /// Layout: per-screen bucket mirrors `BorderState` so swap/rotate can
+    /// drop a screen's records wholesale. Readers that need a window's rect
+    /// regardless of which screen it was captured under (a VS config change
+    /// can re-resolve the notified screen without moving the bucket) scan
+    /// ALL buckets — see the desktop-switch Pass-2 scan in signals.cpp and
+    /// the cross-monitor snapshot in handleWindowOutputChanged.
     QHash<QString, QHash<QString, QRectF>> m_preAutotileGeometries;
     QHash<QString, QStringList> m_savedAutotileStackingOrder; ///< autotile stacking order, restored on snap→autotile
     QSet<QString> m_notifiedWindows;

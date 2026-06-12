@@ -17,24 +17,6 @@ namespace PlasmaZones {
 
 Q_DECLARE_LOGGING_CATEGORY(lcEffect)
 
-bool AutotileHandler::transferPreAutotileGeometry(const QString& windowId, const QString& fromScreenId,
-                                                  const QString& toScreenId)
-{
-    auto fromIt = m_preAutotileGeometries.find(fromScreenId);
-    if (fromIt == m_preAutotileGeometries.end() || !fromIt->contains(windowId)) {
-        return false;
-    }
-    QRectF geo = fromIt->take(windowId);
-    if (fromIt->isEmpty()) {
-        m_preAutotileGeometries.erase(fromIt);
-    }
-    if (!geo.isValid()) {
-        return false;
-    }
-    m_preAutotileGeometries[toScreenId][windowId] = geo;
-    return true;
-}
-
 // ═══════════════════════════════════════════════════════════════════════════════
 // Monocle helpers
 // ═══════════════════════════════════════════════════════════════════════════════

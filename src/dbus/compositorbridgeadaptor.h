@@ -106,7 +106,8 @@ Q_SIGNALS:
 
     /**
      * @brief Apply geometry to a batch of windows
-     * @param batchJson JSON array of [{windowId, x, y, width, height, targetZoneId, ...}]
+     * @param geometries Batch of (windowId, x, y, width, height, screenId)
+     *        entries — empty screenId marks a float/restore entry
      * @param action Operation type ("rotate", "resnap", "snap_all")
      */
     void applyWindowGeometriesBatch(const PhosphorProtocol::WindowGeometryList& geometries, const QString& action);

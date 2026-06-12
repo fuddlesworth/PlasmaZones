@@ -305,8 +305,12 @@ void PlasmaZonesEffect::slotWindowClosed(KWin::EffectWindow* w)
     m_snapHandler->removeMinimizeFloated(closedWindowId);
     m_dragFloatedWindowIds.remove(closedWindowId);
 
-    // Notify autotile handler for cleanup (tracking sets + autotile D-Bus)
+    // Notify autotile handler for cleanup (tracking sets + autotile D-Bus).
+    // Genuine destruction also drops any desktop-move geometry stash —
+    // onWindowClosed itself must not (the desktop-move path creates the
+    // stash immediately before calling it).
     m_autotileHandler->onWindowClosed(closedWindowId, closedScreenId);
+    m_autotileHandler->clearDesktopMoveStash(closedWindowId);
 
     // Mirror that cleanup for snapping's own border set. Pure bookkeeping —
     // the window is being destroyed, so no setNoBorder/removeWindowBorder is

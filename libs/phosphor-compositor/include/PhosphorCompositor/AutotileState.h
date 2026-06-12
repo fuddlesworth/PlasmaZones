@@ -156,6 +156,23 @@ inline bool removeTiledOnScreen(BorderState& border, const QString& screenId, co
     return removed;
 }
 
+/// Remove a window from every screen's tiled bucket EXCEPT @p keepScreenId
+/// (cross-screen transfer: a window is tile-managed by one screen at a time,
+/// so re-recording on a new screen first strips any stale sibling claim).
+inline void removeFromOtherScreens(BorderState& border, const QString& windowId, const QString& keepScreenId)
+{
+    for (auto it = border.tiledWindowsByScreen.begin(); it != border.tiledWindowsByScreen.end();) {
+        if (it.key() != keepScreenId) {
+            it.value().remove(windowId);
+        }
+        if (it.value().isEmpty() && it.key() != keepScreenId) {
+            it = border.tiledWindowsByScreen.erase(it);
+        } else {
+            ++it;
+        }
+    }
+}
+
 /// Remove a window from every screen's tiled bucket.
 /// Returns true if any bucket contained it.
 inline bool removeFromAllScreens(BorderState& border, const QString& windowId)

@@ -47,12 +47,15 @@ void SnapHandler::markWindowSnapped(const QString& windowId, const QString& scre
         return;
     }
     KWin::EffectWindow* w = m_effect->findWindowById(windowId);
-    if (!w) {
+    if (!w || m_effect->getWindowId(w) != windowId) {
         // Window gone (closed mid-snap — the close often races the async
         // snap reply, so slotWindowClosed's bookkeeping may have ALREADY
         // run). Recording tiled tracking or acquiring decoration ownership
         // now would re-create state nothing will ever clean up; drop any
-        // remnants instead.
+        // remnants instead. The exact-id check matters: findWindowById's
+        // appId fuzzy fallback can resolve a same-app SIBLING for a dead id,
+        // and hiding the sibling's title bar under the dead key would be
+        // unreleasable.
         AutotileStateHelpers::removeFromAllScreens(m_border, windowId);
         m_effect->decorationManager()->releaseKind(windowId, DecorationManager::OwnerKind::Snap);
         return;
@@ -60,16 +63,7 @@ void SnapHandler::markWindowSnapped(const QString& windowId, const QString& scre
     // A window can only be snap-managed by one screen at a time. Strip stale
     // tiled tracking from any OTHER screen before recording the new owner
     // (mirrors the autotile cross-screen-transfer cleanup in tiling.cpp).
-    for (auto it = m_border.tiledWindowsByScreen.begin(); it != m_border.tiledWindowsByScreen.end();) {
-        if (it.key() != screenId) {
-            it.value().remove(windowId);
-        }
-        if (it.value().isEmpty() && it.key() != screenId) {
-            it = m_border.tiledWindowsByScreen.erase(it);
-        } else {
-            ++it;
-        }
-    }
+    AutotileStateHelpers::removeFromOtherScreens(m_border, windowId, screenId);
     AutotileStateHelpers::addTiledOnScreen(m_border, screenId, windowId);
 
     // Decoration ownership. The manager owns the capability gate

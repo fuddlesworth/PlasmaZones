@@ -71,6 +71,14 @@ void PlasmaZonesEffect::slotApplyGeometryRequested(const QString& windowId, int 
         qCDebug(lcEffect) << "slotApplyGeometryRequested: window not found" << windowId;
         return;
     }
+    // Key ALL tracking by the window's LIVE id, not the daemon-supplied one:
+    // findWindowById's appId fuzzy fallback (cross-session restore where the
+    // uuid changed) can resolve a window whose current id differs. Tracking
+    // recorded under the stale id would never be cleared — every later
+    // drag-out/float/close path uses the live id — leaving a stale tiled
+    // entry and a permanently hidden title bar. Every other commit path
+    // (batch, drag, snap assist) already keys by the live id.
+    const QString liveWindowId = getWindowId(w);
 
     // Check for size-only restore (drag-out unsnap without activation trigger).
     // The daemon sets sizeOnly=true to restore pre-snap width/height while keeping
@@ -87,7 +95,7 @@ void PlasmaZonesEffect::slotApplyGeometryRequested(const QString& windowId, int 
             applySnapGeometry(w, sizeOnlyGeo, /*allowDuringDrag=*/false, /*skipAnimation=*/false,
                               PhosphorAnimation::ProfilePaths::WindowSnapOut);
             // Drag-out unsnap: the window left zone-managed sizing.
-            m_snapHandler->clearWindowSnapped(windowId);
+            m_snapHandler->clearWindowSnapped(liveWindowId);
         }
         return;
     }
@@ -135,7 +143,7 @@ void PlasmaZonesEffect::slotApplyGeometryRequested(const QString& windowId, int 
         // ensurePreSnapGeometryStored is async (D-Bus hasPreTileGeometry check) — without
         // pre-capturing, the callback would read the post-move geometry instead of the
         // original free-floating position.
-        m_snapHandler->ensurePreSnapGeometryStored(w, getWindowId(w), w->frameGeometry());
+        m_snapHandler->ensurePreSnapGeometryStored(w, liveWindowId, w->frameGeometry());
     }
 
     // Empty zoneId = float-restore (daemon placing the window back at its pre-snap geometry, e.g.
@@ -157,9 +165,9 @@ void PlasmaZonesEffect::slotApplyGeometryRequested(const QString& windowId, int 
     //                             (AutotileHandler tracks autotile-screen windows)
     //   - snap-mode screen      → snap commit
     if (zoneId.isEmpty() || screenId.isEmpty() || m_autotileHandler->isAutotileScreen(screenId)) {
-        m_snapHandler->clearWindowSnapped(windowId);
+        m_snapHandler->clearWindowSnapped(liveWindowId);
     } else {
-        m_snapHandler->markWindowSnapped(windowId, screenId);
+        m_snapHandler->markWindowSnapped(liveWindowId, screenId);
     }
     // Note: windowSnapped/recordSnapIntent are NOT called here. For daemon-driven
     // navigation, the daemon handles zone bookkeeping internally before emitting
@@ -291,13 +299,12 @@ void PlasmaZonesEffect::slotApplyGeometriesBatch(const PhosphorProtocol::WindowG
                 // is being snapped and is no longer floating — even if the effect's
                 // float cache is stale (e.g. a window snapped straight from a
                 // floated-in-autotile state via the daemon's windowsReleased snap-zone
-                // restore). Clear the stale float marker BEFORE marking snapped,
-                // mirroring the single-window applyGeometry path. Without this the float
-                // flag survives, markWindowSnapped never sets the snap border, and the
-                // next snap→autotile saves the zone rect as the pre-tile float-back —
-                // poisoning the float geometry with the snapped rect. setWindowFloating
-                // is an idempotent local FloatingCache write (no signal/D-Bus), so it is
-                // called unconditionally — no need to read-guard a no-op overwrite.
+                // restore). Clear the stale float marker: a surviving float flag
+                // poisons the next pre-tile/float-back capture (the zone rect would be
+                // saved as the "free" geometry) and wrongly exempts the window from
+                // the drain-time restore veto. setWindowFloating is an idempotent
+                // local FloatingCache write (no signal/D-Bus), so it is called
+                // unconditionally — no need to read-guard a no-op overwrite.
                 m_navigationHandler->setWindowFloating(batchWid, false);
                 m_snapHandler->markWindowSnapped(batchWid, p.screenId);
             }

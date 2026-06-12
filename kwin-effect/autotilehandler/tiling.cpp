@@ -347,16 +347,7 @@ void AutotileHandler::slotWindowsTileRequested(const PhosphorProtocol::TileReque
             // from any other screen before recording the new owner. This
             // keeps the tracking map coherent when e.g. a window drags
             // from an autotile VS onto a sibling autotile VS.
-            for (auto scrIt = m_border.tiledWindowsByScreen.begin(); scrIt != m_border.tiledWindowsByScreen.end();) {
-                if (scrIt.key() != snap.screenId) {
-                    scrIt.value().remove(snap.windowId);
-                }
-                if (scrIt.value().isEmpty() && scrIt.key() != snap.screenId) {
-                    scrIt = m_border.tiledWindowsByScreen.erase(scrIt);
-                } else {
-                    ++scrIt;
-                }
-            }
+            AutotileStateHelpers::removeFromOtherScreens(m_border, snap.windowId, snap.screenId);
             AutotileStateHelpers::addTiledOnScreen(m_border, snap.screenId, snap.windowId);
             if (m_border.hideTitleBars) {
                 // Cross-screen transfer: move the decoration claim to this

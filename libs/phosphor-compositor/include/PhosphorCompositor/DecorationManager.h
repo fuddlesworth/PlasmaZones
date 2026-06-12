@@ -163,6 +163,9 @@ public:
     /// it must therefore only return true while a re-acquire is genuinely
     /// expected. The KWin effect installs "window's screen is autotiled,
     /// hide-title-bars is on, and the window is not floating".
+    /// The predicate MUST NOT call back into the manager (it runs between an
+    /// entry lookup and writes through that entry; a re-entrant mutation
+    /// could rehash the table under the held iterator).
     void setRestoreVeto(std::function<bool(const QString& windowId)> veto);
 
     // ── External-reset resync ──────────────────────────────────────────
@@ -216,6 +219,9 @@ private:
     /// Shared owner-removal epilogue: restore (now or deferred) when the
     /// owner set emptied, then prune.
     void finishRelease(const QString& windowId, Entry& entry, Restore restore);
+    /// Cancel a queued deferred restore (flag + queue set + retry counter
+    /// together — the three must never desync across the cancel sites).
+    void cancelPendingRestore(const QString& windowId, Entry& entry);
     void hideNow(WindowHandle w, Placement placement);
     void restoreNow(const QString& windowId, Entry& entry, bool reassertGeometry);
     /// Drop the entry if it carries no information anymore.

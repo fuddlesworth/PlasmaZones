@@ -338,11 +338,107 @@ private Q_SLOTS:
         mgr.setRuleOverride(Win1, std::nullopt);
 
         // The refreshed snapshot sees priorNoBorder=true: nothing to hide
-        // (already borderless), and the final release must NOT force-decorate
-        // the user's window. A stale snapshot would setNoBorder(false) here.
+        // (already borderless — no physical call at all), and the final
+        // release must NOT force-decorate the user's window. A stale
+        // snapshot would setNoBorder(false) here.
         mgr.releaseKind(Win1, OwnerKind::Snap);
+        QVERIFY(bridge.callLog.isEmpty());
+        QCOMPARE(fw->noBorder, true);
+    }
+
+    void testRuleHideAlsoRefreshesStaleSnapshot()
+    {
+        FakeCompositorBridge bridge;
+        auto* fw = bridge.addWindow(Win1);
+        DecorationManager mgr(bridge);
+
+        // Same staleness as the acquire() case, reached via the RULE path:
+        // ownerless veto-only entry with priorNoBorder=false captured, then
+        // the user makes the window borderless themselves.
+        mgr.acquire(Win1, DecorationManager::snap(Screen1));
+        mgr.setRuleOverride(Win1, false);
+        mgr.releaseKind(Win1, OwnerKind::Snap);
+        fw->noBorder = true;
+        bridge.clearLog();
+
+        // A rule HIDE starts a new ownership epoch through the same refresh:
+        // the fresh snapshot sees priorNoBorder=true, so removing the rule
+        // must not force-decorate the user's window.
+        mgr.setRuleOverride(Win1, true);
+        mgr.setRuleOverride(Win1, std::nullopt);
         QVERIFY(!bridge.callLog.contains(QStringLiteral("setNoBorder(app|1,false)")));
         QCOMPARE(fw->noBorder, true);
+    }
+
+    void testDestructionMidDrainIsSafe()
+    {
+        FakeCompositorBridge bridge;
+        bridge.addWindow(QStringLiteral("a|1"));
+        bridge.addWindow(QStringLiteral("b|1"));
+        auto mgr = std::make_unique<DecorationManager>(bridge);
+
+        mgr->acquire(QStringLiteral("a|1"), DecorationManager::autotile(Screen1));
+        mgr->acquire(QStringLiteral("b|1"), DecorationManager::autotile(Screen1));
+        mgr->releaseKind(QStringLiteral("a|1"), OwnerKind::Autotile, Restore::Deferred);
+        mgr->releaseKind(QStringLiteral("b|1"), OwnerKind::Autotile, Restore::Deferred);
+
+        // First step runs synchronously; destroy the manager with the chain
+        // continuation still queued. The queued QTimer copy dies with the
+        // QObject and the destructor breaks the chain's self-reference cycle
+        // (leak half is ASAN/LSAN-visible) — observable here: no stray
+        // compositor call after destruction.
+        mgr->drainPendingRestores();
+        const int callsBeforeDestruction = bridge.callLog.size();
+        mgr.reset();
+        QTest::qWait(50);
+        QCOMPARE(bridge.callLog.size(), callsBeforeDestruction);
+    }
+
+    void testRestoreAllDuringDrainDoesNotDoubleRestore()
+    {
+        FakeCompositorBridge bridge;
+        bridge.addWindow(QStringLiteral("a|1"));
+        bridge.addWindow(QStringLiteral("b|1"));
+        DecorationManager mgr(bridge);
+
+        mgr.acquire(QStringLiteral("a|1"), DecorationManager::autotile(Screen1));
+        mgr.acquire(QStringLiteral("b|1"), DecorationManager::autotile(Screen1));
+        mgr.releaseKind(QStringLiteral("a|1"), OwnerKind::Autotile, Restore::Deferred);
+        mgr.releaseKind(QStringLiteral("b|1"), OwnerKind::Autotile, Restore::Deferred);
+
+        // The drain restores one window synchronously; restoreAll() then
+        // clears all tracking before the chain's second tick — that tick
+        // must find its entry gone and skip, not restore twice.
+        mgr.drainPendingRestores();
+        mgr.restoreAll();
+        QTest::qWait(50);
+        const int aRestores = bridge.callLog.filter(QStringLiteral("setNoBorder(a|1,false)")).size();
+        const int bRestores = bridge.callLog.filter(QStringLiteral("setNoBorder(b|1,false)")).size();
+        QCOMPARE(aRestores, 1);
+        QCOMPARE(bRestores, 1);
+    }
+
+    void testWindowGoneWithoutForgetIsSkippedAndPruned()
+    {
+        FakeCompositorBridge bridge;
+        bridge.addWindow(Win1);
+        DecorationManager mgr(bridge);
+        QSignalSpy restored(&mgr, &DecorationManager::windowDecorationRestored);
+
+        mgr.acquire(Win1, DecorationManager::autotile(Screen1));
+        mgr.releaseKind(Win1, OwnerKind::Autotile, Restore::Deferred);
+
+        // The window vanishes without a forgetWindow (defensive path —
+        // production always forgets on close): the drain step must perform
+        // no compositor call and the entry must not linger.
+        bridge.removeWindow(Win1);
+        bridge.clearLog();
+        mgr.drainPendingRestores();
+        QTest::qWait(50);
+        QVERIFY(bridge.callLog.isEmpty());
+        QCOMPARE(restored.count(), 0);
+        QVERIFY(!mgr.isOwned(Win1));
+        QVERIFY(!mgr.isBorderless(Win1));
     }
 
     void testFallbackTimerDrains()
