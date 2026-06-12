@@ -132,7 +132,6 @@ void SnapHandler::clearSnapTracking()
     // DecorationManager's job — teardown callers pair this with
     // DecorationManager::restoreAll(). Callers also pair it with
     // clearAllBorders() to tear down the OutlinedBorderItem scene items.
-    m_border.borderlessWindowsByScreen.clear();
     m_border.tiledWindowsByScreen.clear();
 }
 

@@ -89,10 +89,7 @@ void AutotileHandler::clearTiledTracking()
 {
     // Bookkeeping only. Physical title-bar restores are the
     // DecorationManager's job — teardown callers pair this with
-    // DecorationManager::restoreAll(). The borderless buckets are unused now
-    // (the manager owns that state) but cleared defensively until the field
-    // is removed from BorderState.
-    m_border.borderlessWindowsByScreen.clear();
+    // DecorationManager::restoreAll().
     m_border.tiledWindowsByScreen.clear();
 }
 

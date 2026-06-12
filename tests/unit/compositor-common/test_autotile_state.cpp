@@ -58,7 +58,6 @@ private Q_SLOTS:
 
         // Set up BorderState with the window on its owning screen.
         PhosphorCompositor::BorderState border;
-        PhosphorCompositor::AutotileStateHelpers::addBorderlessOnScreen(border, screenId, windowId);
         PhosphorCompositor::AutotileStateHelpers::addTiledOnScreen(border, screenId, windowId);
 
         // Set up AutotileWindowState maps
@@ -91,7 +90,6 @@ private Q_SLOTS:
         PhosphorCompositor::AutotileStateHelpers::cleanupClosedWindowState(windowId, screenId, border, state);
 
         // Verify all maps no longer contain the window
-        QVERIFY(!PhosphorCompositor::AutotileStateHelpers::isBorderlessWindow(border, windowId));
         QVERIFY(!PhosphorCompositor::AutotileStateHelpers::isTiledWindow(border, windowId));
         QVERIFY(!notifiedWindows.contains(windowId));
         QVERIFY(!notifiedWindowScreens.contains(windowId));
