@@ -353,7 +353,7 @@ private Q_SLOTS:
             QVERIFY2(!RuleAction::fromJson(o).has_value(), type.data());
             // The standard QColor hex shapes the consumer parses are all accepted:
             // #RGB (4), #RRGGBB (7), #AARRGGBB (9 — QColor reads 9-digit hex alpha-first).
-            for (const QString good :
+            for (const QString& good :
                  {QStringLiteral("#abc"), QStringLiteral("#FF0000"), QStringLiteral("#80FF0000")}) {
                 o.insert(QStringLiteral("value"), good);
                 QVERIFY2(RuleAction::fromJson(o).has_value(),

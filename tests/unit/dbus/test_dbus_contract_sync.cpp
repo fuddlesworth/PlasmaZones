@@ -5,8 +5,8 @@
  * @file test_dbus_contract_sync.cpp
  * @brief XML ↔ adaptor contract tripwire for the hand-written D-Bus adaptors.
  *
- * The dbus/*.xml files are install-only artifacts ("Keep in sync with
- * dbus/*.xml on disk" — root CMakeLists), while the adaptors are handwritten
+ * The XML files under dbus/ are install-only artifacts ("Keep in sync with
+ * the XMLs on disk" — root CMakeLists), while the adaptors are handwritten
  * with Q_CLASSINFO. Nothing enforced the symmetry mechanically, and the
  * PR-608 audit caught exactly the drift class that invites: a capability
  * documented against a deleted method, internal helpers exposed as bus slots,
