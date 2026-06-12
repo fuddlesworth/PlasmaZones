@@ -660,14 +660,17 @@ void PlasmaZonesEffect::loadCachedSettings()
     });
 
     loadSettingAsync(QStringLiteral("autotileBorderWidth"), [this](const QVariant& v) {
-        int bw = qBound(DecorationDefaults::BorderWidthMin, v.toInt(), DecorationDefaults::BorderWidthMax);
+        // No retile on width change: borders are OutlinedBorderItem overlays
+        // drawn INSIDE the window frame, so zone geometry is width-independent.
+        // The retileAllScreens this handler used to fire was a leftover from
+        // the geometry-inset border era (windows were once shrunk by the
+        // border width); the inset surface was removed long ago and nothing
+        // daemon-side consumes autotileBorderWidth. updateAllBorders()
+        // rebuilds the overlays at the new thickness — symmetric with the
+        // snapping width handler below, which never retiled.
+        const int bw = qBound(DecorationDefaults::BorderWidthMin, v.toInt(), DecorationDefaults::BorderWidthMax);
         if (m_autotileHandler->borderWidth() != bw) {
             m_autotileHandler->setBorderWidth(bw);
-            // Invalidate pending stagger timers that would use the old border width
-            m_autotileHandler->invalidateStaggerGeneration();
-            PhosphorProtocol::ClientHelpers::fireAndForget(this, PhosphorProtocol::Service::Interface::Autotile,
-                                                           QStringLiteral("retileAllScreens"), {},
-                                                           QStringLiteral("border width change retile"));
             updateAllBorders();
         }
     });
