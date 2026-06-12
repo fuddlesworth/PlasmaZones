@@ -107,11 +107,16 @@ const QLatin1String kPerScreenAutotileKeys[] = {
 };
 
 // Gaps sub-domain of the autotile per-screen keys — the keys the Tiling
-// Appearance "Gaps" card writes. Everything else in kPerScreenAutotileKeys is
-// the Tiling Algorithm card's sub-domain. The two cards live on disjoint key
-// subsets so each card's scope chip reports its override dot and clears its
-// reset against ONLY its own keys; a shared whole-domain clear would wipe the
-// other card's per-monitor overrides (data loss on reset).
+// Appearance "Gaps" card writes. Everything else in kPerScreenAutotileKeys
+// falls to the Tiling Algorithm card's sub-domain BY COMPLEMENT — including
+// the Animation* keys, which currently have no settings card at all (only
+// the D-Bus dispatch path can write them); they ride the Algorithm card's
+// scope chip and reset until an animations card exists, at which point this
+// binary set-and-complement classification needs a third explicit set. The
+// cards live on disjoint key subsets so each card's scope chip reports its
+// override dot and clears its reset against ONLY its own keys; a shared
+// whole-domain clear would wipe the other card's per-monitor overrides
+// (data loss on reset).
 const QLatin1String kPerScreenAutotileGapsKeys[] = {
     QLatin1String(PerScreenAutotileKey::InnerGap),           QLatin1String(PerScreenAutotileKey::OuterGap),
     QLatin1String(PerScreenAutotileKey::UsePerSideOuterGap), QLatin1String(PerScreenAutotileKey::OuterGapTop),
@@ -408,8 +413,13 @@ void migrateConnectorNames(QHash<QString, QVariantMap>& settings)
         const QString canonical = canonicalPerScreenKey(key);
         const QVariantMap value = settings.take(key);
         if (settings.contains(canonical)) {
+            // Canonical-form entry wins: it was written by current-format
+            // code and is the fresher data; the connector-form entry being
+            // migrated is by definition a legacy leftover. Drop the legacy
+            // one (already take()n above) and surface the loss.
             qCWarning(lcConfig) << "EDID collision during per-screen migration:" << key << "resolves to" << canonical
-                                << "which already exists - the later entry wins, the earlier override is dropped";
+                                << "which already exists - keeping the canonical entry, dropping the legacy override";
+            continue;
         }
         settings.insert(canonical, value);
     }

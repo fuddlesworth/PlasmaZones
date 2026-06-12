@@ -545,6 +545,63 @@ private Q_SLOTS:
         QCOMPARE(bridge.window(reclaimed)->noBorder, true);
         // The re-claimed window must never have been force-decorated.
         QVERIFY(!bridge.callLog.contains(QStringLiteral("setNoBorder(%1,false)").arg(reclaimed)));
+
+        // The physical hide was TRANSFERRED to the new epoch (the re-entrant
+        // acquire evaluated against our own old hide and would otherwise have
+        // latched priorNoBorder=true): the manager still reports the window
+        // borderless, and the new owner's release must restore it — the
+        // reclaim must never strand the title bar.
+        QVERIFY(mgr.isBorderless(reclaimed));
+        mgr.releaseKind(reclaimed, OwnerKind::Snap);
+        QCOMPARE(bridge.window(reclaimed)->noBorder, false);
+    }
+
+    void testOverlappingDrainsNeitherDoubleRestoreNorDoubleEmit()
+    {
+        FakeCompositorBridge bridge;
+        bridge.addWindow(QStringLiteral("a|1"));
+        bridge.addWindow(QStringLiteral("b|1"));
+        DecorationManager mgr(bridge);
+        QSignalSpy finished(&mgr, &DecorationManager::drainFinished);
+        QSignalSpy restored(&mgr, &DecorationManager::windowDecorationRestored);
+
+        mgr.acquire(QStringLiteral("a|1"), DecorationManager::autotile(Screen1));
+        mgr.acquire(QStringLiteral("b|1"), DecorationManager::autotile(Screen1));
+        mgr.releaseKind(QStringLiteral("a|1"), OwnerKind::Autotile, Restore::Deferred);
+
+        // First drain starts a chain (restores a|1 synchronously on tick 1);
+        // a second deferred release + drain mid-flight must snapshot a FRESH
+        // queue — no double-restore of a|1, no extra drainFinished.
+        mgr.drainPendingRestores();
+        mgr.releaseKind(QStringLiteral("b|1"), OwnerKind::Autotile, Restore::Deferred);
+        mgr.drainPendingRestores();
+        QTRY_COMPARE(bridge.window(QStringLiteral("b|1"))->noBorder, false);
+        QTRY_COMPARE(finished.count(), 2);
+        QCOMPARE(restored.count(), 2);
+        QCOMPARE(bridge.callLog.filter(QStringLiteral("setNoBorder(a|1,false)")).size(), 1);
+        QCOMPARE(bridge.callLog.filter(QStringLiteral("setNoBorder(b|1,false)")).size(), 1);
+    }
+
+    void testRestoreAllSurvivesManagerDestructionFromSlot()
+    {
+        FakeCompositorBridge bridge;
+        bridge.addWindow(QStringLiteral("a|1"));
+        bridge.addWindow(QStringLiteral("b|1"));
+        auto* mgr = new DecorationManager(bridge);
+
+        mgr->acquire(QStringLiteral("a|1"), DecorationManager::autotile(Screen1));
+        mgr->acquire(QStringLiteral("b|1"), DecorationManager::autotile(Screen1));
+
+        // A restored-signal slot deletes the manager mid-teardown (the
+        // documented re-entrancy contract). The epilogue guard must stop the
+        // loop cleanly: exactly one window restored, no crash, no UAF.
+        connect(mgr, &DecorationManager::windowDecorationRestored, mgr, [mgr](const QString&) {
+            delete mgr;
+        });
+        mgr->restoreAll();
+
+        const int restores = bridge.callLog.filter(QStringLiteral(",false)")).size();
+        QCOMPARE(restores, 1);
     }
 
     void testReleaseOthersOfKindLeavesOtherKindsAlone()
@@ -569,6 +626,28 @@ private Q_SLOTS:
         // owner remains.
         mgr.releaseKind(Win1, OwnerKind::Snap);
         QCOMPARE(bridge.window(Win1)->noBorder, false);
+    }
+
+    void testResolveExactNeverTogglesFuzzySibling()
+    {
+        FakeCompositorBridge bridge;
+        bridge.fuzzyFindByAppId = true;
+        bridge.addWindow(QStringLiteral("app|1"));
+        bridge.addWindow(QStringLiteral("app|2"));
+        DecorationManager mgr(bridge);
+
+        mgr.acquire(QStringLiteral("app|1"), DecorationManager::autotile(Screen1));
+        QCOMPARE(bridge.window(QStringLiteral("app|1"))->noBorder, true);
+
+        // The hidden window dies; the bridge's fuzzy fallback now resolves
+        // the dead id to the same-app SIBLING. The release's restore must
+        // detect the id mismatch (resolveExact) and touch nothing — toggling
+        // the sibling under the dead key would be unreleasable.
+        bridge.removeWindow(QStringLiteral("app|1"));
+        bridge.clearLog();
+        mgr.releaseKind(QStringLiteral("app|1"), OwnerKind::Autotile);
+        QVERIFY(bridge.callLog.isEmpty());
+        QCOMPARE(bridge.window(QStringLiteral("app|2"))->noBorder, false);
     }
 
     void testResyncNoopWhileStillSuppressed()

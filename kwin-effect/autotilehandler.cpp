@@ -527,11 +527,15 @@ void AutotileHandler::handleWindowOutputChanged(KWin::EffectWindow* w)
     m_effect->updateAllBorders();
 }
 
-void AutotileHandler::onWindowClosed(const QString& windowId, const QString& screenId)
+void AutotileHandler::onWindowClosed(const QString& windowId, const QString& screenId, bool windowDestroyed)
 {
-    // If we haven't notified the daemon about this window yet, record the close
-    // so we can suppress the open if it arrives late (D-Bus ordering race)
-    if (!m_notifiedWindows.contains(windowId) && m_autotileScreens.contains(screenId)) {
+    // If we haven't notified the daemon about this window yet, record the
+    // close so we can suppress the open if it arrives late (D-Bus ordering
+    // race). Genuine destruction only: a LIVE window routed through here
+    // (transfer / desktop move / drag-bypass) that is untracked because it
+    // was eligibility-filtered would otherwise have its NEXT genuine add
+    // silently swallowed when it later becomes eligible.
+    if (windowDestroyed && !m_notifiedWindows.contains(windowId) && m_autotileScreens.contains(screenId)) {
         m_pendingCloses.insert(windowId);
     }
 

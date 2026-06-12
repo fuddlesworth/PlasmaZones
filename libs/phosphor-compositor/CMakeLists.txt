@@ -64,7 +64,6 @@ target_link_libraries(PhosphorCompositor
         Qt6::DBus
         PhosphorProtocol::PhosphorProtocol
         PhosphorIdentity::PhosphorIdentity
-        PhosphorAnimation::PhosphorAnimation
 )
 
 # ═══════════════════════════════════════════════════════════════════════════════

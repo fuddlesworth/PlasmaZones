@@ -92,6 +92,11 @@ public Q_SLOTS:
      * @param modifiers Qt::KeyboardModifiers bitmask
      * @param mouseButtons Qt::MouseButtons bitmask
      * @note For non-drag contexts (focus-follows-mouse, etc.)
+     * @note Reserved forward surface: the KWin bridge does not call this
+     *       (it reports modifiers through the drag pipeline) and nothing
+     *       daemon-side consumes modifierStateChanged yet — the method
+     *       exists for non-KWin bridges that lack a drag channel. The
+     *       interface is EXPERIMENTAL; revisit before v2.
      */
     void reportModifierState(int modifiers, int mouseButtons);
 

@@ -206,8 +206,8 @@ private Q_SLOTS:
         QSignalSpy spy(&engine, &AutotileEngine::autotileScreensChanged);
 
         const QSet<QString> screens{QStringLiteral("HDMI-1")};
-        // First non-empty activity is initialization, NOT a switch (the
-        // engine's arming condition differs from setCurrentDesktop here).
+        // First non-empty activity push is initialization, NOT a switch —
+        // same established-context arming as the desktop side.
         engine.setCurrentActivity(QStringLiteral("activity-a"));
         engine.setAutotileScreens(screens);
         QCOMPARE(spy.count(), 1);

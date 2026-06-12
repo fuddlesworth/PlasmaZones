@@ -404,7 +404,10 @@ QString operatorLabelImpl(Operator op)
     case Operator::LessThan:
         return PhosphorI18n::tr("less than");
     }
-    return QString();
+    // Wire-string fallback (same convention as paramLabel /
+    // actionTypeFallbackLabel): a future operator missing a label entry
+    // shows its raw token in the picker instead of a blank row.
+    return PhosphorWindowRule::operatorToString(op);
 }
 
 } // namespace
@@ -513,6 +516,11 @@ QVariantList matchFields()
 
 QVariantList operatorsForField(int fieldValue)
 {
+    // Bounded cast: QML hands us a raw int, and an out-of-range value must
+    // not reach the Field classifiers (matchFields() bounds the same way).
+    if (fieldValue < 0 || fieldValue >= PhosphorWindowRule::FieldCount) {
+        return {};
+    }
     const Field field = static_cast<Field>(fieldValue);
     QList<Operator> ops;
     if (PhosphorWindowRule::fieldIsString(field)) {

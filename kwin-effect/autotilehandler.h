@@ -74,7 +74,18 @@ public:
     void notifyWindowsAddedBatch(const QList<KWin::EffectWindow*>& windows, const QSet<QString>& screenFilter = {},
                                  bool resetNotified = false);
 
-    void onWindowClosed(const QString& windowId, const QString& screenId);
+    /**
+     * @brief Remove a window from this handler's autotile tracking.
+     *
+     * @param windowDestroyed True ONLY from the genuine window-destruction
+     *        path (slotWindowClosed). The other callers (cross-screen
+     *        transfer, desktop move, drag-bypass) pass a LIVE window: for
+     *        those, recording an m_pendingCloses suppression entry would
+     *        poison the window's next notifyWindowAdded — the entry exists
+     *        solely to absorb the D-Bus ordering race where a real close
+     *        overtakes an in-flight windowOpened.
+     */
+    void onWindowClosed(const QString& windowId, const QString& screenId, bool windowDestroyed = false);
     /// Drop a destroyed window's desktop-move geometry stash. Separate from
     /// onWindowClosed because the desktop-MOVE path calls onWindowClosed
     /// right after creating the stash (the window must look "closed" to this

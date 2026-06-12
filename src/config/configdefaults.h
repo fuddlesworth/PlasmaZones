@@ -674,12 +674,14 @@ public:
     /**
      * Read the rendering backend from the config file on disk.
      *
-     * QSettings::IniFormat maps ungrouped keys (before any [Section] header) into
-     * the "General" group automatically. The settings app writes RenderingBackend
-     * at the root level, so the default read resolves it via General/ implicitly.
-     * This helper provides a single canonical read used by daemon, editor, and Settings.
+     * Primary path: reads Rendering/Backend from config.json (the
+     * renderingGroup()/backendKey() accessors). Falls back to the legacy
+     * plasmazonesrc INI (v1 key) ONLY when the JSON config does not exist
+     * yet — i.e. before the first migration has run. This helper provides a
+     * single canonical read used by daemon, editor, and Settings.
      *
-     * Safe to call before QCoreApplication exists (uses raw QSettings).
+     * Safe to call before QCoreApplication exists (raw file access, no
+     * config backend construction).
      * Returns the normalized backend string ("auto", "vulkan", or "opengl").
      */
     PLASMAZONES_EXPORT static QString readRenderingBackendFromDisk();

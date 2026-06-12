@@ -167,10 +167,22 @@ void DecorationManager::restoreAll()
     // there is no later tick to defer to.
     QPointer<DecorationManager> self(this);
     for (const QString& windowId : std::as_const(toRestore)) {
-        if (m_windows.contains(windowId)) {
+        if (auto it = m_windows.find(windowId); it != m_windows.end()) {
             // A re-entrant acquire (via the restored-signal handlers of
             // earlier loop iterations) re-claimed this window mid-teardown:
-            // the new epoch owns its decoration now — leave it hidden.
+            // the new epoch owns its decoration now — leave it hidden. But
+            // TRANSFER the physical hide to the new epoch: the re-entrant
+            // acquire evaluated against the still-borderless window and
+            // latched OUR OLD hide as priorNoBorder, which would make the
+            // new epoch's eventual release a silent no-op (a permanently
+            // stranded title bar — restoreNow bails on priorNoBorder and
+            // nothing else ever calls setNoBorder). Every id in toRestore
+            // was eligible and physically hidden by us, so the patch values
+            // are known-correct.
+            it->evaluated = true;
+            it->eligible = true;
+            it->priorNoBorder = false;
+            it->physicallyHidden = true;
             continue;
         }
         if (WindowHandle w = resolveExact(windowId)) {

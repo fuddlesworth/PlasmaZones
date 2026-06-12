@@ -17,7 +17,7 @@ SPDX-License-Identifier: GPL-3.0-or-later
             <annotation name="org.gtk.GDBus.DocString" value="Whether autotiling is active on any screen (read-only, derived from assignments)."/>
         </property>
         <property name="autotileScreens" type="as" access="read">
-            <annotation name="org.gtk.GDBus.DocString" value="List of screen names currently using autotile."/>
+            <annotation name="org.gtk.GDBus.DocString" value="List of screen IDs currently using autotile."/>
         </property>
         <property name="algorithm" type="s" access="readwrite">
             <annotation name="org.gtk.GDBus.DocString" value="Current tiling algorithm ID (e.g., master-stack, bsp, columns)."/>
@@ -53,7 +53,7 @@ SPDX-License-Identifier: GPL-3.0-or-later
         </method>
 
         <method name="retileAllScreens">
-            <annotation name="org.gtk.GDBus.DocString" value="Force retiling of all autotile screens. Convenience method equivalent to retile with empty screen name."/>
+            <annotation name="org.gtk.GDBus.DocString" value="Force retiling of all autotile screens. Convenience method equivalent to retile with an empty screen ID."/>
         </method>
 
         <method name="swapWindows">

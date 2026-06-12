@@ -26,7 +26,7 @@ SPDX-License-Identifier: GPL-3.0-or-later
             </arg>
         </method>
         <method name="reportModifierState">
-            <annotation name="org.gtk.GDBus.DocString" value="Report keyboard modifier and mouse button state from compositor."/>
+            <annotation name="org.gtk.GDBus.DocString" value="Report keyboard modifier and mouse button state from compositor. Reserved forward surface for bridges without a drag channel — the KWin bridge reports modifiers through the drag pipeline instead (EXPERIMENTAL interface)."/>
             <arg name="modifiers" type="i" direction="in">
                 <annotation name="org.gtk.GDBus.DocString" value="Qt::KeyboardModifiers bitmask."/>
             </arg>

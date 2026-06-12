@@ -191,9 +191,14 @@ void AutotileHandler::slotScreensChanged(const QStringList& screenIds, bool isDe
                 // desktop switch. m_preAutotileGeometries is read non-
                 // destructively (the entry stays for the next genuine toggle);
                 // the all-bucket lookup covers windows whose rect is keyed
-                // under a screen other than their current one.
+                // under a screen other than their current one. BOTH restore
+                // branches are gated on wasTracked: the geometry bucket also
+                // survives non-destructively, so a window already restored by
+                // a previous switch (now untracked, user may have moved it)
+                // would otherwise be re-teleported to the stale rect on every
+                // later switch onto this desktop.
                 const QRectF savedGeo = findPreAutotileGeometry(windowId);
-                if (savedGeo.isValid()) {
+                if (savedGeo.isValid() && wasTracked) {
                     // applySnapGeometry's moveResize, and the maximize-state
                     // clear below, emit windowFrameGeometryChanged
                     // synchronously; suppress the VS-crossing detectors

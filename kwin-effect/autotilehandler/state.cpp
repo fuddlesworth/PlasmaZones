@@ -276,6 +276,13 @@ void AutotileHandler::savePreAutotileForDesktopMove(const QString& windowId)
 
 bool AutotileHandler::isEligibleForAutotileNotify(KWin::EffectWindow* w) const
 {
+    // Close-grabbed dying windows survive in the stacking order for the
+    // close-animation duration; announcing one as opened would insert an
+    // orphan into the tiling tree (shrinking live tiles) until a later
+    // retile cleans it up.
+    if (w && w->isDeleted()) {
+        return false;
+    }
     // Early-out: KWin internal surfaces (overlay QQuickViews, zone overlays, etc.)
     // are never eligible for autotile notification. KWin's InternalWindow::minSize()
     // segfaults when the backing QWindow is null. See discussion #511.

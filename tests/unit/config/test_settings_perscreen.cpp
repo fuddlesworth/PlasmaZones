@@ -199,18 +199,34 @@ private Q_SLOTS:
             {PerScreenAutotileKey::AnimationEasingCurve, QStringLiteral("linear")},
         };
 
+        // Derive the short form the same way the implementation does
+        // (kAutotilePrefix in perscreen.cpp) — no magic length literal.
+        const QLatin1String autotilePrefix("Autotile");
+        const auto shortForm = [autotilePrefix](const QString& longKey) {
+            return longKey.startsWith(autotilePrefix) ? longKey.mid(autotilePrefix.size()) : longKey;
+        };
+
         for (const KeyProbe& probe : probes) {
             const QString longKey = QString::fromLatin1(probe.key);
             settings.setPerScreenAutotileSetting(screen, longKey, probe.value);
-            // The map stores short form: strip the "Autotile" prefix
-            // (Animation* keys carry none).
-            QString shortKey = longKey;
-            if (shortKey.startsWith(QLatin1String("Autotile"))) {
-                shortKey = shortKey.mid(8);
-            }
             const QVariantMap overrides = settings.getPerScreenAutotileSettings(screen);
-            QVERIFY2(overrides.contains(shortKey),
+            QVERIFY2(overrides.contains(shortForm(longKey)),
                      qPrintable(QStringLiteral("validator rejected declared per-screen key: ") + longKey));
+        }
+
+        // Disk round-trip: the LOAD path whitelists against a separate
+        // hand-maintained list (kPerScreenAutotileKeys in perscreen.cpp) —
+        // a key the validator accepts but that list omits would round-trip
+        // in memory yet be silently dropped on the next launch. Force a
+        // save, construct a second Settings over the same config, and
+        // assert every key survived.
+        settings.save();
+        Settings reloaded;
+        const QVariantMap persisted = reloaded.getPerScreenAutotileSettings(screen);
+        for (const KeyProbe& probe : probes) {
+            const QString longKey = QString::fromLatin1(probe.key);
+            QVERIFY2(persisted.contains(shortForm(longKey)),
+                     qPrintable(QStringLiteral("per-screen key lost across save/reload: ") + longKey));
         }
     }
 

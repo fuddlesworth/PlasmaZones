@@ -102,7 +102,7 @@ public:
      * destination VS). Reading the live screenAssignment closes that gap
      * without requiring a separate signal/cache invalidation path.
      */
-    Q_INVOKABLE QString lastActiveScreenName() const override;
+    QString lastActiveScreenName() const override;
 
     /**
      * @brief Last screen the cursor was on, reported by the KWin effect
@@ -111,7 +111,7 @@ public:
      * This is the primary source for shortcut screen detection on Wayland,
      * since QCursor::pos() is unreliable for background daemons.
      */
-    Q_INVOKABLE QString lastCursorScreenName() const override
+    QString lastCursorScreenName() const override
     {
         return m_lastCursorScreenId;
     }
@@ -119,7 +119,7 @@ public:
     /**
      * @brief Get the last activated window's ID
      */
-    Q_INVOKABLE QString lastActiveWindowId() const override
+    QString lastActiveWindowId() const override
     {
         return m_lastActiveWindowId;
     }
@@ -303,6 +303,7 @@ public Q_SLOTS:
      * @param y Window Y position
      * @param width Window width
      * @param height Window height
+     * @param screenId Screen the geometry was captured on
      * @param overwrite If false (snap mode), skip if entry exists. If true (autotile), always overwrite.
      */
     void storePreTileGeometry(const QString& windowId, int x, int y, int width, int height, const QString& screenId,
@@ -327,6 +328,8 @@ public Q_SLOTS:
     /**
      * Clean up all tracking data for a closed window
      * @param windowId Window ID that was closed
+     * @param windowKind PhosphorEngine::WindowKind wire value (Unknown/Normal/
+     *        Transient) — gates the snap-restore consume on reopen
      * @note Call this when KWin reports a window has been closed to prevent memory leaks
      */
     void windowClosed(const QString& windowId, int windowKind);
@@ -350,14 +353,6 @@ public Q_SLOTS:
      * @param rect Current frame geometry in compositor coordinates
      */
     void setFrameGeometry(const QString& windowId, int x, int y, int width, int height);
-
-    /**
-     * Query the daemon's shadow for a window's last-known frame geometry.
-     *
-     * Returns an invalid QRect if the window has not pushed a geometry yet.
-     * Used by daemon-local shortcut handlers.
-     */
-    Q_INVOKABLE QRect frameGeometry(const QString& windowId) const override;
 
     /**
      * Update cursor screen when cursor crosses to a different monitor
@@ -392,16 +387,6 @@ public Q_SLOTS:
      *       the nearest visible screen while preserving dimensions where possible
      */
     bool getValidatedPreTileGeometry(const QString& windowId, int& x, int& y, int& width, int& height);
-
-    /**
-     * Check if a geometry rectangle is within any visible screen
-     * @param x X position
-     * @param y Y position
-     * @param width Width
-     * @param height Height
-     * @return true if geometry is fully or partially visible on any screen
-     */
-    bool isGeometryOnScreen(int x, int y, int width, int height) const;
 
     // Window tracking queries
     QString getZoneForWindow(const QString& windowId);
@@ -442,7 +427,9 @@ public Q_SLOTS:
 
     /**
      * Get updated geometries for all tracked windows (for resolution change handling)
-     * @return JSON array of objects: [{windowId, x, y, width, height}, ...]
+     * @return Typed PhosphorProtocol::WindowGeometryList — entries carry
+     *         (windowId, x, y, width, height, screenId), the same wire shape
+     *         as applyGeometriesBatch
      * @note Returns empty if keepWindowsInZonesOnResolutionChange is disabled
      */
     PhosphorProtocol::WindowGeometryList getUpdatedWindowGeometries();
@@ -464,7 +451,8 @@ public Q_SLOTS:
     /**
      * @brief Get comprehensive state for a single window
      * @param windowId Window to query
-     * @return PhosphorProtocol::WindowStateEntry with windowId, zoneId, screenId, isFloating, changeType
+     * @return PhosphorProtocol::WindowStateEntry with windowId, zoneId, screenId,
+     *         isFloating, changeType, zoneIds (multi-zone spans), isSticky
      */
     PhosphorProtocol::WindowStateEntry getWindowState(const QString& windowId);
 
@@ -520,11 +508,14 @@ public Q_SLOTS:
 
 public:
     // Internal-only members below — declared as plain public methods (NOT
-    // under Q_SLOTS) so QDBusAbstractAdaptor's runtime introspection does
-    // NOT expose them on the bus regardless of XML content. Same pattern as
-    // `WindowDragAdaptor::clearForCompositorReconnect` /
-    // `handleWindowClosed`. Every caller is in-process and reaches them
-    // via direct C++ invocation through the daemon, NOT through D-Bus.
+    // under Q_SLOTS, and without Q_INVOKABLE, which would re-export them) so
+    // QDBusAbstractAdaptor's runtime introspection does NOT expose them on
+    // the bus regardless of XML content. Same pattern as
+    // `WindowDragAdaptor::handleWindowClosed` (NOT its
+    // clearForCompositorReconnect, which must STAY a slot — the effect
+    // invokes that one over the bus at shutdown). Every caller here is
+    // in-process and reaches these via direct C++ invocation through the
+    // daemon, never through D-Bus.
 
     /**
      * Get stored pre-tile geometry for a window (out-param variant for
@@ -533,6 +524,15 @@ public:
      * @return true if geometry was found, false otherwise
      */
     bool getPreTileGeometry(const QString& windowId, int& x, int& y, int& width, int& height);
+
+    /**
+     * Query the daemon's shadow for a window's last-known frame geometry
+     * (INavigationStateProvider override; daemon-local shortcut handlers
+     * reach it via the typed interface, never the bus).
+     *
+     * Returns an invalid QRect if the window has not pushed a geometry yet.
+     */
+    QRect frameGeometry(const QString& windowId) const override;
 
     /**
      * @brief Find the first empty zone in the current layout
@@ -618,7 +618,7 @@ public:
      *
      * Plain `public:` (not Q_SLOTS): the bus surface deliberately excludes this —
      * every caller is in-process and reaches it via direct C++ invocation through the
-     * daemon. Same pattern as `WindowDragAdaptor::clearForCompositorReconnect`.
+     * daemon. Same pattern as `WindowDragAdaptor::handleWindowClosed`.
      *
      * Called from three daemon-side sites:
      *   1. Daemon::init's init-prologue priming call — runs once, synchronously,
@@ -677,7 +677,8 @@ Q_SIGNALS:
     /**
      * @brief Unified window state change stream
      * @param windowId Window whose state changed
-     * @param state PhosphorProtocol::WindowStateEntry with windowId, zoneId, screenId, isFloating, changeType
+     * @param state PhosphorProtocol::WindowStateEntry with windowId, zoneId, screenId,
+     *        isFloating, changeType, zoneIds (multi-zone spans), isSticky;
      *        changeType: "snapped", "unsnapped", "floated", "unfloated", "screen_changed"
      */
     void windowStateChanged(const QString& windowId, const PhosphorProtocol::WindowStateEntry& state);
@@ -845,15 +846,6 @@ public:
     QString resolveScreenForSnap(const QString& callerScreen, const QString& zoneId) const;
 
 private:
-    // ═══════════════════════════════════════════════════════════════════════════════
-    // Constants
-    // ═══════════════════════════════════════════════════════════════════════════════
-
-    // Minimum visible area for isGeometryOnScreen check (pixels)
-    // A window must have at least this much area visible on a screen to be considered "on screen"
-    static constexpr int MinVisibleWidth = 100;
-    static constexpr int MinVisibleHeight = 100;
-
     // ═══════════════════════════════════════════════════════════════════════════════
     // Helper Methods - Private
     // ═══════════════════════════════════════════════════════════════════════════════

@@ -42,11 +42,6 @@ PhosphorProtocol::BridgeRegistrationResult CompositorBridgeAdaptor::registerBrid
         return result;
     }
 
-    if (!m_bridgeName.isEmpty()) {
-        qCWarning(lcDbusWindow) << "Compositor bridge re-registration: replacing" << m_bridgeName << m_bridgeVersion
-                                << "with" << compositorName << version;
-    }
-
     // Version gate: reject effects that speak an older protocol version.
     // The effect passes its apiVersion as the `version` string.
     const int peerApiVersion = version.toInt();
@@ -59,6 +54,13 @@ PhosphorProtocol::BridgeRegistrationResult CompositorBridgeAdaptor::registerBrid
         result.bridgeName = compositorName;
         result.sessionId = QStringLiteral("REJECTED");
         return result;
+    }
+
+    // Logged only once every rejection gate has passed: a rejected peer
+    // replaces nothing, so warning before the gates would mislead.
+    if (!m_bridgeName.isEmpty()) {
+        qCWarning(lcDbusWindow) << "Compositor bridge re-registration: replacing" << m_bridgeName << m_bridgeVersion
+                                << "with" << compositorName << version;
     }
 
     m_bridgeName = compositorName;

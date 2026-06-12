@@ -1261,6 +1261,11 @@ private:
     /// desktops are >= 1), so the daemon's initial startup push must be told
     /// apart from a genuine switch by this flag, not a value comparison.
     bool m_desktopContextEverSet = false;
+    /// Activity counterpart: true once a NON-EMPTY activity was pushed.
+    /// Keeps "a" → "" → "b" (activities-service restart) armed on the
+    /// second leg, which a bare previous-value-empty sentinel would
+    /// misread as initialization.
+    bool m_activityContextEverSet = false;
 
     // Per-screen desktop override for sticky screens. When the KWin script
     // "virtualdesktopsonlyonprimary" pins all secondary-screen windows to all

@@ -238,12 +238,16 @@ void PlasmaZonesEffect::slotApplyGeometriesBatch(const PhosphorProtocol::WindowG
         return;
     }
 
-    // Note: ensurePreSnapGeometryStored is NOT called here. Batch operations (rotate, resnap)
-    // move windows between zones — their pre-tile geometry is already stored from the original
-    // snap. The daemon's processBatchEntries calls clearPreTileGeometry only for __restore__
-    // entries (overflow windows). Calling ensurePreSnapGeometryStored here would race with
-    // the daemon's clearPreTileGeometry and store the zone geometry as pre-tile, corrupting
-    // the restore path on subsequent mode transitions.
+    // Note: ensurePreSnapGeometryStored is NOT called here. Rotate/resnap/
+    // vs_reconfigure batches move windows between zones — their pre-tile
+    // geometry is already stored from the original snap. snap_all batches
+    // carry previously-UNSNAPPED windows with no per-snap capture on this
+    // path; those rely on the unified placement store's open-time /
+    // free-geometry capture for their float-back instead. The daemon's
+    // processBatchEntries calls clearPreTileGeometry only for __restore__
+    // entries (overflow windows); calling ensurePreSnapGeometryStored here
+    // would race that clear and store the zone geometry as pre-tile,
+    // corrupting the restore path on subsequent mode transitions.
 
     // Capture stacking order before applying geometries (moveResize raises on Wayland)
     const auto allWindows = KWin::effects->stackingOrder();
@@ -265,7 +269,12 @@ void PlasmaZonesEffect::slotApplyGeometriesBatch(const PhosphorProtocol::WindowG
         pending.size(),
         [this, pending, batchProfilePath](int i) {
             const auto& p = pending[i];
-            if (!p.window) {
+            // isDeleted too, not just destruction: close-shader grabs (which
+            // this effect takes) keep deleted windows alive in the stacking
+            // order for the close-animation duration, and the stagger delay
+            // widens the race window — moving/animating a dying window would
+            // also re-pollute the just-scrubbed id caches via getWindowId.
+            if (!p.window || p.window->isDeleted()) {
                 return;
             }
             // Seed the tracked-screen cache from the daemon's authoritative answer for

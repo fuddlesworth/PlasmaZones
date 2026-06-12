@@ -147,6 +147,12 @@ void PlasmaZonesEffect::continueDaemonReadySetup()
     // / pending restores arrive — setWindowMetadata is registry-only and has
     // no dependency on screen identity.
     for (KWin::EffectWindow* w : KWin::effects->stackingOrder()) {
+        // Skip close-grabbed dying windows: pushing their metadata would
+        // resurrect registry records for windows whose windowClosed the
+        // fresh daemon will never see.
+        if (!w || w->isDeleted()) {
+            continue;
+        }
         pushWindowMetadata(w);
     }
 
@@ -309,7 +315,9 @@ void PlasmaZonesEffect::processDaemonReadyWindowState()
     {
         QStringList aliveWindowIds;
         for (KWin::EffectWindow* w : windows) {
-            if (w && shouldHandleWindow(w)) {
+            // !isDeleted: a close-grabbed dying window is NOT alive — listing
+            // it would shield its stale persisted snap entry from the prune.
+            if (w && !w->isDeleted() && shouldHandleWindow(w)) {
                 aliveWindowIds.append(getWindowId(w));
             }
         }
@@ -541,11 +549,19 @@ void PlasmaZonesEffect::loadCachedSettings()
     // the effect's drag-gate exclusion rule set is now derived from the
     // store-side Exclude rules pulled via WindowRules.rulesChanged →
     // loadWindowRuleAnimationsFromDbus. No D-Bus settings fetch needed.
+    // isValid + clamp: a failed/invalid reply would otherwise toInt() to 0
+    // and silently disable the min-size gate the permissive member defaults
+    // exist to protect across the startup race (same hardening as the
+    // animation min-size loaders below).
     loadSettingAsync(QStringLiteral("minimumWindowWidth"), [this](const QVariant& v) {
-        m_cachedMinWindowWidth = v.toInt();
+        if (v.isValid()) {
+            m_cachedMinWindowWidth = qMax(0, v.toInt());
+        }
     });
     loadSettingAsync(QStringLiteral("minimumWindowHeight"), [this](const QVariant& v) {
-        m_cachedMinWindowHeight = v.toInt();
+        if (v.isValid()) {
+            m_cachedMinWindowHeight = qMax(0, v.toInt());
+        }
     });
     loadSettingAsync(QStringLiteral("snapAssistEnabled"), [this](const QVariant& v) {
         m_snapAssistHandler->setEnabled(v.toBool());
@@ -849,7 +865,8 @@ void PlasmaZonesEffect::connectNavigationSignals()
     // emits applyGeometryRequested to paint the outcome. The effect no longer
     // participates in the decision.
 
-    // Daemon-driven batch operations (rotate, resnap emit applyGeometriesBatch)
+    // Daemon-driven batch operations (rotate, resnap, vs_reconfigure emit
+    // applyGeometriesBatch; effect-local snap_all calls the slot directly)
     QDBusConnection::sessionBus().connect(
         PhosphorProtocol::Service::Name, PhosphorProtocol::Service::ObjectPath,
         PhosphorProtocol::Service::Interface::WindowTracking, QStringLiteral("applyGeometriesBatch"), this,

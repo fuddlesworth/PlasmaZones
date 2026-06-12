@@ -55,9 +55,13 @@ void PlasmaZonesEffect::setupDecorationManager()
                 // so off-desktop windows just get their stale item dropped —
                 // the desktopChanged → updateAllBorders refresh rebuilds
                 // theirs when they become visible (same policy as
-                // updateAllBorders and markWindowSnapped).
+                // updateAllBorders and markWindowSnapped). Exact-id re-check:
+                // findWindowById's fuzzy appId fallback could resolve a
+                // same-app sibling for a dead id, and creating a border item
+                // keyed under the dead id against the sibling would linger
+                // until the next full rebuild.
                 KWin::EffectWindow* w = findWindowById(windowId);
-                if (w && w->isOnCurrentDesktop()) {
+                if (w && getWindowId(w) == windowId && w->isOnCurrentDesktop()) {
                     updateWindowBorder(windowId, w);
                 } else {
                     removeWindowBorder(windowId);

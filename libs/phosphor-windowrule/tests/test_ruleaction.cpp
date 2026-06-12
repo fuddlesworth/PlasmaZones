@@ -117,7 +117,7 @@ private Q_SLOTS:
 
     void testActionDomain_contextActions()
     {
-        // The four context-domain actions all fill slots consumed during the
+        // The context-domain actions all fill slots consumed during the
         // screen/desktop/activity resolution pass. They must report
         // ActionDomain::Context so the validator can flag mismatched matches.
         const QList<QLatin1StringView> contextTypes = {
@@ -191,6 +191,51 @@ private Q_SLOTS:
             QVERIFY(descriptor.has_value());
             const int d = static_cast<int>(descriptor->domain);
             QVERIFY(d == static_cast<int>(ActionDomain::Context) || d == static_cast<int>(ActionDomain::Window));
+        }
+
+        // Completeness: every registered type must be domain-PINNED by one of
+        // the explicit lists in this suite (or the known-elsewhere set below)
+        // — otherwise a NEW action registered with the wrong domain sails
+        // through (the two-valued check above can't catch a wrong choice).
+        QSet<QString> pinned;
+        const QList<QLatin1StringView> contextTypes = {
+            ActionType::SetEngineMode,         ActionType::SetSnappingLayout, ActionType::SetTilingAlgorithm,
+            ActionType::DisableEngine,         ActionType::SetZonePadding,    ActionType::SetOuterGap,
+            ActionType::SetUsePerSideOuterGap, ActionType::SetOuterGapTop,    ActionType::SetOuterGapBottom,
+            ActionType::SetOuterGapLeft,       ActionType::SetOuterGapRight,
+        };
+        const QList<QLatin1StringView> windowTypes = {
+            ActionType::Exclude,
+            ActionType::Float,
+            ActionType::OverrideAnimationShader,
+            ActionType::OverrideAnimationTiming,
+            ActionType::OverrideAnimationCurve,
+            ActionType::SetOpacity,
+            ActionType::SetHideTitleBar,
+            ActionType::SetBorderVisible,
+            ActionType::SetBorderWidth,
+            ActionType::SetBorderRadius,
+            ActionType::SetBorderColor,
+        };
+        // Domains pinned in other suites: ExcludeAnimations (window) here in
+        // the validator tests' coverage, RestorePosition (window) in
+        // test_actionregistry.cpp.
+        const QList<QLatin1StringView> pinnedElsewhere = {
+            ActionType::ExcludeAnimations,
+            ActionType::RestorePosition,
+        };
+        for (const QLatin1StringView t : contextTypes) {
+            pinned.insert(QString::fromLatin1(t));
+        }
+        for (const QLatin1StringView t : windowTypes) {
+            pinned.insert(QString::fromLatin1(t));
+        }
+        for (const QLatin1StringView t : pinnedElsewhere) {
+            pinned.insert(QString::fromLatin1(t));
+        }
+        for (const QString& type : ActionRegistry::instance().registeredTypes()) {
+            QVERIFY2(pinned.contains(type),
+                     qPrintable(QStringLiteral("action type not domain-pinned by any list: ") + type));
         }
     }
 

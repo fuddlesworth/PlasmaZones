@@ -140,38 +140,6 @@ bool WindowTrackingAdaptor::getValidatedPreTileGeometry(const QString& windowId,
     return true;
 }
 
-bool WindowTrackingAdaptor::isGeometryOnScreen(int x, int y, int width, int height) const
-{
-    if (width <= 0 || height <= 0) {
-        return false;
-    }
-
-    QRect geometry(x, y, width, height);
-    // Use effective screen IDs (virtual if subdivided) for correct geometry checks
-    auto* mgr = m_service->screenManager();
-    if (mgr) {
-        for (const QString& sid : mgr->effectiveScreenIds()) {
-            QRect screenGeom = mgr->screenGeometry(sid);
-            if (!screenGeom.isValid()) {
-                continue;
-            }
-            QRect intersection = screenGeom.intersected(geometry);
-            if (intersection.width() >= MinVisibleWidth && intersection.height() >= MinVisibleHeight) {
-                return true;
-            }
-        }
-    } else {
-        // Fallback: no PhosphorScreens::ScreenManager, use physical screens
-        for (QScreen* screen : Utils::allScreens()) {
-            QRect intersection = screen->geometry().intersected(geometry);
-            if (intersection.width() >= MinVisibleWidth && intersection.height() >= MinVisibleHeight) {
-                return true;
-            }
-        }
-    }
-    return false;
-}
-
 PhosphorProtocol::WindowGeometryList WindowTrackingAdaptor::getUpdatedWindowGeometries()
 {
     QHash<QString, QRect> geometries = m_service->updatedWindowGeometries();

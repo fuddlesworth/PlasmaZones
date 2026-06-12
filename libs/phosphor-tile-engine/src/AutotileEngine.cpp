@@ -436,15 +436,26 @@ void AutotileEngine::setCurrentDesktop(int desktop)
 void AutotileEngine::setCurrentActivity(const QString& activity)
 {
     if (activity == m_currentActivity) {
+        // A same-activity push still establishes context — but only a
+        // NON-EMPTY one ("" == "" is the daemon pushing "activities
+        // unavailable", which is no context at all).
+        m_activityContextEverSet = m_activityContextEverSet || !activity.isEmpty();
         return;
     }
     qCInfo(PhosphorTileEngine::lcTileEngine)
         << "Switching autotile context: activity" << m_currentActivity << "->" << activity;
-    // Only flag as desktop/activity switch if we already had a valid context.
-    // Initial setup (activity "" → real during daemon startup) is NOT a switch.
+    // Only flag as desktop/activity switch when an activity context was
+    // already established. The established-flag (not a bare empty-string
+    // sentinel on the previous value) keeps the "a" → "" → "b" sequence —
+    // an activities-service restart hiccup — armed on the "" → "b" leg:
+    // with the sentinel alone that leg read as initialization, and a
+    // changed-set setAutotileScreens would then run the genuine-toggle
+    // restore path, leaking geometry restores into the new activity's
+    // session. Mirrors m_desktopContextEverSet on the desktop side.
     // Use |= so that a prior setCurrentDesktop() flag is not lost when both
     // desktop AND activity change simultaneously.
-    m_isDesktopContextSwitch |= !m_currentActivity.isEmpty();
+    m_isDesktopContextSwitch |= m_activityContextEverSet;
+    m_activityContextEverSet = true;
     m_currentActivity = activity;
 }
 
@@ -1382,6 +1393,14 @@ void AutotileEngine::loadState()
 
 void AutotileEngine::scheduleRetileForScreen(const QString& screenId)
 {
+    // Contract: pending retiles are keyed by screenId and resolved against
+    // the CURRENT desktop/activity context when processPendingRetiles runs.
+    // A retile scheduled for a state living in another context (or raced by
+    // a desktop switch in the one-event-loop-pass window before processing)
+    // retiles the current context's state instead; the source context's
+    // zones stay stale until its next operation — bounded by the same
+    // accepted-drift trade-off as the identical-set desktop-switch
+    // early-return in setAutotileScreens.
     m_pendingRetileScreens.insert(screenId);
 
     if (!m_retilePending) {
@@ -1878,6 +1897,16 @@ void AutotileEngine::handoffRelease(const QString& windowId)
         // No retile of the rest is requested here — the orchestrator will
         // call receiveWindow on the destination engine which (if also
         // autotile) will retile its own state.
+        // Keep the memory algorithm's bookkeeping consistent (e.g.
+        // dwindle-memory's split tree) — same lifecycle hook every other
+        // removal path runs before removeWindow.
+        PhosphorTiles::TilingAlgorithm* algo = effectiveAlgorithm(key.screenId);
+        if (algo && algo->supportsLifecycleHooks()) {
+            const int idx = stateIt.value()->tiledWindows().indexOf(canonical);
+            if (idx >= 0) {
+                algo->onWindowRemoved(stateIt.value(), idx);
+            }
+        }
         stateIt.value()->removeWindow(canonical);
     }
     m_windowToStateKey.remove(canonical);
@@ -2185,20 +2214,42 @@ void AutotileEngine::windowFocused(const QString& rawWindowId, const QString& sc
     // tiled window count.
     const TilingStateKey oldKey = m_windowToStateKey.value(windowId);
     const QString oldScreen = oldKey.screenId;
+    bool keyChanged = false;
     if (!screenId.isEmpty() && m_windowToStateKey.contains(windowId)) {
         if (isAutotileScreen(screenId)) {
-            m_windowToStateKey[windowId] = currentKeyForScreen(screenId);
+            const TilingStateKey newKey = currentKeyForScreen(screenId);
+            // FULL key comparison, not just screenId: a focus event landing
+            // between setCurrentDesktop and the catch-scan's windowOpened
+            // re-announce (window moved to another desktop, same screen)
+            // changes the key's desktop dimension only. Refreshing the map
+            // without migrating would leave the window in the OLD desktop's
+            // TilingState as a permanent ghost — windowOpened's own
+            // ghost-removal then skips (map already equals newKey), the old
+            // desktop retiles around a window living elsewhere forever.
+            keyChanged = !(newKey == oldKey);
+            m_windowToStateKey[windowId] = newKey;
         } else {
             // Window moved to a non-autotile screen — remove tracking entirely.
             // Leaving a stale entry pointing at a snap screen causes phantom
             // lookups and prevents clean re-entry if the window returns.
             m_windowToStateKey.remove(windowId);
+            keyChanged = true;
         }
     }
 
-    if (!oldScreen.isEmpty() && !screenId.isEmpty() && oldScreen != screenId) {
+    if (keyChanged && !oldScreen.isEmpty()) {
         PhosphorTiles::TilingState* oldState = m_screenStates.value(oldKey);
         if (oldState && oldState->containsWindow(windowId)) {
+            // Use the algorithm's lifecycle hook for clean removal (e.g.
+            // dwindle-memory updates its split tree) — mirrors windowOpened's
+            // migration path.
+            PhosphorTiles::TilingAlgorithm* oldAlgo = effectiveAlgorithm(oldKey.screenId);
+            if (oldAlgo && oldAlgo->supportsLifecycleHooks()) {
+                const int idx = oldState->tiledWindows().indexOf(windowId);
+                if (idx >= 0) {
+                    oldAlgo->onWindowRemoved(oldState, idx);
+                }
+            }
             oldState->removeWindow(windowId);
             m_overflow.migrateWindow(windowId);
             qCInfo(PhosphorTileEngine::lcTileEngine)
@@ -2212,11 +2263,18 @@ void AutotileEngine::windowFocused(const QString& rawWindowId, const QString& sc
                 // Re-add to the new screen's normal flow (will be
                 // overflow-checked on next retile).
                 onWindowAdded(windowId);
+            } else {
+                // The window left autotile entirely: drop its per-window
+                // caches too. removeWindow()/windowClosed() clear these on
+                // their paths; without this the lingering autotile-floated
+                // marker keeps feeding the daemon's mode-flip logic and the
+                // stored min-size survives a re-entry stale.
+                m_windowMinSizes.remove(windowId);
+                m_autotileFloatedWindows.remove(windowId);
             }
-            // else: the window left for a non-autotile screen and its
-            // tracking entry was removed above. Re-adding here would route
-            // through screenForWindow()'s primary-screen fallback and re-tile
-            // a window that just left autotile — the cross-engine misroute
+            // Re-adding on a non-autotile destination would route through
+            // screenForWindow()'s primary-screen fallback and re-tile a
+            // window that just left autotile — the cross-engine misroute
             // class the tracking removal exists to prevent.
         }
     }

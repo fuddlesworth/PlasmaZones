@@ -21,9 +21,11 @@
  *
  * Known fidelity divergences from the real KWinCompositorBridge — bug
  * classes that live in these gaps are NOT covered by this fake:
- *  - findWindowById is exact-match only. The real effect lookup falls back
- *    to a fuzzy appId match (cross-session restore) that can resolve a
- *    SIBLING window of the same app, or null when ambiguous.
+ *  - findWindowById is exact-match only BY DEFAULT. The real effect lookup
+ *    falls back to a fuzzy appId match (cross-session restore) that can
+ *    resolve a SIBLING window of the same app, or null when ambiguous; set
+ *    fuzzyFindByAppId to opt into that behavior (used to exercise
+ *    DecorationManager::resolveExact's sibling-mismatch guard).
  *  - moveResize applies the frame immediately. Real Wayland clients ack the
  *    configure asynchronously, so frameGeometry() lags moveResizeGeometry().
  *  - setNoBorder leaves frame/moveResizeGeo untouched, while real KWin holds
@@ -80,6 +82,11 @@ public:
 
     QStringList callLog;
 
+    /// Opt-in fuzzy lookup mirroring the real effect's appId fallback
+    /// (cross-session restore): when the exact id misses, return the first
+    /// window whose appId (text before '|') matches.
+    bool fuzzyFindByAppId = false;
+
     void clearLog()
     {
         callLog.clear();
@@ -89,7 +96,18 @@ public:
 
     PhosphorCompositor::WindowHandle findWindowById(const QString& windowId) const override
     {
-        return window(windowId);
+        if (auto* w = window(windowId)) {
+            return w;
+        }
+        if (fuzzyFindByAppId) {
+            const QString appId = windowId.section(QLatin1Char('|'), 0, 0);
+            for (const auto& [id, win] : m_windows) {
+                if (id.section(QLatin1Char('|'), 0, 0) == appId) {
+                    return win.get();
+                }
+            }
+        }
+        return nullptr;
     }
 
     QVector<PhosphorCompositor::WindowHandle> findAllWindowsById(const QString& windowId) const override

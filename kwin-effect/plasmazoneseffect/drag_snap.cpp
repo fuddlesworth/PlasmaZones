@@ -207,6 +207,13 @@ void PlasmaZonesEffect::callEndDrag(KWin::EffectWindow* window, const QString& w
                         // broadcast already landed.
                         m_navigationHandler->setWindowFloating(windowId, false);
                         m_snapHandler->markWindowSnapped(windowId, scr);
+                    } else {
+                        // Unresolved or autotile-owned screen: this commit is
+                        // not snap-tracked — drop any stale snap entry +
+                        // decoration claim instead of merely skipping, same
+                        // discriminator epilogue as the single-window and
+                        // batch apply paths.
+                        m_snapHandler->clearWindowSnapped(windowId);
                     }
                     break;
                 }
@@ -305,6 +312,10 @@ void PlasmaZonesEffect::tryAsyncSnapCall(const QString& interface, const QString
                         // commit path; idempotent vs the daemon broadcast.
                         m_navigationHandler->setWindowFloating(windowId, false);
                         m_snapHandler->markWindowSnapped(windowId, asyncScr);
+                    } else {
+                        // Same discriminator epilogue as the other commit
+                        // paths: drop stale snap tracking instead of skipping.
+                        m_snapHandler->clearWindowSnapped(windowId);
                     }
                     // args[1] is screenId (e.g. for snapToEmptyZone, snapToLastZone)
                     if (onSnapSuccess && args.size() >= 2) {
