@@ -313,12 +313,9 @@ void PlasmaZonesEffect::slotWindowClosed(KWin::EffectWindow* w)
     // needed here (the border item is removed just below and the title bar
     // dies with the window).
     m_snapHandler->onWindowClosed(closedWindowId);
-    // Drop any rule-hidden-title-bar tracking for the dying window. No
-    // setNoBorder restore is needed (the title bar dies with the window); this
-    // just prevents a stale windowId lingering in the set.
-    m_ruleHiddenTitleBars.remove(closedWindowId);
-    // Drop the window's decoration ownership state. forgetWindow makes zero
-    // compositor calls — the decoration dies with the window.
+    // Drop the window's decoration ownership state (mode owners, rule
+    // overrides, vetoes). forgetWindow makes zero compositor calls — the
+    // decoration dies with the window.
     m_decorationManager->forgetWindow(closedWindowId);
 
     // Remove the window's border item (parent WindowItem is being destroyed anyway,

@@ -374,8 +374,8 @@ void PlasmaZonesEffect::processDaemonReadyWindowState()
             QSet<QString> trackedAppIds;
             if (reply.isValid()) {
                 // On daemon loss the effect cleared its window-appearance state
-                // (restoreAllSnapBorderless / AutotileHandler::restoreAllBorderless)
-                // and restored every title bar; already-tracked windows are NOT in
+                // (DecorationManager::restoreAll + the handlers' tiled-tracking
+                // clears) and restored every title bar; already-tracked windows are NOT in
                 // the untracked-restore set below, so their chrome would never come
                 // back without this. Daemon-driven and engine-common: the daemon
                 // re-emits each engine's placement geometry, which routes through the

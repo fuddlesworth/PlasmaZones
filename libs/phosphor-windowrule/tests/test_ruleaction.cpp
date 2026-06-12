@@ -246,6 +246,23 @@ private Q_SLOTS:
         }
     }
 
+    void testSetHideTitleBarFalse_isValidAndPreserved()
+    {
+        // SetHideTitleBar is tri-state at the effect: rule absent = mode
+        // decides, true = hide, FALSE = force the title bar visible (a veto
+        // over mode hiding). An explicit false must therefore validate and
+        // round-trip — it is a meaningful value, not "unset".
+        QJsonObject o;
+        o.insert(QStringLiteral("type"), QString(ActionType::SetHideTitleBar));
+        o.insert(QStringLiteral("value"), false);
+        const auto action = RuleAction::fromJson(o);
+        QVERIFY(action.has_value());
+        QCOMPARE(action->params.value(QStringLiteral("value")), QJsonValue(false));
+        const auto roundTripped = RuleAction::fromJson(action->toJson());
+        QVERIFY(roundTripped.has_value());
+        QCOMPARE(roundTripped->params.value(QStringLiteral("value")), QJsonValue(false));
+    }
+
     void testBorderNumberActions_range()
     {
         QJsonObject w;

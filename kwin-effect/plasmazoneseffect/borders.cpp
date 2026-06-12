@@ -229,10 +229,10 @@ void PlasmaZonesEffect::updateAllBorders()
         }
     }
     // When no rules remain, the per-window reconcile above is skipped (haveRules
-    // is false), so a title bar a now-removed SetHideTitleBar rule hid would stay
-    // hidden until effect teardown. Restore every rule-hidden title bar in that
-    // case — restoreAllRuleHiddenTitleBars is a no-op when the set is already
-    // empty (the common no-rules path), so this costs nothing when nothing is hidden.
+    // is false), so a Rule owner or force-show veto from a now-removed
+    // SetHideTitleBar rule would linger until effect teardown. Clear all rule
+    // overrides in that case — a no-op when the manager tracks none (the
+    // common no-rules path), so this costs nothing when nothing is overridden.
     if (!haveRules) {
         restoreAllRuleHiddenTitleBars();
     }
@@ -244,34 +244,17 @@ void PlasmaZonesEffect::reconcileRuleHiddenTitleBar(const QString& windowId, KWi
     if (!w || windowId.isEmpty()) {
         return;
     }
-    // A rule SetHideTitleBar override only ever ADDS hiding (hide == true).
-    // hide == false / unset means "no override" and defers to the snap/autotile
-    // borderless management — the rule layer never force-shows a title bar that
-    // a mode hid, so it can't fight that mode's authoritative decoration state.
+    // Tri-state rule override, forwarded to the DecorationManager:
+    //   unset → no opinion (mode owners decide)
+    //   true  → rule hides (a Rule owner joins the mode owners)
+    //   false → rule FORCE-SHOWS (a veto that pins the decoration visible
+    //           over any mode owner; owners re-assert when the rule changes)
+    // The manager owns the capability gate, the mode-ownership coordination
+    // the old m_ruleHiddenTitleBars/modeBorderless dance approximated, and
+    // the geometry re-assert across veto-driven decoration flips.
     const std::optional<ResolvedWindowAppearance> ovr = resolveWindowAppearance(
         m_shaderManager.animationRuleEvaluator(), windowRuleQueryFor(w, getWindowScreenId(w)), windowId);
-    const bool ruleWantsHide = ovr && ovr->hideTitleBar && *ovr->hideTitleBar;
-    KWin::Window* kw = w->window();
-    const bool weHidIt = m_ruleHiddenTitleBars.contains(windowId);
-    // A window snap/autotile already manages borderless must not be physically
-    // toggled by the rule layer (it owns the decoration); we only track intent.
-    const bool modeBorderless =
-        m_snapHandler->isBorderlessWindow(windowId) || m_autotileHandler->isBorderlessWindow(windowId);
-
-    if (ruleWantsHide) {
-        if (!weHidIt && kw && kw->userCanSetNoBorder()) {
-            m_ruleHiddenTitleBars.insert(windowId);
-            if (!modeBorderless) {
-                kw->setNoBorder(true);
-            }
-        }
-    } else if (weHidIt) {
-        m_ruleHiddenTitleBars.remove(windowId);
-        // Restore the decoration unless a mode still wants it borderless.
-        if (kw && !modeBorderless) {
-            kw->setNoBorder(false);
-        }
-    }
+    m_decorationManager->setRuleOverride(windowId, ovr ? ovr->hideTitleBar : std::nullopt);
 }
 
 bool PlasmaZonesEffect::isWindowMarkedSnapped(const QString& windowId) const
@@ -299,24 +282,11 @@ const PhosphorCompositor::BorderState* PlasmaZonesEffect::resolveBorderStateFor(
 
 void PlasmaZonesEffect::restoreAllRuleHiddenTitleBars()
 {
-    using namespace PhosphorCompositor;
-    // Symmetric with restoreAllSnapBorderless: on daemon loss / effect teardown
-    // the authoritative window-rule state is gone, so restore every title bar a
-    // SetHideTitleBar rule hid and drop the set. Skip a window a mode still
-    // wants borderless — that mode's own teardown (restoreAllSnapBorderless /
-    // AutotileHandler::restoreAllBorderless) owns its restore, and a double
-    // setNoBorder(false) would fight it.
-    for (const QString& windowId : m_ruleHiddenTitleBars) {
-        if (m_snapHandler->isBorderlessWindow(windowId) || m_autotileHandler->isBorderlessWindow(windowId)) {
-            continue;
-        }
-        if (KWin::EffectWindow* w = findWindowById(windowId)) {
-            if (KWin::Window* kw = w->window()) {
-                kw->setNoBorder(false);
-            }
-        }
-    }
-    m_ruleHiddenTitleBars.clear();
+    // The authoritative window-rule state is gone (rule set emptied, daemon
+    // loss, effect teardown): clear every Rule owner and force-show veto. The
+    // manager restores a title bar only where no mode owner remains, so the
+    // modes' decoration management is never fought.
+    m_decorationManager->clearAllRuleOverrides();
 }
 
 } // namespace PlasmaZones

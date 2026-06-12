@@ -597,12 +597,6 @@ private:
     // auto-nulls on window destruction.
     QPointer<KWin::EffectWindow> m_resizingWindow;
 
-    // Windows whose server-side title bar a per-window-rule SetHideTitleBar
-    // override hid (distinct from the snap/autotile borderless sets). Tracked
-    // so reconcileRuleHiddenTitleBar can restore the decoration when the rule
-    // stops matching, without fighting snap/autotile borderless ownership.
-    QSet<QString> m_ruleHiddenTitleBars;
-
     // Policy returned from the daemon's beginDrag for the currently-active
     // drag. Async-populated a few ms after the
     // drag starts; until then, conservative defaults apply (snap-path
@@ -635,16 +629,15 @@ private:
     /// then snap — or nullptr if neither draws a border for it.
     const PhosphorCompositor::BorderState* resolveBorderStateFor(const QString& windowId) const;
 
-    /// Apply or restore a per-window-rule SetHideTitleBar override for
-    /// @p windowId, coordinating with the snap/autotile borderless sets so a
-    /// rule never fights mode-driven decoration management. Idempotent — only
-    /// toggles setNoBorder on an actual desired-state change.
+    /// Resolve the per-window-rule SetHideTitleBar override for @p windowId
+    /// and forward it to the DecorationManager as a tri-state rule override
+    /// (unset = mode decides, true = rule hides, false = force-show veto).
     void reconcileRuleHiddenTitleBar(const QString& windowId, KWin::EffectWindow* w);
 
-    /// Restore every title bar a SetHideTitleBar rule hid and drop the
-    /// m_ruleHiddenTitleBars set. Called on daemon loss / effect teardown
-    /// (symmetric with restoreAllSnapBorderless) so a rule-hidden title bar is
-    /// never left hidden after the authoritative rule state is gone.
+    /// Clear every DecorationManager rule override (Rule owners + force-show
+    /// vetoes). Called when the rule set empties and on daemon loss / effect
+    /// teardown so a rule-hidden title bar is never left hidden after the
+    /// authoritative rule state is gone.
     void restoreAllRuleHiddenTitleBars();
 
     std::unique_ptr<NavigationHandler> m_navigationHandler;

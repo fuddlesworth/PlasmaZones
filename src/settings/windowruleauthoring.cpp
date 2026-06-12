@@ -178,8 +178,11 @@ QString paramLabel(const QString& type, const QString& key)
         return PhosphorI18n::tr("Restore position on login");
     }
     // Border / title-bar overrides (all single-value, keyed ActionParam::Value).
+    // SetHideTitleBar is tri-state at the effect: rule absent = mode decides,
+    // ON = hide, OFF = force the title bar visible even where the mode hides
+    // it — the label spells that out so the off position doesn't read as inert.
     if (type == ActionType::SetHideTitleBar && key == ActionParam::Value) {
-        return PhosphorI18n::tr("Hide title bars");
+        return PhosphorI18n::tr("Hide title bars (off = force visible)");
     }
     if (type == ActionType::SetBorderVisible && key == ActionParam::Value) {
         return PhosphorI18n::tr("Show border");
