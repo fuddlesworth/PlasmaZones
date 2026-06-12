@@ -1,0 +1,234 @@
+// SPDX-FileCopyrightText: 2026 fuddlesworth
+// SPDX-License-Identifier: GPL-3.0-or-later
+
+#pragma once
+
+#include <PhosphorCompositor/ICompositorBridge.h>
+
+#include <QString>
+#include <QStringList>
+
+#include <map>
+#include <memory>
+
+/**
+ * @brief In-memory ICompositorBridge for DecorationManager unit tests.
+ *
+ * Windows are FakeWindow records owned by the bridge; WindowHandle is a
+ * stable pointer to the record. Every mutating call is appended to an
+ * ordered call log so tests can assert exact call sequences (e.g.
+ * "setNoBorder before moveResize with the pre-captured target").
+ */
+class FakeCompositorBridge : public PhosphorCompositor::ICompositorBridge
+{
+public:
+    struct FakeWindow
+    {
+        QString id;
+        QString screenId;
+        QRectF frame;
+        QRectF moveResizeGeo;
+        bool noBorder = false;
+        bool userCanSetNoBorder = true;
+        bool hasDecoration = true;
+        bool minimized = false;
+    };
+
+    FakeWindow* addWindow(const QString& id, const QString& screenId = QStringLiteral("screen-0"),
+                          const QRectF& frame = QRectF(0, 0, 800, 600))
+    {
+        auto win = std::make_unique<FakeWindow>();
+        win->id = id;
+        win->screenId = screenId;
+        win->frame = frame;
+        win->moveResizeGeo = frame;
+        FakeWindow* raw = win.get();
+        m_windows[id] = std::move(win);
+        return raw;
+    }
+
+    void removeWindow(const QString& id)
+    {
+        m_windows.erase(id);
+    }
+
+    FakeWindow* window(const QString& id) const
+    {
+        auto it = m_windows.find(id);
+        return it != m_windows.end() ? it->second.get() : nullptr;
+    }
+
+    QStringList callLog;
+
+    void clearLog()
+    {
+        callLog.clear();
+    }
+
+    // ── ICompositorBridge ──────────────────────────────────────────────
+
+    PhosphorCompositor::WindowHandle findWindowById(const QString& windowId) const override
+    {
+        return window(windowId);
+    }
+
+    QVector<PhosphorCompositor::WindowHandle> findAllWindowsById(const QString& windowId) const override
+    {
+        QVector<PhosphorCompositor::WindowHandle> result;
+        if (auto* w = window(windowId)) {
+            result.append(w);
+        }
+        return result;
+    }
+
+    QVector<PhosphorCompositor::WindowHandle> stackingOrder() const override
+    {
+        QVector<PhosphorCompositor::WindowHandle> result;
+        for (const auto& [id, win] : m_windows) {
+            result.append(win.get());
+        }
+        return result;
+    }
+
+    QString windowId(PhosphorCompositor::WindowHandle w) const override
+    {
+        return w ? toWin(w)->id : QString();
+    }
+
+    QString windowScreenId(PhosphorCompositor::WindowHandle w) const override
+    {
+        return w ? toWin(w)->screenId : QString();
+    }
+
+    QRectF frameGeometry(PhosphorCompositor::WindowHandle w) const override
+    {
+        return w ? toWin(w)->frame : QRectF();
+    }
+
+    QSizeF minSize(PhosphorCompositor::WindowHandle) const override
+    {
+        return QSizeF();
+    }
+
+    bool isMinimized(PhosphorCompositor::WindowHandle w) const override
+    {
+        return w && toWin(w)->minimized;
+    }
+
+    bool isOnCurrentDesktop(PhosphorCompositor::WindowHandle) const override
+    {
+        return true;
+    }
+
+    bool isOnCurrentActivity(PhosphorCompositor::WindowHandle) const override
+    {
+        return true;
+    }
+
+    bool hasDecoration(PhosphorCompositor::WindowHandle w) const override
+    {
+        return w && toWin(w)->hasDecoration;
+    }
+
+    bool userCanSetNoBorder(PhosphorCompositor::WindowHandle w) const override
+    {
+        return w && toWin(w)->userCanSetNoBorder;
+    }
+
+    bool isNoBorder(PhosphorCompositor::WindowHandle w) const override
+    {
+        return w && toWin(w)->noBorder;
+    }
+
+    QRectF moveResizeGeometry(PhosphorCompositor::WindowHandle w) const override
+    {
+        return w ? toWin(w)->moveResizeGeo : QRectF();
+    }
+
+    PhosphorCompositor::WindowInfo windowInfo(PhosphorCompositor::WindowHandle w) const override
+    {
+        PhosphorCompositor::WindowInfo info;
+        if (!w) {
+            return info;
+        }
+        const FakeWindow* fw = toWin(w);
+        info.handle = w;
+        info.windowId = fw->id;
+        info.screenId = fw->screenId;
+        info.frameGeometry = fw->frame;
+        info.isMinimized = fw->minimized;
+        info.hasDecoration = fw->hasDecoration;
+        return info;
+    }
+
+    bool shouldHandleWindow(PhosphorCompositor::WindowHandle w) const override
+    {
+        return w != nullptr;
+    }
+
+    bool isTileableWindow(PhosphorCompositor::WindowHandle w) const override
+    {
+        return w != nullptr;
+    }
+
+    void moveResize(PhosphorCompositor::WindowHandle w, const QRectF& geometry) override
+    {
+        if (!w) {
+            return;
+        }
+        FakeWindow* fw = toWin(w);
+        fw->moveResizeGeo = geometry;
+        fw->frame = geometry; // fake immediate configure ack
+        callLog.append(QStringLiteral("moveResize(%1,%2x%3)").arg(fw->id).arg(geometry.width()).arg(geometry.height()));
+    }
+
+    void setNoBorder(PhosphorCompositor::WindowHandle w, bool noBorder) override
+    {
+        if (!w) {
+            return;
+        }
+        FakeWindow* fw = toWin(w);
+        fw->noBorder = noBorder;
+        callLog.append(QStringLiteral("setNoBorder(%1,%2)")
+                           .arg(fw->id, noBorder ? QStringLiteral("true") : QStringLiteral("false")));
+    }
+
+    void setMaximized(PhosphorCompositor::WindowHandle, bool) override
+    {
+    }
+
+    void activateWindow(PhosphorCompositor::WindowHandle) override
+    {
+    }
+
+    void raiseWindow(PhosphorCompositor::WindowHandle) override
+    {
+    }
+
+    void applySnapGeometry(PhosphorCompositor::WindowHandle w, const QRectF& geometry, bool) override
+    {
+        moveResize(w, geometry);
+    }
+
+    QObject* asQObject() override
+    {
+        return nullptr;
+    }
+
+    bool isDaemonReady() const override
+    {
+        return true;
+    }
+
+    void invalidateScreenIdCache() override
+    {
+    }
+
+private:
+    static FakeWindow* toWin(PhosphorCompositor::WindowHandle w)
+    {
+        return static_cast<FakeWindow*>(w);
+    }
+
+    std::map<QString, std::unique_ptr<FakeWindow>> m_windows;
+};

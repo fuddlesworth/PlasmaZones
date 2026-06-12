@@ -29,12 +29,15 @@ add_library(PhosphorCompositor SHARED
     include/PhosphorCompositor/ILifecycleHandler.h
     include/PhosphorCompositor/DaemonClient.h
     include/PhosphorCompositor/AutotileState.h
+    include/PhosphorCompositor/DecorationDefaults.h
+    include/PhosphorCompositor/DecorationManager.h
     include/PhosphorCompositor/FloatingCache.h
     include/PhosphorCompositor/DebouncedAction.h
     include/PhosphorCompositor/GeometryHelpers.h
     include/PhosphorCompositor/SnapAssistFilter.h
     include/PhosphorCompositor/TriggerParser.h
     src/DaemonClient.cpp
+    src/DecorationManager.cpp
     src/SnapAssistFilter.cpp
     src/TriggerParser.cpp
 )

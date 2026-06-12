@@ -782,6 +782,10 @@ target_link_libraries(test_autotile_state PRIVATE Qt6::Test PhosphorCompositor::
                                                   PhosphorIdentity::PhosphorIdentity)
 add_test(NAME test_autotile_state COMMAND test_autotile_state)
 
+add_executable(test_decoration_manager compositor-common/test_decoration_manager.cpp)
+target_link_libraries(test_decoration_manager PRIVATE Qt6::Test PhosphorCompositor::PhosphorCompositor)
+add_test(NAME test_decoration_manager COMMAND test_decoration_manager)
+
 # ═══════════════════════════════════════════════════════════════════════════════
 # Headless environment support
 # Apply QT_QPA_PLATFORM=offscreen to every test in this directory so new tests

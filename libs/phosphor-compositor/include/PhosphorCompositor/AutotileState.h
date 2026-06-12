@@ -3,6 +3,8 @@
 
 #pragma once
 
+#include <PhosphorCompositor/DecorationDefaults.h>
+
 #include <QColor>
 #include <QHash>
 #include <QPair>
@@ -30,10 +32,13 @@ struct BorderState
     QHash<QString, QSet<QString>> borderlessWindowsByScreen;
     /// Same shape for the full tiled set (superset of borderless).
     QHash<QString, QSet<QString>> tiledWindowsByScreen;
-    bool hideTitleBars = false;
-    bool showBorder = false;
-    int width = 2;
-    int radius = 0;
+    // Defaults shared with the daemon's ConfigDefaults via DecorationDefaults
+    // so the effect's pre-settings-load rendering can't drift from what the
+    // daemon would persist.
+    bool hideTitleBars = DecorationDefaults::HideTitleBars;
+    bool showBorder = DecorationDefaults::ShowBorder;
+    int width = DecorationDefaults::BorderWidth;
+    int radius = DecorationDefaults::BorderRadius;
     QColor color;
     QColor inactiveColor;
 };

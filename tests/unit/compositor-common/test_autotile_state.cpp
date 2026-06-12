@@ -103,6 +103,24 @@ private Q_SLOTS:
     }
 
     // =================================================================
+    // BorderState: defaults drift tripwire
+    // =================================================================
+
+    void testBorderStateDefaultsMatchDecorationDefaults()
+    {
+        // A default-constructed BorderState must equal DecorationDefaults
+        // field-for-field — the effect renders with these values until the
+        // async settings load completes, and the daemon persists the same
+        // symbols via ConfigDefaults. Divergence here means pre-load
+        // rendering drifts from the configured appearance.
+        const PhosphorCompositor::BorderState border;
+        QCOMPARE(border.hideTitleBars, PhosphorCompositor::DecorationDefaults::HideTitleBars);
+        QCOMPARE(border.showBorder, PhosphorCompositor::DecorationDefaults::ShowBorder);
+        QCOMPARE(border.width, PhosphorCompositor::DecorationDefaults::BorderWidth);
+        QCOMPARE(border.radius, PhosphorCompositor::DecorationDefaults::BorderRadius);
+    }
+
+    // =================================================================
     // WindowId: extractAppId leading separator edge case
     // =================================================================
 
