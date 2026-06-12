@@ -18,6 +18,7 @@
 #include "plasmazones_export.h"
 // PhosphorTiles::AutotileDefaults lives in PhosphorTiles — config layer delegates to it for
 // the user-facing default accessors.
+#include <PhosphorCompositor/DecorationDefaults.h>
 #include <PhosphorTiles/AutotileConstants.h>
 // Animation duration / stagger UI bounds — generic policy, not autotile-specific.
 #include <PhosphorAnimation/AnimationLimits.h>
@@ -1029,37 +1030,44 @@ public:
     {
         return true;
     }
+    // Window-decoration appearance defaults delegate to the shared
+    // PhosphorCompositor::DecorationDefaults constants — the same symbols
+    // the effect's BorderState member-initializers use — so the daemon's
+    // persisted defaults and the effect's pre-settings-load rendering can't
+    // drift. (ZoneDefaults is the zone OVERLAY's constants, a different
+    // visual concept; the old delegation to it was an accident of equal
+    // values.)
     static bool autotileHideTitleBars()
     {
-        return false;
+        return ::PhosphorCompositor::DecorationDefaults::HideTitleBars;
     }
     static bool autotileShowBorder()
     {
-        return false;
+        return ::PhosphorCompositor::DecorationDefaults::ShowBorder;
     }
     static int autotileBorderWidth()
     {
-        return ::PhosphorZones::ZoneDefaults::BorderWidth;
+        return ::PhosphorCompositor::DecorationDefaults::BorderWidth;
     }
     static constexpr int autotileBorderWidthMin()
     {
-        return 0;
+        return ::PhosphorCompositor::DecorationDefaults::BorderWidthMin;
     }
     static constexpr int autotileBorderWidthMax()
     {
-        return 10;
+        return ::PhosphorCompositor::DecorationDefaults::BorderWidthMax;
     }
     static int autotileBorderRadius()
     {
-        return ::PhosphorZones::ZoneDefaults::BorderRadius;
+        return ::PhosphorCompositor::DecorationDefaults::BorderRadius;
     }
     static constexpr int autotileBorderRadiusMin()
     {
-        return 0;
+        return ::PhosphorCompositor::DecorationDefaults::BorderRadiusMin;
     }
     static constexpr int autotileBorderRadiusMax()
     {
-        return 20;
+        return ::PhosphorCompositor::DecorationDefaults::BorderRadiusMax;
     }
     static QColor autotileBorderColor()
     {

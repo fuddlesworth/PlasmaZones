@@ -205,6 +205,10 @@ target_link_libraries(plasmazones_core
         PhosphorWayland::PhosphorWayland
         PhosphorTiles::PhosphorTiles
         PhosphorZones::PhosphorZones
+        # PhosphorCompositor: DecorationDefaults — the shared window-decoration
+        # default constants ConfigDefaults delegates to (PUBLIC because
+        # configdefaults.h includes the header).
+        PhosphorCompositor::PhosphorCompositor
         # PhosphorWindowRule: the unified LGPL rule engine. PUBLIC since
         # Phase 3 — config/settings.h owns a WindowRuleStore for the per-mode
         # disable lists, the WindowRuleAdaptor exposes the store on D-Bus, and

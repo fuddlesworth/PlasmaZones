@@ -660,7 +660,7 @@ void PlasmaZonesEffect::loadCachedSettings()
     });
 
     loadSettingAsync(QStringLiteral("autotileBorderWidth"), [this](const QVariant& v) {
-        int bw = qBound(0, v.toInt(), 10);
+        int bw = qBound(DecorationDefaults::BorderWidthMin, v.toInt(), DecorationDefaults::BorderWidthMax);
         if (m_autotileHandler->borderWidth() != bw) {
             m_autotileHandler->setBorderWidth(bw);
             // Invalidate pending stagger timers that would use the old border width
@@ -673,7 +673,7 @@ void PlasmaZonesEffect::loadCachedSettings()
     });
 
     loadSettingAsync(QStringLiteral("autotileBorderRadius"), [this](const QVariant& v) {
-        int br = qBound(0, v.toInt(), 20);
+        int br = qBound(DecorationDefaults::BorderRadiusMin, v.toInt(), DecorationDefaults::BorderRadiusMax);
         if (m_autotileHandler->borderRadius() != br) {
             m_autotileHandler->setBorderRadius(br);
             updateAllBorders();
@@ -726,14 +726,14 @@ void PlasmaZonesEffect::loadCachedSettings()
         }
     });
     loadSettingAsync(QStringLiteral("snappingBorderWidth"), [this](const QVariant& v) {
-        const int bw = qBound(0, v.toInt(), 10);
+        const int bw = qBound(DecorationDefaults::BorderWidthMin, v.toInt(), DecorationDefaults::BorderWidthMax);
         if (m_snapHandler->borderWidth() != bw) {
             m_snapHandler->setBorderWidth(bw);
             updateAllBorders();
         }
     });
     loadSettingAsync(QStringLiteral("snappingBorderRadius"), [this](const QVariant& v) {
-        const int br = qBound(0, v.toInt(), 20);
+        const int br = qBound(DecorationDefaults::BorderRadiusMin, v.toInt(), DecorationDefaults::BorderRadiusMax);
         if (m_snapHandler->borderRadius() != br) {
             m_snapHandler->setBorderRadius(br);
             updateAllBorders();
