@@ -425,7 +425,7 @@ void PlasmaZonesEffect::setupWindowConnections(KWin::EffectWindow* w)
                 // Save pre-autotile geometry before onWindowClosed clears it.
                 // When the window is re-added on the target desktop, this preserved
                 // geometry is used instead of the current (tiled) frame position.
-                m_autotileHandler->savePreAutotileForDesktopMove(windowId, screenId);
+                m_autotileHandler->savePreAutotileForDesktopMove(windowId);
 
                 // Release autotile's decoration ownership before removing from
                 // tiling — onWindowClosed only clears tracking since it's also

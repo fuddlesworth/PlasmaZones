@@ -101,12 +101,10 @@ public:
      *
      * @param w The window being floated (may be null for cross-screen drops)
      * @param windowId Stable window identifier
-     * @param screenId Screen the window was tiled on (pre-drag screen)
      * @param immediate Apply size restore synchronously during the interactive move
      */
-    void handleDragToFloat(KWin::EffectWindow* w, const QString& windowId, const QString& screenId,
-                           bool immediate = false);
-    void savePreAutotileForDesktopMove(const QString& windowId, const QString& screenId);
+    void handleDragToFloat(KWin::EffectWindow* w, const QString& windowId, bool immediate = false);
+    void savePreAutotileForDesktopMove(const QString& windowId);
     void handleWindowOutputChanged(KWin::EffectWindow* w);
 
     // D-Bus signal connections and settings

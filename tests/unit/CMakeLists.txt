@@ -786,6 +786,10 @@ add_executable(test_decoration_manager compositor-common/test_decoration_manager
 target_link_libraries(test_decoration_manager PRIVATE Qt6::Test PhosphorCompositor::PhosphorCompositor)
 add_test(NAME test_decoration_manager COMMAND test_decoration_manager)
 
+add_executable(test_decoration_manager_timers compositor-common/test_decoration_manager_timers.cpp)
+target_link_libraries(test_decoration_manager_timers PRIVATE Qt6::Test PhosphorCompositor::PhosphorCompositor)
+add_test(NAME test_decoration_manager_timers COMMAND test_decoration_manager_timers)
+
 # ═══════════════════════════════════════════════════════════════════════════════
 # Headless environment support
 # Apply QT_QPA_PLATFORM=offscreen to every test in this directory so new tests

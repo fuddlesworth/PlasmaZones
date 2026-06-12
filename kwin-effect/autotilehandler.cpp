@@ -548,8 +548,7 @@ void AutotileHandler::onWindowClosed(const QString& windowId, const QString& scr
     }
 }
 
-void AutotileHandler::handleDragToFloat(KWin::EffectWindow* w, const QString& windowId, const QString& screenId,
-                                        bool immediate)
+void AutotileHandler::handleDragToFloat(KWin::EffectWindow* w, const QString& windowId, bool immediate)
 {
     // Restore border and clear tiling state synchronously — don't wait for
     // the daemon's async windowFloatingChanged signal, which may never arrive

@@ -187,7 +187,7 @@ bool AutotileHandler::isAutotileScreen(const QString& screenId) const
     return m_autotileScreens.contains(screenId);
 }
 
-void AutotileHandler::savePreAutotileForDesktopMove(const QString& windowId, const QString& screenId)
+void AutotileHandler::savePreAutotileForDesktopMove(const QString& windowId)
 {
     // Preserve the window's pre-autotile geometry before onWindowClosed clears it.
     // When the window is re-added on the target desktop, this geometry is restored

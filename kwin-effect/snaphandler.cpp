@@ -382,7 +382,12 @@ void SnapHandler::slotMoveSpecificWindowToZoneRequested(const QString& windowId,
     KWin::EffectWindow* targetWindow = nullptr;
     const auto windows = KWin::effects->stackingOrder();
     for (KWin::EffectWindow* w : windows) {
-        if (w && m_effect->shouldHandleWindow(w) && m_effect->getWindowId(w) == windowId) {
+        // !isDeleted: a close-grabbed dying instance can still carry the
+        // exact requested id (the recreated-window scenario the appId
+        // fallback below exists for) — snapping it would track a dead id
+        // with no future close event to clean it, and block the fallback
+        // from finding the live sibling.
+        if (w && !w->isDeleted() && m_effect->shouldHandleWindow(w) && m_effect->getWindowId(w) == windowId) {
             targetWindow = w;
             break;
         }
@@ -484,7 +489,10 @@ void SnapHandler::slotSnapAllWindowsRequested(const QString& screenId)
         QStringList unsnappedWindowIds;
         const auto windows = KWin::effects->stackingOrder();
         for (KWin::EffectWindow* w : windows) {
-            if (!w || !m_effect->shouldHandleWindow(w)) {
+            // !isDeleted: a close-grabbed dying window would get a zone
+            // assigned under a dead id (slotWindowClosed already ran, so
+            // nothing ever cleans the resulting snap record).
+            if (!w || w->isDeleted() || !m_effect->shouldHandleWindow(w)) {
                 continue;
             }
 
@@ -627,7 +635,10 @@ void SnapHandler::slotPendingRestoresAvailable()
         // Now iterate through all visible windows and restore untracked ones
         const auto windows = KWin::effects->stackingOrder();
         for (KWin::EffectWindow* window : windows) {
-            if (!window || !m_effect->shouldHandleWindow(window)) {
+            // !isDeleted: a close-grabbed dying window would consume the
+            // single-shot FIFO pending-restore entry for its appId, robbing
+            // the app's next REAL window of its restore.
+            if (!window || window->isDeleted() || !m_effect->shouldHandleWindow(window)) {
                 continue;
             }
 

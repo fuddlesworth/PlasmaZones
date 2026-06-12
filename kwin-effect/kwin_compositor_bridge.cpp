@@ -50,6 +50,14 @@ QVector<WindowHandle> KWinCompositorBridge::stackingOrder() const
     QVector<WindowHandle> result;
     result.reserve(windows.size());
     for (auto* w : windows) {
+        // Live windows only: close-shader grabs keep deleted windows in
+        // KWin's stacking order for the close-animation duration, and the
+        // bridge interface exposes no liveness query — a compositor-agnostic
+        // consumer (SnapAssistFilter) would otherwise offer dying windows as
+        // candidates and re-pollute the id caches via windowId().
+        if (!w || w->isDeleted()) {
+            continue;
+        }
         result.append(fromEffectWindow(w));
     }
     return result;

@@ -156,7 +156,7 @@ void PlasmaZonesEffect::callEndDrag(KWin::EffectWindow* window, const QString& w
                     if (dropScreenId.isEmpty()) {
                         break;
                     }
-                    m_autotileHandler->handleDragToFloat(safeWindow, windowId, dropScreenId);
+                    m_autotileHandler->handleDragToFloat(safeWindow, windowId);
                     // Window is now floating — drop it from snapping's set.
                     m_snapHandler->clearWindowSnapped(windowId);
                     // Note: m_dragFloatedWindowIds is intentionally NOT re-set here.

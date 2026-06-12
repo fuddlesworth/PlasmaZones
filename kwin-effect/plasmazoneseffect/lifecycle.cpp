@@ -313,8 +313,7 @@ PlasmaZonesEffect::PlasmaZonesEffect()
                         // and reply.
                         if (safeW && m_currentDragPolicy.immediateFloatOnStart && !isWindowFloating(capturedWindowId)
                             && !m_dragFloatedWindowIds.contains(capturedWindowId)) {
-                            m_autotileHandler->handleDragToFloat(safeW, capturedWindowId, capturedScreenId,
-                                                                 /*immediate=*/true);
+                            m_autotileHandler->handleDragToFloat(safeW, capturedWindowId, /*immediate=*/true);
                             m_dragFloatedWindowIds.insert(capturedWindowId);
                         }
                     }
@@ -345,7 +344,7 @@ PlasmaZonesEffect::PlasmaZonesEffect()
                 // Guarded on isTrackedWindow so we don't touch windows that
                 // are already floating (not in the autotile tree).
                 if (!reorderMode && m_autotileHandler->isTrackedWindow(windowId) && !isWindowFloating(windowId)) {
-                    m_autotileHandler->handleDragToFloat(w, windowId, m_dragBypassScreenId, /*immediate=*/true);
+                    m_autotileHandler->handleDragToFloat(w, windowId, /*immediate=*/true);
                     // Mark as drag-floated so the daemon's pre-tile geometry
                     // restore (applyGeometryForFloat, triggered by the
                     // setWindowFloatingForScreen call at drop) is skipped in

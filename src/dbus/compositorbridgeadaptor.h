@@ -19,12 +19,11 @@ namespace PlasmaZones {
  *
  * Provides D-Bus interface: org.plasmazones.CompositorBridge
  *
- * This interface defines the daemon→compositor command protocol. Compositor
- * bridges (KWin effect, Hyprland bridge, Sway bridge) subscribe to the
- * signals to receive window manipulation commands.
- *
- * The interface also accepts bridge registration and modifier state reports
- * from the compositor side.
+ * Compositor-agnostic bridge protocol: the registration handshake and
+ * modifier-state reporting. Window manipulation commands do NOT flow over
+ * this interface — they ride org.plasmazones.WindowTracking
+ * (applyGeometryRequested, applyGeometriesBatch, raiseWindowsRequested, ...),
+ * which bridges subscribe to after a successful registration.
  *
  * @note This is an EXPERIMENTAL interface — may change before v2.
  */

@@ -537,12 +537,13 @@ void DecorationManager::armFallbackTimer()
     if (!m_pendingFallback) {
         m_pendingFallback = new QTimer(this);
         m_pendingFallback->setSingleShot(true);
-        m_pendingFallback->setInterval(m_fallbackIntervalMs);
         connect(m_pendingFallback, &QTimer::timeout, this, [this]() {
             drainPendingRestoresInternal(/*fromFallback=*/true);
         });
     }
-    m_pendingFallback->start();
+    // Re-apply the interval on every arm so setFallbackIntervalForTesting
+    // takes effect regardless of call ordering relative to the first defer.
+    m_pendingFallback->start(m_fallbackIntervalMs);
 }
 
 } // namespace PhosphorCompositor

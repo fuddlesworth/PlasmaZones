@@ -19,7 +19,9 @@ namespace PhosphorCompositor {
 /**
  * @brief Compositor-agnostic autotile border state
  *
- * Tracks which windows are borderless/tiled.
+ * Tracks which windows are tile-managed (drives border RENDERING) plus the
+ * shared border appearance settings. Title-bar/borderless state lives in
+ * the DecorationManager's owner model, not here.
  * Per-screen keyed so per-VS retiles can update tracking in isolation
  * without cross-contaminating with windows on sibling virtual screens.
  * Shared across compositor plugins to avoid duplicating state management.
