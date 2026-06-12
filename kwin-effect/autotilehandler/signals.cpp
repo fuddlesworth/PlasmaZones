@@ -163,7 +163,15 @@ void AutotileHandler::slotScreensChanged(const QStringList& screenIds, bool isDe
                 if (m_effect->isWindowFloating(windowId)) {
                     continue;
                 }
-                if (m_notifiedWindows.remove(windowId)) {
+                // Capture tracked-ness BEFORE demoting: it is the only
+                // evidence the window was actually autotile-managed on this
+                // desktop. The daemon-fallback restore below must never fire
+                // without it — the placement store is mode-shared,
+                // appId-fuzzy and session-persisted, so a never-autotiled
+                // free window would match a stale entry and teleport on a
+                // mere desktop switch.
+                const bool wasTracked = m_notifiedWindows.remove(windowId);
+                if (wasTracked) {
                     m_notifiedWindowScreens.remove(windowId);
                 }
                 // Release autotile's decoration ownership on every screen.
@@ -209,58 +217,16 @@ void AutotileHandler::slotScreensChanged(const QStringList& screenIds, bool isDe
                         --m_suppressMaximizeChanged;
                     }
                     m_effect->applySnapGeometry(w, savedGeo.toRect());
-                } else {
-                    // No local bucket entry: the window was snap-managed when
-                    // it entered autotile, so saveAndRecordPreAutotileGeometry
-                    // deliberately stored nothing (its frame was the zone
-                    // rect). The daemon's placement store holds the true
-                    // pre-snap geometry — fetch it async and restore once the
-                    // reply lands (mirrors the autotile→snap fetch in
-                    // handleWindowOutputChanged). Without this the window
-                    // stays parked at its tiled frame.
-                    QPointer<KWin::EffectWindow> safeW = w;
-                    auto* watcher =
-                        new QDBusPendingCallWatcher(PhosphorProtocol::ClientHelpers::asyncCall(
-                                                        PhosphorProtocol::Service::Interface::WindowTracking,
-                                                        QStringLiteral("getValidatedPreTileGeometry"), {windowId}),
-                                                    m_effect);
-                    connect(watcher, &QDBusPendingCallWatcher::finished, m_effect,
-                            [this, safeW, windowId](QDBusPendingCallWatcher* pw) {
-                                pw->deleteLater();
-                                QDBusPendingReply<bool, int, int, int, int> reply = *pw;
-                                if (!reply.isValid() || reply.count() < 5 || !reply.argumentAt<0>()) {
-                                    return;
-                                }
-                                const int rw = reply.argumentAt<3>();
-                                const int rh = reply.argumentAt<4>();
-                                if (rw <= 0 || rh <= 0 || !safeW || safeW->isDeleted()) {
-                                    return;
-                                }
-                                // The desktop may have switched again — or the
-                                // window been re-tiled or snap-committed —
-                                // during the round-trip; each of those owners
-                                // supersedes this orphan restore.
-                                if (!safeW->isOnCurrentDesktop() || m_notifiedWindows.contains(windowId)
-                                    || m_autotileScreens.contains(m_effect->getWindowScreenId(safeW))
-                                    || m_effect->isWindowMarkedSnapped(windowId)) {
-                                    return;
-                                }
-                                m_effect->m_inDaemonGeometryApply = true;
-                                const auto geomGuard = qScopeGuard([this] {
-                                    m_effect->m_inDaemonGeometryApply = false;
-                                });
-                                if (KWin::Window* kw = safeW->window();
-                                    kw && kw->maximizeMode() != KWin::MaximizeRestore) {
-                                    ++m_suppressMaximizeChanged;
-                                    kw->maximize(KWin::MaximizeRestore);
-                                    --m_suppressMaximizeChanged;
-                                }
-                                m_effect->applySnapGeometry(
-                                    safeW, QRect(reply.argumentAt<1>(), reply.argumentAt<2>(), rw, rh));
-                                qCInfo(lcEffect)
-                                    << "Desktop switch: restored pre-snap geometry from daemon for orphaned window"
-                                    << windowId;
-                            });
+                } else if (wasTracked) {
+                    // No local bucket entry but the window WAS tile-managed
+                    // here: it was snap-managed when it entered autotile, so
+                    // saveAndRecordPreAutotileGeometry deliberately stored
+                    // nothing (its frame was the zone rect). The daemon's
+                    // placement store holds the true pre-snap geometry —
+                    // fetch it async and restore once the reply lands.
+                    // Without this the window stays parked at its tiled
+                    // frame. Gated on wasTracked: see the capture above.
+                    requestDaemonPreTileRestore(w, windowId);
                 }
             }
             m_effect->updateAllBorders();
@@ -343,18 +309,30 @@ void AutotileHandler::slotScreensChanged(const QStringList& screenIds, bool isDe
                 unmaximizeMonocleWindow(m_effect->getWindowId(w));
             }
 
-            // Clear autotile zone state for windows on REMOVED screens only.
+            // Clear autotile zone state for entries on REMOVED screens only.
             // A partial toggle (one screen disabled, sibling autotile screens
             // untouched) must not wipe sibling entries mid-animation — that
             // would strand their windows without a centering target (see the
-            // NOTE in slotWindowsTileRequested). Entries whose window is gone
-            // are pruned too. (Stagger timers were already invalidated by the
-            // unconditional bump at function entry; no stagger can have been
-            // scheduled since.)
+            // NOTE in slotWindowsTileRequested). Entries are classified by
+            // their TARGET ZONE's screen, not the window's current frame:
+            // mid-retile the frame may still resolve to the removed screen
+            // while the pending centering belongs to a surviving sibling
+            // zone (Wayland clients commit the new rect asynchronously).
+            // Entries whose window is gone are pruned unconditionally.
+            // (Stagger timers were already invalidated by the bump at
+            // function entry; no stagger can have been scheduled since.)
             const auto pruneRemovedScreenEntries = [this, &removed](QHash<QString, QRect>& map) {
                 for (auto it = map.begin(); it != map.end();) {
                     KWin::EffectWindow* mw = m_effect->findWindowById(it.key());
-                    if (!mw || removed.contains(m_effect->getWindowScreenId(mw))) {
+                    if (!mw) {
+                        it = map.erase(it);
+                        continue;
+                    }
+                    const QPoint zoneCenter = it.value().center();
+                    const auto* output = KWin::effects->screenAt(zoneCenter);
+                    const QString entryScreen = output ? m_effect->resolveEffectiveScreenId(zoneCenter, output)
+                                                       : m_effect->getWindowScreenId(mw);
+                    if (removed.contains(entryScreen)) {
                         it = map.erase(it);
                     } else {
                         ++it;

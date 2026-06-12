@@ -122,8 +122,8 @@ void PlasmaZonesEffect::slotApplyGeometryRequested(const QString& windowId, int 
                          << liveWindowId;
         return;
     }
-    qCInfo(lcEffect) << "slotApplyGeometryRequested:" << windowId << "geo:" << geometry << "zoneId:" << zoneId
-                     << "screen:" << screenId << "floating:" << isWindowFloating(windowId)
+    qCInfo(lcEffect) << "slotApplyGeometryRequested:" << windowId << "(live:" << liveWindowId << ") geo:" << geometry
+                     << "zoneId:" << zoneId << "screen:" << screenId << "floating:" << isWindowFloating(liveWindowId)
                      << "currentFrame:" << w->frameGeometry();
     // Store pre-snap geometry before first snap (idempotent — skips if already stored).
     // The daemon handles windowSnapped/recordSnapIntent internally, but only the effect
@@ -252,11 +252,12 @@ void PlasmaZonesEffect::slotApplyGeometriesBatch(const PhosphorProtocol::WindowG
         savedStack.append(QPointer<KWin::EffectWindow>(w));
     }
 
-    // Map the daemon's action string to a shader-tree ProfilePath. "resnap" / "retile" are layout
-    // changes (different layout or autotile recompute) — semantically a layout switch. "rotate"
-    // moves windows between existing zones in the same layout — a snap-in. Default to WindowSnapIn
-    // for unknown actions (forward-compat with future daemon-emitted strings).
-    const QString batchProfilePath = (action == QLatin1String("resnap") || action == QLatin1String("retile"))
+    // Map the daemon's action string to a shader-tree ProfilePath. "resnap" is a layout
+    // change (different layout or autotile recompute) — semantically a layout switch. "rotate"
+    // moves windows between existing zones in the same layout — a snap-in. Everything else
+    // ("vs_reconfigure" via the adaptor relay, "snap_all" via the effect-local path, and any
+    // future daemon-emitted string) defaults to WindowSnapIn.
+    const QString batchProfilePath = (action == QLatin1String("resnap"))
         ? PhosphorAnimation::ProfilePaths::WindowLayoutSwitch
         : PhosphorAnimation::ProfilePaths::WindowSnapIn;
 

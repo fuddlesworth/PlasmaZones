@@ -112,6 +112,8 @@ private Q_SLOTS:
         QSignalSpy spy(&engine, &AutotileEngine::autotileScreensChanged);
 
         const QSet<QString> screens{QStringLiteral("HDMI-1")};
+        // Daemon startup push — establishes the desktop context, never a switch.
+        engine.setCurrentDesktop(1);
         engine.setAutotileScreens(screens);
         QCOMPARE(spy.count(), 1);
         QCOMPARE(spy.at(0).at(1).toBool(), false);
@@ -124,6 +126,25 @@ private Q_SLOTS:
         QCOMPARE(spy.count(), 2);
         QCOMPARE(spy.at(1).at(0).toStringList(), QStringList{QStringLiteral("HDMI-1")});
         QCOMPARE(spy.at(1).at(1).toBool(), true);
+    }
+
+    void testScreensChanged_initialDesktopPushIsNotASwitch()
+    {
+        AutotileEngine engine(nullptr, nullptr, nullptr, PlasmaZones::TestHelpers::testRegistry());
+        QSignalSpy screensSpy(&engine, &AutotileEngine::autotileScreensChanged);
+        QSignalSpy enabledSpy(&engine, &AutotileEngine::enabledChanged);
+
+        // Daemon startup while the user sits on desktop 5: the very first
+        // context push must NOT read as a desktop switch — login with
+        // autotile enabled needs the genuine enabledChanged +
+        // isDesktopSwitch=false sequence so the effect initializes window
+        // tracking instead of treating it as a desktop return.
+        engine.setCurrentDesktop(5);
+        engine.setAutotileScreens({QStringLiteral("HDMI-1")});
+        QCOMPARE(enabledSpy.count(), 1);
+        QCOMPARE(enabledSpy.at(0).at(0).toBool(), true);
+        QCOMPARE(screensSpy.count(), 1);
+        QCOMPARE(screensSpy.at(0).at(1).toBool(), false);
     }
 
     void testScreensChanged_sameSetNoDesktopSwitch_noSignal()
@@ -146,6 +167,7 @@ private Q_SLOTS:
         QSignalSpy spy(&engine, &AutotileEngine::autotileScreensChanged);
 
         const QSet<QString> screens{QStringLiteral("HDMI-1")};
+        engine.setCurrentDesktop(1); // startup push — establishes context
         engine.setAutotileScreens(screens);
         engine.setCurrentDesktop(2);
         engine.setAutotileScreens(screens);
@@ -167,6 +189,7 @@ private Q_SLOTS:
 
         // Both desktops resolve to an empty set: no screen autotiles anywhere,
         // so there is nothing for the effect's catch-scan to do — no wakeup.
+        engine.setCurrentDesktop(1); // startup push — establishes context
         engine.setCurrentDesktop(2);
         engine.setAutotileScreens({});
         QCOMPARE(spy.count(), 0);

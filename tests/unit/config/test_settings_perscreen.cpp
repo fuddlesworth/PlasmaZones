@@ -21,6 +21,7 @@
 #include "../../../src/config/settings.h"
 #include "../../../src/config/configdefaults.h"
 #include "../../../src/core/constants.h"
+#include "../../../src/core/settings_interfaces.h"
 #include "../helpers/IsolatedConfigGuard.h"
 
 using namespace PlasmaZones;
@@ -145,13 +146,72 @@ private Q_SLOTS:
         QSignalSpy spy(&settings, &Settings::perScreenAutotileSettingsChanged);
         settings.setPerScreenAutotileSetting(screen, QStringLiteral("AutotileHideTitleBars"), true);
         QCOMPARE(spy.count(), 0);
-        // The setter normalizes long→short form, so the short-form spelling is
-        // a distinct input path — it must be rejected identically.
+        // The validator strips the "Autotile" prefix itself, so both
+        // spellings converge on the same rejection branch — the short-form
+        // write pins the second wire spelling rather than a distinct code
+        // path (and would catch a future short-form-only whitelist entry).
         settings.setPerScreenAutotileSetting(screen, QStringLiteral("HideTitleBars"), true);
         QCOMPARE(spy.count(), 0);
         const QVariantMap overrides = settings.getPerScreenAutotileSettings(screen);
         QVERIFY(!overrides.contains(QStringLiteral("HideTitleBars")));
         QVERIFY(!overrides.contains(QStringLiteral("AutotileHideTitleBars")));
+    }
+
+    /**
+     * Tripwire: every PerScreenAutotileKey constant must stay accepted by the
+     * validator (which whitelists against the SHORT-form PhosphorEngine::
+     * PerScreenKeys namespace after stripping the "Autotile" prefix). Nothing
+     * structurally ties the two lists — a key renamed or added on one side
+     * silently fails validation and the override is dropped, so this test
+     * round-trips every long-form key with a type-appropriate value.
+     */
+    void testPerScreenAutotile_everyDeclaredKeyRoundTrips()
+    {
+        IsolatedConfigGuard guard;
+        Settings settings;
+        const QString screen = QStringLiteral("test-screen-1");
+
+        struct KeyProbe
+        {
+            const char* key;
+            QVariant value;
+        };
+        const QList<KeyProbe> probes{
+            {PerScreenAutotileKey::Algorithm, QStringLiteral("bsp")},
+            {PerScreenAutotileKey::SplitRatio, 0.5},
+            {PerScreenAutotileKey::MasterCount, 2},
+            {PerScreenAutotileKey::InnerGap, 5},
+            {PerScreenAutotileKey::OuterGap, 5},
+            {PerScreenAutotileKey::UsePerSideOuterGap, true},
+            {PerScreenAutotileKey::OuterGapTop, 5},
+            {PerScreenAutotileKey::OuterGapBottom, 5},
+            {PerScreenAutotileKey::OuterGapLeft, 5},
+            {PerScreenAutotileKey::OuterGapRight, 5},
+            {PerScreenAutotileKey::FocusNewWindows, true},
+            {PerScreenAutotileKey::SmartGaps, true},
+            {PerScreenAutotileKey::MaxWindows, 3},
+            {PerScreenAutotileKey::InsertPosition, 1},
+            {PerScreenAutotileKey::FocusFollowsMouse, true},
+            {PerScreenAutotileKey::RespectMinimumSize, true},
+            {PerScreenAutotileKey::SplitRatioStep, 0.05},
+            {PerScreenAutotileKey::AnimationsEnabled, true},
+            {PerScreenAutotileKey::AnimationDuration, 200},
+            {PerScreenAutotileKey::AnimationEasingCurve, QStringLiteral("linear")},
+        };
+
+        for (const KeyProbe& probe : probes) {
+            const QString longKey = QString::fromLatin1(probe.key);
+            settings.setPerScreenAutotileSetting(screen, longKey, probe.value);
+            // The map stores short form: strip the "Autotile" prefix
+            // (Animation* keys carry none).
+            QString shortKey = longKey;
+            if (shortKey.startsWith(QLatin1String("Autotile"))) {
+                shortKey = shortKey.mid(8);
+            }
+            const QVariantMap overrides = settings.getPerScreenAutotileSettings(screen);
+            QVERIFY2(overrides.contains(shortKey),
+                     qPrintable(QStringLiteral("validator rejected declared per-screen key: ") + longKey));
+        }
     }
 
     /**

@@ -324,7 +324,9 @@ Q_SIGNALS:
      * windows in a single slot invocation, avoiding race conditions when
      * many windows are retiled (e.g. rotate).
      *
-     * @param tileRequestsJson JSON array of {windowId,x,y,width,height}
+     * @param tileRequests Typed list of TileRequestEntry structs, wire shape
+     *        a(siiiissbb): (windowId, x, y, width, height, zoneId, screenId,
+     *        monocle, floating)
      */
     void windowsTileRequested(const PhosphorProtocol::TileRequestList& tileRequests);
 

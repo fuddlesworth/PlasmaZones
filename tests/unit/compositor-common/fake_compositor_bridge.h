@@ -34,9 +34,10 @@
  *  - stackingOrder() returns std::map key order (lexicographic by id), NOT
  *    bottom-to-top stacking as the interface documents. DecorationManager
  *    never calls it; a future consumer test must not rely on the ordering.
- *  - windowInfo() leaves appId/caption/icon/minSize and the boolean flags
- *    beyond minimized at their defaults; asQObject() returns nullptr (no
- *    D-Bus watcher parent in unit tests).
+ *  - windowInfo() populates frameGeometry/screenId/minimized/hasDecoration
+ *    but leaves appId/windowClass/caption/icon/minSize/pid and the remaining
+ *    boolean flags at their defaults; asQObject() returns nullptr (no D-Bus
+ *    watcher parent in unit tests).
  */
 class FakeCompositorBridge : public PhosphorCompositor::ICompositorBridge
 {

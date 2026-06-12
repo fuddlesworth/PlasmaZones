@@ -99,6 +99,12 @@ private Q_SLOTS:
         o.insert(QStringLiteral("type"), QString(ActionType::SetOpacity));
         o.insert(QStringLiteral("value"), 1.5);
         QVERIFY(!RuleAction::fromJson(o).has_value());
+        // Below-minimum is rejected too; 0.0 itself is a legal wire value
+        // (fully transparent — the 0.0–1.0 range is inclusive).
+        o.insert(QStringLiteral("value"), -0.1);
+        QVERIFY(!RuleAction::fromJson(o).has_value());
+        o.insert(QStringLiteral("value"), 0.0);
+        QVERIFY(RuleAction::fromJson(o).has_value());
         o.insert(QStringLiteral("value"), 0.95);
         QVERIFY(RuleAction::fromJson(o).has_value());
     }

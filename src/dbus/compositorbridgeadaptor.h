@@ -73,7 +73,8 @@ public Q_SLOTS:
      * @param capabilities List of supported capabilities
      * @return PhosphorProtocol::BridgeRegistrationResult struct: {apiVersion,
      *         bridgeName, sessionId}; sessionId == "REJECTED" signals a
-     *         protocol-version mismatch the caller MUST check
+     *         rejected registration the caller MUST check — protocol-version
+     *         mismatch or invalid input (empty compositorName)
      *
      * Capabilities:
      *   "borderless"  — bridge manages window decorations (title-bar hiding

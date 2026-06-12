@@ -309,12 +309,6 @@ public Q_SLOTS:
                               bool overwrite);
 
     /**
-     * Get stored pre-tile geometry for a window
-     * @return true if geometry was found, false otherwise
-     */
-    bool getPreTileGeometry(const QString& windowId, int& x, int& y, int& width, int& height);
-
-    /**
      * Check if a window has stored pre-tile geometry
      */
     bool hasPreTileGeometry(const QString& windowId);
@@ -508,12 +502,6 @@ public Q_SLOTS:
     QStringList getFloatingWindows();
 
     /**
-     * @brief Find the first empty zone in the current layout
-     * @return PhosphorZones::Zone ID of first empty zone, or empty string if all occupied
-     */
-    QString findEmptyZone();
-
-    /**
      * @brief Get geometry for a specific zone ID (uses primary screen)
      * @param zoneId PhosphorZones::Zone UUID string
      * @return PhosphorProtocol::ZoneGeometryRect with x, y, width, height (all zero if not found)
@@ -527,6 +515,30 @@ public Q_SLOTS:
      * @return PhosphorProtocol::ZoneGeometryRect with x, y, width, height (all zero if not found)
      */
     PhosphorProtocol::ZoneGeometryRect getZoneGeometryForScreen(const QString& zoneId, const QString& screenId);
+
+    // handleBatchedResnap moved to SnapAdaptor.
+
+public:
+    // Internal-only members below — declared as plain public methods (NOT
+    // under Q_SLOTS) so QDBusAbstractAdaptor's runtime introspection does
+    // NOT expose them on the bus regardless of XML content. Same pattern as
+    // `WindowDragAdaptor::clearForCompositorReconnect` /
+    // `handleWindowClosed`. Every caller is in-process and reaches them
+    // via direct C++ invocation through the daemon, NOT through D-Bus.
+
+    /**
+     * Get stored pre-tile geometry for a window (out-param variant for
+     * daemon-internal callers; the bus exposes getValidatedPreTileGeometry
+     * and getPreTileGeometries instead)
+     * @return true if geometry was found, false otherwise
+     */
+    bool getPreTileGeometry(const QString& windowId, int& x, int& y, int& width, int& height);
+
+    /**
+     * @brief Find the first empty zone in the current layout
+     * @return PhosphorZones::Zone ID of first empty zone, or empty string if all occupied
+     */
+    QString findEmptyZone();
 
     /// Internal: returns QRect directly (avoids JSON round-trip for daemon-internal callers)
     QRect zoneGeometryRect(const QString& zoneId, const QString& screenId);
@@ -587,16 +599,6 @@ public Q_SLOTS:
      */
     void loadState();
 
-    // handleBatchedResnap moved to SnapAdaptor.
-
-public:
-    // Internal-only members below — declared as plain public methods (NOT
-    // under Q_SLOTS) so QDBusAbstractAdaptor's runtime introspection does
-    // NOT expose them on the bus regardless of XML content. Same pattern as
-    // `WindowDragAdaptor::clearForCompositorReconnect` /
-    // `handleWindowClosed`. Every caller is in-process and reaches them
-    // via direct C++ invocation through the daemon, NOT through D-Bus.
-
     /// Resolve whether an unsnapped (free / snap-floated) window should have its
     /// previous position restored on open. Consulted by the restore-position
     /// predicate the daemon injects into SnapEngine (in-process, not via D-Bus).
@@ -644,7 +646,7 @@ Q_SIGNALS:
     void windowZoneChanged(const QString& windowId, const QString& zoneId);
 
     /**
-     * @brief Internal Qt signal emitted after the windowClosed() D-Bus method
+     * @brief Qt signal emitted after the windowClosed() D-Bus method
      * processes a close. Used to drive sibling-adaptor cleanup (e.g.
      * WindowDragAdaptor's drag-state teardown when a window closes mid-drag)
      * without re-introducing a D-Bus-visible WindowDrag.handleWindowClosed
@@ -652,6 +654,9 @@ Q_SIGNALS:
      *
      * Distinct name from the D-Bus method so MOC/QtDBus don't conflate the
      * two; the method runs first, then we emit this for in-process listeners.
+     * NOTE: like all adaptor signals it IS auto-relayed onto the bus by
+     * QDBusAbstractAdaptor; it is simply not part of the documented wire
+     * contract (absent from the XML) and nothing external subscribes.
      */
     void windowClosedNotification(const QString& windowId);
 

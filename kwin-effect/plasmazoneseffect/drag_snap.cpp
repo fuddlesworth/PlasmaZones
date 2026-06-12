@@ -198,6 +198,14 @@ void PlasmaZonesEffect::callEndDrag(KWin::EffectWindow* window, const QString& w
                     if (const QString scr =
                             !outcome.targetScreenId.isEmpty() ? outcome.targetScreenId : getWindowScreenId(safeWindow);
                         !scr.isEmpty() && !m_autotileHandler->isAutotileScreen(scr)) {
+                        // Defensively clear any stale local float flag before
+                        // recording the snap — a surviving flag poisons the
+                        // next pre-tile capture and wrongly exempts the window
+                        // from the drain-time restore veto (same rationale as
+                        // the single-window and batch apply paths). Idempotent
+                        // when the daemon's windowFloatingChanged(false)
+                        // broadcast already landed.
+                        m_navigationHandler->setWindowFloating(windowId, false);
                         m_snapHandler->markWindowSnapped(windowId, scr);
                     }
                     break;
@@ -293,6 +301,9 @@ void PlasmaZonesEffect::tryAsyncSnapCall(const QString& interface, const QString
                     // mirroring the batch path's discriminator).
                     if (const QString asyncScr = getWindowScreenId(window);
                         !asyncScr.isEmpty() && !m_autotileHandler->isAutotileScreen(asyncScr)) {
+                        // Defensive stale-float clear — see the drag-drop
+                        // commit path; idempotent vs the daemon broadcast.
+                        m_navigationHandler->setWindowFloating(windowId, false);
                         m_snapHandler->markWindowSnapped(windowId, asyncScr);
                     }
                     // args[1] is screenId (e.g. for snapToEmptyZone, snapToLastZone)

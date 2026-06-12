@@ -314,6 +314,21 @@ private:
     QRectF findPreAutotileGeometry(const QString& windowId, QString* bucketScreenId = nullptr) const;
 
     /**
+     * @brief Async daemon-side pre-tile geometry restore for a desktop-switch
+     *        orphan with no local pre-autotile bucket entry.
+     *
+     * Fires getValidatedPreTileGeometry and applies the returned rect once
+     * the reply lands, unless ANY owner took the window back during the
+     * round-trip (re-notified, autotile screen, snap commit, float, user
+     * move/resize, desktop switched again). Callers must only invoke this
+     * for windows that were verifiably autotile-managed (tracked in
+     * m_notifiedWindows at demotion time) — the daemon store is mode-shared,
+     * appId-fuzzy and session-persisted, so an ungated call can teleport a
+     * never-autotiled window.
+     */
+    void requestDaemonPreTileRestore(KWin::EffectWindow* w, const QString& windowId);
+
+    /**
      * @brief Declared compositor min-size for @p w, rounded up to ints.
      *
      * Returns 0×0 when the window declares none. Internal windows (our own

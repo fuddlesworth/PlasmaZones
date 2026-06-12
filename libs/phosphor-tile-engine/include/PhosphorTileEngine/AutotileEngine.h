@@ -881,10 +881,14 @@ public:
      * @brief Compute the insert index for a cursor position on an autotile screen.
      *
      * Walks the screen's current calculated zones and returns the index of the
-     * first zone that contains the cursor. Returns the last tiled index as a
-     * fallback when the cursor is beyond all zones, or -1 if the screen has no
-     * tiling state. updateDragInsertPreview() clamps to [0, tiledWindowCount()-1],
-     * so returning the last slot is equivalent to "append".
+     * first zone that contains the cursor. When the cursor is beyond all
+     * zones: holds at the active preview's lastInsertIndex if a preview is
+     * live (the normal call context — keeps the slot stable while the cursor
+     * crosses gaps), otherwise falls back to the last tiled index. Returns 0
+     * when the state exists but has no zones yet, and -1 if the screen has no
+     * tiling state. updateDragInsertPreview() clamps to
+     * [0, tiledWindowCount()-1], so returning the last slot is equivalent to
+     * "append".
      *
      * The dragged window's zone is intentionally NOT excluded from the hit
      * test: cursor-over-own-zone returns its current index (stable identity),
@@ -1251,6 +1255,12 @@ private:
     int m_currentDesktop = 1;
     QString m_currentActivity;
     bool m_isDesktopContextSwitch = false;
+    /// True once setCurrentDesktop() has been called at least once. Carries
+    /// "a desktop context was established" for the switch-arming logic —
+    /// m_currentDesktop has no reserved unset value (defaults to 1, KWin
+    /// desktops are >= 1), so the daemon's initial startup push must be told
+    /// apart from a genuine switch by this flag, not a value comparison.
+    bool m_desktopContextEverSet = false;
 
     // Per-screen desktop override for sticky screens. When the KWin script
     // "virtualdesktopsonlyonprimary" pins all secondary-screen windows to all

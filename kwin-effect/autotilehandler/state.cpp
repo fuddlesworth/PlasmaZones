@@ -11,7 +11,12 @@
 #include <effect/effectwindow.h>
 #include <window.h>
 
+#include <QDBusPendingCall>
+#include <QDBusPendingCallWatcher>
+#include <QDBusPendingReply>
 #include <QLoggingCategory>
+#include <QPointer>
+#include <QScopeGuard>
 
 namespace PlasmaZones {
 
@@ -179,6 +184,54 @@ void AutotileHandler::saveAndRecordPreAutotileGeometry(const QString& windowId, 
              static_cast<int>(frame.height()), screenId, true},
             QStringLiteral("storePreTileGeometry"));
     }
+}
+
+void AutotileHandler::requestDaemonPreTileRestore(KWin::EffectWindow* w, const QString& windowId)
+{
+    QPointer<KWin::EffectWindow> safeW = w;
+    auto* watcher = new QDBusPendingCallWatcher(
+        PhosphorProtocol::ClientHelpers::asyncCall(PhosphorProtocol::Service::Interface::WindowTracking,
+                                                   QStringLiteral("getValidatedPreTileGeometry"), {windowId}),
+        this);
+    connect(watcher, &QDBusPendingCallWatcher::finished, this, [this, safeW, windowId](QDBusPendingCallWatcher* pw) {
+        pw->deleteLater();
+        QDBusPendingReply<bool, int, int, int, int> reply = *pw;
+        if (!reply.isValid() || reply.count() < 5 || !reply.argumentAt<0>()) {
+            return;
+        }
+        const int rw = reply.argumentAt<3>();
+        const int rh = reply.argumentAt<4>();
+        if (rw <= 0 || rh <= 0 || !safeW || safeW->isDeleted()) {
+            return;
+        }
+        // Anything that took (back) ownership of the window during the
+        // round-trip supersedes this orphan restore: another desktop
+        // switch, a re-tile (re-notified), the screen re-entering
+        // autotile, a snap commit, a float toggle, or the user actively
+        // moving/resizing it.
+        if (!safeW->isOnCurrentDesktop() || m_notifiedWindows.contains(windowId)
+            || m_autotileScreens.contains(m_effect->getWindowScreenId(safeW))
+            || m_effect->isWindowMarkedSnapped(windowId) || m_effect->isWindowFloating(windowId) || safeW->isUserMove()
+            || safeW->isUserResize()) {
+            return;
+        }
+        // Suppress the VS-crossing detectors across the synchronous
+        // frameGeometryChanged this apply emits — same rationale as the
+        // local-bucket restore path in slotScreensChanged.
+        m_effect->m_inDaemonGeometryApply = true;
+        const auto geomGuard = qScopeGuard([this] {
+            m_effect->m_inDaemonGeometryApply = false;
+        });
+        // Clear any lingering KWin maximize flag first or KWin re-asserts
+        // the maximize-area rect and defeats the restore (discussion #461).
+        if (KWin::Window* kw = safeW->window(); kw && kw->maximizeMode() != KWin::MaximizeRestore) {
+            ++m_suppressMaximizeChanged;
+            kw->maximize(KWin::MaximizeRestore);
+            --m_suppressMaximizeChanged;
+        }
+        m_effect->applySnapGeometry(safeW, QRect(reply.argumentAt<1>(), reply.argumentAt<2>(), rw, rh));
+        qCInfo(lcEffect) << "Desktop switch: restored pre-snap geometry from daemon for orphaned window" << windowId;
+    });
 }
 
 QRectF AutotileHandler::findPreAutotileGeometry(const QString& windowId, QString* bucketScreenId) const

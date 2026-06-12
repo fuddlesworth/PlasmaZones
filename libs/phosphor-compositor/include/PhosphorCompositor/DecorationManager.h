@@ -122,8 +122,9 @@ public:
     /// window leaving the mode entirely).
     void releaseKind(const QString& windowId, OwnerKind kind, Restore restore = Restore::Immediate);
     /// Cross-screen transfer: drop @p kind owners on every screen EXCEPT
-    /// @p keepScreenId. Never produces a physical toggle while the kept
-    /// owner remains.
+    /// @p keepScreenId. Never produces a physical toggle — even when the
+    /// kept screen's owner is not registered yet (the caller acquires it
+    /// next); the decoration deliberately stays hidden across the hop.
     void releaseOthersOfKind(const QString& windowId, OwnerKind kind, const QString& keepScreenId);
 
     // ── Bulk operations ────────────────────────────────────────────────
@@ -134,11 +135,11 @@ public:
     /// window before releasing — see AutotileHandler::slotScreensChanged.
     void releaseAllOfKind(OwnerKind kind, Restore restore = Restore::Immediate);
     /// Daemon loss / effect teardown: synchronously restore every window we
-    /// hid to its prior state, then drop all tracking and timers. The
-    /// installed restore veto deliberately survives: it is wired once at
-    /// effect construction and stays valid for the next daemon session
-    /// (the post-restoreAll queue is empty, so it is not consulted until
-    /// new deferred releases arrive).
+    /// hid to its prior state, then drop all tracking, timers, and any
+    /// in-flight drain chains. The installed restore veto deliberately
+    /// survives: it is wired once at effect construction and stays valid
+    /// for the next daemon session (the post-restoreAll queue is empty, so
+    /// it is not consulted until new deferred releases arrive).
     void restoreAll();
     /// Window destroyed: drop all state for it. Zero compositor calls — the
     /// decoration dies with the window.
@@ -198,7 +199,9 @@ public:
 
 Q_SIGNALS:
     /// Emitted after a physical decoration restore (the effect refreshes
-    /// border overlays for the window).
+    /// border overlays for the window). Slots may synchronously re-enter
+    /// the manager — including destroying it or calling restoreAll() —
+    /// every emit site guards its epilogue accordingly.
     void windowDecorationRestored(const QString& windowId);
     /// Emitted when a drain chain completes having processed at least one
     /// restore (the effect rebuilds all borders). An all-vetoed chain —
@@ -255,6 +258,8 @@ private:
     /// Re-arm the fallback timer that drains pending restores if no
     /// drainPendingRestores() call arrives.
     void armFallbackTimer();
+    /// Stop and release the fallback timer (drain start, teardown).
+    void cancelFallbackTimer();
 
     QHash<QString, Entry> m_windows;
     QSet<QString> m_pendingRestore;

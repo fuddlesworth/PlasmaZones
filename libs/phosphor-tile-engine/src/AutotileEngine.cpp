@@ -406,19 +406,30 @@ void AutotileEngine::moveToPosition(const QString& windowId, int position, const
 void AutotileEngine::setCurrentDesktop(int desktop)
 {
     if (desktop == m_currentDesktop) {
+        // A same-desktop push still ESTABLISHES the desktop context: the
+        // daemon's startup push lands here whenever the session begins on
+        // the engine's default desktop. Without recording it, the next
+        // genuine change would read as initialization and skip arming.
+        m_desktopContextEverSet = true;
         return;
     }
     qCInfo(PhosphorTileEngine::lcTileEngine)
         << "Switching autotile context: desktop" << m_currentDesktop << "->" << desktop;
-    // Only flag as desktop switch if we already had a valid context (desktop > 0).
-    // Initial setup (desktop 0 → 1 during daemon startup) is NOT a switch — the
-    // effect must receive the normal enabledChanged/autotileScreensChanged sequence
-    // to initialize window tracking. Without this, login with autotile enabled
-    // suppresses enabledChanged and the effect treats the first autotileScreensChanged
-    // as a "desktop return", skipping window notification to the daemon entirely.
+    // Only flag as desktop switch when a desktop context was already
+    // established by a prior call. The daemon pushes the initial desktop in
+    // start() BEFORE the first updateAutotileScreens(); that first push must
+    // NOT read as a switch — regardless of which desktop the session starts
+    // on — or login with autotile enabled suppresses enabledChanged and the
+    // effect treats the first autotileScreensChanged as a "desktop return",
+    // skipping window notification to the daemon entirely. m_currentDesktop
+    // has no reserved "unset" value (it defaults to 1, and KWin desktops are
+    // always >= 1), so a separate established-flag — not a sentinel
+    // comparison against the current value — carries "context exists";
+    // mirrors the empty-string sentinel setCurrentActivity() gets for free.
     // Use |= so that a prior setCurrentActivity() flag is not lost when both
     // desktop AND activity change simultaneously (e.g., activity-per-desktop).
-    m_isDesktopContextSwitch |= (m_currentDesktop > 0);
+    m_isDesktopContextSwitch |= m_desktopContextEverSet;
+    m_desktopContextEverSet = true;
     m_currentDesktop = desktop;
 }
 
@@ -2192,8 +2203,21 @@ void AutotileEngine::windowFocused(const QString& rawWindowId, const QString& sc
             m_overflow.migrateWindow(windowId);
             qCInfo(PhosphorTileEngine::lcTileEngine)
                 << "Window" << windowId << "moved from" << oldScreen << "to" << screenId << "- migrating";
-            // Re-add to the new screen's normal flow (will be overflow-checked on next retile)
-            onWindowAdded(windowId);
+            // Close the hole the departing window left on the SOURCE screen —
+            // the destination's own insert schedules a retile there, but
+            // nothing else retiles the source (mirrors windowOpened's
+            // migration path).
+            scheduleRetileForScreen(oldScreen);
+            if (isAutotileScreen(screenId)) {
+                // Re-add to the new screen's normal flow (will be
+                // overflow-checked on next retile).
+                onWindowAdded(windowId);
+            }
+            // else: the window left for a non-autotile screen and its
+            // tracking entry was removed above. Re-adding here would route
+            // through screenForWindow()'s primary-screen fallback and re-tile
+            // a window that just left autotile — the cross-engine misroute
+            // class the tracking removal exists to prevent.
         }
     }
 

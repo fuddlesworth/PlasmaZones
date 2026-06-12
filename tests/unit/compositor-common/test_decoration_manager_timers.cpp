@@ -345,6 +345,32 @@ private Q_SLOTS:
         QCOMPARE(bridge.window(QStringLiteral("b|1"))->noBorder, false);
     }
 
+    void testDrainMixedDeadAndLiveEmitsOnce()
+    {
+        FakeCompositorBridge bridge;
+        bridge.addWindow(QStringLiteral("a|1"));
+        bridge.addWindow(QStringLiteral("b|1"));
+        DecorationManager mgr(bridge);
+        QSignalSpy finished(&mgr, &DecorationManager::drainFinished);
+
+        mgr.acquire(QStringLiteral("a|1"), DecorationManager::autotile(Screen1));
+        mgr.acquire(QStringLiteral("b|1"), DecorationManager::autotile(Screen1));
+        mgr.releaseKind(QStringLiteral("a|1"), OwnerKind::Autotile, Restore::Deferred);
+        mgr.releaseKind(QStringLiteral("b|1"), OwnerKind::Autotile, Restore::Deferred);
+
+        // One window dies before the drain: the chain sweeps it with zero
+        // physical work, restores the survivor, and that single real restore
+        // makes the chain emit drainFinished exactly once — the middle
+        // ground between the all-dead (no emit) and all-live (one emit)
+        // extremes.
+        bridge.removeWindow(QStringLiteral("a|1"));
+        mgr.drainPendingRestores();
+        QTRY_COMPARE(bridge.window(QStringLiteral("b|1"))->noBorder, false);
+        QTRY_COMPARE(finished.count(), 1);
+        QTest::qWait(30); // absence check: no second emission follows
+        QCOMPARE(finished.count(), 1);
+    }
+
     void testRestoreAllFlushesQueuedDeferred()
     {
         FakeCompositorBridge bridge;

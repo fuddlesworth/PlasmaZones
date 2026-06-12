@@ -108,9 +108,14 @@ void PlasmaZonesEffect::slotDaemonReady()
             return;
         }
         if (result.sessionId == QLatin1String("REJECTED")) {
-            qCCritical(lcEffect) << "Daemon REJECTED this effect: daemon apiVersion=" << result.apiVersion
-                                 << "but this effect speaks" << PhosphorProtocol::Service::ApiVersion
-                                 << "— update the effect to match the daemon.";
+            // REJECTED covers any invalid registration (the daemon also
+            // rejects an empty compositorName); this caller always sends a
+            // non-empty name, so for it the only reachable cause is a
+            // protocol-version mismatch — diagnose that.
+            qCCritical(lcEffect) << "Daemon REJECTED this effect's registration: daemon apiVersion="
+                                 << result.apiVersion << "but this effect speaks"
+                                 << PhosphorProtocol::Service::ApiVersion
+                                 << "— a version mismatch; update the effect to match the daemon.";
             return;
         }
         int daemonVersion = result.apiVersion.toInt();
@@ -726,9 +731,11 @@ void PlasmaZonesEffect::loadCachedSettings()
     // order in updateAllBorders / re-toggling title bars — matching the
     // "only act on change" convention the autotile width/radius setters use.
     loadSettingAsync(QStringLiteral("snappingHideTitleBars"), [this](const QVariant& v) {
-        // The value-changed guard lives inside updateSnapHideTitleBars
-        // (mirrors updateHideTitleBarsSetting above).
-        m_snapHandler->updateSnapHideTitleBars(v.toBool());
+        // Value-changed guard lives inside the handler; the border refresh
+        // is the caller's job on true — mirrors autotileHideTitleBars above.
+        if (m_snapHandler->updateSnapHideTitleBars(v.toBool())) {
+            updateAllBorders();
+        }
     });
     loadSettingAsync(QStringLiteral("snappingShowBorder"), [this](const QVariant& v) {
         const bool show = v.toBool();

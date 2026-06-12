@@ -127,15 +127,18 @@ bool SnapHandler::updateSnapHideTitleBars(bool hide)
         }
     } else {
         // Release every snap ownership; the manager restores each title bar
-        // no other owner (autotile mid-transition, rule hide) still claims.
-        // Deferred + an immediate drain: each restore is a 30-120 ms
+        // that no other owner (autotile mid-transition, rule hide) still
+        // claims. Deferred + an immediate drain: each restore is a 30-120 ms
         // synchronous Wayland round-trip, so the drain runs them one per
         // event-loop tick instead of stalling the compositor for the batch.
         m_effect->decorationManager()->releaseAllOfKind(DecorationManager::OwnerKind::Snap,
                                                         DecorationManager::Restore::Deferred);
         m_effect->decorationManager()->drainPendingRestores();
     }
-    m_effect->updateAllBorders();
+    // The border refresh is the CALLER's job on a true return — full
+    // symmetry with AutotileHandler::updateHideTitleBarsSetting, so a
+    // caller following either pattern never double-walks the stacking
+    // order.
     return true;
 }
 

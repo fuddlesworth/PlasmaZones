@@ -630,19 +630,20 @@ void AutotileHandler::slotWindowFrameGeometryChanged(KWin::EffectWindow* w, cons
     // get min-size enforcement from this path. They still get the initial
     // min-size from the windowOpened D-Bus call (kw->minSize() at open time),
     // and the centering code handles the visual placement correctly.
-    // !isInternal() guards KWin's InternalWindow::minSize() against a null
-    // backing QWindow (see discussion #511). Internal windows never reach the
-    // autotile-centering pipeline, but the guard keeps the call site safe
-    // independently of the upstream eligibility filter.
-    if ((dw < -MinCenteringDelta || dh < -MinCenteringDelta) && !kw->isInternal()) {
-        const QSizeF declaredMin = kw->minSize();
+    // declaredMinSize() carries the internal-window guard (KWin's
+    // InternalWindow::minSize() segfaults on a null backing QWindow, see
+    // discussion #511); internal windows never reach the autotile-centering
+    // pipeline, but the helper keeps the call site safe independently of the
+    // upstream eligibility filter.
+    if (dw < -MinCenteringDelta || dh < -MinCenteringDelta) {
+        const QSize declaredMin = declaredMinSize(w);
         int discoveredMinW = 0;
         int discoveredMinH = 0;
         if (dw < -MinCenteringDelta && declaredMin.width() > 0) {
-            discoveredMinW = qCeil(declaredMin.width());
+            discoveredMinW = declaredMin.width();
         }
         if (dh < -MinCenteringDelta && declaredMin.height() > 0) {
-            discoveredMinH = qCeil(declaredMin.height());
+            discoveredMinH = declaredMin.height();
         }
         if (discoveredMinW > 0 || discoveredMinH > 0) {
             reportDiscoveredMinSize(windowId, discoveredMinW, discoveredMinH);

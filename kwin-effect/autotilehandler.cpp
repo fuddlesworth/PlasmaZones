@@ -221,8 +221,12 @@ bool AutotileHandler::notifyWindowAdded(KWin::EffectWindow* w)
                 // moveResize from the daemon's tile decision. The D-Bus
                 // call failed — no moveResize is coming — so release
                 // suppression here rather than letting the window sit
-                // invisible until the 250 ms deadline.
-                if (KWin::EffectWindow* effectWindow = m_effect->findWindowById(windowId)) {
+                // invisible until the 250 ms deadline. Exact-id re-check:
+                // the fuzzy appId fallback could resolve a same-app sibling
+                // for a just-closed window, ending the sibling's suppression
+                // early.
+                if (KWin::EffectWindow* effectWindow = m_effect->findWindowById(windowId);
+                    effectWindow && m_effect->getWindowId(effectWindow) == windowId) {
                     m_effect->endRestoreSuppression(effectWindow);
                 }
             }
@@ -299,6 +303,13 @@ void AutotileHandler::notifyWindowsAddedBatch(const QList<KWin::EffectWindow*>& 
         w->deleteLater();
         if (w->isError()) {
             qCWarning(lcEffect) << "windowsOpenedBatch D-Bus call failed:" << w->error().message();
+            // Tracking rollback only — deliberately NO releaseKind or
+            // endRestoreSuppression here, unlike notifyWindowAdded's error
+            // handler: the batch paths (daemon-restart re-announce,
+            // toggle-on) serve windows that are still physically tiled and
+            // may be re-announced when the daemon returns, and the batch
+            // never serves the cross-screen transfer that parks a kept
+            // decoration claim on the single-window path.
             for (const QString& wid : batchWindowIds) {
                 m_notifiedWindows.remove(wid);
                 m_notifiedWindowScreens.remove(wid);
@@ -368,10 +379,11 @@ void AutotileHandler::handleWindowOutputChanged(KWin::EffectWindow* w)
     // transfer the imminent retile moves the claim atomically without a
     // physical flap (releaseOthersOfKind + acquire in
     // slotWindowsTileRequested), so releasing here would only produce a
-    // transient title-bar flash. The no-retile fallthroughs are covered: a
-    // daemon overflow-float lands in applyFloatCleanup (releaseKind), and a
-    // failed windowOpened call releases in notifyWindowAdded's error
-    // handler. The predicate mirrors the re-add condition below.
+    // transient title-bar flash. Every no-retile fallthrough has a release:
+    // a daemon overflow-float lands in applyFloatCleanup (releaseKind), a
+    // locally-filtered re-add releases right below, and a failed
+    // windowOpened call releases in notifyWindowAdded's error handler. The
+    // predicate mirrors the re-add condition below.
     const bool willReAdd = newIsAutotile && !w->isMinimized() && w->isOnCurrentDesktop() && w->isOnCurrentActivity();
     if (!willReAdd) {
         m_effect->decorationManager()->releaseKind(windowId, DecorationManager::OwnerKind::Autotile);
@@ -391,7 +403,15 @@ void AutotileHandler::handleWindowOutputChanged(KWin::EffectWindow* w)
         if (savedPreAutotileGeo.isValid()) {
             m_preAutotileGeometries[newScreenId][windowId] = savedPreAutotileGeo;
         }
-        notifyWindowAdded(w);
+        if (!notifyWindowAdded(w)) {
+            // The re-add was filtered locally — eligibility drift (e.g. the
+            // tiled frame now sits below the user's min-size threshold) or a
+            // pending close. No windowOpened call was issued, so neither the
+            // D-Bus error handler nor a tile request will ever touch this
+            // window again: the claim kept above for the flap-free transfer
+            // would strand the title bar hidden. Release it now.
+            m_effect->decorationManager()->releaseKind(windowId, DecorationManager::OwnerKind::Autotile);
+        }
     } else if (oldIsAutotile && !newIsAutotile) {
         // Autotile → snapping: restore the window's original (pre-snap/pre-tile)
         // SIZE after the drag ends.  The effect-side m_preAutotileGeometries may

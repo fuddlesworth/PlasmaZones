@@ -128,19 +128,29 @@ void DecorationManager::releaseOthersOfKind(const QString& windowId, OwnerKind k
 void DecorationManager::releaseAllOfKind(OwnerKind kind, Restore restore)
 {
     const QStringList ids = m_windows.keys();
+    QPointer<DecorationManager> self(this);
     for (const QString& windowId : ids) {
         releaseKind(windowId, kind, restore);
+        if (!self) {
+            return; // a restored-signal slot destroyed the manager mid-walk
+        }
     }
 }
 
 void DecorationManager::restoreAll()
 {
-    if (m_pendingFallback) {
-        m_pendingFallback->stop();
-        m_pendingFallback->deleteLater();
-        m_pendingFallback = nullptr;
-    }
+    cancelFallbackTimer();
     m_pendingRestore.clear();
+    // Cancel in-flight drain chains: they would only tick over the cleared
+    // table doing nothing, and a chain that had already restored something
+    // before this teardown would emit a spurious post-teardown
+    // drainFinished (a pointless full border rebuild). Same cycle-break as
+    // the destructor; a currently-executing step (restoreAll called from a
+    // windowDecorationRestored slot mid-drain) detects the null and stops.
+    for (const auto& chain : std::as_const(m_liveDrainChains)) {
+        *chain = nullptr;
+    }
+    m_liveDrainChains.clear();
     // Snapshot the ids needing a physical restore and clear ALL tracking
     // before touching the compositor: setNoBorder and the restored signal
     // can synchronously re-enter the manager, and emitting while iterating
@@ -155,6 +165,7 @@ void DecorationManager::restoreAll()
     m_windows.clear();
     // Teardown restores synchronously: the daemon/effect is going away and
     // there is no later tick to defer to.
+    QPointer<DecorationManager> self(this);
     for (const QString& windowId : std::as_const(toRestore)) {
         if (m_windows.contains(windowId)) {
             // A re-entrant acquire (via the restored-signal handlers of
@@ -165,6 +176,9 @@ void DecorationManager::restoreAll()
         if (WindowHandle w = resolveExact(windowId)) {
             m_bridge.setNoBorder(w, false);
             Q_EMIT windowDecorationRestored(windowId);
+            if (!self) {
+                return; // a restored-signal slot destroyed the manager
+            }
         }
     }
 }
@@ -222,7 +236,14 @@ void DecorationManager::setRuleOverride(const QString& windowId, std::optional<b
             return o.kind == OwnerKind::Rule;
         });
         cancelPendingRestore(windowId, entry);
+        // reconcile can restore (and emit) here; guard the epilogue against
+        // a restored-signal slot destroying the manager — same contract as
+        // the drain step and finishRelease.
+        QPointer<DecorationManager> self(this);
         reconcile(windowId, entry, Placement::AlreadyPlaced);
+        if (!self) {
+            return;
+        }
         pruneIfEmpty(windowId);
     }
 }
@@ -230,8 +251,12 @@ void DecorationManager::setRuleOverride(const QString& windowId, std::optional<b
 void DecorationManager::clearAllRuleOverrides()
 {
     const QStringList ids = m_windows.keys();
+    QPointer<DecorationManager> self(this);
     for (const QString& windowId : ids) {
         setRuleOverride(windowId, std::nullopt);
+        if (!self) {
+            return; // a restored-signal slot destroyed the manager mid-walk
+        }
     }
 }
 
@@ -249,11 +274,7 @@ void DecorationManager::drainPendingRestoresInternal(bool fromFallback)
     // Cancel the fallback FIRST — even when the queue is already empty
     // (acquire/setRuleOverride may have emptied it after the timer was
     // armed), so a stale timer never fires a pointless drain later.
-    if (m_pendingFallback) {
-        m_pendingFallback->stop();
-        m_pendingFallback->deleteLater();
-        m_pendingFallback = nullptr;
-    }
+    cancelFallbackTimer();
     if (m_pendingRestore.isEmpty()) {
         return;
     }
@@ -271,44 +292,58 @@ void DecorationManager::drainPendingRestoresInternal(bool fromFallback)
     auto didWork = std::make_shared<bool>(false);
     m_liveDrainChains.append(step);
     *step = [this, pending, step, didWork, fromFallback]() {
-        // Stack copies of the shared state: the FIRST invocation executes the
-        // heap closure itself (not a QTimer-stored copy), and a re-entrant
-        // slot that destroys the manager mid-step (the destructor nulls
-        // *step) would otherwise destroy these captures while they are in
-        // use. The locals pin them to this stack frame.
+        // Stack copies of EVERY captured value used after a potential
+        // re-entrant teardown: the FIRST invocation executes the heap
+        // closure itself (not a QTimer-stored copy), and a slot that
+        // destroys the manager or calls restoreAll() mid-step nulls *step,
+        // destroying the executing closure's captures. The locals pin them
+        // to this stack frame — including the `this` pointer value, which
+        // is itself a capture.
+        DecorationManager* const mgr = this;
         const auto pendingLocal = pending;
         const auto stepLocal = step;
         const auto didWorkLocal = didWork;
+        if (!*stepLocal) {
+            // restoreAll() cancelled this chain between ticks. The QTimer
+            // had already stored a copy of the closure, so the tick still
+            // fires — but it must do nothing, and above all must not
+            // re-schedule the now-null heap function.
+            return;
+        }
         if (pendingLocal->isEmpty()) {
             // Chain bookkeeping BEFORE the emit: a drainFinished slot may
             // synchronously destroy the manager, after which
-            // m_liveDrainChains is gone. Breaking the shared_ptr self-capture
-            // cycle here also prevents the heap std::function (holding a
-            // shared_ptr to itself, `pending`, and the captured context) from
-            // leaking after every drain. Resetting before this invocation
-            // finishes is safe: the stack copies above keep the captured
-            // state alive through the end of this call.
-            m_liveDrainChains.removeOne(stepLocal);
+            // m_liveDrainChains is gone. Breaking the shared_ptr
+            // self-capture cycle here also prevents the heap std::function
+            // (holding a shared_ptr to itself, `pending`, and the captured
+            // context) from leaking after every drain. This branch only
+            // ever executes from a QTimer-stored COPY of the closure (the
+            // first invocation cannot reach it — drainPendingRestores
+            // early-returns on an empty queue), so nulling the heap
+            // original cannot destroy the executing closure's captures; the
+            // stack copies above protect the NON-empty path of the first
+            // (heap-executing) invocation instead.
+            mgr->m_liveDrainChains.removeOne(stepLocal);
             *stepLocal = nullptr;
             // Emit only when the chain actually processed a restore: an
             // all-vetoed cycle (or one that only swept dead windows) changed
             // nothing, and signalling it would make the effect rebuild every
             // border for free each fallback retry.
             if (*didWorkLocal) {
-                Q_EMIT drainFinished();
+                Q_EMIT mgr->drainFinished();
             }
             return;
         }
-        QPointer<DecorationManager> self(this);
+        QPointer<DecorationManager> self(mgr);
         const QString windowId = pendingLocal->takeFirst();
-        auto it = m_windows.find(windowId);
+        auto it = mgr->m_windows.find(windowId);
         // Re-acquired (acquire cleared the flag) or already forgotten: the
         // queued restore is stale — leave the decoration alone.
-        if (it != m_windows.end() && it->pendingRestore) {
+        if (it != mgr->m_windows.end() && it->pendingRestore) {
             // Only FALLBACK cycles count against the veto budget: explicit
             // batch-completion drains can arrive in quick succession during
             // multi-batch resnap churn and must not burn the bound.
-            const bool vetoHolds = m_restoreVeto && m_restoreVeto(windowId);
+            const bool vetoHolds = mgr->m_restoreVeto && mgr->m_restoreVeto(windowId);
             if (vetoHolds && (!fromFallback || ++it->vetoRetries <= MaxVetoRetries)) {
                 // Authoritative state says the window should stay hidden
                 // (e.g. its screen re-entered autotile mid-drain). Keep the
@@ -319,27 +354,31 @@ void DecorationManager::drainPendingRestoresInternal(bool fromFallback)
                 // overridden and the restore happens anyway — bounded
                 // staleness beats stranding an ownerless hidden window when
                 // the "re-acquire is coming" prediction was wrong.
-                m_pendingRestore.insert(windowId);
-                armFallbackTimer();
+                mgr->m_pendingRestore.insert(windowId);
+                mgr->armFallbackTimer();
             } else {
                 it->pendingRestore = false;
-                // A mid-chain release(Deferred) may have re-inserted this id
-                // into m_pendingRestore after the chain snapshotted its queue;
-                // the restore below satisfies that defer too, so drop the set
-                // entry — flag and set stay in lockstep (cancelPendingRestore's
-                // invariant).
-                m_pendingRestore.remove(windowId);
-                const bool restored = restoreNow(windowId, *it, false);
-                if (!self) {
-                    return; // a windowDecorationRestored slot destroyed the manager
+                // Completion clears all three pieces of deferred-restore
+                // state: the flag, the queue-set entry (a mid-chain
+                // release(Deferred) may have re-inserted it after the chain
+                // snapshotted its queue — the restore below satisfies that
+                // defer too), and the retry counter, keeping the
+                // cancelPendingRestore lockstep invariant.
+                it->vetoRetries = 0;
+                mgr->m_pendingRestore.remove(windowId);
+                const bool restored = mgr->restoreNow(windowId, *it, false);
+                if (!self || !*stepLocal) {
+                    // A windowDecorationRestored slot destroyed the manager,
+                    // or called restoreAll() which cancelled this chain.
+                    return;
                 }
-                pruneIfEmpty(windowId);
+                mgr->pruneIfEmpty(windowId);
                 if (restored) {
                     *didWorkLocal = true;
                 }
             }
         }
-        QTimer::singleShot(0, this, *stepLocal);
+        QTimer::singleShot(0, mgr, *stepLocal);
     };
     (*step)();
 }
@@ -462,7 +501,8 @@ void DecorationManager::reconcile(const QString& windowId, Entry& entry, Placeme
 void DecorationManager::finishRelease(const QString& windowId, Entry& entry, Restore restore)
 {
     if (!entry.owners.isEmpty() || entry.vetoed) {
-        pruneIfEmpty(windowId);
+        // No prune here: the branch condition (owners remain, or vetoed)
+        // contradicts the prune predicate, so it could never fire.
         return;
     }
     if (!entry.physicallyHidden) {
@@ -470,7 +510,13 @@ void DecorationManager::finishRelease(const QString& windowId, Entry& entry, Res
         return;
     }
     if (restore == Restore::Immediate) {
+        // restoreNow emits; guard the epilogue against a restored-signal
+        // slot destroying the manager — same contract as the drain step.
+        QPointer<DecorationManager> self(this);
         restoreNow(windowId, entry, false);
+        if (!self) {
+            return;
+        }
         pruneIfEmpty(windowId);
         return;
     }
@@ -565,6 +611,15 @@ void DecorationManager::pruneIfEmpty(const QString& windowId)
     }
     if (it->owners.isEmpty() && !it->vetoed && !it->physicallyHidden && !it->pendingRestore) {
         m_windows.erase(it);
+    }
+}
+
+void DecorationManager::cancelFallbackTimer()
+{
+    if (m_pendingFallback) {
+        m_pendingFallback->stop();
+        m_pendingFallback->deleteLater();
+        m_pendingFallback = nullptr;
     }
 }
 

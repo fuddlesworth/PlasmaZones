@@ -22,7 +22,7 @@ SPDX-License-Identifier: GPL-3.0-or-later
             </arg>
             <arg name="result" type="(sss)" direction="out">
                 <annotation name="org.qtproject.QtDBus.QtTypeName.Out0" value="PhosphorProtocol::BridgeRegistrationResult"/>
-                <annotation name="org.gtk.GDBus.DocString" value="Struct: (apiVersion, bridgeName, sessionId). sessionId == 'REJECTED' signals a protocol-version mismatch — callers MUST check it before sending stateful calls."/>
+                <annotation name="org.gtk.GDBus.DocString" value="Struct: (apiVersion, bridgeName, sessionId). sessionId == 'REJECTED' signals a rejected registration — protocol-version mismatch or invalid input (empty compositorName) — callers MUST check it before sending stateful calls."/>
             </arg>
         </method>
         <method name="reportModifierState">

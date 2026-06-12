@@ -413,11 +413,14 @@ SPDX-License-Identifier: GPL-3.0-or-later
             </arg>
         </method>
         <method name="getPreTileGeometries">
-            <annotation name="org.gtk.GDBus.DocString" value="Return every persisted pre-tile geometry (windowId → rect + screen). The effect pre-populates its local cache from this on bringup so it can teleport restoring windows to their pre-tile geometry without a round-trip on every restore. Each entry carries the appId, the geometry rect (x,y,w,h), and the screen the geometry was captured on."/>
+            <annotation name="org.gtk.GDBus.DocString" value="Return every persisted pre-tile geometry (appId → rect + screen). The effect pre-populates its local cache from this on bringup so it can teleport restoring windows to their pre-tile geometry without a round-trip on every restore. Each entry carries the appId (entries persist across window close/reopen for session restore, so the per-instance windowId is not the key), the geometry rect (x,y,w,h), and the screen the geometry was captured on."/>
             <arg name="geometries" type="a(siiiis)" direction="out">
                 <annotation name="org.qtproject.QtDBus.QtTypeName.Out0" value="PhosphorProtocol::PreTileGeometryList"/>
-                <annotation name="org.gtk.GDBus.DocString" value="Array of (windowId, x, y, width, height, screenId) — the same marshalling shape as applyGeometriesBatch and getUpdatedWindowGeometries."/>
+                <annotation name="org.gtk.GDBus.DocString" value="Array of (appId, x, y, width, height, screenId) — the same marshalling shape as applyGeometriesBatch and getUpdatedWindowGeometries."/>
             </arg>
+        </method>
+        <method name="reapplyWindowAppearance">
+            <annotation name="org.gtk.GDBus.DocString" value="Re-emit the current per-window appearance state (window rules, decoration ownership inputs) for every tracked window. The compositor effect calls this after (re)registering its bridge so a freshly-(re)started effect converges on the daemon's authoritative appearance without waiting for the next natural change."/>
         </method>
         <signal name="snapAllWindowsRequested">
             <annotation name="org.gtk.GDBus.DocString" value="Emitted when snap-all-windows shortcut is triggered. KWin effect should collect unsnapped windows and call calculateSnapAllWindows (on org.plasmazones.Snap)."/>

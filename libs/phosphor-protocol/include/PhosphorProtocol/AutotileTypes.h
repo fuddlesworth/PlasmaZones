@@ -58,7 +58,7 @@ struct AlgorithmInfoEntry
 
 using AlgorithmInfoList = QList<AlgorithmInfoEntry>;
 
-/// D-Bus struct for pre-tile geometry entries: (siiiiis)
+/// D-Bus struct for pre-tile geometry entries: (siiiis)
 /// Replaces the JSON blob previously returned by getPreTileGeometriesJson.
 struct PreTileGeometryEntry
 {
