@@ -6,7 +6,6 @@
 #include <QLoggingCategory>
 #include <QTimer>
 
-#include <algorithm>
 #include <memory>
 
 namespace PhosphorCompositor {
@@ -18,6 +17,10 @@ namespace {
 /// resnap geometry batch) never arrives — e.g. a mode toggle with no
 /// resnappable windows.
 constexpr int FallbackDrainMs = 500;
+/// How many consecutive fallback cycles a vetoed restore stays queued
+/// before it happens anyway. The veto predicts "a re-acquire is imminent";
+/// if it is wrong this bounds the strand to ~MaxVetoRetries × FallbackDrainMs.
+constexpr int MaxVetoRetries = 6;
 } // namespace
 
 DecorationManager::DecorationManager(ICompositorBridge& bridge, QObject* parent)
@@ -26,7 +29,16 @@ DecorationManager::DecorationManager(ICompositorBridge& bridge, QObject* parent)
 {
 }
 
-DecorationManager::~DecorationManager() = default;
+DecorationManager::~DecorationManager()
+{
+    // Null any in-flight drain chains: their queued QTimer continuations die
+    // with this QObject, so the normal end-of-chain cycle-break never runs —
+    // without this the heap closures (each holding a shared_ptr to itself)
+    // would leak.
+    for (const auto& chain : std::as_const(m_liveDrainChains)) {
+        *chain = nullptr;
+    }
+}
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // Ownership
@@ -43,6 +55,7 @@ void DecorationManager::acquire(const QString& windowId, const Owner& owner, Pla
     // unified form of the drain-time "screen re-entered autotile" re-check.
     if (entry.pendingRestore) {
         entry.pendingRestore = false;
+        entry.vetoRetries = 0;
         m_pendingRestore.remove(windowId);
     }
     if (entry.owners.isEmpty() && !entry.physicallyHidden) {
@@ -138,6 +151,12 @@ void DecorationManager::restoreAll()
     // Teardown restores synchronously: the daemon/effect is going away and
     // there is no later tick to defer to.
     for (const QString& windowId : std::as_const(toRestore)) {
+        if (m_windows.contains(windowId)) {
+            // A re-entrant acquire (via the restored-signal handlers of
+            // earlier loop iterations) re-claimed this window mid-teardown:
+            // the new epoch owns its decoration now — leave it hidden.
+            continue;
+        }
         if (WindowHandle w = m_bridge.findWindowById(windowId)) {
             m_bridge.setNoBorder(w, false);
             Q_EMIT windowDecorationRestored(windowId);
@@ -243,9 +262,16 @@ void DecorationManager::drainPendingRestores()
     // snap/OSD animations running concurrently. The shared_ptr<function>
     // self-capture keeps the chain alive across QTimer reschedules.
     auto step = std::make_shared<std::function<void()>>();
-    *step = [this, pending, step]() {
+    auto didWork = std::make_shared<bool>(false);
+    m_liveDrainChains.append(step);
+    *step = [this, pending, step, didWork]() {
         if (pending->isEmpty()) {
-            Q_EMIT drainFinished();
+            // Emit only when the chain actually processed a restore: an
+            // all-vetoed cycle changed nothing, and signalling it would make
+            // the effect rebuild every border for free each fallback retry.
+            if (*didWork) {
+                Q_EMIT drainFinished();
+            }
             // Break the shared_ptr self-capture cycle — the heap
             // std::function holds a shared_ptr to itself and would leak
             // (with `pending` and the captured context) after every drain.
@@ -254,6 +280,7 @@ void DecorationManager::drainPendingRestores()
             // and the first invocation can never take this branch because
             // drainPendingRestores early-returns on an empty queue — so the
             // running lambda's own captures outlive this reset.
+            m_liveDrainChains.removeOne(step);
             *step = nullptr;
             return;
         }
@@ -262,19 +289,23 @@ void DecorationManager::drainPendingRestores()
         // Re-acquired (acquire cleared the flag) or already forgotten: the
         // queued restore is stale — leave the decoration alone.
         if (it != m_windows.end() && it->pendingRestore) {
-            if (m_restoreVeto && m_restoreVeto(windowId)) {
+            if (m_restoreVeto && m_restoreVeto(windowId) && ++it->vetoRetries <= MaxVetoRetries) {
                 // Authoritative state says the window should stay hidden
                 // (e.g. its screen re-entered autotile mid-drain). Keep the
                 // restore QUEUED instead of dropping it: the expected
                 // re-acquire cancels it, and if that re-acquire never lands
                 // (the retile declined the window) the fallback timer
-                // retries rather than stranding an ownerless hidden window.
+                // retries. After MaxVetoRetries cycles the veto is
+                // overridden and the restore happens anyway — bounded
+                // staleness beats stranding an ownerless hidden window when
+                // the "re-acquire is coming" prediction was wrong.
                 m_pendingRestore.insert(windowId);
                 armFallbackTimer();
             } else {
                 it->pendingRestore = false;
                 restoreNow(windowId, *it, false);
                 pruneIfEmpty(windowId);
+                *didWork = true;
             }
         }
         QTimer::singleShot(0, this, *step);
@@ -323,17 +354,6 @@ bool DecorationManager::isOwned(const QString& windowId) const
 {
     auto it = m_windows.constFind(windowId);
     return it != m_windows.constEnd() && !it->owners.isEmpty();
-}
-
-bool DecorationManager::hasOwnerOfKind(const QString& windowId, OwnerKind kind) const
-{
-    auto it = m_windows.constFind(windowId);
-    if (it == m_windows.constEnd()) {
-        return false;
-    }
-    return std::any_of(it->owners.cbegin(), it->owners.cend(), [kind](const Owner& o) {
-        return o.kind == kind;
-    });
 }
 
 bool DecorationManager::isOwnedBy(const QString& windowId, const Owner& owner) const

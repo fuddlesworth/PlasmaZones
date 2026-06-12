@@ -40,62 +40,62 @@ void SnapHandler::markWindowSnapped(const QString& windowId, const QString& scre
 {
     // An empty screenId is never a valid snap owner: the per-screen buckets are
     // keyed by screenId, so recording under "" would pollute the set with an
-    // entry that the per-screen stripOtherScreens cleanup can never reclaim.
+    // entry that the per-screen cross-screen cleanup can never reclaim.
     // Callers route unresolved/float windows through clearWindowSnapped instead;
     // this guard is defensive depth for any path that slips an empty screen in.
     if (windowId.isEmpty() || screenId.isEmpty()) {
         return;
     }
+    KWin::EffectWindow* w = m_effect->findWindowById(windowId);
+    if (!w) {
+        // Window gone (closed mid-snap — the close often races the async
+        // snap reply, so slotWindowClosed's bookkeeping may have ALREADY
+        // run). Recording tiled tracking or acquiring decoration ownership
+        // now would re-create state nothing will ever clean up; drop any
+        // remnants instead.
+        AutotileStateHelpers::removeFromAllScreens(m_border, windowId);
+        m_effect->decorationManager()->releaseKind(windowId, DecorationManager::OwnerKind::Snap);
+        return;
+    }
     // A window can only be snap-managed by one screen at a time. Strip stale
     // tiled tracking from any OTHER screen before recording the new owner
     // (mirrors the autotile cross-screen-transfer cleanup in tiling.cpp).
-    const auto stripOtherScreens = [&](QHash<QString, QSet<QString>>& byScreen) {
-        for (auto it = byScreen.begin(); it != byScreen.end();) {
-            if (it.key() != screenId) {
-                it.value().remove(windowId);
-            }
-            if (it.value().isEmpty() && it.key() != screenId) {
-                it = byScreen.erase(it);
-            } else {
-                ++it;
-            }
+    for (auto it = m_border.tiledWindowsByScreen.begin(); it != m_border.tiledWindowsByScreen.end();) {
+        if (it.key() != screenId) {
+            it.value().remove(windowId);
         }
-    };
-    stripOtherScreens(m_border.tiledWindowsByScreen);
+        if (it.value().isEmpty() && it.key() != screenId) {
+            it = m_border.tiledWindowsByScreen.erase(it);
+        } else {
+            ++it;
+        }
+    }
     AutotileStateHelpers::addTiledOnScreen(m_border, screenId, windowId);
 
-    KWin::EffectWindow* w = m_effect->findWindowById(windowId);
     // Decoration ownership. The manager owns the capability gate
     // (userCanSetNoBorder — survives the already-borderless autotile→snap
     // handoff, skips CSD windows), the prior-state capture, and the
     // AlreadyPlaced sequence (capture moveResizeGeometry → setNoBorder →
     // re-assert) that keeps the window filling its zone across the
     // decoration change.
-    if (m_border.hideTitleBars && w) {
+    if (m_border.hideTitleBars) {
         // Move any stale snap claim from another screen (no physical flap),
-        // then acquire on this one. Gated on a live window so a close-mid-
-        // snap doesn't recreate a manager entry forgetWindow just dropped.
+        // then acquire on this one.
         m_effect->decorationManager()->releaseOthersOfKind(windowId, DecorationManager::OwnerKind::Snap, screenId);
         m_effect->decorationManager()->acquire(windowId, DecorationManager::snap(screenId),
                                                DecorationManager::Placement::AlreadyPlaced);
     } else {
-        // Hide-title-bars off (or window gone): no acquire follows, so a
-        // bare cross-screen owner strip could orphan a hidden entry —
-        // release the whole kind instead (restores if a stale claim somehow
-        // exists, no-op otherwise).
+        // Hide-title-bars off: no acquire follows, so a bare cross-screen
+        // owner strip could orphan a hidden entry — release the whole kind
+        // instead (restores if a stale claim somehow exists, no-op otherwise).
         m_effect->decorationManager()->releaseKind(windowId, DecorationManager::OwnerKind::Snap);
     }
 
-    // A null w means the window is gone (closed mid-snap); the tiled entry
-    // recorded above is then harmless — if the window later closes, slotWindowClosed
-    // clears the snap border for it. No border is drawn (nothing to draw on) and none
-    // is needed; updateAllBorders() iterates only live windows so it simply skips it.
-    //
     // Border overlays are visual-only, so skip the off-desktop case (consistent
     // with updateAllBorders): an OutlinedBorderItem for an invisible window is
     // wasted work. When the user switches to that window's desktop, the
     // desktopChanged → updateAllBorders connection rebuilds its border.
-    if (w && w->isOnCurrentDesktop()) {
+    if (w->isOnCurrentDesktop()) {
         m_effect->updateWindowBorder(windowId, w);
     }
 }

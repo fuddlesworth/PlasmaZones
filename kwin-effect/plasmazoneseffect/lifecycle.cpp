@@ -65,38 +65,9 @@ PlasmaZonesEffect::PlasmaZonesEffect()
 {
     PhosphorProtocol::registerWireTypes();
 
-    // Decoration-manager wiring. The drain-time veto is the authoritative
-    // re-check for deferred title-bar restores: a vetoed restore stays
-    // QUEUED (the manager re-arms its fallback timer), so the veto must
-    // hold ONLY while a re-acquire is genuinely expected — the window's
-    // screen re-entered autotile mid-drain, the mode's hide-title-bars is
-    // still on, and the window is not floating (a retile never re-acquires
-    // floated windows). Without the latter two conditions, a hide-toggle-off
-    // drain or a floated window's restore would be vetoed forever.
-    m_decorationManager->setRestoreVeto([this](const QString& windowId) {
-        KWin::EffectWindow* w = findWindowById(windowId);
-        if (!w || !m_autotileHandler->isAutotileScreen(getWindowScreenId(w))) {
-            return false;
-        }
-        return m_autotileHandler->borderState().hideTitleBars && !isWindowFloating(windowId);
-    });
-    connect(m_decorationManager.get(), &DecorationManager::windowDecorationRestored, this,
-            [this](const QString& windowId) {
-                // A veto-driven restore leaves the window mode-owned and
-                // still border-eligible — rebuild its overlay instead of
-                // dropping it. updateWindowBorder self-gates on the merged
-                // appearance (it removes first and re-creates only when
-                // something should show), so this is also the correct
-                // teardown for windows genuinely leaving a mode.
-                if (KWin::EffectWindow* w = findWindowById(windowId)) {
-                    updateWindowBorder(windowId, w);
-                } else {
-                    removeWindowBorder(windowId);
-                }
-            });
-    connect(m_decorationManager.get(), &DecorationManager::drainFinished, this, [this]() {
-        updateAllBorders();
-    });
+    // Decoration-manager wiring (veto + signal connections) lives with the
+    // rest of the border/decoration code in borders.cpp.
+    setupDecorationManager();
 
     // Sub-pixel vertex precision. KWin's default snapping rounds quad
     // vertex positions to integer pixels before rasterising, which is
@@ -771,12 +742,15 @@ PlasmaZonesEffect::PlasmaZonesEffect()
         }
 
         // Restore borderless and monocle-maximized windows — daemon state is
-        // gone. restoreAll() restores every title bar the manager hid (ALL
-        // owner kinds, rule overrides included) and clears its tracking; the
-        // handlers only drop their tiled-tracking bookkeeping.
-        m_decorationManager->restoreAll();
+        // gone. Clear the handlers' tiled tracking FIRST: restoreAll() emits
+        // windowDecorationRestored per window, and the rebuild-on-restore
+        // handler would otherwise recreate a border item for every still-
+        // tracked window only for clearAllBorders() to destroy it moments
+        // later. With tracking cleared, resolveBorderStateFor returns null
+        // during the restore burst and the handler just drops items.
         m_autotileHandler->clearTiledTracking();
         m_snapHandler->clearSnapTracking();
+        m_decorationManager->restoreAll();
         m_autotileHandler->restoreAllMonocleMaximized();
         clearAllBorders();
         // Deliberately do NOT clear `m_snappingExclusionRuleSet`,
@@ -888,11 +862,13 @@ PlasmaZonesEffect::~PlasmaZonesEffect()
     // Restore borderless and monocle-maximized windows so they recover properly.
     // Guard against compositor teardown — effects may outlive the stacking order.
     if (KWin::effects) {
-        // restoreAll() covers every owner kind including rule overrides —
-        // no separate rule-layer restore is needed here.
-        m_decorationManager->restoreAll();
+        // Tiled tracking cleared first so the rebuild-on-restore handler
+        // doesn't churn border items during the restore burst (see the
+        // daemon-loss site above); restoreAll() covers every owner kind
+        // including rule overrides.
         m_autotileHandler->clearTiledTracking();
         m_snapHandler->clearSnapTracking();
+        m_decorationManager->restoreAll();
         m_autotileHandler->restoreAllMonocleMaximized();
         clearAllBorders();
     }

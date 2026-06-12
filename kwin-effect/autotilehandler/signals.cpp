@@ -55,7 +55,6 @@ void AutotileHandler::slotEnabledChanged(bool enabled)
         // delayed defer so the resnap dispatch can land first. Doing it here
         // would race with that defer and block applyGeometriesBatch.
         restoreAllMonocleMaximized();
-        m_savedSnapStackingOrder.clear();
         m_savedAutotileStackingOrder.clear();
         m_savedNotifiedForDesktopReturn.clear();
         // Drop any in-flight debounced minimize→float commits — they must not
@@ -91,11 +90,10 @@ void AutotileHandler::clearAllPendingMinimizeFloats()
 
 void AutotileHandler::slotScreensChanged(const QStringList& screenIds, bool isDesktopSwitch)
 {
-    // Invalidate in-flight stagger timers from prior autotile/restore operations.
+    // Invalidate in-flight stagger timers from prior autotile operations.
     // Without this, a desktop switch can race with a pending stagger from the
     // previous desktop, applying geometry from the old context.
     ++m_autotileStaggerGeneration;
-    ++m_restoreStaggerGeneration;
 
     const QSet<QString> newScreens(screenIds.begin(), screenIds.end());
     const QSet<QString> removed = m_autotileScreens - newScreens;
@@ -141,13 +139,26 @@ void AutotileHandler::slotScreensChanged(const QStringList& screenIds, bool isDe
                 if (!removed.contains(screenId)) {
                     continue;
                 }
-                // setNoBorder() is a global KWin property — skip sticky
-                // windows while other screens still autotile (mirrors the
-                // genuine-toggle guard below).
-                if (w->isOnAllDesktops() && !newScreens.isEmpty()) {
+                // setNoBorder() is a global KWin property — skip sticky and
+                // multi-desktop windows while other screens still autotile
+                // (mirrors the genuine-toggle guard below): a window visible
+                // on another desktop may still be tiled in that desktop's
+                // live autotile session.
+                if ((w->isOnAllDesktops() || w->desktops().size() > 1) && !newScreens.isEmpty()) {
                     continue;
                 }
                 const QString windowId = m_effect->getWindowId(w);
+                // A window the user floated in autotile keeps its
+                // pre-autotile geometry entry and notify tracking — but its
+                // CURRENT position is the user's chosen float spot.
+                // Restoring the saved rect would teleport it, and demoting
+                // its tracking would re-announce (and possibly re-tile) it
+                // on desktop return. Floating windows need none of the
+                // cleanup below: they hold no decoration ownership, no
+                // border, no zone tracking.
+                if (m_effect->isWindowFloating(windowId)) {
+                    continue;
+                }
                 if (m_notifiedWindows.remove(windowId)) {
                     m_notifiedWindowScreens.remove(windowId);
                 }
@@ -220,11 +231,12 @@ void AutotileHandler::slotScreensChanged(const QStringList& screenIds, bool isDe
                     if (!w->isOnCurrentDesktop()) {
                         continue;
                     }
-                    // Skip sticky (all-desktops) windows when some screens still
-                    // use autotile. setNoBorder() is a global KWin property — restoring
-                    // the border here would remove it on OTHER desktops where the window
-                    // is still autotiled. Only restore when autotile is fully disabled.
-                    if (w->isOnAllDesktops() && !newScreens.isEmpty()) {
+                    // Skip sticky (all-desktops) and multi-desktop windows when
+                    // some screens still use autotile. setNoBorder() is a global
+                    // KWin property — restoring the border here would remove it
+                    // on OTHER desktops where the window is still autotiled.
+                    // Only restore when autotile is fully disabled.
+                    if ((w->isOnAllDesktops() || w->desktops().size() > 1) && !newScreens.isEmpty()) {
                         continue;
                     }
                     windowsOnRemovedScreens.insert(m_effect->getWindowId(w));
@@ -296,17 +308,16 @@ void AutotileHandler::slotScreensChanged(const QStringList& screenIds, bool isDe
                 m_savedGlobalStackForResnap.append(QPointer<KWin::EffectWindow>(w));
             }
 
-            // Invalidate pending stagger timers and clear autotile zone state.
-            ++m_autotileStaggerGeneration;
+            // Clear autotile zone state (stagger timers were already
+            // invalidated by the unconditional bump at function entry; no
+            // stagger can have been scheduled since).
             m_autotileTargetZones.clear();
             m_centeredWaylandZones.clear();
-            ++m_restoreStaggerGeneration;
 
-            // Clear pre-autotile geometries and saved snap stacking order
-            // for removed screens — they're no longer needed.
+            // Clear pre-autotile geometries for removed screens — they're
+            // no longer needed.
             for (const QString& screenId : removed) {
                 m_preAutotileGeometries.remove(screenId);
-                m_savedSnapStackingOrder.remove(screenId);
             }
         }
     }
@@ -400,22 +411,6 @@ void AutotileHandler::slotScreensChanged(const QStringList& screenIds, bool isDe
             m_effect->updateAllBorders();
         } else {
             // Genuine user toggle — process all added screens as new.
-
-            // Save stacking order for windows on screens entering autotile.
-            // Restored when leaving autotile so windows return to their
-            // pre-autotile z-order (autotile focus changes reorder windows).
-            for (KWin::EffectWindow* w : windows) {
-                if (!w || !m_effect->shouldHandleWindow(w)) {
-                    continue;
-                }
-                if (!w->isOnCurrentDesktop() || !w->isOnCurrentActivity()) {
-                    continue;
-                }
-                const QString screenId = m_effect->getWindowScreenId(w);
-                if (added.contains(screenId)) {
-                    m_savedSnapStackingOrder[screenId].append(m_effect->getWindowId(w));
-                }
-            }
 
             // Save pre-autotile geometry for ALL eligible windows (including minimized).
             // The window's current position IS the pre-autotile geometry we want to save.

@@ -1030,13 +1030,17 @@ public:
     {
         return true;
     }
-    // Window-decoration appearance defaults delegate to the shared
-    // PhosphorCompositor::DecorationDefaults constants — the same symbols
-    // the effect's BorderState member-initializers use — so the daemon's
-    // persisted defaults and the effect's pre-settings-load rendering can't
-    // drift. (ZoneDefaults is the zone OVERLAY's constants, a different
-    // visual concept; the old delegation to it was an accident of equal
-    // values.)
+    // Window-decoration hide/show/width/radius defaults delegate to the
+    // shared PhosphorCompositor::DecorationDefaults constants — the same
+    // symbols the effect's BorderState member-initializers use — so the
+    // daemon's persisted defaults and the effect's pre-settings-load
+    // rendering can't drift. (ZoneDefaults is the zone OVERLAY's constants,
+    // a different visual concept; the old width/radius delegation to it was
+    // an accident of equal values.) The border COLORS below intentionally
+    // remain ZoneDefaults-sourced: DecorationDefaults carries no color
+    // constants because colors are daemon-resolved (system accent) and
+    // pushed via settings — nothing renders pre-load (ShowBorder defaults
+    // false), so there is no drift concern to share symbols over.
     static bool autotileHideTitleBars()
     {
         return ::PhosphorCompositor::DecorationDefaults::HideTitleBars;

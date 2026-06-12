@@ -329,12 +329,11 @@ private:
     /// frame instantly when the window leaves autotile mode (untile, mode
     /// switch, screen change) without waiting on a D-Bus round-trip.
     ///
-    /// PhosphorZones::Layout: per-screen bucket mirrors `BorderState` so swap/rotate and
+    /// Layout: per-screen bucket mirrors `BorderState` so swap/rotate and
     /// cross-screen moves can transplant or drop a window's record by
     /// looking only at the source screen's bucket — see
-    /// `transferPreAutotileGeometry()` in autotilehandler.cpp.
+    /// `transferPreAutotileGeometry()` in autotilehandler/state.cpp.
     QHash<QString, QHash<QString, QRectF>> m_preAutotileGeometries;
-    QHash<QString, QStringList> m_savedSnapStackingOrder; ///< snap-mode stacking order, restored on autotile→snap
     QHash<QString, QStringList> m_savedAutotileStackingOrder; ///< autotile stacking order, restored on snap→autotile
     QSet<QString> m_notifiedWindows;
     QHash<QString, QString> m_notifiedWindowScreens; ///< windowId → screen ID at time of notification
@@ -362,7 +361,6 @@ private:
     /// plasmashell notification popups transiently change stacking.
     QHash<QString, QPointer<QTimer>> m_pendingMinimizeFloat;
     uint64_t m_autotileStaggerGeneration = 0;
-    uint64_t m_restoreStaggerGeneration = 0;
     QVector<QPointer<KWin::EffectWindow>> m_savedGlobalStackForResnap; ///< z-order snapshot for resnap restore
     QHash<QString, QRect> m_autotileTargetZones;
     QHash<QString, QRect> m_centeredWaylandZones; ///< zones where Wayland windows were last centered

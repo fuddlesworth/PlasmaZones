@@ -97,8 +97,7 @@ struct AutotileWindowState
  * Removes the window from all QSet/QHash state maps.
  * Does NOT handle D-Bus calls or compositor-specific cleanup.
  */
-inline void cleanupClosedWindowState(const QString& windowId, const QString& screenId, BorderState& border,
-                                     AutotileWindowState& state)
+inline void cleanupClosedWindowState(const QString& windowId, BorderState& border, AutotileWindowState& state)
 {
     state.notifiedWindows.remove(windowId);
     state.notifiedWindowScreens.remove(windowId);
@@ -117,10 +116,17 @@ inline void cleanupClosedWindowState(const QString& windowId, const QString& scr
         }
     }
 
-    if (!screenId.isEmpty()) {
-        auto it = state.preAutotileGeometries.find(screenId);
-        if (it != state.preAutotileGeometries.end()) {
-            it->remove(windowId);
+    // Sweep the pre-autotile geometry out of EVERY screen bucket, not just
+    // the supplied one — the same cross-screen-stale scenario the tiled
+    // sweep above defends against (the window crossed screens before
+    // closing) would otherwise leak a geometry entry in the old screen's
+    // bucket forever.
+    for (auto it = state.preAutotileGeometries.begin(); it != state.preAutotileGeometries.end();) {
+        it->remove(windowId);
+        if (it->isEmpty()) {
+            it = state.preAutotileGeometries.erase(it);
+        } else {
+            ++it;
         }
     }
 }

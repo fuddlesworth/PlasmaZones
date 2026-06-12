@@ -21,6 +21,47 @@
 
 namespace PlasmaZones {
 
+void PlasmaZonesEffect::setupDecorationManager()
+{
+    // The drain-time veto is the authoritative re-check for deferred
+    // title-bar restores: a vetoed restore stays QUEUED (the manager
+    // re-arms its fallback timer and bounds the retries), so the veto must
+    // hold ONLY while a re-acquire is genuinely expected — the window's
+    // screen re-entered autotile mid-drain, the mode's hide-title-bars is
+    // still on, and the window is not floating (a retile never re-acquires
+    // floated windows). Without the latter two conditions, a hide-toggle-off
+    // drain or a floated window's restore would be vetoed until the
+    // manager's retry bound overrides it.
+    m_decorationManager->setRestoreVeto([this](const QString& windowId) {
+        KWin::EffectWindow* w = findWindowById(windowId);
+        if (!w || !m_autotileHandler->isAutotileScreen(getWindowScreenId(w))) {
+            return false;
+        }
+        return m_autotileHandler->borderState().hideTitleBars && !isWindowFloating(windowId);
+    });
+    connect(m_decorationManager.get(), &DecorationManager::windowDecorationRestored, this,
+            [this](const QString& windowId) {
+                // A veto-driven restore leaves the window mode-owned and
+                // still border-eligible — rebuild its overlay instead of
+                // dropping it. updateWindowBorder self-gates on the merged
+                // appearance (it removes first and re-creates only when
+                // something should show). Border overlays are visual-only,
+                // so off-desktop windows just get their stale item dropped —
+                // the desktopChanged → updateAllBorders refresh rebuilds
+                // theirs when they become visible (same policy as
+                // updateAllBorders and markWindowSnapped).
+                KWin::EffectWindow* w = findWindowById(windowId);
+                if (w && w->isOnCurrentDesktop()) {
+                    updateWindowBorder(windowId, w);
+                } else {
+                    removeWindowBorder(windowId);
+                }
+            });
+    connect(m_decorationManager.get(), &DecorationManager::drainFinished, this, [this]() {
+        updateAllBorders();
+    });
+}
+
 void PlasmaZonesEffect::removeWindowBorder(const QString& windowId)
 {
     auto it = m_windowBorders.find(windowId);

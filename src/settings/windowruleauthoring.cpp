@@ -427,7 +427,7 @@ QVariantList matchFields()
     // hand-maintained allow-list: a new Field value (e.g. a hypothetical
     // future `MimeType`) auto-surfaces in the picker unless it's
     // explicitly hidden here. Mirrors the `userAuthorable` filter shape
-    // that replaced `kTypes` in actionTypes() above.
+    // that replaced `kTypes` in actionTypes() below.
     static const QSet<Field> kHiddenFields = {Field::Pid, Field::WindowRole};
     QVariantList out;
     for (int i = 0; i < PhosphorWindowRule::FieldCount; ++i) {

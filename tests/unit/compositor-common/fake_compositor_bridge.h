@@ -26,6 +26,11 @@
  *    SIBLING window of the same app, or null when ambiguous.
  *  - moveResize applies the frame immediately. Real Wayland clients ack the
  *    configure asynchronously, so frameGeometry() lags moveResizeGeometry().
+ *  - setNoBorder leaves frame/moveResizeGeo untouched, while real KWin holds
+ *    the CLIENT size constant so the frame shrinks/grows by the title-bar
+ *    height. The AlreadyPlaced re-assert tests therefore pin call ORDER
+ *    only — the under-fill bug class the re-assert exists for cannot
+ *    reproduce here.
  */
 class FakeCompositorBridge : public PhosphorCompositor::ICompositorBridge
 {

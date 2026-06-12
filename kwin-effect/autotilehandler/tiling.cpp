@@ -19,6 +19,7 @@
 #include <workspace.h>
 
 #include <QLoggingCategory>
+#include <QtMath>
 
 namespace PlasmaZones {
 

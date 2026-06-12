@@ -280,7 +280,7 @@ void PlasmaZonesEffect::slotApplyGeometriesBatch(const PhosphorProtocol::WindowG
             //   - empty screenId      → float/restore: leave snapping's set
             //   - autotile-mode screen → now autotile-managed: leave snap set
             //                            (AutotileHandler tracks it)
-            //   - snap-mode screen     → snap commit (unless floating)
+            //   - snap-mode screen     → snap commit (clears any stale float marker)
             const QString batchWid = getWindowId(p.window);
             if (p.screenId.isEmpty() || m_autotileHandler->isAutotileScreen(p.screenId)) {
                 m_snapHandler->clearWindowSnapped(batchWid);

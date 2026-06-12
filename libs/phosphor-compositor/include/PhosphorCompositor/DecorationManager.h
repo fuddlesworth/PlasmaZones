@@ -15,6 +15,7 @@
 #include <QVector>
 
 #include <functional>
+#include <memory>
 #include <optional>
 
 class QTimer;
@@ -108,6 +109,10 @@ public:
     /// the bridge destroyed after the manager). Taken by reference so a null
     /// bridge is unrepresentable — no runtime guard needed on any call path.
     explicit DecorationManager(ICompositorBridge& bridge, QObject* parent = nullptr);
+    /// Breaks any in-flight drain chains' self-reference cycles — a chain
+    /// interrupted by manager destruction would otherwise leak its heap
+    /// closure (the queued QTimer continuations die with the QObject, so
+    /// the chain's own cycle-break never runs).
     ~DecorationManager() override;
 
     // ── Ownership ──────────────────────────────────────────────────────
@@ -167,14 +172,13 @@ public:
     void resyncWindow(const QString& windowId);
 
     // ── Queries ────────────────────────────────────────────────────────
-    // The state-observation surface: hasOwnerOfKind is what the effect's
-    // mode handlers consume; the rest exist so the behavioral test spec
-    // (and future render-layer integration) can assert manager state
-    // without reaching into internals.
+    // The state-observation surface: production code expresses everything
+    // through the ownership calls above, so these exist for the behavioral
+    // test spec (and future render-layer integration) to assert manager
+    // state without reaching into internals.
     /// True when we physically suppressed the window's decoration.
     bool isBorderless(const QString& windowId) const;
     bool isOwned(const QString& windowId) const;
-    bool hasOwnerOfKind(const QString& windowId, OwnerKind kind) const;
     bool isOwnedBy(const QString& windowId, const Owner& owner) const;
     bool isVetoed(const QString& windowId) const;
 
@@ -182,7 +186,10 @@ Q_SIGNALS:
     /// Emitted after a physical decoration restore (the effect refreshes
     /// border overlays for the window).
     void windowDecorationRestored(const QString& windowId);
-    /// Emitted when a drain chain completes (the effect rebuilds all borders).
+    /// Emitted when a drain chain completes having processed at least one
+    /// restore (the effect rebuilds all borders). An all-vetoed chain —
+    /// every queued restore re-queued for the fallback retry — emits
+    /// nothing: zero decorations changed, so a rebuild would be pure churn.
     void drainFinished();
 
 private:
@@ -195,6 +202,12 @@ private:
         bool priorNoBorder = false; ///< decoration state before our first hide
         bool physicallyHidden = false;
         bool pendingRestore = false;
+        /// Consecutive drain steps whose restore the veto re-queued. Bounds
+        /// the veto: after MaxVetoRetries fallback cycles with no re-acquire
+        /// the restore happens anyway — bounded staleness beats stranding an
+        /// ownerless hidden window when the effect-side "a re-acquire is
+        /// coming" prediction turns out wrong.
+        int vetoRetries = 0;
     };
 
     /// Drive the window's physical decoration state toward the desired state
@@ -215,6 +228,10 @@ private:
     QSet<QString> m_pendingRestore;
     QPointer<QTimer> m_pendingFallback;
     std::function<bool(const QString&)> m_restoreVeto;
+    /// In-flight drain chains (re-entrant drains snapshot-and-clear, so
+    /// several can coexist). A chain removes itself on termination; the
+    /// destructor nulls survivors to break their self-reference cycles.
+    QVector<std::shared_ptr<std::function<void()>>> m_liveDrainChains;
     ICompositorBridge& m_bridge;
 };
 

@@ -620,6 +620,11 @@ private:
     /// `getAllRules` fetch at the trailing edge.
     QTimer m_animationRulesRefreshDebounce;
 
+    /// Wire the DecorationManager into the effect: the deferred-restore veto
+    /// plus the windowDecorationRestored / drainFinished connections.
+    /// Defined in borders.cpp with the rest of the decoration code; called
+    /// once from the constructor.
+    void setupDecorationManager();
     void updateWindowBorder(const QString& windowId, KWin::EffectWindow* w);
     void removeWindowBorder(const QString& windowId);
     void updateAllBorders();

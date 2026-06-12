@@ -20,7 +20,6 @@
 #include "fake_compositor_bridge.h"
 
 using PhosphorCompositor::DecorationManager;
-using Owner = PhosphorCompositor::DecorationManager::Owner;
 using OwnerKind = PhosphorCompositor::DecorationManager::OwnerKind;
 using Placement = PhosphorCompositor::DecorationManager::Placement;
 using Restore = PhosphorCompositor::DecorationManager::Restore;
@@ -253,7 +252,10 @@ private Q_SLOTS:
         bridge.clearLog();
 
         mgr.drainPendingRestores();
-        QTRY_COMPARE(finished.count(), 1);
+        // An all-vetoed chain restores nothing and therefore does NOT emit
+        // drainFinished (a rebuild would be pure churn). Let the chain run.
+        QTest::qWait(50);
+        QCOMPARE(finished.count(), 0);
         QVERIFY(bridge.callLog.isEmpty());
         QCOMPARE(bridge.window(Win1)->noBorder, true); // stays hidden
 
@@ -262,9 +264,85 @@ private Q_SLOTS:
         // of stranding an ownerless hidden window forever.
         vetoActive = false;
         mgr.drainPendingRestores();
-        QTRY_COMPARE(finished.count(), 2);
+        QTRY_COMPARE(finished.count(), 1);
         QCOMPARE(bridge.window(Win1)->noBorder, false);
         QVERIFY(!mgr.isOwned(Win1));
+    }
+
+    void testVetoRequeuedRestoreCancelledByReacquire()
+    {
+        FakeCompositorBridge bridge;
+        bridge.addWindow(Win1);
+        DecorationManager mgr(bridge);
+        mgr.setRestoreVeto([](const QString&) {
+            return true;
+        });
+
+        mgr.acquire(Win1, DecorationManager::autotile(Screen1));
+        mgr.releaseKind(Win1, OwnerKind::Autotile, Restore::Deferred);
+        mgr.drainPendingRestores(); // vetoed → re-queued + fallback armed
+        QTest::qWait(50); // let the chain finish
+
+        // The expected re-acquire lands: it cancels the re-queued restore.
+        mgr.acquire(Win1, DecorationManager::autotile(Screen1));
+        bridge.clearLog();
+
+        // The armed fallback fires into an empty queue and self-cancels —
+        // the window must stay hidden under the new claim.
+        QTest::qWait(700); // past the 500 ms fallback interval
+        QVERIFY(!bridge.callLog.contains(QStringLiteral("setNoBorder(app|1,false)")));
+        QVERIFY(mgr.isBorderless(Win1));
+        QCOMPARE(bridge.window(Win1)->noBorder, true);
+    }
+
+    void testVetoOverriddenAfterRetryBound()
+    {
+        FakeCompositorBridge bridge;
+        bridge.addWindow(Win1);
+        DecorationManager mgr(bridge);
+        int vetoCalls = 0;
+        mgr.setRestoreVeto([&vetoCalls](const QString&) {
+            ++vetoCalls;
+            return true; // never lifts — the prediction is simply wrong
+        });
+
+        mgr.acquire(Win1, DecorationManager::autotile(Screen1));
+        mgr.releaseKind(Win1, OwnerKind::Autotile, Restore::Deferred);
+
+        // A veto that never lifts must not strand the window: after the
+        // bounded number of fallback retries the restore happens anyway.
+        QTRY_COMPARE_WITH_TIMEOUT(bridge.window(Win1)->noBorder, false, 10000);
+        QVERIFY(vetoCalls > 1);
+        QVERIFY(!mgr.isOwned(Win1));
+    }
+
+    void testStaleSnapshotRefreshedOnOwnerlessReacquire()
+    {
+        FakeCompositorBridge bridge;
+        auto* fw = bridge.addWindow(Win1);
+        DecorationManager mgr(bridge);
+
+        // Hide, then force-show via rule veto, then drop the owner — the
+        // veto-only entry persists with the ORIGINAL snapshot
+        // (priorNoBorder=false).
+        mgr.acquire(Win1, DecorationManager::snap(Screen1));
+        mgr.setRuleOverride(Win1, false);
+        mgr.releaseKind(Win1, OwnerKind::Snap);
+        QCOMPARE(fw->noBorder, false);
+
+        // The user makes the window borderless THEMSELVES while we hold no
+        // claim, then a mode re-acquires under the veto and the veto lifts.
+        fw->noBorder = true;
+        bridge.clearLog();
+        mgr.acquire(Win1, DecorationManager::snap(Screen1));
+        mgr.setRuleOverride(Win1, std::nullopt);
+
+        // The refreshed snapshot sees priorNoBorder=true: nothing to hide
+        // (already borderless), and the final release must NOT force-decorate
+        // the user's window. A stale snapshot would setNoBorder(false) here.
+        mgr.releaseKind(Win1, OwnerKind::Snap);
+        QVERIFY(!bridge.callLog.contains(QStringLiteral("setNoBorder(app|1,false)")));
+        QCOMPARE(fw->noBorder, true);
     }
 
     void testFallbackTimerDrains()
@@ -482,9 +560,11 @@ private Q_SLOTS:
         QVERIFY(bridge.callLog.isEmpty());
         mgr.setRuleOverride(Win1, std::nullopt); // re-hides via owner re-assert
 
-        // Pending deferred restore: the hide is on its way OUT — resync must
-        // not fight the queued restore even though the entry is still
-        // physically hidden.
+        // Deferred-release state: the hide is on its way OUT — resync must
+        // not fight the queued restore. (The no-op follows from the emptied
+        // owner set; the pendingRestore term in resync's guard is defensive
+        // redundancy, since pendingRestore is only ever set once the owner
+        // set emptied.)
         mgr.releaseKind(Win1, OwnerKind::Snap, Restore::Deferred);
         bridge.clearLog();
         fw->noBorder = false; // simulate an external reset mid-defer
@@ -528,15 +608,22 @@ private Q_SLOTS:
         mgr.acquire(QStringLiteral("b|1"), DecorationManager::autotile(Screen1));
         mgr.releaseKind(QStringLiteral("a|1"), OwnerKind::Autotile, Restore::Deferred);
         mgr.releaseKind(QStringLiteral("b|1"), OwnerKind::Autotile, Restore::Deferred);
-
-        // The window closes after stash but before its drain step: the
-        // in-flight snapshot still holds the id; the step must skip it.
-        mgr.forgetWindow(QStringLiteral("a|1"));
         bridge.clearLog();
+
+        // Start the drain: the first step runs synchronously and restores
+        // ONE window; the other is still held in the chain's snapshot.
         mgr.drainPendingRestores();
+        QCOMPARE(bridge.callLog.size(), 1);
+
+        // The still-queued window closes MID-DRAIN. The in-flight snapshot
+        // still holds its id — the next step must skip it via the entry
+        // lookup rather than restore a forgotten window.
+        const QString stillQueued =
+            bridge.callLog.first().contains(QStringLiteral("a|1")) ? QStringLiteral("b|1") : QStringLiteral("a|1");
+        mgr.forgetWindow(stillQueued);
         QTRY_COMPARE(finished.count(), 1);
-        QVERIFY(!bridge.callLog.contains(QStringLiteral("setNoBorder(a|1,false)")));
-        QVERIFY(bridge.callLog.contains(QStringLiteral("setNoBorder(b|1,false)")));
+        QCOMPARE(bridge.callLog.size(), 1); // no second restore happened
+        QVERIFY(!bridge.callLog.contains(QStringLiteral("setNoBorder(%1,false)").arg(stillQueued)));
     }
 
     void testAcquireIntentOnlyThenResolvedHides()

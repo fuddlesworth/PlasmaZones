@@ -87,7 +87,7 @@ private Q_SLOTS:
             centeredWaylandZones, monocleMaximizedWindows, preAutotileGeometries};
 
         // Perform cleanup
-        PhosphorCompositor::AutotileStateHelpers::cleanupClosedWindowState(windowId, screenId, border, state);
+        PhosphorCompositor::AutotileStateHelpers::cleanupClosedWindowState(windowId, border, state);
 
         // Verify all maps no longer contain the window
         QVERIFY(!PhosphorCompositor::AutotileStateHelpers::isTiledWindow(border, windowId));

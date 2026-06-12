@@ -12,10 +12,8 @@
 #include <QTest>
 
 #include "../../../src/config/configdefaults.h"
-#include "../../../src/core/constants.h"
 
 #include <PhosphorCompositor/DecorationDefaults.h>
-#include <PhosphorZones/ZoneDefaults.h>
 
 using namespace PlasmaZones;
 

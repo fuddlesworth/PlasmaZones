@@ -141,8 +141,6 @@ void AutotileHandler::handleCursorMoved(const QPointF& pos, const QString& scree
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// Geometry persistence
-// ═══════════════════════════════════════════════════════════════════════════════
 // Integration points
 // ═══════════════════════════════════════════════════════════════════════════════
 
@@ -505,7 +503,7 @@ void AutotileHandler::onWindowClosed(const QString& windowId, const QString& scr
     AutotileStateHelpers::AutotileWindowState windowState{
         m_notifiedWindows,      m_notifiedWindowScreens,   m_minimizeFloatedWindows, m_autotileTargetZones,
         m_centeredWaylandZones, m_monocleMaximizedWindows, m_preAutotileGeometries};
-    AutotileStateHelpers::cleanupClosedWindowState(windowId, screenId, m_border, windowState);
+    AutotileStateHelpers::cleanupClosedWindowState(windowId, m_border, windowState);
     // Cancel any pending debounced minimize→float commit — it must not fire
     // against a destroyed window.
     cancelPendingMinimizeFloat(windowId);
@@ -518,10 +516,7 @@ void AutotileHandler::onWindowClosed(const QString& windowId, const QString& scr
         QObject::disconnect(pendingConn.value());
         m_pendingCrossScreenRestore.erase(pendingConn);
     }
-    // Remove from saved stacking orders so stale IDs don't accumulate
-    if (m_savedSnapStackingOrder.contains(screenId)) {
-        m_savedSnapStackingOrder[screenId].removeAll(windowId);
-    }
+    // Remove from the saved stacking order so stale IDs don't accumulate
     if (m_savedAutotileStackingOrder.contains(screenId)) {
         m_savedAutotileStackingOrder[screenId].removeAll(windowId);
     }
