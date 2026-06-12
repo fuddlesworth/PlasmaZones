@@ -85,72 +85,15 @@ void AutotileHandler::restoreAllMonocleMaximized()
     m_monocleMaximizedWindows.clear();
 }
 
-void AutotileHandler::restoreAllBorderless()
+void AutotileHandler::clearTiledTracking()
 {
-    // Snapshot first (setWindowBorderless mutates the buckets under us).
-    const auto pairs = AutotileStateHelpers::allBorderlessPairs(m_border);
-    for (const auto& p : pairs) {
-        KWin::EffectWindow* w = m_effect->findWindowById(p.first);
-        if (w) {
-            setWindowBorderless(w, p.first, false, p.second);
-        }
-    }
-    // Clear all border tracking (orphans included)
+    // Bookkeeping only. Physical title-bar restores are the
+    // DecorationManager's job — teardown callers pair this with
+    // DecorationManager::restoreAll(). The borderless buckets are unused now
+    // (the manager owns that state) but cleared defensively until the field
+    // is removed from BorderState.
     m_border.borderlessWindowsByScreen.clear();
     m_border.tiledWindowsByScreen.clear();
-}
-
-void AutotileHandler::drainPendingBorderlessRestore()
-{
-    if (m_pendingBorderlessRestore.isEmpty()) {
-        return;
-    }
-    if (m_pendingBorderlessFallback) {
-        m_pendingBorderlessFallback->stop();
-        m_pendingBorderlessFallback->deleteLater();
-        m_pendingBorderlessFallback = nullptr;
-    }
-    // Snapshot and clear first so reentrant drain calls (fallback timer
-    // racing with onComplete, or a second mode toggle mid-drain) start a
-    // fresh chain instead of mutating the one in flight.
-    auto pending = std::make_shared<QList<QString>>(m_pendingBorderlessRestore.values());
-    m_pendingBorderlessRestore.clear();
-
-    // Process one window per event-loop tick. setNoBorder(false) blocks the
-    // main thread for 30-120 ms per window (Wayland decoration round-trip);
-    // doing all four in a tight loop here drops frames from the concurrent
-    // OSD show animation (500 ms) and snap animation (300 ms) that started
-    // when applyGeometriesBatch dispatched. Yielding between calls lets kwin
-    // render frames in between — total wall time goes up (~300 ms vs ~64 ms
-    // batched) but the user-visible animations stay smooth.
-    //
-    // shared_ptr<function> + self-capture forms a chain that holds itself
-    // alive across QTimer reschedules; on the empty branch we stop
-    // rescheduling and the captures naturally unwind.
-    auto step = std::make_shared<std::function<void()>>();
-    *step = [this, pending, step]() {
-        if (pending->isEmpty()) {
-            m_effect->updateAllBorders();
-            return;
-        }
-        const QString windowId = pending->takeFirst();
-        KWin::EffectWindow* w = m_effect->findWindowById(windowId);
-        // Skip the restore if autotile has been re-enabled on this window's
-        // current screen between stash and chunk-execution time. The new
-        // toggle's setWindowBorderless(true) is now authoritative; clearing
-        // it would flash the title bar and discard tracking the re-tile just
-        // added. Realistic trigger: user rapid-cycles through layouts and
-        // lands back on an autotile layout within the chain's ~300 ms
-        // lifetime. The original synchronous code was immune because no
-        // other slot could interleave between stash and clear.
-        if (w && m_autotileScreens.contains(m_effect->getWindowScreenId(w))) {
-            QTimer::singleShot(0, this, *step);
-            return;
-        }
-        restoreWindowBorders(w, windowId);
-        QTimer::singleShot(0, this, *step);
-    };
-    (*step)();
 }
 
 bool AutotileHandler::updateHideTitleBarsSetting(bool enabled)
@@ -160,22 +103,19 @@ bool AutotileHandler::updateHideTitleBarsSetting(bool enabled)
     }
     m_border.hideTitleBars = enabled;
     if (!enabled) {
-        // Turning OFF — restore title bars for all borderless windows
-        const auto pairs = AutotileStateHelpers::allBorderlessPairs(m_border);
-        for (const auto& p : pairs) {
-            KWin::EffectWindow* win = m_effect->findWindowById(p.first);
-            if (win) {
-                setWindowBorderless(win, p.first, false, p.second);
-            }
-        }
+        // Turning OFF — release every autotile ownership; the manager
+        // restores each title bar no other owner still claims.
+        m_effect->decorationManager()->releaseAllOfKind(DecorationManager::OwnerKind::Autotile);
     } else {
-        // Turning ON — hide title bars for all currently tiled windows
+        // Turning ON — hide title bars for all currently tiled windows. The
+        // windows are already placed in their zones, so the AlreadyPlaced
+        // sequence re-asserts the zone rect across the decoration change
+        // (KWin holds the client size constant, which would otherwise leave
+        // a title-bar-height gap).
         const auto pairs = AutotileStateHelpers::allTiledPairs(m_border);
         for (const auto& p : pairs) {
-            KWin::EffectWindow* win = m_effect->findWindowById(p.first);
-            if (win) {
-                setWindowBorderless(win, p.first, true, p.second);
-            }
+            m_effect->decorationManager()->acquire(p.first, DecorationManager::autotile(p.second),
+                                                   DecorationManager::Placement::AlreadyPlaced);
         }
     }
     return true;
@@ -267,52 +207,9 @@ bool AutotileHandler::saveAndRecordPreAutotileGeometry(const QString& windowId, 
     return true;
 }
 
-// ═══════════════════════════════════════════════════════════════════════════════
-// Borderless / title bar management
-// ═══════════════════════════════════════════════════════════════════════════════
-
-void AutotileHandler::setWindowBorderless(KWin::EffectWindow* w, const QString& windowId, bool borderless,
-                                          const QString& screenId)
+bool AutotileHandler::isBorderlessWindow(const QString& windowId) const
 {
-    if (!w) {
-        return;
-    }
-    if (screenId.isEmpty()) {
-        qCWarning(lcEffect) << "setWindowBorderless: empty screenId for" << windowId << "(borderless=" << borderless
-                            << ") — bucket tracking will drift";
-    }
-    KWin::Window* kw = w->window();
-    if (!kw) {
-        return;
-    }
-    if (borderless) {
-        // Skip CSD windows (GTK/Electron) — hasDecoration() is false for them.
-        if (!w->hasDecoration()) {
-            return;
-        }
-        // Add to the screen-scoped bucket. "Was it already borderless
-        // anywhere?" is what determines whether we call setNoBorder(true)
-        // on the compositor — once the flag is set we don't re-set it.
-        const bool wasBorderlessAnywhere = AutotileStateHelpers::isBorderlessWindow(m_border, windowId);
-        AutotileStateHelpers::addBorderlessOnScreen(m_border, screenId, windowId);
-        if (!wasBorderlessAnywhere) {
-            kw->setNoBorder(true);
-            qCDebug(lcEffect) << "Autotile: hid title bar for" << windowId << "(screen:" << screenId << ")";
-        }
-    } else {
-        // Remove from the specific screen's bucket. Only actually restore
-        // the title bar if the window is no longer tracked as borderless
-        // on ANY screen — otherwise a sibling VS's retile still owns it.
-        const bool removedHere = AutotileStateHelpers::removeBorderlessOnScreen(m_border, screenId, windowId);
-        if (!removedHere) {
-            return;
-        }
-        if (!AutotileStateHelpers::isBorderlessWindow(m_border, windowId)) {
-            kw->setNoBorder(false);
-            qCDebug(lcEffect) << "Autotile: restored title bar for" << windowId << "(was on screen:" << screenId << ")";
-            m_effect->removeWindowBorder(windowId);
-        }
-    }
+    return m_effect->decorationManager()->hasOwnerOfKind(windowId, DecorationManager::OwnerKind::Autotile);
 }
 
 bool AutotileHandler::isAutotileScreen(const QString& screenId) const
@@ -387,28 +284,10 @@ bool AutotileHandler::isEligibleForAutotileNotify(KWin::EffectWindow* w) const
 void AutotileHandler::applyFloatCleanup(const QString& windowId)
 {
     m_effect->m_navigationHandler->setWindowFloating(windowId, true);
-    // A floating window is no longer tile-managed on any screen — remove
-    // its tracking from every screen bucket. If it was borderless anywhere,
-    // strip the compositor-side noBorder too by calling setWindowBorderless
-    // for each screen that held it.
-    KWin::EffectWindow* w = m_effect->findWindowById(windowId);
-    QStringList screensOwningBorderless;
-    for (auto it = m_border.borderlessWindowsByScreen.constBegin(); it != m_border.borderlessWindowsByScreen.constEnd();
-         ++it) {
-        if (it.value().contains(windowId)) {
-            screensOwningBorderless.append(it.key());
-        }
-    }
-    for (const QString& screenId : std::as_const(screensOwningBorderless)) {
-        if (w) {
-            setWindowBorderless(w, windowId, false, screenId);
-        } else {
-            AutotileStateHelpers::removeBorderlessOnScreen(m_border, screenId, windowId);
-        }
-    }
-    // Clear tiled tracking on every screen regardless (tiled is a superset of
-    // borderless, but a window can be tiled without borderless if hideTitleBars
-    // was off when it was tiled).
+    // A floating window is no longer tile-managed on any screen — release
+    // autotile's decoration ownership (the manager restores the title bar
+    // unless another owner still claims it) and clear tiled tracking.
+    m_effect->decorationManager()->releaseKind(windowId, DecorationManager::OwnerKind::Autotile);
     AutotileStateHelpers::removeFromAllScreens(m_border, windowId);
     // Drop centering/target tracking too — a floated window isn't being
     // tiled anymore so a stale entry here would trigger centering on the

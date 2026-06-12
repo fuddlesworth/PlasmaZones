@@ -359,13 +359,10 @@ void AutotileHandler::handleWindowOutputChanged(KWin::EffectWindow* w)
         }
     }
 
-    // Restore title bar before removing
-    if (isBorderlessWindow(windowId)) {
-        KWin::Window* kw = w->window();
-        if (kw) {
-            kw->setNoBorder(false);
-        }
-    }
+    // Release autotile's decoration ownership before removing. If the new
+    // screen is also autotiled the imminent retile re-acquires (transient
+    // title-bar flash, same as before the DecorationManager unification).
+    m_effect->decorationManager()->releaseKind(windowId, DecorationManager::OwnerKind::Autotile);
 
     // Remove from old screen's autotile state
     onWindowClosed(windowId, oldScreenId);

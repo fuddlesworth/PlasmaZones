@@ -91,36 +91,12 @@ void AutotileHandler::clearAllPendingMinimizeFloats()
 
 void AutotileHandler::restoreWindowBorders(KWin::EffectWindow* w, const QString& windowId)
 {
-    // Find every screen whose borderless bucket still tracks this window —
-    // stale entries can span multiple screens if the window transferred
-    // between autotile screens during the session — and clear each. When the
-    // EffectWindow is gone (screen-removal path), drop the per-screen border
-    // state directly since setNoBorder needs a live window.
-    QStringList screensHoldingBorderless;
-    for (auto it = m_border.borderlessWindowsByScreen.constBegin(); it != m_border.borderlessWindowsByScreen.constEnd();
-         ++it) {
-        if (it.value().contains(windowId)) {
-            screensHoldingBorderless.append(it.key());
-        }
-    }
-    // If snap has taken over this window (autotile→snap mode swap) and is keeping
-    // its title bar hidden, drop the autotile tracking WITHOUT calling
-    // setNoBorder(false) — doing so would un-hide a title bar the per-mode snapping
-    // appearance wants hidden. This guard defers to snap whenever snap currently owns
-    // the window's borderless state, regardless of which caller we arrive through:
-    // for the mode-swap path, snap's per-window markWindowSnapped runs in the resnap
-    // batch before this deferred drain populates the set; the synchronous
-    // desktop-switch caller (slotScreensChanged) simply reads whatever snap owns at
-    // that moment. Either way, an empty snap borderless set means snap does not own
-    // the window and autotile restores its border normally.
-    const bool snapKeepsBorderless = m_effect->isWindowSnapBorderless(windowId);
-    for (const QString& sid : std::as_const(screensHoldingBorderless)) {
-        if (w && !snapKeepsBorderless) {
-            setWindowBorderless(w, windowId, false, sid);
-        } else {
-            AutotileStateHelpers::removeBorderlessOnScreen(m_border, sid, windowId);
-        }
-    }
+    Q_UNUSED(w)
+    // Release autotile's decoration ownership on every screen. The manager
+    // restores the title bar only when NO owner remains — a snap takeover
+    // (autotile→snap mode swap) or a rule hide simply leaves their owner in
+    // place, which replaces the old cross-mode "snapKeepsBorderless" guard.
+    m_effect->decorationManager()->releaseKind(windowId, DecorationManager::OwnerKind::Autotile);
     AutotileStateHelpers::removeFromAllScreens(m_border, windowId);
 }
 
@@ -266,35 +242,21 @@ void AutotileHandler::slotScreensChanged(const QStringList& screenIds, bool isDe
                 m_notifiedWindowScreens.remove(wid);
             }
 
-            // Defer title-bar restores until slotApplyGeometriesBatch
-            // dispatches the daemon's resnap signal. Each restoreWindowBorders
-            // → setNoBorder(false) is a per-window Wayland decoration
-            // round-trip; running the loop here — or via any singleShot delay
-            // — blocks kwin's event loop and serializes ahead of the queued
-            // applyGeometriesBatch, producing a 250+ ms stall before windows
-            // start moving. Delaying with QTimer doesn't fix it: Qt picks up
-            // pending timer events before draining the D-Bus socket queue.
-            //
-            // Stash the IDs; PlasmaZonesEffect::slotApplyGeometriesBatch
-            // calls drainPendingBorderlessRestore() once the resnap signal
-            // has been dispatched, so windows start animating to their snap
-            // positions first and borders return during the animation.
-            //
-            // Fallback timer covers the case where no resnap arrives at all
-            // (e.g. autotile disabled with nothing to resnap, or a daemon
-            // path that suppresses the signal). 500 ms is well past the
-            // worst-case daemon→effect signal latency we've observed.
-            m_pendingBorderlessRestore.unite(windowsOnRemovedScreens);
-            if (m_pendingBorderlessFallback) {
-                m_pendingBorderlessFallback->stop();
-                m_pendingBorderlessFallback->deleteLater();
+            // Defer title-bar restores until slotApplyGeometriesBatch calls
+            // DecorationManager::drainPendingRestores() after the daemon's
+            // resnap signal has been dispatched. Each restore is a per-window
+            // Wayland decoration round-trip; restoring synchronously here
+            // would block kwin's event loop and serialize ahead of the queued
+            // applyGeometriesBatch, stalling the snap animation by 250+ ms.
+            // The manager's deferred queue also covers the races the old
+            // hand-rolled drain handled: a window re-acquired mid-drain (snap
+            // takeover or rapid re-toggle back into autotile) keeps its title
+            // bar hidden, and a fallback timer drains if no resnap arrives.
+            for (const QString& wid : std::as_const(windowsOnRemovedScreens)) {
+                m_effect->decorationManager()->releaseKind(wid, DecorationManager::OwnerKind::Autotile,
+                                                           DecorationManager::Restore::Deferred);
+                AutotileStateHelpers::removeFromAllScreens(m_border, wid);
             }
-            m_pendingBorderlessFallback = new QTimer(this);
-            m_pendingBorderlessFallback->setSingleShot(true);
-            connect(m_pendingBorderlessFallback, &QTimer::timeout, this, [this]() {
-                drainPendingBorderlessRestore();
-            });
-            m_pendingBorderlessFallback->start(500);
 
             // Save autotile stacking order before restoring snap-mode order.
             // This allows restoring the user's autotile z-order (e.g. floated
@@ -430,11 +392,15 @@ void AutotileHandler::slotScreensChanged(const QStringList& screenIds, bool isDe
                 }
             }
 
-            // Re-apply borderless state for windows returning to autotile desktop.
-            // The daemon skips retile for desktop return (tiledWindowCount > 0), so
-            // slotWindowsTileRequested — which normally applies setWindowBorderless —
-            // does NOT fire. KWin may also reset setNoBorder() for windows that were
-            // on a non-current desktop. Re-apply here to ensure correct state.
+            // Re-assert borderless state for windows returning to an autotile
+            // desktop. The daemon skips retile for desktop return
+            // (tiledWindowCount > 0), so the tile path — which normally
+            // acquires decoration ownership — does NOT fire. KWin may also
+            // silently reset noBorder for windows that were on a non-current
+            // desktop. resyncWindow() re-hides only windows the manager
+            // already owns whose decoration came back, so genuinely new
+            // windows (opened while this desktop was inactive) are untouched
+            // — they get owned when the daemon next retiles.
             if (m_border.hideTitleBars) {
                 for (const QString& screenId : added) {
                     for (KWin::EffectWindow* w : windows) {
@@ -449,18 +415,7 @@ void AutotileHandler::slotScreensChanged(const QStringList& screenIds, bool isDe
                         if (m_effect->isWindowFloating(windowId)) {
                             continue; // Floating windows don't get borderless
                         }
-                        if (AutotileStateHelpers::borderlessOnScreen(m_border, screenId).contains(windowId)) {
-                            // Already tracked — force KWin property in case it was reset
-                            KWin::Window* kw = w->window();
-                            if (kw && !kw->noBorder()) {
-                                kw->setNoBorder(true);
-                                qCDebug(lcEffect) << "Desktop return: re-applied setNoBorder for" << windowId;
-                            }
-                        }
-                        // Don't apply borderless to untracked windows here — they may
-                        // be genuinely new (opened while this desktop was inactive).
-                        // Borderless is applied when the daemon retiles via
-                        // slotWindowsTileRequested, not during desktop return.
+                        m_effect->decorationManager()->resyncWindow(windowId);
                     }
                 }
             }
@@ -805,15 +760,11 @@ void AutotileHandler::slotWindowFullScreenChanged(KWin::EffectWindow* w)
         return;
     }
     const QString windowId = m_effect->getWindowId(w);
-    // Clear border and borderless tracking so borders are not drawn over fullscreen content
-    const bool wasBorderlessAnywhere = AutotileStateHelpers::isBorderlessWindow(m_border, windowId);
+    // Clear border tracking and release decoration ownership so borders are
+    // not drawn over fullscreen content (the manager restores the title bar
+    // unless another owner still claims the window).
     AutotileStateHelpers::removeFromAllScreens(m_border, windowId);
-    if (wasBorderlessAnywhere) {
-        KWin::Window* kw = w->window();
-        if (kw) {
-            kw->setNoBorder(false);
-        }
-    }
+    m_effect->decorationManager()->releaseKind(windowId, DecorationManager::OwnerKind::Autotile);
     if (m_monocleMaximizedWindows.remove(windowId)) {
         qCInfo(lcEffect) << "Monocle window went fullscreen:" << windowId << "- removed from tracking";
     }

@@ -74,10 +74,11 @@ public:
     /// Apply/restore title-bar hiding across all currently snap-committed
     /// windows when the snappingHideTitleBars setting toggles.
     void updateSnapHideTitleBars(bool hide);
-    /// Restore every snap-hidden title bar and drop the snap border set.
-    /// Called on daemon loss / effect teardown (symmetric with
-    /// AutotileHandler::restoreAllBorderless).
-    void restoreAllSnapBorderless();
+    /// Drop all snap tiled-tracking bookkeeping. Physical title-bar restores
+    /// are the DecorationManager's job — teardown callers pair this with
+    /// DecorationManager::restoreAll() (symmetric with
+    /// AutotileHandler::clearTiledTracking).
+    void clearSnapTracking();
     /// Drop snap border/title-bar tracking for a window being destroyed. Pure
     /// bookkeeping — no setNoBorder/removeWindowBorder, the window is going away.
     void onWindowClosed(const QString& windowId);
@@ -159,10 +160,10 @@ public:
     }
 
     // ── Border rendering accessors — delegate to shared AutotileStateHelpers ──
-    bool isBorderlessWindow(const QString& windowId) const
-    {
-        return AutotileStateHelpers::isBorderlessWindow(m_border, windowId);
-    }
+    /// True while snap holds a DecorationManager owner for this window (its
+    /// title bar is snap-managed). Implemented in snaphandler.cpp — it
+    /// consults the effect's DecorationManager.
+    bool isBorderlessWindow(const QString& windowId) const;
     bool isTiledWindow(const QString& windowId) const
     {
         return AutotileStateHelpers::isTiledWindow(m_border, windowId);

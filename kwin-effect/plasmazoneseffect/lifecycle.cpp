@@ -61,8 +61,26 @@ PlasmaZonesEffect::PlasmaZonesEffect()
     , m_shaderManager(this)
     , m_dragTracker(std::make_unique<DragTracker>(this))
     , m_compositorBridge(std::make_unique<KWinCompositorBridge>(this))
+    , m_decorationManager(std::make_unique<DecorationManager>(m_compositorBridge.get()))
 {
     PhosphorProtocol::registerWireTypes();
+
+    // Decoration-manager wiring. The drain-time veto is the authoritative
+    // re-check for deferred title-bar restores: if the window's current
+    // screen re-entered autotile between the mode toggle and the drain step,
+    // the queued restore is stale — the imminent retile re-acquires the
+    // window and clearing the decoration would flash the title bar.
+    m_decorationManager->setRestoreVeto([this](const QString& windowId) {
+        KWin::EffectWindow* w = findWindowById(windowId);
+        return w && m_autotileHandler->isAutotileScreen(getWindowScreenId(w));
+    });
+    connect(m_decorationManager.get(), &DecorationManager::windowDecorationRestored, this,
+            [this](const QString& windowId) {
+                removeWindowBorder(windowId);
+            });
+    connect(m_decorationManager.get(), &DecorationManager::drainFinished, this, [this]() {
+        updateAllBorders();
+    });
 
     // Sub-pixel vertex precision. KWin's default snapping rounds quad
     // vertex positions to integer pixels before rasterising, which is
@@ -736,9 +754,12 @@ PlasmaZonesEffect::PlasmaZonesEffect()
             endRestoreSuppression(sw);
         }
 
-        // Restore borderless and monocle-maximized windows — daemon state is gone
-        m_autotileHandler->restoreAllBorderless();
-        m_snapHandler->restoreAllSnapBorderless();
+        // Restore borderless and monocle-maximized windows — daemon state is gone.
+        // The manager restores every title bar it hid (all owners at once);
+        // the handlers only drop their tiled-tracking bookkeeping.
+        m_decorationManager->restoreAll();
+        m_autotileHandler->clearTiledTracking();
+        m_snapHandler->clearSnapTracking();
         restoreAllRuleHiddenTitleBars();
         m_autotileHandler->restoreAllMonocleMaximized();
         clearAllBorders();
@@ -851,8 +872,9 @@ PlasmaZonesEffect::~PlasmaZonesEffect()
     // Restore borderless and monocle-maximized windows so they recover properly.
     // Guard against compositor teardown — effects may outlive the stacking order.
     if (KWin::effects) {
-        m_autotileHandler->restoreAllBorderless();
-        m_snapHandler->restoreAllSnapBorderless();
+        m_decorationManager->restoreAll();
+        m_autotileHandler->clearTiledTracking();
+        m_snapHandler->clearSnapTracking();
         restoreAllRuleHiddenTitleBars();
         m_autotileHandler->restoreAllMonocleMaximized();
         clearAllBorders();

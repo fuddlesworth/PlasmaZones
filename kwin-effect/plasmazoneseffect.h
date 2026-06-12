@@ -6,6 +6,7 @@
 #include <cstdint>
 
 #include <PhosphorCompositor/AutotileState.h>
+#include <PhosphorCompositor/DecorationManager.h>
 #include <PhosphorCompositor/ICompositorBridge.h>
 #include <PhosphorEngine/EngineTypes.h>
 #include <PhosphorProtocol/DragMarshalling.h>
@@ -426,14 +427,6 @@ private:
      */
     bool isWindowMarkedSnapped(const QString& windowId) const;
 
-    /**
-     * @brief True if SNAP is currently hiding this window's title bar (it is in the
-     * snap BorderState borderless set). The autotile→snap cleanup consults this so it
-     * drops its own tracking without calling setNoBorder(false) — which would un-hide
-     * a title bar the per-mode snapping appearance wants hidden.
-     */
-    bool isWindowSnapBorderless(const QString& windowId) const;
-
     void notifyWindowClosed(KWin::EffectWindow* w);
     void notifyWindowActivated(KWin::EffectWindow* w);
     KWin::EffectWindow* findWindowById(const QString& windowId) const;
@@ -525,6 +518,14 @@ public:
         return m_compositorBridge.get();
     }
 
+    /// The single owner of server-side decoration (title-bar) state. Every
+    /// hide/restore goes through its owner model — handlers and the rule
+    /// layer must never call KWin::Window::setNoBorder directly.
+    DecorationManager* decorationManager() const
+    {
+        return m_decorationManager.get();
+    }
+
     /// Clear the EDID-based screen ID cache (call on screen add/remove/reconfigure)
     void clearScreenIdCache()
     {
@@ -585,6 +586,16 @@ private:
     // re-resolves on it; the window gaining focus is repainted via the slot's
     // own argument. QPointer auto-nulls on window destruction.
     QPointer<KWin::EffectWindow> m_lastActivatedWindow;
+
+    // The window currently in an interactive RESIZE (set at
+    // windowStartUserMovedResized when isUserResize(), cleared at finish).
+    // windowFinishUserMovedResized does not reliably report isUserResize() at
+    // teardown, so the resize-vs-move discriminator is latched at start. Used to
+    // persist a floating window's new free size the instant the resize ends —
+    // distinct from a move, which the drag→snap pipeline owns (a move can end in
+    // a snap, so it must not be captured as a free geometry here). QPointer
+    // auto-nulls on window destruction.
+    QPointer<KWin::EffectWindow> m_resizingWindow;
 
     // Windows whose server-side title bar a per-window-rule SetHideTitleBar
     // override hid (distinct from the snap/autotile borderless sets). Tracked
@@ -717,6 +728,7 @@ private:
 
     std::unique_ptr<DragTracker> m_dragTracker;
     std::unique_ptr<ICompositorBridge> m_compositorBridge;
+    std::unique_ptr<DecorationManager> m_decorationManager;
 
     // Keyboard modifiers from KWin's input system
     // Updated via mouseChanged; that's the only reliable way to get modifiers in a

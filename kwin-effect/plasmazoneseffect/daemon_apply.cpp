@@ -316,15 +316,18 @@ void PlasmaZonesEffect::slotApplyGeometriesBatch(const PhosphorProtocol::WindowG
                 }
             }
             // Drain any title-bar restores deferred from autotile→snap mode
-            // toggle. slotScreensChanged stashes window IDs instead of
-            // running the slow Wayland decoration round-trips synchronously;
-            // by the time onComplete fires here, animations for all
-            // resnapped windows are already in flight via the animation
-            // framework, so borders return mid-animation rather than after
-            // a 250+ ms stall before motion begins. Unconditional — for
-            // non-mode-toggle batches (rotate, vs_reconfigure, snap_all)
-            // the pending set is empty and the call is a no-op.
-            m_autotileHandler->drainPendingBorderlessRestore();
+            // toggle. slotScreensChanged queues deferred releases in the
+            // DecorationManager instead of running the slow Wayland
+            // decoration round-trips synchronously; by the time onComplete
+            // fires here, animations for all resnapped windows are already
+            // in flight via the animation framework, so borders return
+            // mid-animation rather than after a 250+ ms stall before motion
+            // begins. Windows snap re-acquired during the resnap keep their
+            // title bars hidden (the manager cancels their queued restores).
+            // Unconditional — for non-mode-toggle batches (rotate,
+            // vs_reconfigure, snap_all) the pending set is empty and the
+            // call is a no-op.
+            m_decorationManager->drainPendingRestores();
             // Show snap assist after resnap if applicable.
             //
             // A resnap is a bulk operation (autotile→snap toggle, rotate,

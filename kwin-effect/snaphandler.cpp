@@ -30,34 +30,6 @@ namespace PlasmaZones {
 
 Q_DECLARE_LOGGING_CATEGORY(lcEffect)
 
-namespace {
-// Drop the server-side decoration while keeping the window filling its zone.
-// KWin holds the CLIENT size constant across a decoration change, so calling
-// setNoBorder(true) AFTER the zone geometry was applied shrinks the frame by the
-// title-bar height and leaves a gap at the bottom of the zone. Re-assert the
-// zone rect after dropping the decoration so the content grows to fill it.
-//
-// CRITICAL: use moveResizeGeometry(), NOT frameGeometry(). On Wayland the latter
-// lags behind moveResize() until the client acks the configure, so right after
-// applySnapGeometry's moveResize it still reports the window's PRE-snap frame —
-// capturing and re-applying that would clobber the snap (the window reverts to
-// its floating size/position; this broke snap restore entirely). moveResizeGeometry()
-// is the zone rect KWin is already moving toward, set synchronously by moveResize.
-// The setNoBorder→moveResize ordering mirrors autotile hiding the title bar
-// BEFORE its moveResize (autotilehandler/state.cpp::setWindowBorderless).
-void hideTitleBarFillingZone(KWin::Window* kw)
-{
-    const KWin::RectF zoneTarget = kw->moveResizeGeometry();
-    kw->setNoBorder(true);
-    // Only re-assert a real target. A degenerate move-resize geometry would
-    // otherwise resize the window to nothing; in that case leave the decoration
-    // change to settle on its own.
-    if (zoneTarget.isValid() && !zoneTarget.isEmpty()) {
-        kw->moveResize(zoneTarget);
-    }
-}
-} // namespace
-
 SnapHandler::SnapHandler(PlasmaZonesEffect* effect, QObject* parent)
     : QObject(parent)
     , m_effect(effect)
@@ -91,33 +63,23 @@ void SnapHandler::markWindowSnapped(const QString& windowId, const QString& scre
         }
     };
     stripOtherScreens(m_border.tiledWindowsByScreen);
-    stripOtherScreens(m_border.borderlessWindowsByScreen);
     AutotileStateHelpers::addTiledOnScreen(m_border, screenId, windowId);
 
-    KWin::EffectWindow* w = m_effect->findWindowById(windowId);
-    KWin::Window* kw = w ? w->window() : nullptr;
-    // userCanSetNoBorder() — not hasDecoration() — is the correct test for "may
-    // this window's server-side title bar be toggled off." It reports whether KWin
-    // ALLOWS the no-border toggle, so it stays true for a normal SSD window even
-    // while that window is CURRENTLY borderless — exactly the autotile→snap handoff
-    // case, where the window arrives already borderless (autotile stripped its
-    // decoration) and hasDecoration() therefore reads false. It is false for windows
-    // that have no server-side title bar to hide in the first place — client-side-
-    // decorated apps (GTK/Electron) and other non-toggleable windows (override-
-    // redirect, or decoration forced by a window rule). Using hasDecoration() here
-    // skipped the handoff, so snap never recorded the borderless ownership and the
-    // deferred restoreWindowBorders un-hid the title bar autotile had hidden.
-    // (AutotileHandler::setWindowBorderless still gates on hasDecoration(); the snap
-    // side intentionally diverges because only it must survive the already-borderless
-    // handoff.)
-    if (m_border.hideTitleBars && kw && kw->userCanSetNoBorder()) {
-        const bool wasBorderless = AutotileStateHelpers::isBorderlessWindow(m_border, windowId);
-        AutotileStateHelpers::addBorderlessOnScreen(m_border, screenId, windowId);
-        if (!wasBorderless) {
-            hideTitleBarFillingZone(kw);
-        }
+    // Decoration ownership: move any stale snap claim from other screens
+    // (no physical flap), then acquire on this screen. The manager owns the
+    // capability gate (userCanSetNoBorder — survives the already-borderless
+    // autotile→snap handoff, skips CSD windows), the prior-state capture,
+    // and the AlreadyPlaced sequence (capture moveResizeGeometry →
+    // setNoBorder → re-assert) that keeps the window filling its zone across
+    // the decoration change.
+    m_effect->decorationManager()->releaseOthersOfKind(windowId, DecorationManager::OwnerKind::Snap, screenId);
+    if (m_border.hideTitleBars) {
+        m_effect->decorationManager()->acquire(windowId, DecorationManager::snap(screenId),
+                                               DecorationManager::Placement::AlreadyPlaced);
     }
-    // A null w means the window is gone (closed mid-snap); the bucket entry
+
+    KWin::EffectWindow* w = m_effect->findWindowById(windowId);
+    // A null w means the window is gone (closed mid-snap); the tiled entry
     // recorded above is then harmless — if the window later closes, slotWindowClosed
     // clears the snap border for it. No border is drawn (nothing to draw on) and none
     // is needed; updateAllBorders() iterates only live windows so it simply skips it.
@@ -136,19 +98,11 @@ void SnapHandler::clearWindowSnapped(const QString& windowId)
     if (windowId.isEmpty()) {
         return;
     }
-    const bool wasBorderless = AutotileStateHelpers::isBorderlessWindow(m_border, windowId);
     AutotileStateHelpers::removeFromAllScreens(m_border, windowId);
-    // Restore the title bar only if snap had hidden it AND autotile doesn't
-    // still want it borderless. A window mid-transition between modes can be in
-    // both sets briefly; un-hiding here would fight autotile's authoritative
-    // borderless management and flash the title bar.
-    if (wasBorderless && !m_effect->autotileHandler()->isBorderlessWindow(windowId)) {
-        if (KWin::EffectWindow* w = m_effect->findWindowById(windowId)) {
-            if (KWin::Window* kw = w->window()) {
-                kw->setNoBorder(false);
-            }
-        }
-    }
+    // Release snap's decoration ownership. The manager restores the title bar
+    // only when no other owner remains — a window mid-transition between
+    // modes keeps autotile's claim, which replaces the old cross-mode guard.
+    m_effect->decorationManager()->releaseKind(windowId, DecorationManager::OwnerKind::Snap);
     m_effect->removeWindowBorder(windowId);
 }
 
@@ -156,69 +110,35 @@ void SnapHandler::updateSnapHideTitleBars(bool hide)
 {
     m_border.hideTitleBars = hide;
     if (hide) {
-        // Hide on every currently snap-committed window.
+        // Hide on every currently snap-committed window. The windows are
+        // already placed in their zones, so the AlreadyPlaced sequence
+        // re-asserts the zone rect across the decoration change.
         const auto pairs = AutotileStateHelpers::allTiledPairs(m_border);
         for (const auto& p : pairs) {
-            KWin::EffectWindow* w = m_effect->findWindowById(p.first);
-            if (!w || !w->hasDecoration()) {
-                continue;
-            }
-            if (!AutotileStateHelpers::isBorderlessWindow(m_border, p.first)) {
-                AutotileStateHelpers::addBorderlessOnScreen(m_border, p.second, p.first);
-                if (KWin::Window* kw = w->window()) {
-                    hideTitleBarFillingZone(kw);
-                }
-            }
+            m_effect->decorationManager()->acquire(p.first, DecorationManager::snap(p.second),
+                                                   DecorationManager::Placement::AlreadyPlaced);
         }
     } else {
-        // Restore every window snap had made borderless, except one autotile
-        // still wants borderless. A window mid-transition between modes can be in
-        // both sets briefly; un-hiding here would fight autotile's authoritative
-        // borderless management and flash the title bar (mirrors the guard in
-        // clearWindowSnapped / restoreAllSnapBorderless).
-        const auto pairs = AutotileStateHelpers::allBorderlessPairs(m_border);
-        for (const auto& p : pairs) {
-            AutotileStateHelpers::removeBorderlessOnScreen(m_border, p.second, p.first);
-            if (m_effect->autotileHandler()->isBorderlessWindow(p.first)) {
-                continue;
-            }
-            if (KWin::EffectWindow* w = m_effect->findWindowById(p.first)) {
-                if (KWin::Window* kw = w->window()) {
-                    kw->setNoBorder(false);
-                }
-            }
-        }
+        // Release every snap ownership; the manager restores each title bar
+        // no other owner (autotile mid-transition, rule hide) still claims.
+        m_effect->decorationManager()->releaseAllOfKind(DecorationManager::OwnerKind::Snap);
     }
     m_effect->updateAllBorders();
 }
 
-void SnapHandler::restoreAllSnapBorderless()
+void SnapHandler::clearSnapTracking()
 {
-    // Symmetric with AutotileHandler::restoreAllBorderless: on daemon loss or
-    // effect teardown the authoritative snap state is gone, so restore every
-    // title bar snapping hid and drop the whole snap border set. Without this,
-    // snap-hidden windows would keep their title bars hidden until a new snap
-    // event or app restart. The isBorderlessWindow guard below is the live
-    // protection in the per-window path (clearWindowSnapped); at the teardown
-    // call sites AutotileHandler::restoreAllBorderless() runs first and clears
-    // its set, so the guard is a belt-and-braces no-op here (a window autotile
-    // shares is already un-hidden by then, and a second setNoBorder(false) is
-    // harmless/idempotent).
-    // This drops the snap border STATE only; callers pair it with
+    // Bookkeeping only. Physical title-bar restores are the
+    // DecorationManager's job — teardown callers pair this with
+    // DecorationManager::restoreAll(). Callers also pair it with
     // clearAllBorders() to tear down the OutlinedBorderItem scene items.
-    const auto pairs = AutotileStateHelpers::allBorderlessPairs(m_border);
-    for (const auto& p : pairs) {
-        if (m_effect->autotileHandler()->isBorderlessWindow(p.first)) {
-            continue;
-        }
-        if (KWin::EffectWindow* w = m_effect->findWindowById(p.first)) {
-            if (KWin::Window* kw = w->window()) {
-                kw->setNoBorder(false);
-            }
-        }
-    }
     m_border.borderlessWindowsByScreen.clear();
     m_border.tiledWindowsByScreen.clear();
+}
+
+bool SnapHandler::isBorderlessWindow(const QString& windowId) const
+{
+    return m_effect->decorationManager()->hasOwnerOfKind(windowId, DecorationManager::OwnerKind::Snap);
 }
 
 void SnapHandler::onWindowClosed(const QString& windowId)

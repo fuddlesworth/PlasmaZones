@@ -105,22 +105,10 @@ public:
     // Cleanup: unmaximize all monocle-maximized windows (called on daemon loss / effect teardown)
     void restoreAllMonocleMaximized();
 
-    // Cleanup: restore title bars and clear border state for all borderless windows
-    void restoreAllBorderless();
-
-    /**
-     * @brief Drain any pending title-bar restores deferred from autotile→snap.
-     *
-     * Called by PlasmaZonesEffect::slotApplyGeometriesBatch once the resnap
-     * D-Bus signal has been dispatched, so windows start animating to their
-     * snap positions BEFORE we incur the per-window Wayland decoration
-     * round-trip cost of setNoBorder(false). Restoring synchronously inside
-     * slotScreensChanged blocked the queued resnap by 250+ ms.
-     *
-     * No-op if there is no pending restore (e.g. on rotate / vs_reconfigure
-     * batches that did not originate from a mode toggle).
-     */
-    void drainPendingBorderlessRestore();
+    /// Cleanup: drop all autotile tiled-tracking bookkeeping. Physical
+    /// title-bar restores are the DecorationManager's job — teardown callers
+    /// pair this with DecorationManager::restoreAll().
+    void clearTiledTracking();
 
     // Settings update: toggle hide-title-bars with border restore on disable.
     // Returns true if the value actually changed (so the caller can skip a
@@ -165,10 +153,10 @@ public:
     }
 
     // Border rendering accessors — delegate to shared AutotileStateHelpers
-    bool isBorderlessWindow(const QString& windowId) const
-    {
-        return AutotileStateHelpers::isBorderlessWindow(m_border, windowId);
-    }
+    /// True while autotile holds a DecorationManager owner for this window
+    /// (its title bar is autotile-managed). Implemented in autotilehandler.cpp
+    /// — it consults the effect's DecorationManager.
+    bool isBorderlessWindow(const QString& windowId) const;
     bool isTiledWindow(const QString& windowId) const
     {
         return AutotileStateHelpers::isTiledWindow(m_border, windowId);
@@ -272,21 +260,12 @@ private:
     // Utility methods
     // ═══════════════════════════════════════════════════════════════════
 
-    /// Toggle a window's borderless state on a specific screen. screenId is
-    /// REQUIRED for correctness: on per-VS retiles the effect must update
-    /// only that screen's bucket so sibling-VS tracking is untouched. For
-    /// the feature-disable path (where a bulk restore iterates all screens),
-    /// callers pass the screen key from their enumeration; there is no
-    /// "global" variant.
-    void setWindowBorderless(KWin::EffectWindow* w, const QString& windowId, bool borderless, const QString& screenId);
     void unmaximizeMonocleWindow(const QString& windowId);
 
-    /// Restore a window's title bar on every screen whose borderless set still
-    /// tracks it, then drop it from all border tracking. @p w may be null (the
-    /// EffectWindow can be gone on a screen-removal path) — when it is, the
-    /// per-screen border state is cleared directly without a setNoBorder call.
-    /// Shared by the desktop-switch Pass 2 and the genuine autotile-disable
-    /// branch of slotScreensChanged.
+    /// Release autotile's DecorationManager ownership of a window (the
+    /// manager restores the title bar if no other owner remains) and drop it
+    /// from autotile's tiled tracking. Used by the desktop-switch Pass 2
+    /// restore in slotScreensChanged.
     void restoreWindowBorders(KWin::EffectWindow* w, const QString& windowId);
 
     /**
@@ -383,6 +362,9 @@ private:
     QHash<QString, QMetaObject::Connection>
         m_pendingCrossScreenRestore; ///< windowId → deferred size-restore connection
     QSet<QString> m_minimizeFloatedWindows;
+    // NOTE: title-bar (borderless) state is owned by the effect's
+    // DecorationManager; this handler only tracks tiled membership for
+    // border RENDERING via m_border.tiledWindowsByScreen.
     /// Pending debounced minimize→float commits, keyed by windowId. An entry
     /// is created when slotWindowMinimizedChanged sees minimized=true; if the
     /// matching unminimize arrives before the timer fires, the timer is
@@ -390,14 +372,6 @@ private:
     /// minimize/unminimize cycles that KWin emits on tiled windows when
     /// plasmashell notification popups transiently change stacking.
     QHash<QString, QPointer<QTimer>> m_pendingMinimizeFloat;
-    /// Window IDs whose title-bar restore was deferred from
-    /// slotScreensChanged (genuine autotile→snap toggle) until after the
-    /// daemon's queued applyGeometriesBatch("resnap") dispatches. Drained
-    /// by drainPendingBorderlessRestore(); a fallback timer also drains it
-    /// in case the resnap signal never arrives (e.g. autotile disabled with
-    /// no resnappable windows).
-    QSet<QString> m_pendingBorderlessRestore;
-    QPointer<QTimer> m_pendingBorderlessFallback;
     uint64_t m_autotileStaggerGeneration = 0;
     uint64_t m_restoreStaggerGeneration = 0;
     QVector<QPointer<KWin::EffectWindow>> m_savedGlobalStackForResnap; ///< z-order snapshot for resnap restore

@@ -279,11 +279,6 @@ bool PlasmaZonesEffect::isWindowMarkedSnapped(const QString& windowId) const
     return m_snapHandler->isTiledWindow(windowId);
 }
 
-bool PlasmaZonesEffect::isWindowSnapBorderless(const QString& windowId) const
-{
-    return m_snapHandler->isBorderlessWindow(windowId);
-}
-
 const PhosphorCompositor::BorderState* PlasmaZonesEffect::resolveBorderStateFor(const QString& windowId) const
 {
     using namespace PhosphorCompositor;

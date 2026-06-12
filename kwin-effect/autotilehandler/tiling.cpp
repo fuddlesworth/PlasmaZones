@@ -236,9 +236,9 @@ void AutotileHandler::slotWindowsTileRequested(const PhosphorProtocol::TileReque
         // Per-screen untile cleanup. For each screen that participated in
         // this retile, the set of windows previously tracked as tiled on
         // that screen minus the set in the new request is exactly the
-        // windows that left that screen's tiling state. Titlebars are
-        // restored only when the window isn't tracked as borderless on
-        // any sibling screen — setWindowBorderless already enforces this.
+        // windows that left that screen's tiling state. Title bars are
+        // restored by the DecorationManager only when no owner remains —
+        // a sibling VS's claim or a snap takeover keeps the window hidden.
         for (auto screenIt = newTiledByScreen.constBegin(); screenIt != newTiledByScreen.constEnd(); ++screenIt) {
             const QString& screenId = screenIt.key();
             const QSet<QString>& newSet = screenIt.value();
@@ -247,12 +247,13 @@ void AutotileHandler::slotWindowsTileRequested(const PhosphorProtocol::TileReque
             for (const QString& wid : untiled) {
                 KWin::EffectWindow* win = m_effect->findWindowById(wid);
                 if (!win || win->isMinimized()) {
+                    // Minimized windows keep their decoration ownership: a
+                    // restore here would poison the minimize→unminimize
+                    // round-trip; the re-tile on unminimize re-asserts.
                     AutotileStateHelpers::removeTiledOnScreen(m_border, screenId, wid);
                     continue;
                 }
-                if (AutotileStateHelpers::borderlessOnScreen(m_border, screenId).contains(wid)) {
-                    setWindowBorderless(win, wid, false, screenId);
-                }
+                m_effect->decorationManager()->release(wid, DecorationManager::autotile(screenId));
                 AutotileStateHelpers::removeTiledOnScreen(m_border, screenId, wid);
             }
         }
@@ -361,7 +362,15 @@ void AutotileHandler::slotWindowsTileRequested(const PhosphorProtocol::TileReque
             }
             AutotileStateHelpers::addTiledOnScreen(m_border, snap.screenId, snap.windowId);
             if (m_border.hideTitleBars) {
-                setWindowBorderless(snap.window, snap.windowId, true, snap.screenId);
+                // Cross-screen transfer: move the decoration claim to this
+                // screen without a physical flap, then hide BEFORE the
+                // applySnapGeometry below supplies the zone frame
+                // (CallerWillPlace — the placement sees the final
+                // frame/client relationship).
+                m_effect->decorationManager()->releaseOthersOfKind(
+                    snap.windowId, DecorationManager::OwnerKind::Autotile, snap.screenId);
+                m_effect->decorationManager()->acquire(snap.windowId, DecorationManager::autotile(snap.screenId),
+                                                       DecorationManager::Placement::CallerWillPlace);
             }
 
             if (snap.isMonocle) {
