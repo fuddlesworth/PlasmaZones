@@ -4,6 +4,12 @@
 #pragma once
 
 #include <PhosphorServicePipeWire/phosphorservicepipewire_export.h>
+// Full PwNode definition, not a forward declaration: this header's moc
+// registers PwNode* as a metatype (the `node` role / model surface), and
+// QMetaType SFINAE-probes completeness — a fwd decl here makes the probe
+// fail and GCC's -Wsfinae-incomplete fire when moc_PwNode.cpp later defines
+// the class in the same mocs_compilation TU.
+#include <PhosphorServicePipeWire/PwNode.h>
 
 #include <QAbstractListModel>
 #include <QHash>
@@ -15,7 +21,6 @@
 namespace PhosphorServicePipeWire {
 
 class PipeWireConnection;
-class PwNode;
 
 /// Filtered view over a `PipeWireConnection`'s registry-surfaced
 /// nodes, exposed as a QAbstractListModel for direct QML binding.

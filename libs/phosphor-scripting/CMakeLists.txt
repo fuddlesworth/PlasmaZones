@@ -106,7 +106,20 @@ else()
                 set_target_properties(${_luau_tgt} PROPERTIES
                     POSITION_INDEPENDENT_CODE ON
                     UNITY_BUILD OFF)
-                target_compile_options(${_luau_tgt} PRIVATE -fexceptions)
+                # -w: the vendored sources inherit the project's warning set
+                # (KDECompilerSettings' -Wall/-Wextra/-Wpedantic) and drown a
+                # clean build in thousands of third-party diagnostics
+                # (computed gotos, non-virtual dtors, ...). They are not ours
+                # to fix — silence them on the vendored targets only.
+                target_compile_options(${_luau_tgt} PRIVATE -fexceptions -w)
+                # Treat Luau's interface headers as SYSTEM for consumers so
+                # including lua.h / DenseHash.h from our TUs doesn't surface
+                # third-party header warnings there either. (The SYSTEM
+                # target property needs CMake >= 3.25; on older CMake it is
+                # silently ignored and only the in-target -w applies.)
+                if(CMAKE_VERSION VERSION_GREATER_EQUAL "3.25")
+                    set_target_properties(${_luau_tgt} PROPERTIES SYSTEM ON)
+                endif()
             endif()
         endforeach()
     endif()

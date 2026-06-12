@@ -4,6 +4,12 @@
 #pragma once
 
 #include <PhosphorServicePipeWire/phosphorservicepipewire_export.h>
+// Full PwNode definition, not a forward declaration: the nodeAdded/
+// nodeRemoved signals carry PwNode*, and Qt6 moc auto-registers signal
+// parameter metatypes — QMetaType SFINAE-probes completeness, so a fwd decl
+// here makes the probe fail and GCC's -Wsfinae-incomplete fire when
+// moc_PwNode.cpp later defines the class in the same mocs_compilation TU.
+#include <PhosphorServicePipeWire/PwNode.h>
 
 #include <QList>
 #include <QObject>
@@ -12,8 +18,6 @@
 #include <memory>
 
 namespace PhosphorServicePipeWire {
-
-class PwNode;
 
 /// Owns the PipeWire main loop on a dedicated `QThread` and exposes
 /// connection state to the GUI thread via Q_PROPERTY-backed signals.
