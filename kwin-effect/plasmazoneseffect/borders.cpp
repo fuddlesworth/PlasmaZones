@@ -215,6 +215,14 @@ void PlasmaZonesEffect::updateAllBorders()
             continue;
         }
         const QString wid = getWindowId(w);
+        // Self-heal compositor-initiated noBorder resets: KWin silently
+        // re-decorates off-desktop windows on desktop switches. resyncWindow
+        // is a self-guarding no-op unless the manager owns the window,
+        // believes it hidden, and the compositor reports the decoration
+        // back — so running it for every window here is cheap and covers
+        // ALL owner kinds (autotile, snap, rule) on every desktop return,
+        // activation, and border refresh.
+        m_decorationManager->resyncWindow(wid);
         // Border overlays are visual, so only build them for windows on the
         // current desktop. Title-bar hiding (setNoBorder) is a persistent
         // decoration-state change that survives desktop switches, so reconcile

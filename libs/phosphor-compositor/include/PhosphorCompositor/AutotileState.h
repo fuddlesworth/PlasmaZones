@@ -52,30 +52,6 @@ struct BorderState
 namespace AutotileStateHelpers {
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// Saved geometry helpers (pure QHash operations)
-// ═══════════════════════════════════════════════════════════════════════════════
-
-/**
- * @brief Find key in saved geometries map for a window (exact match only)
- */
-inline QString findSavedGeometryKey(const QHash<QString, QRectF>& savedGeometries, const QString& windowId)
-{
-    auto it = savedGeometries.constFind(windowId);
-    if (it != savedGeometries.constEnd()) {
-        return it.key();
-    }
-    return QString();
-}
-
-/**
- * @brief Check if we already have saved geometry for this window
- */
-inline bool hasSavedGeometryForWindow(const QHash<QString, QRectF>& savedGeometries, const QString& windowId)
-{
-    return !findSavedGeometryKey(savedGeometries, windowId).isEmpty();
-}
-
-// ═══════════════════════════════════════════════════════════════════════════════
 // Border state accessors (pure data queries)
 // ═══════════════════════════════════════════════════════════════════════════════
 

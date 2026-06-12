@@ -47,9 +47,8 @@ void SnapHandler::markWindowSnapped(const QString& windowId, const QString& scre
         return;
     }
     // A window can only be snap-managed by one screen at a time. Strip stale
-    // tracking from any OTHER screen — both the tiled and borderless buckets —
-    // before recording the new owner (mirrors the autotile cross-screen-transfer
-    // cleanup in tiling.cpp).
+    // tiled tracking from any OTHER screen before recording the new owner
+    // (mirrors the autotile cross-screen-transfer cleanup in tiling.cpp).
     const auto stripOtherScreens = [&](QHash<QString, QSet<QString>>& byScreen) {
         for (auto it = byScreen.begin(); it != byScreen.end();) {
             if (it.key() != screenId) {
@@ -65,20 +64,28 @@ void SnapHandler::markWindowSnapped(const QString& windowId, const QString& scre
     stripOtherScreens(m_border.tiledWindowsByScreen);
     AutotileStateHelpers::addTiledOnScreen(m_border, screenId, windowId);
 
-    // Decoration ownership: move any stale snap claim from other screens
-    // (no physical flap), then acquire on this screen. The manager owns the
-    // capability gate (userCanSetNoBorder — survives the already-borderless
-    // autotile→snap handoff, skips CSD windows), the prior-state capture,
-    // and the AlreadyPlaced sequence (capture moveResizeGeometry →
-    // setNoBorder → re-assert) that keeps the window filling its zone across
-    // the decoration change.
-    m_effect->decorationManager()->releaseOthersOfKind(windowId, DecorationManager::OwnerKind::Snap, screenId);
-    if (m_border.hideTitleBars) {
+    KWin::EffectWindow* w = m_effect->findWindowById(windowId);
+    // Decoration ownership. The manager owns the capability gate
+    // (userCanSetNoBorder — survives the already-borderless autotile→snap
+    // handoff, skips CSD windows), the prior-state capture, and the
+    // AlreadyPlaced sequence (capture moveResizeGeometry → setNoBorder →
+    // re-assert) that keeps the window filling its zone across the
+    // decoration change.
+    if (m_border.hideTitleBars && w) {
+        // Move any stale snap claim from another screen (no physical flap),
+        // then acquire on this one. Gated on a live window so a close-mid-
+        // snap doesn't recreate a manager entry forgetWindow just dropped.
+        m_effect->decorationManager()->releaseOthersOfKind(windowId, DecorationManager::OwnerKind::Snap, screenId);
         m_effect->decorationManager()->acquire(windowId, DecorationManager::snap(screenId),
                                                DecorationManager::Placement::AlreadyPlaced);
+    } else {
+        // Hide-title-bars off (or window gone): no acquire follows, so a
+        // bare cross-screen owner strip could orphan a hidden entry —
+        // release the whole kind instead (restores if a stale claim somehow
+        // exists, no-op otherwise).
+        m_effect->decorationManager()->releaseKind(windowId, DecorationManager::OwnerKind::Snap);
     }
 
-    KWin::EffectWindow* w = m_effect->findWindowById(windowId);
     // A null w means the window is gone (closed mid-snap); the tiled entry
     // recorded above is then harmless — if the window later closes, slotWindowClosed
     // clears the snap border for it. No border is drawn (nothing to draw on) and none
@@ -121,7 +128,12 @@ void SnapHandler::updateSnapHideTitleBars(bool hide)
     } else {
         // Release every snap ownership; the manager restores each title bar
         // no other owner (autotile mid-transition, rule hide) still claims.
-        m_effect->decorationManager()->releaseAllOfKind(DecorationManager::OwnerKind::Snap);
+        // Deferred + an immediate drain: each restore is a 30-120 ms
+        // synchronous Wayland round-trip, so the drain runs them one per
+        // event-loop tick instead of stalling the compositor for the batch.
+        m_effect->decorationManager()->releaseAllOfKind(DecorationManager::OwnerKind::Snap,
+                                                        DecorationManager::Restore::Deferred);
+        m_effect->decorationManager()->drainPendingRestores();
     }
     m_effect->updateAllBorders();
 }
@@ -133,11 +145,6 @@ void SnapHandler::clearSnapTracking()
     // DecorationManager::restoreAll(). Callers also pair it with
     // clearAllBorders() to tear down the OutlinedBorderItem scene items.
     m_border.tiledWindowsByScreen.clear();
-}
-
-bool SnapHandler::isBorderlessWindow(const QString& windowId) const
-{
-    return m_effect->decorationManager()->hasOwnerOfKind(windowId, DecorationManager::OwnerKind::Snap);
 }
 
 void SnapHandler::onWindowClosed(const QString& windowId)

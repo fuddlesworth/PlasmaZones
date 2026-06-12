@@ -44,11 +44,13 @@ struct CachedSnapRestore
 /**
  * @brief Handles snapping integration for PlasmaZones.
  *
- * The snap-mode counterpart to AutotileHandler. Owns the snap-side managed-
- * window border state (m_border, parallel to AutotileHandler::m_border) and the
- * title-bar / border lifecycle for snap-committed windows. Delegates window
- * lookups, border rendering, and cross-mode borderless queries back to the
- * effect through the m_effect back-pointer.
+ * The snap-mode counterpart to AutotileHandler. Owns the snap-side border
+ * APPEARANCE state and tiled tracking (m_border, parallel to
+ * AutotileHandler::m_border) for snap-committed windows. Title-bar
+ * (borderless) state is owned by the effect's DecorationManager — this
+ * handler only acquires/releases its per-screen Snap ownership there.
+ * Delegates window lookups and border rendering back to the effect through
+ * the m_effect back-pointer.
  *
  * Built on the shared PhosphorCompositor BorderState + AutotileStateHelpers so
  * snap and autotile share one standardized border mechanism. The effect's
@@ -160,10 +162,6 @@ public:
     }
 
     // ── Border rendering accessors — delegate to shared AutotileStateHelpers ──
-    /// True while snap holds a DecorationManager owner for this window (its
-    /// title bar is snap-managed). Implemented in snaphandler.cpp — it
-    /// consults the effect's DecorationManager.
-    bool isBorderlessWindow(const QString& windowId) const;
     bool isTiledWindow(const QString& windowId) const
     {
         return AutotileStateHelpers::isTiledWindow(m_border, windowId);

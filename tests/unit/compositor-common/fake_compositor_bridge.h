@@ -18,6 +18,14 @@
  * stable pointer to the record. Every mutating call is appended to an
  * ordered call log so tests can assert exact call sequences (e.g.
  * "setNoBorder before moveResize with the pre-captured target").
+ *
+ * Known fidelity divergences from the real KWinCompositorBridge — bug
+ * classes that live in these gaps are NOT covered by this fake:
+ *  - findWindowById is exact-match only. The real effect lookup falls back
+ *    to a fuzzy appId match (cross-session restore) that can resolve a
+ *    SIBLING window of the same app, or null when ambiguous.
+ *  - moveResize applies the frame immediately. Real Wayland clients ack the
+ *    configure asynchronously, so frameGeometry() lags moveResizeGeometry().
  */
 class FakeCompositorBridge : public PhosphorCompositor::ICompositorBridge
 {

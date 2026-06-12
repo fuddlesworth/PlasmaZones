@@ -351,11 +351,10 @@ void AutotileHandler::handleWindowOutputChanged(KWin::EffectWindow* w)
     // onWindowClosed removes m_preAutotileGeometries AND m_savedPreAutotileForDesktopMove,
     // so we must hold onto the geometry locally.
     QRectF savedPreAutotileGeo;
-    if (oldIsAutotile && m_preAutotileGeometries.contains(oldScreenId)) {
-        const auto& screenGeometries = m_preAutotileGeometries[oldScreenId];
-        const QString savedKey = AutotileStateHelpers::findSavedGeometryKey(screenGeometries, windowId);
-        if (!savedKey.isEmpty()) {
-            savedPreAutotileGeo = screenGeometries.value(savedKey);
+    if (oldIsAutotile) {
+        const auto screenIt = m_preAutotileGeometries.constFind(oldScreenId);
+        if (screenIt != m_preAutotileGeometries.constEnd()) {
+            savedPreAutotileGeo = screenIt->value(windowId);
         }
     }
 
@@ -549,9 +548,8 @@ void AutotileHandler::handleDragToFloat(KWin::EffectWindow* w, const QString& wi
     if (w) {
         auto screenIt = m_preAutotileGeometries.constFind(screenId);
         if (screenIt != m_preAutotileGeometries.constEnd()) {
-            const QString geoKey = AutotileStateHelpers::findSavedGeometryKey(screenIt.value(), windowId);
-            if (!geoKey.isEmpty()) {
-                const QRectF savedGeo = screenIt.value().value(geoKey);
+            if (screenIt->contains(windowId)) {
+                const QRectF savedGeo = screenIt->value(windowId);
                 if (savedGeo.isValid()) {
                     const int savedW = qRound(savedGeo.width());
                     const int savedH = qRound(savedGeo.height());

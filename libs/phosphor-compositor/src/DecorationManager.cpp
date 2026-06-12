@@ -20,11 +20,10 @@ namespace {
 constexpr int FallbackDrainMs = 500;
 } // namespace
 
-DecorationManager::DecorationManager(ICompositorBridge* bridge, QObject* parent)
+DecorationManager::DecorationManager(ICompositorBridge& bridge, QObject* parent)
     : QObject(parent)
     , m_bridge(bridge)
 {
-    Q_ASSERT(m_bridge);
 }
 
 DecorationManager::~DecorationManager() = default;
@@ -45,6 +44,16 @@ void DecorationManager::acquire(const QString& windowId, const Owner& owner, Pla
     if (entry.pendingRestore) {
         entry.pendingRestore = false;
         m_pendingRestore.remove(windowId);
+    }
+    if (entry.owners.isEmpty() && !entry.physicallyHidden) {
+        // Re-acquired from an ownerless, un-hidden state (veto-only or
+        // intent-only entry): the capability/prior-state snapshot may be
+        // stale — KWin rules can change, the user can toggle their own
+        // noBorder while we hold no claim — so refresh it for this
+        // ownership epoch. While continuously owned (or still physically
+        // hidden awaiting a deferred restore) the captured priorNoBorder
+        // must persist, so the latch holds in those states.
+        entry.evaluated = false;
     }
     if (!entry.owners.contains(owner)) {
         entry.owners.append(owner);
@@ -106,23 +115,6 @@ void DecorationManager::releaseAllOfKind(OwnerKind kind, Restore restore)
     }
 }
 
-void DecorationManager::releaseScreen(OwnerKind kind, const QString& screenId, Restore restore)
-{
-    const QStringList ids = m_windows.keys();
-    for (const QString& windowId : ids) {
-        auto it = m_windows.find(windowId);
-        if (it == m_windows.end()) {
-            continue;
-        }
-        const auto removed = it->owners.removeIf([kind, &screenId](const Owner& o) {
-            return o.kind == kind && o.screenId == screenId;
-        });
-        if (removed > 0) {
-            finishRelease(windowId, *it, restore);
-        }
-    }
-}
-
 void DecorationManager::restoreAll()
 {
     if (m_pendingFallback) {
@@ -131,17 +123,26 @@ void DecorationManager::restoreAll()
         m_pendingFallback = nullptr;
     }
     m_pendingRestore.clear();
-    // Teardown restores synchronously: the daemon/effect is going away and
-    // there is no later tick to defer to.
-    for (auto it = m_windows.begin(); it != m_windows.end(); ++it) {
+    // Snapshot the ids needing a physical restore and clear ALL tracking
+    // before touching the compositor: setNoBorder and the restored signal
+    // can synchronously re-enter the manager, and emitting while iterating
+    // m_windows would run on invalidated iterators.
+    QVector<QString> toRestore;
+    toRestore.reserve(m_windows.size());
+    for (auto it = m_windows.constBegin(); it != m_windows.constEnd(); ++it) {
         if (it->physicallyHidden && !it->priorNoBorder) {
-            if (WindowHandle w = m_bridge->findWindowById(it.key())) {
-                m_bridge->setNoBorder(w, false);
-                Q_EMIT windowDecorationRestored(it.key());
-            }
+            toRestore.append(it.key());
         }
     }
     m_windows.clear();
+    // Teardown restores synchronously: the daemon/effect is going away and
+    // there is no later tick to defer to.
+    for (const QString& windowId : std::as_const(toRestore)) {
+        if (WindowHandle w = m_bridge.findWindowById(windowId)) {
+            m_bridge.setNoBorder(w, false);
+            Q_EMIT windowDecorationRestored(windowId);
+        }
+    }
 }
 
 void DecorationManager::forgetWindow(const QString& windowId)
@@ -220,13 +221,16 @@ void DecorationManager::clearAllRuleOverrides()
 
 void DecorationManager::drainPendingRestores()
 {
-    if (m_pendingRestore.isEmpty()) {
-        return;
-    }
+    // Cancel the fallback FIRST — even when the queue is already empty
+    // (acquire/setRuleOverride may have emptied it after the timer was
+    // armed), so a stale timer never fires a pointless drain later.
     if (m_pendingFallback) {
         m_pendingFallback->stop();
         m_pendingFallback->deleteLater();
         m_pendingFallback = nullptr;
+    }
+    if (m_pendingRestore.isEmpty()) {
+        return;
     }
     // Snapshot and clear first so re-entrant drains (fallback timer racing a
     // batch-complete callback, or a second mode toggle mid-drain) start a
@@ -242,6 +246,15 @@ void DecorationManager::drainPendingRestores()
     *step = [this, pending, step]() {
         if (pending->isEmpty()) {
             Q_EMIT drainFinished();
+            // Break the shared_ptr self-capture cycle — the heap
+            // std::function holds a shared_ptr to itself and would leak
+            // (with `pending` and the captured context) after every drain.
+            // Resetting here is safe: every invocation after the first
+            // executes a COPY of *step (QTimer::singleShot stores the copy),
+            // and the first invocation can never take this branch because
+            // drainPendingRestores early-returns on an empty queue — so the
+            // running lambda's own captures outlive this reset.
+            *step = nullptr;
             return;
         }
         const QString windowId = pending->takeFirst();
@@ -251,10 +264,13 @@ void DecorationManager::drainPendingRestores()
         if (it != m_windows.end() && it->pendingRestore) {
             if (m_restoreVeto && m_restoreVeto(windowId)) {
                 // Authoritative state says the window should stay hidden
-                // (e.g. its screen re-entered autotile mid-drain). Drop the
-                // pending flag and keep the entry; the imminent re-acquire
-                // owns it from here.
-                it->pendingRestore = false;
+                // (e.g. its screen re-entered autotile mid-drain). Keep the
+                // restore QUEUED instead of dropping it: the expected
+                // re-acquire cancels it, and if that re-acquire never lands
+                // (the retile declined the window) the fallback timer
+                // retries rather than stranding an ownerless hidden window.
+                m_pendingRestore.insert(windowId);
+                armFallbackTimer();
             } else {
                 it->pendingRestore = false;
                 restoreNow(windowId, *it, false);
@@ -285,8 +301,8 @@ void DecorationManager::resyncWindow(const QString& windowId)
     if (!desired || !it->physicallyHidden) {
         return;
     }
-    WindowHandle w = m_bridge->findWindowById(windowId);
-    if (!w || m_bridge->isNoBorder(w)) {
+    WindowHandle w = m_bridge.findWindowById(windowId);
+    if (!w || m_bridge.isNoBorder(w)) {
         return; // gone, or still suppressed — nothing drifted
     }
     qCDebug(lcDecoration) << "resync: compositor reset noBorder under" << windowId << "— re-hiding";
@@ -341,16 +357,18 @@ void DecorationManager::reconcile(const QString& windowId, Entry& entry, Placeme
     const bool desired = !entry.vetoed && !entry.owners.isEmpty();
 
     if (desired && !entry.physicallyHidden) {
-        WindowHandle w = m_bridge->findWindowById(windowId);
+        WindowHandle w = m_bridge.findWindowById(windowId);
         if (!w) {
             // Intent recorded; the window is gone or not yet resolvable.
-            // A later acquire/resync retries while ownership persists.
+            // A later acquire retries while ownership persists (resyncWindow
+            // deliberately does not — it only re-asserts hides that already
+            // happened physically).
             return;
         }
         if (!entry.evaluated) {
             entry.evaluated = true;
-            entry.eligible = m_bridge->userCanSetNoBorder(w);
-            entry.priorNoBorder = m_bridge->isNoBorder(w);
+            entry.eligible = m_bridge.userCanSetNoBorder(w);
+            entry.priorNoBorder = m_bridge.isNoBorder(w);
         }
         if (!entry.eligible) {
             // CSD (GTK/Electron) / override-redirect / rule-forced
@@ -363,8 +381,13 @@ void DecorationManager::reconcile(const QString& windowId, Entry& entry, Placeme
             // must return to borderless — i.e. also nothing.
             return;
         }
-        hideNow(w, placement);
+        // Mark state BEFORE the physical toggle: the bridge calls inside
+        // hideNow can synchronously re-enter the manager (KWin emits
+        // geometry/decoration signals whose handlers acquire/release), and
+        // a re-entrant insert may rehash m_windows and invalidate `entry`.
+        // Nothing may touch `entry` after hideNow.
         entry.physicallyHidden = true;
+        hideNow(w, placement);
         qCDebug(lcDecoration) << "hid decoration for" << windowId;
         return;
     }
@@ -407,16 +430,22 @@ void DecorationManager::hideNow(WindowHandle w, Placement placement)
         // content to fill the zone. moveResizeGeometry() — not
         // frameGeometry(), which lags on Wayland until the configure ack —
         // is the rect the compositor is already moving toward.
-        const QRectF target = m_bridge->moveResizeGeometry(w);
-        m_bridge->setNoBorder(w, true);
+        const QRectF target = m_bridge.moveResizeGeometry(w);
+        m_bridge.setNoBorder(w, true);
         if (target.isValid() && !target.isEmpty()) {
-            m_bridge->moveResize(w, target);
+            m_bridge.moveResize(w, target);
+        } else {
+            // No valid target to re-assert: the frame will shrink by the
+            // title-bar height until the next placement. Loud because a
+            // degenerate move-resize geometry on a placed window is
+            // unexpected — surface it rather than under-fill silently.
+            qCWarning(lcDecoration) << "hide: no valid move-resize target to re-assert for" << m_bridge.windowId(w);
         }
     } else {
         // CallerWillPlace: the caller applies the zone geometry immediately
         // after; toggling first means that placement already sees the final
         // frame/client relationship.
-        m_bridge->setNoBorder(w, true);
+        m_bridge.setNoBorder(w, true);
     }
 }
 
@@ -426,18 +455,18 @@ void DecorationManager::restoreNow(const QString& windowId, Entry& entry, bool r
     if (entry.priorNoBorder) {
         return; // defensive: we never hid such a window physically
     }
-    WindowHandle w = m_bridge->findWindowById(windowId);
+    WindowHandle w = m_bridge.findWindowById(windowId);
     if (!w) {
         return; // window gone — decoration died with it
     }
     if (reassertGeometry) {
-        const QRectF target = m_bridge->moveResizeGeometry(w);
-        m_bridge->setNoBorder(w, false);
+        const QRectF target = m_bridge.moveResizeGeometry(w);
+        m_bridge.setNoBorder(w, false);
         if (target.isValid() && !target.isEmpty()) {
-            m_bridge->moveResize(w, target);
+            m_bridge.moveResize(w, target);
         }
     } else {
-        m_bridge->setNoBorder(w, false);
+        m_bridge.setNoBorder(w, false);
     }
     qCDebug(lcDecoration) << "restored decoration for" << windowId;
     Q_EMIT windowDecorationRestored(windowId);

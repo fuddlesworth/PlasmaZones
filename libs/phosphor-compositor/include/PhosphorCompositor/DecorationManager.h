@@ -104,7 +104,10 @@ public:
         Deferred, ///< queue for drainPendingRestores() / the fallback timer
     };
 
-    explicit DecorationManager(ICompositorBridge* bridge, QObject* parent = nullptr);
+    /// @p bridge must outlive the manager (the KWin effect owns both, with
+    /// the bridge destroyed after the manager). Taken by reference so a null
+    /// bridge is unrepresentable — no runtime guard needed on any call path.
+    explicit DecorationManager(ICompositorBridge& bridge, QObject* parent = nullptr);
     ~DecorationManager() override;
 
     // ── Ownership ──────────────────────────────────────────────────────
@@ -120,9 +123,11 @@ public:
 
     // ── Bulk operations ────────────────────────────────────────────────
     /// Per-mode hide-title-bars toggle OFF / whole-mode teardown.
+    /// NOTE: there is deliberately no per-screen bulk release. Owners are
+    /// per-screen but NOT per-desktop, and the mode-toggle path must apply
+    /// desktop policy (sticky-window guards, current-desktop filters) per
+    /// window before releasing — see AutotileHandler::slotScreensChanged.
     void releaseAllOfKind(OwnerKind kind, Restore restore = Restore::Immediate);
-    /// Mode disabled on one screen (e.g. autotile→snap toggle on screen X).
-    void releaseScreen(OwnerKind kind, const QString& screenId, Restore restore);
     /// Daemon loss / effect teardown: synchronously restore every window we
     /// hid to its prior state, then drop all tracking and timers.
     void restoreAll();
@@ -148,8 +153,11 @@ public:
     void drainPendingRestores();
     /// Extra authoritative re-check evaluated per window at drain-step time
     /// (in addition to the built-in "window has owners again" check).
-    /// Returning true skips the restore and leaves the decoration hidden.
-    /// The KWin effect installs "is this window's screen autotiled now?".
+    /// Returning true keeps the restore QUEUED (re-armed via the fallback
+    /// timer) so a re-acquire that never lands still restores eventually —
+    /// it must therefore only return true while a re-acquire is genuinely
+    /// expected. The KWin effect installs "window's screen is autotiled,
+    /// hide-title-bars is on, and the window is not floating".
     void setRestoreVeto(std::function<bool(const QString& windowId)> veto);
 
     // ── External-reset resync ──────────────────────────────────────────
@@ -159,6 +167,10 @@ public:
     void resyncWindow(const QString& windowId);
 
     // ── Queries ────────────────────────────────────────────────────────
+    // The state-observation surface: hasOwnerOfKind is what the effect's
+    // mode handlers consume; the rest exist so the behavioral test spec
+    // (and future render-layer integration) can assert manager state
+    // without reaching into internals.
     /// True when we physically suppressed the window's decoration.
     bool isBorderless(const QString& windowId) const;
     bool isOwned(const QString& windowId) const;
@@ -203,7 +215,7 @@ private:
     QSet<QString> m_pendingRestore;
     QPointer<QTimer> m_pendingFallback;
     std::function<bool(const QString&)> m_restoreVeto;
-    ICompositorBridge* m_bridge;
+    ICompositorBridge& m_bridge;
 };
 
 } // namespace PhosphorCompositor

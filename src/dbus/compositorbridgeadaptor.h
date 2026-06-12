@@ -75,7 +75,8 @@ public Q_SLOTS:
      * @return PhosphorProtocol::BridgeRegistrationResult struct: {apiVersion, bridgeName, sessionId}
      *
      * Capabilities:
-     *   "borderless"  — bridge supports setWindowBorderless
+     *   "borderless"  — bridge manages window decorations (title-bar hiding
+     *                   via its compositor-local DecorationManager)
      *   "maximize"    — bridge supports maximizeWindow
      *   "animation"   — bridge supports skipAnimation flag
      *   "borders"     — bridge supports native window border rendering
@@ -120,13 +121,6 @@ Q_SIGNALS:
     // ═══════════════════════════════════════════════════════════════════════════
     // Window decoration commands (daemon → compositor)
     // ═══════════════════════════════════════════════════════════════════════════
-
-    /**
-     * @brief Set window borderless state
-     * @param windowId Window to modify
-     * @param borderless True to hide title bar, false to show
-     */
-    void setWindowBorderless(const QString& windowId, bool borderless);
 
     /**
      * @brief Maximize or restore a window

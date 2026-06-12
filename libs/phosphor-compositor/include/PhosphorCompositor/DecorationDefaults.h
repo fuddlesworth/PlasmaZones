@@ -30,5 +30,12 @@ inline constexpr int BorderRadius = 8;
 inline constexpr int BorderRadiusMin = 0;
 inline constexpr int BorderRadiusMax = 20;
 
+// A retuned default outside its own declared slider range would clamp
+// differently on every consumer — make that a compile error instead.
+static_assert(BorderWidth >= BorderWidthMin && BorderWidth <= BorderWidthMax,
+              "BorderWidth default must lie within its declared bounds");
+static_assert(BorderRadius >= BorderRadiusMin && BorderRadius <= BorderRadiusMax,
+              "BorderRadius default must lie within its declared bounds");
+
 } // namespace DecorationDefaults
 } // namespace PhosphorCompositor

@@ -116,14 +116,10 @@ void AutotileHandler::slotWindowsTileRequested(const PhosphorProtocol::TileReque
             KWin::EffectWindow* floatWin = m_effect->findWindowById(windowId);
             if (floatWin && !screenId.isEmpty()) {
                 auto screenIt = m_preAutotileGeometries.constFind(screenId);
-                if (screenIt != m_preAutotileGeometries.constEnd()) {
-                    const QString geoKey = AutotileStateHelpers::findSavedGeometryKey(screenIt.value(), windowId);
-                    if (!geoKey.isEmpty()) {
-                        const QRectF& savedGeo = screenIt.value().value(geoKey);
-                        m_effect->applySnapGeometry(floatWin, savedGeo.toRect());
-                        qCInfo(lcEffect) << "Restored pre-autotile geometry for overflow" << windowId
-                                         << savedGeo.toRect();
-                    }
+                if (screenIt != m_preAutotileGeometries.constEnd() && screenIt->contains(windowId)) {
+                    const QRectF savedGeo = screenIt->value(windowId);
+                    m_effect->applySnapGeometry(floatWin, savedGeo.toRect());
+                    qCInfo(lcEffect) << "Restored pre-autotile geometry for overflow" << windowId << savedGeo.toRect();
                 }
             }
             continue;

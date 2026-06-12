@@ -63,12 +63,6 @@
             <arg name="windowIds" type="as"/>
         </signal>
 
-        <!-- Decoration commands (daemon → compositor) -->
-        <signal name="setWindowBorderless">
-            <annotation name="org.gtk.GDBus.DocString" value="Set window borderless state (hide/show title bar)."/>
-            <arg name="windowId" type="s"/>
-            <arg name="borderless" type="b"/>
-        </signal>
         <signal name="maximizeWindow">
             <annotation name="org.gtk.GDBus.DocString" value="Maximize or restore a window."/>
             <arg name="windowId" type="s"/>

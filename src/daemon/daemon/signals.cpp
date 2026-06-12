@@ -936,10 +936,10 @@ void Daemon::syncAutotileFloatState(const QString& windowId, bool floating, cons
 
     // Restore geometry: applyGeometryForFloat prefers pre-snap (the window's
     // original position before any zone snapping) over pre-autotile (autotile tiling).
-    // Pre-autotile persists across float/unfloat cycles (the hasSavedGeometryForWindow
-    // guard in the effect prevents overwriting), so every float restores to the same
-    // original position. The effect does NOT apply geometry on float — the daemon is
-    // the single source.
+    // Pre-autotile persists across float/unfloat cycles (the effect's exact-match
+    // contains-guard in saveAndRecordPreAutotileGeometry prevents overwriting), so
+    // every float restores to the same original position. The effect does NOT apply
+    // geometry on float — the daemon is the single source.
     if (floating && m_windowTrackingAdaptor) {
         m_windowTrackingAdaptor->applyGeometryForFloat(windowId, screenId);
     }

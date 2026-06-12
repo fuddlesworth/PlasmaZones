@@ -32,7 +32,10 @@ class PlasmaZonesEffect;
  * @brief Handles autotile integration for PlasmaZones
  *
  * Manages the autotile D-Bus interface, screen tracking, window tiling,
- * monocle mode, borderless state, and pre-autotile geometry preservation.
+ * monocle mode, tiled-tracking for border rendering, and pre-autotile
+ * geometry preservation. Title-bar (borderless) state is owned by the
+ * effect's DecorationManager — this handler only acquires/releases its
+ * per-screen Autotile ownership there.
  *
  * Delegates window lookups, geometry application, and animation back to the effect.
  */
@@ -153,10 +156,6 @@ public:
     }
 
     // Border rendering accessors — delegate to shared AutotileStateHelpers
-    /// True while autotile holds a DecorationManager owner for this window
-    /// (its title bar is autotile-managed). Implemented in autotilehandler.cpp
-    /// — it consults the effect's DecorationManager.
-    bool isBorderlessWindow(const QString& windowId) const;
     bool isTiledWindow(const QString& windowId) const
     {
         return AutotileStateHelpers::isTiledWindow(m_border, windowId);
@@ -220,12 +219,6 @@ public:
      */
     bool transferPreAutotileGeometry(const QString& windowId, const QString& fromScreenId, const QString& toScreenId);
 
-    // Invalidate pending stagger timers (call before triggering retile)
-    void invalidateStaggerGeneration()
-    {
-        ++m_autotileStaggerGeneration;
-    }
-
     /**
      * @brief Take the saved global stacking order snapshot (move semantics).
      *
@@ -262,17 +255,13 @@ private:
 
     void unmaximizeMonocleWindow(const QString& windowId);
 
-    /// Release autotile's DecorationManager ownership of a window (the
-    /// manager restores the title bar if no other owner remains) and drop it
-    /// from autotile's tiled tracking. Used by the desktop-switch Pass 2
-    /// restore in slotScreensChanged.
-    void restoreWindowBorders(KWin::EffectWindow* w, const QString& windowId);
-
     /**
      * @brief Shared float-state cleanup for a window being floated
      *
-     * Updates float cache, removes from tiled/borderless sets, restores title bars,
-     * removes border, and unmaximizes monocle. Used by both slotWindowFloatingChanged
+     * Updates the float cache, releases autotile's DecorationManager
+     * ownership (the manager restores the title bar unless another owner
+     * remains), clears tiled tracking, removes the border overlay, and
+     * unmaximizes monocle. Used by both slotWindowFloatingChanged
      * (per-window D-Bus signal path) and slotWindowsTileRequested (batch float path).
      */
     void applyFloatCleanup(const QString& windowId);

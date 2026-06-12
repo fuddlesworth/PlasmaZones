@@ -12,11 +12,6 @@
 #include <window.h>
 
 #include <QLoggingCategory>
-#include <QStringList>
-#include <QTimer>
-
-#include <functional>
-#include <memory>
 
 namespace PlasmaZones {
 
@@ -26,21 +21,17 @@ bool AutotileHandler::transferPreAutotileGeometry(const QString& windowId, const
                                                   const QString& toScreenId)
 {
     auto fromIt = m_preAutotileGeometries.find(fromScreenId);
-    if (fromIt == m_preAutotileGeometries.end()) {
+    if (fromIt == m_preAutotileGeometries.end() || !fromIt->contains(windowId)) {
         return false;
     }
-    const QString savedKey = AutotileStateHelpers::findSavedGeometryKey(fromIt.value(), windowId);
-    if (savedKey.isEmpty()) {
-        return false;
-    }
-    QRectF geo = fromIt->take(savedKey);
+    QRectF geo = fromIt->take(windowId);
     if (fromIt->isEmpty()) {
         m_preAutotileGeometries.erase(fromIt);
     }
     if (!geo.isValid()) {
         return false;
     }
-    m_preAutotileGeometries[toScreenId][savedKey] = geo;
+    m_preAutotileGeometries[toScreenId][windowId] = geo;
     return true;
 }
 
@@ -101,8 +92,13 @@ bool AutotileHandler::updateHideTitleBarsSetting(bool enabled)
     m_border.hideTitleBars = enabled;
     if (!enabled) {
         // Turning OFF — release every autotile ownership; the manager
-        // restores each title bar no other owner still claims.
-        m_effect->decorationManager()->releaseAllOfKind(DecorationManager::OwnerKind::Autotile);
+        // restores each title bar no other owner still claims. Deferred +
+        // an immediate drain: each restore is a 30-120 ms synchronous
+        // Wayland round-trip, so the drain runs them one per event-loop
+        // tick instead of stalling the compositor for the whole batch.
+        m_effect->decorationManager()->releaseAllOfKind(DecorationManager::OwnerKind::Autotile,
+                                                        DecorationManager::Restore::Deferred);
+        m_effect->decorationManager()->drainPendingRestores();
     } else {
         // Turning ON — hide title bars for all currently tiled windows. The
         // windows are already placed in their zones, so the AlreadyPlaced
@@ -141,12 +137,12 @@ bool AutotileHandler::saveAndRecordPreAutotileGeometry(const QString& windowId, 
     if (!frame.isValid() || frame.width() <= 0 || frame.height() <= 0) {
         return false;
     }
-    // Use EXACT windowId match only — NOT stableId fallback.
-    // Multiple instances of the same app (e.g., 3 Dolphin windows) share a stableId.
-    // hasSavedGeometryForWindow's stableId fallback would return true after the first
-    // instance is saved, preventing all other instances from saving their own geometry.
-    // On restore, all instances would get the first instance's geometry — scrambling
-    // window positions on every autotile ↔ snapping toggle.
+    // Use EXACT windowId match only — NOT an appId/stableId fallback.
+    // Multiple instances of the same app (e.g., 3 Dolphin windows) share an
+    // appId; a fuzzy contains-check would return true after the first
+    // instance is saved, preventing all other instances from saving their own
+    // geometry. On restore, all instances would get the first instance's
+    // geometry — scrambling window positions on every autotile ↔ snapping toggle.
     //
     // Use a CONST lookup for the contains-check so a guard-bail below never inserts an
     // empty per-screen bucket (operator[] would); the bucket is created only at the
@@ -204,11 +200,6 @@ bool AutotileHandler::saveAndRecordPreAutotileGeometry(const QString& windowId, 
     return true;
 }
 
-bool AutotileHandler::isBorderlessWindow(const QString& windowId) const
-{
-    return m_effect->decorationManager()->hasOwnerOfKind(windowId, DecorationManager::OwnerKind::Autotile);
-}
-
 bool AutotileHandler::isAutotileScreen(const QString& screenId) const
 {
     return m_autotileScreens.contains(screenId);
@@ -223,14 +214,11 @@ void AutotileHandler::savePreAutotileForDesktopMove(const QString& windowId, con
     // Stamped with the source screen so the restore path can detect a
     // cross-screen desktop move and decline to apply a saved rect that
     // belongs to a different monitor's coordinate space.
-    if (m_preAutotileGeometries.contains(screenId)) {
-        const auto& screenGeometries = m_preAutotileGeometries[screenId];
-        const QString savedKey = AutotileStateHelpers::findSavedGeometryKey(screenGeometries, windowId);
-        if (!savedKey.isEmpty()) {
-            m_savedPreAutotileForDesktopMove[windowId] = {screenId, screenGeometries.value(savedKey)};
-            qCDebug(lcEffect) << "Preserved pre-autotile geometry for desktop move:" << windowId << "on" << screenId
-                              << "rect=" << m_savedPreAutotileForDesktopMove[windowId].second;
-        }
+    const auto screenIt = m_preAutotileGeometries.constFind(screenId);
+    if (screenIt != m_preAutotileGeometries.constEnd() && screenIt->contains(windowId)) {
+        m_savedPreAutotileForDesktopMove[windowId] = {screenId, screenIt->value(windowId)};
+        qCDebug(lcEffect) << "Preserved pre-autotile geometry for desktop move:" << windowId << "on" << screenId
+                          << "rect=" << m_savedPreAutotileForDesktopMove[windowId].second;
     }
 }
 

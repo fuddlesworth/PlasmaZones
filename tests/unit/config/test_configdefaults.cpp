@@ -237,6 +237,13 @@ private Q_SLOTS:
         QCOMPARE(ConfigDefaults::autotileBorderWidthMax(), ::PhosphorCompositor::DecorationDefaults::BorderWidthMax);
         QCOMPARE(ConfigDefaults::autotileBorderRadiusMin(), ::PhosphorCompositor::DecorationDefaults::BorderRadiusMin);
         QCOMPARE(ConfigDefaults::autotileBorderRadiusMax(), ::PhosphorCompositor::DecorationDefaults::BorderRadiusMax);
+        // The snapping bounds must track the same shared constants — without
+        // these four they could drift independently while everything above
+        // stays green.
+        QCOMPARE(ConfigDefaults::snappingBorderWidthMin(), ::PhosphorCompositor::DecorationDefaults::BorderWidthMin);
+        QCOMPARE(ConfigDefaults::snappingBorderWidthMax(), ::PhosphorCompositor::DecorationDefaults::BorderWidthMax);
+        QCOMPARE(ConfigDefaults::snappingBorderRadiusMin(), ::PhosphorCompositor::DecorationDefaults::BorderRadiusMin);
+        QCOMPARE(ConfigDefaults::snappingBorderRadiusMax(), ::PhosphorCompositor::DecorationDefaults::BorderRadiusMax);
     }
 };
 

@@ -5,7 +5,7 @@
 
 | | |
 |---|---|
-| **Status** | Implemented (PR #551) |
+| **Status** | Implemented (PR #551). Historical: the title-bar/borderless mechanics described below (`setWindowBorderless`, per-screen `borderlessWindowsByScreen` buckets) were superseded by the DecorationManager owner model in PR #608 |
 | **Branch** | `feature/per-mode-window-appearance` (off `v3.1`) |
 | **Date** | 2026-05-30 |
 

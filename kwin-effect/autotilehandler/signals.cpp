@@ -89,17 +89,6 @@ void AutotileHandler::clearAllPendingMinimizeFloats()
     m_pendingMinimizeFloat.clear();
 }
 
-void AutotileHandler::restoreWindowBorders(KWin::EffectWindow* w, const QString& windowId)
-{
-    Q_UNUSED(w)
-    // Release autotile's decoration ownership on every screen. The manager
-    // restores the title bar only when NO owner remains — a snap takeover
-    // (autotile→snap mode swap) or a rule hide simply leaves their owner in
-    // place, which replaces the old cross-mode "snapKeepsBorderless" guard.
-    m_effect->decorationManager()->releaseKind(windowId, DecorationManager::OwnerKind::Autotile);
-    AutotileStateHelpers::removeFromAllScreens(m_border, windowId);
-}
-
 void AutotileHandler::slotScreensChanged(const QStringList& screenIds, bool isDesktopSwitch)
 {
     // Invalidate in-flight stagger timers from prior autotile/restore operations.
@@ -162,7 +151,12 @@ void AutotileHandler::slotScreensChanged(const QStringList& screenIds, bool isDe
                 if (m_notifiedWindows.remove(windowId)) {
                     m_notifiedWindowScreens.remove(windowId);
                 }
-                restoreWindowBorders(w, windowId);
+                // Release autotile's decoration ownership on every screen.
+                // The manager restores the title bar only when NO owner
+                // remains — a snap takeover or a rule hide simply leaves
+                // their owner in place.
+                m_effect->decorationManager()->releaseKind(windowId, DecorationManager::OwnerKind::Autotile);
+                AutotileStateHelpers::removeFromAllScreens(m_border, windowId);
                 unmaximizeMonocleWindow(windowId);
                 // Drop stale zone-centering tracking so a later
                 // frameGeometryChanged does not re-snap the window into an
@@ -179,11 +173,10 @@ void AutotileHandler::slotScreensChanged(const QStringList& screenIds, bool isDe
                 // screen key other than its current one.
                 for (auto sgIt = m_preAutotileGeometries.constBegin(); sgIt != m_preAutotileGeometries.constEnd();
                      ++sgIt) {
-                    const QString geoKey = AutotileStateHelpers::findSavedGeometryKey(sgIt.value(), windowId);
-                    if (geoKey.isEmpty()) {
+                    if (!sgIt->contains(windowId)) {
                         continue;
                     }
-                    const QRectF savedGeo = sgIt.value().value(geoKey);
+                    const QRectF savedGeo = sgIt->value(windowId);
                     if (savedGeo.isValid()) {
                         // applySnapGeometry's moveResize, and the maximize-state
                         // clear below, emit windowFrameGeometryChanged
@@ -252,6 +245,11 @@ void AutotileHandler::slotScreensChanged(const QStringList& screenIds, bool isDe
             // hand-rolled drain handled: a window re-acquired mid-drain (snap
             // takeover or rapid re-toggle back into autotile) keeps its title
             // bar hidden, and a fallback timer drains if no resnap arrives.
+            // Tiled tracking is cleared at stash time (not drain time as the
+            // old code did), so autotile border OVERLAYS drop at the toggle
+            // instant while the title bars restore during the resnap
+            // animation — intentional: windows leaving autotile should not
+            // keep autotile borders through the transition.
             for (const QString& wid : std::as_const(windowsOnRemovedScreens)) {
                 m_effect->decorationManager()->releaseKind(wid, DecorationManager::OwnerKind::Autotile,
                                                            DecorationManager::Restore::Deferred);
@@ -392,35 +390,13 @@ void AutotileHandler::slotScreensChanged(const QStringList& screenIds, bool isDe
                 }
             }
 
-            // Re-assert borderless state for windows returning to an autotile
-            // desktop. The daemon skips retile for desktop return
-            // (tiledWindowCount > 0), so the tile path — which normally
-            // acquires decoration ownership — does NOT fire. KWin may also
-            // silently reset noBorder for windows that were on a non-current
-            // desktop. resyncWindow() re-hides only windows the manager
-            // already owns whose decoration came back, so genuinely new
-            // windows (opened while this desktop was inactive) are untouched
-            // — they get owned when the daemon next retiles.
-            if (m_border.hideTitleBars) {
-                for (const QString& screenId : added) {
-                    for (KWin::EffectWindow* w : windows) {
-                        if (!w || !m_effect->shouldHandleWindow(w) || !w->isOnCurrentDesktop()
-                            || !w->isOnCurrentActivity() || w->isMinimized()) {
-                            continue;
-                        }
-                        if (m_effect->getWindowScreenId(w) != screenId) {
-                            continue;
-                        }
-                        const QString windowId = m_effect->getWindowId(w);
-                        if (m_effect->isWindowFloating(windowId)) {
-                            continue; // Floating windows don't get borderless
-                        }
-                        m_effect->decorationManager()->resyncWindow(windowId);
-                    }
-                }
-            }
-
-            // Refresh active border for the focused window on the returned-to desktop
+            // Refresh active border for the focused window on the returned-to
+            // desktop. This also re-asserts borderless state: KWin silently
+            // resets noBorder for windows on non-current desktops and the
+            // daemon skips the retile on desktop return, but updateAllBorders
+            // runs DecorationManager::resyncWindow for every window — a
+            // self-guarding, owner-kind-agnostic re-hide of exactly the
+            // windows the manager owns whose decoration came back.
             m_effect->updateAllBorders();
         } else {
             // Genuine user toggle — process all added screens as new.
