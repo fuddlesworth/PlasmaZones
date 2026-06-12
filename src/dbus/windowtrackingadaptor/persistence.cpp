@@ -2,7 +2,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 #include "../windowtrackingadaptor.h"
-#include "internal.h"
 #include <PhosphorIdentity/VirtualScreenId.h>
 #include <PhosphorZones/LayoutRegistry.h>
 #include <PhosphorZones/Layout.h>

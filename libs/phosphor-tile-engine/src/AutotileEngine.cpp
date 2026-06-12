@@ -2339,6 +2339,13 @@ void AutotileEngine::revalidateWindowContext(const QString& windowId, const QStr
     }
     m_windowToStateKey[windowId] = newKey;
     migrateWindowBetweenKeys(windowId, oldKey, screenId);
+    // Re-record focus on the DESTINATION state: the original focus event
+    // ran onWindowFocused against the old key, and the migration's
+    // removeWindow just cleared that marker — without this, the window the
+    // user is actively focused on stays unmarked in its owning state until
+    // the next activation (mirrors the pre-deferral ordering, harmless
+    // no-op when nothing relies on it).
+    onWindowFocused(windowId);
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════

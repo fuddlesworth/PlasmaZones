@@ -167,31 +167,39 @@ void DecorationManager::restoreAll()
     // there is no later tick to defer to.
     QPointer<DecorationManager> self(this);
     for (const QString& windowId : std::as_const(toRestore)) {
-        if (auto it = m_windows.find(windowId); it != m_windows.end() && !it->owners.isEmpty()) {
-            // A re-entrant acquire (via the restored-signal handlers of
-            // earlier loop iterations) re-claimed this window mid-teardown:
-            // the new epoch owns its decoration now — leave it hidden. But
-            // TRANSFER the physical hide to the new epoch: the re-entrant
-            // acquire evaluated against the still-borderless window and
-            // latched OUR OLD hide as priorNoBorder, which would make the
-            // new epoch's eventual release a silent no-op (a permanently
-            // stranded title bar — restoreNow bails on priorNoBorder and
-            // nothing else ever calls setNoBorder). Every id in toRestore
-            // was eligible and physically hidden by us at hide time, so the
-            // patch values are correct (if eligibility flipped since, the
-            // release-time setNoBorder(false) self-guards compositor-side —
-            // the safer direction than re-creating the strand).
-            //
-            // OWNERLESS re-entrant entries fall through: the only way to
-            // create one mid-teardown is a force-show veto
-            // (setRuleOverride(false)), whose invariant — pins the
-            // decoration VISIBLE — demands the physical restore below, not
-            // a hide transfer.
-            it->evaluated = true;
-            it->eligible = true;
-            it->priorNoBorder = false;
-            it->physicallyHidden = true;
-            continue;
+        if (auto it = m_windows.find(windowId); it != m_windows.end()) {
+            if (!it->owners.isEmpty() && !it->vetoed) {
+                // A re-entrant acquire (via the restored-signal handlers of
+                // earlier loop iterations) re-claimed this window
+                // mid-teardown: the new epoch owns its decoration now —
+                // leave it hidden. But TRANSFER the physical hide to the
+                // new epoch: the re-entrant acquire evaluated against the
+                // still-borderless window and latched OUR OLD hide as
+                // priorNoBorder, which would make the new epoch's eventual
+                // release a silent no-op (a permanently stranded title bar
+                // — restoreNow bails on priorNoBorder and nothing else ever
+                // calls setNoBorder). Every id in toRestore was eligible
+                // and physically hidden by us at hide time, so the patch
+                // values are correct (if eligibility flipped since, the
+                // release-time setNoBorder(false) self-guards
+                // compositor-side — the safer direction than re-creating
+                // the strand).
+                it->evaluated = true;
+                it->eligible = true;
+                it->priorNoBorder = false;
+                it->physicallyHidden = true;
+                continue;
+            }
+            // VETOED re-entrant entries (with or without owners) fall
+            // through to the physical restore: the force-show invariant —
+            // pins the decoration VISIBLE — wins over any owner. Reset the
+            // stale snapshot the re-entrant acquire may have latched
+            // against our old hide (priorNoBorder=true): once the restore
+            // below decorates the window, a post-veto owner re-assert must
+            // evaluate FRESH and hide it, not mistake it for
+            // user-borderless and no-op (which would also strand the
+            // owner's eventual release).
+            it->evaluated = false;
         }
         if (WindowHandle w = resolveExact(windowId)) {
             m_bridge.setNoBorder(w, false);
