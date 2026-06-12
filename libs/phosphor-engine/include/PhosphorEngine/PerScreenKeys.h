@@ -25,7 +25,6 @@ inline constexpr QLatin1String SmartGaps{"SmartGaps"};
 inline constexpr QLatin1String InsertPosition{"InsertPosition"};
 inline constexpr QLatin1String FocusFollowsMouse{"FocusFollowsMouse"};
 inline constexpr QLatin1String RespectMinimumSize{"RespectMinimumSize"};
-inline constexpr QLatin1String HideTitleBars{"HideTitleBars"};
 inline constexpr QLatin1String AnimationsEnabled{"AnimationsEnabled"};
 inline constexpr QLatin1String AnimationDuration{"AnimationDuration"};
 inline constexpr QLatin1String AnimationEasingCurve{"AnimationEasingCurve"};

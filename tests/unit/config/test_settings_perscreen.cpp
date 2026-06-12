@@ -131,6 +131,26 @@ private Q_SLOTS:
     }
 
     /**
+     * HideTitleBars is NOT a per-screen autotile key: title-bar hiding is a
+     * global mode setting consumed by the effect's DecorationManager, and the
+     * per-screen variant was dead config surface (no UI, no consumer). A
+     * write must be rejected like any unknown key and never round-trip.
+     */
+    void testPerScreenAutotile_hideTitleBarsIsNotAPerScreenKey()
+    {
+        IsolatedConfigGuard guard;
+        Settings settings;
+        const QString screen = QStringLiteral("test-screen-1");
+
+        QSignalSpy spy(&settings, &Settings::perScreenAutotileSettingsChanged);
+        settings.setPerScreenAutotileSetting(screen, QStringLiteral("AutotileHideTitleBars"), true);
+        QCOMPARE(spy.count(), 0);
+        const QVariantMap overrides = settings.getPerScreenAutotileSettings(screen);
+        QVERIFY(!overrides.contains(QStringLiteral("HideTitleBars")));
+        QVERIFY(!overrides.contains(QStringLiteral("AutotileHideTitleBars")));
+    }
+
+    /**
      * Per-screen autotile gaps and algorithm sub-domains are independent: the
      * Gaps card and the Algorithm card share one per-screen map but must report
      * and clear only their own keys, so resetting one never wipes the other.

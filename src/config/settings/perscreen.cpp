@@ -94,27 +94,16 @@ const QLatin1String kPerScreenKeys[] = {
 };
 
 const QLatin1String kPerScreenAutotileKeys[] = {
-    QLatin1String(PerScreenAutotileKey::Algorithm),
-    QLatin1String(PerScreenAutotileKey::SplitRatio),
-    QLatin1String(PerScreenAutotileKey::SplitRatioStep),
-    QLatin1String(PerScreenAutotileKey::MasterCount),
-    QLatin1String(PerScreenAutotileKey::InnerGap),
-    QLatin1String(PerScreenAutotileKey::OuterGap),
-    QLatin1String(PerScreenAutotileKey::UsePerSideOuterGap),
-    QLatin1String(PerScreenAutotileKey::OuterGapTop),
-    QLatin1String(PerScreenAutotileKey::OuterGapBottom),
-    QLatin1String(PerScreenAutotileKey::OuterGapLeft),
-    QLatin1String(PerScreenAutotileKey::OuterGapRight),
-    QLatin1String(PerScreenAutotileKey::FocusNewWindows),
-    QLatin1String(PerScreenAutotileKey::SmartGaps),
-    QLatin1String(PerScreenAutotileKey::MaxWindows),
-    QLatin1String(PerScreenAutotileKey::InsertPosition),
-    QLatin1String(PerScreenAutotileKey::FocusFollowsMouse),
-    QLatin1String(PerScreenAutotileKey::RespectMinimumSize),
-    QLatin1String(PerScreenAutotileKey::HideTitleBars),
-    QLatin1String(PerScreenAutotileKey::AnimationsEnabled),
-    QLatin1String(PerScreenAutotileKey::AnimationDuration),
-    QLatin1String(PerScreenAutotileKey::AnimationEasingCurve),
+    QLatin1String(PerScreenAutotileKey::Algorithm),          QLatin1String(PerScreenAutotileKey::SplitRatio),
+    QLatin1String(PerScreenAutotileKey::SplitRatioStep),     QLatin1String(PerScreenAutotileKey::MasterCount),
+    QLatin1String(PerScreenAutotileKey::InnerGap),           QLatin1String(PerScreenAutotileKey::OuterGap),
+    QLatin1String(PerScreenAutotileKey::UsePerSideOuterGap), QLatin1String(PerScreenAutotileKey::OuterGapTop),
+    QLatin1String(PerScreenAutotileKey::OuterGapBottom),     QLatin1String(PerScreenAutotileKey::OuterGapLeft),
+    QLatin1String(PerScreenAutotileKey::OuterGapRight),      QLatin1String(PerScreenAutotileKey::FocusNewWindows),
+    QLatin1String(PerScreenAutotileKey::SmartGaps),          QLatin1String(PerScreenAutotileKey::MaxWindows),
+    QLatin1String(PerScreenAutotileKey::InsertPosition),     QLatin1String(PerScreenAutotileKey::FocusFollowsMouse),
+    QLatin1String(PerScreenAutotileKey::RespectMinimumSize), QLatin1String(PerScreenAutotileKey::AnimationsEnabled),
+    QLatin1String(PerScreenAutotileKey::AnimationDuration),  QLatin1String(PerScreenAutotileKey::AnimationEasingCurve),
 };
 
 // Gaps sub-domain of the autotile per-screen keys — the keys the Tiling
@@ -214,7 +203,7 @@ QVariant validatePerScreenAutotileValue(const QString& key, const QVariant& valu
         return value.toString().isEmpty() ? QVariant() : value;
     if (k == PerScreenKeys::UsePerSideOuterGap || k == PerScreenKeys::FocusNewWindows || k == PerScreenKeys::SmartGaps
         || k == PerScreenKeys::FocusFollowsMouse || k == PerScreenKeys::RespectMinimumSize
-        || k == PerScreenKeys::HideTitleBars || k == PerScreenKeys::AnimationsEnabled)
+        || k == PerScreenKeys::AnimationsEnabled)
         return QVariant(value.toBool());
     if (k == PerScreenKeys::AnimationDuration)
         return QVariant(
@@ -241,8 +230,6 @@ QVariant readPerScreenAutotileEntry(PhosphorConfig::IGroup& group, const QString
         return QVariant(group.readBool(key, ConfigDefaults::autotileFocusFollowsMouse()));
     if (key == QLatin1String(PerScreenAutotileKey::RespectMinimumSize))
         return QVariant(group.readBool(key, ConfigDefaults::autotileRespectMinimumSize()));
-    if (key == QLatin1String(PerScreenAutotileKey::HideTitleBars))
-        return QVariant(group.readBool(key, ConfigDefaults::autotileHideTitleBars()));
     if (key == QLatin1String(PerScreenAutotileKey::AnimationsEnabled))
         return QVariant(group.readBool(key, ConfigDefaults::animationsEnabled()));
     return QVariant(group.readInt(key, 0));

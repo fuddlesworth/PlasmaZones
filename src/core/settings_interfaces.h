@@ -78,7 +78,6 @@ inline constexpr const char MaxWindows[] = "AutotileMaxWindows";
 inline constexpr const char InsertPosition[] = "AutotileInsertPosition";
 inline constexpr const char FocusFollowsMouse[] = "AutotileFocusFollowsMouse";
 inline constexpr const char RespectMinimumSize[] = "AutotileRespectMinimumSize";
-inline constexpr const char HideTitleBars[] = "AutotileHideTitleBars";
 inline constexpr const char SplitRatioStep[] = "AutotileSplitRatioStep";
 inline constexpr const char AnimationsEnabled[] = "AnimationsEnabled";
 inline constexpr const char AnimationDuration[] = "AnimationDuration";
