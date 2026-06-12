@@ -139,12 +139,16 @@ void AutotileHandler::slotScreensChanged(const QStringList& screenIds, bool isDe
                 if (!removed.contains(screenId)) {
                     continue;
                 }
-                // setNoBorder() is a global KWin property — skip sticky and
-                // multi-desktop windows while other screens still autotile
-                // (mirrors the genuine-toggle guard below): a window visible
-                // on another desktop may still be tiled in that desktop's
-                // live autotile session.
-                if ((w->isOnAllDesktops() || w->desktops().size() > 1) && !newScreens.isEmpty()) {
+                // setNoBorder() and geometry are global KWin properties — skip
+                // sticky and multi-desktop windows UNCONDITIONALLY on a desktop
+                // switch, even when this desktop's autotile set is empty: the
+                // engine preserves the other desktop's TilingState, so such a
+                // window may still be tiled in that desktop's live session and
+                // restoring it here would leak the title bar / geometry into
+                // that session. The only sanctioned restore for these windows
+                // is the genuine-toggle path below (full disable arrives with
+                // isDesktopSwitch=false and an empty set).
+                if (w->isOnAllDesktops() || w->desktops().size() > 1) {
                     continue;
                 }
                 const QString windowId = m_effect->getWindowId(w);
