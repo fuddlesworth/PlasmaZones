@@ -5,12 +5,10 @@
 
 #include "plasmazones_export.h"
 #include <PhosphorProtocol/BridgeMarshalling.h>
-#include <PhosphorProtocol/WindowMarshalling.h>
 #include <QObject>
 #include <QDBusAbstractAdaptor>
 #include <QString>
 #include <QStringList>
-#include <QVariantMap>
 
 namespace PlasmaZones {
 
@@ -80,10 +78,10 @@ public Q_SLOTS:
      * Capabilities:
      *   "borderless"  — bridge manages window decorations (title-bar hiding
      *                   via its compositor-local DecorationManager)
-     *   "maximize"    — bridge supports maximizeWindow
      *   "animation"   — bridge supports skipAnimation flag
      *   "borders"     — bridge supports native window border rendering
-     *   "modifiers"   — bridge reports keyboard modifier state
+     *   "modifiers"   — bridge reports keyboard modifier state via
+     *                   reportModifierState
      */
     PhosphorProtocol::BridgeRegistrationResult registerBridge(const QString& compositorName, const QString& version,
                                                               const QStringList& capabilities);

@@ -107,8 +107,14 @@ void SnapHandler::clearWindowSnapped(const QString& windowId)
     m_effect->removeWindowBorder(windowId);
 }
 
-void SnapHandler::updateSnapHideTitleBars(bool hide)
+bool SnapHandler::updateSnapHideTitleBars(bool hide)
 {
+    // Only act on change (mirrors AutotileHandler::updateHideTitleBarsSetting):
+    // a no-op call would otherwise walk an acquire-all / release-all pass and
+    // a full updateAllBorders for nothing.
+    if (m_border.hideTitleBars == hide) {
+        return false;
+    }
     m_border.hideTitleBars = hide;
     if (hide) {
         // Hide on every currently snap-committed window. The windows are
@@ -130,6 +136,7 @@ void SnapHandler::updateSnapHideTitleBars(bool hide)
         m_effect->decorationManager()->drainPendingRestores();
     }
     m_effect->updateAllBorders();
+    return true;
 }
 
 void SnapHandler::clearSnapTracking()
@@ -439,12 +446,14 @@ void SnapHandler::slotMoveSpecificWindowToZoneRequested(const QString& windowId,
                                                        QStringLiteral("recordSnapIntent"),
                                                        {m_effect->getWindowId(targetWindow), true});
 
+        const bool isAutotile = m_effect->autotileHandler()->isAutotileScreen(screenId);
+
         // Snap-assist placed the window in a zone — record it in snapping's
         // border set, but only for a resolved snap-mode screen. An empty
         // (unresolved) or autotile-managed screen is owned by AutotileHandler,
         // so recording it here would double-track the window — same
         // discriminator as slotApplyGeometryRequested / the async snap path.
-        if (!screenId.isEmpty() && !m_effect->autotileHandler()->isAutotileScreen(screenId)) {
+        if (!screenId.isEmpty() && !isAutotile) {
             markWindowSnapped(m_effect->getWindowId(targetWindow), screenId);
         }
 
@@ -452,7 +461,7 @@ void SnapHandler::slotMoveSpecificWindowToZoneRequested(const QString& windowId,
         // Autotile screens manage their own window placement; showing snap assist
         // after an autotile resnap is incorrect (the daemon silently ignores the
         // selection anyway via the isAutotileScreen guard in signals.cpp).
-        if (!m_effect->autotileHandler()->isAutotileScreen(screenId)) {
+        if (!isAutotile) {
             m_effect->m_snapAssistHandler->showContinuationIfNeeded(screenId);
         }
     }

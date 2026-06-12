@@ -643,7 +643,7 @@ QVariantList actionTypes()
         // stays the single source of truth.
         RuleAction probe;
         probe.type = typeStr;
-        const auto domain = PhosphorWindowRule::ActionRegistry::instance().domainFor(probe);
+        const auto domain = registry.domainFor(probe);
         entry[QStringLiteral("domain")] =
             domain == PhosphorWindowRule::ActionDomain::Context ? QStringLiteral("context") : QStringLiteral("window");
         out.append(entry);

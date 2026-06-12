@@ -26,7 +26,10 @@ class PlasmaZonesEffect;
 class KWinCompositorBridge : public ICompositorBridge
 {
 public:
-    explicit KWinCompositorBridge(PlasmaZonesEffect* effect);
+    // Reference, not pointer: the bridge is a member of the effect and can
+    // never outlive it, so non-null is a structural guarantee rather than a
+    // debug-only Q_ASSERT.
+    explicit KWinCompositorBridge(PlasmaZonesEffect& effect);
 
     // Public: used by KWin-specific handler code
     static KWin::EffectWindow* toEffectWindow(WindowHandle w)
@@ -76,7 +79,7 @@ public:
     void invalidateScreenIdCache() override;
 
 private:
-    PlasmaZonesEffect* m_effect;
+    PlasmaZonesEffect& m_effect;
 };
 
 } // namespace PlasmaZones

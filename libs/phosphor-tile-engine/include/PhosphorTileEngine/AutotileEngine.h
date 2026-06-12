@@ -257,6 +257,14 @@ public:
      * enabledChanged if the overall state flips.  Only processes states for
      * the current desktop/activity — states for other desktops are preserved.
      *
+     * Identical-set re-emit (discussion #219): when called for a
+     * desktop/activity switch whose autotile set matches the previous
+     * context's, the set comparison early-returns but the engine still
+     * RE-EMITS autotileScreensChanged with the unchanged set and
+     * isDesktopSwitch=true — the compositor effect's catch-scan depends on
+     * that wakeup to re-add windows moved to this desktop while the user was
+     * away. An empty identical set skips the re-emit (nothing to catch).
+     *
      * @param screens Set of screen names that should use autotile
      */
     void setAutotileScreens(const QSet<QString>& screens);
@@ -929,6 +937,13 @@ Q_SIGNALS:
 
     /**
      * @brief Emitted when the set of autotile screens changes
+     *
+     * Also RE-EMITTED with an unchanged set on a desktop/activity switch
+     * between two contexts whose autotile sets are identical (with
+     * isDesktopSwitch=true, discussion #219) — a wire-contract wakeup for
+     * the compositor effect's catch-scan, not a set change. Receivers must
+     * be idempotent for the same-set case.
+     *
      * @param screenIds List of screen IDs using autotile
      * @param isDesktopSwitch True if caused by desktop/activity switch (not user toggle)
      */

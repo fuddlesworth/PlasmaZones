@@ -538,6 +538,17 @@ void AutotileEngine::setAutotileScreens(const QSet<QString>& screens)
         // the source desktop). Re-emit the unchanged set flagged as a desktop
         // switch. An empty set means no screen autotiles anywhere — nothing to
         // catch, skip the wakeup.
+        //
+        // Deliberately NO retile here, unlike the changed-set path's
+        // returning-screen retile: the early return exists to keep
+        // identical-set switches cheap, and re-entrant receivers rely on the
+        // second call terminating without side effects. The cost is that
+        // screen-geometry drift that happened while the user was on the other
+        // desktop (panel added/removed) is not reconciled until the next
+        // retile trigger on this desktop — availableGeometryChanged only
+        // retiles the CURRENT desktop's state at change time. Accepted: the
+        // drift window is panel changes made on another desktop, and the
+        // first insert/close/float on this desktop heals it.
         if (wasDesktopSwitch && !m_autotileScreens.isEmpty()) {
             Q_EMIT autotileScreensChanged(QStringList(m_autotileScreens.begin(), m_autotileScreens.end()), true);
         }

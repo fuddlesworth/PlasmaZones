@@ -5,8 +5,9 @@
  * @file test_autotile_state.cpp
  * @brief Unit tests for WindowId utilities and AutotileStateHelpers
  *
- * Tests WindowId::extractAppId, WindowId::deriveShortName, and
- * AutotileStateHelpers::cleanupClosedWindowState.
+ * Tests WindowId::extractAppId, WindowId::deriveShortName,
+ * AutotileStateHelpers::cleanupClosedWindowState and removeFromOtherScreens,
+ * and the BorderState ↔ DecorationDefaults default-drift tripwire.
  */
 
 #include <QTest>

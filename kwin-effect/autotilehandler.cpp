@@ -35,6 +35,22 @@ AutotileHandler::AutotileHandler(PlasmaZonesEffect* effect, QObject* parent)
 {
 }
 
+QSize AutotileHandler::declaredMinSize(KWin::EffectWindow* w)
+{
+    int minWidth = 0;
+    int minHeight = 0;
+    KWin::Window* kw = w ? w->window() : nullptr;
+    // Internal windows (our own overlays) crash on minSize(); see discussion #511.
+    if (kw && !kw->isInternal()) {
+        const QSizeF minSize = kw->minSize();
+        if (minSize.isValid()) {
+            minWidth = qCeil(minSize.width());
+            minHeight = qCeil(minSize.height());
+        }
+    }
+    return QSize(minWidth, minHeight);
+}
+
 void AutotileHandler::handleCursorMoved(const QPointF& pos, const QString& screenId)
 {
     if (!m_focusFollowsMouse || m_autotileScreens.isEmpty()) {
@@ -179,29 +195,26 @@ bool AutotileHandler::notifyWindowAdded(KWin::EffectWindow* w)
         saveAndRecordPreAutotileGeometry(windowId, screenId, w->frameGeometry(),
                                          /*knownFreeFloating=*/true);
 
-        int minWidth = 0;
-        int minHeight = 0;
-        KWin::Window* kw = w->window();
-        // Internal windows (our own overlays) crash on minSize(); see discussion #511.
-        if (kw && !kw->isInternal()) {
-            const QSizeF minSize = kw->minSize();
-            if (minSize.isValid()) {
-                minWidth = qCeil(minSize.width());
-                minHeight = qCeil(minSize.height());
-            }
-        }
+        const QSize minSize = declaredMinSize(w);
 
-        auto* watcher =
-            new QDBusPendingCallWatcher(PhosphorProtocol::ClientHelpers::asyncCall(
-                                            PhosphorProtocol::Service::Interface::Autotile,
-                                            QStringLiteral("windowOpened"), {windowId, screenId, minWidth, minHeight}),
-                                        this);
+        auto* watcher = new QDBusPendingCallWatcher(
+            PhosphorProtocol::ClientHelpers::asyncCall(PhosphorProtocol::Service::Interface::Autotile,
+                                                       QStringLiteral("windowOpened"),
+                                                       {windowId, screenId, minSize.width(), minSize.height()}),
+            this);
         connect(watcher, &QDBusPendingCallWatcher::finished, this, [this, windowId](QDBusPendingCallWatcher* w) {
             w->deleteLater();
             if (w->isError()) {
                 qCWarning(lcEffect) << "windowOpened D-Bus call failed for" << windowId << ":" << w->error().message();
                 m_notifiedWindows.remove(windowId);
                 m_notifiedWindowScreens.remove(windowId);
+                // The autotile→autotile transfer path in
+                // handleWindowOutputChanged skips its decoration release in
+                // anticipation of this call's tile request moving the claim.
+                // The call failed — no tile request is coming — so release
+                // the stale ownership here (no-op for fresh windows, which
+                // hold no claim yet).
+                m_effect->decorationManager()->releaseKind(windowId, DecorationManager::OwnerKind::Autotile);
                 // notifyWindowAdded() returned true on the synchronous
                 // path, so the caller (PlasmaZonesEffect::slotWindowAdded)
                 // left first-frame open suppression engaged expecting a
@@ -215,7 +228,7 @@ bool AutotileHandler::notifyWindowAdded(KWin::EffectWindow* w)
             }
         });
         qCDebug(lcEffect) << "Notified autotile: windowOpened" << windowId << "on screen" << screenId
-                          << "minSize:" << minWidth << "x" << minHeight;
+                          << "minSize:" << minSize.width() << "x" << minSize.height();
         return true;
     }
     return false;
@@ -262,23 +275,13 @@ void AutotileHandler::notifyWindowsAddedBatch(const QList<KWin::EffectWindow*>& 
         saveAndRecordPreAutotileGeometry(windowId, screenId, w->frameGeometry(),
                                          /*knownFreeFloating=*/true);
 
-        int minWidth = 0;
-        int minHeight = 0;
-        KWin::Window* kw = w->window();
-        // Internal windows (our own overlays) crash on minSize(); see discussion #511.
-        if (kw && !kw->isInternal()) {
-            const QSizeF minSize = kw->minSize();
-            if (minSize.isValid()) {
-                minWidth = qCeil(minSize.width());
-                minHeight = qCeil(minSize.height());
-            }
-        }
+        const QSize minSize = declaredMinSize(w);
 
         PhosphorProtocol::WindowOpenedEntry entry;
         entry.windowId = windowId;
         entry.screenId = screenId;
-        entry.minWidth = minWidth;
-        entry.minHeight = minHeight;
+        entry.minWidth = minSize.width();
+        entry.minHeight = minSize.height();
         batchEntries.append(entry);
         batchWindowIds.append(windowId);
     }
@@ -355,30 +358,29 @@ void AutotileHandler::handleWindowOutputChanged(KWin::EffectWindow* w)
 
     // Snapshot the pre-autotile geometry BEFORE onWindowClosed clears it
     // (the close-cleanup sweeps the geometry out of EVERY screen bucket).
-    // Scan all buckets ourselves too: the rect may be keyed under a screen
-    // other than oldScreenId if the notified screen was re-resolved after a
-    // VS config change without the geometry bucket moving (mirrors the
-    // desktop-switch Pass-2 scan in signals.cpp).
     QRectF savedPreAutotileGeo;
     if (oldIsAutotile) {
-        for (auto sgIt = m_preAutotileGeometries.constBegin(); sgIt != m_preAutotileGeometries.constEnd(); ++sgIt) {
-            const QRectF rect = sgIt->value(windowId);
-            if (rect.isValid()) {
-                savedPreAutotileGeo = rect;
-                break;
-            }
-        }
+        savedPreAutotileGeo = findPreAutotileGeometry(windowId);
     }
 
-    // Release autotile's decoration ownership before removing. If the new
-    // screen is also autotiled the imminent retile re-acquires (transient
-    // title-bar flash, same as before the DecorationManager unification).
-    m_effect->decorationManager()->releaseKind(windowId, DecorationManager::OwnerKind::Autotile);
+    // Release autotile's decoration ownership only when the window is
+    // actually leaving autotile management. On an autotile→autotile
+    // transfer the imminent retile moves the claim atomically without a
+    // physical flap (releaseOthersOfKind + acquire in
+    // slotWindowsTileRequested), so releasing here would only produce a
+    // transient title-bar flash. The no-retile fallthroughs are covered: a
+    // daemon overflow-float lands in applyFloatCleanup (releaseKind), and a
+    // failed windowOpened call releases in notifyWindowAdded's error
+    // handler. The predicate mirrors the re-add condition below.
+    const bool willReAdd = newIsAutotile && !w->isMinimized() && w->isOnCurrentDesktop() && w->isOnCurrentActivity();
+    if (!willReAdd) {
+        m_effect->decorationManager()->releaseKind(windowId, DecorationManager::OwnerKind::Autotile);
+    }
 
     // Remove from old screen's autotile state
     onWindowClosed(windowId, oldScreenId);
 
-    if (newIsAutotile && !w->isMinimized() && w->isOnCurrentDesktop() && w->isOnCurrentActivity()) {
+    if (willReAdd) {
         // Re-add on new autotile screen, carrying over pre-autotile geometry.
         // Cancel any pending cross-screen restore — the window is back in autotile.
         auto pendingIt = m_pendingCrossScreenRestore.find(windowId);
@@ -556,19 +558,11 @@ void AutotileHandler::handleDragToFloat(KWin::EffectWindow* w, const QString& wi
     // before setWindowFloatingForScreen processes).
     applyFloatCleanup(windowId);
 
-    // Restore pre-autotile SIZE at the window's current position. Scan all
-    // screen buckets (all-bucket reader policy — a VS config change can
-    // re-key the window's screen without moving its geometry bucket; size
-    // is coordinate-space-independent, so any bucket's rect is safe).
+    // Restore pre-autotile SIZE at the window's current position. The
+    // all-bucket lookup matters here: size is coordinate-space-independent,
+    // so any bucket's rect is safe.
     if (w) {
-        QRectF savedGeo;
-        for (auto sgIt = m_preAutotileGeometries.constBegin(); sgIt != m_preAutotileGeometries.constEnd(); ++sgIt) {
-            const QRectF rect = sgIt->value(windowId);
-            if (rect.isValid()) {
-                savedGeo = rect;
-                break;
-            }
-        }
+        const QRectF savedGeo = findPreAutotileGeometry(windowId);
         if (savedGeo.isValid()) {
             const int savedW = qRound(savedGeo.width());
             const int savedH = qRound(savedGeo.height());
@@ -630,6 +624,15 @@ void AutotileHandler::onDaemonReady()
     m_savedNotifiedForDesktopReturn.clear();
     m_savedPreAutotileForDesktopMove.clear();
     m_pendingCloses.clear();
+    // Centering state is per-retile transient: the restarted daemon has no
+    // memory of the zones these entries point at, and a stale
+    // m_centeredWaylandZones entry that happens to equal the first
+    // post-restart tile request would trip the skipMoveResize short-circuit
+    // in slotWindowsTileRequested against a freshly-restored decoration,
+    // leaving a title-bar-height gap (the CallerWillPlace acquire there
+    // expects the caller to re-assert geometry).
+    m_autotileTargetZones.clear();
+    m_centeredWaylandZones.clear();
 
     // Re-send the effect's pre-autotile geometry cache to the freshly
     // (re)connected daemon as a backstop. storePreTileGeometry lands in the

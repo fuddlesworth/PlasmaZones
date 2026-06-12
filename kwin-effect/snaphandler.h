@@ -75,7 +75,10 @@ public:
     void clearWindowSnapped(const QString& windowId);
     /// Apply/restore title-bar hiding across all currently snap-committed
     /// windows when the snappingHideTitleBars setting toggles.
-    void updateSnapHideTitleBars(bool hide);
+    /// Returns true if the value actually changed (no-op calls skip the
+    /// acquire/release walk and the updateAllBorders pass — mirrors
+    /// AutotileHandler::updateHideTitleBarsSetting).
+    bool updateSnapHideTitleBars(bool hide);
     /// Drop all snap tiled-tracking bookkeeping. Physical title-bar restores
     /// are the DecorationManager's job — teardown callers pair this with
     /// DecorationManager::restoreAll() (symmetric with

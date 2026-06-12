@@ -283,7 +283,9 @@ private:
      * The caller passes the window's current frame. The default safety
      * guard skips the save when the window is not currently floating —
      * snapped/tiled windows have zone dimensions in frameGeometry() and
-     * capturing them would poison the pre-tile entry.
+     * capturing them would poison the pre-tile entry. Invalid input and
+     * deliberately-skipped saves are both silent no-ops (logged at debug);
+     * no caller distinguishes them.
      *
      * @param knownFreeFloating Bypass the isWindowFloating guard when the
      *        caller knows the frame is authoritatively a free-float rect.
@@ -292,8 +294,34 @@ private:
      *        the FloatingCache yet, so isWindowFloating() returns false
      *        and would incorrectly reject the one-shot initial capture.
      */
-    bool saveAndRecordPreAutotileGeometry(const QString& windowId, const QString& screenId, const QRectF& frame,
+    void saveAndRecordPreAutotileGeometry(const QString& windowId, const QString& screenId, const QRectF& frame,
                                           bool knownFreeFloating = false);
+
+    /**
+     * @brief All-bucket pre-autotile geometry lookup.
+     *
+     * Returns the first VALID rect found for @p windowId across every
+     * screen's bucket in m_preAutotileGeometries, or an invalid QRectF if
+     * none holds one. Readers must scan all buckets (not just the window's
+     * current screen): a VS config change can re-resolve the window's
+     * screen without moving its geometry bucket. Shared by the batch-float,
+     * drag-to-float, cross-monitor-snapshot, desktop-move-stash, and
+     * desktop-switch restore paths.
+     *
+     * @param bucketScreenId Optional out — receives the screen key of the
+     *        bucket the rect was found under (unchanged when not found).
+     */
+    QRectF findPreAutotileGeometry(const QString& windowId, QString* bucketScreenId = nullptr) const;
+
+    /**
+     * @brief Declared compositor min-size for @p w, rounded up to ints.
+     *
+     * Returns 0×0 when the window declares none. Internal windows (our own
+     * overlays) are skipped entirely — KWin's InternalWindow::minSize()
+     * segfaults when the backing QWindow is null (discussion #511).
+     */
+    static QSize declaredMinSize(KWin::EffectWindow* w);
+
     void reportDiscoveredMinSize(const QString& windowId, int minWidth, int minHeight);
 
     // ═══════════════════════════════════════════════════════════════════

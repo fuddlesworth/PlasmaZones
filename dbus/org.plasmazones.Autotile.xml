@@ -162,7 +162,7 @@
         </signal>
 
         <signal name="autotileScreensChanged">
-            <annotation name="org.gtk.GDBus.DocString" value="Emitted when the set of screens using autotile changes."/>
+            <annotation name="org.gtk.GDBus.DocString" value="Emitted when the set of screens using autotile changes. Also RE-EMITTED with an unchanged set on a desktop/activity switch between contexts with identical autotile sets (isDesktopSwitch=true) so the effect's catch-scan can re-add windows moved here while the user was away — receivers must be idempotent for the same-set case."/>
             <arg name="screenNames" type="as">
                 <annotation name="org.gtk.GDBus.DocString" value="List of screen names currently using autotile."/>
             </arg>

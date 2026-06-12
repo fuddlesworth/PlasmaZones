@@ -479,6 +479,68 @@ private Q_SLOTS:
         QVERIFY(bridge.callLog.isEmpty());
         QVERIFY(mgr.isBorderless(Win1));
     }
+
+    void testReleaseOthersOfKindToUnregisteredScreen()
+    {
+        FakeCompositorBridge bridge;
+        bridge.addWindow(Win1);
+        DecorationManager mgr(bridge);
+
+        // Transfer toward a screen whose owner is NOT registered yet (the
+        // contract: the caller acquires it next). The owner set empties but
+        // the surgery must stay non-physical and the still-hidden entry must
+        // survive the prune — the decoration staying hidden across the hop
+        // is exactly the point.
+        mgr.acquire(Win1, DecorationManager::autotile(Screen1));
+        bridge.clearLog();
+        mgr.releaseOthersOfKind(Win1, OwnerKind::Autotile, Screen2);
+        QVERIFY(bridge.callLog.isEmpty());
+        QVERIFY(!mgr.isOwned(Win1));
+        QVERIFY(mgr.isBorderless(Win1)); // ownerless but still hidden
+
+        // The expected follow-up acquire re-claims with no physical flap.
+        mgr.acquire(Win1, DecorationManager::autotile(Screen2), Placement::CallerWillPlace);
+        QVERIFY(bridge.callLog.isEmpty());
+        QVERIFY(mgr.isOwnedBy(Win1, DecorationManager::autotile(Screen2)));
+
+        // If the follow-up acquire never lands (retile declined the window),
+        // restoreAll() is the safety net that recovers the hidden orphan.
+        mgr.releaseOthersOfKind(Win1, OwnerKind::Autotile, Screen1);
+        QVERIFY(mgr.isBorderless(Win1));
+        mgr.restoreAll();
+        QCOMPARE(bridge.window(Win1)->noBorder, false);
+    }
+
+    void testRestoreAllReentrantAcquireKeepsNewClaimHidden()
+    {
+        FakeCompositorBridge bridge;
+        bridge.addWindow(QStringLiteral("a|1"));
+        bridge.addWindow(QStringLiteral("b|1"));
+        DecorationManager mgr(bridge);
+
+        mgr.acquire(QStringLiteral("a|1"), DecorationManager::autotile(Screen1));
+        mgr.acquire(QStringLiteral("b|1"), DecorationManager::autotile(Screen1));
+
+        // A windowDecorationRestored handler re-acquires b mid-teardown (e.g.
+        // a snap takeover racing the daemon-loss restore burst). The restore
+        // ORDER is hash-iteration-dependent, so both interleavings are legal:
+        // if a restores first, the re-entrancy guard skips b (it stays
+        // hidden, snapshot sees priorNoBorder=true); if b restored first, the
+        // re-entrant acquire starts a fresh epoch and physically re-hides it.
+        // The order-independent invariant: the re-claimed window ends the
+        // teardown borderless and owned — never force-decorated.
+        connect(&mgr, &DecorationManager::windowDecorationRestored, &mgr, [&mgr](const QString&) {
+            mgr.acquire(QStringLiteral("b|1"), DecorationManager::snap(Screen1));
+        });
+
+        mgr.restoreAll();
+        QCOMPARE(bridge.window(QStringLiteral("a|1"))->noBorder, false); // restored
+        QCOMPARE(bridge.window(QStringLiteral("b|1"))->noBorder, true); // re-claimed — ends hidden
+        QVERIFY(mgr.isOwnedBy(QStringLiteral("b|1"), DecorationManager::snap(Screen1)));
+        const QStringList bCalls = bridge.callLog.filter(QStringLiteral("setNoBorder(b|1,"));
+        QVERIFY(!bCalls.isEmpty());
+        QCOMPARE(bCalls.last(), QStringLiteral("setNoBorder(b|1,true)"));
+    }
 };
 
 QTEST_GUILESS_MAIN(TestDecorationManager)

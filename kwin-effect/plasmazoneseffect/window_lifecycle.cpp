@@ -675,13 +675,15 @@ void PlasmaZonesEffect::setupWindowConnections(KWin::EffectWindow* w)
         if (wasResize && shouldHandleWindow(window)) {
             const QString windowId = getWindowId(window);
             if (!windowId.isEmpty() && isWindowFloating(windowId)) {
-                const QRectF geom = window->frameGeometry();
+                // toRect() (rounding) rather than truncation: fractional-scale
+                // outputs leave sub-pixel residue in frameGeometry(), and the
+                // other geometry-capture paths round too.
+                const QRect geom = window->frameGeometry().toRect();
                 if (geom.width() > 0 && geom.height() > 0) {
                     PhosphorProtocol::ClientHelpers::fireAndForget(
                         this, PhosphorProtocol::Service::Interface::WindowTracking,
                         QStringLiteral("storePreTileGeometry"),
-                        {windowId, static_cast<int>(geom.x()), static_cast<int>(geom.y()),
-                         static_cast<int>(geom.width()), static_cast<int>(geom.height()), getWindowScreenId(window),
+                        {windowId, geom.x(), geom.y(), geom.width(), geom.height(), getWindowScreenId(window),
                          /*overwrite=*/true},
                         QStringLiteral("storePreTileGeometry - float resize"));
                 }

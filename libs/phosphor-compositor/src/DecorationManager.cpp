@@ -4,6 +4,7 @@
 #include "PhosphorCompositor/DecorationManager.h"
 
 #include <QLoggingCategory>
+#include <QPointer>
 #include <QTimer>
 
 #include <memory>
@@ -112,6 +113,12 @@ void DecorationManager::releaseOthersOfKind(const QString& windowId, OwnerKind k
     it->owners.removeIf([kind, &keepScreenId](const Owner& o) {
         return o.kind == kind && o.screenId != keepScreenId;
     });
+    // Prune keeps hidden/vetoed/pending entries, so a mid-transfer window
+    // (owner set emptied, decoration still hidden awaiting the follow-up
+    // acquire) is unaffected — this only drops an entry that carries no
+    // information at all, the one case every other owner-removal path
+    // already prunes.
+    pruneIfEmpty(windowId);
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -264,26 +271,36 @@ void DecorationManager::drainPendingRestoresInternal(bool fromFallback)
     auto didWork = std::make_shared<bool>(false);
     m_liveDrainChains.append(step);
     *step = [this, pending, step, didWork, fromFallback]() {
-        if (pending->isEmpty()) {
+        // Stack copies of the shared state: the FIRST invocation executes the
+        // heap closure itself (not a QTimer-stored copy), and a re-entrant
+        // slot that destroys the manager mid-step (the destructor nulls
+        // *step) would otherwise destroy these captures while they are in
+        // use. The locals pin them to this stack frame.
+        const auto pendingLocal = pending;
+        const auto stepLocal = step;
+        const auto didWorkLocal = didWork;
+        if (pendingLocal->isEmpty()) {
+            // Chain bookkeeping BEFORE the emit: a drainFinished slot may
+            // synchronously destroy the manager, after which
+            // m_liveDrainChains is gone. Breaking the shared_ptr self-capture
+            // cycle here also prevents the heap std::function (holding a
+            // shared_ptr to itself, `pending`, and the captured context) from
+            // leaking after every drain. Resetting before this invocation
+            // finishes is safe: the stack copies above keep the captured
+            // state alive through the end of this call.
+            m_liveDrainChains.removeOne(stepLocal);
+            *stepLocal = nullptr;
             // Emit only when the chain actually processed a restore: an
-            // all-vetoed cycle changed nothing, and signalling it would make
-            // the effect rebuild every border for free each fallback retry.
-            if (*didWork) {
+            // all-vetoed cycle (or one that only swept dead windows) changed
+            // nothing, and signalling it would make the effect rebuild every
+            // border for free each fallback retry.
+            if (*didWorkLocal) {
                 Q_EMIT drainFinished();
             }
-            // Break the shared_ptr self-capture cycle — the heap
-            // std::function holds a shared_ptr to itself and would leak
-            // (with `pending` and the captured context) after every drain.
-            // Resetting here is safe: every invocation after the first
-            // executes a COPY of *step (QTimer::singleShot stores the copy),
-            // and the first invocation can never take this branch because
-            // drainPendingRestores early-returns on an empty queue — so the
-            // running lambda's own captures outlive this reset.
-            m_liveDrainChains.removeOne(step);
-            *step = nullptr;
             return;
         }
-        const QString windowId = pending->takeFirst();
+        QPointer<DecorationManager> self(this);
+        const QString windowId = pendingLocal->takeFirst();
         auto it = m_windows.find(windowId);
         // Re-acquired (acquire cleared the flag) or already forgotten: the
         // queued restore is stale — leave the decoration alone.
@@ -306,12 +323,23 @@ void DecorationManager::drainPendingRestoresInternal(bool fromFallback)
                 armFallbackTimer();
             } else {
                 it->pendingRestore = false;
-                restoreNow(windowId, *it, false);
+                // A mid-chain release(Deferred) may have re-inserted this id
+                // into m_pendingRestore after the chain snapshotted its queue;
+                // the restore below satisfies that defer too, so drop the set
+                // entry — flag and set stay in lockstep (cancelPendingRestore's
+                // invariant).
+                m_pendingRestore.remove(windowId);
+                const bool restored = restoreNow(windowId, *it, false);
+                if (!self) {
+                    return; // a windowDecorationRestored slot destroyed the manager
+                }
                 pruneIfEmpty(windowId);
-                *didWork = true;
+                if (restored) {
+                    *didWorkLocal = true;
+                }
             }
         }
-        QTimer::singleShot(0, this, *step);
+        QTimer::singleShot(0, this, *stepLocal);
     };
     (*step)();
 }
@@ -389,9 +417,16 @@ void DecorationManager::reconcile(const QString& windowId, Entry& entry, Placeme
             return;
         }
         if (!entry.evaluated) {
+            // Snapshot the const queries into locals BEFORE writing entry
+            // fields — same entry-reference discipline as the hideNow rule
+            // below. ICompositorBridge's contract requires const queries not
+            // to re-enter the manager (see the interface doc), so this is
+            // ordering hygiene, not a workaround.
+            const bool eligible = m_bridge.userCanSetNoBorder(w);
+            const bool priorNoBorder = m_bridge.isNoBorder(w);
             entry.evaluated = true;
-            entry.eligible = m_bridge.userCanSetNoBorder(w);
-            entry.priorNoBorder = m_bridge.isNoBorder(w);
+            entry.eligible = eligible;
+            entry.priorNoBorder = priorNoBorder;
         }
         if (!entry.eligible) {
             // CSD (GTK/Electron) / override-redirect / rule-forced
@@ -498,15 +533,15 @@ void DecorationManager::hideNow(WindowHandle w, Placement placement)
     }
 }
 
-void DecorationManager::restoreNow(const QString& windowId, Entry& entry, bool reassertGeometry)
+bool DecorationManager::restoreNow(const QString& windowId, Entry& entry, bool reassertGeometry)
 {
     entry.physicallyHidden = false;
     if (entry.priorNoBorder) {
-        return; // defensive: we never hid such a window physically
+        return false; // defensive: we never hid such a window physically
     }
     WindowHandle w = resolveExact(windowId);
     if (!w) {
-        return; // window gone — decoration died with it
+        return false; // window gone — decoration died with it
     }
     if (reassertGeometry) {
         const QRectF target = m_bridge.moveResizeGeometry(w);
@@ -519,6 +554,7 @@ void DecorationManager::restoreNow(const QString& windowId, Entry& entry, bool r
     }
     qCDebug(lcDecoration) << "restored decoration for" << windowId;
     Q_EMIT windowDecorationRestored(windowId);
+    return true;
 }
 
 void DecorationManager::pruneIfEmpty(const QString& windowId)

@@ -177,6 +177,28 @@ private Q_SLOTS:
         QCOMPARE(spy.at(0).at(1).toBool(), false);
     }
 
+    void testScreensChanged_activitySwitchSameSet_emitsDesktopSwitchSignal()
+    {
+        AutotileEngine engine(nullptr, nullptr, nullptr, PlasmaZones::TestHelpers::testRegistry());
+        QSignalSpy spy(&engine, &AutotileEngine::autotileScreensChanged);
+
+        const QSet<QString> screens{QStringLiteral("HDMI-1")};
+        // First non-empty activity is initialization, NOT a switch (the
+        // engine's arming condition differs from setCurrentDesktop here).
+        engine.setCurrentActivity(QStringLiteral("activity-a"));
+        engine.setAutotileScreens(screens);
+        QCOMPARE(spy.count(), 1);
+        QCOMPARE(spy.at(0).at(1).toBool(), false);
+
+        // A genuine activity→activity switch with an identical set must arm
+        // the flag and re-emit, same wire contract as the desktop case.
+        engine.setCurrentActivity(QStringLiteral("activity-b"));
+        engine.setAutotileScreens(screens);
+        QCOMPARE(spy.count(), 2);
+        QCOMPARE(spy.at(1).at(0).toStringList(), QStringList{QStringLiteral("HDMI-1")});
+        QCOMPARE(spy.at(1).at(1).toBool(), true);
+    }
+
     // =========================================================================
     // Algorithm selection tests
     // =========================================================================

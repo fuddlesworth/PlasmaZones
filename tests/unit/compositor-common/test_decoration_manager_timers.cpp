@@ -288,19 +288,25 @@ private Q_SLOTS:
         bridge.addWindow(Win1);
         DecorationManager mgr(bridge);
         QSignalSpy restored(&mgr, &DecorationManager::windowDecorationRestored);
+        QSignalSpy finished(&mgr, &DecorationManager::drainFinished);
 
         mgr.acquire(Win1, DecorationManager::autotile(Screen1));
         mgr.releaseKind(Win1, OwnerKind::Autotile, Restore::Deferred);
 
         // The window vanishes without a forgetWindow (defensive path —
         // production always forgets on close): the drain step must perform
-        // no compositor call and the entry must not linger.
+        // no compositor call and the entry must not linger. A chain that
+        // only swept dead windows changed zero decorations, so it must not
+        // fire drainFinished either (the effect would rebuild every border
+        // for nothing — the signal doc's "zero decorations changed → emits
+        // nothing" contract).
         bridge.removeWindow(Win1);
         bridge.clearLog();
         mgr.drainPendingRestores();
         QTest::qWait(50);
         QVERIFY(bridge.callLog.isEmpty());
         QCOMPARE(restored.count(), 0);
+        QCOMPARE(finished.count(), 0);
         QVERIFY(!mgr.isOwned(Win1));
         QVERIFY(!mgr.isBorderless(Win1));
     }

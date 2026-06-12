@@ -767,6 +767,8 @@ set_tests_properties(bench_dbus_adaptors PROPERTIES LABELS "bench")
 #   test_wire_types: D-Bus wire type signature/roundtrip tests
 #   test_floating_cache: FloatingCache + TriggerParser tests
 #   test_autotile_state: AutotileStateHelpers + WindowId tests
+#   test_decoration_manager: DecorationManager ownership/veto behavioral spec
+#   test_decoration_manager_timers: DecorationManager deferred-drain/fallback timers
 # ═══════════════════════════════════════════════════════════════════════════════
 add_executable(test_wire_types compositor-common/test_wire_types.cpp)
 target_link_libraries(test_wire_types PRIVATE Qt6::Test PhosphorCompositor::PhosphorCompositor

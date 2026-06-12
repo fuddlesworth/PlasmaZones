@@ -145,6 +145,10 @@ private Q_SLOTS:
         QSignalSpy spy(&settings, &Settings::perScreenAutotileSettingsChanged);
         settings.setPerScreenAutotileSetting(screen, QStringLiteral("AutotileHideTitleBars"), true);
         QCOMPARE(spy.count(), 0);
+        // The setter normalizes long→short form, so the short-form spelling is
+        // a distinct input path — it must be rejected identically.
+        settings.setPerScreenAutotileSetting(screen, QStringLiteral("HideTitleBars"), true);
+        QCOMPARE(spy.count(), 0);
         const QVariantMap overrides = settings.getPerScreenAutotileSettings(screen);
         QVERIFY(!overrides.contains(QStringLiteral("HideTitleBars")));
         QVERIFY(!overrides.contains(QStringLiteral("AutotileHideTitleBars")));

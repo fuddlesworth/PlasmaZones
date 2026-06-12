@@ -134,7 +134,11 @@ public:
     /// window before releasing — see AutotileHandler::slotScreensChanged.
     void releaseAllOfKind(OwnerKind kind, Restore restore = Restore::Immediate);
     /// Daemon loss / effect teardown: synchronously restore every window we
-    /// hid to its prior state, then drop all tracking and timers.
+    /// hid to its prior state, then drop all tracking and timers. The
+    /// installed restore veto deliberately survives: it is wired once at
+    /// effect construction and stays valid for the next daemon session
+    /// (the post-restoreAll queue is empty, so it is not consulted until
+    /// new deferred releases arrive).
     void restoreAll();
     /// Window destroyed: drop all state for it. Zero compositor calls — the
     /// decoration dies with the window.
@@ -158,9 +162,10 @@ public:
     void drainPendingRestores();
     /// Test seam: shrink the fallback-retry interval (default 500 ms) so
     /// timer-interplay tests run in milliseconds. Production never calls it.
+    /// Negative values clamp to 0 (QTimer::start would warn on them).
     void setFallbackIntervalForTesting(int ms)
     {
-        m_fallbackIntervalMs = ms;
+        m_fallbackIntervalMs = qMax(0, ms);
     }
     /// Extra authoritative re-check evaluated per window at drain-step time
     /// (in addition to the built-in "window has owners again" check).
@@ -239,7 +244,12 @@ private:
     /// never act on a window other than the one the entry tracks.
     WindowHandle resolveExact(const QString& windowId) const;
     void hideNow(WindowHandle w, Placement placement);
-    void restoreNow(const QString& windowId, Entry& entry, bool reassertGeometry);
+    /// @return true when a physical restore happened (and
+    /// windowDecorationRestored was emitted); false when the window is gone
+    /// or was never physically hidden (priorNoBorder). Drain chains use the
+    /// result to decide whether the chain "did work" — a chain that only
+    /// swept dead windows must not fire drainFinished.
+    bool restoreNow(const QString& windowId, Entry& entry, bool reassertGeometry);
     /// Drop the entry if it carries no information anymore.
     void pruneIfEmpty(const QString& windowId);
     /// Re-arm the fallback timer that drains pending restores if no

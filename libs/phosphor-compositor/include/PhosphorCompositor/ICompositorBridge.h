@@ -76,6 +76,13 @@ struct WindowInfo
  *   the rest define what a non-KWin plugin must provide to host the shared
  *   handlers — they are forward-looking SDK API, not dead code
  * - D-Bus helpers (fireAndForget, asyncCall) are free functions, not on this interface
+ *
+ * Re-entrancy contract: const query methods (lookups, identity, properties,
+ * filtering) MUST NOT synchronously dispatch compositor events or call back
+ * into shared-code consumers. DecorationManager holds references into its
+ * window table across these queries; only the mutating actions (moveResize,
+ * setNoBorder, ...) are allowed to re-enter, and consumers order their state
+ * writes around those calls accordingly.
  */
 class PHOSPHORCOMPOSITOR_EXPORT ICompositorBridge
 {

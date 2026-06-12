@@ -60,7 +60,7 @@ PlasmaZonesEffect::PlasmaZonesEffect()
     , m_windowAnimator(std::make_unique<WindowAnimator>())
     , m_shaderManager(this)
     , m_dragTracker(std::make_unique<DragTracker>(this))
-    , m_compositorBridge(std::make_unique<KWinCompositorBridge>(this))
+    , m_compositorBridge(std::make_unique<KWinCompositorBridge>(*this))
     , m_decorationManager(std::make_unique<DecorationManager>(*m_compositorBridge))
 {
     PhosphorProtocol::registerWireTypes();
@@ -746,7 +746,12 @@ PlasmaZonesEffect::PlasmaZonesEffect()
         // handler would otherwise recreate a border item for every still-
         // tracked window only for clearAllBorders() to destroy it moments
         // later. With tracking cleared, resolveBorderStateFor returns null
-        // during the restore burst and the handler just drops items.
+        // for mode-tracked windows during the restore burst and the handler
+        // drops their items. Windows matched by a still-live SetBorder rule
+        // (the rule sets deliberately survive daemon loss, see below) can
+        // still get an item recreated and immediately torn down by
+        // clearAllBorders() — bounded, invisible churn that is cheaper than
+        // suppressing the handler across the burst.
         m_autotileHandler->clearTiledTracking();
         m_snapHandler->clearSnapTracking();
         m_decorationManager->restoreAll();

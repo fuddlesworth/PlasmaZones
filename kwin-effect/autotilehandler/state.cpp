@@ -110,14 +110,14 @@ void AutotileHandler::setFocusFollowsMouse(bool enabled)
     m_focusFollowsMouse = enabled;
 }
 
-bool AutotileHandler::saveAndRecordPreAutotileGeometry(const QString& windowId, const QString& screenId,
+void AutotileHandler::saveAndRecordPreAutotileGeometry(const QString& windowId, const QString& screenId,
                                                        const QRectF& frame, bool knownFreeFloating)
 {
     if (windowId.isEmpty() || screenId.isEmpty()) {
-        return false;
+        return;
     }
     if (!frame.isValid() || frame.width() <= 0 || frame.height() <= 0) {
-        return false;
+        return;
     }
     // Use EXACT windowId match only — NOT an appId/stableId fallback.
     // Multiple instances of the same app (e.g., 3 Dolphin windows) share an
@@ -132,7 +132,7 @@ bool AutotileHandler::saveAndRecordPreAutotileGeometry(const QString& windowId, 
     {
         const auto screenIt = m_preAutotileGeometries.constFind(screenId);
         if (screenIt != m_preAutotileGeometries.constEnd() && screenIt->contains(windowId)) {
-            return false;
+            return;
         }
     }
     // Only save geometry for floating windows — snapped/tiled windows have zone
@@ -156,11 +156,11 @@ bool AutotileHandler::saveAndRecordPreAutotileGeometry(const QString& windowId, 
     if (m_effect->isWindowMarkedSnapped(windowId)) {
         qCDebug(lcEffect) << "Skipped pre-autotile geometry for snap-managed window (frame is zone rect)" << windowId
                           << "on" << screenId;
-        return true;
+        return;
     }
     if (!knownFreeFloating && !m_effect->isWindowFloating(windowId)) {
         qCDebug(lcEffect) << "Skipped pre-autotile geometry for snapped window" << windowId << "on" << screenId;
-        return true;
+        return;
     }
     m_preAutotileGeometries[screenId][windowId] = frame;
     qCDebug(lcEffect) << "Saved pre-autotile geometry for" << windowId << "on" << screenId << ":" << frame;
@@ -179,7 +179,23 @@ bool AutotileHandler::saveAndRecordPreAutotileGeometry(const QString& windowId, 
              static_cast<int>(frame.height()), screenId, true},
             QStringLiteral("storePreTileGeometry"));
     }
-    return true;
+}
+
+QRectF AutotileHandler::findPreAutotileGeometry(const QString& windowId, QString* bucketScreenId) const
+{
+    for (auto sgIt = m_preAutotileGeometries.constBegin(); sgIt != m_preAutotileGeometries.constEnd(); ++sgIt) {
+        const QRectF rect = sgIt->value(windowId);
+        if (rect.isValid()) {
+            if (bucketScreenId) {
+                *bucketScreenId = sgIt.key();
+            }
+            return rect;
+        }
+        // Found-but-invalid entry: keep scanning. A valid rect may still be
+        // stored under another screen's bucket from a mid-session
+        // autotile-screen transfer.
+    }
+    return QRectF();
 }
 
 bool AutotileHandler::isAutotileScreen(const QString& screenId) const
@@ -195,18 +211,13 @@ void AutotileHandler::savePreAutotileForDesktopMove(const QString& windowId)
     //
     // Stamped with the BUCKET's screen (not the caller's) so the restore
     // path can detect a cross-screen desktop move and decline a saved rect
-    // from a different monitor's coordinate space. Scan all buckets: a VS
-    // config change can re-resolve the window's screen without re-keying the
-    // geometry bucket (same all-bucket policy as the desktop-switch Pass-2
-    // scan and the cross-monitor snapshot).
-    for (auto sgIt = m_preAutotileGeometries.constBegin(); sgIt != m_preAutotileGeometries.constEnd(); ++sgIt) {
-        const QRectF rect = sgIt->value(windowId);
-        if (rect.isValid()) {
-            m_savedPreAutotileForDesktopMove[windowId] = {sgIt.key(), rect};
-            qCDebug(lcEffect) << "Preserved pre-autotile geometry for desktop move:" << windowId << "bucket"
-                              << sgIt.key() << "rect=" << rect;
-            return;
-        }
+    // from a different monitor's coordinate space.
+    QString bucketScreenId;
+    const QRectF rect = findPreAutotileGeometry(windowId, &bucketScreenId);
+    if (rect.isValid()) {
+        m_savedPreAutotileForDesktopMove[windowId] = {bucketScreenId, rect};
+        qCDebug(lcEffect) << "Preserved pre-autotile geometry for desktop move:" << windowId << "bucket"
+                          << bucketScreenId << "rect=" << rect;
     }
 }
 

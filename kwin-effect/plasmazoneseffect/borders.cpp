@@ -34,7 +34,13 @@ void PlasmaZonesEffect::setupDecorationManager()
     // manager's retry bound overrides it.
     m_decorationManager->setRestoreVeto([this](const QString& windowId) {
         KWin::EffectWindow* w = findWindowById(windowId);
-        if (!w || !m_autotileHandler->isAutotileScreen(getWindowScreenId(w))) {
+        // Exact-id re-check: findWindowById's appId fuzzy fallback can
+        // resolve a same-app SIBLING when the exact id misses, and a
+        // sibling's screen/floating state must never decide the veto for
+        // the window the queue entry tracks (same hazard guard as
+        // SnapHandler::markWindowSnapped and the manager's own
+        // resolveExact for physical toggles).
+        if (!w || getWindowId(w) != windowId || !m_autotileHandler->isAutotileScreen(getWindowScreenId(w))) {
             return false;
         }
         return m_autotileHandler->borderState().hideTitleBars && !isWindowFloating(windowId);

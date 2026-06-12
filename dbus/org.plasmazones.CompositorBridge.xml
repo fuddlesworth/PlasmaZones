@@ -1,5 +1,9 @@
 <!DOCTYPE node PUBLIC "-//freedesktop//DTD D-BUS Object Introspection 1.0//EN"
 "http://www.freedesktop.org/standards/dbus/1.0/introspect.dtd">
+<!--
+SPDX-FileCopyrightText: 2026 fuddlesworth
+SPDX-License-Identifier: GPL-3.0-or-later
+-->
 <node>
     <interface name="org.plasmazones.CompositorBridge">
         <annotation name="org.gtk.GDBus.DocString" value="Compositor-agnostic bridge protocol: registration handshake and modifier reporting. Window manipulation commands flow over org.plasmazones.WindowTracking (applyGeometryRequested, applyGeometriesBatch, raiseWindowsRequested, ...)."/>
@@ -14,7 +18,7 @@
                 <annotation name="org.gtk.GDBus.DocString" value="Protocol API version as a decimal integer string (PhosphorProtocol::Service::ApiVersion) — NOT the compositor's release version. Peers below the daemon's minimum are rejected."/>
             </arg>
             <arg name="capabilities" type="as" direction="in">
-                <annotation name="org.gtk.GDBus.DocString" value="Supported capabilities: borderless, maximize, animation, borders, modifiers."/>
+                <annotation name="org.gtk.GDBus.DocString" value="Supported capabilities: borderless, animation, borders, modifiers."/>
             </arg>
             <arg name="result" type="(sss)" direction="out">
                 <annotation name="org.qtproject.QtDBus.QtTypeName.Out0" value="PhosphorProtocol::BridgeRegistrationResult"/>

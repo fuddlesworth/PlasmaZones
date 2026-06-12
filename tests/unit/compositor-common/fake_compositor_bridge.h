@@ -31,6 +31,12 @@
  *    height. The AlreadyPlaced re-assert tests therefore pin call ORDER
  *    only — the under-fill bug class the re-assert exists for cannot
  *    reproduce here.
+ *  - stackingOrder() returns std::map key order (lexicographic by id), NOT
+ *    bottom-to-top stacking as the interface documents. DecorationManager
+ *    never calls it; a future consumer test must not rely on the ordering.
+ *  - windowInfo() leaves appId/caption/icon/minSize and the boolean flags
+ *    beyond minimized at their defaults; asQObject() returns nullptr (no
+ *    D-Bus watcher parent in unit tests).
  */
 class FakeCompositorBridge : public PhosphorCompositor::ICompositorBridge
 {

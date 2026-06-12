@@ -753,7 +753,7 @@ private:
      *
      * Sends getSetting(name) via raw QDBusMessage (no QDBusInterface), unwraps
      * the QDBusVariant, and calls onValue with the extracted QVariant.
-     * Used by loadCachedSettings() to eliminate 13 identical watcher blocks.
+     * Used by loadCachedSettings() to eliminate per-setting watcher boilerplate.
      */
     template<typename Fn>
     void loadSettingAsync(const QString& name, Fn&& onValue);
@@ -908,8 +908,6 @@ private:
     // Entries are consumed (removed) when slotApplyGeometryRequested skips
     // the geometry restore for a drag-floated window.
     QSet<QString> m_dragFloatedWindowIds;
-
-    // Autotile: true when the current drag was started on an autotile screen
 
     // Cached daemon D-Bus service registration state.
     // Updated via QDBusServiceWatcher signals (registration/unregistration) to avoid

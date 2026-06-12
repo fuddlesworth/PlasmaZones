@@ -58,9 +58,10 @@ inline constexpr const char TriggerDistance[] = "TriggerDistance";
 
 /**
  * Per-screen autotile override key constants.
- * These intentionally differ from the global ConfigKeys accessors (e.g.
- * "AutotileAlgorithm" here vs ConfigKeys::defaultAutotileAlgorithmKey() =
- * "DefaultAutotileAlgorithm") because per-screen overrides replace the default.
+ * These intentionally differ from the global v2 config keys (e.g.
+ * "AutotileAlgorithm" here vs the "Default" key in
+ * ConfigKeys::tilingAlgorithmGroup() = "Tiling.Algorithm") because
+ * per-screen overrides replace the global default.
  */
 namespace PerScreenAutotileKey {
 inline constexpr const char Algorithm[] = "AutotileAlgorithm";

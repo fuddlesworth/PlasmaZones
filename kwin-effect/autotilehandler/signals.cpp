@@ -181,46 +181,86 @@ void AutotileHandler::slotScreensChanged(const QStringList& screenIds, bool isDe
                 // Apply the pre-autotile geometry — the ONLY thing that
                 // un-tiles the window, since the daemon does not resnap on a
                 // desktop switch. m_preAutotileGeometries is read non-
-                // destructively (the entry stays for the next genuine toggle).
-                // Scan every screen's bucket for this window's saved rect — a
-                // window that transferred between autotile screens during the
-                // session may have its pre-autotile geometry stored under a
-                // screen key other than its current one.
-                for (auto sgIt = m_preAutotileGeometries.constBegin(); sgIt != m_preAutotileGeometries.constEnd();
-                     ++sgIt) {
-                    if (!sgIt->contains(windowId)) {
-                        continue;
+                // destructively (the entry stays for the next genuine toggle);
+                // the all-bucket lookup covers windows whose rect is keyed
+                // under a screen other than their current one.
+                const QRectF savedGeo = findPreAutotileGeometry(windowId);
+                if (savedGeo.isValid()) {
+                    // applySnapGeometry's moveResize, and the maximize-state
+                    // clear below, emit windowFrameGeometryChanged
+                    // synchronously; suppress the VS-crossing detectors
+                    // (autotile slotWindowFrameGeometryChanged and the
+                    // snapping windowFrameGeometryChanged handler) so this
+                    // same-screen restore is not mistaken for a virtual-
+                    // screen crossing — the genuine retile path guards the
+                    // same way (tiling.cpp).
+                    m_effect->m_inDaemonGeometryApply = true;
+                    const auto geomGuard = qScopeGuard([this] {
+                        m_effect->m_inDaemonGeometryApply = false;
+                    });
+                    // Clear any lingering KWin maximize flag before restoring
+                    // the pre-autotile geometry: a still-maximized window
+                    // makes KWin re-assert the maximize-area rect and defeat
+                    // the restore — the tile-request path clears it for the
+                    // same reason (discussion #461).
+                    if (KWin::Window* kw = w->window(); kw && kw->maximizeMode() != KWin::MaximizeRestore) {
+                        ++m_suppressMaximizeChanged;
+                        kw->maximize(KWin::MaximizeRestore);
+                        --m_suppressMaximizeChanged;
                     }
-                    const QRectF savedGeo = sgIt->value(windowId);
-                    if (savedGeo.isValid()) {
-                        // applySnapGeometry's moveResize, and the maximize-state
-                        // clear below, emit windowFrameGeometryChanged
-                        // synchronously; suppress the VS-crossing detectors
-                        // (autotile slotWindowFrameGeometryChanged and the
-                        // snapping windowFrameGeometryChanged handler) so this
-                        // same-screen restore is not mistaken for a virtual-
-                        // screen crossing — the genuine retile path guards the
-                        // same way (tiling.cpp).
-                        m_effect->m_inDaemonGeometryApply = true;
-                        const auto geomGuard = qScopeGuard([this] {
-                            m_effect->m_inDaemonGeometryApply = false;
-                        });
-                        // Clear any lingering KWin maximize flag before restoring
-                        // the pre-autotile geometry: a still-maximized window
-                        // makes KWin re-assert the maximize-area rect and defeat
-                        // the restore — the tile-request path clears it for the
-                        // same reason (discussion #461).
-                        if (KWin::Window* kw = w->window(); kw && kw->maximizeMode() != KWin::MaximizeRestore) {
-                            ++m_suppressMaximizeChanged;
-                            kw->maximize(KWin::MaximizeRestore);
-                            --m_suppressMaximizeChanged;
-                        }
-                        m_effect->applySnapGeometry(w, savedGeo.toRect());
-                        break;
-                    }
-                    // Found-but-invalid entry: keep scanning. A valid rect may
-                    // still be stored under another screen's bucket from a
-                    // mid-session autotile-screen transfer.
+                    m_effect->applySnapGeometry(w, savedGeo.toRect());
+                } else {
+                    // No local bucket entry: the window was snap-managed when
+                    // it entered autotile, so saveAndRecordPreAutotileGeometry
+                    // deliberately stored nothing (its frame was the zone
+                    // rect). The daemon's placement store holds the true
+                    // pre-snap geometry — fetch it async and restore once the
+                    // reply lands (mirrors the autotile→snap fetch in
+                    // handleWindowOutputChanged). Without this the window
+                    // stays parked at its tiled frame.
+                    QPointer<KWin::EffectWindow> safeW = w;
+                    auto* watcher =
+                        new QDBusPendingCallWatcher(PhosphorProtocol::ClientHelpers::asyncCall(
+                                                        PhosphorProtocol::Service::Interface::WindowTracking,
+                                                        QStringLiteral("getValidatedPreTileGeometry"), {windowId}),
+                                                    m_effect);
+                    connect(watcher, &QDBusPendingCallWatcher::finished, m_effect,
+                            [this, safeW, windowId](QDBusPendingCallWatcher* pw) {
+                                pw->deleteLater();
+                                QDBusPendingReply<bool, int, int, int, int> reply = *pw;
+                                if (!reply.isValid() || reply.count() < 5 || !reply.argumentAt<0>()) {
+                                    return;
+                                }
+                                const int rw = reply.argumentAt<3>();
+                                const int rh = reply.argumentAt<4>();
+                                if (rw <= 0 || rh <= 0 || !safeW || safeW->isDeleted()) {
+                                    return;
+                                }
+                                // The desktop may have switched again — or the
+                                // window been re-tiled or snap-committed —
+                                // during the round-trip; each of those owners
+                                // supersedes this orphan restore.
+                                if (!safeW->isOnCurrentDesktop() || m_notifiedWindows.contains(windowId)
+                                    || m_autotileScreens.contains(m_effect->getWindowScreenId(safeW))
+                                    || m_effect->isWindowMarkedSnapped(windowId)) {
+                                    return;
+                                }
+                                m_effect->m_inDaemonGeometryApply = true;
+                                const auto geomGuard = qScopeGuard([this] {
+                                    m_effect->m_inDaemonGeometryApply = false;
+                                });
+                                if (KWin::Window* kw = safeW->window();
+                                    kw && kw->maximizeMode() != KWin::MaximizeRestore) {
+                                    ++m_suppressMaximizeChanged;
+                                    kw->maximize(KWin::MaximizeRestore);
+                                    --m_suppressMaximizeChanged;
+                                }
+                                m_effect->applySnapGeometry(
+                                    safeW, QRect(reply.argumentAt<1>(), reply.argumentAt<2>(), rw, rh));
+                                qCInfo(lcEffect)
+                                    << "Desktop switch: restored pre-snap geometry from daemon for orphaned window"
+                                    << windowId;
+                            });
                 }
             }
             m_effect->updateAllBorders();
@@ -303,11 +343,26 @@ void AutotileHandler::slotScreensChanged(const QStringList& screenIds, bool isDe
                 unmaximizeMonocleWindow(m_effect->getWindowId(w));
             }
 
-            // Clear autotile zone state (stagger timers were already
-            // invalidated by the unconditional bump at function entry; no
-            // stagger can have been scheduled since).
-            m_autotileTargetZones.clear();
-            m_centeredWaylandZones.clear();
+            // Clear autotile zone state for windows on REMOVED screens only.
+            // A partial toggle (one screen disabled, sibling autotile screens
+            // untouched) must not wipe sibling entries mid-animation — that
+            // would strand their windows without a centering target (see the
+            // NOTE in slotWindowsTileRequested). Entries whose window is gone
+            // are pruned too. (Stagger timers were already invalidated by the
+            // unconditional bump at function entry; no stagger can have been
+            // scheduled since.)
+            const auto pruneRemovedScreenEntries = [this, &removed](QHash<QString, QRect>& map) {
+                for (auto it = map.begin(); it != map.end();) {
+                    KWin::EffectWindow* mw = m_effect->findWindowById(it.key());
+                    if (!mw || removed.contains(m_effect->getWindowScreenId(mw))) {
+                        it = map.erase(it);
+                    } else {
+                        ++it;
+                    }
+                }
+            };
+            pruneRemovedScreenEntries(m_autotileTargetZones);
+            pruneRemovedScreenEntries(m_centeredWaylandZones);
 
             // Clear pre-autotile geometries for removed screens — they're
             // no longer needed.
@@ -550,7 +605,6 @@ void AutotileHandler::slotScreensChanged(const QStringList& screenIds, bool isDe
 
 void AutotileHandler::slotWindowFloatingChanged(const QString& windowId, bool isFloating, const QString& screenId)
 {
-    Q_UNUSED(screenId)
     qCInfo(lcEffect) << "Autotile floating changed:" << windowId << "isFloating:" << isFloating
                      << "screen:" << screenId;
 

@@ -119,15 +119,21 @@ void AutotileHandler::slotWindowsTileRequested(const PhosphorProtocol::TileReque
             // its geometry bucket).
             KWin::EffectWindow* floatWin = m_effect->findWindowById(windowId);
             if (floatWin) {
-                for (auto sgIt = m_preAutotileGeometries.constBegin(); sgIt != m_preAutotileGeometries.constEnd();
-                     ++sgIt) {
-                    const QRectF savedGeo = sgIt->value(windowId);
-                    if (savedGeo.isValid()) {
-                        m_effect->applySnapGeometry(floatWin, savedGeo.toRect());
-                        qCInfo(lcEffect) << "Restored pre-autotile geometry for overflow" << windowId
-                                         << savedGeo.toRect();
-                        break;
-                    }
+                if (const QRectF savedGeo = findPreAutotileGeometry(windowId); savedGeo.isValid()) {
+                    // Daemon-driven apply: the restored rect may lie in a
+                    // different virtual screen than the tiled rect, and batch
+                    // floats fire in the same swap/rotate window the
+                    // crossing-detection guard below (per-window tile apply)
+                    // protects against. Without the guard, the synchronous
+                    // frameGeometryChanged would resolve the new position
+                    // against stale m_virtualScreenDefs and spuriously
+                    // re-announce the just-floated window.
+                    m_effect->m_inDaemonGeometryApply = true;
+                    const auto floatGuard = qScopeGuard([this] {
+                        m_effect->m_inDaemonGeometryApply = false;
+                    });
+                    m_effect->applySnapGeometry(floatWin, savedGeo.toRect());
+                    qCInfo(lcEffect) << "Restored pre-autotile geometry for overflow" << windowId << savedGeo.toRect();
                 }
             }
             continue;

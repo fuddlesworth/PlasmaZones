@@ -755,7 +755,7 @@ Q_SIGNALS:
     /**
      * @brief Daemon requests KWin to apply geometries for a batch of windows
      * @param geometries List of window geometry entries to apply
-     * @param action Navigation action type ("rotate", "resnap", "snap_all") for feedback
+     * @param action Navigation action type ("rotate", "resnap", "vs_reconfigure") for feedback
      * @note Daemon handles windowSnapped bookkeeping internally before emitting.
      *       Effect just applies geometry with stagger — no windowsSnappedBatch callback.
      */

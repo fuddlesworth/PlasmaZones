@@ -295,6 +295,11 @@ Q_SIGNALS:
 
     /**
      * @brief Emitted when the set of autotile screens changes
+     *
+     * Also re-emitted with an UNCHANGED set on a desktop/activity switch
+     * between contexts with identical autotile sets (isDesktopSwitch=true,
+     * discussion #219) — the effect's catch-scan keys on that wakeup.
+     *
      * @param screenIds List of screen IDs currently using autotile
      * @param isDesktopSwitch True if the change is due to desktop/activity switch
      */

@@ -726,10 +726,9 @@ void PlasmaZonesEffect::loadCachedSettings()
     // order in updateAllBorders / re-toggling title bars — matching the
     // "only act on change" convention the autotile width/radius setters use.
     loadSettingAsync(QStringLiteral("snappingHideTitleBars"), [this](const QVariant& v) {
-        const bool hide = v.toBool();
-        if (m_snapHandler->hideTitleBars() != hide) {
-            m_snapHandler->updateSnapHideTitleBars(hide);
-        }
+        // The value-changed guard lives inside updateSnapHideTitleBars
+        // (mirrors updateHideTitleBarsSetting above).
+        m_snapHandler->updateSnapHideTitleBars(v.toBool());
     });
     loadSettingAsync(QStringLiteral("snappingShowBorder"), [this](const QVariant& v) {
         const bool show = v.toBool();
