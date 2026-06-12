@@ -102,6 +102,82 @@ private Q_SLOTS:
     }
 
     // =========================================================================
+    // autotileScreensChanged emission on identical-set desktop switches
+    // (discussion #219)
+    // =========================================================================
+
+    void testScreensChanged_desktopSwitchSameSet_emitsDesktopSwitchSignal()
+    {
+        AutotileEngine engine(nullptr, nullptr, nullptr, PlasmaZones::TestHelpers::testRegistry());
+        QSignalSpy spy(&engine, &AutotileEngine::autotileScreensChanged);
+
+        const QSet<QString> screens{QStringLiteral("HDMI-1")};
+        engine.setAutotileScreens(screens);
+        QCOMPARE(spy.count(), 1);
+        QCOMPARE(spy.at(0).at(1).toBool(), false);
+
+        // Desktop switch where the new desktop resolves to the SAME set: the
+        // engine must re-emit flagged as a desktop switch so the effect's
+        // catch-scan runs for windows moved here while the user was away.
+        engine.setCurrentDesktop(2);
+        engine.setAutotileScreens(screens);
+        QCOMPARE(spy.count(), 2);
+        QCOMPARE(spy.at(1).at(0).toStringList(), QStringList{QStringLiteral("HDMI-1")});
+        QCOMPARE(spy.at(1).at(1).toBool(), true);
+    }
+
+    void testScreensChanged_sameSetNoDesktopSwitch_noSignal()
+    {
+        AutotileEngine engine(nullptr, nullptr, nullptr, PlasmaZones::TestHelpers::testRegistry());
+        QSignalSpy spy(&engine, &AutotileEngine::autotileScreensChanged);
+
+        const QSet<QString> screens{QStringLiteral("HDMI-1")};
+        engine.setAutotileScreens(screens);
+        // Same-set recompute outside a desktop/activity switch (settings
+        // change, layout reassignment) must stay silent.
+        engine.setAutotileScreens(screens);
+
+        QCOMPARE(spy.count(), 1);
+    }
+
+    void testScreensChanged_desktopSwitchSameSet_flagConsumedForNextToggle()
+    {
+        AutotileEngine engine(nullptr, nullptr, nullptr, PlasmaZones::TestHelpers::testRegistry());
+        QSignalSpy spy(&engine, &AutotileEngine::autotileScreensChanged);
+
+        const QSet<QString> screens{QStringLiteral("HDMI-1")};
+        engine.setAutotileScreens(screens);
+        engine.setCurrentDesktop(2);
+        engine.setAutotileScreens(screens);
+        QCOMPARE(spy.count(), 2);
+
+        // The identical-set early return consumed the desktop-switch flag, so
+        // a later genuine toggle OFF must report isDesktopSwitch=false — the
+        // effect relies on that to run its geometry/border restore.
+        engine.setAutotileScreens({});
+        QCOMPARE(spy.count(), 3);
+        QCOMPARE(spy.at(2).at(0).toStringList(), QStringList());
+        QCOMPARE(spy.at(2).at(1).toBool(), false);
+    }
+
+    void testScreensChanged_desktopSwitchEmptySet_noSignal()
+    {
+        AutotileEngine engine(nullptr, nullptr, nullptr, PlasmaZones::TestHelpers::testRegistry());
+        QSignalSpy spy(&engine, &AutotileEngine::autotileScreensChanged);
+
+        // Both desktops resolve to an empty set: no screen autotiles anywhere,
+        // so there is nothing for the effect's catch-scan to do — no wakeup.
+        engine.setCurrentDesktop(2);
+        engine.setAutotileScreens({});
+        QCOMPARE(spy.count(), 0);
+
+        // The flag was still consumed: a following enable is a genuine toggle.
+        engine.setAutotileScreens({QStringLiteral("HDMI-1")});
+        QCOMPARE(spy.count(), 1);
+        QCOMPARE(spy.at(0).at(1).toBool(), false);
+    }
+
+    // =========================================================================
     // Algorithm selection tests
     // =========================================================================
 

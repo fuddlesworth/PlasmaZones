@@ -529,7 +529,18 @@ void AutotileEngine::setAutotileScreens(const QSet<QString>& screens)
         // autotile screen set leaves the flag set. The NEXT setAutotileScreens
         // call (e.g. from a toggle OFF) then incorrectly reports isDesktopSwitch=true,
         // causing the effect to skip geometry/border restore on toggle OFF.
+        const bool wasDesktopSwitch = m_isDesktopContextSwitch;
         m_isDesktopContextSwitch = false;
+        // Discussion #219: a desktop/activity switch between two contexts with
+        // an IDENTICAL autotile set still needs the compositor effect's
+        // desktop-switch pass — its catch-scan re-adds windows that were moved
+        // to this desktop while the user was away (the move untracked them on
+        // the source desktop). Re-emit the unchanged set flagged as a desktop
+        // switch. An empty set means no screen autotiles anywhere — nothing to
+        // catch, skip the wakeup.
+        if (wasDesktopSwitch && !m_autotileScreens.isEmpty()) {
+            Q_EMIT autotileScreensChanged(QStringList(m_autotileScreens.begin(), m_autotileScreens.end()), true);
+        }
         return;
     }
 

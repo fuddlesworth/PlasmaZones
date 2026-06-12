@@ -319,12 +319,19 @@ void AutotileHandler::slotScreensChanged(const QStringList& screenIds, bool isDe
 
     m_autotileScreens = newScreens;
 
-    if (!added.isEmpty()) {
+    // A desktop switch enters even with empty `added`: when both desktops'
+    // autotile sets are IDENTICAL the engine re-emits the unchanged set with
+    // isDesktopSwitch=true (discussion #219) solely so the catch-scan below
+    // can re-add windows moved here while the user was away. The added-keyed
+    // re-tracking loops are vacuous no-ops in that case (Pass 1 demoted
+    // nothing).
+    if (!added.isEmpty() || isDesktopSwitch) {
         if (isDesktopSwitch) {
             // Desktop/activity return: windows are already tiled on this desktop.
             // Re-add current-desktop windows to m_notifiedWindows so they're not
             // re-notified by later notifyWindowAdded calls (e.g., window moves).
-            qCInfo(lcEffect) << "slotScreensChanged: desktop return for screens:" << added;
+            qCInfo(lcEffect) << "slotScreensChanged: desktop return, added screens:" << added
+                             << "autotile screens:" << m_autotileScreens;
             for (const QString& screenId : added) {
                 for (KWin::EffectWindow* w : windows) {
                     if (w && m_effect->shouldHandleWindow(w) && w->isOnCurrentDesktop() && w->isOnCurrentActivity()
@@ -362,14 +369,13 @@ void AutotileHandler::slotScreensChanged(const QStringList& screenIds, bool isDe
 
             // Catch windows moved to this desktop while the user was on
             // another — they were removed from tiling by windowDesktopsChanged
-            // on the source desktop and need re-adding here. This covers
+            // on the source desktop and need re-adding here. Scans ALL
+            // autotile screens, not just `added`, so it covers both
             // PARTIAL-overlap desktop switches (the moved window sits on a
-            // shared screen that isn't in `added`). When the two desktops'
-            // autotile sets are IDENTICAL the daemon suppresses the
-            // screens-changed signal entirely (engine early-returns on an
-            // unchanged set) and this code never runs — that gap is the
-            // daemon-side half of discussion #219. notifyWindowAdded is
-            // idempotent (checks m_notifiedWindows).
+            // shared screen that isn't in `added`) and IDENTICAL-set switches
+            // (discussion #219), where the engine re-emits the unchanged set
+            // with isDesktopSwitch=true precisely to reach this scan.
+            // notifyWindowAdded is idempotent (checks m_notifiedWindows).
             for (const QString& screenId : m_autotileScreens) {
                 for (KWin::EffectWindow* w : windows) {
                     if (!w || !m_effect->shouldHandleWindow(w) || !w->isOnCurrentDesktop() || !w->isOnCurrentActivity()
