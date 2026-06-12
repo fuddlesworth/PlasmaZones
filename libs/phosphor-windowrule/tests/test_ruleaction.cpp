@@ -154,6 +154,7 @@ private Q_SLOTS:
             ActionType::OverrideAnimationShader,
             ActionType::OverrideAnimationTiming,
             ActionType::OverrideAnimationCurve,
+            ActionType::ExcludeAnimations,
             ActionType::SetOpacity,
             // Border / title-bar overrides are window-domain — resolved per
             // window in the effect, applicable to any matched window.
@@ -210,6 +211,7 @@ private Q_SLOTS:
             ActionType::OverrideAnimationShader,
             ActionType::OverrideAnimationTiming,
             ActionType::OverrideAnimationCurve,
+            ActionType::ExcludeAnimations,
             ActionType::SetOpacity,
             ActionType::SetHideTitleBar,
             ActionType::SetBorderVisible,
@@ -217,11 +219,9 @@ private Q_SLOTS:
             ActionType::SetBorderRadius,
             ActionType::SetBorderColor,
         };
-        // Domains pinned in other suites: ExcludeAnimations (window) here in
-        // the validator tests' coverage, RestorePosition (window) in
+        // Domain pinned in another suite: RestorePosition (window) in
         // test_actionregistry.cpp.
         const QList<QLatin1StringView> pinnedElsewhere = {
-            ActionType::ExcludeAnimations,
             ActionType::RestorePosition,
         };
         for (const QLatin1StringView t : contextTypes) {

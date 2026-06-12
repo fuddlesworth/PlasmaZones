@@ -1025,6 +1025,31 @@ private:
     bool isKnownScreen(const QString& screenId) const;
 
     /**
+     * @brief Shared key-migration body for focus-driven window moves.
+     *
+     * Removes @p windowId from @p oldKey's TilingState (running the
+     * algorithm lifecycle hook), migrates overflow tracking, retiles the
+     * source screen, and re-adds via onWindowAdded() when @p newScreenId is
+     * an autotile screen. The caller updates/removes the
+     * m_windowToStateKey entry FIRST. No-op when the old state doesn't
+     * contain the window.
+     */
+    void migrateWindowBetweenKeys(const QString& windowId, const PhosphorEngine::TilingStateKey& oldKey,
+                                  const QString& newScreenId);
+
+    /**
+     * @brief Deferred re-check for context-only (desktop/activity) key
+     *        deltas detected by windowFocused().
+     *
+     * Queued one event-loop pass after the focus event so an in-flight
+     * setCurrentDesktop/setCurrentActivity push can land first; migrates
+     * only if the key mismatch persists (the window genuinely moved
+     * context). Prevents the focus-outran-the-push race from yanking a
+     * correctly-tiled window into the wrong desktop's state.
+     */
+    void revalidateWindowContext(const QString& windowId, const QString& screenId);
+
+    /**
      * @brief Construct a TilingStateKey for the current desktop/activity
      *
      * Respects per-screen desktop overrides for screens where all autotiled

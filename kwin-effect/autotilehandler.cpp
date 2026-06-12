@@ -162,14 +162,23 @@ void AutotileHandler::handleCursorMoved(const QPointF& pos, const QString& scree
 
 bool AutotileHandler::notifyWindowAdded(KWin::EffectWindow* w)
 {
-    if (!isEligibleForAutotileNotify(w)) {
+    // Deleted windows bail before getWindowId (cache-pollution hazard);
+    // every other rejection comes after the pending-close consume below.
+    if (!w || w->isDeleted()) {
         return false;
     }
 
     const QString windowId = m_effect->getWindowId(w);
 
-    // Window was already closed before we could notify open — skip (D-Bus ordering race)
+    // Window was already closed before we could notify open — skip (D-Bus
+    // ordering race). Consumed BEFORE the eligibility check so an entry
+    // whose racing add arrives ineligible doesn't strand in the set until
+    // the next daemon restart.
     if (m_pendingCloses.remove(windowId)) {
+        return false;
+    }
+
+    if (!isEligibleForAutotileNotify(w)) {
         return false;
     }
 
@@ -247,7 +256,20 @@ void AutotileHandler::notifyWindowsAddedBatch(const QList<KWin::EffectWindow*>& 
     QStringList batchWindowIds; // for error rollback
 
     for (KWin::EffectWindow* w : windows) {
+        // Deleted windows bail before any id/screen lookup (cache-pollution
+        // hazard); the pending-close consume runs BEFORE the eligibility
+        // check — same ordering rationale as notifyWindowAdded.
+        if (!w || w->isDeleted()) {
+            continue;
+        }
+
+        const QString windowId = m_effect->getWindowId(w);
+        const bool suppressed = m_pendingCloses.remove(windowId);
+
         if (!isEligibleForAutotileNotify(w)) {
+            continue;
+        }
+        if (suppressed) {
             continue;
         }
 
@@ -256,12 +278,6 @@ void AutotileHandler::notifyWindowsAddedBatch(const QList<KWin::EffectWindow*>& 
             continue;
         }
         if (!m_autotileScreens.contains(screenId)) {
-            continue;
-        }
-
-        const QString windowId = m_effect->getWindowId(w);
-
-        if (m_pendingCloses.remove(windowId)) {
             continue;
         }
 

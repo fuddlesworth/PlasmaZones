@@ -676,8 +676,9 @@ public:
      *
      * Primary path: reads Rendering/Backend from config.json (the
      * renderingGroup()/backendKey() accessors). Falls back to the legacy
-     * plasmazonesrc INI (v1 key) ONLY when the JSON config does not exist
-     * yet — i.e. before the first migration has run. This helper provides a
+     * plasmazonesrc INI (v1 key) when the JSON config is absent, unparseable,
+     * or doesn't carry the key — in practice the pre-migration window, since
+     * a successful migration renames the INI away. This helper provides a
      * single canonical read used by daemon, editor, and Settings.
      *
      * Safe to call before QCoreApplication exists (raw file access, no

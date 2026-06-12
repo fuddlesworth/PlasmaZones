@@ -167,7 +167,7 @@ void DecorationManager::restoreAll()
     // there is no later tick to defer to.
     QPointer<DecorationManager> self(this);
     for (const QString& windowId : std::as_const(toRestore)) {
-        if (auto it = m_windows.find(windowId); it != m_windows.end()) {
+        if (auto it = m_windows.find(windowId); it != m_windows.end() && !it->owners.isEmpty()) {
             // A re-entrant acquire (via the restored-signal handlers of
             // earlier loop iterations) re-claimed this window mid-teardown:
             // the new epoch owns its decoration now — leave it hidden. But
@@ -177,8 +177,16 @@ void DecorationManager::restoreAll()
             // new epoch's eventual release a silent no-op (a permanently
             // stranded title bar — restoreNow bails on priorNoBorder and
             // nothing else ever calls setNoBorder). Every id in toRestore
-            // was eligible and physically hidden by us, so the patch values
-            // are known-correct.
+            // was eligible and physically hidden by us at hide time, so the
+            // patch values are correct (if eligibility flipped since, the
+            // release-time setNoBorder(false) self-guards compositor-side —
+            // the safer direction than re-creating the strand).
+            //
+            // OWNERLESS re-entrant entries fall through: the only way to
+            // create one mid-teardown is a force-show veto
+            // (setRuleOverride(false)), whose invariant — pins the
+            // decoration VISIBLE — demands the physical restore below, not
+            // a hide transfer.
             it->evaluated = true;
             it->eligible = true;
             it->priorNoBorder = false;

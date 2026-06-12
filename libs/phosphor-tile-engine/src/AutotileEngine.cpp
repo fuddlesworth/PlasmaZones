@@ -1870,6 +1870,17 @@ void AutotileEngine::handoffReceive(const HandoffContext& ctx)
     // A non-floating arrival gets tiled (the layout engine picks the slot)
     // — drag-from-another-autotile-screen typically falls here.
     state->setFloating(windowId, ctx.wasFloating);
+    // Keep the memory algorithm's bookkeeping consistent for a non-floating
+    // arrival — symmetric with the removal hook in handoffRelease. Floating
+    // arrivals are not in tiledWindows(), so indexOf misses and the hook is
+    // correctly skipped.
+    PhosphorTiles::TilingAlgorithm* algo = effectiveAlgorithm(ctx.toScreenId);
+    if (algo && algo->supportsLifecycleHooks()) {
+        const int idx = state->tiledWindows().indexOf(windowId);
+        if (idx >= 0) {
+            algo->onWindowAdded(state, idx);
+        }
+    }
     m_windowToStateKey[windowId] = currentKeyForScreen(ctx.toScreenId);
 
     // Trigger a retile so a non-floating arrival actually lands in a tile;
@@ -2214,7 +2225,6 @@ void AutotileEngine::windowFocused(const QString& rawWindowId, const QString& sc
     // tiled window count.
     const TilingStateKey oldKey = m_windowToStateKey.value(windowId);
     const QString oldScreen = oldKey.screenId;
-    bool keyChanged = false;
     if (!screenId.isEmpty() && m_windowToStateKey.contains(windowId)) {
         if (isAutotileScreen(screenId)) {
             const TilingStateKey newKey = currentKeyForScreen(screenId);
@@ -2226,60 +2236,109 @@ void AutotileEngine::windowFocused(const QString& rawWindowId, const QString& sc
             // TilingState as a permanent ghost — windowOpened's own
             // ghost-removal then skips (map already equals newKey), the old
             // desktop retiles around a window living elsewhere forever.
-            keyChanged = !(newKey == oldKey);
-            m_windowToStateKey[windowId] = newKey;
+            if (!(newKey == oldKey)) {
+                if (oldKey.screenId == screenId) {
+                    // Context-only delta (desktop/activity changed, screen
+                    // unchanged): the focus event may have OUTRUN the
+                    // daemon's context push (alt-tab to a window on another
+                    // desktop fires focus and desktop-change from different
+                    // D-Bus sources with no ordering guarantee). Migrating
+                    // now against a stale m_currentDesktop would yank a
+                    // correctly-tiled window into the wrong desktop's state
+                    // (visible flicker, order/float reset). Defer one event
+                    // loop pass — by then the in-flight context push has
+                    // been processed — and migrate only if the mismatch
+                    // persists. The map is left untouched here so the
+                    // catch-scan's windowOpened ghost-removal still detects
+                    // a genuine move in the meantime.
+                    QMetaObject::invokeMethod(
+                        this,
+                        [this, windowId, screenId]() {
+                            revalidateWindowContext(windowId, screenId);
+                        },
+                        Qt::QueuedConnection);
+                } else {
+                    m_windowToStateKey[windowId] = newKey;
+                    migrateWindowBetweenKeys(windowId, oldKey, screenId);
+                }
+            }
         } else {
             // Window moved to a non-autotile screen — remove tracking entirely.
             // Leaving a stale entry pointing at a snap screen causes phantom
             // lookups and prevents clean re-entry if the window returns.
+            // Drop the per-window caches too: removeWindow()/windowClosed()
+            // clear these on their paths, and a lingering autotile-floated
+            // marker would keep feeding the daemon's mode-flip logic while a
+            // stored min-size would survive a later re-entry stale.
             m_windowToStateKey.remove(windowId);
-            keyChanged = true;
-        }
-    }
-
-    if (keyChanged && !oldScreen.isEmpty()) {
-        PhosphorTiles::TilingState* oldState = m_screenStates.value(oldKey);
-        if (oldState && oldState->containsWindow(windowId)) {
-            // Use the algorithm's lifecycle hook for clean removal (e.g.
-            // dwindle-memory updates its split tree) — mirrors windowOpened's
-            // migration path.
-            PhosphorTiles::TilingAlgorithm* oldAlgo = effectiveAlgorithm(oldKey.screenId);
-            if (oldAlgo && oldAlgo->supportsLifecycleHooks()) {
-                const int idx = oldState->tiledWindows().indexOf(windowId);
-                if (idx >= 0) {
-                    oldAlgo->onWindowRemoved(oldState, idx);
-                }
+            m_windowMinSizes.remove(windowId);
+            m_autotileFloatedWindows.remove(windowId);
+            if (!oldScreen.isEmpty()) {
+                migrateWindowBetweenKeys(windowId, oldKey, screenId);
             }
-            oldState->removeWindow(windowId);
-            m_overflow.migrateWindow(windowId);
-            qCInfo(PhosphorTileEngine::lcTileEngine)
-                << "Window" << windowId << "moved from" << oldScreen << "to" << screenId << "- migrating";
-            // Close the hole the departing window left on the SOURCE screen —
-            // the destination's own insert schedules a retile there, but
-            // nothing else retiles the source (mirrors windowOpened's
-            // migration path).
-            scheduleRetileForScreen(oldScreen);
-            if (isAutotileScreen(screenId)) {
-                // Re-add to the new screen's normal flow (will be
-                // overflow-checked on next retile).
-                onWindowAdded(windowId);
-            } else {
-                // The window left autotile entirely: drop its per-window
-                // caches too. removeWindow()/windowClosed() clear these on
-                // their paths; without this the lingering autotile-floated
-                // marker keeps feeding the daemon's mode-flip logic and the
-                // stored min-size survives a re-entry stale.
-                m_windowMinSizes.remove(windowId);
-                m_autotileFloatedWindows.remove(windowId);
-            }
-            // Re-adding on a non-autotile destination would route through
-            // screenForWindow()'s primary-screen fallback and re-tile a
-            // window that just left autotile — the cross-engine misroute
-            // class the tracking removal exists to prevent.
         }
     }
 
     onWindowFocused(windowId);
+}
+
+void AutotileEngine::migrateWindowBetweenKeys(const QString& windowId, const TilingStateKey& oldKey,
+                                              const QString& newScreenId)
+{
+    PhosphorTiles::TilingState* oldState = m_screenStates.value(oldKey);
+    if (!oldState || !oldState->containsWindow(windowId)) {
+        return;
+    }
+    // Use the algorithm's lifecycle hook for clean removal (e.g.
+    // dwindle-memory updates its split tree) — mirrors windowOpened's
+    // migration path.
+    PhosphorTiles::TilingAlgorithm* oldAlgo = effectiveAlgorithm(oldKey.screenId);
+    if (oldAlgo && oldAlgo->supportsLifecycleHooks()) {
+        const int idx = oldState->tiledWindows().indexOf(windowId);
+        if (idx >= 0) {
+            oldAlgo->onWindowRemoved(oldState, idx);
+        }
+    }
+    oldState->removeWindow(windowId);
+    m_overflow.migrateWindow(windowId);
+    qCInfo(PhosphorTileEngine::lcTileEngine)
+        << "Window" << windowId << "moved from" << oldKey.screenId << "to" << newScreenId << "- migrating";
+    // Close the hole the departing window left on the SOURCE screen — the
+    // destination's own insert schedules a retile there, but nothing else
+    // retiles the source (mirrors windowOpened's migration path).
+    scheduleRetileForScreen(oldKey.screenId);
+    if (isAutotileScreen(newScreenId)) {
+        // Re-add to the new screen's normal flow (will be overflow-checked
+        // on next retile).
+        onWindowAdded(windowId);
+    }
+    // Re-adding on a non-autotile destination would route through
+    // screenForWindow()'s primary-screen fallback and re-tile a window that
+    // just left autotile — the cross-engine misroute class the tracking
+    // removal exists to prevent.
+}
+
+void AutotileEngine::revalidateWindowContext(const QString& windowId, const QString& screenId)
+{
+    // Deferred half of windowFocused's context-only key-delta handling. By
+    // now any context push that was in flight when the focus event arrived
+    // has been processed, so a persisting mismatch means the window REALLY
+    // moved desktop/activity (the catch-scan race the full-key migration
+    // exists for), not that the focus outran the push.
+    auto it = m_windowToStateKey.constFind(windowId);
+    if (it == m_windowToStateKey.constEnd() || !isAutotileScreen(screenId)) {
+        return; // closed / untracked / screen left autotile meanwhile
+    }
+    const TilingStateKey oldKey = it.value();
+    if (oldKey.screenId != screenId) {
+        return; // a genuine cross-screen event superseded this re-check
+    }
+    const TilingStateKey newKey = currentKeyForScreen(screenId);
+    if (newKey == oldKey) {
+        return; // the context push arrived — nothing actually moved
+    }
+    m_windowToStateKey[windowId] = newKey;
+    migrateWindowBetweenKeys(windowId, oldKey, screenId);
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -3446,6 +3505,13 @@ void AutotileEngine::propagateGlobalMasterCount()
 
 void AutotileEngine::backfillWindows()
 {
+    // Algorithm lifecycle ADD hooks are deliberately not fired here (nor by
+    // the strict pending-order eager-consume in setAutotileScreens or the
+    // drag-insert-preview reorders): backfill runs on algorithm SWITCHES,
+    // where the incoming algorithm builds its bookkeeping from the full
+    // tiledWindows() list on its first retile rather than incrementally;
+    // per-window add hooks before that retile would double-count. The
+    // incremental hooks cover steady-state add/remove/migrate only.
     for (const QString& screenId : m_autotileScreens) {
         // Overflow recovery is NOT done here — it is handled by retileScreen()
         // which defers signal emission until after the full retile cycle.

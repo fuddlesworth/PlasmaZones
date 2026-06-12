@@ -399,9 +399,11 @@ void migrateConnectorNames(QHash<QString, QVariantMap>& settings)
     // keys in SORTED order: when two connectors resolve to the same EDID (or a
     // connector resolves to a key already present in canonical form) the
     // collision is inherently lossy — only one override can keep the slot — so
-    // make the tie-break deterministic (lexicographically-last source key wins)
+    // make the tie-break deterministic (the slot's FIRST writer wins: a
+    // pre-existing canonical entry beats every connector, and among colliding
+    // connectors the lexicographically-first migrates and later ones drop)
     // rather than dependent on QHash iteration order, and warn on every
-    // overwrite so the dropped override is surfaced.
+    // collision so the dropped override is surfaced.
     QStringList connectorKeys;
     for (auto it = settings.constBegin(); it != settings.constEnd(); ++it) {
         if (canonicalPerScreenKey(it.key()) != it.key())
@@ -413,10 +415,11 @@ void migrateConnectorNames(QHash<QString, QVariantMap>& settings)
         const QString canonical = canonicalPerScreenKey(key);
         const QVariantMap value = settings.take(key);
         if (settings.contains(canonical)) {
-            // Canonical-form entry wins: it was written by current-format
-            // code and is the fresher data; the connector-form entry being
-            // migrated is by definition a legacy leftover. Drop the legacy
-            // one (already take()n above) and surface the loss.
+            // The slot's existing entry wins — either a pre-existing
+            // canonical-form entry (written by current-format code, the
+            // fresher data) or an earlier-sorted connector's already-migrated
+            // value. Drop this connector's value (already take()n above) and
+            // surface the loss.
             qCWarning(lcConfig) << "EDID collision during per-screen migration:" << key << "resolves to" << canonical
                                 << "which already exists - keeping the canonical entry, dropping the legacy override";
             continue;

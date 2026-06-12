@@ -168,8 +168,8 @@ private Q_SLOTS:
     // canceling snap overlay, etc.
     void slotDragPolicyChanged(const QString& windowId, const PhosphorProtocol::DragPolicy& newPolicy);
 
-    // Daemon-driven batch operations (rotate, resnap, vs_reconfigure over
-    // the wire; snap_all calls in effect-locally)
+    // Daemon-driven batch operations (rotate, resnap, vs_reconfigure arrive
+    // over the wire; the effect-local snap_all path calls this slot directly)
     void slotApplyGeometriesBatch(const PhosphorProtocol::WindowGeometryList& geometries, const QString& action);
     void slotRaiseWindowsRequested(const QStringList& windowIds);
 

@@ -440,7 +440,10 @@ void PlasmaZonesEffect::processDaemonReadyWindowState()
             // between collection and the dispatch loop below.
             QVector<QPointer<KWin::EffectWindow>> toRestore;
             for (KWin::EffectWindow* window : allWindows) {
-                if (!window || !shouldHandleWindow(window)) {
+                // !isDeleted: same deleted-window hygiene as the metadata
+                // push and aliveWindowIds walks — getWindowId on a
+                // close-grabbed dying window re-pollutes the id caches.
+                if (!window || window->isDeleted() || !shouldHandleWindow(window)) {
                     continue;
                 }
                 if (window->isMinimized()) {

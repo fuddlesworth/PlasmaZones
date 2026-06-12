@@ -408,7 +408,8 @@ void WindowDragAdaptor::dragStopped(const QString& windowId, int cursorX, int cu
         // Float-toggle shortcut uses calculateUnfloatRestore and restores full x/y/w/h.
         // Pass the release screen for proper cross-screen geometry validation (the float
         // toggle path passes screenId to validatedPreTileGeometry; without it, coordinates
-        // captured on another screen may fail isGeometryOnScreen and not restore).
+        // captured on another screen may fail the service's on-screen visibility check
+        // and not restore).
         if (m_settings && m_settings->restoreOriginalSizeOnUnsnap() && m_windowTracking) {
             auto* wts = m_windowTracking->service();
             auto geo = wts->validatedUnmanagedGeometry(windowId, releaseScreenId);

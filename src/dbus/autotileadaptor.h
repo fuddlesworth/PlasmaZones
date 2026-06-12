@@ -137,7 +137,6 @@ public Q_SLOTS:
      * External-client convenience (equivalent to retile("")) — no in-tree
      * caller remains; the effect's border-width handler stopped retiling
      * when the geometry-inset border era ended. Kept as contract surface.
-     * Equivalent to retile("").
      */
     void retileAllScreens();
 

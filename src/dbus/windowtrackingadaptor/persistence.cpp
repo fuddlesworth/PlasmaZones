@@ -3,8 +3,7 @@
 
 #include "../windowtrackingadaptor.h"
 #include "internal.h"
-#include <PhosphorSnapEngine/SnapEngine.h>
-#include "../../core/interfaces.h"
+#include <PhosphorIdentity/VirtualScreenId.h>
 #include <PhosphorZones/LayoutRegistry.h>
 #include <PhosphorZones/Layout.h>
 #include <PhosphorZones/Zone.h>
@@ -12,18 +11,12 @@
 #include <PhosphorScreens/Manager.h>
 #include "../../core/logging.h"
 #include "../../core/utils.h"
-#include <PhosphorWorkspaces/VirtualDesktopManager.h>
-#include <QGuiApplication>
 #include <QScreen>
 #include <QJsonDocument>
-#include <QJsonArray>
 #include <QJsonObject>
-#include <QTimer>
 #include <PhosphorScreens/ScreenIdentity.h>
 
 namespace PlasmaZones {
-
-using namespace WindowTrackingInternal;
 
 void WindowTrackingAdaptor::storePreTileGeometry(const QString& windowId, int x, int y, int width, int height,
                                                  const QString& screenId, bool overwrite)
@@ -123,10 +116,9 @@ bool WindowTrackingAdaptor::getValidatedPreTileGeometry(const QString& windowId,
         return false;
     }
 
-    QString screenId;
-    if (m_service) {
-        screenId = m_service->screenAssignments().value(windowId);
-    }
+    // m_service is non-null by constructor invariant (qFatal on null) —
+    // no half-guarding here, consistent with the rest of this file.
+    const QString screenId = m_service->screenAssignments().value(windowId);
 
     auto geo = m_service->validatedUnmanagedGeometry(windowId, screenId);
     if (!geo) {
