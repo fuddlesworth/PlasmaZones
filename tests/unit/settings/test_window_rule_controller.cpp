@@ -51,6 +51,7 @@ private Q_SLOTS:
     void monitorOverviewIgnoresBareLayoutRules();
     void monitorOverviewLayoutFromSingleWinningRule();
     void monitorOverviewDisableEngineMatchesEffectiveMode();
+    void monitorOverviewReportsLock();
     void engineModePickerExposesAllVocabularyTokens();
     void userAuthorableFilterHidesInternalActions();
     void moveRuleReorders();
@@ -192,6 +193,55 @@ void TestWindowRuleController::monitorOverviewSummarises()
     }
     QVERIFY(sawDp2);
     QVERIFY(sawEdp1);
+}
+
+void TestWindowRuleController::monitorOverviewReportsLock()
+{
+    // A LockContext rule pinning a monitor surfaces `locked: true` on its tile
+    // (drives the lock badge), independent of any layout assignment — a
+    // lock-only rule carries no SetEngineMode, so the tile has no layoutName,
+    // yet it is locked. A rule whose lock value is false reports
+    // `locked: false`, proving the tile reads the action's value (not mere
+    // presence), mirroring resolveContextLocked.
+    WindowRuleController controller;
+
+    const auto lockRule = [&](const QString& screenId, bool locked) {
+        QVariantMap rule = controller.newEmptyRule(QStringLiteral("monitor"));
+        QVariantMap match = rule.value(QStringLiteral("match")).toMap();
+        match[QStringLiteral("value")] = screenId;
+        rule[QStringLiteral("match")] = match;
+        rule[QStringLiteral("actions")] = QVariantList{
+            QVariantMap{{QStringLiteral("type"), QStringLiteral("lockContext")}, {QStringLiteral("value"), locked}}};
+        QVERIFY(!controller.addRuleFromJson(rule).isEmpty());
+    };
+    lockRule(QStringLiteral("DP-2"), true);
+    lockRule(QStringLiteral("DP-3"), false);
+
+    const QVariantList screens{QVariantMap{{QStringLiteral("name"), QStringLiteral("DP-2")}},
+                               QVariantMap{{QStringLiteral("name"), QStringLiteral("DP-3")}},
+                               QVariantMap{{QStringLiteral("name"), QStringLiteral("eDP-1")}}};
+    const QVariantList overview = controller.monitorOverview(screens);
+    QCOMPARE(overview.size(), 3);
+
+    for (const QVariant& v : overview) {
+        const QVariantMap tile = v.toMap();
+        const QString id = tile.value(QStringLiteral("screenId")).toString();
+        if (id == QLatin1String("DP-2")) {
+            // Lock-only rule: locked, counts as a pinned rule (assigned = has
+            // any rule), and surfaces no layoutName (no engine-mode action).
+            QCOMPARE(tile.value(QStringLiteral("locked")).toBool(), true);
+            QCOMPARE(tile.value(QStringLiteral("assigned")).toBool(), true);
+            QCOMPARE(tile.value(QStringLiteral("ruleCount")).toInt(), 1);
+            QVERIFY(tile.value(QStringLiteral("layoutName")).toString().isEmpty());
+        } else if (id == QLatin1String("DP-3")) {
+            // value:false → not locked (the tile reads the value, not presence).
+            QCOMPARE(tile.value(QStringLiteral("locked")).toBool(), false);
+            QCOMPARE(tile.value(QStringLiteral("ruleCount")).toInt(), 1);
+        } else if (id == QLatin1String("eDP-1")) {
+            // No rule → not locked.
+            QCOMPARE(tile.value(QStringLiteral("locked")).toBool(), false);
+        }
+    }
 }
 
 void TestWindowRuleController::monitorOverviewIgnoresDisabledRules()
