@@ -270,8 +270,10 @@ endif()
 
 # ---------------------------------------------------------------------------
 # Translations (Qt Linguist). Extracted to cmake/PhosphorTranslations.cmake
-# (included in this scope) to keep this file under the 800-line cap. See
-# that file for the update-ts / lrelease detail.
+# (included in this scope) to keep this file's growth in check — it has
+# since crept past the 800-line cap again; the next self-contained block
+# to outgrow its section should be extracted the same way. See that file
+# for the update-ts / lrelease detail.
 # ---------------------------------------------------------------------------
 include(cmake/PhosphorTranslations.cmake)
 
@@ -392,8 +394,11 @@ set(PHOSPHOR_ENGINE_TARGETS
 # nowhere to be fixed without a full rewrite.
 #
 # Refuse to configure if any engine target ever picks up a Qml/Quick
-# link. Cheap guardrail; failures here mean someone added a dependency
-# that drags Qml in transitively or wired a target up wrong.
+# link. Cheap guardrail over the targets' DIRECT link lists only — an
+# intermediate in-tree lib that PUBLICly links Qt6::Qml would pass
+# undetected (the engine target's own entries name the lib, not Qml).
+# Failures here mean someone linked Qml/Quick onto an engine target
+# directly or wired a target up wrong.
 #
 # Track whether ANY entry matched a real target so the firewall can't
 # silently degrade to a no-op if PHOSPHOR_ENGINE_TARGETS goes stale

@@ -202,22 +202,33 @@ void TestPhosphorIpcProtocol::parseRequest_rejectsEmptyTargetOnCall()
     // Empty target on a `call` is malformed at the wire level; the
     // router would otherwise surface NO_SUCH_TARGET, which is the
     // wrong shape (the fault is the request, not the registry).
+    // Both shapes are pinned — ABSENT field and explicit "" literal —
+    // so a future parser refactor that distinguishes missing from
+    // empty can't silently start accepting the empty-literal form.
     QString err;
     QVERIFY(!parseRequest(R"({"type":"call","id":1,"fn":"y"})", &err).has_value());
+    QVERIFY(err.contains(QStringLiteral("'target'")));
+    QVERIFY(!parseRequest(R"({"type":"call","id":1,"target":"","fn":"y"})", &err).has_value());
     QVERIFY(err.contains(QStringLiteral("'target'")));
 }
 
 void TestPhosphorIpcProtocol::parseRequest_rejectsEmptyFnOnCall()
 {
+    // Absent and explicit-empty forms, same rationale as the target test.
     QString err;
     QVERIFY(!parseRequest(R"({"type":"call","id":1,"target":"x"})", &err).has_value());
+    QVERIFY(err.contains(QStringLiteral("'fn'")));
+    QVERIFY(!parseRequest(R"({"type":"call","id":1,"target":"x","fn":""})", &err).has_value());
     QVERIFY(err.contains(QStringLiteral("'fn'")));
 }
 
 void TestPhosphorIpcProtocol::parseRequest_rejectsEmptySignalOnSubscribe()
 {
+    // Absent and explicit-empty forms, same rationale as the target test.
     QString err;
     QVERIFY(!parseRequest(R"({"type":"subscribe","id":1,"target":"x"})", &err).has_value());
+    QVERIFY(err.contains(QStringLiteral("'signal'")));
+    QVERIFY(!parseRequest(R"({"type":"subscribe","id":1,"target":"x","signal":""})", &err).has_value());
     QVERIFY(err.contains(QStringLiteral("'signal'")));
 }
 
@@ -262,5 +273,5 @@ void TestPhosphorIpcProtocol::variantToJson_basics()
     QCOMPARE(obj.value(QStringLiteral("k")).toString(), QStringLiteral("v"));
 }
 
-QTEST_MAIN(TestPhosphorIpcProtocol)
+QTEST_GUILESS_MAIN(TestPhosphorIpcProtocol)
 #include "test_phosphor_ipc_protocol.moc"

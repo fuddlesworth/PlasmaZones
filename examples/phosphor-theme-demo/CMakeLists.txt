@@ -55,10 +55,15 @@ target_link_libraries(phosphor_theme_demo_qml
     PRIVATE
         PhosphorTheme::PhosphorTheme
 )
+# Explicit, not inherited: PhosphorTheme propagates cxx_std_20 PUBLIC, but
+# the sibling demos pin it per-target — keep the boilerplate identical so a
+# copied demo doesn't silently lose the requirement.
+target_compile_features(phosphor_theme_demo_qml PRIVATE cxx_std_20)
 
 add_executable(phosphor-theme-demo
     main.cpp
 )
+target_compile_features(phosphor-theme-demo PRIVATE cxx_std_20)
 
 target_link_libraries(phosphor-theme-demo
     PRIVATE

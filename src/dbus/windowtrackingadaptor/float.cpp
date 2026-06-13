@@ -53,18 +53,17 @@ void WindowTrackingAdaptor::notifyDragOutUnsnap(const QString& windowId)
     }
 }
 
-bool WindowTrackingAdaptor::getPreFloatZone(const QString& windowId, QString& zoneIdOut)
+bool WindowTrackingAdaptor::getPreFloatZone(const QString& windowId, QString& zoneId)
 {
     if (windowId.isEmpty()) {
         qCDebug(lcDbusWindow) << "getPreFloatZone: empty windowId";
-        zoneIdOut.clear();
+        zoneId.clear();
         return false;
     }
     // Delegate to service
-    zoneIdOut = m_service->preFloatZone(windowId);
-    qCDebug(lcDbusWindow) << "getPreFloatZone for" << windowId << "-> found:" << !zoneIdOut.isEmpty()
-                          << "zone:" << zoneIdOut;
-    return !zoneIdOut.isEmpty();
+    zoneId = m_service->preFloatZone(windowId);
+    qCDebug(lcDbusWindow) << "getPreFloatZone for" << windowId << "-> found:" << !zoneId.isEmpty() << "zone:" << zoneId;
+    return !zoneId.isEmpty();
 }
 
 void WindowTrackingAdaptor::clearPreFloatZone(const QString& windowId)

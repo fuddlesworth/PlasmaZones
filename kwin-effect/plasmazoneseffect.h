@@ -651,9 +651,11 @@ private:
     void reconcileRuleHiddenTitleBar(const QString& windowId, KWin::EffectWindow* w);
 
     /// Clear every DecorationManager rule override (Rule owners + force-show
-    /// vetoes). Called when the rule set empties and on daemon loss / effect
-    /// teardown so a rule-hidden title bar is never left hidden after the
-    /// authoritative rule state is gone.
+    /// vetoes). Called when the rule set empties (updateAllBorders) so a
+    /// rule-hidden title bar is never left hidden after the authoritative
+    /// rule state is gone. Daemon loss / effect teardown do NOT route here —
+    /// they call DecorationManager::restoreAll(), which clears rule
+    /// overrides along with all other tracking.
     void restoreAllRuleHiddenTitleBars();
 
     std::unique_ptr<NavigationHandler> m_navigationHandler;

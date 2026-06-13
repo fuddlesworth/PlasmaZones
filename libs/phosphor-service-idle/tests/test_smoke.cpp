@@ -6,7 +6,7 @@
 // compositor (offscreen QPA) the idle protocols are unavailable, so the service
 // constructs, reports unsupported, and never crashes. The live
 // idle / inhibit lifecycle needs a real compositor and is exercised via the CLI
-// demo; the pure stage-ladder logic is unit-tested separately once it lands.
+// demo; the pure stage-ladder logic is unit-tested in test_statemachine.cpp.
 
 #include <PhosphorServiceIdle/IdleService.h>
 #include <PhosphorServiceIdle/QmlRegistration.h>

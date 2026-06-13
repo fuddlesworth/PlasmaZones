@@ -111,6 +111,13 @@ bool LayoutAdaptor::updateLayout(const QString& layoutJson)
     // Handle autotile layout settings updates (gaps, visibility, shader only)
     if (PhosphorLayout::LayoutId::isAutotile(idStr)) {
         QString algoId = PhosphorLayout::LayoutId::extractAlgorithmId(idStr);
+        // D-Bus boundary: an id of exactly "autotile:" passes isAutotile but
+        // yields an empty algorithm key — saving overrides under it would
+        // create an unreachable settings group.
+        if (algoId.isEmpty()) {
+            qCWarning(lcDbusLayout) << "updateLayout: autotile id with empty algorithm id rejected:" << idStr;
+            return false;
+        }
         QJsonObject overrides;
         if (obj.contains(::PhosphorZones::ZoneJsonKeys::ZonePadding))
             overrides[::PhosphorZones::ZoneJsonKeys::ZonePadding] = obj[::PhosphorZones::ZoneJsonKeys::ZonePadding];

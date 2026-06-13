@@ -209,6 +209,26 @@ void AutotileEngine::connectSignals()
                     const QStringList newVsIds = m_screenManager->virtualScreenIdsFor(physicalScreenId);
                     const QSet<QString> newVsSet(newVsIds.begin(), newVsIds.end());
 
+                    // Cancel an active drag-insert preview whose target or
+                    // prior screen is about to be orphaned — mirrors the
+                    // setAutotileScreens guard. Without this the preview
+                    // survives the state's deleteLater with dangling keys
+                    // (null-guarded, but commit/cancel would then silently
+                    // restore nothing or re-key a released window).
+                    if (m_dragInsertPreview) {
+                        const auto orphaned = [&](const QString& sid) {
+                            return PhosphorIdentity::VirtualScreenId::isVirtual(sid)
+                                && PhosphorIdentity::VirtualScreenId::extractPhysicalId(sid) == physicalScreenId
+                                && !newVsSet.contains(sid);
+                        };
+                        const QString targetScreen = m_dragInsertPreview->targetScreenId;
+                        const QString priorScreen =
+                            m_dragInsertPreview->hadPriorState ? m_dragInsertPreview->priorKey.screenId : QString();
+                        if (orphaned(targetScreen) || (!priorScreen.isEmpty() && orphaned(priorScreen))) {
+                            cancelDragInsertPreview();
+                        }
+                    }
+
                     // Find and release orphaned virtual screen states for this physical screen
                     QStringList releasedWindows;
                     QSet<QString> orphanedVsIds;
@@ -611,7 +631,9 @@ void AutotileEngine::setAutotileScreens(const QSet<QString>& screens)
         // Only consume the pending order eagerly for STRICT entries (mode
         // transition seeded by setInitialWindowOrder — windows are already
         // open in KWin and need to be added to the autotile state with the
-        // computed order, since they won't arrive via windowOpened again).
+        // computed order BEFORE the effect's windowOpened re-announce lands,
+        // so the first retile uses the seeded order; the later windowOpened
+        // for an already-present window is a tracked no-op insert).
         // Advisory entries describe historical positions for windows that aren't open yet —
         // pre-seeding the state would create ghost entries the user can't
         // close, and would also override the user's insertPosition preference
@@ -623,9 +645,16 @@ void AutotileEngine::setAutotileScreens(const QSet<QString>& screens)
             m_strictInitialOrderScreens.remove(screenId);
             PhosphorTiles::TilingState* ts = tilingStateForScreen(screenId);
             if (ts) {
+                const TilingStateKey stateKey = currentKeyForScreen(screenId);
                 for (const QString& windowId : order) {
                     if (!ts->containsWindow(windowId)) {
                         ts->addWindow(windowId);
+                        // Register engine tracking immediately — without the
+                        // key entry, a window closing before the effect's
+                        // windowOpened round-trip hits onWindowRemoved's
+                        // empty-stored-key early return and stays a permanent
+                        // ghost the layout retiles around.
+                        m_windowToStateKey[windowId] = stateKey;
                         // Restore floating state from the unified record (single source
                         // of truth). Without this, windows added from pending orders lose
                         // their floating state because windowOpened's floating restore is
@@ -655,8 +684,13 @@ void AutotileEngine::setAutotileScreens(const QSet<QString>& screens)
         it.next();
         const TilingStateKey& key = it.key();
         // Only prune states that match the current desktop/activity AND whose
-        // screen is no longer in the autotile set. States for other desktops
-        // are left untouched — they'll be pruned when that desktop is current.
+        // screen is no longer in the autotile set. States for other contexts
+        // are left untouched here — by the time their desktop becomes current
+        // the screen is already absent from m_autotileScreens, so this loop
+        // never sees them again; they are healed per-window (windowFocused /
+        // windowOpened migration) and reaped wholesale by
+        // pruneStatesForDesktop / pruneStatesForActivities when their
+        // desktop or activity is destroyed.
         if (key.desktop != m_currentDesktop || key.activity != m_currentActivity) {
             continue;
         }
@@ -2014,7 +2048,8 @@ void AutotileEngine::windowOpened(const QString& rawWindowId, const QString& scr
         const QString appId = currentAppIdFor(windowId);
         if (!appId.isEmpty() && appId != windowId) {
             const auto snapCrossRestorePending = [&](const PhosphorEngine::WindowPlacement& p) {
-                if (p.slotFor(QStringLiteral("snap")).state != PhosphorEngine::WindowPlacement::stateSnapped()) {
+                if (p.slotFor(PhosphorEngine::WindowPlacement::snapEngineId()).state
+                    != PhosphorEngine::WindowPlacement::stateSnapped()) {
                     return false;
                 }
                 // Resolve the recorded screen's mode in the RECORD'S OWN (desktop,
@@ -2194,9 +2229,11 @@ void AutotileEngine::windowFocused(const QString& rawWindowId, const QString& sc
     // isTileableWindow). Creating entries for these phantom windows causes
     // backfillWindows() to insert them on algorithm switches, inflating the
     // tiled window count.
-    const TilingStateKey oldKey = m_windowToStateKey.value(windowId);
+    const auto trackedIt = m_windowToStateKey.constFind(windowId);
+    const bool tracked = trackedIt != m_windowToStateKey.constEnd();
+    const TilingStateKey oldKey = tracked ? trackedIt.value() : TilingStateKey{};
     const QString oldScreen = oldKey.screenId;
-    if (!screenId.isEmpty() && m_windowToStateKey.contains(windowId)) {
+    if (!screenId.isEmpty() && tracked) {
         if (isAutotileScreen(screenId)) {
             const TilingStateKey newKey = currentKeyForScreen(screenId);
             // FULL key comparison, not just screenId: a focus event landing
@@ -2265,13 +2302,20 @@ void AutotileEngine::releaseScreenStateForTeardown(const QString& screenId, Phos
     const QStringList tiled = state->tiledWindows();
     const QStringList floated = state->floatingWindows();
     if (m_windowTracker) {
-        for (const QString& wid : floated + tiled) {
-            auto rec = capturePlacement(wid);
-            if (!rec) {
-                continue;
+        // Two passes instead of `floated + tiled` — this runs once per
+        // context in the orphaned-VS teardown loop and the concatenation
+        // would allocate a temporary list each time.
+        const auto captureAll = [this](const QStringList& wids) {
+            for (const QString& wid : wids) {
+                auto rec = capturePlacement(wid);
+                if (!rec) {
+                    continue;
+                }
+                m_windowTracker->placementStore().record(*rec);
             }
-            m_windowTracker->placementStore().record(*rec);
-        }
+        };
+        captureAll(floated);
+        captureAll(tiled);
     }
     // Drop the overflow set AFTER capture: capturePlacement's
     // overflow-vs-user-float discriminator (isOverflow) must still see this
@@ -2632,7 +2676,9 @@ bool AutotileEngine::insertWindow(const QString& windowId, const QString& screen
     // Close/reopen restore from the unified placement store: ONE record per window
     // holds both engines' slots + the shared per-screen free geometry. Take it once
     // and branch on the autotile slot — a FLOATING slot restores the window floating
-    // at its shared free geometry (any screen); a TILED slot restores it at its saved
+    // (consumed only when the record's screen matches the opening screen or is
+    // empty; the GEOMETRY fallback below may still come from anyFreeGeometry(),
+    // i.e. any screen); a TILED slot restores it at its saved
     // order in the SAME context (index-based — best-effort if neighbours moved;
     // wasFloating is not relevant since the slot state IS the intent). Re-record
     // bound to the live windowId so the snap slot + per-screen free geometry survive
@@ -3535,6 +3581,12 @@ void AutotileEngine::backfillWindows()
     // tiledWindows() list on its first retile rather than incrementally;
     // per-window add hooks before that retile would double-count. The
     // incremental hooks cover steady-state add/remove/migrate only.
+    // The same reconciliation covers the drag-insert preview's PRIOR-state
+    // mutations too: beginDragInsertPreview's cross-screen adoption
+    // (priorState->removeWindow) and cancelDragInsertPreview's restore skip
+    // the REMOVE/ADD hooks, and the scheduled retile on the prior screen
+    // reconciles that algorithm's bookkeeping against the state's full
+    // window list via prepareTilingState().
     for (const QString& screenId : m_autotileScreens) {
         // Overflow recovery is NOT done here — it is handled by retileScreen()
         // which defers signal emission until after the full retile cycle.

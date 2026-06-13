@@ -1,5 +1,9 @@
 <!DOCTYPE node PUBLIC "-//freedesktop//DTD D-BUS Object Introspection 1.0//EN"
     "http://www.freedesktop.org/standards/dbus/1.0/introspect.dtd">
+<!--
+SPDX-FileCopyrightText: 2026 fuddlesworth
+SPDX-License-Identifier: GPL-3.0-or-later
+-->
 <node>
     <!-- Layout Management Interface -->
     <interface name="org.plasmazones.LayoutRegistry">
@@ -167,7 +171,7 @@
             </arg>
         </method>
         <method name="getScreenStates">
-            <annotation name="org.gtk.GDBus.DocString" value="Return current mode, layout, and algorithm for all screens as a JSON array: one object per screen with screenName, mode (0=Snapping, 1=Autotile), layoutId, layoutName, algorithmId, algorithmName."/>
+            <annotation name="org.gtk.GDBus.DocString" value="Return current mode, layout, and algorithm for all screens as a JSON array: one object per screen with screenId, virtualDesktop, activity, mode (0=Snapping, 1=Autotile), layoutId, layoutName, algorithmId, algorithmName."/>
             <arg name="statesJson" type="s" direction="out">
                 <annotation name="org.gtk.GDBus.DocString" value="JSON array of per-screen state objects."/>
             </arg>
@@ -199,7 +203,7 @@
         <method name="setAllScreenAssignments">
             <annotation name="org.gtk.GDBus.DocString" value="Batch set all base screen assignments (saves once). Clears existing base assignments first."/>
             <arg name="assignments" type="a{sv}" direction="in">
-                <annotation name="org.gtk.GDBus.DocString" value="Map of screenName to layoutId."/>
+                <annotation name="org.gtk.GDBus.DocString" value="Map of screenId to layoutId."/>
             </arg>
         </method>
         <!-- Per-virtual-desktop layout assignment methods -->
@@ -267,7 +271,7 @@
             <arg name="algorithm" type="s" direction="out"/>
         </method>
         <method name="setAllDesktopAssignments">
-            <annotation name="org.gtk.GDBus.DocString" value="Batch set all per-desktop assignments (saves once). Key format: screenName:desktopNumber."/>
+            <annotation name="org.gtk.GDBus.DocString" value="Batch set all per-desktop assignments (saves once). Canonical key format: 'screenId|desktopNumber' ('screenId:desktopNumber' is accepted as a legacy fallback but misparses virtual-screen ids — do not emit it)."/>
             <arg name="assignments" type="a{sv}" direction="in">
                 <annotation name="org.gtk.GDBus.DocString" value="Map of 'screen:desktop' to layoutId."/>
             </arg>
@@ -420,7 +424,7 @@
             </arg>
         </method>
         <method name="setAllActivityAssignments">
-            <annotation name="org.gtk.GDBus.DocString" value="Batch set all per-activity assignments (saves once). Key format: screenName:activityId."/>
+            <annotation name="org.gtk.GDBus.DocString" value="Batch set all per-activity assignments (saves once). Key format: 'screenId|activityId' (legacy ':' fallback accepted)."/>
             <arg name="assignments" type="a{sv}" direction="in">
                 <annotation name="org.gtk.GDBus.DocString" value="Map of 'screen:activity' to layoutId."/>
             </arg>
@@ -432,7 +436,7 @@
             </arg>
         </method>
         <method name="setAllCombinedAssignments">
-            <annotation name="org.gtk.GDBus.DocString" value="Batch set all per-(screen,desktop,activity) Combined assignments (saves once). Key format: 'screenName|virtualDesktop|activityId'. Pure-Activity, pure-Desktop and Monitor-only rules are not touched."/>
+            <annotation name="org.gtk.GDBus.DocString" value="Batch set all per-(screen,desktop,activity) Combined assignments (saves once). Key format: 'screenId|virtualDesktop|activityId'. Pure-Activity, pure-Desktop and Monitor-only rules are not touched."/>
             <arg name="assignments" type="a{sv}" direction="in">
                 <annotation name="org.gtk.GDBus.DocString" value="Map of 'screen|desktop|activity' to layoutId."/>
             </arg>

@@ -255,6 +255,41 @@ private Q_SLOTS:
         QVERIFY(!engine.tilingStateForScreen(screen)->containsWindow(win)); // gone from desktop-1
     }
 
+    void testWindowFocused_activityOnlyDelta_defersAndRevalidates()
+    {
+        // Activity flavor of the context-only deferral: the key delta is in
+        // the activity dimension instead of the desktop one. Same contract —
+        // a push arriving before the queued re-check means no migration; a
+        // persisting mismatch migrates into the current activity's state.
+        AutotileEngine engine(nullptr, nullptr, nullptr, PlasmaZones::TestHelpers::testRegistry());
+        const QString screen = QStringLiteral("HDMI-1");
+        const QString win = QStringLiteral("w|1");
+        const QString actA = QStringLiteral("activity-a");
+        const QString actB = QStringLiteral("activity-b");
+        engine.setCurrentActivity(actA);
+        engine.setAutotileScreens({screen});
+        engine.windowOpened(win, screen);
+        QCoreApplication::processEvents();
+        QVERIFY(engine.tilingStateForScreen(screen)->containsWindow(win));
+
+        // Focus outran the activity push, push arrives before the re-check:
+        // the window stays in activity-a's state.
+        engine.setCurrentActivity(actB);
+        engine.windowFocused(win, screen);
+        engine.setCurrentActivity(actA);
+        QCoreApplication::processEvents();
+        QVERIFY(engine.tilingStateForScreen(screen)->containsWindow(win));
+
+        // Persisting mismatch: the deferred re-check migrates the window
+        // into activity-b's state and out of activity-a's.
+        engine.setCurrentActivity(actB);
+        engine.windowFocused(win, screen);
+        QCoreApplication::processEvents();
+        QVERIFY(engine.tilingStateForScreen(screen)->containsWindow(win)); // activity-b state
+        engine.setCurrentActivity(actA);
+        QVERIFY(!engine.tilingStateForScreen(screen)->containsWindow(win)); // gone from activity-a
+    }
+
     // =========================================================================
     // Algorithm selection tests
     // =========================================================================

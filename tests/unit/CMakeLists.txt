@@ -621,14 +621,10 @@ target_link_libraries(test_snapping_behavior_controller PRIVATE Qt6::Test Qt6::C
     PhosphorControl::PhosphorControl)
 add_test(NAME test_snapping_behavior_controller COMMAND test_snapping_behavior_controller)
 
-# Phase 0 of the animation-settings UI rework: AnimationsPageController
-# round-trips per-event override files in `<userProfilesDir>/<path>.json`,
-# walks the ProfilePaths inheritance chain for resolvedProfile(), and
-# surfaces the built-in taxonomy as section-grouped lists for the QML
-# drilldown. Compiles the controller source directly (it lives in the
-# plasmazones-settings executable, not plasmazones_core).
-add_executable(test_animations_page_controller
-    settings/test_animations_page_controller.cpp
+# Animations-controller sources shared by the three test executables below
+# (page controller / motion sets / shader overrides). One list so a new
+# controller source file can't silently miss one of the three.
+set(_animations_ctrl_SRCS
     ${CMAKE_SOURCE_DIR}/src/settings/animationspagecontroller.cpp
     ${CMAKE_SOURCE_DIR}/src/settings/animationspagecontroller_shaders.cpp
     ${CMAKE_SOURCE_DIR}/src/settings/animationspagecontroller_overrides.cpp
@@ -637,6 +633,17 @@ add_executable(test_animations_page_controller
     ${CMAKE_SOURCE_DIR}/src/settings/animationpresetlibrary.cpp
     ${CMAKE_SOURCE_DIR}/src/settings/motionsetstore.cpp
     ${CMAKE_SOURCE_DIR}/src/settings/animationfileutils.cpp
+)
+
+# Phase 0 of the animation-settings UI rework: AnimationsPageController
+# round-trips per-event override files in `<userProfilesDir>/<path>.json`,
+# walks the ProfilePaths inheritance chain for resolvedProfile(), and
+# surfaces the built-in taxonomy as section-grouped lists for the QML
+# drilldown. Compiles the controller source directly (it lives in the
+# plasmazones-settings executable, not plasmazones_core).
+add_executable(test_animations_page_controller
+    settings/test_animations_page_controller.cpp
+    ${_animations_ctrl_SRCS}
 )
 target_link_libraries(test_animations_page_controller
     PRIVATE
@@ -653,14 +660,7 @@ add_test(NAME test_animations_page_controller COMMAND test_animations_page_contr
 # file under the project's <800-line guideline.
 add_executable(test_animations_motion_sets
     settings/test_animations_motion_sets.cpp
-    ${CMAKE_SOURCE_DIR}/src/settings/animationspagecontroller.cpp
-    ${CMAKE_SOURCE_DIR}/src/settings/animationspagecontroller_shaders.cpp
-    ${CMAKE_SOURCE_DIR}/src/settings/animationspagecontroller_overrides.cpp
-    ${CMAKE_SOURCE_DIR}/src/settings/animationspagecontroller_paths.cpp
-    ${CMAKE_SOURCE_DIR}/src/settings/shaderpackinstaller.cpp
-    ${CMAKE_SOURCE_DIR}/src/settings/animationpresetlibrary.cpp
-    ${CMAKE_SOURCE_DIR}/src/settings/motionsetstore.cpp
-    ${CMAKE_SOURCE_DIR}/src/settings/animationfileutils.cpp
+    ${_animations_ctrl_SRCS}
 )
 target_link_libraries(test_animations_motion_sets
     PRIVATE
@@ -677,14 +677,7 @@ add_test(NAME test_animations_motion_sets COMMAND test_animations_motion_sets)
 # project's <800-line guideline.
 add_executable(test_animations_shader_overrides
     settings/test_animations_shader_overrides.cpp
-    ${CMAKE_SOURCE_DIR}/src/settings/animationspagecontroller.cpp
-    ${CMAKE_SOURCE_DIR}/src/settings/animationspagecontroller_shaders.cpp
-    ${CMAKE_SOURCE_DIR}/src/settings/animationspagecontroller_overrides.cpp
-    ${CMAKE_SOURCE_DIR}/src/settings/animationspagecontroller_paths.cpp
-    ${CMAKE_SOURCE_DIR}/src/settings/shaderpackinstaller.cpp
-    ${CMAKE_SOURCE_DIR}/src/settings/animationpresetlibrary.cpp
-    ${CMAKE_SOURCE_DIR}/src/settings/motionsetstore.cpp
-    ${CMAKE_SOURCE_DIR}/src/settings/animationfileutils.cpp
+    ${_animations_ctrl_SRCS}
 )
 target_link_libraries(test_animations_shader_overrides
     PRIVATE
@@ -761,9 +754,10 @@ add_test(NAME test_layout_adaptor_signals COMMAND test_layout_adaptor_signals)
 # refactor/dbus-performance branch (SettingsAdaptor value-equality guard,
 # LayoutAdaptor signal split, JSON cache reuse). Run with
 # `ctest -R bench_dbus_adaptors` to capture numbers against
-# docs/perf/dbus-baseline.md. Not in _all_tests by default because
-# benchmark output is verbose; it is still added via add_test() so
-# `ctest -R bench` can select it.
+# docs/perf/dbus-baseline.md. NOTE: add_test() puts it in the directory
+# TESTS property, so a bare `ctest` run DOES include it (and its verbose
+# benchmark output); use `ctest -LE bench` to exclude it — the LABELS
+# property below exists exactly for that.
 add_executable(bench_dbus_adaptors dbus/bench_dbus_adaptors.cpp)
 target_link_libraries(bench_dbus_adaptors PRIVATE Qt6::Test Qt6::Core Qt6::DBus plasmazones_core)
 add_test(NAME bench_dbus_adaptors COMMAND bench_dbus_adaptors)

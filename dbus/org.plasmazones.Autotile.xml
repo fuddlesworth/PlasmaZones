@@ -277,7 +277,8 @@ SPDX-License-Identifier: GPL-3.0-or-later
         </method>
 
         <!-- floatWindow, unfloatWindow, toggleFocusedWindowFloat, toggleWindowFloat removed:
-             all float operations are now routed through the unified WTA methods
-             (toggleFloatForWindow for toggle, setWindowFloatingForScreen for directional) -->
+             all float operations are now routed through the unified methods —
+             org.plasmazones.Snap.toggleFloatForWindow for toggle,
+             org.plasmazones.WindowTracking.setWindowFloatingForScreen for directional -->
     </interface>
 </node>

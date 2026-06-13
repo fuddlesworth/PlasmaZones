@@ -237,8 +237,9 @@ public Q_SLOTS:
     void notifyWindowFocused(const QString& windowId, const QString& screenId);
 
     // floatWindow, unfloatWindow, toggleFocusedWindowFloat, toggleWindowFloat removed:
-    // all float operations are now routed through the unified WTA methods
-    // (toggleFloatForWindow for toggle, setWindowFloatingForScreen for directional).
+    // all float operations are now routed through the unified methods —
+    // org.plasmazones.Snap.toggleFloatForWindow (SnapAdaptor) for toggle,
+    // org.plasmazones.WindowTracking.setWindowFloatingForScreen for directional.
 
     // ═══════════════════════════════════════════════════════════════════════════
     // Ratio/Count Adjustment

@@ -22,6 +22,15 @@
 // name preserved for readability at the call sites.
 #define P_CONFIG_GROUP(name, str) P_CONFIG_KEY(name, str)
 
+// Single definition point for the per-screen group prefix spellings.
+// Shared by the *GroupPrefix accessors below (which append the ':') and
+// PerScreenPathResolver's prefix→category mapping table — a rename here
+// updates both in lockstep instead of silently desyncing the JSON path
+// resolver from the group accessors.
+#define P_PER_SCREEN_PREFIX_ZONE_SELECTOR "ZoneSelector"
+#define P_PER_SCREEN_PREFIX_AUTOTILE "AutotileScreen"
+#define P_PER_SCREEN_PREFIX_SNAPPING "SnappingScreen"
+
 namespace PlasmaZones {
 
 /**
@@ -548,9 +557,9 @@ public:
     // Per-Screen Config Group Prefixes
     // ═══════════════════════════════════════════════════════════════════════════
 
-    P_CONFIG_GROUP(zoneSelectorGroupPrefix, "ZoneSelector:")
-    P_CONFIG_GROUP(autotileScreenGroupPrefix, "AutotileScreen:")
-    P_CONFIG_GROUP(snappingScreenGroupPrefix, "SnappingScreen:")
+    P_CONFIG_GROUP(zoneSelectorGroupPrefix, P_PER_SCREEN_PREFIX_ZONE_SELECTOR ":")
+    P_CONFIG_GROUP(autotileScreenGroupPrefix, P_PER_SCREEN_PREFIX_AUTOTILE ":")
+    P_CONFIG_GROUP(snappingScreenGroupPrefix, P_PER_SCREEN_PREFIX_SNAPPING ":")
 
     // ═══════════════════════════════════════════════════════════════════════════
     // Legacy v1/v2/v3/v4 accessors — used ONLY by migration code.

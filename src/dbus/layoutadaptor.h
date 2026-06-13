@@ -270,8 +270,8 @@ public Q_SLOTS:
      * @brief Get current mode, layout, and algorithm for all screens
      *
      * Returns a JSON array with one object per screen:
-     *   screenName, mode (0=Snapping, 1=Autotile), layoutId, layoutName,
-     *   algorithmId, algorithmName.
+     *   screenId, virtualDesktop, activity, mode (0=Snapping, 1=Autotile),
+     *   layoutId, layoutName, algorithmId, algorithmName.
      *
      * @return JSON string
      */

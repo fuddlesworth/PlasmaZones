@@ -651,6 +651,14 @@ void DecorationManager::cancelFallbackTimer()
     }
 }
 
+void DecorationManager::setFallbackIntervalForTesting(int ms)
+{
+    m_fallbackIntervalMs = qMax(0, ms);
+    if (m_pendingFallback && m_pendingFallback->isActive()) {
+        m_pendingFallback->start(m_fallbackIntervalMs);
+    }
+}
+
 void DecorationManager::armFallbackTimer()
 {
     if (!m_pendingFallback) {
@@ -660,8 +668,15 @@ void DecorationManager::armFallbackTimer()
             drainPendingRestoresInternal(/*fromFallback=*/true);
         });
     }
-    // Re-apply the interval on every arm so setFallbackIntervalForTesting
-    // takes effect regardless of call ordering relative to the first defer.
+    // Never restart an already-running countdown: explicit batch-completion
+    // drains can arrive at sub-interval cadence during multi-batch resnap
+    // churn, and each veto re-queue calls back here — restarting would
+    // postpone the fallback (and with it the MaxVetoRetries budget, which
+    // only fallback cycles advance) indefinitely, recreating the unbounded
+    // ownerless-hidden-window strand the budget exists to prevent.
+    if (m_pendingFallback->isActive()) {
+        return;
+    }
     m_pendingFallback->start(m_fallbackIntervalMs);
 }
 

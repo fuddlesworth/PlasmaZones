@@ -85,25 +85,35 @@ void AutotileHandler::loadSettings()
 
     QDBusPendingCall call = QDBusConnection::sessionBus().asyncCall(msg, PhosphorProtocol::Service::SyncCallTimeoutMs);
     auto* watcher = new QDBusPendingCallWatcher(call, this);
-    connect(watcher, &QDBusPendingCallWatcher::finished, this, [this](QDBusPendingCallWatcher* w) {
-        w->deleteLater();
-        QDBusPendingReply<QDBusVariant> reply = *w;
-        if (reply.isValid()) {
-            QStringList screens = reply.value().variant().toStringList();
-            const QSet<QString> added(screens.begin(), screens.end());
-            m_autotileScreens = added;
-            qCInfo(lcEffect) << "Loaded autotile screens:" << m_autotileScreens;
+    const quint64 generationAtDispatch = m_screensSignalGeneration;
+    connect(watcher, &QDBusPendingCallWatcher::finished, this,
+            [this, generationAtDispatch](QDBusPendingCallWatcher* w) {
+                w->deleteLater();
+                // An autotileScreensChanged signal that landed while this query was
+                // in flight carried a NEWER set and already ran the full per-screen
+                // transition handling — the raw assignment below would clobber it
+                // with the older snapshot.
+                if (m_screensSignalGeneration != generationAtDispatch) {
+                    qCDebug(lcEffect) << "Autotile screens: property reply superseded by a live signal, discarding";
+                    return;
+                }
+                QDBusPendingReply<QDBusVariant> reply = *w;
+                if (reply.isValid()) {
+                    QStringList screens = reply.value().variant().toStringList();
+                    const QSet<QString> added(screens.begin(), screens.end());
+                    m_autotileScreens = added;
+                    qCInfo(lcEffect) << "Loaded autotile screens:" << m_autotileScreens;
 
-            if (!added.isEmpty()) {
-                const auto windows = KWin::effects->stackingOrder();
-                // Batch-notify all windows on autotile screens in one D-Bus call
-                // instead of per-window windowOpened round-trips.
-                notifyWindowsAddedBatch(windows, added, /*resetNotified=*/true);
-            }
-        } else {
-            qCDebug(lcEffect) << "Autotile screens: query failed, daemon may not be running";
-        }
-    });
+                    if (!added.isEmpty()) {
+                        const auto windows = KWin::effects->stackingOrder();
+                        // Batch-notify all windows on autotile screens in one D-Bus call
+                        // instead of per-window windowOpened round-trips.
+                        notifyWindowsAddedBatch(windows, added, /*resetNotified=*/true);
+                    }
+                } else {
+                    qCDebug(lcEffect) << "Autotile screens: query failed, daemon may not be running";
+                }
+            });
 }
 
 } // namespace PlasmaZones

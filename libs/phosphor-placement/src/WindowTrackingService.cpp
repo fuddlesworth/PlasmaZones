@@ -651,7 +651,7 @@ QStringList WindowTrackingService::recordedSnapZones(const QString& windowId) co
     // exact-id branch resolves the right window (the appId fallback is for relogin).
     const auto rec = m_placementStore.peek(windowId, currentAppIdFor(windowId));
     if (rec) {
-        const PhosphorEngine::EngineSlot snapSlot = rec->slotFor(QStringLiteral("snap"));
+        const PhosphorEngine::EngineSlot snapSlot = rec->slotFor(PhosphorEngine::WindowPlacement::snapEngineId());
         if (snapSlot.state == PhosphorEngine::WindowPlacement::stateSnapped()) {
             return snapSlot.zoneIds;
         }

@@ -72,6 +72,11 @@ std::unique_ptr<NotificationServer> QmlFacadeTest::makePeerServer()
     QDeadlineTimer deadline(2000);
     while (!client.isConnected() && !deadline.hasExpired())
         QCoreApplication::processEvents(QEventLoop::AllEvents, 25);
+    // Handshake timeout is deliberately NOT fatal (unlike test_wire's
+    // QVERIFY2 guard): these tests drive the server's slots directly and
+    // never round-trip the transport, so an unconnected peer bus still
+    // exercises everything they assert (same rationale as the smoke
+    // test's makeServer).
     return std::make_unique<NotificationServer>(client, NotificationServer::serviceName());
 }
 

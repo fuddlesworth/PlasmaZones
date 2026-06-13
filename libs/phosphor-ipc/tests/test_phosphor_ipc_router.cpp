@@ -507,5 +507,5 @@ void TestPhosphorIpcRouter::schemaFor_skipsProtectedQInvokable()
              "protected Q_INVOKABLE must not appear in the wire-visible schema");
 }
 
-QTEST_MAIN(TestPhosphorIpcRouter)
+QTEST_GUILESS_MAIN(TestPhosphorIpcRouter)
 #include "test_phosphor_ipc_router.moc"

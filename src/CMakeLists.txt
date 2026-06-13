@@ -750,8 +750,12 @@ set_source_files_properties(editor/qml/ColorUtils.js PROPERTIES
 # sub-target's -I list; the no-Q_OBJECT sub-targets (qmltyperegistration,
 # resource init) leave it empty or — after `--clean-first` — missing, so
 # cc1plus fires before AUTOMOC recreates it. Set here (after the core /
-# rendering / daemon targets above, which are unaffected) so only the
-# editor QML sub-targets created just below inherit it. Mirrors
+# rendering / daemon targets above, which are unaffected). NOTE: directory
+# COMPILE_OPTIONS apply to EVERY target created after this point in the
+# scope — the editor QML sub-targets just below, but also
+# plasmazones-shader-validate and the add_subdirectory(settings) tree
+# further down. The suppression is harmless for those (it only silences
+# the missing-AUTOMOC-include-dir warning class). Mirrors
 # src/shared/CMakeLists.txt.
 set_property(DIRECTORY APPEND PROPERTY COMPILE_OPTIONS "-Wno-missing-include-dirs")
 

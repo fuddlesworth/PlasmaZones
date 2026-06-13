@@ -172,18 +172,23 @@ void AutotileHandler::saveAndRecordPreAutotileGeometry(const QString& windowId, 
     m_preAutotileGeometries[screenId][windowId] = frame;
     qCDebug(lcEffect) << "Saved pre-autotile geometry for" << windowId << "on" << screenId << ":" << frame;
     if (m_effect->m_daemonServiceRegistered) {
-        // overwrite=true: the isWindowMarkedSnapped() and isWindowFloating() guards
-        // above already skipped this path for snapped/tiled windows (the former even
-        // on the knownFreeFloating fast path), so when we reach here the frame is the
-        // window's authoritative free-floating geometry for THIS session.
-        // The daemon persists pre-tile entries across window close/reopen
-        // (keyed by appId for session restore), so a stale entry from a
-        // prior session would otherwise block the fresh capture and leave
-        // float-restore teleporting the window to ancient coordinates.
+        // overwrite=knownFreeFloating: only the window-opened spawn paths
+        // (the sole callers passing true) may clobber a persisted daemon
+        // entry — the spawn frame IS the authoritative free-floating
+        // geometry, and a stale appId-keyed entry from a prior session
+        // would otherwise block the fresh capture and leave float-restore
+        // teleporting the window to ancient coordinates.
+        // Every other caller (autotile toggle, unminimize-unfloat,
+        // cross-screen transfer) pushes non-destructively: an
+        // overflow-floated window can pass the isWindowFloating() guard
+        // while its frame still sits at the TILED position, and an
+        // overwrite there would destroy the daemon's correct free-position
+        // entry — exactly what the toggle path's explicit overwrite=false
+        // back-fill exists to preserve.
         PhosphorProtocol::ClientHelpers::fireAndForget(
             m_effect, PhosphorProtocol::Service::Interface::WindowTracking, QStringLiteral("storePreTileGeometry"),
             {windowId, static_cast<int>(frame.x()), static_cast<int>(frame.y()), static_cast<int>(frame.width()),
-             static_cast<int>(frame.height()), screenId, true},
+             static_cast<int>(frame.height()), screenId, knownFreeFloating},
             QStringLiteral("storePreTileGeometry"));
     }
 }

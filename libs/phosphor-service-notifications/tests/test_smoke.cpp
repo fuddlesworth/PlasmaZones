@@ -36,6 +36,7 @@
 #include <QTest>
 #include <QVariantMap>
 
+#include <iterator>
 #include <memory>
 
 using namespace PhosphorServiceNotifications;
@@ -574,15 +575,45 @@ void NotificationsSmokeTest::modelDataChangedOnReplace()
 
 void NotificationsSmokeTest::modelRoleNamesPinned()
 {
+    // Pin ALL role-name mappings, not a sample — QML delegates key on the
+    // name strings, so a rename or reorder anywhere in the enum silently
+    // breaks bindings (mirrors the exhaustive pinning in the pipewire
+    // smoke test).
     NotificationModel model;
     const QHash<int, QByteArray> roles = model.roleNames();
-    QCOMPARE(roles.value(NotificationModel::NotificationRole), QByteArray("notification"));
-    QCOMPARE(roles.value(NotificationModel::IdRole), QByteArray("id"));
-    QCOMPARE(roles.value(NotificationModel::SummaryRole), QByteArray("summary"));
-    QCOMPARE(roles.value(NotificationModel::ImageRole), QByteArray("image"));
-    QCOMPARE(roles.value(NotificationModel::TimestampRole), QByteArray("timestamp"));
+    struct RolePin
+    {
+        NotificationModel::Roles role;
+        const char* name;
+    };
+    const RolePin pins[] = {
+        {NotificationModel::NotificationRole, "notification"},
+        {NotificationModel::IdRole, "id"},
+        {NotificationModel::AppNameRole, "appName"},
+        {NotificationModel::AppIconRole, "appIcon"},
+        {NotificationModel::SummaryRole, "summary"},
+        {NotificationModel::BodyRole, "body"},
+        {NotificationModel::ActionsRole, "actions"},
+        {NotificationModel::UrgencyRole, "urgency"},
+        {NotificationModel::CategoryRole, "category"},
+        {NotificationModel::DesktopEntryRole, "desktopEntry"},
+        {NotificationModel::ImageRole, "image"},
+        {NotificationModel::HasImageRole, "hasImage"},
+        {NotificationModel::ResidentRole, "resident"},
+        {NotificationModel::TransientRole, "transient"},
+        {NotificationModel::SuppressSoundRole, "suppressSound"},
+        {NotificationModel::ValueRole, "value"},
+        {NotificationModel::ExpireTimeoutRole, "expireTimeout"},
+        {NotificationModel::TimestampRole, "timestamp"},
+    };
+    QCOMPARE(roles.size(), static_cast<int>(std::size(pins)));
+    for (const RolePin& pin : pins) {
+        QCOMPARE(roles.value(pin.role), QByteArray(pin.name));
+    }
     // Enum is contiguous from Qt::UserRole + 1.
     QCOMPARE(static_cast<int>(NotificationModel::NotificationRole), static_cast<int>(Qt::UserRole) + 1);
+    QCOMPARE(static_cast<int>(NotificationModel::TimestampRole),
+             static_cast<int>(Qt::UserRole) + static_cast<int>(std::size(pins)));
 }
 
 void NotificationsSmokeTest::modelClearsWhenServerDestroyed()

@@ -293,7 +293,9 @@ void SnapHandler::handleCursorMoved(const QPointF& pos, const QString& screenId)
     const auto windows = KWin::effects->stackingOrder();
     for (int i = windows.size() - 1; i >= 0; --i) {
         KWin::EffectWindow* w = windows[i];
-        if (!w || w->isMinimized() || !w->isOnCurrentDesktop() || !w->isOnCurrentActivity()) {
+        // isDeleted: a close-grabbed dying window under the cursor must not
+        // pause FFM via the occlusion bail (or pollute id caches below).
+        if (!w || w->isDeleted() || w->isMinimized() || !w->isOnCurrentDesktop() || !w->isOnCurrentActivity()) {
             continue;
         }
         // Cheap geometry test before the windowClass()/windowId allocations below.

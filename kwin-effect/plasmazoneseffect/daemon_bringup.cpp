@@ -305,10 +305,12 @@ void PlasmaZonesEffect::processDaemonReadyWindowState()
     }
     m_autotileHandler->onDaemonReady();
 
-    // Re-announce all existing windows on autotile screens in one batch D-Bus
-    // call instead of per-window windowOpened round-trips.
+    // Window re-announcement is NOT done here: onDaemonReady's loadSettings
+    // queries the new daemon's authoritative autotile screen set and its
+    // reply batches notifyWindowsAddedBatch(resetNotified=true). Announcing
+    // here too would double-send AND use the pre-restart screen set, leaking
+    // tracked-but-untiled entries for screens the new daemon doesn't autotile.
     const auto windows = KWin::effects->stackingOrder();
-    m_autotileHandler->notifyWindowsAddedBatch(windows);
 
     // Report all live window IDs to the daemon so it can prune stale
     // entries from KConfig (windows that were snapped but no longer exist).

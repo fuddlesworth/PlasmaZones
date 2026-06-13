@@ -164,10 +164,11 @@ public:
     /// Test seam: shrink the fallback-retry interval (default 500 ms) so
     /// timer-interplay tests run in milliseconds. Production never calls it.
     /// Negative values clamp to 0 (QTimer::start would warn on them).
-    void setFallbackIntervalForTesting(int ms)
-    {
-        m_fallbackIntervalMs = qMax(0, ms);
-    }
+    /// Restarts an already-running countdown with the new interval — the
+    /// arm path deliberately never restarts an active timer (see
+    /// armFallbackTimer), so ordering this call after a defer must apply
+    /// the shrunk interval here.
+    void setFallbackIntervalForTesting(int ms);
     /// Extra authoritative re-check evaluated per window at drain-step time
     /// (in addition to the built-in "window has owners again" check).
     /// Returning true keeps the restore QUEUED (re-armed via the fallback

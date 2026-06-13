@@ -93,6 +93,9 @@ void AutotileHandler::slotScreensChanged(const QStringList& screenIds, bool isDe
     // Without this, a desktop switch can race with a pending stagger from the
     // previous desktop, applying geometry from the old context.
     ++m_autotileStaggerGeneration;
+    // Invalidate any in-flight loadSettings property reply — this signal
+    // carries a newer screen set (see m_screensSignalGeneration doc).
+    ++m_screensSignalGeneration;
 
     const QSet<QString> newScreens(screenIds.begin(), screenIds.end());
     const QSet<QString> removed = m_autotileScreens - newScreens;
@@ -109,7 +112,10 @@ void AutotileHandler::slotScreensChanged(const QStringList& screenIds, bool isDe
             // their borderless / geometry state belongs to the other
             // desktop's still-live autotile session.
             for (KWin::EffectWindow* w : windows) {
-                if (w && removed.contains(m_effect->getWindowScreenId(w))) {
+                // isDeleted: close-grabbed dying windows linger in the
+                // stacking order — getWindowScreenId/getWindowId on them
+                // would re-pollute the scrubbed id caches.
+                if (w && !w->isDeleted() && removed.contains(m_effect->getWindowScreenId(w))) {
                     if (!w->isOnCurrentDesktop()) {
                         const QString wid = m_effect->getWindowId(w);
                         if (m_notifiedWindows.remove(wid)) {
@@ -131,7 +137,9 @@ void AutotileHandler::slotScreensChanged(const QStringList& screenIds, bool isDe
             // no-op for a window that was never autotiled, so this is inert
             // on a healthy desktop switch.
             for (KWin::EffectWindow* w : windows) {
-                if (!w || !w->isOnCurrentDesktop()) {
+                // isDeleted: a window mid-close must not be churned through
+                // the per-window restore steps (same cache hygiene as pass 1).
+                if (!w || w->isDeleted() || !w->isOnCurrentDesktop()) {
                     continue;
                 }
                 const QString screenId = m_effect->getWindowScreenId(w);
@@ -551,7 +559,10 @@ void AutotileHandler::slotScreensChanged(const QStringList& screenIds, bool isDe
                             KWin::EffectWindow* matchedWindow = nullptr;
                             bool ambiguous = false;
                             for (KWin::EffectWindow* ew : allWindows) {
-                                if (!ew || !m_effect->shouldHandleWindow(ew))
+                                // isDeleted: a dying same-app window must not
+                                // consume the geometry override or trip the
+                                // ambiguous-skip, robbing the live window.
+                                if (!ew || ew->isDeleted() || !m_effect->shouldHandleWindow(ew))
                                     continue;
                                 if (::PhosphorIdentity::WindowId::extractAppId(m_effect->getWindowId(ew)) != stableId)
                                     continue;
@@ -789,10 +800,31 @@ void AutotileHandler::slotWindowMaximizedStateChanged(KWin::EffectWindow* w, boo
 
 void AutotileHandler::slotWindowFullScreenChanged(KWin::EffectWindow* w)
 {
-    if (!w || !w->isFullScreen()) {
+    if (!w) {
         return;
     }
     const QString windowId = m_effect->getWindowId(w);
+    if (!w->isFullScreen()) {
+        // EXIT fullscreen: a window the daemon still tiles (it stayed in
+        // m_notifiedWindows the whole time — the daemon never untiles on
+        // fullscreen) returns to its tiled rect, so re-establish the
+        // decoration claim and border tracking the enter-path released.
+        // Windows we never tiled fall through both guards (no-op).
+        const QString screenId = m_notifiedWindowScreens.value(windowId);
+        if (!m_notifiedWindows.contains(windowId) || screenId.isEmpty()) {
+            return;
+        }
+        AutotileStateHelpers::addTiledOnScreen(m_border, screenId, windowId);
+        if (m_border.hideTitleBars) {
+            // AlreadyPlaced: the window is back at its tiled frame — KWin
+            // restores the pre-fullscreen geometry itself; the manager only
+            // needs to re-hide the title bar and re-assert that frame.
+            m_effect->decorationManager()->acquire(windowId, DecorationManager::autotile(screenId),
+                                                   DecorationManager::Placement::AlreadyPlaced);
+        }
+        m_effect->updateAllBorders();
+        return;
+    }
     // Clear border tracking and release decoration ownership so borders are
     // not drawn over fullscreen content (the manager restores the title bar
     // unless another owner still claims the window).

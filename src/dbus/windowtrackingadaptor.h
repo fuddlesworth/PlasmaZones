@@ -283,10 +283,10 @@ public Q_SLOTS:
     /**
      * Get the zone to restore to when unfloating (if any).
      * @param windowId Window ID from the effect
-     * @param zoneIdOut Output: zone ID to snap to, or empty if none
+     * @param zoneId Output: zone ID to snap to, or empty if none
      * @return true if the window had a zone before it was floated
      */
-    bool getPreFloatZone(const QString& windowId, QString& zoneIdOut);
+    bool getPreFloatZone(const QString& windowId, QString& zoneId);
 
     /**
      * Clear the saved "zone before float" after restoring on unfloat.

@@ -12,13 +12,15 @@
 #include "perscreen_fakemodel.h"
 
 #include <QGuiApplication>
+#include <QJSValue>
+#include <QJSValueList>
 #include <QObject>
 #include <QPointer>
 #include <QQmlComponent>
-#include <QQmlContext>
 #include <QQmlEngine>
 #include <QString>
 #include <QTest>
+#include <QUrl>
 #include <QVariant>
 #include <QtCore/qtclasshelpermacros.h>
 
@@ -131,6 +133,12 @@ QQmlComponent* TestPerScreen::makeDelegate(QQmlEngine& engine, QObject* parent)
 
 QObject* TestPerScreen::delegateFor(QQmlEngine& engine, QObject* perScreen, QObject* screen)
 {
+    // DELIBERATE white-box coupling: `_instances` is PerScreen.qml's private
+    // screen->instance JS Map. The identity tests need to resolve "which
+    // delegate instance belongs to which screen", and exposing a public
+    // accessor for that would widen the component's API solely for tests.
+    // If PerScreen.qml renames or restructures `_instances`, this helper is
+    // the single place to update (every identity test funnels through it).
     QJSValue map = engine.toScriptValue(perScreen->property("_instances"));
     QJSValueList args{engine.toScriptValue(QVariant::fromValue(screen))};
     QJSValue getResult = map.property(QStringLiteral("get")).callWithInstance(map, args);

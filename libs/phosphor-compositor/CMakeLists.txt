@@ -18,6 +18,21 @@ if(NOT PROJECT_VERSION)
     set(CMAKE_CXX_STANDARD_REQUIRED ON)
 endif()
 
+# Unconditional like phosphor-identity: the in-tree superbuild has already
+# found Qt (this re-find is a fast cache hit), and a standalone configure
+# needs it — without these the namespaced targets in target_link_libraries
+# below would fail at generate time. Config.cmake.in demands Qt 6.6 of
+# consumers, so enforce the same minimum when building. The sibling
+# phosphor libs are resolved via find_package only when a parent scope has
+# not already defined their targets (i.e. genuine standalone configure).
+find_package(Qt6 6.6 REQUIRED COMPONENTS Core Gui DBus)
+if(NOT TARGET PhosphorProtocol::PhosphorProtocol)
+    find_package(PhosphorProtocol REQUIRED)
+endif()
+if(NOT TARGET PhosphorIdentity::PhosphorIdentity)
+    find_package(PhosphorIdentity REQUIRED)
+endif()
+
 include(GenerateExportHeader)
 
 set(CMAKE_AUTOMOC ON)

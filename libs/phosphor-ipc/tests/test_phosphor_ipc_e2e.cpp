@@ -30,9 +30,11 @@
 #include <QtCore/qtclasshelpermacros.h>
 
 using namespace PhosphorIpc;
+using PhosphorIpcTests::makeCallReq;
 using PhosphorIpcTests::makeReq;
 using PhosphorIpcTests::readLines;
 using PhosphorIpcTests::roundtrip;
+using PhosphorIpcTests::RouterFixture;
 
 namespace {
 
@@ -80,11 +82,11 @@ Q_SIGNALS:
 // function would return-void back to the slot with the failure
 // recorded but execution continuing into stale state). Kept thin —
 // the actual round-trip lives in ipctesthelpers.h.
-#define ROUNDTRIP_OR_FAIL(out, sockPath, req)                                                                          \
+#define ROUNDTRIP_OR_FAIL(out, path, req)                                                                              \
     QJsonObject out;                                                                                                   \
     do {                                                                                                               \
         QString rtErr;                                                                                                 \
-        const auto rtOpt = roundtrip((sockPath), (req), &rtErr);                                                       \
+        const auto rtOpt = roundtrip((path), (req), &rtErr);                                                           \
         if (!rtOpt.has_value()) {                                                                                      \
             QFAIL(qPrintable(QStringLiteral("roundtrip failed: %1").arg(rtErr)));                                      \
         }                                                                                                              \
@@ -117,25 +119,18 @@ private Q_SLOTS:
 
 void TestPhosphorIpcE2e::roundtrip_call()
 {
-    QTemporaryDir dir;
-    QVERIFY(dir.isValid());
-    const QString sockPath = QDir(dir.path()).filePath(QStringLiteral("test.sock"));
+    RouterFixture fx;
+    QVERIFY(fx.valid());
 
-    IpcRouter router;
+    IpcRouter& router = fx.router;
     EchoTarget echo;
     QVERIFY(router.registerTarget(QStringLiteral("echo"), &echo));
-    QVERIFY(router.start(sockPath));
+    QVERIFY(router.start(fx.sockPath));
 
-    QJsonObject req;
-    req.insert(QStringLiteral("type"), QStringLiteral("call"));
-    req.insert(QStringLiteral("id"), 1);
-    req.insert(QStringLiteral("target"), QStringLiteral("echo"));
-    req.insert(QStringLiteral("fn"), QStringLiteral("echo"));
-    QJsonArray args;
-    args.append(QStringLiteral("hello"));
-    req.insert(QStringLiteral("args"), args);
+    const QJsonObject req =
+        makeCallReq(1, QStringLiteral("echo"), QStringLiteral("echo"), QJsonArray{QStringLiteral("hello")});
 
-    ROUNDTRIP_OR_FAIL(resp, sockPath, req);
+    ROUNDTRIP_OR_FAIL(resp, fx.sockPath, req);
     QCOMPARE(resp.value(QStringLiteral("type")).toString(), QStringLiteral("reply"));
     QCOMPARE(resp.value(QStringLiteral("id")).toInt(), 1);
     QCOMPARE(resp.value(QStringLiteral("result")).toString(), QStringLiteral("hello"));
@@ -143,22 +138,21 @@ void TestPhosphorIpcE2e::roundtrip_call()
 
 void TestPhosphorIpcE2e::roundtrip_list()
 {
-    QTemporaryDir dir;
-    QVERIFY(dir.isValid());
-    const QString sockPath = QDir(dir.path()).filePath(QStringLiteral("test.sock"));
+    RouterFixture fx;
+    QVERIFY(fx.valid());
 
-    IpcRouter router;
+    IpcRouter& router = fx.router;
     EchoTarget a;
     EchoTarget b;
     QVERIFY(router.registerTarget(QStringLiteral("a"), &a));
     QVERIFY(router.registerTarget(QStringLiteral("b"), &b));
-    QVERIFY(router.start(sockPath));
+    QVERIFY(router.start(fx.sockPath));
 
     QJsonObject req;
     req.insert(QStringLiteral("type"), QStringLiteral("list"));
     req.insert(QStringLiteral("id"), 2);
 
-    ROUNDTRIP_OR_FAIL(resp, sockPath, req);
+    ROUNDTRIP_OR_FAIL(resp, fx.sockPath, req);
     QCOMPARE(resp.value(QStringLiteral("type")).toString(), QStringLiteral("reply"));
     const QJsonArray names = resp.value(QStringLiteral("result")).toArray();
     QCOMPARE(names.size(), 2);
@@ -173,21 +167,20 @@ void TestPhosphorIpcE2e::roundtrip_list()
 
 void TestPhosphorIpcE2e::roundtrip_schema()
 {
-    QTemporaryDir dir;
-    QVERIFY(dir.isValid());
-    const QString sockPath = QDir(dir.path()).filePath(QStringLiteral("test.sock"));
+    RouterFixture fx;
+    QVERIFY(fx.valid());
 
-    IpcRouter router;
+    IpcRouter& router = fx.router;
     EchoTarget echo;
     QVERIFY(router.registerTarget(QStringLiteral("echo"), &echo));
-    QVERIFY(router.start(sockPath));
+    QVERIFY(router.start(fx.sockPath));
 
     QJsonObject req;
     req.insert(QStringLiteral("type"), QStringLiteral("schema"));
     req.insert(QStringLiteral("id"), 3);
     req.insert(QStringLiteral("target"), QStringLiteral("echo"));
 
-    ROUNDTRIP_OR_FAIL(resp, sockPath, req);
+    ROUNDTRIP_OR_FAIL(resp, fx.sockPath, req);
     QCOMPARE(resp.value(QStringLiteral("type")).toString(), QStringLiteral("reply"));
     const QJsonObject schema = resp.value(QStringLiteral("result")).toObject();
     QCOMPARE(schema.value(QStringLiteral("target")).toString(), QStringLiteral("echo"));
@@ -196,32 +189,26 @@ void TestPhosphorIpcE2e::roundtrip_schema()
 
 void TestPhosphorIpcE2e::roundtrip_unknownTargetError()
 {
-    QTemporaryDir dir;
-    QVERIFY(dir.isValid());
-    const QString sockPath = QDir(dir.path()).filePath(QStringLiteral("test.sock"));
+    RouterFixture fx;
+    QVERIFY(fx.valid());
 
-    IpcRouter router;
-    QVERIFY(router.start(sockPath));
+    IpcRouter& router = fx.router;
+    QVERIFY(router.start(fx.sockPath));
 
-    QJsonObject req;
-    req.insert(QStringLiteral("type"), QStringLiteral("call"));
-    req.insert(QStringLiteral("id"), 4);
-    req.insert(QStringLiteral("target"), QStringLiteral("ghost"));
-    req.insert(QStringLiteral("fn"), QStringLiteral("fn"));
+    const QJsonObject req = makeCallReq(4, QStringLiteral("ghost"), QStringLiteral("fn"));
 
-    ROUNDTRIP_OR_FAIL(resp, sockPath, req);
+    ROUNDTRIP_OR_FAIL(resp, fx.sockPath, req);
     QCOMPARE(resp.value(QStringLiteral("type")).toString(), QStringLiteral("error"));
     QCOMPARE(resp.value(QStringLiteral("code")).toString(), QStringLiteral("NO_SUCH_TARGET"));
 }
 
 void TestPhosphorIpcE2e::roundtrip_malformedRequest()
 {
-    QTemporaryDir dir;
-    QVERIFY(dir.isValid());
-    const QString sockPath = QDir(dir.path()).filePath(QStringLiteral("test.sock"));
+    RouterFixture fx;
+    QVERIFY(fx.valid());
 
-    IpcRouter router;
-    QVERIFY(router.start(sockPath));
+    IpcRouter& router = fx.router;
+    QVERIFY(router.start(fx.sockPath));
 
     // Use the same QEventLoop pattern as roundtrip(); raw byte
     // payload bypasses writeLine.
@@ -238,7 +225,7 @@ void TestPhosphorIpcE2e::roundtrip_malformedRequest()
         }
     });
 
-    socket.connectToServer(sockPath);
+    socket.connectToServer(fx.sockPath);
     QVERIFY(socket.waitForConnected(2000));
     socket.write("{ not json\n");
     socket.flush();
@@ -255,34 +242,27 @@ void TestPhosphorIpcE2e::roundtrip_malformedRequest()
 
 void TestPhosphorIpcE2e::start_failsWhenPathConflict()
 {
-    QTemporaryDir dir;
-    QVERIFY(dir.isValid());
-    const QString sockPath = QDir(dir.path()).filePath(QStringLiteral("test.sock"));
+    RouterFixture fx;
+    QVERIFY(fx.valid());
 
     IpcRouter routerA;
     EchoTarget echo;
     QVERIFY(routerA.registerTarget(QStringLiteral("echo"), &echo));
-    QVERIFY(routerA.start(sockPath));
+    QVERIFY(routerA.start(fx.sockPath));
 
     IpcRouter routerB;
     QTest::ignoreMessage(QtWarningMsg, QRegularExpression(QStringLiteral("listen\\(\\) failed")));
-    QVERIFY(!routerB.start(sockPath));
+    QVERIFY(!routerB.start(fx.sockPath));
 
     // Critical assertion: routerA must still serve traffic. A
     // regression where start() unlinks the live socket file and
     // re-binds (clobbering routerA) would pass the "B fails"
     // check above but break this roundtrip. Send a real call
     // and assert the reply lands.
-    QJsonObject req;
-    req.insert(QStringLiteral("type"), QStringLiteral("call"));
-    req.insert(QStringLiteral("id"), 1);
-    req.insert(QStringLiteral("target"), QStringLiteral("echo"));
-    req.insert(QStringLiteral("fn"), QStringLiteral("echo"));
-    QJsonArray args;
-    args.append(QStringLiteral("alive"));
-    req.insert(QStringLiteral("args"), args);
+    const QJsonObject req =
+        makeCallReq(1, QStringLiteral("echo"), QStringLiteral("echo"), QJsonArray{QStringLiteral("alive")});
 
-    ROUNDTRIP_OR_FAIL(resp, sockPath, req);
+    ROUNDTRIP_OR_FAIL(resp, fx.sockPath, req);
     QCOMPARE(resp.value(QStringLiteral("type")).toString(), QStringLiteral("reply"));
     QCOMPARE(resp.value(QStringLiteral("result")).toString(), QStringLiteral("alive"));
 }
@@ -302,28 +282,21 @@ void TestPhosphorIpcE2e::start_afterStop_succeeds()
     // the full start -> stop -> start -> serve-traffic cycle so a
     // regression in stop()'s teardown order (e.g. dangling
     // m_subscriptionsBySocket entries blocking re-bind) is caught.
-    QTemporaryDir dir;
-    QVERIFY(dir.isValid());
-    const QString sockPath = QDir(dir.path()).filePath(QStringLiteral("test.sock"));
+    RouterFixture fx;
+    QVERIFY(fx.valid());
 
-    IpcRouter router;
+    IpcRouter& router = fx.router;
     EchoTarget echo;
     QVERIFY(router.registerTarget(QStringLiteral("echo"), &echo));
-    QVERIFY(router.start(sockPath));
+    QVERIFY(router.start(fx.sockPath));
     router.stop();
     QVERIFY(router.socketPath().isEmpty());
-    QVERIFY(router.start(sockPath));
+    QVERIFY(router.start(fx.sockPath));
 
-    QJsonObject req;
-    req.insert(QStringLiteral("type"), QStringLiteral("call"));
-    req.insert(QStringLiteral("id"), 1);
-    req.insert(QStringLiteral("target"), QStringLiteral("echo"));
-    req.insert(QStringLiteral("fn"), QStringLiteral("echo"));
-    QJsonArray args;
-    args.append(QStringLiteral("after-restart"));
-    req.insert(QStringLiteral("args"), args);
+    const QJsonObject req =
+        makeCallReq(1, QStringLiteral("echo"), QStringLiteral("echo"), QJsonArray{QStringLiteral("after-restart")});
 
-    ROUNDTRIP_OR_FAIL(resp, sockPath, req);
+    ROUNDTRIP_OR_FAIL(resp, fx.sockPath, req);
     QCOMPARE(resp.value(QStringLiteral("type")).toString(), QStringLiteral("reply"));
     QCOMPARE(resp.value(QStringLiteral("result")).toString(), QStringLiteral("after-restart"));
 }
@@ -342,12 +315,11 @@ void TestPhosphorIpcE2e::oversizedLineClosesConnection()
     // cap directly rather than depending on the kernel's AF_UNIX send-
     // buffer sizing (a regression that added a write-timeout in the
     // single-write path could break this test for the wrong reason).
-    QTemporaryDir dir;
-    QVERIFY(dir.isValid());
-    const QString sockPath = QDir(dir.path()).filePath(QStringLiteral("test.sock"));
+    RouterFixture fx;
+    QVERIFY(fx.valid());
 
-    IpcRouter router;
-    QVERIFY(router.start(sockPath));
+    IpcRouter& router = fx.router;
+    QVERIFY(router.start(fx.sockPath));
 
     QLocalSocket socket;
     QByteArray buffer;
@@ -360,7 +332,7 @@ void TestPhosphorIpcE2e::oversizedLineClosesConnection()
         buffer.append(socket.readAll());
     });
 
-    socket.connectToServer(sockPath);
+    socket.connectToServer(fx.sockPath);
     QVERIFY(socket.waitForConnected(2000));
 
     // Write 1 MiB + 1 byte without a newline in 64 KiB chunks. The
@@ -406,15 +378,14 @@ void TestPhosphorIpcE2e::consecutiveMalformedFramesClosesConnection()
     // value at exactly 16 (the previous flake-prone 16..17 tolerance
     // was a symptom of writing all frames at once and racing the
     // waitForBytesWritten flush window on the close iteration).
-    QTemporaryDir dir;
-    QVERIFY(dir.isValid());
-    const QString sockPath = QDir(dir.path()).filePath(QStringLiteral("test.sock"));
+    RouterFixture fx;
+    QVERIFY(fx.valid());
 
-    IpcRouter router;
-    QVERIFY(router.start(sockPath));
+    IpcRouter& router = fx.router;
+    QVERIFY(router.start(fx.sockPath));
 
     QLocalSocket socket;
-    socket.connectToServer(sockPath);
+    socket.connectToServer(fx.sockPath);
     QVERIFY(socket.waitForConnected(2000));
 
     // Frames 1..16: each must produce a MALFORMED_REQUEST diagnostic
@@ -457,15 +428,14 @@ void TestPhosphorIpcE2e::pipelinedFramesAllReceiveReplies()
     // type="reply". A regression that reordered, duplicated, or
     // dropped+padded the reply stream would pass a bare count-check
     // but fail the id set.
-    QTemporaryDir dir;
-    QVERIFY(dir.isValid());
-    const QString sockPath = QDir(dir.path()).filePath(QStringLiteral("test.sock"));
+    RouterFixture fx;
+    QVERIFY(fx.valid());
 
-    IpcRouter router;
-    QVERIFY(router.start(sockPath));
+    IpcRouter& router = fx.router;
+    QVERIFY(router.start(fx.sockPath));
 
     QLocalSocket socket;
-    socket.connectToServer(sockPath);
+    socket.connectToServer(fx.sockPath);
     QVERIFY(socket.waitForConnected(2000));
 
     // Pipeline FrameCount list requests in a single write so they
@@ -507,14 +477,13 @@ void TestPhosphorIpcE2e::peerDisconnectMidRequest()
     // robust against the "buffer has unconsumed bytes" state, and
     // the per-socket subscription / malformed-counter maps get cleaned
     // up so a fresh accept slot is ready.
-    QTemporaryDir dir;
-    QVERIFY(dir.isValid());
-    const QString sockPath = QDir(dir.path()).filePath(QStringLiteral("test.sock"));
+    RouterFixture fx;
+    QVERIFY(fx.valid());
 
-    IpcRouter router;
+    IpcRouter& router = fx.router;
     EchoTarget echo;
     QVERIFY(router.registerTarget(QStringLiteral("echo"), &echo));
-    QVERIFY(router.start(sockPath));
+    QVERIFY(router.start(fx.sockPath));
 
     // Client A: partial JSON, then abort. The partial frame leaves
     // server-side state with bytes buffered but no '\n'. Note: we
@@ -524,7 +493,7 @@ void TestPhosphorIpcE2e::peerDisconnectMidRequest()
     // returning false despite the bytes being on the wire.
     {
         QLocalSocket a;
-        a.connectToServer(sockPath);
+        a.connectToServer(fx.sockPath);
         QVERIFY(a.waitForConnected(2000));
         a.write("{\"type\":\"list\",\"id\":1");
         a.flush();
@@ -542,7 +511,7 @@ void TestPhosphorIpcE2e::peerDisconnectMidRequest()
     QJsonObject req;
     req.insert(QStringLiteral("type"), QStringLiteral("list"));
     req.insert(QStringLiteral("id"), 42);
-    ROUNDTRIP_OR_FAIL(resp, sockPath, req);
+    ROUNDTRIP_OR_FAIL(resp, fx.sockPath, req);
     QCOMPARE(resp.value(QStringLiteral("type")).toString(), QStringLiteral("reply"));
     QCOMPARE(resp.value(QStringLiteral("id")).toInt(), 42);
 }
@@ -568,17 +537,16 @@ void TestPhosphorIpcE2e::slowSubscriberHitsWriteCap()
         QtWarningMsg,
         QRegularExpression(QStringLiteral("subscriber on '.*' is .* bytes behind; closing the connection")));
 
-    QTemporaryDir dir;
-    QVERIFY(dir.isValid());
-    const QString sockPath = QDir(dir.path()).filePath(QStringLiteral("test.sock"));
+    RouterFixture fx;
+    QVERIFY(fx.valid());
 
-    IpcRouter router;
+    IpcRouter& router = fx.router;
     BroadcastTarget t;
     QVERIFY(router.registerTarget(QStringLiteral("bcast"), &t));
-    QVERIFY(router.start(sockPath));
+    QVERIFY(router.start(fx.sockPath));
 
     QLocalSocket subscriber;
-    subscriber.connectToServer(sockPath);
+    subscriber.connectToServer(fx.sockPath);
     QVERIFY(subscriber.waitForConnected(2000));
     subscriber.write(
         writeLine(makeReq(QStringLiteral("subscribe"), 1, QStringLiteral("bcast"), QStringLiteral("payload"))));
@@ -615,5 +583,5 @@ void TestPhosphorIpcE2e::slowSubscriberHitsWriteCap()
     QVERIFY2(closed, "router must close the subscriber once pending writes exceed the 16 MiB cap");
 }
 
-QTEST_MAIN(TestPhosphorIpcE2e)
+QTEST_GUILESS_MAIN(TestPhosphorIpcE2e)
 #include "test_phosphor_ipc_e2e.moc"

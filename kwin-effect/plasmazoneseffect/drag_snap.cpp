@@ -149,7 +149,12 @@ void PlasmaZonesEffect::callEndDrag(KWin::EffectWindow* window, const QString& w
                     // applied by slotDragPolicyChanged at the moment of
                     // crossing, so by the time we get here the autotile
                     // handler has the right tracking state.
-                    if (!safeWindow) {
+                    //
+                    // isDeleted: same reply-latency hygiene as ApplySnap /
+                    // RestoreSize below — floating a dying window would
+                    // re-pollute the scrubbed id caches and record a daemon
+                    // float for a dead id.
+                    if (!safeWindow || safeWindow->isDeleted()) {
                         break;
                     }
                     const QString dropScreenId = getWindowScreenId(safeWindow);
@@ -229,12 +234,12 @@ void PlasmaZonesEffect::callEndDrag(KWin::EffectWindow* window, const QString& w
                     // position. Skip if slotRestoreSizeDuringDrag already
                     // applied during the drag (size within 1px).
                     QRectF frame = safeWindow->frameGeometry();
-                    const QRect geo(static_cast<int>(frame.x()), static_cast<int>(frame.y()), outcome.width,
-                                    outcome.height);
                     if (qAbs(frame.width() - outcome.width) <= 1 && qAbs(frame.height() - outcome.height) <= 1) {
                         qCDebug(lcEffect) << "endDrag RestoreSize: already at correct size, skipping";
                         break;
                     }
+                    const QRect geo(static_cast<int>(frame.x()), static_cast<int>(frame.y()), outcome.width,
+                                    outcome.height);
                     if (safeWindow->isUserMove() && !(m_currentMouseButtons & Qt::LeftButton)) {
                         if (KWin::Window* kw = safeWindow->window()) {
                             kw->cancelInteractiveMoveResize();
@@ -255,7 +260,10 @@ void PlasmaZonesEffect::callEndDrag(KWin::EffectWindow* window, const QString& w
                 // window's current screen (cross-screen drags).
                 const bool applied = outcome.action == PhosphorProtocol::DragOutcome::ApplySnap
                     || outcome.action == PhosphorProtocol::DragOutcome::ApplyFloat;
-                if (!applied && safeWindow && !outcome.targetScreenId.isEmpty() && isDaemonReady("auto-fill on drop")) {
+                // isDeleted: don't auto-fill a zone for a close-grabbed dying
+                // window — the daemon would commit an assignment for a dead id.
+                if (!applied && safeWindow && !safeWindow->isDeleted() && !outcome.targetScreenId.isEmpty()
+                    && isDaemonReady("auto-fill on drop")) {
                     const bool sticky = isWindowSticky(safeWindow);
                     auto onSnapSuccess = [this](const QString&, const QString& snappedScreenId) {
                         m_snapAssistHandler->showContinuationIfNeeded(snappedScreenId);

@@ -308,9 +308,10 @@ PhosphorProtocol::DragOutcome WindowDragAdaptor::endDrag(const QString& windowId
         return outcome;
     }
 
-    // Pending snap-path drag that never activated. Mirrors the main-branch
-    // behavior where sendDeferredDragStarted() never latched and
-    // DragTracker::dragStopped short-circuited at `if (!m_dragStartedSent)`.
+    // Pending snap-path drag that never activated. Mirrors the historical
+    // effect-side behavior where the deferred drag-started notification
+    // never latched, so the drag-stopped path short-circuited without a
+    // daemon round-trip.
     // If the window was snapped at drag start and the user dragged it
     // without holding the activation trigger, drive notifyDragOutUnsnap
     // on the window-tracking side so the window unsnaps and floats at

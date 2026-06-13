@@ -10,8 +10,9 @@
  * with Q_CLASSINFO. Nothing enforced the symmetry mechanically, and the
  * PR-608 audit caught exactly the drift class that invites: a capability
  * documented against a deleted method, internal helpers exposed as bus slots,
- * and renamed args. This test pins, for EVERY handwritten (XML, adaptor)
- * pair — all twelve org.plasmazones interfaces:
+ * and renamed args. This test pins, for every linkable handwritten
+ * (XML, adaptor) pair — the daemon's twelve src/dbus interfaces plus
+ * phosphor-screens' org.plasmazones.Screen (thirteen in total):
  *
  *  1. Every XML method exists as a bus-exposed metaobject method with
  *     matching in/out argument types, names, and return mapping.
@@ -27,8 +28,22 @@
  * are exported; plain public methods are not. Out-args follow QtDBus
  * convention: a non-void return is the FIRST out argument, then non-const
  * reference parameters in declaration order.
+ *
+ * NOT covered (documented gap, not an oversight): the settings/editor apps'
+ * single-slot launch forwarders — SettingsAppAdaptor (org.plasmazones
+ * .SettingsController, dbus/org.plasmazones.SettingsApp.xml) and
+ * EditorAppAdaptor (org.plasmazones.EditorController, dbus/org.plasmazones
+ * .EditorApp.xml). Their classes are app-internal (compiled into the app
+ * binaries, not exported from any linkable target), so their
+ * staticMetaObjects cannot be linked here without dragging each app's
+ * controller graph into the test. Each is one forwarder slot; drift there
+ * surfaces immediately as a launch failure in the owning app.
  */
 
+#include <PhosphorProtocol/Registration.h>
+#include <PhosphorScreens/DBusScreenAdaptor.h>
+
+#include <QDBusMetaType>
 #include <QFile>
 #include <QHash>
 #include <QMetaMethod>
@@ -266,6 +281,25 @@ void compareArg(const QString& iface, const QString& method, const XmlArg& xmlAr
         QVERIFY2(xmlArg.qtTypeName == cpp,
                  qPrintable(QStringLiteral("%1.%2 arg '%3': QtTypeName '%4' != C++ type '%5'")
                                 .arg(iface, method, xmlArg.name, xmlArg.qtTypeName, cpp)));
+        // The XML's D-Bus signature string must match the registered
+        // marshaller's actual wire signature — the annotation VALUE alone
+        // can be right while the `type` attribute drifts (the a{ss}→a{sv}
+        // class of bug). Requires the metatype to be registered with
+        // QtDBus (initTestCase calls PhosphorProtocol::registerWireTypes).
+        const QMetaType mt = QMetaType::fromName(cpp.toLatin1());
+        QVERIFY2(mt.isValid(),
+                 qPrintable(QStringLiteral("%1.%2 arg '%3': annotated type '%4' is not a registered "
+                                           "metatype — cannot verify its wire signature")
+                                .arg(iface, method, xmlArg.name, cpp)));
+        const char* sig = QDBusMetaType::typeToSignature(mt);
+        QVERIFY2(sig,
+                 qPrintable(QStringLiteral("%1.%2 arg '%3': annotated type '%4' has no QtDBus marshaller "
+                                           "registered (qDBusRegisterMetaType missing)")
+                                .arg(iface, method, xmlArg.name, cpp)));
+        QVERIFY2(xmlArg.dbusType == QString::fromLatin1(sig),
+                 qPrintable(QStringLiteral("%1.%2 arg '%3': XML signature '%4' != registered wire signature '%5' "
+                                           "for annotated type '%6'")
+                                .arg(iface, method, xmlArg.name, xmlArg.dbusType, QString::fromLatin1(sig), cpp)));
         return;
     }
     const QString mapped = dbusTypeFor(cpp);
@@ -389,26 +423,33 @@ class TestDBusContractSync : public QObject
                 ++outIdx;
             }
 
-            // In-arg NAMES are part of the published contract (out-args may
-            // use a synthetic name for the return value, so only the
-            // ref-param tail is name-checked).
+            // Arg NAMES are part of the published contract. In-args map to
+            // C++ params 1:1; out-args map to the ref-param tail (the
+            // return-value out-arg has no C++ param name — QtDBus
+            // introspection synthesizes one — so it is skipped).
             const QList<QByteArray> paramNames = m.parameterNames();
             {
-                int xmlIdx = 0;
+                int inXmlIdx = 0;
+                int outXmlIdx = hasReturn ? 1 : 0; // return value occupies out slot 0
                 for (int nameIdx = 0; nameIdx < paramTypes.size(); ++nameIdx) {
                     const QByteArray& t = paramTypes[nameIdx];
                     if (t == "QDBusMessage" || t == "const QDBusMessage&") {
                         continue; // context injection — no wire arg
                     }
                     const bool isOut = t.endsWith('&') && !t.startsWith("const ");
+                    const QString cppName = QString::fromLatin1(paramNames.value(nameIdx));
                     if (isOut) {
+                        QVERIFY2(outArgs[outXmlIdx].name == cppName,
+                                 qPrintable(QStringLiteral("%1.%2: XML out-arg name '%3' != C++ ref-param name '%4' "
+                                                           "(live introspection publishes the C++ name)")
+                                                .arg(interfaceName, it.key(), outArgs[outXmlIdx].name, cppName)));
+                        ++outXmlIdx;
                         continue;
                     }
-                    const QString cppName = QString::fromLatin1(paramNames.value(nameIdx));
-                    QVERIFY2(inArgs[xmlIdx].name == cppName,
+                    QVERIFY2(inArgs[inXmlIdx].name == cppName,
                              qPrintable(QStringLiteral("%1.%2: XML in-arg name '%3' != C++ param name '%4'")
-                                            .arg(interfaceName, it.key(), inArgs[xmlIdx].name, cppName)));
-                    ++xmlIdx;
+                                            .arg(interfaceName, it.key(), inArgs[inXmlIdx].name, cppName)));
+                    ++inXmlIdx;
                 }
             }
         }
@@ -488,6 +529,14 @@ class TestDBusContractSync : public QObject
 
 private Q_SLOTS:
 
+    void initTestCase()
+    {
+        // compareArg verifies XML signature strings against the registered
+        // QtDBus marshallers for QtTypeName-annotated args — the wire types
+        // must be registered first, exactly as the daemon does at startup.
+        PhosphorProtocol::registerWireTypes();
+    }
+
     void testCompositorBridgeContract()
     {
         verifyContract(CompositorBridgeAdaptor::staticMetaObject, QStringLiteral("org.plasmazones.CompositorBridge"));
@@ -555,6 +604,11 @@ private Q_SLOTS:
     void testZoneDetectionContract()
     {
         verifyContract(ZoneDetectionAdaptor::staticMetaObject, QStringLiteral("org.plasmazones.ZoneDetection"));
+    }
+
+    void testScreenContract()
+    {
+        verifyContract(PhosphorScreens::DBusScreenAdaptor::staticMetaObject, QStringLiteral("org.plasmazones.Screen"));
     }
 };
 

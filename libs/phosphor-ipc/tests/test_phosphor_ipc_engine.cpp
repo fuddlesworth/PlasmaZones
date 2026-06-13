@@ -185,5 +185,5 @@ void TestPhosphorIpcEngine::install_uninstall_install_doesNotLeakDestroyedWatche
     QCOMPARE(IpcEngine::routerFor(&engine), nullptr);
 }
 
-QTEST_MAIN(TestPhosphorIpcEngine)
+QTEST_GUILESS_MAIN(TestPhosphorIpcEngine)
 #include "test_phosphor_ipc_engine.moc"

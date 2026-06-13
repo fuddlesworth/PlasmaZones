@@ -733,7 +733,7 @@ public:
     }
 
     // Untranslated display names — use for translation source only.
-    // SettingsController translates these via PhosphorI18n::tr() at runtime.
+    // GeneralPageController translates these via PhosphorI18n::tr() at runtime.
     static QStringList renderingBackendDisplayNames()
     {
         QStringList names;

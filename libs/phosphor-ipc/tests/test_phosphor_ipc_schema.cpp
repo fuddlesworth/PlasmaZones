@@ -248,5 +248,5 @@ void TestPhosphorIpcSchema::signals_enumerated()
              QStringLiteral("integer"));
 }
 
-QTEST_MAIN(TestPhosphorIpcSchema)
+QTEST_GUILESS_MAIN(TestPhosphorIpcSchema)
 #include "test_phosphor_ipc_schema.moc"

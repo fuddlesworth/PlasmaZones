@@ -213,11 +213,6 @@ target_link_libraries(PhosphorShellQml
         Qt6::Quick
 )
 
-set_target_properties(PhosphorShellQml PROPERTIES
-    VERSION ${PHOSPHORSHELL_VERSION}
-    SOVERSION 0
-)
-
 # ═══════════════════════════════════════════════════════════════════════════════
 # Install
 # ═══════════════════════════════════════════════════════════════════════════════

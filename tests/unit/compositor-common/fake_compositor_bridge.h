@@ -42,10 +42,14 @@
  *  - stackingOrder() returns std::map key order (lexicographic by id), NOT
  *    bottom-to-top stacking as the interface documents. DecorationManager
  *    never calls it; a future consumer test must not rely on the ordering.
- *  - windowInfo() populates frameGeometry/screenId/minimized/hasDecoration
- *    but leaves appId/windowClass/caption/icon/minSize/pid and the remaining
- *    boolean flags at their defaults; asQObject() returns nullptr (no D-Bus
- *    watcher parent in unit tests).
+ *  - windowInfo() populates handle/windowId/frameGeometry/screenId/
+ *    minimized/hasDecoration but leaves appId/windowClass/caption/icon/
+ *    minSize/pid and the remaining boolean flags at their defaults;
+ *    asQObject() returns nullptr (no D-Bus watcher parent in unit tests).
+ *
+ * Style note: `callLog` / `fuzzyFindByAppId` are deliberately bare public
+ * data members (no m_ prefix, no accessors) — they are test-fixture knobs
+ * the suites poke directly, and accessor ceremony would only obscure that.
  */
 class FakeCompositorBridge : public PhosphorCompositor::ICompositorBridge
 {

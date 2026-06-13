@@ -110,7 +110,7 @@ void WindowTrackingService::populateResnapBufferForAllScreens(const QSet<QString
     for (const PhosphorEngine::WindowPlacement& rec : m_placementStore.records()) {
         if (addedIds.contains(rec.windowId))
             continue;
-        const PhosphorEngine::EngineSlot snapSlot = rec.slotFor(QStringLiteral("snap"));
+        const PhosphorEngine::EngineSlot snapSlot = rec.slotFor(PhosphorEngine::WindowPlacement::snapEngineId());
         if (snapSlot.state != PhosphorEngine::WindowPlacement::stateSnapped())
             continue;
         addCandidate(rec.windowId, snapSlot.zoneIds, rec.screenId, rec.virtualDesktop);
@@ -242,7 +242,7 @@ QHash<QString, WindowTrackingService::PendingRestoreTarget> WindowTrackingServic
     // unordered hash iteration.
     QHash<QString, quint64> chosenSequence;
     for (const PhosphorEngine::WindowPlacement& p : m_placementStore.records()) {
-        const PhosphorEngine::EngineSlot snapSlot = p.slotFor(QStringLiteral("snap"));
+        const PhosphorEngine::EngineSlot snapSlot = p.slotFor(PhosphorEngine::WindowPlacement::snapEngineId());
         if (snapSlot.state != PhosphorEngine::WindowPlacement::stateSnapped()) {
             continue;
         }

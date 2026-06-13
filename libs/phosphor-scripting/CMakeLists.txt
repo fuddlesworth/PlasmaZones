@@ -82,11 +82,17 @@ else()
                 "  got      ${_p_luau_actual_sha}\nThe committed ${_p_luau_tarball} is corrupt or was swapped.")
         endif()
         # Extract the committed tarball once (a LOCAL file — no network). The
-        # archive has a single luau-<ver>/ top-level dir; re-extract only when the
-        # target tree is absent so reconfigures stay fast.
-        if(NOT EXISTS "${_p_luau_src}/CMakeLists.txt")
+        # archive has a single luau-<ver>/ top-level dir. The re-extract guard
+        # keys on a stamp file written AFTER a successful extraction — keying
+        # on a file tar writes early (e.g. CMakeLists.txt) would let an
+        # aborted extraction (disk full, ^C mid-configure) pass the guard on
+        # every later reconfigure and fail confusingly inside the vendored
+        # build instead of repairing itself.
+        set(_p_luau_extract_stamp "${CMAKE_BINARY_DIR}/_luau/.extracted-${PHOSPHORSCRIPTING_LUAU_VERSION}")
+        if(NOT EXISTS "${_p_luau_extract_stamp}")
             file(MAKE_DIRECTORY "${CMAKE_BINARY_DIR}/_luau")
             file(ARCHIVE_EXTRACT INPUT "${_p_luau_tarball}" DESTINATION "${CMAKE_BINARY_DIR}/_luau")
+            file(TOUCH "${_p_luau_extract_stamp}")
         endif()
         set(LUAU_BUILD_CLI   OFF CACHE BOOL "" FORCE)
         set(LUAU_BUILD_TESTS OFF CACHE BOOL "" FORCE)
@@ -213,10 +219,16 @@ endif()
 # system-Luau build links a separately-installed Luau that carries its own
 # licence, so skip it there.
 if(NOT PLASMAZONES_SYSTEM_LUAU)
-    # _p_luau_src is the extracted tarball tree (set in the acquisition block).
-    install(FILES ${_p_luau_src}/LICENSE.txt
-        DESTINATION ${KDE_INSTALL_DATADIR}/licenses/plasmazones
-        RENAME LICENSE.Luau)
+    # _p_luau_src is the extracted tarball tree (set in the acquisition
+    # block). Guarded on the file actually existing: a superbuild/parent
+    # scope that pre-defines Luau.VM skips the extraction entirely, and an
+    # unconditional rule would then fail at `cmake --install` time against
+    # a path that was never created.
+    if(EXISTS "${_p_luau_src}/LICENSE.txt")
+        install(FILES ${_p_luau_src}/LICENSE.txt
+            DESTINATION ${KDE_INSTALL_DATADIR}/licenses/plasmazones
+            RENAME LICENSE.Luau)
+    endif()
 endif()
 
 install(TARGETS PhosphorScripting

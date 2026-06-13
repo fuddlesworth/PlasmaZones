@@ -252,6 +252,7 @@ void AutotileHandler::slotWindowsTileRequested(const PhosphorProtocol::TileReque
         // windows that left that screen's tiling state. Title bars are
         // restored by the DecorationManager only when no owner remains —
         // a sibling VS's claim or a snap takeover keeps the window hidden.
+        bool anyDeferred = false;
         for (auto screenIt = newTiledByScreen.constBegin(); screenIt != newTiledByScreen.constEnd(); ++screenIt) {
             const QString& screenId = screenIt.key();
             const QSet<QString>& newSet = screenIt.value();
@@ -266,9 +267,31 @@ void AutotileHandler::slotWindowsTileRequested(const PhosphorProtocol::TileReque
                     AutotileStateHelpers::removeTiledOnScreen(m_border, screenId, wid);
                     continue;
                 }
-                m_effect->decorationManager()->release(wid, DecorationManager::autotile(screenId));
+                // Deferred: each physical restore is a synchronous Wayland
+                // round-trip (30-120 ms) — a multi-window untile batch must
+                // not stall the compositor mid-retile-animation. A window
+                // re-tiled by the next batch is rescued by the manager's
+                // re-acquire cancellation; stale entries also drop any
+                // unconsumed zone-centering targets below.
+                m_effect->decorationManager()->release(wid, DecorationManager::autotile(screenId),
+                                                       DecorationManager::Restore::Deferred);
                 AutotileStateHelpers::removeTiledOnScreen(m_border, screenId, wid);
+                // A daemon-initiated untile that is not a float/fullscreen/
+                // close/desktop-switch (e.g. a rule change dropping the
+                // window from the layout) must not leave a stale centering
+                // target that teleport-centers the window on its next
+                // frameGeometryChanged. Cross-screen transfers are safe: the
+                // apply lambda wrote a fresh entry only for windows in
+                // toApply, which are never in `untiled` for their new screen.
+                if (!AutotileStateHelpers::isTiledWindow(m_border, wid)) {
+                    m_autotileTargetZones.remove(wid);
+                    m_centeredWaylandZones.remove(wid);
+                }
+                anyDeferred = true;
             }
+        }
+        if (anyDeferred) {
+            m_effect->decorationManager()->drainPendingRestores();
         }
         auto* ws = KWin::Workspace::self();
         if (ws) {

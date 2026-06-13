@@ -26,8 +26,9 @@ namespace PlasmaZones {
  */
 struct ZoneSelectorConfig
 {
-    // NOTE: these member defaults hand-duplicate the ConfigDefaults::
-    // zoneSelector* accessors (a ConfigDefaults include here would cycle).
+    // NOTE: these member defaults hand-duplicate the ConfigDefaults
+    // zone-selector default accessors — position(), layoutMode(),
+    // maxRows(), … (unprefixed; a ConfigDefaults include here would cycle).
     // They matter only for BARE default construction — every production
     // path (Settings::resolvedZoneSelectorConfig and the ISettings default
     // implementation) populates from the accessors, so a retuned

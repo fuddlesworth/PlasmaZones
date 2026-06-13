@@ -364,6 +364,12 @@ private:
     PlasmaZonesEffect* m_effect;
 
     QSet<QString> m_autotileScreens;
+    /// Bumped on every autotileScreensChanged signal. loadSettings' async
+    /// Properties.Get reply captures the value at dispatch and discards
+    /// itself if a signal landed in between — the signal carried a newer
+    /// set AND ran the full per-screen transition handling the raw reply
+    /// assignment lacks.
+    quint64 m_screensSignalGeneration = 0;
     /// Pre-autotile frame geometry, keyed [screenId][windowId].
     ///
     /// Ownership: this is a local cache. The daemon's

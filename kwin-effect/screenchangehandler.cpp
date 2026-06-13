@@ -198,7 +198,10 @@ void ScreenChangeHandler::applyWindowGeometries(const PhosphorProtocol::WindowGe
     QHash<QString, KWin::EffectWindow*> windowByAppId;
     const auto windows = KWin::effects->stackingOrder();
     for (KWin::EffectWindow* w : windows) {
-        if (!w || !m_effect->shouldHandleWindow(w)) {
+        // isDeleted: a dying sibling must not claim the insert-if-absent
+        // appId slot — the apply loop's own isDeleted guard would then
+        // silently drop the live window's reapply.
+        if (!w || w->isDeleted() || !m_effect->shouldHandleWindow(w)) {
             continue;
         }
         QString fullId = m_effect->getWindowId(w);

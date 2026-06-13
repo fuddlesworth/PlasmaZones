@@ -140,8 +140,9 @@ void Daemon::initializeAutotile()
                             // immediately; geometry restore is deferred to the batched resnap
                             // signal to avoid individual D-Bus signals queuing behind the resnap.
                             const auto rec = wts->placementStore().peek(windowId, wts->currentAppIdFor(windowId));
-                            const PhosphorEngine::EngineSlot snapSlot =
-                                rec ? rec->slotFor(QStringLiteral("snap")) : PhosphorEngine::EngineSlot{};
+                            const PhosphorEngine::EngineSlot snapSlot = rec
+                                ? rec->slotFor(PhosphorEngine::WindowPlacement::snapEngineId())
+                                : PhosphorEngine::EngineSlot{};
                             const bool snapFloat = snapSlot.state == PhosphorEngine::WindowPlacement::stateFloating();
                             // A window SNAPPED in snapping mode, then floated in autotile, keeps its
                             // snap-engine state — float is PER ENGINE. Such a window is excluded from
@@ -730,7 +731,7 @@ void Daemon::connectOverlaySignals()
                 // Suppress resnap OSD when triggered by a mode/layout change
                 // (layout switch OSD already provides feedback)
                 if (m_suppressResnapOsd > 0
-                    && (action == QStringLiteral("resnap") || action == QStringLiteral("retile"))) {
+                    && (action == QLatin1String("resnap") || action == QLatin1String("retile"))) {
                     m_suppressResnapOsd = std::max(0, m_suppressResnapOsd - 1);
                     return;
                 }

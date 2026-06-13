@@ -12,11 +12,10 @@ function(phosphoripc_add_test name)
             Qt6::Network
     )
     add_test(NAME ${name} COMMAND ${name} WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR})
-    # offscreen QPA: even non-GUI tests pull QGuiApplication transitively
-    # through Qt::Test on some Qt builds. TIMEOUT 30 caps ctest at 30s
-    # per binary so a hung socket test can't wedge CI.
+    # All suites are QTEST_GUILESS_MAIN (QCoreApplication) — no QPA platform
+    # needed; even the engine test's QQmlEngine runs headless. TIMEOUT 30
+    # caps ctest at 30s per binary so a hung socket test can't wedge CI.
     set_tests_properties(${name} PROPERTIES
-        ENVIRONMENT "QT_QPA_PLATFORM=offscreen"
         TIMEOUT 30
     )
 endfunction()

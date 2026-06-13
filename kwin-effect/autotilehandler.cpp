@@ -106,7 +106,9 @@ void AutotileHandler::handleCursorMoved(const QPointF& pos, const QString& scree
     const auto windows = KWin::effects->stackingOrder();
     for (int i = windows.size() - 1; i >= 0; --i) {
         KWin::EffectWindow* w = windows[i];
-        if (!w || w->isMinimized() || !w->isOnCurrentDesktop() || !w->isOnCurrentActivity()) {
+        // isDeleted: a close-grabbed dying window under the cursor must not
+        // pause FFM via the occlusion bail (mirrors the snap FFM guard).
+        if (!w || w->isDeleted() || w->isMinimized() || !w->isOnCurrentDesktop() || !w->isOnCurrentActivity()) {
             continue;
         }
         // Geometry check first (cheap QRectF::contains) before shouldHandleWindow (allocates via windowClass())
@@ -684,6 +686,11 @@ void AutotileHandler::onDaemonReady()
         QObject::disconnect(connIt.value());
     }
     m_pendingCrossScreenRestore.clear();
+    // A stacking order saved before the restart describes a dead session's
+    // z-order — the first post-restart retile's onComplete would replay it
+    // and re-raise windows in stale order; same for a stale pending focus id.
+    m_savedAutotileStackingOrder.clear();
+    m_pendingAutotileFocusWindowId.clear();
 
     // Re-send the effect's pre-autotile geometry cache to the freshly
     // (re)connected daemon as a backstop. storePreTileGeometry lands in the

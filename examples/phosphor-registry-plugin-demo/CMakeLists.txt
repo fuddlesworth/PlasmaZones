@@ -8,6 +8,10 @@
 
 find_package(Qt6 6.6 REQUIRED COMPONENTS Core Gui Qml Quick QuickControls2)
 
+if(COMMAND qt_policy)
+    qt_policy(SET QTP0001 NEW)
+endif()
+
 # Build the CPU-meter plugin .so first; the demo's --plugin-root
 # argument will point at the directory the plugin's CMakeLists
 # writes the .so + manifest.json into.
