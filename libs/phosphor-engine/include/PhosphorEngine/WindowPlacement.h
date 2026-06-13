@@ -117,18 +117,20 @@ struct WindowPlacement
     }
 
     /// Whether this record carries anything worth restoring. True when the window
-    /// has a captured free/float geometry OR any engine slot represents a managed
-    /// placement — a snapped/tiled state, or a slot that still references a zone /
-    /// tile index (e.g. a floated-from-snap window keeping its pre-float zones).
+    /// has a captured free/float geometry OR any engine slot holds a non-`free`
+    /// state — `snapped`/`tiled` place by zone/order, `floating` restores the float
+    /// state (the engines emit windowFloatingChanged / setFloating on a floating
+    /// slot even without geometry). `free` is the unmanaged default and only counts
+    /// as content when it carries a geometry.
     ///
-    /// A bare `{free}` slot with no geometry and no zone reference — the residue a
-    /// window leaves when it was open but never floated, snapped, or had a frame
-    /// captured (e.g. a close-time capture after its frame was already gone) — has
-    /// nothing to restore. Such records must NOT be persisted, and must never be
-    /// consumed from the per-app FIFO ahead of (or in place of) a content-bearing
-    /// sibling: at MaxPerApp entries per app, contentless residue would otherwise
-    /// starve and even evict (removeFirst) the window's real placement, silently
-    /// breaking float/free geometry restore on the next open.
+    /// A bare `{free}` slot with no geometry — the residue a window leaves when it
+    /// was open but never floated, snapped, or had a frame captured (e.g. a
+    /// close-time capture after its frame was already gone) — has nothing to
+    /// restore. Such records must NOT be persisted, and must never be CONSUMED from
+    /// the per-app FIFO (the snap restore's accept predicate rejects them): at
+    /// MaxPerApp entries per app, contentless residue would otherwise starve and
+    /// even evict (removeFirst) the window's real placement, silently breaking
+    /// float/free geometry restore on the next open.
     bool hasRestorableContent() const
     {
         if (anyFreeGeometry().isValid()) {
@@ -136,10 +138,7 @@ struct WindowPlacement
         }
         for (auto it = engines.constBegin(); it != engines.constEnd(); ++it) {
             const EngineSlot& s = it.value();
-            if (s.state == stateSnapped() || s.state == stateTiled()) {
-                return true;
-            }
-            if (!s.zoneIds.isEmpty() || s.order >= 0) {
+            if (!s.state.isEmpty() && s.state != stateFree()) {
                 return true;
             }
         }

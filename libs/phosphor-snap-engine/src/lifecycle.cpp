@@ -234,23 +234,35 @@ SnapResult SnapEngine::resolveWindowRestore(const QString& windowId, const QStri
                 if (p.slotFor(engineId()).state == WindowPlacement::stateSnapped()) {
                     return recordedSnapScreenIsSnapping(p);
                 }
+                // A contentless {free, no geometry} residue record (left by an
+                // earlier-closed instance captured frame-less) has nothing to
+                // restore. Never CONSUME it: at MaxPerApp entries per app it would
+                // otherwise be taken ahead of the window's real placement (captured
+                // last at save time, so it sits at the back of the FIFO), and the
+                // window would return neither to its zone nor its saved free/float
+                // position. Rejecting it here also lets a genuinely-new window fall
+                // through to the auto-snap chain instead of consuming a dead record
+                // and short-circuiting to no-snap. (Mirrors AutotileEngine's restore
+                // accept predicate, which likewise only consumes records with a real
+                // autotile slot.)
+                if (!p.hasRestorableContent()) {
+                    return false;
+                }
                 if (restoreUnsnappedPosition) {
                     return true;
                 }
                 return p.screenId.isEmpty() || p.screenId == screenId;
             },
             [&](const WindowPlacement& p) {
-                // Among an app's FIFO records, restore a record that actually has
-                // something to restore — a snapped placement on a still-snapping
-                // screen, or any record carrying real free/float geometry — ahead of a
-                // contentless {free, no geometry} sibling that is merely older.
-                // Otherwise a stale residue record (empty screen, no zone, no geometry)
-                // is consumed first and the window never returns to its zone OR its
-                // saved floating/free position. This is the load-bearing fix for
-                // unsnapped-position restore across logout/login: the floated window's
-                // real record, captured last at save time, sits at the back of the
-                // FIFO and would lose to older residue without this preference.
-                return recordedSnapScreenIsSnapping(p) || p.anyFreeGeometry().isValid();
+                // Among an app's FIFO records, restore a snapped placement on a
+                // still-snapping screen ahead of an unsnapped (free/floating) sibling
+                // that is merely older — snapping is the stronger restore intent, and
+                // this keeps a cross-screen snapped record from losing to an older
+                // free/floating record (or being passed over so a snap-screen open
+                // consumes and destroys an autotile-owned record it cannot use).
+                // Contentless residue is already excluded by the accept predicate, so
+                // the second (merely-accepted) pass only ever sees real placements.
+                return recordedSnapScreenIsSnapping(p);
             });
         if (rec) {
             // Same window across a daemon restart (uuid-exact) vs a reopened instance

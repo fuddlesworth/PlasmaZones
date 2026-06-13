@@ -358,16 +358,17 @@ private Q_SLOTS:
         QVERIFY(freeButTiled.hasRestorableContent());
     }
 
-    void testTake_preferredOutranksContentlessFreeByGeometry()
+    void testTake_contentlessResidueRejectedSoRealPlacementWins()
     {
         // Regression (floating geometry restore on login): a window the user floated
-        // and resized is captured LAST at logout, so its content-bearing `free`/
-        // `floating` record (with freeGeometry) sits at the BACK of the appId FIFO,
-        // behind OLDER contentless residue records left by earlier-closed windows of
-        // the same app. The snap engine's restore `preferred` predicate ranks any
-        // record with real free geometry ahead of those residue records, so the saved
-        // position is the one consumed on reopen — not an empty record that restores
-        // nothing.
+        // and resized is captured LAST at logout, so its content-bearing `floating`
+        // record (with freeGeometry) sits at the BACK of the appId FIFO, behind OLDER
+        // contentless residue records left by earlier-closed windows of the same app.
+        // The snap engine's restore ACCEPT predicate rejects contentless residue
+        // (hasRestorableContent() == false), so the FIFO never consumes it ahead of
+        // the real placement — the saved position is the one taken on reopen, and the
+        // residue is left untouched (later drained by MaxPerApp eviction / save-time
+        // hasRestorableContent filter).
         WindowPlacementStore store;
         // Older contentless free record (empty screen, no geometry) — residue.
         WindowPlacement residue;
@@ -381,21 +382,53 @@ private Q_SLOTS:
         store.record(make(QStringLiteral("kate|floated"), QStringLiteral("kate"), WindowPlacement::stateFloating(),
                           WindowPlacement::snapEngineId(), QStringLiteral("DP-1")));
 
-        // Mirror the engine's predicates: with restore-unsnapped on, every record is
-        // accepted; the preference is snapped-on-snapping OR has real free geometry.
-        const auto accept = [](const WindowPlacement&) {
-            return true;
+        // Mirror the engine's predicates: snapped records are eligible cross-screen;
+        // contentless residue is rejected; other content is accepted (restore-unsnapped
+        // on). The preference is snapped-on-snapping only (the stronger intent).
+        const auto accept = [](const WindowPlacement& p) {
+            if (p.slotFor(WindowPlacement::snapEngineId()).state == WindowPlacement::stateSnapped()) {
+                return true;
+            }
+            return p.hasRestorableContent();
         };
         const auto preferred = [](const WindowPlacement& p) {
-            return p.slotFor(WindowPlacement::snapEngineId()).state == WindowPlacement::stateSnapped()
-                || p.anyFreeGeometry().isValid();
+            return p.slotFor(WindowPlacement::snapEngineId()).state == WindowPlacement::stateSnapped();
         };
 
         auto p = store.take(QStringLiteral("kate|new"), QStringLiteral("kate"), accept, preferred);
         QVERIFY(p.has_value());
         QCOMPARE(p->windowId, QStringLiteral("kate|floated")); // the record with geometry, not the residue
         QVERIFY(p->anyFreeGeometry().isValid());
-        QCOMPARE(store.size(), 1); // residue remains, unconsumed
+        QCOMPARE(store.size(), 1); // residue remains, rejected (not consumed)
+    }
+
+    void testTake_snappedSiblingPreferredOverOlderFloatingContent()
+    {
+        // The preferred ranking must keep a SNAPPED placement ahead of an OLDER
+        // content-bearing floating sibling of the same app (snapping is the stronger
+        // restore intent). Guards against a regression where broadening `preferred`
+        // to "any free geometry" let the older floating record win by age — and, in
+        // the cross-mode case, let a snap-screen open consume a record it could not use.
+        WindowPlacementStore store;
+        store.record(make(QStringLiteral("kate|floated"), QStringLiteral("kate"), WindowPlacement::stateFloating(),
+                          WindowPlacement::snapEngineId(), QStringLiteral("DP-1"))); // older, content (geometry)
+        store.record(make(QStringLiteral("kate|snapped"), QStringLiteral("kate"), WindowPlacement::stateSnapped(),
+                          WindowPlacement::snapEngineId(), QStringLiteral("DP-1"))); // newer, snapped
+
+        const auto accept = [](const WindowPlacement& p) {
+            if (p.slotFor(WindowPlacement::snapEngineId()).state == WindowPlacement::stateSnapped()) {
+                return true;
+            }
+            return p.hasRestorableContent();
+        };
+        const auto preferred = [](const WindowPlacement& p) {
+            return p.slotFor(WindowPlacement::snapEngineId()).state == WindowPlacement::stateSnapped();
+        };
+
+        auto p = store.take(QStringLiteral("kate|new"), QStringLiteral("kate"), accept, preferred);
+        QVERIFY(p.has_value());
+        QCOMPARE(p->windowId, QStringLiteral("kate|snapped")); // snapped wins despite being newer
+        QCOMPARE(store.size(), 1); // the older floating record remains for the next instance
     }
 
     void testSerializeDropsContentlessRecords()
