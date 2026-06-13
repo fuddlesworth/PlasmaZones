@@ -769,6 +769,10 @@ Q_SIGNALS:
      */
     void activateWindowRequested(const QString& windowId);
 
+    /// Cross-desktop directional move: KWin should move @p windowId to virtual
+    /// desktop @p desktop (1-based). The effect calls windowToDesktops.
+    void windowDesktopMoveRequested(const QString& windowId, int desktop);
+
     /**
      * @brief Daemon requests KWin to apply geometries for a batch of windows
      * @param geometries List of window geometry entries to apply

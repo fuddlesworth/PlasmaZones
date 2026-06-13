@@ -66,6 +66,12 @@ Q_SIGNALS:
     void windowFloatingChanged(const QString& windowId, bool floating, const QString& screenId);
     void activateWindowRequested(const QString& windowId);
 
+    /// Emitted when directional navigation moves a window across virtual
+    /// desktops: the engine has already re-keyed its own tiling state, and the
+    /// compositor must move the real window to @p desktop (1-based). Relayed
+    /// over D-Bus to the KWin effect, which calls windowToDesktops.
+    void windowDesktopMoveRequested(const QString& windowId, int desktop);
+
     /// Emitted to sync floating state without restoring geometry.
     /// Passive state-sync: engine-internal divergence correction.
     void windowFloatingStateSynced(const QString& windowId, bool floating, const QString& screenId);

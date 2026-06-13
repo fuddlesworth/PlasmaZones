@@ -867,6 +867,13 @@ void PlasmaZonesEffect::connectNavigationSignals()
                                           QStringLiteral("activateWindowRequested"), this,
                                           SLOT(slotActivateWindowRequested(QString)));
 
+    // Cross-desktop directional move: daemon re-keys its tiling state and asks
+    // the effect to move the real KWin window to the target virtual desktop.
+    QDBusConnection::sessionBus().connect(PhosphorProtocol::Service::Name, PhosphorProtocol::Service::ObjectPath,
+                                          PhosphorProtocol::Service::Interface::WindowTracking,
+                                          QStringLiteral("windowDesktopMoveRequested"), this,
+                                          SLOT(slotWindowDesktopMoveRequested(QString, int)));
+
     // Float toggle is entirely daemon-local: the daemon reads the active
     // window from its own shadow, calls toggleFloatForWindow internally, and
     // emits applyGeometryRequested to paint the outcome. The effect no longer

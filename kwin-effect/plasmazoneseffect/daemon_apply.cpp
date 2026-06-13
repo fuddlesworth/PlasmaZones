@@ -59,6 +59,26 @@ void PlasmaZonesEffect::slotActivateWindowRequested(const QString& windowId)
     }
 }
 
+void PlasmaZonesEffect::slotWindowDesktopMoveRequested(const QString& windowId, int desktop)
+{
+    if (desktop < 1) {
+        return;
+    }
+    KWin::EffectWindow* w = findWindowById(windowId);
+    if (!w) {
+        qCDebug(lcEffect) << "slotWindowDesktopMoveRequested: window not found" << windowId;
+        return;
+    }
+    const QList<KWin::VirtualDesktop*> all = KWin::effects->desktops();
+    if (desktop > all.size()) {
+        qCDebug(lcEffect) << "slotWindowDesktopMoveRequested: desktop" << desktop << "out of range, have" << all.size();
+        return;
+    }
+    // 1-based desktop → the matching VirtualDesktop. Single-desktop membership
+    // (not on-all-desktops) so the window genuinely moves to the target.
+    KWin::effects->windowToDesktops(w, {all.at(desktop - 1)});
+}
+
 // slotToggleWindowFloatRequested removed — the daemon now handles float-toggle
 // locally against its active-window + frame-geometry shadow and emits
 // applyGeometryRequested directly. See WindowTrackingAdaptor::toggleWindowFloat.

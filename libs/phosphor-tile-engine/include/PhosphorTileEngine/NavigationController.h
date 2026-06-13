@@ -149,6 +149,25 @@ private:
     bool crossOutputMove(const QString& sourceScreenId, const QString& focused, const QString& direction);
 
     /**
+     * @brief The window to focus when directional navigation crosses to the
+     *        adjacent virtual desktop on @p sourceScreenId in @p direction.
+     *
+     * Resolves the neighbour desktop via the cross-surface resolver and returns
+     * that (screen, desktop) state's entry window — the first tiled window for
+     * a forward step (right/down), the last for a backward step. Empty when
+     * there is no neighbour desktop or it has no tiled windows on this screen.
+     */
+    QString crossDesktopFocusTarget(const QString& sourceScreenId, const QString& direction) const;
+
+    /**
+     * @brief Move @p focused from @p sourceScreenId's current desktop onto the
+     *        adjacent desktop in @p direction, re-keying its tiling state and
+     *        emitting windowDesktopMoveRequested so the compositor moves the
+     *        real window. Returns false when there is no neighbour desktop.
+     */
+    bool crossDesktopMove(const QString& sourceScreenId, const QString& focused, const QString& direction);
+
+    /**
      * @brief The global-coordinate rect of @p windowId within @p state, or an
      *        invalid rect when the state has no computed geometry for it.
      */

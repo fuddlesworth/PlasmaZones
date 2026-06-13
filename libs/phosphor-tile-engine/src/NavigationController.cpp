@@ -254,6 +254,63 @@ bool NavigationController::crossOutputMove(const QString& sourceScreenId, const 
     return true;
 }
 
+QString NavigationController::crossDesktopFocusTarget(const QString& sourceScreenId, const QString& direction) const
+{
+    if (!m_engine->m_crossSurfaceResolver) {
+        return QString();
+    }
+    const int targetDesktop =
+        m_engine->m_crossSurfaceResolver->neighborDesktopInDirection(m_engine->m_currentDesktop, direction);
+    if (targetDesktop <= 0) {
+        return QString();
+    }
+    const PhosphorEngine::TilingStateKey targetKey{sourceScreenId, targetDesktop, m_engine->m_currentActivity};
+    PhosphorTiles::TilingState* targetState = m_engine->stateForKey(targetKey);
+    if (!targetState) {
+        return QString();
+    }
+    const QStringList targetWindows = targetState->tiledWindows();
+    if (targetWindows.isEmpty()) {
+        return QString();
+    }
+    // Desktops occupy the same physical space, so direction doesn't map to a
+    // geometric edge across them — enter at the order extreme: first tiled
+    // window stepping forward (right/down), last stepping backward.
+    const bool forward = (direction == QLatin1String("right") || direction == QLatin1String("down"));
+    return forward ? targetWindows.first() : targetWindows.last();
+}
+
+bool NavigationController::crossDesktopMove(const QString& sourceScreenId, const QString& focused,
+                                            const QString& direction)
+{
+    if (!m_engine->m_crossSurfaceResolver) {
+        return false;
+    }
+    const int targetDesktop =
+        m_engine->m_crossSurfaceResolver->neighborDesktopInDirection(m_engine->m_currentDesktop, direction);
+    if (targetDesktop <= 0) {
+        return false;
+    }
+    const PhosphorEngine::TilingStateKey sourceKey = m_engine->currentKeyForScreen(sourceScreenId);
+    const PhosphorEngine::TilingStateKey targetKey{sourceScreenId, targetDesktop, m_engine->m_currentActivity};
+    PhosphorTiles::TilingState* sourceState = m_engine->stateForKey(sourceKey);
+    PhosphorTiles::TilingState* targetState = m_engine->stateForKey(targetKey);
+    if (!sourceState || !targetState) {
+        return false;
+    }
+
+    const bool forward = (direction == QLatin1String("right") || direction == QLatin1String("down"));
+    sourceState->removeWindow(focused);
+    targetState->addWindow(focused, forward ? 0 : -1);
+    m_engine->m_windowToStateKey[focused] = targetKey;
+    // Close the hole on the source desktop; the target desktop tiles when it
+    // next becomes current.
+    m_engine->scheduleRetileForScreen(sourceScreenId);
+    // Ask the compositor to move the real KWin window to the target desktop.
+    Q_EMIT m_engine->windowDesktopMoveRequested(focused, targetDesktop);
+    return true;
+}
+
 void NavigationController::swapFocusedInDirection(const QString& direction, const QString& action,
                                                   const QString& explicitWindowId)
 {
@@ -283,10 +340,15 @@ void NavigationController::swapFocusedInDirection(const QString& direction, cons
     }
 
     if (hasGeometry) {
-        // The focused window is at the layout edge in this direction — try
-        // moving it onto the adjacent output before giving up.
+        // The focused window is at the layout edge in this direction — try the
+        // adjacent output first, then the adjacent desktop, before giving up.
         if (crossOutputMove(screenId, focused, direction)) {
             Q_EMIT m_engine->navigationFeedback(true, action, QStringLiteral("screen:") + direction, QString(),
+                                                QString(), screenId);
+            return;
+        }
+        if (crossDesktopMove(screenId, focused, direction)) {
+            Q_EMIT m_engine->navigationFeedback(true, action, QStringLiteral("desktop:") + direction, QString(),
                                                 QString(), screenId);
             return;
         }
@@ -337,12 +399,20 @@ void NavigationController::focusInDirection(const QString& direction, const QStr
     }
 
     if (hasGeometry) {
-        // No tiled window lies in this direction on this surface — try focusing
-        // into the adjacent output before reporting a boundary.
-        const QString crossTarget = crossOutputFocusTarget(screenId, focused, direction);
-        if (!crossTarget.isEmpty()) {
-            Q_EMIT m_engine->activateWindowRequested(crossTarget);
+        // No tiled window lies in this direction on this surface — try the
+        // adjacent output, then the adjacent desktop, before reporting a boundary.
+        const QString crossOutputTarget = crossOutputFocusTarget(screenId, focused, direction);
+        if (!crossOutputTarget.isEmpty()) {
+            Q_EMIT m_engine->activateWindowRequested(crossOutputTarget);
             Q_EMIT m_engine->navigationFeedback(true, action, QStringLiteral("screen:") + direction, QString(),
+                                                QString(), screenId);
+            return;
+        }
+        const QString crossDesktopTarget = crossDesktopFocusTarget(screenId, direction);
+        if (!crossDesktopTarget.isEmpty()) {
+            // Activating a window on another desktop switches KWin to it.
+            Q_EMIT m_engine->activateWindowRequested(crossDesktopTarget);
+            Q_EMIT m_engine->navigationFeedback(true, action, QStringLiteral("desktop:") + direction, QString(),
                                                 QString(), screenId);
             return;
         }

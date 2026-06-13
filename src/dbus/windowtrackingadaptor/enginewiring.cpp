@@ -38,6 +38,14 @@ void WindowTrackingAdaptor::setEngines(PhosphorEngine::PlacementEngineBase* snap
     if (m_autotileEngine) {
         disconnect(m_autotileEngine, &PhosphorEngine::PlacementEngineBase::navigationFeedback, this, nullptr);
     }
+    // Drop the cross-desktop move relay from BOTH outgoing engines before
+    // reassigning (same anti-duplicate-connection reason as the float relay).
+    if (m_snapEngine) {
+        disconnect(m_snapEngine, &PhosphorEngine::PlacementEngineBase::windowDesktopMoveRequested, this, nullptr);
+    }
+    if (m_autotileEngine) {
+        disconnect(m_autotileEngine, &PhosphorEngine::PlacementEngineBase::windowDesktopMoveRequested, this, nullptr);
+    }
     // Drop the common float-restore geometry relay from BOTH outgoing engines
     // before reassigning, so a re-wire (mode toggle / daemon teardown) can't
     // accumulate duplicate connections.
@@ -162,6 +170,19 @@ void WindowTrackingAdaptor::setEngines(PhosphorEngine::PlacementEngineBase* snap
         // Autotile's disabled-context gate is applied centrally at save time by the
         // WindowPlacementStore serialize keep-predicate (isPersistedContextDisabled),
         // so no engine-side predicate injection is needed.
+    }
+
+    // Cross-desktop directional move: both engines emit windowDesktopMoveRequested
+    // when they re-key a window onto another virtual desktop; relay it to the
+    // KWin effect (which performs the real windowToDesktops) over the
+    // mode-agnostic WindowTracking interface.
+    if (m_autotileEngine) {
+        connect(m_autotileEngine, &PhosphorEngine::PlacementEngineBase::windowDesktopMoveRequested, this,
+                &WindowTrackingAdaptor::windowDesktopMoveRequested);
+    }
+    if (m_snapEngine) {
+        connect(m_snapEngine, &PhosphorEngine::PlacementEngineBase::windowDesktopMoveRequested, this,
+                &WindowTrackingAdaptor::windowDesktopMoveRequested);
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
