@@ -175,6 +175,11 @@ struct WindowPlacement
 
     /// Common state-token vocabulary. Engines may define more; these cover the
     /// built-in snap/autotile states.
+    /// Retired snap state — snapping is now two-state (snapped/floating). No engine
+    /// produces it any more; a legacy `free` record persisted by an older build
+    /// deserializes to this token and is restored as floating (see
+    /// SnapEngine::resolveWindowRestore). Retained only for that legacy-record
+    /// mapping and the tests that exercise it.
     static QLatin1String stateFree()
     {
         return QLatin1String("free");

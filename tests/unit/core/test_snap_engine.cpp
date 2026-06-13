@@ -1508,6 +1508,33 @@ private Q_SLOTS:
         m_wts->setSnapState(nullptr);
     }
 
+    // Companion to the OFF test: with the setting ON, the resolver runs the full
+    // chain PAST the opt-in gate — effective-screen resolution, layout lookup, and
+    // zone selection (last-used → first-empty → first zone) — and reaches the final
+    // geometry gate. Under QTEST_GUILESS_MAIN there is no QScreen, so zoneGeometry()
+    // returns an invalid QRect and the result is still not-found. This pins that (a)
+    // the post-gate chain executes without crashing on a real layout, and (b) the
+    // headless geometry limitation — not a broken gate — is what produces not-found
+    // here (the on-success geometry path is covered by live verification).
+    void testResolveFallbackUnfloatGeometry_onButHeadlessReturnsNotFound()
+    {
+        SnapEngine engine(m_layoutManager, m_wts, nullptr, nullptr, nullptr);
+        engine.setEngineSettings(m_settings);
+        m_wts->setSnapState(engine.snapState());
+
+        auto* layout = createTestLayout(2, m_layoutManager);
+        m_layoutManager->addLayout(layout);
+        m_layoutManager->setActiveLayout(layout);
+
+        engine.snapState()->setFloatingOnScreen(QStringLiteral("app|nofloatzone"), QStringLiteral("DP-1"), 0);
+
+        m_settings->setSnapUnfloatFallbackToZone(true);
+        QVERIFY2(
+            !engine.resolveFallbackUnfloatGeometry(QStringLiteral("app|nofloatzone"), QStringLiteral("DP-1")).found,
+            "unfloatFallbackToZone on, but headless zoneGeometry is invalid → still no fallback target");
+        m_wts->setSnapState(nullptr);
+    }
+
     // =========================================================================
     // setExcludeRuleSet + isAppIdExcluded wiring tests
     //

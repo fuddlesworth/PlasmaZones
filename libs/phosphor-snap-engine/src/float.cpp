@@ -96,6 +96,15 @@ bool SnapEngine::unfloatToZone(const QString& windowId, const QString& screenId)
         }
     }
 
+    // Both resolvers populate zoneIds before setting found, so a found result
+    // always carries at least one zone — but UnfloatResult does not structurally
+    // enforce that, and the commit / applyGeometryRequested calls below deref
+    // zoneIds.first() unconditionally. Guard the invariant so a future resolver
+    // change can never turn a found-but-empty result into an out-of-range crash.
+    if (unfloat.zoneIds.isEmpty()) {
+        return false;
+    }
+
     // Whether the target came from the pre-float zone or the no-pre-float-zone
     // fallback, there is no saved-float entry to consume — the snap commit below
     // re-captures the window's snap slot as "snapped" in the unified record, so a
