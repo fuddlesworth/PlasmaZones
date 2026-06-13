@@ -532,8 +532,9 @@ std::optional<PhosphorEngine::WindowPlacement> SnapEngine::capturePlacement(cons
     // snapping mode. On an autotile-mode screen the window's snap state is FROZEN
     // memory (its last snap-mode placement, restored when the screen returns to
     // snapping) — autotile owns the window now. Re-capturing here would over-claim
-    // (a leftover pre-tile unmanaged rect gets reported as "free") and clobber that
-    // frozen snap record, breaking per-mode float independence. Each engine remembers
+    // (a leftover pre-tile unmanaged rect gets reported as a floated record) and
+    // clobber that frozen snap record, breaking per-mode float independence. Each
+    // engine remembers
     // the window's state in its OWN mode; returning nullopt leaves the snap record
     // untouched.
     if (m_layoutManager) {
