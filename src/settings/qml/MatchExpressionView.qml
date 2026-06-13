@@ -239,6 +239,23 @@ ColumnLayout {
             /// "hasChildren" semantics — the C++ role is
             /// `hasChildrenRow`.
             required property bool hasChildrenRow
+            /// Effective layout depth: the WHEN section header hosted by
+            /// WindowRuleRow is treated as the depth-0 parent, so the model's
+            /// root composite renders one level in —
+            /// indented under the header with a connector, mirroring how the
+            /// THEN action list sits under its pill (ActionListView already
+            /// renders actions at this depth-1). Every model depth shifts one
+            /// column right; the operator / value-pill columns stay put because
+            /// the leaf field-width compensation below keys off this same
+            /// effective depth, so the +indentStep in the content margin cancels
+            /// against the -indentStep in the field width.
+            readonly property int _effectiveDepth: delegate.depth + 1
+            /// Ancestor last-child flags for the effective tree. The virtual
+            /// header-pill root has exactly one child — the model root — so it
+            /// is always that child's last sibling; prepend `true`. Keeps the
+            /// connector's column-0 vertical terminating at the root row instead
+            /// of trailing a dangling line down the left of every deeper row.
+            readonly property var _effectiveAncestors: [true].concat(delegate.ancestorIsLastChild || [])
             readonly property real _indentStep: Kirigami.Units.gridUnit * 1.5
             /// Tree connector color. Foreground textColor at 0.75 alpha:
             /// 0.4 and 0.55 both still vanished into the dark expansion
@@ -296,8 +313,8 @@ ColumnLayout {
                     ctx.lineCap = "butt";
                     var indentStep = delegate._indentStep;
                     var smallSpacing = Kirigami.Units.smallSpacing;
-                    var depth = delegate.depth;
-                    var anc = delegate.ancestorIsLastChild || [];
+                    var depth = delegate._effectiveDepth;
+                    var anc = delegate._effectiveAncestors;
                     var rowMid = Math.round(height / 2) + 0.5;
                     // Content's left edge — kept in sync with contentRow's
                     // anchors.leftMargin so the L-stub ends exactly where
@@ -397,7 +414,7 @@ ColumnLayout {
                 id: contentRow
 
                 anchors.left: parent.left
-                anchors.leftMargin: delegate.depth * delegate._indentStep + Kirigami.Units.smallSpacing
+                anchors.leftMargin: delegate._effectiveDepth * delegate._indentStep + Kirigami.Units.smallSpacing
                 anchors.right: parent.right
                 anchors.rightMargin: Kirigami.Units.largeSpacing
                 anchors.verticalCenter: parent.verticalCenter
@@ -494,16 +511,20 @@ ColumnLayout {
                     // width so the operator label always lands at the
                     // same *absolute* x across rows, regardless of
                     // tree depth. The contentRow's leftMargin grows by
-                    // one `indentStep` per depth level, so the field
-                    // column needs to shrink by the same amount to
+                    // one `indentStep` per (effective) depth level, so
+                    // the field column shrinks by the same amount to
                     // keep operator_x = leftMargin + bullet + field_w
-                    // constant. The Math.max floor (4 gridUnits) keeps
-                    // deeply-nested rows readable when the formula
-                    // would otherwise hand back a sub-field-width
-                    // value.
+                    // constant. Keys off `_effectiveDepth` to match the
+                    // margin above — the +indentStep there cancels the
+                    // -indentStep here, so indenting the whole tree under
+                    // the header pill leaves the operator / value columns
+                    // exactly where they were (still aligned with THEN).
+                    // The Math.max floor (4 gridUnits) keeps deeply-nested
+                    // rows readable when the formula would otherwise hand
+                    // back a sub-field-width value.
                     Label {
                         Layout.alignment: Qt.AlignVCenter
-                        Layout.minimumWidth: Math.max(Kirigami.Units.gridUnit * 4, Kirigami.Units.gridUnit * 13 - delegate.depth * delegate._indentStep)
+                        Layout.minimumWidth: Math.max(Kirigami.Units.gridUnit * 4, Kirigami.Units.gridUnit * 13 - delegate._effectiveDepth * delegate._indentStep)
                         text: root._fieldLabel(delegate.fieldWire)
                         font.bold: true
                     }
