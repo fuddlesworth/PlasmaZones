@@ -329,6 +329,11 @@ public:
      */
     void setZoneAdjacencyResolver(IZoneAdjacencyResolver* resolver);
 
+    /// Inject the cross-surface resolver (neighbour output / desktop lookup),
+    /// threaded into the navigation target resolver so a no-adjacent-zone
+    /// boundary crosses into the neighbouring output instead of failing.
+    void setCrossSurfaceResolver(PhosphorEngine::ICrossSurfaceResolver* resolver) override;
+
     // ═══════════════════════════════════════════════════════════════════════════
     // Navigation state provider
     // ═══════════════════════════════════════════════════════════════════════════
@@ -623,6 +628,7 @@ private:
     QPointer<QObject> m_autotileEngineObj;
     PhosphorEngine::IPlacementEngine* m_autotileEngineTyped = nullptr;
     IZoneAdjacencyResolver* m_zoneAdjacencyResolver = nullptr;
+    PhosphorEngine::ICrossSurfaceResolver* m_crossSurfaceResolver = nullptr;
     // Typed navigation-state provider — replaces the opaque QObject* m_wta
     // back-reference. Provides read-only access to compositor-layer shadows
     // (last-active window, last-active screen, last-cursor screen, frame

@@ -3,6 +3,7 @@
 
 #include <PhosphorSnapEngine/snapnavigationtargets.h>
 
+#include <PhosphorEngine/ICrossSurfaceResolver.h>
 #include <PhosphorSnapEngine/IZoneAdjacencyResolver.h>
 #include <PhosphorZones/Layout.h>
 #include <PhosphorZones/LayoutRegistry.h>
@@ -42,6 +43,25 @@ PhosphorProtocol::CycleTargetResult cycleResult(bool success, const QString& rea
                                                 const QString& zoneId, const QString& screenId)
 {
     return {success, reason, windowIdToActivate, zoneId, screenId};
+}
+
+/// The direction one enters a neighbour output from: crossing right lands on
+/// its left edge, down on its top, etc. Empty for an unknown token.
+QString oppositeDirection(const QString& direction)
+{
+    if (direction == QLatin1String("left")) {
+        return QStringLiteral("right");
+    }
+    if (direction == QLatin1String("right")) {
+        return QStringLiteral("left");
+    }
+    if (direction == QLatin1String("up")) {
+        return QStringLiteral("down");
+    }
+    if (direction == QLatin1String("down")) {
+        return QStringLiteral("up");
+    }
+    return QString();
 }
 
 PhosphorProtocol::SwapTargetResult swapResult(bool success, const QString& reason, const QString& windowId1, int x1,
@@ -115,6 +135,39 @@ void SnapNavigationTargetResolver::setZoneAdjacencyResolver(IZoneAdjacencyResolv
     m_zoneAdjacency = resolver;
 }
 
+void SnapNavigationTargetResolver::setCrossSurfaceResolver(PhosphorEngine::ICrossSurfaceResolver* resolver)
+{
+    m_crossSurface = resolver;
+}
+
+PhosphorProtocol::MoveTargetResult SnapNavigationTargetResolver::crossOutputEntryTarget(const QString& currentZoneId,
+                                                                                        const QString& direction,
+                                                                                        const QString& sourceScreenId,
+                                                                                        const QString& action) const
+{
+    Q_UNUSED(action)
+    const QString fail = QString();
+    if (!m_crossSurface || !m_zoneAdjacency || !m_service) {
+        return moveResult(false, fail, QString(), QRect(), currentZoneId, sourceScreenId);
+    }
+    const QString neighborScreen = m_crossSurface->neighborOutputInDirection(sourceScreenId, direction);
+    if (neighborScreen.isEmpty()) {
+        return moveResult(false, fail, QString(), QRect(), currentZoneId, sourceScreenId);
+    }
+    // Enter the neighbour output from the edge facing back toward the source.
+    const QString entryZone = m_zoneAdjacency->getFirstZoneInDirection(oppositeDirection(direction), neighborScreen);
+    if (entryZone.isEmpty()) {
+        return moveResult(false, fail, QString(), QRect(), currentZoneId, sourceScreenId);
+    }
+    const QRect geo = m_service->zoneGeometry(entryZone, neighborScreen);
+    if (!geo.isValid()) {
+        return moveResult(false, fail, QString(), QRect(), currentZoneId, sourceScreenId);
+    }
+    // Success: the entry zone on the neighbour output. Feedback is emitted by
+    // the caller so the move/focus tag is correct.
+    return moveResult(true, QString(), entryZone, geo, currentZoneId, neighborScreen);
+}
+
 // Feedback callback emission goes through SnapNavigationTargetResolver::emitFeedback
 // (defined inline in the header) so call sites don't need to null-check the
 // optional std::function at every call.
@@ -178,6 +231,15 @@ PhosphorProtocol::MoveTargetResult SnapNavigationTargetResolver::getMoveTargetFo
     } else {
         targetZoneId = m_zoneAdjacency->getAdjacentZone(currentZoneId, direction, effectiveScreenId);
         if (targetZoneId.isEmpty()) {
+            // No adjacent zone on this output — cross into the adjacent output's
+            // entry zone before giving up.
+            const PhosphorProtocol::MoveTargetResult cross =
+                crossOutputEntryTarget(currentZoneId, direction, effectiveScreenId, QStringLiteral("move"));
+            if (cross.success) {
+                emitFeedback(true, QStringLiteral("move"), QStringLiteral("screen:") + direction, currentZoneId,
+                             cross.zoneId, cross.screenName);
+                return cross;
+            }
             emitFeedback(false, QStringLiteral("move"), QStringLiteral("no_adjacent_zone"), currentZoneId, QString(),
                          effectiveScreenId);
             return moveResult(false, QStringLiteral("no_adjacent_zone"), QString(), QRect(), currentZoneId,
@@ -233,6 +295,19 @@ PhosphorProtocol::FocusTargetResult SnapNavigationTargetResolver::getFocusTarget
 
     QString targetZoneId = m_zoneAdjacency->getAdjacentZone(currentZoneId, direction, effectiveScreenId);
     if (targetZoneId.isEmpty()) {
+        // No adjacent zone on this output — try focusing into the adjacent
+        // output's entry zone.
+        const PhosphorProtocol::MoveTargetResult cross =
+            crossOutputEntryTarget(currentZoneId, direction, effectiveScreenId, QStringLiteral("focus"));
+        if (cross.success) {
+            const QStringList crossWindows = m_service->windowsInZone(cross.zoneId);
+            if (!crossWindows.isEmpty()) {
+                emitFeedback(true, QStringLiteral("focus"), QStringLiteral("screen:") + direction, currentZoneId,
+                             cross.zoneId, cross.screenName);
+                return focusResult(true, QString(), crossWindows.first(), currentZoneId, cross.zoneId,
+                                   cross.screenName);
+            }
+        }
         emitFeedback(false, QStringLiteral("focus"), QStringLiteral("no_adjacent_zone"), currentZoneId, QString(),
                      effectiveScreenId);
         return focusResult(false, QStringLiteral("no_adjacent_zone"), QString(), currentZoneId, QString(),

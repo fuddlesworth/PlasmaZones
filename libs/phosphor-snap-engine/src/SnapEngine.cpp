@@ -112,6 +112,16 @@ void SnapEngine::setZoneAdjacencyResolver(IZoneAdjacencyResolver* resolver)
     }
 }
 
+void SnapEngine::setCrossSurfaceResolver(PhosphorEngine::ICrossSurfaceResolver* resolver)
+{
+    m_crossSurfaceResolver = resolver;
+    // Push into the target resolver if it has been constructed; otherwise
+    // ensureTargetResolver() picks it up on first navigation.
+    if (m_targetResolver) {
+        m_targetResolver->setCrossSurfaceResolver(resolver);
+    }
+}
+
 SnapNavigationTargetResolver* SnapEngine::ensureTargetResolver(const QString& action)
 {
     if (m_targetResolver) {
@@ -141,6 +151,7 @@ SnapNavigationTargetResolver* SnapEngine::ensureTargetResolver(const QString& ac
                const QString& targetZoneId, const QString& screenId) {
             Q_EMIT navigationFeedback(success, action, reason, sourceZoneId, targetZoneId, screenId);
         });
+    m_targetResolver->setCrossSurfaceResolver(m_crossSurfaceResolver);
     return m_targetResolver.get();
 }
 

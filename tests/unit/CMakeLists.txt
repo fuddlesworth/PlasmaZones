@@ -425,6 +425,7 @@ target_compile_definitions(test_per_screen_config PRIVATE "P_SOURCE_DIR=\"${PROJ
 # autotile/ - Navigation Controller Tests
 # ═══════════════════════════════════════════════════════════════════════════════
 p_add_test(test_navigation_controller autotile/test_navigation_controller.cpp)
+p_add_test(test_snap_cross_surface snap/test_snap_cross_surface.cpp)
 
 # Cross-surface navigation exercises cross-output handoff, which needs real
 # output geometry — compile in the FakeScreenProvider (like the WTA tests).

@@ -15,6 +15,10 @@ namespace PhosphorZones {
 class LayoutRegistry;
 }
 
+namespace PhosphorEngine {
+class ICrossSurfaceResolver;
+}
+
 namespace PhosphorSnapEngine {
 
 class ISettings;
@@ -78,6 +82,12 @@ public:
     /// it becomes available.
     void setZoneAdjacencyResolver(IZoneAdjacencyResolver* resolver);
 
+    /// Late setter for the cross-surface resolver (neighbour output / desktop
+    /// lookup). When set, a navigation that finds no adjacent zone on the
+    /// current output crosses to the entry zone of the adjacent output instead
+    /// of failing. May be nullptr.
+    void setCrossSurfaceResolver(PhosphorEngine::ICrossSurfaceResolver* resolver);
+
     PhosphorProtocol::MoveTargetResult getMoveTargetForWindow(const QString& windowId, const QString& direction,
                                                               const QString& screenId);
 
@@ -110,9 +120,17 @@ private:
         }
     }
 
+    /// Cross-output entry target on a no-adjacent-zone boundary, or an empty
+    /// MoveTargetResult.zoneId when there's no neighbour output / entry zone.
+    /// Shared by the move/focus/swap paths. @p action drives the feedback tag.
+    PhosphorProtocol::MoveTargetResult crossOutputEntryTarget(const QString& currentZoneId, const QString& direction,
+                                                              const QString& sourceScreenId,
+                                                              const QString& action) const;
+
     PhosphorEngine::IWindowTrackingService* m_service = nullptr;
     PhosphorZones::LayoutRegistry* m_layoutManager = nullptr;
     IZoneAdjacencyResolver* m_zoneAdjacency = nullptr;
+    PhosphorEngine::ICrossSurfaceResolver* m_crossSurface = nullptr;
     FeedbackFn m_feedback;
 };
 
