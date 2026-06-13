@@ -354,6 +354,149 @@ private Q_SLOTS:
         QVERIFY2(engine.isWindowTracked(QStringLiteral("app|new")),
                  "with snapping globally disabled, autotile must tile the window — not defer to a dead snap");
     }
+
+    // =========================================================================
+    // Floated-position restore gate (autotileRestoreFloatedWindowsOnLogin /
+    // RestorePosition rule, injected by the daemon as a predicate). Mirrors snap:
+    // the float STATE is always restored; only the geometry MOVE is gated. The
+    // stored free geometry is a literal rect (no QScreen needed), so the gate is
+    // directly observable here.
+    // =========================================================================
+
+    // Predicate UNSET → historical behaviour: the floated window's recorded
+    // position is always re-applied.
+    void testFloatRestore_predicateUnset_appliesMove()
+    {
+        const FloatRestoreOutcome r = runFloatRestoreGate([](AutotileEngine&) { });
+        QVERIFY(r.tracked);
+        QCOMPARE(r.moveCount, 1);
+    }
+
+    // Predicate ALLOWS → the move fires (e.g. autotileRestoreFloatedWindowsOnLogin
+    // ON, or a RestorePosition(true) rule).
+    void testFloatRestore_predicateAllows_appliesMove()
+    {
+        const FloatRestoreOutcome r = runFloatRestoreGate([](AutotileEngine& e) {
+            e.setRestorePositionPredicate([](const QString&) {
+                return true;
+            });
+        });
+        QVERIFY(r.tracked);
+        QCOMPARE(r.moveCount, 1);
+    }
+
+    // Predicate DENIES → the window still comes back floating, but stays where the
+    // compositor placed it: no geometry move (the setting OFF / RestorePosition(false)).
+    void testFloatRestore_predicateDenies_skipsMove()
+    {
+        const FloatRestoreOutcome r = runFloatRestoreGate([](AutotileEngine& e) {
+            e.setRestorePositionPredicate([](const QString&) {
+                return false;
+            });
+        });
+        // Float MARK is unconditional — only the geometry move is gated off.
+        QVERIFY(r.tracked);
+        QCOMPARE(r.moveCount, 0);
+    }
+
+    // Predicate ALLOWS, but the only recorded free geometry is on a DIFFERENT screen
+    // than restoreScreen → the move is skipped (no anyFreeGeometry() cross-screen
+    // fallback). The free rect is in global coords; applying another screen's rect
+    // while the float tracking points at restoreScreen would teleport the window to a
+    // third monitor with the state disagreeing. Mirrors snap's resolveWindowRestore.
+    void testFloatRestore_geometryOnOtherScreen_skipsMoveNoCrossScreenFallback()
+    {
+        QObject root;
+        PlasmaZones::TestHelpers::IsolatedConfigGuard guard;
+        PhosphorZones::LayoutRegistry* layout =
+            PlasmaZones::TestHelpers::makeLayoutRegistry(QStringLiteral("plasmazones/layouts"), &root);
+        PlasmaZones::StubZoneDetector zoneDet;
+        PhosphorPlacement::WindowTrackingService wts(layout, &zoneDet, nullptr, nullptr);
+        AutotileEngine engine(layout, &wts, nullptr, PlasmaZones::TestHelpers::testRegistry());
+
+        const QString autotileScreen = QStringLiteral("DP-2");
+        engine.setAutotileScreens({autotileScreen});
+        PhosphorZones::AssignmentEntry autotile;
+        autotile.mode = PhosphorZones::AssignmentEntry::Autotile;
+        autotile.tilingAlgorithm = QStringLiteral("dwindle");
+        layout->setAssignmentEntryDirect(autotileScreen, 0, QString(), autotile);
+
+        // Floating record with EMPTY screenId (so take() consumes it on any opening
+        // screen), and the only recorded rect is on DP-3 — NOT the DP-2 the window
+        // reopens on, so restoreScreen (DP-2) has no screen-local rect.
+        PhosphorEngine::WindowPlacement rec;
+        rec.windowId = QStringLiteral("app|orig");
+        rec.appId = QStringLiteral("app");
+        rec.screenId = QString();
+        PhosphorEngine::EngineSlot slot;
+        slot.state = PhosphorEngine::WindowPlacement::stateFloating();
+        rec.engines.insert(PhosphorEngine::WindowPlacement::autotileEngineId(), slot);
+        rec.freeGeometryByScreen.insert(QStringLiteral("DP-3"), QRect(10, 10, 800, 600));
+        wts.placementStore().record(rec);
+
+        // Opt-in ON, so the gate is NOT what suppresses the move — only the
+        // screen-local resolution is.
+        engine.setRestorePositionPredicate([](const QString&) {
+            return true;
+        });
+
+        QSignalSpy geoSpy(&engine, &PhosphorEngine::PlacementEngineBase::geometryRestoreRequested);
+        engine.windowOpened(QStringLiteral("app|new"), autotileScreen);
+        QCoreApplication::processEvents();
+
+        // Still restored floating (mark is unconditional)...
+        QVERIFY(engine.isWindowTracked(QStringLiteral("app|new")));
+        // ...but NO move — DP-3's rect must not be resurrected for a DP-2 restore.
+        QCOMPARE(geoSpy.count(), 0);
+    }
+
+private:
+    struct FloatRestoreOutcome
+    {
+        int moveCount = 0; // geometryRestoreRequested emissions
+        bool tracked = false; // window restored floating (mark is unconditional)
+    };
+
+    // Build an autotile engine on DP-2 with a FLOATING record for "app" carrying a
+    // stored free rect, then reopen the window. @p wirePredicate controls the
+    // injected gate. Returns the geometry-move count + whether the window was
+    // tracked (floating mark), so the void test slots can assert both with QVERIFY.
+    static FloatRestoreOutcome runFloatRestoreGate(const std::function<void(AutotileEngine&)>& wirePredicate)
+    {
+        QObject root;
+        PlasmaZones::TestHelpers::IsolatedConfigGuard guard;
+        PhosphorZones::LayoutRegistry* layout =
+            PlasmaZones::TestHelpers::makeLayoutRegistry(QStringLiteral("plasmazones/layouts"), &root);
+        PlasmaZones::StubZoneDetector zoneDet;
+        PhosphorPlacement::WindowTrackingService wts(layout, &zoneDet, nullptr, nullptr);
+        AutotileEngine engine(layout, &wts, nullptr, PlasmaZones::TestHelpers::testRegistry());
+
+        const QString autotileScreen = QStringLiteral("DP-2");
+        engine.setAutotileScreens({autotileScreen});
+        PhosphorZones::AssignmentEntry autotile;
+        autotile.mode = PhosphorZones::AssignmentEntry::Autotile;
+        autotile.tilingAlgorithm = QStringLiteral("dwindle");
+        layout->setAssignmentEntryDirect(autotileScreen, 0, QString(), autotile);
+
+        // A floated autotile record with a stored free rect on the autotile screen.
+        PhosphorEngine::WindowPlacement rec;
+        rec.windowId = QStringLiteral("app|orig");
+        rec.appId = QStringLiteral("app");
+        rec.screenId = autotileScreen;
+        PhosphorEngine::EngineSlot slot;
+        slot.state = PhosphorEngine::WindowPlacement::stateFloating();
+        rec.engines.insert(PhosphorEngine::WindowPlacement::autotileEngineId(), slot);
+        rec.freeGeometryByScreen.insert(autotileScreen, QRect(100, 100, 800, 600));
+        wts.placementStore().record(rec);
+
+        wirePredicate(engine);
+
+        QSignalSpy geoSpy(&engine, &PhosphorEngine::PlacementEngineBase::geometryRestoreRequested);
+        engine.windowOpened(QStringLiteral("app|new"), autotileScreen);
+        QCoreApplication::processEvents();
+
+        return {static_cast<int>(geoSpy.count()), engine.isWindowTracked(QStringLiteral("app|new"))};
+    }
 };
 
 QTEST_MAIN(TestAutotileHandoff)

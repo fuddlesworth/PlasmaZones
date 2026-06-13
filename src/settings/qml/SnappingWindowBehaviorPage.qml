@@ -183,10 +183,25 @@ SettingsFlickable {
                         description: i18n("When an unsnapped window reopens after a logout, it returns to the position and monitor it was on instead of wherever the compositor would place it. A per-window rule can override this either way, opting individual windows in or out.")
 
                         SettingsSwitch {
-                            checked: appSettings.restoreUnsnappedWindowsOnLogin
+                            checked: appSettings.snappingRestoreFloatedWindowsOnLogin
                             accessibleName: i18n("Restore unsnapped windows to their previous position")
                             onToggled: function (newValue) {
-                                appSettings.restoreUnsnappedWindowsOnLogin = newValue;
+                                appSettings.snappingRestoreFloatedWindowsOnLogin = newValue;
+                            }
+                        }
+                    }
+
+                    SettingsSeparator {}
+
+                    SettingsRow {
+                        title: i18n("Unfloat to a zone when there is no previous zone")
+                        description: i18n("When you unfloat a window that was never snapped, snap it to a fallback zone (last used, then first empty, then the first zone) instead of leaving it floating.")
+
+                        SettingsSwitch {
+                            checked: appSettings.snapUnfloatFallbackToZone
+                            accessibleName: i18n("Unfloat to a zone when there is no previous zone")
+                            onToggled: function (newValue) {
+                                appSettings.snapUnfloatFallbackToZone = newValue;
                             }
                         }
                     }

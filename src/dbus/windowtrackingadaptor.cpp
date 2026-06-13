@@ -273,10 +273,10 @@ void WindowTrackingAdaptor::captureWindowPlacement(const QString& windowId)
     }
     // Capture from the engine that CURRENTLY OWNS this window, not merely the first
     // engine that returns a placement. The engines keep INDEPENDENT state (snap:
-    // snapped / floated / free; autotile: tiled / floated), so a window now managed
-    // by autotile can still carry stale snap state — e.g. leftover unmanaged
-    // geometry from a prior snap session — which SnapEngine::capturePlacement would
-    // claim as a "free" record before autotile is ever asked.
+    // snapped / floated; autotile: tiled / floated), so a window now managed by
+    // autotile can still carry stale snap state — e.g. leftover unmanaged geometry
+    // from a prior snap session — which SnapEngine::capturePlacement would claim as
+    // a floated record before autotile is ever asked.
     //
     // Owning engine = the engine matching the window's CURRENT screen mode, via the
     // SAME predicate that routes the float resolver / writer / float-back geometry
@@ -301,7 +301,7 @@ void WindowTrackingAdaptor::captureWindowPlacement(const QString& windowId)
             // The engine's capturePlacement fills ONLY its own slot (state + zone IDs
             // / tile order) — never a rectangle. Here is the SINGLE point that writes
             // the shared free/float geometry, and it does so ONLY when the window is
-            // genuinely free or floating in this engine. For a snapped/tiled window
+            // floated in this engine. For a snapped/tiled window
             // the live frame IS the zone/tile rect, so writing it would poison the
             // float-back — exactly the per-mode geometry leak this model removes. By
             // gating the write on the slot state (not a fragile frame-vs-zone compare),
@@ -309,8 +309,11 @@ void WindowTrackingAdaptor::captureWindowPlacement(const QString& windowId)
             // record() leaves any other screen's free geometry and the other engine's
             // slot intact.
             const PhosphorEngine::EngineSlot slot = p->slotFor(e->engineId());
-            const bool unmanagedState = (slot.state == PhosphorEngine::WindowPlacement::stateFree()
-                                         || slot.state == PhosphorEngine::WindowPlacement::stateFloating());
+            // Floated windows carry a shared free-geometry rect; snapped/tiled windows
+            // don't (the live frame IS the zone/tile rect). Snapping now produces only
+            // snapped/floating (the `free` state is retired) and autotile produces
+            // tiled/floating — so the unmanaged check is simply `floating`.
+            const bool unmanagedState = (slot.state == PhosphorEngine::WindowPlacement::stateFloating());
             if (unmanagedState) {
                 const QRect frame = m_frameGeometry.value(windowId);
                 if (frame.isValid()) {
@@ -336,9 +339,9 @@ void WindowTrackingAdaptor::captureWindowPlacement(const QString& windowId)
                     }
                 }
             }
-            // A capture that yields no restorable content — a bare {free} slot with
-            // no frame geometry (the window has no reported frame: closing, or never
-            // mapped) and no managed slot — carries nothing to restore. Recording it
+            // A capture that yields no restorable content — a bare {floating} slot
+            // with no frame geometry (the window has no reported frame: closing, or
+            // never mapped) and no zones — carries nothing to restore. Recording it
             // would only append FIFO noise that, at MaxPerApp entries per app, starves
             // and eventually evicts (removeFirst) the window's REAL placement, silently
             // breaking float/free geometry restore on the next open. Skip it: any
@@ -597,8 +600,8 @@ void WindowTrackingAdaptor::windowClosed(const QString& windowId, int windowKind
     // Capture the window's final live placement before teardown drops the
     // frame-geometry shadow + per-engine state below. For a FLOATING window this
     // records a floated WindowPlacement at its live geometry (the single source
-    // of truth a future reopen restores from); for a snapped/free window it
-    // records the corresponding state. Runs while the window is still floating
+    // of truth a future reopen restores from); for a snapped window it records the
+    // corresponding state. Runs while the window is still floating
     // (m_service->windowClosed below tears that down) and before m_frameGeometry
     // is dropped, so the live floated geometry is captured.
     captureWindowPlacement(windowId);

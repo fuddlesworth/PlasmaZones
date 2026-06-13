@@ -340,6 +340,18 @@ private Q_SLOTS:
         bare.engines.insert(WindowPlacement::snapEngineId(), freeSlot);
         QVERIFY(!bare.hasRestorableContent());
 
+        // CRITICAL (two-state model): snapping now defaults every unmanaged window to
+        // `floating`, so a bare {floating, no geometry, no zones} record is the new
+        // residue and MUST also be rejected — otherwise geometry-less floated records
+        // flood the per-app FIFO and re-trigger the residue-eviction bug.
+        WindowPlacement bareFloating;
+        bareFloating.windowId = QStringLiteral("b|1");
+        bareFloating.appId = QStringLiteral("b");
+        EngineSlot bareFloatSlot;
+        bareFloatSlot.state = WindowPlacement::stateFloating();
+        bareFloating.engines.insert(WindowPlacement::snapEngineId(), bareFloatSlot);
+        QVERIFY(!bareFloating.hasRestorableContent());
+
         // A floated-from-snap window keeping its pre-float zones (no geometry yet) is
         // still restorable — the zones let it resnap.
         WindowPlacement floatWithZones = bare;

@@ -458,8 +458,11 @@ void SettingsAdaptor::initializeRegistry()
     };
     m_schemas[QStringLiteral("snappingStickyWindowHandling")] = QStringLiteral("int");
     REGISTER_BOOL_SETTING("restoreWindowsToZonesOnLogin", restoreWindowsToZonesOnLogin, setRestoreWindowsToZonesOnLogin)
-    REGISTER_BOOL_SETTING("restoreUnsnappedWindowsOnLogin", restoreUnsnappedWindowsOnLogin,
-                          setRestoreUnsnappedWindowsOnLogin)
+    REGISTER_BOOL_SETTING("snappingRestoreFloatedWindowsOnLogin", snappingRestoreFloatedWindowsOnLogin,
+                          setSnappingRestoreFloatedWindowsOnLogin)
+    REGISTER_BOOL_SETTING("autotileRestoreFloatedWindowsOnLogin", autotileRestoreFloatedWindowsOnLogin,
+                          setAutotileRestoreFloatedWindowsOnLogin)
+    REGISTER_BOOL_SETTING("snapUnfloatFallbackToZone", snapUnfloatFallbackToZone, setSnapUnfloatFallbackToZone)
     REGISTER_BOOL_SETTING("autoAssignAllLayouts", autoAssignAllLayouts, setAutoAssignAllLayouts)
     REGISTER_BOOL_SETTING("snapAssistFeatureEnabled", snapAssistFeatureEnabled, setSnapAssistFeatureEnabled)
     REGISTER_BOOL_SETTING("snapAssistEnabled", snapAssistEnabled, setSnapAssistEnabled)

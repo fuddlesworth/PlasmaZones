@@ -2074,9 +2074,16 @@ void Settings::setSnappingStickyWindowHandlingInt(int handling)
 P_STORE_GET(bool, restoreWindowsToZonesOnLogin, snappingBehaviorWindowHandlingGroup, restoreOnLoginKey, bool)
 P_STORE_SET_BOOL(setRestoreWindowsToZonesOnLogin, snappingBehaviorWindowHandlingGroup, restoreOnLoginKey,
                  restoreWindowsToZonesOnLoginChanged)
-P_STORE_GET(bool, restoreUnsnappedWindowsOnLogin, snappingBehaviorWindowHandlingGroup, restoreUnsnappedOnLoginKey, bool)
-P_STORE_SET_BOOL(setRestoreUnsnappedWindowsOnLogin, snappingBehaviorWindowHandlingGroup, restoreUnsnappedOnLoginKey,
-                 restoreUnsnappedWindowsOnLoginChanged)
+P_STORE_GET(bool, snappingRestoreFloatedWindowsOnLogin, snappingBehaviorWindowHandlingGroup, restoreFloatedOnLoginKey,
+            bool)
+P_STORE_SET_BOOL(setSnappingRestoreFloatedWindowsOnLogin, snappingBehaviorWindowHandlingGroup, restoreFloatedOnLoginKey,
+                 snappingRestoreFloatedWindowsOnLoginChanged)
+P_STORE_GET(bool, autotileRestoreFloatedWindowsOnLogin, tilingBehaviorGroup, restoreFloatedOnLoginKey, bool)
+P_STORE_SET_BOOL(setAutotileRestoreFloatedWindowsOnLogin, tilingBehaviorGroup, restoreFloatedOnLoginKey,
+                 autotileRestoreFloatedWindowsOnLoginChanged)
+P_STORE_GET(bool, snapUnfloatFallbackToZone, snappingBehaviorWindowHandlingGroup, unfloatFallbackToZoneKey, bool)
+P_STORE_SET_BOOL(setSnapUnfloatFallbackToZone, snappingBehaviorWindowHandlingGroup, unfloatFallbackToZoneKey,
+                 snapUnfloatFallbackToZoneChanged)
 P_STORE_GET(bool, autoAssignAllLayouts, snappingBehaviorWindowHandlingGroup, autoAssignAllLayoutsKey, bool)
 P_STORE_SET_BOOL(setAutoAssignAllLayouts, snappingBehaviorWindowHandlingGroup, autoAssignAllLayoutsKey,
                  autoAssignAllLayoutsChanged)
@@ -2222,6 +2229,10 @@ P_STORE_SET_BOOL(setSnappingFocusFollowsMouse, snappingBehaviorGroup, focusFollo
 bool Settings::focusNewWindows() const
 {
     return snappingFocusNewWindows();
+}
+bool Settings::unfloatFallbackToZone() const
+{
+    return snapUnfloatFallbackToZone();
 }
 P_STORE_GET(bool, autotileRespectMinimumSize, tilingBehaviorGroup, respectMinimumSizeKey, bool)
 P_STORE_SET_BOOL(setAutotileRespectMinimumSize, tilingBehaviorGroup, respectMinimumSizeKey,

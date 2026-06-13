@@ -268,13 +268,14 @@ inline constexpr QLatin1StringView SetOpacity{"setOpacity"};
 /// settings lists by the v3→v4 chain.
 inline constexpr QLatin1StringView ExcludeAnimations{"excludeAnimations"};
 
-/// Per-window override for unsnapped-position restore on login. A boolean
-/// `value` action: true forces the window's previous free/floating position
-/// (and original monitor) to be restored, false suppresses it. Overrides the
-/// global `restoreUnsnappedWindowsOnLogin` setting for matched windows —
-/// resolved by the daemon-injected restore-position predicate and consulted
-/// inside SnapEngine::resolveWindowRestore. Domain Window (matches window
-/// properties).
+/// Per-window override for floated-position restore on login. A boolean `value`
+/// action: true forces the window's previous floated position (and original
+/// monitor) to be restored, false suppresses it. Engine-neutral — overrides the
+/// per-engine `snappingRestoreFloatedWindowsOnLogin` /
+/// `autotileRestoreFloatedWindowsOnLogin` settings for matched windows. Resolved
+/// by the daemon-injected restore-position predicate and consulted inside both
+/// SnapEngine::resolveWindowRestore and AutotileEngine::insertWindow. Domain
+/// Window (matches window properties).
 inline constexpr QLatin1StringView RestorePosition{"restorePosition"};
 
 // ── Per-window border / title-bar appearance overrides (domain Window) ──
