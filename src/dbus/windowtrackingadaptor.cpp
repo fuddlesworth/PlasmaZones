@@ -301,7 +301,7 @@ void WindowTrackingAdaptor::captureWindowPlacement(const QString& windowId)
             // The engine's capturePlacement fills ONLY its own slot (state + zone IDs
             // / tile order) — never a rectangle. Here is the SINGLE point that writes
             // the shared free/float geometry, and it does so ONLY when the window is
-            // genuinely free or floating in this engine. For a snapped/tiled window
+            // floated in this engine. For a snapped/tiled window
             // the live frame IS the zone/tile rect, so writing it would poison the
             // float-back — exactly the per-mode geometry leak this model removes. By
             // gating the write on the slot state (not a fragile frame-vs-zone compare),

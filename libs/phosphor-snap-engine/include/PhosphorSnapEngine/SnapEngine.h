@@ -133,9 +133,10 @@ public:
     }
 
     /**
-     * @brief Predicate consulted in `resolveWindowRestore` to decide whether an
-     *        UNSNAPPED window (a genuinely free record, or a snap-floated one)
-     *        should have its previous global position restored on open.
+     * @brief Predicate consulted in `resolveWindowRestore` to decide whether a
+     *        FLOATED window should have its previous global position restored on
+     *        open. (Snapping is two-state — snapped or floated; "floated" is the
+     *        only unsnapped state.)
      *
      * Keyed by the live windowId so the daemon closure can build a full
      * WindowQuery (window class / title / role) from its WindowRegistry and
@@ -147,22 +148,19 @@ public:
      * stored geometry is in global compositor coordinates, so re-applying it
      * lands the window back on its original monitor).
      *
-     * The gate governs two distinct things, both ONLY for free/floating records
-     * (snapped-to-zone restore is unaffected):
+     * The gate governs two things for FLOATED records (snapped-to-zone restore is
+     * unaffected):
      *   - cross-screen CONSUMPTION eligibility — a record whose recorded screen
      *     differs from the reopening screen is only consumed when the predicate
      *     opts the window in; otherwise consumption stays gated on the opening
-     *     screen (free and floating alike);
-     *   - the free branch additionally re-gates the geometry MOVE on the
-     *     predicate (a same-screen free record is consumed but only repositioned
-     *     when opted in). The floating branch does NOT re-gate the move — once a
-     *     floating record is consumed it always re-emits its recorded position
-     *     on restoreScreen (historical float-restore behaviour).
+     *     screen;
+     *   - the geometry MOVE — a floated record ALWAYS re-marks the window floating
+     *     (windowFloatingChanged), but its recorded position is re-applied only
+     *     when the predicate opts in.
      *
      * When the predicate is UNSET (default), the engine preserves its historical
-     * behaviour: free records are inert (consumed on the opening screen, no move)
-     * and floating records restore only on the screen they reopen on — the path
-     * unit tests rely on.
+     * behaviour: a floated record is consumed only on the screen it reopens on and
+     * is marked floating without a position move — the path unit tests rely on.
      */
     using RestorePositionPredicate = std::function<bool(const QString& windowId)>;
 
@@ -272,10 +270,9 @@ public:
     /**
      * @brief Resolve auto-snap for a newly opened window
      *
-     * First consults the unified WindowPlacementStore: a snapped / floating /
-     * free record reopens the window from its stored placement (cross-screen
-     * where the predicates allow). If no stored record applies, runs the
-     * fallback chain:
+     * First consults the unified WindowPlacementStore: a snapped or floated
+     * record reopens the window from its stored placement (cross-screen where the
+     * predicates allow). If no stored record applies, runs the fallback chain:
      *   1. App rules (highest priority)
      *   2. Auto-assign to empty zone
      *   3. Snap to last zone (final fallback)
@@ -393,7 +390,7 @@ public:
     void reapplyManagedWindowAppearance() override;
 
     /// Unified placement model — report this window's current snap state
-    /// (snapped / floated / free) for persistence, or nullopt if untracked.
+    /// (snapped or floated) for persistence, or nullopt if untracked.
     std::optional<PhosphorEngine::WindowPlacement> capturePlacement(const QString& windowId) const override;
 
     /// Snap every unmanaged window on the screen. The IPlacementEngine
@@ -717,8 +714,8 @@ private:
     ShouldRestorePredicate m_shouldRestorePredicate{};
 
     // Unsnapped-position-restore gate. Empty until the daemon wires it; while
-    // empty the engine restores no free positions and floating positions only
-    // on the reopening screen — the historical behaviour unit tests rely on.
+    // empty the engine marks floated windows floating but restores their position
+    // only on the reopening screen — the historical behaviour unit tests rely on.
     // See RestorePositionPredicate doc above.
     RestorePositionPredicate m_restorePositionPredicate{};
 };

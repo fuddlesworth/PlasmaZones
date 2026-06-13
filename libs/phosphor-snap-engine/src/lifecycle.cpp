@@ -189,7 +189,7 @@ SnapResult SnapEngine::resolveWindowRestore(const QString& windowId, const QStri
     // restart the old WindowZoneAssignmentsFull is still loaded, so a window that
     // was FLOATED (floating keeps its zone assignment) comes back isWindowSnapped()
     // == true and would hit the legacy skip below — never floating. Consulting the
-    // store first lets the floated/free record override that stale assignment.
+    // store first lets the floated record override that stale assignment.
     // Mutual exclusivity (one record per window) means a snapped window never
     // resurrects a stale float (the floated→snapped→login bug). Only snap-owned
     // records on a matching screen are handled here; autotile records are left for
@@ -197,10 +197,10 @@ SnapResult SnapEngine::resolveWindowRestore(const QString& windowId, const QStri
     // store has no record (windows persisted under the old keys before migration).
     if (m_windowTracker) {
         const QString appId = m_windowTracker->currentAppIdFor(windowId);
-        // Whether an UNSNAPPED record (free / snap-floated) for THIS window may
-        // restore its recorded global position on open — the daemon resolves the
-        // global `restoreUnsnappedWindowsOnLogin` setting plus the per-window
-        // RestorePosition rule. When true the free/floating record is eligible
+        // Whether a FLOATED record for THIS window may restore its recorded global
+        // position on open — the daemon resolves the global
+        // `restoreUnsnappedWindowsOnLogin` setting plus the per-window
+        // RestorePosition rule. When true the floated record is eligible
         // regardless of the opening screen, so a window KWin reopened on the wrong
         // monitor returns to its recorded one (stored geometry is global, so
         // re-applying it lands on the original output). When false the historical
@@ -229,7 +229,7 @@ SnapResult SnapEngine::resolveWindowRestore(const QString& windowId, const QStri
                 // on the wrong monitor, unsnapped. The RECORDED screen must still be
                 // in snapping mode, though: a snapped record whose own screen is now
                 // autotile-owned must not snap-restore there (the early gate leaves it
-                // for autotile). A floating/free position is screen-local UNLESS the
+                // for autotile). A floated position is screen-local UNLESS the
                 // user opted into unsnapped-position restore (global setting / rule),
                 // in which case the record is eligible cross-screen so the window
                 // returns to its recorded monitor; otherwise it stays gated on the
