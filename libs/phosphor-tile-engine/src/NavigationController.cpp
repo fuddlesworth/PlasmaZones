@@ -8,6 +8,7 @@
 #include <PhosphorEngine/PerScreenKeys.h>
 #include <PhosphorTiles/AutotileConstants.h>
 #include "tileenginelogging.h"
+#include <PhosphorGeometry/DirectionalNeighbor.h>
 #include <PhosphorScreens/Manager.h>
 
 #include <QScreen>
@@ -116,11 +117,60 @@ void NavigationController::rotateWindowOrder(bool clockwise)
     qCInfo(PhosphorTileEngine::lcTileEngine) << "Rotated windows" << (clockwise ? "clockwise" : "counterclockwise");
 }
 
+QString NavigationController::directionalNeighborWindow(PhosphorTiles::TilingState* state, const QStringList& windows,
+                                                        const QString& focused, const QString& direction,
+                                                        bool& outHasGeometry) const
+{
+    outHasGeometry = false;
+
+    const auto dir = PhosphorGeometry::directionFromString(direction);
+    if (!dir.has_value() || !state || windows.isEmpty()) {
+        return QString();
+    }
+
+    // calculatedZones() is index-aligned with tiledWindows(). When the layout
+    // has not been computed yet (e.g. a headless engine with no screen
+    // geometry) the vectors won't match — report "no geometry" so the caller
+    // falls back to order-based cycling rather than mis-selecting.
+    const QVector<QRect> zones = state->calculatedZones();
+    if (zones.size() != windows.size()) {
+        return QString();
+    }
+
+    const int focusIdx = windows.indexOf(focused);
+    if (focusIdx < 0) {
+        return QString();
+    }
+    const QRect focusRect = zones.at(focusIdx);
+    if (!focusRect.isValid()) {
+        return QString();
+    }
+    outHasGeometry = true;
+
+    // Candidate rects for every tiled window except the focused one, with a
+    // parallel map back into `windows`.
+    QList<QRectF> candidates;
+    QList<int> sourceIndex;
+    candidates.reserve(windows.size() - 1);
+    sourceIndex.reserve(windows.size() - 1);
+    for (int i = 0; i < windows.size(); ++i) {
+        if (i == focusIdx) {
+            continue;
+        }
+        candidates.append(QRectF(zones.at(i)));
+        sourceIndex.append(i);
+    }
+
+    const int pick = PhosphorGeometry::directionalNeighbor(QRectF(focusRect), candidates, *dir);
+    if (pick < 0) {
+        return QString(); // no tiled window in that direction — the surface boundary
+    }
+    return windows.at(sourceIndex.at(pick));
+}
+
 void NavigationController::swapFocusedInDirection(const QString& direction, const QString& action,
                                                   const QString& explicitWindowId)
 {
-    const bool forward = (direction == QLatin1String("right") || direction == QLatin1String("down"));
-
     QString screenId;
     PhosphorTiles::TilingState* state = nullptr;
     const QStringList windows = tiledWindowsForFocusedScreen(screenId, state, explicitWindowId);
@@ -137,32 +187,45 @@ void NavigationController::swapFocusedInDirection(const QString& direction, cons
         return;
     }
 
+    bool hasGeometry = false;
+    const QString targetWindow = directionalNeighborWindow(state, windows, focused, direction, hasGeometry);
+    if (!targetWindow.isEmpty()) {
+        const bool swapped = state->swapWindowsById(focused, targetWindow);
+        m_engine->retileAfterOperation(screenId, swapped);
+        Q_EMIT m_engine->navigationFeedback(swapped, action, direction, QString(), QString(), screenId);
+        return;
+    }
+
+    if (hasGeometry) {
+        // The focused window is at the layout edge in this direction. This is
+        // the seam where cross-surface move resolution takes over (a later
+        // layer); until then, stop at the edge rather than wrapping.
+        Q_EMIT m_engine->navigationFeedback(false, action, QStringLiteral("no_neighbor"), QString(), QString(),
+                                            screenId);
+        return;
+    }
+
+    // Geometry not computed yet: fall back to order-based neighbour with wrap.
+    const bool forward = (direction == QLatin1String("right") || direction == QLatin1String("down"));
     const int currentIndex = windows.indexOf(focused);
     if (currentIndex < 0) {
         Q_EMIT m_engine->navigationFeedback(false, action, QStringLiteral("no_focus"), QString(), QString(), screenId);
         return;
     }
-
     int targetIndex = forward ? currentIndex + 1 : currentIndex - 1;
-    // Wrap around
     if (targetIndex < 0) {
         targetIndex = windows.size() - 1;
     } else if (targetIndex >= windows.size()) {
         targetIndex = 0;
     }
-
-    const QString targetWindow = windows.at(targetIndex);
-    const bool swapped = state->swapWindowsById(focused, targetWindow);
+    const bool swapped = state->swapWindowsById(focused, windows.at(targetIndex));
     m_engine->retileAfterOperation(screenId, swapped);
-
     Q_EMIT m_engine->navigationFeedback(swapped, action, direction, QString(), QString(), screenId);
 }
 
 void NavigationController::focusInDirection(const QString& direction, const QString& action,
                                             const QString& explicitWindowId)
 {
-    const bool forward = (direction == QLatin1String("right") || direction == QLatin1String("down"));
-
     QString screenId;
     PhosphorTiles::TilingState* state = nullptr;
     const QStringList windows = tiledWindowsForFocusedScreen(screenId, state, explicitWindowId);
@@ -174,9 +237,28 @@ void NavigationController::focusInDirection(const QString& direction, const QStr
     }
 
     const QString focused = !explicitWindowId.isEmpty() ? explicitWindowId : state->focusedWindow();
+
+    bool hasGeometry = false;
+    const QString target = directionalNeighborWindow(state, windows, focused, direction, hasGeometry);
+    if (!target.isEmpty()) {
+        Q_EMIT m_engine->activateWindowRequested(target);
+        Q_EMIT m_engine->navigationFeedback(true, action, direction, QString(), QString(), screenId);
+        return;
+    }
+
+    if (hasGeometry) {
+        // No tiled window lies in this direction on this surface — the layout
+        // boundary, where cross-surface focus resolution takes over later.
+        Q_EMIT m_engine->navigationFeedback(false, action, QStringLiteral("no_neighbor"), QString(), QString(),
+                                            screenId);
+        return;
+    }
+
+    // Geometry not computed yet: fall back to order-based cycling so navigation
+    // still works on a surface whose layout has not been calculated.
+    const bool forward = (direction == QLatin1String("right") || direction == QLatin1String("down"));
     const int currentIndex = qMax(0, windows.indexOf(focused));
     const int targetIndex = (currentIndex + (forward ? 1 : -1) + windows.size()) % windows.size();
-
     Q_EMIT m_engine->activateWindowRequested(windows.at(targetIndex));
     Q_EMIT m_engine->navigationFeedback(true, action, direction, QString(), QString(), screenId);
 }

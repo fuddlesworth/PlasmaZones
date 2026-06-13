@@ -3575,16 +3575,25 @@ QRect AutotileEngine::screenGeometry(const QString& screenId) const
         return m_screenManager->screenAvailableGeometry(screenId);
     }
 
-    // Physical screens: existing behavior
+    // Physical screens: resolve through the manager's cache-backed string
+    // overload, which reads the tracked-screen snapshot (from the screen
+    // provider) rather than a live QScreen. This is behaviourally identical to
+    // the old findByIdOrName + actualAvailableGeometry(QScreen*) path on a real
+    // system (both feed the same available-geometry/strut cache) AND resolves
+    // synthetic, QScreen-less screens from a test provider — without it,
+    // directional cross-output navigation cannot be exercised headlessly.
+    const QRect geom = m_screenManager->screenAvailableGeometry(screenId);
+    if (geom.isValid()) {
+        return geom;
+    }
+
+    // Last resort: a live QScreen the manager has not tracked yet (a hotplug
+    // race). The QScreen* overload resolves the connector and falls back to
+    // QScreen::availableGeometry().
     QScreen* screen = PhosphorScreens::ScreenIdentity::findByIdOrName(screenId);
     if (!screen) {
         return QRect();
     }
-
-    // m_screenManager is non-null here — the !m_screenManager early-return
-    // at the top of this function already handled that case. The QScreen*
-    // overload resolves the connector and falls back to
-    // QScreen::availableGeometry() when it is not tracked.
     return m_screenManager->actualAvailableGeometry(screen);
 }
 
@@ -3596,6 +3605,14 @@ bool AutotileEngine::isKnownScreen(const QString& screenId) const
     }
     if (PhosphorIdentity::VirtualScreenId::isVirtual(screenId)) {
         return m_screenManager->screenGeometry(screenId).isValid();
+    }
+    // Physical screens: resolve via the manager's tracked-screen snapshot
+    // (the screen provider), which is equivalent to a live-QScreen lookup on a
+    // real system but also recognises synthetic, QScreen-less screens from a
+    // test provider — keeping this consistent with screenGeometry() above.
+    // Fall back to findByIdOrName for a not-yet-tracked hotplug race.
+    if (m_screenManager->screenGeometry(screenId).isValid()) {
+        return true;
     }
     return PhosphorScreens::ScreenIdentity::findByIdOrName(screenId) != nullptr;
 }

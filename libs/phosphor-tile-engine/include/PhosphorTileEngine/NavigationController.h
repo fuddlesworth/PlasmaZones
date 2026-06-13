@@ -107,6 +107,27 @@ private:
                                              const QString& explicitWindowId = QString());
 
     /**
+     * @brief Pick the tiled window spatially adjacent to @p focused in
+     *        @p direction, using the engine's computed per-window geometry.
+     *
+     * Selection is geometric (via PhosphorGeometry::directionalNeighbor over
+     * the state's calculatedZones(), which are index-aligned with @p windows),
+     * not order-based — so "right" lands on the window to the right, never the
+     * one below.
+     *
+     * @param windows the state's tiledWindows() list.
+     * @param outHasGeometry set true when the surface has a computed layout
+     *        (zones align 1:1 with @p windows and the focused window has a
+     *        valid rect); false when geometry is not yet available, so callers
+     *        can fall back to order-based cycling.
+     * @return the target windowId, or an empty string when no tiled window
+     *         lies in @p direction (the layout boundary — the seam where
+     *         cross-surface navigation takes over) or geometry is unavailable.
+     */
+    QString directionalNeighborWindow(PhosphorTiles::TilingState* state, const QStringList& windows,
+                                      const QString& focused, const QString& direction, bool& outHasGeometry) const;
+
+    /**
      * @brief Helper to apply an operation to all screen states
      */
     void applyToAllStates(const std::function<void(PhosphorTiles::TilingState*)>& operation);
