@@ -540,7 +540,9 @@ add_test(NAME test_overlay_helpers COMMAND test_overlay_helpers)
 # ═══════════════════════════════════════════════════════════════════════════════
 # dbus/ - D-Bus API Tests (convenience, schema, compositor bridge)
 # ═══════════════════════════════════════════════════════════════════════════════
-add_executable(test_wta_convenience dbus/test_wta_convenience.cpp)
+add_executable(test_wta_convenience dbus/test_wta_convenience.cpp
+               ${CMAKE_SOURCE_DIR}/libs/phosphor-screens/tests/FakeScreenProvider.cpp)
+target_include_directories(test_wta_convenience PRIVATE ${CMAKE_SOURCE_DIR}/libs/phosphor-screens/tests)
 target_link_libraries(test_wta_convenience PRIVATE Qt6::Test Qt6::Core Qt6::DBus plasmazones_core)
 add_test(NAME test_wta_convenience COMMAND test_wta_convenience)
 

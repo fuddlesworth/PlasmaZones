@@ -311,10 +311,29 @@ void WindowTrackingAdaptor::captureWindowPlacement(const QString& windowId)
             const PhosphorEngine::EngineSlot slot = p->slotFor(e->engineId());
             const bool unmanagedState = (slot.state == PhosphorEngine::WindowPlacement::stateFree()
                                          || slot.state == PhosphorEngine::WindowPlacement::stateFloating());
-            if (unmanagedState && !p->screenId.isEmpty()) {
+            if (unmanagedState) {
                 const QRect frame = m_frameGeometry.value(windowId);
                 if (frame.isValid()) {
-                    p->freeGeometryByScreen.insert(p->screenId, frame);
+                    // Screen key for the shared free/float geometry. The owning engine
+                    // normally reports the window's screen, but a FLOATING window whose
+                    // engine lost its screen assignment comes back with an empty
+                    // screenId. The previous `!p->screenId.isEmpty()` gate then silently
+                    // DROPPED its live float geometry, so it never persisted — and a
+                    // later re-float (or logout→login) had no freeGeometry to restore,
+                    // snapping the window back to a default instead of the user's last
+                    // floated size/position. Fall back to the screen the live frame
+                    // actually sits on (resolved from its centre) so a free/floating
+                    // window's geometry is ALWAYS captured. Stamp it back onto
+                    // p->screenId so the merged record carries a real managed screen too
+                    // (the capture's engine slot makes record() adopt p->screenId).
+                    QString screenKey = p->screenId;
+                    if (screenKey.isEmpty()) {
+                        screenKey = Utils::effectiveScreenIdAt(m_service->screenManager(), frame.center());
+                    }
+                    if (!screenKey.isEmpty()) {
+                        p->screenId = screenKey;
+                        p->freeGeometryByScreen.insert(screenKey, frame);
+                    }
                 }
             }
             // Only mark dirty when the store actually changed. A content-identical
