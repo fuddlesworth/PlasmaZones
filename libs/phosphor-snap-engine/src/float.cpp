@@ -190,6 +190,24 @@ bool SnapEngine::applyGeometryForFloat(const QString& windowId, const QString& s
 // identical: commitSnap emits windowFloatingClearedForSnap, WTA relays
 // it as windowFloatingChanged on the same D-Bus interface.
 
+QString SnapEngine::resolveUnfloatScreen(const QString& primaryScreen, const QString& fallbackScreen) const
+{
+    QString screen = primaryScreen;
+    if (!screen.isEmpty()) {
+        screen = m_windowTracker->resolveEffectiveScreenId(screen);
+        auto* mgr = m_windowTracker->screenManager();
+        const bool screenExists = mgr ? mgr->physicalScreenFor(screen).isValid()
+                                      : (PhosphorScreens::ScreenIdentity::findByIdOrName(screen) != nullptr);
+        if (!screenExists) {
+            screen.clear();
+        }
+    }
+    if (screen.isEmpty() && !fallbackScreen.isEmpty()) {
+        screen = m_windowTracker->resolveEffectiveScreenId(fallbackScreen);
+    }
+    return screen;
+}
+
 UnfloatResult SnapEngine::resolveUnfloatGeometry(const QString& windowId, const QString& fallbackScreen) const
 {
     UnfloatResult result;
@@ -199,19 +217,7 @@ UnfloatResult SnapEngine::resolveUnfloatGeometry(const QString& windowId, const 
         return result;
     }
 
-    QString restoreScreen = m_windowTracker->preFloatScreen(windowId);
-    if (!restoreScreen.isEmpty()) {
-        restoreScreen = m_windowTracker->resolveEffectiveScreenId(restoreScreen);
-        auto* mgr = m_windowTracker->screenManager();
-        const bool screenExists = mgr ? mgr->physicalScreenFor(restoreScreen).isValid()
-                                      : (PhosphorScreens::ScreenIdentity::findByIdOrName(restoreScreen) != nullptr);
-        if (!screenExists) {
-            restoreScreen.clear();
-        }
-    }
-    if (restoreScreen.isEmpty() && !fallbackScreen.isEmpty()) {
-        restoreScreen = m_windowTracker->resolveEffectiveScreenId(fallbackScreen);
-    }
+    const QString restoreScreen = resolveUnfloatScreen(m_windowTracker->preFloatScreen(windowId), fallbackScreen);
 
     QRect geo = m_windowTracker->resolveZoneGeometry(zoneIds, restoreScreen);
     if (!geo.isValid()) {
@@ -239,22 +245,9 @@ UnfloatResult SnapEngine::resolveFallbackUnfloatGeometry(const QString& windowId
 
     // Resolve the window's effective screen — its tracked float screen, else the
     // caller's fallback. A tracked screen that no longer exists (output unplugged)
-    // is discarded in favour of the caller's fallback, mirroring the screen-existence
-    // handling in resolveUnfloatGeometry. Zone geometry is resolved on the resulting
-    // screen so the fallback lands where the window currently is.
-    QString screen = m_snapState->screenAssignments().value(windowId);
-    if (!screen.isEmpty()) {
-        screen = m_windowTracker->resolveEffectiveScreenId(screen);
-        auto* mgr = m_windowTracker->screenManager();
-        const bool screenExists = mgr ? mgr->physicalScreenFor(screen).isValid()
-                                      : (PhosphorScreens::ScreenIdentity::findByIdOrName(screen) != nullptr);
-        if (!screenExists) {
-            screen.clear();
-        }
-    }
-    if (screen.isEmpty() && !fallbackScreen.isEmpty()) {
-        screen = m_windowTracker->resolveEffectiveScreenId(fallbackScreen);
-    }
+    // is discarded in favour of the caller's fallback. Zone geometry is resolved on
+    // the resulting screen so the fallback lands where the window currently is.
+    const QString screen = resolveUnfloatScreen(m_snapState->screenAssignments().value(windowId), fallbackScreen);
     if (screen.isEmpty() || !m_layoutManager) {
         return result;
     }

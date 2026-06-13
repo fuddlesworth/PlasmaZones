@@ -143,6 +143,39 @@ private Q_SLOTS:
         m_wts->setSnapState(nullptr);
     }
 
+    // ON + a recorded last-used zone that belongs to a DIFFERENT layout (not this
+    // screen's) → the last-used tier is rejected (its zone resolves geometry on this
+    // screen, but layout->zoneById fails) and the resolver falls through to the
+    // first-empty zone of THIS screen's layout. Pins the layout-scoping guard.
+    void testFallback_on_lastUsedFromOtherLayout_fallsThroughToFirstEmpty()
+    {
+        SnapEngine engine(m_layoutManager, m_wts, nullptr, nullptr, nullptr);
+        engine.setEngineSettings(m_settings);
+        m_wts->setSnapState(engine.snapState());
+
+        auto* layout = installLayout(2);
+        const QString firstZone = layout->zones().first()->id().toString();
+
+        // A second, registered-but-not-active layout. Its zones resolve geometry
+        // (findZoneInAllLayouts spans all layouts) but are NOT in the active layout,
+        // so a last-used zone from it must be rejected by the zoneById scoping.
+        auto* otherLayout = createTestLayout(2, m_layoutManager);
+        m_layoutManager->addLayout(otherLayout);
+        const QString foreignZone = otherLayout->zones().first()->id().toString();
+
+        engine.snapState()->updateLastUsedZone(foreignZone, QStringLiteral("DP-1"), QStringLiteral("app"), 0);
+        engine.snapState()->setFloatingOnScreen(QStringLiteral("app|w"), QStringLiteral("DP-1"), 0);
+        m_settings->setSnapUnfloatFallbackToZone(true);
+
+        const PhosphorEngine::UnfloatResult r =
+            engine.resolveFallbackUnfloatGeometry(QStringLiteral("app|w"), QStringLiteral("DP-1"));
+
+        QVERIFY(r.found);
+        QVERIFY2(r.zoneIds != QStringList{foreignZone}, "a last-used zone from another layout must not be selected");
+        QCOMPARE(r.zoneIds, QStringList{firstZone});
+        m_wts->setSnapState(nullptr);
+    }
+
     // ON + every zone occupied and no last-used → first-empty yields nothing, so
     // the resolver falls back to the FIRST zone in the layout (occupancy is fine:
     // snapping stacks multiple windows per zone).

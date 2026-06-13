@@ -621,6 +621,13 @@ private:
     void commitSnapImpl(const QString& windowId, const QStringList& zoneIds, const QString& screenId,
                         PhosphorEngine::SnapIntent intent);
 
+    /// Resolve an unfloat target screen: take @p primaryScreen if it still exists
+    /// (resolving virtual IDs), otherwise fall back to @p fallbackScreen. Returns an
+    /// empty string when neither resolves. Shared by resolveUnfloatGeometry (primary
+    /// = pre-float screen) and resolveFallbackUnfloatGeometry (primary = tracked
+    /// float screen) so the screen-existence handling stays in one place.
+    QString resolveUnfloatScreen(const QString& primaryScreen, const QString& fallbackScreen) const;
+
     PhosphorZones::LayoutRegistry* m_layoutManager = nullptr;
     PhosphorEngine::IWindowTrackingService* m_windowTracker = nullptr;
     SnapState* m_snapState = nullptr;
