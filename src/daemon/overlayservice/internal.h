@@ -5,6 +5,18 @@
 
 #include <optional>
 
+#include "overlay_helpers.h"
+#include "../../core/settings_interfaces.h"
+#include "../../core/interfaces.h"
+#include "../../core/shaderregistry.h"
+#include "../../core/utils.h"
+#include "../config/configdefaults.h"
+
+#include <PhosphorLayer/Role.h>
+#include <PhosphorScreens/Manager.h>
+#include <PhosphorScreens/ScreenIdentity.h>
+#include <PhosphorZones/IZoneLayoutRegistry.h>
+
 #include <QFont>
 #include <QGuiApplication>
 #include <QMargins>
@@ -12,18 +24,6 @@
 #include <QQuickItem>
 #include <QQuickWindow>
 #include <QScreen>
-
-#include <PhosphorLayer/Role.h>
-#include <PhosphorScreens/Manager.h>
-#include <PhosphorScreens/ScreenIdentity.h>
-
-#include "overlay_helpers.h"
-#include <PhosphorScreens/Manager.h>
-#include "../../core/settings_interfaces.h"
-#include "../../core/interfaces.h"
-#include "../../core/shaderregistry.h"
-#include "../../core/utils.h"
-#include "../config/configdefaults.h"
 
 namespace PlasmaZones {
 
@@ -257,11 +257,20 @@ inline void applyShaderInfoToWindow(QObject* window, const ShaderRegistry::Shade
 /// Previously, ZoneSelectorController only checked the current mode, causing inconsistencies when the
 /// overlay reported a lock but the selector did not.
 ///
+/// A rule-driven `LockContext` lock is checked FIRST, ahead of the persisted per-mode store: it is
+/// mode-agnostic (locks regardless of @p currentMode) and live-resolved, exactly mirroring the
+/// daemon's resolver-routed `IContextGateSource::isContextLocked`. Without this, a `LockContext`
+/// window rule would block the layout-switch gate but leave the selector/overlay reporting unlocked —
+/// the same overlay-vs-selector split PR #247 eliminated for manual locks.
+///
 /// Pass the current mode explicitly when only the active mode's lock is relevant.
 // contextLockKey is defined in Utils:: (src/core/utils.h)
-inline bool isAnyModeLocked(ISettings* settings, const QString& screenId, int desktop, const QString& activity,
-                            int currentMode = -1)
+inline bool isAnyModeLocked(ISettings* settings, PhosphorZones::IZoneLayoutRegistry* layoutRegistry,
+                            const QString& screenId, int desktop, const QString& activity, int currentMode = -1)
 {
+    if (layoutRegistry && layoutRegistry->resolveContextLocked(screenId, desktop, activity)) {
+        return true;
+    }
     if (!settings) {
         return false;
     }

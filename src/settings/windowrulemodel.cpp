@@ -38,12 +38,11 @@ bool hasAnimationAction(const QList<RuleAction>& actions)
 }
 
 /// True if @p actions carry a context-targeting action (layout / engine /
-/// disable) — the kind a Monitor & Layout rule produces.
+/// disable / lock) — the kind a Monitor & Layout rule produces.
 bool hasContextAction(const QList<RuleAction>& actions)
 {
     for (const RuleAction& a : actions) {
-        if (a.type == ActionType::SetEngineMode || a.type == ActionType::SetSnappingLayout
-            || a.type == ActionType::SetTilingAlgorithm || a.type == ActionType::DisableEngine) {
+        if (ActionType::isLayoutEngineContextAction(a.type)) {
             return true;
         }
     }
@@ -311,6 +310,9 @@ QString actionLabel(const RuleAction& action, const WindowRuleModel::LabelLookup
         }
         if (action.type == ActionType::SetHideTitleBar) {
             return raw.toBool() ? PhosphorI18n::tr("Hide title bars") : PhosphorI18n::tr("Show title bars");
+        }
+        if (action.type == ActionType::LockContext) {
+            return raw.toBool() ? PhosphorI18n::tr("Lock layout") : PhosphorI18n::tr("Don't lock layout");
         }
         if (action.type == ActionType::SetBorderVisible) {
             return raw.toBool() ? PhosphorI18n::tr("Show border") : PhosphorI18n::tr("Hide border");

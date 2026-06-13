@@ -405,10 +405,11 @@ bool ZoneSelectorController::isScreenLocked() const
     if (m_layoutManager && m_settings && m_screen) {
         const int desktop = m_layoutManager->currentVirtualDesktop();
         const QString activity = m_layoutManager->currentActivity();
-        // Check both modes (0 = manual, 1 = autotile) to match OverlayService behavior.
-        // A lock on either mode should block the zone selector regardless of which mode
-        // is currently active, preventing inconsistency with overlay lock checks.
-        return isAnyModeLocked(m_settings, m_screenId, desktop, activity);
+        // Match OverlayService behavior: a rule-driven LockContext lock is checked first,
+        // then both manual modes (0 = manual, 1 = autotile). A lock from any of these
+        // sources should block the zone selector regardless of which mode is currently
+        // active, preventing inconsistency with overlay lock checks.
+        return isAnyModeLocked(m_settings, m_layoutManager, m_screenId, desktop, activity);
     }
     return false;
 }

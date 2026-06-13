@@ -7,6 +7,8 @@
 #include "../core/screenmoderouter.h"
 #include "../core/utils.h"
 
+#include <PhosphorZones/LayoutRegistry.h>
+
 #include <PhosphorWorkspaces/ActivityManager.h>
 #include <PhosphorWorkspaces/VirtualDesktopManager.h>
 
@@ -59,8 +61,9 @@ PhosphorZones::AssignmentEntry::Mode DaemonScreenModeAdapter::modeFor(const QStr
 
 // ── DaemonSettingsGateAdapter ───────────────────────────────────────────
 
-DaemonSettingsGateAdapter::DaemonSettingsGateAdapter(ISettings* settings)
+DaemonSettingsGateAdapter::DaemonSettingsGateAdapter(ISettings* settings, PhosphorZones::LayoutRegistry* layoutRegistry)
     : m_settings(settings)
+    , m_layoutRegistry(layoutRegistry)
 {
 }
 
@@ -97,6 +100,14 @@ bool DaemonSettingsGateAdapter::isActivityDisabled(PhosphorZones::AssignmentEntr
 bool DaemonSettingsGateAdapter::isContextLocked(PhosphorZones::AssignmentEntry::Mode mode, const QString& screenId,
                                                 int desktop, const QString& activity) const
 {
+    // Rule-driven lock first: a `LockContext` context rule locks the active
+    // layout live, regardless of engine mode, and is never written to the
+    // persisted lock store — so it OR-s with (never replaces) the manual
+    // ToggleLayoutLock state below. Mode-agnostic: the rule query ignores the
+    // Mode axis, so the same rule lock surfaces for whichever mode is asked.
+    if (m_layoutRegistry && m_layoutRegistry->resolveContextLocked(screenId, desktop, activity))
+        return true;
+
     if (!m_settings)
         return false;
     // Fold the Mode into the screen-key the way every pre-migration call

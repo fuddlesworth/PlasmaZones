@@ -123,8 +123,7 @@ QString fieldDescription(Field f)
 /// management, appearance, animation.
 PickerCategory actionCategory(const QString& type)
 {
-    if (type == ActionType::SetEngineMode || type == ActionType::SetSnappingLayout
-        || type == ActionType::SetTilingAlgorithm || type == ActionType::DisableEngine) {
+    if (ActionType::isLayoutEngineContextAction(type)) {
         return {PhosphorI18n::tr("Layout & engine"), 0};
     }
     if (type == ActionType::SetZonePadding || type == ActionType::SetOuterGap
@@ -205,6 +204,13 @@ QString paramLabel(const QString& type, const QString& key)
     }
     if (type == ActionType::SetUsePerSideOuterGap && key == ActionParam::Value) {
         return PhosphorI18n::tr("Per-side outer gaps");
+    }
+    if (type == ActionType::LockContext && key == ActionParam::Value) {
+        // The action is the rule-driven counterpart to the ToggleLayoutLock
+        // shortcut: on = the matched context's active layout can't be switched.
+        // off is "don't lock" (not "no change"): the Locked slot is single-winner
+        // by priority, so a higher-priority off rule cancels a lower-priority on.
+        return PhosphorI18n::tr("Lock the layout (off = don't lock)");
     }
     if (type == ActionType::SetOuterGapTop && key == ActionParam::Value) {
         return PhosphorI18n::tr("Top gap (px)");
@@ -318,6 +324,9 @@ QString actionTypeLabelImpl(const QString& type)
     }
     if (type == ActionType::DisableEngine) {
         return PhosphorI18n::tr("Disable engine");
+    }
+    if (type == ActionType::LockContext) {
+        return PhosphorI18n::tr("Lock layout");
     }
     if (type == ActionType::Exclude) {
         return PhosphorI18n::tr("Exclude window");
@@ -589,6 +598,7 @@ QVariantList actionTypes()
         ActionType::SetSnappingLayout,
         ActionType::SetTilingAlgorithm,
         ActionType::DisableEngine,
+        ActionType::LockContext,
         // Per-context gap overrides (context-domain, grouped with the other
         // context actions above).
         ActionType::SetZonePadding,
