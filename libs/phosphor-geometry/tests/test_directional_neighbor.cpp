@@ -1,0 +1,132 @@
+// SPDX-FileCopyrightText: 2026 fuddlesworth
+// SPDX-License-Identifier: LGPL-2.1-or-later
+
+#include <PhosphorGeometry/DirectionalNeighbor.h>
+
+#include <QList>
+#include <QRectF>
+#include <QTest>
+
+using PhosphorGeometry::Direction;
+using PhosphorGeometry::directionalNeighbor;
+using PhosphorGeometry::directionFromString;
+
+class TestDirectionalNeighbor : public QObject
+{
+    Q_OBJECT
+
+private Q_SLOTS:
+    void directionFromString_parsesCardinals();
+    void directionFromString_rejectsUnknown();
+
+    void grid2x2_picksOrthogonalNeighbour();
+    void grid2x2_noCandidateInDirection_returnsMinusOne();
+
+    void binarySplit_rightFromTopLeft_picksTopRightNotBelow();
+    void overlapPreference_beatsNearerDiagonal();
+    void overlappingTier_nearestGapWins();
+    void tie_isDeterministicByOrder();
+    void emptyCandidates_returnsMinusOne();
+};
+
+void TestDirectionalNeighbor::directionFromString_parsesCardinals()
+{
+    QCOMPARE(directionFromString(QStringLiteral("left")).value(), Direction::Left);
+    QCOMPARE(directionFromString(QStringLiteral("right")).value(), Direction::Right);
+    QCOMPARE(directionFromString(QStringLiteral("up")).value(), Direction::Up);
+    QCOMPARE(directionFromString(QStringLiteral("down")).value(), Direction::Down);
+}
+
+void TestDirectionalNeighbor::directionFromString_rejectsUnknown()
+{
+    QVERIFY(!directionFromString(QStringLiteral("diagonal")).has_value());
+    QVERIFY(!directionFromString(QStringLiteral("Right")).has_value()); // case-sensitive
+    QVERIFY(!directionFromString(QStringLiteral("")).has_value());
+}
+
+void TestDirectionalNeighbor::grid2x2_picksOrthogonalNeighbour()
+{
+    // 1920x1080 split into four quadrants. Index order: TL, TR, BL, BR.
+    const QList<QRectF> grid{
+        QRectF(0, 0, 960, 540), // 0 TL
+        QRectF(960, 0, 960, 540), // 1 TR
+        QRectF(0, 540, 960, 540), // 2 BL
+        QRectF(960, 540, 960, 540) // 3 BR
+    };
+
+    // From TL.
+    QCOMPARE(directionalNeighbor(grid[0], grid, Direction::Right), 1); // TR
+    QCOMPARE(directionalNeighbor(grid[0], grid, Direction::Down), 2); // BL
+    // From BR.
+    QCOMPARE(directionalNeighbor(grid[3], grid, Direction::Left), 2); // BL
+    QCOMPARE(directionalNeighbor(grid[3], grid, Direction::Up), 1); // TR
+}
+
+void TestDirectionalNeighbor::grid2x2_noCandidateInDirection_returnsMinusOne()
+{
+    const QList<QRectF> grid{QRectF(0, 0, 960, 540), QRectF(960, 0, 960, 540), QRectF(0, 540, 960, 540),
+                             QRectF(960, 540, 960, 540)};
+    // Nothing left of / above the top-left quadrant.
+    QCOMPARE(directionalNeighbor(grid[0], grid, Direction::Left), -1);
+    QCOMPARE(directionalNeighbor(grid[0], grid, Direction::Up), -1);
+}
+
+void TestDirectionalNeighbor::binarySplit_rightFromTopLeft_picksTopRightNotBelow()
+{
+    // The reported bug: focus a window and press "right"; it must land on the
+    // window to the RIGHT, never the one below. Layout: top-left, with the
+    // right column split into top-right and bottom-right.
+    const QRectF topLeft(0, 0, 960, 540);
+    const QRectF topRight(960, 0, 960, 540);
+    const QRectF bottomRight(960, 540, 960, 540);
+
+    // Candidate order deliberately puts the BELOW-ish window first to prove the
+    // result is geometric, not index-based.
+    const QList<QRectF> candidates{bottomRight, topRight};
+    QCOMPARE(directionalNeighbor(topLeft, candidates, Direction::Right), 1); // topRight
+}
+
+void TestDirectionalNeighbor::overlapPreference_beatsNearerDiagonal()
+{
+    // A genuinely side-by-side (perpendicular-overlapping) candidate must win
+    // over a diagonal candidate that is nearer by centre distance. This is the
+    // behaviour a pure centre-distance heuristic gets wrong.
+    const QRectF focus(0, 0, 100, 100); // centre (50,50)
+    const QRectF overlappingFar(1000, 0, 100, 100); // side-by-side, far gap
+    const QRectF diagonalNear(110, 150, 100, 100); // closer centre, no y-overlap
+
+    const QList<QRectF> candidates{overlappingFar, diagonalNear};
+    QCOMPARE(directionalNeighbor(focus, candidates, Direction::Right), 0); // overlappingFar
+}
+
+void TestDirectionalNeighbor::overlappingTier_nearestGapWins()
+{
+    const QRectF focus(0, 0, 100, 100);
+    const QRectF near(110, 0, 100, 100); // gap 10
+    const QRectF far(400, 0, 100, 100); // gap 300
+    const QList<QRectF> candidates{far, near};
+    QCOMPARE(directionalNeighbor(focus, candidates, Direction::Right), 1); // near
+}
+
+void TestDirectionalNeighbor::tie_isDeterministicByOrder()
+{
+    // Two candidates with identical geometry-derived ranking: the first in the
+    // list wins, so the result never depends on iteration accidents.
+    const QRectF focus(0, 0, 100, 1000); // tall; both candidates overlap equally
+    const QRectF upperRight(110, 0, 100, 100);
+    const QRectF lowerRight(110, 900, 100, 100);
+    // Both: gap 10, full membership in the in-direction half-plane, equal
+    // perpendicular centre distance (450) from focus centre y=500.
+    const QList<QRectF> a{upperRight, lowerRight};
+    const QList<QRectF> b{lowerRight, upperRight};
+    QCOMPARE(directionalNeighbor(focus, a, Direction::Right), 0);
+    QCOMPARE(directionalNeighbor(focus, b, Direction::Right), 0);
+}
+
+void TestDirectionalNeighbor::emptyCandidates_returnsMinusOne()
+{
+    QCOMPARE(directionalNeighbor(QRectF(0, 0, 10, 10), {}, Direction::Right), -1);
+}
+
+QTEST_GUILESS_MAIN(TestDirectionalNeighbor)
+#include "test_directional_neighbor.moc"

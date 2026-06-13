@@ -21,6 +21,7 @@ include(GenerateExportHeader)
 
 add_library(PhosphorGeometry SHARED
     src/GeometryUtils.cpp
+    src/DirectionalNeighbor.cpp
 )
 add_library(PhosphorGeometry::PhosphorGeometry ALIAS PhosphorGeometry)
 
@@ -98,3 +99,12 @@ install(FILES
     "${CMAKE_CURRENT_BINARY_DIR}/PhosphorGeometryConfigVersion.cmake"
     DESTINATION ${KDE_INSTALL_LIBDIR}/cmake/PhosphorGeometry
 )
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# Tests
+# ═══════════════════════════════════════════════════════════════════════════════
+
+if(CMAKE_PROJECT_NAME STREQUAL "PhosphorGeometry" OR BUILD_TESTING)
+    enable_testing()
+    add_subdirectory(tests)
+endif()

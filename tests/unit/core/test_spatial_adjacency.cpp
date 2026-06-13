@@ -8,6 +8,8 @@
 #include "core/spatialadjacency.h"
 #include "core/utils.h"
 
+#include <PhosphorScreens/Swapper.h>
+
 using namespace PlasmaZones;
 
 class TestSpatialAdjacency : public QObject
