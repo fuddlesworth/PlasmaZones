@@ -34,7 +34,9 @@ ColumnLayout {
     /// allocates a fresh list per call, so it is cached once at the root and
     /// threaded down rather than re-invoked here.
     required property var matchFieldOptions
-    /// Recursion depth — drives the indentation guide.
+    /// Recursion depth of this node (0 at the root). Threaded down for
+    /// potential depth-aware behaviour; indentation itself is handled
+    /// structurally by each level's rail + margin, not by this value.
     property int depth: 0
     /// True when this node may be removed (the root cannot).
     property bool removable: false
@@ -140,13 +142,15 @@ ColumnLayout {
                 Layout.fillWidth: true
                 spacing: Kirigami.Units.smallSpacing
 
-                // Indentation guide proportional to depth — horizontal only.
-                // No Layout.fillHeight: the spacer exists purely to offset the
-                // row horizontally, and a zero-implicit-height item asked to
-                // fill height only adds noise to the host Dialog's content-sized
-                // height solve.
+                // Leading gutter the width of a leaf row's info icon, so this
+                // group's kind selector lines up with the field pickers of the
+                // sibling leaf rows at the same level — every primary control
+                // forms one column per nesting level. Depth is conveyed by the
+                // children block's indent + vertical rail below, not by a
+                // per-header spacer (that compounded with the child indent and
+                // inverted the nesting past depth 1).
                 Item {
-                    Layout.preferredWidth: matchEditor.depth * Kirigami.Units.largeSpacing
+                    Layout.preferredWidth: Kirigami.Units.iconSizes.small
                 }
 
                 WideComboBox {
@@ -190,71 +194,93 @@ ColumnLayout {
                 }
             }
 
-            // Children — each recursively a MatchExpressionEditor, loaded by
-            // URL via Loader. Qt 6 forbids direct self-instantiation of a type
-            // from within its own definition (the type isn't fully registered
-            // yet at compile time → "instantiated recursively" → unavailable).
-            // The URL-based Loader defers resolution to runtime; setSource's
-            // initialProperties seed the inner `required` properties, and a
-            // Qt.binding on `node` keeps it reactive to _replaceChild updates.
-            Repeater {
-                model: matchEditor._children.length
-
-                Loader {
-                    id: childLoader
-
-                    required property int index
-
-                    Layout.fillWidth: true
-                    Layout.leftMargin: Kirigami.Units.largeSpacing
-                    Component.onCompleted: {
-                        setSource("MatchExpressionEditor.qml", {
-                            "node": Qt.binding(function () {
-                                return matchEditor._children[childLoader.index];
-                            }),
-                            "controller": matchEditor.controller,
-                            "appSettings": matchEditor.appSettings,
-                            "matchFieldOptions": matchEditor.matchFieldOptions,
-                            "depth": matchEditor.depth + 1,
-                            "removable": true
-                        });
-                    }
-
-                    Connections {
-                        function onNodeEdited(updated) {
-                            matchEditor._replaceChild(childLoader.index, updated);
-                        }
-
-                        function onRemoveRequested() {
-                            matchEditor._removeChild(childLoader.index);
-                        }
-
-                        target: childLoader.item
-                    }
-                }
-            }
-
+            // Indented children block with a vertical guide rail down its left
+            // edge. The rail (a full-height Separator) makes each nesting level
+            // legible at a glance; this row's leftMargin + spacing is the SINGLE
+            // source of indentation, composing correctly through the recursion.
             RowLayout {
-                Layout.leftMargin: Kirigami.Units.largeSpacing
-                spacing: Kirigami.Units.smallSpacing
+                Layout.fillWidth: true
+                Layout.leftMargin: Kirigami.Units.smallSpacing
+                spacing: Kirigami.Units.largeSpacing
 
-                Button {
-                    text: i18n("Add condition")
-                    icon.name: "list-add"
-                    flat: true
-                    // No registered match fields ⇒ nothing to seed a leaf
-                    // from; disable rather than dereferencing an empty list.
-                    enabled: matchEditor.matchFieldOptions.length > 0
-                    Accessible.name: i18n("Add a condition to this group")
-                    onClicked: matchEditor._addLeafChild()
+                // Vertical nesting rail. fillHeight stretches it to the sibling
+                // column's height (the column carries the real implicit height,
+                // so the rail just fills — it never drives the height solve).
+                Kirigami.Separator {
+                    Layout.fillHeight: true
+                    Layout.preferredWidth: 1
                 }
 
-                Button {
-                    text: i18n("Add group")
-                    icon.name: "list-add"
-                    flat: true
-                    Accessible.name: i18n("Add a nested condition group")
-                    onClicked: matchEditor._addGroupChild()
+                ColumnLayout {
+                    Layout.fillWidth: true
+                    spacing: Kirigami.Units.smallSpacing
+
+                    // Children — each recursively a MatchExpressionEditor, loaded
+                    // by URL via Loader. Qt 6 forbids direct self-instantiation of
+                    // a type from within its own definition (the type isn't fully
+                    // registered yet at compile time → "instantiated recursively"
+                    // → unavailable). The URL-based Loader defers resolution to
+                    // runtime; setSource's initialProperties seed the inner
+                    // `required` properties, and a Qt.binding on `node` keeps it
+                    // reactive to _replaceChild updates.
+                    Repeater {
+                        model: matchEditor._children.length
+
+                        Loader {
+                            id: childLoader
+
+                            required property int index
+
+                            Layout.fillWidth: true
+                            Component.onCompleted: {
+                                setSource("MatchExpressionEditor.qml", {
+                                    "node": Qt.binding(function () {
+                                        return matchEditor._children[childLoader.index];
+                                    }),
+                                    "controller": matchEditor.controller,
+                                    "appSettings": matchEditor.appSettings,
+                                    "matchFieldOptions": matchEditor.matchFieldOptions,
+                                    "depth": matchEditor.depth + 1,
+                                    "removable": true
+                                });
+                            }
+
+                            Connections {
+                                function onNodeEdited(updated) {
+                                    matchEditor._replaceChild(childLoader.index, updated);
+                                }
+
+                                function onRemoveRequested() {
+                                    matchEditor._removeChild(childLoader.index);
+                                }
+
+                                target: childLoader.item
+                            }
+                        }
+                    }
+
+                    RowLayout {
+                        spacing: Kirigami.Units.smallSpacing
+
+                        Button {
+                            text: i18n("Add condition")
+                            icon.name: "list-add"
+                            flat: true
+                            // No registered match fields ⇒ nothing to seed a leaf
+                            // from; disable rather than dereferencing an empty list.
+                            enabled: matchEditor.matchFieldOptions.length > 0
+                            Accessible.name: i18n("Add a condition to this group")
+                            onClicked: matchEditor._addLeafChild()
+                        }
+
+                        Button {
+                            text: i18n("Add group")
+                            icon.name: "list-add"
+                            flat: true
+                            Accessible.name: i18n("Add a nested condition group")
+                            onClicked: matchEditor._addGroupChild()
+                        }
+                    }
                 }
             }
         }
