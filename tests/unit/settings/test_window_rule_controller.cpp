@@ -52,6 +52,7 @@ private Q_SLOTS:
     void monitorOverviewLayoutFromSingleWinningRule();
     void monitorOverviewDisableEngineMatchesEffectiveMode();
     void monitorOverviewReportsLock();
+    void monitorOverviewLockPriorityResolution();
     void engineModePickerExposesAllVocabularyTokens();
     void userAuthorableFilterHidesInternalActions();
     void moveRuleReorders();
@@ -239,6 +240,53 @@ void TestWindowRuleController::monitorOverviewReportsLock()
             QCOMPARE(tile.value(QStringLiteral("ruleCount")).toInt(), 1);
         } else if (id == QLatin1String("eDP-1")) {
             // No rule → not locked.
+            QCOMPARE(tile.value(QStringLiteral("locked")).toBool(), false);
+        }
+    }
+}
+
+void TestWindowRuleController::monitorOverviewLockPriorityResolution()
+{
+    // When two opposing LockContext rules pin the SAME monitor, the tile must
+    // report the HIGHEST-PRIORITY rule's value (first-wins), not last-wins and
+    // not mere presence — mirroring resolveContextLocked's single-winner Locked
+    // slot (cf. testContextLock_priorityResolution at the registry level).
+    // addRuleFromJson appends and renormalizePriorities makes the earlier-added
+    // rule the higher-priority one within the Context band, so the FIRST rule
+    // added for a screen is its winner. Run both value directions so a
+    // "true-always-wins" / "false-always-wins" bug fails one of the two.
+    WindowRuleController controller;
+
+    const auto lockRule = [&](const QString& screenId, bool locked) {
+        QVariantMap rule = controller.newEmptyRule(QStringLiteral("monitor"));
+        QVariantMap match = rule.value(QStringLiteral("match")).toMap();
+        match[QStringLiteral("value")] = screenId;
+        rule[QStringLiteral("match")] = match;
+        rule[QStringLiteral("actions")] = QVariantList{
+            QVariantMap{{QStringLiteral("type"), QStringLiteral("lockContext")}, {QStringLiteral("value"), locked}}};
+        QVERIFY(!controller.addRuleFromJson(rule).isEmpty());
+    };
+    // DP-A: lock=true added FIRST (higher priority) over a later unlock → locked.
+    lockRule(QStringLiteral("DP-A"), true);
+    lockRule(QStringLiteral("DP-A"), false);
+    // DP-B: the inverse — unlock added first (higher priority) over a later
+    // lock → not locked. Proves the winner is priority, not the value.
+    lockRule(QStringLiteral("DP-B"), false);
+    lockRule(QStringLiteral("DP-B"), true);
+
+    const QVariantList screens{QVariantMap{{QStringLiteral("name"), QStringLiteral("DP-A")}},
+                               QVariantMap{{QStringLiteral("name"), QStringLiteral("DP-B")}}};
+    const QVariantList overview = controller.monitorOverview(screens);
+    QCOMPARE(overview.size(), 2);
+
+    for (const QVariant& v : overview) {
+        const QVariantMap tile = v.toMap();
+        const QString id = tile.value(QStringLiteral("screenId")).toString();
+        // Both screens carry two pinned lock rules.
+        QCOMPARE(tile.value(QStringLiteral("ruleCount")).toInt(), 2);
+        if (id == QLatin1String("DP-A")) {
+            QCOMPARE(tile.value(QStringLiteral("locked")).toBool(), true);
+        } else if (id == QLatin1String("DP-B")) {
             QCOMPARE(tile.value(QStringLiteral("locked")).toBool(), false);
         }
     }

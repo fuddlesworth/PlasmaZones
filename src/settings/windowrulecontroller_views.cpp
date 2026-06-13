@@ -133,6 +133,10 @@ QVariantList WindowRuleController::monitorOverview(const QVariantList& screens) 
         // the daemon's single-winner Locked slot); `locked` is that rule's
         // boolean value — a higher-priority `value:false` rule reports unlocked
         // even when a lower one says lock, mirroring `resolveContextLocked`.
+        // Like the engine/disable slots above, this does NOT model terminal-
+        // action (Exclude) cascade termination — but Exclude is window-domain
+        // and these accumulators only see context-only rules, which never carry
+        // it, so the omission is unreachable here.
         bool lockResolved = false;
         bool locked = false;
     };
