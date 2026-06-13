@@ -373,13 +373,17 @@ ComboBox {
         }
 
         contentItem: ListView {
+            id: popupList
+
             clip: true
             implicitHeight: contentHeight
             model: root.delegateModel
             currentIndex: root.highlightedIndex
             highlightMoveDuration: 0
 
-            ScrollBar.vertical: ScrollBar {}
+            ScrollBar.vertical: ScrollBar {
+                policy: ScrollBar.AsNeeded
+            }
         }
 
         background: Rectangle {
@@ -399,7 +403,12 @@ ComboBox {
         readonly property bool isCurrentSelection: root.currentIndex === index
 
         Accessible.name: modelData.text || ""
-        width: root.popup.availableWidth
+        // Reserve the scrollbar's gutter so the row content ends at the
+        // scrollbar's left edge instead of running underneath it — otherwise
+        // the seam between the full-width delegate and the floating scrollbar
+        // shows as a stray vertical line beside the handle (mirrors the
+        // FontPickerDialog list pattern).
+        width: popupList.width - (popupList.ScrollBar.vertical.visible ? popupList.ScrollBar.vertical.width : 0)
         implicitHeight: Kirigami.Units.gridUnit * 6
         // Only highlight the hovered/keyboard-navigated item (standard ComboBox UX).
         // The current selection is shown with a checkmark, not a second highlight
