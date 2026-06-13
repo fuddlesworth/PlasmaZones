@@ -645,6 +645,39 @@ private:
         return h;
     }
 
+    /// Shared revision-invalidated memoization for the three context resolvers
+    /// (@ref resolveAssignmentEntry, @ref resolveContextGaps,
+    /// @ref resolveContextLocked). Drops @p cache wholesale whenever the rule
+    /// set's monotonic revision moves past @p cacheRevision, returns a cached
+    /// hit, else runs @p compute, then soft-caps the cache at 256 entries —
+    /// dropping the whole cache on overflow rather than evicting one key, which
+    /// keeps the structure simple and lets the next walk re-seed cleanly — and
+    /// stores the result (a @c nullopt / false value is cached too, so a genuine
+    /// miss pays the walk once per revision, not on every cursor frame). Callers
+    /// that must short-circuit on a null evaluator do so BEFORE calling this.
+    template<typename V, typename ComputeFn>
+    V resolveCachedContext(QHash<ContextResolveKey, V>& cache, quint64& cacheRevision, const QString& screenId,
+                           int virtualDesktop, const QString& activity, ComputeFn&& compute) const
+    {
+        const quint64 revision = m_ruleStore->ruleSet().revision();
+        if (revision != cacheRevision) {
+            cache.clear();
+            cacheRevision = revision;
+        }
+        const ContextResolveKey key{screenId, virtualDesktop, activity};
+        const auto cached = cache.constFind(key);
+        if (cached != cache.constEnd()) {
+            return cached.value();
+        }
+        V value = compute();
+        constexpr qsizetype kMaxEntries = 256;
+        if (cache.size() >= kMaxEntries) {
+            cache.clear();
+        }
+        cache.insert(key, value);
+        return value;
+    }
+
     /// Cache of @ref resolveAssignmentEntry results keyed by context tuple.
     /// A @c nullopt value caches a genuine cascade miss (no pinned context
     /// rule wins) — so a missed lookup pays the linear walk exactly once per

@@ -64,46 +64,23 @@ std::optional<AssignmentEntry> LayoutRegistry::resolveAssignmentEntry(const QStr
     // mode-toggle losslessness invariant (an entry keeps BOTH snappingLayout
     // and tilingAlgorithm regardless of active mode).
     //
-    // Hot-path cache. The linear walk is O(N rules × M predicates per match);
-    // overlay/OSD callers issue it per cursor-move, and the connector +
-    // virtual-screen fallback chain in the public resolvers triples that on a
-    // miss. Memoize the (screenId, virtualDesktop, activity) result, keyed
-    // against the rule set's monotonic revision so any real edit invalidates
-    // lazily. A @c nullopt is cached too — a genuine miss must not re-walk
-    // three times per cursor frame.
-    const quint64 revision = m_ruleStore->ruleSet().revision();
-    if (revision != m_contextResolveCacheRevision) {
-        m_contextResolveCache.clear();
-        m_contextResolveCacheRevision = revision;
-    }
-    const ContextResolveKey key{screenId, virtualDesktop, activity};
-    const auto cached = m_contextResolveCache.constFind(key);
-    if (cached != m_contextResolveCache.constEnd()) {
-        return cached.value();
-    }
-
-    const PWR::WindowQuery query = makeContextQuery(screenId, virtualDesktop, activity);
-    const PWR::WindowRule* winner = m_evaluator->highestPriorityMatch(query, [](const PWR::WindowRule& rule) {
-        return hasEngineModeAction(rule) && !rule.match.isCatchAll();
-    });
-    std::optional<AssignmentEntry> result;
-    if (winner != nullptr) {
-        result = entryFromRuleMatchActions(*winner);
-    }
-    // Soft cap. The header claims the cache is bounded by live
-    // (screens × desktops × activities) — order-of-1000 in the worst case —
-    // but a pathological client poking unique non-existent tuples could grow
-    // it unbounded. 256 is comfortably above any realistic live footprint and
-    // far below any heap-pressure concern; on overflow drop the whole cache
-    // rather than evicting one key, which keeps the data-structure simple
-    // and the next walk seeds it cleanly. The walk itself stays O(N), so the
-    // miss cost is bounded.
-    constexpr qsizetype kMaxEntries = 256;
-    if (m_contextResolveCache.size() >= kMaxEntries) {
-        m_contextResolveCache.clear();
-    }
-    m_contextResolveCache.insert(key, result);
-    return result;
+    // Hot-path cache via the shared revision-invalidated memoizer. The linear
+    // walk is O(N rules × M predicates per match); overlay/OSD callers issue it
+    // per cursor-move, and the connector + virtual-screen fallback chain in the
+    // public resolvers triples that on a miss. A @c nullopt is cached too — a
+    // genuine miss must not re-walk three times per cursor frame.
+    return resolveCachedContext(m_contextResolveCache, m_contextResolveCacheRevision, screenId, virtualDesktop,
+                                activity, [&]() -> std::optional<AssignmentEntry> {
+                                    const PWR::WindowQuery query = makeContextQuery(screenId, virtualDesktop, activity);
+                                    const PWR::WindowRule* winner =
+                                        m_evaluator->highestPriorityMatch(query, [](const PWR::WindowRule& rule) {
+                                            return hasEngineModeAction(rule) && !rule.match.isCatchAll();
+                                        });
+                                    if (winner != nullptr) {
+                                        return entryFromRuleMatchActions(*winner);
+                                    }
+                                    return std::nullopt;
+                                });
 }
 
 ContextGapOverride LayoutRegistry::resolveContextGaps(const QString& screenId, int virtualDesktop,
@@ -115,55 +92,38 @@ ContextGapOverride LayoutRegistry::resolveContextGaps(const QString& screenId, i
     // compose — and two gap rules touching different slots both apply. No
     // engine-mode gate and no isValid() filter: a gap-only context rule is a
     // first-class override here.
-    ContextGapOverride gaps;
     if (!m_evaluator) {
-        return gaps;
+        return ContextGapOverride{};
     }
 
-    // Hot-path cache, mirroring resolveAssignmentEntry: the geometry path
-    // resolves the same context twice per op (zone padding + outer gaps) and
-    // N× inside a multi-zone snap, all with identical arguments. Memoize keyed
-    // by the rule set's monotonic revision so any edit invalidates lazily.
-    const quint64 revision = m_ruleStore->ruleSet().revision();
-    if (revision != m_contextGapCacheRevision) {
-        m_contextGapCache.clear();
-        m_contextGapCacheRevision = revision;
-    }
-    const ContextResolveKey key{screenId, virtualDesktop, activity};
-    const auto cached = m_contextGapCache.constFind(key);
-    if (cached != m_contextGapCache.constEnd()) {
-        return cached.value();
-    }
+    // Hot-path cache via the shared revision-invalidated memoizer: the geometry
+    // path resolves the same context twice per op (zone padding + outer gaps)
+    // and N× inside a multi-zone snap, all with identical arguments.
+    return resolveCachedContext(
+        m_contextGapCache, m_contextGapCacheRevision, screenId, virtualDesktop, activity, [&]() -> ContextGapOverride {
+            ContextGapOverride gaps;
+            const PWR::WindowQuery query = makeContextQuery(screenId, virtualDesktop, activity);
+            const PWR::ResolvedActions resolved = m_evaluator->resolve(query);
 
-    const PWR::WindowQuery query = makeContextQuery(screenId, virtualDesktop, activity);
-    const PWR::ResolvedActions resolved = m_evaluator->resolve(query);
-
-    const auto readInt = [&resolved](QLatin1StringView slot, std::optional<int>& out) {
-        if (const auto action = resolved.slot(QString(slot))) {
-            out = action->params.value(PWR::ActionParam::Value).toInt();
-        }
-    };
-    const auto readBool = [&resolved](QLatin1StringView slot, std::optional<bool>& out) {
-        if (const auto action = resolved.slot(QString(slot))) {
-            out = action->params.value(PWR::ActionParam::Value).toBool();
-        }
-    };
-    readInt(PWR::ActionSlot::ZonePadding, gaps.zonePadding);
-    readInt(PWR::ActionSlot::OuterGap, gaps.outerGap);
-    readBool(PWR::ActionSlot::UsePerSideOuterGap, gaps.usePerSideOuterGap);
-    readInt(PWR::ActionSlot::OuterGapTop, gaps.outerGapTop);
-    readInt(PWR::ActionSlot::OuterGapBottom, gaps.outerGapBottom);
-    readInt(PWR::ActionSlot::OuterGapLeft, gaps.outerGapLeft);
-    readInt(PWR::ActionSlot::OuterGapRight, gaps.outerGapRight);
-
-    // Soft cap mirroring m_contextResolveCache (see resolveAssignmentEntry):
-    // drop the whole cache on overflow rather than evicting one key.
-    constexpr qsizetype kMaxEntries = 256;
-    if (m_contextGapCache.size() >= kMaxEntries) {
-        m_contextGapCache.clear();
-    }
-    m_contextGapCache.insert(key, gaps);
-    return gaps;
+            const auto readInt = [&resolved](QLatin1StringView slot, std::optional<int>& out) {
+                if (const auto action = resolved.slot(QString(slot))) {
+                    out = action->params.value(PWR::ActionParam::Value).toInt();
+                }
+            };
+            const auto readBool = [&resolved](QLatin1StringView slot, std::optional<bool>& out) {
+                if (const auto action = resolved.slot(QString(slot))) {
+                    out = action->params.value(PWR::ActionParam::Value).toBool();
+                }
+            };
+            readInt(PWR::ActionSlot::ZonePadding, gaps.zonePadding);
+            readInt(PWR::ActionSlot::OuterGap, gaps.outerGap);
+            readBool(PWR::ActionSlot::UsePerSideOuterGap, gaps.usePerSideOuterGap);
+            readInt(PWR::ActionSlot::OuterGapTop, gaps.outerGapTop);
+            readInt(PWR::ActionSlot::OuterGapBottom, gaps.outerGapBottom);
+            readInt(PWR::ActionSlot::OuterGapLeft, gaps.outerGapLeft);
+            readInt(PWR::ActionSlot::OuterGapRight, gaps.outerGapRight);
+            return gaps;
+        });
 }
 
 bool LayoutRegistry::resolveContextLocked(const QString& screenId, int virtualDesktop, const QString& activity) const
@@ -177,32 +137,18 @@ bool LayoutRegistry::resolveContextLocked(const QString& screenId, int virtualDe
         return false;
     }
 
-    const quint64 revision = m_ruleStore->ruleSet().revision();
-    if (revision != m_contextLockCacheRevision) {
-        m_contextLockCache.clear();
-        m_contextLockCacheRevision = revision;
-    }
-    const ContextResolveKey key{screenId, virtualDesktop, activity};
-    const auto cached = m_contextLockCache.constFind(key);
-    if (cached != m_contextLockCache.constEnd()) {
-        return cached.value();
-    }
-
-    const PWR::WindowQuery query = makeContextQuery(screenId, virtualDesktop, activity);
-    const PWR::ResolvedActions resolved = m_evaluator->resolve(query);
-    bool locked = false;
-    if (const auto action = resolved.slot(QString(PWR::ActionSlot::Locked))) {
-        locked = action->params.value(PWR::ActionParam::Value).toBool();
-    }
-
-    // Soft cap mirroring m_contextGapCache (see resolveAssignmentEntry): drop
-    // the whole cache on overflow rather than evicting one key.
-    constexpr qsizetype kMaxEntries = 256;
-    if (m_contextLockCache.size() >= kMaxEntries) {
-        m_contextLockCache.clear();
-    }
-    m_contextLockCache.insert(key, locked);
-    return locked;
+    // Hot-path cache via the shared revision-invalidated memoizer: the lock
+    // check runs per cursor-move while a selector is open and on every
+    // layout-switch attempt.
+    return resolveCachedContext(m_contextLockCache, m_contextLockCacheRevision, screenId, virtualDesktop, activity,
+                                [&]() -> bool {
+                                    const PWR::WindowQuery query = makeContextQuery(screenId, virtualDesktop, activity);
+                                    const PWR::ResolvedActions resolved = m_evaluator->resolve(query);
+                                    if (const auto action = resolved.slot(QString(PWR::ActionSlot::Locked))) {
+                                        return action->params.value(PWR::ActionParam::Value).toBool();
+                                    }
+                                    return false;
+                                });
 }
 
 bool LayoutRegistry::hasExactContextRule(const QString& screenId, int virtualDesktop, const QString& activity) const
@@ -238,8 +184,8 @@ const PhosphorWindowRule::WindowRule* LayoutRegistry::findExactContextRule(const
     // the settings UI (windowruletemplates.cpp's `QUuid::createUuid()`
     // path). The shape fallback gates on `isPureAssignmentRule` — a
     // user rule that ALSO carries SetOpacity / OverrideAnimation* /
-    // Float / Exclude alongside the assignment slots is intentionally
-    // NOT claimed here. Admitting it would feed it through
+    // Float / Exclude / LockContext alongside the assignment slots is
+    // intentionally NOT claimed here. Admitting it would feed it through
     // upsertAssignmentRule / assignLayout / applyBatchAssignments which
     // rebuild via makeAssignmentActions and emit only the three slot
     // actions — silently stripping the user's other actions. Falling
@@ -364,9 +310,9 @@ bool LayoutRegistry::purgeSnappingLayoutFromAssignments(const QString& layoutId)
         // Gate on isPureAssignmentRule (not isContextAssignmentRule) — the
         // Shape-1 rebuild path emits ONLY the three assignment slot actions
         // via makeAssignmentActions, so a mixed context rule carrying
-        // SetOpacity / OverrideAnimation* / Float / Exclude alongside its
-        // assignment actions would silently lose those non-assignment
-        // actions on rebuild. Mixed rules fall through to Shape 2's
+        // SetOpacity / OverrideAnimation* / Float / Exclude / LockContext
+        // alongside its assignment actions would silently lose those
+        // non-assignment actions on rebuild. Mixed rules fall through to Shape 2's
         // surgical SetSnappingLayout removal, which preserves every
         // other action verbatim.
         if (isContextAssignmentRule(rule) && isPureAssignmentRule(rule)) {

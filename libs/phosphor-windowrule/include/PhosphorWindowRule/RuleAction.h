@@ -339,6 +339,20 @@ inline bool isEffectRuleAction(const QString& type)
 {
     return isAnimationOverrideAction(type) || type == SetOpacity || isBorderAppearanceAction(type);
 }
+
+/// True when @p type is one of the five context-domain layout/engine actions
+/// that pin a screen/desktop/activity's layout behaviour — engine mode,
+/// snapping layout, tiling algorithm, disable-engine, or the layout lock. The
+/// settings layer clusters these into the "Layout & engine" picker category and
+/// treats any of them as marking a Monitor & Layout rule; keeping the list in
+/// one place stops those call-sites from drifting when a sixth such action is
+/// added. (Gap overrides are also context-domain but cluster separately, so
+/// they are intentionally excluded here.)
+inline bool isLayoutEngineContextAction(const QString& type)
+{
+    return type == SetEngineMode || type == SetSnappingLayout || type == SetTilingAlgorithm || type == DisableEngine
+        || type == LockContext;
+}
 } // namespace ActionType
 
 // ── Action param keys — canonical wire strings ──

@@ -123,9 +123,7 @@ QString fieldDescription(Field f)
 /// management, appearance, animation.
 PickerCategory actionCategory(const QString& type)
 {
-    if (type == ActionType::SetEngineMode || type == ActionType::SetSnappingLayout
-        || type == ActionType::SetTilingAlgorithm || type == ActionType::DisableEngine
-        || type == ActionType::LockContext) {
+    if (ActionType::isLayoutEngineContextAction(type)) {
         return {PhosphorI18n::tr("Layout & engine"), 0};
     }
     if (type == ActionType::SetZonePadding || type == ActionType::SetOuterGap

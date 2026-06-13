@@ -5,6 +5,18 @@
 
 #include <optional>
 
+#include "overlay_helpers.h"
+#include "../../core/settings_interfaces.h"
+#include "../../core/interfaces.h"
+#include "../../core/shaderregistry.h"
+#include "../../core/utils.h"
+#include "../config/configdefaults.h"
+
+#include <PhosphorLayer/Role.h>
+#include <PhosphorScreens/Manager.h>
+#include <PhosphorScreens/ScreenIdentity.h>
+#include <PhosphorZones/IZoneLayoutRegistry.h>
+
 #include <QFont>
 #include <QGuiApplication>
 #include <QMargins>
@@ -12,18 +24,6 @@
 #include <QQuickItem>
 #include <QQuickWindow>
 #include <QScreen>
-
-#include <PhosphorLayer/Role.h>
-#include <PhosphorScreens/Manager.h>
-#include <PhosphorScreens/ScreenIdentity.h>
-#include <PhosphorZones/IZoneLayoutRegistry.h>
-
-#include "overlay_helpers.h"
-#include "../../core/settings_interfaces.h"
-#include "../../core/interfaces.h"
-#include "../../core/shaderregistry.h"
-#include "../../core/utils.h"
-#include "../config/configdefaults.h"
 
 namespace PlasmaZones {
 

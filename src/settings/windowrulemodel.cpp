@@ -42,9 +42,7 @@ bool hasAnimationAction(const QList<RuleAction>& actions)
 bool hasContextAction(const QList<RuleAction>& actions)
 {
     for (const RuleAction& a : actions) {
-        if (a.type == ActionType::SetEngineMode || a.type == ActionType::SetSnappingLayout
-            || a.type == ActionType::SetTilingAlgorithm || a.type == ActionType::DisableEngine
-            || a.type == ActionType::LockContext) {
+        if (ActionType::isLayoutEngineContextAction(a.type)) {
             return true;
         }
     }
