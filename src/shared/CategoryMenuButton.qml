@@ -1,5 +1,5 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
-// SPDX-License-Identifier: LGPL-2.1-or-later
+// SPDX-License-Identifier: GPL-3.0-or-later
 
 import QtQuick
 import QtQuick.Controls
@@ -47,9 +47,11 @@ import org.kde.kirigami as Kirigami
  * `Qt.callLater` so the click handler returns before the menu hides.
  *
  * Required:
- *   - `items`: var — list of `{ id, name, category?, dimmed?, dimReason? }`
- *     maps. A `dimmed` item renders greyed with a warning icon + `dimReason`
- *     tooltip (still selectable — the host surfaces the consequence).
+ *   - `items`: var — list of `{ id, name, category?, categoryOrder?,
+ *     dimmed?, dimReason? }` maps. A `dimmed` item renders greyed with a
+ *     warning icon + `dimReason` tooltip (still selectable — the host
+ *     surfaces the consequence). `categoryOrder` (int) sorts top-level
+ *     categories; uncategorised items sort by name.
  *
  * Optional:
  *   - `currentId`: string — drives the checkmark and button label
@@ -251,8 +253,15 @@ ComboBox {
         event.accepted = true;
     }
     // Force rebuild on items change (registry reload) — _built guard would
-    // otherwise pin the menu to whatever was loaded at first popup.
-    onItemsChanged: categoryMenu.markDirty()
+    // otherwise pin the menu to whatever was loaded at first popup. While the
+    // menu is OPEN, markDirty() would destroy the children the user is looking
+    // at (the menu visibly empties); defer the rebuild to onClosed instead.
+    onItemsChanged: {
+        if (categoryMenu.visible)
+            categoryMenu._pendingDirty = true;
+        else
+            categoryMenu.markDirty();
+    }
 
     // Use ItemDelegate (not MenuItem) so Qt's onItemTriggered → dismiss()
     // cascade never fires; the menu hides via explicit Qt.callLater below.
@@ -320,6 +329,9 @@ ComboBox {
         property var _allItems: []
         property var _owned: []
         property bool _built: false
+        // Set when `items` changes while the menu is open; consumed by
+        // onClosed to rebuild against a hidden tree (see onItemsChanged).
+        property bool _pendingDirty: false
 
         function markDirty() {
             // Qt 6 differentiates Menu.removeItem() (works for items +
@@ -482,6 +494,14 @@ ComboBox {
         }
 
         onAboutToShow: root._opening = false
+        // Apply a deferred items-change rebuild now that the tree is hidden
+        // (see onItemsChanged) — markDirty() destroys children safely here.
+        onClosed: {
+            if (_pendingDirty) {
+                _pendingDirty = false;
+                markDirty();
+            }
+        }
         palette.window: Kirigami.Theme.backgroundColor
 
         enter: Transition {}

@@ -25,34 +25,58 @@ static QString canonicalPerScreenKey(const QString& screenIdOrName);
 
 namespace {
 
+// D-Bus boundary guards: per-screen values arrive as raw QVariants from the
+// settings adaptor dispatch. QVariant::toInt()/toDouble() silently coerce a
+// non-numeric payload to 0, which the validators would then accept or clamp
+// as a real override (e.g. Position "garbage" -> 0 = TopLeft stored). These
+// helpers reject non-convertible payloads with an invalid QVariant instead,
+// matching the contract the enum-range validators already use.
+QVariant boundedInt(const QVariant& value, int min, int max)
+{
+    bool ok = false;
+    const int v = value.toInt(&ok);
+    return ok ? QVariant(qBound(min, v, max)) : QVariant();
+}
+
+QVariant boundedDouble(const QVariant& value, double min, double max)
+{
+    bool ok = false;
+    const double v = value.toDouble(&ok);
+    return ok ? QVariant(qBound(min, v, max)) : QVariant();
+}
+
+/// Enum-range check over [0, max]; rejects non-numeric payloads.
+QVariant enumInRange(const QVariant& value, int max)
+{
+    bool ok = false;
+    const int v = value.toInt(&ok);
+    return (ok && v >= 0 && v <= max) ? QVariant(v) : QVariant();
+}
+
 QVariant validatePerScreenValue(const QString& key, const QVariant& value)
 {
     namespace K = ZoneSelectorConfigKey;
     if (key == QLatin1String(K::Position)) {
-        int v = value.toInt();
-        return (v >= 0 && v <= static_cast<int>(ZoneSelectorPosition::BottomRight)) ? QVariant(v) : QVariant();
+        return enumInRange(value, static_cast<int>(ZoneSelectorPosition::BottomRight));
     }
     if (key == QLatin1String(K::LayoutMode)) {
-        int v = value.toInt();
-        return (v >= 0 && v <= static_cast<int>(ZoneSelectorLayoutMode::Vertical)) ? QVariant(v) : QVariant();
+        return enumInRange(value, static_cast<int>(ZoneSelectorLayoutMode::Vertical));
     }
     if (key == QLatin1String(K::SizeMode)) {
-        int v = value.toInt();
-        return (v >= 0 && v <= static_cast<int>(ZoneSelectorSizeMode::Manual)) ? QVariant(v) : QVariant();
+        return enumInRange(value, static_cast<int>(ZoneSelectorSizeMode::Manual));
     }
     if (key == QLatin1String(K::MaxRows))
-        return QVariant(qBound(ConfigDefaults::maxRowsMin(), value.toInt(), ConfigDefaults::maxRowsMax()));
+        return boundedInt(value, ConfigDefaults::maxRowsMin(), ConfigDefaults::maxRowsMax());
     if (key == QLatin1String(K::PreviewWidth))
-        return QVariant(qBound(ConfigDefaults::previewWidthMin(), value.toInt(), ConfigDefaults::previewWidthMax()));
+        return boundedInt(value, ConfigDefaults::previewWidthMin(), ConfigDefaults::previewWidthMax());
     if (key == QLatin1String(K::PreviewHeight))
-        return QVariant(qBound(ConfigDefaults::previewHeightMin(), value.toInt(), ConfigDefaults::previewHeightMax()));
+        return boundedInt(value, ConfigDefaults::previewHeightMin(), ConfigDefaults::previewHeightMax());
     if (key == QLatin1String(K::PreviewLockAspect))
         return QVariant(value.toBool());
     if (key == QLatin1String(K::GridColumns))
-        return QVariant(qBound(ConfigDefaults::gridColumnsMin(), value.toInt(), ConfigDefaults::gridColumnsMax()));
+        return boundedInt(value, ConfigDefaults::gridColumnsMin(), ConfigDefaults::gridColumnsMax());
     if (key == QLatin1String(K::TriggerDistance))
-        return QVariant(
-            qBound(ConfigDefaults::triggerDistanceMin(), value.toInt(), ConfigDefaults::triggerDistanceMax()));
+        return boundedInt(value, ConfigDefaults::triggerDistanceMin(), ConfigDefaults::triggerDistanceMax());
     return QVariant();
 }
 
@@ -94,35 +118,29 @@ const QLatin1String kPerScreenKeys[] = {
 };
 
 const QLatin1String kPerScreenAutotileKeys[] = {
-    QLatin1String(PerScreenAutotileKey::Algorithm),
-    QLatin1String(PerScreenAutotileKey::SplitRatio),
-    QLatin1String(PerScreenAutotileKey::SplitRatioStep),
-    QLatin1String(PerScreenAutotileKey::MasterCount),
-    QLatin1String(PerScreenAutotileKey::InnerGap),
-    QLatin1String(PerScreenAutotileKey::OuterGap),
-    QLatin1String(PerScreenAutotileKey::UsePerSideOuterGap),
-    QLatin1String(PerScreenAutotileKey::OuterGapTop),
-    QLatin1String(PerScreenAutotileKey::OuterGapBottom),
-    QLatin1String(PerScreenAutotileKey::OuterGapLeft),
-    QLatin1String(PerScreenAutotileKey::OuterGapRight),
-    QLatin1String(PerScreenAutotileKey::FocusNewWindows),
-    QLatin1String(PerScreenAutotileKey::SmartGaps),
-    QLatin1String(PerScreenAutotileKey::MaxWindows),
-    QLatin1String(PerScreenAutotileKey::InsertPosition),
-    QLatin1String(PerScreenAutotileKey::FocusFollowsMouse),
-    QLatin1String(PerScreenAutotileKey::RespectMinimumSize),
-    QLatin1String(PerScreenAutotileKey::HideTitleBars),
-    QLatin1String(PerScreenAutotileKey::AnimationsEnabled),
-    QLatin1String(PerScreenAutotileKey::AnimationDuration),
-    QLatin1String(PerScreenAutotileKey::AnimationEasingCurve),
+    QLatin1String(PerScreenAutotileKey::Algorithm),          QLatin1String(PerScreenAutotileKey::SplitRatio),
+    QLatin1String(PerScreenAutotileKey::SplitRatioStep),     QLatin1String(PerScreenAutotileKey::MasterCount),
+    QLatin1String(PerScreenAutotileKey::InnerGap),           QLatin1String(PerScreenAutotileKey::OuterGap),
+    QLatin1String(PerScreenAutotileKey::UsePerSideOuterGap), QLatin1String(PerScreenAutotileKey::OuterGapTop),
+    QLatin1String(PerScreenAutotileKey::OuterGapBottom),     QLatin1String(PerScreenAutotileKey::OuterGapLeft),
+    QLatin1String(PerScreenAutotileKey::OuterGapRight),      QLatin1String(PerScreenAutotileKey::FocusNewWindows),
+    QLatin1String(PerScreenAutotileKey::SmartGaps),          QLatin1String(PerScreenAutotileKey::MaxWindows),
+    QLatin1String(PerScreenAutotileKey::InsertPosition),     QLatin1String(PerScreenAutotileKey::FocusFollowsMouse),
+    QLatin1String(PerScreenAutotileKey::RespectMinimumSize), QLatin1String(PerScreenAutotileKey::AnimationsEnabled),
+    QLatin1String(PerScreenAutotileKey::AnimationDuration),  QLatin1String(PerScreenAutotileKey::AnimationEasingCurve),
 };
 
 // Gaps sub-domain of the autotile per-screen keys — the keys the Tiling
-// Appearance "Gaps" card writes. Everything else in kPerScreenAutotileKeys is
-// the Tiling Algorithm card's sub-domain. The two cards live on disjoint key
-// subsets so each card's scope chip reports its override dot and clears its
-// reset against ONLY its own keys; a shared whole-domain clear would wipe the
-// other card's per-monitor overrides (data loss on reset).
+// Appearance "Gaps" card writes. Everything else in kPerScreenAutotileKeys
+// falls to the Tiling Algorithm card's sub-domain BY COMPLEMENT — including
+// the Animation* keys, which currently have no settings card at all (only
+// the D-Bus dispatch path can write them); they ride the Algorithm card's
+// scope chip and reset until an animations card exists, at which point this
+// binary set-and-complement classification needs a third explicit set. The
+// cards live on disjoint key subsets so each card's scope chip reports its
+// override dot and clears its reset against ONLY its own keys; a shared
+// whole-domain clear would wipe the other card's per-monitor overrides
+// (data loss on reset).
 const QLatin1String kPerScreenAutotileGapsKeys[] = {
     QLatin1String(PerScreenAutotileKey::InnerGap),           QLatin1String(PerScreenAutotileKey::OuterGap),
     QLatin1String(PerScreenAutotileKey::UsePerSideOuterGap), QLatin1String(PerScreenAutotileKey::OuterGapTop),
@@ -167,58 +185,53 @@ QVariant validatePerScreenAutotileValue(const QString& key, const QVariant& valu
     const QString k = stripAutotilePrefix(key);
 
     if (k == PerScreenKeys::SplitRatio) {
-        double v = value.toDouble();
-        return QVariant(qBound(ConfigDefaults::autotileSplitRatioMin(), v, ConfigDefaults::autotileSplitRatioMax()));
+        return boundedDouble(value, ConfigDefaults::autotileSplitRatioMin(), ConfigDefaults::autotileSplitRatioMax());
     }
     if (k == PerScreenKeys::SplitRatioStep) {
-        double v = value.toDouble();
-        return QVariant(
-            qBound(ConfigDefaults::autotileSplitRatioStepMin(), v, ConfigDefaults::autotileSplitRatioStepMax()));
+        return boundedDouble(value, ConfigDefaults::autotileSplitRatioStepMin(),
+                             ConfigDefaults::autotileSplitRatioStepMax());
     }
     if (k == PerScreenKeys::MasterCount)
-        return QVariant(
-            qBound(ConfigDefaults::autotileMasterCountMin(), value.toInt(), ConfigDefaults::autotileMasterCountMax()));
+        return boundedInt(value, ConfigDefaults::autotileMasterCountMin(), ConfigDefaults::autotileMasterCountMax());
     if (k == PerScreenKeys::InnerGap)
-        return QVariant(
-            qBound(ConfigDefaults::autotileInnerGapMin(), value.toInt(), ConfigDefaults::autotileInnerGapMax()));
+        return boundedInt(value, ConfigDefaults::autotileInnerGapMin(), ConfigDefaults::autotileInnerGapMax());
     // Per-side gaps each have their own min/max — match exactly, not by prefix.
     // A single startsWith("OuterGap") would apply the uniform-gap bounds to
     // Top/Bottom/Left/Right, which silently clamps to the wrong range whenever
     // those bounds diverge from the uniform ones.
     if (k == PerScreenKeys::OuterGap)
-        return QVariant(
-            qBound(ConfigDefaults::autotileOuterGapMin(), value.toInt(), ConfigDefaults::autotileOuterGapMax()));
+        return boundedInt(value, ConfigDefaults::autotileOuterGapMin(), ConfigDefaults::autotileOuterGapMax());
     if (k == PerScreenKeys::OuterGapTop)
-        return QVariant(
-            qBound(ConfigDefaults::autotileOuterGapTopMin(), value.toInt(), ConfigDefaults::autotileOuterGapTopMax()));
+        return boundedInt(value, ConfigDefaults::autotileOuterGapTopMin(), ConfigDefaults::autotileOuterGapTopMax());
     if (k == PerScreenKeys::OuterGapBottom)
-        return QVariant(qBound(ConfigDefaults::autotileOuterGapBottomMin(), value.toInt(),
-                               ConfigDefaults::autotileOuterGapBottomMax()));
+        return boundedInt(value, ConfigDefaults::autotileOuterGapBottomMin(),
+                          ConfigDefaults::autotileOuterGapBottomMax());
     if (k == PerScreenKeys::OuterGapLeft)
-        return QVariant(qBound(ConfigDefaults::autotileOuterGapLeftMin(), value.toInt(),
-                               ConfigDefaults::autotileOuterGapLeftMax()));
+        return boundedInt(value, ConfigDefaults::autotileOuterGapLeftMin(), ConfigDefaults::autotileOuterGapLeftMax());
     if (k == PerScreenKeys::OuterGapRight)
-        return QVariant(qBound(ConfigDefaults::autotileOuterGapRightMin(), value.toInt(),
-                               ConfigDefaults::autotileOuterGapRightMax()));
+        return boundedInt(value, ConfigDefaults::autotileOuterGapRightMin(),
+                          ConfigDefaults::autotileOuterGapRightMax());
     if (k == PerScreenKeys::MaxWindows)
-        return QVariant(
-            qBound(ConfigDefaults::autotileMaxWindowsMin(), value.toInt(), ConfigDefaults::autotileMaxWindowsMax()));
+        return boundedInt(value, ConfigDefaults::autotileMaxWindowsMin(), ConfigDefaults::autotileMaxWindowsMax());
     if (k == PerScreenKeys::InsertPosition)
-        return QVariant(qBound(ConfigDefaults::autotileInsertPositionMin(), value.toInt(),
-                               ConfigDefaults::autotileInsertPositionMax()));
+        return boundedInt(value, ConfigDefaults::autotileInsertPositionMin(),
+                          ConfigDefaults::autotileInsertPositionMax());
     // Algorithm / easing-curve tokens are resolved (with a fallback) at the
     // daemon, so the registry isn't available here to validate them — but
     // reject an empty override outright, since a blank per-screen algorithm or
     // curve is never a meaningful override.
     if (k == PerScreenKeys::Algorithm || k == PerScreenKeys::AnimationEasingCurve)
-        return value.toString().isEmpty() ? QVariant() : value;
+        // Canonicalize to QString: the backend round-trips these via
+        // writeString/readString, so a non-string payload accepted here
+        // (e.g. an int over D-Bus) would change observable type across a
+        // restart (int in the writing session, string after reload).
+        return value.toString().isEmpty() ? QVariant() : QVariant(value.toString());
     if (k == PerScreenKeys::UsePerSideOuterGap || k == PerScreenKeys::FocusNewWindows || k == PerScreenKeys::SmartGaps
         || k == PerScreenKeys::FocusFollowsMouse || k == PerScreenKeys::RespectMinimumSize
-        || k == PerScreenKeys::HideTitleBars || k == PerScreenKeys::AnimationsEnabled)
+        || k == PerScreenKeys::AnimationsEnabled)
         return QVariant(value.toBool());
     if (k == PerScreenKeys::AnimationDuration)
-        return QVariant(
-            qBound(ConfigDefaults::animationDurationMin(), value.toInt(), ConfigDefaults::animationDurationMax()));
+        return boundedInt(value, ConfigDefaults::animationDurationMin(), ConfigDefaults::animationDurationMax());
     return QVariant();
 }
 
@@ -241,8 +254,6 @@ QVariant readPerScreenAutotileEntry(PhosphorConfig::IGroup& group, const QString
         return QVariant(group.readBool(key, ConfigDefaults::autotileFocusFollowsMouse()));
     if (key == QLatin1String(PerScreenAutotileKey::RespectMinimumSize))
         return QVariant(group.readBool(key, ConfigDefaults::autotileRespectMinimumSize()));
-    if (key == QLatin1String(PerScreenAutotileKey::HideTitleBars))
-        return QVariant(group.readBool(key, ConfigDefaults::autotileHideTitleBars()));
     if (key == QLatin1String(PerScreenAutotileKey::AnimationsEnabled))
         return QVariant(group.readBool(key, ConfigDefaults::animationsEnabled()));
     return QVariant(group.readInt(key, 0));
@@ -300,44 +311,39 @@ QVariant validatePerScreenSnappingValue(const QString& key, const QVariant& valu
     if (key == K::SnapAssistEnabled || key == K::ZoneSelectorEnabled)
         return QVariant(value.toBool());
     if (key == K::ZoneSelectorTriggerDistance)
-        return QVariant(
-            qBound(ConfigDefaults::triggerDistanceMin(), value.toInt(), ConfigDefaults::triggerDistanceMax()));
+        return boundedInt(value, ConfigDefaults::triggerDistanceMin(), ConfigDefaults::triggerDistanceMax());
     if (key == K::ZoneSelectorPosition) {
-        int v = value.toInt();
-        return (v >= 0 && v <= static_cast<int>(ZoneSelectorPosition::BottomRight)) ? QVariant(v) : QVariant();
+        return enumInRange(value, static_cast<int>(ZoneSelectorPosition::BottomRight));
     }
     if (key == K::ZoneSelectorLayoutMode) {
-        int v = value.toInt();
-        return (v >= 0 && v <= static_cast<int>(ZoneSelectorLayoutMode::Vertical)) ? QVariant(v) : QVariant();
+        return enumInRange(value, static_cast<int>(ZoneSelectorLayoutMode::Vertical));
     }
     if (key == K::ZoneSelectorSizeMode) {
-        int v = value.toInt();
-        return (v >= 0 && v <= static_cast<int>(ZoneSelectorSizeMode::Manual)) ? QVariant(v) : QVariant();
+        return enumInRange(value, static_cast<int>(ZoneSelectorSizeMode::Manual));
     }
     if (key == K::ZoneSelectorMaxRows)
-        return QVariant(qBound(ConfigDefaults::maxRowsMin(), value.toInt(), ConfigDefaults::maxRowsMax()));
+        return boundedInt(value, ConfigDefaults::maxRowsMin(), ConfigDefaults::maxRowsMax());
     if (key == K::ZoneSelectorPreviewWidth)
-        return QVariant(qBound(ConfigDefaults::previewWidthMin(), value.toInt(), ConfigDefaults::previewWidthMax()));
+        return boundedInt(value, ConfigDefaults::previewWidthMin(), ConfigDefaults::previewWidthMax());
     if (key == K::ZoneSelectorPreviewHeight)
-        return QVariant(qBound(ConfigDefaults::previewHeightMin(), value.toInt(), ConfigDefaults::previewHeightMax()));
+        return boundedInt(value, ConfigDefaults::previewHeightMin(), ConfigDefaults::previewHeightMax());
     // Per-screen snapping gaps (the Gaps card on Snapping → Window → Appearance).
     // Each key clamps against its own ConfigDefaults bounds — mirroring the
     // per-side handling in the autotile validator above; a uniform startsWith
     // would clamp Top/Bottom/Left/Right to the wrong range when those bounds
     // diverge from the uniform OuterGap bounds.
     if (key == K::ZonePadding)
-        return QVariant(qBound(ConfigDefaults::zonePaddingMin(), value.toInt(), ConfigDefaults::zonePaddingMax()));
+        return boundedInt(value, ConfigDefaults::zonePaddingMin(), ConfigDefaults::zonePaddingMax());
     if (key == K::OuterGap)
-        return QVariant(qBound(ConfigDefaults::outerGapMin(), value.toInt(), ConfigDefaults::outerGapMax()));
+        return boundedInt(value, ConfigDefaults::outerGapMin(), ConfigDefaults::outerGapMax());
     if (key == K::OuterGapTop)
-        return QVariant(qBound(ConfigDefaults::outerGapTopMin(), value.toInt(), ConfigDefaults::outerGapTopMax()));
+        return boundedInt(value, ConfigDefaults::outerGapTopMin(), ConfigDefaults::outerGapTopMax());
     if (key == K::OuterGapBottom)
-        return QVariant(
-            qBound(ConfigDefaults::outerGapBottomMin(), value.toInt(), ConfigDefaults::outerGapBottomMax()));
+        return boundedInt(value, ConfigDefaults::outerGapBottomMin(), ConfigDefaults::outerGapBottomMax());
     if (key == K::OuterGapLeft)
-        return QVariant(qBound(ConfigDefaults::outerGapLeftMin(), value.toInt(), ConfigDefaults::outerGapLeftMax()));
+        return boundedInt(value, ConfigDefaults::outerGapLeftMin(), ConfigDefaults::outerGapLeftMax());
     if (key == K::OuterGapRight)
-        return QVariant(qBound(ConfigDefaults::outerGapRightMin(), value.toInt(), ConfigDefaults::outerGapRightMax()));
+        return boundedInt(value, ConfigDefaults::outerGapRightMin(), ConfigDefaults::outerGapRightMax());
     if (key == K::UsePerSideOuterGap)
         return QVariant(value.toBool());
     return QVariant();
@@ -407,9 +413,11 @@ void migrateConnectorNames(QHash<QString, QVariantMap>& settings)
     // keys in SORTED order: when two connectors resolve to the same EDID (or a
     // connector resolves to a key already present in canonical form) the
     // collision is inherently lossy — only one override can keep the slot — so
-    // make the tie-break deterministic (lexicographically-last source key wins)
+    // make the tie-break deterministic (the slot's FIRST writer wins: a
+    // pre-existing canonical entry beats every connector, and among colliding
+    // connectors the lexicographically-first migrates and later ones drop)
     // rather than dependent on QHash iteration order, and warn on every
-    // overwrite so the dropped override is surfaced.
+    // collision so the dropped override is surfaced.
     QStringList connectorKeys;
     for (auto it = settings.constBegin(); it != settings.constEnd(); ++it) {
         if (canonicalPerScreenKey(it.key()) != it.key())
@@ -421,8 +429,14 @@ void migrateConnectorNames(QHash<QString, QVariantMap>& settings)
         const QString canonical = canonicalPerScreenKey(key);
         const QVariantMap value = settings.take(key);
         if (settings.contains(canonical)) {
+            // The slot's existing entry wins — either a pre-existing
+            // canonical-form entry (written by current-format code, the
+            // fresher data) or an earlier-sorted connector's already-migrated
+            // value. Drop this connector's value (already take()n above) and
+            // surface the loss.
             qCWarning(lcConfig) << "EDID collision during per-screen migration:" << key << "resolves to" << canonical
-                                << "which already exists - the later entry wins, the earlier override is dropped";
+                                << "which already exists - keeping the canonical entry, dropping the legacy override";
+            continue;
         }
         settings.insert(canonical, value);
     }

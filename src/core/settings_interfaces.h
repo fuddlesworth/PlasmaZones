@@ -26,6 +26,15 @@ namespace PlasmaZones {
  */
 struct ZoneSelectorConfig
 {
+    // NOTE: these member defaults hand-duplicate the ConfigDefaults
+    // zone-selector default accessors — position(), layoutMode(),
+    // maxRows(), … (unprefixed; core interface headers must not depend on
+    // the config layer, so the values are duplicated rather than included).
+    // They matter only for BARE default construction — every production
+    // path (Settings::resolvedZoneSelectorConfig and the ISettings default
+    // implementation) populates from the accessors, so a retuned
+    // ConfigDefaults value diverges here only for default-constructed
+    // instances no resolver touched.
     int position = 1; // ZoneSelectorPosition enum value (Top)
     int layoutMode = 0; // ZoneSelectorLayoutMode enum value (Grid)
     int sizeMode = 0; // ZoneSelectorSizeMode enum value (Auto)
@@ -40,7 +49,8 @@ struct ZoneSelectorConfig
 /**
  * @brief Config key names for per-screen zone selector overrides
  *
- * Used in KConfig group keys ([ZoneSelector:ScreenName]), QVariantMap
+ * Used in config group keys ([ZoneSelector:ScreenName], stored via the
+ * pluggable PhosphorConfig::IBackend — JSON by default), QVariantMap
  * override storage, and QML writeSetting() calls.
  */
 namespace ZoneSelectorConfigKey {
@@ -57,9 +67,10 @@ inline constexpr const char TriggerDistance[] = "TriggerDistance";
 
 /**
  * Per-screen autotile override key constants.
- * These intentionally differ from the global ConfigKeys accessors (e.g.
- * "AutotileAlgorithm" here vs ConfigKeys::defaultAutotileAlgorithmKey() =
- * "DefaultAutotileAlgorithm") because per-screen overrides replace the default.
+ * These intentionally differ from the global v2 config keys (e.g.
+ * "AutotileAlgorithm" here vs the "Default" key in
+ * ConfigKeys::tilingAlgorithmGroup() = "Tiling.Algorithm") because
+ * per-screen overrides replace the global default.
  */
 namespace PerScreenAutotileKey {
 inline constexpr const char Algorithm[] = "AutotileAlgorithm";
@@ -78,7 +89,6 @@ inline constexpr const char MaxWindows[] = "AutotileMaxWindows";
 inline constexpr const char InsertPosition[] = "AutotileInsertPosition";
 inline constexpr const char FocusFollowsMouse[] = "AutotileFocusFollowsMouse";
 inline constexpr const char RespectMinimumSize[] = "AutotileRespectMinimumSize";
-inline constexpr const char HideTitleBars[] = "AutotileHideTitleBars";
 inline constexpr const char SplitRatioStep[] = "AutotileSplitRatioStep";
 inline constexpr const char AnimationsEnabled[] = "AnimationsEnabled";
 inline constexpr const char AnimationDuration[] = "AnimationDuration";

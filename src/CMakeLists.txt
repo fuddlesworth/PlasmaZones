@@ -5,8 +5,14 @@
 
 include(GenerateExportHeader)
 
-# QTP0004: All QML files are explicitly listed in qt_add_qml_module
-qt_policy(SET QTP0004 NEW)
+# QTP0004: All QML files are explicitly listed in qt_add_qml_module.
+# Guarded — the policy exists only from Qt 6.8 and QT_MIN_VERSION is 6.6;
+# unguarded, a 6.6/6.7 toolchain fatal-errors on the unknown policy.
+# QT_KNOWN_POLICY_*, not if(POLICY ...): CMake's POLICY test only knows
+# CMP* policies and is always false for QTP*.
+if(QT_KNOWN_POLICY_QTP0004)
+    qt_policy(SET QTP0004 NEW)
+endif()
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # Shared QML Components (must be built first)
@@ -205,6 +211,10 @@ target_link_libraries(plasmazones_core
         PhosphorWayland::PhosphorWayland
         PhosphorTiles::PhosphorTiles
         PhosphorZones::PhosphorZones
+        # PhosphorCompositor: DecorationDefaults — the shared window-decoration
+        # default constants ConfigDefaults delegates to (PUBLIC because
+        # configdefaults.h includes the header).
+        PhosphorCompositor::PhosphorCompositor
         # PhosphorWindowRule: the unified LGPL rule engine. PUBLIC since
         # Phase 3 — config/settings.h owns a WindowRuleStore for the per-mode
         # disable lists, the WindowRuleAdaptor exposes the store on D-Bus, and
@@ -746,8 +756,12 @@ set_source_files_properties(editor/qml/ColorUtils.js PROPERTIES
 # sub-target's -I list; the no-Q_OBJECT sub-targets (qmltyperegistration,
 # resource init) leave it empty or — after `--clean-first` — missing, so
 # cc1plus fires before AUTOMOC recreates it. Set here (after the core /
-# rendering / daemon targets above, which are unaffected) so only the
-# editor QML sub-targets created just below inherit it. Mirrors
+# rendering / daemon targets above, which are unaffected). NOTE: directory
+# COMPILE_OPTIONS apply to EVERY target created after this point in the
+# scope — the editor QML sub-targets just below, but also
+# plasmazones-shader-validate and the add_subdirectory(settings) tree
+# further down. The suppression is harmless for those (it only silences
+# the missing-AUTOMOC-include-dir warning class). Mirrors
 # src/shared/CMakeLists.txt.
 set_property(DIRECTORY APPEND PROPERTY COMPILE_OPTIONS "-Wno-missing-include-dirs")
 

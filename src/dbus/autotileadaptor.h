@@ -134,8 +134,9 @@ public Q_SLOTS:
     /**
      * @brief Force retiling of all autotile screens
      *
-     * Convenience slot called by KWin effect (e.g. after border width change).
-     * Equivalent to retile("").
+     * External-client convenience (equivalent to retile("")) — no in-tree
+     * caller remains; the effect's border-width handler stopped retiling
+     * when the geometry-inset border era ended. Kept as contract surface.
      */
     void retileAllScreens();
 
@@ -236,8 +237,9 @@ public Q_SLOTS:
     void notifyWindowFocused(const QString& windowId, const QString& screenId);
 
     // floatWindow, unfloatWindow, toggleFocusedWindowFloat, toggleWindowFloat removed:
-    // all float operations are now routed through the unified WTA methods
-    // (toggleFloatForWindow for toggle, setWindowFloatingForScreen for directional).
+    // all float operations are now routed through the unified methods —
+    // org.plasmazones.Snap.toggleFloatForWindow (SnapAdaptor) for toggle,
+    // org.plasmazones.WindowTracking.setWindowFloatingForScreen for directional.
 
     // ═══════════════════════════════════════════════════════════════════════════
     // Ratio/Count Adjustment
@@ -295,6 +297,12 @@ Q_SIGNALS:
 
     /**
      * @brief Emitted when the set of autotile screens changes
+     *
+     * Also re-emitted with an UNCHANGED set on a desktop/activity switch
+     * between contexts with identical NON-EMPTY autotile sets
+     * (isDesktopSwitch=true, discussion #219) — the effect's catch-scan keys
+     * on that wakeup; an empty identical set skips the re-emit.
+     *
      * @param screenIds List of screen IDs currently using autotile
      * @param isDesktopSwitch True if the change is due to desktop/activity switch
      */
@@ -319,7 +327,9 @@ Q_SIGNALS:
      * windows in a single slot invocation, avoiding race conditions when
      * many windows are retiled (e.g. rotate).
      *
-     * @param tileRequestsJson JSON array of {windowId,x,y,width,height}
+     * @param tileRequests Typed list of TileRequestEntry structs, wire shape
+     *        a(siiiissbb): (windowId, x, y, width, height, zoneId, screenId,
+     *        monocle, floating)
      */
     void windowsTileRequested(const PhosphorProtocol::TileRequestList& tileRequests);
 

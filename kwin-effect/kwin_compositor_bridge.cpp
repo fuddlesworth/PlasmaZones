@@ -12,16 +12,13 @@
 #include <window.h>
 #include <workspace.h>
 
-#include <QtGlobal>
-
 namespace PlasmaZones {
 
 using namespace PhosphorCompositor;
 
-KWinCompositorBridge::KWinCompositorBridge(PlasmaZonesEffect* effect)
+KWinCompositorBridge::KWinCompositorBridge(PlasmaZonesEffect& effect)
     : m_effect(effect)
 {
-    Q_ASSERT(m_effect);
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -30,12 +27,12 @@ KWinCompositorBridge::KWinCompositorBridge(PlasmaZonesEffect* effect)
 
 WindowHandle KWinCompositorBridge::findWindowById(const QString& windowId) const
 {
-    return fromEffectWindow(m_effect->findWindowById(windowId));
+    return fromEffectWindow(m_effect.findWindowById(windowId));
 }
 
 QVector<WindowHandle> KWinCompositorBridge::findAllWindowsById(const QString& windowId) const
 {
-    const auto windows = m_effect->findAllWindowsById(windowId);
+    const auto windows = m_effect.findAllWindowsById(windowId);
     QVector<WindowHandle> result;
     result.reserve(windows.size());
     for (auto* w : windows) {
@@ -50,6 +47,14 @@ QVector<WindowHandle> KWinCompositorBridge::stackingOrder() const
     QVector<WindowHandle> result;
     result.reserve(windows.size());
     for (auto* w : windows) {
+        // Live windows only: close-shader grabs keep deleted windows in
+        // KWin's stacking order for the close-animation duration, and the
+        // bridge interface exposes no liveness query — a compositor-agnostic
+        // consumer (SnapAssistFilter) would otherwise offer dying windows as
+        // candidates and re-pollute the id caches via windowId().
+        if (!w || w->isDeleted()) {
+            continue;
+        }
         result.append(fromEffectWindow(w));
     }
     return result;
@@ -64,7 +69,7 @@ QString KWinCompositorBridge::windowId(WindowHandle w) const
     auto* ew = toEffectWindow(w);
     if (!ew)
         return QString();
-    return m_effect->getWindowId(ew);
+    return m_effect.getWindowId(ew);
 }
 
 QString KWinCompositorBridge::windowScreenId(WindowHandle w) const
@@ -72,7 +77,7 @@ QString KWinCompositorBridge::windowScreenId(WindowHandle w) const
     auto* ew = toEffectWindow(w);
     if (!ew)
         return QString();
-    return m_effect->getWindowScreenId(ew);
+    return m_effect.getWindowScreenId(ew);
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -122,6 +127,33 @@ bool KWinCompositorBridge::hasDecoration(WindowHandle w) const
     return ew && ew->hasDecoration();
 }
 
+bool KWinCompositorBridge::userCanSetNoBorder(WindowHandle w) const
+{
+    auto* ew = toEffectWindow(w);
+    if (!ew)
+        return false;
+    auto* kw = ew->window();
+    return kw && kw->userCanSetNoBorder();
+}
+
+bool KWinCompositorBridge::isNoBorder(WindowHandle w) const
+{
+    auto* ew = toEffectWindow(w);
+    if (!ew)
+        return false;
+    auto* kw = ew->window();
+    return kw && kw->noBorder();
+}
+
+QRectF KWinCompositorBridge::moveResizeGeometry(WindowHandle w) const
+{
+    auto* ew = toEffectWindow(w);
+    if (!ew)
+        return QRectF();
+    auto* kw = ew->window();
+    return kw ? QRectF(kw->moveResizeGeometry()) : QRectF();
+}
+
 WindowInfo KWinCompositorBridge::windowInfo(WindowHandle w) const
 {
     auto* ew = toEffectWindow(w);
@@ -130,10 +162,10 @@ WindowInfo KWinCompositorBridge::windowInfo(WindowHandle w) const
         return info;
 
     info.handle = w;
-    info.windowId = m_effect->getWindowId(ew);
+    info.windowId = m_effect.getWindowId(ew);
     info.appId = ::PhosphorIdentity::WindowId::extractAppId(info.windowId);
     info.windowClass = ew->windowClass();
-    info.screenId = m_effect->getWindowScreenId(ew);
+    info.screenId = m_effect.getWindowScreenId(ew);
     info.caption = ew->caption();
     info.icon = ew->icon();
     info.frameGeometry = ew->frameGeometry();
@@ -165,7 +197,7 @@ bool KWinCompositorBridge::shouldHandleWindow(WindowHandle w) const
     auto* ew = toEffectWindow(w);
     if (!ew)
         return false;
-    return m_effect->shouldHandleWindow(ew);
+    return m_effect.shouldHandleWindow(ew);
 }
 
 bool KWinCompositorBridge::isTileableWindow(WindowHandle w) const
@@ -173,7 +205,7 @@ bool KWinCompositorBridge::isTileableWindow(WindowHandle w) const
     auto* ew = toEffectWindow(w);
     if (!ew)
         return false;
-    return m_effect->isTileableWindow(ew);
+    return m_effect.isTileableWindow(ew);
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -237,7 +269,7 @@ void KWinCompositorBridge::applySnapGeometry(WindowHandle w, const QRectF& geome
     auto* ew = toEffectWindow(w);
     if (!ew)
         return;
-    m_effect->applySnapGeometry(ew, GeometryHelpers::snapToRect(geometry), false, skipAnimation);
+    m_effect.applySnapGeometry(ew, GeometryHelpers::snapToRect(geometry), false, skipAnimation);
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -246,17 +278,17 @@ void KWinCompositorBridge::applySnapGeometry(WindowHandle w, const QRectF& geome
 
 QObject* KWinCompositorBridge::asQObject()
 {
-    return m_effect;
+    return &m_effect;
 }
 
 bool KWinCompositorBridge::isDaemonReady() const
 {
-    return m_effect->isDaemonReady("compositor bridge");
+    return m_effect.isDaemonReady("compositor bridge");
 }
 
 void KWinCompositorBridge::invalidateScreenIdCache()
 {
-    m_effect->clearScreenIdCache();
+    m_effect.clearScreenIdCache();
 }
 
 } // namespace PlasmaZones

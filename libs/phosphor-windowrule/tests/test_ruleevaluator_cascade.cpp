@@ -254,5 +254,5 @@ private Q_SLOTS:
     }
 };
 
-QTEST_MAIN(TestRuleEvaluatorCascade)
+QTEST_GUILESS_MAIN(TestRuleEvaluatorCascade)
 #include "test_ruleevaluator_cascade.moc"

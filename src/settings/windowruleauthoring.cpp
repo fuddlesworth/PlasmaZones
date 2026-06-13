@@ -178,8 +178,11 @@ QString paramLabel(const QString& type, const QString& key)
         return PhosphorI18n::tr("Restore position on login");
     }
     // Border / title-bar overrides (all single-value, keyed ActionParam::Value).
+    // SetHideTitleBar is tri-state at the effect: rule absent = mode decides,
+    // ON = hide, OFF = force the title bar visible even where the mode hides
+    // it — the label spells that out so the off position doesn't read as inert.
     if (type == ActionType::SetHideTitleBar && key == ActionParam::Value) {
-        return PhosphorI18n::tr("Hide title bars");
+        return PhosphorI18n::tr("Hide title bars (off = force visible)");
     }
     if (type == ActionType::SetBorderVisible && key == ActionParam::Value) {
         return PhosphorI18n::tr("Show border");
@@ -341,7 +344,11 @@ QString actionTypeLabelImpl(const QString& type)
         return PhosphorI18n::tr("Exclude from animations");
     }
     if (type == ActionType::SetHideTitleBar) {
-        return PhosphorI18n::tr("Hide title bars");
+        // Tri-state at the effect (true = hide, false = force visible) — the
+        // picker label hints both directions so a user looking to FORCE a
+        // title bar finds the action; the parameter toggle's "(off = force
+        // visible)" wording carries the detail.
+        return PhosphorI18n::tr("Hide or show title bars");
     }
     if (type == ActionType::SetBorderVisible) {
         return PhosphorI18n::tr("Show border");
@@ -401,7 +408,10 @@ QString operatorLabelImpl(Operator op)
     case Operator::LessThan:
         return PhosphorI18n::tr("less than");
     }
-    return QString();
+    // Wire-string fallback (same convention as paramLabel /
+    // actionTypeFallbackLabel): a future operator missing a label entry
+    // shows its raw token in the picker instead of a blank row.
+    return PhosphorWindowRule::operatorToString(op);
 }
 
 } // namespace
@@ -424,7 +434,7 @@ QVariantList matchFields()
     // hand-maintained allow-list: a new Field value (e.g. a hypothetical
     // future `MimeType`) auto-surfaces in the picker unless it's
     // explicitly hidden here. Mirrors the `userAuthorable` filter shape
-    // that replaced `kTypes` in actionTypes() above.
+    // that replaced `kTypes` in actionTypes() below.
     static const QSet<Field> kHiddenFields = {Field::Pid, Field::WindowRole};
     QVariantList out;
     for (int i = 0; i < PhosphorWindowRule::FieldCount; ++i) {
@@ -510,6 +520,11 @@ QVariantList matchFields()
 
 QVariantList operatorsForField(int fieldValue)
 {
+    // Bounded cast: QML hands us a raw int, and an out-of-range value must
+    // not reach the Field classifiers (matchFields() bounds the same way).
+    if (fieldValue < 0 || fieldValue >= PhosphorWindowRule::FieldCount) {
+        return {};
+    }
     const Field field = static_cast<Field>(fieldValue);
     QList<Operator> ops;
     if (PhosphorWindowRule::fieldIsString(field)) {
@@ -640,7 +655,7 @@ QVariantList actionTypes()
         // stays the single source of truth.
         RuleAction probe;
         probe.type = typeStr;
-        const auto domain = PhosphorWindowRule::ActionRegistry::instance().domainFor(probe);
+        const auto domain = registry.domainFor(probe);
         entry[QStringLiteral("domain")] =
             domain == PhosphorWindowRule::ActionDomain::Context ? QStringLiteral("context") : QStringLiteral("window");
         out.append(entry);

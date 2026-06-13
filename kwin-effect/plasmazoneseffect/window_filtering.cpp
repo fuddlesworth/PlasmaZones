@@ -42,7 +42,11 @@ QHash<QString, KWin::EffectWindow*> PlasmaZonesEffect::buildWindowMap() const
     QHash<QString, KWin::EffectWindow*> windowMap;
     windowMap.reserve(windows.size());
     for (KWin::EffectWindow* w : windows) {
-        if (w && shouldHandleWindow(w)) {
+        // Close-shader grabs keep deleted windows in the stacking order;
+        // mapping them would re-pollute the just-scrubbed id caches via
+        // getWindowId and let a dying sibling shadow a live window in
+        // appId-fallback lookups.
+        if (w && !w->isDeleted() && shouldHandleWindow(w)) {
             windowMap[getWindowId(w)] = w;
         }
     }
@@ -392,6 +396,11 @@ bool PlasmaZonesEffect::hasOtherWindowOfClassWithDifferentPid(KWin::EffectWindow
         if (other == w) {
             continue; // Skip self
         }
+        if (!other || other->isDeleted()) {
+            // A close-grabbed dying window of the same class (quit-and-relaunch,
+            // app auto-restart) must not suppress the new instance's snap restore.
+            continue;
+        }
         if (!shouldHandleWindow(other)) {
             continue; // Skip non-managed windows
         }
@@ -433,7 +442,10 @@ KWin::EffectWindow* PlasmaZonesEffect::getActiveWindow() const
     const auto windows = KWin::effects->stackingOrder();
     for (auto it = windows.rbegin(); it != windows.rend(); ++it) {
         KWin::EffectWindow* w = *it;
-        if (w && w->isOnCurrentActivity() && w->isOnCurrentDesktop() && !w->isMinimized() && shouldHandleWindow(w)) {
+        // Skip close-grabbed dying windows — a topmost close animation must
+        // not become the navigation / snap-assist anchor.
+        if (w && !w->isDeleted() && w->isOnCurrentActivity() && w->isOnCurrentDesktop() && !w->isMinimized()
+            && shouldHandleWindow(w)) {
             return w;
         }
     }

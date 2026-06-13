@@ -129,6 +129,20 @@ struct WindowPlacement
             && freeGeometryByScreen == o.freeGeometryByScreen;
     }
 
+    /// Built-in engine-slot ids. Cross-engine readers (resnap, teardown
+    /// capture, autotile's snap-defer gate) key slotFor() on these instead
+    /// of spelling the id inline — same drift-prevention rationale as the
+    /// state-token accessors below. Each engine's own engineId() override
+    /// returns the same spelling.
+    static QLatin1String snapEngineId()
+    {
+        return QLatin1String("snap");
+    }
+    static QLatin1String autotileEngineId()
+    {
+        return QLatin1String("autotile");
+    }
+
     /// Common state-token vocabulary. Engines may define more; these cover the
     /// built-in snap/autotile states.
     static QLatin1String stateFree()

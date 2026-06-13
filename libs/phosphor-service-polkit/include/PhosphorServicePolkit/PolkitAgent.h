@@ -4,6 +4,14 @@
 #pragma once
 
 #include <PhosphorServicePolkit/phosphorservicepolkit_export.h>
+// Full AuthRequest definition, not a forward declaration: it sits on this
+// header's moc surface — the `activeRequest` Q_PROPERTY and the
+// `authenticationRequested` signal both carry AuthRequest*, and Qt6 moc
+// auto-registers property/signal-parameter metatypes (QMetaType
+// SFINAE-probes completeness). A fwd decl re-fires GCC's -Wsfinae-incomplete
+// the moment mocs_compilation aggregation order stops shielding this header
+// (same rationale as the phosphor-service-pipewire headers).
+#include <PhosphorServicePolkit/AuthRequest.h>
 
 #include <QObject>
 #include <QString>
@@ -12,7 +20,6 @@
 
 namespace PhosphorServicePolkit {
 
-class AuthRequest;
 class ListenerImpl;
 
 /**

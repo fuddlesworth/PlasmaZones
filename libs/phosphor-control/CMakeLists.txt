@@ -16,7 +16,11 @@
 #
 # Built standalone or as a subdirectory of Phosphor (or any consumer).
 
-cmake_minimum_required(VERSION 3.16)
+# 3.21 floor: this file uses cmake_language(DEFER CALL ...) (>= 3.19) for the
+# plugin rpath and ${PROJECT_IS_TOP_LEVEL} (>= 3.21) for the examples gate. A
+# lower floor would fail mid-configure with an unknown-command / empty-variable
+# error instead of a clear minimum-version message.
+cmake_minimum_required(VERSION 3.21)
 
 set(PHOSPHORCONTROL_VERSION "0.1.0")
 
@@ -78,7 +82,13 @@ endif()
 #             "You need qmldir files for each extra directory".
 if(COMMAND qt_policy)
     qt_policy(SET QTP0001 NEW)
-    qt_policy(SET QTP0004 NEW)
+    # QTP0004 exists only from Qt 6.8 — qt_policy(SET) on an unknown policy
+    # fatal-errors, and the COMMAND guard alone doesn't prove the policy
+    # exists (qt_policy ships from 6.5). QT_KNOWN_POLICY_*, not
+    # if(POLICY ...), which only knows CMP* CMake policies.
+    if(QT_KNOWN_POLICY_QTP0004)
+        qt_policy(SET QTP0004 NEW)
+    endif()
 endif()
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -310,10 +320,10 @@ target_link_libraries(PhosphorControlQml
         Qt6::Quick
 )
 
-set_target_properties(PhosphorControlQml PROPERTIES
-    VERSION ${PHOSPHORCONTROL_VERSION}
-    SOVERSION 0
-)
+# Static archive: VERSION/SOVERSION apply to SHARED libraries only and are
+# silently ignored on STATIC. Don't set them on PhosphorControlQml so the
+# property surface matches what the target actually carries (mirrors
+# phosphor-popout / phosphor-theme). The SHARED variant below keeps its own.
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # QML Module — SHARED (install-only runtime plugin)
@@ -422,6 +432,13 @@ endif()
 # Examples — opt-in via -DBUILD_PHOSPHOR_CONTROL_EXAMPLES=ON
 # ═══════════════════════════════════════════════════════════════════════════════
 
+# Default follows PROJECT_IS_TOP_LEVEL: ON when this lib is the outermost
+# project (standalone build), and also ON in-tree (PlasmaZones is top-level,
+# so the value propagates TRUE here) where examples/minimal is built and
+# expected. CAVEAT: a third party that vendors this lib via add_subdirectory
+# inside their OWN top-level project also gets the propagated TRUE and builds
+# these examples unintentionally — they should pass -DBUILD_PHOSPHOR_CONTROL_EXAMPLES=OFF.
+# (Requires CMake >= 3.21 for PROJECT_IS_TOP_LEVEL — see the minimum above.)
 option(BUILD_PHOSPHOR_CONTROL_EXAMPLES
     "Build the phosphor-control example apps"
     ${PROJECT_IS_TOP_LEVEL})

@@ -11,9 +11,10 @@ function(_phosphorserviceidle_test target source)
             PhosphorServiceIdle::PhosphorServiceIdle
     )
     add_test(NAME ${target} COMMAND ${target})
+    # All suites are QTEST_GUILESS_MAIN (QCoreApplication) — no QPA platform
+    # is loaded, so no offscreen ENVIRONMENT is needed.
     set_tests_properties(${target}
         PROPERTIES
-            ENVIRONMENT "QT_QPA_PLATFORM=offscreen"
             LABELS "phosphorserviceidle"
     )
 endfunction()
@@ -24,7 +25,7 @@ endfunction()
 _phosphorserviceidle_test(test_phosphorserviceidle_smoke test_smoke.cpp)
 
 # Facade test: the deterministic IdleService surface (stage config round trip +
-# sort, inhibition toggling, inert defaults) under the offscreen platform.
+# sort, inhibition toggling, inert defaults) with no QPA / no compositor.
 _phosphorserviceidle_test(test_phosphorserviceidle_facade test_facade.cpp)
 
 # QML facade test: a real QQmlEngine imports the module and proves the imperative
@@ -48,7 +49,6 @@ target_link_libraries(test_phosphorserviceidle_statemachine PRIVATE Qt6::Test)
 add_test(NAME test_phosphorserviceidle_statemachine COMMAND test_phosphorserviceidle_statemachine)
 set_tests_properties(test_phosphorserviceidle_statemachine
     PROPERTIES
-        ENVIRONMENT "QT_QPA_PLATFORM=offscreen"
         LABELS "phosphorserviceidle"
 )
 
@@ -65,6 +65,5 @@ target_link_libraries(test_phosphorserviceidle_inhibition PRIVATE Qt6::Test)
 add_test(NAME test_phosphorserviceidle_inhibition COMMAND test_phosphorserviceidle_inhibition)
 set_tests_properties(test_phosphorserviceidle_inhibition
     PROPERTIES
-        ENVIRONMENT "QT_QPA_PLATFORM=offscreen"
         LABELS "phosphorserviceidle"
 )

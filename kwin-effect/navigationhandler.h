@@ -12,7 +12,9 @@ class QDBusPendingCallWatcher;
 
 namespace PlasmaZones {
 
-using namespace PhosphorCompositor;
+// Targeted using-declaration, not a namespace-wide directive: headers must
+// not leak the whole PhosphorCompositor namespace into every includer.
+using PhosphorCompositor::FloatingCache;
 
 class PlasmaZonesEffect;
 

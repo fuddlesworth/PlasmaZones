@@ -148,5 +148,5 @@ private Q_SLOTS:
     }
 };
 
-QTEST_MAIN(TestMatchTypes)
+QTEST_GUILESS_MAIN(TestMatchTypes)
 #include "test_matchtypes.moc"

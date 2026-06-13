@@ -80,8 +80,11 @@ endif()
 option(PHOSPHOR_ANIMATION_QUICK "Build QtQuickClock (requires Qt6::Quick)" OFF)
 
 # Qt 6.5+ resource-prefix policy. NEW = use `:/qt/qml/` as the QML
-# module resource prefix.
-if(POLICY CMP0090 OR COMMAND qt_policy)
+# module resource prefix. Guard on COMMAND qt_policy alone: the prior
+# `POLICY CMP0090 OR ...` disjunct was always true (CMP0090 is a CMake
+# policy present since 3.15), making the qt_policy-existence half dead and
+# fatal-erroring on a toolchain without qt_policy (Qt < 6.5).
+if(COMMAND qt_policy)
     qt_policy(SET QTP0001 NEW)
 endif()
 

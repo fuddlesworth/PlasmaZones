@@ -1,5 +1,5 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
-// SPDX-License-Identifier: GPL-3.0-or-later
+// SPDX-License-Identifier: LGPL-2.1-or-later
 
 // In-process IpcRouter tests. Exercise registerTarget / unregisterTarget /
 // invoke / listTargets / schemaFor against a hand-built QObject "target"
@@ -507,5 +507,5 @@ void TestPhosphorIpcRouter::schemaFor_skipsProtectedQInvokable()
              "protected Q_INVOKABLE must not appear in the wire-visible schema");
 }
 
-QTEST_MAIN(TestPhosphorIpcRouter)
+QTEST_GUILESS_MAIN(TestPhosphorIpcRouter)
 #include "test_phosphor_ipc_router.moc"

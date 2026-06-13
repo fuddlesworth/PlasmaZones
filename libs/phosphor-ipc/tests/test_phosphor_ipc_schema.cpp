@@ -1,5 +1,5 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
-// SPDX-License-Identifier: GPL-3.0-or-later
+// SPDX-License-Identifier: LGPL-2.1-or-later
 
 // Validates the QMetaType → JSON Schema table documented in
 // IpcSchemaGenerator.h. Each test exercises one type by registering
@@ -248,5 +248,5 @@ void TestPhosphorIpcSchema::signals_enumerated()
              QStringLiteral("integer"));
 }
 
-QTEST_MAIN(TestPhosphorIpcSchema)
+QTEST_GUILESS_MAIN(TestPhosphorIpcSchema)
 #include "test_phosphor_ipc_schema.moc"

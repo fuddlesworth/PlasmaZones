@@ -120,5 +120,5 @@ private Q_SLOTS:
     }
 };
 
-QTEST_MAIN(TestWindowRuleStoreWatcher)
+QTEST_GUILESS_MAIN(TestWindowRuleStoreWatcher)
 #include "test_windowrulestorewatcher.moc"

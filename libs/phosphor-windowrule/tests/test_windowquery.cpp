@@ -102,5 +102,5 @@ private Q_SLOTS:
     }
 };
 
-QTEST_MAIN(TestWindowQuery)
+QTEST_GUILESS_MAIN(TestWindowQuery)
 #include "test_windowquery.moc"

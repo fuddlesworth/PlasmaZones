@@ -9,6 +9,7 @@
 #include <QHash>
 #include <QMultiHash>
 #include <QObject>
+#include <QSet>
 #include <QString>
 #include <QStringList>
 #include <optional>
@@ -60,6 +61,17 @@ public:
     Q_INVOKABLE QString canonicalizeWindowId(const QString& rawWindowId) override;
     Q_INVOKABLE QString canonicalizeForLookup(const QString& rawWindowId) const override;
     void releaseCanonical(const QString& anyWindowId);
+
+    /// Defensive cleanup for windows that died WITHOUT a close signal reaching
+    /// the registry (compositor crash, lost D-Bus call): drop every metadata
+    /// record AND canonical-id translation whose instance id is absent from
+    /// @p aliveInstanceIds, firing windowDisappeared for each so subscribers
+    /// (e.g. saved-autotile-order cleanup) drop their ghost state too. Returns
+    /// the count removed. @p aliveInstanceIds are the uuid components
+    /// (WindowId::extractInstanceId), matching this registry's keying. The
+    /// normal per-window path is remove() + releaseCanonical on windowClosed;
+    /// this is the batch backstop the WTA alive-ids report drives.
+    int pruneStaleInstances(const QSet<QString>& aliveInstanceIds);
 
 Q_SIGNALS:
     void windowAppeared(const QString& instanceId);

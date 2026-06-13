@@ -372,6 +372,17 @@ void WindowTrackingService::recordFreeGeometry(const QString& windowId, const QS
                              << "— float-back stays frozen while it occupies a zone";
         return;
     }
+    // Same invariant for the tiled case: an actively-tiled window's frame IS
+    // the tile rect. The effect's saveAndRecordPreAutotileGeometry guards its
+    // own capture paths, but cannot help when the effect reloads (kwin
+    // restart with the daemon alive) — its border tracking starts empty and
+    // the re-announce batch would push every tiled window's zone rect here
+    // with overwrite=true. The engine-backed predicate survives that reload.
+    if (isWindowAutotileTiled(windowId)) {
+        qCDebug(lcPlacement) << "recordFreeGeometry: refusing tiled frame for" << windowId
+                             << "— float-back stays frozen while the autotile engine tiles it";
+        return;
+    }
     const QString appId = currentAppIdFor(windowId);
     if (appId.isEmpty()) {
         return;
@@ -651,7 +662,7 @@ QStringList WindowTrackingService::recordedSnapZones(const QString& windowId) co
     // exact-id branch resolves the right window (the appId fallback is for relogin).
     const auto rec = m_placementStore.peek(windowId, currentAppIdFor(windowId));
     if (rec) {
-        const PhosphorEngine::EngineSlot snapSlot = rec->slotFor(QStringLiteral("snap"));
+        const PhosphorEngine::EngineSlot snapSlot = rec->slotFor(PhosphorEngine::WindowPlacement::snapEngineId());
         if (snapSlot.state == PhosphorEngine::WindowPlacement::stateSnapped()) {
             return snapSlot.zoneIds;
         }

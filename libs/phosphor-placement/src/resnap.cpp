@@ -110,7 +110,7 @@ void WindowTrackingService::populateResnapBufferForAllScreens(const QSet<QString
     for (const PhosphorEngine::WindowPlacement& rec : m_placementStore.records()) {
         if (addedIds.contains(rec.windowId))
             continue;
-        const PhosphorEngine::EngineSlot snapSlot = rec.slotFor(QStringLiteral("snap"));
+        const PhosphorEngine::EngineSlot snapSlot = rec.slotFor(PhosphorEngine::WindowPlacement::snapEngineId());
         if (snapSlot.state != PhosphorEngine::WindowPlacement::stateSnapped())
             continue;
         addCandidate(rec.windowId, snapSlot.zoneIds, rec.screenId, rec.virtualDesktop);
@@ -229,7 +229,6 @@ QHash<QString, WindowTrackingService::PendingRestoreTarget> WindowTrackingServic
 {
     QHash<QString, PendingRestoreTarget> result;
     int currentDesktop = m_virtualDesktopManager ? m_virtualDesktopManager->currentDesktop() : 0;
-    QString currentActivity = m_layoutManager ? m_layoutManager->currentActivity() : QString();
 
     // Source the effect's instant-restore cache from the unified placement store:
     // one snapped WindowPlacement per appId-keyed window, resolved to its zone
@@ -242,7 +241,7 @@ QHash<QString, WindowTrackingService::PendingRestoreTarget> WindowTrackingServic
     // unordered hash iteration.
     QHash<QString, quint64> chosenSequence;
     for (const PhosphorEngine::WindowPlacement& p : m_placementStore.records()) {
-        const PhosphorEngine::EngineSlot snapSlot = p.slotFor(QStringLiteral("snap"));
+        const PhosphorEngine::EngineSlot snapSlot = p.slotFor(PhosphorEngine::WindowPlacement::snapEngineId());
         if (snapSlot.state != PhosphorEngine::WindowPlacement::stateSnapped()) {
             continue;
         }
@@ -254,9 +253,12 @@ QHash<QString, WindowTrackingService::PendingRestoreTarget> WindowTrackingServic
         const QString screenId = resolveEffectiveScreenId(p.screenId);
 
         // Skip screens currently in autotile mode — autotile owns placement there
-        // and would otherwise fight a stale snap teleport.
+        // and would otherwise fight a stale snap teleport. Both context
+        // dimensions come from the RECORD (mirrors the cross-engine claim
+        // gates, which key desktop AND activity off the record so the
+        // engines reach identical verdicts).
         if (m_layoutManager
-            && m_layoutManager->modeForScreen(screenId, p.virtualDesktop, currentActivity)
+            && m_layoutManager->modeForScreen(screenId, p.virtualDesktop, p.activity)
                 != PhosphorZones::AssignmentEntry::Mode::Snapping) {
             continue;
         }

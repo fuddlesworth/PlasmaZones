@@ -66,10 +66,14 @@ void PlasmaZonesEffect::callEndDrag(KWin::EffectWindow* window, const QString& w
     // shape was a 9-tuple of out-params) with a typed struct.
     QPointF cursorAtRelease = m_dragTracker->lastCursorPos();
 
+    // qRound the cursor coords (not truncation): the hot-path updateDragCursor
+    // stream rounds, so on fractional-scale outputs the release coordinate the
+    // daemon resolves the drop zone against must round too, or it can differ by
+    // 1px from the last streamed tick at a zone boundary.
     QDBusPendingCall pendingCall = PhosphorProtocol::ClientHelpers::asyncCall(
         PhosphorProtocol::Service::Interface::WindowDrag, QStringLiteral("endDrag"),
-        {windowId, static_cast<int>(cursorAtRelease.x()), static_cast<int>(cursorAtRelease.y()),
-         static_cast<int>(m_currentModifiers), static_cast<int>(m_currentMouseButtons), cancelled});
+        {windowId, qRound(cursorAtRelease.x()), qRound(cursorAtRelease.y()), static_cast<int>(m_currentModifiers),
+         static_cast<int>(m_currentMouseButtons), cancelled});
 
     QPointer<KWin::EffectWindow> safeWindow = window;
     auto* watcher = new QDBusPendingCallWatcher(pendingCall, this);
@@ -149,14 +153,19 @@ void PlasmaZonesEffect::callEndDrag(KWin::EffectWindow* window, const QString& w
                     // applied by slotDragPolicyChanged at the moment of
                     // crossing, so by the time we get here the autotile
                     // handler has the right tracking state.
-                    if (!safeWindow) {
+                    //
+                    // isDeleted: same reply-latency hygiene as ApplySnap /
+                    // RestoreSize below — floating a dying window would
+                    // re-pollute the scrubbed id caches and record a daemon
+                    // float for a dead id.
+                    if (!safeWindow || safeWindow->isDeleted()) {
                         break;
                     }
                     const QString dropScreenId = getWindowScreenId(safeWindow);
                     if (dropScreenId.isEmpty()) {
                         break;
                     }
-                    m_autotileHandler->handleDragToFloat(safeWindow, windowId, dropScreenId);
+                    m_autotileHandler->handleDragToFloat(safeWindow, windowId);
                     // Window is now floating — drop it from snapping's set.
                     m_snapHandler->clearWindowSnapped(windowId);
                     // Note: m_dragFloatedWindowIds is intentionally NOT re-set here.
@@ -173,7 +182,10 @@ void PlasmaZonesEffect::callEndDrag(KWin::EffectWindow* window, const QString& w
                 }
 
                 case PhosphorProtocol::DragOutcome::ApplySnap: {
-                    if (!safeWindow || safeWindow->isFullScreen()) {
+                    // isDeleted: close-shader grabs keep dying windows alive
+                    // through the D-Bus reply latency (same hygiene as the
+                    // batch apply path).
+                    if (!safeWindow || safeWindow->isDeleted() || safeWindow->isFullScreen()) {
                         break;
                     }
                     const QRect snapGeometry = outcome.toRect();
@@ -198,25 +210,42 @@ void PlasmaZonesEffect::callEndDrag(KWin::EffectWindow* window, const QString& w
                     if (const QString scr =
                             !outcome.targetScreenId.isEmpty() ? outcome.targetScreenId : getWindowScreenId(safeWindow);
                         !scr.isEmpty() && !m_autotileHandler->isAutotileScreen(scr)) {
+                        // Defensively clear any stale local float flag before
+                        // recording the snap — a surviving flag poisons the
+                        // next pre-tile capture and wrongly exempts the window
+                        // from the drain-time restore veto (same rationale as
+                        // the single-window and batch apply paths). Idempotent
+                        // when the daemon's windowFloatingChanged(false)
+                        // broadcast already landed.
+                        m_navigationHandler->setWindowFloating(windowId, false);
                         m_snapHandler->markWindowSnapped(windowId, scr);
+                    } else {
+                        // Unresolved or autotile-owned screen: this commit is
+                        // not snap-tracked — drop any stale snap entry +
+                        // decoration claim instead of merely skipping, same
+                        // discriminator epilogue as the single-window and
+                        // batch apply paths.
+                        m_snapHandler->clearWindowSnapped(windowId);
                     }
                     break;
                 }
 
                 case PhosphorProtocol::DragOutcome::RestoreSize: {
-                    if (!safeWindow || safeWindow->isFullScreen()) {
+                    if (!safeWindow || safeWindow->isDeleted() || safeWindow->isFullScreen()) {
                         break;
                     }
                     // Drag-to-unsnap: apply pre-snap width/height at current
                     // position. Skip if slotRestoreSizeDuringDrag already
                     // applied during the drag (size within 1px).
                     QRectF frame = safeWindow->frameGeometry();
-                    const QRect geo(static_cast<int>(frame.x()), static_cast<int>(frame.y()), outcome.width,
-                                    outcome.height);
                     if (qAbs(frame.width() - outcome.width) <= 1 && qAbs(frame.height() - outcome.height) <= 1) {
                         qCDebug(lcEffect) << "endDrag RestoreSize: already at correct size, skipping";
                         break;
                     }
+                    // qRound, not truncation: fractional-scale outputs leave
+                    // sub-pixel residue in frameGeometry() (same convention as
+                    // the toRect() sites).
+                    const QRect geo(qRound(frame.x()), qRound(frame.y()), outcome.width, outcome.height);
                     if (safeWindow->isUserMove() && !(m_currentMouseButtons & Qt::LeftButton)) {
                         if (KWin::Window* kw = safeWindow->window()) {
                             kw->cancelInteractiveMoveResize();
@@ -237,7 +266,10 @@ void PlasmaZonesEffect::callEndDrag(KWin::EffectWindow* window, const QString& w
                 // window's current screen (cross-screen drags).
                 const bool applied = outcome.action == PhosphorProtocol::DragOutcome::ApplySnap
                     || outcome.action == PhosphorProtocol::DragOutcome::ApplyFloat;
-                if (!applied && safeWindow && !outcome.targetScreenId.isEmpty() && isDaemonReady("auto-fill on drop")) {
+                // isDeleted: don't auto-fill a zone for a close-grabbed dying
+                // window — the daemon would commit an assignment for a dead id.
+                if (!applied && safeWindow && !safeWindow->isDeleted() && !outcome.targetScreenId.isEmpty()
+                    && isDaemonReady("auto-fill on drop")) {
                     const bool sticky = isWindowSticky(safeWindow);
                     auto onSnapSuccess = [this](const QString&, const QString& snappedScreenId) {
                         m_snapAssistHandler->showContinuationIfNeeded(snappedScreenId);
@@ -247,8 +279,13 @@ void PlasmaZonesEffect::callEndDrag(KWin::EffectWindow* window, const QString& w
                                      onSnapSuccess);
                 }
 
-                // Snap Assist: show the window picker if the daemon
-                // requested it. asyncShow is non-blocking.
+                // Snap Assist: show the window picker if the daemon requested
+                // it. asyncShow is non-blocking. This fires alongside an
+                // ApplySnap outcome (applied==true) BY DESIGN: the daemon only
+                // sets requestSnapAssist when the window actually snapped
+                // (drop.cpp: `actuallySnapped && ...`) — snap-assist's purpose
+                // is to offer filling the REMAINING empty zones after a snap,
+                // so it must not be gated on !applied.
                 if (outcome.requestSnapAssist && !outcome.emptyZones.isEmpty() && !outcome.targetScreenId.isEmpty()) {
                     m_snapAssistHandler->asyncShow(windowId, outcome.targetScreenId, outcome.emptyZones);
                 }
@@ -276,7 +313,7 @@ void PlasmaZonesEffect::tryAsyncSnapCall(const QString& interface, const QString
                         onComplete();
                     return;
                 }
-                if (reply.argumentAt<4>() && window) {
+                if (reply.argumentAt<4>() && window && !window->isDeleted()) {
                     QRect geo(reply.argumentAt<0>(), reply.argumentAt<1>(), reply.argumentAt<2>(),
                               reply.argumentAt<3>());
                     qCInfo(lcEffect) << method << "snapping" << windowId << "to:" << geo;
@@ -293,7 +330,14 @@ void PlasmaZonesEffect::tryAsyncSnapCall(const QString& interface, const QString
                     // mirroring the batch path's discriminator).
                     if (const QString asyncScr = getWindowScreenId(window);
                         !asyncScr.isEmpty() && !m_autotileHandler->isAutotileScreen(asyncScr)) {
+                        // Defensive stale-float clear — see the drag-drop
+                        // commit path; idempotent vs the daemon broadcast.
+                        m_navigationHandler->setWindowFloating(windowId, false);
                         m_snapHandler->markWindowSnapped(windowId, asyncScr);
+                    } else {
+                        // Same discriminator epilogue as the other commit
+                        // paths: drop stale snap tracking instead of skipping.
+                        m_snapHandler->clearWindowSnapped(windowId);
                     }
                     // args[1] is screenId (e.g. for snapToEmptyZone, snapToLastZone)
                     if (onSnapSuccess && args.size() >= 2) {
@@ -652,7 +696,8 @@ void PlasmaZonesEffect::slotRestoreSizeDuringDrag(const QString& windowId, int w
 
     // Restore-size-only: keep current position, apply pre-snap width/height
     QRectF frame = window->frameGeometry();
-    QRect geometry(static_cast<int>(frame.x()), static_cast<int>(frame.y()), width, height);
+    // qRound, not truncation — fractional-scale sub-pixel residue (see above).
+    QRect geometry(qRound(frame.x()), qRound(frame.y()), width, height);
 
     qCDebug(lcEffect) << "Restoring size during drag:" << windowId << geometry;
     // Live drag-out unsnap: restoring pre-snap dimensions while the user is still dragging.
@@ -714,9 +759,6 @@ void PlasmaZonesEffect::slotDragPolicyChanged(const QString& windowId, const Pho
             m_snapHandler->callCancelSnap();
             m_dragBypassedForAutotile = true;
             m_dragBypassScreenId = newPolicy.screenId;
-            m_dragStartedSent = false;
-            m_pendingDragWindowId.clear();
-            m_pendingDragGeometry = QRectF();
         } else {
             // Already in bypass but on a different autotile screen — just
             // update the captured screen id.
@@ -740,9 +782,6 @@ void PlasmaZonesEffect::slotDragPolicyChanged(const QString& windowId, const Pho
         }
         m_dragBypassedForAutotile = false;
         m_dragActivationDetected = false;
-        m_dragStartedSent = false;
-        m_pendingDragWindowId = windowId;
-        m_pendingDragGeometry = dragW ? dragW->frameGeometry() : QRectF();
         if (!m_keyboardGrabbed) {
             KWin::effects->grabKeyboard(this);
             m_keyboardGrabbed = true;

@@ -5,8 +5,9 @@
  * @file test_autotile_state.cpp
  * @brief Unit tests for WindowId utilities and AutotileStateHelpers
  *
- * Tests WindowId::extractAppId, WindowId::deriveShortName, and
- * AutotileStateHelpers::cleanupClosedWindowState.
+ * Tests WindowId::extractAppId, WindowId::deriveShortName,
+ * AutotileStateHelpers::cleanupClosedWindowState and removeFromOtherScreens,
+ * and the BorderState ↔ DecorationDefaults default-drift tripwire.
  */
 
 #include <QTest>
@@ -54,12 +55,19 @@ private Q_SLOTS:
     void testCleanupClosedWindowState()
     {
         const QString windowId = QStringLiteral("testapp|42");
+        const QString sibling = QStringLiteral("other|7");
         const QString screenId = QStringLiteral("screen-0");
+        const QString staleScreen = QStringLiteral("screen-stale");
 
-        // Set up BorderState with the window on its owning screen.
+        // Set up BorderState with the window in TWO screen buckets — the
+        // cross-screen-stale scenario cleanup defends against (window
+        // crossed screens before closing). The stale bucket also holds a
+        // sibling so we can verify the bucket survives while the closed
+        // window is scrubbed from it.
         PhosphorCompositor::BorderState border;
-        PhosphorCompositor::AutotileStateHelpers::addBorderlessOnScreen(border, screenId, windowId);
         PhosphorCompositor::AutotileStateHelpers::addTiledOnScreen(border, screenId, windowId);
+        PhosphorCompositor::AutotileStateHelpers::addTiledOnScreen(border, staleScreen, windowId);
+        PhosphorCompositor::AutotileStateHelpers::addTiledOnScreen(border, staleScreen, sibling);
 
         // Set up AutotileWindowState maps
         QSet<QString> notifiedWindows;
@@ -82,16 +90,20 @@ private Q_SLOTS:
 
         QHash<QString, QHash<QString, QRectF>> preAutotileGeometries;
         preAutotileGeometries[screenId].insert(windowId, QRectF(0.1, 0.1, 0.5, 0.5));
+        // Same cross-screen-stale shape for the geometry store: the closed
+        // window's entry in the old screen's bucket plus a sibling entry
+        // that must survive the sweep.
+        preAutotileGeometries[staleScreen].insert(windowId, QRectF(0.2, 0.2, 0.4, 0.4));
+        preAutotileGeometries[staleScreen].insert(sibling, QRectF(0.3, 0.3, 0.3, 0.3));
 
         PhosphorCompositor::AutotileStateHelpers::AutotileWindowState state{
             notifiedWindows,      notifiedWindowScreens,   minimizeFloatedWindows, autotileTargetZones,
             centeredWaylandZones, monocleMaximizedWindows, preAutotileGeometries};
 
         // Perform cleanup
-        PhosphorCompositor::AutotileStateHelpers::cleanupClosedWindowState(windowId, screenId, border, state);
+        PhosphorCompositor::AutotileStateHelpers::cleanupClosedWindowState(windowId, border, state);
 
         // Verify all maps no longer contain the window
-        QVERIFY(!PhosphorCompositor::AutotileStateHelpers::isBorderlessWindow(border, windowId));
         QVERIFY(!PhosphorCompositor::AutotileStateHelpers::isTiledWindow(border, windowId));
         QVERIFY(!notifiedWindows.contains(windowId));
         QVERIFY(!notifiedWindowScreens.contains(windowId));
@@ -99,7 +111,68 @@ private Q_SLOTS:
         QVERIFY(!autotileTargetZones.contains(windowId));
         QVERIFY(!centeredWaylandZones.contains(windowId));
         QVERIFY(!monocleMaximizedWindows.contains(windowId));
-        QVERIFY(!preAutotileGeometries[screenId].contains(windowId));
+
+        // Cross-screen sweep: the window is scrubbed from EVERY bucket, the
+        // now-empty owning bucket is erased, the stale bucket survives with
+        // only the sibling, and the sibling's entries are untouched.
+        QVERIFY(!border.tiledWindowsByScreen.contains(screenId));
+        QVERIFY(!border.tiledWindowsByScreen.value(staleScreen).contains(windowId));
+        QVERIFY(border.tiledWindowsByScreen.value(staleScreen).contains(sibling));
+        QVERIFY(!preAutotileGeometries.contains(screenId));
+        QVERIFY(!preAutotileGeometries.value(staleScreen).contains(windowId));
+        QVERIFY(preAutotileGeometries.value(staleScreen).contains(sibling));
+    }
+
+    // =================================================================
+    // AutotileStateHelpers: removeFromOtherScreens
+    // =================================================================
+
+    void testRemoveFromOtherScreens()
+    {
+        const QString windowId = QStringLiteral("app|1");
+        const QString other = QStringLiteral("other|1");
+        const QString keep = QStringLiteral("screen-keep");
+        const QString shared = QStringLiteral("screen-shared");
+        const QString solo = QStringLiteral("screen-solo");
+
+        PhosphorCompositor::BorderState border;
+        PhosphorCompositor::AutotileStateHelpers::addTiledOnScreen(border, keep, windowId);
+        PhosphorCompositor::AutotileStateHelpers::addTiledOnScreen(border, shared, windowId);
+        PhosphorCompositor::AutotileStateHelpers::addTiledOnScreen(border, shared, other);
+        PhosphorCompositor::AutotileStateHelpers::addTiledOnScreen(border, solo, windowId);
+
+        PhosphorCompositor::AutotileStateHelpers::removeFromOtherScreens(border, windowId, keep);
+
+        // Window survives only on the keep screen; the sibling that still
+        // holds another window survives; the window-only sibling bucket is
+        // erased entirely.
+        QVERIFY(border.tiledWindowsByScreen.value(keep).contains(windowId));
+        QVERIFY(!border.tiledWindowsByScreen.value(shared).contains(windowId));
+        QVERIFY(border.tiledWindowsByScreen.value(shared).contains(other));
+        QVERIFY(!border.tiledWindowsByScreen.contains(solo));
+    }
+
+    // =================================================================
+    // BorderState: defaults drift tripwire
+    // =================================================================
+
+    void testBorderStateDefaultsMatchDecorationDefaults()
+    {
+        // Every BorderState field with a DecorationDefaults counterpart must
+        // match it — the effect renders with these values until the async
+        // settings load completes, and the daemon persists the same symbols
+        // via ConfigDefaults. Divergence here means pre-load rendering
+        // drifts from the configured appearance. Colors intentionally have
+        // no shared default: they stay invalid until the daemon delivers the
+        // resolved (possibly system-accent) values, and nothing draws
+        // pre-load because ShowBorder defaults to false.
+        const PhosphorCompositor::BorderState border;
+        QCOMPARE(border.hideTitleBars, PhosphorCompositor::DecorationDefaults::HideTitleBars);
+        QCOMPARE(border.showBorder, PhosphorCompositor::DecorationDefaults::ShowBorder);
+        QCOMPARE(border.width, PhosphorCompositor::DecorationDefaults::BorderWidth);
+        QCOMPARE(border.radius, PhosphorCompositor::DecorationDefaults::BorderRadius);
+        QVERIFY(!border.color.isValid());
+        QVERIFY(!border.inactiveColor.isValid());
     }
 
     // =================================================================

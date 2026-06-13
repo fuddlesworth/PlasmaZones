@@ -5,7 +5,7 @@
 
 | | |
 |---|---|
-| **Status** | Implemented (PR #551) |
+| **Status** | Implemented (PR #551). Historical, two layers: (1) the title-bar/borderless mechanics described below (`setWindowBorderless`, per-screen `borderlessWindowsByScreen` buckets) were superseded by the DecorationManager owner model in PR #608; (2) the §2/§5/§7 page-tree naming ("Zones" page as `SnappingZonesPage.qml` / `snapping-zones`, `kSnappingVisualChildren`, `snapping-visual-cat`) was superseded by the later Overlay/Window restructure — the implemented page is `SnappingOverlayAppearancePage.qml` registered as `snapping-overlay-appearance` (title "Appearance" under the "Overlay" category) with `snapping-overlay-cat` / `snapping-window-cat` parents (see settingscontroller_pageregistration.cpp) |
 | **Branch** | `feature/per-mode-window-appearance` (off `v3.1`) |
 | **Date** | 2026-05-30 |
 

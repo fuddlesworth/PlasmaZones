@@ -18,7 +18,10 @@
 # GitHub's auto-archive and every distro source tarball include it, so offline
 # packaging builds need no network and no special handling.
 
-cmake_minimum_required(VERSION 3.16)
+# 3.18 floor: the vendored-Luau acquisition uses file(ARCHIVE_EXTRACT ...)
+# (>= 3.18). A lower floor would fail mid-configure with an unknown-subcommand
+# error instead of a clear minimum-version message.
+cmake_minimum_required(VERSION 3.18)
 
 set(PHOSPHORSCRIPTING_VERSION "0.1.0")
 
@@ -82,11 +85,17 @@ else()
                 "  got      ${_p_luau_actual_sha}\nThe committed ${_p_luau_tarball} is corrupt or was swapped.")
         endif()
         # Extract the committed tarball once (a LOCAL file — no network). The
-        # archive has a single luau-<ver>/ top-level dir; re-extract only when the
-        # target tree is absent so reconfigures stay fast.
-        if(NOT EXISTS "${_p_luau_src}/CMakeLists.txt")
+        # archive has a single luau-<ver>/ top-level dir. The re-extract guard
+        # keys on a stamp file written AFTER a successful extraction — keying
+        # on a file tar writes early (e.g. CMakeLists.txt) would let an
+        # aborted extraction (disk full, ^C mid-configure) pass the guard on
+        # every later reconfigure and fail confusingly inside the vendored
+        # build instead of repairing itself.
+        set(_p_luau_extract_stamp "${CMAKE_BINARY_DIR}/_luau/.extracted-${PHOSPHORSCRIPTING_LUAU_VERSION}")
+        if(NOT EXISTS "${_p_luau_extract_stamp}")
             file(MAKE_DIRECTORY "${CMAKE_BINARY_DIR}/_luau")
             file(ARCHIVE_EXTRACT INPUT "${_p_luau_tarball}" DESTINATION "${CMAKE_BINARY_DIR}/_luau")
+            file(TOUCH "${_p_luau_extract_stamp}")
         endif()
         set(LUAU_BUILD_CLI   OFF CACHE BOOL "" FORCE)
         set(LUAU_BUILD_TESTS OFF CACHE BOOL "" FORCE)
@@ -101,12 +110,30 @@ else()
         # project's global exception settings. Luau also breaks under unity builds
         # (same-named file-local symbols collide), and is STATIC, so it must be
         # PIC to link into our shared lib. Override on the vendored targets only.
-        foreach(_luau_tgt Luau.Ast Luau.Compiler Luau.VM Luau.Bytecode Luau.CodeGen Luau.Config)
+        # Luau.Common is NOT header-only in 0.723: it is a compiled STATIC
+        # library (BytecodeWire/StringUtils/TimeTrace TUs) inside the PUBLIC
+        # link closure of both Luau.VM and Luau.Compiler, so it needs every
+        # override below — most critically -fexceptions (its TUs sit in the
+        # lua_pcall unwind path) and PIC (it links into our SHARED lib).
+        foreach(_luau_tgt Luau.Ast Luau.Common Luau.Compiler Luau.VM Luau.Bytecode Luau.CodeGen Luau.Config)
             if(TARGET ${_luau_tgt})
                 set_target_properties(${_luau_tgt} PROPERTIES
                     POSITION_INDEPENDENT_CODE ON
                     UNITY_BUILD OFF)
-                target_compile_options(${_luau_tgt} PRIVATE -fexceptions)
+                # -w: the vendored sources inherit the project's warning set
+                # (KDECompilerSettings' -Wall/-Wextra/-Wpedantic) and drown a
+                # clean build in thousands of third-party diagnostics
+                # (computed gotos, non-virtual dtors, ...). They are not ours
+                # to fix — silence them on the vendored targets only.
+                target_compile_options(${_luau_tgt} PRIVATE -fexceptions -w)
+                # Treat Luau's interface headers as SYSTEM for consumers so
+                # including lua.h / DenseHash.h from our TUs doesn't surface
+                # third-party header warnings there either. (The SYSTEM
+                # target property needs CMake >= 3.25; on older CMake it is
+                # silently ignored and only the in-target -w applies.)
+                if(CMAKE_VERSION VERSION_GREATER_EQUAL "3.25")
+                    set_target_properties(${_luau_tgt} PROPERTIES SYSTEM ON)
+                endif()
             endif()
         endforeach()
     endif()
@@ -195,10 +222,16 @@ endif()
 # system-Luau build links a separately-installed Luau that carries its own
 # licence, so skip it there.
 if(NOT PLASMAZONES_SYSTEM_LUAU)
-    # _p_luau_src is the extracted tarball tree (set in the acquisition block).
-    install(FILES ${_p_luau_src}/LICENSE.txt
-        DESTINATION ${KDE_INSTALL_DATADIR}/licenses/plasmazones
-        RENAME LICENSE.Luau)
+    # _p_luau_src is the extracted tarball tree (set in the acquisition
+    # block). Guarded on the file actually existing: a superbuild/parent
+    # scope that pre-defines Luau.VM skips the extraction entirely, and an
+    # unconditional rule would then fail at `cmake --install` time against
+    # a path that was never created.
+    if(EXISTS "${_p_luau_src}/LICENSE.txt")
+        install(FILES ${_p_luau_src}/LICENSE.txt
+            DESTINATION ${KDE_INSTALL_DATADIR}/licenses/plasmazones
+            RENAME LICENSE.Luau)
+    endif()
 endif()
 
 install(TARGETS PhosphorScripting

@@ -764,34 +764,4 @@ QString LayoutAdaptor::getLayoutPreview(const QString& id, int windowCount)
     return QString::fromUtf8(QJsonDocument(PlasmaZones::toJson(preview)).toJson(QJsonDocument::Compact));
 }
 
-// ═══════════════════════════════════════════════════════════════════════════════
-// Screen PhosphorZones::Layout Lock
-// ═══════════════════════════════════════════════════════════════════════════════
-
-void LayoutAdaptor::toggleScreenLock(const QString& screenId)
-{
-    toggleContextLock(screenId, 0, QString());
-}
-
-bool LayoutAdaptor::isScreenLocked(const QString& screenId)
-{
-    return isContextLocked(screenId, 0, QString());
-}
-
-void LayoutAdaptor::toggleContextLock(const QString& screenId, int virtualDesktop, const QString& activity)
-{
-    if (!m_settings)
-        return;
-    bool locked = m_settings->isContextLocked(screenId, virtualDesktop, activity);
-    m_settings->setContextLocked(screenId, virtualDesktop, activity, !locked);
-    m_settings->save();
-}
-
-bool LayoutAdaptor::isContextLocked(const QString& screenId, int virtualDesktop, const QString& activity)
-{
-    if (!m_settings)
-        return false;
-    return m_settings->isContextLocked(screenId, virtualDesktop, activity);
-}
-
 } // namespace PlasmaZones

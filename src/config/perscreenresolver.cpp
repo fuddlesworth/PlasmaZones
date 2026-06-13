@@ -3,6 +3,8 @@
 
 #include "perscreenresolver.h"
 
+#include "configkeys.h"
+
 #include <QJsonObject>
 #include <QLatin1String>
 
@@ -15,10 +17,13 @@ struct PerScreenMapping
     const char* category; // e.g. "Autotile"       — JSON container key
 };
 
+// Prefix spellings come from configkeys.h's single definition point — the
+// same literals the ConfigDefaults *GroupPrefix accessors are built from,
+// so a prefix rename cannot desync this table from the group accessors.
 constexpr PerScreenMapping kPerScreenMappings[] = {
-    {"ZoneSelector", "ZoneSelector"},
-    {"AutotileScreen", "Autotile"},
-    {"SnappingScreen", "Snapping"},
+    {P_PER_SCREEN_PREFIX_ZONE_SELECTOR, "ZoneSelector"},
+    {P_PER_SCREEN_PREFIX_AUTOTILE, "Autotile"},
+    {P_PER_SCREEN_PREFIX_SNAPPING, "Snapping"},
 };
 } // namespace
 

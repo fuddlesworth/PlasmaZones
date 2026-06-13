@@ -35,6 +35,22 @@ AutotileHandler::AutotileHandler(PlasmaZonesEffect* effect, QObject* parent)
 {
 }
 
+QSize AutotileHandler::declaredMinSize(KWin::EffectWindow* w)
+{
+    int minWidth = 0;
+    int minHeight = 0;
+    KWin::Window* kw = w ? w->window() : nullptr;
+    // Internal windows (our own overlays) crash on minSize(); see discussion #511.
+    if (kw && !kw->isInternal()) {
+        const QSizeF minSize = kw->minSize();
+        if (minSize.isValid()) {
+            minWidth = qCeil(minSize.width());
+            minHeight = qCeil(minSize.height());
+        }
+    }
+    return QSize(minWidth, minHeight);
+}
+
 void AutotileHandler::handleCursorMoved(const QPointF& pos, const QString& screenId)
 {
     if (!m_focusFollowsMouse || m_autotileScreens.isEmpty()) {
@@ -90,7 +106,9 @@ void AutotileHandler::handleCursorMoved(const QPointF& pos, const QString& scree
     const auto windows = KWin::effects->stackingOrder();
     for (int i = windows.size() - 1; i >= 0; --i) {
         KWin::EffectWindow* w = windows[i];
-        if (!w || w->isMinimized() || !w->isOnCurrentDesktop() || !w->isOnCurrentActivity()) {
+        // isDeleted: a close-grabbed dying window under the cursor must not
+        // pause FFM via the occlusion bail (mirrors the snap FFM guard).
+        if (!w || w->isDeleted() || w->isMinimized() || !w->isOnCurrentDesktop() || !w->isOnCurrentActivity()) {
             continue;
         }
         // Geometry check first (cheap QRectF::contains) before shouldHandleWindow (allocates via windowClass())
@@ -141,21 +159,28 @@ void AutotileHandler::handleCursorMoved(const QPointF& pos, const QString& scree
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// Geometry persistence
-// ═══════════════════════════════════════════════════════════════════════════════
 // Integration points
 // ═══════════════════════════════════════════════════════════════════════════════
 
-bool AutotileHandler::notifyWindowAdded(KWin::EffectWindow* w)
+bool AutotileHandler::notifyWindowAdded(KWin::EffectWindow* w, bool knownFreeFloating)
 {
-    if (!isEligibleForAutotileNotify(w)) {
+    // Deleted windows bail before getWindowId (cache-pollution hazard);
+    // every other rejection comes after the pending-close consume below.
+    if (!w || w->isDeleted()) {
         return false;
     }
 
     const QString windowId = m_effect->getWindowId(w);
 
-    // Window was already closed before we could notify open — skip (D-Bus ordering race)
+    // Window was already closed before we could notify open — skip (D-Bus
+    // ordering race). Consumed BEFORE the eligibility check so an entry
+    // whose racing add arrives ineligible doesn't strand in the set until
+    // the next daemon restart.
     if (m_pendingCloses.remove(windowId)) {
+        return false;
+    }
+
+    if (!isEligibleForAutotileNotify(w)) {
         return false;
     }
 
@@ -174,50 +199,52 @@ bool AutotileHandler::notifyWindowAdded(KWin::EffectWindow* w)
         // geometry — floating it would leave it at its tiled position instead
         // of restoring to its original free-floating size.
         //
-        // knownFreeFloating=true: this is the window-opened path, so the frame
-        // is KWin's spawn geometry — the authoritative pre-autotile position.
-        // The FloatingCache is not yet populated for fresh windows, so without
-        // this flag the isWindowFloating() guard would drop the one-shot save.
-        saveAndRecordPreAutotileGeometry(windowId, screenId, w->frameGeometry(),
-                                         /*knownFreeFloating=*/true);
+        // knownFreeFloating defaults true for the genuine window-opened path
+        // (the frame is KWin's spawn geometry — the authoritative pre-autotile
+        // position — and the FloatingCache is not yet populated, so the
+        // isWindowFloating() guard would otherwise drop the one-shot save).
+        // RE-ADD callers pass false so the floating guard runs and rejects a
+        // tiled zone rect instead of persisting it as free geometry.
+        saveAndRecordPreAutotileGeometry(windowId, screenId, w->frameGeometry(), knownFreeFloating);
 
-        int minWidth = 0;
-        int minHeight = 0;
-        KWin::Window* kw = w->window();
-        // Internal windows (our own overlays) crash on minSize(); see discussion #511.
-        if (kw && !kw->isInternal()) {
-            const QSizeF minSize = kw->minSize();
-            if (minSize.isValid()) {
-                minWidth = qCeil(minSize.width());
-                minHeight = qCeil(minSize.height());
-            }
-        }
+        const QSize minSize = declaredMinSize(w);
 
-        auto* watcher =
-            new QDBusPendingCallWatcher(PhosphorProtocol::ClientHelpers::asyncCall(
-                                            PhosphorProtocol::Service::Interface::Autotile,
-                                            QStringLiteral("windowOpened"), {windowId, screenId, minWidth, minHeight}),
-                                        this);
+        auto* watcher = new QDBusPendingCallWatcher(
+            PhosphorProtocol::ClientHelpers::asyncCall(PhosphorProtocol::Service::Interface::Autotile,
+                                                       QStringLiteral("windowOpened"),
+                                                       {windowId, screenId, minSize.width(), minSize.height()}),
+            this);
         connect(watcher, &QDBusPendingCallWatcher::finished, this, [this, windowId](QDBusPendingCallWatcher* w) {
             w->deleteLater();
             if (w->isError()) {
                 qCWarning(lcEffect) << "windowOpened D-Bus call failed for" << windowId << ":" << w->error().message();
                 m_notifiedWindows.remove(windowId);
                 m_notifiedWindowScreens.remove(windowId);
+                // The autotile→autotile transfer path in
+                // handleWindowOutputChanged skips its decoration release in
+                // anticipation of this call's tile request moving the claim.
+                // The call failed — no tile request is coming — so release
+                // the stale ownership here (no-op for fresh windows, which
+                // hold no claim yet).
+                m_effect->decorationManager()->releaseKind(windowId, DecorationManager::OwnerKind::Autotile);
                 // notifyWindowAdded() returned true on the synchronous
                 // path, so the caller (PlasmaZonesEffect::slotWindowAdded)
                 // left first-frame open suppression engaged expecting a
                 // moveResize from the daemon's tile decision. The D-Bus
                 // call failed — no moveResize is coming — so release
                 // suppression here rather than letting the window sit
-                // invisible until the 250 ms deadline.
-                if (KWin::EffectWindow* effectWindow = m_effect->findWindowById(windowId)) {
+                // invisible until the 250 ms deadline. Exact-id re-check:
+                // the fuzzy appId fallback could resolve a same-app sibling
+                // for a just-closed window, ending the sibling's suppression
+                // early.
+                if (KWin::EffectWindow* effectWindow = m_effect->findWindowById(windowId);
+                    effectWindow && m_effect->getWindowId(effectWindow) == windowId) {
                     m_effect->endRestoreSuppression(effectWindow);
                 }
             }
         });
         qCDebug(lcEffect) << "Notified autotile: windowOpened" << windowId << "on screen" << screenId
-                          << "minSize:" << minWidth << "x" << minHeight;
+                          << "minSize:" << minSize.width() << "x" << minSize.height();
         return true;
     }
     return false;
@@ -232,7 +259,20 @@ void AutotileHandler::notifyWindowsAddedBatch(const QList<KWin::EffectWindow*>& 
     QStringList batchWindowIds; // for error rollback
 
     for (KWin::EffectWindow* w : windows) {
+        // Deleted windows bail before any id/screen lookup (cache-pollution
+        // hazard); the pending-close consume runs BEFORE the eligibility
+        // check — same ordering rationale as notifyWindowAdded.
+        if (!w || w->isDeleted()) {
+            continue;
+        }
+
+        const QString windowId = m_effect->getWindowId(w);
+        const bool suppressed = m_pendingCloses.remove(windowId);
+
         if (!isEligibleForAutotileNotify(w)) {
+            continue;
+        }
+        if (suppressed) {
             continue;
         }
 
@@ -241,12 +281,6 @@ void AutotileHandler::notifyWindowsAddedBatch(const QList<KWin::EffectWindow*>& 
             continue;
         }
         if (!m_autotileScreens.contains(screenId)) {
-            continue;
-        }
-
-        const QString windowId = m_effect->getWindowId(w);
-
-        if (m_pendingCloses.remove(windowId)) {
             continue;
         }
 
@@ -259,28 +293,27 @@ void AutotileHandler::notifyWindowsAddedBatch(const QList<KWin::EffectWindow*>& 
         m_notifiedWindows.insert(windowId);
         m_notifiedWindowScreens[windowId] = screenId;
 
-        // knownFreeFloating=true: window-opened path — see notifyWindowAdded()
-        // for rationale. Fresh windows aren't in the FloatingCache yet.
+        // knownFreeFloating only for windows we do NOT track as tiled. The
+        // batch is also the RE-announce path (daemon restart, toggle-on,
+        // screen-add) where a window's current frame is its tiled zone rect —
+        // border tracking survives daemon restarts, so isTiledWindow is
+        // authoritative here. Passing true for a tiled window would push
+        // storePreTileGeometry with overwrite=true and destroy the daemon's
+        // persisted free geometry (a snap→autotile window has no local
+        // bucket entry, so the exact-match early-return cannot save it).
+        // Genuinely fresh windows (not yet tiled) keep the spawn-geometry
+        // overwrite semantics — see notifyWindowAdded() for that rationale.
+        const bool freshFrame = !AutotileStateHelpers::isTiledWindow(m_border, windowId);
         saveAndRecordPreAutotileGeometry(windowId, screenId, w->frameGeometry(),
-                                         /*knownFreeFloating=*/true);
+                                         /*knownFreeFloating=*/freshFrame);
 
-        int minWidth = 0;
-        int minHeight = 0;
-        KWin::Window* kw = w->window();
-        // Internal windows (our own overlays) crash on minSize(); see discussion #511.
-        if (kw && !kw->isInternal()) {
-            const QSizeF minSize = kw->minSize();
-            if (minSize.isValid()) {
-                minWidth = qCeil(minSize.width());
-                minHeight = qCeil(minSize.height());
-            }
-        }
+        const QSize minSize = declaredMinSize(w);
 
         PhosphorProtocol::WindowOpenedEntry entry;
         entry.windowId = windowId;
         entry.screenId = screenId;
-        entry.minWidth = minWidth;
-        entry.minHeight = minHeight;
+        entry.minWidth = minSize.width();
+        entry.minHeight = minSize.height();
         batchEntries.append(entry);
         batchWindowIds.append(windowId);
     }
@@ -298,6 +331,13 @@ void AutotileHandler::notifyWindowsAddedBatch(const QList<KWin::EffectWindow*>& 
         w->deleteLater();
         if (w->isError()) {
             qCWarning(lcEffect) << "windowsOpenedBatch D-Bus call failed:" << w->error().message();
+            // Tracking rollback only — deliberately NO releaseKind or
+            // endRestoreSuppression here, unlike notifyWindowAdded's error
+            // handler: the batch paths (daemon-restart re-announce,
+            // toggle-on) serve windows that are still physically tiled and
+            // may be re-announced when the daemon returns, and the batch
+            // never serves the cross-screen transfer that parks a kept
+            // decoration claim on the single-window path.
             for (const QString& wid : batchWindowIds) {
                 m_notifiedWindows.remove(wid);
                 m_notifiedWindowScreens.remove(wid);
@@ -342,35 +382,45 @@ void AutotileHandler::handleWindowOutputChanged(KWin::EffectWindow* w)
     const bool newIsAutotile = m_autotileScreens.contains(newScreenId);
 
     if (!oldIsAutotile && !newIsAutotile) {
-        return; // Neither screen is autotiled — snapping unsnap handled by effect's outputChanged
+        // Neither screen is autotiled — snapping unsnap is handled by the
+        // effect's outputChanged. Still refresh the notified-screen record:
+        // a window that left autotile via the desktop-switch float skip
+        // stays tracked, and a stale screen here would make every later
+        // frameGeometryChanged re-detect a phantom VS crossing.
+        if (m_notifiedWindowScreens.contains(windowId)) {
+            m_notifiedWindowScreens[windowId] = newScreenId;
+        }
+        return;
     }
 
     qCInfo(lcEffect) << "Window moved between monitors:" << windowId << oldScreenId << "->" << newScreenId;
 
-    // Snapshot the pre-autotile geometry BEFORE onWindowClosed clears it.
-    // onWindowClosed removes m_preAutotileGeometries AND m_savedPreAutotileForDesktopMove,
-    // so we must hold onto the geometry locally.
+    // Snapshot the pre-autotile geometry BEFORE onWindowClosed clears it
+    // (the close-cleanup sweeps the geometry out of EVERY screen bucket).
     QRectF savedPreAutotileGeo;
-    if (oldIsAutotile && m_preAutotileGeometries.contains(oldScreenId)) {
-        const auto& screenGeometries = m_preAutotileGeometries[oldScreenId];
-        const QString savedKey = AutotileStateHelpers::findSavedGeometryKey(screenGeometries, windowId);
-        if (!savedKey.isEmpty()) {
-            savedPreAutotileGeo = screenGeometries.value(savedKey);
-        }
+    if (oldIsAutotile) {
+        savedPreAutotileGeo = findPreAutotileGeometry(windowId);
     }
 
-    // Restore title bar before removing
-    if (isBorderlessWindow(windowId)) {
-        KWin::Window* kw = w->window();
-        if (kw) {
-            kw->setNoBorder(false);
-        }
+    // Release autotile's decoration ownership only when the window is
+    // actually leaving autotile management. On an autotile→autotile
+    // transfer the imminent retile moves the claim atomically without a
+    // physical flap (releaseOthersOfKind + acquire in
+    // slotWindowsTileRequested), so releasing here would only produce a
+    // transient title-bar flash. Every no-retile fallthrough has a release:
+    // a daemon overflow-float lands in applyFloatCleanup (releaseKind), a
+    // locally-filtered re-add releases right below, and a failed
+    // windowOpened call releases in notifyWindowAdded's error handler. The
+    // predicate mirrors the re-add condition below.
+    const bool willReAdd = newIsAutotile && !w->isMinimized() && w->isOnCurrentDesktop() && w->isOnCurrentActivity();
+    if (!willReAdd) {
+        m_effect->decorationManager()->releaseKind(windowId, DecorationManager::OwnerKind::Autotile);
     }
 
     // Remove from old screen's autotile state
     onWindowClosed(windowId, oldScreenId);
 
-    if (newIsAutotile && !w->isMinimized() && w->isOnCurrentDesktop() && w->isOnCurrentActivity()) {
+    if (willReAdd) {
         // Re-add on new autotile screen, carrying over pre-autotile geometry.
         // Cancel any pending cross-screen restore — the window is back in autotile.
         auto pendingIt = m_pendingCrossScreenRestore.find(windowId);
@@ -381,7 +431,20 @@ void AutotileHandler::handleWindowOutputChanged(KWin::EffectWindow* w)
         if (savedPreAutotileGeo.isValid()) {
             m_preAutotileGeometries[newScreenId][windowId] = savedPreAutotileGeo;
         }
-        notifyWindowAdded(w);
+        // RE-ADD: a tiled window's current frame is its zone rect on the old
+        // screen — knownFreeFloating=false lets the floating guard reject it
+        // (a genuinely floating window passes the guard and keeps its float
+        // geometry captured). Without this the tiled rect would be pushed with
+        // overwrite=true and destroy the daemon's persisted free-back.
+        if (!notifyWindowAdded(w, /*knownFreeFloating=*/false)) {
+            // The re-add was filtered locally — eligibility drift (e.g. the
+            // tiled frame now sits below the user's min-size threshold) or a
+            // pending close. No windowOpened call was issued, so neither the
+            // D-Bus error handler nor a tile request will ever touch this
+            // window again: the claim kept above for the flap-free transfer
+            // would strand the title bar hidden. Release it now.
+            m_effect->decorationManager()->releaseKind(windowId, DecorationManager::OwnerKind::Autotile);
+        }
     } else if (oldIsAutotile && !newIsAutotile) {
         // Autotile → snapping: restore the window's original (pre-snap/pre-tile)
         // SIZE after the drag ends.  The effect-side m_preAutotileGeometries may
@@ -497,11 +560,15 @@ void AutotileHandler::handleWindowOutputChanged(KWin::EffectWindow* w)
     m_effect->updateAllBorders();
 }
 
-void AutotileHandler::onWindowClosed(const QString& windowId, const QString& screenId)
+void AutotileHandler::onWindowClosed(const QString& windowId, const QString& screenId, bool windowDestroyed)
 {
-    // If we haven't notified the daemon about this window yet, record the close
-    // so we can suppress the open if it arrives late (D-Bus ordering race)
-    if (!m_notifiedWindows.contains(windowId) && m_autotileScreens.contains(screenId)) {
+    // If we haven't notified the daemon about this window yet, record the
+    // close so we can suppress the open if it arrives late (D-Bus ordering
+    // race). Genuine destruction only: a LIVE window routed through here
+    // (transfer / desktop move / drag-bypass) that is untracked because it
+    // was eligibility-filtered would otherwise have its NEXT genuine add
+    // silently swallowed when it later becomes eligible.
+    if (windowDestroyed && !m_notifiedWindows.contains(windowId) && m_autotileScreens.contains(screenId)) {
         m_pendingCloses.insert(windowId);
     }
 
@@ -509,23 +576,24 @@ void AutotileHandler::onWindowClosed(const QString& windowId, const QString& scr
     AutotileStateHelpers::AutotileWindowState windowState{
         m_notifiedWindows,      m_notifiedWindowScreens,   m_minimizeFloatedWindows, m_autotileTargetZones,
         m_centeredWaylandZones, m_monocleMaximizedWindows, m_preAutotileGeometries};
-    AutotileStateHelpers::cleanupClosedWindowState(windowId, screenId, m_border, windowState);
+    AutotileStateHelpers::cleanupClosedWindowState(windowId, m_border, windowState);
     // Cancel any pending debounced minimize→float commit — it must not fire
     // against a destroyed window.
     cancelPendingMinimizeFloat(windowId);
 
-    // KWin-specific cleanup not covered by the shared helper
+    // KWin-specific cleanup not covered by the shared helper.
+    // NOTE: m_savedPreAutotileForDesktopMove is deliberately NOT cleared
+    // here — the desktop-move path calls savePreAutotileForDesktopMove
+    // immediately before this function, so clearing it would wipe the stash
+    // the instant it was created (the consume site erases it, and
+    // clearDesktopMoveStash covers genuine window destruction).
     m_savedNotifiedForDesktopReturn.remove(windowId);
-    m_savedPreAutotileForDesktopMove.remove(windowId);
     auto pendingConn = m_pendingCrossScreenRestore.find(windowId);
     if (pendingConn != m_pendingCrossScreenRestore.end()) {
         QObject::disconnect(pendingConn.value());
         m_pendingCrossScreenRestore.erase(pendingConn);
     }
-    // Remove from saved stacking orders so stale IDs don't accumulate
-    if (m_savedSnapStackingOrder.contains(screenId)) {
-        m_savedSnapStackingOrder[screenId].removeAll(windowId);
-    }
+    // Remove from the saved stacking order so stale IDs don't accumulate
     if (m_savedAutotileStackingOrder.contains(screenId)) {
         m_savedAutotileStackingOrder[screenId].removeAll(windowId);
     }
@@ -539,8 +607,7 @@ void AutotileHandler::onWindowClosed(const QString& windowId, const QString& scr
     }
 }
 
-void AutotileHandler::handleDragToFloat(KWin::EffectWindow* w, const QString& windowId, const QString& screenId,
-                                        bool immediate)
+void AutotileHandler::handleDragToFloat(KWin::EffectWindow* w, const QString& windowId, bool immediate)
 {
     // Restore border and clear tiling state synchronously — don't wait for
     // the daemon's async windowFloatingChanged signal, which may never arrive
@@ -548,61 +615,56 @@ void AutotileHandler::handleDragToFloat(KWin::EffectWindow* w, const QString& wi
     // before setWindowFloatingForScreen processes).
     applyFloatCleanup(windowId);
 
-    // Restore pre-autotile SIZE at the window's current position.
+    // Restore pre-autotile SIZE at the window's current position. The
+    // all-bucket lookup matters here: size is coordinate-space-independent,
+    // so any bucket's rect is safe.
     if (w) {
-        auto screenIt = m_preAutotileGeometries.constFind(screenId);
-        if (screenIt != m_preAutotileGeometries.constEnd()) {
-            const QString geoKey = AutotileStateHelpers::findSavedGeometryKey(screenIt.value(), windowId);
-            if (!geoKey.isEmpty()) {
-                const QRectF savedGeo = screenIt.value().value(geoKey);
-                if (savedGeo.isValid()) {
-                    const int savedW = qRound(savedGeo.width());
-                    const int savedH = qRound(savedGeo.height());
+        const QRectF savedGeo = findPreAutotileGeometry(windowId);
+        if (savedGeo.isValid()) {
+            const int savedW = qRound(savedGeo.width());
+            const int savedH = qRound(savedGeo.height());
 
-                    if (immediate) {
-                        // Drag-start path: apply synchronously during the
-                        // interactive move (allowDuringDrag=true) so the user
-                        // sees the window return to its free-floating size the
-                        // moment they start dragging — matches snap-mode behavior.
-                        // Re-center horizontally under the cursor so the window
-                        // doesn't "jump away" from the grab point when it shrinks.
-                        QRectF currentFrame = w->frameGeometry();
-                        const QPointF cursor = KWin::effects->cursorPos();
-                        int newX = qRound(currentFrame.x());
-                        int newY = qRound(currentFrame.y());
-                        if (currentFrame.width() > 0 && savedW < currentFrame.width()) {
-                            const qreal cursorOffsetRatio = (cursor.x() - currentFrame.x()) / currentFrame.width();
-                            newX = qRound(cursor.x() - cursorOffsetRatio * savedW);
-                        }
-                        QRect sizeRestored(newX, newY, savedW, savedH);
-                        m_effect->applySnapGeometry(w, sizeRestored, /*allowDuringDrag=*/true);
-                        qCInfo(lcEffect) << "Drag-start float: restored pre-autotile size for" << windowId << savedW
-                                         << "x" << savedH;
-                    } else {
-                        // Drag-stop path: defer to next event loop tick so
-                        // KWin has finished the interactive move and the window's
-                        // frame geometry reflects the actual drop position.
-                        QPointer<KWin::EffectWindow> wp = w;
-                        PlasmaZonesEffect* effect = m_effect;
-                        QTimer::singleShot(0, effect, [effect, wp, windowId, savedW, savedH]() {
-                            if (!wp || wp->isDeleted()) {
-                                return;
-                            }
-                            // Skip if the window was re-snapped during the deferred tick
-                            // (e.g., dropped on a zone on a snap screen during cross-VS drag).
-                            if (!effect->isWindowFloating(effect->getWindowId(wp))) {
-                                qCDebug(lcEffect)
-                                    << "Drag-to-float: skipping size restore for re-snapped window" << windowId;
-                                return;
-                            }
-                            QRectF currentFrame = wp->frameGeometry();
-                            QRect sizeRestored(qRound(currentFrame.x()), qRound(currentFrame.y()), savedW, savedH);
-                            effect->applySnapGeometry(wp, sizeRestored);
-                            qCInfo(lcEffect) << "Drag-to-float: restored pre-autotile size for" << windowId << savedW
-                                             << "x" << savedH;
-                        });
-                    }
+            if (immediate) {
+                // Drag-start path: apply synchronously during the
+                // interactive move (allowDuringDrag=true) so the user
+                // sees the window return to its free-floating size the
+                // moment they start dragging — matches snap-mode behavior.
+                // Re-center horizontally under the cursor so the window
+                // doesn't "jump away" from the grab point when it shrinks.
+                QRectF currentFrame = w->frameGeometry();
+                const QPointF cursor = KWin::effects->cursorPos();
+                int newX = qRound(currentFrame.x());
+                int newY = qRound(currentFrame.y());
+                if (currentFrame.width() > 0 && savedW < currentFrame.width()) {
+                    const qreal cursorOffsetRatio = (cursor.x() - currentFrame.x()) / currentFrame.width();
+                    newX = qRound(cursor.x() - cursorOffsetRatio * savedW);
                 }
+                QRect sizeRestored(newX, newY, savedW, savedH);
+                m_effect->applySnapGeometry(w, sizeRestored, /*allowDuringDrag=*/true);
+                qCInfo(lcEffect) << "Drag-start float: restored pre-autotile size for" << windowId << savedW << "x"
+                                 << savedH;
+            } else {
+                // Drag-stop path: defer to next event loop tick so
+                // KWin has finished the interactive move and the window's
+                // frame geometry reflects the actual drop position.
+                QPointer<KWin::EffectWindow> wp = w;
+                PlasmaZonesEffect* effect = m_effect;
+                QTimer::singleShot(0, effect, [effect, wp, windowId, savedW, savedH]() {
+                    if (!wp || wp->isDeleted()) {
+                        return;
+                    }
+                    // Skip if the window was re-snapped during the deferred tick
+                    // (e.g., dropped on a zone on a snap screen during cross-VS drag).
+                    if (!effect->isWindowFloating(effect->getWindowId(wp))) {
+                        qCDebug(lcEffect) << "Drag-to-float: skipping size restore for re-snapped window" << windowId;
+                        return;
+                    }
+                    QRectF currentFrame = wp->frameGeometry();
+                    QRect sizeRestored(qRound(currentFrame.x()), qRound(currentFrame.y()), savedW, savedH);
+                    effect->applySnapGeometry(wp, sizeRestored);
+                    qCInfo(lcEffect) << "Drag-to-float: restored pre-autotile size for" << windowId << savedW << "x"
+                                     << savedH;
+                });
             }
         }
     }
@@ -612,25 +674,53 @@ void AutotileHandler::handleDragToFloat(KWin::EffectWindow* w, const QString& wi
 
 void AutotileHandler::onDaemonReady()
 {
-    loadSettings();
+    // Connect BEFORE querying: a screensChanged emitted after the daemon
+    // serves Properties.Get but before our AddMatch lands would be both lost
+    // and unable to bump the generation guard. Connect-then-query is
+    // strictly sound — a signal lost pre-AddMatch implies the Get (served
+    // after the change) already returns the new set.
     connectSignals();
+    loadSettings();
     m_notifiedWindows.clear();
     m_notifiedWindowScreens.clear();
     m_savedNotifiedForDesktopReturn.clear();
     m_savedPreAutotileForDesktopMove.clear();
     m_pendingCloses.clear();
+    // Centering state is per-retile transient: the restarted daemon has no
+    // memory of the zones these entries point at, and a stale
+    // m_centeredWaylandZones entry that happens to equal the first
+    // post-restart tile request would trip the skipMoveResize short-circuit
+    // in slotWindowsTileRequested against a freshly-restored decoration,
+    // leaving a title-bar-height gap (the CallerWillPlace acquire there
+    // expects the caller to re-assert geometry).
+    m_autotileTargetZones.clear();
+    m_centeredWaylandZones.clear();
+    // In-flight debounced minimize→float commits and minimize-float records
+    // belong to the dead daemon session — a timer firing now would issue a
+    // setWindowFloatingForScreen against state the new daemon never had, and
+    // a stale record would mis-route the next unminimize. Pending
+    // cross-screen size-restore connections are likewise per-session.
+    clearAllPendingMinimizeFloats();
+    m_minimizeFloatedWindows.clear();
+    for (auto connIt = m_pendingCrossScreenRestore.begin(); connIt != m_pendingCrossScreenRestore.end(); ++connIt) {
+        QObject::disconnect(connIt.value());
+    }
+    m_pendingCrossScreenRestore.clear();
+    // A stacking order saved before the restart describes a dead session's
+    // z-order — the first post-restart retile's onComplete would replay it
+    // and re-raise windows in stale order; same for a stale pending focus id.
+    m_savedAutotileStackingOrder.clear();
+    m_pendingAutotileFocusWindowId.clear();
 
-    // Re-send the effect's durable pre-autotile geometry cache to the freshly
-    // (re)connected daemon. The daemon's pre-tile / float-back store
-    // (m_unmanagedGeometries) is an in-session cache it does NOT persist on its
-    // own, so a daemon restart wipes it — and saveGeometryForWindow's idempotency
-    // guard means the effect never re-sends on its own. The effect survives daemon
-    // restarts and still holds each window's true pre-autotile frame here, so it is
-    // the authoritative source to repopulate the daemon. Without this, windows
-    // already auto-tiled when the daemon restarts have no pre-autotile position to
-    // return to on autotile→snap or drag-to-float — they stay stranded at their
-    // tiled rect. overwrite=false so anything the daemon already restored from its
-    // own persisted records wins.
+    // Re-send the effect's pre-autotile geometry cache to the freshly
+    // (re)connected daemon as a backstop. storePreTileGeometry lands in the
+    // unified WindowPlacementStore record (which IS persisted), but a record
+    // the store had not flushed before the daemon died — or a daemon started
+    // with wiped state — would leave already-tiled windows with no
+    // pre-autotile position to return to on autotile→snap or drag-to-float.
+    // The effect survives daemon restarts and still holds each window's true
+    // pre-autotile frame here. overwrite=false so anything the daemon
+    // restored from its own persisted records wins.
     if (m_effect->m_daemonServiceRegistered) {
         int resent = 0;
         for (auto scrIt = m_preAutotileGeometries.constBegin(); scrIt != m_preAutotileGeometries.constEnd(); ++scrIt) {
@@ -640,11 +730,13 @@ void AutotileHandler::onDaemonReady()
                 if (geo.width() <= 0 || geo.height() <= 0) {
                     continue;
                 }
+                // qRound, not truncation: fractional-scale sub-pixel residue
+                // (matches the toRect() geometry-capture convention).
                 PhosphorProtocol::ClientHelpers::fireAndForget(
                     m_effect, PhosphorProtocol::Service::Interface::WindowTracking,
                     QStringLiteral("storePreTileGeometry"),
-                    {winIt.key(), static_cast<int>(geo.x()), static_cast<int>(geo.y()), static_cast<int>(geo.width()),
-                     static_cast<int>(geo.height()), screenId, false},
+                    {winIt.key(), qRound(geo.x()), qRound(geo.y()), qRound(geo.width()), qRound(geo.height()), screenId,
+                     false},
                     QStringLiteral("storePreTileGeometry"));
                 ++resent;
             }
@@ -658,90 +750,7 @@ void AutotileHandler::onDaemonReady()
 // handleAutotileFloatToggle removed: float toggle is now daemon-local via
 // WindowTrackingAdaptor::toggleWindowFloat (which emits applyGeometryRequested).
 
-// ═══════════════════════════════════════════════════════════════════════════════
-// D-Bus signal connections and settings
-// ═══════════════════════════════════════════════════════════════════════════════
-
-void AutotileHandler::connectSignals()
-{
-    QDBusConnection bus = QDBusConnection::sessionBus();
-
-    // Disconnect first so daemon restarts don't accumulate duplicate match
-    // rules. Qt's QDBusConnection::connect can register the same handler
-    // twice if called twice with identical args, which would cause each
-    // signal to invoke the slot N times after N daemon restarts.
-    bus.disconnect(PhosphorProtocol::Service::Name, PhosphorProtocol::Service::ObjectPath,
-                   PhosphorProtocol::Service::Interface::Autotile, QStringLiteral("windowsTileRequested"), this,
-                   SLOT(slotWindowsTileRequested(PhosphorProtocol::TileRequestList)));
-    bus.disconnect(PhosphorProtocol::Service::Name, PhosphorProtocol::Service::ObjectPath,
-                   PhosphorProtocol::Service::Interface::Autotile, QStringLiteral("focusWindowRequested"), this,
-                   SLOT(slotFocusWindowRequested(QString)));
-    bus.disconnect(PhosphorProtocol::Service::Name, PhosphorProtocol::Service::ObjectPath,
-                   PhosphorProtocol::Service::Interface::Autotile, QStringLiteral("enabledChanged"), this,
-                   SLOT(slotEnabledChanged(bool)));
-    bus.disconnect(PhosphorProtocol::Service::Name, PhosphorProtocol::Service::ObjectPath,
-                   PhosphorProtocol::Service::Interface::Autotile, QStringLiteral("autotileScreensChanged"), this,
-                   SLOT(slotScreensChanged(QStringList, bool)));
-    bus.disconnect(PhosphorProtocol::Service::Name, PhosphorProtocol::Service::ObjectPath,
-                   PhosphorProtocol::Service::Interface::Autotile, QStringLiteral("windowFloatingChanged"), this,
-                   SLOT(slotWindowFloatingChanged(QString, bool, QString)));
-
-    bus.connect(PhosphorProtocol::Service::Name, PhosphorProtocol::Service::ObjectPath,
-                PhosphorProtocol::Service::Interface::Autotile, QStringLiteral("windowsTileRequested"), this,
-                SLOT(slotWindowsTileRequested(PhosphorProtocol::TileRequestList)));
-
-    bus.connect(PhosphorProtocol::Service::Name, PhosphorProtocol::Service::ObjectPath,
-                PhosphorProtocol::Service::Interface::Autotile, QStringLiteral("focusWindowRequested"), this,
-                SLOT(slotFocusWindowRequested(QString)));
-
-    bus.connect(PhosphorProtocol::Service::Name, PhosphorProtocol::Service::ObjectPath,
-                PhosphorProtocol::Service::Interface::Autotile, QStringLiteral("enabledChanged"), this,
-                SLOT(slotEnabledChanged(bool)));
-
-    bus.connect(PhosphorProtocol::Service::Name, PhosphorProtocol::Service::ObjectPath,
-                PhosphorProtocol::Service::Interface::Autotile, QStringLiteral("autotileScreensChanged"), this,
-                SLOT(slotScreensChanged(QStringList, bool)));
-
-    bus.connect(PhosphorProtocol::Service::Name, PhosphorProtocol::Service::ObjectPath,
-                PhosphorProtocol::Service::Interface::Autotile, QStringLiteral("windowFloatingChanged"), this,
-                SLOT(slotWindowFloatingChanged(QString, bool, QString)));
-
-    qCInfo(lcEffect) << "Connected to autotile D-Bus signals";
-}
-
-void AutotileHandler::loadSettings()
-{
-    // Query initial autotile screen set from daemon asynchronously. The
-    // foreign org.freedesktop.DBus.Properties interface is correct for D-Bus
-    // property access; ClientHelpers can't be used here because it hard-wires
-    // the org.plasmazones interface. Bound by SyncCallTimeoutMs so a wedged
-    // daemon doesn't leak a watcher for Qt's default 25 s.
-    QDBusMessage msg =
-        QDBusMessage::createMethodCall(PhosphorProtocol::Service::Name, PhosphorProtocol::Service::ObjectPath,
-                                       QStringLiteral("org.freedesktop.DBus.Properties"), QStringLiteral("Get"));
-    msg << PhosphorProtocol::Service::Interface::Autotile << QStringLiteral("autotileScreens");
-
-    QDBusPendingCall call = QDBusConnection::sessionBus().asyncCall(msg, PhosphorProtocol::Service::SyncCallTimeoutMs);
-    auto* watcher = new QDBusPendingCallWatcher(call, this);
-    connect(watcher, &QDBusPendingCallWatcher::finished, this, [this](QDBusPendingCallWatcher* w) {
-        w->deleteLater();
-        QDBusPendingReply<QDBusVariant> reply = *w;
-        if (reply.isValid()) {
-            QStringList screens = reply.value().variant().toStringList();
-            const QSet<QString> added(screens.begin(), screens.end());
-            m_autotileScreens = added;
-            qCInfo(lcEffect) << "Loaded autotile screens:" << m_autotileScreens;
-
-            if (!added.isEmpty()) {
-                const auto windows = KWin::effects->stackingOrder();
-                // Batch-notify all windows on autotile screens in one D-Bus call
-                // instead of per-window windowOpened round-trips.
-                notifyWindowsAddedBatch(windows, added, /*resetNotified=*/true);
-            }
-        } else {
-            qCDebug(lcEffect) << "Autotile screens: query failed, daemon may not be running";
-        }
-    });
-}
+// connectSignals() / loadSettings() live in autotilehandler/wiring.cpp
+// (split for the 800-line limit).
 
 } // namespace PlasmaZones

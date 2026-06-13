@@ -16,7 +16,7 @@
 #include "../../core/utils.h"
 #include <PhosphorPlacement/WindowTrackingService.h>
 #include <PhosphorContext/ContextResolver.h>
-#include "../config/settings.h"
+#include "../../config/settings.h"
 #include "../../dbus/windowtrackingadaptor.h"
 #include <PhosphorEngine/PlacementEngineBase.h>
 #include <PhosphorEngine/IPlacementEngine.h>
@@ -286,13 +286,6 @@ void Daemon::handleSnappingToAutotile()
     }
     const QString autotileLayoutId = PhosphorLayout::LayoutId::makeAutotileId(algoId);
 
-    if (m_autotileEngine) {
-        m_autotileEngine->setAlgorithm(algoId);
-    }
-
-    // Pre-save snap-float state before autotile entry (same rationale as toggle handler)
-    presaveSnapFloats();
-
     // Determine which screens need to be converted to autotile. Skip screens
     // that already have an autotile assignment so we preserve their per-screen
     // algorithm customization (mixed-mode: screen A snap → autotile, screen B
@@ -309,8 +302,16 @@ void Daemon::handleSnappingToAutotile()
     }
 
     if (screensToConvert.isEmpty()) {
-        return;
+        return; // No-op enable: do NOT mutate engine algorithm or capture floats.
     }
+
+    // Side effects deferred past the no-op check above so an enable with nothing
+    // to convert leaves engine state untouched.
+    if (m_autotileEngine) {
+        m_autotileEngine->setAlgorithm(algoId);
+    }
+    // Pre-save snap-float state before autotile entry (same rationale as toggle handler)
+    presaveSnapFloats();
 
     // Pre-seed autotile engine with zone-ordered windows BEFORE layout switch
     // so we get deterministic window ordering (zone 1 → master, zone 2 → second).

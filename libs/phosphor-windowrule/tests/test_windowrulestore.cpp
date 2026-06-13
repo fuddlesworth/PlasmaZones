@@ -44,6 +44,10 @@ private:
 
     static WindowRule makeRule(const QString& screenId)
     {
+        // screenId is passed as BOTH the rule name (1st arg) and the screen-id
+        // dimension (2nd arg) so each fixture rule is self-describing: a distinct
+        // screenId yields a distinct context tuple AND a distinct deterministic
+        // id. The id derives from the context tuple, not the name.
         return ContextRuleBridge::makeAssignmentRule(screenId, screenId, 0, QString(), QStringLiteral("snapping"),
                                                      QStringLiteral("{11111111-2222-3333-4444-555555555555}"),
                                                      QString());
@@ -303,5 +307,5 @@ private Q_SLOTS:
     }
 };
 
-QTEST_MAIN(TestWindowRuleStore)
+QTEST_GUILESS_MAIN(TestWindowRuleStore)
 #include "test_windowrulestore.moc"

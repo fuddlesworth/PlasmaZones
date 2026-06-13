@@ -13,6 +13,8 @@
 #include <QtGlobal>
 #include <QtTest/QtTest>
 
+#include <iterator>
+
 class TestSmoke : public QObject
 {
     Q_OBJECT
@@ -251,6 +253,13 @@ private Q_SLOTS:
                                     .arg(QLatin1String(c.expected))
                                     .arg(QLatin1String(actual))));
         }
+
+        // Completeness guard: the table above spot-checks each known role,
+        // but a newly-added role (e.g. UserRole+10) would slip past it
+        // silently — names.value() on an unlisted role is simply never
+        // queried. Pin the total count to the pinned table size so adding
+        // a role to roleNames() forces a matching entry here.
+        QCOMPARE(names.size(), int(std::size(nameCases)));
 
         // Role-value table: same pattern, for the int role enum values.
         // A reordering regression here breaks every C++ caller doing

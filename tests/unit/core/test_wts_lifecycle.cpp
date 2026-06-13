@@ -482,7 +482,7 @@ private Q_SLOTS:
         PhosphorEngine::EngineSlot snap;
         snap.state = PhosphorEngine::WindowPlacement::stateSnapped();
         snap.zoneIds = QStringList{m_zoneIds[1]};
-        p.engines.insert(QStringLiteral("snap"), snap);
+        p.engines.insert(PhosphorEngine::WindowPlacement::snapEngineId(), snap);
         m_service->placementStore().record(p);
 
         const QString newId = QStringLiteral("firefox|new-uuid");
@@ -505,7 +505,7 @@ private Q_SLOTS:
         PhosphorEngine::EngineSlot snap;
         snap.state = PhosphorEngine::WindowPlacement::stateSnapped();
         snap.zoneIds = QStringList{m_zoneIds[2]};
-        p.engines.insert(QStringLiteral("snap"), snap);
+        p.engines.insert(PhosphorEngine::WindowPlacement::snapEngineId(), snap);
         m_service->placementStore().record(p);
 
         QCOMPARE(m_service->recordedSnapZones(instA), QStringList{m_zoneIds[0]});
@@ -542,7 +542,7 @@ private Q_SLOTS:
         PhosphorEngine::EngineSlot snap;
         snap.state = PhosphorEngine::WindowPlacement::stateSnapped();
         snap.zoneIds = QStringList{m_zoneIds[2]};
-        p.engines.insert(QStringLiteral("snap"), snap);
+        p.engines.insert(PhosphorEngine::WindowPlacement::snapEngineId(), snap);
         m_service->placementStore().record(p);
 
         QCOMPARE(m_service->recordedSnapZones(windowId), QStringList{m_zoneIds[2]});
@@ -563,7 +563,7 @@ private Q_SLOTS:
         PhosphorEngine::EngineSlot snap;
         snap.state = PhosphorEngine::WindowPlacement::stateFloating();
         snap.zoneIds = QStringList{m_zoneIds[1]};
-        p.engines.insert(QStringLiteral("snap"), snap);
+        p.engines.insert(PhosphorEngine::WindowPlacement::snapEngineId(), snap);
         m_service->placementStore().record(p);
 
         QVERIFY(m_service->recordedSnapZones(windowId).isEmpty());
