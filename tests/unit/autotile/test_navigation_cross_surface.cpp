@@ -20,10 +20,14 @@
 #include <PhosphorTileEngine/AutotileEngine.h>
 #include <PhosphorTiles/TilingState.h>
 
+#include <PhosphorIdentity/VirtualScreenId.h>
+#include <PhosphorScreens/VirtualScreen.h>
+
 #include "FakeScreenProvider.h"
 #include "core/crosssurfaceresolver.h"
 
 #include "../helpers/AutotileTestHelpers.h"
+#include "../helpers/VirtualScreenTestHelpers.h"
 
 using PhosphorEngine::NavigationContext;
 using PhosphorTileEngine::AutotileEngine;
@@ -92,6 +96,7 @@ private Q_SLOTS:
 
     void crossOutput_focusRight_entersLeftEdgeOfNeighbourOutput();
     void crossOutput_moveRight_relocatesWindowToNeighbourOutput();
+    void crossVirtualScreen_focusRight_crossesToSiblingVirtualScreen();
 
     void crossDesktop_focusRight_activatesEntryWindowOnNextDesktop();
     void crossDesktop_moveRight_relocatesToNextDesktopAndRequestsKWinMove();
@@ -269,6 +274,48 @@ void TestNavigationCrossSurface::crossDesktop_moveRight_relocatesToNextDesktopAn
     const QList<QVariant> args = moveSpy.takeFirst();
     QCOMPARE(args.at(0).toString(), rightmost);
     QCOMPARE(args.at(1).toInt(), 2);
+}
+
+void TestNavigationCrossSurface::crossVirtualScreen_focusRight_crossesToSiblingVirtualScreen()
+{
+    // Virtual screens are standardised first-class outputs: one physical
+    // monitor split into two virtual screens. Cross-output navigation must
+    // treat the sibling virtual screen as the neighbour output — the resolver
+    // iterates effectiveScreenIds() (which yields the vs IDs) and reads their
+    // virtual geometry, exactly like physical outputs.
+    const QString physId = QStringLiteral("DP-1");
+    PhosphorScreens::FakeScreenProvider provider;
+    provider.addScreen(physId, QRect(0, 0, 1920, 1080));
+    PhosphorScreens::ScreenManager manager(
+        PhosphorScreens::ScreenManagerConfig{.screenProvider = &provider, .useGeometrySensors = false});
+    manager.start();
+    manager.setVirtualScreenConfig(physId, PlasmaZones::TestHelpers::makeSplitConfig(physId));
+
+    const QString vs0 = PhosphorIdentity::VirtualScreenId::make(physId, 0); // left half
+    const QString vs1 = PhosphorIdentity::VirtualScreenId::make(physId, 1); // right half
+    // Precondition: the manager presents both virtual screens as effective
+    // outputs with valid (left/right half) geometry.
+    QVERIFY(manager.effectiveScreenIds().contains(vs0));
+    QVERIFY(manager.effectiveScreenIds().contains(vs1));
+    QVERIFY(manager.screenGeometry(vs0).isValid());
+
+    AutotileEngine engine(nullptr, nullptr, &manager, PlasmaZones::TestHelpers::testRegistry());
+    PlasmaZones::CrossSurfaceResolver resolver(&manager, nullptr);
+    engine.setCrossSurfaceResolver(&resolver);
+    engine.setAutotileScreens({vs0, vs1});
+    engine.windowOpened(QStringLiteral("a"), vs0);
+    engine.windowOpened(QStringLiteral("b"), vs1);
+    QCoreApplication::processEvents();
+    // Each virtual screen has one full-half window (global coordinates).
+    engine.tilingStateForScreen(vs0)->setCalculatedZones({QRect(0, 0, 960, 1080)});
+    engine.tilingStateForScreen(vs1)->setCalculatedZones({QRect(960, 0, 960, 1080)});
+
+    // Focus right from the only window on the LEFT virtual screen → cross to the
+    // RIGHT virtual screen's window.
+    QSignalSpy activateSpy(&engine, &AutotileEngine::activateWindowRequested);
+    engine.focusInDirection(QStringLiteral("right"), NavigationContext{QStringLiteral("a"), vs0});
+    QCOMPARE(activateSpy.count(), 1);
+    QCOMPARE(activateSpy.takeFirst().at(0).toString(), QStringLiteral("b"));
 }
 
 QTEST_MAIN(TestNavigationCrossSurface)
