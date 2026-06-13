@@ -622,6 +622,18 @@ public:
     void setRestoreWindowsToZonesOnLogin(bool) override
     {
     }
+    bool restoreUnsnappedWindowsOnLogin() const override
+    {
+        return m_restoreUnsnappedWindowsOnLogin;
+    }
+    void setRestoreUnsnappedWindowsOnLogin(bool value) override
+    {
+        if (m_restoreUnsnappedWindowsOnLogin == value)
+            return;
+        m_restoreUnsnappedWindowsOnLogin = value;
+        Q_EMIT restoreUnsnappedWindowsOnLoginChanged();
+        Q_EMIT settingsChanged();
+    }
     bool autoAssignAllLayouts() const override
     {
         return m_autoAssignAllLayouts;
@@ -1127,6 +1139,7 @@ private:
     bool m_snapAssistFeatureEnabled = false;
     bool m_snapAssistEnabled = false;
     bool m_autoAssignAllLayouts = false;
+    bool m_restoreUnsnappedWindowsOnLogin = true;
     bool m_snappingFocusNewWindows = false;
     bool m_snappingFocusFollowsMouse = false;
     QStringList m_snappingLayoutOrder;

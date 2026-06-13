@@ -9,7 +9,7 @@
 namespace PlasmaZones {
 
 GeneralPageController::GeneralPageController(ISettings& settings, QObject* parent)
-    : PhosphorSettingsUi::PageController(QStringLiteral("general"), parent)
+    : PhosphorControl::PageController(QStringLiteral("general"), parent)
 {
     // Translate rendering backend display names once at construction.
     for (const auto& name : ConfigDefaults::renderingBackendDisplayNames()) {

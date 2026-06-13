@@ -15,7 +15,7 @@
 namespace PlasmaZones {
 
 SettingsStagingDomain::SettingsStagingDomain(SettingsController* controller, QObject* parent)
-    : PhosphorSettingsUi::StagingDomain(parent)
+    : PhosphorControl::StagingDomain(parent)
     , m_controller(controller)
 {
     if (!m_controller) {

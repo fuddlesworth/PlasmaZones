@@ -295,7 +295,7 @@ private:
 
     QHash<QString, Getter> m_getters;
     QHash<QString, Setter> m_setters;
-    QHash<QString, QString> m_schemas; // key -> type ("bool"|"int"|"double"|"string"|"color"|"stringlist")
+    QHash<QString, QString> m_schemas; // key -> type ("bool"|"int"|"double"|"string"|"color"|"stringlist"|"map")
 
     // Debounced save timer (performance optimization)
     QTimer* m_saveTimer = nullptr;

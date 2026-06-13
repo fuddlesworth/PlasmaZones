@@ -18,6 +18,21 @@ if(NOT PROJECT_VERSION)
     set(CMAKE_CXX_STANDARD_REQUIRED ON)
 endif()
 
+# Unconditional like phosphor-identity: the in-tree superbuild has already
+# found Qt (this re-find is a fast cache hit), and a standalone configure
+# needs it — without these the namespaced targets in target_link_libraries
+# below would fail at generate time. Config.cmake.in demands Qt 6.6 of
+# consumers, so enforce the same minimum when building. The sibling
+# phosphor libs are resolved via find_package only when a parent scope has
+# not already defined their targets (i.e. genuine standalone configure).
+find_package(Qt6 6.6 REQUIRED COMPONENTS Core Gui DBus)
+if(NOT TARGET PhosphorProtocol::PhosphorProtocol)
+    find_package(PhosphorProtocol REQUIRED)
+endif()
+if(NOT TARGET PhosphorIdentity::PhosphorIdentity)
+    find_package(PhosphorIdentity REQUIRED)
+endif()
+
 include(GenerateExportHeader)
 
 set(CMAKE_AUTOMOC ON)
@@ -29,12 +44,15 @@ add_library(PhosphorCompositor SHARED
     include/PhosphorCompositor/ILifecycleHandler.h
     include/PhosphorCompositor/DaemonClient.h
     include/PhosphorCompositor/AutotileState.h
+    include/PhosphorCompositor/DecorationDefaults.h
+    include/PhosphorCompositor/DecorationManager.h
     include/PhosphorCompositor/FloatingCache.h
     include/PhosphorCompositor/DebouncedAction.h
     include/PhosphorCompositor/GeometryHelpers.h
     include/PhosphorCompositor/SnapAssistFilter.h
     include/PhosphorCompositor/TriggerParser.h
     src/DaemonClient.cpp
+    src/DecorationManager.cpp
     src/SnapAssistFilter.cpp
     src/TriggerParser.cpp
 )
@@ -44,6 +62,16 @@ generate_export_header(PhosphorCompositor
     EXPORT_FILE_NAME phosphorcompositor_export.h
     EXPORT_MACRO_NAME PHOSPHORCOMPOSITOR_EXPORT
 )
+
+# Fallback BEFORE first use: ${KDE_INSTALL_INCLUDEDIR} is expanded into the
+# $<INSTALL_INTERFACE:> below at this point, so defining it afterwards would
+# export an empty install include dir in a non-KDE configure (mirrors
+# phosphor-identity's ordering).
+if(NOT DEFINED KDE_INSTALL_INCLUDEDIR)
+    include(GNUInstallDirs)
+    set(KDE_INSTALL_INCLUDEDIR ${CMAKE_INSTALL_INCLUDEDIR})
+    set(KDE_INSTALL_LIBDIR ${CMAKE_INSTALL_LIBDIR})
+endif()
 
 target_include_directories(PhosphorCompositor
     PUBLIC
@@ -61,18 +89,11 @@ target_link_libraries(PhosphorCompositor
         Qt6::DBus
         PhosphorProtocol::PhosphorProtocol
         PhosphorIdentity::PhosphorIdentity
-        PhosphorAnimation::PhosphorAnimation
 )
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # Install
 # ═══════════════════════════════════════════════════════════════════════════════
-
-if(NOT DEFINED KDE_INSTALL_INCLUDEDIR)
-    include(GNUInstallDirs)
-    set(KDE_INSTALL_INCLUDEDIR ${CMAKE_INSTALL_INCLUDEDIR})
-    set(KDE_INSTALL_LIBDIR ${CMAKE_INSTALL_LIBDIR})
-endif()
 
 set_target_properties(PhosphorCompositor PROPERTIES
     SOVERSION 0

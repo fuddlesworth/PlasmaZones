@@ -1,5 +1,5 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
-// SPDX-License-Identifier: GPL-3.0-or-later
+// SPDX-License-Identifier: LGPL-2.1-or-later
 //
 // Smoke test for phosphor-service-polkit. Pins the plumbing contract:
 // QML-registration idempotency, the default object path, and inert
@@ -10,7 +10,6 @@
 // full PAM session lifecycle needs a live polkitd and is exercised via the CLI
 // demo against pkexec.
 
-#include <PhosphorServicePolkit/AuthRequest.h>
 #include <PhosphorServicePolkit/PolkitAgent.h>
 #include <PhosphorServicePolkit/QmlRegistration.h>
 

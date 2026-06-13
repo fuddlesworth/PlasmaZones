@@ -51,9 +51,9 @@ bool hasNumberInRange(const QJsonObject& params, QLatin1StringView key, double m
 /// Validates that @p params has a `#`-prefixed hex colour string at @p key.
 /// Accepts the standard QColor hex shapes the effect-side consumer parses via
 /// `QColor(QString)`: `#RGB` (4), `#RRGGBB` (7) and `#AARRGGBB` (9 — QColor reads
-/// a 9-digit hex as alpha-first). The picker only emits `#RRGGBB`; the wider set keeps a hand-edited
-/// payload (short form, alpha) from being silently dropped on load while still
-/// rejecting non-hex/garbage. Named colours ("red") are intentionally NOT
+/// a 9-digit hex as alpha-first). The picker emits `#AARRGGBB`; the wider set
+/// also keeps hand-edited short-form payloads from being silently dropped on
+/// load while still rejecting non-hex/garbage. Named colours ("red") are NOT
 /// accepted here — the boundary stays hex-only even though the consumer's
 /// QColor would resolve them.
 bool hasHexColor(const QJsonObject& params, QLatin1StringView key)
@@ -366,6 +366,31 @@ void ActionRegistry::registerBuiltins()
                      .enumWireValues = engineModeOptions()}},
     });
 
+    // ── locked slot — context-domain layout lock ──
+    // A matched context rule pins the active layout for its screen/desktop/
+    // activity so it can't be switched, mirroring the manual ToggleLayoutLock
+    // shortcut. Boolean `value`: true locks (the meaningful default for a
+    // freshly-authored action, hence `defaultDisplay = 1.0`); false fills the
+    // Locked slot with not-locked — a no-op against the manual lock store (the
+    // daemon ORs, so it never unlocks a manual lock), but as a single-winner
+    // slot a higher-priority false rule overrides a lower-priority true one.
+    // Mode-agnostic — the rule query ignores the Mode
+    // axis, so the same lock surfaces for whichever engine mode is asked — and
+    // live-resolved: the daemon ORs it with (never replaces) the manual
+    // ToggleLayoutLock store, so rule locks and manual toggles do not fight.
+    registerAction(ActionDescriptor{
+        .type = QString(ActionType::LockContext),
+        .slotFor = constantSlot(ActionSlot::Locked),
+        .validate =
+            [](const QJsonObject& p) {
+                return hasBool(p, ActionParam::Value);
+            },
+        .terminal = false,
+        .allowedKeys = {QString(ActionParam::Value)},
+        .domain = ActionDomain::Context,
+        .params = {P{.key = QString(ActionParam::Value), .kind = QStringLiteral("bool"), .defaultDisplay = 1.0}},
+    });
+
     // ── manage slot — terminal. Exclude is intentionally free-form: an empty
     //    `allowedKeys` opts out of the strict-key check so a future Exclude
     //    reason/scope param can be added without a schema bump. ──
@@ -509,6 +534,25 @@ void ActionRegistry::registerBuiltins()
                      .defaultDisplay = 100.0}},
     });
 
+    // RestorePosition is window-domain but NOT a border/appearance slot — it is
+    // consumed daemon-side (SnapEngine restore-position predicate), not by the
+    // effect. Unlike the border bools below it seeds FALSE: the global
+    // `restoreUnsnappedWindowsOnLogin` setting defaults ON, so a fresh rule that
+    // re-asserted true would be a no-op the user has to flip. Seeding false lands
+    // the rule on its only meaningful value — opt this window OUT of restore.
+    registerAction(ActionDescriptor{
+        .type = QString(ActionType::RestorePosition),
+        .slotFor = constantSlot(ActionSlot::RestorePosition),
+        .validate =
+            [](const QJsonObject& p) {
+                return hasBool(p, ActionParam::Value);
+            },
+        .terminal = false,
+        .allowedKeys = {QString(ActionParam::Value)},
+        .domain = ActionDomain::Window,
+        .params = {P{.key = QString(ActionParam::Value), .kind = QStringLiteral("bool"), .defaultDisplay = 0.0}},
+    });
+
     // ── per-window border / title-bar appearance slots (domain Window) ──
     // One slot per property so independent rules cascade per-property. The
     // effect (resolveWindowAppearance) reads these slots and merges them over
@@ -581,7 +625,7 @@ void ActionRegistry::registerBuiltins()
         .terminal = false,
         .allowedKeys = {QString(ActionParam::Value)},
         .domain = ActionDomain::Window,
-        // Colour seed (#RRGGBB) is a string, so it is set by the editor's
+        // Colour seed (#AARRGGBB) is a string, so it is set by the editor's
         // defaultPayloadFor "color" branch, not via defaultDisplay (double).
         .params = {P{.key = QString(ActionParam::Value), .kind = QStringLiteral("color")}},
     });

@@ -23,6 +23,9 @@
 #include <PhosphorScreens/VirtualScreen.h>
 #include "../core/types.h"
 #include <PhosphorEngine/WindowRegistry.h>
+// Complete type required where ~WindowTrackingAdaptor destroys the
+// unique_ptr<RuleEvaluator> member (m_restorePositionEvaluator).
+#include <PhosphorWindowRule/RuleEvaluator.h>
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
@@ -308,11 +311,42 @@ void WindowTrackingAdaptor::captureWindowPlacement(const QString& windowId)
             const PhosphorEngine::EngineSlot slot = p->slotFor(e->engineId());
             const bool unmanagedState = (slot.state == PhosphorEngine::WindowPlacement::stateFree()
                                          || slot.state == PhosphorEngine::WindowPlacement::stateFloating());
-            if (unmanagedState && !p->screenId.isEmpty()) {
+            if (unmanagedState) {
                 const QRect frame = m_frameGeometry.value(windowId);
                 if (frame.isValid()) {
-                    p->freeGeometryByScreen.insert(p->screenId, frame);
+                    // Screen key for the shared free/float geometry. The owning engine
+                    // normally reports the window's screen, but a FLOATING window whose
+                    // engine lost its screen assignment comes back with an empty
+                    // screenId. The previous `!p->screenId.isEmpty()` gate then silently
+                    // DROPPED its live float geometry, so it never persisted — and a
+                    // later re-float (or logout→login) had no freeGeometry to restore,
+                    // snapping the window back to a default instead of the user's last
+                    // floated size/position. Fall back to the screen the live frame
+                    // actually sits on (resolved from its centre) so a free/floating
+                    // window's geometry is ALWAYS captured. Stamp it back onto
+                    // p->screenId so the merged record carries a real managed screen too
+                    // (the capture's engine slot makes record() adopt p->screenId).
+                    QString screenKey = p->screenId;
+                    if (screenKey.isEmpty()) {
+                        screenKey = Utils::effectiveScreenIdAt(m_service->screenManager(), frame.center());
+                    }
+                    if (!screenKey.isEmpty()) {
+                        p->screenId = screenKey;
+                        p->freeGeometryByScreen.insert(screenKey, frame);
+                    }
                 }
+            }
+            // A capture that yields no restorable content — a bare {free} slot with
+            // no frame geometry (the window has no reported frame: closing, or never
+            // mapped) and no managed slot — carries nothing to restore. Recording it
+            // would only append FIFO noise that, at MaxPerApp entries per app, starves
+            // and eventually evicts (removeFirst) the window's REAL placement, silently
+            // breaking float/free geometry restore on the next open. Skip it: any
+            // existing record for this window keeps its last meaningful state (a genuine
+            // float/free transition always captures a valid frame, so it is never
+            // contentless — only a frame-less capture lands here).
+            if (!p->hasRestorableContent()) {
+                return;
             }
             // Only mark dirty when the store actually changed. A content-identical
             // re-capture (the common case — refreshOpenWindowPlacements re-captures
@@ -843,7 +877,25 @@ void WindowTrackingAdaptor::pruneStaleWindows(const QStringList& aliveWindowIds)
     const QSet<QString> alive(aliveWindowIds.begin(), aliveWindowIds.end());
     int persistedPruned = m_service->pruneStaleAssignments(alive);
     if (m_autotileEngine) {
-        persistedPruned += m_autotileEngine->pruneStaleWindows(alive);
+        // The autotile engine keys every internal map (m_windowToStateKey,
+        // m_windowMinSizes, m_autotileFloatedWindows, TilingState membership)
+        // on each window's CANONICAL id — its FIRST-seen composite, frozen by
+        // the daemon-side WindowRegistry. The alive list, by contrast, carries
+        // the effect's CURRENT composites: on an effect reload the effect
+        // rebuilds its id cache from the windows' present WM_CLASS, so for an
+        // app that mutated its class mid-session (Electron/CEF — the exact
+        // class the canonicalization machinery exists for) the current
+        // composite differs from the canonical. A raw comparison would then
+        // miss the live window in the alive set and FORCE-REMOVE it from the
+        // layout. Canonicalize each alive id back to its registry identity so
+        // the engine compares canonical-to-canonical (passthrough for ids the
+        // registry never saw — never worse than the raw set).
+        QSet<QString> canonicalAlive;
+        canonicalAlive.reserve(aliveWindowIds.size());
+        for (const QString& id : aliveWindowIds) {
+            canonicalAlive.insert(m_service->canonicalizeForLookup(id));
+        }
+        persistedPruned += m_autotileEngine->pruneStaleWindows(canonicalAlive);
     }
     // Defensive sweep of the frame-geometry shadow store. The primary
     // cleanup path is `windowClosed`, but if a window dies without a
@@ -869,6 +921,19 @@ void WindowTrackingAdaptor::pruneStaleWindows(const QStringList& aliveWindowIds)
         } else {
             ++it;
         }
+    }
+    // And the WindowRegistry's metadata records + canonical-id translations:
+    // windowClosed releases these per-window, but a window that died without a
+    // close signal (the case this whole method backstops) would leak its
+    // record + canonical entry for the session. The registry keys on instance
+    // ids (uuid components), so build the alive set in that form.
+    if (m_windowRegistry) {
+        QSet<QString> aliveInstances;
+        aliveInstances.reserve(aliveWindowIds.size());
+        for (const QString& id : aliveWindowIds) {
+            aliveInstances.insert(PhosphorIdentity::WindowId::extractInstanceId(id));
+        }
+        m_windowRegistry->pruneStaleInstances(aliveInstances);
     }
     const int totalPruned = persistedPruned + frameGeoPruned;
     if (totalPruned > 0) {

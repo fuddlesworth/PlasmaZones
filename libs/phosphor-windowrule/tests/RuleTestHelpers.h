@@ -29,27 +29,6 @@ inline RuleAction snappingLayout(const QString& layoutId)
     return a;
 }
 
-inline RuleAction tilingAlgorithm(const QString& algorithm)
-{
-    RuleAction a;
-    a.type = QString(ActionType::SetTilingAlgorithm);
-    a.params.insert(ActionParam::Algorithm, algorithm);
-    return a;
-}
-
-/// DisableEngine carries a mandatory `mode` wire token; an unset mode is
-/// rejected by the action validator (engineModeOptions().contains("") is
-/// false). The earlier zero-arg shape produced an action that always
-/// failed strict load — a footgun for future test authors. Mirror
-/// engineMode(QString) above.
-inline RuleAction disableEngine(const QString& mode)
-{
-    RuleAction a;
-    a.type = QString(ActionType::DisableEngine);
-    a.params.insert(ActionParam::Mode, mode);
-    return a;
-}
-
 inline RuleAction excludeAction()
 {
     RuleAction a;
@@ -102,6 +81,14 @@ inline RuleAction zonePadding(int px)
     RuleAction a;
     a.type = QString(ActionType::SetZonePadding);
     a.params.insert(ActionParam::Value, px);
+    return a;
+}
+
+inline RuleAction restorePosition(bool value)
+{
+    RuleAction a;
+    a.type = QString(ActionType::RestorePosition);
+    a.params.insert(ActionParam::Value, value);
     return a;
 }
 

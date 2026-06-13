@@ -4,6 +4,16 @@
 #pragma once
 
 #include <PhosphorServicePipeWire/phosphorservicepipewire_export.h>
+// Full definitions, not forward declarations, for both types this header's
+// moc surface exposes: the `connection` Q_PROPERTY carries
+// PipeWireConnection* and the nodeAdded/nodeRemoved relay signals carry
+// PwNode*. Qt6 moc auto-registers property and signal-parameter metatypes,
+// and QMetaType SFINAE-probes completeness — a fwd decl for either would
+// re-fire GCC's -Wsfinae-incomplete the moment the mocs_compilation
+// aggregation order stops shielding this header (same rationale as
+// PwNodeModel.h).
+#include <PhosphorServicePipeWire/PipeWireConnection.h>
+#include <PhosphorServicePipeWire/PwNode.h>
 
 #include <QObject>
 #include <QString>
@@ -11,9 +21,6 @@
 #include <memory>
 
 namespace PhosphorServicePipeWire {
-
-class PipeWireConnection;
-class PwNode;
 
 /// Process-wide PipeWire host: owns the single `PipeWireConnection`
 /// instance the shell binds to and re-exposes its observable state as
@@ -28,10 +35,12 @@ class PwNode;
 /// is forwarded one-for-one — `connectedChanged`,
 /// `daemonAvailableChanged`, `defaultSinkNameChanged`,
 /// `defaultSourceNameChanged`, `error`, `nodeAdded`, `nodeRemoved`.
-/// QML consumers can bind exclusively through `PipeWireHost.*` and
-/// never need to reach through `.connection.*`. The `connection`
-/// property remains exposed for C++ consumers (and for QML code that
-/// wants to pass the connection into a `PwNodeModel`).
+/// QML consumers can OBSERVE exclusively through `PipeWireHost.*` and
+/// never need to reach through `.connection.*` for state. The mutating
+/// slots (`setDefaultSink` / `setDefaultSource` / `writeVolumes` /
+/// `writeMuted`) live only on the connection, so writers still go
+/// through `host.connection.*` — which the `connection` property exposes
+/// (alongside its other use: handing the connection to a `PwNodeModel`).
 ///
 /// The host is constructed lazily on first QML use (via
 /// `qmlRegisterSingletonType`'s factory) and auto-connects to the

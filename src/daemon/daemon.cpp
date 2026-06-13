@@ -74,8 +74,6 @@
 #include <PhosphorScreens/PlasmaPanelSource.h>
 #include "../core/shaderregistry.h"
 #include "../config/settings.h"
-#include "../config/configmigration.h"
-#include "../config/configbackends.h"
 #include "../dbus/layoutadaptor.h"
 #include "../dbus/settingsadaptor.h"
 #include "../dbus/overlayadaptor.h"
@@ -999,6 +997,9 @@ bool Daemon::init()
                                   m_virtualDesktopManager.get(), m_activityManager.get(), this);
     m_windowTrackingAdaptor->setZoneDetectionAdaptor(m_zoneDetectionAdaptor);
     m_windowTrackingAdaptor->setWindowRegistry(m_windowRegistry.get());
+    // Full rule set for per-window RestorePosition evaluation (overrides the
+    // global restoreUnsnappedWindowsOnLogin setting for matched windows).
+    m_windowTrackingAdaptor->setWindowRuleStore(m_windowRuleStore.get());
 
     // Drop closed windows from m_lastAutotileOrders so a manual→autotile toggle
     // doesn't replay a ghost id into the TilingState (recalculateLayout would
@@ -1096,7 +1097,7 @@ bool Daemon::init()
     m_workspaceStateAdapter =
         std::make_unique<DaemonWorkspaceStateAdapter>(m_virtualDesktopManager.get(), m_activityManager.get());
     m_screenModeAdapter = std::make_unique<DaemonScreenModeAdapter>(m_screenModeRouter.get());
-    m_settingsGateAdapter = std::make_unique<DaemonSettingsGateAdapter>(m_settings.get());
+    m_settingsGateAdapter = std::make_unique<DaemonSettingsGateAdapter>(m_settings.get(), m_layoutManager.get());
     m_contextResolver = std::make_unique<PhosphorContext::ContextResolver>(
         m_workspaceStateAdapter.get(), m_screenModeAdapter.get(), m_settingsGateAdapter.get());
 
@@ -1213,6 +1214,19 @@ bool Daemon::init()
                 refilterExcludeRules();
             });
 
+    // A rule edit can change the live context-lock state (e.g. toggling,
+    // re-prioritising or re-matching a LockContext rule) without touching the
+    // manual lock store, so the ISettings::settingsChanged refresh that keeps
+    // open zone selectors / the layout picker in sync would miss it. Re-push
+    // the lock state to any open overlay on every rule change. QPointer guards
+    // the shutdown window (overlay reset before ~Daemon disconnects).
+    connect(m_windowRuleStore.get(), &PhosphorWindowRule::WindowRuleStore::rulesChanged, this,
+            [overlay = QPointer(m_overlayService.get())](bool /*persisted*/) {
+                if (overlay) {
+                    overlay->refreshContextLockState();
+                }
+            });
+
     // Wire persistence delegate — SnapEngine delegates save/load to WTA's KConfig layer.
     // QPointer guards against late calls during shutdown if WTA is destroyed first.
     snapEngine->setPersistenceDelegate(
@@ -1312,6 +1326,16 @@ bool Daemon::init()
         m_windowTrackingAdaptor->service()->setAutotileModePredicate(
             [screenModeForWindow](const QString& windowId) -> bool {
                 return screenModeForWindow(windowId) == PhosphorZones::AssignmentEntry::Autotile;
+            });
+
+        // Tiled predicate (distinct from the MODE predicate above): live
+        // engine state, "is this window actively tiled right now". Guards
+        // recordFreeGeometry against recording a tile rect as a float-back —
+        // the engine-backed answer survives effect reloads, which the
+        // effect-side capture guard cannot.
+        m_windowTrackingAdaptor->service()->setAutotileTiledPredicate(
+            [autotilePtr = QPointer(autotileEngine)](const QString& windowId) -> bool {
+                return autotilePtr && autotilePtr->isWindowTiled(windowId);
             });
     }
 
@@ -1440,6 +1464,10 @@ bool Daemon::init()
             m_suppressResnapOsd = osdEntries.size();
             m_windowTrackingAdaptor->service()->populateResnapBufferForAllScreens(autotileScreens, changedScreenIds);
             m_snapAdaptor->resnapToNewLayout();
+            // Restore snap-float positions for windows this KCM apply released
+            // from autotile — the buffer-based resnap above cannot cover
+            // floating windows (see the helper).
+            emitPendingSnapFloatRestoresForResnapBuffer();
 
             // Show OSD for changed screens — use locked OSD variant when context is locked.
             // KCM Apply is an explicit user-driven layout assignment change, so the regular
@@ -1931,6 +1959,7 @@ void Daemon::stop()
         wts->setEngineFloatWriter({});
         wts->setEngineFloatLister({});
         wts->setAutotileModePredicate({});
+        wts->setAutotileTiledPredicate({});
     }
 
     // Tear down the context-resolver triple before destroying the
@@ -1984,6 +2013,13 @@ void Daemon::stop()
     // narrowing in the autotile-toggle branch above (~ line 893).
     if (auto* concreteSnap = qobject_cast<PhosphorSnapEngine::SnapEngine*>(m_snapEngine.get())) {
         concreteSnap->setExcludeRuleSet(nullptr);
+    }
+
+    // Likewise sever WindowTrackingAdaptor's borrow of m_windowRuleStore (used by
+    // its restore-position evaluator) before the store is destroyed. Same
+    // grep-discoverable teardown contract as the SnapEngine exclude borrow above.
+    if (m_windowTrackingAdaptor) {
+        m_windowTrackingAdaptor->setWindowRuleStore(nullptr);
     }
 
     // Destroy engines now (during stop(), before Qt child destruction order).

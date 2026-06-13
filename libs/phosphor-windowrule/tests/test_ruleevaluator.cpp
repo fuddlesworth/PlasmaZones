@@ -120,6 +120,32 @@ private Q_SLOTS:
         QVERIFY(result.hasSlot(QString(ActionSlot::EngineMode)));
     }
 
+    // The daemon's restore-position predicate reads the RestorePosition slot's
+    // boolean `value` to override the global setting per window. A rule matching
+    // on appId must surface that value through the evaluator.
+    void testRestorePositionRuleResolvesValue()
+    {
+        WindowRuleSet set;
+        set.addRule(
+            makeRule(QStringLiteral("no-restore-konsole"), 100,
+                     MatchExpression::makeLeaf(Field::AppId, Operator::Equals, QStringLiteral("org.kde.konsole")),
+                     {restorePosition(false)}));
+        RuleEvaluator eval(set);
+
+        const ResolvedActions matched = eval.resolve(konsoleQuery());
+        QVERIFY(matched.hasSlot(QString(ActionSlot::RestorePosition)));
+        const std::optional<RuleAction> action = matched.slot(QString(ActionSlot::RestorePosition));
+        QVERIFY(action.has_value());
+        QCOMPARE(action->params.value(QString(ActionParam::Value)).toBool(), false);
+
+        // A different app does not match → slot empty, daemon falls back to the
+        // global setting.
+        WindowQuery firefox;
+        firefox.appId = QStringLiteral("org.mozilla.firefox");
+        firefox.screenId = QStringLiteral("DP-2");
+        QVERIFY(!eval.resolve(firefox).hasSlot(QString(ActionSlot::RestorePosition)));
+    }
+
     void testActionsInDifferentSlotsStack()
     {
         WindowRuleSet set;
@@ -367,5 +393,5 @@ private Q_SLOTS:
     }
 };
 
-QTEST_MAIN(TestRuleEvaluator)
+QTEST_GUILESS_MAIN(TestRuleEvaluator)
 #include "test_ruleevaluator.moc"

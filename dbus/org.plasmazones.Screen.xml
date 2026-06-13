@@ -1,5 +1,9 @@
 <!DOCTYPE node PUBLIC "-//freedesktop//DTD D-BUS Object Introspection 1.0//EN"
     "http://www.freedesktop.org/standards/dbus/1.0/introspect.dtd">
+<!--
+SPDX-FileCopyrightText: 2026 fuddlesworth
+SPDX-License-Identifier: GPL-3.0-or-later
+-->
 <node>
     <!-- Screen Management Interface -->
     <interface name="org.plasmazones.Screen">
@@ -21,7 +25,7 @@
         </method>
         <method name="getScreenId">
             <annotation name="org.gtk.GDBus.DocString" value="Return the stable EDID-based screen identifier for a connector name. Format: manufacturer:model:serial (or connector name fallback for virtual displays)."/>
-            <arg name="screenName" type="s" direction="in">
+            <arg name="connectorName" type="s" direction="in">
                 <annotation name="org.gtk.GDBus.DocString" value="Connector name (e.g. DP-1)."/>
             </arg>
             <arg name="screenId" type="s" direction="out">
@@ -36,7 +40,7 @@
         </method>
         <method name="setPrimaryScreenFromKWin">
             <annotation name="org.gtk.GDBus.DocString" value="Override the primary screen with the KWin compositor's output order primary. Called by the KWin effect on daemon ready."/>
-            <arg name="screenName" type="s" direction="in">
+            <arg name="connectorName" type="s" direction="in">
                 <annotation name="org.gtk.GDBus.DocString" value="Connector name from Workspace::outputOrder().first() (e.g. DP-1). Resolved to EDID-based identifier internally."/>
             </arg>
         </method>
@@ -65,6 +69,7 @@
             </arg>
             <arg name="geometry" type="(iiii)" direction="out">
                 <annotation name="org.gtk.GDBus.DocString" value="Available geometry as (x, y, width, height)."/>
+                <annotation name="org.qtproject.QtDBus.QtTypeName.Out0" value="QRect"/>
             </arg>
         </method>
         <method name="getScreenGeometry">
@@ -74,6 +79,7 @@
             </arg>
             <arg name="geometry" type="(iiii)" direction="out">
                 <annotation name="org.gtk.GDBus.DocString" value="Full screen geometry as (x, y, width, height)."/>
+                <annotation name="org.qtproject.QtDBus.QtTypeName.Out0" value="QRect"/>
             </arg>
         </method>
         <signal name="screenAdded">

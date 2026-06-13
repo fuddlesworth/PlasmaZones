@@ -5,7 +5,7 @@
 
 | | |
 |---|---|
-| **Status** | Implemented (PR #551) |
+| **Status** | Implemented (PR #551). Historical, two layers: (1) the title-bar/borderless mechanics described below (`setWindowBorderless`, per-screen `borderlessWindowsByScreen` buckets) were superseded by the DecorationManager owner model in PR #608; (2) the §2/§5/§7 page-tree naming ("Zones" page as `SnappingZonesPage.qml` / `snapping-zones`, `kSnappingVisualChildren`, `snapping-visual-cat`) was superseded by the later Overlay/Window restructure — the implemented page is `SnappingOverlayAppearancePage.qml` registered as `snapping-overlay-appearance` (title "Appearance" under the "Overlay" category) with `snapping-overlay-cat` / `snapping-window-cat` parents (see settingscontroller_pageregistration.cpp) |
 | **Branch** | `feature/per-mode-window-appearance` (off `v3.1`) |
 | **Date** | 2026-05-30 |
 
@@ -29,7 +29,7 @@ current code, so nothing is missed during implementation.
   `isettings.h` (virtuals + NOTIFY) → `settings.{h,cpp}` (Q_PROPERTY/getter/setter via
   `P_STORE_*` macros; `applyAutotileBorderSystemColor()` accent helper) →
   `settingsadaptor.cpp` (`REGISTER_*_SETTING` — D-Bus by-name, how the effect reads them).
-- **Settings UI:** `TilingAppearanceController` (thin `PhosphorSettingsUi::PageController`,
+- **Settings UI:** `TilingAppearanceController` (thin `PhosphorControl::PageController`,
   CONSTANT bounds only) + `TilingAppearancePage.qml` (Colors / Decorations / Borders cards,
   binding directly to `appSettings.autotile*`). Registered `regPage(m_tilingAppearancePage,
   "tiling-visual-cat", "Appearance", "TilingAppearancePage.qml", …)`.

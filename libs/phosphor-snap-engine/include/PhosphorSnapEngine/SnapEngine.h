@@ -132,6 +132,51 @@ public:
         m_shouldRestorePredicate = std::move(predicate);
     }
 
+    /**
+     * @brief Predicate consulted in `resolveWindowRestore` to decide whether an
+     *        UNSNAPPED window (a genuinely free record, or a snap-floated one)
+     *        should have its previous global position restored on open.
+     *
+     * Keyed by the live windowId so the daemon closure can build a full
+     * WindowQuery (window class / title / role) from its WindowRegistry and
+     * evaluate the per-window RestorePosition rule, falling back to the global
+     * `restoreUnsnappedWindowsOnLogin` setting. Like @ref ShouldRestorePredicate
+     * the engine stays settings-agnostic (LGPL boundary) — it only asks.
+     *
+     * Returns true to restore the recorded position (cross-screen allowed —
+     * stored geometry is in global compositor coordinates, so re-applying it
+     * lands the window back on its original monitor).
+     *
+     * The gate governs two distinct things, both ONLY for free/floating records
+     * (snapped-to-zone restore is unaffected):
+     *   - cross-screen CONSUMPTION eligibility — a record whose recorded screen
+     *     differs from the reopening screen is only consumed when the predicate
+     *     opts the window in; otherwise consumption stays gated on the opening
+     *     screen (free and floating alike);
+     *   - the free branch additionally re-gates the geometry MOVE on the
+     *     predicate (a same-screen free record is consumed but only repositioned
+     *     when opted in). The floating branch does NOT re-gate the move — once a
+     *     floating record is consumed it always re-emits its recorded position
+     *     on restoreScreen (historical float-restore behaviour).
+     *
+     * When the predicate is UNSET (default), the engine preserves its historical
+     * behaviour: free records are inert (consumed on the opening screen, no move)
+     * and floating records restore only on the screen they reopen on — the path
+     * unit tests rely on.
+     */
+    using RestorePositionPredicate = std::function<bool(const QString& windowId)>;
+
+    /**
+     * @brief Inject the unsnapped-position-restore gate. See
+     *        RestorePositionPredicate. Same lifetime contract as
+     *        setShouldRestorePredicate — clear with `{}` before destroying any
+     *        captured state.
+     */
+    void setRestorePositionPredicate(RestorePositionPredicate predicate)
+    {
+        m_restorePositionPredicate = std::move(predicate);
+    }
+
     void windowClosed(const QString& windowId) override;
     void windowFocused(const QString& windowId, const QString& screenId) override;
     void toggleWindowFloat(const QString& windowId, const QString& screenId) override;
@@ -227,11 +272,13 @@ public:
     /**
      * @brief Resolve auto-snap for a newly opened window
      *
-     * Runs the 4-level fallback chain:
+     * First consults the unified WindowPlacementStore: a snapped / floating /
+     * free record reopens the window from its stored placement (cross-screen
+     * where the predicates allow). If no stored record applies, runs the
+     * fallback chain:
      *   1. App rules (highest priority)
-     *   2. Persisted zone (session restore)
-     *   3. Auto-assign to empty zone
-     *   4. Snap to last zone (final fallback)
+     *   2. Auto-assign to empty zone
+     *   3. Snap to last zone (final fallback)
      *
      * Returns a PhosphorEngine::SnapResult so the D-Bus adaptor can unpack geometry for the
      * KWin effect. Also handles floating windows (skips snap, emits feedback).
@@ -548,9 +595,11 @@ Q_SIGNALS:
     void snapAllWindowsRequested(const QString& screenId);
 
     /// Batch of window-geometry updates, applied by the KWin effect in a
-    /// single operation (rotate, resnap, snap-all paths). The @p action
-    /// label disambiguates the cause downstream ("rotate", "resnap",
-    /// "snap_all", "vs_reconfigure"). Relayed to D-Bus via WTA.
+    /// single operation. The engine itself only ever emits action="rotate";
+    /// the SnapAdaptor layer attaches "resnap" / "vs_reconfigure" when it
+    /// relays its own batches over the same WTA D-Bus signal ("snap_all"
+    /// batches never cross the wire — the effect builds those locally). The
+    /// @p action label disambiguates the cause downstream.
     void applyGeometriesBatch(const PhosphorProtocol::WindowGeometryList& geometries, const QString& action);
 
 private:
@@ -657,6 +706,12 @@ private:
     // call time, not passed in here; see ShouldRestorePredicate doc
     // above and discussion #461 item 7.)
     ShouldRestorePredicate m_shouldRestorePredicate{};
+
+    // Unsnapped-position-restore gate. Empty until the daemon wires it; while
+    // empty the engine restores no free positions and floating positions only
+    // on the reopening screen — the historical behaviour unit tests rely on.
+    // See RestorePositionPredicate doc above.
+    RestorePositionPredicate m_restorePositionPredicate{};
 };
 
 } // namespace PhosphorSnapEngine

@@ -5,7 +5,7 @@
 
 #include "../config/configdefaults.h"
 
-#include <PhosphorSettingsUi/PageController.h>
+#include <PhosphorControl/PageController.h>
 #include <QObject>
 
 namespace PlasmaZones {
@@ -16,7 +16,7 @@ namespace PlasmaZones {
 /// (parallel to TilingAppearanceController). Live border values are on Settings
 /// (Q_PROPERTY) and bind via `appSettings.snappingBorderWidth` /
 /// `appSettings.snappingBorderRadius`.
-class SnappingWindowAppearanceController : public PhosphorSettingsUi::PageController
+class SnappingWindowAppearanceController : public PhosphorControl::PageController
 {
     Q_OBJECT
 
@@ -37,7 +37,7 @@ class SnappingWindowAppearanceController : public PhosphorSettingsUi::PageContro
 
 public:
     explicit SnappingWindowAppearanceController(QObject* parent = nullptr)
-        : PhosphorSettingsUi::PageController(QStringLiteral("snapping-window-appearance"), parent)
+        : PhosphorControl::PageController(QStringLiteral("snapping-window-appearance"), parent)
     {
     }
 

@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 // Page-registration + sidebar topology methods for SettingsController:
-//   * buildApplicationController() — wires the PhosphorSettingsUi
+//   * buildApplicationController() — wires the PhosphorControl
 //     PageRegistry with PlasmaZones' settings pages and sidebar categories
 //     (the navigable leaf pages are enumerated in validPageNames()).
 //   * What's-New dismissal + last-seen-version state.
@@ -40,13 +40,13 @@ void SettingsController::buildApplicationController()
     // No QObject parent — m_app is owned by the unique_ptr declared after
     // the page sub-controllers in the header, so reverse-order member
     // destruction tears it down BEFORE the pages it references.
-    m_app = std::make_unique<PhosphorSettingsUi::ApplicationController>();
+    m_app = std::make_unique<PhosphorControl::ApplicationController>();
 
     const QString qmlPrefix = QStringLiteral("qrc:/qt/qml/org/plasmazones/settings/qml/");
 
     // Two helpers — both delegate to ApplicationController::registerPage:
     //   regPage:     the page already has its own PageController subclass
-    //                (the existing m_xxxPage controllers, now PhosphorSettingsUi::
+    //                (the existing m_xxxPage controllers, now PhosphorControl::
     //                PageController-derived).
     //   regVirtual:  no concrete controller — either a drill-down parent /
     //                inline-collapsible category header, or a leaf whose QML
@@ -54,7 +54,7 @@ void SettingsController::buildApplicationController()
     //                controller). Uses PageAdapter as the framework-facing
     //                identity so the registry still gets a stable
     //                PageController*.
-    const auto regPage = [this, &qmlPrefix](PhosphorSettingsUi::PageController* page, const QString& parentId,
+    const auto regPage = [this, &qmlPrefix](PhosphorControl::PageController* page, const QString& parentId,
                                             const QString& title, const QString& qmlFile, const QString& icon,
                                             bool collapsible = false, bool divider = false) {
         const QUrl source = qmlFile.isEmpty() ? QUrl() : QUrl(qmlPrefix + qmlFile);
@@ -262,7 +262,7 @@ void SettingsController::buildApplicationController()
             m_app->setCurrentPageId(m_activePage);
         }
     });
-    connect(m_app.get(), &PhosphorSettingsUi::ApplicationController::currentPageIdChanged, this, [this]() {
+    connect(m_app.get(), &PhosphorControl::ApplicationController::currentPageIdChanged, this, [this]() {
         const QString id = m_app->currentPageId();
         if (id.isEmpty() || id == m_activePage) {
             return;

@@ -142,7 +142,7 @@ std::optional<qreal> resolveWindowOpacity(const PhosphorWindowRule::RuleEvaluato
  * Each field is set only when an enabled rule whose match resolves for
  * @p query fills the corresponding slot with a valid param (bool for
  * hideTitleBar/showBorder, an int in the descriptor range for width/radius, a
- * parseable `#RRGGBB` for the colours). Unset fields mean "no override — fall
+ * parseable `#AARRGGBB` for the colours). Unset fields mean "no override — fall
  * back to the global snap/autotile border state." Returns `std::nullopt` when
  * @p query is windowless / @p windowId is empty / no rule fills any slot, so
  * the caller can skip the merge entirely.

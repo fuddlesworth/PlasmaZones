@@ -5,7 +5,7 @@ import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
 import org.kde.kirigami as Kirigami
-import org.phosphor.settings.ui as PhosphorUi
+import org.phosphor.control as PhosphorUi
 
 // PhosphorUi.AboutPageShell hosts the standard chrome (icon + name +
 // version + description + license + homepage); PlasmaZones-specific
@@ -60,7 +60,7 @@ PhosphorUi.AboutPageShell {
                     Accessible.name: i18n("What's New")
                     onClicked: {
                         // Defensive truthy-check: this AboutPage is also used
-                        // by the standalone phosphor-settings-ui demo, which
+                        // by the standalone phosphor-control demo, which
                         // doesn't define `showWhatsNew`. Guard `window`
                         // itself too — when AboutPage is hosted by the demo
                         // (no chrome) the `window` context property may be
@@ -180,7 +180,7 @@ PhosphorUi.AboutPageShell {
             // console.warn — a silent console message is invisible to
             // the user clicking the button. Defensive truthy-check on
             // `window` + `showToast` mirrors the AboutPage's other
-            // call sites: the standalone phosphor-settings-ui demo
+            // call sites: the standalone phosphor-control demo
             // mounts this page without the chrome's toast.
             console.warn("AboutPage.LinkButton: refusing to open non-http(s) URL:", u);
             if (typeof window !== "undefined" && window && window.showToast)

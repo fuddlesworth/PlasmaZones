@@ -458,6 +458,8 @@ void SettingsAdaptor::initializeRegistry()
     };
     m_schemas[QStringLiteral("snappingStickyWindowHandling")] = QStringLiteral("int");
     REGISTER_BOOL_SETTING("restoreWindowsToZonesOnLogin", restoreWindowsToZonesOnLogin, setRestoreWindowsToZonesOnLogin)
+    REGISTER_BOOL_SETTING("restoreUnsnappedWindowsOnLogin", restoreUnsnappedWindowsOnLogin,
+                          setRestoreUnsnappedWindowsOnLogin)
     REGISTER_BOOL_SETTING("autoAssignAllLayouts", autoAssignAllLayouts, setAutoAssignAllLayouts)
     REGISTER_BOOL_SETTING("snapAssistFeatureEnabled", snapAssistFeatureEnabled, setSnapAssistFeatureEnabled)
     REGISTER_BOOL_SETTING("snapAssistEnabled", snapAssistEnabled, setSnapAssistEnabled)
@@ -1007,8 +1009,16 @@ bool SettingsAdaptor::setSettings(const QVariantMap& settings)
             const QString& key = it.key();
             auto setter = m_setters.find(key);
             if (setter == m_setters.end()) {
-                qCWarning(lcDbusSettings) << "setSettings: unknown key" << key;
-                allOk = false;
+                // A key with a getter but no setter is read-only (e.g.
+                // motionProfileTree, animationShaderSearchPaths). getAllSettings
+                // serializes those, so a getAllSettings -> setSettings round-trip
+                // legitimately carries them back; skip them silently rather than
+                // failing the whole batch. Only a key unknown to BOTH maps is a
+                // genuine error.
+                if (!m_getters.contains(key)) {
+                    qCWarning(lcDbusSettings) << "setSettings: unknown key" << key;
+                    allOk = false;
+                }
                 continue;
             }
             // Convert QDBusArgument types to plain Qt types before passing to setters.
@@ -1191,8 +1201,11 @@ bool SettingsAdaptor::setPerScreenSettings(const QString& screenId, const QStrin
 
     for (auto it = values.constBegin(); it != values.constEnd(); ++it) {
         // Values arriving over the wire can be QDBusArgument-wrapped when
-        // they contain lists or maps; normalize to plain Qt types first —
-        // matches the single-key setPerScreenSetting path exactly.
+        // they contain lists or maps; normalize to plain Qt types first.
+        // (The single-key setPerScreenSetting path passes the QDBusVariant's
+        // payload through raw — fine there because per-screen values are
+        // scalars, which demarshal to plain QVariants; this batch path
+        // normalizes defensively since a map payload arrives wrapped.)
         const QVariant converted = DBusVariantUtils::convertDbusArgument(it.value());
         dispatch->set(screenId, it.key(), converted);
     }

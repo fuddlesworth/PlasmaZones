@@ -1,5 +1,5 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
-// SPDX-License-Identifier: GPL-3.0-or-later
+// SPDX-License-Identifier: LGPL-2.1-or-later
 
 // Tests for libs/phosphor-shell/qml/Phosphor/Shell/PerScreen.qml.
 // The key invariants are about delegate identity surviving ScreenModel's
@@ -11,15 +11,19 @@
 
 #include "perscreen_fakemodel.h"
 
+#include <QCoreApplication>
+#include <QDebug>
+#include <QEvent>
 #include <QGuiApplication>
+#include <QJSValue>
+#include <QJSValueList>
 #include <QObject>
 #include <QPointer>
 #include <QQmlComponent>
-#include <QQmlContext>
 #include <QQmlEngine>
-#include <QSignalSpy>
 #include <QString>
 #include <QTest>
+#include <QUrl>
 #include <QVariant>
 #include <QtCore/qtclasshelpermacros.h>
 
@@ -132,6 +136,12 @@ QQmlComponent* TestPerScreen::makeDelegate(QQmlEngine& engine, QObject* parent)
 
 QObject* TestPerScreen::delegateFor(QQmlEngine& engine, QObject* perScreen, QObject* screen)
 {
+    // DELIBERATE white-box coupling: `_instances` is PerScreen.qml's private
+    // screen->instance JS Map. The identity tests need to resolve "which
+    // delegate instance belongs to which screen", and exposing a public
+    // accessor for that would widen the component's API solely for tests.
+    // If PerScreen.qml renames or restructures `_instances`, this helper is
+    // the single place to update (every identity test funnels through it).
     QJSValue map = engine.toScriptValue(perScreen->property("_instances"));
     QJSValueList args{engine.toScriptValue(QVariant::fromValue(screen))};
     QJSValue getResult = map.property(QStringLiteral("get")).callWithInstance(map, args);

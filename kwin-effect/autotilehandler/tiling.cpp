@@ -19,6 +19,10 @@
 #include <workspace.h>
 
 #include <QLoggingCategory>
+#include <QScopeGuard>
+#include <QtMath>
+
+#include <algorithm>
 
 namespace PlasmaZones {
 
@@ -112,18 +116,27 @@ void AutotileHandler::slotWindowsTileRequested(const PhosphorProtocol::TileReque
             qCInfo(lcEffect) << "Autotile batch float:" << windowId << "screen:" << screenId;
             applyFloatCleanup(windowId);
 
-            // Restore pre-autotile geometry from effect's local cache
+            // Restore pre-autotile geometry from the effect's local cache.
+            // Scan all screen buckets (all-bucket reader policy — a VS
+            // config change can re-key the window's screen without moving
+            // its geometry bucket).
             KWin::EffectWindow* floatWin = m_effect->findWindowById(windowId);
-            if (floatWin && !screenId.isEmpty()) {
-                auto screenIt = m_preAutotileGeometries.constFind(screenId);
-                if (screenIt != m_preAutotileGeometries.constEnd()) {
-                    const QString geoKey = AutotileStateHelpers::findSavedGeometryKey(screenIt.value(), windowId);
-                    if (!geoKey.isEmpty()) {
-                        const QRectF& savedGeo = screenIt.value().value(geoKey);
-                        m_effect->applySnapGeometry(floatWin, savedGeo.toRect());
-                        qCInfo(lcEffect) << "Restored pre-autotile geometry for overflow" << windowId
-                                         << savedGeo.toRect();
-                    }
+            if (floatWin) {
+                if (const QRectF savedGeo = findPreAutotileGeometry(windowId); savedGeo.isValid()) {
+                    // Daemon-driven apply: the restored rect may lie in a
+                    // different virtual screen than the tiled rect, and batch
+                    // floats fire in the same swap/rotate window the
+                    // crossing-detection guard below (per-window tile apply)
+                    // protects against. Without the guard, the synchronous
+                    // frameGeometryChanged would resolve the new position
+                    // against stale m_virtualScreenDefs and spuriously
+                    // re-announce the just-floated window.
+                    m_effect->m_inDaemonGeometryApply = true;
+                    const auto floatGuard = qScopeGuard([this] {
+                        m_effect->m_inDaemonGeometryApply = false;
+                    });
+                    m_effect->applySnapGeometry(floatWin, savedGeo.toRect());
+                    qCInfo(lcEffect) << "Restored pre-autotile geometry for overflow" << windowId << savedGeo.toRect();
                 }
             }
             continue;
@@ -236,9 +249,10 @@ void AutotileHandler::slotWindowsTileRequested(const PhosphorProtocol::TileReque
         // Per-screen untile cleanup. For each screen that participated in
         // this retile, the set of windows previously tracked as tiled on
         // that screen minus the set in the new request is exactly the
-        // windows that left that screen's tiling state. Titlebars are
-        // restored only when the window isn't tracked as borderless on
-        // any sibling screen — setWindowBorderless already enforces this.
+        // windows that left that screen's tiling state. Title bars are
+        // restored by the DecorationManager only when no owner remains —
+        // a sibling VS's claim or a snap takeover keeps the window hidden.
+        bool anyDeferred = false;
         for (auto screenIt = newTiledByScreen.constBegin(); screenIt != newTiledByScreen.constEnd(); ++screenIt) {
             const QString& screenId = screenIt.key();
             const QSet<QString>& newSet = screenIt.value();
@@ -247,14 +261,37 @@ void AutotileHandler::slotWindowsTileRequested(const PhosphorProtocol::TileReque
             for (const QString& wid : untiled) {
                 KWin::EffectWindow* win = m_effect->findWindowById(wid);
                 if (!win || win->isMinimized()) {
+                    // Minimized windows keep their decoration ownership: a
+                    // restore here would poison the minimize→unminimize
+                    // round-trip; the re-tile on unminimize re-asserts.
                     AutotileStateHelpers::removeTiledOnScreen(m_border, screenId, wid);
                     continue;
                 }
-                if (AutotileStateHelpers::borderlessOnScreen(m_border, screenId).contains(wid)) {
-                    setWindowBorderless(win, wid, false, screenId);
-                }
+                // Deferred: each physical restore is a synchronous Wayland
+                // round-trip (30-120 ms) — a multi-window untile batch must
+                // not stall the compositor mid-retile-animation. A window
+                // re-tiled by the next batch is rescued by the manager's
+                // re-acquire cancellation; stale entries also drop any
+                // unconsumed zone-centering targets below.
+                m_effect->decorationManager()->release(wid, DecorationManager::autotile(screenId),
+                                                       DecorationManager::Restore::Deferred);
                 AutotileStateHelpers::removeTiledOnScreen(m_border, screenId, wid);
+                // A daemon-initiated untile that is not a float/fullscreen/
+                // close/desktop-switch (e.g. a rule change dropping the
+                // window from the layout) must not leave a stale centering
+                // target that teleport-centers the window on its next
+                // frameGeometryChanged. Cross-screen transfers are safe: the
+                // apply lambda wrote a fresh entry only for windows in
+                // toApply, which are never in `untiled` for their new screen.
+                if (!AutotileStateHelpers::isTiledWindow(m_border, wid)) {
+                    m_autotileTargetZones.remove(wid);
+                    m_centeredWaylandZones.remove(wid);
+                }
+                anyDeferred = true;
             }
+        }
+        if (anyDeferred) {
+            m_effect->decorationManager()->drainPendingRestores();
         }
         auto* ws = KWin::Workspace::self();
         if (ws) {
@@ -349,24 +386,27 @@ void AutotileHandler::slotWindowsTileRequested(const PhosphorProtocol::TileReque
             // from any other screen before recording the new owner. This
             // keeps the tracking map coherent when e.g. a window drags
             // from an autotile VS onto a sibling autotile VS.
-            for (auto scrIt = m_border.tiledWindowsByScreen.begin(); scrIt != m_border.tiledWindowsByScreen.end();) {
-                if (scrIt.key() != snap.screenId) {
-                    scrIt.value().remove(snap.windowId);
-                }
-                if (scrIt.value().isEmpty() && scrIt.key() != snap.screenId) {
-                    scrIt = m_border.tiledWindowsByScreen.erase(scrIt);
-                } else {
-                    ++scrIt;
-                }
-            }
+            AutotileStateHelpers::removeFromOtherScreens(m_border, snap.windowId, snap.screenId);
             AutotileStateHelpers::addTiledOnScreen(m_border, snap.screenId, snap.windowId);
             if (m_border.hideTitleBars) {
-                setWindowBorderless(snap.window, snap.windowId, true, snap.screenId);
+                // Cross-screen transfer: move the decoration claim to this
+                // screen without a physical flap, then hide BEFORE the
+                // applySnapGeometry below supplies the zone frame
+                // (CallerWillPlace — the placement sees the final
+                // frame/client relationship).
+                m_effect->decorationManager()->releaseOthersOfKind(
+                    snap.windowId, DecorationManager::OwnerKind::Autotile, snap.screenId);
+                m_effect->decorationManager()->acquire(snap.windowId, DecorationManager::autotile(snap.screenId),
+                                                       DecorationManager::Placement::CallerWillPlace);
             }
 
             if (snap.isMonocle) {
-                KWin::Window* kw = snap.window->window();
-                if (kw) {
+                // The maximize leg needs the KWin::Window, but the geometry
+                // apply must run regardless: the CallerWillPlace acquire
+                // above already hid the decoration expecting this placement
+                // — skipping it on a null kw would leave a borderless window
+                // with a title-bar-height gap.
+                if (KWin::Window* kw = snap.window->window()) {
                     const bool wasAlreadyMaximized = (kw->maximizeMode() == KWin::MaximizeFull);
                     ++m_suppressMaximizeChanged;
                     kw->maximize(KWin::MaximizeFull);
@@ -375,6 +415,8 @@ void AutotileHandler::slotWindowsTileRequested(const PhosphorProtocol::TileReque
                     }
                     m_effect->applySnapGeometry(snap.window, snap.geometry);
                     --m_suppressMaximizeChanged;
+                } else {
+                    m_effect->applySnapGeometry(snap.window, snap.geometry);
                 }
             } else {
                 unmaximizeMonocleWindow(snap.windowId);
@@ -620,19 +662,20 @@ void AutotileHandler::slotWindowFrameGeometryChanged(KWin::EffectWindow* w, cons
     // get min-size enforcement from this path. They still get the initial
     // min-size from the windowOpened D-Bus call (kw->minSize() at open time),
     // and the centering code handles the visual placement correctly.
-    // !isInternal() guards KWin's InternalWindow::minSize() against a null
-    // backing QWindow (see discussion #511). Internal windows never reach the
-    // autotile-centering pipeline, but the guard keeps the call site safe
-    // independently of the upstream eligibility filter.
-    if ((dw < -MinCenteringDelta || dh < -MinCenteringDelta) && !kw->isInternal()) {
-        const QSizeF declaredMin = kw->minSize();
+    // declaredMinSize() carries the internal-window guard (KWin's
+    // InternalWindow::minSize() segfaults on a null backing QWindow, see
+    // discussion #511); internal windows never reach the autotile-centering
+    // pipeline, but the helper keeps the call site safe independently of the
+    // upstream eligibility filter.
+    if (dw < -MinCenteringDelta || dh < -MinCenteringDelta) {
+        const QSize declaredMin = declaredMinSize(w);
         int discoveredMinW = 0;
         int discoveredMinH = 0;
         if (dw < -MinCenteringDelta && declaredMin.width() > 0) {
-            discoveredMinW = qCeil(declaredMin.width());
+            discoveredMinW = declaredMin.width();
         }
         if (dh < -MinCenteringDelta && declaredMin.height() > 0) {
-            discoveredMinH = qCeil(declaredMin.height());
+            discoveredMinH = declaredMin.height();
         }
         if (discoveredMinW > 0 || discoveredMinH > 0) {
             reportDiscoveredMinSize(windowId, discoveredMinW, discoveredMinH);

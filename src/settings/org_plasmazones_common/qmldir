@@ -2,7 +2,7 @@ module org.plasmazones.common
 AspectRatioBadge 1.0 AspectRatioBadge.qml
 ZonePreview 1.0 ZonePreview.qml
 CategoryBadge 1.0 CategoryBadge.qml
-ShaderPickerButton 1.0 ShaderPickerButton.qml
+CategoryMenuButton 1.0 CategoryMenuButton.qml
 ShaderParameterRow 1.0 ShaderParameterRow.qml
 ShaderParameterSection 1.0 ShaderParameterSection.qml
 ShaderParameterEditor 1.0 ShaderParameterEditor.qml

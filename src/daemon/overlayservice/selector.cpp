@@ -361,11 +361,12 @@ void OverlayService::updateSelectorPosition(int cursorX, int cursorY)
                 QVariantMap layoutMap = layouts[i].toMap();
                 QString layoutId = layoutMap[QStringLiteral("id")].toString();
 
-                // Skip non-active layouts when screen is locked (either mode)
+                // Skip non-active layouts when screen is locked — a LockContext
+                // rule (checked first) or a manual lock on either mode.
                 if (m_settings && m_layoutManager) {
                     int curDesktop = m_layoutManager->currentVirtualDesktop();
                     QString curActivity = m_layoutManager->currentActivity();
-                    bool locked = isAnyModeLocked(m_settings, cursorScreenId, curDesktop, curActivity);
+                    bool locked = isAnyModeLocked(m_settings, m_layoutManager, cursorScreenId, curDesktop, curActivity);
                     if (locked) {
                         // Only allow zone selection from the active layout
                         PhosphorZones::Layout* activeLayout = m_layoutManager->resolveLayoutForScreen(cursorScreenId);

@@ -3,7 +3,7 @@
 
 #pragma once
 
-#include <PhosphorSettingsUi/PageController.h>
+#include <PhosphorControl/PageController.h>
 #include <QJSValue>
 #include <QObject>
 #include <QString>
@@ -42,13 +42,13 @@ namespace PlasmaZones {
  * The controller is the only thing on the settings side that knows the D-Bus
  * shape; the model and QML never touch the wire.
  */
-class WindowRuleController : public PhosphorSettingsUi::PageController
+class WindowRuleController : public PhosphorControl::PageController
 {
     Q_OBJECT
 
     Q_PROPERTY(WindowRuleModel* model READ model CONSTANT)
     // `dirty` Q_PROPERTY + `dirtyChanged()` signal are inherited from
-    // PhosphorSettingsUi::StagingDomain via PageController — do not redeclare.
+    // PhosphorControl::StagingDomain via PageController — do not redeclare.
     Q_PROPERTY(bool daemonReachable READ daemonReachable NOTIFY daemonReachableChanged)
     /// True when a daemon `rulesChanged` broadcast arrived while the page had
     /// unsaved staged edits — `reload()` skipped the refresh to avoid stomping
@@ -63,7 +63,7 @@ public:
     explicit WindowRuleController(QObject* parent = nullptr);
     ~WindowRuleController() override;
 
-    /// PhosphorSettingsUi::StagingDomain contract. apply() dispatches
+    /// PhosphorControl::StagingDomain contract. apply() dispatches
     /// asyncCommit() (the staged set goes to the daemon); discard() forwards to
     /// revert() (the daemon's set is re-fetched into the model).
     bool isDirty() const override;
@@ -249,7 +249,8 @@ public:
     // ── Monitor overview strip ────────────────────────────────────────────
 
     /// Read-only per-monitor summary for the overview strip. Each entry:
-    /// `{ screenId, layoutName, tilingEnabled, ruleCount, assigned }`.
+    /// `{ screenId, layoutName, tilingEnabled, ruleCount, assigned, locked }`
+    /// (`locked` is true when a LockContext rule pins the monitor's layout).
     /// @p screens is the `SettingsController::screens` list (each a map with a
     /// `name` field, and a `screenId` fallback) so the overview can list every
     /// connected monitor — including ones with no rule at all (the "Not
@@ -259,9 +260,11 @@ public:
     // ── Authoring metadata for the QML editors ────────────────────────────
 
     /// Match fields suitable for the leaf-editor field dropdown. Each entry:
-    /// `{ value: int (Field enum), wire: QString (JSON wire string),
-    ///    label, valueKind: "string"|"number"|"bool" }`. QML keys off `wire`
-    /// so it never has to reconstruct the enum↔wire-string table.
+    /// `{ value: int (Field enum), wire: QString (JSON wire string), label,
+    ///    valueKind: "string"|"number"|"bool"|"windowType"|"screen"|"activity" }`
+    /// (the latter three drive dedicated pickers; "windowType" also carries an
+    /// `options` list). QML keys off `wire` so it never has to reconstruct the
+    /// enum↔wire-string table.
     Q_INVOKABLE QVariantList matchFields() const;
 
     /// Operators valid for @p fieldValue (a `Field` enum int). Each entry:

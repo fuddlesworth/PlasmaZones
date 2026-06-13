@@ -4,8 +4,10 @@
 #include <PhosphorWindowRule/MatchExpression.h>
 
 #include <QJsonArray>
-#include <QJsonDocument>
+#include <QJsonObject>
 #include <QTest>
+#include <QVariant>
+#include <QVariantList>
 
 using namespace PhosphorWindowRule;
 using PhosphorProtocol::WindowType;
@@ -424,5 +426,5 @@ private Q_SLOTS:
     }
 };
 
-QTEST_MAIN(TestMatchExpression)
+QTEST_GUILESS_MAIN(TestMatchExpression)
 #include "test_matchexpression.moc"

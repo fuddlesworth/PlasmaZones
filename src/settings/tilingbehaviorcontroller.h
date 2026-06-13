@@ -3,7 +3,7 @@
 
 #pragma once
 
-#include <PhosphorSettingsUi/PageController.h>
+#include <PhosphorControl/PageController.h>
 #include <QObject>
 #include <QVariantList>
 
@@ -24,7 +24,7 @@ class ISettings;
 /// already wires the NOTIFY to `onSettingsPropertyChanged()`. This class
 /// just forwards the NOTIFY to QML and caches the derived boolean so it
 /// only fires when it actually flips.
-class TilingBehaviorController : public PhosphorSettingsUi::PageController
+class TilingBehaviorController : public PhosphorControl::PageController
 {
     Q_OBJECT
 

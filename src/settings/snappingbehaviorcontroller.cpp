@@ -10,7 +10,7 @@
 namespace PlasmaZones {
 
 SnappingBehaviorController::SnappingBehaviorController(ISettings& settings, QObject* parent)
-    : PhosphorSettingsUi::PageController(QStringLiteral("snapping-behavior"), parent)
+    : PhosphorControl::PageController(QStringLiteral("snapping-behavior"), parent)
     , m_settings(&settings)
 {
     m_lastAlwaysActiveOnDrag = alwaysActivateOnDrag();

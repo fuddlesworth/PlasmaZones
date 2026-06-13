@@ -95,6 +95,10 @@ QVariantList ruleTemplates()
     out.append(entry(QLatin1String("algorithmOnMonitor"), PhosphorI18n::tr("Set a tiling algorithm on a monitor"),
                      PhosphorI18n::tr("Pick an autotile algorithm to use on one monitor."),
                      QLatin1String("view-list-tree")));
+    out.append(entry(QLatin1String("lockLayoutOnMonitor"), PhosphorI18n::tr("Lock the layout on a monitor"),
+                     PhosphorI18n::tr("Pin the active layout on one monitor so it can't be switched — the rule-driven "
+                                      "version of the lock-layout shortcut."),
+                     QLatin1String("object-locked")));
     out.append(entry(QLatin1String("excludeApp"), PhosphorI18n::tr("Exclude an app from tiling"),
                      PhosphorI18n::tr("Keep one application's windows out of the snap and autotile engines entirely."),
                      QLatin1String("edit-delete-remove")));
@@ -144,6 +148,17 @@ QVariantMap newRuleFromTemplate(const QString& templateId)
         algoAction.type = QString::fromLatin1(ActionType::SetTilingAlgorithm);
         algoAction.params.insert(ActionParam::Algorithm, QString());
         rule.actions.append(algoAction);
+    } else if (templateId == QLatin1String("lockLayoutOnMonitor")) {
+        rule.name = PhosphorI18n::tr("Lock layout on monitor");
+        rule.priority = kContextBandBase;
+        rule.match = MatchExpression::makeLeaf(Field::ScreenId, Operator::Equals, QString());
+        // Single LockContext action seeded to lock (value = true) — the user
+        // fills in the screen picker. Mode-agnostic and live-resolved, so it
+        // pins whichever layout is active on that monitor without persisting.
+        RuleAction lockAction;
+        lockAction.type = QString::fromLatin1(ActionType::LockContext);
+        lockAction.params.insert(ActionParam::Value, true);
+        rule.actions.append(lockAction);
     } else if (templateId == QLatin1String("excludeApp")) {
         rule.name = PhosphorI18n::tr("Exclude an app from tiling");
         rule.priority = kApplicationBandBase;

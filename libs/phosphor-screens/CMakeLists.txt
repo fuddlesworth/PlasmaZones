@@ -57,9 +57,9 @@ include(GenerateExportHeader)
 #
 # Namespace convention: this library exposes its types in a single-level
 # namespace `PhosphorScreens` (not `Phosphor::Screens`) to align with
-# other phosphor-* libs such as phosphor-settings-ui (`PhosphorSettingsUi`).
+# other phosphor-* libs such as phosphor-control (`PhosphorControl`).
 # A single-level namespace is the project convention for new phosphor-*
-# libs; existing libs were flattened during the phosphor-settings-ui
+# libs; existing libs were flattened during the phosphor-control
 # scaffolding pass. See libs/phosphor-screens/CHANGES.md for the rename
 # history.
 find_package(Qt6 6.6 REQUIRED COMPONENTS Core Gui)

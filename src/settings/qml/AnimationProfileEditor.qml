@@ -17,7 +17,7 @@ import org.plasmazones.common as PZCommon
  * for timing, effect id / parameter map for shader) and renders the
  * widget tree the per-event card and the App Rules form both need
  * (CurveThumbnail + Customize button → CurveEditorDialog,
- * timing-mode combo, duration slider, ShaderPickerButton +
+ * timing-mode combo, duration slider, CategoryMenuButton +
  * ShaderParameterEditor + ColorDialog).
  *
  * The editor is intentionally persistence-agnostic: it emits
@@ -344,7 +344,7 @@ ColumnLayout {
         title: i18n("Shader effect")
         description: i18n("Apply a shader transition to this event")
 
-        PZCommon.ShaderPickerButton {
+        PZCommon.CategoryMenuButton {
             id: shaderPicker
 
             // `availableShaders` is supplied by the consumer; bumping
@@ -355,12 +355,12 @@ ColumnLayout {
             }
 
             Layout.fillWidth: true
-            shaders: _effectModel
-            currentShaderId: root.shaderEffectId
-            noneShaderId: ""
+            items: _effectModel
+            currentId: root.shaderEffectId
+            noneId: ""
             includeNoneEntry: true
             placeholderText: i18nc("@action:button", "Select shader…")
-            onShaderSelected: function (id) {
+            onSelected: function (id) {
                 var sid = id || "";
                 root.shaderEffectActivated(sid);
             }
@@ -456,6 +456,8 @@ ColumnLayout {
     // signal handler).
     ColorDialog {
         id: colorDialog
+
+        options: ColorDialog.ShowAlphaChannel
 
         property string effectId: ""
         property string paramId: ""

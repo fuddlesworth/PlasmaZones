@@ -21,6 +21,7 @@
 #include "../../../src/config/settings.h"
 #include "../../../src/config/configdefaults.h"
 #include "../../../src/core/constants.h"
+#include "../../../src/core/settings_interfaces.h"
 #include "../helpers/IsolatedConfigGuard.h"
 
 using namespace PlasmaZones;
@@ -128,6 +129,153 @@ private Q_SLOTS:
         QVERIFY2(stored >= PhosphorTiles::AutotileDefaults::MinMasterCount
                      && stored <= PhosphorTiles::AutotileDefaults::MaxMasterCount,
                  "Per-screen autotile value must be clamped to valid range");
+
+        // Non-numeric payloads are REJECTED, not coerced: QVariant::toInt()
+        // silently converts garbage to 0, which the validators would then
+        // clamp/store as a real override (e.g. Position "garbage" -> 0 =
+        // TopLeft). The D-Bus dispatch path delivers raw QVariants, making
+        // this a genuine input boundary.
+        const int before = spy.count();
+        settings.setPerScreenAutotileSetting(screen, QStringLiteral("AutotileMasterCount"), QStringLiteral("garbage"));
+        QCOMPARE(spy.count(), before);
+        QCOMPARE(settings.getPerScreenAutotileSettings(screen).value(QStringLiteral("MasterCount")).toInt(), stored);
+
+        // Numeric STRINGS still convert (JSON string storage compatibility):
+        // QVariant("3").toInt(&ok) sets ok=true.
+        settings.setPerScreenAutotileSetting(screen, QStringLiteral("AutotileMasterCount"), QStringLiteral("3"));
+        QCOMPARE(settings.getPerScreenAutotileSettings(screen).value(QStringLiteral("MasterCount")).toInt(), 3);
+
+        // Same rejection contract on the zone-selector validator.
+        QSignalSpy zsSpy(&settings, &Settings::perScreenZoneSelectorSettingsChanged);
+        const QString freshScreen = QStringLiteral("test-screen-nonnumeric");
+        settings.setPerScreenZoneSelectorSetting(freshScreen, QStringLiteral("Position"), QStringLiteral("garbage"));
+        QCOMPARE(zsSpy.count(), 0);
+        QVERIFY(!settings.hasPerScreenZoneSelectorSettings(freshScreen));
+    }
+
+    /**
+     * HideTitleBars is NOT a per-screen autotile key: title-bar hiding is a
+     * global mode setting consumed by the effect's DecorationManager, and the
+     * per-screen variant was dead config surface (no UI, no consumer). A
+     * write must be rejected like any unknown key and never round-trip.
+     */
+    void testPerScreenAutotile_hideTitleBarsIsNotAPerScreenKey()
+    {
+        IsolatedConfigGuard guard;
+        Settings settings;
+        const QString screen = QStringLiteral("test-screen-1");
+
+        QSignalSpy spy(&settings, &Settings::perScreenAutotileSettingsChanged);
+        settings.setPerScreenAutotileSetting(screen, QStringLiteral("AutotileHideTitleBars"), true);
+        QCOMPARE(spy.count(), 0);
+        // The validator strips the "Autotile" prefix itself, so both
+        // spellings converge on the same rejection branch — the short-form
+        // write pins the second wire spelling rather than a distinct code
+        // path (and would catch a future short-form-only whitelist entry).
+        settings.setPerScreenAutotileSetting(screen, QStringLiteral("HideTitleBars"), true);
+        QCOMPARE(spy.count(), 0);
+        const QVariantMap overrides = settings.getPerScreenAutotileSettings(screen);
+        QVERIFY(!overrides.contains(QStringLiteral("HideTitleBars")));
+        QVERIFY(!overrides.contains(QStringLiteral("AutotileHideTitleBars")));
+    }
+
+    /**
+     * The Algorithm / AnimationEasingCurve validators canonicalize the
+     * accepted value to QString so the in-memory type matches what the
+     * backend round-trips (writeString → readString). A non-string payload
+     * (e.g. an int arriving over D-Bus) must therefore store as a QString
+     * immediately, keeping the observable type stable across restart — a
+     * regression to pass-through QVariant(value) would store it int-typed
+     * in the writing session but string-typed after reload.
+     */
+    void testPerScreenAutotile_algorithmValueIsCanonicalizedToString()
+    {
+        IsolatedConfigGuard guard;
+        Settings settings;
+        const QString screen = QStringLiteral("test-screen-1");
+
+        settings.setPerScreenAutotileSetting(screen, QStringLiteral("AutotileAlgorithm"), 5);
+        const QVariant stored = settings.getPerScreenAutotileSettings(screen).value(QStringLiteral("Algorithm"));
+        QCOMPARE(stored.typeId(), static_cast<int>(QMetaType::QString));
+        QCOMPARE(stored.toString(), QStringLiteral("5"));
+
+        // Empty string is still rejected (no meaningful per-screen override).
+        QSignalSpy spy(&settings, &Settings::perScreenAutotileSettingsChanged);
+        settings.setPerScreenAutotileSetting(screen, QStringLiteral("AutotileAlgorithm"), QString());
+        QCOMPARE(spy.count(), 0);
+    }
+
+    /**
+     * Tripwire: every PerScreenAutotileKey constant must stay accepted by the
+     * validator (which whitelists against the SHORT-form PhosphorEngine::
+     * PerScreenKeys namespace after stripping the "Autotile" prefix). Nothing
+     * structurally ties the two lists — a key renamed or added on one side
+     * silently fails validation and the override is dropped, so this test
+     * round-trips every long-form key with a type-appropriate value.
+     */
+    void testPerScreenAutotile_everyDeclaredKeyRoundTrips()
+    {
+        IsolatedConfigGuard guard;
+        Settings settings;
+        const QString screen = QStringLiteral("test-screen-1");
+
+        struct KeyProbe
+        {
+            const char* key;
+            QVariant value;
+        };
+        const QList<KeyProbe> probes{
+            {PerScreenAutotileKey::Algorithm, QStringLiteral("bsp")},
+            {PerScreenAutotileKey::SplitRatio, 0.5},
+            {PerScreenAutotileKey::MasterCount, 2},
+            {PerScreenAutotileKey::InnerGap, 5},
+            {PerScreenAutotileKey::OuterGap, 5},
+            {PerScreenAutotileKey::UsePerSideOuterGap, true},
+            {PerScreenAutotileKey::OuterGapTop, 5},
+            {PerScreenAutotileKey::OuterGapBottom, 5},
+            {PerScreenAutotileKey::OuterGapLeft, 5},
+            {PerScreenAutotileKey::OuterGapRight, 5},
+            {PerScreenAutotileKey::FocusNewWindows, true},
+            {PerScreenAutotileKey::SmartGaps, true},
+            {PerScreenAutotileKey::MaxWindows, 3},
+            {PerScreenAutotileKey::InsertPosition, 1},
+            {PerScreenAutotileKey::FocusFollowsMouse, true},
+            {PerScreenAutotileKey::RespectMinimumSize, true},
+            {PerScreenAutotileKey::SplitRatioStep, 0.05},
+            {PerScreenAutotileKey::AnimationsEnabled, true},
+            {PerScreenAutotileKey::AnimationDuration, 200},
+            {PerScreenAutotileKey::AnimationEasingCurve, QStringLiteral("linear")},
+        };
+
+        // Derive the short form the same way the implementation does
+        // (kAutotilePrefix in perscreen.cpp) — no magic length literal.
+        const QLatin1String autotilePrefix("Autotile");
+        const auto shortForm = [autotilePrefix](const QString& longKey) {
+            return longKey.startsWith(autotilePrefix) ? longKey.mid(autotilePrefix.size()) : longKey;
+        };
+
+        for (const KeyProbe& probe : probes) {
+            const QString longKey = QString::fromLatin1(probe.key);
+            settings.setPerScreenAutotileSetting(screen, longKey, probe.value);
+            const QVariantMap overrides = settings.getPerScreenAutotileSettings(screen);
+            QVERIFY2(overrides.contains(shortForm(longKey)),
+                     qPrintable(QStringLiteral("validator rejected declared per-screen key: ") + longKey));
+        }
+
+        // Disk round-trip: the LOAD path whitelists against a separate
+        // hand-maintained list (kPerScreenAutotileKeys in perscreen.cpp) —
+        // a key the validator accepts but that list omits would round-trip
+        // in memory yet be silently dropped on the next launch. Force a
+        // save, construct a second Settings over the same config, and
+        // assert every key survived.
+        settings.save();
+        Settings reloaded;
+        const QVariantMap persisted = reloaded.getPerScreenAutotileSettings(screen);
+        for (const KeyProbe& probe : probes) {
+            const QString longKey = QString::fromLatin1(probe.key);
+            QVERIFY2(persisted.contains(shortForm(longKey)),
+                     qPrintable(QStringLiteral("per-screen key lost across save/reload: ") + longKey));
+        }
     }
 
     /**
@@ -285,5 +433,8 @@ private Q_SLOTS:
     // test_windowrule_store; the empty-rule-set case is exercised there.
 };
 
+// NOT guiless: Settings::load → applySystemColorScheme reads
+// QGuiApplication::palette(), which requires a QGuiApplication instance
+// (crashes under QCoreApplication).
 QTEST_MAIN(TestSettingsPerScreen)
 #include "test_settings_perscreen.moc"

@@ -8,10 +8,21 @@
 
 find_package(Qt6 6.6 REQUIRED COMPONENTS Core Gui Qml Quick QuickControls2)
 
+if(COMMAND qt_policy)
+    qt_policy(SET QTP0001 NEW)
+endif()
+
 # Build the CPU-meter plugin .so first; the demo's --plugin-root
 # argument will point at the directory the plugin's CMakeLists
 # writes the .so + manifest.json into.
 add_subdirectory(plugins/cpu-meter)
+
+# Directory-scope suppression of -Wmissing-include-dirs for the targets
+# qt_add_qml_module generates here: Qt adds <target>_autogen/include to each
+# sub-target's -I list, but when a module carries no Q_OBJECT sources AUTOMOC
+# never creates that directory (and --clean-first deletes it), so cc1plus
+# warns on a Qt-managed scratch path. Full rationale: src/shared/CMakeLists.txt.
+set_property(DIRECTORY APPEND PROPERTY COMPILE_OPTIONS "-Wno-missing-include-dirs")
 
 qt_add_qml_module(phosphor_registry_plugin_demo_qml
     URI Phosphor.RegistryPluginDemo

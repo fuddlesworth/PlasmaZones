@@ -106,10 +106,13 @@ find_package(Qt6 ${QT_MIN_VERSION} REQUIRED COMPONENTS
 # default for QML module dependency resolution (QTP0004). These are
 # the NEW behaviours we already rely on across phosphor-* and src/
 # qt_add_qml_module calls.
-if(POLICY QTP0001)
+# NOTE: CMake's if(POLICY) only understands CMP* CMake policies — for QTP*
+# Qt policies it is ALWAYS false. Qt's documented existence test is the
+# QT_KNOWN_POLICY_<policy> variable (set by the Qt CMake machinery from 6.5).
+if(QT_KNOWN_POLICY_QTP0001)
     qt_policy(SET QTP0001 NEW)
 endif()
-if(POLICY QTP0004)
+if(QT_KNOWN_POLICY_QTP0004)
     qt_policy(SET QTP0004 NEW)
 endif()
 # GuiPrivate (QRhi) and ShaderToolsPrivate (QShaderBaker) required for daemon zone overlay.
@@ -270,8 +273,10 @@ endif()
 
 # ---------------------------------------------------------------------------
 # Translations (Qt Linguist). Extracted to cmake/PhosphorTranslations.cmake
-# (included in this scope) to keep this file under the 800-line cap. See
-# that file for the update-ts / lrelease detail.
+# (included in this scope) to keep this file's growth in check — it has
+# since crept past the 800-line cap again; the next self-contained block
+# to outgrow its section should be extracted the same way. See that file
+# for the update-ts / lrelease detail.
 # ---------------------------------------------------------------------------
 include(cmake/PhosphorTranslations.cmake)
 
@@ -370,6 +375,9 @@ add_subdirectory(libs/phosphor-workspaces)  # virtual desktop / workspace manage
 add_subdirectory(libs/phosphor-tile-engine) # autotile placement engine (IAutotileSettings + engine code)
 add_subdirectory(libs/phosphor-snap-engine) # zone-based snap placement engine
 
+
+add_subdirectory(libs/phosphor-placement)   # window placement state tracking
+
 # Canonical list of engine library target names. Consumed by the
 # engine QML firewall below; declared here next to the engine
 # subdirs so the list moves with the targets it gates.
@@ -378,6 +386,8 @@ set(PHOSPHOR_ENGINE_TARGETS
     PhosphorSnapEngine
     PhosphorTileEngine
     PhosphorEngine
+    PhosphorWorkspaces
+    PhosphorPlacement
 )
 
 # ─── Engine QML firewall ─────────────────────────────────────────────────────
@@ -392,8 +402,11 @@ set(PHOSPHOR_ENGINE_TARGETS
 # nowhere to be fixed without a full rewrite.
 #
 # Refuse to configure if any engine target ever picks up a Qml/Quick
-# link. Cheap guardrail; failures here mean someone added a dependency
-# that drags Qml in transitively or wired a target up wrong.
+# link. Cheap guardrail over the targets' DIRECT link lists only — an
+# intermediate in-tree lib that PUBLICly links Qt6::Qml would pass
+# undetected (the engine target's own entries name the lib, not Qml).
+# Failures here mean someone linked Qml/Quick onto an engine target
+# directly or wired a target up wrong.
 #
 # Track whether ANY entry matched a real target so the firewall can't
 # silently degrade to a no-op if PHOSPHOR_ENGINE_TARGETS goes stale
@@ -408,7 +421,7 @@ foreach(_p_engine_lib IN LISTS PHOSPHOR_ENGINE_TARGETS)
         get_target_property(_p_engine_links ${_p_engine_lib} LINK_LIBRARIES)
         if(_p_engine_links)
             foreach(_p_link IN LISTS _p_engine_links)
-                if(_p_link MATCHES "(^|::)Qt6::(Qml|Quick)$")
+                if(_p_link MATCHES "(^|::)Qt6::(Qml|Quick)(Private)?$")
                     message(FATAL_ERROR
                         "Engine library '${_p_engine_lib}' links '${_p_link}'. "
                         "Engine libs must stay QML-free, see comment above this "
@@ -419,7 +432,7 @@ foreach(_p_engine_lib IN LISTS PHOSPHOR_ENGINE_TARGETS)
         get_target_property(_p_engine_iface ${_p_engine_lib} INTERFACE_LINK_LIBRARIES)
         if(_p_engine_iface)
             foreach(_p_link IN LISTS _p_engine_iface)
-                if(_p_link MATCHES "(^|::)Qt6::(Qml|Quick)$")
+                if(_p_link MATCHES "(^|::)Qt6::(Qml|Quick)(Private)?$")
                     message(FATAL_ERROR
                         "Engine library '${_p_engine_lib}' publicly links '${_p_link}'. "
                         "Engine libs must stay QML-free, see comment above this "
@@ -441,10 +454,8 @@ if(NOT _p_engine_matched_any)
         "move this firewall block below the add_subdirectory calls that "
         "declare the engines.")
 endif()
-
-add_subdirectory(libs/phosphor-placement)   # window placement state tracking
 add_subdirectory(libs/phosphor-compositor)  # compositor-plugin SDK
-add_subdirectory(libs/phosphor-settings-ui) # reusable Qt6/QML/Kirigami settings-app framework (page controllers, registry, chrome)
+add_subdirectory(libs/phosphor-control) # reusable Qt6/QML/Kirigami settings-app framework (page controllers, registry, chrome)
 if(BUILD_PHOSPHOR_SHELL)
     # Order: icontheme is consumed by sni (SNI publisher uses the
     # image provider + theme resolver), so configure it first. The
@@ -508,6 +519,7 @@ install(FILES
     dbus/org.plasmazones.Settings.xml
     dbus/org.plasmazones.SettingsApp.xml
     dbus/org.plasmazones.Shader.xml
+    dbus/org.plasmazones.Snap.xml
     dbus/org.plasmazones.WindowDrag.xml
     dbus/org.plasmazones.WindowRules.xml
     dbus/org.plasmazones.WindowTracking.xml

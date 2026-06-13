@@ -43,7 +43,7 @@ constexpr QLatin1String Enum{"enum"};
 
 TilingAlgorithmController::TilingAlgorithmController(ISettings& settings, PhosphorTiles::AlgorithmRegistry& registry,
                                                      QObject* parent)
-    : PhosphorSettingsUi::PageController(QStringLiteral("tiling-algorithm"), parent)
+    : PhosphorControl::PageController(QStringLiteral("tiling-algorithm"), parent)
     , m_settings(&settings)
     , m_registry(&registry)
 {

@@ -11,7 +11,11 @@ class EffectWindow;
 
 namespace PlasmaZones {
 
-using namespace PhosphorCompositor;
+// Targeted using-declarations, not a namespace-wide directive: headers must
+// not leak the whole PhosphorCompositor namespace into every includer.
+using PhosphorCompositor::ICompositorBridge;
+using PhosphorCompositor::WindowHandle;
+using PhosphorCompositor::WindowInfo;
 
 class PlasmaZonesEffect;
 
@@ -26,7 +30,10 @@ class PlasmaZonesEffect;
 class KWinCompositorBridge : public ICompositorBridge
 {
 public:
-    explicit KWinCompositorBridge(PlasmaZonesEffect* effect);
+    // Reference, not pointer: the bridge is a member of the effect and can
+    // never outlive it, so non-null is a structural guarantee rather than a
+    // debug-only Q_ASSERT.
+    explicit KWinCompositorBridge(PlasmaZonesEffect& effect);
 
     // Public: used by KWin-specific handler code
     static KWin::EffectWindow* toEffectWindow(WindowHandle w)
@@ -55,6 +62,9 @@ public:
     bool isOnCurrentDesktop(WindowHandle w) const override;
     bool isOnCurrentActivity(WindowHandle w) const override;
     bool hasDecoration(WindowHandle w) const override;
+    bool userCanSetNoBorder(WindowHandle w) const override;
+    bool isNoBorder(WindowHandle w) const override;
+    QRectF moveResizeGeometry(WindowHandle w) const override;
     WindowInfo windowInfo(WindowHandle w) const override;
 
     bool shouldHandleWindow(WindowHandle w) const override;
@@ -73,7 +83,7 @@ public:
     void invalidateScreenIdCache() override;
 
 private:
-    PlasmaZonesEffect* m_effect;
+    PlasmaZonesEffect& m_effect;
 };
 
 } // namespace PlasmaZones

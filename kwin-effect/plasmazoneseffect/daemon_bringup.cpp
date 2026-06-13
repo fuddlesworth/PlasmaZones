@@ -12,7 +12,6 @@
 
 #include <PhosphorAnimation/AnimationLimits.h>
 #include <PhosphorAnimation/CurveRegistry.h>
-#include <PhosphorIdentity/WindowId.h>
 #include <PhosphorProtocol/ClientHelpers.h>
 #include <PhosphorProtocol/ServiceConstants.h>
 #include <PhosphorProtocol/BridgeMarshalling.h>
@@ -108,9 +107,14 @@ void PlasmaZonesEffect::slotDaemonReady()
             return;
         }
         if (result.sessionId == QLatin1String("REJECTED")) {
-            qCCritical(lcEffect) << "Daemon REJECTED this effect: daemon apiVersion=" << result.apiVersion
-                                 << "but this effect speaks" << PhosphorProtocol::Service::ApiVersion
-                                 << "— update the effect to match the daemon.";
+            // REJECTED covers any invalid registration (the daemon also
+            // rejects an empty compositorName); this caller always sends a
+            // non-empty name, so for it the only reachable cause is a
+            // protocol-version mismatch — diagnose that.
+            qCCritical(lcEffect) << "Daemon REJECTED this effect's registration: daemon apiVersion="
+                                 << result.apiVersion << "but this effect speaks"
+                                 << PhosphorProtocol::Service::ApiVersion
+                                 << "— a version mismatch; update the effect to match the daemon.";
             return;
         }
         int daemonVersion = result.apiVersion.toInt();
@@ -142,6 +146,12 @@ void PlasmaZonesEffect::continueDaemonReadySetup()
     // / pending restores arrive — setWindowMetadata is registry-only and has
     // no dependency on screen identity.
     for (KWin::EffectWindow* w : KWin::effects->stackingOrder()) {
+        // Skip close-grabbed dying windows: pushing their metadata would
+        // resurrect registry records for windows whose windowClosed the
+        // fresh daemon will never see.
+        if (!w || w->isDeleted()) {
+            continue;
+        }
         pushWindowMetadata(w);
     }
 
@@ -294,17 +304,21 @@ void PlasmaZonesEffect::processDaemonReadyWindowState()
     }
     m_autotileHandler->onDaemonReady();
 
-    // Re-announce all existing windows on autotile screens in one batch D-Bus
-    // call instead of per-window windowOpened round-trips.
+    // Window re-announcement is NOT done here: onDaemonReady's loadSettings
+    // queries the new daemon's authoritative autotile screen set and its
+    // reply batches notifyWindowsAddedBatch(resetNotified=true). Announcing
+    // here too would double-send AND use the pre-restart screen set, leaking
+    // tracked-but-untiled entries for screens the new daemon doesn't autotile.
     const auto windows = KWin::effects->stackingOrder();
-    m_autotileHandler->notifyWindowsAddedBatch(windows);
 
     // Report all live window IDs to the daemon so it can prune stale
     // entries from KConfig (windows that were snapped but no longer exist).
     {
         QStringList aliveWindowIds;
         for (KWin::EffectWindow* w : windows) {
-            if (w && shouldHandleWindow(w)) {
+            // !isDeleted: a close-grabbed dying window is NOT alive — listing
+            // it would shield its stale persisted snap entry from the prune.
+            if (w && !w->isDeleted() && shouldHandleWindow(w)) {
                 aliveWindowIds.append(getWindowId(w));
             }
         }
@@ -336,13 +350,15 @@ void PlasmaZonesEffect::processDaemonReadyWindowState()
             m_snapHandler->clearRestoreCache();
             for (auto it = obj.constBegin(); it != obj.constEnd(); ++it) {
                 QJsonObject geo = it.value().toObject();
-                int x = geo[QLatin1String("x")].toInt();
-                int y = geo[QLatin1String("y")].toInt();
-                int w = geo[QLatin1String("width")].toInt();
-                int h = geo[QLatin1String("height")].toInt();
+                // gw/gh, not w/h — `w` would shadow the lambda's watcher
+                // parameter above.
+                const int gx = geo[QLatin1String("x")].toInt();
+                const int gy = geo[QLatin1String("y")].toInt();
+                const int gw = geo[QLatin1String("width")].toInt();
+                const int gh = geo[QLatin1String("height")].toInt();
                 QString savedScreen = geo[QLatin1String("screenId")].toString();
-                if (w > 0 && h > 0) {
-                    m_snapHandler->cacheRestore(it.key(), CachedSnapRestore{QRect(x, y, w, h), savedScreen});
+                if (gw > 0 && gh > 0) {
+                    m_snapHandler->cacheRestore(it.key(), CachedSnapRestore{QRect(gx, gy, gw, gh), savedScreen});
                 }
             }
             qCDebug(lcEffect) << "Cached" << m_snapHandler->restoreCacheSize() << "pending restore geometries";
@@ -362,20 +378,28 @@ void PlasmaZonesEffect::processDaemonReadyWindowState()
         connect(watcher, &QDBusPendingCallWatcher::finished, this, [this](QDBusPendingCallWatcher* w) {
             w->deleteLater();
 
+            QDBusPendingReply<QStringList> reply = *w;
+            if (!reply.isValid()) {
+                // Leave m_daemonReadyRestoresDone false: `finished` fires for
+                // ERROR replies too, and latching the guard on a failed
+                // getSnappedWindows would permanently disable the
+                // slotPendingRestoresAvailable fallback for the session.
+                qCWarning(lcEffect) << "getSnappedWindows failed at daemon-ready:" << reply.error().message()
+                                    << "— deferring restores to pendingRestoresAvailable";
+                return;
+            }
             // Guard: prevent slotPendingRestoresAvailable from double-processing
-            // the same windows. Set inside the callback so that if this D-Bus call
-            // fails, the flag stays false and slotPendingRestoresAvailable can
-            // still function as a fallback.
+            // the same windows. Set only on a VALID reply so a failed call
+            // keeps the fallback alive.
             m_daemonReadyRestoresDone = true;
 
             // Re-drive per-window chrome (snap border / hidden title bar,
             // autotile border) for windows the daemon already considers managed.
-            QDBusPendingReply<QStringList> reply = *w;
-            QSet<QString> trackedAppIds;
-            if (reply.isValid()) {
+            QSet<QString> trackedWindowIds;
+            {
                 // On daemon loss the effect cleared its window-appearance state
-                // (restoreAllSnapBorderless / AutotileHandler::restoreAllBorderless)
-                // and restored every title bar; already-tracked windows are NOT in
+                // (DecorationManager::restoreAll + the handlers' tiled-tracking
+                // clears) and restored every title bar; already-tracked windows are NOT in
                 // the untracked-restore set below, so their chrome would never come
                 // back without this. Daemon-driven and engine-common: the daemon
                 // re-emits each engine's placement geometry, which routes through the
@@ -388,9 +412,8 @@ void PlasmaZonesEffect::processDaemonReadyWindowState()
 
                 const QStringList trackedWindows = reply.value();
                 for (const QString& windowId : trackedWindows) {
-                    QString appId = ::PhosphorIdentity::WindowId::extractAppId(windowId);
-                    if (!appId.isEmpty()) {
-                        trackedAppIds.insert(appId);
+                    if (!windowId.isEmpty()) {
+                        trackedWindowIds.insert(windowId);
                     }
                 }
             }
@@ -417,14 +440,21 @@ void PlasmaZonesEffect::processDaemonReadyWindowState()
             // between collection and the dispatch loop below.
             QVector<QPointer<KWin::EffectWindow>> toRestore;
             for (KWin::EffectWindow* window : allWindows) {
-                if (!window || !shouldHandleWindow(window)) {
+                // !isDeleted: same deleted-window hygiene as the metadata
+                // push and aliveWindowIds walks — getWindowId on a
+                // close-grabbed dying window re-pollutes the id caches.
+                if (!window || window->isDeleted() || !shouldHandleWindow(window)) {
                     continue;
                 }
                 if (window->isMinimized()) {
                     continue;
                 }
-                QString appId = ::PhosphorIdentity::WindowId::extractAppId(getWindowId(window));
-                if (trackedAppIds.contains(appId)) {
+                // Skip only if THIS window is already tracked (exact id). Deduping by
+                // appId would skip an untracked window whose app has another tracked
+                // window — stranding e.g. a multi-window terminal's window that raced
+                // startup. The daemon tracks restored windows by live id, matching
+                // getWindowId(). (Mirrors SnapHandler::slotPendingRestoresAvailable.)
+                if (trackedWindowIds.contains(getWindowId(window))) {
                     continue;
                 }
                 toRestore.append(QPointer<KWin::EffectWindow>(window));
@@ -526,11 +556,19 @@ void PlasmaZonesEffect::loadCachedSettings()
     // the effect's drag-gate exclusion rule set is now derived from the
     // store-side Exclude rules pulled via WindowRules.rulesChanged →
     // loadWindowRuleAnimationsFromDbus. No D-Bus settings fetch needed.
+    // isValid + clamp: a failed/invalid reply would otherwise toInt() to 0
+    // and silently disable the min-size gate the permissive member defaults
+    // exist to protect across the startup race (same hardening as the
+    // animation min-size loaders below).
     loadSettingAsync(QStringLiteral("minimumWindowWidth"), [this](const QVariant& v) {
-        m_cachedMinWindowWidth = v.toInt();
+        if (v.isValid()) {
+            m_cachedMinWindowWidth = qMax(0, v.toInt());
+        }
     });
     loadSettingAsync(QStringLiteral("minimumWindowHeight"), [this](const QVariant& v) {
-        m_cachedMinWindowHeight = v.toInt();
+        if (v.isValid()) {
+            m_cachedMinWindowHeight = qMax(0, v.toInt());
+        }
     });
     loadSettingAsync(QStringLiteral("snapAssistEnabled"), [this](const QVariant& v) {
         m_snapAssistHandler->setEnabled(v.toBool());
@@ -660,20 +698,23 @@ void PlasmaZonesEffect::loadCachedSettings()
     });
 
     loadSettingAsync(QStringLiteral("autotileBorderWidth"), [this](const QVariant& v) {
-        int bw = qBound(0, v.toInt(), 10);
+        // No retile on width change: borders are OutlinedBorderItem overlays
+        // drawn INSIDE the window frame, so zone geometry is width-independent.
+        // The retileAllScreens this handler used to fire was a leftover from
+        // the geometry-inset border era (windows were once shrunk by the
+        // border width); the inset surface was removed long ago and nothing
+        // daemon-side consumes autotileBorderWidth. updateAllBorders()
+        // rebuilds the overlays at the new thickness — symmetric with the
+        // snapping width handler below, which never retiled.
+        const int bw = qBound(DecorationDefaults::BorderWidthMin, v.toInt(), DecorationDefaults::BorderWidthMax);
         if (m_autotileHandler->borderWidth() != bw) {
             m_autotileHandler->setBorderWidth(bw);
-            // Invalidate pending stagger timers that would use the old border width
-            m_autotileHandler->invalidateStaggerGeneration();
-            PhosphorProtocol::ClientHelpers::fireAndForget(this, PhosphorProtocol::Service::Interface::Autotile,
-                                                           QStringLiteral("retileAllScreens"), {},
-                                                           QStringLiteral("border width change retile"));
             updateAllBorders();
         }
     });
 
     loadSettingAsync(QStringLiteral("autotileBorderRadius"), [this](const QVariant& v) {
-        int br = qBound(0, v.toInt(), 20);
+        int br = qBound(DecorationDefaults::BorderRadiusMin, v.toInt(), DecorationDefaults::BorderRadiusMax);
         if (m_autotileHandler->borderRadius() != br) {
             m_autotileHandler->setBorderRadius(br);
             updateAllBorders();
@@ -713,9 +754,10 @@ void PlasmaZonesEffect::loadCachedSettings()
     // order in updateAllBorders / re-toggling title bars — matching the
     // "only act on change" convention the autotile width/radius setters use.
     loadSettingAsync(QStringLiteral("snappingHideTitleBars"), [this](const QVariant& v) {
-        const bool hide = v.toBool();
-        if (m_snapHandler->hideTitleBars() != hide) {
-            m_snapHandler->updateSnapHideTitleBars(hide);
+        // Value-changed guard lives inside the handler; the border refresh
+        // is the caller's job on true — mirrors autotileHideTitleBars above.
+        if (m_snapHandler->updateSnapHideTitleBars(v.toBool())) {
+            updateAllBorders();
         }
     });
     loadSettingAsync(QStringLiteral("snappingShowBorder"), [this](const QVariant& v) {
@@ -726,14 +768,14 @@ void PlasmaZonesEffect::loadCachedSettings()
         }
     });
     loadSettingAsync(QStringLiteral("snappingBorderWidth"), [this](const QVariant& v) {
-        const int bw = qBound(0, v.toInt(), 10);
+        const int bw = qBound(DecorationDefaults::BorderWidthMin, v.toInt(), DecorationDefaults::BorderWidthMax);
         if (m_snapHandler->borderWidth() != bw) {
             m_snapHandler->setBorderWidth(bw);
             updateAllBorders();
         }
     });
     loadSettingAsync(QStringLiteral("snappingBorderRadius"), [this](const QVariant& v) {
-        const int br = qBound(0, v.toInt(), 20);
+        const int br = qBound(DecorationDefaults::BorderRadiusMin, v.toInt(), DecorationDefaults::BorderRadiusMax);
         if (m_snapHandler->borderRadius() != br) {
             m_snapHandler->setBorderRadius(br);
             updateAllBorders();
@@ -830,7 +872,8 @@ void PlasmaZonesEffect::connectNavigationSignals()
     // emits applyGeometryRequested to paint the outcome. The effect no longer
     // participates in the decision.
 
-    // Daemon-driven batch operations (rotate, resnap emit applyGeometriesBatch)
+    // Daemon-driven batch operations (rotate, resnap, vs_reconfigure emit
+    // applyGeometriesBatch; effect-local snap_all calls the slot directly)
     QDBusConnection::sessionBus().connect(
         PhosphorProtocol::Service::Name, PhosphorProtocol::Service::ObjectPath,
         PhosphorProtocol::Service::Interface::WindowTracking, QStringLiteral("applyGeometriesBatch"), this,

@@ -69,6 +69,7 @@ set(plasmazones_effect_SRCS
     autotilehandler/signals.cpp
     autotilehandler/state.cpp
     autotilehandler/tiling.cpp
+    autotilehandler/wiring.cpp
     snaphandler.cpp
     snaphandler.h
     navigationhandler.cpp

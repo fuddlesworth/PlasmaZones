@@ -41,7 +41,10 @@ class ISettings;
  *
  * Signal relay from SnapEngine to WindowTrackingAdaptor is also wired
  * here (navigationFeedback, windowFloatingChanged, applyGeometryRequested,
- * resnapToNewLayoutRequested, snapAllWindowsRequested).
+ * snapAllWindowsRequested, applyGeometriesBatch, activateWindowRequested).
+ * SnapEngine::resnapToNewLayoutRequested routes to this adaptor's own
+ * handleBatchedResnap slot (bookkeeping + applyGeometriesBatch emission),
+ * not directly to WTA.
  *
  * @see SnapEngine, WindowTrackingAdaptor
  */
@@ -143,7 +146,8 @@ public Q_SLOTS:
                          int& snapWidth, int& snapHeight, bool& shouldSnap);
 
     /**
-     * @brief Run the full 4-level snap-restore fallback chain in one call
+     * @brief Run the full snap-restore resolution (WindowPlacementStore restore +
+     *        app-rule / empty-zone / last-zone fallback chain) in one call
      * @param windowKind Structural kind of the opening window (0=Unknown, 1=Normal, 2=Transient).
      *                   Forwarded to SnapEngine for protocol compatibility; the unified
      *                   placement record now carries the kind, so it no longer gates restore.
@@ -289,8 +293,13 @@ public Q_SLOTS:
      */
     void windowUnsnappedForFloat(const QString& windowId);
 
+public:
     // ═══════════════════════════════════════════════════════════════════════════
-    // Internal (not D-Bus, but callable from daemon C++ code)
+    // Internal — plain `public:` (NOT Q_SLOTS, no Q_INVOKABLE) so
+    // QDBusAbstractAdaptor's introspection does not expose them on the bus.
+    // Every caller is in-process and reaches these via direct C++ invocation
+    // through the daemon (same pattern as
+    // WindowDragAdaptor::handleWindowClosed).
     // ═══════════════════════════════════════════════════════════════════════════
 
     /**

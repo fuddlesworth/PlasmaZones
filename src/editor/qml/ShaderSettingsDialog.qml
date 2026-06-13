@@ -16,7 +16,7 @@ import org.plasmazones.common as PZCommon
  * Side-by-side layout: settings on the left, live preview on the right.
  *
  * The picker, parameter rows, accordion sections and lock/randomize
- * toolbar live in `org.plasmazones.common` (PZCommon.ShaderPickerButton /
+ * toolbar live in `org.plasmazones.common` (PZCommon.CategoryMenuButton /
  * ShaderParameterEditor) so the animation-settings page can reuse them.
  * This dialog owns the editor-specific bits: the live preview pane, the
  * shader-preset load/save flow, color/image platform dialogs, and the
@@ -427,15 +427,15 @@ Kirigami.Dialog {
                     }
                 }
 
-                PZCommon.ShaderPickerButton {
+                PZCommon.CategoryMenuButton {
                     Kirigami.FormData.label: i18nc("@label", "Shader:")
                     enabled: root.hasShaderEffect
                     Layout.fillWidth: true
-                    shaders: editorController ? editorController.availableShaders : []
-                    currentShaderId: root.pendingShaderId
-                    noneShaderId: root.noneShaderId
+                    items: editorController ? editorController.availableShaders : []
+                    currentId: root.pendingShaderId
+                    noneId: root.noneShaderId
                     placeholderText: i18nc("@action:button", "Select shader…")
-                    onShaderSelected: function (id) {
+                    onSelected: function (id) {
                         // Hide preview before the switch so RHI resources
                         // are released cleanly before the new shader spins
                         // up. NVIDIA EGL 595.x corrupts the heap on
@@ -565,7 +565,7 @@ Kirigami.Dialog {
                             id: metadataPresetMenu
 
                             // Same Qt 6 menu-lifecycle hardening as
-                            // ShaderPickerButton: opaque palette + empty
+                            // CategoryMenuButton: opaque palette + empty
                             // transitions keep finalizeExitTransition
                             // synchronous and avoid the QQmlData::destroyed
                             // race that fires when MenuItem-based exit
@@ -856,6 +856,8 @@ Kirigami.Dialog {
     // ═══════════════════════════════════════════════════════════════════════
     ColorDialog {
         id: shaderColorDialog
+
+        options: ColorDialog.ShowAlphaChannel
 
         property string paramId: ""
         property string paramName: ""

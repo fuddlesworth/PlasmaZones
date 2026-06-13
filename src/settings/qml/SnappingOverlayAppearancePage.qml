@@ -507,6 +507,7 @@ SettingsFlickable {
     ColorDialog {
         id: highlightColorDialog
 
+        options: ColorDialog.ShowAlphaChannel
         title: i18n("Choose Highlight Color")
         onAccepted: appSettings.highlightColor = selectedColor
     }
@@ -514,6 +515,7 @@ SettingsFlickable {
     ColorDialog {
         id: inactiveColorDialog
 
+        options: ColorDialog.ShowAlphaChannel
         title: i18n("Choose Inactive Zone Color")
         onAccepted: appSettings.inactiveColor = selectedColor
     }
@@ -521,6 +523,7 @@ SettingsFlickable {
     ColorDialog {
         id: borderColorDialog
 
+        options: ColorDialog.ShowAlphaChannel
         title: i18n("Choose Border Color")
         onAccepted: appSettings.borderColor = selectedColor
     }
@@ -528,6 +531,7 @@ SettingsFlickable {
     ColorDialog {
         id: labelFontColorDialog
 
+        options: ColorDialog.ShowAlphaChannel
         title: i18n("Choose Label Color")
         onAccepted: appSettings.labelFontColor = selectedColor
     }

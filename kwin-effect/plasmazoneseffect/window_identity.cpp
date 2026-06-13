@@ -176,6 +176,25 @@ bool PlasmaZonesEffect::isOwnOverlayClass(const QString& windowClass)
         || windowClass.contains(QLatin1String("plasmazones-editor"), Qt::CaseInsensitive);
 }
 
+bool PlasmaZonesEffect::isOwnPassthroughOverlayClass(const QString& windowClass)
+{
+    // The daemon's overlay layer-shell surface (windowClass "plasmazonesd")
+    // covers the whole autotile monitor and is permanently topmost, but it is a
+    // non-interactive passthrough surface that never holds keyboard focus. The
+    // focus-follows-mouse stacking walk must look THROUGH it to the real window
+    // beneath, or FFM bails on every cursor move once any OSD/snap-preview/
+    // layout-picker has been shown (discussion #461 #3 / PR #517).
+    //
+    // The editor (windowClass "plasmazones-editor") is deliberately NOT here:
+    // it is an interactive fullscreen xdg-shell toplevel the user works in, not
+    // a passthrough overlay. Looking through it stole the editor's focus to the
+    // tiled window beneath on every cursor move — that is what this predicate
+    // exists to prevent. It is still rejected from tiling by isOwnOverlayClass()
+    // (shouldHandleWindow), so FFM treats it as a genuine occluder and pauses,
+    // leaving focus on the editor.
+    return windowClass.contains(QLatin1String("plasmazonesd"), Qt::CaseInsensitive);
+}
+
 bool PlasmaZonesEffect::isXdgDesktopPortalSurface(const QString& windowClass)
 {
     // Substring match on "xdg-desktop-portal" covers every brokered portal

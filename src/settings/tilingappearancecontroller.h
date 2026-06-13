@@ -5,7 +5,7 @@
 
 #include "../config/configdefaults.h"
 
-#include <PhosphorSettingsUi/PageController.h>
+#include <PhosphorControl/PageController.h>
 #include <QObject>
 
 namespace PlasmaZones {
@@ -15,7 +15,7 @@ namespace PlasmaZones {
 /// CONSTANT bounds for the autotile border-width / border-radius sliders.
 /// Live border values are on Settings (Q_PROPERTY) and bind via
 /// `appSettings.autotileBorderWidth` / `appSettings.autotileBorderRadius`.
-class TilingAppearanceController : public PhosphorSettingsUi::PageController
+class TilingAppearanceController : public PhosphorControl::PageController
 {
     Q_OBJECT
 
@@ -36,7 +36,7 @@ class TilingAppearanceController : public PhosphorSettingsUi::PageController
 
 public:
     explicit TilingAppearanceController(QObject* parent = nullptr)
-        : PhosphorSettingsUi::PageController(QStringLiteral("tiling-appearance"), parent)
+        : PhosphorControl::PageController(QStringLiteral("tiling-appearance"), parent)
     {
     }
 

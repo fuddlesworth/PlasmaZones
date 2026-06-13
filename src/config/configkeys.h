@@ -22,6 +22,23 @@
 // name preserved for readability at the call sites.
 #define P_CONFIG_GROUP(name, str) P_CONFIG_KEY(name, str)
 
+// Single definition point for the per-screen group prefix spellings.
+// Shared by the *GroupPrefix accessors below (which append the ':') and
+// PerScreenPathResolver's prefix→category mapping table — a rename here
+// updates both in lockstep instead of silently desyncing the JSON path
+// resolver from the group accessors.
+//
+// MIGRATION-FROZEN: configmigration.cpp's v1→v2 INI migration matches
+// per-screen groups through the live resolver (and therefore through these
+// spellings). Renaming any of them would retarget the v1 migration to
+// names no historical INI ever held, silently dropping per-screen
+// overrides on migration. A rename therefore requires a schema-version
+// bump with frozen Legacy copies of the old spellings — same policy as
+// the ConfigKeys::Legacy accessors.
+#define P_PER_SCREEN_PREFIX_ZONE_SELECTOR "ZoneSelector"
+#define P_PER_SCREEN_PREFIX_AUTOTILE "AutotileScreen"
+#define P_PER_SCREEN_PREFIX_SNAPPING "SnappingScreen"
+
 namespace PlasmaZones {
 
 /**
@@ -209,6 +226,7 @@ public:
     P_CONFIG_KEY(moveNewToLastZoneKey, "MoveNewToLastZone")
     P_CONFIG_KEY(restoreOnUnsnapKey, "RestoreOnUnsnap")
     P_CONFIG_KEY(restoreOnLoginKey, "RestoreOnLogin")
+    P_CONFIG_KEY(restoreUnsnappedOnLoginKey, "RestoreUnsnappedOnLogin")
     P_CONFIG_KEY(autoAssignAllLayoutsKey, "AutoAssignAllLayouts")
     P_CONFIG_KEY(stickyWindowHandlingKey, "StickyWindowHandling")
     P_CONFIG_KEY(defaultLayoutIdKey, "DefaultLayoutId")
@@ -547,9 +565,9 @@ public:
     // Per-Screen Config Group Prefixes
     // ═══════════════════════════════════════════════════════════════════════════
 
-    P_CONFIG_GROUP(zoneSelectorGroupPrefix, "ZoneSelector:")
-    P_CONFIG_GROUP(autotileScreenGroupPrefix, "AutotileScreen:")
-    P_CONFIG_GROUP(snappingScreenGroupPrefix, "SnappingScreen:")
+    P_CONFIG_GROUP(zoneSelectorGroupPrefix, P_PER_SCREEN_PREFIX_ZONE_SELECTOR ":")
+    P_CONFIG_GROUP(autotileScreenGroupPrefix, P_PER_SCREEN_PREFIX_AUTOTILE ":")
+    P_CONFIG_GROUP(snappingScreenGroupPrefix, P_PER_SCREEN_PREFIX_SNAPPING ":")
 
     // ═══════════════════════════════════════════════════════════════════════════
     // Legacy v1/v2/v3/v4 accessors — used ONLY by migration code.
@@ -899,3 +917,6 @@ inline QString disableRuleActivitySuffix()
 
 #undef P_CONFIG_KEY
 #undef P_CONFIG_GROUP
+// P_PER_SCREEN_PREFIX_* deliberately NOT undef'd: perscreenresolver.cpp
+// consumes them after including this header (the single-definition-point
+// contract above). Do not "clean up" by undef'ing them here.

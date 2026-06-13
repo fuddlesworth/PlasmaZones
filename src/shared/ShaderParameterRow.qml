@@ -1,8 +1,7 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
-// SPDX-License-Identifier: LGPL-2.1-or-later
+// SPDX-License-Identifier: GPL-3.0-or-later
 
 import QtQuick
-import QtQuick.Window
 import QtQuick.Controls
 import QtQuick.Layouts
 import org.kde.kirigami as Kirigami
@@ -163,9 +162,12 @@ Item {
             visible: paramDelegate.paramType === "int"
             Accessible.name: paramDelegate.paramData ? (paramDelegate.paramData.name || paramDelegate.paramData.id || "") : ""
             // SpinBox.from/to are integers — `_numberOr` validates as a
-            // finite number first, then we round.
+            // finite number first, then we round. The schema's optional
+            // `step` is honoured the same way the float slider honours it
+            // (minimum 1 — a fractional step is meaningless for an int).
             from: paramDelegate.paramData ? Math.round(paramDelegate._numberOr(paramDelegate.paramData.min, 0)) : 0
             to: paramDelegate.paramData ? Math.round(paramDelegate._numberOr(paramDelegate.paramData.max, 100)) : 100
+            stepSize: paramDelegate.paramData ? Math.max(1, Math.round(paramDelegate._numberOr(paramDelegate.paramData.step, 1))) : 1
             ToolTip.text: paramDelegate.paramData ? (paramDelegate.paramData.description || "") : ""
             ToolTip.visible: hovered && paramDelegate.paramData && paramDelegate.paramData.description !== undefined && paramDelegate.paramData.description !== ""
             ToolTip.delay: Kirigami.Units.toolTipDelay
@@ -273,7 +275,10 @@ Item {
             contentItem: Rectangle {
                 radius: Kirigami.Units.smallSpacing
                 color: colorSwatch.currentColor
-                border.width: colorSwatch.activeFocus ? Math.max(2, Math.round(Screen.devicePixelRatio * 2)) : Math.max(1, Math.round(Screen.devicePixelRatio))
+                // 1 device-independent px (2 when focused) — Qt scales DIPs
+                // to physical pixels itself; multiplying by devicePixelRatio
+                // here would double-scale into a thicker, not crisper, line.
+                border.width: colorSwatch.activeFocus ? 2 : 1
                 border.color: colorSwatch.activeFocus ? Kirigami.Theme.focusColor : Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.3)
 
                 MouseArea {

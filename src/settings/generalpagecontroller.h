@@ -5,7 +5,7 @@
 
 #include "../config/configdefaults.h"
 
-#include <PhosphorSettingsUi/PageController.h>
+#include <PhosphorControl/PageController.h>
 #include <QObject>
 #include <QString>
 #include <QStringList>
@@ -34,7 +34,7 @@ class ISettings;
 /// The "General" page therefore participates in dirty tracking via
 /// the Settings property surface, not via this controller's own
 /// signals.
-class GeneralPageController : public PhosphorSettingsUi::PageController
+class GeneralPageController : public PhosphorControl::PageController
 {
     Q_OBJECT
 

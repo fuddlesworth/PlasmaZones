@@ -1,5 +1,5 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
-// SPDX-License-Identifier: GPL-3.0-or-later
+// SPDX-License-Identifier: LGPL-2.1-or-later
 #pragma once
 
 // Shared NDJSON drain / round-trip helpers used by several
@@ -8,14 +8,18 @@
 // .cpp dragging extra symbols into every binary's MOC.
 
 #include <PhosphorIpc/IpcProtocol.h>
+#include <PhosphorIpc/IpcRouter.h>
 
 #include <QByteArray>
+#include <QDir>
 #include <QEventLoop>
+#include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QLocalSocket>
 #include <QObject>
 #include <QString>
+#include <QTemporaryDir>
 #include <QTimer>
 
 #include <optional>
@@ -90,6 +94,41 @@ inline QJsonObject makeReq(const QString& type, qint64 id, const QString& target
     }
     return o;
 }
+
+// Build a wire-format call request (type/id/target/fn/args). The args
+// array is appended verbatim; pass {} for a no-arg call.
+inline QJsonObject makeCallReq(qint64 id, const QString& target, const QString& fn, const QJsonArray& args = {})
+{
+    QJsonObject o;
+    o.insert(QStringLiteral("type"), QStringLiteral("call"));
+    o.insert(QStringLiteral("id"), static_cast<double>(id));
+    o.insert(QStringLiteral("target"), target);
+    o.insert(QStringLiteral("fn"), fn);
+    if (!args.isEmpty()) {
+        o.insert(QStringLiteral("args"), args);
+    }
+    return o;
+}
+
+// Per-test router fixture: an isolated socket dir + path + router. Collapses
+// the QTemporaryDir/sockPath/IpcRouter boilerplate every e2e/subscribe test
+// otherwise repeats. Tests register their targets and call
+// `router.start(fx.sockPath)` themselves (target sets vary per test).
+struct RouterFixture
+{
+    QTemporaryDir dir;
+    QString sockPath;
+    PhosphorIpc::IpcRouter router;
+
+    RouterFixture()
+        : sockPath(QDir(dir.path()).filePath(QStringLiteral("test.sock")))
+    {
+    }
+    bool valid() const
+    {
+        return dir.isValid();
+    }
+};
 
 // One-shot connect + send + drain a single response line. Failures
 // (connect timeout, response timeout) populate outError and return

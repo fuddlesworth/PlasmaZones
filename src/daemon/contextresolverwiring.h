@@ -12,6 +12,10 @@ class ActivityManager;
 class VirtualDesktopManager;
 } // namespace PhosphorWorkspaces
 
+namespace PhosphorZones {
+class LayoutRegistry;
+} // namespace PhosphorZones
+
 namespace PlasmaZones {
 
 class ISettings;
@@ -97,16 +101,19 @@ private:
  * composes the Mode into the screen-key string via `Utils::contextLockKey`
  * before calling `ISettings::isContextLocked`, mirroring the call shape
  * every migrated site used before (`isContextLocked(contextLockKey(modeInt,
- * screenId), desktop, activity)`).
+ * screenId), desktop, activity)`), then ORs in the rule-driven lock resolved
+ * by `LayoutRegistry::resolveContextLocked` so a `LockContext` window rule
+ * locks the context live without ever touching the persisted lock store.
  *
- * Null `ISettings*` is permitted for headless-test wiring; every predicate
- * returns `false` in that case (the "no settings → nothing is gated"
- * fallback that the daemon's existing code already exercises).
+ * Null `ISettings*` / `LayoutRegistry*` are permitted for headless-test
+ * wiring; every predicate returns `false` in that case (the "no settings →
+ * nothing is gated" fallback that the daemon's existing code already
+ * exercises).
  */
 class DaemonSettingsGateAdapter : public PhosphorContext::IContextGateSource
 {
 public:
-    explicit DaemonSettingsGateAdapter(ISettings* settings);
+    DaemonSettingsGateAdapter(ISettings* settings, PhosphorZones::LayoutRegistry* layoutRegistry);
     ~DaemonSettingsGateAdapter() override = default;
 
     bool isMonitorDisabled(PhosphorZones::AssignmentEntry::Mode mode, const QString& screenId) const override;
@@ -119,6 +126,10 @@ public:
 
 private:
     ISettings* m_settings; ///< Non-owning; outlives this adapter.
+    /// Non-owning; outlives this adapter (the daemon declares the registry
+    /// before this adapter, so it tears down after). Source of the live,
+    /// never-persisted rule-driven context lock OR-ed into `isContextLocked`.
+    PhosphorZones::LayoutRegistry* m_layoutRegistry;
 };
 
 } // namespace PlasmaZones

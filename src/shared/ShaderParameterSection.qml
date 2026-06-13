@@ -1,8 +1,7 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
-// SPDX-License-Identifier: LGPL-2.1-or-later
+// SPDX-License-Identifier: GPL-3.0-or-later
 
 import QtQuick
-import QtQuick.Window
 import QtQuick.Controls as QQC
 import QtQuick.Layouts
 import org.kde.kirigami as Kirigami
@@ -155,10 +154,10 @@ ColumnLayout {
                 anchors.bottom: parent.bottom
                 anchors.left: parent.left
                 anchors.right: parent.right
-                // Hairline divider — pixel-snap via devicePixelRatio so it
-                // renders crisp on HiDPI without violating the no-hardcoded-
-                // pixels rule.
-                height: Math.max(1, Math.round(Screen.devicePixelRatio))
+                // Hairline divider: 1 device-independent px. Qt scales DIPs
+                // to physical pixels itself; multiplying by devicePixelRatio
+                // here would double-scale into a thicker, not crisper, line.
+                height: 1
                 color: Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.2)
                 visible: root.expanded
                 opacity: 0.5

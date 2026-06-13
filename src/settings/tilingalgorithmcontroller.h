@@ -3,7 +3,7 @@
 
 #pragma once
 
-#include <PhosphorSettingsUi/PageController.h>
+#include <PhosphorControl/PageController.h>
 #include <QObject>
 #include <QString>
 #include <QVariant>
@@ -29,7 +29,7 @@ class ISettings;
 /// stay on SettingsController — they're shared across multiple pages /
 /// sub-components (AlgorithmPreview, NewAlgorithmDialog, TilingOrderingPage)
 /// and don't belong to any single page.
-class TilingAlgorithmController : public PhosphorSettingsUi::PageController
+class TilingAlgorithmController : public PhosphorControl::PageController
 {
     Q_OBJECT
 

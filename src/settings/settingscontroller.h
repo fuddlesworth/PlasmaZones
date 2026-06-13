@@ -58,7 +58,7 @@ class RegistryShaderPreviewBackend;
 #include <memory>
 #include <optional>
 
-#include <PhosphorSettingsUi/ApplicationController.h>
+#include <PhosphorControl/ApplicationController.h>
 
 #include "algorithmservice.h"
 #include "animationspagecontroller.h"
@@ -133,11 +133,11 @@ class SettingsController : public QObject
     // adaptor; QML reads `settingsController.windowRulesPage.model`.
     Q_PROPERTY(WindowRuleController* windowRulesPage READ windowRulesPage CONSTANT)
 
-    // PhosphorSettingsUi ApplicationController hosting the PageRegistry that
+    // PhosphorControl ApplicationController hosting the PageRegistry that
     // SettingsAppWindow's sidebar / breadcrumbs / footer consume. Constructed
     // lazily after every page controller has been built so the registry
     // entries can carry stable PageController* pointers.
-    Q_PROPERTY(PhosphorSettingsUi::ApplicationController* app READ app CONSTANT)
+    Q_PROPERTY(PhosphorControl::ApplicationController* app READ app CONSTANT)
 
 public:
     explicit SettingsController(QObject* parent = nullptr);
@@ -377,7 +377,7 @@ public:
         return m_windowRulesPage;
     }
 
-    PhosphorSettingsUi::ApplicationController* app() const
+    PhosphorControl::ApplicationController* app() const
     {
         return m_app.get();
     }
@@ -802,7 +802,7 @@ private:
     std::optional<QStringList> m_stagedSnappingOrder;
     std::optional<QStringList> m_stagedTilingOrder;
 
-    // PhosphorSettingsUi integration — owns the PageRegistry the framework's
+    // PhosphorControl integration — owns the PageRegistry the framework's
     // SettingsAppWindow chrome consumes. Constructed in buildApplicationController()
     // after every page controller exists (so adapter registrations carry stable
     // pointers).
@@ -815,7 +815,7 @@ private:
     // would defer m_app's destruction to ~QObject, which runs AFTER the page
     // unique_ptrs reset — leaving the registry briefly holding dangling refs
     // any queued event-loop tick could trip on.
-    std::unique_ptr<PhosphorSettingsUi::ApplicationController> m_app;
+    std::unique_ptr<PhosphorControl::ApplicationController> m_app;
 
     void buildApplicationController();
 

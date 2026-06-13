@@ -13,6 +13,10 @@ import QtQuick.Dialogs
 ColorDialog {
     id: zoneColorDialog
 
+    // Expose the alpha channel so zone colors (highlight/inactive/border) can
+    // have their transparency edited directly in the picker — storage is ARGB.
+    options: ColorDialog.ShowAlphaChannel
+
     /**
      * @brief The editor controller for updates
      */
@@ -66,5 +70,4 @@ ColorDialog {
         target: zoneColorDialog.editorController
         enabled: !zoneColorDialog.isMultiMode && zoneColorDialog.editorController !== null && zoneColorDialog.selectedZoneId !== "" && zoneColorDialog.colorProperty !== ""
     }
-
 }

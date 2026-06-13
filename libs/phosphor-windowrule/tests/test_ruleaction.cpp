@@ -6,6 +6,8 @@
 #include <PhosphorWindowRule/RuleAction.h>
 
 #include <QJsonObject>
+#include <QJsonValue>
+#include <QSet>
 #include <QTest>
 
 using namespace PhosphorWindowRule;
@@ -19,6 +21,44 @@ inline RuleAction engineModeAction(const QString& mode)
 {
     return PhosphorWindowRule::TestHelpers::engineMode(mode);
 }
+
+// Single source for the domain pins: the per-domain assertion tests AND the
+// completeness canary iterate these same lists, so a registered type can
+// only pass the canary by actually being domain-asserted somewhere.
+const QList<QLatin1StringView> kContextDomainTypes = {
+    ActionType::SetEngineMode,
+    ActionType::SetSnappingLayout,
+    ActionType::SetTilingAlgorithm,
+    ActionType::DisableEngine,
+    // Layout lock — context-domain, resolved during the screen/desktop/
+    // activity pass (mode-agnostic) like the other context actions.
+    ActionType::LockContext,
+    // Gap overrides are context-domain — resolved during the
+    // screen/desktop/activity pass, never per-window.
+    ActionType::SetZonePadding,
+    ActionType::SetOuterGap,
+    ActionType::SetUsePerSideOuterGap,
+    ActionType::SetOuterGapTop,
+    ActionType::SetOuterGapBottom,
+    ActionType::SetOuterGapLeft,
+    ActionType::SetOuterGapRight,
+};
+const QList<QLatin1StringView> kWindowDomainTypes = {
+    ActionType::Exclude,
+    ActionType::Float,
+    ActionType::OverrideAnimationShader,
+    ActionType::OverrideAnimationTiming,
+    ActionType::OverrideAnimationCurve,
+    ActionType::ExcludeAnimations,
+    ActionType::SetOpacity,
+    // Border / title-bar overrides are window-domain — resolved per
+    // window in the effect, applicable to any matched window.
+    ActionType::SetHideTitleBar,
+    ActionType::SetBorderVisible,
+    ActionType::SetBorderWidth,
+    ActionType::SetBorderRadius,
+    ActionType::SetBorderColor,
+};
 } // namespace
 
 class TestRuleAction : public QObject
@@ -99,6 +139,12 @@ private Q_SLOTS:
         o.insert(QStringLiteral("type"), QString(ActionType::SetOpacity));
         o.insert(QStringLiteral("value"), 1.5);
         QVERIFY(!RuleAction::fromJson(o).has_value());
+        // Below-minimum is rejected too; 0.0 itself is a legal wire value
+        // (fully transparent — the 0.0–1.0 range is inclusive).
+        o.insert(QStringLiteral("value"), -0.1);
+        QVERIFY(!RuleAction::fromJson(o).has_value());
+        o.insert(QStringLiteral("value"), 0.0);
+        QVERIFY(RuleAction::fromJson(o).has_value());
         o.insert(QStringLiteral("value"), 0.95);
         QVERIFY(RuleAction::fromJson(o).has_value());
     }
@@ -111,25 +157,12 @@ private Q_SLOTS:
 
     void testActionDomain_contextActions()
     {
-        // The four context-domain actions all fill slots consumed during the
+        // The context-domain actions all fill slots consumed during the
         // screen/desktop/activity resolution pass. They must report
         // ActionDomain::Context so the validator can flag mismatched matches.
-        const QList<QLatin1StringView> contextTypes = {
-            ActionType::SetEngineMode,
-            ActionType::SetSnappingLayout,
-            ActionType::SetTilingAlgorithm,
-            ActionType::DisableEngine,
-            // Gap overrides are context-domain — resolved during the
-            // screen/desktop/activity pass, never per-window.
-            ActionType::SetZonePadding,
-            ActionType::SetOuterGap,
-            ActionType::SetUsePerSideOuterGap,
-            ActionType::SetOuterGapTop,
-            ActionType::SetOuterGapBottom,
-            ActionType::SetOuterGapLeft,
-            ActionType::SetOuterGapRight,
-        };
-        for (const QLatin1StringView type : contextTypes) {
+        // (kContextDomainTypes is shared with the completeness canary so
+        // pinning is structural, not copy-discipline.)
+        for (const QLatin1StringView type : kContextDomainTypes) {
             const auto descriptor = ActionRegistry::instance().descriptor(QString::fromLatin1(type));
             QVERIFY2(descriptor.has_value(), type.data());
             QCOMPARE(descriptor->domain, ActionDomain::Context);
@@ -141,23 +174,8 @@ private Q_SLOTS:
         // Window-domain actions cover the per-window evaluation pass — exclude,
         // float, animation overrides, opacity. They run against a WindowQuery
         // that carries both window and context fields, so any match shape is
-        // valid for them.
-        const QList<QLatin1StringView> windowTypes = {
-            ActionType::Exclude,
-            ActionType::Float,
-            ActionType::OverrideAnimationShader,
-            ActionType::OverrideAnimationTiming,
-            ActionType::OverrideAnimationCurve,
-            ActionType::SetOpacity,
-            // Border / title-bar overrides are window-domain — resolved per
-            // window in the effect, applicable to any matched window.
-            ActionType::SetHideTitleBar,
-            ActionType::SetBorderVisible,
-            ActionType::SetBorderWidth,
-            ActionType::SetBorderRadius,
-            ActionType::SetBorderColor,
-        };
-        for (const QLatin1StringView type : windowTypes) {
+        // valid for them. (kWindowDomainTypes is shared with the canary.)
+        for (const QLatin1StringView type : kWindowDomainTypes) {
             const auto descriptor = ActionRegistry::instance().descriptor(QString::fromLatin1(type));
             QVERIFY2(descriptor.has_value(), type.data());
             QCOMPARE(descriptor->domain, ActionDomain::Window);
@@ -185,6 +203,31 @@ private Q_SLOTS:
             QVERIFY(descriptor.has_value());
             const int d = static_cast<int>(descriptor->domain);
             QVERIFY(d == static_cast<int>(ActionDomain::Context) || d == static_cast<int>(ActionDomain::Window));
+        }
+
+        // Completeness: every registered type must be domain-PINNED by the
+        // SAME lists the assertion tests above iterate (file-scope
+        // kContextDomainTypes / kWindowDomainTypes — shared, not copied, so
+        // a type added here without a domain assertion is impossible), or by
+        // the known-elsewhere set below.
+        QSet<QString> pinned;
+        // Domain pinned in another suite: RestorePosition (window) in
+        // test_actionregistry.cpp.
+        const QList<QLatin1StringView> pinnedElsewhere = {
+            ActionType::RestorePosition,
+        };
+        for (const QLatin1StringView t : kContextDomainTypes) {
+            pinned.insert(QString::fromLatin1(t));
+        }
+        for (const QLatin1StringView t : kWindowDomainTypes) {
+            pinned.insert(QString::fromLatin1(t));
+        }
+        for (const QLatin1StringView t : pinnedElsewhere) {
+            pinned.insert(QString::fromLatin1(t));
+        }
+        for (const QString& type : ActionRegistry::instance().registeredTypes()) {
+            QVERIFY2(pinned.contains(type),
+                     qPrintable(QStringLiteral("action type not domain-pinned by any list: ") + type));
         }
     }
 
@@ -246,6 +289,23 @@ private Q_SLOTS:
         }
     }
 
+    void testSetHideTitleBarFalse_isValidAndPreserved()
+    {
+        // SetHideTitleBar is tri-state at the effect: rule absent = mode
+        // decides, true = hide, FALSE = force the title bar visible (a veto
+        // over mode hiding). An explicit false must therefore validate and
+        // round-trip — it is a meaningful value, not "unset".
+        QJsonObject o;
+        o.insert(QStringLiteral("type"), QString(ActionType::SetHideTitleBar));
+        o.insert(QStringLiteral("value"), false);
+        const auto action = RuleAction::fromJson(o);
+        QVERIFY(action.has_value());
+        QCOMPARE(action->params.value(QStringLiteral("value")), QJsonValue(false));
+        const auto roundTripped = RuleAction::fromJson(action->toJson());
+        QVERIFY(roundTripped.has_value());
+        QCOMPARE(roundTripped->params.value(QStringLiteral("value")), QJsonValue(false));
+    }
+
     void testBorderNumberActions_range()
     {
         QJsonObject w;
@@ -272,6 +332,9 @@ private Q_SLOTS:
 
     void testBorderColorActions_requireHex()
     {
+        // Single colour action since setInactiveBorderColor's removal (see the
+        // header note above); kept loop-shaped so a future colour action only
+        // adds an initializer entry.
         for (const QLatin1StringView type : {ActionType::SetBorderColor}) {
             QJsonObject o;
             o.insert(QStringLiteral("type"), QString::fromLatin1(type));
@@ -285,7 +348,7 @@ private Q_SLOTS:
             QVERIFY2(!RuleAction::fromJson(o).has_value(), type.data());
             // The standard QColor hex shapes the consumer parses are all accepted:
             // #RGB (4), #RRGGBB (7), #AARRGGBB (9 — QColor reads 9-digit hex alpha-first).
-            for (const QString good :
+            for (const QString& good :
                  {QStringLiteral("#abc"), QStringLiteral("#FF0000"), QStringLiteral("#80FF0000")}) {
                 o.insert(QStringLiteral("value"), good);
                 QVERIFY2(RuleAction::fromJson(o).has_value(),
@@ -355,8 +418,33 @@ private Q_SLOTS:
         rejectsStray(ActionType::SetBorderColor, QJsonValue(QStringLiteral("#FF0000")));
         rejectsStray(ActionType::SetOuterGapTop, QJsonValue(8));
         rejectsStray(ActionType::SetUsePerSideOuterGap, QJsonValue(true));
+        rejectsStray(ActionType::LockContext, QJsonValue(true));
+    }
+
+    void testLockContext_fromJsonRoundTrip()
+    {
+        // LockContext is a context-domain boolean: it must validate through the
+        // public fromJson boundary (not just the registry), require a bool
+        // `value`, and round-trip both true and the explicit-false no-op overlay
+        // losslessly. Mirrors testSetHideTitleBarFalse_isValidAndPreserved.
+        QJsonObject bad;
+        bad.insert(QStringLiteral("type"), QString(ActionType::LockContext));
+        bad.insert(QStringLiteral("value"), 1); // a number is not a bool
+        QVERIFY(!RuleAction::fromJson(bad).has_value());
+
+        for (const bool v : {true, false}) {
+            QJsonObject o;
+            o.insert(QStringLiteral("type"), QString(ActionType::LockContext));
+            o.insert(QStringLiteral("value"), v);
+            const auto action = RuleAction::fromJson(o);
+            QVERIFY(action.has_value());
+            QCOMPARE(action->params.value(QStringLiteral("value")), QJsonValue(v));
+            const auto roundTripped = RuleAction::fromJson(action->toJson());
+            QVERIFY(roundTripped.has_value());
+            QCOMPARE(roundTripped->params.value(QStringLiteral("value")), QJsonValue(v));
+        }
     }
 };
 
-QTEST_MAIN(TestRuleAction)
+QTEST_GUILESS_MAIN(TestRuleAction)
 #include "test_ruleaction.moc"

@@ -1,5 +1,9 @@
 <!DOCTYPE node PUBLIC "-//freedesktop//DTD D-BUS Object Introspection 1.0//EN"
     "http://www.freedesktop.org/standards/dbus/1.0/introspect.dtd">
+<!--
+SPDX-FileCopyrightText: 2026 fuddlesworth
+SPDX-License-Identifier: GPL-3.0-or-later
+-->
 <node>
     <!-- Window Tracking Interface -->
     <interface name="org.plasmazones.WindowTracking">
@@ -50,7 +54,7 @@
             </arg>
         </method>
         <method name="getEmptyZones">
-            <annotation name="org.gtk.GDBus.DocString" value="Return typed list of empty zones for Snap Assist continuation. Same format as emptyZones from dragStopped."/>
+            <annotation name="org.gtk.GDBus.DocString" value="Return typed list of empty zones for Snap Assist continuation. Same EmptyZoneEntry format as the WindowDrag interface's snapAssistReady signal."/>
             <arg name="screenId" type="s" direction="in">
                 <annotation name="org.gtk.GDBus.DocString" value="Screen identifier (e.g. Dell:U2722D:115107 or Dell:U2722D:115107/vs:0)."/>
             </arg>
@@ -308,7 +312,7 @@
                 <annotation name="org.gtk.GDBus.DocString" value="Array of (windowId, x, y, width, height, screenId). screenId is the daemon-authoritative target screen — compositor uses it to seed its tracked-screen cache without re-deriving from geometry. Empty screenId means no authoritative answer (fall back to geometry-based resolution)."/>
             </arg>
             <arg name="action" type="s">
-                <annotation name="org.gtk.GDBus.DocString" value="Navigation action type (rotate, resnap, snap_all) for feedback."/>
+                <annotation name="org.gtk.GDBus.DocString" value="Navigation action type (rotate, resnap, vs_reconfigure) for feedback."/>
             </arg>
         </signal>
         <signal name="raiseWindowsRequested">
@@ -409,11 +413,14 @@
             </arg>
         </method>
         <method name="getPreTileGeometries">
-            <annotation name="org.gtk.GDBus.DocString" value="Return every persisted pre-tile geometry (windowId → rect + screen). The effect pre-populates its local cache from this on bringup so it can teleport restoring windows to their pre-tile geometry without a round-trip on every restore. Each entry carries the appId, the geometry rect (x,y,w,h), and the screen the geometry was captured on."/>
+            <annotation name="org.gtk.GDBus.DocString" value="Return every persisted pre-tile geometry (appId → rect + screen). The effect pre-populates its local cache from this on bringup so it can teleport restoring windows to their pre-tile geometry without a round-trip on every restore. Each entry carries the appId (entries persist across window close/reopen for session restore, so the per-instance windowId is not the key), the geometry rect (x,y,w,h), and the screen the geometry was captured on."/>
             <arg name="geometries" type="a(siiiis)" direction="out">
                 <annotation name="org.qtproject.QtDBus.QtTypeName.Out0" value="PhosphorProtocol::PreTileGeometryList"/>
-                <annotation name="org.gtk.GDBus.DocString" value="Array of (windowId, x, y, width, height, screenId) — the same marshalling shape as applyGeometriesBatch and getUpdatedWindowGeometries."/>
+                <annotation name="org.gtk.GDBus.DocString" value="Array of (appId, x, y, width, height, screenId) — the same marshalling shape as applyGeometriesBatch and getUpdatedWindowGeometries."/>
             </arg>
+        </method>
+        <method name="reapplyWindowAppearance">
+            <annotation name="org.gtk.GDBus.DocString" value="Re-drive each placement engine's per-window decoration inputs (snap border / hidden title bar, autotile border) for every window it manages. The compositor effect calls this after (re)registering its bridge so a freshly-(re)started effect converges on the daemon's authoritative appearance without waiting for the next natural change. Window-rule decoration overrides flow separately via the WindowRules rulesChanged broadcast."/>
         </method>
         <signal name="snapAllWindowsRequested">
             <annotation name="org.gtk.GDBus.DocString" value="Emitted when snap-all-windows shortcut is triggered. KWin effect should collect unsnapped windows and call calculateSnapAllWindows (on org.plasmazones.Snap)."/>

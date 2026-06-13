@@ -19,13 +19,19 @@
 #include <PhosphorAnimation/PhosphorCurve.h>
 #include <PhosphorAnimation/QtQuickClockManager.h>
 
-#include <QGuiApplication>
+#include <QApplication>
+#include <QDir>
+#include <QDirIterator>
 #include <QCommandLineParser>
 #include <QIcon>
 #include <QQmlApplicationEngine>
+#include <QQmlComponent>
 #include <QQmlContext>
 #include <QQuickStyle>
 #include <QScopeGuard>
+
+#include <memory>
+#include <vector>
 
 namespace {
 
@@ -62,12 +68,18 @@ int main(int argc, char* argv[])
     // settings UI, not a game client. Both env vars are cleared:
     // MANGOHUD=0 alone is not enough on all manifest versions; the explicit
     // DISABLE_MANGOHUD opt-out is honored regardless of MANGOHUD's value.
-    // Must run before QGuiApplication construction (which initializes the
+    // Must run before QApplication construction (which initializes the
     // QtQuick render path and may load the Vulkan ICD chain).
     qunsetenv("MANGOHUD");
     qputenv("DISABLE_MANGOHUD", "1");
 
-    QGuiApplication app(argc, argv);
+    // QApplication (not QGuiApplication): the org.kde.desktop QtQuick Controls
+    // style (qqc2-desktop-style) renders every control through a QtWidgets
+    // QStyle via KQuickStyleItem. That path calls qApp->style(), which requires
+    // a QApplication — under a plain QGuiApplication it operates in a degenerate
+    // context that fragile third-party QStyle plugins (e.g. Darkly) dereference
+    // into a crash on the first paint frame. See discussion #262.
+    QApplication app(argc, argv);
     PlasmaZones::loadTranslations(&app);
 
     app.setApplicationName(QStringLiteral("plasmazones-settings"));
@@ -175,6 +187,32 @@ int main(int argc, char* argv[])
     if (engine.rootObjects().isEmpty()) {
         qCCritical(PlasmaZones::lcCore) << "Failed to load settings QML";
         return 1;
+    }
+
+    // Background-compile every settings QML unit — the pages AND the shared
+    // child component types they use (SettingsCard, AnimationEventCard,
+    // AnimationProfileEditor, CurveThumbnail, …). A page's child component
+    // types compile LAZILY on first instantiation, not when the page's own
+    // unit compiles, so the first navigation to a page otherwise pays that
+    // first-time child compilation — which measurement showed dominates
+    // first-visit cost (e.g. Window Rules' first build was ~1560 ms, ~1300 ms
+    // of it child compilation; warmed it drops to ~260 ms). Compiling here,
+    // asynchronously (on the type-loader thread, never blocking the UI) and
+    // holding the components so the engine keeps the compiled units cached,
+    // means PageHost's Loader pays construction only on first visit.
+    //
+    // `warmComponents` is declared after `engine` so it is destroyed BEFORE
+    // the engine (the components reference it). Compilation only — no
+    // instantiation — so no page `onCompleted` side effects run here.
+    std::vector<std::unique_ptr<QQmlComponent>> warmComponents;
+    {
+        QDirIterator qmlIt(QStringLiteral(":/qt/qml/org/plasmazones/settings/qml"),
+                           QStringList{QStringLiteral("*.qml")}, QDir::Files, QDirIterator::Subdirectories);
+        while (qmlIt.hasNext()) {
+            qmlIt.next();
+            const QUrl url(QStringLiteral("qrc") + qmlIt.filePath());
+            warmComponents.push_back(std::make_unique<QQmlComponent>(&engine, url, QQmlComponent::Asynchronous));
+        }
     }
 
     return app.exec();

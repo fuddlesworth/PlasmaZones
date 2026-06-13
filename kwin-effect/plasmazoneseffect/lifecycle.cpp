@@ -60,9 +60,14 @@ PlasmaZonesEffect::PlasmaZonesEffect()
     , m_windowAnimator(std::make_unique<WindowAnimator>())
     , m_shaderManager(this)
     , m_dragTracker(std::make_unique<DragTracker>(this))
-    , m_compositorBridge(std::make_unique<KWinCompositorBridge>(this))
+    , m_compositorBridge(std::make_unique<KWinCompositorBridge>(*this))
+    , m_decorationManager(std::make_unique<DecorationManager>(*m_compositorBridge))
 {
     PhosphorProtocol::registerWireTypes();
+
+    // Decoration-manager wiring (veto + signal connections) lives with the
+    // rest of the border/decoration code in borders.cpp.
+    setupDecorationManager();
 
     // Sub-pixel vertex precision. KWin's default snapping rounds quad
     // vertex positions to integer pixels before rasterising, which is
@@ -306,10 +311,10 @@ PlasmaZonesEffect::PlasmaZonesEffect()
                         // by the fast path. Using QPointer so we skip
                         // if the window was destroyed between drag-start
                         // and reply.
-                        if (safeW && m_currentDragPolicy.immediateFloatOnStart && !isWindowFloating(capturedWindowId)
+                        if (safeW && !safeW->isDeleted() && m_currentDragPolicy.immediateFloatOnStart
+                            && !isWindowFloating(capturedWindowId)
                             && !m_dragFloatedWindowIds.contains(capturedWindowId)) {
-                            m_autotileHandler->handleDragToFloat(safeW, capturedWindowId, capturedScreenId,
-                                                                 /*immediate=*/true);
+                            m_autotileHandler->handleDragToFloat(safeW, capturedWindowId, /*immediate=*/true);
                             m_dragFloatedWindowIds.insert(capturedWindowId);
                         }
                     }
@@ -340,7 +345,7 @@ PlasmaZonesEffect::PlasmaZonesEffect()
                 // Guarded on isTrackedWindow so we don't touch windows that
                 // are already floating (not in the autotile tree).
                 if (!reorderMode && m_autotileHandler->isTrackedWindow(windowId) && !isWindowFloating(windowId)) {
-                    m_autotileHandler->handleDragToFloat(w, windowId, m_dragBypassScreenId, /*immediate=*/true);
+                    m_autotileHandler->handleDragToFloat(w, windowId, /*immediate=*/true);
                     // Mark as drag-floated so the daemon's pre-tile geometry
                     // restore (applyGeometryForFloat, triggered by the
                     // setWindowFloatingForScreen call at drop) is skipped in
@@ -352,9 +357,6 @@ PlasmaZonesEffect::PlasmaZonesEffect()
             }
             m_dragBypassedForAutotile = false;
             m_dragActivationDetected = false;
-            m_dragStartedSent = false;
-            m_pendingDragWindowId = windowId;
-            m_pendingDragGeometry = geometry;
 
             // beginDrag already initialized daemon-side snap-drag state
             // (called internally from the adaptor). The effect only needs
@@ -454,9 +456,6 @@ PlasmaZonesEffect::PlasmaZonesEffect()
                 m_dragBypassedForAutotile = false;
                 m_dragBypassScreenId.clear();
                 m_dragActivationDetected = false;
-                m_dragStartedSent = false;
-                m_pendingDragWindowId.clear();
-                m_pendingDragGeometry = QRectF();
             });
 
     // Connect to window lifecycle signals
@@ -473,7 +472,12 @@ PlasmaZonesEffect::PlasmaZonesEffect()
             &ScreenChangeHandler::onWindowClosed);
     // Panels mapped before the effect loaded never fire windowAdded — hook the
     // already-present docks now so a later resize of one still re-reports.
+    // Skip close-grabbed dying windows: other effects' close animations can
+    // hold deleted windows in the stacking order across an effect (re)load.
     for (KWin::EffectWindow* existing : KWin::effects->stackingOrder()) {
+        if (!existing || existing->isDeleted()) {
+            continue;
+        }
         m_screenChangeHandler->trackDockWindow(existing);
     }
     // clientArea(MaximizeArea) is queried for the current virtual desktop, so a
@@ -736,10 +740,21 @@ PlasmaZonesEffect::PlasmaZonesEffect()
             endRestoreSuppression(sw);
         }
 
-        // Restore borderless and monocle-maximized windows — daemon state is gone
-        m_autotileHandler->restoreAllBorderless();
-        m_snapHandler->restoreAllSnapBorderless();
-        restoreAllRuleHiddenTitleBars();
+        // Restore borderless and monocle-maximized windows — daemon state is
+        // gone. Clear the handlers' tiled tracking FIRST: restoreAll() emits
+        // windowDecorationRestored per window, and the rebuild-on-restore
+        // handler would otherwise recreate a border item for every still-
+        // tracked window only for clearAllBorders() to destroy it moments
+        // later. With tracking cleared, resolveBorderStateFor returns null
+        // for mode-tracked windows during the restore burst and the handler
+        // drops their items. Windows matched by a still-live SetBorder rule
+        // (the rule sets deliberately survive daemon loss, see below) can
+        // still get an item recreated and immediately torn down by
+        // clearAllBorders() — bounded, invisible churn that is cheaper than
+        // suppressing the handler across the burst.
+        m_autotileHandler->clearTiledTracking();
+        m_snapHandler->clearSnapTracking();
+        m_decorationManager->restoreAll();
         m_autotileHandler->restoreAllMonocleMaximized();
         clearAllBorders();
         // Deliberately do NOT clear `m_snappingExclusionRuleSet`,
@@ -777,9 +792,14 @@ PlasmaZonesEffect::PlasmaZonesEffect()
     // slotDaemonReady), so any ensureInterface() call would bail out immediately.
     // All daemon state sync is deferred to slotDaemonReady().
 
-    // Connect to existing windows
+    // Connect to existing windows. Skip close-grabbed dying windows — wiring
+    // per-window connections and seeding screen tracking for a window whose
+    // close already happened would resurrect state nothing cleans up.
     const auto windows = KWin::effects->stackingOrder();
     for (KWin::EffectWindow* w : windows) {
+        if (!w || w->isDeleted()) {
+            continue;
+        }
         setupWindowConnections(w);
     }
 
@@ -851,9 +871,13 @@ PlasmaZonesEffect::~PlasmaZonesEffect()
     // Restore borderless and monocle-maximized windows so they recover properly.
     // Guard against compositor teardown — effects may outlive the stacking order.
     if (KWin::effects) {
-        m_autotileHandler->restoreAllBorderless();
-        m_snapHandler->restoreAllSnapBorderless();
-        restoreAllRuleHiddenTitleBars();
+        // Tiled tracking cleared first so the rebuild-on-restore handler
+        // doesn't churn border items during the restore burst (see the
+        // daemon-loss site above); restoreAll() covers every owner kind
+        // including rule overrides.
+        m_autotileHandler->clearTiledTracking();
+        m_snapHandler->clearSnapTracking();
+        m_decorationManager->restoreAll();
         m_autotileHandler->restoreAllMonocleMaximized();
         clearAllBorders();
     }

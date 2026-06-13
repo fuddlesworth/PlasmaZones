@@ -5,7 +5,7 @@
 
 #include "../config/configdefaults.h"
 
-#include <PhosphorSettingsUi/PageController.h>
+#include <PhosphorControl/PageController.h>
 #include <QObject>
 
 namespace PlasmaZones {
@@ -18,7 +18,7 @@ namespace PlasmaZones {
 /// and read directly via `appSettings.X` from QML. This sub-controller
 /// only owns the per-widget min/max bounds so the sliders and spin boxes
 /// don't hard-code numbers in QML.
-class SnappingZoneSelectorController : public PhosphorSettingsUi::PageController
+class SnappingZoneSelectorController : public PhosphorControl::PageController
 {
     Q_OBJECT
 
@@ -39,7 +39,7 @@ class SnappingZoneSelectorController : public PhosphorSettingsUi::PageController
 
 public:
     explicit SnappingZoneSelectorController(QObject* parent = nullptr)
-        : PhosphorSettingsUi::PageController(QStringLiteral("snapping-zoneselector"), parent)
+        : PhosphorControl::PageController(QStringLiteral("snapping-zoneselector"), parent)
     {
     }
 

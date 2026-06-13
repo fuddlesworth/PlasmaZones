@@ -1,5 +1,5 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
-// SPDX-License-Identifier: GPL-3.0-or-later
+// SPDX-License-Identifier: LGPL-2.1-or-later
 
 // Subscribe / broadcast / unsubscribe roundtrip tests. A test target
 // QObject exposes one signal-shaped surface; the router subscribes
@@ -12,19 +12,18 @@
 #include <PhosphorIpc/IpcRouter.h>
 
 #include <QCoreApplication>
-#include <QDir>
 #include <QJsonArray>
 #include <QJsonObject>
 #include <QLocalSocket>
 #include <QObject>
 #include <QString>
-#include <QTemporaryDir>
 #include <QTest>
 #include <QtCore/qtclasshelpermacros.h>
 
 using namespace PhosphorIpc;
 using PhosphorIpcTests::makeReq;
 using PhosphorIpcTests::readLines;
+using PhosphorIpcTests::RouterFixture;
 
 namespace {
 
@@ -81,17 +80,16 @@ private Q_SLOTS:
 
 void TestPhosphorIpcSubscribe::subscribe_replies_then_streams_events()
 {
-    QTemporaryDir dir;
-    QVERIFY(dir.isValid());
-    const QString sockPath = QDir(dir.path()).filePath(QStringLiteral("test.sock"));
+    RouterFixture fx;
+    QVERIFY(fx.valid());
 
-    IpcRouter router;
+    IpcRouter& router = fx.router;
     CounterTarget c;
     QVERIFY(router.registerTarget(QStringLiteral("count"), &c));
-    QVERIFY(router.start(sockPath));
+    QVERIFY(router.start(fx.sockPath));
 
     QLocalSocket socket;
-    socket.connectToServer(sockPath);
+    socket.connectToServer(fx.sockPath);
     QVERIFY(socket.waitForConnected(2000));
 
     socket.write(
@@ -121,15 +119,14 @@ void TestPhosphorIpcSubscribe::subscribe_replies_then_streams_events()
 
 void TestPhosphorIpcSubscribe::subscribe_unknownTarget()
 {
-    QTemporaryDir dir;
-    QVERIFY(dir.isValid());
-    const QString sockPath = QDir(dir.path()).filePath(QStringLiteral("test.sock"));
+    RouterFixture fx;
+    QVERIFY(fx.valid());
 
-    IpcRouter router;
-    QVERIFY(router.start(sockPath));
+    IpcRouter& router = fx.router;
+    QVERIFY(router.start(fx.sockPath));
 
     QLocalSocket socket;
-    socket.connectToServer(sockPath);
+    socket.connectToServer(fx.sockPath);
     QVERIFY(socket.waitForConnected(2000));
 
     socket.write(
@@ -143,17 +140,16 @@ void TestPhosphorIpcSubscribe::subscribe_unknownTarget()
 
 void TestPhosphorIpcSubscribe::subscribe_unknownSignal()
 {
-    QTemporaryDir dir;
-    QVERIFY(dir.isValid());
-    const QString sockPath = QDir(dir.path()).filePath(QStringLiteral("test.sock"));
+    RouterFixture fx;
+    QVERIFY(fx.valid());
 
-    IpcRouter router;
+    IpcRouter& router = fx.router;
     CounterTarget c;
     QVERIFY(router.registerTarget(QStringLiteral("count"), &c));
-    QVERIFY(router.start(sockPath));
+    QVERIFY(router.start(fx.sockPath));
 
     QLocalSocket socket;
-    socket.connectToServer(sockPath);
+    socket.connectToServer(fx.sockPath);
     QVERIFY(socket.waitForConnected(2000));
 
     socket.write(
@@ -173,17 +169,16 @@ void TestPhosphorIpcSubscribe::subscribe_duplicateRejected()
     // call, and each broadcast must produce exactly one event on
     // the socket (not two). The cap prevents subscribe-fan
     // amplification.
-    QTemporaryDir dir;
-    QVERIFY(dir.isValid());
-    const QString sockPath = QDir(dir.path()).filePath(QStringLiteral("test.sock"));
+    RouterFixture fx;
+    QVERIFY(fx.valid());
 
-    IpcRouter router;
+    IpcRouter& router = fx.router;
     CounterTarget c;
     QVERIFY(router.registerTarget(QStringLiteral("count"), &c));
-    QVERIFY(router.start(sockPath));
+    QVERIFY(router.start(fx.sockPath));
 
     QLocalSocket socket;
-    socket.connectToServer(sockPath);
+    socket.connectToServer(fx.sockPath);
     QVERIFY(socket.waitForConnected(2000));
 
     socket.write(
@@ -211,17 +206,16 @@ void TestPhosphorIpcSubscribe::subscribe_duplicateRejected()
 
 void TestPhosphorIpcSubscribe::unsubscribe_stops_events()
 {
-    QTemporaryDir dir;
-    QVERIFY(dir.isValid());
-    const QString sockPath = QDir(dir.path()).filePath(QStringLiteral("test.sock"));
+    RouterFixture fx;
+    QVERIFY(fx.valid());
 
-    IpcRouter router;
+    IpcRouter& router = fx.router;
     CounterTarget c;
     QVERIFY(router.registerTarget(QStringLiteral("count"), &c));
-    QVERIFY(router.start(sockPath));
+    QVERIFY(router.start(fx.sockPath));
 
     QLocalSocket socket;
-    socket.connectToServer(sockPath);
+    socket.connectToServer(fx.sockPath);
     QVERIFY(socket.waitForConnected(2000));
 
     socket.write(
@@ -260,15 +254,14 @@ void TestPhosphorIpcSubscribe::unsubscribe_stops_events()
 
 void TestPhosphorIpcSubscribe::unsubscribe_unknownId()
 {
-    QTemporaryDir dir;
-    QVERIFY(dir.isValid());
-    const QString sockPath = QDir(dir.path()).filePath(QStringLiteral("test.sock"));
+    RouterFixture fx;
+    QVERIFY(fx.valid());
 
-    IpcRouter router;
-    QVERIFY(router.start(sockPath));
+    IpcRouter& router = fx.router;
+    QVERIFY(router.start(fx.sockPath));
 
     QLocalSocket socket;
-    socket.connectToServer(sockPath);
+    socket.connectToServer(fx.sockPath);
     QVERIFY(socket.waitForConnected(2000));
 
     // Unsubscribe with no prior subscribe on this connection.
@@ -281,19 +274,18 @@ void TestPhosphorIpcSubscribe::unsubscribe_unknownId()
 
 void TestPhosphorIpcSubscribe::multipleSubscribers_eachReceiveEvent()
 {
-    QTemporaryDir dir;
-    QVERIFY(dir.isValid());
-    const QString sockPath = QDir(dir.path()).filePath(QStringLiteral("test.sock"));
+    RouterFixture fx;
+    QVERIFY(fx.valid());
 
-    IpcRouter router;
+    IpcRouter& router = fx.router;
     CounterTarget c;
     QVERIFY(router.registerTarget(QStringLiteral("count"), &c));
-    QVERIFY(router.start(sockPath));
+    QVERIFY(router.start(fx.sockPath));
 
     QLocalSocket a;
     QLocalSocket b;
-    a.connectToServer(sockPath);
-    b.connectToServer(sockPath);
+    a.connectToServer(fx.sockPath);
+    b.connectToServer(fx.sockPath);
     QVERIFY(a.waitForConnected(2000));
     QVERIFY(b.waitForConnected(2000));
 
@@ -319,14 +311,13 @@ void TestPhosphorIpcSubscribe::multipleSubscribers_eachReceiveEvent()
 
 void TestPhosphorIpcSubscribe::disconnect_pruneSubscriptions()
 {
-    QTemporaryDir dir;
-    QVERIFY(dir.isValid());
-    const QString sockPath = QDir(dir.path()).filePath(QStringLiteral("test.sock"));
+    RouterFixture fx;
+    QVERIFY(fx.valid());
 
-    IpcRouter router;
+    IpcRouter& router = fx.router;
     CounterTarget c;
     QVERIFY(router.registerTarget(QStringLiteral("count"), &c));
-    QVERIFY(router.start(sockPath));
+    QVERIFY(router.start(fx.sockPath));
 
     // First subscriber connects + subscribes + disconnects. If the
     // router's disconnect path FAILS to prune m_subscriptionsBySocket
@@ -336,7 +327,7 @@ void TestPhosphorIpcSubscribe::disconnect_pruneSubscriptions()
     // from "did it not crash."
     {
         QLocalSocket sock;
-        sock.connectToServer(sockPath);
+        sock.connectToServer(fx.sockPath);
         QVERIFY(sock.waitForConnected(2000));
         sock.write(writeLine(
             makeReq(QStringLiteral("subscribe"), 1, QStringLiteral("count"), QStringLiteral("countChanged"))));
@@ -368,7 +359,7 @@ void TestPhosphorIpcSubscribe::disconnect_pruneSubscriptions()
     // events back onto the live socket would surface as extra
     // events arriving here.)
     QLocalSocket live;
-    live.connectToServer(sockPath);
+    live.connectToServer(fx.sockPath);
     QVERIFY(live.waitForConnected(2000));
     live.write(
         writeLine(makeReq(QStringLiteral("subscribe"), 1, QStringLiteral("count"), QStringLiteral("countChanged"))));
@@ -413,20 +404,19 @@ void TestPhosphorIpcSubscribe::subscribe_perSocketCapExceeded()
     // 257 different names. The router allows the same QObject under
     // multiple names; each (name_i, countChanged) is a unique
     // subscription from the dedup-on-(target, signal) perspective.
-    QTemporaryDir dir;
-    QVERIFY(dir.isValid());
-    const QString sockPath = QDir(dir.path()).filePath(QStringLiteral("test.sock"));
+    RouterFixture fx;
+    QVERIFY(fx.valid());
 
-    IpcRouter router;
+    IpcRouter& router = fx.router;
     CounterTarget c;
     constexpr int Cap = 256;
     for (int i = 0; i < Cap + 1; ++i) {
         QVERIFY(router.registerTarget(QStringLiteral("count_%1").arg(i), &c));
     }
-    QVERIFY(router.start(sockPath));
+    QVERIFY(router.start(fx.sockPath));
 
     QLocalSocket socket;
-    socket.connectToServer(sockPath);
+    socket.connectToServer(fx.sockPath);
     QVERIFY(socket.waitForConnected(2000));
 
     // Subscribe to the first 256 distinct (target, signal) pairs.
@@ -468,5 +458,5 @@ void TestPhosphorIpcSubscribe::subscribe_perSocketCapExceeded()
     QCOMPARE(after.at(1).value(QStringLiteral("id")).toInt(), Cap + 2);
 }
 
-QTEST_MAIN(TestPhosphorIpcSubscribe)
+QTEST_GUILESS_MAIN(TestPhosphorIpcSubscribe)
 #include "test_phosphor_ipc_subscribe.moc"

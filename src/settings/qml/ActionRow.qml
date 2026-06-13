@@ -13,7 +13,7 @@ import org.plasmazones.common as PZCommon
  * @brief One editable action row inside ActionListEditor.
  *
  * An action is a `{ type, ...params }` JSON object. The row exposes a type
- * dropdown and one editor per parameter, both driven entirely by the
+ * picker and one editor per parameter, both driven entirely by the
  * `actionTypeOptions` metadata from `WindowRuleController.actionTypes()` —
  * there is no per-type `if (t === "...")` ladder here. Two-way: edits emit
  * `actionEdited(updatedAction)`; the parent owns the list.
@@ -34,22 +34,22 @@ ColumnLayout {
     /// Registered action types from `WindowRuleController.actionTypes()` —
     /// each entry: `{ value, label, params: [{ key, kind, label, ... }],
     /// domain: "context"|"window" }`. The `domain` field is consulted by the
-    /// per-option compatibility flag below.
+    /// row-level incompatibility flag below (`_currentTypeIncompatible`).
     required property var actionTypeOptions
     /// The SettingsController — drives the snappingLayout / tilingAlgorithm
     /// picker dropdowns.
     required property var appSettings
     /// True when the current match references only context fields — passed in
-    /// from ActionListEditor. Drives the type-picker delegate: context-domain
-    /// action types are disabled with a tooltip when this is false, so the
-    /// user sees the picker but cannot pick a combination that silently never
-    /// fires.
+    /// from ActionListEditor. Drives `_currentTypeIncompatible`: a context-
+    /// domain action against a window-property match is flagged with the
+    /// per-row warning chip + the sheet's InlineMessage (the combination that
+    /// silently never fires), while the picker itself stays a plain menu.
     required property bool matchIsContextOnly
     /// True when the action's currently-selected type is incompatible with
     /// the rule's match (a context action against a window-property match).
-    /// Surfaces a small inline warning next to the type combo so the user
+    /// Surfaces a small inline warning next to the type picker so the user
     /// sees the mismatch on the existing action even before opening the
-    /// type dropdown — mirrors the RuleEditorSheet's whole-rule
+    /// type menu — mirrors the RuleEditorSheet's whole-rule
     /// InlineMessage but scoped to this single action row.
     readonly property bool _currentTypeIncompatible: {
         if (row._typeEntry === undefined)
@@ -128,23 +128,26 @@ ColumnLayout {
     // writes it back to `action.params`. Image picking is disabled because
     // shader-image uniforms aren't part of the rule wire format here.
     property Component _shaderParamsEditor
-    // Toggle editor for `kind == "bool"` params (SetHideTitleBar / SetBorderVisible
-    // / SetUsePerSideOuterGap). Stores a JSON bool.
+    // Toggle editor for `kind == "bool"` params (e.g. SetHideTitleBar /
+    // SetBorderVisible / SetUsePerSideOuterGap / RestorePosition — dispatch is by
+    // `kind`, not this list). Stores a JSON bool.
     property Component _boolParamEditor
     // Colour swatch + picker for `kind == "color"` params (SetBorderColor).
-    // Stores a `#RRGGBB` wire string — the validator
-    // rejects anything else, so the dialog's selectedColor is encoded to 6-hex
-    // via `_toHex6` (QML color.toString() includes the alpha byte).
+    // Stores a `#AARRGGBB` wire string (alpha-first, matching QColor::HexArgb and
+    // the global zone/border colours) so transparency set in the picker survives.
+    // The validator accepts the `#AARRGGBB` shape and the effect-side consumer
+    // parses it via `QColor(QString)` (which reads 9-digit hex alpha-first).
     property Component _colorParamEditor
 
-    /// Encode a QML color to a `#RRGGBB` wire string (no alpha) — the form the
-    /// SetBorderColor validator accepts.
-    function _toHex6(c) {
+    /// Encode a QML color to a `#AARRGGBB` wire string (alpha-first) — the form
+    /// the SetBorderColor validator accepts and the consumer parses back via
+    /// QColor::HexArgb. Mirrors how general-settings border colours are stored.
+    function _toHexArgb(c) {
         function h(v) {
             var s = Math.round(v * 255).toString(16);
             return s.length < 2 ? "0" + s : s;
         }
-        return "#" + h(c.r) + h(c.g) + h(c.b);
+        return "#" + h(c.a) + h(c.r) + h(c.g) + h(c.b);
     }
 
     // `actionEdited`, not `actionChanged`, because `property var action`
@@ -203,16 +206,6 @@ ColumnLayout {
         return undefined;
     }
 
-    /// The index of the current action's type — -1 for an unknown / legacy
-    /// type so the combo shows no selection rather than coercing to index 0.
-    function _typeIndex() {
-        for (var i = 0; i < row.actionTypeOptions.length; ++i) {
-            if (row.actionTypeOptions[i].value === row.action.type)
-                return i;
-        }
-        return -1;
-    }
-
     spacing: Kirigami.Units.smallSpacing
 
     // Reset session locks when the user switches the effect. Tracking via
@@ -231,11 +224,11 @@ ColumnLayout {
         target: row
     }
 
-    // ── Top: action-type combo + per-param editors + delete ──────────────
+    // ── Top: action-type picker + per-param editors + delete ─────────────
     RowLayout {
-        // `WideComboBox` — popup sizes to fit the widest action-type label
-        // ("Override animation shader" etc.) and the closed combo sizes to
-        // its current label via `implicitContentWidthPolicy`.
+        // The action-type picker is `PZCommon.CategoryMenuButton` (a cascading
+        // category menu, declared further below); it gets a fixed
+        // `Layout.preferredWidth` wide enough for the longest action label.
 
         Layout.fillWidth: true
         spacing: Kirigami.Units.smallSpacing
@@ -247,86 +240,49 @@ ColumnLayout {
             Layout.alignment: Qt.AlignVCenter
         }
 
-        // The delegate is overridden so context-domain entries render as
-        // disabled with an explanatory tooltip when the rule's match
-        // references window-property fields (the silently-never-fires
-        // combination). Selecting an incompatible entry is still possible —
-        // the per-row warning chip and the RuleEditorSheet's InlineMessage
-        // explain the consequence — but the picker visually signals the
-        // mismatch up front. Aligns with the disabled+tooltip UX chosen for
-        // this control (cleaner than hiding entries that change set as the
-        // user edits the match).
-        WideComboBox {
+        // Categorized action-type picker — the shared cascading category-menu
+        // button (PZCommon.CategoryMenuButton). Grouped into Layout & engine /
+        // Gaps / Window / Appearance / Animation. Context-domain actions that
+        // can't fire against a window-property match render dimmed with a
+        // warning tooltip (the picker's `dimmed` item flag); the per-row chip
+        // below + the sheet's InlineMessage reinforce it for an action that's
+        // already selected.
+        PZCommon.CategoryMenuButton {
             id: typeCombo
 
-            textRole: "label"
-            valueRole: "value"
-            model: row.actionTypeOptions
-            currentIndex: row._typeIndex()
-            Accessible.name: i18n("Action type")
-            onActivated: function (index) {
+            // Wide enough for the longest action label ("Override animation
+            // duration") so the closed picker never elides its current value.
+            Layout.preferredWidth: Kirigami.Units.gridUnit * 13
+            // Map the action metadata to the picker's item shape. A context-
+            // domain action against a non-context-only match never fires, so
+            // mark it dimmed (with a warning tooltip) — the binding re-reads
+            // `matchIsContextOnly`, so the dim state follows match edits.
+            items: row.actionTypeOptions.map(function (o) {
+                var incompatible = o.domain === "context" && !row.matchIsContextOnly;
+                return {
+                    "id": o.value,
+                    "name": o.label,
+                    "category": o.category,
+                    "categoryOrder": o.categoryOrder,
+                    "dimmed": incompatible,
+                    "dimReason": incompatible ? i18n("This action runs during context resolution and cannot match window properties. Remove the window conditions from the rule's match, or pick a different action.") : ""
+                };
+            })
+            currentId: row.action.type
+            placeholderText: i18n("Choose…")
+            Accessible.description: i18n("Action type")
+            onSelected: function (value) {
                 // Type-switch must seed the new param set's defaults — emitting
                 // a bare `{ type: newType }` left every parameter undefined,
                 // which a SpinBox renders as 0 and `canSave` then gates the
                 // rule on. Route through the controller's `defaultPayloadFor`
-                // so the same kind→default mapping that drives ActionListEditor
-                // ._append also drives a type change here (single source of
-                // truth — adding a new param kind no longer needs two edits).
-                if (currentValue === row.action.type)
+                // (via row._payloadForType) so the same kind→default mapping
+                // that drives ActionListEditor._append also drives a type
+                // change here.
+                if (value === row.action.type)
                     return;
 
-                row.actionEdited(row._payloadForType(currentValue));
-            }
-
-            delegate: ItemDelegate {
-                id: optionDelegate
-
-                required property var modelData
-                required property int index
-                readonly property bool isCurrentSelection: typeCombo.currentIndex === index
-                /// Per-option compatibility derived from the action descriptor's
-                /// `domain` and the match-domain prop threaded down from the
-                /// editor sheet. Context-domain entries are incompatible iff
-                /// the match has any window-property leaf.
-                readonly property bool _incompatible: modelData && modelData.domain === "context" && !row.matchIsContextOnly
-
-                width: typeCombo.popup.availableWidth
-                highlighted: typeCombo.highlightedIndex === index
-                // Visually disable the row but DO NOT set `enabled: false`:
-                // a disabled ItemDelegate doesn't trigger the ComboBox's
-                // activation, which would hide the picker UX entirely. The
-                // user is allowed to pick the incompatible entry (the row's
-                // warning chip and the sheet's InlineMessage explain why
-                // it never fires); we just lower the opacity so the
-                // incompatibility is obvious.
-                opacity: _incompatible ? 0.45 : 1
-                ToolTip.delay: 300
-                ToolTip.visible: hovered && _incompatible
-                ToolTip.text: i18n("This action runs during context resolution and cannot match window properties. Remove the window conditions from the rule's match, or pick a different action.")
-
-                background: Rectangle {
-                    color: optionDelegate.highlighted ? Kirigami.Theme.highlightColor : optionDelegate.isCurrentSelection ? Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g, Kirigami.Theme.highlightColor.b, 0.15) : Kirigami.Theme.backgroundColor
-                }
-
-                contentItem: RowLayout {
-                    spacing: Kirigami.Units.smallSpacing
-
-                    Label {
-                        Layout.fillWidth: true
-                        text: optionDelegate.modelData.label
-                        color: optionDelegate.highlighted ? Kirigami.Theme.highlightedTextColor : Kirigami.Theme.textColor
-                        font.weight: (optionDelegate.highlighted || optionDelegate.isCurrentSelection) ? Font.DemiBold : Font.Normal
-                        elide: Text.ElideRight
-                        verticalAlignment: Text.AlignVCenter
-                    }
-
-                    Kirigami.Icon {
-                        visible: optionDelegate._incompatible
-                        source: "dialog-warning"
-                        Layout.preferredWidth: Kirigami.Units.iconSizes.small
-                        Layout.preferredHeight: Kirigami.Units.iconSizes.small
-                    }
-                }
+                row.actionEdited(row._payloadForType(value));
             }
         }
 
@@ -450,19 +406,35 @@ ColumnLayout {
     }
 
     _boolParamEditor: Component {
-        Switch {
+        // SettingsSwitch is a fixed-size custom Item whose track fills its
+        // bounds, but the hosting Loader is `Layout.fillWidth` (for the text /
+        // combo editors), which would stretch the toggle into a full-width pill.
+        // Host it in a fill wrapper and keep the toggle at its implicit size,
+        // left- and vertically-centered — matching the compact placement the
+        // stock Switch produced.
+        Item {
             readonly property var _param: parent.modelData
 
-            checked: row.action[_param.key] === true
-            Accessible.name: _param.label
-            onToggled: row.actionEdited(row._withParam(_param.key, checked))
+            implicitHeight: boolToggle.implicitHeight
+
+            SettingsSwitch {
+                id: boolToggle
+
+                anchors.left: parent.left
+                anchors.verticalCenter: parent.verticalCenter
+                checked: row.action[_param.key] === true
+                accessibleName: _param.label
+                onToggled: function (newValue) {
+                    row.actionEdited(row._withParam(_param.key, newValue));
+                }
+            }
         }
     }
 
     _colorParamEditor: Component {
         RowLayout {
             readonly property var _param: parent.modelData
-            readonly property string _hex: (row.action[_param.key] !== undefined && row.action[_param.key] !== "") ? String(row.action[_param.key]) : "#3daee9"
+            readonly property string _hex: (row.action[_param.key] !== undefined && row.action[_param.key] !== "") ? String(row.action[_param.key]) : "#FF3DAEE9"
 
             spacing: Kirigami.Units.smallSpacing
 
@@ -475,9 +447,8 @@ ColumnLayout {
             }
 
             Label {
-                // Show the stored #RRGGBB wire value, not swatch.color.toString()
-                // (a QML color stringifies to the 9-char #AARRGGBB form, which
-                // would display an alpha byte the saved value never carries).
+                // Show the stored #AARRGGBB wire value (alpha-first), which the
+                // swatch round-trips through QColor::HexArgb.
                 text: parent._hex.toUpperCase()
                 font: Kirigami.Theme.fixedWidthFont
             }
@@ -489,8 +460,9 @@ ColumnLayout {
             ColorDialog {
                 id: colorDialog
 
+                options: ColorDialog.ShowAlphaChannel
                 selectedColor: swatch.color
-                onAccepted: row.actionEdited(row._withParam(_param.key, row._toHex6(selectedColor)))
+                onAccepted: row.actionEdited(row._withParam(_param.key, row._toHexArgb(selectedColor)))
             }
         }
     }

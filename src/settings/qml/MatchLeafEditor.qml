@@ -5,13 +5,14 @@ import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
 import org.kde.kirigami as Kirigami
+import org.plasmazones.common as PZCommon
 
 /**
  * @brief One leaf predicate row — `{ field, op, value }`.
  *
- * Field and operator are dropdowns; the value field shape adapts to the
- * field's value kind (string / number / bool). Two-way: edits emit
- * `leafChanged(updatedLeaf)`.
+ * The field is a categorized picker and the operator is a dropdown; the value
+ * field shape adapts to the field's value kind (string / number / bool).
+ * Two-way: edits emit `leafChanged(updatedLeaf)`.
  */
 RowLayout {
     id: leaf
@@ -165,30 +166,50 @@ RowLayout {
     }
 
     Kirigami.Icon {
+        id: fieldInfoIcon
+
         source: "dialog-information"
         Layout.preferredWidth: Kirigami.Units.iconSizes.small
         Layout.preferredHeight: Kirigami.Units.iconSizes.small
         Layout.alignment: Qt.AlignVCenter
         color: Kirigami.Theme.highlightColor
+        // Hover help describing the selected field. An unknown / legacy field
+        // (_fieldEntry undefined) yields no text, so the tooltip just doesn't
+        // appear rather than showing an empty bubble.
+        readonly property string _fieldDesc: leaf._fieldEntry !== undefined ? (leaf._fieldEntry.description || "") : ""
+        Accessible.name: _fieldDesc
+        ToolTip.text: _fieldDesc
+        ToolTip.visible: fieldInfoHover.hovered && _fieldDesc !== ""
+        ToolTip.delay: Kirigami.Units.toolTipDelay
+
+        HoverHandler {
+            id: fieldInfoHover
+        }
     }
 
-    // `WideComboBox` (not plain `ComboBox`) — sizes the popup to fit the
-    // widest item so options like "starts with" / "is one of" don't truncate.
-    // `implicitContentWidthPolicy: WidestTextWhenCompleted` (set on the
-    // WideComboBox base) also widens the closed combo to fit the longest
-    // current label, so we drop the fixed `Layout.preferredWidth` here.
-    WideComboBox {
+    // Categorized field picker — the same cascading category-menu button the
+    // shader choosers use (PZCommon.CategoryMenuButton). The field list is long,
+    // so it's grouped into Identity / State / Size / Context. Keyed on the
+    // field's `wire` string, matching `leaf.node.field`.
+    PZCommon.CategoryMenuButton {
         id: fieldCombo
 
-        textRole: "label"
-        valueRole: "wire"
-        model: leaf.fieldOptions
-        // -1 for an unknown / legacy field — show no selection rather than
-        // silently coercing it to the first field.
-        currentIndex: leaf._indexForWire(leaf.fieldOptions, leaf.node.field)
-        Accessible.name: i18n("Match field")
-        onActivated: function (index) {
-            if (currentValue === leaf.node.field)
+        Layout.preferredWidth: Kirigami.Units.gridUnit * 9
+        // Map the field metadata to the picker's { id, name, category,
+        // categoryOrder } item shape.
+        items: leaf.fieldOptions.map(function (o) {
+            return {
+                "id": o.wire,
+                "name": o.label,
+                "category": o.category,
+                "categoryOrder": o.categoryOrder
+            };
+        })
+        currentId: leaf.node.field
+        placeholderText: i18n("Choose…")
+        Accessible.description: i18n("Match field")
+        onSelected: function (value) {
+            if (value === leaf.node.field)
                 return;
 
             // Changing the field invalidates the carried-over value and
@@ -199,7 +220,7 @@ RowLayout {
             //   valid operator for Title, leaving the rule un-saveable.
             // So we reset the value to empty and only carry the operator
             // if the new field's allowed-operator set still includes it.
-            var newFieldEntry = leaf._entryForWire(leaf.fieldOptions, currentValue);
+            var newFieldEntry = leaf._entryForWire(leaf.fieldOptions, value);
             var newOps = newFieldEntry !== undefined ? leaf.controller.operatorsForField(newFieldEntry.value) : [];
             var carryOp = leaf.node.op;
             var opStillValid = false;
@@ -218,7 +239,7 @@ RowLayout {
             // (string / screen / activity / windowType picker) -> "".
             var newKind = newFieldEntry !== undefined ? newFieldEntry.valueKind : "string";
             var seedValue = newKind === "bool" ? false : (newKind === "number" ? 0 : "");
-            leaf._emit(currentValue, carryOp, seedValue);
+            leaf._emit(value, carryOp, seedValue);
         }
     }
 
@@ -438,7 +459,7 @@ RowLayout {
             // hand-edited rule or a newer schema version) when no option
             // matches, mirroring the screen / activity pickers above. The
             // empty-string sentinel is the "no value yet" state the field
-            // combo's onActivated seeds for picker-kind fields (windowType /
+            // picker's onSelected seeds for picker-kind fields (windowType /
             // screen / activity) when the user switches in from another field —
             // treat it as no-value so the placeholder shows. Plain `||` would also
             // map int 0 (WindowType::Unknown) to the placeholder when no

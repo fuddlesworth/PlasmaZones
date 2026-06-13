@@ -53,7 +53,7 @@ WindowRule ruleFromVariant(const QVariantMap& map)
 } // namespace
 
 WindowRuleController::WindowRuleController(QObject* parent)
-    : PhosphorSettingsUi::PageController(QStringLiteral("window-rules"), parent)
+    : PhosphorControl::PageController(QStringLiteral("window-rules"), parent)
 {
     // Re-fetch from the daemon whenever it broadcasts a rule change — but only
     // while the page is clean, so a daemon-side write doesn't silently stomp

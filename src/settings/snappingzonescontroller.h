@@ -3,7 +3,7 @@
 
 #pragma once
 
-#include <PhosphorSettingsUi/PageController.h>
+#include <PhosphorControl/PageController.h>
 #include <QObject>
 #include <QString>
 
@@ -26,7 +26,7 @@ class ISettings;
 ///      Q_PROPERTY on Settings and mark dirty through the meta-loop, but
 ///      the top-level load path needs the explicit signal to cover any
 ///      batched writes that don't individually trip a NOTIFY.
-class SnappingZonesController : public PhosphorSettingsUi::PageController
+class SnappingZonesController : public PhosphorControl::PageController
 {
     Q_OBJECT
 

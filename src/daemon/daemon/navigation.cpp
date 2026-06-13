@@ -9,6 +9,8 @@
 #include "../../config/settings.h"
 #include <PhosphorContext/ContextResolver.h>
 #include <PhosphorEngine/IPlacementEngine.h>
+#include <PhosphorSnapEngine/SnapEngine.h>
+#include "../../core/constants.h"
 #include "../../core/logging.h"
 #include "../../core/screenmoderouter.h"
 #include "../../core/utils.h"
@@ -424,6 +426,35 @@ void Daemon::resnapIfManualMode()
     if (m_snapAdaptor) {
         m_suppressResnapOsd = 1;
         m_snapAdaptor->resnapToNewLayout();
+    }
+    // Restore snap-float positions for windows the picker/cycle just released
+    // from autotile — the resnap above (buffer-based) cannot cover floating
+    // windows. See the helper for why only the float half is emitted here.
+    emitPendingSnapFloatRestoresForResnapBuffer();
+}
+
+void Daemon::emitPendingSnapFloatRestoresForResnapBuffer()
+{
+    if (m_pendingSnapFloatRestores.isEmpty()) {
+        return;
+    }
+    QVector<ZoneAssignmentEntry> floatEntries;
+    for (const ZoneAssignmentEntry& e : std::as_const(m_pendingSnapFloatRestores)) {
+        if (e.targetZoneId == RestoreSentinel) {
+            floatEntries.append(e);
+        }
+    }
+    // Consume the whole buffer: the float entries are emitted below; the
+    // snap-ZONE entries are deliberately handed to the in-flight
+    // resnapToNewLayout (new-layout zones), not re-applied here against the
+    // old layout. Clearing prevents them leaking into the next windowsReleased.
+    m_pendingSnapFloatRestores.clear();
+    if (floatEntries.isEmpty() || !m_snapEngine) {
+        return;
+    }
+    if (auto* concreteSnap = qobject_cast<PhosphorSnapEngine::SnapEngine*>(m_snapEngine.get())) {
+        ++m_suppressResnapOsd; // the batched emit drives an additional resnap feedback
+        concreteSnap->emitBatchedResnap(floatEntries);
     }
 }
 

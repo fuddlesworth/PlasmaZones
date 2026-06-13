@@ -3,7 +3,7 @@
 
 #pragma once
 
-#include <PhosphorSettingsUi/PageController.h>
+#include <PhosphorControl/PageController.h>
 #include <QObject>
 #include <QString>
 
@@ -26,7 +26,7 @@ class ISettings;
 /// [Editor] group, so SettingsController's meta-object-loop dirty wiring
 /// skips it; this forwarder replaces the explicit connect() list that used
 /// to sit in SettingsController's constructor.
-class EditorPageController : public PhosphorSettingsUi::PageController
+class EditorPageController : public PhosphorControl::PageController
 {
     Q_OBJECT
 

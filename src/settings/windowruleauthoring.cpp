@@ -27,6 +27,126 @@ using PhosphorWindowRule::Field;
 using PhosphorWindowRule::Operator;
 using PhosphorWindowRule::RuleAction;
 
+/// One picker category: a translated label + a stable sort order. The field
+/// and action pickers group their (otherwise long, flat) entry lists into
+/// fly-out submenus keyed by this.
+struct PickerCategory
+{
+    QString label;
+    int order;
+};
+
+/// Group a match Field into a picker category. The `Field` enum interleaves
+/// state and context (e.g. IsMaximized sits after Activity), so the picker
+/// groups by THIS classification, never by enum / emit order.
+PickerCategory fieldCategory(Field f)
+{
+    switch (f) {
+    case Field::AppId:
+    case Field::WindowClass:
+    case Field::DesktopFile:
+    case Field::WindowRole:
+    case Field::Pid:
+    case Field::Title:
+        return {PhosphorI18n::tr("Identity"), 0};
+    case Field::WindowType:
+    case Field::IsSticky:
+    case Field::IsFullscreen:
+    case Field::IsMinimized:
+    case Field::IsMaximized:
+    case Field::IsFocused:
+    case Field::IsTransient:
+    case Field::IsNotification:
+        return {PhosphorI18n::tr("State"), 1};
+    case Field::Width:
+    case Field::Height:
+        return {PhosphorI18n::tr("Size"), 2};
+    case Field::ScreenId:
+    case Field::VirtualDesktop:
+    case Field::Activity:
+        return {PhosphorI18n::tr("Context"), 3};
+    }
+    return {PhosphorI18n::tr("Other"), 99};
+}
+
+/// Short, user-facing help for one match Field — surfaced as the hover
+/// tooltip on the leaf editor's info icon. Kept concise (one line); the
+/// switch is exhaustive so every field, including the picker-hidden ones,
+/// has a description.
+QString fieldDescription(Field f)
+{
+    switch (f) {
+    case Field::AppId:
+        return PhosphorI18n::tr("The application's ID (Wayland app_id / desktop entry), e.g. org.kde.konsole.");
+    case Field::WindowClass:
+        return PhosphorI18n::tr("The window's class (WM_CLASS resource class), e.g. konsole.");
+    case Field::DesktopFile:
+        return PhosphorI18n::tr("The application's desktop entry file name.");
+    case Field::WindowRole:
+        return PhosphorI18n::tr("The window's X11 role (WM_WINDOW_ROLE); empty for Wayland-native windows.");
+    case Field::Pid:
+        return PhosphorI18n::tr("The window's process ID.");
+    case Field::Title:
+        return PhosphorI18n::tr("The window's title-bar text.");
+    case Field::WindowType:
+        return PhosphorI18n::tr("The window's type (Normal, Dialog, Utility, Notification, …).");
+    case Field::IsSticky:
+        return PhosphorI18n::tr("Whether the window is shown on all virtual desktops.");
+    case Field::IsFullscreen:
+        return PhosphorI18n::tr("Whether the window is fullscreen.");
+    case Field::IsMinimized:
+        return PhosphorI18n::tr("Whether the window is minimized.");
+    case Field::IsMaximized:
+        return PhosphorI18n::tr("Whether the window is maximized.");
+    case Field::IsFocused:
+        return PhosphorI18n::tr("Whether the window currently has keyboard focus.");
+    case Field::IsTransient:
+        return PhosphorI18n::tr("Whether the window is a transient (a dialog or popup owned by another window).");
+    case Field::IsNotification:
+        return PhosphorI18n::tr("Whether the window is a notification or on-screen display.");
+    case Field::Width:
+        return PhosphorI18n::tr("The window's width in pixels.");
+    case Field::Height:
+        return PhosphorI18n::tr("The window's height in pixels.");
+    case Field::ScreenId:
+        return PhosphorI18n::tr("The monitor the window is on.");
+    case Field::VirtualDesktop:
+        return PhosphorI18n::tr("The virtual desktop the window is on.");
+    case Field::Activity:
+        return PhosphorI18n::tr("The KDE Activity the window is on.");
+    }
+    return QString();
+}
+
+/// Group an action type (wire string) into a picker category. Mirrors the
+/// preferred-order clustering in actionTypes(): engine/layout, gaps, window
+/// management, appearance, animation.
+PickerCategory actionCategory(const QString& type)
+{
+    if (ActionType::isLayoutEngineContextAction(type)) {
+        return {PhosphorI18n::tr("Layout & engine"), 0};
+    }
+    if (type == ActionType::SetZonePadding || type == ActionType::SetOuterGap
+        || type == ActionType::SetUsePerSideOuterGap || type == ActionType::SetOuterGapTop
+        || type == ActionType::SetOuterGapBottom || type == ActionType::SetOuterGapLeft
+        || type == ActionType::SetOuterGapRight) {
+        return {PhosphorI18n::tr("Gaps"), 1};
+    }
+    if (type == ActionType::Exclude || type == ActionType::Float || type == ActionType::RestorePosition) {
+        return {PhosphorI18n::tr("Window"), 2};
+    }
+    if (type == ActionType::SetOpacity || type == ActionType::SetHideTitleBar || type == ActionType::SetBorderVisible
+        || type == ActionType::SetBorderWidth || type == ActionType::SetBorderRadius
+        || type == ActionType::SetBorderColor) {
+        return {PhosphorI18n::tr("Appearance"), 3};
+    }
+    if (type == ActionType::OverrideAnimationShader || type == ActionType::OverrideAnimationCurve
+        || type == ActionType::OverrideAnimationTiming || type == ActionType::ExcludeAnimations) {
+        return {PhosphorI18n::tr("Animation"), 4};
+    }
+    return {PhosphorI18n::tr("Other"), 99};
+}
+
 /// Translated label for one param key on action @p type. The structural
 /// schema (kind, min/max, scale, enum wire values) lives on the LGPL
 /// `ActionDescriptor` in PhosphorWindowRule; the GPL settings layer adds
@@ -52,9 +172,16 @@ QString paramLabel(const QString& type, const QString& key)
     if (type == ActionType::SetOpacity && key == ActionParam::Value) {
         return PhosphorI18n::tr("Opacity (%)");
     }
+    // Unsnapped-position restore override (window-domain, single bool value).
+    if (type == ActionType::RestorePosition && key == ActionParam::Value) {
+        return PhosphorI18n::tr("Restore position on login");
+    }
     // Border / title-bar overrides (all single-value, keyed ActionParam::Value).
+    // SetHideTitleBar is tri-state at the effect: rule absent = mode decides,
+    // ON = hide, OFF = force the title bar visible even where the mode hides
+    // it — the label spells that out so the off position doesn't read as inert.
     if (type == ActionType::SetHideTitleBar && key == ActionParam::Value) {
-        return PhosphorI18n::tr("Hide title bars");
+        return PhosphorI18n::tr("Hide title bars (off = force visible)");
     }
     if (type == ActionType::SetBorderVisible && key == ActionParam::Value) {
         return PhosphorI18n::tr("Show border");
@@ -77,6 +204,13 @@ QString paramLabel(const QString& type, const QString& key)
     }
     if (type == ActionType::SetUsePerSideOuterGap && key == ActionParam::Value) {
         return PhosphorI18n::tr("Per-side outer gaps");
+    }
+    if (type == ActionType::LockContext && key == ActionParam::Value) {
+        // The action is the rule-driven counterpart to the ToggleLayoutLock
+        // shortcut: on = the matched context's active layout can't be switched.
+        // off is "don't lock" (not "no change"): the Locked slot is single-winner
+        // by priority, so a higher-priority off rule cancels a lower-priority on.
+        return PhosphorI18n::tr("Lock the layout (off = don't lock)");
     }
     if (type == ActionType::SetOuterGapTop && key == ActionParam::Value) {
         return PhosphorI18n::tr("Top gap (px)");
@@ -191,11 +325,17 @@ QString actionTypeLabelImpl(const QString& type)
     if (type == ActionType::DisableEngine) {
         return PhosphorI18n::tr("Disable engine");
     }
+    if (type == ActionType::LockContext) {
+        return PhosphorI18n::tr("Lock layout");
+    }
     if (type == ActionType::Exclude) {
         return PhosphorI18n::tr("Exclude window");
     }
     if (type == ActionType::Float) {
         return PhosphorI18n::tr("Float window");
+    }
+    if (type == ActionType::RestorePosition) {
+        return PhosphorI18n::tr("Restore position on login");
     }
     if (type == ActionType::OverrideAnimationShader) {
         return PhosphorI18n::tr("Override animation shader");
@@ -213,7 +353,11 @@ QString actionTypeLabelImpl(const QString& type)
         return PhosphorI18n::tr("Exclude from animations");
     }
     if (type == ActionType::SetHideTitleBar) {
-        return PhosphorI18n::tr("Hide title bars");
+        // Tri-state at the effect (true = hide, false = force visible) — the
+        // picker label hints both directions so a user looking to FORCE a
+        // title bar finds the action; the parameter toggle's "(off = force
+        // visible)" wording carries the detail.
+        return PhosphorI18n::tr("Hide or show title bars");
     }
     if (type == ActionType::SetBorderVisible) {
         return PhosphorI18n::tr("Show border");
@@ -273,7 +417,10 @@ QString operatorLabelImpl(Operator op)
     case Operator::LessThan:
         return PhosphorI18n::tr("less than");
     }
-    return QString();
+    // Wire-string fallback (same convention as paramLabel /
+    // actionTypeFallbackLabel): a future operator missing a label entry
+    // shows its raw token in the picker instead of a blank row.
+    return PhosphorWindowRule::operatorToString(op);
 }
 
 } // namespace
@@ -296,7 +443,7 @@ QVariantList matchFields()
     // hand-maintained allow-list: a new Field value (e.g. a hypothetical
     // future `MimeType`) auto-surfaces in the picker unless it's
     // explicitly hidden here. Mirrors the `userAuthorable` filter shape
-    // that replaced `kTypes` in actionTypes() above.
+    // that replaced `kTypes` in actionTypes() below.
     static const QSet<Field> kHiddenFields = {Field::Pid, Field::WindowRole};
     QVariantList out;
     for (int i = 0; i < PhosphorWindowRule::FieldCount; ++i) {
@@ -310,6 +457,11 @@ QVariantList matchFields()
         // reconstructing the enum↔string table itself.
         entry[QStringLiteral("wire")] = PhosphorWindowRule::fieldToString(f);
         entry[QStringLiteral("label")] = WindowRuleModel::fieldLabel(f);
+        const PickerCategory fcat = fieldCategory(f);
+        entry[QStringLiteral("category")] = fcat.label;
+        entry[QStringLiteral("categoryOrder")] = fcat.order;
+        // One-line help surfaced as the leaf editor's info-icon tooltip.
+        entry[QStringLiteral("description")] = fieldDescription(f);
         QString kind = QStringLiteral("string");
         if (f == Field::WindowType) {
             // WindowType is stored as the int underlying the
@@ -377,6 +529,11 @@ QVariantList matchFields()
 
 QVariantList operatorsForField(int fieldValue)
 {
+    // Bounded cast: QML hands us a raw int, and an out-of-range value must
+    // not reach the Field classifiers (matchFields() bounds the same way).
+    if (fieldValue < 0 || fieldValue >= PhosphorWindowRule::FieldCount) {
+        return {};
+    }
     const Field field = static_cast<Field>(fieldValue);
     QList<Operator> ops;
     if (PhosphorWindowRule::fieldIsString(field)) {
@@ -441,6 +598,7 @@ QVariantList actionTypes()
         ActionType::SetSnappingLayout,
         ActionType::SetTilingAlgorithm,
         ActionType::DisableEngine,
+        ActionType::LockContext,
         // Per-context gap overrides (context-domain, grouped with the other
         // context actions above).
         ActionType::SetZonePadding,
@@ -452,6 +610,7 @@ QVariantList actionTypes()
         ActionType::SetOuterGapRight,
         ActionType::Exclude,
         ActionType::Float,
+        ActionType::RestorePosition,
         ActionType::SetOpacity,
         // Per-window border / title-bar overrides (window-domain, grouped with
         // the other per-window appearance actions).
@@ -495,14 +654,18 @@ QVariantList actionTypes()
         entry[QStringLiteral("value")] = typeStr;
         entry[QStringLiteral("label")] = actionTypeLabelImpl(typeStr);
         entry[QStringLiteral("params")] = paramsForActionTypeImpl(typeStr);
-        // Domain wire string drives the picker's compatibility flag — the
-        // QML side disables a context-domain action type when the current
-        // match references window-property fields (the silently-never-fires
-        // combination). Looked up via a probe RuleAction so the descriptor's
-        // own `domain` field stays the single source of truth.
+        const PickerCategory acat = actionCategory(typeStr);
+        entry[QStringLiteral("category")] = acat.label;
+        entry[QStringLiteral("categoryOrder")] = acat.order;
+        // Domain wire string drives the action row's incompatibility warning —
+        // the QML side flags a context-domain action as never-firing when the
+        // match references window-property fields (ActionRow's
+        // `_currentTypeIncompatible` chip + the sheet's InlineMessage). Looked
+        // up via a probe RuleAction so the descriptor's own `domain` field
+        // stays the single source of truth.
         RuleAction probe;
         probe.type = typeStr;
-        const auto domain = PhosphorWindowRule::ActionRegistry::instance().domainFor(probe);
+        const auto domain = registry.domainFor(probe);
         entry[QStringLiteral("domain")] =
             domain == PhosphorWindowRule::ActionDomain::Context ? QStringLiteral("context") : QStringLiteral("window");
         out.append(entry);
@@ -585,10 +748,10 @@ QVariantMap defaultPayloadFor(const QString& typeWire)
             payload[key] = defaultDisplay.isValid() ? QVariant(defaultDisplay.toBool()) : QVariant(false);
         } else if (kind == QLatin1String("color")) {
             // Colour kind has no numeric `defaultDisplay` (that field is a
-            // double); seed a valid `#RRGGBB` so a fresh rule passes the
+            // double); seed a valid `#AARRGGBB` so a fresh rule passes the
             // SetBorderColor validator before the user opens the picker.
-            // Neutral KDE accent blue.
-            payload[key] = QStringLiteral("#3daee9");
+            // Neutral KDE accent blue, fully opaque.
+            payload[key] = QStringLiteral("#FF3DAEE9");
         } else {
             // Picker kinds (snappingLayout, tilingAlgorithm, animationEvent,
             // shaderEffect, curveEditor) and plain strings all start empty —

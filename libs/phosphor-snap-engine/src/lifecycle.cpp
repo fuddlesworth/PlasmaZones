@@ -79,23 +79,28 @@ void SnapEngine::windowOpened(const QString& windowId, const QString& screenId, 
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// resolveWindowRestore — 4-level auto-snap fallback chain
+// resolveWindowRestore — WindowPlacementStore restore + auto-snap fallback chain
+//
+// Consults the unified WindowPlacementStore first (snapped / floating / free
+// record); if none applies, runs the fallback chain (1. app rules, 2. empty
+// zone, 3. last zone). Persisted session restore is now served by the store
+// block above, not a chain level.
 //
 // Mostly decision logic: returns a SnapResult for the caller to apply geometry.
-// Side effects: consumePendingAssignment (step 2), navigationFeedback emit
-// (floating windows). The caller (windowOpened or WTA D-Bus facade) handles
-// zone assignment and geometry application.
+// Side effects: consumePendingAssignment, navigationFeedback emit (floating
+// windows). The caller (windowOpened or WTA D-Bus facade) handles zone
+// assignment and geometry application.
 //
 // Screen mode semantics:
-//   - The placement-store restore (level 2) and app rules (level 1) may
+//   - The placement-store restore and app rules (chain level 1) may
 //     cross-screen migrate: a stored record's own screenId or an app rule can
 //     route a window to a different screen, and the store's take() accept
 //     predicate / snapped-branch screen check keep an autotile-mode screen from
 //     being snapped onto (autotile on that screen will own it).
-//   - Levels 3 (empty zone) and 4 (last zone) inherently use the caller
-//     screen as the target, so they are ONLY valid when the caller's screen
-//     is in snap mode. On autotile screens they're short-circuited — stale
-//     snap zones on a now-autotile screen must not bleed into placement.
+//   - The empty-zone (level 2) and last-zone (level 3) fallbacks inherently use
+//     the caller screen as the target, so they are ONLY valid when the caller's
+//     screen is in snap mode. On autotile screens they're short-circuited —
+//     stale snap zones on a now-autotile screen must not bleed into placement.
 // ═══════════════════════════════════════════════════════════════════════════════
 
 SnapResult SnapEngine::resolveWindowRestore(const QString& windowId, const QString& screenId, bool sticky,
@@ -189,6 +194,15 @@ SnapResult SnapEngine::resolveWindowRestore(const QString& windowId, const QStri
     // store has no record (windows persisted under the old keys before migration).
     if (m_windowTracker) {
         const QString appId = m_windowTracker->currentAppIdFor(windowId);
+        // Whether an UNSNAPPED record (free / snap-floated) for THIS window may
+        // restore its recorded global position on open — the daemon resolves the
+        // global `restoreUnsnappedWindowsOnLogin` setting plus the per-window
+        // RestorePosition rule. When true the free/floating record is eligible
+        // regardless of the opening screen, so a window KWin reopened on the wrong
+        // monitor returns to its recorded one (stored geometry is global, so
+        // re-applying it lands on the original output). When false the historical
+        // opening-screen gate stands. Snapped records are never governed by this.
+        const bool restoreUnsnappedPosition = m_restorePositionPredicate && m_restorePositionPredicate(windowId);
         // ONE record per window (both engines' slots + the shared free geometry).
         // take() consumes it (multi-instance FIFO); we then re-record it bound to
         // the LIVE windowId so the OTHER engine's slot and the per-screen free
@@ -212,36 +226,70 @@ SnapResult SnapEngine::resolveWindowRestore(const QString& windowId, const QStri
                 // on the wrong monitor, unsnapped. The RECORDED screen must still be
                 // in snapping mode, though: a snapped record whose own screen is now
                 // autotile-owned must not snap-restore there (the early gate leaves it
-                // for autotile). A floating/free position is screen-local, so those
-                // records stay gated on the opening screen.
+                // for autotile). A floating/free position is screen-local UNLESS the
+                // user opted into unsnapped-position restore (global setting / rule),
+                // in which case the record is eligible cross-screen so the window
+                // returns to its recorded monitor; otherwise it stays gated on the
+                // opening screen.
                 if (p.slotFor(engineId()).state == WindowPlacement::stateSnapped()) {
                     return recordedSnapScreenIsSnapping(p);
+                }
+                // A contentless {free, no geometry} residue record (left by an
+                // earlier-closed instance captured frame-less) has nothing to
+                // restore. Never CONSUME it: at MaxPerApp entries per app it would
+                // otherwise be taken ahead of the window's real placement (captured
+                // last at save time, so it sits at the back of the FIFO), and the
+                // window would return neither to its zone nor its saved free/float
+                // position. Rejecting it here also lets a genuinely-new window fall
+                // through to the auto-snap chain instead of consuming a dead record
+                // and short-circuiting to no-snap. (Mirrors AutotileEngine's restore
+                // accept predicate, which likewise only consumes records with a real
+                // autotile slot.)
+                if (!p.hasRestorableContent()) {
+                    return false;
+                }
+                if (restoreUnsnappedPosition) {
+                    return true;
                 }
                 return p.screenId.isEmpty() || p.screenId == screenId;
             },
             [&](const WindowPlacement& p) {
-                // Among an app's FIFO records, restore a snapped placement ahead of a
-                // contentless free/floating sibling that is merely older — otherwise a
-                // stale free record (empty screen, no zone) is consumed first and the
-                // window never returns to its zone.
+                // Among an app's FIFO records, restore a snapped placement on a
+                // still-snapping screen ahead of an unsnapped (free/floating) sibling
+                // that is merely older — snapping is the stronger restore intent, and
+                // this keeps a cross-screen snapped record from losing to an older
+                // free/floating record (or being passed over so a snap-screen open
+                // consumes and destroys an autotile-owned record it cannot use).
+                // Contentless residue is already excluded by the accept predicate, so
+                // the second (merely-accepted) pass only ever sees real placements.
                 return recordedSnapScreenIsSnapping(p);
             });
         if (rec) {
-            // Same window across a daemon restart (uuid-exact) vs a reopened instance
-            // (appId FIFO). Only the former re-records — keeping the FULL record (the
-            // other engine's slot + per-screen free geometry) alive across further
-            // restarts. A FIFO reopen CONSUMES instead: re-recording it would let a
-            // second instance of the same app steal this placement on its own reopen.
-            const bool wasExact = (rec->windowId == windowId);
+            // Re-record the restored placement bound to the LIVE windowId so the
+            // window's float-back geometry (freeGeo) and the OTHER engine's slot
+            // survive the reopen. This is load-bearing for logout/login: KWin assigns
+            // a NEW uuid at login, so the record matches by appId FIFO (not
+            // uuid-exact). Without re-binding, a FIFO reopen CONSUMES the record and
+            // the float-back is lost — floating the window after login then finds no
+            // recorded free position and strands it on its zone (which a later capture
+            // records as a poisoned zone-rect float-back). Re-binding appends the
+            // record under the live uuid (newest in the appId bucket), so a SECOND
+            // instance of the same app still takes an OLDER sibling record first on its
+            // own reopen — multi-instance FIFO distribution is preserved.
             const QString restoreScreen = rec->screenId.isEmpty() ? screenId : rec->screenId;
             const PhosphorEngine::EngineSlot slot = rec->slotFor(engineId());
-            QRect freeGeo = rec->freeGeometryFor(restoreScreen);
-            if (!freeGeo.isValid()) {
-                freeGeo = rec->anyFreeGeometry();
-            }
-            if (wasExact) {
-                m_windowTracker->placementStore().record(*rec);
-            }
+            // The SCREEN-LOCAL recorded position for restoreScreen — deliberately NOT
+            // the anyFreeGeometry() cross-screen fallback. A free/floating reposition
+            // emits global compositor coordinates: they only land the window back on
+            // restoreScreen if the rect was captured on restoreScreen. Applying some
+            // other screen's rect would put the window on a third monitor while the
+            // floating-on-screen tracking (set to restoreScreen) says otherwise — a
+            // visible/state desync. If restoreScreen has no recorded position, there is
+            // nothing meaningful to restore, so the move is skipped. (Snapped restore
+            // places by zone geometry and never consults this.)
+            const QRect freeGeo = rec->freeGeometryFor(restoreScreen);
+            rec->windowId = windowId;
+            m_windowTracker->placementStore().record(*rec);
 
             if (slot.state == WindowPlacement::stateSnapped()) {
                 // A stored snap is still subject to the disabled-context gate.
@@ -296,6 +344,19 @@ SnapResult SnapEngine::resolveWindowRestore(const QString& windowId, const QStri
                 return SnapResult::noSnap();
             } else if (slot.state == WindowPlacement::stateFree()) {
                 // free geometry already lives in the record; nothing to re-seed.
+                // When the user opted into unsnapped-position restore, move the
+                // window back to its recorded global position (which, being in
+                // compositor-global coords, returns it to its original monitor —
+                // KWin may have reopened the session window elsewhere). The window
+                // stays genuinely unmanaged; this is a one-shot placement, not a
+                // snap. Eligibility above already required restoreUnsnappedPosition
+                // to consume a cross-screen record, but a same-screen free record is
+                // consumed unconditionally — so gate the move itself here too.
+                if (restoreUnsnappedPosition && freeGeo.isValid()) {
+                    Q_EMIT geometryRestoreRequested(windowId, freeGeo, restoreScreen);
+                    qCInfo(PhosphorSnapEngine::lcSnapEngine)
+                        << "resolveWindowRestore: placement(free) reposition for" << windowId << "->" << freeGeo;
+                }
                 return SnapResult::noSnap();
             }
         }
@@ -352,7 +413,8 @@ SnapResult SnapEngine::resolveWindowRestore(const QString& windowId, const QStri
         return SnapResult::noSnap();
     }
 
-    // 0. Floating windows should not be auto-snapped — emit OSD feedback
+    // Floating windows should not be auto-snapped — emit OSD feedback. (A skip
+    // guard, not a fallback level.)
     if (m_snapState->isFloating(windowId)) {
         qCInfo(PhosphorSnapEngine::lcSnapEngine)
             << "resolveWindowRestore: window" << windowId << "is floating, skipping snap";
@@ -381,12 +443,12 @@ SnapResult SnapEngine::resolveWindowRestore(const QString& windowId, const QStri
         }
     }
 
-    // 2. Persisted session restore is now served entirely by the unified
-    // WindowPlacementStore block at the top of this function (a snapped window
-    // reopens from its WindowPlacement record). The legacy
-    // PendingRestoreQueues / calculateRestoreFromSession path is gone.
+    // (Persisted session restore is now served entirely by the unified
+    // WindowPlacementStore block at the top of this function — a snapped window
+    // reopens from its WindowPlacement record. It is no longer a chain level; the
+    // legacy PendingRestoreQueues / calculateRestoreFromSession path is gone.)
 
-    // Levels 3 and 4 inherently target the caller's screen (the empty-zone /
+    // Levels 2 and 3 inherently target the caller's screen (the empty-zone /
     // last-zone lookups are scoped to screenId, not to a saved zone). If the
     // caller's screen is now in autotile mode, skip them — stale snap zones
     // on an autotile screen must not be auto-assigned, autotile owns
@@ -401,7 +463,7 @@ SnapResult SnapEngine::resolveWindowRestore(const QString& windowId, const QStri
         }
     }
 
-    // 3. Auto-assign to empty zone
+    // 2. Auto-assign to empty zone
     {
         SnapResult result = calculateSnapToEmptyZone(windowId, screenId, sticky);
         if (result.shouldSnap) {
@@ -411,7 +473,7 @@ SnapResult SnapEngine::resolveWindowRestore(const QString& windowId, const QStri
         }
     }
 
-    // 4. Snap to last zone (final fallback)
+    // 3. Snap to last zone (final fallback)
     {
         SnapResult result = calculateSnapToLastZone(windowId, screenId, sticky);
         if (result.shouldSnap) {

@@ -257,6 +257,14 @@ public:
      * enabledChanged if the overall state flips.  Only processes states for
      * the current desktop/activity — states for other desktops are preserved.
      *
+     * Identical-set re-emit (discussion #219): when called for a
+     * desktop/activity switch whose autotile set matches the previous
+     * context's, the set comparison early-returns but the engine still
+     * RE-EMITS autotileScreensChanged with the unchanged set and
+     * isDesktopSwitch=true — the compositor effect's catch-scan depends on
+     * that wakeup to re-add windows moved to this desktop while the user was
+     * away. An empty identical set skips the re-emit (nothing to catch).
+     *
      * @param screens Set of screen names that should use autotile
      */
     void setAutotileScreens(const QSet<QString>& screens);
@@ -873,10 +881,14 @@ public:
      * @brief Compute the insert index for a cursor position on an autotile screen.
      *
      * Walks the screen's current calculated zones and returns the index of the
-     * first zone that contains the cursor. Returns the last tiled index as a
-     * fallback when the cursor is beyond all zones, or -1 if the screen has no
-     * tiling state. updateDragInsertPreview() clamps to [0, tiledWindowCount()-1],
-     * so returning the last slot is equivalent to "append".
+     * first zone that contains the cursor. When the cursor is beyond all
+     * zones: holds at the active preview's lastInsertIndex if a preview is
+     * live (the normal call context — keeps the slot stable while the cursor
+     * crosses gaps), otherwise falls back to the last tiled index. Returns 0
+     * when the state exists but has no zones yet, and -1 if the screen has no
+     * tiling state. updateDragInsertPreview() clamps to
+     * [0, tiledWindowCount()-1], so returning the last slot is equivalent to
+     * "append".
      *
      * The dragged window's zone is intentionally NOT excluded from the hit
      * test: cursor-over-own-zone returns its current index (stable identity),
@@ -929,6 +941,13 @@ Q_SIGNALS:
 
     /**
      * @brief Emitted when the set of autotile screens changes
+     *
+     * Also RE-EMITTED with an unchanged set on a desktop/activity switch
+     * between two contexts whose autotile sets are identical (with
+     * isDesktopSwitch=true, discussion #219) — a wire-contract wakeup for
+     * the compositor effect's catch-scan, not a set change. Receivers must
+     * be idempotent for the same-set case.
+     *
      * @param screenIds List of screen IDs using autotile
      * @param isDesktopSwitch True if caused by desktop/activity switch (not user toggle)
      */
@@ -993,6 +1012,19 @@ private:
     void connectSignals();
     bool insertWindow(const QString& windowId, const QString& screenId);
     void removeWindow(const QString& windowId);
+
+    /// Algorithm lifecycle REMOVE hook + state removal for a tracked window,
+    /// WITHOUT the per-window immediate retile that onWindowRemoved performs.
+    /// Returns the affected screen id (empty if the window was untracked) so
+    /// batch callers (pruneStaleWindows) can retile each affected screen once
+    /// instead of N times. onWindowRemoved is this + an immediate retile.
+    QString removeTrackedWindowNoRetile(const QString& windowId);
+
+    /// If @p windowId is the active drag-insert preview's dragged window or
+    /// evicted neighbour, drop it from the preview so a later commit/cancel
+    /// never operates on a now-dead id. Shared by windowClosed and the
+    /// pruneStaleWindows dead-window sweep.
+    void dropClosedWindowFromDragPreview(const QString& windowId);
     bool storeWindowMinSize(const QString& windowId, int minWidth, int minHeight);
     bool recalculateLayout(const QString& screenId);
     void applyTiling(const QString& screenId);
@@ -1004,6 +1036,51 @@ private:
     /// Virtual screen IDs are validated via PhosphorScreens::ScreenManager geometry;
     /// physical IDs via QScreen lookup.
     bool isKnownScreen(const QString& screenId) const;
+
+    /**
+     * @brief Shared per-state teardown body for screen removal.
+     *
+     * Captures every window's placement into the unified record, drops the
+     * overflow set (AFTER capture — the discriminator needs it), appends the
+     * released windows, clears the pending-order bookkeeping, and
+     * deleteLater()s the state. Callers own the divergent parts: removing
+     * the state from m_screenStates (they iterate it) and the per-path
+     * override policy — toggle-off drops only the resolver's in-memory
+     * overrides, the orphaned-VS teardown purges persisted settings too.
+     *
+     * @param drainOverflow Pass false when tearing down SEVERAL states that
+     *        share one screenId (the orphaned-VS loop spans every
+     *        desktop/activity context); the overflow bucket is keyed per
+     *        screenId only, so the caller must drain once per screen AFTER
+     *        all of that screen's states are captured.
+     */
+    void releaseScreenStateForTeardown(const QString& screenId, PhosphorTiles::TilingState* state,
+                                       QStringList& releasedWindows, bool drainOverflow = true);
+
+    /**
+     * @brief Shared key-migration body for focus-driven window moves.
+     *
+     * Removes @p windowId from @p oldKey's TilingState (running the
+     * algorithm lifecycle hook), migrates overflow tracking, retiles the
+     * source screen, and re-adds via onWindowAdded() when @p newScreenId is
+     * an autotile screen. The caller updates/removes the
+     * m_windowToStateKey entry FIRST. No-op when the old state doesn't
+     * contain the window.
+     */
+    void migrateWindowBetweenKeys(const QString& windowId, const PhosphorEngine::TilingStateKey& oldKey,
+                                  const QString& newScreenId);
+
+    /**
+     * @brief Deferred re-check for context-only (desktop/activity) key
+     *        deltas detected by windowFocused().
+     *
+     * Queued one event-loop pass after the focus event so an in-flight
+     * setCurrentDesktop/setCurrentActivity push can land first; migrates
+     * only if the key mismatch persists (the window genuinely moved
+     * context). Prevents the focus-outran-the-push race from yanking a
+     * correctly-tiled window into the wrong desktop's state.
+     */
+    void revalidateWindowContext(const QString& windowId, const QString& screenId);
 
     /**
      * @brief Construct a TilingStateKey for the current desktop/activity
@@ -1236,6 +1313,17 @@ private:
     int m_currentDesktop = 1;
     QString m_currentActivity;
     bool m_isDesktopContextSwitch = false;
+    /// True once setCurrentDesktop() has been called at least once. Carries
+    /// "a desktop context was established" for the switch-arming logic —
+    /// m_currentDesktop has no reserved unset value (defaults to 1, KWin
+    /// desktops are >= 1), so the daemon's initial startup push must be told
+    /// apart from a genuine switch by this flag, not a value comparison.
+    bool m_desktopContextEverSet = false;
+    /// Activity counterpart: true once a NON-EMPTY activity was pushed.
+    /// Keeps "a" → "" → "b" (activities-service restart) armed on the
+    /// second leg, which a bare previous-value-empty sentinel would
+    /// misread as initialization.
+    bool m_activityContextEverSet = false;
 
     // Per-screen desktop override for sticky screens. When the KWin script
     // "virtualdesktopsonlyonprimary" pins all secondary-screen windows to all
