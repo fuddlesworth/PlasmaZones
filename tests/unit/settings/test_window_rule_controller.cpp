@@ -847,6 +847,20 @@ void TestWindowRuleController::templatesProduceSeededRules()
     QCOMPARE(smallActions.size(), 1);
     QCOMPARE(smallActions.at(0).toMap().value(QStringLiteral("type")).toString(), QStringLiteral("excludeAnimations"));
 
+    // `lockLayoutOnMonitor` is the lock template: ScreenId leaf + a single
+    // LockContext action seeded to lock (value == true). The seeded value is
+    // the contract — a regression that drops/inverts it would author a rule
+    // that silently doesn't lock, or doesn't surface in the picker's
+    // value-on default.
+    const QVariantMap lockRule = controller.newRuleFromTemplate(QStringLiteral("lockLayoutOnMonitor"));
+    QVERIFY(!lockRule.value(QStringLiteral("id")).toString().isEmpty());
+    QCOMPARE(lockRule.value(QStringLiteral("match")).toMap().value(QStringLiteral("field")).toString(),
+             QStringLiteral("screenId"));
+    const QVariantList lockActions = lockRule.value(QStringLiteral("actions")).toList();
+    QCOMPARE(lockActions.size(), 1);
+    QCOMPARE(lockActions.at(0).toMap().value(QStringLiteral("type")).toString(), QStringLiteral("lockContext"));
+    QCOMPARE(lockActions.at(0).toMap().value(QStringLiteral("value")).toBool(), true);
+
     // An unknown id must return an empty map — the AddRuleSheet would
     // otherwise commit a UUID-less rule on a typo in the template id.
     const QVariantMap bogus = controller.newRuleFromTemplate(QStringLiteral("nonexistentTemplate"));

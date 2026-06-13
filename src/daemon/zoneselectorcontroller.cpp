@@ -408,7 +408,7 @@ bool ZoneSelectorController::isScreenLocked() const
         // Check both modes (0 = manual, 1 = autotile) to match OverlayService behavior.
         // A lock on either mode should block the zone selector regardless of which mode
         // is currently active, preventing inconsistency with overlay lock checks.
-        return isAnyModeLocked(m_settings, m_screenId, desktop, activity);
+        return isAnyModeLocked(m_settings, m_layoutManager, m_screenId, desktop, activity);
     }
     return false;
 }

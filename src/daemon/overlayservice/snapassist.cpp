@@ -573,7 +573,7 @@ void OverlayService::showLayoutPicker(const QString& screenId)
     if (m_settings && m_layoutManager) {
         int curDesktop = m_layoutManager->currentVirtualDesktop();
         QString curActivity = m_layoutManager->currentActivity();
-        locked = isAnyModeLocked(m_settings, resolvedId, curDesktop, curActivity);
+        locked = isAnyModeLocked(m_settings, m_layoutManager, resolvedId, curDesktop, curActivity);
     }
     writeQmlProperty(slot, QStringLiteral("locked"), locked);
     writeColorSettings(slot, m_settings);

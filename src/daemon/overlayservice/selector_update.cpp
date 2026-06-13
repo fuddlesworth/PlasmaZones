@@ -181,7 +181,7 @@ void OverlayService::updateZoneSelectorWindow(const QString& screenId)
     if (m_settings && m_layoutManager) {
         int curDesktop = m_layoutManager->currentVirtualDesktop();
         QString curActivity = m_layoutManager->currentActivity();
-        locked = isAnyModeLocked(m_settings, screenId, curDesktop, curActivity);
+        locked = isAnyModeLocked(m_settings, m_layoutManager, screenId, curDesktop, curActivity);
     }
     writeQmlProperty(window, QStringLiteral("locked"), locked);
 

@@ -365,7 +365,7 @@ void OverlayService::updateSelectorPosition(int cursorX, int cursorY)
                 if (m_settings && m_layoutManager) {
                     int curDesktop = m_layoutManager->currentVirtualDesktop();
                     QString curActivity = m_layoutManager->currentActivity();
-                    bool locked = isAnyModeLocked(m_settings, cursorScreenId, curDesktop, curActivity);
+                    bool locked = isAnyModeLocked(m_settings, m_layoutManager, cursorScreenId, curDesktop, curActivity);
                     if (locked) {
                         // Only allow zone selection from the active layout
                         PhosphorZones::Layout* activeLayout = m_layoutManager->resolveLayoutForScreen(cursorScreenId);
