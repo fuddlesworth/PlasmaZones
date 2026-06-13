@@ -240,7 +240,17 @@ void DecorationManager::setRuleOverride(const QString& windowId, std::optional<b
             finishRelease(windowId, *it, Restore::Immediate);
         } else if (hadVeto) {
             // Veto lifted with no rule owner: remaining mode owners re-assert.
+            // reconcile here resolves to a hide (mode owners present) or a
+            // no-op (none), so it cannot currently emit windowDecorationRestored
+            // — but guard the pruneIfEmpty epilogue against a restored-signal
+            // slot destroying the manager anyway, matching the force-show and
+            // drain-step contract so a future change to reconcile's restore
+            // branch can't turn this into a UAF.
+            QPointer<DecorationManager> self(this);
             reconcile(windowId, *it, Placement::AlreadyPlaced);
+            if (!self) {
+                return;
+            }
             pruneIfEmpty(windowId);
         }
         return;

@@ -279,8 +279,13 @@ void PlasmaZonesEffect::callEndDrag(KWin::EffectWindow* window, const QString& w
                                      onSnapSuccess);
                 }
 
-                // Snap Assist: show the window picker if the daemon
-                // requested it. asyncShow is non-blocking.
+                // Snap Assist: show the window picker if the daemon requested
+                // it. asyncShow is non-blocking. This fires alongside an
+                // ApplySnap outcome (applied==true) BY DESIGN: the daemon only
+                // sets requestSnapAssist when the window actually snapped
+                // (drop.cpp: `actuallySnapped && ...`) — snap-assist's purpose
+                // is to offer filling the REMAINING empty zones after a snap,
+                // so it must not be gated on !applied.
                 if (outcome.requestSnapAssist && !outcome.emptyZones.isEmpty() && !outcome.targetScreenId.isEmpty()) {
                     m_snapAssistHandler->asyncShow(windowId, outcome.targetScreenId, outcome.emptyZones);
                 }

@@ -6,6 +6,7 @@
 #include <PhosphorWindowRule/RuleAction.h>
 
 #include <QJsonObject>
+#include <QSet>
 #include <QTest>
 
 using namespace PhosphorWindowRule;
