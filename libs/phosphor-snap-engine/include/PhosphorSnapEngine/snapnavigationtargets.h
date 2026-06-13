@@ -120,12 +120,12 @@ private:
         }
     }
 
-    /// Cross-output entry target on a no-adjacent-zone boundary, or an empty
-    /// MoveTargetResult.zoneId when there's no neighbour output / entry zone.
-    /// Shared by the move/focus/swap paths. @p action drives the feedback tag.
+    /// Cross-output entry target on a no-adjacent-zone boundary, or a
+    /// non-success MoveTargetResult when there's no neighbour output / entry
+    /// zone. Shared by the move and focus paths; the caller emits feedback so
+    /// the move/focus tag stays correct.
     PhosphorProtocol::MoveTargetResult crossOutputEntryTarget(const QString& currentZoneId, const QString& direction,
-                                                              const QString& sourceScreenId,
-                                                              const QString& action) const;
+                                                              const QString& sourceScreenId) const;
 
     PhosphorEngine::IWindowTrackingService* m_service = nullptr;
     PhosphorZones::LayoutRegistry* m_layoutManager = nullptr;

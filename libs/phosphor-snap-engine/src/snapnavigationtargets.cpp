@@ -140,12 +140,10 @@ void SnapNavigationTargetResolver::setCrossSurfaceResolver(PhosphorEngine::ICros
     m_crossSurface = resolver;
 }
 
-PhosphorProtocol::MoveTargetResult SnapNavigationTargetResolver::crossOutputEntryTarget(const QString& currentZoneId,
-                                                                                        const QString& direction,
-                                                                                        const QString& sourceScreenId,
-                                                                                        const QString& action) const
+PhosphorProtocol::MoveTargetResult
+SnapNavigationTargetResolver::crossOutputEntryTarget(const QString& currentZoneId, const QString& direction,
+                                                     const QString& sourceScreenId) const
 {
-    Q_UNUSED(action)
     const QString fail = QString();
     if (!m_crossSurface || !m_zoneAdjacency || !m_service) {
         return moveResult(false, fail, QString(), QRect(), currentZoneId, sourceScreenId);
@@ -234,7 +232,7 @@ PhosphorProtocol::MoveTargetResult SnapNavigationTargetResolver::getMoveTargetFo
             // No adjacent zone on this output — cross into the adjacent output's
             // entry zone before giving up.
             const PhosphorProtocol::MoveTargetResult cross =
-                crossOutputEntryTarget(currentZoneId, direction, effectiveScreenId, QStringLiteral("move"));
+                crossOutputEntryTarget(currentZoneId, direction, effectiveScreenId);
             if (cross.success) {
                 emitFeedback(true, QStringLiteral("move"), QStringLiteral("screen:") + direction, currentZoneId,
                              cross.zoneId, cross.screenName);
@@ -304,7 +302,7 @@ PhosphorProtocol::FocusTargetResult SnapNavigationTargetResolver::getFocusTarget
         // No adjacent zone on this output — try focusing into the adjacent
         // output's entry zone.
         const PhosphorProtocol::MoveTargetResult cross =
-            crossOutputEntryTarget(currentZoneId, direction, effectiveScreenId, QStringLiteral("focus"));
+            crossOutputEntryTarget(currentZoneId, direction, effectiveScreenId);
         if (cross.success) {
             const QStringList crossWindows = m_service->windowsInZone(cross.zoneId);
             if (!crossWindows.isEmpty()) {
