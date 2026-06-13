@@ -143,22 +143,28 @@ private Q_SLOTS:
         m_wts->setSnapState(nullptr);
     }
 
-    // ON + a recorded last-used zone that belongs to a DIFFERENT layout (not this
-    // screen's) → the last-used tier is rejected (its zone resolves geometry on this
-    // screen, but layout->zoneById fails) and the resolver falls through to the
-    // first-empty zone of THIS screen's layout. Pins the layout-scoping guard.
+    // ON + a recorded last-used zone that belongs to a DIFFERENT layout (not the one
+    // resolved for this screen) → the last-used tier is rejected (its zone resolves
+    // geometry on this screen, but layout->zoneById fails) and the resolver falls
+    // through to the first-empty zone of THIS screen's layout. Pins the layout-scoping
+    // guard.
     void testFallback_on_lastUsedFromOtherLayout_fallsThroughToFirstEmpty()
     {
         SnapEngine engine(m_layoutManager, m_wts, nullptr, nullptr, nullptr);
         engine.setEngineSettings(m_settings);
         m_wts->setSnapState(engine.snapState());
 
+        // `layout` is installed FIRST, so it is the registry's default
+        // (resolveLayoutForScreen → defaultLayout() → m_layouts.first() when no
+        // per-screen assignment or default-id provider is wired) and therefore the
+        // layout resolved for DP-1.
         auto* layout = installLayout(2);
         const QString firstZone = layout->zones().first()->id().toString();
 
-        // A second, registered-but-not-active layout. Its zones resolve geometry
-        // (findZoneInAllLayouts spans all layouts) but are NOT in the active layout,
-        // so a last-used zone from it must be rejected by the zoneById scoping.
+        // A second layout registered AFTER it (so not the default / not DP-1's
+        // resolved layout). Its zones still resolve geometry (findZoneInAllLayouts
+        // spans every registered layout), so a last-used zone from it must be
+        // rejected by the zoneById scoping, not by an invalid geometry.
         auto* otherLayout = createTestLayout(2, m_layoutManager);
         m_layoutManager->addLayout(otherLayout);
         const QString foreignZone = otherLayout->zones().first()->id().toString();
