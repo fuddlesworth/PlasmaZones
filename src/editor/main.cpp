@@ -19,8 +19,8 @@
 #include "../daemon/rendering/zoneshaderitem.h"
 #include "../daemon/vulkan_support.h"
 
+#include <QApplication>
 #include <QFile>
-#include <QGuiApplication>
 #include <QLibrary>
 #include <QScopeGuard>
 #include <QQmlApplicationEngine>
@@ -81,10 +81,10 @@ int main(int argc, char* argv[])
     qunsetenv("MANGOHUD");
     qputenv("DISABLE_MANGOHUD", "1");
 
-    // Register our layer-shell QPA plugin before QGuiApplication
+    // Register our layer-shell QPA plugin before QApplication
     PhosphorWayland::registerLayerShellPlugin();
 
-    // Read rendering backend preference and set graphics API BEFORE QGuiApplication.
+    // Read rendering backend preference and set graphics API BEFORE QApplication.
     // Must match daemon's backend so shader previews render identically.
     bool useVulkan = false;
 #if QT_CONFIG(vulkan)
@@ -95,7 +95,13 @@ int main(int argc, char* argv[])
         useVulkan = PlasmaZones::probeAndSetGraphicsApi(backend);
     }
 
-    QGuiApplication app(argc, argv);
+    // QApplication (not QGuiApplication): the org.kde.desktop QtQuick Controls
+    // style (qqc2-desktop-style) renders every control through a QtWidgets
+    // QStyle via KQuickStyleItem. That path calls qApp->style(), which requires
+    // a QApplication — under a plain QGuiApplication it operates in a degenerate
+    // context that fragile third-party QStyle plugins (e.g. Darkly) dereference
+    // into a crash on the first paint frame. See discussion #262.
+    QApplication app(argc, argv);
     PlasmaZones::loadTranslations(&app);
 
     // Create and store QVulkanInstance for shader preview windows (same as daemon)
