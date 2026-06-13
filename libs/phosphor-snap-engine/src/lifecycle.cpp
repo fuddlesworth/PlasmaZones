@@ -81,15 +81,18 @@ void SnapEngine::windowOpened(const QString& windowId, const QString& screenId, 
 // ═══════════════════════════════════════════════════════════════════════════════
 // resolveWindowRestore — WindowPlacementStore restore + auto-snap fallback chain
 //
-// Consults the unified WindowPlacementStore first (snapped / floating / free
-// record); if none applies, runs the fallback chain (1. app rules, 2. empty
-// zone, 3. last zone). Persisted session restore is now served by the store
-// block above, not a chain level.
+// Consults the unified WindowPlacementStore first (snapped or floated record —
+// snapping's two states); if none applies, runs the fallback chain (1. app rules,
+// 2. empty zone, 3. last zone), and a no-match window defaults to floated.
+// Persisted session restore is now served by the store block above, not a chain
+// level.
 //
 // Mostly decision logic: returns a SnapResult for the caller to apply geometry.
-// Side effects: consumePendingAssignment, navigationFeedback emit (floating
-// windows). The caller (windowOpened or WTA D-Bus facade) handles zone
-// assignment and geometry application.
+// Side effects: consumePendingAssignment; marks floated windows floating
+// (setFloatingOnScreen + windowFloatingChanged) on the floated-restore branch and
+// on the no-match default; geometryRestoreRequested for floated position restore.
+// The caller (windowOpened or WTA D-Bus facade) handles zone assignment and
+// geometry application.
 //
 // Screen mode semantics:
 //   - The placement-store restore and app rules (chain level 1) may
@@ -234,9 +237,9 @@ SnapResult SnapEngine::resolveWindowRestore(const QString& windowId, const QStri
                 if (p.slotFor(engineId()).state == WindowPlacement::stateSnapped()) {
                     return recordedSnapScreenIsSnapping(p);
                 }
-                // A contentless {free, no geometry} residue record (left by an
-                // earlier-closed instance captured frame-less) has nothing to
-                // restore. Never CONSUME it: at MaxPerApp entries per app it would
+                // A contentless {floating, no geometry, no zones} residue record
+                // (left by an earlier-closed instance captured frame-less) has nothing
+                // to restore. Never CONSUME it: at MaxPerApp entries per app it would
                 // otherwise be taken ahead of the window's real placement (captured
                 // last at save time, so it sits at the back of the FIFO), and the
                 // window would return neither to its zone nor its saved free/float
@@ -407,13 +410,15 @@ SnapResult SnapEngine::resolveWindowRestore(const QString& windowId, const QStri
         return SnapResult::noSnap();
     }
 
-    // Floating windows should not be auto-snapped — emit OSD feedback. (A skip
-    // guard, not a fallback level.)
+    // Floating windows are never auto-snapped — skip the chain. (A skip guard, not
+    // a fallback level.) No OSD feedback here: this is the automatic window-open /
+    // restore path, not an interactive float toggle — the user did not act, so a
+    // "floated" toast would be spurious (and would spam at login, where the
+    // retry net re-resolves every floating window, including the now-default
+    // floated ones). Interactive feedback lives in toggleWindowFloat.
     if (m_snapState->isFloating(windowId)) {
         qCInfo(PhosphorSnapEngine::lcSnapEngine)
             << "resolveWindowRestore: window" << windowId << "is floating, skipping snap";
-        Q_EMIT navigationFeedback(true, QStringLiteral("float"), QStringLiteral("floated"), QString(), QString(),
-                                  screenId);
         return SnapResult::noSnap();
     }
 

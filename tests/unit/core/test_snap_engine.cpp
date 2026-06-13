@@ -1484,6 +1484,33 @@ private Q_SLOTS:
         m_wts->setSnapState(nullptr);
     }
 
+    // The unfloatFallbackToZone setting GATES the fallback: with it off, a window
+    // that has no pre-float zone gets no fallback target (resolveFallbackUnfloatGeometry
+    // returns not-found), so unfloat keeps it floating. (The on-success geometry path
+    // needs a wired ScreenManager for zoneGeometry — exercised in live verification,
+    // not this guiless fixture; the empty-zone gate tests skip geometry for the same
+    // reason.)
+    void testResolveFallbackUnfloatGeometry_offReturnsNotFound()
+    {
+        SnapEngine engine(m_layoutManager, m_wts, nullptr, nullptr, nullptr);
+        engine.setEngineSettings(m_settings);
+        m_wts->setSnapState(engine.snapState());
+
+        auto* layout = createTestLayout(2, m_layoutManager);
+        m_layoutManager->addLayout(layout);
+        m_layoutManager->setActiveLayout(layout);
+
+        // A floating window with no pre-float zone, on a known screen.
+        engine.snapState()->setFloatingOnScreen(QStringLiteral("app|nofloatzone"), QStringLiteral("DP-1"), 0);
+
+        // Setting OFF (the StubSettings default) → no fallback, regardless of layout.
+        m_settings->setSnapUnfloatFallbackToZone(false);
+        QVERIFY2(
+            !engine.resolveFallbackUnfloatGeometry(QStringLiteral("app|nofloatzone"), QStringLiteral("DP-1")).found,
+            "unfloatFallbackToZone off → no fallback target");
+        m_wts->setSnapState(nullptr);
+    }
+
     // =========================================================================
     // setExcludeRuleSet + isAppIdExcluded wiring tests
     //

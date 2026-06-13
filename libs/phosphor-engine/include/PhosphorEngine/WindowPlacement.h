@@ -28,7 +28,7 @@ namespace PhosphorEngine {
 /// WindowPlacement::freeGeometryByScreen.
 struct EngineSlot
 {
-    QString state; ///< engine-defined token: snap "snapped"/"floating"/"free"; autotile "tiled"/"floating"
+    QString state; ///< engine-defined token: snap "snapped"/"floating"; autotile "tiled"/"floating" ("free" retired)
     QStringList zoneIds; ///< snap slot — zone UUIDs (first is primary); empty for autotile
     int order = -1; ///< autotile slot — tile index within the screen; -1 for snap
 
