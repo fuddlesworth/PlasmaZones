@@ -227,6 +227,33 @@ public:
     }
 
     /**
+     * @brief Predicate: is the window ACTIVELY TILED by the autotile engine
+     * right now (engine-owned, non-floating)?
+     *
+     * Injected by the daemon (same LGPL-boundary pattern as
+     * AutotileModePredicate). Distinct from the MODE predicate: a fresh
+     * spawn on an autotile screen is in autotile mode but not yet tiled —
+     * its frame is a genuine free geometry — while a tiled window's frame
+     * IS the tile rect and must never be recorded as a float-back.
+     * recordFreeGeometry uses this to refuse tiled frames the same way it
+     * refuses snapped frames; it complements the effect-side capture guard,
+     * which cannot help on an effect reload (the effect's border tracking
+     * starts empty while this engine still holds the tiling state).
+     */
+    using AutotileTiledPredicate = std::function<bool(const QString& windowId)>;
+    void setAutotileTiledPredicate(AutotileTiledPredicate predicate)
+    {
+        m_autotileTiledPredicate = std::move(predicate);
+    }
+
+    /// True if the autotile engine reports the window actively tiled.
+    /// Returns false when the predicate is unwired (snap-only tests).
+    bool isWindowAutotileTiled(const QString& windowId) const
+    {
+        return m_autotileTiledPredicate && m_autotileTiledPredicate(windowId);
+    }
+
+    /**
      * @brief Accessor for consumers that need direct access (effect, adaptor).
      */
     PhosphorEngine::WindowRegistry* windowRegistry() const
@@ -1066,6 +1093,7 @@ private:
     PhosphorScreens::ScreenManager* m_screenManager = nullptr;
     QPointer<PhosphorEngine::PlacementEngineBase> m_snapEngine;
     AutotileModePredicate m_autotileModePredicate{};
+    AutotileTiledPredicate m_autotileTiledPredicate{};
 
     // Floating windows: full windowId at runtime, appId for session-restored entries
     // Converted from windowId to appId on window close for persistence.

@@ -12,13 +12,11 @@
 #include <PhosphorIpc/IpcRouter.h>
 
 #include <QCoreApplication>
-#include <QDir>
 #include <QJsonArray>
 #include <QJsonObject>
 #include <QLocalSocket>
 #include <QObject>
 #include <QString>
-#include <QTemporaryDir>
 #include <QTest>
 #include <QtCore/qtclasshelpermacros.h>
 

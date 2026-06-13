@@ -5,8 +5,13 @@
 
 include(GenerateExportHeader)
 
-# QTP0004: All QML files are explicitly listed in qt_add_qml_module
-qt_policy(SET QTP0004 NEW)
+# QTP0004: All QML files are explicitly listed in qt_add_qml_module.
+# Guarded — the policy exists only from Qt 6.8 and QT_MIN_VERSION is 6.6;
+# unguarded, a 6.6/6.7 toolchain fatal-errors on the unknown policy
+# (mirrors the root CMakeLists' if(POLICY ...) guard).
+if(POLICY QTP0004)
+    qt_policy(SET QTP0004 NEW)
+endif()
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # Shared QML Components (must be built first)

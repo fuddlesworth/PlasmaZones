@@ -372,6 +372,9 @@ add_subdirectory(libs/phosphor-workspaces)  # virtual desktop / workspace manage
 add_subdirectory(libs/phosphor-tile-engine) # autotile placement engine (IAutotileSettings + engine code)
 add_subdirectory(libs/phosphor-snap-engine) # zone-based snap placement engine
 
+
+add_subdirectory(libs/phosphor-placement)   # window placement state tracking
+
 # Canonical list of engine library target names. Consumed by the
 # engine QML firewall below; declared here next to the engine
 # subdirs so the list moves with the targets it gates.
@@ -380,6 +383,8 @@ set(PHOSPHOR_ENGINE_TARGETS
     PhosphorSnapEngine
     PhosphorTileEngine
     PhosphorEngine
+    PhosphorWorkspaces
+    PhosphorPlacement
 )
 
 # ─── Engine QML firewall ─────────────────────────────────────────────────────
@@ -413,7 +418,7 @@ foreach(_p_engine_lib IN LISTS PHOSPHOR_ENGINE_TARGETS)
         get_target_property(_p_engine_links ${_p_engine_lib} LINK_LIBRARIES)
         if(_p_engine_links)
             foreach(_p_link IN LISTS _p_engine_links)
-                if(_p_link MATCHES "(^|::)Qt6::(Qml|Quick)$")
+                if(_p_link MATCHES "(^|::)Qt6::(Qml|Quick)(Private)?$")
                     message(FATAL_ERROR
                         "Engine library '${_p_engine_lib}' links '${_p_link}'. "
                         "Engine libs must stay QML-free, see comment above this "
@@ -424,7 +429,7 @@ foreach(_p_engine_lib IN LISTS PHOSPHOR_ENGINE_TARGETS)
         get_target_property(_p_engine_iface ${_p_engine_lib} INTERFACE_LINK_LIBRARIES)
         if(_p_engine_iface)
             foreach(_p_link IN LISTS _p_engine_iface)
-                if(_p_link MATCHES "(^|::)Qt6::(Qml|Quick)$")
+                if(_p_link MATCHES "(^|::)Qt6::(Qml|Quick)(Private)?$")
                     message(FATAL_ERROR
                         "Engine library '${_p_engine_lib}' publicly links '${_p_link}'. "
                         "Engine libs must stay QML-free, see comment above this "
@@ -446,8 +451,6 @@ if(NOT _p_engine_matched_any)
         "move this firewall block below the add_subdirectory calls that "
         "declare the engines.")
 endif()
-
-add_subdirectory(libs/phosphor-placement)   # window placement state tracking
 add_subdirectory(libs/phosphor-compositor)  # compositor-plugin SDK
 add_subdirectory(libs/phosphor-control) # reusable Qt6/QML/Kirigami settings-app framework (page controllers, registry, chrome)
 if(BUILD_PHOSPHOR_SHELL)

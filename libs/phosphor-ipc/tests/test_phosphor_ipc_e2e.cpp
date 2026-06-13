@@ -13,7 +13,6 @@
 
 #include <QByteArray>
 #include <QCoreApplication>
-#include <QDir>
 #include <QEventLoop>
 #include <QJsonArray>
 #include <QJsonDocument>
@@ -24,7 +23,6 @@
 #include <QRegularExpression>
 #include <QSet>
 #include <QString>
-#include <QTemporaryDir>
 #include <QTest>
 #include <QTimer>
 #include <QtCore/qtclasshelpermacros.h>
@@ -148,9 +146,7 @@ void TestPhosphorIpcE2e::roundtrip_list()
     QVERIFY(router.registerTarget(QStringLiteral("b"), &b));
     QVERIFY(router.start(fx.sockPath));
 
-    QJsonObject req;
-    req.insert(QStringLiteral("type"), QStringLiteral("list"));
-    req.insert(QStringLiteral("id"), 2);
+    const QJsonObject req = makeReq(QStringLiteral("list"), 2);
 
     ROUNDTRIP_OR_FAIL(resp, fx.sockPath, req);
     QCOMPARE(resp.value(QStringLiteral("type")).toString(), QStringLiteral("reply"));
@@ -175,10 +171,7 @@ void TestPhosphorIpcE2e::roundtrip_schema()
     QVERIFY(router.registerTarget(QStringLiteral("echo"), &echo));
     QVERIFY(router.start(fx.sockPath));
 
-    QJsonObject req;
-    req.insert(QStringLiteral("type"), QStringLiteral("schema"));
-    req.insert(QStringLiteral("id"), 3);
-    req.insert(QStringLiteral("target"), QStringLiteral("echo"));
+    const QJsonObject req = makeReq(QStringLiteral("schema"), 3, QStringLiteral("echo"));
 
     ROUNDTRIP_OR_FAIL(resp, fx.sockPath, req);
     QCOMPARE(resp.value(QStringLiteral("type")).toString(), QStringLiteral("reply"));
@@ -242,6 +235,9 @@ void TestPhosphorIpcE2e::roundtrip_malformedRequest()
 
 void TestPhosphorIpcE2e::start_failsWhenPathConflict()
 {
+    // Fixture used for the isolated dir/path only — routerA/routerB are
+    // deliberately LOCAL so the test controls which one binds first;
+    // fx.router stays idle.
     RouterFixture fx;
     QVERIFY(fx.valid());
 
@@ -443,10 +439,7 @@ void TestPhosphorIpcE2e::pipelinedFramesAllReceiveReplies()
     constexpr int FrameCount = 100;
     QByteArray pipeline;
     for (int i = 1; i <= FrameCount; ++i) {
-        QJsonObject req;
-        req.insert(QStringLiteral("type"), QStringLiteral("list"));
-        req.insert(QStringLiteral("id"), i);
-        pipeline.append(writeLine(req));
+        pipeline.append(writeLine(makeReq(QStringLiteral("list"), i)));
     }
     socket.write(pipeline);
     socket.flush();
@@ -508,9 +501,7 @@ void TestPhosphorIpcE2e::peerDisconnectMidRequest()
     // Client B: a normal round-trip must still succeed. If client A
     // had wedged the router (deadlock, freed-pointer access, etc.),
     // this round-trip would hang or fail.
-    QJsonObject req;
-    req.insert(QStringLiteral("type"), QStringLiteral("list"));
-    req.insert(QStringLiteral("id"), 42);
+    const QJsonObject req = makeReq(QStringLiteral("list"), 42);
     ROUNDTRIP_OR_FAIL(resp, fx.sockPath, req);
     QCOMPARE(resp.value(QStringLiteral("type")).toString(), QStringLiteral("reply"));
     QCOMPARE(resp.value(QStringLiteral("id")).toInt(), 42);

@@ -54,7 +54,7 @@ SPDX-License-Identifier: GPL-3.0-or-later
             </arg>
         </method>
         <method name="getEmptyZones">
-            <annotation name="org.gtk.GDBus.DocString" value="Return typed list of empty zones for Snap Assist continuation. Same format as emptyZones from dragStopped."/>
+            <annotation name="org.gtk.GDBus.DocString" value="Return typed list of empty zones for Snap Assist continuation. Same EmptyZoneEntry format as the WindowDrag interface's snapAssistReady signal."/>
             <arg name="screenId" type="s" direction="in">
                 <annotation name="org.gtk.GDBus.DocString" value="Screen identifier (e.g. Dell:U2722D:115107 or Dell:U2722D:115107/vs:0)."/>
             </arg>

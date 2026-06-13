@@ -203,9 +203,13 @@ ColumnLayout {
                 var minF = param.min !== undefined ? param.min : 0;
                 var maxF = param.max !== undefined ? param.max : 1;
                 value = minF + Math.random() * (maxF - minF);
-                if (param.step !== undefined && param.step > 0)
+                if (param.step !== undefined && param.step > 0) {
                     value = Math.round(value / param.step) * param.step;
-
+                    // Step-rounding can escape the range when a bound is not
+                    // a step multiple (e.g. max 1.6, step 1 -> 2.0); the
+                    // emitted value is what persists, so clamp it back.
+                    value = Math.min(maxF, Math.max(minF, value));
+                }
                 break;
             case "int":
                 var minI = param.min !== undefined ? param.min : 0;

@@ -139,6 +139,33 @@ int AutotileEngine::pruneStaleWindows(const QSet<QString>& aliveWindowIds)
             ++it;
         }
     }
+    // Engine tracking sweep — the contract this override exists for ("window
+    // died without a windowClosed signal"): a dead window's TilingState
+    // membership is otherwise permanent, since windowOpened's ghost-removal
+    // only fires when the same window re-announces and a dead window never
+    // does — the layout retiles around a ghost tile forever. Route each
+    // stale id through the normal removal path (lifecycle hook + state
+    // removal + immediate retile of the owning screen) via onWindowRemoved.
+    QStringList staleTracked;
+    for (auto it = m_windowToStateKey.constBegin(); it != m_windowToStateKey.constEnd(); ++it) {
+        if (!aliveWindowIds.contains(it.key())) {
+            staleTracked.append(it.key());
+        }
+    }
+    for (const QString& windowId : std::as_const(staleTracked)) {
+        qCInfo(PhosphorTileEngine::lcTileEngine) << "pruneStaleWindows: removing dead tracked window" << windowId;
+        onWindowRemoved(windowId);
+        ++pruned;
+    }
+    // Min-size entries are keyed independently of tracking (windowOpened
+    // stores them before any state insert), so sweep them directly.
+    for (auto it = m_windowMinSizes.begin(); it != m_windowMinSizes.end();) {
+        if (!aliveWindowIds.contains(it.key())) {
+            it = m_windowMinSizes.erase(it);
+        } else {
+            ++it;
+        }
+    }
     return pruned;
 }
 
@@ -719,7 +746,15 @@ void AutotileEngine::setAutotileScreens(const QSet<QString>& screens)
         Q_EMIT windowsReleased(releasedWindows, removed);
     }
 
-    // Clean up any remaining overflow entries for removed screens.
+    // Clean up any remaining overflow entries for removed screens. KNOWN
+    // LIMITATION: the overflow bucket is keyed per-screenId only, while the
+    // prune loop above (by design) tears down current-context states only —
+    // a preserved other-desktop/activity state on a removed screen loses its
+    // overflow markers here, so its save-time capturePlacement records
+    // overflow-floated windows as user floats (they re-float instead of
+    // re-tiling on re-enable). Accepted: fixing it requires re-keying
+    // OverflowManager per (screen, context), and the window is narrow —
+    // toggle-off while another context holds overflow on the same screen.
     m_overflow.clearForRemovedScreens(m_autotileScreens);
 
     // Clear desktop overrides for removed screens
@@ -2203,6 +2238,13 @@ void AutotileEngine::windowClosed(const QString& rawWindowId)
     }
 
     m_autotileFloatedWindows.remove(windowId);
+    // Min-size cleanup must not depend on tracking: a window released from
+    // tracking (autotile toggle-off, orphaned VS) and later closed would hit
+    // onWindowRemoved's empty-stored-key early return and keep its entry for
+    // the session — a later re-entry reporting min 0x0 never clears it
+    // (windowOpened only stores when minWidth/minHeight > 0), inflating
+    // enforceMinSizes constraints with a stale value.
+    m_windowMinSizes.remove(windowId);
 
     onWindowRemoved(windowId);
     // Release the canonical translation last — downstream cleanup above may
@@ -3974,7 +4016,10 @@ std::optional<PhosphorEngine::WindowPlacement> AutotileEngine::capturePlacement(
     }
 
     WindowPlacement p;
-    p.windowId = windowId;
+    // Canonical id, not the raw argument: every engine map is keyed on the
+    // canonical form, and a record persisted under a mutated-appId alias
+    // would never exact-match again (only the appId FIFO fallback rescues it).
+    p.windowId = wid;
     p.appId = currentAppIdFor(windowId);
     p.screenId = key.screenId;
     p.virtualDesktop = key.desktop;

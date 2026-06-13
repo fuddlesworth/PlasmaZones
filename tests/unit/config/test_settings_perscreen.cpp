@@ -129,6 +129,28 @@ private Q_SLOTS:
         QVERIFY2(stored >= PhosphorTiles::AutotileDefaults::MinMasterCount
                      && stored <= PhosphorTiles::AutotileDefaults::MaxMasterCount,
                  "Per-screen autotile value must be clamped to valid range");
+
+        // Non-numeric payloads are REJECTED, not coerced: QVariant::toInt()
+        // silently converts garbage to 0, which the validators would then
+        // clamp/store as a real override (e.g. Position "garbage" -> 0 =
+        // TopLeft). The D-Bus dispatch path delivers raw QVariants, making
+        // this a genuine input boundary.
+        const int before = spy.count();
+        settings.setPerScreenAutotileSetting(screen, QStringLiteral("AutotileMasterCount"), QStringLiteral("garbage"));
+        QCOMPARE(spy.count(), before);
+        QCOMPARE(settings.getPerScreenAutotileSettings(screen).value(QStringLiteral("MasterCount")).toInt(), stored);
+
+        // Numeric STRINGS still convert (JSON string storage compatibility):
+        // QVariant("3").toInt(&ok) sets ok=true.
+        settings.setPerScreenAutotileSetting(screen, QStringLiteral("AutotileMasterCount"), QStringLiteral("3"));
+        QCOMPARE(settings.getPerScreenAutotileSettings(screen).value(QStringLiteral("MasterCount")).toInt(), 3);
+
+        // Same rejection contract on the zone-selector validator.
+        QSignalSpy zsSpy(&settings, &Settings::perScreenZoneSelectorSettingsChanged);
+        const QString freshScreen = QStringLiteral("test-screen-nonnumeric");
+        settings.setPerScreenZoneSelectorSetting(freshScreen, QStringLiteral("Position"), QStringLiteral("garbage"));
+        QCOMPARE(zsSpy.count(), 0);
+        QVERIFY(!settings.hasPerScreenZoneSelectorSettings(freshScreen));
     }
 
     /**

@@ -273,13 +273,13 @@ SPDX-License-Identifier: GPL-3.0-or-later
         <method name="setAllDesktopAssignments">
             <annotation name="org.gtk.GDBus.DocString" value="Batch set all per-desktop assignments (saves once). Canonical key format: 'screenId|desktopNumber' ('screenId:desktopNumber' is accepted as a legacy fallback but misparses virtual-screen ids — do not emit it)."/>
             <arg name="assignments" type="a{sv}" direction="in">
-                <annotation name="org.gtk.GDBus.DocString" value="Map of 'screen:desktop' to layoutId."/>
+                <annotation name="org.gtk.GDBus.DocString" value="Map of 'screenId|desktop' keys to layoutId."/>
             </arg>
         </method>
         <method name="getAllDesktopAssignments">
             <annotation name="org.gtk.GDBus.DocString" value="Get all per-desktop assignments."/>
             <arg name="assignments" type="a{sv}" direction="out">
-                <annotation name="org.gtk.GDBus.DocString" value="Map of 'screen:desktop' to layoutId."/>
+                <annotation name="org.gtk.GDBus.DocString" value="Map of 'screenId|desktop' keys to layoutId."/>
             </arg>
         </method>
         <method name="getVirtualDesktopCount">
@@ -426,13 +426,13 @@ SPDX-License-Identifier: GPL-3.0-or-later
         <method name="setAllActivityAssignments">
             <annotation name="org.gtk.GDBus.DocString" value="Batch set all per-activity assignments (saves once). Key format: 'screenId|activityId' (legacy ':' fallback accepted)."/>
             <arg name="assignments" type="a{sv}" direction="in">
-                <annotation name="org.gtk.GDBus.DocString" value="Map of 'screen:activity' to layoutId."/>
+                <annotation name="org.gtk.GDBus.DocString" value="Map of 'screenId|activityId' keys to layoutId."/>
             </arg>
         </method>
         <method name="getAllActivityAssignments">
             <annotation name="org.gtk.GDBus.DocString" value="Get all per-activity assignments."/>
             <arg name="assignments" type="a{sv}" direction="out">
-                <annotation name="org.gtk.GDBus.DocString" value="Map of 'screen:activity' to layoutId."/>
+                <annotation name="org.gtk.GDBus.DocString" value="Map of 'screenId|activityId' keys to layoutId."/>
             </arg>
         </method>
         <method name="setAllCombinedAssignments">

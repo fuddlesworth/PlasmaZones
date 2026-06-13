@@ -44,6 +44,7 @@
 #include <PhosphorScreens/DBusScreenAdaptor.h>
 
 #include <QDBusMetaType>
+#include <QDir>
 #include <QFile>
 #include <QHash>
 #include <QMetaMethod>
@@ -350,6 +351,20 @@ class TestDBusContractSync : public QObject
                                 .arg(interfaceName, overloads.join(QLatin1String(", ")))));
         const QHash<QString, QMetaMethod> signals_ = busSignals(mo);
 
+        // A method and a signal sharing one name on the same interface breaks
+        // QtDBus dispatch — the per-map duplicate checks above can't see the
+        // cross-map collision, so check it explicitly.
+        for (auto it = iface.methods.constBegin(); it != iface.methods.constEnd(); ++it) {
+            QVERIFY2(!iface.signalEntries.contains(it.key()),
+                     qPrintable(QStringLiteral("%1: '%2' is declared as BOTH a method and a signal in the XML")
+                                    .arg(interfaceName, it.key())));
+        }
+        for (auto it = methods.constBegin(); it != methods.constEnd(); ++it) {
+            QVERIFY2(!signals_.contains(it.key()),
+                     qPrintable(QStringLiteral("%1: adaptor declares '%2' as BOTH a bus method and a signal")
+                                    .arg(interfaceName, it.key())));
+        }
+
         // 1 + 2. Method bijection with full argument verification.
         for (auto it = iface.methods.constBegin(); it != iface.methods.constEnd(); ++it) {
             QVERIFY2(methods.contains(it.key()),
@@ -609,6 +624,43 @@ private Q_SLOTS:
     void testScreenContract()
     {
         verifyContract(PhosphorScreens::DBusScreenAdaptor::staticMetaObject, QStringLiteral("org.plasmazones.Screen"));
+    }
+
+    void testAllXmlFilesCovered()
+    {
+        // Completeness tripwire: every XML under dbus/ must be either tested
+        // above or on the documented out-of-scope list (the app-internal
+        // launch adaptors — see the header comment). A 16th XML added later
+        // must not go silently unchecked.
+        static const QSet<QString> covered = {
+            QStringLiteral("org.plasmazones.Autotile.xml"),      QStringLiteral("org.plasmazones.CompositorBridge.xml"),
+            QStringLiteral("org.plasmazones.Control.xml"),       QStringLiteral("org.plasmazones.LayoutRegistry.xml"),
+            QStringLiteral("org.plasmazones.Overlay.xml"),       QStringLiteral("org.plasmazones.Screen.xml"),
+            QStringLiteral("org.plasmazones.Settings.xml"),      QStringLiteral("org.plasmazones.Shader.xml"),
+            QStringLiteral("org.plasmazones.Snap.xml"),          QStringLiteral("org.plasmazones.WindowDrag.xml"),
+            QStringLiteral("org.plasmazones.WindowRules.xml"),   QStringLiteral("org.plasmazones.WindowTracking.xml"),
+            QStringLiteral("org.plasmazones.ZoneDetection.xml"),
+        };
+        static const QSet<QString> documentedOutOfScope = {
+            // App-internal single-slot launch forwarders; rationale in the
+            // file header's "NOT covered" paragraph.
+            QStringLiteral("org.plasmazones.SettingsApp.xml"),
+            QStringLiteral("org.plasmazones.EditorApp.xml"),
+        };
+        const QDir xmlDir(QStringLiteral(PLASMAZONES_DBUS_XML_DIR));
+        const QStringList onDisk = xmlDir.entryList({QStringLiteral("*.xml")}, QDir::Files);
+        for (const QString& f : onDisk) {
+            QVERIFY2(covered.contains(f) || documentedOutOfScope.contains(f),
+                     qPrintable(QStringLiteral("dbus/%1 is neither contract-tested nor on the documented "
+                                               "out-of-scope list — add a test slot or document it")
+                                    .arg(f)));
+        }
+        // The reverse direction: a covered entry whose file vanished means a
+        // rename slipped past the suite.
+        for (const QString& f : covered + documentedOutOfScope) {
+            QVERIFY2(xmlDir.exists(f),
+                     qPrintable(QStringLiteral("dbus/%1 is on the coverage list but missing on disk").arg(f)));
+        }
     }
 };
 

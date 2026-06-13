@@ -1193,8 +1193,11 @@ bool SettingsAdaptor::setPerScreenSettings(const QString& screenId, const QStrin
 
     for (auto it = values.constBegin(); it != values.constEnd(); ++it) {
         // Values arriving over the wire can be QDBusArgument-wrapped when
-        // they contain lists or maps; normalize to plain Qt types first —
-        // matches the single-key setPerScreenSetting path exactly.
+        // they contain lists or maps; normalize to plain Qt types first.
+        // (The single-key setPerScreenSetting path passes the QDBusVariant's
+        // payload through raw — fine there because per-screen values are
+        // scalars, which demarshal to plain QVariants; this batch path
+        // normalizes defensively since a map payload arrives wrapped.)
         const QVariant converted = DBusVariantUtils::convertDbusArgument(it.value());
         dispatch->set(screenId, it.key(), converted);
     }

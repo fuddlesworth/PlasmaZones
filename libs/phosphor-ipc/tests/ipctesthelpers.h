@@ -112,7 +112,8 @@ inline QJsonObject makeCallReq(qint64 id, const QString& target, const QString& 
 
 // Per-test router fixture: an isolated socket dir + path + router. Collapses
 // the QTemporaryDir/sockPath/IpcRouter boilerplate every e2e/subscribe test
-// otherwise repeats. Register targets BEFORE calling start().
+// otherwise repeats. Tests register their targets and call
+// `router.start(fx.sockPath)` themselves (target sets vary per test).
 struct RouterFixture
 {
     QTemporaryDir dir;
@@ -126,10 +127,6 @@ struct RouterFixture
     bool valid() const
     {
         return dir.isValid();
-    }
-    bool start()
-    {
-        return router.start(sockPath);
     }
 };
 

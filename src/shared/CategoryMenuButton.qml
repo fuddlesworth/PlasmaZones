@@ -47,9 +47,11 @@ import org.kde.kirigami as Kirigami
  * `Qt.callLater` so the click handler returns before the menu hides.
  *
  * Required:
- *   - `items`: var — list of `{ id, name, category?, dimmed?, dimReason? }`
- *     maps. A `dimmed` item renders greyed with a warning icon + `dimReason`
- *     tooltip (still selectable — the host surfaces the consequence).
+ *   - `items`: var — list of `{ id, name, category?, categoryOrder?,
+ *     dimmed?, dimReason? }` maps. A `dimmed` item renders greyed with a
+ *     warning icon + `dimReason` tooltip (still selectable — the host
+ *     surfaces the consequence). `categoryOrder` (int) sorts top-level
+ *     categories; uncategorised items sort by name.
  *
  * Optional:
  *   - `currentId`: string — drives the checkmark and button label

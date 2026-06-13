@@ -130,7 +130,10 @@ QDBusMessage NotificationsWireTest::callSync(const QDBusMessage& message)
 QDBusMessage NotificationsWireTest::notifyMessage() const
 {
     // Empty service: on a peer connection there are no bus names, so the call
-    // routes to the peer and dispatches by object path.
+    // routes to the peer and dispatches by object path. serviceName() doubles
+    // as the INTERFACE argument here — valid only because the notifications
+    // spec uses one string ("org.freedesktop.Notifications") for both; a
+    // spec-rev that splits them would need a dedicated interfaceName().
     return QDBusMessage::createMethodCall(QString(), NotificationServer::objectPath(),
                                           NotificationServer::serviceName(), QStringLiteral("Notify"));
 }

@@ -238,8 +238,10 @@ void PlasmaZonesEffect::callEndDrag(KWin::EffectWindow* window, const QString& w
                         qCDebug(lcEffect) << "endDrag RestoreSize: already at correct size, skipping";
                         break;
                     }
-                    const QRect geo(static_cast<int>(frame.x()), static_cast<int>(frame.y()), outcome.width,
-                                    outcome.height);
+                    // qRound, not truncation: fractional-scale outputs leave
+                    // sub-pixel residue in frameGeometry() (same convention as
+                    // the toRect() sites).
+                    const QRect geo(qRound(frame.x()), qRound(frame.y()), outcome.width, outcome.height);
                     if (safeWindow->isUserMove() && !(m_currentMouseButtons & Qt::LeftButton)) {
                         if (KWin::Window* kw = safeWindow->window()) {
                             kw->cancelInteractiveMoveResize();
@@ -685,7 +687,8 @@ void PlasmaZonesEffect::slotRestoreSizeDuringDrag(const QString& windowId, int w
 
     // Restore-size-only: keep current position, apply pre-snap width/height
     QRectF frame = window->frameGeometry();
-    QRect geometry(static_cast<int>(frame.x()), static_cast<int>(frame.y()), width, height);
+    // qRound, not truncation — fractional-scale sub-pixel residue (see above).
+    QRect geometry(qRound(frame.x()), qRound(frame.y()), width, height);
 
     qCDebug(lcEffect) << "Restoring size during drag:" << windowId << geometry;
     // Live drag-out unsnap: restoring pre-snap dimensions while the user is still dragging.

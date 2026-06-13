@@ -3,7 +3,7 @@
 //
 // Smoke test for phosphor-service-idle. Pins the deterministic plumbing
 // contract: QML-registration idempotency and inert construction. With no live
-// compositor (offscreen QPA) the idle protocols are unavailable, so the service
+// compositor (guiless QCoreApplication — no QPA at all) the idle protocols are unavailable, so the service
 // constructs, reports unsupported, and never crashes. The live
 // idle / inhibit lifecycle needs a real compositor and is exercised via the CLI
 // demo; the pure stage-ladder logic is unit-tested in test_statemachine.cpp.

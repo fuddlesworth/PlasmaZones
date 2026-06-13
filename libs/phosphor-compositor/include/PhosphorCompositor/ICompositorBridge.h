@@ -7,12 +7,9 @@
 
 #include <QIcon>
 #include <QObject>
-#include <QPointF>
-#include <QRect>
 #include <QRectF>
 #include <QSizeF>
 #include <QString>
-#include <QStringList>
 #include <QVector>
 
 namespace PhosphorCompositor {

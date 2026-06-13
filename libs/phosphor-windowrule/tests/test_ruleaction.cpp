@@ -327,6 +327,9 @@ private Q_SLOTS:
 
     void testBorderColorActions_requireHex()
     {
+        // Single colour action since setInactiveBorderColor's removal (see the
+        // header note above); kept loop-shaped so a future colour action only
+        // adds an initializer entry.
         for (const QLatin1StringView type : {ActionType::SetBorderColor}) {
             QJsonObject o;
             o.insert(QStringLiteral("type"), QString::fromLatin1(type));
@@ -413,5 +416,5 @@ private Q_SLOTS:
     }
 };
 
-QTEST_MAIN(TestRuleAction)
+QTEST_GUILESS_MAIN(TestRuleAction)
 #include "test_ruleaction.moc"

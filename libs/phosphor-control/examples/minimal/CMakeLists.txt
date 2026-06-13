@@ -16,7 +16,12 @@
 # in-tree builds where the parent already set the policies.
 if(COMMAND qt_policy)
     qt_policy(SET QTP0001 NEW)
-    qt_policy(SET QTP0004 NEW)
+    # QTP0004 exists only from Qt 6.8 — qt_policy(SET) on an unknown policy
+    # fatal-errors, and the COMMAND guard alone doesn't prove the policy
+    # exists (qt_policy ships from 6.5).
+    if(POLICY QTP0004)
+        qt_policy(SET QTP0004 NEW)
+    endif()
 endif()
 
 # Pull in Widgets locally — the parent lib's find_package only lists the

@@ -285,12 +285,20 @@ public Q_SLOTS:
      * @param windowId Window ID from the effect
      * @param zoneId Output: zone ID to snap to, or empty if none
      * @return true if the window had a zone before it was floated
+     *
+     * No in-tree caller: the effect's unfloat flow moved to
+     * SnapAdaptor::calculateUnfloatRestore. Kept as external contract
+     * surface (scripting/automation query into the pre-float state),
+     * same policy as AutotileAdaptor::retileAllScreens.
      */
     bool getPreFloatZone(const QString& windowId, QString& zoneId);
 
     /**
      * Clear the saved "zone before float" after restoring on unfloat.
      * @param windowId Window ID from the effect
+     *
+     * No in-tree caller (see getPreFloatZone) — kept as the write half of
+     * the same external contract surface.
      */
     void clearPreFloatZone(const QString& windowId);
 
@@ -311,6 +319,10 @@ public Q_SLOTS:
 
     /**
      * Check if a window has stored pre-tile geometry
+     *
+     * No in-tree caller (the effect restores via getValidatedPreTileGeometry
+     * without a pre-check) — kept as external contract surface, same policy
+     * as AutotileAdaptor::retileAllScreens.
      */
     bool hasPreTileGeometry(const QString& windowId);
 
@@ -418,6 +430,10 @@ public Q_SLOTS:
     /**
      * Get the last zone a window was snapped to
      * @return PhosphorZones::Zone ID of last used zone, or empty string if none
+     *
+     * No in-tree caller (snap-to-last-zone moved to SnapAdaptor) — kept as
+     * external contract surface, same policy as
+     * AutotileAdaptor::retileAllScreens.
      */
     QString getLastUsedZoneId();
 

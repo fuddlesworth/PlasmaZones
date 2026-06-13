@@ -221,7 +221,11 @@ QVariant validatePerScreenAutotileValue(const QString& key, const QVariant& valu
     // reject an empty override outright, since a blank per-screen algorithm or
     // curve is never a meaningful override.
     if (k == PerScreenKeys::Algorithm || k == PerScreenKeys::AnimationEasingCurve)
-        return value.toString().isEmpty() ? QVariant() : value;
+        // Canonicalize to QString: the backend round-trips these via
+        // writeString/readString, so a non-string payload accepted here
+        // (e.g. an int over D-Bus) would change observable type across a
+        // restart (int in the writing session, string after reload).
+        return value.toString().isEmpty() ? QVariant() : QVariant(value.toString());
     if (k == PerScreenKeys::UsePerSideOuterGap || k == PerScreenKeys::FocusNewWindows || k == PerScreenKeys::SmartGaps
         || k == PerScreenKeys::FocusFollowsMouse || k == PerScreenKeys::RespectMinimumSize
         || k == PerScreenKeys::AnimationsEnabled)

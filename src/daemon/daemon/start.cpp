@@ -36,7 +36,7 @@
 #include <PhosphorZones/ZoneDetector.h>
 #include <QProcess>
 #include <QPointer>
-#include "../config/settings.h"
+#include "../../config/settings.h"
 #include <QGuiApplication>
 #include <QScreen>
 #include <PhosphorScreens/ScreenIdentity.h>

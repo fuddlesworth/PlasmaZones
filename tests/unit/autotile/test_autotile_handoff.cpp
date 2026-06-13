@@ -65,7 +65,7 @@ private Q_SLOTS:
         PhosphorEngine::IPlacementEngine::HandoffContext ctx;
         ctx.windowId = windowId;
         ctx.toScreenId = screen;
-        ctx.fromEngineId = QStringLiteral("snap");
+        ctx.fromEngineId = PhosphorEngine::WindowPlacement::snapEngineId();
         ctx.wasFloating = true;
         engine.handoffReceive(ctx);
         QCoreApplication::processEvents();
@@ -87,7 +87,7 @@ private Q_SLOTS:
         PhosphorEngine::IPlacementEngine::HandoffContext ctx;
         ctx.windowId = windowId;
         ctx.toScreenId = screen;
-        ctx.fromEngineId = QStringLiteral("autotile");
+        ctx.fromEngineId = PhosphorEngine::WindowPlacement::autotileEngineId();
         ctx.wasFloating = false;
         engine.handoffReceive(ctx);
         QCoreApplication::processEvents();
@@ -291,7 +291,7 @@ private Q_SLOTS:
         PhosphorEngine::EngineSlot slot;
         slot.state = PhosphorEngine::WindowPlacement::stateSnapped();
         slot.zoneIds = QStringList{QStringLiteral("z1")};
-        rec.engines.insert(QStringLiteral("snap"), slot);
+        rec.engines.insert(PhosphorEngine::WindowPlacement::snapEngineId(), slot);
         wts.placementStore().record(rec);
 
         // KWin reopens it (new uuid) on the AUTOTILE monitor DP-2.
@@ -345,7 +345,7 @@ private Q_SLOTS:
         PhosphorEngine::EngineSlot slot;
         slot.state = PhosphorEngine::WindowPlacement::stateSnapped();
         slot.zoneIds = QStringList{QStringLiteral("z1")};
-        rec.engines.insert(QStringLiteral("snap"), slot);
+        rec.engines.insert(PhosphorEngine::WindowPlacement::snapEngineId(), slot);
         wts.placementStore().record(rec);
 
         engine.windowOpened(QStringLiteral("app|new"), autotileScreen);

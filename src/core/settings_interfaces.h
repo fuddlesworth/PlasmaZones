@@ -28,7 +28,8 @@ struct ZoneSelectorConfig
 {
     // NOTE: these member defaults hand-duplicate the ConfigDefaults
     // zone-selector default accessors — position(), layoutMode(),
-    // maxRows(), … (unprefixed; a ConfigDefaults include here would cycle).
+    // maxRows(), … (unprefixed; core interface headers must not depend on
+    // the config layer, so the values are duplicated rather than included).
     // They matter only for BARE default construction — every production
     // path (Settings::resolvedZoneSelectorConfig and the ISettings default
     // implementation) populates from the accessors, so a retuned

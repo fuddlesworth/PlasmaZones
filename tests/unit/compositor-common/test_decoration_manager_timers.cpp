@@ -13,6 +13,7 @@
  * placement-ordering, and rule-veto semantics live in the sibling suite.
  */
 
+#include <QElapsedTimer>
 #include <QSignalSpy>
 #include <QTest>
 
@@ -345,6 +346,29 @@ private Q_SLOTS:
         m_mgr->releaseKind(Win1, OwnerKind::Autotile, Restore::Deferred);
         // Nobody calls drainPendingRestores() — the fallback must.
         QTRY_COMPARE(m_bridge->window(Win1)->noBorder, false);
+    }
+
+    void testShrinkIntervalAfterDeferReArmsActiveCountdown()
+    {
+        // Ordering-contract pin for the test seam: a deferred release FIRST
+        // arms the countdown at the production 500 ms; shrinking the
+        // interval afterwards must restart the ACTIVE timer with the new
+        // value (armFallbackTimer deliberately never restarts an active
+        // countdown, so the seam itself has to re-arm). Without the re-arm
+        // the restore would still land — but only after the full production
+        // interval; the elapsed-time bound below is what pins the contract.
+        m_bridge->addWindow(Win1);
+        m_mgr->acquire(Win1, DecorationManager::autotile(Screen1));
+        m_mgr->releaseKind(Win1, OwnerKind::Autotile, Restore::Deferred); // arms at 500 ms
+        m_mgr->setFallbackIntervalForTesting(TestFallbackMs); // must re-arm at 25 ms
+
+        QElapsedTimer clock;
+        clock.start();
+        QTRY_COMPARE(m_bridge->window(Win1)->noBorder, false);
+        QVERIFY2(clock.elapsed() < 400,
+                 qPrintable(QStringLiteral("fallback fired after %1 ms — the shrunk interval was not applied "
+                                           "to the already-armed countdown")
+                                .arg(clock.elapsed())));
     }
 
     void testReleaseAllOfKindDeferredDrains()

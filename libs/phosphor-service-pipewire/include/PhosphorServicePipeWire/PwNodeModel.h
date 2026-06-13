@@ -4,13 +4,14 @@
 #pragma once
 
 #include <PhosphorServicePipeWire/phosphorservicepipewire_export.h>
-// Full definitions, not forward declarations, for the two types this
-// header's moc surface exposes: the `connection` Q_PROPERTY carries
-// PipeWireConnection* (Qt6 moc auto-registers property metatypes, and
-// QMetaType SFINAE-probes completeness — a fwd decl would re-fire GCC's
-// -Wsfinae-incomplete once moc aggregation order stops shielding it), and
-// the `node` role hands consumers PwNode* through data(), so the full type
-// is included for them here (PipeWireConnection.h already pulls it in).
+// Full definition for the ONE type this header's moc surface exposes: the
+// `connection` Q_PROPERTY carries PipeWireConnection* (Qt6 moc
+// auto-registers property metatypes, and QMetaType SFINAE-probes
+// completeness — a fwd decl would re-fire GCC's -Wsfinae-incomplete once
+// moc aggregation order stops shielding it). PwNode.h is NOT moc surface
+// (the `node` role travels inside a QVariant through data()); it is
+// included purely for consumers of that role, and PipeWireConnection.h
+// already pulls it in anyway.
 #include <PhosphorServicePipeWire/PipeWireConnection.h>
 #include <PhosphorServicePipeWire/PwNode.h>
 

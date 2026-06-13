@@ -170,6 +170,20 @@ void AutotileHandler::slotScreensChanged(const QStringList& screenIds, bool isDe
                 if (m_effect->isWindowFloating(windowId)) {
                     continue;
                 }
+                // Fullscreen windows: KWin owns their geometry and re-asserts
+                // the fullscreen frame against any moveResize, so the
+                // geometry-restore steps below would fight it and park the
+                // window wherever KWin's exit-restore lands. The
+                // enter-fullscreen slot already released the decoration and
+                // border tracking. DO demote — this screen is leaving
+                // autotile, and stale tracking would make the exit-fullscreen
+                // slot re-claim the window on a no-longer-autotile screen.
+                if (w->isFullScreen()) {
+                    if (m_notifiedWindows.remove(windowId)) {
+                        m_notifiedWindowScreens.remove(windowId);
+                    }
+                    continue;
+                }
                 // Capture tracked-ness BEFORE demoting: it is the only
                 // evidence the window was actually autotile-managed on this
                 // desktop. The daemon-fallback restore below must never fire
@@ -759,7 +773,11 @@ void AutotileHandler::slotWindowMinimizedChanged(KWin::EffectWindow* w)
         notifyWindowAdded(w);
         return;
     }
-    saveAndRecordPreAutotileGeometry(windowId, screenId, w->frameGeometry());
+    // No pre-autotile geometry capture here: a minimize-floated window cannot
+    // move while minimized, so its frame is always the tiled rect — recording
+    // it would poison the local float-back cache for windows with no prior
+    // entry (snap→autotile transitions), and a genuine entry already exists
+    // from the original capture.
 
     qCInfo(lcEffect) << "Autotile: window unminimized, unfloating:" << windowId << "on" << screenId;
 
@@ -800,7 +818,9 @@ void AutotileHandler::slotWindowMaximizedStateChanged(KWin::EffectWindow* w, boo
 
 void AutotileHandler::slotWindowFullScreenChanged(KWin::EffectWindow* w)
 {
-    if (!w) {
+    // isDeleted: a dying window's fullscreen flip must not create a stale
+    // decoration claim / border-tracking entry that only close-cleanup sweeps.
+    if (!w || w->isDeleted()) {
         return;
     }
     const QString windowId = m_effect->getWindowId(w);
@@ -812,6 +832,13 @@ void AutotileHandler::slotWindowFullScreenChanged(KWin::EffectWindow* w)
         // Windows we never tiled fall through both guards (no-op).
         const QString screenId = m_notifiedWindowScreens.value(windowId);
         if (!m_notifiedWindows.contains(windowId) || screenId.isEmpty()) {
+            return;
+        }
+        // Floating windows stay released: a window floated while fullscreen
+        // (manual toggle, minimize-float, overflow batch-float — all keep
+        // m_notifiedWindows intact) is free-floating on exit; re-claiming it
+        // would hide its title bar with no retile ever restoring it.
+        if (m_effect->isWindowFloating(windowId)) {
             return;
         }
         AutotileStateHelpers::addTiledOnScreen(m_border, screenId, windowId);

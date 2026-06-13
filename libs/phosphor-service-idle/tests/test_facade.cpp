@@ -4,7 +4,7 @@
 // Facade test for the public IdleService. The compositor-driven idle advance
 // needs a live session, but the wiring that does not (stage configuration round
 // trip + sort, inhibition ref-count toggling, inert defaults) is deterministic
-// under the offscreen platform and pinned here. The stage-advance path itself is
+// without a compositor (guiless QCoreApplication — no QPA at all) and pinned here. The stage-advance path itself is
 // covered by the state-machine unit test against a fake source.
 //
 // Coverage boundary: the inhibit -> disarm-the-ladder bridge (inhibitedChanged

@@ -27,6 +27,14 @@
 // PerScreenPathResolver's prefix→category mapping table — a rename here
 // updates both in lockstep instead of silently desyncing the JSON path
 // resolver from the group accessors.
+//
+// MIGRATION-FROZEN: configmigration.cpp's v1→v2 INI migration matches
+// per-screen groups through the live resolver (and therefore through these
+// spellings). Renaming any of them would retarget the v1 migration to
+// names no historical INI ever held, silently dropping per-screen
+// overrides on migration. A rename therefore requires a schema-version
+// bump with frozen Legacy copies of the old spellings — same policy as
+// the ConfigKeys::Legacy accessors.
 #define P_PER_SCREEN_PREFIX_ZONE_SELECTOR "ZoneSelector"
 #define P_PER_SCREEN_PREFIX_AUTOTILE "AutotileScreen"
 #define P_PER_SCREEN_PREFIX_SNAPPING "SnappingScreen"
@@ -909,3 +917,6 @@ inline QString disableRuleActivitySuffix()
 
 #undef P_CONFIG_KEY
 #undef P_CONFIG_GROUP
+// P_PER_SCREEN_PREFIX_* deliberately NOT undef'd: perscreenresolver.cpp
+// consumes them after including this header (the single-definition-point
+// contract above). Do not "clean up" by undef'ing them here.

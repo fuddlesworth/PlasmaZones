@@ -14,9 +14,9 @@ if(COMMAND qt_policy)
     qt_policy(SET QTP0001 NEW)
 endif()
 
-# AUTOMOC is required so the QML module's metatype generation picks up
-# any Q_OBJECT we add here.
-set(CMAKE_AUTOMOC ON)
+# CMAKE_AUTOMOC is NOT set here: the top level enables it globally and
+# qt_add_qml_module enables it on its own targets — the sibling popout demo
+# documents the same redundancy.
 
 # Demo QML lives in this directory; bundle as its own QML module so
 # qmlcachegen can compile it.

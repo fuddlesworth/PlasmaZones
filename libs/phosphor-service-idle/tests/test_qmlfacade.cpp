@@ -65,7 +65,7 @@ void IdleQmlFacadeTest::moduleLoadsAndServiceBinds()
     std::unique_ptr<QObject> root = create(component);
     QVERIFY2(root != nullptr, qPrintable(component.errorString())); // module + types resolved
 
-    // Under the offscreen platform there is no compositor, so supported / idle /
+    // With no compositor (guiless QCoreApplication), supported / idle /
     // inhibited read false. The stages assigned in QML round-trip (one valid
     // stage), confirming the QVariantList property is writable from QML.
     QCOMPARE(root->property("serviceSupported").toBool(), false);

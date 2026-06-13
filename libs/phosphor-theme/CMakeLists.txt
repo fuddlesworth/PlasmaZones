@@ -197,11 +197,6 @@ target_link_libraries(PhosphorThemeQml
         Qt6::Quick
 )
 
-set_target_properties(PhosphorThemeQml PROPERTIES
-    VERSION ${PHOSPHORTHEME_VERSION}
-    SOVERSION 0
-)
-
 # ═══════════════════════════════════════════════════════════════════════════════
 # QML Module — SHARED (install-only runtime plugin)
 # ═══════════════════════════════════════════════════════════════════════════════

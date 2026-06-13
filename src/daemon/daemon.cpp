@@ -1316,6 +1316,16 @@ bool Daemon::init()
             [screenModeForWindow](const QString& windowId) -> bool {
                 return screenModeForWindow(windowId) == PhosphorZones::AssignmentEntry::Autotile;
             });
+
+        // Tiled predicate (distinct from the MODE predicate above): live
+        // engine state, "is this window actively tiled right now". Guards
+        // recordFreeGeometry against recording a tile rect as a float-back —
+        // the engine-backed answer survives effect reloads, which the
+        // effect-side capture guard cannot.
+        m_windowTrackingAdaptor->service()->setAutotileTiledPredicate(
+            [autotilePtr = QPointer(autotileEngine)](const QString& windowId) -> bool {
+                return autotilePtr && autotilePtr->isWindowTiled(windowId);
+            });
     }
 
     // Wire SnapEngine's back-reference to the window tracking adaptor.

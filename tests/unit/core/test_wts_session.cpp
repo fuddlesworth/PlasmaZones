@@ -206,7 +206,7 @@ private Q_SLOTS:
         PhosphorEngine::EngineSlot snapSlot;
         snapSlot.state = PhosphorEngine::WindowPlacement::stateSnapped();
         snapSlot.zoneIds = QStringList{m_zoneIds[0]};
-        rec.engines.insert(QStringLiteral("snap"), snapSlot);
+        rec.engines.insert(PhosphorEngine::WindowPlacement::snapEngineId(), snapSlot);
         m_service->placementStore().record(rec);
 
         QVERIFY(m_service->zonesForWindow(windowId).isEmpty()); // live map is cold

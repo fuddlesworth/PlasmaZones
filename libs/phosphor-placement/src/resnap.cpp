@@ -229,7 +229,6 @@ QHash<QString, WindowTrackingService::PendingRestoreTarget> WindowTrackingServic
 {
     QHash<QString, PendingRestoreTarget> result;
     int currentDesktop = m_virtualDesktopManager ? m_virtualDesktopManager->currentDesktop() : 0;
-    QString currentActivity = m_layoutManager ? m_layoutManager->currentActivity() : QString();
 
     // Source the effect's instant-restore cache from the unified placement store:
     // one snapped WindowPlacement per appId-keyed window, resolved to its zone
@@ -254,9 +253,12 @@ QHash<QString, WindowTrackingService::PendingRestoreTarget> WindowTrackingServic
         const QString screenId = resolveEffectiveScreenId(p.screenId);
 
         // Skip screens currently in autotile mode — autotile owns placement there
-        // and would otherwise fight a stale snap teleport.
+        // and would otherwise fight a stale snap teleport. Both context
+        // dimensions come from the RECORD (mirrors the cross-engine claim
+        // gates, which key desktop AND activity off the record so the
+        // engines reach identical verdicts).
         if (m_layoutManager
-            && m_layoutManager->modeForScreen(screenId, p.virtualDesktop, currentActivity)
+            && m_layoutManager->modeForScreen(screenId, p.virtualDesktop, p.activity)
                 != PhosphorZones::AssignmentEntry::Mode::Snapping) {
             continue;
         }

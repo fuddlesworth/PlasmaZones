@@ -668,12 +668,18 @@ void DecorationManager::armFallbackTimer()
             drainPendingRestoresInternal(/*fromFallback=*/true);
         });
     }
-    // Never restart an already-running countdown: explicit batch-completion
-    // drains can arrive at sub-interval cadence during multi-batch resnap
-    // churn, and each veto re-queue calls back here — restarting would
-    // postpone the fallback (and with it the MaxVetoRetries budget, which
-    // only fallback cycles advance) indefinitely, recreating the unbounded
-    // ownerless-hidden-window strand the budget exists to prevent.
+    // Never restart an already-running countdown. The arm churn this guards
+    // against: finishRelease arms on every new deferred release, and the
+    // 2nd..Nth vetoed windows within one drain chain each re-arm — without
+    // the guard, steady release/veto traffic would push the countdown (and
+    // with it the MaxVetoRetries budget, which only fallback cycles advance)
+    // out indefinitely. Explicit drains are NOT covered by this guard and DO
+    // reset the countdown by design: drainPendingRestoresInternal cancels
+    // the timer at drain entry, so a veto re-queue inside that drain arms a
+    // fresh full interval — acceptable, because the drain itself just
+    // re-evaluated the veto (it is the liveness event the fallback exists
+    // to approximate), and once explicit drains stop, fallback cycles bound
+    // the strand.
     if (m_pendingFallback->isActive()) {
         return;
     }

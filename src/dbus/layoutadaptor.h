@@ -165,7 +165,8 @@ public Q_SLOTS:
     int getModeForScreenDesktop(const QString& screenId, int virtualDesktop);
     QString getSnappingLayoutForScreenDesktop(const QString& screenId, int virtualDesktop);
     QString getTilingAlgorithmForScreenDesktop(const QString& screenId, int virtualDesktop);
-    void setAllDesktopAssignments(const QVariantMap& assignments); // Batch set - key: "screen:desktop", value: layoutId
+    void setAllDesktopAssignments(
+        const QVariantMap& assignments); // Batch set - key: "screenId|desktop" (legacy ':' accepted), value: layoutId
 
     // Individual full-entry assignment (KCM sends complete PhosphorZones::AssignmentEntry per context)
     void setAssignmentEntry(const QString& screenId, int virtualDesktop, const QString& activity, int mode,
@@ -250,8 +251,8 @@ public Q_SLOTS:
     void assignLayoutToScreenActivity(const QString& screenId, const QString& activityId, const QString& layoutId);
     void clearAssignmentForScreenActivity(const QString& screenId, const QString& activityId);
     bool hasExplicitAssignmentForScreenActivity(const QString& screenId, const QString& activityId);
-    void
-    setAllActivityAssignments(const QVariantMap& assignments); // Batch set - key: "screen:activity", value: layoutId
+    void setAllActivityAssignments(const QVariantMap& assignments); // Batch set - key: "screenId|activityId" (legacy
+                                                                    // ':' accepted), value: layoutId
 
     // Combined-context (screen + desktop + activity) batch setter —
     // triple-axis sibling of the Activity / Desktop batches. Pure-Activity /

@@ -292,10 +292,19 @@ void AutotileHandler::notifyWindowsAddedBatch(const QList<KWin::EffectWindow*>& 
         m_notifiedWindows.insert(windowId);
         m_notifiedWindowScreens[windowId] = screenId;
 
-        // knownFreeFloating=true: window-opened path — see notifyWindowAdded()
-        // for rationale. Fresh windows aren't in the FloatingCache yet.
+        // knownFreeFloating only for windows we do NOT track as tiled. The
+        // batch is also the RE-announce path (daemon restart, toggle-on,
+        // screen-add) where a window's current frame is its tiled zone rect —
+        // border tracking survives daemon restarts, so isTiledWindow is
+        // authoritative here. Passing true for a tiled window would push
+        // storePreTileGeometry with overwrite=true and destroy the daemon's
+        // persisted free geometry (a snap→autotile window has no local
+        // bucket entry, so the exact-match early-return cannot save it).
+        // Genuinely fresh windows (not yet tiled) keep the spawn-geometry
+        // overwrite semantics — see notifyWindowAdded() for that rationale.
+        const bool freshFrame = !AutotileStateHelpers::isTiledWindow(m_border, windowId);
         saveAndRecordPreAutotileGeometry(windowId, screenId, w->frameGeometry(),
-                                         /*knownFreeFloating=*/true);
+                                         /*knownFreeFloating=*/freshFrame);
 
         const QSize minSize = declaredMinSize(w);
 
@@ -659,8 +668,13 @@ void AutotileHandler::handleDragToFloat(KWin::EffectWindow* w, const QString& wi
 
 void AutotileHandler::onDaemonReady()
 {
-    loadSettings();
+    // Connect BEFORE querying: a screensChanged emitted after the daemon
+    // serves Properties.Get but before our AddMatch lands would be both lost
+    // and unable to bump the generation guard. Connect-then-query is
+    // strictly sound — a signal lost pre-AddMatch implies the Get (served
+    // after the change) already returns the new set.
     connectSignals();
+    loadSettings();
     m_notifiedWindows.clear();
     m_notifiedWindowScreens.clear();
     m_savedNotifiedForDesktopReturn.clear();
