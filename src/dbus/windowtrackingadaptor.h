@@ -7,6 +7,7 @@
 #include <PhosphorEngine/WindowRegistry.h>
 #include <PhosphorPlacement/WindowTrackingService.h>
 #include <PhosphorEngine/PlacementEngineBase.h>
+#include <PhosphorZones/AssignmentEntry.h>
 #include <PhosphorSnapEngine/INavigationStateProvider.h>
 #include <PhosphorProtocol/AutotileMarshalling.h>
 #include <PhosphorProtocol/WindowMarshalling.h>
@@ -151,7 +152,7 @@ public:
      *        RestorePosition evaluation.
      *
      * Non-owning. Used by the restore-position predicate (see enginewiring.cpp)
-     * to override the global `restoreUnsnappedWindowsOnLogin` setting for a
+     * to override the per-engine `*RestoreFloatedWindowsOnLogin` settings for a
      * matched window. A lazily-built RuleEvaluator binds to the store's full
      * rule set; it self-invalidates on in-place rule edits via the set's
      * revision counter, so no rulesChanged subscription is required.
@@ -610,13 +611,14 @@ public:
      */
     void loadState();
 
-    /// Resolve whether an unsnapped (free / snap-floated) window should have its
-    /// previous position restored on open. Consulted by the restore-position
-    /// predicate the daemon injects into SnapEngine (in-process, not via D-Bus).
-    /// A matched RestorePosition window rule wins; otherwise the global
-    /// `restoreUnsnappedWindowsOnLogin` setting decides. Builds a WindowQuery
-    /// from the window registry metadata.
-    bool shouldRestoreUnsnappedPosition(const QString& windowId);
+    /// Resolve whether a FLOATED window should have its previous position restored
+    /// on open. Consulted by the restore-position predicate the daemon injects into
+    /// BOTH engines (in-process, not via D-Bus); @p mode selects which per-engine
+    /// global default applies (snap-floated vs autotile-floated). A matched
+    /// RestorePosition window rule wins (engine-neutral); otherwise the
+    /// per-engine `*RestoreFloatedWindowsOnLogin` setting decides. Builds a
+    /// WindowQuery from the window registry metadata.
+    bool shouldRestoreFloatedPosition(const QString& windowId, PhosphorZones::AssignmentEntry::Mode mode);
     /**
      * @brief Drop unified WindowPlacement records for excluded appIds.
      *
@@ -960,6 +962,7 @@ private:
     QPointer<PhosphorEngine::PlacementEngineBase> m_snapEngine;
     QPointer<PhosphorEngine::PlacementEngineBase> m_autotileEngine;
     QPointer<PhosphorSnapEngine::SnapEngine> m_cachedSnapEngine;
+    QPointer<PhosphorTileEngine::AutotileEngine> m_cachedAutotileEngine;
 
     // Central dispatcher: adaptor methods route lifecycle / resnap /
     // restore calls through this instead of direct engine pointer checks.
@@ -1000,7 +1003,7 @@ private:
     QPointer<PhosphorEngine::WindowRegistry> m_windowRegistry;
 
     // Unified window-rule store (daemon-owned, not owned here) + a lazily-built
-    // evaluator over its full rule set, used only by shouldRestoreUnsnappedPosition.
+    // evaluator over its full rule set, used only by shouldRestoreFloatedPosition.
     // The evaluator self-invalidates on in-place rule edits via the set revision,
     // so it is built once on first use. Reset in setWindowRuleStore only when the
     // store pointer actually changes (a same-store rebind keeps the evaluator).

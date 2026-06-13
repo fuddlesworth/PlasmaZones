@@ -284,7 +284,7 @@ private Q_SLOTS:
     // ────────────────────────────────────────────────────────────────────
     // RestorePosition rule override resolves through the composite windowId.
     //
-    // Regression: shouldRestoreUnsnappedPosition must extract the BARE instance
+    // Regression: shouldRestoreFloatedPosition must extract the BARE instance
     // id from the composite `appId|instanceId` before the WindowRegistry lookup
     // (the registry is keyed by instance id). Looking up by the composite id
     // always misses, which would silently disable every RestorePosition rule and
@@ -316,7 +316,7 @@ private Q_SLOTS:
         const auto detach = qScopeGuard([this] {
             m_wta->setWindowRuleStore(nullptr);
         });
-        m_settings->setRestoreUnsnappedWindowsOnLogin(true); // global default ON
+        m_settings->setSnappingRestoreFloatedWindowsOnLogin(true); // global default ON
 
         // Dolphin's metadata is registered under the BARE instance id.
         const QString dolphinInstance = QStringLiteral("dolphin-uuid-1");
@@ -326,23 +326,32 @@ private Q_SLOTS:
         // the same identity helper the daemon uses) — the rule must still resolve
         // (false) and override the global ON. On the pre-fix code metadata() missed
         // and this returned the global default (true).
-        QVERIFY2(!m_wta->shouldRestoreUnsnappedPosition(
-                     PhosphorIdentity::WindowId::buildCompositeId(QStringLiteral("org.kde.dolphin"), dolphinInstance)),
+        QVERIFY2(!m_wta->shouldRestoreFloatedPosition(
+                     PhosphorIdentity::WindowId::buildCompositeId(QStringLiteral("org.kde.dolphin"), dolphinInstance),
+                     PhosphorZones::AssignmentEntry::Mode::Snapping),
                  "a matched RestorePosition(false) rule must override the global ON setting");
+
+        // The RestorePosition rule is engine-neutral: it overrides the global for
+        // autotile-floated windows too.
+        QVERIFY2(!m_wta->shouldRestoreFloatedPosition(
+                     PhosphorIdentity::WindowId::buildCompositeId(QStringLiteral("org.kde.dolphin"), dolphinInstance),
+                     PhosphorZones::AssignmentEntry::Mode::Autotile),
+                 "a matched RestorePosition(false) rule must override the global ON setting (autotile too)");
 
         // An unmatched window falls back to the global setting (ON).
         const QString konsoleInstance = QStringLiteral("konsole-uuid-1");
         m_registry->upsert(konsoleInstance, {QStringLiteral("org.kde.konsole"), QString(), QString()});
-        QVERIFY2(m_wta->shouldRestoreUnsnappedPosition(
-                     PhosphorIdentity::WindowId::buildCompositeId(QStringLiteral("org.kde.konsole"), konsoleInstance)),
-                 "an unmatched window falls back to the global restoreUnsnappedWindowsOnLogin = true");
+        QVERIFY2(m_wta->shouldRestoreFloatedPosition(
+                     PhosphorIdentity::WindowId::buildCompositeId(QStringLiteral("org.kde.konsole"), konsoleInstance),
+                     PhosphorZones::AssignmentEntry::Mode::Snapping),
+                 "an unmatched window falls back to the global snappingRestoreFloatedWindowsOnLogin = true");
     }
 
     // ────────────────────────────────────────────────────────────────────
     // The no-rule fallback branches: with no store, or a store that has no
-    // metadata for the window, the global restoreUnsnappedWindowsOnLogin
+    // metadata for the window, the per-engine *RestoreFloatedWindowsOnLogin
     // setting is the whole policy. Guards the early-outs in
-    // shouldRestoreUnsnappedPosition (null store / registry, metadata miss) —
+    // shouldRestoreFloatedPosition (null store / registry, metadata miss) —
     // a regression flipping either to a hardcoded false would silently disable
     // restore for every not-yet-registered window at session start.
     // ────────────────────────────────────────────────────────────────────
@@ -351,12 +360,22 @@ private Q_SLOTS:
         const QString unseen = PhosphorIdentity::WindowId::buildCompositeId(QStringLiteral("org.kde.dolphin"),
                                                                             QStringLiteral("unseen-uuid"));
 
-        // No store wired → global setting decides, both polarities.
+        // No store wired → per-engine global setting decides, both polarities. The
+        // two engine defaults are independent: Mode::Snapping reads the snapping
+        // setting, Mode::Autotile reads the autotile setting.
         m_wta->setWindowRuleStore(nullptr);
-        m_settings->setRestoreUnsnappedWindowsOnLogin(true);
-        QVERIFY2(m_wta->shouldRestoreUnsnappedPosition(unseen), "no store → global ON restores");
-        m_settings->setRestoreUnsnappedWindowsOnLogin(false);
-        QVERIFY2(!m_wta->shouldRestoreUnsnappedPosition(unseen), "no store → global OFF suppresses");
+        m_settings->setSnappingRestoreFloatedWindowsOnLogin(true);
+        m_settings->setAutotileRestoreFloatedWindowsOnLogin(false);
+        QVERIFY2(m_wta->shouldRestoreFloatedPosition(unseen, PhosphorZones::AssignmentEntry::Mode::Snapping),
+                 "no store → snapping global ON restores");
+        QVERIFY2(!m_wta->shouldRestoreFloatedPosition(unseen, PhosphorZones::AssignmentEntry::Mode::Autotile),
+                 "no store → autotile global OFF suppresses (independent of snapping)");
+        m_settings->setSnappingRestoreFloatedWindowsOnLogin(false);
+        m_settings->setAutotileRestoreFloatedWindowsOnLogin(true);
+        QVERIFY2(!m_wta->shouldRestoreFloatedPosition(unseen, PhosphorZones::AssignmentEntry::Mode::Snapping),
+                 "no store → snapping global OFF suppresses");
+        QVERIFY2(m_wta->shouldRestoreFloatedPosition(unseen, PhosphorZones::AssignmentEntry::Mode::Autotile),
+                 "no store → autotile global ON restores (independent of snapping)");
 
         // Store wired, but this window was never registered → metadata miss →
         // still the global setting (no rule can match a window with no query).
@@ -367,8 +386,8 @@ private Q_SLOTS:
         const auto detach = qScopeGuard([this] {
             m_wta->setWindowRuleStore(nullptr);
         });
-        m_settings->setRestoreUnsnappedWindowsOnLogin(true);
-        QVERIFY2(m_wta->shouldRestoreUnsnappedPosition(unseen),
+        m_settings->setSnappingRestoreFloatedWindowsOnLogin(true);
+        QVERIFY2(m_wta->shouldRestoreFloatedPosition(unseen, PhosphorZones::AssignmentEntry::Mode::Snapping),
                  "store wired but no metadata for this window → global ON");
     }
 

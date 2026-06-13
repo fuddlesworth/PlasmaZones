@@ -65,10 +65,14 @@ void WindowTrackingAdaptor::setEngines(PhosphorEngine::PlacementEngineBase* snap
         m_cachedSnapEngine->setShouldRestorePredicate({});
         m_cachedSnapEngine->setRestorePositionPredicate({});
     }
+    if (m_cachedAutotileEngine) {
+        m_cachedAutotileEngine->setRestorePositionPredicate({});
+    }
 
     m_snapEngine = snapEngine;
     m_autotileEngine = autotileEngine;
     m_cachedSnapEngine = qobject_cast<PhosphorSnapEngine::SnapEngine*>(snapEngine);
+    m_cachedAutotileEngine = qobject_cast<PhosphorTileEngine::AutotileEngine*>(autotileEngine);
 
     // ═══════════════════════════════════════════════════════════════════════════
     // Cross-engine references — SnapEngine needs AutotileEngine for
@@ -108,15 +112,15 @@ void WindowTrackingAdaptor::setEngines(PhosphorEngine::PlacementEngineBase* snap
             return !isPersistedContextDisabled(screenId, currentDesktop());
         });
 
-        // Unsnapped-position restore gate (free / snap-floated windows). On open
-        // the engine asks whether THIS window should return to its recorded global
-        // position — which, being in compositor-global coords, brings it back to
-        // its original monitor even when KWin's session restore reopened it on
-        // another output. shouldRestoreUnsnappedPosition resolves the per-window
-        // RestorePosition rule when one matches, otherwise the global
-        // `restoreUnsnappedWindowsOnLogin` setting.
+        // Floated-position restore gate (snap-floated windows). On open the engine
+        // asks whether THIS window should return to its recorded global position —
+        // which, being in compositor-global coords, brings it back to its original
+        // monitor even when KWin's session restore reopened it on another output.
+        // shouldRestoreFloatedPosition resolves the per-window RestorePosition rule
+        // when one matches, otherwise the per-engine
+        // `snappingRestoreFloatedWindowsOnLogin` setting (Mode::Snapping here).
         snap->setRestorePositionPredicate([this](const QString& windowId) -> bool {
-            return shouldRestoreUnsnappedPosition(windowId);
+            return shouldRestoreFloatedPosition(windowId, PhosphorZones::AssignmentEntry::Mode::Snapping);
         });
 
         // Snap-specific signal: carries PhosphorProtocol::WindowStateEntry which is snap-mode-only.
@@ -169,7 +173,18 @@ void WindowTrackingAdaptor::setEngines(PhosphorEngine::PlacementEngineBase* snap
                 &WindowTrackingAdaptor::navigationFeedback);
         // Autotile's disabled-context gate is applied centrally at save time by the
         // WindowPlacementStore serialize keep-predicate (isPersistedContextDisabled),
-        // so no engine-side predicate injection is needed.
+        // so no engine-side disabled-context predicate injection is needed.
+        //
+        // Floated-position restore IS gated per-engine, mirroring snap: an
+        // autotile-floated (untiled) window only returns to its recorded position
+        // when the autotile `restoreFloatedWindowsOnLogin` setting (or a per-window
+        // RestorePosition rule) opts it in. Same closure shape as the snap wiring
+        // above, with Mode::Autotile selecting the autotile default.
+        if (m_cachedAutotileEngine) {
+            m_cachedAutotileEngine->setRestorePositionPredicate([this](const QString& windowId) -> bool {
+                return shouldRestoreFloatedPosition(windowId, PhosphorZones::AssignmentEntry::Mode::Autotile);
+            });
+        }
     }
 
     // Cross-desktop directional move: both engines emit windowDesktopMoveRequested
@@ -220,15 +235,20 @@ void WindowTrackingAdaptor::setWindowRuleStore(PhosphorWindowRule::WindowRuleSto
     }
     m_windowRuleStore = store;
     // Drop the evaluator bound to the previous set; it rebuilds lazily against
-    // the new one on the next shouldRestoreUnsnappedPosition call.
+    // the new one on the next shouldRestoreFloatedPosition call.
     m_restorePositionEvaluator.reset();
 }
 
-bool WindowTrackingAdaptor::shouldRestoreUnsnappedPosition(const QString& windowId)
+bool WindowTrackingAdaptor::shouldRestoreFloatedPosition(const QString& windowId,
+                                                         PhosphorZones::AssignmentEntry::Mode mode)
 {
     // m_settings is a hard ctor dependency (qFatal on null), so it is non-null
-    // here — deref unguarded like every other method in this class.
-    const bool globalDefault = m_settings->restoreUnsnappedWindowsOnLogin();
+    // here — deref unguarded like every other method in this class. The global
+    // default is per-engine (snap-floated vs autotile-floated); the RestorePosition
+    // rule override below is engine-neutral.
+    const bool globalDefault = mode == PhosphorZones::AssignmentEntry::Mode::Autotile
+        ? m_settings->autotileRestoreFloatedWindowsOnLogin()
+        : m_settings->snappingRestoreFloatedWindowsOnLogin();
 
     // No rule store / metadata → the global setting is the whole policy.
     if (!m_windowRuleStore || m_windowRegistry.isNull()) {

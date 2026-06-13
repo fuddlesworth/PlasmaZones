@@ -28,7 +28,7 @@ namespace PhosphorEngine {
 /// WindowPlacement::freeGeometryByScreen.
 struct EngineSlot
 {
-    QString state; ///< engine-defined token: snap "snapped"/"floating"/"free"; autotile "tiled"/"floating"
+    QString state; ///< engine-defined token: snap "snapped"/"floating"; autotile "tiled"/"floating" ("free" retired)
     QStringList zoneIds; ///< snap slot — zone UUIDs (first is primary); empty for autotile
     int order = -1; ///< autotile slot — tile index within the screen; -1 for snap
 
@@ -117,20 +117,18 @@ struct WindowPlacement
     }
 
     /// Whether this record carries anything worth restoring. True when the window
-    /// has a captured free/float geometry OR any engine slot holds a non-`free`
-    /// state — `snapped`/`tiled` place by zone/order, `floating` restores the float
-    /// state (the engines emit windowFloatingChanged / setFloating on a floating
-    /// slot even without geometry). `free` is the unmanaged default and only counts
-    /// as content when it carries a geometry.
+    /// has a captured free/float geometry, OR a MANAGED slot (`snapped`/`tiled`,
+    /// which restore by zone/tile reference), OR a slot that still references a zone
+    /// (`zoneIds` — a floated-from-snap window's pre-float zones) or a tile order.
     ///
-    /// A bare `{free}` slot with no geometry — the residue a window leaves when it
-    /// was open but never floated, snapped, or had a frame captured (e.g. a
-    /// close-time capture after its frame was already gone) — has nothing to
-    /// restore. Such records must NOT be persisted, and must never be CONSUMED from
-    /// the per-app FIFO (the snap restore's accept predicate rejects them): at
-    /// MaxPerApp entries per app, contentless residue would otherwise starve and
-    /// even evict (removeFirst) the window's real placement, silently breaking
-    /// float/free geometry restore on the next open.
+    /// A bare slot with no geometry, no zone reference, and no tile order — whether
+    /// `floating` (a never-snapped floated window captured frame-less) or the retired
+    /// `free` token — has NOTHING to restore. Snapping now defaults every unmanaged
+    /// window to `floating`, so this geometry-less floated residue is exactly the
+    /// case that must be rejected: it must NOT be persisted, and the snap restore's
+    /// accept predicate must never CONSUME it from the per-app FIFO. At MaxPerApp
+    /// entries per app, such residue would otherwise starve and even evict
+    /// (removeFirst) the window's real placement, silently breaking geometry restore.
     bool hasRestorableContent() const
     {
         if (anyFreeGeometry().isValid()) {
@@ -138,7 +136,10 @@ struct WindowPlacement
         }
         for (auto it = engines.constBegin(); it != engines.constEnd(); ++it) {
             const EngineSlot& s = it.value();
-            if (!s.state.isEmpty() && s.state != stateFree()) {
+            if (s.state == stateSnapped() || s.state == stateTiled()) {
+                return true;
+            }
+            if (!s.zoneIds.isEmpty() || s.order >= 0) {
                 return true;
             }
         }
@@ -174,6 +175,11 @@ struct WindowPlacement
 
     /// Common state-token vocabulary. Engines may define more; these cover the
     /// built-in snap/autotile states.
+    /// Retired snap state — snapping is now two-state (snapped/floating). No engine
+    /// produces it any more; a legacy `free` record persisted by an older build
+    /// deserializes to this token and is restored as floating (see
+    /// SnapEngine::resolveWindowRestore). Retained only for that legacy-record
+    /// mapping and the tests that exercise it.
     static QLatin1String stateFree()
     {
         return QLatin1String("free");

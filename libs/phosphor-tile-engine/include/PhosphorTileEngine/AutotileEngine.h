@@ -435,6 +435,27 @@ public:
         m_persistLoadFn = std::move(loadFn);
     }
 
+    /**
+     * @brief Predicate consulted on reopen to decide whether a FLOATED (untiled)
+     *        window should have its previous global position re-applied.
+     *
+     * Mirrors SnapEngine::RestorePositionPredicate: the daemon resolves the global
+     * `autotileRestoreFloatedWindowsOnLogin` setting plus the per-window
+     * RestorePosition rule and injects the result here, keyed by the live windowId.
+     * The float STATE is always restored (the window comes back floating); only the
+     * geometry MOVE is gated. When UNSET (default), the engine preserves its
+     * historical behaviour of always re-applying the recorded position — the path
+     * unit tests rely on.
+     */
+    using RestorePositionPredicate = std::function<bool(const QString& windowId)>;
+
+    /// Inject the floated-position-restore gate. Clear with `{}` before destroying
+    /// any state captured by the closure (the daemon honours this on re-wire).
+    void setRestorePositionPredicate(RestorePositionPredicate predicate)
+    {
+        m_restorePositionPredicate = std::move(predicate);
+    }
+
     // Cross-engine handoff (see PhosphorEngine/IPlacementEngine.h for contract)
     QString engineId() const override
     {
@@ -1296,6 +1317,11 @@ private:
     // Persistence delegates (KConfig stays in WTA layer)
     std::function<void()> m_persistSaveFn;
     std::function<void()> m_persistLoadFn;
+
+    // Floated-position-restore gate. Empty until the daemon wires it; while empty
+    // the engine always re-applies a floated window's recorded position (historical
+    // behaviour). See RestorePositionPredicate doc above.
+    RestorePositionPredicate m_restorePositionPredicate{};
 
     QSet<QString> m_autotileScreens;
     QString m_algorithmId;

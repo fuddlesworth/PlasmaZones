@@ -172,8 +172,12 @@ public:
                    setSnappingStickyWindowHandlingInt NOTIFY snappingStickyWindowHandlingChanged)
     Q_PROPERTY(bool restoreWindowsToZonesOnLogin READ restoreWindowsToZonesOnLogin WRITE setRestoreWindowsToZonesOnLogin
                    NOTIFY restoreWindowsToZonesOnLoginChanged)
-    Q_PROPERTY(bool restoreUnsnappedWindowsOnLogin READ restoreUnsnappedWindowsOnLogin WRITE
-                   setRestoreUnsnappedWindowsOnLogin NOTIFY restoreUnsnappedWindowsOnLoginChanged)
+    Q_PROPERTY(bool snappingRestoreFloatedWindowsOnLogin READ snappingRestoreFloatedWindowsOnLogin WRITE
+                   setSnappingRestoreFloatedWindowsOnLogin NOTIFY snappingRestoreFloatedWindowsOnLoginChanged)
+    Q_PROPERTY(bool autotileRestoreFloatedWindowsOnLogin READ autotileRestoreFloatedWindowsOnLogin WRITE
+                   setAutotileRestoreFloatedWindowsOnLogin NOTIFY autotileRestoreFloatedWindowsOnLoginChanged)
+    Q_PROPERTY(bool snapUnfloatFallbackToZone READ snapUnfloatFallbackToZone WRITE setSnapUnfloatFallbackToZone NOTIFY
+                   snapUnfloatFallbackToZoneChanged)
     Q_PROPERTY(bool autoAssignAllLayouts READ autoAssignAllLayouts WRITE setAutoAssignAllLayouts NOTIFY
                    autoAssignAllLayoutsChanged)
     Q_PROPERTY(bool snapAssistFeatureEnabled READ snapAssistFeatureEnabled WRITE setSnapAssistFeatureEnabled NOTIFY
@@ -649,6 +653,11 @@ public:
     // value (snappingFocusNewWindows). The snap engine reads this on AutoRestored
     // commits to focus auto-placed-on-open windows.
     bool focusNewWindows() const override;
+    // ISnapSettings::unfloatFallbackToZone() — bridges to the Snapping.Behavior
+    // store value (snapUnfloatFallbackToZone). The snap engine reads this in
+    // unfloatToZone to decide whether a no-pre-float-zone unfloat snaps to a
+    // fallback zone or stays floating.
+    bool unfloatFallbackToZone() const override;
     void setMoveNewWindowsToLastZone(bool move) override;
     bool restoreOriginalSizeOnUnsnap() const override;
     void setRestoreOriginalSizeOnUnsnap(bool restore) override;
@@ -658,8 +667,12 @@ public:
     void setSnappingStickyWindowHandlingInt(int handling);
     bool restoreWindowsToZonesOnLogin() const override;
     void setRestoreWindowsToZonesOnLogin(bool restore) override;
-    bool restoreUnsnappedWindowsOnLogin() const override;
-    void setRestoreUnsnappedWindowsOnLogin(bool restore) override;
+    bool snappingRestoreFloatedWindowsOnLogin() const override;
+    void setSnappingRestoreFloatedWindowsOnLogin(bool restore) override;
+    bool autotileRestoreFloatedWindowsOnLogin() const override;
+    void setAutotileRestoreFloatedWindowsOnLogin(bool restore) override;
+    bool snapUnfloatFallbackToZone() const override;
+    void setSnapUnfloatFallbackToZone(bool enabled) override;
     bool autoAssignAllLayouts() const override;
     void setAutoAssignAllLayouts(bool enabled) override;
     bool snapAssistFeatureEnabled() const override;

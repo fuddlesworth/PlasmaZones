@@ -535,9 +535,9 @@ void ActionRegistry::registerBuiltins()
     });
 
     // RestorePosition is window-domain but NOT a border/appearance slot — it is
-    // consumed daemon-side (SnapEngine restore-position predicate), not by the
-    // effect. Unlike the border bools below it seeds FALSE: the global
-    // `restoreUnsnappedWindowsOnLogin` setting defaults ON, so a fresh rule that
+    // consumed daemon-side (both engines' restore-position predicate), not by the
+    // effect. Unlike the border bools below it seeds FALSE: the per-engine
+    // `*RestoreFloatedWindowsOnLogin` settings default ON, so a fresh rule that
     // re-asserted true would be a no-op the user has to flip. Seeding false lands
     // the rule on its only meaningful value — opt this window OUT of restore.
     registerAction(ActionDescriptor{

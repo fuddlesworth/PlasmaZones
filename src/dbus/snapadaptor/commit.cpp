@@ -246,6 +246,12 @@ PhosphorProtocol::UnfloatRestoreResult SnapAdaptor::calculateUnfloatRestore(cons
 
     UnfloatResult unfloat = m_engine->resolveUnfloatGeometry(windowId, screenId);
     if (!unfloat.found) {
+        // Mirror the live unfloat path (SnapEngine::unfloatToZone): when the window
+        // has no pre-float zone, honour the unfloatFallbackToZone setting so this
+        // D-Bus query stays consistent with the in-engine toggle behaviour.
+        unfloat = m_engine->resolveFallbackUnfloatGeometry(windowId, screenId);
+    }
+    if (!unfloat.found) {
         qCDebug(lcDbusWindow) << "calculateUnfloatRestore: no restore target for" << windowId;
         return PhosphorProtocol::UnfloatRestoreResult{};
     }
