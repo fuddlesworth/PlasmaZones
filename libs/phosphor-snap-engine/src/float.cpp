@@ -268,8 +268,17 @@ UnfloatResult SnapEngine::resolveFallbackUnfloatGeometry(const QString& windowId
     // accessors as the auto-snap chain (findEmptyZoneInLayout / zoneGeometry).
     QString zoneId;
     const QString lastUsed = m_snapState->lastUsedZoneId();
-    if (!lastUsed.isEmpty() && m_windowTracker->zoneGeometry(lastUsed, screen).isValid()) {
-        zoneId = lastUsed;
+    // lastUsedZoneId() is GLOBAL (last zone used on any screen). zoneGeometry()
+    // resolves a zone from any layout against this screen, so the geometry check
+    // alone would let a zone from another monitor's layout win here. Scope it to
+    // THIS screen's resolved layout via zoneById so "exists in this screen's
+    // layout" (above) actually holds.
+    if (!lastUsed.isEmpty()) {
+        const QUuid lastUsedUuid(lastUsed);
+        if (!lastUsedUuid.isNull() && layout->zoneById(lastUsedUuid)
+            && m_windowTracker->zoneGeometry(lastUsed, screen).isValid()) {
+            zoneId = lastUsed;
+        }
     }
     if (zoneId.isEmpty()) {
         const int desktopFilter = m_virtualDesktopManager ? m_virtualDesktopManager->currentDesktop() : 0;

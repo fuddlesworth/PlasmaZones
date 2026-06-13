@@ -86,7 +86,11 @@ add_test(NAME test_snap_engine COMMAND test_snap_engine)
 # QGuiApplication + offscreen primary screen exists and zoneGeometry() resolves —
 # the geometry-dependent path test_snap_engine.cpp (guiless) cannot reach.
 add_executable(test_snap_unfloat_fallback core/test_snap_unfloat_fallback.cpp)
-target_link_libraries(test_snap_unfloat_fallback PRIVATE Qt6::Test Qt6::Core Qt6::DBus plasmazones_core)
+# Qt6::Gui is explicit (not transitive via plasmazones_core) so QTEST_MAIN
+# resolves to QGuiApplication — the offscreen primary screen it provides is what
+# makes zoneGeometry() resolve. Relying on the transitive pull would silently
+# degrade to QCoreApplication (null primaryScreen) if core dropped Gui PUBLIC.
+target_link_libraries(test_snap_unfloat_fallback PRIVATE Qt6::Test Qt6::Core Qt6::Gui Qt6::DBus plasmazones_core)
 add_test(NAME test_snap_unfloat_fallback COMMAND test_snap_unfloat_fallback)
 
 # ═══════════════════════════════════════════════════════════════════════════════

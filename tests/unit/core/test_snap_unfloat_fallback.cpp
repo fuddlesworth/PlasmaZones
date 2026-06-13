@@ -49,9 +49,9 @@ private:
     PlasmaZones::StubZoneDetector* m_zoneDetector = nullptr;
     PhosphorPlacement::WindowTrackingService* m_wts = nullptr;
 
-    // Build a SnapEngine wired to a fresh 2-zone layout on the active registry,
-    // with its SnapState shared into the WTS (mirroring the production wiring).
-    // Returns the layout's zones so callers can assert on specific zone ids.
+    // Register a fresh equal-split layout of zoneCount zones as the active layout
+    // and return it, so callers can assert on specific zone ids. (Engine/SnapState
+    // wiring is done per-test, not here.)
     PhosphorZones::Layout* installLayout(int zoneCount)
     {
         auto* layout = createTestLayout(zoneCount, m_layoutManager);
