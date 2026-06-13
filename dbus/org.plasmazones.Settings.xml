@@ -84,11 +84,11 @@ SPDX-License-Identifier: GPL-3.0-or-later
                 <annotation name="org.gtk.GDBus.DocString" value="Setting key name."/>
             </arg>
             <arg name="schemaJson" type="s" direction="out">
-                <annotation name="org.gtk.GDBus.DocString" value="JSON: {key, type}. Type is bool, int, double, string, color, or stringlist."/>
+                <annotation name="org.gtk.GDBus.DocString" value="JSON: {key, type}. Type is bool, int, double, string, color, stringlist, or map."/>
             </arg>
         </method>
         <method name="getAllSettingSchemas">
-            <annotation name="org.gtk.GDBus.DocString" value="Get metadata for all settings. Returns JSON object mapping keys to type info."/>
+            <annotation name="org.gtk.GDBus.DocString" value="Get metadata for all settings. Returns JSON object mapping keys to type info (type is one of bool, int, double, string, color, stringlist, map)."/>
             <arg name="schemasJson" type="s" direction="out">
                 <annotation name="org.gtk.GDBus.DocString" value="JSON object: {key: {type}, ...}."/>
             </arg>

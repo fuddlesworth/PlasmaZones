@@ -1009,8 +1009,16 @@ bool SettingsAdaptor::setSettings(const QVariantMap& settings)
             const QString& key = it.key();
             auto setter = m_setters.find(key);
             if (setter == m_setters.end()) {
-                qCWarning(lcDbusSettings) << "setSettings: unknown key" << key;
-                allOk = false;
+                // A key with a getter but no setter is read-only (e.g.
+                // motionProfileTree, animationShaderSearchPaths). getAllSettings
+                // serializes those, so a getAllSettings -> setSettings round-trip
+                // legitimately carries them back; skip them silently rather than
+                // failing the whole batch. Only a key unknown to BOTH maps is a
+                // genuine error.
+                if (!m_getters.contains(key)) {
+                    qCWarning(lcDbusSettings) << "setSettings: unknown key" << key;
+                    allOk = false;
+                }
                 continue;
             }
             // Convert QDBusArgument types to plain Qt types before passing to setters.

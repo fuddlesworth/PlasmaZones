@@ -251,6 +251,13 @@ void ScreenChangeHandler::applyWindowGeometries(const PhosphorProtocol::WindowGe
     m_effect->applyStaggeredOrImmediate(toApply.size(), [this, toApply](int i) {
         const ApplyEntry& e = toApply[i];
         if (e.window && !e.window->isDeleted() && m_effect->shouldHandleWindow(e.window)) {
+            // Re-check at apply time (mirrors the build-time guard above): the
+            // window's screen can flip to autotile during the stagger interval,
+            // and a snap-path applySnapGeometry would then fight the autotile
+            // engine for placement.
+            if (m_effect->m_autotileHandler->isAutotileScreen(m_effect->getWindowScreenId(e.window))) {
+                return;
+            }
             qCInfo(lcScreenChange) << "Repositioning window" << m_effect->getWindowId(e.window) << "to" << e.geometry;
             m_effect->applySnapGeometry(e.window, e.geometry);
         }

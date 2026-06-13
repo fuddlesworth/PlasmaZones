@@ -96,6 +96,12 @@ void PlasmaZonesEffect::slotApplyGeometryRequested(const QString& windowId, int 
                               PhosphorAnimation::ProfilePaths::WindowSnapOut);
             // Drag-out unsnap: the window left zone-managed sizing.
             m_snapHandler->clearWindowSnapped(liveWindowId);
+        } else {
+            // Symmetric with the non-sizeOnly invalid-geometry path below: a
+            // garbled size-only payload is dropped, but log it rather than
+            // failing silently.
+            qCWarning(lcEffect) << "slotApplyGeometryRequested: invalid size-only dimensions for" << windowId << width
+                                << "x" << height << "— dropping";
         }
         return;
     }
