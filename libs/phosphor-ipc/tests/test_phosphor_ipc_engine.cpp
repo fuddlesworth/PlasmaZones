@@ -1,5 +1,5 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
-// SPDX-License-Identifier: GPL-3.0-or-later
+// SPDX-License-Identifier: LGPL-2.1-or-later
 
 // IpcEngine attaches an IpcRouter to a QQmlEngine via a dynamic
 // property; IpcTarget instances look the router up at
@@ -16,6 +16,8 @@
 #include <QTest>
 #include <QVariant>
 #include <QtCore/qtclasshelpermacros.h>
+
+#include <memory>
 
 using namespace PhosphorIpc;
 
@@ -185,5 +187,5 @@ void TestPhosphorIpcEngine::install_uninstall_install_doesNotLeakDestroyedWatche
     QCOMPARE(IpcEngine::routerFor(&engine), nullptr);
 }
 
-QTEST_MAIN(TestPhosphorIpcEngine)
+QTEST_GUILESS_MAIN(TestPhosphorIpcEngine)
 #include "test_phosphor_ipc_engine.moc"

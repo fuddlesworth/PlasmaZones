@@ -1002,6 +1002,13 @@ void TestWindowRuleController::defaultPayloadForSeedsParams()
     QCOMPARE(curvePayload.value(QStringLiteral("event")).toString(), QString());
     QCOMPARE(curvePayload.value(QStringLiteral("curve")).toString(), QString());
 
+    // SetBorderColor's `value` is a `color` kind — seeded with a fully opaque
+    // ARGB string (`#AARRGGBB`, alpha-first) so the picker can edit transparency
+    // and the seed round-trips through QColor::HexArgb like global border colours.
+    const QVariantMap borderColorPayload = controller.defaultPayloadFor(QStringLiteral("setBorderColor"));
+    QCOMPARE(borderColorPayload.value(QStringLiteral("type")).toString(), QStringLiteral("setBorderColor"));
+    QCOMPARE(borderColorPayload.value(QStringLiteral("value")).toString(), QStringLiteral("#FF3DAEE9"));
+
     // Unknown type → bare `{type: X}` map. The QML side will never call this
     // with an unknown wire (the picker only offers registered types), but
     // returning a sane shape keeps the contract total.

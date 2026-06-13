@@ -486,5 +486,5 @@ private Q_SLOTS:
     }
 };
 
-QTEST_MAIN(TestContextRuleBridge)
+QTEST_GUILESS_MAIN(TestContextRuleBridge)
 #include "test_contextrulebridge.moc"

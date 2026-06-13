@@ -200,5 +200,5 @@ private Q_SLOTS:
     }
 };
 
-QTEST_MAIN(TestActionRegistry)
+QTEST_GUILESS_MAIN(TestActionRegistry)
 #include "test_actionregistry.moc"

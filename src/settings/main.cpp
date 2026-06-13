@@ -19,9 +19,9 @@
 #include <PhosphorAnimation/PhosphorCurve.h>
 #include <PhosphorAnimation/QtQuickClockManager.h>
 
+#include <QApplication>
 #include <QDir>
 #include <QDirIterator>
-#include <QGuiApplication>
 #include <QCommandLineParser>
 #include <QIcon>
 #include <QQmlApplicationEngine>
@@ -68,12 +68,18 @@ int main(int argc, char* argv[])
     // settings UI, not a game client. Both env vars are cleared:
     // MANGOHUD=0 alone is not enough on all manifest versions; the explicit
     // DISABLE_MANGOHUD opt-out is honored regardless of MANGOHUD's value.
-    // Must run before QGuiApplication construction (which initializes the
+    // Must run before QApplication construction (which initializes the
     // QtQuick render path and may load the Vulkan ICD chain).
     qunsetenv("MANGOHUD");
     qputenv("DISABLE_MANGOHUD", "1");
 
-    QGuiApplication app(argc, argv);
+    // QApplication (not QGuiApplication): the org.kde.desktop QtQuick Controls
+    // style (qqc2-desktop-style) renders every control through a QtWidgets
+    // QStyle via KQuickStyleItem. That path calls qApp->style(), which requires
+    // a QApplication — under a plain QGuiApplication it operates in a degenerate
+    // context that fragile third-party QStyle plugins (e.g. Darkly) dereference
+    // into a crash on the first paint frame. See discussion #262.
+    QApplication app(argc, argv);
     PlasmaZones::loadTranslations(&app);
 
     app.setApplicationName(QStringLiteral("plasmazones-settings"));

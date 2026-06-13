@@ -26,7 +26,6 @@
 #include "../../dbus/windowtrackingadaptor.h"
 #include "../../dbus/windowdragadaptor.h"
 #include "../../dbus/autotileadaptor.h"
-#include "../../dbus/snapadaptor.h"
 #include <PhosphorEngine/PlacementEngineBase.h>
 #include <PhosphorTiles/AlgorithmRegistry.h>
 #include <PhosphorTiles/TilingAlgorithm.h>
@@ -36,7 +35,7 @@
 #include <PhosphorZones/ZoneDetector.h>
 #include <QProcess>
 #include <QPointer>
-#include "../config/settings.h"
+#include "../../config/settings.h"
 #include <QGuiApplication>
 #include <QScreen>
 #include <PhosphorScreens/ScreenIdentity.h>

@@ -14,12 +14,19 @@ if(COMMAND qt_policy)
     qt_policy(SET QTP0001 NEW)
 endif()
 
-# AUTOMOC is required so the QML module's metatype generation picks up
-# any Q_OBJECT we add here.
-set(CMAKE_AUTOMOC ON)
+# CMAKE_AUTOMOC is NOT set here: the top level enables it globally and
+# qt_add_qml_module enables it on its own targets — the sibling popout demo
+# documents the same redundancy.
 
 # Demo QML lives in this directory; bundle as its own QML module so
 # qmlcachegen can compile it.
+# Directory-scope suppression of -Wmissing-include-dirs for the targets
+# qt_add_qml_module generates here: Qt adds <target>_autogen/include to each
+# sub-target's -I list, but when a module carries no Q_OBJECT sources AUTOMOC
+# never creates that directory (and --clean-first deletes it), so cc1plus
+# warns on a Qt-managed scratch path. Full rationale: src/shared/CMakeLists.txt.
+set_property(DIRECTORY APPEND PROPERTY COMPILE_OPTIONS "-Wno-missing-include-dirs")
+
 qt_add_qml_module(phosphor_theme_demo_qml
     URI Phosphor.ThemeDemo
     VERSION 1.0
@@ -48,10 +55,15 @@ target_link_libraries(phosphor_theme_demo_qml
     PRIVATE
         PhosphorTheme::PhosphorTheme
 )
+# Explicit, not inherited: PhosphorTheme propagates cxx_std_20 PUBLIC, but
+# the sibling demos pin it per-target — keep the boilerplate identical so a
+# copied demo doesn't silently lose the requirement.
+target_compile_features(phosphor_theme_demo_qml PRIVATE cxx_std_20)
 
 add_executable(phosphor-theme-demo
     main.cpp
 )
+target_compile_features(phosphor-theme-demo PRIVATE cxx_std_20)
 
 target_link_libraries(phosphor-theme-demo
     PRIVATE

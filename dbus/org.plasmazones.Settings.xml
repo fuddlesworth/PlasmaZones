@@ -1,5 +1,9 @@
 <!DOCTYPE node PUBLIC "-//freedesktop//DTD D-BUS Object Introspection 1.0//EN"
     "http://www.freedesktop.org/standards/dbus/1.0/introspect.dtd">
+<!--
+SPDX-FileCopyrightText: 2026 fuddlesworth
+SPDX-License-Identifier: GPL-3.0-or-later
+-->
 <node>
     <!-- Settings Interface -->
     <interface name="org.plasmazones.Settings">
@@ -38,7 +42,7 @@
             </arg>
         </method>
         <method name="setSetting">
-            <annotation name="org.gtk.GDBus.DocString" value="Set a single setting by key. Returns true if updated."/>
+            <annotation name="org.gtk.GDBus.DocString" value="Set a single setting by key. Returns true if the setting now holds the supplied value — a same-value write is a no-op but still returns true (the value-equality guard suppresses the redundant write without reporting failure)."/>
             <arg name="key" type="s" direction="in">
                 <annotation name="org.gtk.GDBus.DocString" value="Setting key name."/>
             </arg>
@@ -46,7 +50,7 @@
                 <annotation name="org.gtk.GDBus.DocString" value="New value (variant)."/>
             </arg>
             <arg name="success" type="b" direction="out">
-                <annotation name="org.gtk.GDBus.DocString" value="True if setting was updated."/>
+                <annotation name="org.gtk.GDBus.DocString" value="True if the setting now holds the supplied value (including same-value no-op writes)."/>
             </arg>
         </method>
         <method name="setSettings">
@@ -71,72 +75,20 @@
             <annotation name="org.gtk.GDBus.DocString" value="Daemon to KWin effect: the per-event motion-profile tree changed (a profiles/&lt;path&gt;.json override was edited and rescanned). Kept separate from settingsChanged so the Settings app's value-change detection is not reset by its own profile-file writes; the KWin effect re-fetches motionProfileTree on this signal."/>
         </signal>
 
-        <method name="isZoneSelectorEnabled">
-            <annotation name="org.gtk.GDBus.DocString" value="Returns true if the Zone Selector feature is enabled."/>
-            <arg name="enabled" type="b" direction="out">
-                <annotation name="org.gtk.GDBus.DocString" value="True if Zone Selector is enabled."/>
-            </arg>
-        </method>
-        <method name="setZoneSelectorEnabled">
-            <annotation name="org.gtk.GDBus.DocString" value="Enable or disable the Zone Selector."/>
-            <arg name="enabled" type="b" direction="in">
-                <annotation name="org.gtk.GDBus.DocString" value="True to enable."/>
-            </arg>
-        </method>
-        <method name="getZoneSelectorTriggerDistance">
-            <annotation name="org.gtk.GDBus.DocString" value="Get the trigger distance (pixels) for showing Zone Selector."/>
-            <arg name="distance" type="i" direction="out">
-                <annotation name="org.gtk.GDBus.DocString" value="Trigger distance in pixels."/>
-            </arg>
-        </method>
-        <method name="setZoneSelectorTriggerDistance">
-            <annotation name="org.gtk.GDBus.DocString" value="Set the Zone Selector trigger distance."/>
-            <arg name="distance" type="i" direction="in">
-                <annotation name="org.gtk.GDBus.DocString" value="Trigger distance in pixels."/>
-            </arg>
-        </method>
-        <method name="getZoneSelectorPosition">
-            <annotation name="org.gtk.GDBus.DocString" value="Get the Zone Selector position (e.g. edge/side)."/>
-            <arg name="position" type="i" direction="out">
-                <annotation name="org.gtk.GDBus.DocString" value="Position enum value (e.g. edge/side)."/>
-            </arg>
-        </method>
-        <method name="setZoneSelectorPosition">
-            <annotation name="org.gtk.GDBus.DocString" value="Set the Zone Selector position."/>
-            <arg name="position" type="i" direction="in">
-                <annotation name="org.gtk.GDBus.DocString" value="Position enum value."/>
-            </arg>
-        </method>
-        <signal name="zoneSelectorEnabledChanged">
-            <annotation name="org.gtk.GDBus.DocString" value="Emitted when Zone Selector enabled state changes."/>
-            <arg name="enabled" type="b">
-                <annotation name="org.gtk.GDBus.DocString" value="New enabled state."/>
-            </arg>
-        </signal>
-        <signal name="zoneSelectorTriggerDistanceChanged">
-            <annotation name="org.gtk.GDBus.DocString" value="Emitted when trigger distance changes."/>
-            <arg name="distance" type="i">
-                <annotation name="org.gtk.GDBus.DocString" value="New trigger distance in pixels."/>
-            </arg>
-        </signal>
-        <signal name="zoneSelectorPositionChanged">
-            <annotation name="org.gtk.GDBus.DocString" value="Emitted when Zone Selector position changes."/>
-            <arg name="position" type="i">
-                <annotation name="org.gtk.GDBus.DocString" value="New position enum value."/>
-            </arg>
-        </signal>
-
+        <!-- The dedicated zone-selector getters/setters/signals were removed:
+             zone-selector settings ride the generic getSetting/setSetting keys
+             and the per-screen 'zoneSelector' category APIs below. -->
         <method name="getSettingSchema">
             <annotation name="org.gtk.GDBus.DocString" value="Get metadata for a single setting key. Returns JSON with key and type fields."/>
             <arg name="key" type="s" direction="in">
                 <annotation name="org.gtk.GDBus.DocString" value="Setting key name."/>
             </arg>
             <arg name="schemaJson" type="s" direction="out">
-                <annotation name="org.gtk.GDBus.DocString" value="JSON: {key, type}. Type is bool, int, double, string, color, or stringlist."/>
+                <annotation name="org.gtk.GDBus.DocString" value="JSON: {key, type}. Type is bool, int, double, string, color, stringlist, or map."/>
             </arg>
         </method>
         <method name="getAllSettingSchemas">
-            <annotation name="org.gtk.GDBus.DocString" value="Get metadata for all settings. Returns JSON object mapping keys to type info."/>
+            <annotation name="org.gtk.GDBus.DocString" value="Get metadata for all settings. Returns JSON object mapping keys to type info (type is one of bool, int, double, string, color, stringlist, map)."/>
             <arg name="schemasJson" type="s" direction="out">
                 <annotation name="org.gtk.GDBus.DocString" value="JSON object: {key: {type}, ...}."/>
             </arg>

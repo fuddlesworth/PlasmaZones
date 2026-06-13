@@ -30,34 +30,6 @@ namespace PlasmaZones {
 
 Q_DECLARE_LOGGING_CATEGORY(lcEffect)
 
-namespace {
-// Drop the server-side decoration while keeping the window filling its zone.
-// KWin holds the CLIENT size constant across a decoration change, so calling
-// setNoBorder(true) AFTER the zone geometry was applied shrinks the frame by the
-// title-bar height and leaves a gap at the bottom of the zone. Re-assert the
-// zone rect after dropping the decoration so the content grows to fill it.
-//
-// CRITICAL: use moveResizeGeometry(), NOT frameGeometry(). On Wayland the latter
-// lags behind moveResize() until the client acks the configure, so right after
-// applySnapGeometry's moveResize it still reports the window's PRE-snap frame —
-// capturing and re-applying that would clobber the snap (the window reverts to
-// its floating size/position; this broke snap restore entirely). moveResizeGeometry()
-// is the zone rect KWin is already moving toward, set synchronously by moveResize.
-// The setNoBorder→moveResize ordering mirrors autotile hiding the title bar
-// BEFORE its moveResize (autotilehandler/state.cpp::setWindowBorderless).
-void hideTitleBarFillingZone(KWin::Window* kw)
-{
-    const KWin::RectF zoneTarget = kw->moveResizeGeometry();
-    kw->setNoBorder(true);
-    // Only re-assert a real target. A degenerate move-resize geometry would
-    // otherwise resize the window to nothing; in that case leave the decoration
-    // change to settle on its own.
-    if (zoneTarget.isValid() && !zoneTarget.isEmpty()) {
-        kw->moveResize(zoneTarget);
-    }
-}
-} // namespace
-
 SnapHandler::SnapHandler(PlasmaZonesEffect* effect, QObject* parent)
     : QObject(parent)
     , m_effect(effect)
@@ -68,65 +40,56 @@ void SnapHandler::markWindowSnapped(const QString& windowId, const QString& scre
 {
     // An empty screenId is never a valid snap owner: the per-screen buckets are
     // keyed by screenId, so recording under "" would pollute the set with an
-    // entry that the per-screen stripOtherScreens cleanup can never reclaim.
+    // entry that the per-screen cross-screen cleanup can never reclaim.
     // Callers route unresolved/float windows through clearWindowSnapped instead;
     // this guard is defensive depth for any path that slips an empty screen in.
     if (windowId.isEmpty() || screenId.isEmpty()) {
         return;
     }
+    KWin::EffectWindow* w = m_effect->findWindowById(windowId);
+    if (!w || m_effect->getWindowId(w) != windowId) {
+        // Window gone (closed mid-snap — the close often races the async
+        // snap reply, so slotWindowClosed's bookkeeping may have ALREADY
+        // run). Recording tiled tracking or acquiring decoration ownership
+        // now would re-create state nothing will ever clean up; drop any
+        // remnants instead. The exact-id check matters: findWindowById's
+        // appId fuzzy fallback can resolve a same-app SIBLING for a dead id,
+        // and hiding the sibling's title bar under the dead key would be
+        // unreleasable.
+        AutotileStateHelpers::removeFromAllScreens(m_border, windowId);
+        m_effect->decorationManager()->releaseKind(windowId, DecorationManager::OwnerKind::Snap);
+        return;
+    }
     // A window can only be snap-managed by one screen at a time. Strip stale
-    // tracking from any OTHER screen — both the tiled and borderless buckets —
-    // before recording the new owner (mirrors the autotile cross-screen-transfer
-    // cleanup in tiling.cpp).
-    const auto stripOtherScreens = [&](QHash<QString, QSet<QString>>& byScreen) {
-        for (auto it = byScreen.begin(); it != byScreen.end();) {
-            if (it.key() != screenId) {
-                it.value().remove(windowId);
-            }
-            if (it.value().isEmpty() && it.key() != screenId) {
-                it = byScreen.erase(it);
-            } else {
-                ++it;
-            }
-        }
-    };
-    stripOtherScreens(m_border.tiledWindowsByScreen);
-    stripOtherScreens(m_border.borderlessWindowsByScreen);
+    // tiled tracking from any OTHER screen before recording the new owner
+    // (mirrors the autotile cross-screen-transfer cleanup in tiling.cpp).
+    AutotileStateHelpers::removeFromOtherScreens(m_border, windowId, screenId);
     AutotileStateHelpers::addTiledOnScreen(m_border, screenId, windowId);
 
-    KWin::EffectWindow* w = m_effect->findWindowById(windowId);
-    KWin::Window* kw = w ? w->window() : nullptr;
-    // userCanSetNoBorder() — not hasDecoration() — is the correct test for "may
-    // this window's server-side title bar be toggled off." It reports whether KWin
-    // ALLOWS the no-border toggle, so it stays true for a normal SSD window even
-    // while that window is CURRENTLY borderless — exactly the autotile→snap handoff
-    // case, where the window arrives already borderless (autotile stripped its
-    // decoration) and hasDecoration() therefore reads false. It is false for windows
-    // that have no server-side title bar to hide in the first place — client-side-
-    // decorated apps (GTK/Electron) and other non-toggleable windows (override-
-    // redirect, or decoration forced by a window rule). Using hasDecoration() here
-    // skipped the handoff, so snap never recorded the borderless ownership and the
-    // deferred restoreWindowBorders un-hid the title bar autotile had hidden.
-    // (AutotileHandler::setWindowBorderless still gates on hasDecoration(); the snap
-    // side intentionally diverges because only it must survive the already-borderless
-    // handoff.)
-    if (m_border.hideTitleBars && kw && kw->userCanSetNoBorder()) {
-        const bool wasBorderless = AutotileStateHelpers::isBorderlessWindow(m_border, windowId);
-        AutotileStateHelpers::addBorderlessOnScreen(m_border, screenId, windowId);
-        if (!wasBorderless) {
-            hideTitleBarFillingZone(kw);
-        }
+    // Decoration ownership. The manager owns the capability gate
+    // (userCanSetNoBorder — survives the already-borderless autotile→snap
+    // handoff, skips CSD windows), the prior-state capture, and the
+    // AlreadyPlaced sequence (capture moveResizeGeometry → setNoBorder →
+    // re-assert) that keeps the window filling its zone across the
+    // decoration change.
+    if (m_border.hideTitleBars) {
+        // Move any stale snap claim from another screen (no physical flap),
+        // then acquire on this one.
+        m_effect->decorationManager()->releaseOthersOfKind(windowId, DecorationManager::OwnerKind::Snap, screenId);
+        m_effect->decorationManager()->acquire(windowId, DecorationManager::snap(screenId),
+                                               DecorationManager::Placement::AlreadyPlaced);
+    } else {
+        // Hide-title-bars off: no acquire follows, so a bare cross-screen
+        // owner strip could orphan a hidden entry — release the whole kind
+        // instead (restores if a stale claim somehow exists, no-op otherwise).
+        m_effect->decorationManager()->releaseKind(windowId, DecorationManager::OwnerKind::Snap);
     }
-    // A null w means the window is gone (closed mid-snap); the bucket entry
-    // recorded above is then harmless — if the window later closes, slotWindowClosed
-    // clears the snap border for it. No border is drawn (nothing to draw on) and none
-    // is needed; updateAllBorders() iterates only live windows so it simply skips it.
-    //
+
     // Border overlays are visual-only, so skip the off-desktop case (consistent
     // with updateAllBorders): redirecting an invisible window through the border
     // shader is wasted work. When the user switches to that window's desktop, the
     // desktopChanged → updateAllBorders connection rebuilds its border.
-    if (w && w->isOnCurrentDesktop()) {
+    if (w->isOnCurrentDesktop()) {
         m_effect->updateWindowBorder(windowId, w);
     }
 }
@@ -136,88 +99,55 @@ void SnapHandler::clearWindowSnapped(const QString& windowId)
     if (windowId.isEmpty()) {
         return;
     }
-    const bool wasBorderless = AutotileStateHelpers::isBorderlessWindow(m_border, windowId);
     AutotileStateHelpers::removeFromAllScreens(m_border, windowId);
-    // Restore the title bar only if snap had hidden it AND autotile doesn't
-    // still want it borderless. A window mid-transition between modes can be in
-    // both sets briefly; un-hiding here would fight autotile's authoritative
-    // borderless management and flash the title bar.
-    if (wasBorderless && !m_effect->autotileHandler()->isBorderlessWindow(windowId)) {
-        if (KWin::EffectWindow* w = m_effect->findWindowById(windowId)) {
-            if (KWin::Window* kw = w->window()) {
-                kw->setNoBorder(false);
-            }
-        }
-    }
+    // Release snap's decoration ownership. The manager restores the title bar
+    // only when no other owner remains — a window mid-transition between
+    // modes keeps autotile's claim, which replaces the old cross-mode guard.
+    m_effect->decorationManager()->releaseKind(windowId, DecorationManager::OwnerKind::Snap);
     m_effect->removeWindowBorder(windowId);
 }
 
-void SnapHandler::updateSnapHideTitleBars(bool hide)
+bool SnapHandler::updateSnapHideTitleBars(bool hide)
 {
+    // Only act on change (mirrors AutotileHandler::updateHideTitleBarsSetting):
+    // a no-op call would otherwise walk an acquire-all / release-all pass and
+    // a full updateAllBorders for nothing.
+    if (m_border.hideTitleBars == hide) {
+        return false;
+    }
     m_border.hideTitleBars = hide;
     if (hide) {
-        // Hide on every currently snap-committed window.
+        // Hide on every currently snap-committed window. The windows are
+        // already placed in their zones, so the AlreadyPlaced sequence
+        // re-asserts the zone rect across the decoration change.
         const auto pairs = AutotileStateHelpers::allTiledPairs(m_border);
         for (const auto& p : pairs) {
-            KWin::EffectWindow* w = m_effect->findWindowById(p.first);
-            if (!w || !w->hasDecoration()) {
-                continue;
-            }
-            if (!AutotileStateHelpers::isBorderlessWindow(m_border, p.first)) {
-                AutotileStateHelpers::addBorderlessOnScreen(m_border, p.second, p.first);
-                if (KWin::Window* kw = w->window()) {
-                    hideTitleBarFillingZone(kw);
-                }
-            }
+            m_effect->decorationManager()->acquire(p.first, DecorationManager::snap(p.second),
+                                                   DecorationManager::Placement::AlreadyPlaced);
         }
     } else {
-        // Restore every window snap had made borderless, except one autotile
-        // still wants borderless. A window mid-transition between modes can be in
-        // both sets briefly; un-hiding here would fight autotile's authoritative
-        // borderless management and flash the title bar (mirrors the guard in
-        // clearWindowSnapped / restoreAllSnapBorderless).
-        const auto pairs = AutotileStateHelpers::allBorderlessPairs(m_border);
-        for (const auto& p : pairs) {
-            AutotileStateHelpers::removeBorderlessOnScreen(m_border, p.second, p.first);
-            if (m_effect->autotileHandler()->isBorderlessWindow(p.first)) {
-                continue;
-            }
-            if (KWin::EffectWindow* w = m_effect->findWindowById(p.first)) {
-                if (KWin::Window* kw = w->window()) {
-                    kw->setNoBorder(false);
-                }
-            }
-        }
+        // Release every snap ownership; the manager restores each title bar
+        // that no other owner (autotile mid-transition, rule hide) still
+        // claims. Deferred + an immediate drain: each restore is a 30-120 ms
+        // synchronous Wayland round-trip, so the drain runs them one per
+        // event-loop tick instead of stalling the compositor for the batch.
+        m_effect->decorationManager()->releaseAllOfKind(DecorationManager::OwnerKind::Snap,
+                                                        DecorationManager::Restore::Deferred);
+        m_effect->decorationManager()->drainPendingRestores();
     }
-    m_effect->updateAllBorders();
+    // The border refresh is the CALLER's job on a true return — full
+    // symmetry with AutotileHandler::updateHideTitleBarsSetting, so a
+    // caller following either pattern never double-walks the stacking
+    // order.
+    return true;
 }
 
-void SnapHandler::restoreAllSnapBorderless()
+void SnapHandler::clearSnapTracking()
 {
-    // Symmetric with AutotileHandler::restoreAllBorderless: on daemon loss or
-    // effect teardown the authoritative snap state is gone, so restore every
-    // title bar snapping hid and drop the whole snap border set. Without this,
-    // snap-hidden windows would keep their title bars hidden until a new snap
-    // event or app restart. The isBorderlessWindow guard below is the live
-    // protection in the per-window path (clearWindowSnapped); at the teardown
-    // call sites AutotileHandler::restoreAllBorderless() runs first and clears
-    // its set, so the guard is a belt-and-braces no-op here (a window autotile
-    // shares is already un-hidden by then, and a second setNoBorder(false) is
-    // harmless/idempotent).
-    // This drops the snap border STATE only; callers pair it with
+    // Bookkeeping only. Physical title-bar restores are the
+    // DecorationManager's job — teardown callers pair this with
+    // DecorationManager::restoreAll(). Callers also pair it with
     // clearAllBorders() to release the per-window border shader redirect.
-    const auto pairs = AutotileStateHelpers::allBorderlessPairs(m_border);
-    for (const auto& p : pairs) {
-        if (m_effect->autotileHandler()->isBorderlessWindow(p.first)) {
-            continue;
-        }
-        if (KWin::EffectWindow* w = m_effect->findWindowById(p.first)) {
-            if (KWin::Window* kw = w->window()) {
-                kw->setNoBorder(false);
-            }
-        }
-    }
-    m_border.borderlessWindowsByScreen.clear();
     m_border.tiledWindowsByScreen.clear();
 }
 
@@ -323,10 +253,12 @@ void SnapHandler::ensurePreSnapGeometryStored(KWin::EffectWindow* w, const QStri
     // pre-check: that path matched on appId too, so a stale cross-session entry from
     // a prior window instance (keyed by appId) would block the fresh per-instance
     // capture and freeze float-restore at ancient coordinates.
+    // qRound, not truncation: fractional-scale outputs leave sub-pixel
+    // residue in frameGeometry() (same convention as the toRect() geometry
+    // paths — see window_lifecycle.cpp).
     PhosphorProtocol::ClientHelpers::fireAndForget(
         m_effect, PhosphorProtocol::Service::Interface::WindowTracking, QStringLiteral("storePreTileGeometry"),
-        {windowId, static_cast<int>(geom.x()), static_cast<int>(geom.y()), static_cast<int>(geom.width()),
-         static_cast<int>(geom.height()), screenId, false},
+        {windowId, qRound(geom.x()), qRound(geom.y()), qRound(geom.width()), qRound(geom.height()), screenId, false},
         QStringLiteral("storePreTileGeometry"));
     qCInfo(lcEffect) << "Stored pre-tile geometry for window" << windowId << "geom=" << geom;
 }
@@ -363,7 +295,9 @@ void SnapHandler::handleCursorMoved(const QPointF& pos, const QString& screenId)
     const auto windows = KWin::effects->stackingOrder();
     for (int i = windows.size() - 1; i >= 0; --i) {
         KWin::EffectWindow* w = windows[i];
-        if (!w || w->isMinimized() || !w->isOnCurrentDesktop() || !w->isOnCurrentActivity()) {
+        // isDeleted: a close-grabbed dying window under the cursor must not
+        // pause FFM via the occlusion bail (or pollute id caches below).
+        if (!w || w->isDeleted() || w->isMinimized() || !w->isOnCurrentDesktop() || !w->isOnCurrentActivity()) {
             continue;
         }
         // Cheap geometry test before the windowClass()/windowId allocations below.
@@ -462,19 +396,33 @@ void SnapHandler::slotMoveSpecificWindowToZoneRequested(const QString& windowId,
     KWin::EffectWindow* targetWindow = nullptr;
     const auto windows = KWin::effects->stackingOrder();
     for (KWin::EffectWindow* w : windows) {
-        if (w && m_effect->shouldHandleWindow(w) && m_effect->getWindowId(w) == windowId) {
+        // !isDeleted: a close-grabbed dying instance can still carry the
+        // exact requested id (the recreated-window scenario the appId
+        // fallback below exists for) — snapping it would track a dead id
+        // with no future close event to clean it, and block the fallback
+        // from finding the live sibling.
+        if (w && !w->isDeleted() && m_effect->shouldHandleWindow(w) && m_effect->getWindowId(w) == windowId) {
             targetWindow = w;
             break;
         }
     }
     if (!targetWindow) {
-        QString appId = ::PhosphorIdentity::WindowId::extractAppId(windowId);
+        // appId fallback (window recreated between candidate build and
+        // selection) — only when UNAMBIGUOUS: with two same-app windows,
+        // taking the first stacking-order match would snap (and track) the
+        // wrong sibling. Mirrors findWindowById's matchCount guard.
+        const QString appId = ::PhosphorIdentity::WindowId::extractAppId(windowId);
+        KWin::EffectWindow* appMatch = nullptr;
+        int matchCount = 0;
         for (KWin::EffectWindow* w : windows) {
-            if (w && m_effect->shouldHandleWindow(w)
+            if (w && !w->isDeleted() && m_effect->shouldHandleWindow(w)
                 && ::PhosphorIdentity::WindowId::extractAppId(m_effect->getWindowId(w)) == appId) {
-                targetWindow = w;
-                break;
+                appMatch = w;
+                ++matchCount;
             }
+        }
+        if (matchCount == 1) {
+            targetWindow = appMatch;
         }
     }
 
@@ -505,12 +453,14 @@ void SnapHandler::slotMoveSpecificWindowToZoneRequested(const QString& windowId,
                                                        QStringLiteral("recordSnapIntent"),
                                                        {m_effect->getWindowId(targetWindow), true});
 
+        const bool isAutotile = m_effect->autotileHandler()->isAutotileScreen(screenId);
+
         // Snap-assist placed the window in a zone — record it in snapping's
         // border set, but only for a resolved snap-mode screen. An empty
         // (unresolved) or autotile-managed screen is owned by AutotileHandler,
         // so recording it here would double-track the window — same
         // discriminator as slotApplyGeometryRequested / the async snap path.
-        if (!screenId.isEmpty() && !m_effect->autotileHandler()->isAutotileScreen(screenId)) {
+        if (!screenId.isEmpty() && !isAutotile) {
             markWindowSnapped(m_effect->getWindowId(targetWindow), screenId);
         }
 
@@ -518,7 +468,7 @@ void SnapHandler::slotMoveSpecificWindowToZoneRequested(const QString& windowId,
         // Autotile screens manage their own window placement; showing snap assist
         // after an autotile resnap is incorrect (the daemon silently ignores the
         // selection anyway via the isAutotileScreen guard in signals.cpp).
-        if (!m_effect->autotileHandler()->isAutotileScreen(screenId)) {
+        if (!isAutotile) {
             m_effect->m_snapAssistHandler->showContinuationIfNeeded(screenId);
         }
     }
@@ -555,7 +505,10 @@ void SnapHandler::slotSnapAllWindowsRequested(const QString& screenId)
         QStringList unsnappedWindowIds;
         const auto windows = KWin::effects->stackingOrder();
         for (KWin::EffectWindow* w : windows) {
-            if (!w || !m_effect->shouldHandleWindow(w)) {
+            // !isDeleted: a close-grabbed dying window would get a zone
+            // assigned under a dead id (slotWindowClosed already ran, so
+            // nothing ever cleans the resulting snap record).
+            if (!w || w->isDeleted() || !m_effect->shouldHandleWindow(w)) {
                 continue;
             }
 
@@ -698,7 +651,10 @@ void SnapHandler::slotPendingRestoresAvailable()
         // Now iterate through all visible windows and restore untracked ones
         const auto windows = KWin::effects->stackingOrder();
         for (KWin::EffectWindow* window : windows) {
-            if (!window || !m_effect->shouldHandleWindow(window)) {
+            // !isDeleted: a close-grabbed dying window would consume the
+            // single-shot FIFO pending-restore entry for its appId, robbing
+            // the app's next REAL window of its restore.
+            if (!window || window->isDeleted() || !m_effect->shouldHandleWindow(window)) {
                 continue;
             }
 

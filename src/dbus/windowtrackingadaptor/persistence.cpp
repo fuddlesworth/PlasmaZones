@@ -2,9 +2,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 #include "../windowtrackingadaptor.h"
-#include "internal.h"
-#include <PhosphorSnapEngine/SnapEngine.h>
-#include "../../core/interfaces.h"
+#include <PhosphorIdentity/VirtualScreenId.h>
 #include <PhosphorZones/LayoutRegistry.h>
 #include <PhosphorZones/Layout.h>
 #include <PhosphorZones/Zone.h>
@@ -12,18 +10,12 @@
 #include <PhosphorScreens/Manager.h>
 #include "../../core/logging.h"
 #include "../../core/utils.h"
-#include <PhosphorWorkspaces/VirtualDesktopManager.h>
-#include <QGuiApplication>
 #include <QScreen>
 #include <QJsonDocument>
-#include <QJsonArray>
 #include <QJsonObject>
-#include <QTimer>
 #include <PhosphorScreens/ScreenIdentity.h>
 
 namespace PlasmaZones {
-
-using namespace WindowTrackingInternal;
 
 void WindowTrackingAdaptor::storePreTileGeometry(const QString& windowId, int x, int y, int width, int height,
                                                  const QString& screenId, bool overwrite)
@@ -48,12 +40,6 @@ void WindowTrackingAdaptor::storePreTileGeometry(const QString& windowId, int x,
     }
     qCDebug(lcDbusWindow) << "Stored pre-tile geometry to record for" << windowId << "screen=" << screenId
                           << "overwrite=" << overwrite;
-}
-
-bool WindowTrackingAdaptor::getPreTileGeometry(const QString& windowId, int& x, int& y, int& width, int& height)
-{
-    // Single float-back store: the unified record (via validatedUnmanagedGeometry).
-    return getValidatedPreTileGeometry(windowId, x, y, width, height);
 }
 
 bool WindowTrackingAdaptor::hasPreTileGeometry(const QString& windowId)
@@ -123,10 +109,10 @@ bool WindowTrackingAdaptor::getValidatedPreTileGeometry(const QString& windowId,
         return false;
     }
 
-    QString screenId;
-    if (m_service) {
-        screenId = m_service->screenAssignments().value(windowId);
-    }
+    // m_service is non-null by constructor invariant (the ctor qFatals on
+    // null), so no guard is needed; the half-guard this replaced checked
+    // one deref and missed the next.
+    const QString screenId = m_service->screenAssignments().value(windowId);
 
     auto geo = m_service->validatedUnmanagedGeometry(windowId, screenId);
     if (!geo) {
@@ -138,38 +124,6 @@ bool WindowTrackingAdaptor::getValidatedPreTileGeometry(const QString& windowId,
     width = geo->width();
     height = geo->height();
     return true;
-}
-
-bool WindowTrackingAdaptor::isGeometryOnScreen(int x, int y, int width, int height) const
-{
-    if (width <= 0 || height <= 0) {
-        return false;
-    }
-
-    QRect geometry(x, y, width, height);
-    // Use effective screen IDs (virtual if subdivided) for correct geometry checks
-    auto* mgr = m_service->screenManager();
-    if (mgr) {
-        for (const QString& sid : mgr->effectiveScreenIds()) {
-            QRect screenGeom = mgr->screenGeometry(sid);
-            if (!screenGeom.isValid()) {
-                continue;
-            }
-            QRect intersection = screenGeom.intersected(geometry);
-            if (intersection.width() >= MinVisibleWidth && intersection.height() >= MinVisibleHeight) {
-                return true;
-            }
-        }
-    } else {
-        // Fallback: no PhosphorScreens::ScreenManager, use physical screens
-        for (QScreen* screen : Utils::allScreens()) {
-            QRect intersection = screen->geometry().intersected(geometry);
-            if (intersection.width() >= MinVisibleWidth && intersection.height() >= MinVisibleHeight) {
-                return true;
-            }
-        }
-    }
-    return false;
 }
 
 PhosphorProtocol::WindowGeometryList WindowTrackingAdaptor::getUpdatedWindowGeometries()

@@ -41,7 +41,10 @@ class ISettings;
  *
  * Signal relay from SnapEngine to WindowTrackingAdaptor is also wired
  * here (navigationFeedback, windowFloatingChanged, applyGeometryRequested,
- * resnapToNewLayoutRequested, snapAllWindowsRequested).
+ * snapAllWindowsRequested, applyGeometriesBatch, activateWindowRequested).
+ * SnapEngine::resnapToNewLayoutRequested routes to this adaptor's own
+ * handleBatchedResnap slot (bookkeeping + applyGeometriesBatch emission),
+ * not directly to WTA.
  *
  * @see SnapEngine, WindowTrackingAdaptor
  */
@@ -290,8 +293,13 @@ public Q_SLOTS:
      */
     void windowUnsnappedForFloat(const QString& windowId);
 
+public:
     // ═══════════════════════════════════════════════════════════════════════════
-    // Internal (not D-Bus, but callable from daemon C++ code)
+    // Internal — plain `public:` (NOT Q_SLOTS, no Q_INVOKABLE) so
+    // QDBusAbstractAdaptor's introspection does not expose them on the bus.
+    // Every caller is in-process and reaches these via direct C++ invocation
+    // through the daemon (same pattern as
+    // WindowDragAdaptor::handleWindowClosed).
     // ═══════════════════════════════════════════════════════════════════════════
 
     /**

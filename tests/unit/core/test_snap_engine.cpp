@@ -661,7 +661,7 @@ private Q_SLOTS:
         PhosphorEngine::IPlacementEngine::HandoffContext ctx;
         ctx.windowId = windowId;
         ctx.toScreenId = screen;
-        ctx.fromEngineId = QStringLiteral("autotile");
+        ctx.fromEngineId = PhosphorEngine::WindowPlacement::autotileEngineId();
         ctx.wasFloating = true;
         engine.handoffReceive(ctx);
 
@@ -1069,7 +1069,7 @@ private Q_SLOTS:
         PhosphorEngine::EngineSlot slot;
         slot.state = PhosphorEngine::WindowPlacement::stateSnapped();
         slot.zoneIds = QStringList{QStringLiteral("z1")};
-        rec.engines.insert(QStringLiteral("snap"), slot);
+        rec.engines.insert(PhosphorEngine::WindowPlacement::snapEngineId(), slot);
         m_wts->placementStore().record(rec);
 
         // The session reopens the window (new uuid) on the AUTOTILE monitor DP-2.
@@ -1106,7 +1106,7 @@ private Q_SLOTS:
         PhosphorEngine::EngineSlot slot;
         slot.state = PhosphorEngine::WindowPlacement::stateSnapped();
         slot.zoneIds = QStringList{QStringLiteral("z1")};
-        rec.engines.insert(QStringLiteral("snap"), slot);
+        rec.engines.insert(PhosphorEngine::WindowPlacement::snapEngineId(), slot);
         m_wts->placementStore().record(rec);
 
         // Reopen on DP-2. No cross-screen restore is pending (the recorded screen
@@ -1156,7 +1156,7 @@ private Q_SLOTS:
         rec.screenId = QStringLiteral("DP-1");
         PhosphorEngine::EngineSlot slot;
         slot.state = PhosphorEngine::WindowPlacement::stateFree();
-        rec.engines.insert(QStringLiteral("snap"), slot);
+        rec.engines.insert(PhosphorEngine::WindowPlacement::snapEngineId(), slot);
         rec.freeGeometryByScreen.insert(QStringLiteral("DP-1"), dp1Geo);
         m_wts->placementStore().record(rec);
 
@@ -1187,7 +1187,7 @@ private Q_SLOTS:
         rec.screenId = QStringLiteral("DP-1");
         PhosphorEngine::EngineSlot slot;
         slot.state = PhosphorEngine::WindowPlacement::stateFree();
-        rec.engines.insert(QStringLiteral("snap"), slot);
+        rec.engines.insert(PhosphorEngine::WindowPlacement::snapEngineId(), slot);
         rec.freeGeometryByScreen.insert(QStringLiteral("DP-1"), QRect(120, 80, 800, 600));
         m_wts->placementStore().record(rec);
 
@@ -1222,7 +1222,7 @@ private Q_SLOTS:
         PhosphorEngine::EngineSlot slot;
         slot.state = PhosphorEngine::WindowPlacement::stateFloating();
         slot.zoneIds = QStringList{QStringLiteral("z1")};
-        rec.engines.insert(QStringLiteral("snap"), slot);
+        rec.engines.insert(PhosphorEngine::WindowPlacement::snapEngineId(), slot);
         rec.freeGeometryByScreen.insert(QStringLiteral("DP-1"), dp1Geo);
         m_wts->placementStore().record(rec);
 
@@ -1268,7 +1268,7 @@ private Q_SLOTS:
         rec.screenId = QStringLiteral("DP-1");
         PhosphorEngine::EngineSlot slot;
         slot.state = PhosphorEngine::WindowPlacement::stateFree();
-        rec.engines.insert(QStringLiteral("snap"), slot);
+        rec.engines.insert(PhosphorEngine::WindowPlacement::snapEngineId(), slot);
         rec.freeGeometryByScreen.insert(QStringLiteral("DP-1"), dp1Geo);
         m_wts->placementStore().record(rec);
 
@@ -1306,7 +1306,7 @@ private Q_SLOTS:
         rec.screenId = QStringLiteral("DP-1");
         PhosphorEngine::EngineSlot slot;
         slot.state = PhosphorEngine::WindowPlacement::stateFree();
-        rec.engines.insert(QStringLiteral("snap"), slot);
+        rec.engines.insert(PhosphorEngine::WindowPlacement::snapEngineId(), slot);
         rec.freeGeometryByScreen.insert(QStringLiteral("DP-1"), QRect(60, 40, 1024, 768));
         m_wts->placementStore().record(rec);
 
@@ -1345,7 +1345,7 @@ private Q_SLOTS:
         PhosphorEngine::EngineSlot slot;
         slot.state = PhosphorEngine::WindowPlacement::stateFloating();
         slot.zoneIds = QStringList{QStringLiteral("z1")};
-        rec.engines.insert(QStringLiteral("snap"), slot);
+        rec.engines.insert(PhosphorEngine::WindowPlacement::snapEngineId(), slot);
         rec.freeGeometryByScreen.insert(QStringLiteral("DP-1"), dp1Geo);
         m_wts->placementStore().record(rec);
 
@@ -1388,7 +1388,7 @@ private Q_SLOTS:
         rec.screenId = QStringLiteral("DP-1"); // restoreScreen resolves to DP-1
         PhosphorEngine::EngineSlot slot;
         slot.state = PhosphorEngine::WindowPlacement::stateFree();
-        rec.engines.insert(QStringLiteral("snap"), slot);
+        rec.engines.insert(PhosphorEngine::WindowPlacement::snapEngineId(), slot);
         // Geometry recorded on DP-3, NOT on the record's own screen DP-1.
         rec.freeGeometryByScreen.insert(QStringLiteral("DP-3"), QRect(10, 10, 800, 600));
         m_wts->placementStore().record(rec);

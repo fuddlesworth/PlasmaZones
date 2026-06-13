@@ -95,9 +95,10 @@ struct PHOSPHORWINDOWRULE_EXPORT RuleAction
  *     offers; labels for each are translated upstream.
  *   - `bool` is a toggle (wire value is a JSON bool); may carry
  *     `defaultDisplay` (1.0 → seed true, 0.0 → seed false).
- *   - `color` is a `#RRGGBB` hex string; seeded by the settings layer's
- *     `defaultPayloadFor` "color" branch (defaultDisplay is a double, so it
- *     cannot carry a colour seed).
+ *   - `color` is a `#AARRGGBB` hex string (alpha-first, matching
+ *     QColor::HexArgb); seeded by the settings layer's `defaultPayloadFor`
+ *     "color" branch (defaultDisplay is a double, so it cannot carry a colour
+ *     seed). Shorter `#RGB`/`#RRGGBB` shapes still load for hand-edited values.
  *   - picker-aware kinds carry no schema state — the QML loader knows
  *     to swap in the catalogue-driven ComboBox.
  */

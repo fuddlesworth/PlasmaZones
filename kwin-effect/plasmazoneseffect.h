@@ -6,6 +6,7 @@
 #include <cstdint>
 
 #include <PhosphorCompositor/AutotileState.h>
+#include <PhosphorCompositor/DecorationManager.h>
 #include <PhosphorCompositor/ICompositorBridge.h>
 #include <PhosphorEngine/EngineTypes.h>
 #include <PhosphorProtocol/DragMarshalling.h>
@@ -56,7 +57,16 @@ class IMotionClock;
 
 namespace PlasmaZones {
 
-using namespace PhosphorCompositor;
+// Targeted using-declarations, not a namespace-wide directive: headers must
+// not leak the whole PhosphorCompositor namespace into every includer.
+// (Re-declaring the same alias/using in a sibling header is well-formed.)
+using PhosphorCompositor::BorderState;
+using PhosphorCompositor::DecorationManager;
+using PhosphorCompositor::ICompositorBridge;
+using PhosphorCompositor::ParsedTrigger;
+namespace AutotileStateHelpers = PhosphorCompositor::AutotileStateHelpers;
+namespace DecorationDefaults = PhosphorCompositor::DecorationDefaults;
+namespace TriggerParser = PhosphorCompositor::TriggerParser;
 
 // Mirror of PhosphorTiles::AutotileDragBehavior (re-exported via core/enums.h).
 // The effect can't include daemon headers (KWin plugin ABI constraints), so the
@@ -176,7 +186,8 @@ private Q_SLOTS:
     // canceling snap overlay, etc.
     void slotDragPolicyChanged(const QString& windowId, const PhosphorProtocol::DragPolicy& newPolicy);
 
-    // Daemon-driven batch operations (rotate, resnap)
+    // Daemon-driven batch operations (rotate, resnap, vs_reconfigure arrive
+    // over the wire; the effect-local snap_all path calls this slot directly)
     void slotApplyGeometriesBatch(const PhosphorProtocol::WindowGeometryList& geometries, const QString& action);
     void slotRaiseWindowsRequested(const QStringList& windowIds);
 
@@ -435,14 +446,6 @@ private:
      */
     bool isWindowMarkedSnapped(const QString& windowId) const;
 
-    /**
-     * @brief True if SNAP is currently hiding this window's title bar (it is in the
-     * snap BorderState borderless set). The autotile→snap cleanup consults this so it
-     * drops its own tracking without calling setNoBorder(false) — which would un-hide
-     * a title bar the per-mode snapping appearance wants hidden.
-     */
-    bool isWindowSnapBorderless(const QString& windowId) const;
-
     void notifyWindowClosed(KWin::EffectWindow* w);
     void notifyWindowActivated(KWin::EffectWindow* w);
     KWin::EffectWindow* findWindowById(const QString& windowId) const;
@@ -524,14 +527,23 @@ public Q_SLOTS:
     bool borderActivated(KWin::ElectricBorder border) override;
 
     // ═══════════════════════════════════════════════════════════════════════════════
-    // Helper class access methods
-    // These methods are used by NavigationHandler, WindowAnimator, and DragTracker
+    // Helper class access methods — consumed across the handler split
+    // (AutotileHandler/SnapHandler via decorationManager(), ScreenChangeHandler
+    // via applyStaggeredOrImmediate, KWinCompositorBridge via clearScreenIdCache)
     // ═══════════════════════════════════════════════════════════════════════════════
 public:
     /// Access the compositor bridge (for shared code that needs compositor-agnostic window ops)
     ICompositorBridge* compositorBridge() const
     {
         return m_compositorBridge.get();
+    }
+
+    /// The single owner of server-side decoration (title-bar) state. Every
+    /// hide/restore goes through its owner model — handlers and the rule
+    /// layer must never call KWin::Window::setNoBorder directly.
+    DecorationManager* decorationManager() const
+    {
+        return m_decorationManager.get();
     }
 
     /// Clear the EDID-based screen ID cache (call on screen add/remove/reconfigure)
@@ -595,11 +607,15 @@ private:
     // own argument. QPointer auto-nulls on window destruction.
     QPointer<KWin::EffectWindow> m_lastActivatedWindow;
 
-    // Windows whose server-side title bar a per-window-rule SetHideTitleBar
-    // override hid (distinct from the snap/autotile borderless sets). Tracked
-    // so reconcileRuleHiddenTitleBar can restore the decoration when the rule
-    // stops matching, without fighting snap/autotile borderless ownership.
-    QSet<QString> m_ruleHiddenTitleBars;
+    // The window currently in an interactive RESIZE (set at
+    // windowStartUserMovedResized when isUserResize(), cleared at finish).
+    // windowFinishUserMovedResized does not reliably report isUserResize() at
+    // teardown, so the resize-vs-move discriminator is latched at start. Used to
+    // persist a floating window's new free size the instant the resize ends —
+    // distinct from a move, which the drag→snap pipeline owns (a move can end in
+    // a snap, so it must not be captured as a free geometry here). QPointer
+    // auto-nulls on window destruction.
+    QPointer<KWin::EffectWindow> m_resizingWindow;
 
     // Policy returned from the daemon's beginDrag for the currently-active
     // drag. Async-populated a few ms after the
@@ -624,6 +640,11 @@ private:
     /// `getAllRules` fetch at the trailing edge.
     QTimer m_animationRulesRefreshDebounce;
 
+    /// Wire the DecorationManager into the effect: the deferred-restore veto
+    /// plus the windowDecorationRestored / drainFinished connections.
+    /// Defined in borders.cpp with the rest of the decoration code; called
+    /// once from the constructor.
+    void setupDecorationManager();
     void updateWindowBorder(const QString& windowId, KWin::EffectWindow* w);
     void removeWindowBorder(const QString& windowId);
     void updateAllBorders();
@@ -674,16 +695,17 @@ private:
     /// then snap — or nullptr if neither draws a border for it.
     const PhosphorCompositor::BorderState* resolveBorderStateFor(const QString& windowId) const;
 
-    /// Apply or restore a per-window-rule SetHideTitleBar override for
-    /// @p windowId, coordinating with the snap/autotile borderless sets so a
-    /// rule never fights mode-driven decoration management. Idempotent — only
-    /// toggles setNoBorder on an actual desired-state change.
+    /// Resolve the per-window-rule SetHideTitleBar override for @p windowId
+    /// and forward it to the DecorationManager as a tri-state rule override
+    /// (unset = mode decides, true = rule hides, false = force-show veto).
     void reconcileRuleHiddenTitleBar(const QString& windowId, KWin::EffectWindow* w);
 
-    /// Restore every title bar a SetHideTitleBar rule hid and drop the
-    /// m_ruleHiddenTitleBars set. Called on daemon loss / effect teardown
-    /// (symmetric with restoreAllSnapBorderless) so a rule-hidden title bar is
-    /// never left hidden after the authoritative rule state is gone.
+    /// Clear every DecorationManager rule override (Rule owners + force-show
+    /// vetoes). Called when the rule set empties (updateAllBorders) so a
+    /// rule-hidden title bar is never left hidden after the authoritative
+    /// rule state is gone. Daemon loss / effect teardown do NOT route here —
+    /// they call DecorationManager::restoreAll(), which clears rule
+    /// overrides along with all other tracking.
     void restoreAllRuleHiddenTitleBars();
 
     std::unique_ptr<NavigationHandler> m_navigationHandler;
@@ -767,6 +789,7 @@ private:
 
     std::unique_ptr<DragTracker> m_dragTracker;
     std::unique_ptr<ICompositorBridge> m_compositorBridge;
+    std::unique_ptr<DecorationManager> m_decorationManager;
 
     // Keyboard modifiers from KWin's input system
     // Updated via mouseChanged; that's the only reliable way to get modifiers in a
@@ -793,7 +816,7 @@ private:
      *
      * Sends getSetting(name) via raw QDBusMessage (no QDBusInterface), unwraps
      * the QDBusVariant, and calls onValue with the extracted QVariant.
-     * Used by loadCachedSettings() to eliminate 13 identical watcher blocks.
+     * Used by loadCachedSettings() to eliminate per-setting watcher boilerplate.
      */
     template<typename Fn>
     void loadSettingAsync(const QString& name, Fn&& onValue);
@@ -926,14 +949,6 @@ private:
     // cycles and overlay hide/show).
     bool m_dragActivationDetected = false;
 
-    // Deferred dragStarted: D-Bus call is only sent when zones are actually needed.
-    // Pending info is stored from DragTracker::dragStarted signal and sent on first
-    // activation or zone selector trigger. This avoids KGlobalAccel register/unregister
-    // overhead on every non-zone window drag.
-    bool m_dragStartedSent = false;
-    QString m_pendingDragWindowId;
-    QRectF m_pendingDragGeometry;
-
     /// Monotonic per-drag generation. Bumped on every drag start. The async
     /// beginDrag reply lambda captures the generation at dispatch time and
     /// checks against the live value at reply time — if the drag has ended
@@ -948,8 +963,6 @@ private:
     // Entries are consumed (removed) when slotApplyGeometryRequested skips
     // the geometry restore for a drag-floated window.
     QSet<QString> m_dragFloatedWindowIds;
-
-    // Autotile: true when the current drag was started on an autotile screen
 
     // Cached daemon D-Bus service registration state.
     // Updated via QDBusServiceWatcher signals (registration/unregistration) to avoid

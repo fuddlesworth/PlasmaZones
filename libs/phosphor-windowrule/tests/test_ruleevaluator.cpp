@@ -393,5 +393,5 @@ private Q_SLOTS:
     }
 };
 
-QTEST_MAIN(TestRuleEvaluator)
+QTEST_GUILESS_MAIN(TestRuleEvaluator)
 #include "test_ruleevaluator.moc"

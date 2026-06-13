@@ -594,9 +594,11 @@ Q_SIGNALS:
     void snapAllWindowsRequested(const QString& screenId);
 
     /// Batch of window-geometry updates, applied by the KWin effect in a
-    /// single operation (rotate, resnap, snap-all paths). The @p action
-    /// label disambiguates the cause downstream ("rotate", "resnap",
-    /// "snap_all", "vs_reconfigure"). Relayed to D-Bus via WTA.
+    /// single operation. The engine itself only ever emits action="rotate";
+    /// the SnapAdaptor layer attaches "resnap" / "vs_reconfigure" when it
+    /// relays its own batches over the same WTA D-Bus signal ("snap_all"
+    /// batches never cross the wire — the effect builds those locally). The
+    /// @p action label disambiguates the cause downstream.
     void applyGeometriesBatch(const PhosphorProtocol::WindowGeometryList& geometries, const QString& action);
 
 private:

@@ -857,6 +857,8 @@ Kirigami.Dialog {
     ColorDialog {
         id: shaderColorDialog
 
+        options: ColorDialog.ShowAlphaChannel
+
         property string paramId: ""
         property string paramName: ""
 

@@ -504,6 +504,24 @@ private:
     void resnapIfManualMode();
 
     /**
+     * @brief Emit the float-restore half of m_pendingSnapFloatRestores for the
+     *        resnap-buffer paths (picker / quick-layout cycle / KCM apply).
+     *
+     * windowsReleased populates m_pendingSnapFloatRestores whenever a screen
+     * leaves the autotile set, but the resnap-buffer paths
+     * (populateResnapBufferForAllScreens + resnapToNewLayout) never consume it
+     * — only the mode-toggle and autotile-disable paths do. A window
+     * snap-FLOATED before passing through autotile would therefore lose its
+     * float-back position on a picker/KCM flip. Floating windows are excluded
+     * from the resnap buffer, so these float restores are a disjoint set the
+     * buffer path cannot cover; emit them as a separate batch. The snap-ZONE
+     * restores in the buffer reference the OLD layout and are intentionally
+     * left to resnapToNewLayout (which re-snaps to the NEW layout's zones).
+     * Consumes (clears) m_pendingSnapFloatRestores.
+     */
+    void emitPendingSnapFloatRestoresForResnapBuffer();
+
+    /**
      * @brief Update layout filter on overlay service and unified layout controller
      *
      * Shows both manual and autotile layouts when the feature gate is enabled.

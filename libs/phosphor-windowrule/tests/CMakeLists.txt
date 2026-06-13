@@ -1,10 +1,12 @@
 # SPDX-FileCopyrightText: 2026 fuddlesworth
 # SPDX-License-Identifier: LGPL-2.1-or-later
 
-# PhosphorWindowRule unit tests. Headless — QCoreApplication only;
-# `Qt6::Gui` is intentionally NOT a link dependency (the library itself is
-# Core-only — see ../CMakeLists.txt's `Core only — no Gui` comment), so no
-# `QT_QPA_PLATFORM` env var is needed: there is no QPA layer to choose.
+# PhosphorWindowRule unit tests. Headless — QCoreApplication only; every
+# suite uses QTEST_GUILESS_MAIN so the guiless contract is pinned in source
+# rather than left contingent on link flags. `Qt6::Gui` is intentionally NOT
+# a link dependency (the library itself is Core-only — see ../CMakeLists.txt's
+# `Core only — no Gui` comment), so no `QT_QPA_PLATFORM` env var is needed:
+# there is no QPA layer to choose.
 
 find_package(Qt6 REQUIRED COMPONENTS Test)
 

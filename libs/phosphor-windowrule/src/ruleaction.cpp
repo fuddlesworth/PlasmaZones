@@ -51,9 +51,9 @@ bool hasNumberInRange(const QJsonObject& params, QLatin1StringView key, double m
 /// Validates that @p params has a `#`-prefixed hex colour string at @p key.
 /// Accepts the standard QColor hex shapes the effect-side consumer parses via
 /// `QColor(QString)`: `#RGB` (4), `#RRGGBB` (7) and `#AARRGGBB` (9 — QColor reads
-/// a 9-digit hex as alpha-first). The picker only emits `#RRGGBB`; the wider set keeps a hand-edited
-/// payload (short form, alpha) from being silently dropped on load while still
-/// rejecting non-hex/garbage. Named colours ("red") are intentionally NOT
+/// a 9-digit hex as alpha-first). The picker emits `#AARRGGBB`; the wider set
+/// also keeps hand-edited short-form payloads from being silently dropped on
+/// load while still rejecting non-hex/garbage. Named colours ("red") are NOT
 /// accepted here — the boundary stays hex-only even though the consumer's
 /// QColor would resolve them.
 bool hasHexColor(const QJsonObject& params, QLatin1StringView key)
@@ -600,7 +600,7 @@ void ActionRegistry::registerBuiltins()
         .terminal = false,
         .allowedKeys = {QString(ActionParam::Value)},
         .domain = ActionDomain::Window,
-        // Colour seed (#RRGGBB) is a string, so it is set by the editor's
+        // Colour seed (#AARRGGBB) is a string, so it is set by the editor's
         // defaultPayloadFor "color" branch, not via defaultDisplay (double).
         .params = {P{.key = QString(ActionParam::Value), .kind = QStringLiteral("color")}},
     });

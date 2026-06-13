@@ -18,6 +18,7 @@
 #include "plasmazones_export.h"
 // PhosphorTiles::AutotileDefaults lives in PhosphorTiles — config layer delegates to it for
 // the user-facing default accessors.
+#include <PhosphorCompositor/DecorationDefaults.h>
 #include <PhosphorTiles/AutotileConstants.h>
 // Animation duration / stagger UI bounds — generic policy, not autotile-specific.
 #include <PhosphorAnimation/AnimationLimits.h>
@@ -85,7 +86,7 @@ public:
     }
     static int zoneSpanModifier()
     {
-        return 2;
+        return static_cast<int>(DragModifier::Ctrl);
     }
     static QVariantList zoneSpanTriggers()
     {
@@ -673,12 +674,15 @@ public:
     /**
      * Read the rendering backend from the config file on disk.
      *
-     * QSettings::IniFormat maps ungrouped keys (before any [Section] header) into
-     * the "General" group automatically. The settings app writes RenderingBackend
-     * at the root level, so the default read resolves it via General/ implicitly.
-     * This helper provides a single canonical read used by daemon, editor, and Settings.
+     * Primary path: reads Rendering/Backend from config.json (the
+     * renderingGroup()/backendKey() accessors). Falls back to the legacy
+     * plasmazonesrc INI (v1 key) when the JSON config is absent, unparseable,
+     * or doesn't carry the key — in practice the pre-migration window, since
+     * a successful migration renames the INI away. This helper provides a
+     * single canonical read used by daemon, editor, and Settings.
      *
-     * Safe to call before QCoreApplication exists (uses raw QSettings).
+     * Safe to call before QCoreApplication exists (raw file access, no
+     * config backend construction).
      * Returns the normalized backend string ("auto", "vulkan", or "opengl").
      */
     PLASMAZONES_EXPORT static QString readRenderingBackendFromDisk();
@@ -729,7 +733,7 @@ public:
     }
 
     // Untranslated display names — use for translation source only.
-    // SettingsController translates these via PhosphorI18n::tr() at runtime.
+    // GeneralPageController translates these via PhosphorI18n::tr() at runtime.
     static QStringList renderingBackendDisplayNames()
     {
         QStringList names;
@@ -1029,37 +1033,48 @@ public:
     {
         return true;
     }
+    // Window-decoration hide/show/width/radius defaults delegate to the
+    // shared PhosphorCompositor::DecorationDefaults constants — the same
+    // symbols the effect's BorderState member-initializers use — so the
+    // daemon's persisted defaults and the effect's pre-settings-load
+    // rendering can't drift. (ZoneDefaults is the zone OVERLAY's constants,
+    // a different visual concept; the old width/radius delegation to it was
+    // an accident of equal values.) The border COLORS below intentionally
+    // remain ZoneDefaults-sourced: DecorationDefaults carries no color
+    // constants because colors are daemon-resolved (system accent) and
+    // pushed via settings — nothing renders pre-load (ShowBorder defaults
+    // false), so there is no drift concern to share symbols over.
     static bool autotileHideTitleBars()
     {
-        return false;
+        return ::PhosphorCompositor::DecorationDefaults::HideTitleBars;
     }
     static bool autotileShowBorder()
     {
-        return false;
+        return ::PhosphorCompositor::DecorationDefaults::ShowBorder;
     }
     static int autotileBorderWidth()
     {
-        return ::PhosphorZones::ZoneDefaults::BorderWidth;
+        return ::PhosphorCompositor::DecorationDefaults::BorderWidth;
     }
     static constexpr int autotileBorderWidthMin()
     {
-        return 0;
+        return ::PhosphorCompositor::DecorationDefaults::BorderWidthMin;
     }
     static constexpr int autotileBorderWidthMax()
     {
-        return 10;
+        return ::PhosphorCompositor::DecorationDefaults::BorderWidthMax;
     }
     static int autotileBorderRadius()
     {
-        return ::PhosphorZones::ZoneDefaults::BorderRadius;
+        return ::PhosphorCompositor::DecorationDefaults::BorderRadius;
     }
     static constexpr int autotileBorderRadiusMin()
     {
-        return 0;
+        return ::PhosphorCompositor::DecorationDefaults::BorderRadiusMin;
     }
     static constexpr int autotileBorderRadiusMax()
     {
-        return 20;
+        return ::PhosphorCompositor::DecorationDefaults::BorderRadiusMax;
     }
     static QColor autotileBorderColor()
     {

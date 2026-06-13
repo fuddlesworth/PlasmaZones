@@ -29,7 +29,7 @@
 #include <PhosphorTiles/AlgorithmRegistry.h>
 #include <PhosphorTiles/TilingAlgorithm.h>
 #include <PhosphorSnapEngine/SnapEngine.h>
-#include "../config/settings.h"
+#include "../../config/settings.h"
 #include <QGuiApplication>
 #include <QScreen>
 #include <QTimer>
@@ -140,8 +140,9 @@ void Daemon::initializeAutotile()
                             // immediately; geometry restore is deferred to the batched resnap
                             // signal to avoid individual D-Bus signals queuing behind the resnap.
                             const auto rec = wts->placementStore().peek(windowId, wts->currentAppIdFor(windowId));
-                            const PhosphorEngine::EngineSlot snapSlot =
-                                rec ? rec->slotFor(QStringLiteral("snap")) : PhosphorEngine::EngineSlot{};
+                            const PhosphorEngine::EngineSlot snapSlot = rec
+                                ? rec->slotFor(PhosphorEngine::WindowPlacement::snapEngineId())
+                                : PhosphorEngine::EngineSlot{};
                             const bool snapFloat = snapSlot.state == PhosphorEngine::WindowPlacement::stateFloating();
                             // A window SNAPPED in snapping mode, then floated in autotile, keeps its
                             // snap-engine state — float is PER ENGINE. Such a window is excluded from
@@ -550,7 +551,8 @@ void Daemon::connectLayoutSignals()
     }
 
     // Note: autotileEnabledChanged, snappingEnabledChanged, and perScreenAutotileSettingsChanged
-    // are handled by the settingsChanged handler above (consolidated for single-pass processing).
+    // are handled by the consolidated settingsChanged handler (lives in
+    // daemon.cpp since the daemon file split — single-pass processing).
     // Individual autotile signals only fire from runtime setters, where settingsChanged also
     // fires and handles the transitions — no separate handlers needed.
 
@@ -729,7 +731,7 @@ void Daemon::connectOverlaySignals()
                 // Suppress resnap OSD when triggered by a mode/layout change
                 // (layout switch OSD already provides feedback)
                 if (m_suppressResnapOsd > 0
-                    && (action == QStringLiteral("resnap") || action == QStringLiteral("retile"))) {
+                    && (action == QLatin1String("resnap") || action == QLatin1String("retile"))) {
                     m_suppressResnapOsd = std::max(0, m_suppressResnapOsd - 1);
                     return;
                 }
@@ -986,10 +988,10 @@ void Daemon::syncAutotileFloatState(const QString& windowId, bool floating, cons
 
     // Restore geometry: applyGeometryForFloat prefers pre-snap (the window's
     // original position before any zone snapping) over pre-autotile (autotile tiling).
-    // Pre-autotile persists across float/unfloat cycles (the hasSavedGeometryForWindow
-    // guard in the effect prevents overwriting), so every float restores to the same
-    // original position. The effect does NOT apply geometry on float — the daemon is
-    // the single source.
+    // Pre-autotile persists across float/unfloat cycles (the effect's exact-match
+    // contains-guard in saveAndRecordPreAutotileGeometry prevents overwriting), so
+    // every float restores to the same original position. The effect does NOT apply
+    // geometry on float — the daemon is the single source.
     if (floating && m_windowTrackingAdaptor) {
         m_windowTrackingAdaptor->applyGeometryForFloat(windowId, screenId);
     }
@@ -1019,10 +1021,12 @@ void Daemon::syncAutotileFloatStatePassive(const QString& windowId, bool floatin
     PhosphorPlacement::WindowTrackingService* wts = m_windowTrackingAdaptor->service();
     // Cross-engine handoff: this signal fires when autotile has just taken
     // ownership of a window that may still be tracked by snap. handoffRelease
-    // is a no-op when the engine doesn't track the window, so we can call it
-    // unconditionally — that closes the loophole where snap thought the
-    // window was on the same screen ID as the autotile target (stale state
-    // mid-mode-switch) and the previous gated path skipped cleanup.
+    // is a no-op when the engine doesn't track the window, so the
+    // isWindowTracked gate below is screen-agnostic (no same-screen-ID
+    // comparison) — that closes the loophole where snap thought the window
+    // was on the same screen ID as the autotile target (stale state
+    // mid-mode-switch) and the previous screen-gated path skipped cleanup.
+    // The tracked-check itself only keeps the handoff log meaningful.
     if (m_snapEngine && m_snapEngine->isWindowTracked(windowId)) {
         qCInfo(lcDaemon) << "Cross-engine handoff: releasing snap state for" << windowId << "(autotile screen"
                          << screenId << ")";

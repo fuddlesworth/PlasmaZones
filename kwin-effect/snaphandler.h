@@ -24,7 +24,11 @@ class EffectWindow;
 
 namespace PlasmaZones {
 
-using namespace PhosphorCompositor;
+// Targeted using-declarations, not a namespace-wide directive: headers must
+// not leak the whole PhosphorCompositor namespace into every includer.
+// (Re-declaring the same alias/using in a sibling header is well-formed.)
+using PhosphorCompositor::BorderState;
+namespace AutotileStateHelpers = PhosphorCompositor::AutotileStateHelpers;
 
 class PlasmaZonesEffect;
 
@@ -44,11 +48,13 @@ struct CachedSnapRestore
 /**
  * @brief Handles snapping integration for PlasmaZones.
  *
- * The snap-mode counterpart to AutotileHandler. Owns the snap-side managed-
- * window border state (m_border, parallel to AutotileHandler::m_border) and the
- * title-bar / border lifecycle for snap-committed windows. Delegates window
- * lookups, border rendering, and cross-mode borderless queries back to the
- * effect through the m_effect back-pointer.
+ * The snap-mode counterpart to AutotileHandler. Owns the snap-side border
+ * APPEARANCE state and tiled tracking (m_border, parallel to
+ * AutotileHandler::m_border) for snap-committed windows. Title-bar
+ * (borderless) state is owned by the effect's DecorationManager — this
+ * handler only acquires/releases its per-screen Snap ownership there.
+ * Delegates window lookups and border rendering back to the effect through
+ * the m_effect back-pointer.
  *
  * Built on the shared PhosphorCompositor BorderState + AutotileStateHelpers so
  * snap and autotile share one standardized border mechanism. The effect's
@@ -73,11 +79,15 @@ public:
     void clearWindowSnapped(const QString& windowId);
     /// Apply/restore title-bar hiding across all currently snap-committed
     /// windows when the snappingHideTitleBars setting toggles.
-    void updateSnapHideTitleBars(bool hide);
-    /// Restore every snap-hidden title bar and drop the snap border set.
-    /// Called on daemon loss / effect teardown (symmetric with
-    /// AutotileHandler::restoreAllBorderless).
-    void restoreAllSnapBorderless();
+    /// Returns true if the value actually changed; the caller runs
+    /// updateAllBorders() on true (and skips it on a no-op reload) — full
+    /// mirror of AutotileHandler::updateHideTitleBarsSetting.
+    bool updateSnapHideTitleBars(bool hide);
+    /// Drop all snap tiled-tracking bookkeeping. Physical title-bar restores
+    /// are the DecorationManager's job — teardown callers pair this with
+    /// DecorationManager::restoreAll() (symmetric with
+    /// AutotileHandler::clearTiledTracking).
+    void clearSnapTracking();
     /// Drop snap border/title-bar tracking for a window being destroyed. Pure
     /// bookkeeping — no setNoBorder/removeWindowBorder, the window is going away.
     void onWindowClosed(const QString& windowId);
@@ -159,10 +169,6 @@ public:
     }
 
     // ── Border rendering accessors — delegate to shared AutotileStateHelpers ──
-    bool isBorderlessWindow(const QString& windowId) const
-    {
-        return AutotileStateHelpers::isBorderlessWindow(m_border, windowId);
-    }
     bool isTiledWindow(const QString& windowId) const
     {
         return AutotileStateHelpers::isTiledWindow(m_border, windowId);

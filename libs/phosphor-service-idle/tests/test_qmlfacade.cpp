@@ -1,5 +1,5 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
-// SPDX-License-Identifier: GPL-3.0-or-later
+// SPDX-License-Identifier: LGPL-2.1-or-later
 //
 // QML facade test for phosphor-service-idle. Proves the imperative registration
 // produces a usable QML module: a real QQmlEngine imports Phosphor.Service.Idle
@@ -65,7 +65,7 @@ void IdleQmlFacadeTest::moduleLoadsAndServiceBinds()
     std::unique_ptr<QObject> root = create(component);
     QVERIFY2(root != nullptr, qPrintable(component.errorString())); // module + types resolved
 
-    // Under the offscreen platform there is no compositor, so supported / idle /
+    // With no compositor (guiless QCoreApplication), supported / idle /
     // inhibited read false. The stages assigned in QML round-trip (one valid
     // stage), confirming the QVariantList property is writable from QML.
     QCOMPARE(root->property("serviceSupported").toBool(), false);

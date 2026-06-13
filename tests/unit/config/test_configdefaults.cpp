@@ -12,9 +12,9 @@
 #include <QTest>
 
 #include "../../../src/config/configdefaults.h"
-#include "../../../src/core/constants.h"
+#include "../../../src/core/settings_interfaces.h" // ZoneSelectorConfig struct tripwire
 
-#include <PhosphorZones/ZoneDefaults.h>
+#include <PhosphorCompositor/DecorationDefaults.h>
 
 using namespace PlasmaZones;
 
@@ -219,17 +219,52 @@ private Q_SLOTS:
         QCOMPARE(ConfigDefaults::snappingBorderWidth(), ConfigDefaults::autotileBorderWidth());
         QCOMPARE(ConfigDefaults::snappingBorderRadius(), ConfigDefaults::autotileBorderRadius());
 
-        // Pin the concrete shipped defaults (shared by both modes): title bars
-        // and the border are OFF, width 2, radius 8. Colors are compared against
-        // the zone color accessors so a palette change can't stale the test.
-        QCOMPARE(ConfigDefaults::snappingHideTitleBars(), false);
-        QCOMPARE(ConfigDefaults::snappingShowBorder(), false);
+        // Pin the concrete shipped defaults (shared by both modes) against the
+        // shared DecorationDefaults constants — the same symbols the effect's
+        // BorderState member-initializers use. This is the drift tripwire: if
+        // either side stops delegating, pre-settings-load rendering in the
+        // effect diverges from the daemon's persisted defaults. Colors are
+        // compared against the zone color accessors so a palette change can't
+        // stale the test.
+        QCOMPARE(ConfigDefaults::snappingHideTitleBars(), ::PhosphorCompositor::DecorationDefaults::HideTitleBars);
+        QCOMPARE(ConfigDefaults::snappingShowBorder(), ::PhosphorCompositor::DecorationDefaults::ShowBorder);
         QCOMPARE(ConfigDefaults::snappingBorderColor(), ConfigDefaults::highlightColor());
         QCOMPARE(ConfigDefaults::snappingInactiveBorderColor(), ConfigDefaults::inactiveColor());
-        QCOMPARE(ConfigDefaults::snappingBorderWidth(), ::PhosphorZones::ZoneDefaults::BorderWidth);
-        QCOMPARE(ConfigDefaults::snappingBorderRadius(), ::PhosphorZones::ZoneDefaults::BorderRadius);
+        QCOMPARE(ConfigDefaults::snappingBorderWidth(), ::PhosphorCompositor::DecorationDefaults::BorderWidth);
+        QCOMPARE(ConfigDefaults::snappingBorderRadius(), ::PhosphorCompositor::DecorationDefaults::BorderRadius);
+        QCOMPARE(ConfigDefaults::autotileBorderWidthMin(), ::PhosphorCompositor::DecorationDefaults::BorderWidthMin);
+        QCOMPARE(ConfigDefaults::autotileBorderWidthMax(), ::PhosphorCompositor::DecorationDefaults::BorderWidthMax);
+        QCOMPARE(ConfigDefaults::autotileBorderRadiusMin(), ::PhosphorCompositor::DecorationDefaults::BorderRadiusMin);
+        QCOMPARE(ConfigDefaults::autotileBorderRadiusMax(), ::PhosphorCompositor::DecorationDefaults::BorderRadiusMax);
+        // The snapping bounds must track the same shared constants — without
+        // these four they could drift independently while everything above
+        // stays green.
+        QCOMPARE(ConfigDefaults::snappingBorderWidthMin(), ::PhosphorCompositor::DecorationDefaults::BorderWidthMin);
+        QCOMPARE(ConfigDefaults::snappingBorderWidthMax(), ::PhosphorCompositor::DecorationDefaults::BorderWidthMax);
+        QCOMPARE(ConfigDefaults::snappingBorderRadiusMin(), ::PhosphorCompositor::DecorationDefaults::BorderRadiusMin);
+        QCOMPARE(ConfigDefaults::snappingBorderRadiusMax(), ::PhosphorCompositor::DecorationDefaults::BorderRadiusMax);
+    }
+
+    /**
+     * ZoneSelectorConfig's in-struct fallback defaults duplicate the
+     * ConfigDefaults accessors by value (core cannot include the config layer
+     * to delegate). This tripwire keeps a retuned ConfigDefault from silently
+     * diverging from the struct fallback the overlay falls back to.
+     */
+    void testZoneSelectorConfigStructDefaultsMatchAccessors()
+    {
+        const ZoneSelectorConfig cfg;
+        QCOMPARE(cfg.position, ConfigDefaults::position());
+        QCOMPARE(cfg.layoutMode, ConfigDefaults::layoutMode());
+        QCOMPARE(cfg.sizeMode, ConfigDefaults::sizeMode());
+        QCOMPARE(cfg.maxRows, ConfigDefaults::maxRows());
+        QCOMPARE(cfg.previewWidth, ConfigDefaults::previewWidth());
+        QCOMPARE(cfg.previewHeight, ConfigDefaults::previewHeight());
+        QCOMPARE(cfg.previewLockAspect, ConfigDefaults::previewLockAspect());
+        QCOMPARE(cfg.gridColumns, ConfigDefaults::gridColumns());
+        QCOMPARE(cfg.triggerDistance, ConfigDefaults::triggerDistance());
     }
 };
 
-QTEST_MAIN(TestConfigDefaults)
+QTEST_GUILESS_MAIN(TestConfigDefaults)
 #include "test_configdefaults.moc"

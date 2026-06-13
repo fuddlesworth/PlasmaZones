@@ -21,6 +21,8 @@
 #include <PhosphorPlacement/WindowTrackingService.h>
 #include <PhosphorZones/LayoutRegistry.h>
 #include <PhosphorSnapEngine/SnapState.h>
+#include <PhosphorScreens/Manager.h>
+#include "FakeScreenProvider.h"
 #include "core/interfaces.h"
 #include <PhosphorZones/Layout.h>
 #include <PhosphorZones/Zone.h>
@@ -373,7 +375,7 @@ private Q_SLOTS:
         PhosphorEngine::EngineSlot slot;
         slot.state = PhosphorEngine::WindowPlacement::stateFloating();
         slot.zoneIds = QStringList{m_zoneIds[0]}; // pre-float zones
-        rec.engines.insert(QStringLiteral("snap"), slot);
+        rec.engines.insert(PhosphorEngine::WindowPlacement::snapEngineId(), slot);
         rec.freeGeometryByScreen.insert(m_screenId, floatedGeo);
         m_wta->service()->placementStore().record(rec);
 
@@ -415,7 +417,7 @@ private Q_SLOTS:
         PhosphorEngine::EngineSlot slot;
         slot.state = PhosphorEngine::WindowPlacement::stateSnapped();
         slot.zoneIds = QStringList{m_zoneIds[0]};
-        rec.engines.insert(QStringLiteral("snap"), slot);
+        rec.engines.insert(PhosphorEngine::WindowPlacement::snapEngineId(), slot);
         rec.freeGeometryByScreen.insert(m_screenId, floatBack); // shared float-back (single store)
         m_wta->service()->placementStore().record(rec);
 
@@ -449,8 +451,69 @@ private Q_SLOTS:
         // The store now holds a floated record for the open window at its live geo.
         auto rec = m_wta->service()->placementStore().peek(w1, QStringLiteral("settings"));
         QVERIFY(rec.has_value());
-        QCOMPARE(rec->slotFor(QStringLiteral("snap")).state, QString(PhosphorEngine::WindowPlacement::stateFloating()));
+        QCOMPARE(rec->slotFor(PhosphorEngine::WindowPlacement::snapEngineId()).state,
+                 QString(PhosphorEngine::WindowPlacement::stateFloating()));
         QCOMPARE(rec->freeGeometryFor(m_screenId), floatedGeo);
+    }
+
+    void testFloatRestore_openFloatingWindow_emptyEngineScreen_resolvesFromFrame()
+    {
+        // Regression (settings-app float-geometry not restored across logout/login):
+        // a window FLOATED without a tracked screen assignment reports an EMPTY
+        // screenId from capturePlacement. The save-time sync
+        // (refreshOpenWindowPlacements → captureWindowPlacement) previously gated the
+        // freeGeometry write on `!screenId.isEmpty()`, so such a window's live float
+        // geometry was SILENTLY DROPPED: never persisted, so a later re-float or
+        // logout→login had no freeGeometry to restore. The fix resolves the screen
+        // from the live frame's position, so a floating window's geometry is always
+        // captured.
+        //
+        // A local WTA wired to a deterministic ScreenManager (FakeScreenProvider) is
+        // used so the frame → screen resolution is independent of the test QPA
+        // (offscreen has no usable screen identifier). The shared fixture's WTA has a
+        // null ScreenManager, which is the very gap this exercises.
+        const QString screenId = QStringLiteral("DP-9");
+        const QRect screenRect(0, 0, 1920, 1080);
+        PhosphorScreens::FakeScreenProvider fake;
+        fake.addScreen(screenId, screenRect, screenId); // before the manager so it is in the initial snapshot
+        PhosphorScreens::ScreenManager screenMgr(
+            PhosphorScreens::ScreenManagerConfig{.screenProvider = &fake, .useGeometrySensors = false});
+        screenMgr.start(); // ingest the provider's screens into the tracked snapshot
+        QCOMPARE(screenMgr.effectiveScreenAt(QPoint(500, 400)), screenId); // resolution sanity
+
+        QObject parent;
+        auto* wta = new WindowTrackingAdaptor(m_layoutManager, m_zoneDetector, &screenMgr, m_settings, nullptr, nullptr,
+                                              &parent);
+        auto* snap = new SnapEngine(m_layoutManager, wta->service(), m_zoneDetector, nullptr, nullptr);
+        snap->setEngineSettings(m_settings);
+        wta->service()->setSnapState(snap->snapState());
+        wta->service()->setSnapEngine(snap);
+        wta->setEngines(snap, nullptr);
+
+        const QRect floatedGeo(120, 90, 760, 540); // inside screenRect
+        const QString w1 = QStringLiteral("settings|orphan-float");
+        // Float WITHOUT a prior snap → the snap engine never recorded a screen
+        // assignment, so capturePlacement comes back with an empty screenId.
+        snap->setWindowFloat(w1, true);
+        QVERIFY(wta->service()->isWindowFloating(w1));
+        auto captured = snap->capturePlacement(w1);
+        QVERIFY(captured.has_value());
+        QVERIFY(captured->screenId.isEmpty()); // precondition the old gate tripped on
+
+        wta->setFrameGeometry(w1, floatedGeo.x(), floatedGeo.y(), floatedGeo.width(), floatedGeo.height());
+        wta->refreshOpenWindowPlacements();
+
+        auto rec = wta->service()->placementStore().peek(w1, QStringLiteral("settings"));
+        QVERIFY(rec.has_value());
+        // The live float geometry is persisted despite the engine's empty screenId,
+        // keyed by the screen resolved from the frame's position.
+        QCOMPARE(rec->freeGeometryFor(screenId), floatedGeo);
+
+        // Tear down the engine before the parent destructor deletes wta so the
+        // service never dereferences a dangling snap engine/state.
+        wta->service()->setSnapEngine(nullptr);
+        wta->service()->setSnapState(nullptr);
+        delete snap;
     }
 
     // =====================================================================

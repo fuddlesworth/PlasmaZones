@@ -544,7 +544,9 @@ add_test(NAME test_overlay_helpers COMMAND test_overlay_helpers)
 # ═══════════════════════════════════════════════════════════════════════════════
 # dbus/ - D-Bus API Tests (convenience, schema, compositor bridge)
 # ═══════════════════════════════════════════════════════════════════════════════
-add_executable(test_wta_convenience dbus/test_wta_convenience.cpp)
+add_executable(test_wta_convenience dbus/test_wta_convenience.cpp
+               ${CMAKE_SOURCE_DIR}/libs/phosphor-screens/tests/FakeScreenProvider.cpp)
+target_include_directories(test_wta_convenience PRIVATE ${CMAKE_SOURCE_DIR}/libs/phosphor-screens/tests)
 target_link_libraries(test_wta_convenience PRIVATE Qt6::Test Qt6::Core Qt6::DBus plasmazones_core)
 add_test(NAME test_wta_convenience COMMAND test_wta_convenience)
 
@@ -567,6 +569,16 @@ add_test(NAME test_settings_adaptor_batch COMMAND test_settings_adaptor_batch)
 add_executable(test_compositor_bridge dbus/test_compositor_bridge.cpp)
 target_link_libraries(test_compositor_bridge PRIVATE Qt6::Test Qt6::Core Qt6::DBus plasmazones_core)
 add_test(NAME test_compositor_bridge COMMAND test_compositor_bridge)
+
+# XML ↔ adaptor contract tripwire: the dbus/*.xml files are the installed
+# public contract while the adaptors are handwritten — this compares each
+# adaptor's staticMetaObject (bus-exposed slots/invokables, signals,
+# properties) against its XML so drift fails CI instead of shipping.
+add_executable(test_dbus_contract_sync dbus/test_dbus_contract_sync.cpp)
+target_compile_definitions(test_dbus_contract_sync
+                           PRIVATE PLASMAZONES_DBUS_XML_DIR="${CMAKE_SOURCE_DIR}/dbus")
+target_link_libraries(test_dbus_contract_sync PRIVATE Qt6::Test Qt6::Core Qt6::DBus plasmazones_core)
+add_test(NAME test_dbus_contract_sync COMMAND test_dbus_contract_sync)
 
 # End-to-end adaptor routing test: verifies typed-struct slot dispatch works
 # over a real QDBusConnection. Regression guard for the 2026-04-10 resnap
@@ -615,14 +627,10 @@ target_link_libraries(test_snapping_behavior_controller PRIVATE Qt6::Test Qt6::C
     PhosphorControl::PhosphorControl)
 add_test(NAME test_snapping_behavior_controller COMMAND test_snapping_behavior_controller)
 
-# Phase 0 of the animation-settings UI rework: AnimationsPageController
-# round-trips per-event override files in `<userProfilesDir>/<path>.json`,
-# walks the ProfilePaths inheritance chain for resolvedProfile(), and
-# surfaces the built-in taxonomy as section-grouped lists for the QML
-# drilldown. Compiles the controller source directly (it lives in the
-# plasmazones-settings executable, not plasmazones_core).
-add_executable(test_animations_page_controller
-    settings/test_animations_page_controller.cpp
+# Animations-controller sources shared by the three test executables below
+# (page controller / motion sets / shader overrides). One list so a new
+# controller source file can't silently miss one of the three.
+set(_animations_ctrl_SRCS
     ${CMAKE_SOURCE_DIR}/src/settings/animationspagecontroller.cpp
     ${CMAKE_SOURCE_DIR}/src/settings/animationspagecontroller_shaders.cpp
     ${CMAKE_SOURCE_DIR}/src/settings/animationspagecontroller_overrides.cpp
@@ -631,6 +639,17 @@ add_executable(test_animations_page_controller
     ${CMAKE_SOURCE_DIR}/src/settings/animationpresetlibrary.cpp
     ${CMAKE_SOURCE_DIR}/src/settings/motionsetstore.cpp
     ${CMAKE_SOURCE_DIR}/src/settings/animationfileutils.cpp
+)
+
+# Phase 0 of the animation-settings UI rework: AnimationsPageController
+# round-trips per-event override files in `<userProfilesDir>/<path>.json`,
+# walks the ProfilePaths inheritance chain for resolvedProfile(), and
+# surfaces the built-in taxonomy as section-grouped lists for the QML
+# drilldown. Compiles the controller source directly (it lives in the
+# plasmazones-settings executable, not plasmazones_core).
+add_executable(test_animations_page_controller
+    settings/test_animations_page_controller.cpp
+    ${_animations_ctrl_SRCS}
 )
 target_link_libraries(test_animations_page_controller
     PRIVATE
@@ -647,14 +666,7 @@ add_test(NAME test_animations_page_controller COMMAND test_animations_page_contr
 # file under the project's <800-line guideline.
 add_executable(test_animations_motion_sets
     settings/test_animations_motion_sets.cpp
-    ${CMAKE_SOURCE_DIR}/src/settings/animationspagecontroller.cpp
-    ${CMAKE_SOURCE_DIR}/src/settings/animationspagecontroller_shaders.cpp
-    ${CMAKE_SOURCE_DIR}/src/settings/animationspagecontroller_overrides.cpp
-    ${CMAKE_SOURCE_DIR}/src/settings/animationspagecontroller_paths.cpp
-    ${CMAKE_SOURCE_DIR}/src/settings/shaderpackinstaller.cpp
-    ${CMAKE_SOURCE_DIR}/src/settings/animationpresetlibrary.cpp
-    ${CMAKE_SOURCE_DIR}/src/settings/motionsetstore.cpp
-    ${CMAKE_SOURCE_DIR}/src/settings/animationfileutils.cpp
+    ${_animations_ctrl_SRCS}
 )
 target_link_libraries(test_animations_motion_sets
     PRIVATE
@@ -671,14 +683,7 @@ add_test(NAME test_animations_motion_sets COMMAND test_animations_motion_sets)
 # project's <800-line guideline.
 add_executable(test_animations_shader_overrides
     settings/test_animations_shader_overrides.cpp
-    ${CMAKE_SOURCE_DIR}/src/settings/animationspagecontroller.cpp
-    ${CMAKE_SOURCE_DIR}/src/settings/animationspagecontroller_shaders.cpp
-    ${CMAKE_SOURCE_DIR}/src/settings/animationspagecontroller_overrides.cpp
-    ${CMAKE_SOURCE_DIR}/src/settings/animationspagecontroller_paths.cpp
-    ${CMAKE_SOURCE_DIR}/src/settings/shaderpackinstaller.cpp
-    ${CMAKE_SOURCE_DIR}/src/settings/animationpresetlibrary.cpp
-    ${CMAKE_SOURCE_DIR}/src/settings/motionsetstore.cpp
-    ${CMAKE_SOURCE_DIR}/src/settings/animationfileutils.cpp
+    ${_animations_ctrl_SRCS}
 )
 target_link_libraries(test_animations_shader_overrides
     PRIVATE
@@ -755,9 +760,10 @@ add_test(NAME test_layout_adaptor_signals COMMAND test_layout_adaptor_signals)
 # refactor/dbus-performance branch (SettingsAdaptor value-equality guard,
 # LayoutAdaptor signal split, JSON cache reuse). Run with
 # `ctest -R bench_dbus_adaptors` to capture numbers against
-# docs/perf/dbus-baseline.md. Not in _all_tests by default because
-# benchmark output is verbose; it is still added via add_test() so
-# `ctest -R bench` can select it.
+# docs/perf/dbus-baseline.md. NOTE: add_test() puts it in the directory
+# TESTS property, so a bare `ctest` run DOES include it (and its verbose
+# benchmark output); use `ctest -LE bench` to exclude it — the LABELS
+# property below exists exactly for that.
 add_executable(bench_dbus_adaptors dbus/bench_dbus_adaptors.cpp)
 target_link_libraries(bench_dbus_adaptors PRIVATE Qt6::Test Qt6::Core Qt6::DBus plasmazones_core)
 add_test(NAME bench_dbus_adaptors COMMAND bench_dbus_adaptors)
@@ -771,6 +777,8 @@ set_tests_properties(bench_dbus_adaptors PROPERTIES LABELS "bench")
 #   test_wire_types: D-Bus wire type signature/roundtrip tests
 #   test_floating_cache: FloatingCache + TriggerParser tests
 #   test_autotile_state: AutotileStateHelpers + WindowId tests
+#   test_decoration_manager: DecorationManager ownership/veto behavioral spec
+#   test_decoration_manager_timers: DecorationManager deferred-drain/fallback timers
 # ═══════════════════════════════════════════════════════════════════════════════
 add_executable(test_wire_types compositor-common/test_wire_types.cpp)
 target_link_libraries(test_wire_types PRIVATE Qt6::Test PhosphorCompositor::PhosphorCompositor
@@ -785,6 +793,14 @@ add_executable(test_autotile_state compositor-common/test_autotile_state.cpp)
 target_link_libraries(test_autotile_state PRIVATE Qt6::Test PhosphorCompositor::PhosphorCompositor
                                                   PhosphorIdentity::PhosphorIdentity)
 add_test(NAME test_autotile_state COMMAND test_autotile_state)
+
+add_executable(test_decoration_manager compositor-common/test_decoration_manager.cpp)
+target_link_libraries(test_decoration_manager PRIVATE Qt6::Test PhosphorCompositor::PhosphorCompositor)
+add_test(NAME test_decoration_manager COMMAND test_decoration_manager)
+
+add_executable(test_decoration_manager_timers compositor-common/test_decoration_manager_timers.cpp)
+target_link_libraries(test_decoration_manager_timers PRIVATE Qt6::Test PhosphorCompositor::PhosphorCompositor)
+add_test(NAME test_decoration_manager_timers COMMAND test_decoration_manager_timers)
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # Headless environment support

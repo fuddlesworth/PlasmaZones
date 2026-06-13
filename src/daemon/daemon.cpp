@@ -74,8 +74,6 @@
 #include <PhosphorScreens/PlasmaPanelSource.h>
 #include "../core/shaderregistry.h"
 #include "../config/settings.h"
-#include "../config/configmigration.h"
-#include "../config/configbackends.h"
 #include "../dbus/layoutadaptor.h"
 #include "../dbus/settingsadaptor.h"
 #include "../dbus/overlayadaptor.h"
@@ -1324,6 +1322,16 @@ bool Daemon::init()
             [screenModeForWindow](const QString& windowId) -> bool {
                 return screenModeForWindow(windowId) == PhosphorZones::AssignmentEntry::Autotile;
             });
+
+        // Tiled predicate (distinct from the MODE predicate above): live
+        // engine state, "is this window actively tiled right now". Guards
+        // recordFreeGeometry against recording a tile rect as a float-back —
+        // the engine-backed answer survives effect reloads, which the
+        // effect-side capture guard cannot.
+        m_windowTrackingAdaptor->service()->setAutotileTiledPredicate(
+            [autotilePtr = QPointer(autotileEngine)](const QString& windowId) -> bool {
+                return autotilePtr && autotilePtr->isWindowTiled(windowId);
+            });
     }
 
     // Wire SnapEngine's back-reference to the window tracking adaptor.
@@ -1451,6 +1459,10 @@ bool Daemon::init()
             m_suppressResnapOsd = osdEntries.size();
             m_windowTrackingAdaptor->service()->populateResnapBufferForAllScreens(autotileScreens, changedScreenIds);
             m_snapAdaptor->resnapToNewLayout();
+            // Restore snap-float positions for windows this KCM apply released
+            // from autotile — the buffer-based resnap above cannot cover
+            // floating windows (see the helper).
+            emitPendingSnapFloatRestoresForResnapBuffer();
 
             // Show OSD for changed screens — use locked OSD variant when context is locked.
             // KCM Apply is an explicit user-driven layout assignment change, so the regular
@@ -1942,6 +1954,7 @@ void Daemon::stop()
         wts->setEngineFloatWriter({});
         wts->setEngineFloatLister({});
         wts->setAutotileModePredicate({});
+        wts->setAutotileTiledPredicate({});
     }
 
     // Tear down the context-resolver triple before destroying the

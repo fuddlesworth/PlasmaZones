@@ -283,6 +283,68 @@ private Q_SLOTS:
         WindowRegistry reg;
         QCOMPARE(reg.appIdFor(QStringLiteral("unknown")), QString());
     }
+
+    // ────────────────────────────────────────────────────────────────────
+    // pruneStaleInstances — defensive batch cleanup for signal-less deaths
+    // ────────────────────────────────────────────────────────────────────
+
+    void pruneStaleInstances_removesAbsentRecordsAndCanonical_emitsDisappeared()
+    {
+        WindowRegistry reg;
+        reg.upsert(QStringLiteral("alive-1"), make(QStringLiteral("firefox")));
+        reg.upsert(QStringLiteral("dead-1"), make(QStringLiteral("konsole")));
+        reg.upsert(QStringLiteral("dead-2"), make(QStringLiteral("dolphin")));
+        // Seed a canonical translation for a dead window (composite id is
+        // appId|instanceId; the registry keys canonical on the instance part).
+        reg.canonicalizeWindowId(QStringLiteral("konsole|dead-1"));
+
+        QSignalSpy disappeared(&reg, &WindowRegistry::windowDisappeared);
+
+        const int pruned = reg.pruneStaleInstances({QStringLiteral("alive-1")});
+
+        QCOMPARE(pruned, 2);
+        QCOMPARE(reg.size(), 1);
+        QVERIFY(reg.contains(QStringLiteral("alive-1")));
+        QVERIFY(!reg.contains(QStringLiteral("dead-1")));
+        QVERIFY(!reg.contains(QStringLiteral("dead-2")));
+        // windowDisappeared fired for each dead record so subscribers (e.g.
+        // saved-autotile-order cleanup) drop their ghost state.
+        QCOMPARE(disappeared.size(), 2);
+        // The dead window's canonical translation is gone — a re-observation
+        // under a mutated appId no longer resolves to the stale canonical.
+        QCOMPARE(reg.canonicalizeForLookup(QStringLiteral("konsole-renamed|dead-1")),
+                 QStringLiteral("konsole-renamed|dead-1"));
+        // The alive window is untouched.
+        QCOMPARE(reg.appIdFor(QStringLiteral("alive-1")), QStringLiteral("firefox"));
+    }
+
+    void pruneStaleInstances_allAlive_isNoop()
+    {
+        WindowRegistry reg;
+        reg.upsert(QStringLiteral("u1"), make(QStringLiteral("firefox")));
+        reg.upsert(QStringLiteral("u2"), make(QStringLiteral("konsole")));
+        QSignalSpy disappeared(&reg, &WindowRegistry::windowDisappeared);
+
+        const int pruned = reg.pruneStaleInstances({QStringLiteral("u1"), QStringLiteral("u2")});
+
+        QCOMPARE(pruned, 0);
+        QCOMPARE(disappeared.size(), 0);
+        QCOMPARE(reg.size(), 2);
+    }
+
+    void pruneStaleInstances_canonicalWithoutRecord_isStillSwept()
+    {
+        // A window can hold a canonical translation with no metadata record
+        // (it was canonicalized but never upserted, or its record was already
+        // removed). The sweep must still drop the orphan canonical entry.
+        WindowRegistry reg;
+        reg.canonicalizeWindowId(QStringLiteral("ghost|orphan-1"));
+
+        const int pruned = reg.pruneStaleInstances({QStringLiteral("alive-1")});
+
+        QCOMPARE(pruned, 1);
+        QCOMPARE(reg.canonicalizeForLookup(QStringLiteral("ghost-2|orphan-1")), QStringLiteral("ghost-2|orphan-1"));
+    }
 };
 
 // metadataChanged carries WindowMetadata by value in its signal payload;

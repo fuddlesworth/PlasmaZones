@@ -69,8 +69,10 @@ QString ConfigDefaults::readRenderingBackendFromDisk()
         }
     }
 
-    // Fallback: read from legacy INI file if JSON doesn't exist yet (migration
-    // hasn't run — this function is called very early, before ensureJsonConfig()).
+    // Fallback: read from the legacy INI when the JSON is absent, unparseable,
+    // or doesn't carry the key — in practice the pre-migration window (this
+    // function is called very early, before ensureJsonConfig(), and a
+    // successful migration renames the INI away).
     const QString iniPath = legacyConfigFilePath();
     if (QFile::exists(iniPath)) {
         QSettings cfg(iniPath, QSettings::IniFormat);
