@@ -25,7 +25,7 @@ endfunction()
 _phosphorserviceidle_test(test_phosphorserviceidle_smoke test_smoke.cpp)
 
 # Facade test: the deterministic IdleService surface (stage config round trip +
-# sort, inhibition toggling, inert defaults) under the offscreen platform.
+# sort, inhibition toggling, inert defaults) with no QPA / no compositor.
 _phosphorserviceidle_test(test_phosphorserviceidle_facade test_facade.cpp)
 
 # QML facade test: a real QQmlEngine imports the module and proves the imperative

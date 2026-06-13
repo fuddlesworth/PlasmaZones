@@ -865,7 +865,25 @@ void WindowTrackingAdaptor::pruneStaleWindows(const QStringList& aliveWindowIds)
     const QSet<QString> alive(aliveWindowIds.begin(), aliveWindowIds.end());
     int persistedPruned = m_service->pruneStaleAssignments(alive);
     if (m_autotileEngine) {
-        persistedPruned += m_autotileEngine->pruneStaleWindows(alive);
+        // The autotile engine keys every internal map (m_windowToStateKey,
+        // m_windowMinSizes, m_autotileFloatedWindows, TilingState membership)
+        // on each window's CANONICAL id — its FIRST-seen composite, frozen by
+        // the daemon-side WindowRegistry. The alive list, by contrast, carries
+        // the effect's CURRENT composites: on an effect reload the effect
+        // rebuilds its id cache from the windows' present WM_CLASS, so for an
+        // app that mutated its class mid-session (Electron/CEF — the exact
+        // class the canonicalization machinery exists for) the current
+        // composite differs from the canonical. A raw comparison would then
+        // miss the live window in the alive set and FORCE-REMOVE it from the
+        // layout. Canonicalize each alive id back to its registry identity so
+        // the engine compares canonical-to-canonical (passthrough for ids the
+        // registry never saw — never worse than the raw set).
+        QSet<QString> canonicalAlive;
+        canonicalAlive.reserve(aliveWindowIds.size());
+        for (const QString& id : aliveWindowIds) {
+            canonicalAlive.insert(m_service->canonicalizeForLookup(id));
+        }
+        persistedPruned += m_autotileEngine->pruneStaleWindows(canonicalAlive);
     }
     // Defensive sweep of the frame-geometry shadow store. The primary
     // cleanup path is `windowClosed`, but if a window dies without a

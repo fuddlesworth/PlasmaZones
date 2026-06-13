@@ -17,6 +17,7 @@ function(phosphoripc_add_test name)
     # caps ctest at 30s per binary so a hung socket test can't wedge CI.
     set_tests_properties(${name} PROPERTIES
         TIMEOUT 30
+        LABELS "phosphoripc"
     )
 endfunction()
 

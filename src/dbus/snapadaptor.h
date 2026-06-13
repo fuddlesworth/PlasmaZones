@@ -41,7 +41,10 @@ class ISettings;
  *
  * Signal relay from SnapEngine to WindowTrackingAdaptor is also wired
  * here (navigationFeedback, windowFloatingChanged, applyGeometryRequested,
- * resnapToNewLayoutRequested, snapAllWindowsRequested).
+ * snapAllWindowsRequested, applyGeometriesBatch, activateWindowRequested).
+ * SnapEngine::resnapToNewLayoutRequested routes to this adaptor's own
+ * handleBatchedResnap slot (bookkeeping + applyGeometriesBatch emission),
+ * not directly to WTA.
  *
  * @see SnapEngine, WindowTrackingAdaptor
  */

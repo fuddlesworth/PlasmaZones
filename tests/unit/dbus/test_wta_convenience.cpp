@@ -375,7 +375,7 @@ private Q_SLOTS:
         PhosphorEngine::EngineSlot slot;
         slot.state = PhosphorEngine::WindowPlacement::stateFloating();
         slot.zoneIds = QStringList{m_zoneIds[0]}; // pre-float zones
-        rec.engines.insert(QStringLiteral("snap"), slot);
+        rec.engines.insert(PhosphorEngine::WindowPlacement::snapEngineId(), slot);
         rec.freeGeometryByScreen.insert(m_screenId, floatedGeo);
         m_wta->service()->placementStore().record(rec);
 
@@ -417,7 +417,7 @@ private Q_SLOTS:
         PhosphorEngine::EngineSlot slot;
         slot.state = PhosphorEngine::WindowPlacement::stateSnapped();
         slot.zoneIds = QStringList{m_zoneIds[0]};
-        rec.engines.insert(QStringLiteral("snap"), slot);
+        rec.engines.insert(PhosphorEngine::WindowPlacement::snapEngineId(), slot);
         rec.freeGeometryByScreen.insert(m_screenId, floatBack); // shared float-back (single store)
         m_wta->service()->placementStore().record(rec);
 
@@ -451,7 +451,8 @@ private Q_SLOTS:
         // The store now holds a floated record for the open window at its live geo.
         auto rec = m_wta->service()->placementStore().peek(w1, QStringLiteral("settings"));
         QVERIFY(rec.has_value());
-        QCOMPARE(rec->slotFor(QStringLiteral("snap")).state, QString(PhosphorEngine::WindowPlacement::stateFloating()));
+        QCOMPARE(rec->slotFor(PhosphorEngine::WindowPlacement::snapEngineId()).state,
+                 QString(PhosphorEngine::WindowPlacement::stateFloating()));
         QCOMPARE(rec->freeGeometryFor(m_screenId), floatedGeo);
     }
 

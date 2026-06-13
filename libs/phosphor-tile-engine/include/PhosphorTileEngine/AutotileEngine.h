@@ -1012,6 +1012,19 @@ private:
     void connectSignals();
     bool insertWindow(const QString& windowId, const QString& screenId);
     void removeWindow(const QString& windowId);
+
+    /// Algorithm lifecycle REMOVE hook + state removal for a tracked window,
+    /// WITHOUT the per-window immediate retile that onWindowRemoved performs.
+    /// Returns the affected screen id (empty if the window was untracked) so
+    /// batch callers (pruneStaleWindows) can retile each affected screen once
+    /// instead of N times. onWindowRemoved is this + an immediate retile.
+    QString removeTrackedWindowNoRetile(const QString& windowId);
+
+    /// If @p windowId is the active drag-insert preview's dragged window or
+    /// evicted neighbour, drop it from the preview so a later commit/cancel
+    /// never operates on a now-dead id. Shared by windowClosed and the
+    /// pruneStaleWindows dead-window sweep.
+    void dropClosedWindowFromDragPreview(const QString& windowId);
     bool storeWindowMinSize(const QString& windowId, int minWidth, int minHeight);
     bool recalculateLayout(const QString& screenId);
     void applyTiling(const QString& screenId);

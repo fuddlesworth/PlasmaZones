@@ -30,6 +30,7 @@
 #include <QDBusServer>
 #include <QDeadlineTimer>
 #include <QImage>
+#include <QSet>
 #include <QSignalSpy>
 #include <QStringList>
 #include <QTemporaryDir>
@@ -142,10 +143,13 @@ void NotificationsSmokeTest::capabilitiesAdvertiseBody()
 {
     auto server = makeServer();
     const QStringList caps = server->GetCapabilities();
-    QVERIFY(!caps.isEmpty());
-    // "body" is honestly backed today; the set grows as actions / markup /
-    // persistence land in later milestones.
-    QVERIFY(caps.contains(QStringLiteral("body")));
+    // body / actions / icon-static / persistence are honestly backed today;
+    // body-markup stays out until a renderer exists (GetCapabilities documents
+    // the same). Pin the full set so a capability silently dropped from — or
+    // added to — the server is caught.
+    QCOMPARE(QSet<QString>(caps.begin(), caps.end()),
+             (QSet<QString>{QStringLiteral("body"), QStringLiteral("actions"), QStringLiteral("icon-static"),
+                            QStringLiteral("persistence")}));
 }
 
 void NotificationsSmokeTest::notifyAllocatesMonotonicNonZeroIds()

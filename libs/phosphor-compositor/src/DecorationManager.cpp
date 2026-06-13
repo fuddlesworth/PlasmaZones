@@ -622,6 +622,12 @@ bool DecorationManager::restoreNow(const QString& windowId, Entry& entry, bool r
         m_bridge.setNoBorder(w, false);
         if (target.isValid()) {
             m_bridge.moveResize(w, target);
+        } else {
+            // Symmetric with hideNow's AlreadyPlaced warning: a degenerate
+            // move-resize geometry on a placed window is unexpected, and
+            // without the re-assert the frame overflows the zone by the
+            // title-bar height — surface it rather than fail silently.
+            qCWarning(lcDecoration) << "restore: no valid move-resize target to re-assert for" << windowId;
         }
     } else {
         m_bridge.setNoBorder(w, false);

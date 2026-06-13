@@ -4,12 +4,13 @@
 // Facade test for the public IdleService. The compositor-driven idle advance
 // needs a live session, but the wiring that does not (stage configuration round
 // trip + sort, inhibition ref-count toggling, inert defaults) is deterministic
-// without a compositor (guiless QCoreApplication — no QPA at all) and pinned here. The stage-advance path itself is
-// covered by the state-machine unit test against a fake source.
+// without a compositor (guiless QCoreApplication — no QPA at all) and pinned
+// here. The stage-advance path itself is covered by the state-machine unit
+// test against a fake source.
 //
 // Coverage boundary: the inhibit -> disarm-the-ladder bridge (inhibitedChanged
 // driving setMonitoringEnabled) cannot be observed end-to-end here because the
-// facade wires the real IdleNotifierSource factory and offscreen has no
+// facade wires the real IdleNotifierSource factory and a guiless run has no
 // compositor to fire a stage. Its two halves are each fully unit-tested:
 // setMonitoringEnabled disarm/re-arm in test_statemachine, and the inhibition
 // cookie edges in test_inhibition. The live composite is the CLI-validated path.

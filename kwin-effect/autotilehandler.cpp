@@ -162,7 +162,7 @@ void AutotileHandler::handleCursorMoved(const QPointF& pos, const QString& scree
 // Integration points
 // ═══════════════════════════════════════════════════════════════════════════════
 
-bool AutotileHandler::notifyWindowAdded(KWin::EffectWindow* w)
+bool AutotileHandler::notifyWindowAdded(KWin::EffectWindow* w, bool knownFreeFloating)
 {
     // Deleted windows bail before getWindowId (cache-pollution hazard);
     // every other rejection comes after the pending-close consume below.
@@ -199,12 +199,13 @@ bool AutotileHandler::notifyWindowAdded(KWin::EffectWindow* w)
         // geometry — floating it would leave it at its tiled position instead
         // of restoring to its original free-floating size.
         //
-        // knownFreeFloating=true: this is the window-opened path, so the frame
-        // is KWin's spawn geometry — the authoritative pre-autotile position.
-        // The FloatingCache is not yet populated for fresh windows, so without
-        // this flag the isWindowFloating() guard would drop the one-shot save.
-        saveAndRecordPreAutotileGeometry(windowId, screenId, w->frameGeometry(),
-                                         /*knownFreeFloating=*/true);
+        // knownFreeFloating defaults true for the genuine window-opened path
+        // (the frame is KWin's spawn geometry — the authoritative pre-autotile
+        // position — and the FloatingCache is not yet populated, so the
+        // isWindowFloating() guard would otherwise drop the one-shot save).
+        // RE-ADD callers pass false so the floating guard runs and rejects a
+        // tiled zone rect instead of persisting it as free geometry.
+        saveAndRecordPreAutotileGeometry(windowId, screenId, w->frameGeometry(), knownFreeFloating);
 
         const QSize minSize = declaredMinSize(w);
 
@@ -430,7 +431,12 @@ void AutotileHandler::handleWindowOutputChanged(KWin::EffectWindow* w)
         if (savedPreAutotileGeo.isValid()) {
             m_preAutotileGeometries[newScreenId][windowId] = savedPreAutotileGeo;
         }
-        if (!notifyWindowAdded(w)) {
+        // RE-ADD: a tiled window's current frame is its zone rect on the old
+        // screen — knownFreeFloating=false lets the floating guard reject it
+        // (a genuinely floating window passes the guard and keeps its float
+        // geometry captured). Without this the tiled rect would be pushed with
+        // overwrite=true and destroy the daemon's persisted free-back.
+        if (!notifyWindowAdded(w, /*knownFreeFloating=*/false)) {
             // The re-add was filtered locally — eligibility drift (e.g. the
             // tiled frame now sits below the user's min-size threshold) or a
             // pending close. No windowOpened call was issued, so neither the
@@ -724,11 +730,13 @@ void AutotileHandler::onDaemonReady()
                 if (geo.width() <= 0 || geo.height() <= 0) {
                     continue;
                 }
+                // qRound, not truncation: fractional-scale sub-pixel residue
+                // (matches the toRect() geometry-capture convention).
                 PhosphorProtocol::ClientHelpers::fireAndForget(
                     m_effect, PhosphorProtocol::Service::Interface::WindowTracking,
                     QStringLiteral("storePreTileGeometry"),
-                    {winIt.key(), static_cast<int>(geo.x()), static_cast<int>(geo.y()), static_cast<int>(geo.width()),
-                     static_cast<int>(geo.height()), screenId, false},
+                    {winIt.key(), qRound(geo.x()), qRound(geo.y()), qRound(geo.width()), qRound(geo.height()), screenId,
+                     false},
                     QStringLiteral("storePreTileGeometry"));
                 ++resent;
             }

@@ -18,7 +18,10 @@
 # GitHub's auto-archive and every distro source tarball include it, so offline
 # packaging builds need no network and no special handling.
 
-cmake_minimum_required(VERSION 3.16)
+# 3.18 floor: the vendored-Luau acquisition uses file(ARCHIVE_EXTRACT ...)
+# (>= 3.18). A lower floor would fail mid-configure with an unknown-subcommand
+# error instead of a clear minimum-version message.
+cmake_minimum_required(VERSION 3.18)
 
 set(PHOSPHORSCRIPTING_VERSION "0.1.0")
 

@@ -143,19 +143,31 @@ int AutotileEngine::pruneStaleWindows(const QSet<QString>& aliveWindowIds)
     // died without a windowClosed signal"): a dead window's TilingState
     // membership is otherwise permanent, since windowOpened's ghost-removal
     // only fires when the same window re-announces and a dead window never
-    // does — the layout retiles around a ghost tile forever. Route each
-    // stale id through the normal removal path (lifecycle hook + state
-    // removal + immediate retile of the owning screen) via onWindowRemoved.
+    // does — the layout retiles around a ghost tile forever. This is a BATCH
+    // path (N dead windows reported at once), so do the lifecycle hook + state
+    // removal per id but retile each affected screen ONCE afterward, rather
+    // than N immediate retiles of the same screen via onWindowRemoved.
     QStringList staleTracked;
     for (auto it = m_windowToStateKey.constBegin(); it != m_windowToStateKey.constEnd(); ++it) {
         if (!aliveWindowIds.contains(it.key())) {
             staleTracked.append(it.key());
         }
     }
+    QSet<QString> affectedScreens;
     for (const QString& windowId : std::as_const(staleTracked)) {
         qCInfo(PhosphorTileEngine::lcTileEngine) << "pruneStaleWindows: removing dead tracked window" << windowId;
-        onWindowRemoved(windowId);
+        // Drop a dead window from an active drag-insert preview before tearing
+        // down its state, mirroring windowClosed — else commit/cancel would
+        // later re-add or float a dead id.
+        dropClosedWindowFromDragPreview(windowId);
+        const QString screenId = removeTrackedWindowNoRetile(windowId);
+        if (!screenId.isEmpty()) {
+            affectedScreens.insert(screenId);
+        }
         ++pruned;
+    }
+    for (const QString& screenId : std::as_const(affectedScreens)) {
+        retileAfterOperation(screenId, true);
     }
     // Min-size entries are keyed independently of tracking (windowOpened
     // stores them before any state insert), so sweep them directly.
@@ -2213,6 +2225,22 @@ bool AutotileEngine::storeWindowMinSize(const QString& rawWindowId, int minWidth
     return true;
 }
 
+void AutotileEngine::dropClosedWindowFromDragPreview(const QString& windowId)
+{
+    if (!m_dragInsertPreview) {
+        return;
+    }
+    if (m_dragInsertPreview->windowId == windowId) {
+        // Dragged window gone mid-preview — drop the preview entirely.
+        // Cannot "restore" or "commit" a gone window; clear and move on.
+        m_dragInsertPreview.reset();
+    } else if (m_dragInsertPreview->evictedWindowId == windowId) {
+        // Evicted neighbour gone mid-preview — forget the eviction so
+        // commit/cancel don't try to operate on it.
+        m_dragInsertPreview->evictedWindowId.clear();
+    }
+}
+
 void AutotileEngine::windowClosed(const QString& rawWindowId)
 {
     if (!warnIfEmptyWindowId(rawWindowId, "windowClosed")) {
@@ -2220,22 +2248,10 @@ void AutotileEngine::windowClosed(const QString& rawWindowId)
     }
     const QString windowId = canonicalizeWindowId(rawWindowId);
 
-    // Drag-insert preview bookkeeping: if the closed window is involved in
-    // an active preview (as either the dragged window or the evicted
-    // neighbour), we must react before onWindowRemoved tears down state.
-    // Leaving a stale evictedWindowId would later drive setFloating or
+    // Drag-insert preview bookkeeping: react before onWindowRemoved tears
+    // down state. Leaving a stale reference would later drive setFloating or
     // windowsBatchFloated on a dead window id.
-    if (m_dragInsertPreview) {
-        if (m_dragInsertPreview->windowId == windowId) {
-            // Dragged window closed mid-preview — drop the preview entirely.
-            // Cannot "restore" or "commit" a gone window; clear and move on.
-            m_dragInsertPreview.reset();
-        } else if (m_dragInsertPreview->evictedWindowId == windowId) {
-            // Evicted neighbour closed mid-preview — forget the eviction so
-            // commit/cancel don't try to operate on it.
-            m_dragInsertPreview->evictedWindowId.clear();
-        }
-    }
+    dropClosedWindowFromDragPreview(windowId);
 
     m_autotileFloatedWindows.remove(windowId);
     // Min-size cleanup must not depend on tracking: a window released from
@@ -2512,14 +2528,12 @@ void AutotileEngine::onWindowAdded(const QString& windowId)
     }
 }
 
-void AutotileEngine::onWindowRemoved(const QString& windowId)
+QString AutotileEngine::removeTrackedWindowNoRetile(const QString& windowId)
 {
     const QString screenId = m_windowToStateKey.value(windowId).screenId;
     if (screenId.isEmpty()) {
-        return;
+        return {};
     }
-
-    qCInfo(PhosphorTileEngine::lcTileEngine) << "onWindowRemoved:" << windowId << "screen=" << screenId;
 
     // Notify algorithm via lifecycle hook before removal. Resolve the state
     // through the window's STORED key (mirrors handoffRelease /
@@ -2535,14 +2549,25 @@ void AutotileEngine::onWindowRemoved(const QString& windowId)
             algo->onWindowRemoved(state, idx);
         } else {
             qCDebug(PhosphorTileEngine::lcTileEngine)
-                << "onWindowRemoved: window" << windowId << "not found in tiling state — lifecycle hook skipped";
+                << "removeTrackedWindow: window" << windowId << "not found in tiling state — lifecycle hook skipped";
         }
     }
 
     removeWindow(windowId);
+    return screenId;
+}
+
+void AutotileEngine::onWindowRemoved(const QString& windowId)
+{
+    const QString screenId = removeTrackedWindowNoRetile(windowId);
+    if (screenId.isEmpty()) {
+        return;
+    }
+    qCInfo(PhosphorTileEngine::lcTileEngine) << "onWindowRemoved:" << windowId << "screen=" << screenId;
     // Retile immediately (not deferred like onWindowAdded). Removals need instant
     // layout recalculation to avoid visible holes. Unlike additions, removals don't
-    // arrive in bursts, so coalescing provides no benefit.
+    // arrive in bursts, so coalescing provides no benefit. (The batch prune path
+    // in pruneStaleWindows is the exception — it retiles each affected screen once.)
     retileAfterOperation(screenId, true);
 }
 
@@ -2705,16 +2730,13 @@ bool AutotileEngine::insertWindow(const QString& windowId, const QString& screen
         }
     }
 
-    // Float-restore (common PlacementEngineBase queue) takes precedence over the
-    // pending-restore queue and the insert-position config: a window closed while
-    // FLOATING reopens at its floated geometry, STILL FLOATING — never inserted
-    // into the tile layout. Marks it floating in TilingState (onWindowAdded then
-    // emits windowFloatingStateSynced → daemon passive float-sync, NO geometry
-    // teleport) and applies the floated geometry via the base
-    // geometryRestoreRequested signal. Independent of the wasFloating-ignoring
-    // pending-restore queue below, so regression #271 (stale pre-tile rect)
-    // cannot recur. inserted=true → the tile-insert paths below are all skipped;
-    // the function tail still records m_windowToStateKey and returns true.
+    // Close/reopen restore takes precedence over the insert-position config: a
+    // window closed while FLOATING reopens at its floated geometry, STILL
+    // FLOATING — never inserted into the tile layout (marked floating in
+    // TilingState; onWindowAdded then emits windowFloatingStateSynced → daemon
+    // passive float-sync, NO geometry teleport). inserted=true → the tile-insert
+    // paths below are all skipped; the function tail still records
+    // m_windowToStateKey and returns true.
     // Close/reopen restore from the unified placement store: ONE record per window
     // holds both engines' slots + the shared per-screen free geometry. Take it once
     // and branch on the autotile slot — a FLOATING slot restores the window floating

@@ -74,8 +74,6 @@
 #include <PhosphorScreens/PlasmaPanelSource.h>
 #include "../core/shaderregistry.h"
 #include "../config/settings.h"
-#include "../config/configmigration.h"
-#include "../config/configbackends.h"
 #include "../dbus/layoutadaptor.h"
 #include "../dbus/settingsadaptor.h"
 #include "../dbus/overlayadaptor.h"
@@ -1944,6 +1942,7 @@ void Daemon::stop()
         wts->setEngineFloatWriter({});
         wts->setEngineFloatLister({});
         wts->setAutotileModePredicate({});
+        wts->setAutotileTiledPredicate({});
     }
 
     // Tear down the context-resolver triple before destroying the

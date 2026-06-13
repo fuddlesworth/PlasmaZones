@@ -253,10 +253,12 @@ void SnapHandler::ensurePreSnapGeometryStored(KWin::EffectWindow* w, const QStri
     // pre-check: that path matched on appId too, so a stale cross-session entry from
     // a prior window instance (keyed by appId) would block the fresh per-instance
     // capture and freeze float-restore at ancient coordinates.
+    // qRound, not truncation: fractional-scale outputs leave sub-pixel
+    // residue in frameGeometry() (same convention as the toRect() geometry
+    // paths — see window_lifecycle.cpp).
     PhosphorProtocol::ClientHelpers::fireAndForget(
         m_effect, PhosphorProtocol::Service::Interface::WindowTracking, QStringLiteral("storePreTileGeometry"),
-        {windowId, static_cast<int>(geom.x()), static_cast<int>(geom.y()), static_cast<int>(geom.width()),
-         static_cast<int>(geom.height()), screenId, false},
+        {windowId, qRound(geom.x()), qRound(geom.y()), qRound(geom.width()), qRound(geom.height()), screenId, false},
         QStringLiteral("storePreTileGeometry"));
     qCInfo(lcEffect) << "Stored pre-tile geometry for window" << windowId << "geom=" << geom;
 }

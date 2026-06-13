@@ -10,7 +10,6 @@
 // full PAM session lifecycle needs a live polkitd and is exercised via the CLI
 // demo against pkexec.
 
-#include <PhosphorServicePolkit/AuthRequest.h>
 #include <PhosphorServicePolkit/PolkitAgent.h>
 #include <PhosphorServicePolkit/QmlRegistration.h>
 

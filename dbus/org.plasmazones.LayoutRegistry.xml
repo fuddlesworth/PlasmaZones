@@ -9,15 +9,15 @@ SPDX-License-Identifier: GPL-3.0-or-later
     <interface name="org.plasmazones.LayoutRegistry">
         <annotation name="org.gtk.GDBus.DocString" value="Layout management: CRUD, screen and virtual-desktop assignments, quick layout slots (1-9), KDE Activities, and editor launch."/>
         <method name="getActiveLayout">
-            <annotation name="org.gtk.GDBus.DocString" value="Returns the currently active layout as JSON (id, name, zones, etc.)."/>
+            <annotation name="org.gtk.GDBus.DocString" value="Returns the settings-based DEFAULT layout as JSON (id, name, zones, etc.). Note this is the persisted default, which may differ from the transient internal active layout — subscribe to activeLayoutIdChanged for the latter."/>
             <arg name="layoutJson" type="s" direction="out">
                 <annotation name="org.gtk.GDBus.DocString" value="Full layout as JSON (id, name, zones, etc.)."/>
             </arg>
         </method>
         <method name="getLayoutList">
-            <annotation name="org.gtk.GDBus.DocString" value="Returns a list of all available layout IDs (or JSON array of layout objects, depending on implementation)."/>
+            <annotation name="org.gtk.GDBus.DocString" value="Returns an array of strings; each element is one JSON-serialized layout object (manual layouts enriched with origin/visibility/allow-lists, plus autotile algorithm entries). Never bare IDs and never a single JSON array."/>
             <arg name="layouts" type="as" direction="out">
-                <annotation name="org.gtk.GDBus.DocString" value="List of layout IDs or JSON array of layout objects."/>
+                <annotation name="org.gtk.GDBus.DocString" value="Array of JSON-serialized layout objects, one per string."/>
             </arg>
         </method>
         <method name="getLayoutPreviewList">
@@ -297,7 +297,7 @@ SPDX-License-Identifier: GPL-3.0-or-later
         <method name="getAvailableScreenIds">
             <annotation name="org.gtk.GDBus.DocString" value="Returns the daemon's effective screen ids — one entry per physical monitor PLUS any virtual-screen subdivisions configured on top. Use this for screen enumeration in UI / settings panels; getAllScreenAssignments is the assignment-state readback and emits only screens with stored entries."/>
             <arg name="screenIds" type="as" direction="out">
-                <annotation name="org.gtk.GDBus.DocString" value="Stable screen ids (e.g. &apos;{edid-uuid}&apos; for physical, &apos;{edid-uuid}/vs:0&apos; for virtual subdivisions). Order follows the daemon's effective-screen iteration."/>
+                <annotation name="org.gtk.GDBus.DocString" value="Stable screen ids in manufacturer:model:serial form (e.g. &apos;Dell:U2722D:115107&apos; for physical, &apos;Dell:U2722D:115107/vs:0&apos; for virtual subdivisions). Order follows the daemon's effective-screen iteration."/>
             </arg>
         </method>
         <method name="getAllScreenAssignments">

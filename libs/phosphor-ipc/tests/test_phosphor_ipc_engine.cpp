@@ -17,6 +17,8 @@
 #include <QVariant>
 #include <QtCore/qtclasshelpermacros.h>
 
+#include <memory>
+
 using namespace PhosphorIpc;
 
 class TestPhosphorIpcEngine : public QObject

@@ -66,10 +66,14 @@ void PlasmaZonesEffect::callEndDrag(KWin::EffectWindow* window, const QString& w
     // shape was a 9-tuple of out-params) with a typed struct.
     QPointF cursorAtRelease = m_dragTracker->lastCursorPos();
 
+    // qRound the cursor coords (not truncation): the hot-path updateDragCursor
+    // stream rounds, so on fractional-scale outputs the release coordinate the
+    // daemon resolves the drop zone against must round too, or it can differ by
+    // 1px from the last streamed tick at a zone boundary.
     QDBusPendingCall pendingCall = PhosphorProtocol::ClientHelpers::asyncCall(
         PhosphorProtocol::Service::Interface::WindowDrag, QStringLiteral("endDrag"),
-        {windowId, static_cast<int>(cursorAtRelease.x()), static_cast<int>(cursorAtRelease.y()),
-         static_cast<int>(m_currentModifiers), static_cast<int>(m_currentMouseButtons), cancelled});
+        {windowId, qRound(cursorAtRelease.x()), qRound(cursorAtRelease.y()), static_cast<int>(m_currentModifiers),
+         static_cast<int>(m_currentMouseButtons), cancelled});
 
     QPointer<KWin::EffectWindow> safeWindow = window;
     auto* watcher = new QDBusPendingCallWatcher(pendingCall, this);

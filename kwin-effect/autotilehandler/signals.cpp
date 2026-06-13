@@ -479,7 +479,13 @@ void AutotileHandler::slotScreensChanged(const QStringList& screenIds, bool isDe
                         }
                         qCInfo(lcEffect) << "Desktop switch: re-adding moved window to autotile:" << windowId << "on"
                                          << screenId;
-                        notifyWindowAdded(w);
+                        // RE-ADD (desktop return): this window's current frame is
+                        // the tiled rect from the source desktop, not a free
+                        // position. knownFreeFloating=false runs the floating
+                        // guard so a tiled rect is not persisted as free geometry
+                        // (a stash restore above already populated the local
+                        // bucket for windows that had one; this protects the rest).
+                        notifyWindowAdded(w, /*knownFreeFloating=*/false);
                     }
                 }
             }
@@ -520,11 +526,13 @@ void AutotileHandler::slotScreensChanged(const QStringList& screenIds, bool isDe
                     // frame at the tiled position. If a correct pre-tile entry already
                     // exists, preserve it. If no entry exists, the floating window's
                     // current geometry is the best available fallback.
+                    // qRound, not truncation: fractional-scale sub-pixel
+                    // residue (matches the toRect() geometry-capture convention).
                     PhosphorProtocol::ClientHelpers::fireAndForget(
                         m_effect, PhosphorProtocol::Service::Interface::WindowTracking,
                         QStringLiteral("storePreTileGeometry"),
-                        {windowId, static_cast<int>(frame.x()), static_cast<int>(frame.y()),
-                         static_cast<int>(frame.width()), static_cast<int>(frame.height()), screenId, false},
+                        {windowId, qRound(frame.x()), qRound(frame.y()), qRound(frame.width()), qRound(frame.height()),
+                         screenId, false},
                         QStringLiteral("storePreTileGeometry"));
                 }
             }
@@ -829,9 +837,31 @@ void AutotileHandler::slotWindowFullScreenChanged(KWin::EffectWindow* w)
         // m_notifiedWindows the whole time — the daemon never untiles on
         // fullscreen) returns to its tiled rect, so re-establish the
         // decoration claim and border tracking the enter-path released.
-        // Windows we never tiled fall through both guards (no-op).
         const QString screenId = m_notifiedWindowScreens.value(windowId);
-        if (!m_notifiedWindows.contains(windowId) || screenId.isEmpty()) {
+        if (!m_notifiedWindows.contains(windowId)) {
+            // Never-tracked window: a window that OPENED fullscreen was
+            // rejected by isEligibleForAutotileNotify (fullscreen guard) and
+            // never announced. Now that it has a normal frame, announce it so
+            // the daemon tiles it (notifyWindowAdded re-checks eligibility,
+            // including the current desktop/activity).
+            const QString currentScreen = m_effect->getWindowScreenId(w);
+            if (m_autotileScreens.contains(currentScreen)) {
+                notifyWindowAdded(w);
+            }
+            return;
+        }
+        if (screenId.isEmpty()) {
+            return;
+        }
+        // Autotile was disabled on this window's tracked screen while it was
+        // fullscreen on a non-current desktop (the genuine-toggle path skips
+        // non-current-desktop windows, so the tracking survived). Re-claiming
+        // onto a no-longer-autotiled screen would hide the title bar with no
+        // retile coming — demote the stale tracking and release instead.
+        if (!m_autotileScreens.contains(screenId)) {
+            m_notifiedWindows.remove(windowId);
+            m_notifiedWindowScreens.remove(windowId);
+            m_effect->decorationManager()->releaseKind(windowId, DecorationManager::OwnerKind::Autotile);
             return;
         }
         // Floating windows stay released: a window floated while fullscreen

@@ -180,6 +180,32 @@ private Q_SLOTS:
     }
 
     /**
+     * The Algorithm / AnimationEasingCurve validators canonicalize the
+     * accepted value to QString so the in-memory type matches what the
+     * backend round-trips (writeString → readString). A non-string payload
+     * (e.g. an int arriving over D-Bus) must therefore store as a QString
+     * immediately, keeping the observable type stable across restart — a
+     * regression to pass-through QVariant(value) would store it int-typed
+     * in the writing session but string-typed after reload.
+     */
+    void testPerScreenAutotile_algorithmValueIsCanonicalizedToString()
+    {
+        IsolatedConfigGuard guard;
+        Settings settings;
+        const QString screen = QStringLiteral("test-screen-1");
+
+        settings.setPerScreenAutotileSetting(screen, QStringLiteral("AutotileAlgorithm"), 5);
+        const QVariant stored = settings.getPerScreenAutotileSettings(screen).value(QStringLiteral("Algorithm"));
+        QCOMPARE(stored.typeId(), static_cast<int>(QMetaType::QString));
+        QCOMPARE(stored.toString(), QStringLiteral("5"));
+
+        // Empty string is still rejected (no meaningful per-screen override).
+        QSignalSpy spy(&settings, &Settings::perScreenAutotileSettingsChanged);
+        settings.setPerScreenAutotileSetting(screen, QStringLiteral("AutotileAlgorithm"), QString());
+        QCOMPARE(spy.count(), 0);
+    }
+
+    /**
      * Tripwire: every PerScreenAutotileKey constant must stay accepted by the
      * validator (which whitelists against the SHORT-form PhosphorEngine::
      * PerScreenKeys namespace after stripping the "Autotile" prefix). Nothing

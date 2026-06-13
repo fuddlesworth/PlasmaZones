@@ -169,6 +169,15 @@ ColumnLayout {
         return next;
     }
 
+    /// Coerce @p v to a finite number, falling back to @p fallback for
+    /// undefined / non-numeric / NaN / Infinity. Mirrors ShaderParameterRow's
+    /// `_numberOr` boundary defence: raw JSON metadata bounds can be strings
+    /// or NaN and must not leak into computed values.
+    function _finiteOr(v, fallback) {
+        var n = Number(v);
+        return isFinite(n) ? n : fallback;
+    }
+
     /// Roll a fresh value for every unlocked parameter within its
     /// metadata range. Locked entries and `image`-typed entries are
     /// preserved verbatim from `currentValues` (or the param default
@@ -200,11 +209,15 @@ ColumnLayout {
             var value;
             switch (param.type) {
             case "float":
-                var minF = param.min !== undefined ? param.min : 0;
-                var maxF = param.max !== undefined ? param.max : 1;
+                // Coerce bounds/step to finite numbers: raw JSON metadata can
+                // carry strings/NaN, which would otherwise yield string
+                // concatenation ("0.5" + ...) or NaN in the persisted value.
+                var minF = root._finiteOr(param.min, 0);
+                var maxF = root._finiteOr(param.max, 1);
+                var stepF = root._finiteOr(param.step, 0);
                 value = minF + Math.random() * (maxF - minF);
-                if (param.step !== undefined && param.step > 0) {
-                    value = Math.round(value / param.step) * param.step;
+                if (stepF > 0) {
+                    value = Math.round(value / stepF) * stepF;
                     // Step-rounding can escape the range when a bound is not
                     // a step multiple (e.g. max 1.6, step 1 -> 2.0); the
                     // emitted value is what persists, so clamp it back.
@@ -212,9 +225,12 @@ ColumnLayout {
                 }
                 break;
             case "int":
-                var minI = param.min !== undefined ? param.min : 0;
-                var maxI = param.max !== undefined ? param.max : 100;
+                var minI = Math.round(root._finiteOr(param.min, 0));
+                var maxI = Math.round(root._finiteOr(param.max, 100));
                 value = Math.floor(minI + Math.random() * (maxI - minI + 1));
+                // Clamp defensively — fractional/garbage bounds can push the
+                // draw above max (same range-escape class as the float step).
+                value = Math.min(maxI, Math.max(minI, value));
                 break;
             case "bool":
                 value = Math.random() < 0.5;

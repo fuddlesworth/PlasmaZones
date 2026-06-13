@@ -64,7 +64,17 @@ public:
     /// already-notified) — callers that depend on a follow-up tile must
     /// not wait for one in that case (used by the first-frame open
     /// suppression path to release suppression immediately on a no-op).
-    bool notifyWindowAdded(KWin::EffectWindow* w);
+    ///
+    /// @p knownFreeFloating governs the pre-autotile geometry capture: the
+    /// genuine window-opened/spawn path passes `true` (the frame is KWin's
+    /// spawn geometry and the FloatingCache is not yet populated, so the
+    /// isWindowFloating() guard must be bypassed). RE-ADD callers (a window
+    /// already known to the engine being re-announced — cross-screen
+    /// transfer, desktop-return catch-scan) pass `false`: the frame may be
+    /// a tiled zone rect, so the floating guard MUST run and reject it,
+    /// otherwise the tiled rect would be persisted as the window's
+    /// free-floating geometry and clobber the daemon's real float-back.
+    bool notifyWindowAdded(KWin::EffectWindow* w, bool knownFreeFloating = true);
 
     /**
      * @brief Batch-notify windows added to autotile screens

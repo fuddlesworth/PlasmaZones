@@ -185,10 +185,12 @@ void AutotileHandler::saveAndRecordPreAutotileGeometry(const QString& windowId, 
         // overwrite there would destroy the daemon's correct free-position
         // entry — exactly what the toggle path's explicit overwrite=false
         // back-fill exists to preserve.
+        // qRound, not truncation: fractional-scale sub-pixel residue (see the
+        // toRect() geometry-capture convention in window_lifecycle.cpp).
         PhosphorProtocol::ClientHelpers::fireAndForget(
             m_effect, PhosphorProtocol::Service::Interface::WindowTracking, QStringLiteral("storePreTileGeometry"),
-            {windowId, static_cast<int>(frame.x()), static_cast<int>(frame.y()), static_cast<int>(frame.width()),
-             static_cast<int>(frame.height()), screenId, knownFreeFloating},
+            {windowId, qRound(frame.x()), qRound(frame.y()), qRound(frame.width()), qRound(frame.height()), screenId,
+             knownFreeFloating},
             QStringLiteral("storePreTileGeometry"));
     }
 }
@@ -308,6 +310,17 @@ bool AutotileHandler::isEligibleForAutotileNotify(KWin::EffectWindow* w) const
     }
     if (w->isMinimized()) {
         qCDebug(lcEffect) << "isEligibleForAutotileNotify: rejected (minimized)" << m_effect->getWindowId(w);
+        return false;
+    }
+    // A window that is fullscreen at first contact (opened fullscreen, or
+    // present-fullscreen when autotile is enabled / the daemon restarts):
+    // KWin owns its geometry and re-asserts the fullscreen frame, so
+    // announcing it would (a) push the fullscreen frame as free geometry
+    // with overwrite=true and (b) make the daemon try to tile a window KWin
+    // won't let move. The exit-fullscreen slot re-announces it via
+    // notifyWindowAdded once it returns to a normal frame.
+    if (w->isFullScreen()) {
+        qCDebug(lcEffect) << "isEligibleForAutotileNotify: rejected (fullscreen)" << m_effect->getWindowId(w);
         return false;
     }
     if (!w->isOnCurrentDesktop() || !w->isOnCurrentActivity()) {
