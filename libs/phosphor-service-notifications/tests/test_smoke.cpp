@@ -51,7 +51,7 @@ private Q_SLOTS:
     void registerQmlTypesIsIdempotent();
     void staticIdentifiers();
     void serverInformation();
-    void capabilitiesAdvertiseBody();
+    void capabilitiesAdvertiseExactSet();
     void notifyAllocatesMonotonicNonZeroIds();
     void notifyHonoursReplacesId();
     void closeNotificationEmitsForLiveIdOnly();
@@ -139,7 +139,7 @@ void NotificationsSmokeTest::serverInformation()
     QVERIFY(!version.isEmpty());
 }
 
-void NotificationsSmokeTest::capabilitiesAdvertiseBody()
+void NotificationsSmokeTest::capabilitiesAdvertiseExactSet()
 {
     auto server = makeServer();
     const QStringList caps = server->GetCapabilities();
