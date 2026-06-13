@@ -285,7 +285,7 @@ void SnapHandler::handleCursorMoved(const QPointF& pos, const QString& screenId)
     if (KWin::EffectWindow* active = KWin::effects->activeWindow()) {
         // Cheap overlay-class check first, then the heavier screen resolution
         // (mirrors the autotile guard's predicate ordering).
-        if (!PlasmaZonesEffect::isOwnOverlayClass(active->windowClass())
+        if (!PlasmaZonesEffect::isOwnPassthroughOverlayClass(active->windowClass())
             && m_effect->getWindowScreenId(active) == screenId && !isTiledWindow(m_effect->getWindowId(active))) {
             return;
         }
@@ -304,10 +304,12 @@ void SnapHandler::handleCursorMoved(const QPointF& pos, const QString& screenId)
         if (!w->frameGeometry().contains(pos)) {
             continue;
         }
-        // Look through our own overlay/editor layer-shell surfaces — they are full-screen
-        // and always topmost, so a bail here would kill FFM whenever an overlay is up
-        // (mirrors the autotile FFM guard).
-        if (PlasmaZonesEffect::isOwnOverlayClass(w->windowClass())) {
+        // Look through the daemon's own passthrough overlay surface — it is
+        // full-screen and always topmost, so a bail here would kill FFM whenever
+        // an overlay is up (mirrors the autotile FFM guard). The interactive
+        // editor is NOT looked through: it falls to the not-snapped bail below,
+        // so FFM leaves focus on it instead of stealing to a snapped window.
+        if (PlasmaZonesEffect::isOwnPassthroughOverlayClass(w->windowClass())) {
             continue;
         }
         // The window directly under the cursor is not snapped (a floating dialog, popup,
