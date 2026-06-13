@@ -229,4 +229,39 @@ void OverlayService::updateZoneSelectorWindow(const QString& screenId)
     }
 }
 
+void OverlayService::refreshContextLockState()
+{
+    // Targeted re-push of just the `locked` QML property (not a full
+    // updateZoneSelectorWindow — only the lock state can change here). Both the
+    // zone selector and the layout picker compute `locked` via isAnyModeLocked,
+    // which folds the rule-driven LockContext lock over the manual lock store,
+    // so re-resolving picks up a runtime rule edit. Without settings/registry we
+    // cannot resolve a lock, and every overlay already defaults to unlocked.
+    if (!m_settings || !m_layoutManager) {
+        return;
+    }
+    const int curDesktop = m_layoutManager->currentVirtualDesktop();
+    const QString curActivity = m_layoutManager->currentActivity();
+
+    // Open zone selectors: one entry per screen with a live slot.
+    for (auto it = m_screenStates.constBegin(); it != m_screenStates.constEnd(); ++it) {
+        auto* window = it.value().zoneSelectorSlot();
+        if (!window) {
+            continue;
+        }
+        const bool locked = isAnyModeLocked(m_settings, m_layoutManager, it.key(), curDesktop, curActivity);
+        writeQmlProperty(window, QStringLiteral("locked"), locked);
+    }
+
+    // Open layout picker (re-running showLayoutPicker would rebuild/re-animate
+    // it, so push just the lock state to the live slot).
+    if (m_layoutPickerVisible && !m_layoutPickerScreenId.isEmpty()) {
+        if (auto* slot = m_screenStates.value(m_layoutPickerScreenId).layoutPickerSlot()) {
+            const bool locked =
+                isAnyModeLocked(m_settings, m_layoutManager, m_layoutPickerScreenId, curDesktop, curActivity);
+            writeQmlProperty(slot, QStringLiteral("locked"), locked);
+        }
+    }
+}
+
 } // namespace PlasmaZones

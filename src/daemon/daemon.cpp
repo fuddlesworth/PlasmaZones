@@ -1214,6 +1214,19 @@ bool Daemon::init()
                 refilterExcludeRules();
             });
 
+    // A rule edit can change the live context-lock state (e.g. toggling,
+    // re-prioritising or re-matching a LockContext rule) without touching the
+    // manual lock store, so the ISettings::settingsChanged refresh that keeps
+    // open zone selectors / the layout picker in sync would miss it. Re-push
+    // the lock state to any open overlay on every rule change. QPointer guards
+    // the shutdown window (overlay reset before ~Daemon disconnects).
+    connect(m_windowRuleStore.get(), &PhosphorWindowRule::WindowRuleStore::rulesChanged, this,
+            [overlay = QPointer(m_overlayService.get())](bool /*persisted*/) {
+                if (overlay) {
+                    overlay->refreshContextLockState();
+                }
+            });
+
     // Wire persistence delegate — SnapEngine delegates save/load to WTA's KConfig layer.
     // QPointer guards against late calls during shutdown if WTA is destroyed first.
     snapEngine->setPersistenceDelegate(

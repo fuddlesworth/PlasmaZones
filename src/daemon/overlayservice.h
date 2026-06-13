@@ -391,6 +391,16 @@ public:
     void pickerMoveSelection(int dx, int dy);
     void pickerConfirmSelection();
 
+    /// Re-push the context lock state to any open zone selector and the layout
+    /// picker. Called when window rules change at runtime (e.g. a `LockContext`
+    /// rule is toggled, re-prioritised or re-matched) so an already-visible
+    /// overlay's lock affordance updates in place instead of waiting for the
+    /// next show — mirroring how `ISettings::settingsChanged` refreshes the
+    /// selectors for manual-lock edits. The authoritative block is still the
+    /// live re-check at commit (the selector hit-test and `isScreenLocked`);
+    /// this only keeps the visual in sync.
+    void refreshContextLockState();
+
 public Q_SLOTS:
     // hideLayoutOsd / hideNavigationOsd intentionally absent. Phase-5
     // dismiss path: QML auto-dismiss timer → loaded content's
