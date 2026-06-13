@@ -425,7 +425,16 @@ target_compile_definitions(test_per_screen_config PRIVATE "P_SOURCE_DIR=\"${PROJ
 # autotile/ - Navigation Controller Tests
 # ═══════════════════════════════════════════════════════════════════════════════
 p_add_test(test_navigation_controller autotile/test_navigation_controller.cpp)
-p_add_test(test_navigation_cross_surface autotile/test_navigation_cross_surface.cpp)
+
+# Cross-surface navigation exercises cross-output handoff, which needs real
+# output geometry — compile in the FakeScreenProvider (like the WTA tests).
+add_executable(test_navigation_cross_surface
+               autotile/test_navigation_cross_surface.cpp
+               ${CMAKE_SOURCE_DIR}/libs/phosphor-screens/tests/FakeScreenProvider.cpp)
+target_include_directories(test_navigation_cross_surface
+               PRIVATE ${CMAKE_SOURCE_DIR}/libs/phosphor-screens/tests)
+target_link_libraries(test_navigation_cross_surface PRIVATE Qt6::Test Qt6::Core plasmazones_core)
+add_test(NAME test_navigation_cross_surface COMMAND test_navigation_cross_surface)
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # autotile/ - Engine Settings Tests (replaces deleted test_settings_bridge)

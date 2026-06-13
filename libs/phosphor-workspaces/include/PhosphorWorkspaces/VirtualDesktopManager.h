@@ -28,11 +28,16 @@ public:
     int currentDesktop() const override;
     void setCurrentDesktop(int desktop);
     int desktopCount() const;
+    /// Number of rows in KWin's virtual-desktop grid (>= 1). With the count,
+    /// this gives the grid shape that cross-desktop directional navigation
+    /// walks. Defaults to 1 until the first KWin refresh.
+    int desktopRows() const;
     QStringList desktopNames() const;
 
 Q_SIGNALS:
     void currentDesktopChanged(int desktop);
     void desktopCountChanged(int count);
+    void desktopRowsChanged(int rows);
 
 private Q_SLOTS:
     void onCurrentDesktopChanged(int desktop);
@@ -51,6 +56,7 @@ private:
     bool m_useKWinDBus = false;
     int m_currentDesktop = 1;
     int m_desktopCount = 1;
+    int m_desktopRows = 1;
     QStringList m_desktopNames;
     QStringList m_desktopIds;
     uint m_refreshGeneration = 0;

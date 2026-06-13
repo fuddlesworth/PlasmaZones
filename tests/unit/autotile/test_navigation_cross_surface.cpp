@@ -15,8 +15,12 @@
 #include <QTest>
 
 #include <PhosphorEngine/NavigationContext.h>
+#include <PhosphorScreens/Manager.h>
 #include <PhosphorTileEngine/AutotileEngine.h>
 #include <PhosphorTiles/TilingState.h>
+
+#include "FakeScreenProvider.h"
+#include "core/crosssurfaceresolver.h"
 
 #include "../helpers/AutotileTestHelpers.h"
 
@@ -62,6 +66,9 @@ private Q_SLOTS:
     void focusRight_fromLeftColumn_picksWindowToTheRight();
     void focus_fromTopRight_resolvesEachDirectionGeometrically();
     void swap_exchangesWithSpatialNeighbour();
+
+    void crossOutput_focusRight_entersLeftEdgeOfNeighbourOutput();
+    void crossOutput_moveRight_relocatesWindowToNeighbourOutput();
 };
 
 void TestNavigationCrossSurface::focusRight_fromLeftColumn_picksWindowToTheRight()
@@ -120,6 +127,71 @@ void TestNavigationCrossSurface::swap_exchangesWithSpatialNeighbour()
     const QStringList after = state->tiledWindows();
     QCOMPARE(after.indexOf(win2), before.indexOf(win3));
     QCOMPARE(after.indexOf(win3), before.indexOf(win2));
+}
+
+// ── Cross-output: two side-by-side 1920x1080 outputs, real ScreenManager ──
+//
+// Cross-output resolution needs real output geometry, so these build the
+// engine over a FakeScreenProvider-backed ScreenManager and inject the daemon
+// CrossSurfaceResolver. Per-window zones are still injected (global coords) so
+// the layout is exact; the screen geometry the resolver reads is the fake
+// provider's.
+namespace {
+
+struct TwoOutputFixture
+{
+    PhosphorScreens::FakeScreenProvider provider;
+    std::unique_ptr<PhosphorScreens::ScreenManager> manager;
+    std::unique_ptr<AutotileEngine> engine;
+    std::unique_ptr<PlasmaZones::CrossSurfaceResolver> resolver;
+
+    TwoOutputFixture()
+    {
+        provider.addScreen(QStringLiteral("DP-1"), QRect(0, 0, 1920, 1080));
+        provider.addScreen(QStringLiteral("DP-2"), QRect(1920, 0, 1920, 1080));
+        manager = std::make_unique<PhosphorScreens::ScreenManager>(
+            PhosphorScreens::ScreenManagerConfig{.screenProvider = &provider, .useGeometrySensors = false});
+        manager->start();
+        engine =
+            std::make_unique<AutotileEngine>(nullptr, nullptr, manager.get(), PlasmaZones::TestHelpers::testRegistry());
+        resolver = std::make_unique<PlasmaZones::CrossSurfaceResolver>(manager.get(), nullptr);
+        engine->setCrossSurfaceResolver(resolver.get());
+        engine->setAutotileScreens({QStringLiteral("DP-1"), QStringLiteral("DP-2")});
+        engine->windowOpened(QStringLiteral("a1"), QStringLiteral("DP-1"));
+        engine->windowOpened(QStringLiteral("a2"), QStringLiteral("DP-1"));
+        engine->windowOpened(QStringLiteral("b1"), QStringLiteral("DP-2"));
+        engine->windowOpened(QStringLiteral("b2"), QStringLiteral("DP-2"));
+        QCoreApplication::processEvents();
+        // Left/right split per output, in GLOBAL coordinates.
+        engine->tilingStateForScreen(QStringLiteral("DP-1"))
+            ->setCalculatedZones({QRect(0, 0, 960, 1080), QRect(960, 0, 960, 1080)});
+        engine->tilingStateForScreen(QStringLiteral("DP-2"))
+            ->setCalculatedZones({QRect(1920, 0, 960, 1080), QRect(2880, 0, 960, 1080)});
+    }
+};
+
+} // namespace
+
+void TestNavigationCrossSurface::crossOutput_focusRight_entersLeftEdgeOfNeighbourOutput()
+{
+    TwoOutputFixture fx;
+    // a2 is the rightmost window on DP-1 — nothing to its right on this output,
+    // so "right" must cross into DP-2 and land on its left-edge window (b1).
+    QSignalSpy activateSpy(fx.engine.get(), &AutotileEngine::activateWindowRequested);
+    fx.engine->focusInDirection(QStringLiteral("right"),
+                                NavigationContext{QStringLiteral("a2"), QStringLiteral("DP-1")});
+    QCOMPARE(activateSpy.count(), 1);
+    QCOMPARE(activateSpy.takeFirst().at(0).toString(), QStringLiteral("b1"));
+}
+
+void TestNavigationCrossSurface::crossOutput_moveRight_relocatesWindowToNeighbourOutput()
+{
+    TwoOutputFixture fx;
+    // Moving a2 "right" off the edge of DP-1 relocates it onto DP-2.
+    fx.engine->swapFocusedInDirection(QStringLiteral("right"),
+                                      NavigationContext{QStringLiteral("a2"), QStringLiteral("DP-1")});
+    QVERIFY(!fx.engine->tilingStateForScreen(QStringLiteral("DP-1"))->tiledWindows().contains(QStringLiteral("a2")));
+    QVERIFY(fx.engine->tilingStateForScreen(QStringLiteral("DP-2"))->tiledWindows().contains(QStringLiteral("a2")));
 }
 
 QTEST_MAIN(TestNavigationCrossSurface)

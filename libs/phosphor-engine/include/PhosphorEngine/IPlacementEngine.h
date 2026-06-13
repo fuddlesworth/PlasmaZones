@@ -23,6 +23,8 @@ class QObject;
 
 namespace PhosphorEngine {
 
+class ICrossSurfaceResolver;
+
 /// Unified placement engine interface.
 ///
 /// ## Required vs Optional Methods
@@ -466,6 +468,13 @@ public:
     virtual void setCurrentActivity(const QString& activity)
     {
         Q_UNUSED(activity)
+    }
+    /// Inject the cross-surface resolver used to find a neighbouring output /
+    /// desktop when directional navigation reaches a surface boundary. Engines
+    /// that don't support cross-surface navigation ignore it.
+    virtual void setCrossSurfaceResolver(ICrossSurfaceResolver* resolver)
+    {
+        Q_UNUSED(resolver)
     }
     virtual void updateStickyScreenPins(const std::function<bool(const QString&)>& isWindowSticky)
     {

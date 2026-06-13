@@ -9,6 +9,7 @@
 #include <PhosphorTiles/AutotileConstants.h>
 #include "tileenginelogging.h"
 #include <PhosphorGeometry/DirectionalNeighbor.h>
+#include <PhosphorEngine/ICrossSurfaceResolver.h>
 #include <PhosphorScreens/Manager.h>
 
 #include <QScreen>
@@ -168,6 +169,91 @@ QString NavigationController::directionalNeighborWindow(PhosphorTiles::TilingSta
     return windows.at(sourceIndex.at(pick));
 }
 
+QRect NavigationController::rectForWindowInState(PhosphorTiles::TilingState* state, const QString& windowId) const
+{
+    if (!state) {
+        return QRect();
+    }
+    const QStringList windows = state->tiledWindows();
+    const QVector<QRect> zones = state->calculatedZones();
+    if (zones.size() != windows.size()) {
+        return QRect();
+    }
+    const int idx = windows.indexOf(windowId);
+    if (idx < 0) {
+        return QRect();
+    }
+    return zones.at(idx);
+}
+
+QString NavigationController::crossOutputFocusTarget(const QString& sourceScreenId, const QString& focused,
+                                                     const QString& direction) const
+{
+    if (!m_engine->m_crossSurfaceResolver) {
+        return QString();
+    }
+    const QString neighbor = m_engine->m_crossSurfaceResolver->neighborOutputInDirection(sourceScreenId, direction);
+    if (neighbor.isEmpty()) {
+        return QString();
+    }
+    PhosphorTiles::TilingState* neighborState = m_engine->tilingStateForScreen(neighbor);
+    if (!neighborState) {
+        return QString();
+    }
+    const QStringList neighborWindows = neighborState->tiledWindows();
+    if (neighborWindows.isEmpty()) {
+        return QString();
+    }
+
+    // Entry window: the neighbour-output window nearest the crossing edge. The
+    // neighbour output lies entirely in `direction` from the source, so every
+    // one of its windows is a directional candidate of the focused window's
+    // rect (global coordinates) — directionalNeighbor picks the closest with
+    // perpendicular overlap. Fall back to the first tiled window when geometry
+    // is unavailable.
+    const QRect focusRect = rectForWindowInState(m_engine->tilingStateForScreen(sourceScreenId), focused);
+    const auto dir = PhosphorGeometry::directionFromString(direction);
+    const QVector<QRect> neighborZones = neighborState->calculatedZones();
+    if (dir.has_value() && focusRect.isValid() && neighborZones.size() == neighborWindows.size()) {
+        QList<QRectF> candidates;
+        candidates.reserve(neighborZones.size());
+        for (const QRect& zone : neighborZones) {
+            candidates.append(QRectF(zone));
+        }
+        const int pick = PhosphorGeometry::directionalNeighbor(QRectF(focusRect), candidates, *dir);
+        if (pick >= 0) {
+            return neighborWindows.at(pick);
+        }
+    }
+    return neighborWindows.first();
+}
+
+bool NavigationController::crossOutputMove(const QString& sourceScreenId, const QString& focused,
+                                           const QString& direction)
+{
+    if (!m_engine->m_crossSurfaceResolver) {
+        return false;
+    }
+    const QString neighbor = m_engine->m_crossSurfaceResolver->neighborOutputInDirection(sourceScreenId, direction);
+    if (neighbor.isEmpty()) {
+        return false;
+    }
+    const PhosphorEngine::TilingStateKey oldKey = m_engine->currentKeyForScreen(sourceScreenId);
+    const PhosphorEngine::TilingStateKey newKey = m_engine->currentKeyForScreen(neighbor);
+    // Re-point the window's state-key BEFORE migrating, exactly as the reactive
+    // windowFocused() path does: migrateWindowBetweenKeys re-adds the window via
+    // onWindowAdded() → screenForWindow(), which reads this map. Without the
+    // update it would resolve back to the source screen and re-add it there.
+    m_engine->m_windowToStateKey[focused] = newKey;
+    // migrateWindowBetweenKeys removes the window from the source state (with
+    // its onWindowRemoved lifecycle), adds it on the neighbour output, and
+    // retiles both surfaces.
+    m_engine->migrateWindowBetweenKeys(focused, oldKey, neighbor);
+    m_engine->m_activeScreen = neighbor;
+    Q_EMIT m_engine->activateWindowRequested(focused);
+    return true;
+}
+
 void NavigationController::swapFocusedInDirection(const QString& direction, const QString& action,
                                                   const QString& explicitWindowId)
 {
@@ -197,9 +283,13 @@ void NavigationController::swapFocusedInDirection(const QString& direction, cons
     }
 
     if (hasGeometry) {
-        // The focused window is at the layout edge in this direction. This is
-        // the seam where cross-surface move resolution takes over (a later
-        // layer); until then, stop at the edge rather than wrapping.
+        // The focused window is at the layout edge in this direction — try
+        // moving it onto the adjacent output before giving up.
+        if (crossOutputMove(screenId, focused, direction)) {
+            Q_EMIT m_engine->navigationFeedback(true, action, QStringLiteral("screen:") + direction, QString(),
+                                                QString(), screenId);
+            return;
+        }
         Q_EMIT m_engine->navigationFeedback(false, action, QStringLiteral("no_neighbor"), QString(), QString(),
                                             screenId);
         return;
@@ -247,8 +337,15 @@ void NavigationController::focusInDirection(const QString& direction, const QStr
     }
 
     if (hasGeometry) {
-        // No tiled window lies in this direction on this surface — the layout
-        // boundary, where cross-surface focus resolution takes over later.
+        // No tiled window lies in this direction on this surface — try focusing
+        // into the adjacent output before reporting a boundary.
+        const QString crossTarget = crossOutputFocusTarget(screenId, focused, direction);
+        if (!crossTarget.isEmpty()) {
+            Q_EMIT m_engine->activateWindowRequested(crossTarget);
+            Q_EMIT m_engine->navigationFeedback(true, action, QStringLiteral("screen:") + direction, QString(),
+                                                QString(), screenId);
+            return;
+        }
         Q_EMIT m_engine->navigationFeedback(false, action, QStringLiteral("no_neighbor"), QString(), QString(),
                                             screenId);
         return;

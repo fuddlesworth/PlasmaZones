@@ -1084,6 +1084,10 @@ bool Daemon::init()
                                  m_virtualDesktopManager.get(), m_windowRegistry.get(), this);
     auto* autotileEngine = engines.autotile.get();
     auto* snapEngine = engines.snap.get();
+    // Move the shared cross-surface resolver BEFORE the engines so it is
+    // destroyed AFTER them (they borrow it). Declared earlier than the engines
+    // in daemon.h for the same reason.
+    m_crossSurfaceResolver = std::move(engines.crossSurfaceResolver);
     m_autotileEngine = std::move(engines.autotile);
     m_snapEngine = std::move(engines.snap);
     m_screenModeRouter = std::move(engines.router);

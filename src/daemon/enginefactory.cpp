@@ -9,6 +9,7 @@
 #include <PhosphorEngine/WindowRegistry.h>
 #include <PhosphorPlacement/WindowTrackingService.h>
 #include <PhosphorWorkspaces/VirtualDesktopManager.h>
+#include "../core/crosssurfaceresolver.h"
 #include "../core/isettings.h"
 #include "../core/screenmoderouter.h"
 
@@ -38,10 +39,18 @@ EngineSet createEngines(PhosphorZones::LayoutRegistry* layoutManager,
     // isActiveOnScreen routing.
     snap->setAutotileEngine(autotile.get());
 
+    // --- CrossSurfaceResolver ---
+    // One resolver, shared by both engines, resolves neighbour outputs
+    // (geometrically) and neighbour desktops (grid arithmetic) when directional
+    // navigation reaches a layout boundary.
+    auto crossSurfaceResolver = std::make_unique<CrossSurfaceResolver>(screenManager, vdm);
+    autotile->setCrossSurfaceResolver(crossSurfaceResolver.get());
+    snap->setCrossSurfaceResolver(crossSurfaceResolver.get());
+
     // --- ScreenModeRouter ---
     auto router = std::make_unique<ScreenModeRouter>(layoutManager, snap.get(), autotile.get());
 
-    return EngineSet{std::move(autotile), std::move(snap), std::move(router)};
+    return EngineSet{std::move(autotile), std::move(snap), std::move(router), std::move(crossSurfaceResolver)};
 }
 
 } // namespace PlasmaZones

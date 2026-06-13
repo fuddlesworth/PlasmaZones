@@ -44,12 +44,17 @@ namespace PlasmaZones {
 
 class ISettings;
 class ScreenModeRouter;
+class CrossSurfaceResolver;
 
 struct EngineSet
 {
     std::unique_ptr<PhosphorTileEngine::AutotileEngine> autotile;
     std::unique_ptr<PhosphorSnapEngine::SnapEngine> snap;
     std::unique_ptr<ScreenModeRouter> router;
+    /// Shared neighbour-output / neighbour-desktop resolver injected into the
+    /// engines. Listed last so the daemon keeps it alive; it must outlive the
+    /// engines that borrow it.
+    std::unique_ptr<CrossSurfaceResolver> crossSurfaceResolver;
 };
 
 /**

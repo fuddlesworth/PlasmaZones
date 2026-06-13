@@ -4,6 +4,7 @@
 #pragma once
 
 #include <phosphortileengine_export.h>
+#include <QRect>
 #include <QString>
 #include <QStringList>
 #include <functional>
@@ -126,6 +127,32 @@ private:
      */
     QString directionalNeighborWindow(PhosphorTiles::TilingState* state, const QStringList& windows,
                                       const QString& focused, const QString& direction, bool& outHasGeometry) const;
+
+    /**
+     * @brief The window to focus when directional navigation crosses from
+     *        @p sourceScreenId into the adjacent output in @p direction.
+     *
+     * Resolves the neighbour output via the injected cross-surface resolver,
+     * then picks that output's tiled window nearest the crossing edge (the
+     * directional neighbour of @p focused's rect in global coordinates),
+     * falling back to its first tiled window. Returns an empty string when
+     * there is no resolver, no neighbour output, or it has no tiled windows.
+     */
+    QString crossOutputFocusTarget(const QString& sourceScreenId, const QString& focused,
+                                   const QString& direction) const;
+
+    /**
+     * @brief Move @p focused from @p sourceScreenId into the adjacent output in
+     *        @p direction, migrating its tiling state and activating it there.
+     * @return false when there is no resolver or no neighbour output.
+     */
+    bool crossOutputMove(const QString& sourceScreenId, const QString& focused, const QString& direction);
+
+    /**
+     * @brief The global-coordinate rect of @p windowId within @p state, or an
+     *        invalid rect when the state has no computed geometry for it.
+     */
+    QRect rectForWindowInState(PhosphorTiles::TilingState* state, const QString& windowId) const;
 
     /**
      * @brief Helper to apply an operation to all screen states

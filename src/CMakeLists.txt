@@ -56,6 +56,8 @@ set(plasmazones_core_SRCS
     # callers include <PhosphorScreens/Swapper.h> directly.
     core/screenmoderouter.cpp
     core/screenmoderouter.h
+    core/crosssurfaceresolver.cpp
+    core/crosssurfaceresolver.h
     core/dbusvariantutils.cpp
     core/dbusvariantutils.h
     # zone, layout, layoututils, zonedetector, zonehighlighter, LayoutRegistry,
@@ -199,6 +201,7 @@ target_link_libraries(plasmazones_core
         PhosphorAnimation::PhosphorAnimation
         PhosphorConfig::PhosphorConfig
         PhosphorEngine::PhosphorEngine
+        PhosphorGeometry::PhosphorGeometry
         PhosphorWorkspaces::PhosphorWorkspaces
         PhosphorPlacement::PhosphorPlacement
         PhosphorTileEngine::PhosphorTileEngine

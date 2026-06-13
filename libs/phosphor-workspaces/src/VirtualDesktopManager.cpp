@@ -137,6 +137,18 @@ void VirtualDesktopManager::refreshFromKWin()
         m_desktopCount = countVar.toInt();
     }
 
+    // Grid row count — drives the shape cross-desktop directional navigation
+    // walks. Clamp to >= 1 so a missing / zero property can't divide the grid
+    // arithmetic by zero.
+    QVariant rowsVar = m_kwinVDInterface->property("rows");
+    if (rowsVar.isValid()) {
+        const int rows = qMax(1, rowsVar.toInt());
+        if (rows != m_desktopRows) {
+            m_desktopRows = rows;
+            Q_EMIT desktopRowsChanged(m_desktopRows);
+        }
+    }
+
     QVariant currentVar = m_kwinVDInterface->property("current");
     QString currentId;
     if (currentVar.isValid()) {
@@ -269,6 +281,11 @@ void VirtualDesktopManager::onNumberOfDesktopsChanged(int count)
 int VirtualDesktopManager::desktopCount() const
 {
     return m_useKWinDBus ? m_desktopCount : 1;
+}
+
+int VirtualDesktopManager::desktopRows() const
+{
+    return m_useKWinDBus ? qMax(1, m_desktopRows) : 1;
 }
 
 QStringList VirtualDesktopManager::desktopNames() const

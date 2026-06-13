@@ -280,6 +280,13 @@ public:
      */
     void setCurrentDesktop(int desktop) override;
 
+    /// Inject the cross-surface resolver (neighbouring output / desktop lookup)
+    /// used by directional navigation when it reaches a layout boundary.
+    void setCrossSurfaceResolver(PhosphorEngine::ICrossSurfaceResolver* resolver) override
+    {
+        m_crossSurfaceResolver = resolver;
+    }
+
     /**
      * @brief Set the current activity for per-activity tiling state
      *
@@ -1274,6 +1281,10 @@ private:
     PhosphorZones::LayoutRegistry* m_layoutManager = nullptr;
     PhosphorEngine::IWindowTrackingService* m_windowTracker = nullptr;
     PhosphorScreens::ScreenManager* m_screenManager = nullptr;
+    /// Borrowed cross-surface resolver (neighbouring output / desktop lookup);
+    /// null when not injected, in which case directional navigation stops at the
+    /// layout boundary instead of crossing surfaces.
+    PhosphorEngine::ICrossSurfaceResolver* m_crossSurfaceResolver = nullptr;
     PhosphorEngine::IWindowRegistry* m_windowRegistry = nullptr;
     PhosphorTiles::ITileAlgorithmRegistry* m_algorithmRegistry = nullptr; ///< Borrowed; outlives engine
     std::unique_ptr<AutotileConfig> m_config;

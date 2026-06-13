@@ -95,6 +95,7 @@ class ZoneSelectorController;
 class UnifiedLayoutController;
 class AutotileAdaptor;
 class ScreenModeRouter;
+class CrossSurfaceResolver;
 class DaemonScreenModeAdapter;
 class DaemonSettingsGateAdapter;
 class DaemonWorkspaceStateAdapter;
@@ -709,6 +710,12 @@ private:
     // m_algorithmRegistry is declared up at the top of the member block with
     // m_layoutManager — see the DECLARATION ORDER INVARIANT comment there.
     std::unique_ptr<PhosphorTiles::ScriptedAlgorithmLoader> m_scriptedAlgorithmLoader;
+
+    // Shared neighbour-output / neighbour-desktop resolver injected into both
+    // engines. Declared BEFORE the engines so it is destroyed AFTER them (they
+    // borrow it), and after m_screenManager / m_virtualDesktopManager (which it
+    // borrows) so those outlive it.
+    std::unique_ptr<CrossSurfaceResolver> m_crossSurfaceResolver;
 
     // Window engines (held as base class; concrete types known only in daemon.cpp/enginefactory.cpp)
     std::unique_ptr<PhosphorEngine::PlacementEngineBase> m_autotileEngine;
