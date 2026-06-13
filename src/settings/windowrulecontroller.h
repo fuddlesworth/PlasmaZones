@@ -260,9 +260,11 @@ public:
     // ── Authoring metadata for the QML editors ────────────────────────────
 
     /// Match fields suitable for the leaf-editor field dropdown. Each entry:
-    /// `{ value: int (Field enum), wire: QString (JSON wire string),
-    ///    label, valueKind: "string"|"number"|"bool" }`. QML keys off `wire`
-    /// so it never has to reconstruct the enum↔wire-string table.
+    /// `{ value: int (Field enum), wire: QString (JSON wire string), label,
+    ///    valueKind: "string"|"number"|"bool"|"windowType"|"screen"|"activity" }`
+    /// (the latter three drive dedicated pickers; "windowType" also carries an
+    /// `options` list). QML keys off `wire` so it never has to reconstruct the
+    /// enum↔wire-string table.
     Q_INVOKABLE QVariantList matchFields() const;
 
     /// Operators valid for @p fieldValue (a `Field` enum int). Each entry:
