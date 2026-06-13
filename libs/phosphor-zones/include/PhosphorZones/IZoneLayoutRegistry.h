@@ -141,6 +141,23 @@ public:
         return {};
     }
 
+    /// Resolve whether window rules lock the active layout for the
+    /// (@p screenId, @p virtualDesktop, @p activity) context — the rule-driven
+    /// counterpart to the manual ToggleLayoutLock shortcut. A context rule
+    /// carrying an `ActionType::LockContext` action whose `value` is true locks
+    /// the context; the daemon ORs this into its context-lock check (across
+    /// both engine modes) so a locked context refuses layout switches. Mode-
+    /// agnostic and never persisted. The default returns false (no rule lock); a
+    /// registry that does not model context rules — e.g. a fixture stub — keeps
+    /// only the persisted manual-lock behaviour.
+    virtual bool resolveContextLocked(const QString& screenId, int virtualDesktop, const QString& activity) const
+    {
+        Q_UNUSED(screenId);
+        Q_UNUSED(virtualDesktop);
+        Q_UNUSED(activity);
+        return false;
+    }
+
 Q_SIGNALS:
     // Catalog mutation. @c addLayout / @c duplicateLayout fire `layoutAdded`;
     // @c removeLayout / @c removeLayoutById fire `layoutRemoved`.

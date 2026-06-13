@@ -114,6 +114,22 @@ Kirigami.Dialog {
         root._initialSnapshot = "";
     }
 
+    /// Reset the dialog's scroll offset to the top of the current page.
+    ///
+    /// `Kirigami.Dialog` wraps its content in an internal `QQC2.ScrollView`
+    /// (exposed as `contentItem` — see `_scrollBarReserved`), whose own
+    /// `contentItem` is the backing `Flickable`. That Flickable keeps its
+    /// `contentY` across a `StackLayout` page switch, so the offset the step-1
+    /// picker had carries into step 2 and scrolls the editor's WHEN section off
+    /// the top. Snapping `contentY` back to 0 on each transition makes every
+    /// step open at the top of its page.
+    function _scrollToTop() {
+        const scrollView = root.contentItem;
+        const flickable = scrollView ? scrollView.contentItem : null;
+        if (flickable && flickable.contentY !== undefined)
+            flickable.contentY = 0;
+    }
+
     function _isClean() {
         // Step 1 has no working rule to lose. Step 2 is dirty iff the
         // current working rule diverges from the snapshot we took on entry.
@@ -145,6 +161,12 @@ Kirigami.Dialog {
         root._initialSnapshot = "";
         wizardFooter.errorText = "";
     }
+    // Every step transition (picker → editor, Next fallback, Back → picker)
+    // should reveal the top of the new page. Deferred via `Qt.callLater` so the
+    // StackLayout has switched pages and the Dialog's content-height binding has
+    // settled before we snap the Flickable back to 0 — setting it earlier would
+    // be clobbered by the post-switch relayout.
+    onCurrentStepChanged: Qt.callLater(root._scrollToTop)
 
     Shortcut {
         // `sequences` (plural) binds all key sequences associated with
