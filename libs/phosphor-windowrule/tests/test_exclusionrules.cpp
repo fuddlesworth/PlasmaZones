@@ -413,5 +413,5 @@ private Q_SLOTS:
     }
 };
 
-QTEST_MAIN(TestExclusionRules)
+QTEST_GUILESS_MAIN(TestExclusionRules)
 #include "test_exclusionrules.moc"

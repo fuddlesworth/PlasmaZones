@@ -1451,6 +1451,10 @@ bool Daemon::init()
             m_suppressResnapOsd = osdEntries.size();
             m_windowTrackingAdaptor->service()->populateResnapBufferForAllScreens(autotileScreens, changedScreenIds);
             m_snapAdaptor->resnapToNewLayout();
+            // Restore snap-float positions for windows this KCM apply released
+            // from autotile — the buffer-based resnap above cannot cover
+            // floating windows (see the helper).
+            emitPendingSnapFloatRestoresForResnapBuffer();
 
             // Show OSD for changed screens — use locked OSD variant when context is locked.
             // KCM Apply is an explicit user-driven layout assignment change, so the regular

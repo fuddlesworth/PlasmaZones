@@ -292,5 +292,5 @@ private Q_SLOTS:
     }
 };
 
-QTEST_MAIN(TestWindowRuleSet)
+QTEST_GUILESS_MAIN(TestWindowRuleSet)
 #include "test_windowruleset.moc"

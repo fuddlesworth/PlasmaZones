@@ -910,6 +910,19 @@ void WindowTrackingAdaptor::pruneStaleWindows(const QStringList& aliveWindowIds)
             ++it;
         }
     }
+    // And the WindowRegistry's metadata records + canonical-id translations:
+    // windowClosed releases these per-window, but a window that died without a
+    // close signal (the case this whole method backstops) would leak its
+    // record + canonical entry for the session. The registry keys on instance
+    // ids (uuid components), so build the alive set in that form.
+    if (m_windowRegistry) {
+        QSet<QString> aliveInstances;
+        aliveInstances.reserve(aliveWindowIds.size());
+        for (const QString& id : aliveWindowIds) {
+            aliveInstances.insert(PhosphorIdentity::WindowId::extractInstanceId(id));
+        }
+        m_windowRegistry->pruneStaleInstances(aliveInstances);
+    }
     const int totalPruned = persistedPruned + frameGeoPruned;
     if (totalPruned > 0) {
         qCInfo(lcDbusWindow) << "Pruned" << totalPruned << "stale window assignments (not in KWin)";

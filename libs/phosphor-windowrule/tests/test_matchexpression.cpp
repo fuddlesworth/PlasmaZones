@@ -424,5 +424,5 @@ private Q_SLOTS:
     }
 };
 
-QTEST_MAIN(TestMatchExpression)
+QTEST_GUILESS_MAIN(TestMatchExpression)
 #include "test_matchexpression.moc"

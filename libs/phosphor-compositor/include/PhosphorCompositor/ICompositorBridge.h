@@ -6,11 +6,14 @@
 #include <phosphorcompositor_export.h>
 
 #include <QIcon>
-#include <QObject>
 #include <QRectF>
 #include <QSizeF>
 #include <QString>
 #include <QVector>
+
+// QObject is only named as a pointer return type (asQObject) — forward
+// declare per the project's header rule rather than pulling in <QObject>.
+class QObject;
 
 namespace PhosphorCompositor {
 
