@@ -4,8 +4,10 @@
 #include <PhosphorWindowRule/MatchExpression.h>
 
 #include <QJsonArray>
-#include <QJsonDocument>
+#include <QJsonObject>
 #include <QTest>
+#include <QVariant>
+#include <QVariantList>
 
 using namespace PhosphorWindowRule;
 using PhosphorProtocol::WindowType;

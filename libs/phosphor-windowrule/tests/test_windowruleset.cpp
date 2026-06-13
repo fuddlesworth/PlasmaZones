@@ -5,7 +5,6 @@
 
 #include <QFile>
 #include <QJsonArray>
-#include <QJsonDocument>
 #include <QTemporaryDir>
 #include <QTest>
 
