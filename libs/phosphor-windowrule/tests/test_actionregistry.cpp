@@ -50,6 +50,7 @@ private Q_SLOTS:
         QVERIFY(reg.isRegistered(QString(ActionType::OverrideAnimationCurve)));
         QVERIFY(reg.isRegistered(QString(ActionType::SetOpacity)));
         QVERIFY(reg.isRegistered(QString(ActionType::RestorePosition)));
+        QVERIFY(reg.isRegistered(QString(ActionType::LockContext)));
     }
 
     void testSlots()
@@ -111,6 +112,7 @@ private Q_SLOTS:
         QVERIFY(!reg.isTerminal(makeAction(ActionType::OverrideAnimationCurve)));
         QVERIFY(!reg.isTerminal(makeAction(ActionType::SetOpacity)));
         QVERIFY(!reg.isTerminal(makeAction(ActionType::RestorePosition)));
+        QVERIFY(!reg.isTerminal(makeAction(ActionType::LockContext)));
     }
 
     void testValidateAcceptsWellFormedRegisteredAction()

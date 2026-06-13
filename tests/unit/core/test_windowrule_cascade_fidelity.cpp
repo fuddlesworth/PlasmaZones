@@ -713,7 +713,24 @@ private Q_SLOTS:
         // screen/activity, proving the desktop axis of the context match.
         const PWR::WindowRule lockDesktop =
             lockRule(QStringLiteral("lock desktop 2"), PWR::Field::VirtualDesktop, 2, true);
-        QVERIFY(f.store->setAllRules({lockMonitor, lockActivity, unlockMonitor, lockDesktop}));
+        // A mixed (context + window-property) lock rule: All{ScreenId == DP-4,
+        // AppId == firefox} carrying a LockContext action at a far-above band.
+        // Against the windowless context query the AppId leaf evaluates false,
+        // so the All{} fails and DP-4 must NOT lock — symmetric to the
+        // assignment-path mixed-rule inertness proof (testMixedRule* above).
+        PWR::RuleAction mixedLockAction;
+        mixedLockAction.type = QString(PWR::ActionType::LockContext);
+        mixedLockAction.params.insert(QString(PWR::ActionParam::Value), true);
+        PWR::WindowRule mixedLock;
+        mixedLock.id = QUuid::createUuid();
+        mixedLock.name = QStringLiteral("mixed lock DP-4");
+        mixedLock.enabled = true;
+        mixedLock.priority = 999;
+        mixedLock.match = PWR::MatchExpression::makeAll(
+            {PWR::MatchExpression::makeLeaf(PWR::Field::ScreenId, PWR::Operator::Equals, QStringLiteral("DP-4")),
+             PWR::MatchExpression::makeLeaf(PWR::Field::AppId, PWR::Operator::Equals, QStringLiteral("firefox"))});
+        mixedLock.actions = {mixedLockAction};
+        QVERIFY(f.store->setAllRules({lockMonitor, lockActivity, unlockMonitor, lockDesktop, mixedLock}));
 
         // DP-1 is locked regardless of desktop/activity (screen-only match).
         QVERIFY(f.registry->resolveContextLocked(QStringLiteral("DP-1"), 0, QString()));
@@ -727,6 +744,9 @@ private Q_SLOTS:
         QVERIFY(!f.registry->resolveContextLocked(QStringLiteral("HDMI-2"), 1, QString()));
         // value = false resolves to not-locked (explicit no-op overlay).
         QVERIFY(!f.registry->resolveContextLocked(QStringLiteral("DP-3"), 0, QString()));
+        // The mixed rule's AppId leaf can't match a windowless query → DP-4 not
+        // locked, even though its band (999) would dominate if it leaked.
+        QVERIFY(!f.registry->resolveContextLocked(QStringLiteral("DP-4"), 0, QString()));
         // A context no rule pins → not locked.
         QVERIFY(!f.registry->resolveContextLocked(QStringLiteral("HDMI-1"), 0, QString()));
 
@@ -735,7 +755,7 @@ private Q_SLOTS:
         // true here — the post-mutation false proves the revision bump evicts.
         PWR::WindowRule disabled = lockMonitor;
         disabled.enabled = false;
-        QVERIFY(f.store->setAllRules({disabled, lockActivity, unlockMonitor, lockDesktop}));
+        QVERIFY(f.store->setAllRules({disabled, lockActivity, unlockMonitor, lockDesktop, mixedLock}));
         QVERIFY(!f.registry->resolveContextLocked(QStringLiteral("DP-1"), 0, QString()));
     }
 
