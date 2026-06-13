@@ -2782,11 +2782,18 @@ bool AutotileEngine::insertWindow(const QString& windowId, const QString& screen
                 if (!freeGeo.isValid()) {
                     freeGeo = rec->anyFreeGeometry();
                 }
-                if (freeGeo.isValid()) {
+                // The window is marked floating unconditionally above; the geometry
+                // MOVE is gated on the floated-position-restore opt-in (daemon-wired
+                // autotileRestoreFloatedWindowsOnLogin setting + per-window
+                // RestorePosition rule). When the predicate is unset (tests / no
+                // daemon) the move always fires, preserving historical behaviour.
+                const bool restorePosition = !m_restorePositionPredicate || m_restorePositionPredicate(windowId);
+                if (freeGeo.isValid() && restorePosition) {
                     Q_EMIT geometryRestoreRequested(windowId, freeGeo, restoreScreen);
                 }
                 qCInfo(PhosphorTileEngine::lcTileEngine)
-                    << "insertWindow: float-restore for" << windowId << "to" << freeGeo << "on" << restoreScreen;
+                    << "insertWindow: float-restore for" << windowId << "to" << freeGeo << "on" << restoreScreen
+                    << "move=" << (freeGeo.isValid() && restorePosition);
             } else {
                 const int savedPos = slot.order;
                 const int clampedPos = savedPos < 0 ? state->windowCount() : qMin(savedPos, state->windowCount());

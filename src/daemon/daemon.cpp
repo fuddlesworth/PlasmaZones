@@ -998,7 +998,7 @@ bool Daemon::init()
     m_windowTrackingAdaptor->setZoneDetectionAdaptor(m_zoneDetectionAdaptor);
     m_windowTrackingAdaptor->setWindowRegistry(m_windowRegistry.get());
     // Full rule set for per-window RestorePosition evaluation (overrides the
-    // global restoreUnsnappedWindowsOnLogin setting for matched windows).
+    // per-engine *RestoreFloatedWindowsOnLogin settings for matched windows).
     m_windowTrackingAdaptor->setWindowRuleStore(m_windowRuleStore.get());
 
     // Drop closed windows from m_lastAutotileOrders so a manual→autotile toggle

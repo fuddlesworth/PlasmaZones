@@ -140,8 +140,8 @@ public:
      *
      * Keyed by the live windowId so the daemon closure can build a full
      * WindowQuery (window class / title / role) from its WindowRegistry and
-     * evaluate the per-window RestorePosition rule, falling back to the global
-     * `restoreUnsnappedWindowsOnLogin` setting. Like @ref ShouldRestorePredicate
+     * evaluate the per-window RestorePosition rule, falling back to the
+     * `snappingRestoreFloatedWindowsOnLogin` setting. Like @ref ShouldRestorePredicate
      * the engine stays settings-agnostic (LGPL boundary) — it only asks.
      *
      * Returns true to restore the recorded position (cross-screen allowed —

@@ -172,8 +172,10 @@ public:
                    setSnappingStickyWindowHandlingInt NOTIFY snappingStickyWindowHandlingChanged)
     Q_PROPERTY(bool restoreWindowsToZonesOnLogin READ restoreWindowsToZonesOnLogin WRITE setRestoreWindowsToZonesOnLogin
                    NOTIFY restoreWindowsToZonesOnLoginChanged)
-    Q_PROPERTY(bool restoreUnsnappedWindowsOnLogin READ restoreUnsnappedWindowsOnLogin WRITE
-                   setRestoreUnsnappedWindowsOnLogin NOTIFY restoreUnsnappedWindowsOnLoginChanged)
+    Q_PROPERTY(bool snappingRestoreFloatedWindowsOnLogin READ snappingRestoreFloatedWindowsOnLogin WRITE
+                   setSnappingRestoreFloatedWindowsOnLogin NOTIFY snappingRestoreFloatedWindowsOnLoginChanged)
+    Q_PROPERTY(bool autotileRestoreFloatedWindowsOnLogin READ autotileRestoreFloatedWindowsOnLogin WRITE
+                   setAutotileRestoreFloatedWindowsOnLogin NOTIFY autotileRestoreFloatedWindowsOnLoginChanged)
     Q_PROPERTY(bool snapUnfloatFallbackToZone READ snapUnfloatFallbackToZone WRITE setSnapUnfloatFallbackToZone NOTIFY
                    snapUnfloatFallbackToZoneChanged)
     Q_PROPERTY(bool autoAssignAllLayouts READ autoAssignAllLayouts WRITE setAutoAssignAllLayouts NOTIFY
@@ -665,8 +667,10 @@ public:
     void setSnappingStickyWindowHandlingInt(int handling);
     bool restoreWindowsToZonesOnLogin() const override;
     void setRestoreWindowsToZonesOnLogin(bool restore) override;
-    bool restoreUnsnappedWindowsOnLogin() const override;
-    void setRestoreUnsnappedWindowsOnLogin(bool restore) override;
+    bool snappingRestoreFloatedWindowsOnLogin() const override;
+    void setSnappingRestoreFloatedWindowsOnLogin(bool restore) override;
+    bool autotileRestoreFloatedWindowsOnLogin() const override;
+    void setAutotileRestoreFloatedWindowsOnLogin(bool restore) override;
     bool snapUnfloatFallbackToZone() const override;
     void setSnapUnfloatFallbackToZone(bool enabled) override;
     bool autoAssignAllLayouts() const override;

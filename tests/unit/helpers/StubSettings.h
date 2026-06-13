@@ -622,16 +622,28 @@ public:
     void setRestoreWindowsToZonesOnLogin(bool) override
     {
     }
-    bool restoreUnsnappedWindowsOnLogin() const override
+    bool snappingRestoreFloatedWindowsOnLogin() const override
     {
-        return m_restoreUnsnappedWindowsOnLogin;
+        return m_snappingRestoreFloatedWindowsOnLogin;
     }
-    void setRestoreUnsnappedWindowsOnLogin(bool value) override
+    void setSnappingRestoreFloatedWindowsOnLogin(bool value) override
     {
-        if (m_restoreUnsnappedWindowsOnLogin == value)
+        if (m_snappingRestoreFloatedWindowsOnLogin == value)
             return;
-        m_restoreUnsnappedWindowsOnLogin = value;
-        Q_EMIT restoreUnsnappedWindowsOnLoginChanged();
+        m_snappingRestoreFloatedWindowsOnLogin = value;
+        Q_EMIT snappingRestoreFloatedWindowsOnLoginChanged();
+        Q_EMIT settingsChanged();
+    }
+    bool autotileRestoreFloatedWindowsOnLogin() const override
+    {
+        return m_autotileRestoreFloatedWindowsOnLogin;
+    }
+    void setAutotileRestoreFloatedWindowsOnLogin(bool value) override
+    {
+        if (m_autotileRestoreFloatedWindowsOnLogin == value)
+            return;
+        m_autotileRestoreFloatedWindowsOnLogin = value;
+        Q_EMIT autotileRestoreFloatedWindowsOnLoginChanged();
         Q_EMIT settingsChanged();
     }
     // ISettings getter/setter; the ISnapSettings bridge (unfloatFallbackToZone)
@@ -1157,7 +1169,8 @@ private:
     bool m_snapAssistFeatureEnabled = false;
     bool m_snapAssistEnabled = false;
     bool m_autoAssignAllLayouts = false;
-    bool m_restoreUnsnappedWindowsOnLogin = true;
+    bool m_snappingRestoreFloatedWindowsOnLogin = true;
+    bool m_autotileRestoreFloatedWindowsOnLogin = true;
     bool m_snapUnfloatFallbackToZone = false;
     bool m_snappingFocusNewWindows = false;
     bool m_snappingFocusFollowsMouse = false;

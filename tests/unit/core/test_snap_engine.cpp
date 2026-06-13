@@ -1340,8 +1340,8 @@ private Q_SLOTS:
 
     // Two-state model: the merged floated-restore branch ALWAYS marks the window
     // floating (windowFloatingChanged true), but the geometry MOVE is now gated on
-    // the restore-position predicate for ALL floated windows (the repurposed
-    // restoreUnsnappedWindowsOnLogin setting / RestorePosition rule). When the
+    // the restore-position predicate for ALL floated windows (the
+    // snappingRestoreFloatedWindowsOnLogin setting / RestorePosition rule). When the
     // predicate DENIES, the window comes back floating but stays where the
     // compositor placed it — the move is skipped.
     void testResolveWindowRestore_floatingSameScreen_marksFloatingButSkipsMoveWhenPredicateDenies()

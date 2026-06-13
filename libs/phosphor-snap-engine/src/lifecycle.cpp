@@ -198,14 +198,14 @@ SnapResult SnapEngine::resolveWindowRestore(const QString& windowId, const QStri
     if (m_windowTracker) {
         const QString appId = m_windowTracker->currentAppIdFor(windowId);
         // Whether a FLOATED record for THIS window may restore its recorded global
-        // position on open — the daemon resolves the global
-        // `restoreUnsnappedWindowsOnLogin` setting plus the per-window
+        // position on open — the daemon resolves the
+        // `snappingRestoreFloatedWindowsOnLogin` setting plus the per-window
         // RestorePosition rule. When true the floated record is eligible
         // regardless of the opening screen, so a window KWin reopened on the wrong
         // monitor returns to its recorded one (stored geometry is global, so
         // re-applying it lands on the original output). When false the historical
         // opening-screen gate stands. Snapped records are never governed by this.
-        const bool restoreUnsnappedPosition = m_restorePositionPredicate && m_restorePositionPredicate(windowId);
+        const bool restoreFloatedPosition = m_restorePositionPredicate && m_restorePositionPredicate(windowId);
         // ONE record per window (both engines' slots + the shared free geometry).
         // take() consumes it (multi-instance FIFO); we then re-record it bound to
         // the LIVE windowId so the OTHER engine's slot and the per-screen free
@@ -251,7 +251,7 @@ SnapResult SnapEngine::resolveWindowRestore(const QString& windowId, const QStri
                 if (!p.hasRestorableContent()) {
                     return false;
                 }
-                if (restoreUnsnappedPosition) {
+                if (restoreFloatedPosition) {
                     return true;
                 }
                 return p.screenId.isEmpty() || p.screenId == screenId;
@@ -348,12 +348,12 @@ SnapResult SnapEngine::resolveWindowRestore(const QString& windowId, const QStri
                 // per-window RestorePosition rule) for ALL floated windows: when off,
                 // the window comes back floating but stays where KWin placed it.
                 Q_EMIT windowFloatingChanged(windowId, true, restoreScreen);
-                if (restoreUnsnappedPosition && freeGeo.isValid()) {
+                if (restoreFloatedPosition && freeGeo.isValid()) {
                     Q_EMIT geometryRestoreRequested(windowId, freeGeo, restoreScreen);
                 }
                 qCInfo(PhosphorSnapEngine::lcSnapEngine)
                     << "resolveWindowRestore: placement(floated) for" << windowId << "->" << freeGeo
-                    << "move=" << (restoreUnsnappedPosition && freeGeo.isValid());
+                    << "move=" << (restoreFloatedPosition && freeGeo.isValid());
                 return SnapResult::noSnap();
             }
         }
