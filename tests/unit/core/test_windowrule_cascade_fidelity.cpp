@@ -728,6 +728,49 @@ private Q_SLOTS:
         QVERIFY(f.store->setAllRules({disabled, lockActivity, unlockMonitor}));
         QVERIFY(!f.registry->resolveContextLocked(QStringLiteral("DP-1"), 0, QString()));
     }
+
+    // ─── Context lock — slot conflict resolution ──────────────────────────
+    // When two LockContext rules pin the SAME context with opposing values,
+    // the single Locked slot is won by the highest-priority rule (then list
+    // order on a tie), exactly like the layout slot (testTieBreakIsListOrder).
+    // The value itself does not bias the contest — proven by running it both
+    // directions so neither "true always wins" nor "false always wins" passes.
+
+    void testContextLock_priorityResolution()
+    {
+        const auto lockRuleAt = [](const QString& name, const QString& screenId, bool locked, int priority) {
+            PWR::RuleAction a;
+            a.type = QString(PWR::ActionType::LockContext);
+            a.params.insert(QString(PWR::ActionParam::Value), locked);
+            PWR::WindowRule r;
+            r.id = QUuid::createUuid();
+            r.name = name;
+            r.enabled = true;
+            r.priority = priority;
+            r.match = PWR::MatchExpression::makeLeaf(PWR::Field::ScreenId, PWR::Operator::Equals, screenId);
+            r.actions = {a};
+            return r;
+        };
+
+        RegistryFixture f = makeRegistryFixture();
+        // DP-9: higher-priority rule says NOT locked → wins over a lower one
+        // that says locked.
+        const PWR::WindowRule dp9High = lockRuleAt(QStringLiteral("dp9 unlock"), QStringLiteral("DP-9"), false, 500);
+        const PWR::WindowRule dp9Low = lockRuleAt(QStringLiteral("dp9 lock"), QStringLiteral("DP-9"), true, 400);
+        // DP-10: the inverse — higher-priority rule says locked → wins.
+        const PWR::WindowRule dp10High = lockRuleAt(QStringLiteral("dp10 lock"), QStringLiteral("DP-10"), true, 500);
+        const PWR::WindowRule dp10Low = lockRuleAt(QStringLiteral("dp10 unlock"), QStringLiteral("DP-10"), false, 400);
+        // DP-11: equal priority — first-listed rule wins the slot (stable sort).
+        const PWR::WindowRule dp11First = lockRuleAt(QStringLiteral("dp11 a"), QStringLiteral("DP-11"), true, 400);
+        const PWR::WindowRule dp11Second = lockRuleAt(QStringLiteral("dp11 b"), QStringLiteral("DP-11"), false, 400);
+        QVERIFY(f.store->setAllRules({dp9High, dp9Low, dp10High, dp10Low, dp11First, dp11Second}));
+
+        // Highest priority wins regardless of the value it carries.
+        QVERIFY(!f.registry->resolveContextLocked(QStringLiteral("DP-9"), 0, QString()));
+        QVERIFY(f.registry->resolveContextLocked(QStringLiteral("DP-10"), 0, QString()));
+        // Equal priority → first-listed (lock=true) wins.
+        QVERIFY(f.registry->resolveContextLocked(QStringLiteral("DP-11"), 0, QString()));
+    }
 };
 
 QTEST_MAIN(TestWindowRuleCascadeFidelity)

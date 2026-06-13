@@ -16,10 +16,9 @@
 #include <PhosphorLayer/Role.h>
 #include <PhosphorScreens/Manager.h>
 #include <PhosphorScreens/ScreenIdentity.h>
+#include <PhosphorZones/IZoneLayoutRegistry.h>
 
 #include "overlay_helpers.h"
-#include <PhosphorScreens/Manager.h>
-#include <PhosphorZones/IZoneLayoutRegistry.h>
 #include "../../core/settings_interfaces.h"
 #include "../../core/interfaces.h"
 #include "../../core/shaderregistry.h"
