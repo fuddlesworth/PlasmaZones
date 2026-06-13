@@ -635,18 +635,24 @@ void SnapHandler::slotPendingRestoresAvailable()
         w->deleteLater();
 
         QDBusPendingReply<QStringList> reply = *w;
-        QSet<QString> trackedAppIds;
+        QSet<QString> trackedWindowIds;
 
         if (reply.isValid()) {
-            // Extract app IDs from tracked windows for comparison
+            // Track by FULL windowId (appId|uuid), NOT appId. A multi-window app
+            // (e.g. several ghostty terminals, each snapped to its own zone) has one
+            // tracked entry PER window; deduping by appId would treat the whole app
+            // as "handled" the moment ONE of its windows restored, and skip every
+            // sibling below — including a window that individually failed its early
+            // restore (it raced startup and got a not-ready no-snap) and is the exact
+            // window this retry net exists to recover. The daemon tracks restored
+            // windows by their live id, which matches getWindowId() here.
             const QStringList trackedWindows = reply.value();
             for (const QString& windowId : trackedWindows) {
-                QString appId = ::PhosphorIdentity::WindowId::extractAppId(windowId);
-                if (!appId.isEmpty()) {
-                    trackedAppIds.insert(appId);
+                if (!windowId.isEmpty()) {
+                    trackedWindowIds.insert(windowId);
                 }
             }
-            qCDebug(lcEffect) << "Got" << trackedAppIds.size() << "tracked windows from daemon";
+            qCDebug(lcEffect) << "Got" << trackedWindowIds.size() << "tracked windows from daemon";
         } else {
             qCWarning(lcEffect) << "Failed to get tracked windows:" << reply.error().message();
             // Continue anyway - will try to restore all windows (daemon will handle duplicates)
@@ -667,10 +673,10 @@ void SnapHandler::slotPendingRestoresAvailable()
                 continue;
             }
 
-            // Check if this window is already tracked using local set lookup (O(1))
+            // Check if THIS window is already tracked (exact id, O(1)). A snapped
+            // sibling of the same app no longer masks an untracked window here.
             QString windowId = m_effect->getWindowId(window);
-            QString appId = ::PhosphorIdentity::WindowId::extractAppId(windowId);
-            if (trackedAppIds.contains(appId)) {
+            if (trackedWindowIds.contains(windowId)) {
                 continue; // Already tracked
             }
 
