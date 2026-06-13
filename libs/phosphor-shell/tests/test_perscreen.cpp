@@ -11,6 +11,9 @@
 
 #include "perscreen_fakemodel.h"
 
+#include <QCoreApplication>
+#include <QDebug>
+#include <QEvent>
 #include <QGuiApplication>
 #include <QJSValue>
 #include <QJSValueList>
