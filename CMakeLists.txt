@@ -106,10 +106,13 @@ find_package(Qt6 ${QT_MIN_VERSION} REQUIRED COMPONENTS
 # default for QML module dependency resolution (QTP0004). These are
 # the NEW behaviours we already rely on across phosphor-* and src/
 # qt_add_qml_module calls.
-if(POLICY QTP0001)
+# NOTE: CMake's if(POLICY) only understands CMP* CMake policies — for QTP*
+# Qt policies it is ALWAYS false. Qt's documented existence test is the
+# QT_KNOWN_POLICY_<policy> variable (set by the Qt CMake machinery from 6.5).
+if(QT_KNOWN_POLICY_QTP0001)
     qt_policy(SET QTP0001 NEW)
 endif()
-if(POLICY QTP0004)
+if(QT_KNOWN_POLICY_QTP0004)
     qt_policy(SET QTP0004 NEW)
 endif()
 # GuiPrivate (QRhi) and ShaderToolsPrivate (QShaderBaker) required for daemon zone overlay.

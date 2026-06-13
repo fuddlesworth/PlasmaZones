@@ -18,8 +18,9 @@ if(COMMAND qt_policy)
     qt_policy(SET QTP0001 NEW)
     # QTP0004 exists only from Qt 6.8 — qt_policy(SET) on an unknown policy
     # fatal-errors, and the COMMAND guard alone doesn't prove the policy
-    # exists (qt_policy ships from 6.5).
-    if(POLICY QTP0004)
+    # exists (qt_policy ships from 6.5). QT_KNOWN_POLICY_*, not
+    # if(POLICY ...), which only knows CMP* CMake policies.
+    if(QT_KNOWN_POLICY_QTP0004)
         qt_policy(SET QTP0004 NEW)
     endif()
 endif()
