@@ -277,15 +277,17 @@ void SnapHandler::handleCursorMoved(const QPointF& pos, const QString& screenId)
     // (follows the cursor between snapped windows) once a snapped window is
     // active. Scoped to the cursor's screen (mirrors AutotileHandler::
     // handleCursorMoved, discussion #461 + follow-up): a window active on another
-    // monitor must not freeze FFM on the monitor the cursor is on. Our own
-    // full-screen overlays never count as the kind of active window worth
-    // protecting. (Autotile pauses on the same principle — floated/popup/under-
+    // monitor must not freeze FFM on the monitor the cursor is on. The daemon's
+    // own passthrough overlay surface never counts as the kind of active window
+    // worth protecting; the interactive editor DOES (it is not a passthrough
+    // overlay, so it falls through to the not-snapped pause below and keeps
+    // focus). (Autotile pauses on the same principle — floated/popup/under-
     // min-size — but everything else there is tiled, so it has no never-managed
     // "free" case; snap does, hence the single not-snapped predicate.)
     if (KWin::EffectWindow* active = KWin::effects->activeWindow()) {
         // Cheap overlay-class check first, then the heavier screen resolution
         // (mirrors the autotile guard's predicate ordering).
-        if (!PlasmaZonesEffect::isOwnOverlayClass(active->windowClass())
+        if (!PlasmaZonesEffect::isOwnPassthroughOverlayClass(active->windowClass())
             && m_effect->getWindowScreenId(active) == screenId && !isTiledWindow(m_effect->getWindowId(active))) {
             return;
         }
@@ -304,10 +306,12 @@ void SnapHandler::handleCursorMoved(const QPointF& pos, const QString& screenId)
         if (!w->frameGeometry().contains(pos)) {
             continue;
         }
-        // Look through our own overlay/editor layer-shell surfaces — they are full-screen
-        // and always topmost, so a bail here would kill FFM whenever an overlay is up
-        // (mirrors the autotile FFM guard).
-        if (PlasmaZonesEffect::isOwnOverlayClass(w->windowClass())) {
+        // Look through the daemon's own passthrough overlay surface — it is
+        // full-screen and always topmost, so a bail here would kill FFM whenever
+        // an overlay is up (mirrors the autotile FFM guard). The interactive
+        // editor is NOT looked through: it falls to the not-snapped bail below,
+        // so FFM leaves focus on it instead of stealing to a snapped window.
+        if (PlasmaZonesEffect::isOwnPassthroughOverlayClass(w->windowClass())) {
             continue;
         }
         // The window directly under the cursor is not snapped (a floating dialog, popup,
