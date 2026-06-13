@@ -96,9 +96,11 @@ bool SnapEngine::unfloatToZone(const QString& windowId, const QString& screenId)
         }
     }
 
-    // No saved-float entry to consume — the snap commit below re-captures the
-    // window's snap slot as "snapped" in the unified record, so a future mode
-    // transition restores it snapped, not floating (single source of truth).
+    // Whether the target came from the pre-float zone or the no-pre-float-zone
+    // fallback, there is no saved-float entry to consume — the snap commit below
+    // re-captures the window's snap slot as "snapped" in the unified record, so a
+    // future mode transition restores it snapped, not floating (single source of
+    // truth).
 
     // Commit the snap via the unified orchestration. User-initiated because
     // the user just toggled float off — they want this snap to update the
@@ -227,13 +229,23 @@ UnfloatResult SnapEngine::resolveFallbackUnfloatGeometry(const QString& windowId
     }
 
     // Resolve the window's effective screen — its tracked float screen, else the
-    // caller's fallback. Zone geometry is resolved on THIS screen so the fallback
-    // lands where the window currently is.
+    // caller's fallback. A tracked screen that no longer exists (output unplugged)
+    // is discarded in favour of the caller's fallback, mirroring the screen-existence
+    // handling in resolveUnfloatGeometry. Zone geometry is resolved on the resulting
+    // screen so the fallback lands where the window currently is.
     QString screen = m_snapState->screenAssignments().value(windowId);
-    if (screen.isEmpty()) {
-        screen = fallbackScreen;
+    if (!screen.isEmpty()) {
+        screen = m_windowTracker->resolveEffectiveScreenId(screen);
+        auto* mgr = m_windowTracker->screenManager();
+        const bool screenExists = mgr ? mgr->physicalScreenFor(screen).isValid()
+                                      : (PhosphorScreens::ScreenIdentity::findByIdOrName(screen) != nullptr);
+        if (!screenExists) {
+            screen.clear();
+        }
     }
-    screen = m_windowTracker->resolveEffectiveScreenId(screen);
+    if (screen.isEmpty() && !fallbackScreen.isEmpty()) {
+        screen = m_windowTracker->resolveEffectiveScreenId(fallbackScreen);
+    }
     if (screen.isEmpty() || !m_layoutManager) {
         return result;
     }

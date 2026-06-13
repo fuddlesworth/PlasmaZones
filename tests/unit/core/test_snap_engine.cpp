@@ -1451,8 +1451,11 @@ private Q_SLOTS:
 
     // A new window that matches no auto-snap rule on a snap-mode screen defaults to
     // FLOATED (not the retired `free`): resolveWindowRestore marks it floating
-    // (windowFloatingChanged true) and returns noSnap. Asserted via the distinctive
-    // fallthrough log line so it is robust to the guiless fixture's mode resolution.
+    // (windowFloatingChanged true) and returns noSnap. The guiless fixture wires no
+    // mode providers, so the unconfigured DP-1 resolves to the default Snapping mode
+    // (LayoutRegistry::resolveDefaultAssignmentEntry → default-constructed entry,
+    // Mode::Snapping == 0). The window therefore deterministically reaches the
+    // snap-mode no-match fallthrough; the distinctive log line pins that path.
     void testResolveWindowRestore_newWindowNoMatch_defaultsToFloating()
     {
         SnapEngine engine(m_layoutManager, m_wts, nullptr, nullptr, nullptr);
@@ -1471,16 +1474,10 @@ private Q_SLOTS:
         const QString joined = lines.join(QLatin1Char('\n'));
 
         QVERIFY(!result.shouldSnap);
-        // Only meaningful when the window actually reached the snap-mode fallthrough
-        // (not the autotile-caller short-circuit). When it did, it must mark floating.
-        if (joined.contains(QStringLiteral("defaulting to floated"))) {
-            QCOMPARE(floatSpy.count(), 1);
-            QCOMPARE(floatSpy.takeFirst().at(1).toBool(), true);
-        } else {
-            QVERIFY2(joined.contains(QStringLiteral("is autotile — skipping")),
-                     "a no-match window must either default to floated or be deferred as autotile");
-            QCOMPARE(floatSpy.count(), 0);
-        }
+        QVERIFY2(joined.contains(QStringLiteral("defaulting to floated")),
+                 "a no-match window on a snap-mode screen must default to floated");
+        QCOMPARE(floatSpy.count(), 1);
+        QCOMPARE(floatSpy.takeFirst().at(1).toBool(), true);
         m_wts->setSnapState(nullptr);
     }
 
