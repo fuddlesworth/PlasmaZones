@@ -20,14 +20,14 @@ RuleAction makeAction(QLatin1StringView type, const QJsonObject& params = {})
 
 } // namespace
 
-// `ActionRegistry` is a process-global singleton. It now exposes
-// `unregisterAction` (added in the audit pass), so symmetric cleanup is
-// possible — but this test suite predates that API and `testRegisterCustomAction`
-// does not yet RAII-clean up its sentinel. To keep cross-test independence
-// without rewriting every test, no test here asserts an *absolute*
-// `registeredTypes().size()` — that count is not stable across the suite.
-// Builtins are asserted individually instead. `testBuiltinsRegistered` must
-// stay declared FIRST so it observes the registry before any test mutates it.
+// `ActionRegistry` is a process-global singleton. `testRegisterCustomAction`
+// registers a sentinel and unregisters it again (via `unregisterAction`) so it
+// leaves the singleton pristine. As defence in depth against any future test
+// that mutates the registry without cleaning up, no test here asserts an
+// *absolute* `registeredTypes().size()` — that count is not guaranteed stable
+// across the suite. Builtins are asserted individually instead, and
+// `testBuiltinsRegistered` stays declared FIRST so it observes the registry
+// before any test mutates it.
 class TestActionRegistry : public QObject
 {
     Q_OBJECT

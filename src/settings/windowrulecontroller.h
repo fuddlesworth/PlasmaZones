@@ -249,7 +249,8 @@ public:
     // ── Monitor overview strip ────────────────────────────────────────────
 
     /// Read-only per-monitor summary for the overview strip. Each entry:
-    /// `{ screenId, layoutName, tilingEnabled, ruleCount, assigned }`.
+    /// `{ screenId, layoutName, tilingEnabled, ruleCount, assigned, locked }`
+    /// (`locked` is true when a LockContext rule pins the monitor's layout).
     /// @p screens is the `SettingsController::screens` list (each a map with a
     /// `name` field, and a `screenId` fallback) so the overview can list every
     /// connected monitor — including ones with no rule at all (the "Not

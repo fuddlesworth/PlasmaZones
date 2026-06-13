@@ -279,17 +279,25 @@ void TestWindowRuleController::monitorOverviewLockPriorityResolution()
     const QVariantList overview = controller.monitorOverview(screens);
     QCOMPARE(overview.size(), 2);
 
+    bool sawA = false;
+    bool sawB = false;
     for (const QVariant& v : overview) {
         const QVariantMap tile = v.toMap();
         const QString id = tile.value(QStringLiteral("screenId")).toString();
         // Both screens carry two pinned lock rules.
         QCOMPARE(tile.value(QStringLiteral("ruleCount")).toInt(), 2);
         if (id == QLatin1String("DP-A")) {
+            sawA = true;
             QCOMPARE(tile.value(QStringLiteral("locked")).toBool(), true);
         } else if (id == QLatin1String("DP-B")) {
+            sawB = true;
             QCOMPARE(tile.value(QStringLiteral("locked")).toBool(), false);
         }
     }
+    // Pin identity: an unexpected screenId would otherwise skip both branches
+    // and pass having verified no lock value.
+    QVERIFY(sawA);
+    QVERIFY(sawB);
 }
 
 void TestWindowRuleController::monitorOverviewIgnoresDisabledRules()
