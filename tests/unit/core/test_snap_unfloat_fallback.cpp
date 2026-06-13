@@ -207,6 +207,7 @@ private Q_SLOTS:
 
         QVERIFY2(r.found, "all-occupied still resolves to the first zone (stacking)");
         QCOMPARE(r.zoneIds, QStringList{firstZone});
+        QVERIFY(r.geometry.isValid());
         m_wts->setSnapState(nullptr);
     }
 
