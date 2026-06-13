@@ -277,9 +277,11 @@ void SnapHandler::handleCursorMoved(const QPointF& pos, const QString& screenId)
     // (follows the cursor between snapped windows) once a snapped window is
     // active. Scoped to the cursor's screen (mirrors AutotileHandler::
     // handleCursorMoved, discussion #461 + follow-up): a window active on another
-    // monitor must not freeze FFM on the monitor the cursor is on. Our own
-    // full-screen overlays never count as the kind of active window worth
-    // protecting. (Autotile pauses on the same principle — floated/popup/under-
+    // monitor must not freeze FFM on the monitor the cursor is on. The daemon's
+    // own passthrough overlay surface never counts as the kind of active window
+    // worth protecting; the interactive editor DOES (it is not a passthrough
+    // overlay, so it falls through to the not-snapped pause below and keeps
+    // focus). (Autotile pauses on the same principle — floated/popup/under-
     // min-size — but everything else there is tiled, so it has no never-managed
     // "free" case; snap does, hence the single not-snapped predicate.)
     if (KWin::EffectWindow* active = KWin::effects->activeWindow()) {
