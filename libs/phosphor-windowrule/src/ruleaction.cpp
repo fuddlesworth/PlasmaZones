@@ -370,8 +370,11 @@ void ActionRegistry::registerBuiltins()
     // A matched context rule pins the active layout for its screen/desktop/
     // activity so it can't be switched, mirroring the manual ToggleLayoutLock
     // shortcut. Boolean `value`: true locks (the meaningful default for a
-    // freshly-authored action, hence `defaultDisplay = 1.0`), false is an
-    // explicit no-op overlay. Mode-agnostic — the rule query ignores the Mode
+    // freshly-authored action, hence `defaultDisplay = 1.0`); false fills the
+    // Locked slot with not-locked — a no-op against the manual lock store (the
+    // daemon ORs, so it never unlocks a manual lock), but as a single-winner
+    // slot a higher-priority false rule overrides a lower-priority true one.
+    // Mode-agnostic — the rule query ignores the Mode
     // axis, so the same lock surfaces for whichever engine mode is asked — and
     // live-resolved: the daemon ORs it with (never replaces) the manual
     // ToggleLayoutLock store, so rule locks and manual toggles do not fight.
