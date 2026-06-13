@@ -145,13 +145,17 @@ ComboBox {
         padding: 1
 
         contentItem: ListView {
+            id: popupList
+
             clip: true
             implicitHeight: contentHeight
             model: root.delegateModel
             currentIndex: root.highlightedIndex
             highlightMoveDuration: 0
 
-            ScrollBar.vertical: ScrollBar {}
+            ScrollBar.vertical: ScrollBar {
+                policy: ScrollBar.AsNeeded
+            }
         }
 
         background: Rectangle {
@@ -167,7 +171,10 @@ ComboBox {
         required property int index
         readonly property bool isCurrentSelection: root.currentIndex === index
 
-        width: root.popup.availableWidth
+        // Reserve the scrollbar's gutter so the row content ends at the
+        // scrollbar's left edge instead of running underneath it (avoids the
+        // stray vertical-line seam beside the handle when the list scrolls).
+        width: popupList.width - (popupList.ScrollBar.vertical.visible ? popupList.ScrollBar.vertical.width : 0)
         highlighted: root.highlightedIndex === index
 
         background: Rectangle {
