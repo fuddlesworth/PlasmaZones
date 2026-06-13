@@ -342,10 +342,13 @@ private Q_SLOTS:
             QRect(spy.at(0).at(1).toInt(), spy.at(0).at(2).toInt(), spy.at(0).at(3).toInt(), spy.at(0).at(4).toInt()),
             floatedGeo);
         QVERIFY(m_snapEngine->snapState()->isFloating(w2)); // reopened floating, not snapped
-        // Entry consumed (FIFO reopen, not re-recorded) so a third instance does
-        // not also inherit the float.
-        QVERIFY(!m_wta->service()->placementStore().contains(w1, QStringLiteral("settings")));
-        QVERIFY(!m_wta->service()->placementStore().contains(w2, QStringLiteral("settings")));
+        // The record is re-recorded under the LIVE windowId (w2) so the window's
+        // float-back survives logout/login — KWin assigns a new uuid at login, so the
+        // record matched by appId FIFO, and consuming it (the old behaviour) lost the
+        // float-back, leaving a later float with no recorded free position. The stale
+        // recorded-uuid entry (w1) is rebound, not left as a duplicate.
+        QVERIFY(m_wta->service()->placementStore().contains(w2));
+        QVERIFY(!m_wta->service()->placementStore().contains(w1));
         // Pre-float zone is restored so a subsequent float-toggle resnaps the
         // window back into its original zone (unfloatToZone reads preFloatZones).
         QCOMPARE(m_snapEngine->snapState()->preFloatZones(w2), QStringList{m_zoneIds[0]});
