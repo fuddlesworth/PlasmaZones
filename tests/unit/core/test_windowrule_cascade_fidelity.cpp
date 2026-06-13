@@ -757,6 +757,10 @@ private Q_SLOTS:
         disabled.enabled = false;
         QVERIFY(f.store->setAllRules({disabled, lockActivity, unlockMonitor, lockDesktop, mixedLock}));
         QVERIFY(!f.registry->resolveContextLocked(QStringLiteral("DP-1"), 0, QString()));
+        // The eviction is a whole-cache drop, not a zeroing: a lock left intact
+        // (lockDesktop, also primed above) must still resolve true after the
+        // revision bump rebuilds the cache.
+        QVERIFY(f.registry->resolveContextLocked(QStringLiteral("HDMI-2"), 2, QString()));
     }
 
     // ─── Context lock — slot conflict resolution ──────────────────────────
