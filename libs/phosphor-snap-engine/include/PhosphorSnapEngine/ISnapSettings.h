@@ -47,6 +47,13 @@ public:
     // practice a manual-layout-only override. Default false preserves the
     // pre-#370 per-layout-only semantics.
     virtual bool autoAssignAllLayouts() const = 0;
+
+    // When true, unfloating (Meta+F) a window that has NO pre-float zone to return
+    // to — a never-snapped window that defaulted to floating — snaps it to a
+    // fallback zone (last-used → first-empty → first zone in the layout) instead of
+    // leaving it floating. Default false: unfloat with no pre-float zone emits OSD
+    // feedback and the window stays floating. Read in SnapEngine::unfloatToZone.
+    virtual bool unfloatFallbackToZone() const = 0;
 };
 
 } // namespace PhosphorEngine

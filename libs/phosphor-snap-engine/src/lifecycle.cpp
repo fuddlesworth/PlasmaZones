@@ -320,43 +320,37 @@ SnapResult SnapEngine::resolveWindowRestore(const QString& windowId, const QStri
                 }
                 // Disabled context or zone gone (layout edit) → fall through to
                 // the legacy chain below.
-            } else if (slot.state == WindowPlacement::stateFloating()) {
-                // NOTE: the floating (and free, below) branch deliberately does NOT
-                // consult m_shouldRestorePredicate. That gate refuses to auto-SNAP a
-                // window onto a context the user disabled snapping for; a floating/free
-                // window is not being snapped into a zone, so restoring its floating
-                // position is correct regardless of the snap-disable state.
+            } else {
+                // FLOATED restore. Snapping has only two states — snapped (above) or
+                // floated — so any non-snapped record is floated. This also absorbs
+                // legacy `free` records (the retired third state): a `free` slot
+                // persisted by an older build is restored as floating, the single
+                // point where that mapping happens.
+                //
+                // This branch deliberately does NOT consult m_shouldRestorePredicate.
+                // That gate refuses to auto-SNAP a window onto a context the user
+                // disabled snapping for; a floated window is not being snapped into a
+                // zone, so restoring its floating state is correct regardless.
                 m_snapState->setFloatingOnScreen(windowId, restoreScreen, currentVirtualDesktop());
                 if (!slot.zoneIds.isEmpty()) {
+                    // A window floated FROM a snapped state carries its pre-float zones
+                    // for the resnap path; a never-snapped floated window has none.
                     m_snapState->addPreFloatZone(windowId, slot.zoneIds);
                     m_snapState->addPreFloatScreen(windowId, restoreScreen);
                 }
-                // The window is floating regardless of whether a free position was
-                // recorded — tell the compositor unconditionally (matching
-                // toggleWindowFloat / setWindowFloat / handoffReceive). Only the
-                // geometry move is gated on a valid recorded position.
+                // The window is floating regardless of whether a position was recorded
+                // — tell the compositor unconditionally (matching toggleWindowFloat /
+                // setWindowFloat / handoffReceive). The geometry MOVE, however, is
+                // gated on the unsnapped-position-restore opt-in (global setting +
+                // per-window RestorePosition rule) for ALL floated windows: when off,
+                // the window comes back floating but stays where KWin placed it.
                 Q_EMIT windowFloatingChanged(windowId, true, restoreScreen);
-                if (freeGeo.isValid()) {
+                if (restoreUnsnappedPosition && freeGeo.isValid()) {
                     Q_EMIT geometryRestoreRequested(windowId, freeGeo, restoreScreen);
                 }
                 qCInfo(PhosphorSnapEngine::lcSnapEngine)
-                    << "resolveWindowRestore: placement(floating) for" << windowId << "->" << freeGeo;
-                return SnapResult::noSnap();
-            } else if (slot.state == WindowPlacement::stateFree()) {
-                // free geometry already lives in the record; nothing to re-seed.
-                // When the user opted into unsnapped-position restore, move the
-                // window back to its recorded global position (which, being in
-                // compositor-global coords, returns it to its original monitor —
-                // KWin may have reopened the session window elsewhere). The window
-                // stays genuinely unmanaged; this is a one-shot placement, not a
-                // snap. Eligibility above already required restoreUnsnappedPosition
-                // to consume a cross-screen record, but a same-screen free record is
-                // consumed unconditionally — so gate the move itself here too.
-                if (restoreUnsnappedPosition && freeGeo.isValid()) {
-                    Q_EMIT geometryRestoreRequested(windowId, freeGeo, restoreScreen);
-                    qCInfo(PhosphorSnapEngine::lcSnapEngine)
-                        << "resolveWindowRestore: placement(free) reposition for" << windowId << "->" << freeGeo;
-                }
+                    << "resolveWindowRestore: placement(floated) for" << windowId << "->" << freeGeo
+                    << "move=" << (restoreUnsnappedPosition && freeGeo.isValid());
                 return SnapResult::noSnap();
             }
         }
@@ -483,6 +477,18 @@ SnapResult SnapEngine::resolveWindowRestore(const QString& windowId, const QStri
         }
     }
 
+    // No auto-snap matched on a snap-mode screen — the window defaults to FLOATED
+    // (snapping's only non-snapped state; the retired `free` default is gone). Mark
+    // it floating so it has a definite state and the float toggle / minimize / save
+    // paths treat it like autotile's floated windows. Reached ONLY here: the
+    // autotile-defer, disabled-context, exclusion, already-floating and
+    // already-snapped guards above all return earlier, and the autotile-caller
+    // short-circuit returns before the empty/last-zone chain — so this is always a
+    // genuine snap-mode window with no zone match.
+    m_snapState->setFloatingOnScreen(windowId, screenId, currentVirtualDesktop());
+    Q_EMIT windowFloatingChanged(windowId, true, screenId);
+    qCInfo(PhosphorSnapEngine::lcSnapEngine)
+        << "resolveWindowRestore:" << windowId << "no snap match — defaulting to floated on" << screenId;
     return SnapResult::noSnap();
 }
 
@@ -558,9 +564,12 @@ std::optional<PhosphorEngine::WindowPlacement> SnapEngine::capturePlacement(cons
         slot.zoneIds = m_snapState->zonesForWindow(windowId);
         p.screenId = m_snapState->screenAssignments().value(windowId);
     } else {
-        // Unmanaged on a snap-mode screen — a genuinely free window. The orchestrator
-        // fills freeGeometryByScreen from the live frame (a real un-managed position).
-        slot.state = WindowPlacement::stateFree();
+        // Snapping has only two states — snapped (above) or floated. An unmanaged
+        // window on a snap-mode screen is FLOATED (the retired `free` state). The
+        // orchestrator fills freeGeometryByScreen from the live frame; a contentless
+        // capture (no frame) is dropped by hasRestorableContent() so geometry-less
+        // floated residue never floods the per-app FIFO.
+        slot.state = WindowPlacement::stateFloating();
         p.screenId = screenForTrackedWindow(windowId);
     }
     p.engines.insert(engineId(), slot);

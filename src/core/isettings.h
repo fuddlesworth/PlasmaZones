@@ -384,6 +384,7 @@ Q_SIGNALS:
     void snappingStickyWindowHandlingChanged();
     void restoreWindowsToZonesOnLoginChanged();
     void restoreUnsnappedWindowsOnLoginChanged();
+    void snapUnfloatFallbackToZoneChanged();
     void autoAssignAllLayoutsChanged();
     void snapAssistFeatureEnabledChanged();
     void snapAssistEnabledChanged();

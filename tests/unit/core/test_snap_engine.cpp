@@ -1255,10 +1255,11 @@ private Q_SLOTS:
         m_wts->setSnapState(nullptr);
     }
 
-    // Same-screen free restore (option #2: restore the full position, not only the
-    // monitor). With the predicate opted in, a free record reopening on its OWN
-    // recorded screen still gets its global position re-applied.
-    void testResolveWindowRestore_freeSameScreen_restoresWhenPredicateOptsIn()
+    // LEGACY `free` record restored as floating (the retired third state). A `free`
+    // slot persisted by an older build is now treated as floating: the merged branch
+    // marks it floating (windowFloatingChanged true) AND, with the predicate opted
+    // in, re-applies its recorded position on its own screen.
+    void testResolveWindowRestore_legacyFreeSameScreen_restoresAsFloatingWhenPredicateOptsIn()
     {
         SnapEngine engine(m_layoutManager, m_wts, nullptr, nullptr, nullptr);
         engine.setEngineSettings(m_settings);
@@ -1273,11 +1274,12 @@ private Q_SLOTS:
         rec.appId = QStringLiteral("app");
         rec.screenId = QStringLiteral("DP-1");
         PhosphorEngine::EngineSlot slot;
-        slot.state = PhosphorEngine::WindowPlacement::stateFree();
+        slot.state = PhosphorEngine::WindowPlacement::stateFree(); // legacy token
         rec.engines.insert(PhosphorEngine::WindowPlacement::snapEngineId(), slot);
         rec.freeGeometryByScreen.insert(QStringLiteral("DP-1"), dp1Geo);
         m_wts->placementStore().record(rec);
 
+        QSignalSpy floatSpy(&engine, &PhosphorEngine::PlacementEngineBase::windowFloatingChanged);
         QSignalSpy geoSpy(&engine, &PhosphorEngine::PlacementEngineBase::geometryRestoreRequested);
 
         // Reopens on its own recorded screen DP-1.
@@ -1285,6 +1287,9 @@ private Q_SLOTS:
             engine.resolveWindowRestore(QStringLiteral("app|new"), QStringLiteral("DP-1"), /*sticky*/ false);
 
         QVERIFY(!result.shouldSnap);
+        // Legacy free now marks floating (the old free branch did NOT).
+        QCOMPARE(floatSpy.count(), 1);
+        QCOMPARE(floatSpy.takeFirst().at(1).toBool(), true);
         QCOMPARE(geoSpy.count(), 1);
         const QList<QVariant> args = geoSpy.takeFirst();
         QCOMPARE(args.at(1).toRect(), dp1Geo);
@@ -1333,12 +1338,13 @@ private Q_SLOTS:
         m_wts->setSnapState(nullptr);
     }
 
-    // The floating branch deliberately does NOT re-gate the geometry move on the
-    // restore-position predicate (unlike the free branch): once a floating record
-    // is consumed it always re-emits its recorded position. Pin that the move
-    // fires even when the predicate DENIES — proving the floating restore is the
-    // historical float-back path, independent of the unsnapped-restore opt-in.
-    void testResolveWindowRestore_floatingSameScreen_restoresEvenWhenPredicateDenies()
+    // Two-state model: the merged floated-restore branch ALWAYS marks the window
+    // floating (windowFloatingChanged true), but the geometry MOVE is now gated on
+    // the restore-position predicate for ALL floated windows (the repurposed
+    // restoreUnsnappedWindowsOnLogin setting / RestorePosition rule). When the
+    // predicate DENIES, the window comes back floating but stays where the
+    // compositor placed it — the move is skipped.
+    void testResolveWindowRestore_floatingSameScreen_marksFloatingButSkipsMoveWhenPredicateDenies()
     {
         SnapEngine engine(m_layoutManager, m_wts, nullptr, nullptr, nullptr);
         engine.setEngineSettings(m_settings);
@@ -1367,12 +1373,13 @@ private Q_SLOTS:
             engine.resolveWindowRestore(QStringLiteral("app|new"), QStringLiteral("DP-1"), /*sticky*/ false);
 
         QVERIFY(!result.shouldSnap);
-        QVERIFY2(geoSpy.count() == 1, "floating restore re-emits its position regardless of the restore predicate");
-        QCOMPARE(geoSpy.takeFirst().at(1).toRect(), dp1Geo);
+        // Marked floating unconditionally...
         QCOMPARE(floatSpy.count(), 1);
         const QList<QVariant> floatArgs = floatSpy.takeFirst();
         QCOMPARE(floatArgs.at(1).toBool(), true);
         QCOMPARE(floatArgs.at(2).toString(), QStringLiteral("DP-1"));
+        // ...but the geometry move is gated by the predicate (denied → skipped).
+        QVERIFY2(geoSpy.count() == 0, "floated move is gated on the restore-position predicate; denied → no move");
         m_wts->setSnapState(nullptr);
     }
 
@@ -1416,6 +1423,64 @@ private Q_SLOTS:
                  "opt-in re-records the cross-screen free record under the live id even when the move is skipped");
         QVERIFY2(!m_wts->placementStore().contains(QStringLiteral("app|orig")),
                  "the stale recorded-uuid entry is rebound, not left behind");
+        m_wts->setSnapState(nullptr);
+    }
+
+    // =========================================================================
+    // Two-state model: snapping has only `snapped` / `floated` — no `free`.
+    // =========================================================================
+
+    // capturePlacement of an unmanaged window (neither snapped nor floating in the
+    // runtime SnapState) records a FLOATING slot — the retired `free` state. An
+    // untracked window has no effective screen, so capturePlacement's snap-mode gate
+    // is bypassed and it reaches the state if/else.
+    void testCapturePlacement_unmanagedWindowRecordsFloating()
+    {
+        SnapEngine engine(m_layoutManager, m_wts, nullptr, nullptr, nullptr);
+        engine.setEngineSettings(m_settings);
+        m_wts->setSnapState(engine.snapState());
+
+        const auto p = engine.capturePlacement(QStringLiteral("app|unmanaged"));
+        QVERIFY(p.has_value());
+        const PhosphorEngine::EngineSlot slot = p->slotFor(PhosphorEngine::WindowPlacement::snapEngineId());
+        QCOMPARE(slot.state, QString(PhosphorEngine::WindowPlacement::stateFloating()));
+        QVERIFY2(slot.state != PhosphorEngine::WindowPlacement::stateFree(),
+                 "the retired `free` state must never be produced");
+        m_wts->setSnapState(nullptr);
+    }
+
+    // A new window that matches no auto-snap rule on a snap-mode screen defaults to
+    // FLOATED (not the retired `free`): resolveWindowRestore marks it floating
+    // (windowFloatingChanged true) and returns noSnap. Asserted via the distinctive
+    // fallthrough log line so it is robust to the guiless fixture's mode resolution.
+    void testResolveWindowRestore_newWindowNoMatch_defaultsToFloating()
+    {
+        SnapEngine engine(m_layoutManager, m_wts, nullptr, nullptr, nullptr);
+        engine.setEngineSettings(m_settings);
+        m_wts->setSnapState(engine.snapState());
+
+        auto* layout = createTestLayout(2, m_layoutManager);
+        m_layoutManager->addLayout(layout);
+        m_layoutManager->setActiveLayout(layout);
+
+        QSignalSpy floatSpy(&engine, &PhosphorEngine::PlacementEngineBase::windowFloatingChanged);
+
+        PhosphorEngine::SnapResult result;
+        const QStringList lines =
+            captureResolveLogs(engine, QStringLiteral("app|brand-new"), QStringLiteral("DP-1"), &result);
+        const QString joined = lines.join(QLatin1Char('\n'));
+
+        QVERIFY(!result.shouldSnap);
+        // Only meaningful when the window actually reached the snap-mode fallthrough
+        // (not the autotile-caller short-circuit). When it did, it must mark floating.
+        if (joined.contains(QStringLiteral("defaulting to floated"))) {
+            QCOMPARE(floatSpy.count(), 1);
+            QCOMPARE(floatSpy.takeFirst().at(1).toBool(), true);
+        } else {
+            QVERIFY2(joined.contains(QStringLiteral("is autotile — skipping")),
+                     "a no-match window must either default to floated or be deferred as autotile");
+            QCOMPARE(floatSpy.count(), 0);
+        }
         m_wts->setSnapState(nullptr);
     }
 

@@ -439,6 +439,10 @@ public:
     {
         return true;
     }
+    static bool snapUnfloatFallbackToZone()
+    {
+        return false;
+    }
     static bool autoAssignAllLayouts()
     {
         return false;

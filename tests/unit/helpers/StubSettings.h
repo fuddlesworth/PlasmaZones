@@ -634,6 +634,24 @@ public:
         Q_EMIT restoreUnsnappedWindowsOnLoginChanged();
         Q_EMIT settingsChanged();
     }
+    // ISettings getter/setter; the ISnapSettings bridge (unfloatFallbackToZone)
+    // is defined alongside the other ISnapSettings overrides below.
+    bool snapUnfloatFallbackToZone() const override
+    {
+        return m_snapUnfloatFallbackToZone;
+    }
+    void setSnapUnfloatFallbackToZone(bool value) override
+    {
+        if (m_snapUnfloatFallbackToZone == value)
+            return;
+        m_snapUnfloatFallbackToZone = value;
+        Q_EMIT snapUnfloatFallbackToZoneChanged();
+        Q_EMIT settingsChanged();
+    }
+    bool unfloatFallbackToZone() const override
+    {
+        return m_snapUnfloatFallbackToZone;
+    }
     bool autoAssignAllLayouts() const override
     {
         return m_autoAssignAllLayouts;
@@ -1140,6 +1158,7 @@ private:
     bool m_snapAssistEnabled = false;
     bool m_autoAssignAllLayouts = false;
     bool m_restoreUnsnappedWindowsOnLogin = true;
+    bool m_snapUnfloatFallbackToZone = false;
     bool m_snappingFocusNewWindows = false;
     bool m_snappingFocusFollowsMouse = false;
     QStringList m_snappingLayoutOrder;

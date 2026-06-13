@@ -191,6 +191,19 @@ SettingsFlickable {
                         }
                     }
 
+                    SettingsRow {
+                        title: i18n("Unfloat to a zone when there is no previous zone")
+                        description: i18n("When you unfloat a window that was never snapped, snap it to a fallback zone (last used, then first empty, then the first zone) instead of leaving it floating.")
+
+                        SettingsSwitch {
+                            checked: appSettings.snapUnfloatFallbackToZone
+                            accessibleName: i18n("Unfloat to a zone when there is no previous zone")
+                            onToggled: function (newValue) {
+                                appSettings.snapUnfloatFallbackToZone = newValue;
+                            }
+                        }
+                    }
+
                     SettingsSeparator {}
 
                     SettingsRow {

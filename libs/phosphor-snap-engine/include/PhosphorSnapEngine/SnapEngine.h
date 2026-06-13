@@ -433,6 +433,15 @@ public:
 
     PhosphorEngine::UnfloatResult resolveUnfloatGeometry(const QString& windowId, const QString& fallbackScreen) const;
 
+    /// Fallback unfloat target for a window with NO pre-float zone (a never-snapped
+    /// window that defaulted to floating). Returns a found result ONLY when the
+    /// `unfloatFallbackToZone` setting is on, resolving last-used → first-empty →
+    /// first zone in the window's screen's layout. Returns not-found when the
+    /// setting is off or no zone can be resolved (so the caller keeps the window
+    /// floating with feedback).
+    PhosphorEngine::UnfloatResult resolveFallbackUnfloatGeometry(const QString& windowId,
+                                                                 const QString& fallbackScreen) const;
+
     PhosphorProtocol::WindowGeometryList
     applyBatchAssignments(const QVector<PhosphorEngine::ZoneAssignmentEntry>& entries,
                           PhosphorEngine::SnapIntent intent = PhosphorEngine::SnapIntent::UserInitiated,

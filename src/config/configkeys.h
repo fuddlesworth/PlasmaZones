@@ -227,6 +227,7 @@ public:
     P_CONFIG_KEY(restoreOnUnsnapKey, "RestoreOnUnsnap")
     P_CONFIG_KEY(restoreOnLoginKey, "RestoreOnLogin")
     P_CONFIG_KEY(restoreUnsnappedOnLoginKey, "RestoreUnsnappedOnLogin")
+    P_CONFIG_KEY(unfloatFallbackToZoneKey, "UnfloatFallbackToZone")
     P_CONFIG_KEY(autoAssignAllLayoutsKey, "AutoAssignAllLayouts")
     P_CONFIG_KEY(stickyWindowHandlingKey, "StickyWindowHandling")
     P_CONFIG_KEY(defaultLayoutIdKey, "DefaultLayoutId")

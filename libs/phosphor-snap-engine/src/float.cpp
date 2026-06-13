@@ -3,8 +3,12 @@
 
 #include <PhosphorSnapEngine/SnapEngine.h>
 #include <PhosphorSnapEngine/SnapState.h>
+#include <PhosphorSnapEngine/ISnapSettings.h>
 #include <PhosphorScreens/Manager.h>
 #include <PhosphorScreens/ScreenIdentity.h>
+#include <PhosphorZones/Layout.h>
+#include <PhosphorZones/LayoutRegistry.h>
+#include <PhosphorZones/Zone.h>
 #include "snapenginelogging.h"
 
 namespace PhosphorSnapEngine {
@@ -82,7 +86,14 @@ bool SnapEngine::unfloatToZone(const QString& windowId, const QString& screenId)
 {
     UnfloatResult unfloat = resolveUnfloatGeometry(windowId, screenId);
     if (!unfloat.found) {
-        return false;
+        // No pre-float zone (a never-snapped window that defaulted to floating).
+        // With the unfloatFallbackToZone setting on, snap it to a fallback zone
+        // instead of refusing; otherwise return false so the caller keeps it
+        // floating with feedback.
+        unfloat = resolveFallbackUnfloatGeometry(windowId, screenId);
+        if (!unfloat.found) {
+            return false;
+        }
     }
 
     // No saved-float entry to consume — the snap commit below re-captures the
@@ -200,6 +211,72 @@ UnfloatResult SnapEngine::resolveUnfloatGeometry(const QString& windowId, const 
     result.zoneIds = zoneIds;
     result.geometry = geo;
     result.screenId = restoreScreen;
+    return result;
+}
+
+UnfloatResult SnapEngine::resolveFallbackUnfloatGeometry(const QString& windowId, const QString& fallbackScreen) const
+{
+    UnfloatResult result;
+
+    // Opt-in only: when the setting is off, a no-pre-float-zone unfloat leaves the
+    // window floating (the caller emits feedback). The engine reads the bool via the
+    // settings-agnostic ISnapSettings seam, like moveNewWindowsToLastZone.
+    auto* s = snapSettings();
+    if (!s || !s->unfloatFallbackToZone()) {
+        return result;
+    }
+
+    // Resolve the window's effective screen — its tracked float screen, else the
+    // caller's fallback. Zone geometry is resolved on THIS screen so the fallback
+    // lands where the window currently is.
+    QString screen = m_snapState->screenAssignments().value(windowId);
+    if (screen.isEmpty()) {
+        screen = fallbackScreen;
+    }
+    screen = m_windowTracker->resolveEffectiveScreenId(screen);
+    if (screen.isEmpty() || !m_layoutManager) {
+        return result;
+    }
+    PhosphorZones::Layout* layout = m_layoutManager->resolveLayoutForScreen(screen);
+    if (!layout) {
+        return result;
+    }
+
+    // Target resolution order: last-used zone (if it exists in this screen's layout)
+    // → first empty zone → first zone in the layout. The last two reuse the same
+    // accessors as the auto-snap chain (findEmptyZoneInLayout / zoneGeometry).
+    QString zoneId;
+    const QString lastUsed = m_snapState->lastUsedZoneId();
+    if (!lastUsed.isEmpty() && m_windowTracker->zoneGeometry(lastUsed, screen).isValid()) {
+        zoneId = lastUsed;
+    }
+    if (zoneId.isEmpty()) {
+        const int desktopFilter = m_virtualDesktopManager ? m_virtualDesktopManager->currentDesktop() : 0;
+        zoneId = m_windowTracker->findEmptyZoneInLayout(layout, screen, desktopFilter);
+    }
+    if (zoneId.isEmpty()) {
+        // Final fallback: the first zone in the layout. May already be occupied —
+        // snapping supports multiple windows per zone (stacking), so that is fine.
+        const QVector<PhosphorZones::Zone*> zones = layout->zones();
+        if (!zones.isEmpty() && zones.first()) {
+            zoneId = zones.first()->id().toString();
+        }
+    }
+    if (zoneId.isEmpty()) {
+        return result;
+    }
+
+    const QRect geo = m_windowTracker->zoneGeometry(zoneId, screen);
+    if (!geo.isValid()) {
+        return result;
+    }
+
+    result.found = true;
+    result.zoneIds = QStringList{zoneId};
+    result.geometry = geo;
+    result.screenId = screen;
+    qCInfo(PhosphorSnapEngine::lcSnapEngine)
+        << "resolveFallbackUnfloatGeometry:" << windowId << "→ zone" << zoneId << "on" << screen;
     return result;
 }
 

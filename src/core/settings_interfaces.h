@@ -372,6 +372,12 @@ public:
     /// overrides via the RestorePosition window rule.
     virtual bool restoreUnsnappedWindowsOnLogin() const = 0;
     virtual void setRestoreUnsnappedWindowsOnLogin(bool restore) = 0;
+    /// When a window that was never snapped (no pre-float zone to return to) is
+    /// unfloated (Meta+F), snap it to a fallback zone (last-used → first-empty →
+    /// first zone) instead of leaving it floating. Default off: unfloat with no
+    /// pre-float zone emits OSD feedback and the window stays floating.
+    virtual bool snapUnfloatFallbackToZone() const = 0;
+    virtual void setSnapUnfloatFallbackToZone(bool enabled) = 0;
     virtual bool autoAssignAllLayouts() const = 0;
     virtual void setAutoAssignAllLayouts(bool enabled) = 0;
     virtual bool snapAssistFeatureEnabled() const = 0;

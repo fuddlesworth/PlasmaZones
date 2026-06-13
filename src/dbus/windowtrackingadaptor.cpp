@@ -309,8 +309,11 @@ void WindowTrackingAdaptor::captureWindowPlacement(const QString& windowId)
             // record() leaves any other screen's free geometry and the other engine's
             // slot intact.
             const PhosphorEngine::EngineSlot slot = p->slotFor(e->engineId());
-            const bool unmanagedState = (slot.state == PhosphorEngine::WindowPlacement::stateFree()
-                                         || slot.state == PhosphorEngine::WindowPlacement::stateFloating());
+            // Floated windows carry a shared free-geometry rect; snapped/tiled windows
+            // don't (the live frame IS the zone/tile rect). Snapping now produces only
+            // snapped/floating (the `free` state is retired) and autotile produces
+            // tiled/floating — so the unmanaged check is simply `floating`.
+            const bool unmanagedState = (slot.state == PhosphorEngine::WindowPlacement::stateFloating());
             if (unmanagedState) {
                 const QRect frame = m_frameGeometry.value(windowId);
                 if (frame.isValid()) {
