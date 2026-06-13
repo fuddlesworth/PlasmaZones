@@ -73,7 +73,7 @@ void AutotileHandler::handleCursorMoved(const QPointF& pos, const QString& scree
     // active. Scoped to the same screen as the cursor so an unrelated focused
     // window on another monitor never freezes FFM here.
     if (KWin::EffectWindow* active = KWin::effects->activeWindow()) {
-        if (!PlasmaZonesEffect::isOwnOverlayClass(active->windowClass())
+        if (!PlasmaZonesEffect::isOwnPassthroughOverlayClass(active->windowClass())
             && m_effect->getWindowScreenId(active) == screenId) {
             // Filter first, then size-check. This mirrors the under-cursor
             // guard below so the two predicates stay structurally aligned.
@@ -115,10 +115,13 @@ void AutotileHandler::handleCursorMoved(const QPointF& pos, const QString& scree
         if (!w->frameGeometry().contains(pos)) {
             continue;
         }
-        // Look through our own overlay/editor layer-shell surfaces — they are
+        // Look through the daemon's own passthrough overlay surface — it is
         // full-screen and always topmost on the autotile monitor, so the bail
-        // below would otherwise kill FFM forever (discussion #461 #3).
-        if (PlasmaZonesEffect::isOwnOverlayClass(w->windowClass())) {
+        // below would otherwise kill FFM forever (discussion #461 #3). The
+        // editor is deliberately NOT looked through here: it is an interactive
+        // fullscreen window, so it falls to the occluder bail below and FFM
+        // leaves focus on it rather than stealing to the tiled window beneath.
+        if (PlasmaZonesEffect::isOwnPassthroughOverlayClass(w->windowClass())) {
             continue;
         }
         // A non-autotile window (excluded app, keep-above overlay, popup, dialog,
