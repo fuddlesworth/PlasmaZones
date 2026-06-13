@@ -210,7 +210,9 @@ QString paramLabel(const QString& type, const QString& key)
     if (type == ActionType::LockContext && key == ActionParam::Value) {
         // The action is the rule-driven counterpart to the ToggleLayoutLock
         // shortcut: on = the matched context's active layout can't be switched.
-        return PhosphorI18n::tr("Lock the layout (off = no change)");
+        // off is "don't lock" (not "no change"): the Locked slot is single-winner
+        // by priority, so a higher-priority off rule cancels a lower-priority on.
+        return PhosphorI18n::tr("Lock the layout (off = don't lock)");
     }
     if (type == ActionType::SetOuterGapTop && key == ActionParam::Value) {
         return PhosphorI18n::tr("Top gap (px)");
