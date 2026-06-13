@@ -166,6 +166,32 @@ private Q_SLOTS:
         QVERIFY2(!reg.validate(makeAction(ActionType::RestorePosition, notBool)), "non-bool value must fail");
     }
 
+    void testLockContextAction()
+    {
+        const ActionRegistry& reg = ActionRegistry::instance();
+        QVERIFY(reg.isRegistered(QString(ActionType::LockContext)));
+
+        QJsonObject on;
+        on.insert(QStringLiteral("value"), true);
+        QJsonObject off;
+        off.insert(QStringLiteral("value"), false);
+
+        // Context-domain boolean action filling the dedicated locked slot.
+        // Non-terminal: a lock-only context rule composes with other context
+        // slots (e.g. a separate gap rule) rather than short-circuiting.
+        QCOMPARE(reg.slotFor(makeAction(ActionType::LockContext, on)), QString(ActionSlot::Locked));
+        QCOMPARE(reg.domainFor(makeAction(ActionType::LockContext, on)), ActionDomain::Context);
+        QVERIFY(!reg.isTerminal(makeAction(ActionType::LockContext, on)));
+
+        // Requires a boolean `value`; both true and false are well-formed.
+        QVERIFY(reg.validate(makeAction(ActionType::LockContext, on)));
+        QVERIFY(reg.validate(makeAction(ActionType::LockContext, off)));
+        QVERIFY2(!reg.validate(makeAction(ActionType::LockContext)), "missing value must fail validation");
+        QJsonObject notBool;
+        notBool.insert(QStringLiteral("value"), 1);
+        QVERIFY2(!reg.validate(makeAction(ActionType::LockContext, notBool)), "non-bool value must fail");
+    }
+
     void testRegisterCustomAction()
     {
         ActionRegistry& reg = ActionRegistry::instance();

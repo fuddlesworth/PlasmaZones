@@ -678,6 +678,56 @@ private Q_SLOTS:
         // A context the rules do not pin → no override (cascade falls through).
         QVERIFY(f.registry->resolveContextGaps(QStringLiteral("DP-2"), 0, QString()).isEmpty());
     }
+
+    // ─── Context lock resolution (ActionSlot::Locked) ─────────────────────
+    // resolveContextLocked reads the boolean Locked slot off a matching
+    // context rule. Mode-agnostic, never persisted — the daemon's
+    // isContextLocked ORs it over the manual lock store.
+
+    void testContextLock_resolution()
+    {
+        const auto lockRule = [](const QString& name, PWR::Field field, const QVariant& value, bool locked) {
+            PWR::RuleAction a;
+            a.type = QString(PWR::ActionType::LockContext);
+            a.params.insert(QString(PWR::ActionParam::Value), locked);
+            PWR::WindowRule r;
+            r.id = QUuid::createUuid();
+            r.name = name;
+            r.enabled = true;
+            r.priority = 400;
+            r.match = PWR::MatchExpression::makeLeaf(field, PWR::Operator::Equals, value);
+            r.actions = {a};
+            return r;
+        };
+
+        RegistryFixture f = makeRegistryFixture();
+        // A monitor lock (value = true) on DP-1, and an activity lock scoped to
+        // "work". An explicit value = false lock on DP-3 must NOT lock.
+        const PWR::WindowRule lockMonitor =
+            lockRule(QStringLiteral("lock DP-1"), PWR::Field::ScreenId, QStringLiteral("DP-1"), true);
+        const PWR::WindowRule lockActivity =
+            lockRule(QStringLiteral("lock work"), PWR::Field::Activity, QStringLiteral("work-uuid"), true);
+        const PWR::WindowRule unlockMonitor =
+            lockRule(QStringLiteral("unlock DP-3"), PWR::Field::ScreenId, QStringLiteral("DP-3"), false);
+        QVERIFY(f.store->setAllRules({lockMonitor, lockActivity, unlockMonitor}));
+
+        // DP-1 is locked regardless of desktop/activity (screen-only match).
+        QVERIFY(f.registry->resolveContextLocked(QStringLiteral("DP-1"), 0, QString()));
+        QVERIFY(f.registry->resolveContextLocked(QStringLiteral("DP-1"), 3, QStringLiteral("anything")));
+        // The activity lock fires only inside "work".
+        QVERIFY(f.registry->resolveContextLocked(QStringLiteral("DP-2"), 0, QStringLiteral("work-uuid")));
+        QVERIFY(!f.registry->resolveContextLocked(QStringLiteral("DP-2"), 0, QStringLiteral("play-uuid")));
+        // value = false resolves to not-locked (explicit no-op overlay).
+        QVERIFY(!f.registry->resolveContextLocked(QStringLiteral("DP-3"), 0, QString()));
+        // A context no rule pins → not locked.
+        QVERIFY(!f.registry->resolveContextLocked(QStringLiteral("HDMI-1"), 0, QString()));
+
+        // Disabling the lock rule drops the lock (revision-invalidated cache).
+        PWR::WindowRule disabled = lockMonitor;
+        disabled.enabled = false;
+        QVERIFY(f.store->setAllRules({disabled, lockActivity, unlockMonitor}));
+        QVERIFY(!f.registry->resolveContextLocked(QStringLiteral("DP-1"), 0, QString()));
+    }
 };
 
 QTEST_MAIN(TestWindowRuleCascadeFidelity)

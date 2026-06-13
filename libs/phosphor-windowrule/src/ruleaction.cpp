@@ -366,6 +366,27 @@ void ActionRegistry::registerBuiltins()
                      .enumWireValues = engineModeOptions()}},
     });
 
+    // ── locked slot — context-domain layout lock ──
+    // A matched context rule pins the active layout for its screen/desktop/
+    // activity so it can't be switched, mirroring the manual ToggleLayoutLock
+    // shortcut. Boolean `value`: true locks (the meaningful default for a
+    // freshly-authored action, hence `defaultDisplay = 1.0`), false is an
+    // explicit no-op overlay. Mode-agnostic — the daemon's lock check ORs the
+    // resolved value across both engine modes — and live-resolved, never
+    // persisted, so rule locks and manual toggles do not fight.
+    registerAction(ActionDescriptor{
+        .type = QString(ActionType::LockContext),
+        .slotFor = constantSlot(ActionSlot::Locked),
+        .validate =
+            [](const QJsonObject& p) {
+                return hasBool(p, ActionParam::Value);
+            },
+        .terminal = false,
+        .allowedKeys = {QString(ActionParam::Value)},
+        .domain = ActionDomain::Context,
+        .params = {P{.key = QString(ActionParam::Value), .kind = QStringLiteral("bool"), .defaultDisplay = 1.0}},
+    });
+
     // ── manage slot — terminal. Exclude is intentionally free-form: an empty
     //    `allowedKeys` opts out of the strict-key check so a future Exclude
     //    reason/scope param can be added without a schema bump. ──

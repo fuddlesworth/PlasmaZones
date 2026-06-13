@@ -166,6 +166,45 @@ ContextGapOverride LayoutRegistry::resolveContextGaps(const QString& screenId, i
     return gaps;
 }
 
+bool LayoutRegistry::resolveContextLocked(const QString& screenId, int virtualDesktop, const QString& activity) const
+{
+    // Mirror resolveContextGaps: a per-slot read off the evaluator's
+    // ResolvedActions, not the single-winner assignment walk. The Locked slot
+    // is filled by the highest-priority matching context rule carrying a
+    // LockContext action; we report its boolean value. No engine-mode gate —
+    // a lock-only context rule is a first-class overlay.
+    if (!m_evaluator) {
+        return false;
+    }
+
+    const quint64 revision = m_ruleStore->ruleSet().revision();
+    if (revision != m_contextLockCacheRevision) {
+        m_contextLockCache.clear();
+        m_contextLockCacheRevision = revision;
+    }
+    const ContextResolveKey key{screenId, virtualDesktop, activity};
+    const auto cached = m_contextLockCache.constFind(key);
+    if (cached != m_contextLockCache.constEnd()) {
+        return cached.value();
+    }
+
+    const PWR::WindowQuery query = makeContextQuery(screenId, virtualDesktop, activity);
+    const PWR::ResolvedActions resolved = m_evaluator->resolve(query);
+    bool locked = false;
+    if (const auto action = resolved.slot(QString(PWR::ActionSlot::Locked))) {
+        locked = action->params.value(PWR::ActionParam::Value).toBool();
+    }
+
+    // Soft cap mirroring m_contextGapCache (see resolveAssignmentEntry): drop
+    // the whole cache on overflow rather than evicting one key.
+    constexpr qsizetype kMaxEntries = 256;
+    if (m_contextLockCache.size() >= kMaxEntries) {
+        m_contextLockCache.clear();
+    }
+    m_contextLockCache.insert(key, locked);
+    return locked;
+}
+
 bool LayoutRegistry::hasExactContextRule(const QString& screenId, int virtualDesktop, const QString& activity) const
 {
     return findExactContextRule(screenId, virtualDesktop, activity) != nullptr;

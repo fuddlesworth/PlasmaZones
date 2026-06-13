@@ -314,6 +314,14 @@ public:
     ContextGapOverride resolveContextGaps(const QString& screenId, int virtualDesktop,
                                           const QString& activity) const override;
 
+    /// Resolve whether a context rule locks the active layout for the
+    /// (screen, desktop, activity) context by evaluating a windowless
+    /// WindowQuery through the RuleEvaluator and reading the
+    /// `ActionSlot::Locked` slot. Mode-agnostic per-slot read (mirrors @ref
+    /// resolveContextGaps); returns true iff the winning Locked-slot action's
+    /// `value` is true. Same owner-thread affinity as the rest of the registry.
+    bool resolveContextLocked(const QString& screenId, int virtualDesktop, const QString& activity) const override;
+
     Q_INVOKABLE void clearAssignment(const QString& screenId, int virtualDesktop = 0,
                                      const QString& activity = QString());
     /// True iff a context-assignment rule whose match is exactly this
@@ -656,6 +664,14 @@ private:
     /// so memoizing collapses those repeats to one walk per rule-set revision.
     mutable QHash<ContextResolveKey, ContextGapOverride> m_contextGapCache;
     mutable quint64 m_contextGapCacheRevision = 0;
+
+    /// Hot-path cache for @ref resolveContextLocked, keyed and
+    /// revision-invalidated exactly like @c m_contextGapCache. The lock check
+    /// runs on overlay/selector updates (per cursor-move while a selector is
+    /// open) as well as every layout-switch attempt, so memoizing the per-slot
+    /// walk collapses repeats to one walk per rule-set revision.
+    mutable QHash<ContextResolveKey, bool> m_contextLockCache;
+    mutable quint64 m_contextLockCacheRevision = 0;
 
     std::function<QString()> m_defaultLayoutIdProvider; ///< Empty = provider disabled; falls back to first layout
     /// Empty = provider disabled. Returns the user's default autotile

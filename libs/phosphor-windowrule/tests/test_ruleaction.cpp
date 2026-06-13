@@ -30,6 +30,9 @@ const QList<QLatin1StringView> kContextDomainTypes = {
     ActionType::SetSnappingLayout,
     ActionType::SetTilingAlgorithm,
     ActionType::DisableEngine,
+    // Layout lock — context-domain, resolved during the screen/desktop/
+    // activity pass (mode-agnostic) like the other context actions.
+    ActionType::LockContext,
     // Gap overrides are context-domain — resolved during the
     // screen/desktop/activity pass, never per-window.
     ActionType::SetZonePadding,
