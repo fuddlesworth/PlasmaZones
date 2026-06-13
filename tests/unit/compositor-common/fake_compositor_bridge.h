@@ -33,6 +33,12 @@
  *    height. The AlreadyPlaced re-assert tests therefore pin call ORDER
  *    only — the under-fill bug class the re-assert exists for cannot
  *    reproduce here.
+ *  - findAllWindowsById does NOT honor fuzzyFindByAppId — it stays
+ *    exact-match even when the flag is set, so multi-match fuzzy scenarios
+ *    (several windows sharing an appId) cannot be exercised through it.
+ *  - applySnapGeometry is logged as a moveResize entry in callLog (it
+ *    delegates to the same record mutation), so call-order assertions
+ *    cannot distinguish the two paths.
  *  - stackingOrder() returns std::map key order (lexicographic by id), NOT
  *    bottom-to-top stacking as the interface documents. DecorationManager
  *    never calls it; a future consumer test must not rely on the ordering.

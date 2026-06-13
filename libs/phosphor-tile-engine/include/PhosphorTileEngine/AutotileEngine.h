@@ -1034,9 +1034,15 @@ private:
      * the state from m_screenStates (they iterate it) and the per-path
      * override policy — toggle-off drops only the resolver's in-memory
      * overrides, the orphaned-VS teardown purges persisted settings too.
+     *
+     * @param drainOverflow Pass false when tearing down SEVERAL states that
+     *        share one screenId (the orphaned-VS loop spans every
+     *        desktop/activity context); the overflow bucket is keyed per
+     *        screenId only, so the caller must drain once per screen AFTER
+     *        all of that screen's states are captured.
      */
     void releaseScreenStateForTeardown(const QString& screenId, PhosphorTiles::TilingState* state,
-                                       QStringList& releasedWindows);
+                                       QStringList& releasedWindows, bool drainOverflow = true);
 
     /**
      * @brief Shared key-migration body for focus-driven window moves.

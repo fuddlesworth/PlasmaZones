@@ -378,8 +378,12 @@ void AutotileHandler::slotWindowsTileRequested(const PhosphorProtocol::TileReque
             }
 
             if (snap.isMonocle) {
-                KWin::Window* kw = snap.window->window();
-                if (kw) {
+                // The maximize leg needs the KWin::Window, but the geometry
+                // apply must run regardless: the CallerWillPlace acquire
+                // above already hid the decoration expecting this placement
+                // — skipping it on a null kw would leave a borderless window
+                // with a title-bar-height gap.
+                if (KWin::Window* kw = snap.window->window()) {
                     const bool wasAlreadyMaximized = (kw->maximizeMode() == KWin::MaximizeFull);
                     ++m_suppressMaximizeChanged;
                     kw->maximize(KWin::MaximizeFull);
@@ -388,6 +392,8 @@ void AutotileHandler::slotWindowsTileRequested(const PhosphorProtocol::TileReque
                     }
                     m_effect->applySnapGeometry(snap.window, snap.geometry);
                     --m_suppressMaximizeChanged;
+                } else {
+                    m_effect->applySnapGeometry(snap.window, snap.geometry);
                 }
             } else {
                 unmaximizeMonocleWindow(snap.windowId);

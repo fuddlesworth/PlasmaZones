@@ -173,7 +173,10 @@ void PlasmaZonesEffect::callEndDrag(KWin::EffectWindow* window, const QString& w
                 }
 
                 case PhosphorProtocol::DragOutcome::ApplySnap: {
-                    if (!safeWindow || safeWindow->isFullScreen()) {
+                    // isDeleted: close-shader grabs keep dying windows alive
+                    // through the D-Bus reply latency (same hygiene as the
+                    // batch apply path).
+                    if (!safeWindow || safeWindow->isDeleted() || safeWindow->isFullScreen()) {
                         break;
                     }
                     const QRect snapGeometry = outcome.toRect();
@@ -219,7 +222,7 @@ void PlasmaZonesEffect::callEndDrag(KWin::EffectWindow* window, const QString& w
                 }
 
                 case PhosphorProtocol::DragOutcome::RestoreSize: {
-                    if (!safeWindow || safeWindow->isFullScreen()) {
+                    if (!safeWindow || safeWindow->isDeleted() || safeWindow->isFullScreen()) {
                         break;
                     }
                     // Drag-to-unsnap: apply pre-snap width/height at current
@@ -291,7 +294,7 @@ void PlasmaZonesEffect::tryAsyncSnapCall(const QString& interface, const QString
                         onComplete();
                     return;
                 }
-                if (reply.argumentAt<4>() && window) {
+                if (reply.argumentAt<4>() && window && !window->isDeleted()) {
                     QRect geo(reply.argumentAt<0>(), reply.argumentAt<1>(), reply.argumentAt<2>(),
                               reply.argumentAt<3>());
                     qCInfo(lcEffect) << method << "snapping" << windowId << "to:" << geo;
@@ -736,9 +739,6 @@ void PlasmaZonesEffect::slotDragPolicyChanged(const QString& windowId, const Pho
             m_snapHandler->callCancelSnap();
             m_dragBypassedForAutotile = true;
             m_dragBypassScreenId = newPolicy.screenId;
-            m_dragStartedSent = false;
-            m_pendingDragWindowId.clear();
-            m_pendingDragGeometry = QRectF();
         } else {
             // Already in bypass but on a different autotile screen — just
             // update the captured screen id.
@@ -762,9 +762,6 @@ void PlasmaZonesEffect::slotDragPolicyChanged(const QString& windowId, const Pho
         }
         m_dragBypassedForAutotile = false;
         m_dragActivationDetected = false;
-        m_dragStartedSent = false;
-        m_pendingDragWindowId = windowId;
-        m_pendingDragGeometry = dragW ? dragW->frameGeometry() : QRectF();
         if (!m_keyboardGrabbed) {
             KWin::effects->grabKeyboard(this);
             m_keyboardGrabbed = true;

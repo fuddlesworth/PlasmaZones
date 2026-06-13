@@ -590,7 +590,7 @@ void DecorationManager::hideNow(WindowHandle w, Placement placement)
         // is the rect the compositor is already moving toward.
         const QRectF target = m_bridge.moveResizeGeometry(w);
         m_bridge.setNoBorder(w, true);
-        if (target.isValid() && !target.isEmpty()) {
+        if (target.isValid()) {
             m_bridge.moveResize(w, target);
         } else {
             // No valid target to re-assert: the frame will shrink by the
@@ -620,7 +620,7 @@ bool DecorationManager::restoreNow(const QString& windowId, Entry& entry, bool r
     if (reassertGeometry) {
         const QRectF target = m_bridge.moveResizeGeometry(w);
         m_bridge.setNoBorder(w, false);
-        if (target.isValid() && !target.isEmpty()) {
+        if (target.isValid()) {
             m_bridge.moveResize(w, target);
         }
     } else {

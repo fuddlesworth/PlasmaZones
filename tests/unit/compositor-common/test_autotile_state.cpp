@@ -55,11 +55,19 @@ private Q_SLOTS:
     void testCleanupClosedWindowState()
     {
         const QString windowId = QStringLiteral("testapp|42");
+        const QString sibling = QStringLiteral("other|7");
         const QString screenId = QStringLiteral("screen-0");
+        const QString staleScreen = QStringLiteral("screen-stale");
 
-        // Set up BorderState with the window on its owning screen.
+        // Set up BorderState with the window in TWO screen buckets — the
+        // cross-screen-stale scenario cleanup defends against (window
+        // crossed screens before closing). The stale bucket also holds a
+        // sibling so we can verify the bucket survives while the closed
+        // window is scrubbed from it.
         PhosphorCompositor::BorderState border;
         PhosphorCompositor::AutotileStateHelpers::addTiledOnScreen(border, screenId, windowId);
+        PhosphorCompositor::AutotileStateHelpers::addTiledOnScreen(border, staleScreen, windowId);
+        PhosphorCompositor::AutotileStateHelpers::addTiledOnScreen(border, staleScreen, sibling);
 
         // Set up AutotileWindowState maps
         QSet<QString> notifiedWindows;
@@ -82,6 +90,11 @@ private Q_SLOTS:
 
         QHash<QString, QHash<QString, QRectF>> preAutotileGeometries;
         preAutotileGeometries[screenId].insert(windowId, QRectF(0.1, 0.1, 0.5, 0.5));
+        // Same cross-screen-stale shape for the geometry store: the closed
+        // window's entry in the old screen's bucket plus a sibling entry
+        // that must survive the sweep.
+        preAutotileGeometries[staleScreen].insert(windowId, QRectF(0.2, 0.2, 0.4, 0.4));
+        preAutotileGeometries[staleScreen].insert(sibling, QRectF(0.3, 0.3, 0.3, 0.3));
 
         PhosphorCompositor::AutotileStateHelpers::AutotileWindowState state{
             notifiedWindows,      notifiedWindowScreens,   minimizeFloatedWindows, autotileTargetZones,
@@ -98,7 +111,16 @@ private Q_SLOTS:
         QVERIFY(!autotileTargetZones.contains(windowId));
         QVERIFY(!centeredWaylandZones.contains(windowId));
         QVERIFY(!monocleMaximizedWindows.contains(windowId));
-        QVERIFY(!preAutotileGeometries[screenId].contains(windowId));
+
+        // Cross-screen sweep: the window is scrubbed from EVERY bucket, the
+        // now-empty owning bucket is erased, the stale bucket survives with
+        // only the sibling, and the sibling's entries are untouched.
+        QVERIFY(!border.tiledWindowsByScreen.contains(screenId));
+        QVERIFY(!border.tiledWindowsByScreen.value(staleScreen).contains(windowId));
+        QVERIFY(border.tiledWindowsByScreen.value(staleScreen).contains(sibling));
+        QVERIFY(!preAutotileGeometries.contains(screenId));
+        QVERIFY(!preAutotileGeometries.value(staleScreen).contains(windowId));
+        QVERIFY(preAutotileGeometries.value(staleScreen).contains(sibling));
     }
 
     // =================================================================

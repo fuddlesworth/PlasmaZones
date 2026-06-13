@@ -146,7 +146,7 @@
             </arg>
             <arg name="geometry" type="(iiii)">
                 <annotation name="org.gtk.GDBus.DocString" value="Zone geometry struct: (x, y, width, height)."/>
-                <annotation name="org.qtproject.QtDBus.QtTypeName.Out0" value="PhosphorProtocol::ZoneGeometryRect"/>
+                <annotation name="org.qtproject.QtDBus.QtTypeName.Out1" value="PhosphorProtocol::ZoneGeometryRect"/>
             </arg>
         </signal>
     </interface>

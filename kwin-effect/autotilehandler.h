@@ -6,8 +6,10 @@
 #include <PhosphorCompositor/AutotileState.h>
 #include <PhosphorProtocol/AutotileMarshalling.h>
 
+#include <QColor>
 #include <QHash>
 #include <QObject>
+#include <QPair>
 #include <QPointer>
 #include <QRect>
 #include <QRectF>
@@ -15,6 +17,8 @@
 #include <QString>
 #include <QStringList>
 #include <QVector>
+
+#include <cstdint>
 
 class QTimer;
 

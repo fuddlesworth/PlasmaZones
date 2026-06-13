@@ -311,7 +311,8 @@ PlasmaZonesEffect::PlasmaZonesEffect()
                         // by the fast path. Using QPointer so we skip
                         // if the window was destroyed between drag-start
                         // and reply.
-                        if (safeW && m_currentDragPolicy.immediateFloatOnStart && !isWindowFloating(capturedWindowId)
+                        if (safeW && !safeW->isDeleted() && m_currentDragPolicy.immediateFloatOnStart
+                            && !isWindowFloating(capturedWindowId)
                             && !m_dragFloatedWindowIds.contains(capturedWindowId)) {
                             m_autotileHandler->handleDragToFloat(safeW, capturedWindowId, /*immediate=*/true);
                             m_dragFloatedWindowIds.insert(capturedWindowId);
@@ -356,9 +357,6 @@ PlasmaZonesEffect::PlasmaZonesEffect()
             }
             m_dragBypassedForAutotile = false;
             m_dragActivationDetected = false;
-            m_dragStartedSent = false;
-            m_pendingDragWindowId = windowId;
-            m_pendingDragGeometry = geometry;
 
             // beginDrag already initialized daemon-side snap-drag state
             // (called internally from the adaptor). The effect only needs
@@ -458,9 +456,6 @@ PlasmaZonesEffect::PlasmaZonesEffect()
                 m_dragBypassedForAutotile = false;
                 m_dragBypassScreenId.clear();
                 m_dragActivationDetected = false;
-                m_dragStartedSent = false;
-                m_pendingDragWindowId.clear();
-                m_pendingDragGeometry = QRectF();
             });
 
     // Connect to window lifecycle signals
@@ -477,7 +472,12 @@ PlasmaZonesEffect::PlasmaZonesEffect()
             &ScreenChangeHandler::onWindowClosed);
     // Panels mapped before the effect loaded never fire windowAdded — hook the
     // already-present docks now so a later resize of one still re-reports.
+    // Skip close-grabbed dying windows: other effects' close animations can
+    // hold deleted windows in the stacking order across an effect (re)load.
     for (KWin::EffectWindow* existing : KWin::effects->stackingOrder()) {
+        if (!existing || existing->isDeleted()) {
+            continue;
+        }
         m_screenChangeHandler->trackDockWindow(existing);
     }
     // clientArea(MaximizeArea) is queried for the current virtual desktop, so a
@@ -792,9 +792,14 @@ PlasmaZonesEffect::PlasmaZonesEffect()
     // slotDaemonReady), so any ensureInterface() call would bail out immediately.
     // All daemon state sync is deferred to slotDaemonReady().
 
-    // Connect to existing windows
+    // Connect to existing windows. Skip close-grabbed dying windows — wiring
+    // per-window connections and seeding screen tracking for a window whose
+    // close already happened would resurrect state nothing cleans up.
     const auto windows = KWin::effects->stackingOrder();
     for (KWin::EffectWindow* w : windows) {
+        if (!w || w->isDeleted()) {
+            continue;
+        }
         setupWindowConnections(w);
     }
 

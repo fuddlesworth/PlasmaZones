@@ -230,11 +230,20 @@ void AutotileEngine::connectSignals()
                         // toggle-off path, an orphaned VS id is never reused,
                         // so BOTH override layers go: the resolver's
                         // in-memory map here, the persisted settings below
-                        // (clearPerScreenAutotileSettings).
+                        // (clearPerScreenAutotileSettings). drainOverflow is
+                        // deferred to the per-screen loop below: this loop
+                        // visits EVERY desktop/activity context of the same
+                        // VS id, and an in-helper drain on the first context
+                        // would blind capturePlacement's overflow
+                        // discriminator for the remaining contexts.
                         orphanedVsIds.insert(sid);
-                        releaseScreenStateForTeardown(sid, it.value(), releasedWindows);
+                        releaseScreenStateForTeardown(sid, it.value(), releasedWindows,
+                                                      /*drainOverflow=*/false);
                         m_configResolver->removeOverridesForScreen(sid);
                         it.remove();
+                    }
+                    for (const QString& sid : std::as_const(orphanedVsIds)) {
+                        m_overflow.takeForScreen(sid);
                     }
                     for (const QString& windowId : std::as_const(releasedWindows)) {
                         m_windowToStateKey.remove(windowId);
@@ -408,7 +417,7 @@ void AutotileEngine::setCurrentDesktop(int desktop)
     // has no reserved "unset" value (it defaults to 1, and KWin desktops are
     // always >= 1), so a separate established-flag — not a sentinel
     // comparison against the current value — carries "context exists";
-    // mirrors the empty-string sentinel setCurrentActivity() gets for free.
+    // mirrors m_activityContextEverSet on the activity side.
     // Use |= so that a prior setCurrentActivity() flag is not lost when both
     // desktop AND activity change simultaneously (e.g., activity-per-desktop).
     m_isDesktopContextSwitch |= m_desktopContextEverSet;
@@ -1843,7 +1852,7 @@ void AutotileEngine::handoffReceive(const HandoffContext& ctx)
             algo->onWindowAdded(state, idx);
         }
     }
-    m_windowToStateKey[windowId] = currentKeyForScreen(ctx.toScreenId);
+    m_windowToStateKey[windowId] = destKey;
 
     // Trigger a retile so a non-floating arrival actually lands in a tile;
     // floating arrivals retile too because their displacement may free a
@@ -2245,7 +2254,7 @@ void AutotileEngine::windowFocused(const QString& rawWindowId, const QString& sc
 }
 
 void AutotileEngine::releaseScreenStateForTeardown(const QString& screenId, PhosphorTiles::TilingState* state,
-                                                   QStringList& releasedWindows)
+                                                   QStringList& releasedWindows, bool drainOverflow)
 {
     // Snapshot each window's autotile slot into the unified record BEFORE the
     // PhosphorTiles::TilingState is torn down — the record is the SINGLE
@@ -2267,8 +2276,15 @@ void AutotileEngine::releaseScreenStateForTeardown(const QString& screenId, Phos
     // Drop the overflow set AFTER capture: capturePlacement's
     // overflow-vs-user-float discriminator (isOverflow) must still see this
     // screen's overflow windows, or they'd be mis-recorded as user floats and
-    // stick floating instead of re-tiling on re-entry.
-    m_overflow.takeForScreen(screenId);
+    // stick floating instead of re-tiling on re-entry. Callers tearing down
+    // SEVERAL states for the same screenId (the orphaned-VS loop spans every
+    // desktop/activity context) pass drainOverflow=false and drain once per
+    // screen AFTER all captures — the overflow bucket is keyed per screenId
+    // only, so an in-helper drain on the first state would blind the
+    // discriminator for every later state of the same screen.
+    if (drainOverflow) {
+        m_overflow.takeForScreen(screenId);
+    }
     releasedWindows.append(tiled);
     releasedWindows.append(floated);
     m_pendingInitialOrders.remove(screenId);
@@ -2419,8 +2435,13 @@ void AutotileEngine::onWindowRemoved(const QString& windowId)
 
     qCInfo(PhosphorTileEngine::lcTileEngine) << "onWindowRemoved:" << windowId << "screen=" << screenId;
 
-    // Notify algorithm via lifecycle hook before removal
-    PhosphorTiles::TilingState* state = tilingStateForScreen(screenId);
+    // Notify algorithm via lifecycle hook before removal. Resolve the state
+    // through the window's STORED key (mirrors handoffRelease /
+    // migrateWindowBetweenKeys), not tilingStateForScreen(): the latter keys
+    // on the CURRENT desktop/activity — for a window owned by another
+    // context's state it would miss the hook on the owning state AND lazily
+    // create a spurious empty TilingState for the current context.
+    PhosphorTiles::TilingState* state = m_screenStates.value(m_windowToStateKey.value(windowId));
     PhosphorTiles::TilingAlgorithm* algo = effectiveAlgorithm(screenId);
     if (algo && algo->supportsLifecycleHooks() && state) {
         const int idx = state->tiledWindows().indexOf(windowId);

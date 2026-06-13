@@ -42,12 +42,6 @@ void WindowTrackingAdaptor::storePreTileGeometry(const QString& windowId, int x,
                           << "overwrite=" << overwrite;
 }
 
-bool WindowTrackingAdaptor::getPreTileGeometry(const QString& windowId, int& x, int& y, int& width, int& height)
-{
-    // Single float-back store: the unified record (via validatedUnmanagedGeometry).
-    return getValidatedPreTileGeometry(windowId, x, y, width, height);
-}
-
 bool WindowTrackingAdaptor::hasPreTileGeometry(const QString& windowId)
 {
     if (windowId.isEmpty() || !m_service) {
@@ -115,8 +109,9 @@ bool WindowTrackingAdaptor::getValidatedPreTileGeometry(const QString& windowId,
         return false;
     }
 
-    // m_service is non-null by constructor invariant (qFatal on null) —
-    // no half-guarding here, consistent with the rest of this file.
+    // m_service is non-null by constructor invariant (the ctor qFatals on
+    // null), so no guard is needed; the half-guard this replaced checked
+    // one deref and missed the next.
     const QString screenId = m_service->screenAssignments().value(windowId);
 
     auto geo = m_service->validatedUnmanagedGeometry(windowId, screenId);

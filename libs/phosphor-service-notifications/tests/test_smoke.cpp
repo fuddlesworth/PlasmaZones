@@ -29,7 +29,6 @@
 #include <QDBusConnection>
 #include <QDBusServer>
 #include <QDeadlineTimer>
-#include <QDir>
 #include <QImage>
 #include <QSignalSpy>
 #include <QStringList>

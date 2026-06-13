@@ -299,7 +299,6 @@ void PlasmaZonesEffect::updateAllBorders()
 
 void PlasmaZonesEffect::reconcileRuleHiddenTitleBar(const QString& windowId, KWin::EffectWindow* w)
 {
-    using namespace PhosphorCompositor;
     if (!w || windowId.isEmpty()) {
         return;
     }
@@ -323,7 +322,6 @@ bool PlasmaZonesEffect::isWindowMarkedSnapped(const QString& windowId) const
 
 const PhosphorCompositor::BorderState* PlasmaZonesEffect::resolveBorderStateFor(const QString& windowId) const
 {
-    using namespace PhosphorCompositor;
     // Autotile takes precedence; a window can transiently appear in both the
     // autotile and snap border sets during a mode switch (the call sites guard
     // against steady-state double-tracking via isAutotileScreen, but the

@@ -332,11 +332,6 @@ void LayoutAdaptor::openEditorForScreen(const QString& screenId)
     launchEditor({QStringLiteral("--screen"), screenId}, QStringLiteral("for screen: %1").arg(screenId));
 }
 
-void LayoutAdaptor::openEditorForLayout(const QString& layoutId)
-{
-    launchEditor({QStringLiteral("--layout"), layoutId}, QStringLiteral("for layout: %1").arg(layoutId));
-}
-
 void LayoutAdaptor::openEditorForLayoutOnScreen(const QString& layoutId, const QString& screenId)
 {
     QStringList args{QStringLiteral("--layout"), layoutId};

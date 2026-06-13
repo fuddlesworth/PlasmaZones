@@ -119,9 +119,11 @@ void AutotileHandler::saveAndRecordPreAutotileGeometry(const QString& windowId, 
                                                        const QRectF& frame, bool knownFreeFloating)
 {
     if (windowId.isEmpty() || screenId.isEmpty()) {
+        qCDebug(lcEffect) << "Skipped pre-autotile geometry save: empty id" << windowId << screenId;
         return;
     }
     if (!frame.isValid() || frame.width() <= 0 || frame.height() <= 0) {
+        qCDebug(lcEffect) << "Skipped pre-autotile geometry save: invalid frame" << frame << "for" << windowId;
         return;
     }
     // Use EXACT windowId match only — NOT an appId/stableId fallback.

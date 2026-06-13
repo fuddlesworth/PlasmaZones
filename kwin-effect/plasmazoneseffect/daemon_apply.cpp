@@ -473,7 +473,9 @@ void PlasmaZonesEffect::slotRunningWindowsRequested()
     const auto windows = KWin::effects->stackingOrder();
     for (auto it = windows.rbegin(); it != windows.rend(); ++it) {
         KWin::EffectWindow* w = *it;
-        if (!w) {
+        // !isDeleted: a window mid-close-animation must not be offered in
+        // the rule picker (same stacking-walk hygiene as the other walks).
+        if (!w || w->isDeleted()) {
             continue;
         }
 

@@ -101,7 +101,12 @@ else()
         # project's global exception settings. Luau also breaks under unity builds
         # (same-named file-local symbols collide), and is STATIC, so it must be
         # PIC to link into our shared lib. Override on the vendored targets only.
-        foreach(_luau_tgt Luau.Ast Luau.Compiler Luau.VM Luau.Bytecode Luau.CodeGen Luau.Config)
+        # Luau.Common is NOT header-only in 0.723: it is a compiled STATIC
+        # library (BytecodeWire/StringUtils/TimeTrace TUs) inside the PUBLIC
+        # link closure of both Luau.VM and Luau.Compiler, so it needs every
+        # override below — most critically -fexceptions (its TUs sit in the
+        # lua_pcall unwind path) and PIC (it links into our SHARED lib).
+        foreach(_luau_tgt Luau.Ast Luau.Common Luau.Compiler Luau.VM Luau.Bytecode Luau.CodeGen Luau.Config)
             if(TARGET ${_luau_tgt})
                 set_target_properties(${_luau_tgt} PROPERTIES
                     POSITION_INDEPENDENT_CODE ON

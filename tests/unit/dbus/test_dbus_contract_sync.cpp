@@ -10,7 +10,8 @@
  * with Q_CLASSINFO. Nothing enforced the symmetry mechanically, and the
  * PR-608 audit caught exactly the drift class that invites: a capability
  * documented against a deleted method, internal helpers exposed as bus slots,
- * and renamed args. This test pins, for each (XML, adaptor) pair:
+ * and renamed args. This test pins, for EVERY handwritten (XML, adaptor)
+ * pair — all twelve org.plasmazones interfaces:
  *
  *  1. Every XML method exists as a bus-exposed metaobject method with
  *     matching in/out argument types, names, and return mapping.
@@ -38,8 +39,16 @@
 
 #include "../../../src/dbus/autotileadaptor.h"
 #include "../../../src/dbus/compositorbridgeadaptor.h"
+#include "../../../src/dbus/controladaptor.h"
+#include "../../../src/dbus/layoutadaptor.h"
+#include "../../../src/dbus/overlayadaptor.h"
+#include "../../../src/dbus/settingsadaptor.h"
+#include "../../../src/dbus/shaderadaptor.h"
 #include "../../../src/dbus/snapadaptor.h"
+#include "../../../src/dbus/windowdragadaptor.h"
+#include "../../../src/dbus/windowruleadaptor.h"
 #include "../../../src/dbus/windowtrackingadaptor.h"
+#include "../../../src/dbus/zonedetectionadaptor.h"
 
 using namespace PlasmaZones;
 
@@ -50,7 +59,8 @@ struct XmlArg
     QString name;
     QString dbusType;
     QString direction; // "in" / "out" (signals: treated as out)
-    QString qtTypeName; // org.qtproject.QtDBus.QtTypeName.* annotation, if any
+    QString qtTypeName; // org.qtproject.QtDBus.QtTypeName.* annotation value, if any
+    QString qtTypeNameLabel; // the annotation's index suffix ("In0", "Out1", ...)
 };
 
 struct XmlMethod
@@ -72,6 +82,10 @@ struct XmlInterface
     QHash<QString, XmlMethod> methods;
     QHash<QString, XmlMethod> signalEntries;
     QHash<QString, XmlProperty> properties;
+    /// Names that appeared more than once — D-Bus allows overloads but this
+    /// harness's name-keyed model doesn't; an overload must fail loudly
+    /// instead of being half-checked.
+    QStringList duplicateNames;
 };
 
 /// Map a (normalized) C++ parameter type to its D-Bus signature. Custom
@@ -94,7 +108,10 @@ QString dbusTypeFor(const QString& cppTypeIn)
         {QStringLiteral("qulonglong"), QStringLiteral("t")},
         {QStringLiteral("QStringList"), QStringLiteral("as")},
         {QStringLiteral("QVariantMap"), QStringLiteral("a{sv}")},
+        {QStringLiteral("QVariantList"), QStringLiteral("av")},
         {QStringLiteral("QByteArray"), QStringLiteral("ay")},
+        {QStringLiteral("QDBusUnixFileDescriptor"), QStringLiteral("h")},
+        {QStringLiteral("QDBusVariant"), QStringLiteral("v")},
     };
     return kMap.value(cppType);
 }
@@ -110,7 +127,7 @@ XmlInterface parseInterfaceXml(const QString& path)
     XmlMethod current;
     bool inMethod = false;
     bool inSignal = false;
-    int lastArgIndex = -1;
+    bool inArg = false;
     while (!xml.atEnd()) {
         xml.readNext();
         if (xml.isStartElement()) {
@@ -122,7 +139,7 @@ XmlInterface parseInterfaceXml(const QString& path)
                 current = XmlMethod{attrs.value(QLatin1String("name")).toString(), {}};
                 inMethod = (el == QLatin1String("method"));
                 inSignal = !inMethod;
-                lastArgIndex = -1;
+                inArg = false;
             } else if (el == QLatin1String("arg") && (inMethod || inSignal)) {
                 XmlArg arg;
                 arg.name = attrs.value(QLatin1String("name")).toString();
@@ -134,30 +151,44 @@ XmlInterface parseInterfaceXml(const QString& path)
                     arg.direction = inSignal ? QStringLiteral("out") : QStringLiteral("in");
                 }
                 current.args.append(arg);
-                lastArgIndex = current.args.size() - 1;
-            } else if (el == QLatin1String("annotation") && lastArgIndex >= 0) {
+                inArg = true;
+            } else if (el == QLatin1String("annotation") && inArg) {
+                // Attribute QtTypeName annotations ONLY while nested inside
+                // an <arg> element — a method-level annotation placed after
+                // the args (Qt's other canonical placement) must not be
+                // silently attached to the last arg.
                 const QString annName = attrs.value(QLatin1String("name")).toString();
-                if (annName.startsWith(QLatin1String("org.qtproject.QtDBus.QtTypeName"))) {
-                    current.args[lastArgIndex].qtTypeName = attrs.value(QLatin1String("value")).toString();
+                const QLatin1String prefix("org.qtproject.QtDBus.QtTypeName.");
+                if (annName.startsWith(prefix)) {
+                    current.args.last().qtTypeName = attrs.value(QLatin1String("value")).toString();
+                    current.args.last().qtTypeNameLabel = annName.mid(prefix.size());
                 }
             } else if (el == QLatin1String("property")) {
                 XmlProperty p;
                 p.name = attrs.value(QLatin1String("name")).toString();
                 p.dbusType = attrs.value(QLatin1String("type")).toString();
                 p.access = attrs.value(QLatin1String("access")).toString();
+                if (iface.properties.contains(p.name)) {
+                    iface.duplicateNames.append(p.name);
+                }
                 iface.properties.insert(p.name, p);
             }
         } else if (xml.isEndElement()) {
             const auto el = xml.name();
             if (el == QLatin1String("method") && inMethod) {
+                if (iface.methods.contains(current.name)) {
+                    iface.duplicateNames.append(current.name);
+                }
                 iface.methods.insert(current.name, current);
                 inMethod = false;
             } else if (el == QLatin1String("signal") && inSignal) {
+                if (iface.signalEntries.contains(current.name)) {
+                    iface.duplicateNames.append(current.name);
+                }
                 iface.signalEntries.insert(current.name, current);
                 inSignal = false;
             } else if (el == QLatin1String("arg")) {
-                // keep lastArgIndex until the next arg/method so trailing
-                // annotations inside <arg>...</arg> are captured above
+                inArg = false;
             }
         }
     }
@@ -166,8 +197,11 @@ XmlInterface parseInterfaceXml(const QString& path)
 
 /// Bus-exposed methods of the adaptor subclass itself: public slots and
 /// public Q_INVOKABLEs from methodOffset() up, with default-argument clones
-/// collapsed to the full-signature entry.
-QHash<QString, QMetaMethod> busMethods(const QMetaObject& mo)
+/// collapsed to the full-signature entry. Genuine OVERLOADS (same name,
+/// non-prefix parameter lists) are reported through @p overloads — this
+/// harness's name-keyed model would only half-check them, so they must fail
+/// loudly instead.
+QHash<QString, QMetaMethod> busMethods(const QMetaObject& mo, QStringList* overloads = nullptr)
 {
     QHash<QString, QMetaMethod> out;
     for (int i = mo.methodOffset(); i < mo.methodCount(); ++i) {
@@ -180,9 +214,22 @@ QHash<QString, QMetaMethod> busMethods(const QMetaObject& mo)
         }
         const QString name = QString::fromLatin1(m.name());
         auto it = out.find(name);
-        if (it == out.end() || it->parameterCount() < m.parameterCount()) {
-            out.insert(name, m); // default-arg clones have fewer params
+        if (it == out.end()) {
+            out.insert(name, m);
+            continue;
         }
+        // Same-name entry: legal only as a default-arg CLONE, whose
+        // parameter types are a strict prefix of the full signature's.
+        const QMetaMethod& shorter = (it->parameterCount() < m.parameterCount()) ? it.value() : m;
+        const QMetaMethod& longer = (it->parameterCount() < m.parameterCount()) ? m : it.value();
+        bool isClone = shorter.parameterCount() < longer.parameterCount();
+        for (int p = 0; isClone && p < shorter.parameterCount(); ++p) {
+            isClone = (shorter.parameterTypes().at(p) == longer.parameterTypes().at(p));
+        }
+        if (!isClone && overloads) {
+            overloads->append(name);
+        }
+        out.insert(name, longer);
     }
     return out;
 }
@@ -244,7 +291,7 @@ class TestDBusContractSync : public QObject
     }
 
     void verifyContract(const QMetaObject& mo, const QString& interfaceName,
-                        const QSet<QString>& offContractSignals = {})
+                        const QSet<QString>& offContractSignals = {}, const QSet<QString>& offContractMethods = {})
     {
         const XmlInterface iface = parseInterfaceXml(xmlPath(interfaceName));
         QVERIFY2(!iface.name.isEmpty(), qPrintable(QStringLiteral("could not parse %1").arg(xmlPath(interfaceName))));
@@ -255,7 +302,18 @@ class TestDBusContractSync : public QObject
         QVERIFY(ci >= 0);
         QCOMPARE(QString::fromLatin1(mo.classInfo(ci).value()), interfaceName);
 
-        const QHash<QString, QMetaMethod> methods = busMethods(mo);
+        // The name-keyed model can't represent overloads — fail loudly on
+        // any duplicate instead of half-checking it.
+        QVERIFY2(iface.duplicateNames.isEmpty(),
+                 qPrintable(QStringLiteral("%1: duplicate XML method/signal/property names (overloads are not "
+                                           "supported by this harness): %2")
+                                .arg(interfaceName, iface.duplicateNames.join(QLatin1String(", ")))));
+        QStringList overloads;
+        const QHash<QString, QMetaMethod> methods = busMethods(mo, &overloads);
+        QVERIFY2(overloads.isEmpty(),
+                 qPrintable(QStringLiteral("%1: adaptor declares genuine overloads (not default-arg clones) — "
+                                           "unsupported by this harness: %2")
+                                .arg(interfaceName, overloads.join(QLatin1String(", ")))));
         const QHash<QString, QMetaMethod> signals_ = busSignals(mo);
 
         // 1 + 2. Method bijection with full argument verification.
@@ -272,11 +330,16 @@ class TestDBusContractSync : public QObject
             }
 
             // Split C++ parameters into ins (by-value / const-ref) and outs
-            // (non-const refs), preserving order.
+            // (non-const refs), preserving order. A `const QDBusMessage&`
+            // parameter is QtDBus's delayed-reply context injection — it is
+            // NOT a wire argument and never appears in the XML.
             QList<QByteArray> cppIns;
             QList<QByteArray> cppOuts;
             const QList<QByteArray> paramTypes = m.parameterTypes();
             for (const QByteArray& t : paramTypes) {
+                if (t == "QDBusMessage" || t == "const QDBusMessage&") {
+                    continue;
+                }
                 if (t.endsWith('&') && !t.startsWith("const ")) {
                     cppOuts.append(t);
                 } else {
@@ -291,6 +354,13 @@ class TestDBusContractSync : public QObject
                                     .arg(cppIns.size())));
             for (int i = 0; i < inArgs.size(); ++i) {
                 compareArg(interfaceName, it.key(), inArgs[i], cppIns[i]);
+                // The annotation's index digit is part of the contract:
+                // qdbusxml2cpp keys generated typedefs on In<N>/Out<N>, so a
+                // wrong digit breaks generated consumers even when the value
+                // string is right.
+                if (!inArgs[i].qtTypeNameLabel.isEmpty()) {
+                    QCOMPARE(inArgs[i].qtTypeNameLabel, QStringLiteral("In%1").arg(i));
+                }
             }
 
             // QtDBus out mapping: non-void return first, then ref params.
@@ -305,42 +375,52 @@ class TestDBusContractSync : public QObject
                                     .arg(cppOuts.size())));
             int outIdx = 0;
             if (hasReturn) {
-                compareArg(interfaceName, it.key(), outArgs[outIdx++], QByteArray(m.typeName()));
+                compareArg(interfaceName, it.key(), outArgs[outIdx], QByteArray(m.typeName()));
+                if (!outArgs[outIdx].qtTypeNameLabel.isEmpty()) {
+                    QCOMPARE(outArgs[outIdx].qtTypeNameLabel, QStringLiteral("Out%1").arg(outIdx));
+                }
+                ++outIdx;
             }
             for (const QByteArray& t : cppOuts) {
-                compareArg(interfaceName, it.key(), outArgs[outIdx++], t);
+                compareArg(interfaceName, it.key(), outArgs[outIdx], t);
+                if (!outArgs[outIdx].qtTypeNameLabel.isEmpty()) {
+                    QCOMPARE(outArgs[outIdx].qtTypeNameLabel, QStringLiteral("Out%1").arg(outIdx));
+                }
+                ++outIdx;
             }
 
             // In-arg NAMES are part of the published contract (out-args may
             // use a synthetic name for the return value, so only the
             // ref-param tail is name-checked).
             const QList<QByteArray> paramNames = m.parameterNames();
-            int nameIdx = 0;
-            for (const QByteArray& t : paramTypes) {
-                const QString cppName = QString::fromLatin1(paramNames.value(nameIdx));
-                const bool isOut = t.endsWith('&') && !t.startsWith("const ");
-                if (!isOut) {
-                    int xmlIdx = 0;
-                    // recompute position among in-args
-                    for (int k = 0, ins = 0; k < paramTypes.size() && k < nameIdx; ++k) {
-                        const QByteArray& pt = paramTypes[k];
-                        if (!(pt.endsWith('&') && !pt.startsWith("const "))) {
-                            ++ins;
-                        }
-                        xmlIdx = ins;
+            {
+                int xmlIdx = 0;
+                for (int nameIdx = 0; nameIdx < paramTypes.size(); ++nameIdx) {
+                    const QByteArray& t = paramTypes[nameIdx];
+                    if (t == "QDBusMessage" || t == "const QDBusMessage&") {
+                        continue; // context injection — no wire arg
                     }
+                    const bool isOut = t.endsWith('&') && !t.startsWith("const ");
+                    if (isOut) {
+                        continue;
+                    }
+                    const QString cppName = QString::fromLatin1(paramNames.value(nameIdx));
                     QVERIFY2(inArgs[xmlIdx].name == cppName,
                              qPrintable(QStringLiteral("%1.%2: XML in-arg name '%3' != C++ param name '%4'")
                                             .arg(interfaceName, it.key(), inArgs[xmlIdx].name, cppName)));
+                    ++xmlIdx;
                 }
-                ++nameIdx;
             }
         }
         for (auto it = methods.constBegin(); it != methods.constEnd(); ++it) {
+            if (offContractMethods.contains(it.key())) {
+                continue;
+            }
             QVERIFY2(iface.methods.contains(it.key()),
                      qPrintable(QStringLiteral("%1: bus-exposed adaptor method '%2' is missing from the contract "
-                                               "XML — either add it to the XML or move it to a plain public: "
-                                               "section (internal helpers must not sit under Q_SLOTS)")
+                                               "XML — either add it to the XML, move it to a plain public: "
+                                               "section (internal helpers must not sit under Q_SLOTS), or "
+                                               "document it off-contract and extend this test's allowlist")
                                     .arg(interfaceName, it.key())));
         }
 
@@ -356,8 +436,21 @@ class TestDBusContractSync : public QObject
                                     .arg(it->args.size())
                                     .arg(m.parameterCount())));
             const QList<QByteArray> sigTypes = m.parameterTypes();
+            const QList<QByteArray> sigNames = m.parameterNames();
             for (int i = 0; i < it->args.size(); ++i) {
                 compareArg(interfaceName, it.key(), it->args[i], sigTypes[i]);
+                if (!it->args[i].qtTypeNameLabel.isEmpty()) {
+                    QCOMPARE(it->args[i].qtTypeNameLabel, QStringLiteral("Out%1").arg(i));
+                }
+                // Signal arg NAMES are part of the introspected contract,
+                // same as method in-arg names. An unnamed XML arg is legal
+                // D-Bus — only compare when the XML names it.
+                if (!it->args[i].name.isEmpty()) {
+                    QVERIFY2(it->args[i].name == QString::fromLatin1(sigNames.value(i)),
+                             qPrintable(QStringLiteral("%1 signal %2: XML arg name '%3' != C++ param name '%4'")
+                                            .arg(interfaceName, it.key(), it->args[i].name,
+                                                 QString::fromLatin1(sigNames.value(i)))));
+                }
             }
         }
         for (auto it = signals_.constBegin(); it != signals_.constEnd(); ++it) {
@@ -417,6 +510,51 @@ private Q_SLOTS:
     void testSnapContract()
     {
         verifyContract(SnapAdaptor::staticMetaObject, QStringLiteral("org.plasmazones.Snap"));
+    }
+
+    void testControlContract()
+    {
+        verifyContract(ControlAdaptor::staticMetaObject, QStringLiteral("org.plasmazones.Control"));
+    }
+
+    void testLayoutRegistryContract()
+    {
+        verifyContract(LayoutAdaptor::staticMetaObject, QStringLiteral("org.plasmazones.LayoutRegistry"));
+    }
+
+    void testOverlayContract()
+    {
+        verifyContract(OverlayAdaptor::staticMetaObject, QStringLiteral("org.plasmazones.Overlay"));
+    }
+
+    void testSettingsContract()
+    {
+        verifyContract(SettingsAdaptor::staticMetaObject, QStringLiteral("org.plasmazones.Settings"));
+    }
+
+    void testShaderContract()
+    {
+        verifyContract(ShaderAdaptor::staticMetaObject, QStringLiteral("org.plasmazones.Shader"));
+    }
+
+    void testWindowDragContract()
+    {
+        // clearForCompositorReconnect is a documented off-contract bus
+        // method: the effect invokes it cross-process at shutdown, but it is
+        // deliberately absent from the published XML (see its doc comment in
+        // windowdragadaptor.h — it must STAY a slot).
+        verifyContract(WindowDragAdaptor::staticMetaObject, QStringLiteral("org.plasmazones.WindowDrag"), {},
+                       {QStringLiteral("clearForCompositorReconnect")});
+    }
+
+    void testWindowRulesContract()
+    {
+        verifyContract(WindowRuleAdaptor::staticMetaObject, QStringLiteral("org.plasmazones.WindowRules"));
+    }
+
+    void testZoneDetectionContract()
+    {
+        verifyContract(ZoneDetectionAdaptor::staticMetaObject, QStringLiteral("org.plasmazones.ZoneDetection"));
     }
 };
 

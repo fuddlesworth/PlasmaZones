@@ -149,7 +149,6 @@ public Q_SLOTS:
     // Editor launch
     void openEditor();
     void openEditorForScreen(const QString& screenId);
-    void openEditorForLayout(const QString& layoutId);
     void openEditorForLayoutOnScreen(const QString& layoutId, const QString& screenId);
 
     // Screen assignments
@@ -277,12 +276,6 @@ public Q_SLOTS:
      * @return JSON string
      */
     QString getScreenStates();
-
-    // Screen layout lock
-    void toggleScreenLock(const QString& screenId);
-    bool isScreenLocked(const QString& screenId);
-    void toggleContextLock(const QString& screenId, int virtualDesktop, const QString& activity);
-    bool isContextLocked(const QString& screenId, int virtualDesktop, const QString& activity);
 
 Q_SIGNALS:
     /**

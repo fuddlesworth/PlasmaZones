@@ -26,6 +26,13 @@ namespace PlasmaZones {
  */
 struct ZoneSelectorConfig
 {
+    // NOTE: these member defaults hand-duplicate the ConfigDefaults::
+    // zoneSelector* accessors (a ConfigDefaults include here would cycle).
+    // They matter only for BARE default construction — every production
+    // path (Settings::resolvedZoneSelectorConfig and the ISettings default
+    // implementation) populates from the accessors, so a retuned
+    // ConfigDefaults value diverges here only for default-constructed
+    // instances no resolver touched.
     int position = 1; // ZoneSelectorPosition enum value (Top)
     int layoutMode = 0; // ZoneSelectorLayoutMode enum value (Grid)
     int sizeMode = 0; // ZoneSelectorSizeMode enum value (Auto)

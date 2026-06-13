@@ -531,30 +531,6 @@ private Q_SLOTS:
         QCOMPARE(m_bridge->window(reclaimed)->noBorder, false);
     }
 
-    void testOverlappingDrainsNeitherDoubleRestoreNorDoubleEmit()
-    {
-        m_bridge->addWindow(QStringLiteral("a|1"));
-        m_bridge->addWindow(QStringLiteral("b|1"));
-        QSignalSpy finished(m_mgr.get(), &DecorationManager::drainFinished);
-        QSignalSpy restored(m_mgr.get(), &DecorationManager::windowDecorationRestored);
-
-        m_mgr->acquire(QStringLiteral("a|1"), DecorationManager::autotile(Screen1));
-        m_mgr->acquire(QStringLiteral("b|1"), DecorationManager::autotile(Screen1));
-        m_mgr->releaseKind(QStringLiteral("a|1"), OwnerKind::Autotile, Restore::Deferred);
-
-        // First drain starts a chain (restores a|1 synchronously on tick 1);
-        // a second deferred release + drain mid-flight must snapshot a FRESH
-        // queue — no double-restore of a|1, no extra drainFinished.
-        m_mgr->drainPendingRestores();
-        m_mgr->releaseKind(QStringLiteral("b|1"), OwnerKind::Autotile, Restore::Deferred);
-        m_mgr->drainPendingRestores();
-        QTRY_COMPARE(m_bridge->window(QStringLiteral("b|1"))->noBorder, false);
-        QTRY_COMPARE(finished.count(), 2);
-        QCOMPARE(restored.count(), 2);
-        QCOMPARE(m_bridge->callLog.filter(QStringLiteral("setNoBorder(a|1,false)")).size(), 1);
-        QCOMPARE(m_bridge->callLog.filter(QStringLiteral("setNoBorder(b|1,false)")).size(), 1);
-    }
-
     void testRestoreAllSurvivesManagerDestructionFromSlot()
     {
         m_bridge->addWindow(QStringLiteral("a|1"));

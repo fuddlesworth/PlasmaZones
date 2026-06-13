@@ -8,7 +8,7 @@
             service: org.plasmazones.Settings.App
             path:    /SettingsApp
 
-        A second plasmazones-settings launcher forwards a --page request here
+        A second plasmazones-settings launcher forwards a "page" launch request here
         so the existing settings window can navigate to the requested page
         instead of spawning a parallel process. The running instance does NOT
         attempt to raise its own window — see org.plasmazones.EditorApp.xml

@@ -350,7 +350,7 @@ public Q_SLOTS:
      * without a round-trip back to the effect.
      *
      * @param windowId Window identifier
-     * @param rect Current frame geometry in compositor coordinates
+     * @param x/y/width/height Current frame geometry in compositor coordinates
      */
     void setFrameGeometry(const QString& windowId, int x, int y, int width, int height);
 
@@ -517,13 +517,8 @@ public:
     // in-process and reaches these via direct C++ invocation through the
     // daemon, never through D-Bus.
 
-    /**
-     * Get stored pre-tile geometry for a window (out-param variant for
-     * daemon-internal callers; the bus exposes getValidatedPreTileGeometry
-     * and getPreTileGeometries instead)
-     * @return true if geometry was found, false otherwise
-     */
-    bool getPreTileGeometry(const QString& windowId, int& x, int& y, int& width, int& height);
+    // getPreTileGeometry (out-param forwarder) removed: zero callers
+    // remained — getValidatedPreTileGeometry is the single read path.
 
     /**
      * Query the daemon's shadow for a window's last-known frame geometry

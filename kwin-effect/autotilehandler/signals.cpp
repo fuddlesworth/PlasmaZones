@@ -79,13 +79,12 @@ void AutotileHandler::cancelPendingMinimizeFloat(const QString& windowId)
 
 void AutotileHandler::clearAllPendingMinimizeFloats()
 {
-    for (auto it = m_pendingMinimizeFloat.begin(); it != m_pendingMinimizeFloat.end(); ++it) {
-        if (QTimer* pending = it.value()) {
-            pending->stop();
-            pending->deleteLater();
-        }
+    // Delegate per-entry so the cancel semantics (stop + deleteLater + erase)
+    // live in exactly one place. keys() snapshot: the delegate erases.
+    const QStringList ids = m_pendingMinimizeFloat.keys();
+    for (const QString& windowId : ids) {
+        cancelPendingMinimizeFloat(windowId);
     }
-    m_pendingMinimizeFloat.clear();
 }
 
 void AutotileHandler::slotScreensChanged(const QStringList& screenIds, bool isDesktopSwitch)
@@ -177,8 +176,15 @@ void AutotileHandler::slotScreensChanged(const QStringList& screenIds, bool isDe
                 // Release autotile's decoration ownership on every screen.
                 // The manager restores the title bar only when NO owner
                 // remains — a snap takeover or a rule hide simply leaves
-                // their owner in place.
-                m_effect->decorationManager()->releaseKind(windowId, DecorationManager::OwnerKind::Autotile);
+                // their owner in place. Deferred: each physical restore is a
+                // 30-120 ms synchronous Wayland round-trip, and this loop can
+                // visit many windows — restoring synchronously would stall
+                // the compositor through the desktop-switch animation. The
+                // drain after the loop runs them one per event-loop tick
+                // (same policy as the genuine-toggle branch below and
+                // updateHideTitleBarsSetting).
+                m_effect->decorationManager()->releaseKind(windowId, DecorationManager::OwnerKind::Autotile,
+                                                           DecorationManager::Restore::Deferred);
                 AutotileStateHelpers::removeFromAllScreens(m_border, windowId);
                 unmaximizeMonocleWindow(windowId);
                 // Drop stale zone-centering tracking so a later
@@ -234,6 +240,12 @@ void AutotileHandler::slotScreensChanged(const QStringList& screenIds, bool isDe
                     requestDaemonPreTileRestore(w, windowId);
                 }
             }
+            // Drain the deferred releases queued above: the daemon emits no
+            // resnap batch on a desktop switch, so without an explicit drain
+            // the queued title-bar restores would sit until the 500 ms
+            // fallback timer. One restore per event-loop tick, same as the
+            // hide-title-bars toggle path.
+            m_effect->decorationManager()->drainPendingRestores();
             m_effect->updateAllBorders();
         } else {
             QSet<QString> windowsOnRemovedScreens;
@@ -463,8 +475,10 @@ void AutotileHandler::slotScreensChanged(const QStringList& screenIds, bool isDe
 
             // Save pre-autotile geometry for ALL eligible windows (including minimized).
             // The window's current position IS the pre-autotile geometry we want to save.
-            // For floating windows, also update daemon's pre-tile geometry to current
-            // position with overwrite=true (user may have moved the window while floating).
+            // Floating windows additionally back-fill the daemon's pre-tile
+            // entry — non-destructively (overwrite=false; the inner comment
+            // explains why an overflow float must not clobber a correct
+            // existing entry).
             for (KWin::EffectWindow* w : windows) {
                 if (!w || !m_effect->shouldHandleWindow(w)) {
                     continue;
@@ -787,6 +801,12 @@ void AutotileHandler::slotWindowFullScreenChanged(KWin::EffectWindow* w)
     if (m_monocleMaximizedWindows.remove(windowId)) {
         qCInfo(lcEffect) << "Monocle window went fullscreen:" << windowId << "- removed from tracking";
     }
+    // Drop any unconsumed zone-centering entries: a window that fullscreens
+    // right after being tiled must not have the fullscreen frame change
+    // consume a stale centering target and moveResize against the fullscreen
+    // geometry (same cleanup applyFloatCleanup performs).
+    m_autotileTargetZones.remove(windowId);
+    m_centeredWaylandZones.remove(windowId);
     m_effect->removeWindowBorder(windowId);
 }
 

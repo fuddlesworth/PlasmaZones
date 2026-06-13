@@ -266,5 +266,5 @@ private Q_SLOTS:
     }
 };
 
-QTEST_MAIN(TestConfigDefaults)
+QTEST_GUILESS_MAIN(TestConfigDefaults)
 #include "test_configdefaults.moc"

@@ -166,6 +166,10 @@ inline void removeFromOtherScreens(BorderState& border, const QString& windowId,
         if (it.key() != keepScreenId) {
             it.value().remove(windowId);
         }
+        // The keep-bucket exclusion below is defensive symmetry only: this
+        // function never mutates the keep bucket, so an empty keep bucket
+        // could only pre-exist (and every other mutator erases empty
+        // buckets on the way out).
         if (it.value().isEmpty() && it.key() != keepScreenId) {
             it = border.tiledWindowsByScreen.erase(it);
         } else {
@@ -192,7 +196,8 @@ inline bool removeFromAllScreens(BorderState& border, const QString& windowId)
     return any;
 }
 
-/// Read-only view of the set of tiled windows on a given screen. Empty if none.
+/// Detached copy of the set of tiled windows on a given screen (QHash::value
+/// copy, not a reference). Empty if none.
 inline QSet<QString> tiledOnScreen(const BorderState& border, const QString& screenId)
 {
     return border.tiledWindowsByScreen.value(screenId);

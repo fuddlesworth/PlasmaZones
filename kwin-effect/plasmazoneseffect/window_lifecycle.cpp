@@ -77,17 +77,9 @@ void PlasmaZonesEffect::slotWindowAdded(KWin::EffectWindow* w)
     setupWindowConnections(w);
     updateWindowStickyState(w);
 
-    // Whether this window is a snap-restore candidate — it may be
-    // teleported into a saved zone moments after opening (instantly from
-    // cache, or after an async daemon resolve). Stricter filter — only
-    // normal application windows, NOT dialogs / utilities.
-    const bool canSnapRestore =
-        shouldHandleWindow(w) && isTileableWindow(w) && !w->isMinimized() && !hasOtherWindowOfClassWithDifferentPid(w);
-
     // window.open shader transition: fires once for every newly-mapped
-    // normal top-level window we handle. Gate by the same filter as the
-    // snap-restore candidate check so the shader DOESN'T fire on the
-    // child surfaces an app spawns alongside its main window (popup
+    // normal top-level window we handle. Gate so the shader DOESN'T fire
+    // on the child surfaces an app spawns alongside its main window (popup
     // menus, dropdowns, tooltips, dialogs, transient utility windows).
     // Without this gate, a single app open like Discord triggers a
     // fly-in on every sub-surface — main window sliding in slowly while
@@ -99,6 +91,12 @@ void PlasmaZonesEffect::slotWindowAdded(KWin::EffectWindow* w)
     // Same predicate gates both the user-assigned open shader and the
     // first-frame suppression decision below. Compute once.
     const bool tileableAppWindow = shouldHandleWindow(w) && isTileableWindow(w) && !w->isMinimized();
+
+    // Whether this window is a snap-restore candidate — it may be
+    // teleported into a saved zone moments after opening (instantly from
+    // cache, or after an async daemon resolve). Stricter than
+    // tileableAppWindow: also excludes multi-instance siblings.
+    const bool canSnapRestore = tileableAppWindow && !hasOtherWindowOfClassWithDifferentPid(w);
     if (tileableAppWindow) {
         // holdAddedGrab=true: take KWin::WindowAddedGrabRole so KWin's
         // stock window-open built-ins (fade / scale / slide / glide)

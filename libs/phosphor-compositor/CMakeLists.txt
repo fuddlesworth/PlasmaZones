@@ -48,6 +48,16 @@ generate_export_header(PhosphorCompositor
     EXPORT_MACRO_NAME PHOSPHORCOMPOSITOR_EXPORT
 )
 
+# Fallback BEFORE first use: ${KDE_INSTALL_INCLUDEDIR} is expanded into the
+# $<INSTALL_INTERFACE:> below at this point, so defining it afterwards would
+# export an empty install include dir in a non-KDE configure (mirrors
+# phosphor-identity's ordering).
+if(NOT DEFINED KDE_INSTALL_INCLUDEDIR)
+    include(GNUInstallDirs)
+    set(KDE_INSTALL_INCLUDEDIR ${CMAKE_INSTALL_INCLUDEDIR})
+    set(KDE_INSTALL_LIBDIR ${CMAKE_INSTALL_LIBDIR})
+endif()
+
 target_include_directories(PhosphorCompositor
     PUBLIC
         $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
@@ -69,12 +79,6 @@ target_link_libraries(PhosphorCompositor
 # ═══════════════════════════════════════════════════════════════════════════════
 # Install
 # ═══════════════════════════════════════════════════════════════════════════════
-
-if(NOT DEFINED KDE_INSTALL_INCLUDEDIR)
-    include(GNUInstallDirs)
-    set(KDE_INSTALL_INCLUDEDIR ${CMAKE_INSTALL_INCLUDEDIR})
-    set(KDE_INSTALL_LIBDIR ${CMAKE_INSTALL_LIBDIR})
-endif()
 
 set_target_properties(PhosphorCompositor PROPERTIES
     SOVERSION 0

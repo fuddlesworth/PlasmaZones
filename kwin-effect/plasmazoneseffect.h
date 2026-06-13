@@ -518,8 +518,9 @@ public Q_SLOTS:
     bool borderActivated(KWin::ElectricBorder border) override;
 
     // ═══════════════════════════════════════════════════════════════════════════════
-    // Helper class access methods
-    // These methods are used by NavigationHandler, WindowAnimator, and DragTracker
+    // Helper class access methods — consumed across the handler split
+    // (AutotileHandler/SnapHandler via decorationManager(), ScreenChangeHandler
+    // via applyStaggeredOrImmediate, KWinCompositorBridge via clearScreenIdCache)
     // ═══════════════════════════════════════════════════════════════════════════════
 public:
     /// Access the compositor bridge (for shared code that needs compositor-agnostic window ops)
@@ -895,14 +896,6 @@ private:
     // the daemon receives all subsequent cursor updates (needed for hold/release
     // cycles and overlay hide/show).
     bool m_dragActivationDetected = false;
-
-    // Deferred dragStarted: D-Bus call is only sent when zones are actually needed.
-    // Pending info is stored from DragTracker::dragStarted signal and sent on first
-    // activation or zone selector trigger. This avoids KGlobalAccel register/unregister
-    // overhead on every non-zone window drag.
-    bool m_dragStartedSent = false;
-    QString m_pendingDragWindowId;
-    QRectF m_pendingDragGeometry;
 
     /// Monotonic per-drag generation. Bumped on every drag start. The async
     /// beginDrag reply lambda captures the generation at dispatch time and

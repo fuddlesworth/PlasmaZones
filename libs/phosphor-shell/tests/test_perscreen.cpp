@@ -17,7 +17,6 @@
 #include <QQmlComponent>
 #include <QQmlContext>
 #include <QQmlEngine>
-#include <QSignalSpy>
 #include <QString>
 #include <QTest>
 #include <QVariant>

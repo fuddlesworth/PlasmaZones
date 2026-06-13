@@ -1,5 +1,5 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
-// SPDX-License-Identifier: LGPL-2.1-or-later
+// SPDX-License-Identifier: GPL-3.0-or-later
 
 import QtQuick
 import QtQuick.Controls
@@ -42,8 +42,7 @@ ColumnLayout {
 
     required property var parameters
     required property var currentValues
-    property var lockedParams: ({
-    })
+    property var lockedParams: ({})
     property bool enableLocking: true
     property bool enableRandomize: true
     property bool enableGroups: true
@@ -83,8 +82,7 @@ ColumnLayout {
             return [];
 
         var defaultGroupName = i18nc("@title:group", "General");
-        var groupMap = {
-        };
+        var groupMap = {};
         var groupOrder = [];
         for (var j = 0; j < parameters.length; j++) {
             var param = parameters[j];
@@ -116,7 +114,6 @@ ColumnLayout {
         for (var i = 0; i < keys.length; i++) {
             if (lockedParams[keys[i]] === true)
                 return true;
-
         }
         return false;
     }
@@ -140,7 +137,7 @@ ColumnLayout {
     /// pattern) coalesce the N emissions into one render.
     signal lockToggled(string paramId, bool locked)
     signal lockAllRequested(bool locked)
-    signal randomizeRequested()
+    signal randomizeRequested
     signal requestColorPicker(string paramId, string paramName, color current)
     signal requestImagePicker(string paramId)
 
@@ -150,9 +147,7 @@ ColumnLayout {
     /// Lives here so the editor and settings card don't carry their
     /// own copy of the same lookup-and-rewrite boilerplate.
     function lockedAfterToggle(paramId, locked) {
-        var next = Object.assign({
-        }, root.lockedParams || {
-        });
+        var next = Object.assign({}, root.lockedParams || {});
         if (locked)
             next[paramId] = true;
         else
@@ -163,14 +158,12 @@ ColumnLayout {
     /// Lock-or-unlock-every-parameter map. Reads `parameters` from
     /// the component instance.
     function lockedAfterAllToggle(locked) {
-        var next = {
-        };
+        var next = {};
         if (locked && root.parameters) {
             for (var i = 0; i < root.parameters.length; i++) {
                 var p = root.parameters[i];
                 if (p && p.id !== undefined)
                     next[p.id] = true;
-
             }
         }
         return next;
@@ -183,8 +176,7 @@ ColumnLayout {
     /// either feed it back via `currentValues` (editor pattern) or
     /// push it through their write-back API (settings pattern).
     function computeRandomized() {
-        var next = {
-        };
+        var next = {};
         if (!root.parameters)
             return next;
 
@@ -235,7 +227,6 @@ ColumnLayout {
             }
             if (value !== undefined)
                 next[param.id] = value;
-
         }
         return next;
     }
@@ -278,7 +269,6 @@ ColumnLayout {
             active: root.toolbarTrailing !== null
             sourceComponent: root.toolbarTrailing
         }
-
     }
 
     // ── Empty state when no parameters ───────────────────────────────
@@ -319,7 +309,7 @@ ColumnLayout {
                 onToggled: {
                     root.expandedGroupIndex = expanded ? -1 : index;
                 }
-                onGroupLockToggled: function(lock) {
+                onGroupLockToggled: function (lock) {
                     // Synthesise per-id `lockToggled` signals so the host
                     // reacts with the same handler it uses for single-row
                     // toggles. The host typically batches-replaces its
@@ -330,7 +320,6 @@ ColumnLayout {
                         var pp = paramSection.groupParams[j];
                         if (pp && pp.id !== undefined)
                             root.lockToggled(pp.id, lock);
-
                     }
                 }
 
@@ -343,15 +332,10 @@ ColumnLayout {
                             model: paramSection.groupParams
                             delegate: root.compact ? root._compactRowComponent : root._wideRowComponent
                         }
-
                     }
-
                 }
-
             }
-
         }
-
     }
 
     // ── Flat layout (no groups declared, or enableGroups disabled) ───
@@ -364,7 +348,6 @@ ColumnLayout {
             model: root._parameterGroups.length === 0 ? root.parameters : []
             delegate: root.compact ? root._compactRowComponent : root._wideRowComponent
         }
-
     }
 
     _wideRowComponent: Component {
@@ -395,22 +378,20 @@ ColumnLayout {
                 sliderValueLabelWidth: root.sliderValueLabelWidth
                 colorButtonSize: root.colorButtonSize
                 colorLabelWidth: root.colorLabelWidth
-                onValueChanged: function(id, value) {
+                onValueChanged: function (id, value) {
                     root.valueChanged(id, value);
                 }
-                onLockToggled: function(id, locked) {
+                onLockToggled: function (id, locked) {
                     root.lockToggled(id, locked);
                 }
-                onRequestColorPicker: function(id, name, current) {
+                onRequestColorPicker: function (id, name, current) {
                     root.requestColorPicker(id, name, current);
                 }
-                onRequestImagePicker: function(id) {
+                onRequestImagePicker: function (id) {
                     root.requestImagePicker(id);
                 }
             }
-
         }
-
     }
 
     _compactRowComponent: Component {
@@ -451,7 +432,6 @@ ColumnLayout {
                     maximumLineCount: 3
                     elide: Text.ElideRight
                 }
-
             }
 
             ShaderParameterRow {
@@ -466,22 +446,19 @@ ColumnLayout {
                 sliderValueLabelWidth: root.sliderValueLabelWidth
                 colorButtonSize: root.colorButtonSize
                 colorLabelWidth: root.colorLabelWidth
-                onValueChanged: function(id, value) {
+                onValueChanged: function (id, value) {
                     root.valueChanged(id, value);
                 }
-                onLockToggled: function(id, locked) {
+                onLockToggled: function (id, locked) {
                     root.lockToggled(id, locked);
                 }
-                onRequestColorPicker: function(id, name, current) {
+                onRequestColorPicker: function (id, name, current) {
                     root.requestColorPicker(id, name, current);
                 }
-                onRequestImagePicker: function(id) {
+                onRequestImagePicker: function (id) {
                     root.requestImagePicker(id);
                 }
             }
-
         }
-
     }
-
 }

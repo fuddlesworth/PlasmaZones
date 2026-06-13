@@ -222,6 +222,39 @@ private Q_SLOTS:
         QCOMPARE(spy.at(1).at(1).toBool(), true);
     }
 
+    void testWindowFocused_contextOnlyDelta_defersAndRevalidates()
+    {
+        AutotileEngine engine(nullptr, nullptr, nullptr, PlasmaZones::TestHelpers::testRegistry());
+        const QString screen = QStringLiteral("HDMI-1");
+        const QString win = QStringLiteral("w|1");
+        engine.setCurrentDesktop(1);
+        engine.setAutotileScreens({screen});
+        engine.windowOpened(win, screen);
+        QCoreApplication::processEvents();
+        QVERIFY(engine.tilingStateForScreen(screen)->containsWindow(win));
+
+        // Focus event against a STALE engine context (alt-tab race: the
+        // focus D-Bus call outran the daemon's desktop push). The
+        // context-only key delta must DEFER — and when the push "arrives"
+        // before the queued re-check runs, nothing migrates: the window
+        // stays in its rightful desktop-1 state.
+        engine.setCurrentDesktop(2);
+        engine.windowFocused(win, screen);
+        engine.setCurrentDesktop(1);
+        QCoreApplication::processEvents();
+        QVERIFY(engine.tilingStateForScreen(screen)->containsWindow(win));
+
+        // A PERSISTING mismatch (the window genuinely lives in the new
+        // context now): the deferred re-check migrates it into the current
+        // desktop's state and out of the old one.
+        engine.setCurrentDesktop(2);
+        engine.windowFocused(win, screen);
+        QCoreApplication::processEvents();
+        QVERIFY(engine.tilingStateForScreen(screen)->containsWindow(win)); // desktop-2 state
+        engine.setCurrentDesktop(1);
+        QVERIFY(!engine.tilingStateForScreen(screen)->containsWindow(win)); // gone from desktop-1
+    }
+
     // =========================================================================
     // Algorithm selection tests
     // =========================================================================

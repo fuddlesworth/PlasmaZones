@@ -19,6 +19,41 @@ inline RuleAction engineModeAction(const QString& mode)
 {
     return PhosphorWindowRule::TestHelpers::engineMode(mode);
 }
+
+// Single source for the domain pins: the per-domain assertion tests AND the
+// completeness canary iterate these same lists, so a registered type can
+// only pass the canary by actually being domain-asserted somewhere.
+const QList<QLatin1StringView> kContextDomainTypes = {
+    ActionType::SetEngineMode,
+    ActionType::SetSnappingLayout,
+    ActionType::SetTilingAlgorithm,
+    ActionType::DisableEngine,
+    // Gap overrides are context-domain — resolved during the
+    // screen/desktop/activity pass, never per-window.
+    ActionType::SetZonePadding,
+    ActionType::SetOuterGap,
+    ActionType::SetUsePerSideOuterGap,
+    ActionType::SetOuterGapTop,
+    ActionType::SetOuterGapBottom,
+    ActionType::SetOuterGapLeft,
+    ActionType::SetOuterGapRight,
+};
+const QList<QLatin1StringView> kWindowDomainTypes = {
+    ActionType::Exclude,
+    ActionType::Float,
+    ActionType::OverrideAnimationShader,
+    ActionType::OverrideAnimationTiming,
+    ActionType::OverrideAnimationCurve,
+    ActionType::ExcludeAnimations,
+    ActionType::SetOpacity,
+    // Border / title-bar overrides are window-domain — resolved per
+    // window in the effect, applicable to any matched window.
+    ActionType::SetHideTitleBar,
+    ActionType::SetBorderVisible,
+    ActionType::SetBorderWidth,
+    ActionType::SetBorderRadius,
+    ActionType::SetBorderColor,
+};
 } // namespace
 
 class TestRuleAction : public QObject
@@ -120,22 +155,9 @@ private Q_SLOTS:
         // The context-domain actions all fill slots consumed during the
         // screen/desktop/activity resolution pass. They must report
         // ActionDomain::Context so the validator can flag mismatched matches.
-        const QList<QLatin1StringView> contextTypes = {
-            ActionType::SetEngineMode,
-            ActionType::SetSnappingLayout,
-            ActionType::SetTilingAlgorithm,
-            ActionType::DisableEngine,
-            // Gap overrides are context-domain — resolved during the
-            // screen/desktop/activity pass, never per-window.
-            ActionType::SetZonePadding,
-            ActionType::SetOuterGap,
-            ActionType::SetUsePerSideOuterGap,
-            ActionType::SetOuterGapTop,
-            ActionType::SetOuterGapBottom,
-            ActionType::SetOuterGapLeft,
-            ActionType::SetOuterGapRight,
-        };
-        for (const QLatin1StringView type : contextTypes) {
+        // (kContextDomainTypes is shared with the completeness canary so
+        // pinning is structural, not copy-discipline.)
+        for (const QLatin1StringView type : kContextDomainTypes) {
             const auto descriptor = ActionRegistry::instance().descriptor(QString::fromLatin1(type));
             QVERIFY2(descriptor.has_value(), type.data());
             QCOMPARE(descriptor->domain, ActionDomain::Context);
@@ -147,24 +169,8 @@ private Q_SLOTS:
         // Window-domain actions cover the per-window evaluation pass — exclude,
         // float, animation overrides, opacity. They run against a WindowQuery
         // that carries both window and context fields, so any match shape is
-        // valid for them.
-        const QList<QLatin1StringView> windowTypes = {
-            ActionType::Exclude,
-            ActionType::Float,
-            ActionType::OverrideAnimationShader,
-            ActionType::OverrideAnimationTiming,
-            ActionType::OverrideAnimationCurve,
-            ActionType::ExcludeAnimations,
-            ActionType::SetOpacity,
-            // Border / title-bar overrides are window-domain — resolved per
-            // window in the effect, applicable to any matched window.
-            ActionType::SetHideTitleBar,
-            ActionType::SetBorderVisible,
-            ActionType::SetBorderWidth,
-            ActionType::SetBorderRadius,
-            ActionType::SetBorderColor,
-        };
-        for (const QLatin1StringView type : windowTypes) {
+        // valid for them. (kWindowDomainTypes is shared with the canary.)
+        for (const QLatin1StringView type : kWindowDomainTypes) {
             const auto descriptor = ActionRegistry::instance().descriptor(QString::fromLatin1(type));
             QVERIFY2(descriptor.has_value(), type.data());
             QCOMPARE(descriptor->domain, ActionDomain::Window);
@@ -194,40 +200,21 @@ private Q_SLOTS:
             QVERIFY(d == static_cast<int>(ActionDomain::Context) || d == static_cast<int>(ActionDomain::Window));
         }
 
-        // Completeness: every registered type must be domain-PINNED by one of
-        // the explicit lists in this suite (or the known-elsewhere set below)
-        // — otherwise a NEW action registered with the wrong domain sails
-        // through (the two-valued check above can't catch a wrong choice).
+        // Completeness: every registered type must be domain-PINNED by the
+        // SAME lists the assertion tests above iterate (file-scope
+        // kContextDomainTypes / kWindowDomainTypes — shared, not copied, so
+        // a type added here without a domain assertion is impossible), or by
+        // the known-elsewhere set below.
         QSet<QString> pinned;
-        const QList<QLatin1StringView> contextTypes = {
-            ActionType::SetEngineMode,         ActionType::SetSnappingLayout, ActionType::SetTilingAlgorithm,
-            ActionType::DisableEngine,         ActionType::SetZonePadding,    ActionType::SetOuterGap,
-            ActionType::SetUsePerSideOuterGap, ActionType::SetOuterGapTop,    ActionType::SetOuterGapBottom,
-            ActionType::SetOuterGapLeft,       ActionType::SetOuterGapRight,
-        };
-        const QList<QLatin1StringView> windowTypes = {
-            ActionType::Exclude,
-            ActionType::Float,
-            ActionType::OverrideAnimationShader,
-            ActionType::OverrideAnimationTiming,
-            ActionType::OverrideAnimationCurve,
-            ActionType::ExcludeAnimations,
-            ActionType::SetOpacity,
-            ActionType::SetHideTitleBar,
-            ActionType::SetBorderVisible,
-            ActionType::SetBorderWidth,
-            ActionType::SetBorderRadius,
-            ActionType::SetBorderColor,
-        };
         // Domain pinned in another suite: RestorePosition (window) in
         // test_actionregistry.cpp.
         const QList<QLatin1StringView> pinnedElsewhere = {
             ActionType::RestorePosition,
         };
-        for (const QLatin1StringView t : contextTypes) {
+        for (const QLatin1StringView t : kContextDomainTypes) {
             pinned.insert(QString::fromLatin1(t));
         }
-        for (const QLatin1StringView t : windowTypes) {
+        for (const QLatin1StringView t : kWindowDomainTypes) {
             pinned.insert(QString::fromLatin1(t));
         }
         for (const QLatin1StringView t : pinnedElsewhere) {
