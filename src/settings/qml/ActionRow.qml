@@ -406,12 +406,28 @@ ColumnLayout {
     }
 
     _boolParamEditor: Component {
-        Switch {
+        // SettingsSwitch is a fixed-size custom Item whose track fills its
+        // bounds, but the hosting Loader is `Layout.fillWidth` (for the text /
+        // combo editors), which would stretch the toggle into a full-width pill.
+        // Host it in a fill wrapper and keep the toggle at its implicit size,
+        // left- and vertically-centered — matching the compact placement the
+        // stock Switch produced.
+        Item {
             readonly property var _param: parent.modelData
 
-            checked: row.action[_param.key] === true
-            Accessible.name: _param.label
-            onToggled: row.actionEdited(row._withParam(_param.key, checked))
+            implicitHeight: boolToggle.implicitHeight
+
+            SettingsSwitch {
+                id: boolToggle
+
+                anchors.left: parent.left
+                anchors.verticalCenter: parent.verticalCenter
+                checked: row.action[_param.key] === true
+                accessibleName: _param.label
+                onToggled: function (newValue) {
+                    row.actionEdited(row._withParam(_param.key, newValue));
+                }
+            }
         }
     }
 
