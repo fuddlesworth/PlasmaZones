@@ -3,6 +3,7 @@
 
 #include "RuleTestHelpers.h"
 
+#include <QFile>
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QTemporaryDir>

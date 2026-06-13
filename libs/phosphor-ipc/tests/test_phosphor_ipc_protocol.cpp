@@ -4,9 +4,12 @@
 #include <PhosphorIpc/IpcProtocol.h>
 
 #include <QJsonArray>
-#include <QJsonDocument>
 #include <QJsonObject>
+#include <QJsonValue>
 #include <QTest>
+#include <QVariant>
+#include <QVariantList>
+#include <QVariantMap>
 #include <QtCore/qtclasshelpermacros.h>
 
 using namespace PhosphorIpc;
