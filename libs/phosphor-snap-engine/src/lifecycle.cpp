@@ -240,11 +240,17 @@ SnapResult SnapEngine::resolveWindowRestore(const QString& windowId, const QStri
                 return p.screenId.isEmpty() || p.screenId == screenId;
             },
             [&](const WindowPlacement& p) {
-                // Among an app's FIFO records, restore a snapped placement ahead of a
-                // contentless free/floating sibling that is merely older — otherwise a
-                // stale free record (empty screen, no zone) is consumed first and the
-                // window never returns to its zone.
-                return recordedSnapScreenIsSnapping(p);
+                // Among an app's FIFO records, restore a record that actually has
+                // something to restore — a snapped placement on a still-snapping
+                // screen, or any record carrying real free/float geometry — ahead of a
+                // contentless {free, no geometry} sibling that is merely older.
+                // Otherwise a stale residue record (empty screen, no zone, no geometry)
+                // is consumed first and the window never returns to its zone OR its
+                // saved floating/free position. This is the load-bearing fix for
+                // unsnapped-position restore across logout/login: the floated window's
+                // real record, captured last at save time, sits at the back of the
+                // FIFO and would lose to older residue without this preference.
+                return recordedSnapScreenIsSnapping(p) || p.anyFreeGeometry().isValid();
             });
         if (rec) {
             // Same window across a daemon restart (uuid-exact) vs a reopened instance

@@ -116,6 +116,36 @@ struct WindowPlacement
         return QRect();
     }
 
+    /// Whether this record carries anything worth restoring. True when the window
+    /// has a captured free/float geometry OR any engine slot represents a managed
+    /// placement — a snapped/tiled state, or a slot that still references a zone /
+    /// tile index (e.g. a floated-from-snap window keeping its pre-float zones).
+    ///
+    /// A bare `{free}` slot with no geometry and no zone reference — the residue a
+    /// window leaves when it was open but never floated, snapped, or had a frame
+    /// captured (e.g. a close-time capture after its frame was already gone) — has
+    /// nothing to restore. Such records must NOT be persisted, and must never be
+    /// consumed from the per-app FIFO ahead of (or in place of) a content-bearing
+    /// sibling: at MaxPerApp entries per app, contentless residue would otherwise
+    /// starve and even evict (removeFirst) the window's real placement, silently
+    /// breaking float/free geometry restore on the next open.
+    bool hasRestorableContent() const
+    {
+        if (anyFreeGeometry().isValid()) {
+            return true;
+        }
+        for (auto it = engines.constBegin(); it != engines.constEnd(); ++it) {
+            const EngineSlot& s = it.value();
+            if (s.state == stateSnapped() || s.state == stateTiled()) {
+                return true;
+            }
+            if (!s.zoneIds.isEmpty() || s.order >= 0) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     /// Content equality IGNORING `sequence` (the store stamps a fresh sequence on
     /// every record(), so it must not count as a change). Lets the merge in
     /// record() short-circuit a re-capture that produced an identical placement —

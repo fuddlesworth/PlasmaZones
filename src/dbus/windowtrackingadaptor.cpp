@@ -336,6 +336,18 @@ void WindowTrackingAdaptor::captureWindowPlacement(const QString& windowId)
                     }
                 }
             }
+            // A capture that yields no restorable content — a bare {free} slot with
+            // no frame geometry (the window has no reported frame: closing, or never
+            // mapped) and no managed slot — carries nothing to restore. Recording it
+            // would only append FIFO noise that, at MaxPerApp entries per app, starves
+            // and eventually evicts (removeFirst) the window's REAL placement, silently
+            // breaking float/free geometry restore on the next open. Skip it: any
+            // existing record for this window keeps its last meaningful state (a genuine
+            // float/free transition always captures a valid frame, so it is never
+            // contentless — only a frame-less capture lands here).
+            if (!p->hasRestorableContent()) {
+                return;
+            }
             // Only mark dirty when the store actually changed. A content-identical
             // re-capture (the common case — refreshOpenWindowPlacements re-captures
             // every open window on each save) returns false, so an idle window does
