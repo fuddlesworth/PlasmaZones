@@ -175,8 +175,9 @@ void OverlayService::updateZoneSelectorWindow(const QString& screenId)
     }
     writeQmlProperty(window, QStringLiteral("activeLayoutId"), activeLayoutId);
 
-    // Push lock state so QML disables non-active layout interaction
-    // Check both modes - zone selector appears during drag for the current mode
+    // Push lock state so QML disables non-active layout interaction.
+    // isAnyModeLocked checks a LockContext rule first, then both manual modes -
+    // the zone selector appears during drag for the current mode.
     bool locked = false;
     if (m_settings && m_layoutManager) {
         int curDesktop = m_layoutManager->currentVirtualDesktop();

@@ -1023,6 +1023,16 @@ void TestWindowRuleController::defaultPayloadForSeedsParams()
     QCOMPARE(borderColorPayload.value(QStringLiteral("type")).toString(), QStringLiteral("setBorderColor"));
     QCOMPARE(borderColorPayload.value(QStringLiteral("value")).toString(), QStringLiteral("#FF3DAEE9"));
 
+    // LockContext's `value` is a bool with defaultDisplay=1.0, so a freshly
+    // type-switched lock action seeds to `value: true` — the picker opens
+    // value-on (the meaningful "lock" default). A descriptor regression that
+    // dropped defaultDisplay would seed `false` here, silently authoring a
+    // lock action that doesn't lock.
+    const QVariantMap lockPayload = controller.defaultPayloadFor(QStringLiteral("lockContext"));
+    QCOMPARE(lockPayload.value(QStringLiteral("type")).toString(), QStringLiteral("lockContext"));
+    QVERIFY(lockPayload.contains(QStringLiteral("value")));
+    QCOMPARE(lockPayload.value(QStringLiteral("value")).toBool(), true);
+
     // Unknown type → bare `{type: X}` map. The QML side will never call this
     // with an unknown wire (the picker only offers registered types), but
     // returning a sane shape keeps the contract total.
