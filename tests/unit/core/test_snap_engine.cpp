@@ -1484,9 +1484,9 @@ private Q_SLOTS:
     // The unfloatFallbackToZone setting GATES the fallback: with it off, a window
     // that has no pre-float zone gets no fallback target (resolveFallbackUnfloatGeometry
     // returns not-found), so unfloat keeps it floating. (The on-success geometry path
-    // needs a wired ScreenManager for zoneGeometry — exercised in live verification,
-    // not this guiless fixture; the empty-zone gate tests skip geometry for the same
-    // reason.)
+    // needs a valid zoneGeometry, which this guiless fixture cannot produce — null
+    // QGuiApplication::primaryScreen(); it is covered end-to-end in the QTEST_MAIN
+    // test_snap_unfloat_fallback.cpp instead.)
     void testResolveFallbackUnfloatGeometry_offReturnsNotFound()
     {
         SnapEngine engine(m_layoutManager, m_wts, nullptr, nullptr, nullptr);
@@ -1515,7 +1515,7 @@ private Q_SLOTS:
     // returns an invalid QRect and the result is still not-found. This pins that (a)
     // the post-gate chain executes without crashing on a real layout, and (b) the
     // headless geometry limitation — not a broken gate — is what produces not-found
-    // here (the on-success geometry path is covered by live verification).
+    // here (the on-success geometry path is covered in test_snap_unfloat_fallback.cpp).
     void testResolveFallbackUnfloatGeometry_onButHeadlessReturnsNotFound()
     {
         SnapEngine engine(m_layoutManager, m_wts, nullptr, nullptr, nullptr);

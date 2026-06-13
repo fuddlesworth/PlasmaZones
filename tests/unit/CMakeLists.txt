@@ -82,6 +82,13 @@ add_executable(test_snap_engine core/test_snap_engine.cpp)
 target_link_libraries(test_snap_engine PRIVATE Qt6::Test Qt6::Core Qt6::DBus plasmazones_core)
 add_test(NAME test_snap_engine COMMAND test_snap_engine)
 
+# resolveFallbackUnfloatGeometry on-success coverage. QTEST_MAIN (not GUILESS) so a
+# QGuiApplication + offscreen primary screen exists and zoneGeometry() resolves —
+# the geometry-dependent path test_snap_engine.cpp (guiless) cannot reach.
+add_executable(test_snap_unfloat_fallback core/test_snap_unfloat_fallback.cpp)
+target_link_libraries(test_snap_unfloat_fallback PRIVATE Qt6::Test Qt6::Core Qt6::DBus plasmazones_core)
+add_test(NAME test_snap_unfloat_fallback COMMAND test_snap_unfloat_fallback)
+
 # ═══════════════════════════════════════════════════════════════════════════════
 # core/ - PlacementEngineBase Tests (LGPL shared engine base: settings injection + base prune)
 # ═══════════════════════════════════════════════════════════════════════════════
