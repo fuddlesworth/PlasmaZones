@@ -663,6 +663,13 @@ private:
     /// handle the null case themselves).
     SnapNavigationTargetResolver* ensureTargetResolver(const QString& action = QString());
 
+    /// Move @p windowId to the virtual desktop adjacent to the current one in
+    /// @p direction (re-stamping its SnapState desktop and emitting
+    /// windowDesktopMoveRequested so the compositor moves the real window).
+    /// Used when directional move reaches a zone-layout boundary with no
+    /// neighbour output. Returns false when there is no neighbour desktop.
+    bool tryCrossDesktopMove(const QString& windowId, const QString& direction, const QString& screenId);
+
     /// Check whether the window is excluded from the given navigation
     /// action by a terminal `Exclude` action in the unified WindowRule
     /// store. Emits navigationFeedback(false, action, "excluded", ...)

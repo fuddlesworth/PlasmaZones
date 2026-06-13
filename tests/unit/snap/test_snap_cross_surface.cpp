@@ -18,11 +18,13 @@
 #include <PhosphorEngine/WindowPlacementStore.h>
 #include <PhosphorZones/LayoutRegistry.h>
 #include <PhosphorSnapEngine/IZoneAdjacencyResolver.h>
+#include <PhosphorSnapEngine/SnapState.h>
 #include <PhosphorSnapEngine/snapnavigationtargets.h>
 
 #include "../helpers/LayoutRegistryTestHelpers.h"
 
 using PhosphorSnapEngine::SnapNavigationTargetResolver;
+using PhosphorSnapEngine::SnapState;
 
 namespace {
 
@@ -224,6 +226,8 @@ private Q_SLOTS:
     void move_noAdjacentZone_crossesToNeighbourOutputEntryZone();
     void focus_noAdjacentZone_focusesWindowInNeighbourOutputEntryZone();
     void move_noNeighbourOutput_reportsBoundary();
+
+    void reassignDesktop_restampsAssignedWindowKeepingZone();
 };
 
 void TestSnapCrossSurface::move_noAdjacentZone_crossesToNeighbourOutputEntryZone()
@@ -295,6 +299,22 @@ void TestSnapCrossSurface::move_noNeighbourOutput_reportsBoundary()
     const auto result =
         resolver.getMoveTargetForWindow(QStringLiteral("w1"), QStringLiteral("right"), QStringLiteral("DP-1"));
     QVERIFY(!result.success);
+}
+
+void TestSnapCrossSurface::reassignDesktop_restampsAssignedWindowKeepingZone()
+{
+    // The state primitive cross-desktop move relies on: re-stamp a snapped
+    // window's desktop, keep its zone; no-op for unassigned / same-desktop.
+    SnapState state(QStringLiteral("DP-1"));
+    state.assignWindowToZone(QStringLiteral("w1"), QStringLiteral("z-a"), QStringLiteral("DP-1"), 1);
+    QCOMPARE(state.desktopForWindow(QStringLiteral("w1")), 1);
+
+    QVERIFY(state.reassignDesktop(QStringLiteral("w1"), 2));
+    QCOMPARE(state.desktopForWindow(QStringLiteral("w1")), 2);
+    QCOMPARE(state.zoneForWindow(QStringLiteral("w1")), QStringLiteral("z-a")); // zone preserved
+
+    QVERIFY(!state.reassignDesktop(QStringLiteral("ghost"), 3)); // not assigned
+    QVERIFY(!state.reassignDesktop(QStringLiteral("w1"), 2)); // already on desktop 2
 }
 
 QTEST_MAIN(TestSnapCrossSurface)

@@ -76,6 +76,13 @@ public:
     QString screenForWindow(const QString& windowId) const;
     int desktopForWindow(const QString& windowId) const;
 
+    /// Re-stamp a snapped window's virtual-desktop membership to @p virtualDesktop,
+    /// keeping its zone and screen. The ONE place a desktop other than the live
+    /// current one is written — used by cross-desktop directional move, where
+    /// the window relocates to another desktop but keeps its snapped slot.
+    /// No-op for a window that isn't currently assigned. Returns true on change.
+    bool reassignDesktop(const QString& windowId, int virtualDesktop);
+
     const QHash<QString, QString>& screenAssignments() const
     {
         return m_windowScreenAssignments;

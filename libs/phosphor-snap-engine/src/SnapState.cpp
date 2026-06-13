@@ -221,6 +221,21 @@ int SnapState::desktopForWindow(const QString& windowId) const
     return m_windowDesktopAssignments.value(windowId, 0);
 }
 
+bool SnapState::reassignDesktop(const QString& windowId, int virtualDesktop)
+{
+    // Only re-stamp a window that is actually assigned (has a zone); the
+    // desktop attribute alone is meaningless without a snap slot.
+    if (!m_windowZoneAssignments.contains(windowId)) {
+        return false;
+    }
+    if (m_windowDesktopAssignments.value(windowId, 0) == virtualDesktop) {
+        return false;
+    }
+    m_windowDesktopAssignments[windowId] = virtualDesktop;
+    Q_EMIT stateChanged();
+    return true;
+}
+
 QString SnapState::zoneForWindow(const QString& windowId) const
 {
     const auto it = m_windowZoneAssignments.constFind(windowId);

@@ -25,6 +25,8 @@
 #include <PhosphorSnapEngine/SnapEngine.h>
 #include <PhosphorSnapEngine/SnapState.h>
 
+#include <PhosphorEngine/ICrossSurfaceResolver.h>
+
 #include <PhosphorSnapEngine/INavigationStateProvider.h>
 #include <PhosphorZones/Layout.h>
 
@@ -235,6 +237,17 @@ void SnapEngine::moveFocusedInDirection(const QString& direction, const Navigati
     const QString screenId = resolveNavScreen(m_navState, windowId, m_windowTracker, ctx.screenId);
     PhosphorProtocol::MoveTargetResult result = resolver->getMoveTargetForWindow(windowId, direction, screenId);
     if (!result.success) {
+        // At a zone-layout boundary with no neighbour output, the resolver
+        // deferred the decision to us — try crossing to the adjacent desktop.
+        if (result.reason == QLatin1String("no_adjacent_zone")) {
+            if (tryCrossDesktopMove(windowId, direction, screenId)) {
+                return;
+            }
+            // No neighbour desktop either — emit the boundary feedback the
+            // resolver left to us.
+            Q_EMIT navigationFeedback(false, QStringLiteral("move"), QStringLiteral("no_adjacent_zone"), QString(),
+                                      QString(), screenId);
+        }
         return;
     }
     const QRect geo = result.toRect();
@@ -247,6 +260,24 @@ void SnapEngine::moveFocusedInDirection(const QString& direction, const Navigati
     m_windowTracker->recordSnapIntent(windowId, true);
     Q_EMIT applyGeometryRequested(windowId, geo.x(), geo.y(), geo.width(), geo.height(), result.zoneId,
                                   result.screenName, false);
+}
+
+bool SnapEngine::tryCrossDesktopMove(const QString& windowId, const QString& direction, const QString& screenId)
+{
+    if (!m_crossSurfaceResolver || !m_snapState) {
+        return false;
+    }
+    const int targetDesktop = m_crossSurfaceResolver->neighborDesktopInDirection(currentVirtualDesktop(), direction);
+    if (targetDesktop <= 0) {
+        return false;
+    }
+    // Re-stamp the window's desktop membership (keeping its snapped slot) and
+    // ask the compositor to move the real window to the target desktop.
+    m_snapState->reassignDesktop(windowId, targetDesktop);
+    Q_EMIT windowDesktopMoveRequested(windowId, targetDesktop);
+    Q_EMIT navigationFeedback(true, QStringLiteral("move"), QStringLiteral("desktop:") + direction, QString(),
+                              QString(), screenId);
+    return true;
 }
 
 void SnapEngine::swapFocusedInDirection(const QString& direction, const NavigationContext& ctx)

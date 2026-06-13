@@ -240,8 +240,14 @@ PhosphorProtocol::MoveTargetResult SnapNavigationTargetResolver::getMoveTargetFo
                              cross.zoneId, cross.screenName);
                 return cross;
             }
-            emitFeedback(false, QStringLiteral("move"), QStringLiteral("no_adjacent_zone"), currentZoneId, QString(),
-                         effectiveScreenId);
+            // Defer the boundary decision (and its feedback) to the caller when a
+            // cross-surface resolver is present: SnapEngine may cross to an
+            // adjacent desktop, which doesn't fit a zone-target result. Without a
+            // resolver, emit the boundary feedback here as before.
+            if (!m_crossSurface) {
+                emitFeedback(false, QStringLiteral("move"), QStringLiteral("no_adjacent_zone"), currentZoneId,
+                             QString(), effectiveScreenId);
+            }
             return moveResult(false, QStringLiteral("no_adjacent_zone"), QString(), QRect(), currentZoneId,
                               effectiveScreenId);
         }
