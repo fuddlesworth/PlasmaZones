@@ -891,6 +891,7 @@ void TestWindowRuleController::actionTypesCarryDomain()
     QCOMPARE(domainOf.value(QStringLiteral("setSnappingLayout")), QStringLiteral("context"));
     QCOMPARE(domainOf.value(QStringLiteral("setTilingAlgorithm")), QStringLiteral("context"));
     QCOMPARE(domainOf.value(QStringLiteral("disableEngine")), QStringLiteral("context"));
+    QCOMPARE(domainOf.value(QStringLiteral("lockContext")), QStringLiteral("context"));
     QCOMPARE(domainOf.value(QStringLiteral("float")), QStringLiteral("window"));
     QCOMPARE(domainOf.value(QStringLiteral("exclude")), QStringLiteral("window"));
 }

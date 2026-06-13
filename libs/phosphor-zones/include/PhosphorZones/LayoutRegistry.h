@@ -534,7 +534,8 @@ private:
     /// linear walk. No explicit signal-time clear is required: a real edit
     /// bumps the revision (see @c WindowRuleSet::setRules), so the next
     /// resolve sees the bump and re-populates. A soft cap (256 entries — see
-    /// the @c kMaxEntries constant in @c layoutregistry_assignments.cpp)
+    /// the per-cache @c kMaxEntries constant in
+    /// @c layoutregistry_assignments.cpp; each context cache declares its own)
     /// guards against pathological growth from clients probing unique
     /// non-existent tuples; on overflow the cache is cleared entirely (the
     /// next walk re-seeds it cleanly). 256 sits comfortably above any
