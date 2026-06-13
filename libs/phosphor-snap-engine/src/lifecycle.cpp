@@ -234,25 +234,48 @@ SnapResult SnapEngine::resolveWindowRestore(const QString& windowId, const QStri
                 if (p.slotFor(engineId()).state == WindowPlacement::stateSnapped()) {
                     return recordedSnapScreenIsSnapping(p);
                 }
+                // A contentless {free, no geometry} residue record (left by an
+                // earlier-closed instance captured frame-less) has nothing to
+                // restore. Never CONSUME it: at MaxPerApp entries per app it would
+                // otherwise be taken ahead of the window's real placement (captured
+                // last at save time, so it sits at the back of the FIFO), and the
+                // window would return neither to its zone nor its saved free/float
+                // position. Rejecting it here also lets a genuinely-new window fall
+                // through to the auto-snap chain instead of consuming a dead record
+                // and short-circuiting to no-snap. (Mirrors AutotileEngine's restore
+                // accept predicate, which likewise only consumes records with a real
+                // autotile slot.)
+                if (!p.hasRestorableContent()) {
+                    return false;
+                }
                 if (restoreUnsnappedPosition) {
                     return true;
                 }
                 return p.screenId.isEmpty() || p.screenId == screenId;
             },
             [&](const WindowPlacement& p) {
-                // Among an app's FIFO records, restore a snapped placement ahead of a
-                // contentless free/floating sibling that is merely older — otherwise a
-                // stale free record (empty screen, no zone) is consumed first and the
-                // window never returns to its zone.
+                // Among an app's FIFO records, restore a snapped placement on a
+                // still-snapping screen ahead of an unsnapped (free/floating) sibling
+                // that is merely older — snapping is the stronger restore intent, and
+                // this keeps a cross-screen snapped record from losing to an older
+                // free/floating record (or being passed over so a snap-screen open
+                // consumes and destroys an autotile-owned record it cannot use).
+                // Contentless residue is already excluded by the accept predicate, so
+                // the second (merely-accepted) pass only ever sees real placements.
                 return recordedSnapScreenIsSnapping(p);
             });
         if (rec) {
-            // Same window across a daemon restart (uuid-exact) vs a reopened instance
-            // (appId FIFO). Only the former re-records — keeping the FULL record (the
-            // other engine's slot + per-screen free geometry) alive across further
-            // restarts. A FIFO reopen CONSUMES instead: re-recording it would let a
-            // second instance of the same app steal this placement on its own reopen.
-            const bool wasExact = (rec->windowId == windowId);
+            // Re-record the restored placement bound to the LIVE windowId so the
+            // window's float-back geometry (freeGeo) and the OTHER engine's slot
+            // survive the reopen. This is load-bearing for logout/login: KWin assigns
+            // a NEW uuid at login, so the record matches by appId FIFO (not
+            // uuid-exact). Without re-binding, a FIFO reopen CONSUMES the record and
+            // the float-back is lost — floating the window after login then finds no
+            // recorded free position and strands it on its zone (which a later capture
+            // records as a poisoned zone-rect float-back). Re-binding appends the
+            // record under the live uuid (newest in the appId bucket), so a SECOND
+            // instance of the same app still takes an OLDER sibling record first on its
+            // own reopen — multi-instance FIFO distribution is preserved.
             const QString restoreScreen = rec->screenId.isEmpty() ? screenId : rec->screenId;
             const PhosphorEngine::EngineSlot slot = rec->slotFor(engineId());
             // The SCREEN-LOCAL recorded position for restoreScreen — deliberately NOT
@@ -265,9 +288,8 @@ SnapResult SnapEngine::resolveWindowRestore(const QString& windowId, const QStri
             // nothing meaningful to restore, so the move is skipped. (Snapped restore
             // places by zone geometry and never consults this.)
             const QRect freeGeo = rec->freeGeometryFor(restoreScreen);
-            if (wasExact) {
-                m_windowTracker->placementStore().record(*rec);
-            }
+            rec->windowId = windowId;
+            m_windowTracker->placementStore().record(*rec);
 
             if (slot.state == WindowPlacement::stateSnapped()) {
                 // A stored snap is still subject to the disabled-context gate.

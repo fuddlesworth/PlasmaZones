@@ -2762,16 +2762,18 @@ bool AutotileEngine::insertWindow(const QString& windowId, const QString& screen
             return false;
         });
         if (rec) {
-            // Same window across a daemon restart (uuid-exact) re-records the FULL
-            // record so the snap slot + per-screen free geometry survive; a reopened
-            // instance (appId FIFO) consumes instead, so a second instance can't steal
-            // this placement.
-            const bool wasExact = (rec->windowId == windowId);
+            // Re-record bound to the LIVE windowId so the autotile slot + per-screen
+            // free/float geometry survive the reopen. KWin assigns a NEW uuid at
+            // logout/login, so the record matches by appId FIFO (not uuid-exact);
+            // without re-binding, a FIFO reopen consumes the record and the window
+            // loses its remembered float-back. Re-binding appends under the live uuid
+            // (newest in the appId bucket), so a SECOND instance of the same app still
+            // takes an OLDER sibling record first on its own reopen — multi-instance
+            // FIFO distribution is preserved.
             const PhosphorEngine::EngineSlot slot = rec->slotFor(engineId());
             const QString restoreScreen = rec->screenId.isEmpty() ? screenId : rec->screenId;
-            if (wasExact) {
-                m_windowTracker->placementStore().record(*rec);
-            }
+            rec->windowId = windowId;
+            m_windowTracker->placementStore().record(*rec);
             if (slot.state == WindowPlacement::stateFloating()) {
                 state->addWindow(windowId);
                 state->setFloating(windowId, true);

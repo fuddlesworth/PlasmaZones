@@ -1239,13 +1239,19 @@ private Q_SLOTS:
         const QList<QVariant> floatArgs = floatSpy.takeFirst();
         QCOMPARE(floatArgs.at(1).toBool(), true);
         QCOMPARE(floatArgs.at(2).toString(), QStringLiteral("DP-1"));
-        // A FIFO-reopened record (live id != recorded id) is CONSUMED, not re-recorded.
-        QVERIFY2(!m_wts->placementStore().contains(QStringLiteral("app|orig"), QStringLiteral("app")),
-                 "a cross-screen floating restore must consume the record");
-        // Consumption must not leak a duplicate under the live id either — the
-        // record is gone, not silently re-recorded against app|new.
-        QVERIFY2(!m_wts->placementStore().contains(QStringLiteral("app|new"), QStringLiteral("app")),
-                 "consuming a floating record must not re-record it under the live window id");
+        // A FIFO-reopened record (live id != recorded id) is RE-RECORDED under the
+        // LIVE windowId so the window's float-back survives logout/login (KWin assigns
+        // a new uuid at login). The stale recorded-uuid entry is rebound, not left as
+        // a duplicate.
+        QVERIFY2(m_wts->placementStore().contains(QStringLiteral("app|new")),
+                 "a cross-screen floating restore re-records under the live window id");
+        QVERIFY2(!m_wts->placementStore().contains(QStringLiteral("app|orig")),
+                 "the stale recorded-uuid entry is rebound to the live id, not left behind");
+        // The float-back geometry is preserved on the re-recorded placement, so a
+        // later float after login restores the pre-logout position.
+        const auto reRec = m_wts->placementStore().peek(QStringLiteral("app|new"), QStringLiteral("app"));
+        QVERIFY(reRec.has_value());
+        QCOMPARE(reRec->freeGeometryFor(QStringLiteral("DP-1")), dp1Geo);
         m_wts->setSnapState(nullptr);
     }
 
@@ -1288,10 +1294,10 @@ private Q_SLOTS:
 
     // The predicate's RETURN VALUE is honored (not merely its presence): a free
     // record reopening on its own screen with the predicate returning false is
-    // still consumed (same-screen eligibility) but its position is NOT re-applied.
-    // This is the load-bearing consume-but-gate-move boundary the free branch
-    // documents.
-    void testResolveWindowRestore_freeSameScreen_consumesButSkipsMoveWhenPredicateDenies()
+    // still eligible (same-screen) and re-recorded under the live id, but its
+    // position is NOT re-applied. This is the load-bearing re-record-but-gate-move
+    // boundary the free branch documents.
+    void testResolveWindowRestore_freeSameScreen_reRecordsButSkipsMoveWhenPredicateDenies()
     {
         SnapEngine engine(m_layoutManager, m_wts, nullptr, nullptr, nullptr);
         engine.setEngineSettings(m_settings);
@@ -1318,8 +1324,12 @@ private Q_SLOTS:
         QVERIFY(!result.shouldSnap);
         // A predicate that denies restore must skip the geometry move.
         QCOMPARE(geoSpy.count(), 0);
-        QVERIFY2(!m_wts->placementStore().contains(QStringLiteral("app|orig"), QStringLiteral("app")),
-                 "a same-screen free record is still consumed even when the move is skipped");
+        // The record is still rebound to the live id (float-back survives) even
+        // though the move is skipped; the stale recorded-uuid entry is gone.
+        QVERIFY2(m_wts->placementStore().contains(QStringLiteral("app|new")),
+                 "a same-screen free record is re-recorded under the live id even when the move is skipped");
+        QVERIFY2(!m_wts->placementStore().contains(QStringLiteral("app|orig")),
+                 "the stale recorded-uuid entry is rebound, not left behind");
         m_wts->setSnapState(nullptr);
     }
 
@@ -1366,14 +1376,14 @@ private Q_SLOTS:
         m_wts->setSnapState(nullptr);
     }
 
-    // Opt-in cross-screen eligibility (consumption) and the geometry move are
-    // SEPARATELY gated. A free record reopening cross-screen is consumed purely on
+    // Opt-in cross-screen eligibility (re-record) and the geometry move are
+    // SEPARATELY gated. A free record reopening cross-screen is eligible purely on
     // the predicate opt-in, but the move only fires when restoreScreen has a
     // recorded position. With geometry captured on a THIRD screen (not the
     // record's own restoreScreen), freeGeometryFor(restoreScreen) is invalid, so
-    // the record is consumed without a move — the removed anyFreeGeometry()
-    // cross-screen fallback must NOT resurrect some other screen's rect.
-    void testResolveWindowRestore_freeCrossScreen_optInNoGeometryForRestoreScreen_consumesWithoutMove()
+    // the record is re-recorded (under the live id) without a move — the removed
+    // anyFreeGeometry() cross-screen fallback must NOT resurrect some other screen's rect.
+    void testResolveWindowRestore_freeCrossScreen_optInNoGeometryForRestoreScreen_reRecordsWithoutMove()
     {
         SnapEngine engine(m_layoutManager, m_wts, nullptr, nullptr, nullptr);
         engine.setEngineSettings(m_settings);
@@ -1402,8 +1412,10 @@ private Q_SLOTS:
         QVERIFY(!result.shouldSnap);
         QVERIFY2(geoSpy.count() == 0,
                  "no recorded position for restoreScreen → move skipped (no anyFreeGeometry fallback)");
-        QVERIFY2(!m_wts->placementStore().contains(QStringLiteral("app|orig"), QStringLiteral("app")),
-                 "opt-in consumes the cross-screen free record even when the move is skipped");
+        QVERIFY2(m_wts->placementStore().contains(QStringLiteral("app|new")),
+                 "opt-in re-records the cross-screen free record under the live id even when the move is skipped");
+        QVERIFY2(!m_wts->placementStore().contains(QStringLiteral("app|orig")),
+                 "the stale recorded-uuid entry is rebound, not left behind");
         m_wts->setSnapState(nullptr);
     }
 
