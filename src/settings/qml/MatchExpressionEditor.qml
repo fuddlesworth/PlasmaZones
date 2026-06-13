@@ -34,10 +34,6 @@ ColumnLayout {
     /// allocates a fresh list per call, so it is cached once at the root and
     /// threaded down rather than re-invoked here.
     required property var matchFieldOptions
-    /// Recursion depth of this node (0 at the root). Threaded down for
-    /// potential depth-aware behaviour; indentation itself is handled
-    /// structurally by each level's rail + margin, not by this value.
-    property int depth: 0
     /// True when this node may be removed (the root cannot).
     property bool removable: false
     readonly property bool _isLeaf: matchEditor.node && matchEditor.node.field !== undefined
@@ -240,7 +236,6 @@ ColumnLayout {
                                     "controller": matchEditor.controller,
                                     "appSettings": matchEditor.appSettings,
                                     "matchFieldOptions": matchEditor.matchFieldOptions,
-                                    "depth": matchEditor.depth + 1,
                                     "removable": true
                                 });
                             }

@@ -241,7 +241,6 @@ ColumnLayout {
         controller: root.controller
         appSettings: root.appSettings
         matchFieldOptions: root._matchFieldOptions
-        depth: 0
         removable: false
         onNodeEdited: function (updated) {
             root._patch("match", updated);
