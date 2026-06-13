@@ -228,6 +228,7 @@ private Q_SLOTS:
     void move_noNeighbourOutput_reportsBoundary();
 
     void reassignDesktop_restampsAssignedWindowKeepingZone();
+    void windowsOnScreenAndDesktop_filtersByScreenAndDesktopSorted();
 };
 
 void TestSnapCrossSurface::move_noAdjacentZone_crossesToNeighbourOutputEntryZone()
@@ -315,6 +316,21 @@ void TestSnapCrossSurface::reassignDesktop_restampsAssignedWindowKeepingZone()
 
     QVERIFY(!state.reassignDesktop(QStringLiteral("ghost"), 3)); // not assigned
     QVERIFY(!state.reassignDesktop(QStringLiteral("w1"), 2)); // already on desktop 2
+}
+
+void TestSnapCrossSurface::windowsOnScreenAndDesktop_filtersByScreenAndDesktopSorted()
+{
+    // The entry-window lookup behind cross-desktop focus: only windows on the
+    // given screen AND desktop, sorted by id for a deterministic choice.
+    SnapState state(QStringLiteral("DP-1"));
+    state.assignWindowToZone(QStringLiteral("wb"), QStringLiteral("z1"), QStringLiteral("DP-1"), 2);
+    state.assignWindowToZone(QStringLiteral("wa"), QStringLiteral("z2"), QStringLiteral("DP-1"), 2);
+    state.assignWindowToZone(QStringLiteral("wc"), QStringLiteral("z3"), QStringLiteral("DP-1"), 1); // other desktop
+    state.assignWindowToZone(QStringLiteral("wd"), QStringLiteral("z4"), QStringLiteral("DP-2"), 2); // other screen
+
+    QCOMPARE(state.windowsOnScreenAndDesktop(QStringLiteral("DP-1"), 2),
+             (QStringList{QStringLiteral("wa"), QStringLiteral("wb")}));
+    QVERIFY(state.windowsOnScreenAndDesktop(QStringLiteral("DP-1"), 3).isEmpty());
 }
 
 QTEST_MAIN(TestSnapCrossSurface)

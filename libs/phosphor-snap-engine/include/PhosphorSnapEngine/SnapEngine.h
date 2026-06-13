@@ -670,6 +670,13 @@ private:
     /// neighbour output. Returns false when there is no neighbour desktop.
     bool tryCrossDesktopMove(const QString& windowId, const QString& direction, const QString& screenId);
 
+    /// Focus a window on the virtual desktop adjacent to the current one in
+    /// @p direction (the entry window on @p screenId there), switching KWin to
+    /// it. Used when directional focus reaches a zone-layout boundary with no
+    /// neighbour output. Returns false when there is no neighbour desktop or no
+    /// window on it.
+    bool tryCrossDesktopFocus(const QString& windowId, const QString& direction, const QString& screenId);
+
     /// Check whether the window is excluded from the given navigation
     /// action by a terminal `Exclude` action in the unified WindowRule
     /// store. Emits navigationFeedback(false, action, "excluded", ...)

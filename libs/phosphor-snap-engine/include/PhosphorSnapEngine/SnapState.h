@@ -83,6 +83,11 @@ public:
     /// No-op for a window that isn't currently assigned. Returns true on change.
     bool reassignDesktop(const QString& windowId, int virtualDesktop);
 
+    /// Snapped windows on @p screenId whose desktop membership is
+    /// @p virtualDesktop, sorted by id for deterministic entry-window choice.
+    /// Used by cross-desktop directional focus to find a window to land on.
+    QStringList windowsOnScreenAndDesktop(const QString& screenId, int virtualDesktop) const;
+
     const QHash<QString, QString>& screenAssignments() const
     {
         return m_windowScreenAssignments;

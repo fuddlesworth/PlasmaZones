@@ -314,8 +314,13 @@ PhosphorProtocol::FocusTargetResult SnapNavigationTargetResolver::getFocusTarget
                                    cross.screenName);
             }
         }
-        emitFeedback(false, QStringLiteral("focus"), QStringLiteral("no_adjacent_zone"), currentZoneId, QString(),
-                     effectiveScreenId);
+        // Defer the boundary decision (and feedback) to the caller when a
+        // cross-surface resolver is present — SnapEngine may focus a window on
+        // the adjacent desktop. Without one, emit the boundary feedback here.
+        if (!m_crossSurface) {
+            emitFeedback(false, QStringLiteral("focus"), QStringLiteral("no_adjacent_zone"), currentZoneId, QString(),
+                         effectiveScreenId);
+        }
         return focusResult(false, QStringLiteral("no_adjacent_zone"), QString(), currentZoneId, QString(),
                            effectiveScreenId);
     }

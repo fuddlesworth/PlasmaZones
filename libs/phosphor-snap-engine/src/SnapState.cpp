@@ -236,6 +236,22 @@ bool SnapState::reassignDesktop(const QString& windowId, int virtualDesktop)
     return true;
 }
 
+QStringList SnapState::windowsOnScreenAndDesktop(const QString& screenId, int virtualDesktop) const
+{
+    QStringList result;
+    for (auto it = m_windowDesktopAssignments.constBegin(); it != m_windowDesktopAssignments.constEnd(); ++it) {
+        if (it.value() != virtualDesktop) {
+            continue;
+        }
+        if (m_windowScreenAssignments.value(it.key()) != screenId) {
+            continue;
+        }
+        result.append(it.key());
+    }
+    result.sort();
+    return result;
+}
+
 QString SnapState::zoneForWindow(const QString& windowId) const
 {
     const auto it = m_windowZoneAssignments.constFind(windowId);

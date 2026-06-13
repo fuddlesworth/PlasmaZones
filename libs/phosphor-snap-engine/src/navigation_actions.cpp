@@ -201,11 +201,44 @@ void SnapEngine::focusInDirection(const QString& direction, const NavigationCont
     const QString screenId = resolveNavScreen(m_navState, windowId, m_windowTracker, ctx.screenId);
     PhosphorProtocol::FocusTargetResult result = resolver->getFocusTargetForWindow(windowId, direction, screenId);
     if (!result.success) {
-        return; // resolver already emitted feedback via its callback
+        // At a zone-layout boundary with no neighbour output, the resolver
+        // deferred the decision to us — try focusing onto the adjacent desktop.
+        if (result.reason == QLatin1String("no_adjacent_zone")) {
+            if (tryCrossDesktopFocus(windowId, direction, screenId)) {
+                return;
+            }
+            Q_EMIT navigationFeedback(false, QStringLiteral("focus"), QStringLiteral("no_adjacent_zone"), QString(),
+                                      QString(), screenId);
+        }
+        return;
     }
     if (!result.windowIdToActivate.isEmpty()) {
         Q_EMIT activateWindowRequested(result.windowIdToActivate);
     }
+}
+
+bool SnapEngine::tryCrossDesktopFocus(const QString& windowId, const QString& direction, const QString& screenId)
+{
+    Q_UNUSED(windowId)
+    if (!m_crossSurfaceResolver || !m_snapState) {
+        return false;
+    }
+    const int targetDesktop = m_crossSurfaceResolver->neighborDesktopInDirection(currentVirtualDesktop(), direction);
+    if (targetDesktop <= 0) {
+        return false;
+    }
+    const QStringList candidates = m_snapState->windowsOnScreenAndDesktop(screenId, targetDesktop);
+    if (candidates.isEmpty()) {
+        return false;
+    }
+    // Enter at the order extreme (first stepping forward, last stepping
+    // backward), mirroring autotile's cross-desktop entry. Activating a window
+    // on another desktop switches KWin to it.
+    const bool forward = (direction == QLatin1String("right") || direction == QLatin1String("down"));
+    Q_EMIT activateWindowRequested(forward ? candidates.first() : candidates.last());
+    Q_EMIT navigationFeedback(true, QStringLiteral("focus"), QStringLiteral("desktop:") + direction, QString(),
+                              QString(), screenId);
+    return true;
 }
 
 void SnapEngine::moveFocusedInDirection(const QString& direction, const NavigationContext& ctx)
