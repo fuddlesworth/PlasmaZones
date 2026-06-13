@@ -51,6 +51,8 @@ private Q_SLOTS:
     void monitorOverviewIgnoresBareLayoutRules();
     void monitorOverviewLayoutFromSingleWinningRule();
     void monitorOverviewDisableEngineMatchesEffectiveMode();
+    void monitorOverviewReportsLock();
+    void monitorOverviewLockPriorityResolution();
     void engineModePickerExposesAllVocabularyTokens();
     void userAuthorableFilterHidesInternalActions();
     void moveRuleReorders();
@@ -192,6 +194,110 @@ void TestWindowRuleController::monitorOverviewSummarises()
     }
     QVERIFY(sawDp2);
     QVERIFY(sawEdp1);
+}
+
+void TestWindowRuleController::monitorOverviewReportsLock()
+{
+    // A LockContext rule pinning a monitor surfaces `locked: true` on its tile
+    // (drives the lock badge), independent of any layout assignment — a
+    // lock-only rule carries no SetEngineMode, so the tile has no layoutName,
+    // yet it is locked. A rule whose lock value is false reports
+    // `locked: false`, proving the tile reads the action's value (not mere
+    // presence), mirroring resolveContextLocked.
+    WindowRuleController controller;
+
+    const auto lockRule = [&](const QString& screenId, bool locked) {
+        QVariantMap rule = controller.newEmptyRule(QStringLiteral("monitor"));
+        QVariantMap match = rule.value(QStringLiteral("match")).toMap();
+        match[QStringLiteral("value")] = screenId;
+        rule[QStringLiteral("match")] = match;
+        rule[QStringLiteral("actions")] = QVariantList{
+            QVariantMap{{QStringLiteral("type"), QStringLiteral("lockContext")}, {QStringLiteral("value"), locked}}};
+        QVERIFY(!controller.addRuleFromJson(rule).isEmpty());
+    };
+    lockRule(QStringLiteral("DP-2"), true);
+    lockRule(QStringLiteral("DP-3"), false);
+
+    const QVariantList screens{QVariantMap{{QStringLiteral("name"), QStringLiteral("DP-2")}},
+                               QVariantMap{{QStringLiteral("name"), QStringLiteral("DP-3")}},
+                               QVariantMap{{QStringLiteral("name"), QStringLiteral("eDP-1")}}};
+    const QVariantList overview = controller.monitorOverview(screens);
+    QCOMPARE(overview.size(), 3);
+
+    for (const QVariant& v : overview) {
+        const QVariantMap tile = v.toMap();
+        const QString id = tile.value(QStringLiteral("screenId")).toString();
+        if (id == QLatin1String("DP-2")) {
+            // Lock-only rule: locked, counts as a pinned rule (assigned = has
+            // any rule), and surfaces no layoutName (no engine-mode action).
+            QCOMPARE(tile.value(QStringLiteral("locked")).toBool(), true);
+            QCOMPARE(tile.value(QStringLiteral("assigned")).toBool(), true);
+            QCOMPARE(tile.value(QStringLiteral("ruleCount")).toInt(), 1);
+            QVERIFY(tile.value(QStringLiteral("layoutName")).toString().isEmpty());
+        } else if (id == QLatin1String("DP-3")) {
+            // value:false → not locked (the tile reads the value, not presence).
+            QCOMPARE(tile.value(QStringLiteral("locked")).toBool(), false);
+            QCOMPARE(tile.value(QStringLiteral("ruleCount")).toInt(), 1);
+        } else if (id == QLatin1String("eDP-1")) {
+            // No rule → not locked.
+            QCOMPARE(tile.value(QStringLiteral("locked")).toBool(), false);
+        }
+    }
+}
+
+void TestWindowRuleController::monitorOverviewLockPriorityResolution()
+{
+    // When two opposing LockContext rules pin the SAME monitor, the tile must
+    // report the HIGHEST-PRIORITY rule's value (first-wins), not last-wins and
+    // not mere presence — mirroring resolveContextLocked's single-winner Locked
+    // slot (cf. testContextLock_priorityResolution at the registry level).
+    // addRuleFromJson appends and renormalizePriorities makes the earlier-added
+    // rule the higher-priority one within the Context band, so the FIRST rule
+    // added for a screen is its winner. Run both value directions so a
+    // "true-always-wins" / "false-always-wins" bug fails one of the two.
+    WindowRuleController controller;
+
+    const auto lockRule = [&](const QString& screenId, bool locked) {
+        QVariantMap rule = controller.newEmptyRule(QStringLiteral("monitor"));
+        QVariantMap match = rule.value(QStringLiteral("match")).toMap();
+        match[QStringLiteral("value")] = screenId;
+        rule[QStringLiteral("match")] = match;
+        rule[QStringLiteral("actions")] = QVariantList{
+            QVariantMap{{QStringLiteral("type"), QStringLiteral("lockContext")}, {QStringLiteral("value"), locked}}};
+        QVERIFY(!controller.addRuleFromJson(rule).isEmpty());
+    };
+    // DP-A: lock=true added FIRST (higher priority) over a later unlock → locked.
+    lockRule(QStringLiteral("DP-A"), true);
+    lockRule(QStringLiteral("DP-A"), false);
+    // DP-B: the inverse — unlock added first (higher priority) over a later
+    // lock → not locked. Proves the winner is priority, not the value.
+    lockRule(QStringLiteral("DP-B"), false);
+    lockRule(QStringLiteral("DP-B"), true);
+
+    const QVariantList screens{QVariantMap{{QStringLiteral("name"), QStringLiteral("DP-A")}},
+                               QVariantMap{{QStringLiteral("name"), QStringLiteral("DP-B")}}};
+    const QVariantList overview = controller.monitorOverview(screens);
+    QCOMPARE(overview.size(), 2);
+
+    bool sawA = false;
+    bool sawB = false;
+    for (const QVariant& v : overview) {
+        const QVariantMap tile = v.toMap();
+        const QString id = tile.value(QStringLiteral("screenId")).toString();
+        // Both screens carry two pinned lock rules.
+        QCOMPARE(tile.value(QStringLiteral("ruleCount")).toInt(), 2);
+        if (id == QLatin1String("DP-A")) {
+            sawA = true;
+            QCOMPARE(tile.value(QStringLiteral("locked")).toBool(), true);
+        } else if (id == QLatin1String("DP-B")) {
+            sawB = true;
+            QCOMPARE(tile.value(QStringLiteral("locked")).toBool(), false);
+        }
+    }
+    // Pin identity: an unexpected screenId would otherwise skip both branches
+    // and pass having verified no lock value.
+    QVERIFY(sawA);
+    QVERIFY(sawB);
 }
 
 void TestWindowRuleController::monitorOverviewIgnoresDisabledRules()
@@ -847,6 +953,20 @@ void TestWindowRuleController::templatesProduceSeededRules()
     QCOMPARE(smallActions.size(), 1);
     QCOMPARE(smallActions.at(0).toMap().value(QStringLiteral("type")).toString(), QStringLiteral("excludeAnimations"));
 
+    // `lockLayoutOnMonitor` is the lock template: ScreenId leaf + a single
+    // LockContext action seeded to lock (value == true). The seeded value is
+    // the contract — a regression that drops/inverts it would author a rule
+    // that silently doesn't lock, or doesn't surface in the picker's
+    // value-on default.
+    const QVariantMap lockRule = controller.newRuleFromTemplate(QStringLiteral("lockLayoutOnMonitor"));
+    QVERIFY(!lockRule.value(QStringLiteral("id")).toString().isEmpty());
+    QCOMPARE(lockRule.value(QStringLiteral("match")).toMap().value(QStringLiteral("field")).toString(),
+             QStringLiteral("screenId"));
+    const QVariantList lockActions = lockRule.value(QStringLiteral("actions")).toList();
+    QCOMPARE(lockActions.size(), 1);
+    QCOMPARE(lockActions.at(0).toMap().value(QStringLiteral("type")).toString(), QStringLiteral("lockContext"));
+    QCOMPARE(lockActions.at(0).toMap().value(QStringLiteral("value")).toBool(), true);
+
     // An unknown id must return an empty map — the AddRuleSheet would
     // otherwise commit a UUID-less rule on a typo in the template id.
     const QVariantMap bogus = controller.newRuleFromTemplate(QStringLiteral("nonexistentTemplate"));
@@ -877,6 +997,7 @@ void TestWindowRuleController::actionTypesCarryDomain()
     QCOMPARE(domainOf.value(QStringLiteral("setSnappingLayout")), QStringLiteral("context"));
     QCOMPARE(domainOf.value(QStringLiteral("setTilingAlgorithm")), QStringLiteral("context"));
     QCOMPARE(domainOf.value(QStringLiteral("disableEngine")), QStringLiteral("context"));
+    QCOMPARE(domainOf.value(QStringLiteral("lockContext")), QStringLiteral("context"));
     QCOMPARE(domainOf.value(QStringLiteral("float")), QStringLiteral("window"));
     QCOMPARE(domainOf.value(QStringLiteral("exclude")), QStringLiteral("window"));
 }
@@ -1008,6 +1129,16 @@ void TestWindowRuleController::defaultPayloadForSeedsParams()
     const QVariantMap borderColorPayload = controller.defaultPayloadFor(QStringLiteral("setBorderColor"));
     QCOMPARE(borderColorPayload.value(QStringLiteral("type")).toString(), QStringLiteral("setBorderColor"));
     QCOMPARE(borderColorPayload.value(QStringLiteral("value")).toString(), QStringLiteral("#FF3DAEE9"));
+
+    // LockContext's `value` is a bool with defaultDisplay=1.0, so a freshly
+    // type-switched lock action seeds to `value: true` — the picker opens
+    // value-on (the meaningful "lock" default). A descriptor regression that
+    // dropped defaultDisplay would seed `false` here, silently authoring a
+    // lock action that doesn't lock.
+    const QVariantMap lockPayload = controller.defaultPayloadFor(QStringLiteral("lockContext"));
+    QCOMPARE(lockPayload.value(QStringLiteral("type")).toString(), QStringLiteral("lockContext"));
+    QVERIFY(lockPayload.contains(QStringLiteral("value")));
+    QCOMPARE(lockPayload.value(QStringLiteral("value")).toBool(), true);
 
     // Unknown type → bare `{type: X}` map. The QML side will never call this
     // with an unknown wire (the picker only offers registered types), but

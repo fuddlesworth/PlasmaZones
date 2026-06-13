@@ -1101,7 +1101,7 @@ bool Daemon::init()
     m_workspaceStateAdapter =
         std::make_unique<DaemonWorkspaceStateAdapter>(m_virtualDesktopManager.get(), m_activityManager.get());
     m_screenModeAdapter = std::make_unique<DaemonScreenModeAdapter>(m_screenModeRouter.get());
-    m_settingsGateAdapter = std::make_unique<DaemonSettingsGateAdapter>(m_settings.get());
+    m_settingsGateAdapter = std::make_unique<DaemonSettingsGateAdapter>(m_settings.get(), m_layoutManager.get());
     m_contextResolver = std::make_unique<PhosphorContext::ContextResolver>(
         m_workspaceStateAdapter.get(), m_screenModeAdapter.get(), m_settingsGateAdapter.get());
 
@@ -1216,6 +1216,19 @@ bool Daemon::init()
     connect(m_windowRuleStore.get(), &PhosphorWindowRule::WindowRuleStore::rulesChanged, this,
             [refilterExcludeRules](bool /*persisted*/) {
                 refilterExcludeRules();
+            });
+
+    // A rule edit can change the live context-lock state (e.g. toggling,
+    // re-prioritising or re-matching a LockContext rule) without touching the
+    // manual lock store, so the ISettings::settingsChanged refresh that keeps
+    // open zone selectors / the layout picker in sync would miss it. Re-push
+    // the lock state to any open overlay on every rule change. QPointer guards
+    // the shutdown window (overlay reset before ~Daemon disconnects).
+    connect(m_windowRuleStore.get(), &PhosphorWindowRule::WindowRuleStore::rulesChanged, this,
+            [overlay = QPointer(m_overlayService.get())](bool /*persisted*/) {
+                if (overlay) {
+                    overlay->refreshContextLockState();
+                }
             });
 
     // Wire persistence delegate — SnapEngine delegates save/load to WTA's KConfig layer.

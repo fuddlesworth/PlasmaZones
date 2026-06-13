@@ -184,11 +184,13 @@ ColumnLayout {
             onEditingFinished: root._patch("name", text)
         }
 
-        Switch {
+        SettingsSwitch {
             Kirigami.FormData.label: i18n("Enabled:")
             checked: root.workingRule.enabled !== false
-            Accessible.name: i18n("Rule enabled")
-            onToggled: root._patch("enabled", checked)
+            accessibleName: i18n("Rule enabled")
+            onToggled: function (newValue) {
+                root._patch("enabled", newValue);
+            }
         }
 
         // Priority + band-name hint. Bare integers like "610" are
