@@ -111,4 +111,44 @@ int directionalNeighbor(const QRectF& focus, const QList<QRectF>& candidates, Di
     return bestIndex;
 }
 
+int neighborDesktopInDirection(int currentDesktop, int desktopCount, int rows, Direction direction)
+{
+    if (desktopCount < 1 || currentDesktop < 1 || currentDesktop > desktopCount) {
+        return 0;
+    }
+    const int r = std::max(1, rows);
+    // Row-major grid; the last row may be partial.
+    const int columns = (desktopCount + r - 1) / r;
+    const int index = currentDesktop - 1;
+    int row = index / columns;
+    int col = index % columns;
+
+    switch (direction) {
+    case Direction::Left:
+        col -= 1;
+        break;
+    case Direction::Right:
+        col += 1;
+        break;
+    case Direction::Up:
+        row -= 1;
+        break;
+    case Direction::Down:
+        row += 1;
+        break;
+    }
+
+    // Off the grid (edge, or a horizontal move that would wrap onto another
+    // row) → no neighbour.
+    if (row < 0 || row >= r || col < 0 || col >= columns) {
+        return 0;
+    }
+    const int target = row * columns + col;
+    // A missing cell on a partial last row is also "no neighbour".
+    if (target >= desktopCount) {
+        return 0;
+    }
+    return target + 1;
+}
+
 } // namespace PhosphorGeometry

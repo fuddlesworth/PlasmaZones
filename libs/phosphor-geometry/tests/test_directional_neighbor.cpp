@@ -27,6 +27,11 @@ private Q_SLOTS:
     void overlappingTier_nearestGapWins();
     void tie_isDeterministicByOrder();
     void emptyCandidates_returnsMinusOne();
+
+    void desktopGrid_2x2_steps();
+    void desktopGrid_singleRow_horizontalOnly();
+    void desktopGrid_partialLastRow_missingCellIsNoNeighbour();
+    void desktopGrid_outOfRange_returnsZero();
 };
 
 void TestDirectionalNeighbor::directionFromString_parsesCardinals()
@@ -126,6 +131,48 @@ void TestDirectionalNeighbor::tie_isDeterministicByOrder()
 void TestDirectionalNeighbor::emptyCandidates_returnsMinusOne()
 {
     QCOMPARE(directionalNeighbor(QRectF(0, 0, 10, 10), {}, Direction::Right), -1);
+}
+
+void TestDirectionalNeighbor::desktopGrid_2x2_steps()
+{
+    using PhosphorGeometry::neighborDesktopInDirection;
+    // 4 desktops, 2 rows -> 2 columns:  [1 2] / [3 4]
+    QCOMPARE(neighborDesktopInDirection(1, 4, 2, Direction::Right), 2);
+    QCOMPARE(neighborDesktopInDirection(1, 4, 2, Direction::Down), 3);
+    QCOMPARE(neighborDesktopInDirection(1, 4, 2, Direction::Left), 0); // edge
+    QCOMPARE(neighborDesktopInDirection(1, 4, 2, Direction::Up), 0); // edge
+    QCOMPARE(neighborDesktopInDirection(4, 4, 2, Direction::Left), 3);
+    QCOMPARE(neighborDesktopInDirection(4, 4, 2, Direction::Up), 2);
+    QCOMPARE(neighborDesktopInDirection(2, 4, 2, Direction::Right), 0); // column edge, no row wrap
+}
+
+void TestDirectionalNeighbor::desktopGrid_singleRow_horizontalOnly()
+{
+    using PhosphorGeometry::neighborDesktopInDirection;
+    // 4 desktops, 1 row: [1 2 3 4]
+    QCOMPARE(neighborDesktopInDirection(2, 4, 1, Direction::Right), 3);
+    QCOMPARE(neighborDesktopInDirection(2, 4, 1, Direction::Left), 1);
+    QCOMPARE(neighborDesktopInDirection(2, 4, 1, Direction::Up), 0);
+    QCOMPARE(neighborDesktopInDirection(2, 4, 1, Direction::Down), 0);
+    QCOMPARE(neighborDesktopInDirection(4, 4, 1, Direction::Right), 0); // edge
+}
+
+void TestDirectionalNeighbor::desktopGrid_partialLastRow_missingCellIsNoNeighbour()
+{
+    using PhosphorGeometry::neighborDesktopInDirection;
+    // 3 desktops, 2 rows -> 2 columns: [1 2] / [3 _]
+    QCOMPARE(neighborDesktopInDirection(1, 3, 2, Direction::Down), 3);
+    QCOMPARE(neighborDesktopInDirection(2, 3, 2, Direction::Down), 0); // cell (1,1) is empty
+    QCOMPARE(neighborDesktopInDirection(3, 3, 2, Direction::Right), 0); // would be the empty cell
+}
+
+void TestDirectionalNeighbor::desktopGrid_outOfRange_returnsZero()
+{
+    using PhosphorGeometry::neighborDesktopInDirection;
+    QCOMPARE(neighborDesktopInDirection(0, 4, 2, Direction::Right), 0);
+    QCOMPARE(neighborDesktopInDirection(5, 4, 2, Direction::Right), 0);
+    QCOMPARE(neighborDesktopInDirection(1, 0, 1, Direction::Right), 0);
+    QCOMPARE(neighborDesktopInDirection(1, 1, 1, Direction::Right), 0); // only desktop
 }
 
 QTEST_GUILESS_MAIN(TestDirectionalNeighbor)

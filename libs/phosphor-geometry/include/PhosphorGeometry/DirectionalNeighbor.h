@@ -53,4 +53,20 @@ PHOSPHORGEOMETRY_EXPORT std::optional<Direction> directionFromString(QStringView
 PHOSPHORGEOMETRY_EXPORT int directionalNeighbor(const QRectF& focus, const QList<QRectF>& candidates,
                                                 Direction direction);
 
+/**
+ * @brief The virtual desktop reached by stepping @p direction from
+ *        @p currentDesktop on a @p rows-high desktop grid.
+ *
+ * Desktops are 1-based and laid out row-major across `ceil(desktopCount/rows)`
+ * columns, matching KWin's desktop-grid model. A step that leaves the grid —
+ * past an edge, into a missing cell on a partial last row, or a horizontal move
+ * that would wrap onto another row — returns 0 (no neighbour) rather than
+ * wrapping, so callers can treat 0 as "no desktop that way; try another axis".
+ *
+ * @return the 1-based target desktop, or 0 when there is no neighbour in
+ *         @p direction (including for out-of-range inputs).
+ */
+PHOSPHORGEOMETRY_EXPORT int neighborDesktopInDirection(int currentDesktop, int desktopCount, int rows,
+                                                       Direction direction);
+
 } // namespace PhosphorGeometry
