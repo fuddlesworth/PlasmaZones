@@ -25,6 +25,12 @@
 
 namespace PhosphorPlacement {
 
+// Snapped-window frames are inset by the snap border width via the shared
+// PhosphorGeometry::insetRect helper (also used by the autotile path), so the
+// snap border the KWin effect draws on the window's own edge sits INSIDE the
+// zone, leaving a border-width gap between adjacent tiles. @p inset is already 0
+// when the snap border is off (gating lives in IGeometryResolver::snapBorderInset).
+
 // ═══════════════════════════════════════════════════════════════════════════════
 // Navigation Helpers
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -224,8 +230,14 @@ QRect WindowTrackingService::zoneGeometry(const QString& zoneId, const QString& 
                                 : PhosphorEngine::GeometryDefaults::ZonePadding;
     auto og = m_geometryResolver ? m_geometryResolver->resolveOuterGaps(layout, screenId)
                                  : PhosphorLayout::EdgeGaps::uniform(PhosphorEngine::GeometryDefaults::OuterGap);
-    return PhosphorZones::GeometryUtils::getZoneGeometryForScreen(m_screenManager, zone, screen, screenId, layout, zp,
-                                                                  og);
+    QRect geo =
+        PhosphorZones::GeometryUtils::getZoneGeometryForScreen(m_screenManager, zone, screen, screenId, layout, zp, og);
+    // Inset for the snap border drawn on the window's own edge (no-op when the
+    // snap show-border setting is off). Single chokepoint for actual window
+    // frames — snap-assist previews use getZoneGeometryWithGaps directly
+    // (buildEmptyZoneList) and bypass this, so previews stay un-inset.
+    int inset = m_geometryResolver ? m_geometryResolver->snapBorderInset() : 0;
+    return PhosphorGeometry::insetRect(geo, inset);
 }
 
 QRect WindowTrackingService::multiZoneGeometry(const QStringList& zoneIds, const QString& screenId) const
@@ -264,7 +276,11 @@ QRect WindowTrackingService::multiZoneGeometry(const QStringList& zoneIds, const
             }
         }
     }
-    return combined.toAlignedRect();
+    // Inset the COMBINED span once (not per sub-zone) so the border traces the
+    // outer edge of the multi-zone frame, matching the single per-mode snap
+    // border the effect draws. No-op when the snap show-border setting is off.
+    int inset = m_geometryResolver ? m_geometryResolver->snapBorderInset() : 0;
+    return PhosphorGeometry::insetRect(combined.toAlignedRect(), inset);
 }
 
 } // namespace PhosphorPlacement

@@ -61,4 +61,13 @@ PHOSPHORGEOMETRY_EXPORT void removeRectOverlaps(QVector<QRect>& zones, const QVe
 
 PHOSPHORGEOMETRY_EXPORT QString rectToJson(const QRect& rect);
 
+// Shrinks @p rect inward by @p inset on every edge (a tile/zone border inset
+// so the border the compositor draws on the window's own edge sits INSIDE the
+// slot, separating adjacent windows by the inset width). @p inset <= 0 or an
+// empty @p rect is a no-op. Degenerate clamp: on a rect too small to absorb
+// 2*inset, width/height are kept >= 1 px rather than collapsing to an empty or
+// inverted rect. Shared by the snap (PhosphorPlacement) and autotile
+// (PhosphorTileEngine) paths so the two inset gates cannot drift.
+PHOSPHORGEOMETRY_EXPORT QRect insetRect(const QRect& rect, int inset);
+
 } // namespace PhosphorGeometry

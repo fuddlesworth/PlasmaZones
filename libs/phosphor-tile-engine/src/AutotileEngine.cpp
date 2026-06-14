@@ -3449,12 +3449,18 @@ void AutotileEngine::applyTiling(const QString& screenId)
     const bool useMonocleMode = tileCount >= 2 && std::all_of(zones.begin() + 1, zones.end(), [&](const QRect& z) {
                                     return z == zones[0];
                                 });
+
     QJsonArray arr;
     for (int i = 0; i < tileCount; ++i) {
         if (filterForPreview && windows[i] == filteredWindowId) {
             continue;
         }
-        const QRect& geo = zones[i];
+        // No inset: the KWin effect's border shader recolours each window's own
+        // outermost band (inside the frame), so a tiled window fills its zone
+        // exactly and the border never pushes past the slot into the neighbour
+        // (mirrors the snap side, DaemonGeometryResolver::snapBorderInset == 0).
+        // Tile spacing comes from the zone gap/padding settings, not the border.
+        const QRect geo = zones[i];
         QJsonObject obj;
         obj[QLatin1String("windowId")] = windows[i];
         obj[QLatin1String("screenId")] = screenId;

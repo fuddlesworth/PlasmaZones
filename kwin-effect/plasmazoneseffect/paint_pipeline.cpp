@@ -304,6 +304,25 @@ void PlasmaZonesEffect::prePaintWindow(KWin::RenderView* view, KWin::EffectWindo
         }
     }
 
+    // Keep a static bordered window in KWin's paint set so the drawWindow
+    // override keeps getting called for it on idle frames. KWin's simple-screen
+    // path culls a fully-opaque, undamaged window out of the paint cycle
+    // entirely (its opaque region is occluded / unchanged), which would drop
+    // drawWindow for it and the passive border blit would only run while the
+    // window happens to be animating or damaged. setTranslucent() clears the
+    // window's opaque region so KWin always recomposites it (and thus calls
+    // drawWindow), letting the border shader re-blit the redirected FBO every
+    // frame with no FBO re-render. Gated on the cheap isEmpty() hot-path check
+    // and shaderApplied so only windows we actually border pay the cost; the
+    // transform-driven branch above already set translucent for transitioning
+    // windows, so this only adds the idle bordered case.
+    if (w && !transformDriven && !m_windowBorders.isEmpty()) {
+        const auto bit = m_windowBorders.constFind(getWindowId(w));
+        if (bit != m_windowBorders.constEnd() && bit->shaderApplied) {
+            data.setTranslucent();
+        }
+    }
+
     OffscreenEffect::prePaintWindow(view, w, data, presentTime);
 }
 
@@ -1013,6 +1032,12 @@ void PlasmaZonesEffect::paintWindow(const KWin::RenderTarget& renderTarget, cons
                 Qt::QueuedConnection);
         }
     }
+
+    // Border rendering is NOT handled here. A static bordered window is rendered
+    // through the offscreen border shader passively in the drawWindow override
+    // (the KDE-Rounded-Corners model), which applies the shader on every
+    // composite including idle frames. paintWindow only drives the animation
+    // transition path above; everything else falls through unchanged.
 
     // Route through the draw chain (not a direct OffscreenEffect::drawWindow
     // call) so KWin's `m_currentDrawWindowIterator` is advanced past us

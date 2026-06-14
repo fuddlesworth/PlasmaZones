@@ -47,7 +47,6 @@
 #include "plasmazoneseffect/types.h"
 
 namespace KWin {
-class OutlinedBorderItem;
 class SurfaceItem;
 class LogicalOutput;
 }
@@ -128,11 +127,21 @@ public:
     void postPaintScreen() override;
     void prePaintWindow(KWin::RenderView* view, KWin::EffectWindow* w, KWin::WindowPrePaintData& data,
                         std::chrono::milliseconds presentTime) override;
-    // paintScreen override removed — borders are now rendered natively by KWin's
-    // scene graph (OutlinedBorderItem), no custom GL drawing needed.
+    // paintScreen override removed — per-window borders are rendered by routing
+    // the redirected window through the offscreen border MapTexture shader (see
+    // the drawWindow override below + borders.cpp); no separate paintScreen-level
+    // GL drawing is needed.
     void paintWindow(const KWin::RenderTarget& renderTarget, const KWin::RenderViewport& viewport,
                      KWin::EffectWindow* w, int mask, const KWin::Region& deviceRegion,
                      KWin::WindowPaintData& data) override;
+    // Border render path (implemented in borders.cpp). A static bordered window
+    // is rendered through the offscreen border shader PASSIVELY here: we bind the
+    // border shader + push its uniforms, then let OffscreenEffect::drawWindow
+    // re-blit the redirected FBO through it on EVERY composite (idle included),
+    // with no FBO re-render and no forced per-frame repaints — the
+    // KDE-Rounded-Corners model. paintWindow no longer touches the border.
+    void drawWindow(const KWin::RenderTarget& renderTarget, const KWin::RenderViewport& viewport, KWin::EffectWindow* w,
+                    int mask, const KWin::Region& deviceRegion, KWin::WindowPaintData& data) override;
     void grabbedKeyboardEvent(QKeyEvent* e) override;
 
 protected:
@@ -654,6 +663,55 @@ private:
     void removeWindowBorder(const QString& windowId);
     void updateAllBorders();
     void clearAllBorders();
+
+    // ── Offscreen border shader (flush rounded corners + per-window outline) ──
+    //
+    // A bordered window is rendered THROUGH a MapTexture fragment shader that
+    // evaluates one rounded-rect SDF over the frame to clip the corners AND draw
+    // the `width` outline band, using KWin's own MVP so it is flush over the
+    // server-side decoration (the prior scene-graph OutlinedBorderItem composited
+    // UNDER the decoration and looked inset). Same path for decorated + borderless
+    // windows; it clips the COMPOSITED texture, never the client surface, so the
+    // window's own BorderRadius is left untouched (setting it inset the corner and
+    // clipped the inner surface). Coordinated with the per-window animation
+    // transition on the SAME OffscreenEffect setShader() slot — see borders.cpp.
+
+    /// Lazily compile the border MapTexture shader on first use. Returns the
+    /// cached shader (or nullptr if compilation failed — borders then no-op).
+    /// Compiled once per effect lifetime; cleared on effect teardown.
+    KWin::GLShader* borderShader();
+
+    /// Decide and apply the desired offscreen shader for @p windowId / @p w:
+    ///   • a transition is active (animation owns the slot) → leave it alone;
+    ///   • else the window has a border in m_windowBorders → redirect + set the
+    ///     border shader, marking the WindowBorder `shaderApplied`;
+    ///   • else if WE applied the border shader → setShader(nullptr) + unredirect.
+    /// Idempotent and safe to call from updateWindowBorder / removeWindowBorder /
+    /// transition end. Never unredirects a window the animation system owns.
+    void reconcileBorderShader(const QString& windowId, KWin::EffectWindow* w);
+
+    /// Per-frame uniform push for a bordered window painted through the border
+    /// shader. Sets the 5 geometry/appearance uniforms (windowExpandedSize,
+    /// frameTopLeft, frameSize, thickness, outlineColor) from @p border and the
+    /// window's frame/expanded geometry × @p scale on the ALREADY-BOUND border
+    /// shader — the caller owns the KWin::ShaderBinder and routes the actual draw
+    /// through OffscreenEffect::drawWindow, whose OffscreenData::paint re-binds
+    /// the same program and runs the shader. Does NOT bind/unbind or re-validate
+    /// the window: drawWindow is the sole caller and has already confirmed the
+    /// border is applied and no transition owns the slot.
+    void pushBorderUniforms(KWin::EffectWindow* w, const WindowBorder& border, qreal scale);
+
+    /// Compiled border MapTexture shader + cached uniform locations. The shader
+    /// is shared by every bordered window (uniforms are per-window); compiled
+    /// once on first border, owned for the effect's lifetime.
+    std::unique_ptr<KWin::GLShader> m_borderShader;
+    bool m_borderShaderCompileFailed = false; ///< latch a failed compile so we don't retry every frame
+    int m_borderUWindowExpandedSizeLoc = -1;
+    int m_borderUFrameTopLeftLoc = -1; ///< frame top-left within the expanded FBO, device px (outline gate)
+    int m_borderUFrameSizeLoc = -1; ///< frame size excluding shadows, device px (SDF rect)
+    int m_borderURadiusLoc = -1; ///< outer corner radius, device px (SDF rounding)
+    int m_borderUThicknessLoc = -1;
+    int m_borderUOutlineColorLoc = -1;
 
     /// Resolve which mode's BorderState manages @p windowId — autotile first,
     /// then snap — or nullptr if neither draws a border for it.

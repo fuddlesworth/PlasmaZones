@@ -1016,6 +1016,34 @@ bool Daemon::init()
     connect(&m_reapplyGeometriesTimer, &QTimer::timeout, m_windowTrackingAdaptor,
             &WindowTrackingAdaptor::requestReapplyWindowGeometries);
 
+    // Startup inset correction debounce (see daemon.h). Armed by the first
+    // post-startup window-zone commit (connectOverlaySignals), fires once.
+    // 400ms matches GEOMETRY_UPDATE_DEBOUNCE_MS so the whole login restore
+    // burst settles into a single corrective pass.
+    m_startupInsetCorrectionTimer.setSingleShot(true);
+    m_startupInsetCorrectionTimer.setInterval(GEOMETRY_UPDATE_DEBOUNCE_MS);
+    connect(&m_startupInsetCorrectionTimer, &QTimer::timeout, this, &Daemon::applyStartupInsetCorrection);
+
+    // Runtime inset correction debounce (see daemon.h). Armed by any of the six
+    // border-setting change signals; coalesces a multi-key KCM batch save into a
+    // single resnap + retile so existing windows pick up the new inset.
+    m_borderInsetReapplyTimer.setSingleShot(true);
+    m_borderInsetReapplyTimer.setInterval(GEOMETRY_UPDATE_DEBOUNCE_MS);
+    connect(&m_borderInsetReapplyTimer, &QTimer::timeout, this, &Daemon::reapplyBorderInsets);
+    const auto armBorderInsetReapply = [this]() {
+        // Ignore the change signals emitted while settings load during start()
+        // (before m_running): the startup inset correction covers that window.
+        if (m_running) {
+            m_borderInsetReapplyTimer.start();
+        }
+    };
+    connect(m_settings.get(), &ISettings::snappingShowBorderChanged, this, armBorderInsetReapply);
+    connect(m_settings.get(), &ISettings::snappingBorderWidthChanged, this, armBorderInsetReapply);
+    connect(m_settings.get(), &ISettings::snappingHideTitleBarsChanged, this, armBorderInsetReapply);
+    connect(m_settings.get(), &ISettings::autotileShowBorderChanged, this, armBorderInsetReapply);
+    connect(m_settings.get(), &ISettings::autotileBorderWidthChanged, this, armBorderInsetReapply);
+    connect(m_settings.get(), &ISettings::autotileHideTitleBarsChanged, this, armBorderInsetReapply);
+
     // DBusScreenAdaptor::setVirtualScreenConfig writes to Settings (the source
     // of truth) via the IConfigStore — the daemon's single SettingsConfigStore
     // instance, shared with m_screenManager (as its Config::configStore) and
@@ -1604,6 +1632,11 @@ void Daemon::start()
     // handler; this is the matching reset on the value side.
     m_shuttingDown = false;
 
+    // Re-arm the one-shot startup inset correction for this run. Without the
+    // reset a stop()→start() cycle (tests, programmatic restart) would leave the
+    // latch true from the prior run and permanently skip the correction.
+    m_startupInsetCorrectionDone = false;
+
     // Re-publish the QML static defaults. stop() nulls all three
     // (`PhosphorCurve::setDefaultRegistry(nullptr)` etc.) to prevent
     // borrowed-pointer UAF during teardown; without this re-publish,
@@ -1892,6 +1925,8 @@ void Daemon::stop()
     // Stop pending timers to prevent callbacks during shutdown
     m_geometryUpdateTimer.stop();
     m_geometryUpdatePending = false;
+    m_startupInsetCorrectionTimer.stop();
+    m_borderInsetReapplyTimer.stop();
 
     // Disconnect scripted algorithm loader to prevent file watcher events during teardown
     if (m_scriptedAlgorithmLoader) {

@@ -3,12 +3,11 @@
 
 #include "../plasmazoneseffect.h"
 
+#include <core/renderviewport.h>
 #include <effect/effecthandler.h>
 #include <effect/effectwindow.h>
-#include <scene/borderoutline.h>
-#include <scene/outlinedborderitem.h>
-#include <scene/windowitem.h>
-#include <window.h>
+#include <opengl/glshader.h>
+#include <opengl/glshadermanager.h>
 
 #include "../autotilehandler.h"
 #include "../snaphandler.h"
@@ -16,6 +15,10 @@
 #include "window_query.h"
 
 #include <PhosphorCompositor/AutotileState.h>
+
+#include <QByteArray>
+#include <QVector2D>
+#include <QVector4D>
 
 #include <optional>
 
@@ -79,26 +82,25 @@ void PlasmaZonesEffect::removeWindowBorder(const QString& windowId)
         return;
     }
     WindowBorder& wb = it.value();
-    if (wb.clippedContainer) {
-        wb.clippedContainer->setBorderRadius(wb.savedContainerRadius);
+    // Release the offscreen redirect + border shader slot IF this border owns
+    // it. When an animation transition currently owns the slot (shaderApplied
+    // is false — the transition's begin took it over), we must NOT touch
+    // setShader / unredirect: the transition lifecycle owns the handover and a
+    // stray unredirect here would tear down the animation mid-flight. The
+    // transition-end path re-checks m_windowBorders and only re-applies the
+    // border shader when the border still exists, so dropping the entry here
+    // (after this guarded release) is the correct teardown.
+    if (wb.shaderApplied) {
+        if (KWin::EffectWindow* w = findWindowById(windowId)) {
+            // Only clear when no transition raced in to own the slot between
+            // this border being applied and now — reconcileBorderShader would
+            // have cleared shaderApplied in that case, but guard defensively.
+            if (!m_shaderManager.findTransition(w)) {
+                setShader(w, nullptr);
+                unredirect(w);
+            }
+        }
     }
-    // QPointer: item may already be null if Qt parent-child ownership destroyed it.
-    // Use deleteLater() rather than raw delete — OutlinedBorderItem is a QObject
-    // parented into the scene graph and may have queued signals / pending paints
-    // mid-cycle. CLAUDE.md: never manual-delete QObjects.
-    //
-    // Hide-then-deleteLater: updateWindowBorder calls removeWindowBorder and then
-    // immediately allocates a new OutlinedBorderItem under the same windowItem
-    // parent. Without setVisible(false) here, both the old and the new item live
-    // in the scene graph for one event-loop iteration (until deleteLater fires)
-    // and the user sees a one-frame flicker / Z-fight on every active-window
-    // swap. Hiding first short-circuits the old item's render path while the
-    // QObject deletion is still deferred per the CLAUDE.md no-manual-delete rule.
-    if (wb.item) {
-        wb.item->setVisible(false);
-        wb.item->deleteLater();
-    }
-    QObject::disconnect(wb.geometryConnection);
     m_windowBorders.erase(it);
 }
 
@@ -167,86 +169,41 @@ void PlasmaZonesEffect::updateWindowBorder(const QString& windowId, KWin::Effect
         return;
     }
 
-    // The OutlinedBorderItem draws the border OUTSIDE the innerRect, but the
-    // parent WindowItem clips children to the window frame.  Inset the innerRect
-    // by borderWidth so the border draws fully inside the frame (no clipping).
-    const QRectF frame = w->frameGeometry();
-    const KWin::RectF innerRect(bw, bw, frame.width() - 2.0 * bw, frame.height() - 2.0 * bw);
     const int br = (ovr && ovr->borderRadius) ? *ovr->borderRadius : (state ? state->radius : 0);
-    const KWin::BorderOutline outline(bw, bc, KWin::BorderRadius(br));
 
-    KWin::WindowItem* windowItem = w->windowItem();
-    if (!windowItem) {
-        return;
-    }
-
+    // Store the resolved appearance (LOGICAL pixels). pushBorderUniforms scales
+    // these by viewport.scale() per-frame to reach device px for the shader,
+    // and reads live frameGeometry()/expandedGeometry() so a resize/move needs
+    // no geometry-sync bookkeeping — the OffscreenEffect redirect already drives
+    // a fresh paint on every geometry change.
     WindowBorder wb;
-    wb.item = new KWin::OutlinedBorderItem(innerRect, outline, windowItem);
+    wb.width = bw;
+    wb.radius = br;
+    wb.color = bc;
 
-    // Clip the window contents so they don't poke past the rounded outline
-    // at the corners (dark pixels leaking past the border).
-    //
-    // Geometry: KWin's BorderOutline takes `radius` as the INNER curve
-    // radius (verified against src/scene/outlinedborderitem.cpp:buildQuads —
-    // the corner quad is sized `thickness + radius`, with the arc going
-    // from the inner straight-edge meeting points at distance `radius` from
-    // the corner-quad center). The outer curve is concentric and has
-    // radius `radius + thickness`.
-    //
-    // We pass `br` as BorderOutline.radius and `bw` as thickness, so:
-    //   - Outline's INNER curve: radius `br`, located at innerRect edges
-    //     `(bw, bw)–(w-bw, h-bw)`.
-    //   - Outline's OUTER curve: radius `br + bw`, at the frame edges
-    //     `(0, 0)–(w, h)`.
-    //
-    // Clip on `windowContainer()`, NOT on the SurfaceItem directly:
-    //   - WindowItem::m_windowContainer is the parent Item that holds the
-    //     surface + decoration. Its rect is the FULL frame (0, 0, w, h) —
-    //     identical to the outline's outer rect.
-    //   - SurfaceItem::rect() is the client buffer extent, which can be
-    //     SMALLER than the frame for SSD windows (decoration adds margin)
-    //     or have a non-zero offset within the windowContainer.
-    //   - Item::setBorderRadius rounds the item's OWN rect corners, so a
-    //     clip on the surface anchors at surface-local origin — wrong for
-    //     SSD windows where surface != frame.
-    //   - The borderRadius propagates via cornerStack to descendants, so
-    //     clipping the windowContainer applies the same RoundedCorners
-    //     shader trait to the SurfaceItem render branch but anchored at
-    //     the frame corners (where the outline lives), regardless of
-    //     surface buffer size or offset.
-    //
-    // Don't go through Window::setBorderRadius — that triggers KDecoration3
-    // active-state outline machinery on focused windows, drawing an extra
-    // inset outline that looks visually different from the inactive border.
-    //
-    // Apply universally when bw > 0: SSD windows we made borderless (their
-    // surface IS the content area), CSD windows we left alone (GTK/Electron
-    // — hasDecoration returned false so the borderless path skipped them),
-    // and any other tiled window whose squared corners would peek past the
-    // rounded outline.
-    if (bw > 0) {
-        KWin::Item* container = windowItem->windowContainer();
-        if (container) {
-            const int containerRadius = br + bw;
-            wb.savedContainerRadius = container->borderRadius();
-            container->setBorderRadius(KWin::BorderRadius(containerRadius));
-            wb.clippedContainer = container;
-        }
-    }
-
-    // Keep the border in sync when the window resizes or moves.
-    const QString wid = windowId; // capture by value
-    wb.geometryConnection =
-        connect(w, &KWin::EffectWindow::windowFrameGeometryChanged, this,
-                [this, wid, bw](KWin::EffectWindow* ew, const QRectF& /*oldGeo*/) {
-                    auto it = m_windowBorders.find(wid);
-                    if (it != m_windowBorders.end() && it->item) {
-                        const QRectF f = ew->frameGeometry();
-                        it->item->setInnerRect(KWin::RectF(bw, bw, f.width() - 2.0 * bw, f.height() - 2.0 * bw));
-                    }
-                });
+    // Corner rounding and the outline are entirely the SHADER's job (the
+    // rounded-rect SDF in the border fragment shader), identically for decorated
+    // and borderless windows. It operates on the COMPOSITED redirected texture, so
+    // it never clips individual client subsurfaces — and crucially we do NOT touch
+    // the KWin window's own BorderRadius: setting it made KWin clip the client
+    // surface independently, which on a server-side-decorated window cut the inner
+    // surface and left the shader's corner inset behind KWin's. We draw no drop
+    // shadow: KWin does not render the shadow into this redirected texture (its
+    // expanded margin arrives transparent), so there is nothing here to reshape.
 
     m_windowBorders.insert(windowId, wb);
+
+    // Apply the offscreen border shader (redirect + setShader) unless an
+    // animation transition currently owns this window's shader slot — in which
+    // case reconcileBorderShader leaves the transition alone and the border
+    // shader is (re-)applied when the transition ends. A geometry change drives
+    // its own repaint, so no manual repaint is needed here for the steady case;
+    // request one anyway so a border added to a STATIC window (no pending
+    // damage) reaches paintWindow and the outline becomes visible immediately.
+    reconcileBorderShader(windowId, w);
+    // `w` is non-null here (the early-out above returns on !w), so no
+    // KWin::effects guard is needed — addRepaintFull is a window method.
+    w->addRepaintFull();
 }
 
 void PlasmaZonesEffect::updateAllBorders()
@@ -344,6 +301,300 @@ void PlasmaZonesEffect::restoreAllRuleHiddenTitleBars()
     // manager restores a title bar only where no mode owner remains, so the
     // modes' decoration management is never fought.
     m_decorationManager->clearAllRuleOverrides();
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Offscreen border shader
+// ─────────────────────────────────────────────────────────────────────────────
+
+KWin::GLShader* PlasmaZonesEffect::borderShader()
+{
+    if (m_borderShader) {
+        return m_borderShader.get();
+    }
+    if (m_borderShaderCompileFailed) {
+        return nullptr;
+    }
+
+    // Self-contained MapTexture shader pair. We ship BOTH stages (not just the
+    // fragment) so the vertex→fragment varying name is OURS, not KWin's
+    // generated convention: KWin's built-in MapTexture vertex stage names its
+    // texcoord varying differently from our `vTexCoord`, and a name mismatch
+    // would leave the fragment's `in vec2 vTexCoord` unlinked. The vertex stage
+    // shares the attribute-slot layout (position @ location 0, texCoord @ 1, the
+    // modelViewProjectionMatrix uniform) with the animation transition path's
+    // kKwinDefaultVertexSource, but DELIBERATELY omits its Y-flip — see the
+    // `vTexCoord = texCoord` note below; the fragment reconstructs the top-down
+    // device pixel itself, so the rounded-rect gate lines up without it.
+    //
+    // `uTexture0` is the redirected window content (expanded geometry, device
+    // px). KWin's OffscreenData::paint binds it to texture unit 0; a sampler2D
+    // left unset defaults to unit 0, so the name is free — same as the
+    // animation shaders, which also read `uTexture0` without an explicit
+    // sampler bind.
+    //
+    // One analytic rounded-rect SDF over the window FRAME drives BOTH the corner
+    // rounding and the outline (the KDE-Rounded-Corners / shapecorners model),
+    // IDENTICALLY for decorated and borderless windows — no alpha-edge detection,
+    // no per-window-type branch:
+    //
+    //   * Corner clip: the window content is clipped to the INNER rounded rect
+    //     (inset by the border thickness), transparent outside. The redirected
+    //     texture includes the server-side decoration, so a visible titlebar's
+    //     corners round too. We do NOT set the KWin window BorderRadius (that clips
+    //     the client surface independently and insets the corner).
+    //
+    //   * Outline: the border band [-thickness, 0] is laid OVER the background, not
+    //     over the content, so the content sits INSIDE the border and nothing from
+    //     the window leaks through it — a TRANSLUCENT border blends with the desktop
+    //     behind the window, not the content. Interior Wayland subsurfaces are never
+    //     individually clipped — the field is a single frame-edge band, which is
+    //     why a translucent terminal with an opaque child widget gets no cutout.
+    //
+    //   * Shadow: none drawn here. KWin does not render the drop shadow into this
+    //     redirected texture (its expanded margin arrives transparent), so there is
+    //     nothing to reshape; a synthesized rounded shadow would be a separate step.
+    //
+    // Coordinate reconstruction (KDE-Rounded-Corners' `tex_to_pixel` model):
+    //   p            = vec2(vTexCoord.x, 1 - vTexCoord.y) * windowExpandedSize
+    //   frameTopLeft = (frameGeometry.topLeft - expandedGeometry.topLeft) * scale
+    //   frameSize    = frameGeometry.size * scale
+    //   radius       = (borderRadius + borderWidth) * scale   // OUTER corner
+    // p is the fragment's TOP-DOWN device pixel within the expanded (shadow-
+    // padded) redirected texture; the frame rect sits at frameTopLeft..+frameSize
+    // inside it, and the SDF is evaluated in that space. The shader reduces alpha
+    // at the corners, so the border path runs the window translucent
+    // (prePaintWindow sets it) for the clip to composite.
+    static const QByteArray kBorderVertexSource = QByteArrayLiteral(
+        "#version 450\n"
+        "\n"
+        "layout(location = 0) in vec2 position;\n"
+        "layout(location = 1) in vec2 texCoord;\n"
+        "\n"
+        "layout(location = 0) out vec2 vTexCoord;\n"
+        "\n"
+        "uniform mat4 modelViewProjectionMatrix;\n"
+        "\n"
+        "void main() {\n"
+        // No Y-flip: pass the texcoord through so `texture(uTexture0, vTexCoord)`
+        // samples the redirected window content upright (KWin's OffscreenData
+        // composites its bottom-origin FBO so the natural texcoord renders the
+        // window the right way up). vTexCoord is therefore Y-UP; the fragment
+        // flips Y itself when it reconstructs the device pixel for the rounded-
+        // rect SDF, so the SDF lines up with the top-down frameTopLeft the C++
+        // side computes — this keeps asymmetric vertical shadow margins correct.
+        "    vTexCoord = texCoord;\n"
+        "    gl_Position = modelViewProjectionMatrix * vec4(position, 0.0, 1.0);\n"
+        "}\n");
+
+    static const QByteArray kBorderFragmentSource = QByteArrayLiteral(
+        "#version 450\n"
+        "\n"
+        "uniform sampler2D uTexture0;\n"
+        "uniform vec2 windowExpandedSize;  // redirected/expanded texture size, device px\n"
+        "uniform vec2 frameTopLeft;        // window frame top-left within the FBO, top-down device px\n"
+        "uniform vec2 frameSize;           // window frame size (excludes shadows), device px\n"
+        "uniform float radius;             // OUTER corner radius (border radius + width) * scale\n"
+        "uniform float thickness;          // outline band width = border width * scale\n"
+        "uniform vec4 outlineColor;        // straight (non-premultiplied) RGBA border colour\n"
+        "\n"
+        "in vec2 vTexCoord;\n"
+        "out vec4 fragColor;\n"
+        "\n"
+        "void main() {\n"
+        "    vec4 tex = texture(uTexture0, vTexCoord);\n"
+        "\n"
+        "    // Fragment's TOP-DOWN device pixel within the expanded (shadow-padded)\n"
+        "    // redirected texture; the frame rect sits at frameTopLeft..+frameSize.\n"
+        "    vec2  p       = vec2(vTexCoord.x, 1.0 - vTexCoord.y) * windowExpandedSize;\n"
+        "    vec2  halfSz  = 0.5 * frameSize;\n"
+        "    vec2  cen     = frameTopLeft + halfSz;\n"
+        "    float r       = clamp(radius, 0.0, min(halfSz.x, halfSz.y));\n"
+        "\n"
+        "    // Analytic rounded-rect SDF over the frame (Inigo-Quilez); < 0 inside.\n"
+        "    // This is the single field that both rounds the corners and places the\n"
+        "    // outline, IDENTICALLY for decorated and borderless windows — the\n"
+        "    // redirected texture includes the server-side decoration, so a visible\n"
+        "    // titlebar's corners round too.\n"
+        "    vec2  q  = abs(p - cen) - halfSz + r;\n"
+        "    float d  = min(max(q.x, q.y), 0.0) + length(max(q, 0.0)) - r;\n"
+        "    // FIXED device-pixel AA half-width (all our length uniforms are device px).\n"
+        "    // NOT fwidth(d): an SDF's fwidth is ~1 on straight edges but ~1.4 at corners\n"
+        "    // (diagonal gradient), which widens the AA at corners — softening the corner\n"
+        "    // clip and thinning the outline band right at the corner. A constant keeps\n"
+        "    // the clip and border width uniform everywhere (KDE-Rounded-Corners does the\n"
+        "    // same: device-px uniforms + a fixed +-0.5px band, no fwidth).\n"
+        "    float aa = 0.7;\n"
+        "\n"
+        "    // 1 inside the rounded rect, 0 outside, AA across the boundary.\n"
+        "    float insideMask = 1.0 - smoothstep(-aa, aa, d);\n"
+        "\n"
+        "    // Border edge factor: 0 deep inside the content, ramps to 1 from the\n"
+        "    // border's INNER edge outward (d > -thickness).\n"
+        "    float edge = smoothstep(-thickness - aa, -thickness + aa, d);\n"
+        "\n"
+        "    // Clip the window content to the INNER rounded rect (inset by the border\n"
+        "    // thickness) so the content sits INSIDE the border band and NOTHING from the\n"
+        "    // window shows through it. The border band [-thickness, 0] is then laid over\n"
+        "    // TRANSPARENCY — so a translucent border blends with the desktop behind the\n"
+        "    // window, not with the window content. (1 - edge) is the inner content mask;\n"
+        "    // edge * insideMask is the border band (clipped to the outer rounded rect).\n"
+        "    // Premultiplied throughout. No shadow: KWin does not render the drop shadow\n"
+        "    // into this redirected texture (its expanded margin arrives transparent).\n"
+        "    float ba       = edge * insideMask * outlineColor.a; // border coverage * its alpha\n"
+        "    vec4 contentPx = tex * (1.0 - edge);                 // content, clipped to the inner rect\n"
+        "    fragColor = vec4(outlineColor.rgb * ba, ba) + contentPx * (1.0 - ba);\n"
+        "}\n");
+
+    if (!KWin::effects) {
+        return nullptr;
+    }
+    auto shader = KWin::ShaderManager::instance()->generateCustomShader(KWin::ShaderTrait::MapTexture,
+                                                                        kBorderVertexSource, kBorderFragmentSource);
+    if (!shader || !shader->isValid()) {
+        qCWarning(lcEffect) << "Failed to compile PlasmaZones border shader — borders disabled this session";
+        m_borderShaderCompileFailed = true;
+        return nullptr;
+    }
+    m_borderUWindowExpandedSizeLoc = shader->uniformLocation("windowExpandedSize");
+    m_borderUFrameTopLeftLoc = shader->uniformLocation("frameTopLeft");
+    m_borderUFrameSizeLoc = shader->uniformLocation("frameSize");
+    m_borderURadiusLoc = shader->uniformLocation("radius");
+    m_borderUThicknessLoc = shader->uniformLocation("thickness");
+    m_borderUOutlineColorLoc = shader->uniformLocation("outlineColor");
+    m_borderShader = std::move(shader);
+    return m_borderShader.get();
+}
+
+void PlasmaZonesEffect::reconcileBorderShader(const QString& windowId, KWin::EffectWindow* w)
+{
+    if (!w) {
+        return;
+    }
+    auto it = m_windowBorders.find(windowId);
+    const bool wantsBorder = (it != m_windowBorders.end()) && it->width > 0 && it->color.isValid();
+
+    // An in-flight animation transition owns the shader slot — the transition's
+    // begin already called setShader(animationShader) and redirect(). Leave it
+    // alone: the transition-end path re-applies the border shader (and keeps the
+    // redirect) when the border still exists. Just clear our ownership flag so
+    // the per-frame push and removeWindowBorder defer to the transition.
+    if (m_shaderManager.findTransition(w)) {
+        if (it != m_windowBorders.end()) {
+            it->shaderApplied = false;
+        }
+        return;
+    }
+
+    if (wantsBorder) {
+        // Compile-on-first-use; a failed compile latches and no-ops.
+        KWin::GLShader* shader = borderShader();
+        if (!shader) {
+            // No border shader available (compile failed/latched). Don't leave the
+            // window stuck redirected with a stale shader bound: a transition that
+            // just ended hands the slot back here still redirected (its setShader
+            // remains until we clear it), so tear the redirect down rather than
+            // blit a dead shader forever. setShader(nullptr)/unredirect are no-ops
+            // when the window was never redirected.
+            setShader(w, nullptr);
+            unredirect(w);
+            it->shaderApplied = false;
+            return;
+        }
+        // redirect() is idempotent for an already-redirected window; setShader()
+        // replaces any prior pointer. Re-applying the same shader is a no-op.
+        redirect(w);
+        setShader(w, shader);
+        it->shaderApplied = true;
+    } else if (it != m_windowBorders.end() && it->shaderApplied) {
+        // Border removed but we still own the slot and no transition raced in.
+        setShader(w, nullptr);
+        unredirect(w);
+        it->shaderApplied = false;
+    }
+}
+
+void PlasmaZonesEffect::pushBorderUniforms(KWin::EffectWindow* w, const WindowBorder& border, qreal scale)
+{
+    // drawWindow (the sole caller) has already resolved @p border, confirmed it
+    // is applied, ruled out a transition owning the slot, and bound the shader,
+    // so this just computes and writes the uniforms onto the bound program.
+    KWin::GLShader* shader = m_borderShader.get();
+
+    // The shader evaluates a rounded-rect SDF over the window FRAME to round the
+    // corners + draw the outline. It needs the expanded (redirected) texture size
+    // for the top-down pixel reconstruction plus the frame rect placed within that
+    // texture, the outer corner radius, and the band thickness — all device px.
+    // windowExpandedSize is the redirected FBO extent in device px; expandedGeometry
+    // covers frame + drop shadow (falls back to frame when empty, e.g. a shadowless
+    // window). frameTopLeft = (frameGeometry.topLeft - expandedGeometry.topLeft) *
+    // scale is the frame's offset inside that texture (top-down device px), and
+    // frameSize = frameGeometry.size * scale its extent.
+    const QRectF frame = w->frameGeometry();
+    QRectF expanded = w->expandedGeometry();
+    if (expanded.isEmpty()) {
+        expanded = frame;
+    }
+    const QVector2D windowExpandedSize(static_cast<float>(expanded.width() * scale),
+                                       static_cast<float>(expanded.height() * scale));
+    const QVector2D frameTopLeft(static_cast<float>((frame.left() - expanded.left()) * scale),
+                                 static_cast<float>((frame.top() - expanded.top()) * scale));
+    const QVector2D frameSize(static_cast<float>(frame.width() * scale), static_cast<float>(frame.height() * scale));
+    const float thickness = static_cast<float>(border.width * scale);
+    // OUTER radius = content radius + border width, so the outline band sits inside
+    // it and the content corner ends one band-width in, at `border.radius`.
+    const float radius = static_cast<float>((border.radius + border.width) * scale);
+
+    const QColor& c = border.color;
+    const QVector4D outlineColor(static_cast<float>(c.redF()), static_cast<float>(c.greenF()),
+                                 static_cast<float>(c.blueF()), static_cast<float>(c.alphaF()));
+
+    // The caller binds the border shader (a KWin::ShaderBinder kept in scope
+    // through the subsequent effects->drawWindow) — setUniform writes to the
+    // currently bound program, so we must NOT bind/unbind here or the uniforms
+    // would be set on the wrong (or no) program.
+    if (m_borderUWindowExpandedSizeLoc >= 0) {
+        shader->setUniform(m_borderUWindowExpandedSizeLoc, windowExpandedSize);
+    }
+    if (m_borderUFrameTopLeftLoc >= 0) {
+        shader->setUniform(m_borderUFrameTopLeftLoc, frameTopLeft);
+    }
+    if (m_borderUFrameSizeLoc >= 0) {
+        shader->setUniform(m_borderUFrameSizeLoc, frameSize);
+    }
+    if (m_borderURadiusLoc >= 0) {
+        shader->setUniform(m_borderURadiusLoc, radius);
+    }
+    if (m_borderUThicknessLoc >= 0) {
+        shader->setUniform(m_borderUThicknessLoc, thickness);
+    }
+    if (m_borderUOutlineColorLoc >= 0) {
+        shader->setUniform(m_borderUOutlineColorLoc, outlineColor);
+    }
+}
+
+void PlasmaZonesEffect::drawWindow(const KWin::RenderTarget& renderTarget, const KWin::RenderViewport& viewport,
+                                   KWin::EffectWindow* w, int mask, const KWin::Region& deviceRegion,
+                                   KWin::WindowPaintData& data)
+{
+    // Apply the border shader passively for static bordered windows: bind it +
+    // set its uniforms, then let OffscreenEffect::drawWindow re-blit the
+    // redirected FBO through it. OffscreenData::paint re-binds the SAME program
+    // (the one from setShader in reconcileBorderShader), and uniform values
+    // persist in the program object across our ShaderBinder pop — so the values
+    // we set here are live for that blit. This is the KDE-Rounded-Corners model:
+    // the shader applies on every composite, idle included, with no re-render,
+    // and no forced per-frame repaints. Skip during a transition (the animation
+    // shader owns the setShader slot and paintWindow's transition branch drives
+    // it) and during snapshot capture.
+    if (!m_capturingSnapshot && !m_windowBorders.isEmpty() && m_borderShader && !m_shaderManager.findTransition(w)) {
+        const auto bit = m_windowBorders.constFind(getWindowId(w));
+        if (bit != m_windowBorders.constEnd() && bit->shaderApplied) {
+            KWin::ShaderBinder binder(m_borderShader.get());
+            pushBorderUniforms(w, *bit, viewport.scale());
+        }
+    }
+    KWin::OffscreenEffect::drawWindow(renderTarget, viewport, w, mask, deviceRegion, data);
 }
 
 } // namespace PlasmaZones

@@ -12,7 +12,6 @@
 #include <PhosphorScreens/ScreenIdentity.h>
 #include <PhosphorIdentity/VirtualScreenId.h>
 #include <PhosphorZones/LayoutUtils.h>
-#include <PhosphorZones/GeometryUtils.h>
 #include "snapenginelogging.h"
 #include <QGuiApplication>
 #include <QScreen>
@@ -380,8 +379,6 @@ QVector<ZoneAssignmentEntry> SnapEngine::calculateSnapAllWindowEntries(const QSt
     // Track zones we're assigning in this batch (to avoid double-assigning)
     QSet<QUuid> batchOccupied = occupiedZoneIds;
 
-    auto [gapZonePadding, gapOuterGaps] = resolveGapParams();
-
     for (const QString& windowId : windowIds) {
         // Find the first unoccupied zone
         PhosphorZones::Zone* targetZone = nullptr;
@@ -397,8 +394,12 @@ QVector<ZoneAssignmentEntry> SnapEngine::calculateSnapAllWindowEntries(const QSt
             break;
         }
 
-        QRect geo = PhosphorZones::GeometryUtils::getZoneGeometryForScreen(screenManager, targetZone, screen, screenId,
-                                                                           layout, gapZonePadding, gapOuterGaps);
+        // Route through the WTS wrapper (not the raw geometry util) so the
+        // committed frame is inset by the snap-border width when the border is
+        // shown — matching the sibling resnap/restore paths. The wrapper also
+        // resolves gaps through the full per-screen/per-layout/context cascade,
+        // so this stays consistent with every other committed snap geometry.
+        QRect geo = m_windowTracker->zoneGeometry(targetZone->id().toString(), screenId);
 
         if (geo.isValid()) {
             ZoneAssignmentEntry entry;
@@ -494,15 +495,15 @@ QVector<ZoneAssignmentEntry> SnapEngine::calculateRotation(bool clockwise, const
             }
         }
 
-        // Resolve physical screen for zone geometry calculation
+        // Early-out for a screen with no resolvable physical output: every
+        // window on it would resolve to an invalid geometry below, so skip the
+        // whole group up front (matches the pre-wrapper behaviour).
         auto* screenManager = m_windowTracker->screenManager();
         QScreen* screen =
             screenManager ? screenManager->physicalScreenFor(screenId).qscreen : QGuiApplication::primaryScreen();
         if (!screen) {
             continue;
         }
-
-        auto [rotGapPadding, rotGapOuter] = resolveGapParams();
 
         // Calculate rotated positions within this screen's zones
         for (const auto& pair : windowZoneIndices) {
@@ -512,8 +513,11 @@ QVector<ZoneAssignmentEntry> SnapEngine::calculateRotation(bool clockwise, const
 
             PhosphorZones::Zone* sourceZone = zones[currentIdx];
             PhosphorZones::Zone* targetZone = zones[targetIdx];
-            QRect geo = PhosphorZones::GeometryUtils::getZoneGeometryForScreen(
-                screenManager, targetZone, screen, screenId, layout, rotGapPadding, rotGapOuter);
+            // Route through the WTS wrapper so the committed frame is inset by
+            // the snap-border width when the border is shown, and so gaps
+            // resolve through the full per-screen/per-layout/context cascade —
+            // matching the sibling calc paths (resnap-from-current / autotile).
+            QRect geo = m_windowTracker->zoneGeometry(targetZone->id().toString(), screenId);
 
             if (geo.isValid()) {
                 ZoneAssignmentEntry entry;
