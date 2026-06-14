@@ -211,7 +211,11 @@ private Q_SLOTS:
         }
 
         Settings settings;
-        QCOMPARE(settings.snappingBorderColor(), settings.highlightColor());
+        // System colors enabled → border adopts the zone highlight HUE but with
+        // the near-opaque window-border alpha (not the translucent zone-fill alpha).
+        QColor expectedBorder = settings.highlightColor();
+        expectedBorder.setAlpha(::PhosphorZones::ZoneDefaults::WindowBorderActiveAlpha);
+        QCOMPARE(settings.snappingBorderColor(), expectedBorder);
         QVERIFY(settings.snappingBorderColor() != QColor(QStringLiteral("#010203")));
     }
 

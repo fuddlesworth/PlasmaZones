@@ -145,12 +145,15 @@ private Q_SLOTS:
         QCOMPARE(settings.snappingBorderRadius(), ConfigDefaults::snappingBorderRadius());
         // The default snappingUseSystemBorderColors is true, so reset()'s
         // reload drives the snap border colors to the (also-reset) zone
-        // highlight/inactive colors via applySnappingBorderSystemColor().
-        // Assert against the live zone colors — the actual contract when
-        // system colors are enabled — rather than the static ConfigDefaults
-        // border colors, which only apply when system colors are off.
-        QCOMPARE(settings.snappingBorderColor(), settings.highlightColor());
-        QCOMPARE(settings.snappingInactiveBorderColor(), settings.inactiveColor());
+        // highlight/inactive HUE via applySnappingBorderSystemColor(), but with
+        // the near-opaque window-border alpha (not the translucent zone-fill alpha
+        // those colors carry — that would render a barely-visible border).
+        QColor expectedActiveBorder = settings.highlightColor();
+        expectedActiveBorder.setAlpha(::PhosphorZones::ZoneDefaults::WindowBorderActiveAlpha);
+        QColor expectedInactiveBorder = settings.inactiveColor();
+        expectedInactiveBorder.setAlpha(::PhosphorZones::ZoneDefaults::WindowBorderInactiveAlpha);
+        QCOMPARE(settings.snappingBorderColor(), expectedActiveBorder);
+        QCOMPARE(settings.snappingInactiveBorderColor(), expectedInactiveBorder);
     }
 
     /**
