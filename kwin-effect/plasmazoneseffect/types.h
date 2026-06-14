@@ -10,7 +10,6 @@
 #include <scene/borderradius.h>
 
 #include <QColor>
-#include <QPointer>
 #include <QRect>
 #include <QString>
 #include <QVector4D>
@@ -25,40 +24,43 @@ class Item;
 
 namespace PlasmaZones {
 
-/// Per-window border, rendered by recolouring the redirected window's edge
-/// pixels through an offscreen MapTexture fragment shader (the proven
-/// KDE-Rounded-Corners / LightlyShaders technique) rather than a scene-graph
+/// Per-window border + rounded corners, rendered by sampling the redirected
+/// window through an offscreen MapTexture fragment shader (the KDE-Rounded-
+/// Corners / shapecorners technique) rather than a scene-graph
 /// `OutlinedBorderItem`.
 ///
 /// A scene-graph child item composites against KWin's own decoration frame +
-/// drop shadow, so on server-side-decorated windows the outline looks "inset"
-/// (drawn under the decoration). Recolouring through the offscreen shader runs
-/// over the decoration with KWin's own MVP, so the outline is always flush.
+/// drop shadow, so on server-side-decorated windows an outline looks "inset".
+/// Sampling the redirected texture runs over the decoration with KWin's own MVP,
+/// so the outline is flush and the SAME path rounds the corners.
 ///
-/// The resolved appearance (width / radius / colour in LOGICAL pixels) is
-/// stored here and pushed as shader uniforms per-frame in the drawWindow
-/// override (pushBorderUniforms). The shader is OUTLINE-ONLY: it locates the
-/// outermost `width` band from the window's own alpha edge and recolours it,
-/// leaving interior pixels untouched, so no translucency is required. The band
-/// traces whatever corners the window has — its decoration's (Breeze) or, for a
-/// window WE made borderless, the rounding supplied below.
+/// The shader evaluates one analytic rounded-rect signed-distance field over the
+/// window FRAME and does TWO things from it, IDENTICALLY for decorated and
+/// borderless windows: it clips the frame corners (reducing content alpha so the
+/// corners round) and draws the outline as an inner band of `width` just inside
+/// the rounded edge. The drop shadow in the expanded-geometry margin is left
+/// untouched (the clip cuts only the corner overhang INSIDE the frame box). To
+/// keep KWin's own decoration/shadow following the rounded corner, the window's
+/// BorderRadius is set to the outer radius for the border's lifetime and
+/// restored on teardown.
+///
+/// The resolved appearance (width / radius / colour) is stored in LOGICAL
+/// pixels; pushBorderUniforms multiplies by `viewport.scale()` per frame to
+/// reach the device-pixel uniforms the shader works in.
 struct WindowBorder
 {
-    /// Corner-rounding clip applied to the windowContainer, ONLY for windows with
-    /// no decoration of their own to round them (our borderless / hidden-titlebar
-    /// windows). Decorated windows round via their decoration, so we leave them
-    /// alone — applying this clip there carves a rounded cutout out of inner
-    /// Wayland subsurfaces (the single shared corner box maps into every
-    /// descendant surface). Null when no clip was applied; the saved radius is
-    /// restored on teardown.
-    QPointer<KWin::Item> clippedContainer;
-    KWin::BorderRadius savedContainerRadius;
-
     /// Resolved border appearance in LOGICAL pixels (the paint path multiplies
     /// width/radius by `viewport.scale()` to reach device px for the shader).
     int width = 0;
     int radius = 0;
     QColor color;
+
+    /// KWin window BorderRadius captured before we set our own (so the
+    /// decoration + drop shadow round to match the shader), restored on teardown.
+    /// windowRadiusApplied gates the restore: false when we never wrote it (e.g.
+    /// the EffectWindow had no backing KWin::Window).
+    KWin::BorderRadius savedWindowRadius;
+    bool windowRadiusApplied = false;
 
     /// True when THIS border owns the window's OffscreenEffect redirect +
     /// border shader slot. False while an animation transition has taken over

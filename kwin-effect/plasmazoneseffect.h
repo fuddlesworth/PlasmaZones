@@ -664,14 +664,16 @@ private:
     void updateAllBorders();
     void clearAllBorders();
 
-    // ── Offscreen border shader (flush rounded per-window outline) ──
+    // ── Offscreen border shader (flush rounded corners + per-window outline) ──
     //
     // A bordered window is rendered THROUGH a MapTexture fragment shader that
-    // recolours its outermost `width` band to the border colour, using KWin's
-    // own MVP so the outline is always flush over the server-side decoration
-    // (the prior scene-graph OutlinedBorderItem composited UNDER the decoration
-    // and looked inset). Coordinated with the per-window animation transition
-    // on the SAME OffscreenEffect setShader() slot — see borders.cpp.
+    // evaluates one rounded-rect SDF over the frame to clip the corners AND draw
+    // the `width` outline band, using KWin's own MVP so it is flush over the
+    // server-side decoration (the prior scene-graph OutlinedBorderItem composited
+    // UNDER the decoration and looked inset). Same path for decorated + borderless
+    // windows; the KWin window BorderRadius is set to match so its shadow follows.
+    // Coordinated with the per-window animation transition on the SAME
+    // OffscreenEffect setShader() slot — see borders.cpp.
 
     /// Lazily compile the border MapTexture shader on first use. Returns the
     /// cached shader (or nullptr if compilation failed — borders then no-op).
@@ -705,7 +707,8 @@ private:
     bool m_borderShaderCompileFailed = false; ///< latch a failed compile so we don't retry every frame
     int m_borderUWindowExpandedSizeLoc = -1;
     int m_borderUFrameTopLeftLoc = -1; ///< frame top-left within the expanded FBO, device px (outline gate)
-    int m_borderUFrameSizeLoc = -1; ///< frame size excluding shadows, device px (outline gate)
+    int m_borderUFrameSizeLoc = -1; ///< frame size excluding shadows, device px (SDF rect)
+    int m_borderURadiusLoc = -1; ///< outer corner radius, device px (SDF rounding)
     int m_borderUThicknessLoc = -1;
     int m_borderUOutlineColorLoc = -1;
 
