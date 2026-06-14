@@ -8,7 +8,6 @@
 #include <effect/effectwindow.h>
 #include <opengl/glshader.h>
 #include <opengl/glshadermanager.h>
-#include <scene/decorationitem.h>
 #include <scene/windowitem.h>
 #include <window.h>
 
@@ -87,9 +86,6 @@ void PlasmaZonesEffect::removeWindowBorder(const QString& windowId)
     WindowBorder& wb = it.value();
     if (wb.clippedContainer) {
         wb.clippedContainer->setBorderRadius(wb.savedContainerRadius);
-    }
-    if (wb.clippedDecoration) {
-        wb.clippedDecoration->setBorderRadius(wb.savedDecorationRadius);
     }
     // Release the offscreen redirect + border shader slot IF this border owns
     // it. When an animation transition currently owns the slot (shaderApplied
@@ -180,11 +176,6 @@ void PlasmaZonesEffect::updateWindowBorder(const QString& windowId, KWin::Effect
 
     const int br = (ovr && ovr->borderRadius) ? *ovr->borderRadius : (state ? state->radius : 0);
 
-    KWin::WindowItem* windowItem = w->windowItem();
-    if (!windowItem) {
-        return;
-    }
-
     // Store the resolved appearance (LOGICAL pixels). pushBorderUniforms scales
     // these by viewport.scale() per-frame to reach device px for the shader,
     // and reads live frameGeometry()/expandedGeometry() so a resize/move needs
@@ -195,58 +186,24 @@ void PlasmaZonesEffect::updateWindowBorder(const QString& windowId, KWin::Effect
     wb.radius = br;
     wb.color = bc;
 
-    // Clip the window contents so they don't poke past the rounded outline
-    // at the corners (dark pixels leaking past the border). RETAINED from the
-    // scene-graph implementation — the offscreen shader is OUTLINE-ONLY (it
-    // recolours the outermost band but does not itself clip interior corners),
-    // so this Item-level rounding is what keeps the window content corners
-    // inside the rounded outline.
-    //
-    // Geometry: the outline's OUTER curve has radius `br + bw` at the frame
-    // edges `(0, 0)–(w, h)`; its INNER curve has radius `br` at the inset
-    // edges `(bw, bw)–(w-bw, h-bw)`. The Item corner-clip rounds to the OUTER
-    // radius `br + bw` at the frame corners.
-    //
-    // Clip on `windowContainer()`, NOT on the SurfaceItem directly:
-    //   - WindowItem::m_windowContainer is the parent Item that holds the
-    //     surface + decoration. Its rect is the FULL frame (0, 0, w, h) —
-    //     identical to the outline's outer rect.
-    //   - SurfaceItem::rect() is the client buffer extent, which can be
-    //     SMALLER than the frame for SSD windows (decoration adds margin)
-    //     or have a non-zero offset within the windowContainer.
-    //   - Item::setBorderRadius rounds the item's OWN rect corners, so a
-    //     clip on the surface anchors at surface-local origin — wrong for
-    //     SSD windows where surface != frame.
-    //   - The borderRadius propagates via cornerStack to descendants, so
-    //     clipping the windowContainer applies the same RoundedCorners
-    //     shader trait to the SurfaceItem render branch but anchored at
-    //     the frame corners (where the outline lives), regardless of
-    //     surface buffer size or offset.
-    //
-    // Don't go through Window::setBorderRadius — that triggers KDecoration3
-    // active-state outline machinery on focused windows, drawing an extra
-    // inset outline that looks visually different from the inactive border.
-    //
-    // Apply universally when bw > 0: SSD windows we made borderless (their
-    // surface IS the content area), CSD windows we left alone (GTK/Electron
-    // — hasDecoration returned false so the borderless path skipped them),
-    // and any other tiled window whose squared corners would peek past the
-    // rounded outline.
-    if (bw > 0) {
-        const KWin::BorderRadius corner(br + bw);
-        if (KWin::Item* container = windowItem->windowContainer()) {
-            wb.savedContainerRadius = container->borderRadius();
-            container->setBorderRadius(corner);
-            wb.clippedContainer = container;
-        }
-        // The container radius does NOT reach the server-side decoration's render
-        // branch, so a SHOWN title bar keeps square corners and pokes past the
-        // rounded outline. Round the decoration item directly so its corners
-        // follow the outline too. Null (skipped) for borderless / CSD windows.
-        if (KWin::DecorationItem* deco = windowItem->decorationItem()) {
-            wb.savedDecorationRadius = deco->borderRadius();
-            deco->setBorderRadius(corner);
-            wb.clippedDecoration = deco;
+    // Corner rounding. A window that has its OWN decoration (Breeze, visible
+    // titlebar) already rounds its corners, and the outline just traces them —
+    // so we must NOT apply our clip there. Doing so is redundant AND harmful:
+    // Item::setBorderRadius pushes a single shared corner box that the renderer
+    // maps into every descendant SurfaceItem, carving a rounded "cutout" out of
+    // inner Wayland subsurfaces (e.g. an opaque widget on a translucent
+    // terminal). Only a window with NO decoration — one we made borderless /
+    // hidden-titlebar — has no rounding of its own, so we supply it on the
+    // windowContainer (whose rect is the full frame == the outline's outer rect).
+    // Interior subsurfaces stay untouched: the box is the window frame, so only
+    // the outer frame corners are clipped. Skipped for CSD/decorated windows.
+    if (bw > 0 && !w->hasDecoration()) {
+        if (KWin::WindowItem* windowItem = w->windowItem()) {
+            if (KWin::Item* container = windowItem->windowContainer()) {
+                wb.savedContainerRadius = container->borderRadius();
+                container->setBorderRadius(KWin::BorderRadius(br + bw));
+                wb.clippedContainer = container;
+            }
         }
     }
 
@@ -390,24 +347,40 @@ KWin::GLShader* PlasmaZonesEffect::borderShader()
     // animation shaders, which also read `uTexture0` without an explicit
     // sampler bind.
     //
-    // We reconstruct window-local pixel coordinates exactly like
-    // KDE-Rounded-Corners' variables.glsl `tex_to_pixel`:
+    // The outline is POSITIONED from the texture alpha and GATED by frame
+    // geometry — the combination that an alpha-only or geometry-only outline each
+    // gets half-right:
     //
-    //   pixel = vTexCoord * windowExpandedSize - windowTopLeft
+    //   * Alpha ring (position): a ring of `thickness`-radius alpha taps locates
+    //     the window's ACTUAL visible edge — where the decoration / CSD content +
+    //     antialiasing actually ends, including the dense shadow lip a few px
+    //     outside frameGeometry. That is where the edge visually reads, so the
+    //     outline sits flush rather than inset to the bare frame rect (the frame
+    //     rect is ~2px inside the visible edge for SSD windows — measured). The
+    //     ring makes the band a uniform-width offset of the contour, crisp at
+    //     rounded corners and straight edges alike.
     //
-    // where windowTopLeft = (frameGeometry.topLeft - expandedGeometry.topLeft)
-    // in device px — i.e. the offset of the FRAME inside the expanded
-    // (shadow-padded) redirected texture. That puts `pixel` in [0, windowSize]
-    // across the window FRAME, with negative / past-size values in the shadow
-    // band. The rounded-rect SDF is then evaluated in frame-local space so the
-    // outline tracks the frame edges, flush, regardless of shadow padding.
+    //   * Geometry gate (immunity): a translucent window (e.g. a terminal) can
+    //     hold an opaque inner Wayland subsurface whose own alpha edge the ring
+    //     would otherwise trace, drawing a spurious border around it. The gate
+    //     rejects any band pixel more than `thickness` px INSIDE the frame rect —
+    //     exactly the deep-interior region a pure-geometry frame ring (band in
+    //     [-t, 0]) excludes, so it is just as immune to interior surfaces, with no
+    //     tuned threshold (the cutoff IS the band width). frameGeometry — the
+    //     window's frame rect excluding shadows — is the gate anchor.
     //
-    // OUTLINE-ONLY: pixels whose distance to the rounded-rect boundary falls
-    // within the outermost `thickness` band are replaced with the premultiplied
-    // border colour (AA ~0.5px on both band edges). Interior + exterior pixels
-    // are passed through untouched — the existing Item::setBorderRadius clip
-    // handles corner rounding of the content, so this shader needs no
-    // translucency and never writes alpha < the source.
+    // Coordinate reconstruction (KDE-Rounded-Corners' `tex_to_pixel` model):
+    //   p            = vec2(vTexCoord.x, 1 - vTexCoord.y) * windowExpandedSize
+    //   frameTopLeft = (frameGeometry.topLeft - expandedGeometry.topLeft) * scale
+    //   frameSize    = frameGeometry.size * scale
+    // p is the fragment's TOP-DOWN device pixel within the expanded (shadow-
+    // padded) redirected texture; the frame rect sits at frameTopLeft..+frameSize
+    // inside it, and the gate's signed distance is evaluated against that rect.
+    //
+    // OUTLINE-ONLY: interior + exterior pixels pass through untouched, so the
+    // shader needs no translucency and never writes alpha below the source. The
+    // window keeps its own corner rounding (decoration / CSD); the alpha-located
+    // band simply traces it.
     static const QByteArray kBorderVertexSource = QByteArrayLiteral(
         "#version 450\n"
         "\n"
@@ -422,10 +395,10 @@ KWin::GLShader* PlasmaZonesEffect::borderShader()
         // No Y-flip: pass the texcoord through so `texture(uTexture0, vTexCoord)`
         // samples the redirected window content upright (KWin's OffscreenData
         // composites its bottom-origin FBO so the natural texcoord renders the
-        // window the right way up). The fragment flips Y itself for the pixel-
-        // coordinate reconstruction (see `texForPixel` there) so the rounded-
-        // rect SDF lines up with the top-down `windowTopLeft` the C++ side
-        // computes — this keeps asymmetric shadow margins correct.
+        // window the right way up). vTexCoord is therefore Y-UP; the fragment
+        // flips Y itself when it reconstructs the device pixel for the rounded-
+        // rect SDF, so the SDF lines up with the top-down frameTopLeft the C++
+        // side computes — this keeps asymmetric vertical shadow margins correct.
         "    vTexCoord = texCoord;\n"
         "    gl_Position = modelViewProjectionMatrix * vec4(position, 0.0, 1.0);\n"
         "}\n");
@@ -435,6 +408,8 @@ KWin::GLShader* PlasmaZonesEffect::borderShader()
         "\n"
         "uniform sampler2D uTexture0;\n"
         "uniform vec2 windowExpandedSize;  // redirected/expanded texture size, device px\n"
+        "uniform vec2 frameTopLeft;        // window frame top-left within the FBO, top-down device px\n"
+        "uniform vec2 frameSize;           // window frame size (excludes shadows), device px\n"
         "uniform float thickness;          // outline band width = border width * scale\n"
         "uniform vec4 outlineColor;        // straight (non-premultiplied) RGBA border colour\n"
         "\n"
@@ -443,43 +418,50 @@ KWin::GLShader* PlasmaZonesEffect::borderShader()
         "\n"
         "void main() {\n"
         "    vec4 tex = texture(uTexture0, vTexCoord);\n"
-        "\n"
-        "    // Anchor the outline to the window's ACTUAL opaque-content edge,\n"
-        "    // detected from the texture's alpha, instead of to frameGeometry. The\n"
-        "    // redirected FBO holds the window over a transparent drop-shadow margin;\n"
-        "    // frameGeometry / expandedGeometry do not reliably locate the VISIBLE\n"
-        "    // edge across server-side-decorated vs client-decorated (CSD/Electron)\n"
-        "    // windows, but the alpha boundary always does — and it follows the\n"
-        "    // window's real corners, so no radius / rounded-rect SDF is needed.\n"
-        "    //\n"
-        "    // A pixel is in the inner outline band if it is itself opaque but a\n"
-        "    // neighbour `thickness` device-px outward (sampled on both axes) has\n"
-        "    // fallen into the transparent shadow — i.e. it lies within `thickness`\n"
-        "    // of the visible edge.\n"
         "    float a = tex.a;\n"
-        "    vec2 px = vec2(1.0) / max(windowExpandedSize, vec2(1.0)); // one device px, in texcoord\n"
         "    float t = max(thickness, 1.0);\n"
-        "    float aL = texture(uTexture0, vTexCoord + vec2(-t, 0.0) * px).a;\n"
-        "    float aR = texture(uTexture0, vTexCoord + vec2( t, 0.0) * px).a;\n"
-        "    float aU = texture(uTexture0, vTexCoord + vec2(0.0, -t) * px).a;\n"
-        "    float aD = texture(uTexture0, vTexCoord + vec2(0.0,  t) * px).a;\n"
-        "    float minNeighbour = min(min(aL, aR), min(aU, aD));\n"
+        "    vec2 px = vec2(1.0) / max(windowExpandedSize, vec2(1.0)); // one device px, in texcoord\n"
+        "\n"
+        "    // POSITION the outline on the window's ACTUAL visible edge from the\n"
+        "    // texture alpha (a ring of `t`-radius taps → a uniform-width Euclidean\n"
+        "    // offset of the visible contour, crisp at rounded corners and straight\n"
+        "    // edges alike). The alpha edge sits exactly where the decoration / CSD\n"
+        "    // content+AA actually ends, including the dense shadow lip a few px\n"
+        "    // outside frameGeometry — i.e. flush, not inset to the bare frame rect.\n"
         "    float opaqueHere = smoothstep(0.35, 0.65, a);\n"
-        "    float edgeNear   = 1.0 - smoothstep(0.35, 0.65, minNeighbour);\n"
-        "    float alphaBand  = opaqueHere * edgeNear;\n"
+        "    float band = 0.0;\n"
+        "    if (opaqueHere > 0.0) {\n"
+        "        float minRing = 1.0;\n"
+        "        const int RING = 16;\n"
+        "        for (int i = 0; i < RING; ++i) {\n"
+        "            float ang = (6.28318530718 / float(RING)) * float(i);\n"
+        "            vec2 dir = vec2(cos(ang), sin(ang));\n"
+        "            minRing = min(minRing, textureLod(uTexture0, vTexCoord + dir * t * px, 0.0).a);\n"
+        "        }\n"
+        "        float alphaBand = opaqueHere * (1.0 - smoothstep(0.35, 0.65, minRing));\n"
+        "        // Borderless-no-shadow fallback: a window opaque to the FBO edge has\n"
+        "        // no transparent margin for the ring to find, so treat the FBO's own\n"
+        "        // outer edge as an edge (gated on opaqueHere). Clipped corners are\n"
+        "        // transparent, so the ring already rounds them.\n"
+        "        vec2 edgePx = min(vTexCoord, 1.0 - vTexCoord) * windowExpandedSize;\n"
+        "        float fboBand = (1.0 - smoothstep(t - 0.5, t + 0.5, min(edgePx.x, edgePx.y))) * opaqueHere;\n"
+        "        band = clamp(max(alphaBand, fboBand), 0.0, 1.0);\n"
+        "    }\n"
         "\n"
-        "    // Borderless fallback: a window with NO transparent shadow margin runs\n"
-        "    // opaque all the way to the FBO edge, so the alpha-neighbour test above\n"
-        "    // finds no edge and draws nothing. Treat the FBO's own outer edge as an\n"
-        "    // edge too — but gated on `opaqueHere`, so it lights up for borderless\n"
-        "    // windows yet never paints onto a shadowed window's transparent FBO\n"
-        "    // margin (those pixels are not opaque, so this term stays 0 and the\n"
-        "    // alpha-edge term governs).\n"
-        "    vec2 edgePx = min(vTexCoord, 1.0 - vTexCoord) * windowExpandedSize;\n"
-        "    float fboEdgeDist = min(edgePx.x, edgePx.y);\n"
-        "    float fboBand = (1.0 - smoothstep(t - 0.5, t + 0.5, fboEdgeDist)) * opaqueHere;\n"
-        "\n"
-        "    float band = clamp(max(alphaBand, fboBand), 0.0, 1.0);\n"
+        "    // GATE the band to the frame boundary, the one thing a content-derived\n"
+        "    // edge can't do for itself: reject any band pixel more than `t` px INSIDE\n"
+        "    // the frame rect. That deep-interior region is exactly what a\n"
+        "    // pure-geometry frame ring (band in [-t, 0]) excludes, so this is just as\n"
+        "    // immune to an inner Wayland subsurface's own alpha edge (it sits deeper\n"
+        "    // than the band width inside the frame) — while the alpha ring above\n"
+        "    // keeps the visible outline flush and crisp. The threshold is the band\n"
+        "    // width t itself, not a tuned constant. Plain axis-aligned rect distance\n"
+        "    // (no radius): rejecting the deep interior needs no corner shaping.\n"
+        "    vec2 p = vec2(vTexCoord.x, 1.0 - vTexCoord.y) * windowExpandedSize;\n"
+        "    vec2 fq = abs(p - (frameTopLeft + 0.5 * frameSize)) - 0.5 * frameSize;\n"
+        "    float d = length(max(fq, 0.0)) + min(max(fq.x, fq.y), 0.0); // signed dist to frame rect, <0 inside\n"
+        "    float aa = max(fwidth(d), 1e-3);\n"
+        "    band *= smoothstep(-t - aa, -t + aa, d); // 1 where d > -t (outline ring), 0 deeper inside\n"
         "\n"
         "    // Straight 'over' composite of the border colour onto the window\n"
         "    // content, weighted by band coverage AND the colour's own alpha (a true\n"
@@ -501,6 +483,8 @@ KWin::GLShader* PlasmaZonesEffect::borderShader()
         return nullptr;
     }
     m_borderUWindowExpandedSizeLoc = shader->uniformLocation("windowExpandedSize");
+    m_borderUFrameTopLeftLoc = shader->uniformLocation("frameTopLeft");
+    m_borderUFrameSizeLoc = shader->uniformLocation("frameSize");
     m_borderUThicknessLoc = shader->uniformLocation("thickness");
     m_borderUOutlineColorLoc = shader->uniformLocation("outlineColor");
     m_borderShader = std::move(shader);
@@ -575,19 +559,27 @@ bool PlasmaZonesEffect::pushBorderUniforms(KWin::EffectWindow* w, qreal scale)
         return false;
     }
 
-    // The shader works in the redirected texture's own pixel space and detects
-    // the window's visible edge from the texture alpha, so it needs only the
-    // expanded (redirected) texture size for px conversion, the band thickness,
-    // and the colour. windowExpandedSize is the redirected FBO extent in device
-    // px; expandedGeometry covers frame + drop shadow (falls back to frame when
-    // empty, e.g. a shadowless window).
+    // The shader locates the visible edge from the texture alpha (a ring of taps)
+    // and GATES the band against the window FRAME rect so an interior subsurface's
+    // alpha edge is never traced. It needs the expanded (redirected) texture size
+    // for px conversion plus the frame rect placed within that texture.
+    // windowExpandedSize is the redirected FBO extent in device px; expandedGeometry
+    // covers frame + drop shadow (falls back to frame when empty, e.g. a shadowless
+    // window). frameTopLeft = (frameGeometry.topLeft - expandedGeometry.topLeft) *
+    // scale is the frame's offset inside that texture (top-down device px), and
+    // frameSize = frameGeometry.size * scale its extent.
+    const QRectF frame = w->frameGeometry();
     QRectF expanded = w->expandedGeometry();
     if (expanded.isEmpty()) {
-        expanded = w->frameGeometry();
+        expanded = frame;
     }
     const QVector2D windowExpandedSize(static_cast<float>(expanded.width() * scale),
                                        static_cast<float>(expanded.height() * scale));
+    const QVector2D frameTopLeft(static_cast<float>((frame.left() - expanded.left()) * scale),
+                                 static_cast<float>((frame.top() - expanded.top()) * scale));
+    const QVector2D frameSize(static_cast<float>(frame.width() * scale), static_cast<float>(frame.height() * scale));
     const float thickness = static_cast<float>(it->width * scale);
+
     const QColor& c = it->color;
     const QVector4D outlineColor(static_cast<float>(c.redF()), static_cast<float>(c.greenF()),
                                  static_cast<float>(c.blueF()), static_cast<float>(c.alphaF()));
@@ -598,6 +590,12 @@ bool PlasmaZonesEffect::pushBorderUniforms(KWin::EffectWindow* w, qreal scale)
     // would be set on the wrong (or no) program.
     if (m_borderUWindowExpandedSizeLoc >= 0) {
         shader->setUniform(m_borderUWindowExpandedSizeLoc, windowExpandedSize);
+    }
+    if (m_borderUFrameTopLeftLoc >= 0) {
+        shader->setUniform(m_borderUFrameTopLeftLoc, frameTopLeft);
+    }
+    if (m_borderUFrameSizeLoc >= 0) {
+        shader->setUniform(m_borderUFrameSizeLoc, frameSize);
     }
     if (m_borderUThicknessLoc >= 0) {
         shader->setUniform(m_borderUThicknessLoc, thickness);

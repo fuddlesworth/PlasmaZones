@@ -837,12 +837,15 @@ public:
     }
     bool snappingHideTitleBars() const override
     {
-        // Distinct from snappingShowBorder so the D-Bus batch test can detect a
-        // registration swap between the two adjacent bool keys via value-mirroring.
-        return true;
+        // Member-backed so the border-inset tests can toggle decorated vs
+        // borderless mode. Defaults to true (distinct from snappingShowBorder's
+        // default) so the D-Bus batch test can still detect a registration swap
+        // between the two adjacent bool keys via value-mirroring.
+        return m_snappingHideTitleBars;
     }
-    void setSnappingHideTitleBars(bool) override
+    void setSnappingHideTitleBars(bool v) override
     {
+        m_snappingHideTitleBars = v;
     }
     bool snappingShowBorder() const override
     {
@@ -1148,6 +1151,7 @@ private:
     // so tests that read the stub's defaults are unaffected; settable so the
     // DaemonGeometryResolver inset-gate test can flip the show-border state.
     bool m_snappingShowBorder = false;
+    bool m_snappingHideTitleBars = true;
     int m_snappingBorderWidth = 2;
     QStringList m_snappingLayoutOrder;
     QStringList m_tilingAlgorithmOrder;

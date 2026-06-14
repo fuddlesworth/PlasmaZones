@@ -41,13 +41,28 @@ private Q_SLOTS:
         QCOMPARE(resolver.snapBorderInset(), 0);
     }
 
-    void showBorderOn_insetEqualsBorderWidth()
+    void showBorderOn_titleBarsShown_insetEqualsBorderWidth()
     {
         StubSettings settings;
         settings.setSnappingShowBorder(true);
+        settings.setSnappingHideTitleBars(false); // decorated mode → inset
         settings.setSnappingBorderWidth(3);
         DaemonGeometryResolver resolver(&settings);
         QCOMPARE(resolver.snapBorderInset(), 3);
+    }
+
+    void hideTitleBarsOn_insetZero()
+    {
+        // Borderless mode: the window fills its zone and the border is recoloured
+        // inside the content edge, so it must NOT be inset (insetting leaves an
+        // empty gap = "too small"). Width is non-zero, border is shown, but the
+        // title-bar gate collapses the inset.
+        StubSettings settings;
+        settings.setSnappingShowBorder(true);
+        settings.setSnappingHideTitleBars(true);
+        settings.setSnappingBorderWidth(4);
+        DaemonGeometryResolver resolver(&settings);
+        QCOMPARE(resolver.snapBorderInset(), 0);
     }
 
     void showBorderOn_tracksLiveWidthChange()
@@ -57,6 +72,7 @@ private Q_SLOTS:
         // un-inset to inset without reconstructing the resolver.
         StubSettings settings;
         settings.setSnappingShowBorder(true);
+        settings.setSnappingHideTitleBars(false); // decorated mode → inset
         settings.setSnappingBorderWidth(2);
         DaemonGeometryResolver resolver(&settings);
         QCOMPARE(resolver.snapBorderInset(), 2);
@@ -64,9 +80,13 @@ private Q_SLOTS:
         settings.setSnappingBorderWidth(5);
         QCOMPARE(resolver.snapBorderInset(), 5);
 
-        // Flipping show-border off collapses the inset back to 0 even with a
-        // non-zero width still configured — the exact transition the login
-        // race produces in reverse.
+        // Flipping title bars off (borderless) collapses the inset back to 0 even
+        // with a non-zero width still configured — the decorated/borderless gate.
+        settings.setSnappingHideTitleBars(true);
+        QCOMPARE(resolver.snapBorderInset(), 0);
+
+        // And flipping show-border off also collapses it, independent of mode.
+        settings.setSnappingHideTitleBars(false);
         settings.setSnappingShowBorder(false);
         QCOMPARE(resolver.snapBorderInset(), 0);
     }

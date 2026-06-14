@@ -37,20 +37,22 @@ namespace PlasmaZones {
 ///
 /// The resolved appearance (width / radius / colour in LOGICAL pixels) is
 /// stored here and pushed as shader uniforms per-frame in paintWindow. The
-/// existing `Item::setBorderRadius` corner-clip on the window container +
-/// decoration is RETAINED — it rounds the window content corners so squared
-/// pixels don't peek past the rounded outline. The shader is OUTLINE-ONLY: it
-/// recolours the outermost `width` band to the border colour at full alpha and
-/// leaves interior pixels untouched, so no translucency is required.
+/// shader is OUTLINE-ONLY: it locates the outermost `width` band from the
+/// window's own alpha edge and recolours it, leaving interior pixels untouched,
+/// so no translucency is required. The band traces whatever corners the window
+/// has — its decoration's (Breeze) or, for a window WE made borderless, the
+/// rounding supplied below.
 struct WindowBorder
 {
+    /// Corner-rounding clip applied to the windowContainer, ONLY for windows with
+    /// no decoration of their own to round them (our borderless / hidden-titlebar
+    /// windows). Decorated windows round via their decoration, so we leave them
+    /// alone — applying this clip there carves a rounded cutout out of inner
+    /// Wayland subsurfaces (the single shared corner box maps into every
+    /// descendant surface). Null when no clip was applied; the saved radius is
+    /// restored on teardown.
     QPointer<KWin::Item> clippedContainer;
     KWin::BorderRadius savedContainerRadius;
-    /// Server-side decoration item rounded to match the outline so a SHOWN title
-    /// bar's corners follow the rounded border (the container radius doesn't reach
-    /// the decoration's render branch). Null for borderless / CSD windows.
-    QPointer<KWin::Item> clippedDecoration;
-    KWin::BorderRadius savedDecorationRadius;
 
     /// Resolved border appearance in LOGICAL pixels (the paint path multiplies
     /// width/radius by `viewport.scale()` to reach device px for the shader).

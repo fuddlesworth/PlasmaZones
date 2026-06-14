@@ -3445,8 +3445,13 @@ void AutotileEngine::applyTiling(const QString& screenId)
     // no-op then and tile geometry is unchanged. Resolved once per pass.
     // Per-window SetBorderVisible rules on otherwise-borderless windows are out
     // of scope (resolved compositor-side, not reachable here) and are not inset.
+    // Gate on title-bar mode (mirrors DaemonGeometryResolver::snapBorderInset):
+    // inset only when title bars are SHOWN (decorated) — the border sits on the
+    // decoration edge and would otherwise push the tile past its slot. With title
+    // bars hidden (borderless) the window fills the tile and the border is drawn
+    // inside the content edge, so no inset (insetting would leave an empty gap).
     int borderInset = 0;
-    if (auto* s = autotileSettings(); s && s->autotileShowBorder()) {
+    if (auto* s = autotileSettings(); s && s->autotileShowBorder() && !s->autotileHideTitleBars()) {
         borderInset = qMax(0, s->autotileBorderWidth());
     }
     auto insetTile = [borderInset](QRect geo) -> QRect {

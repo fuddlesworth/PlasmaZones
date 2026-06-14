@@ -688,6 +688,8 @@ private:
     std::unique_ptr<KWin::GLShader> m_borderShader;
     bool m_borderShaderCompileFailed = false; ///< latch a failed compile so we don't retry every frame
     int m_borderUWindowExpandedSizeLoc = -1;
+    int m_borderUFrameTopLeftLoc = -1; ///< frame top-left within the expanded FBO, device px (outline gate)
+    int m_borderUFrameSizeLoc = -1; ///< frame size excluding shadows, device px (outline gate)
     int m_borderUThicknessLoc = -1;
     int m_borderUOutlineColorLoc = -1;
 
