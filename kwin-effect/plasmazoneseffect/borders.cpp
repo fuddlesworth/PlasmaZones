@@ -531,33 +531,12 @@ void PlasmaZonesEffect::reconcileBorderShader(const QString& windowId, KWin::Eff
     }
 }
 
-bool PlasmaZonesEffect::pushBorderUniforms(KWin::EffectWindow* w, qreal scale)
+void PlasmaZonesEffect::pushBorderUniforms(KWin::EffectWindow* w, const WindowBorder& border, qreal scale)
 {
-    if (!w) {
-        return false;
-    }
-    // Hot-path gate: paintWindow calls this for EVERY painted window on its
-    // fall-through. The common case (no bordered windows at all) must cost two
-    // pointer reads, not a getWindowId composite-key build + hash lookup. Mirror
-    // the `isEmpty()` short-circuit the SetOpacity / animation sister consumers
-    // use.
-    if (m_windowBorders.isEmpty()) {
-        return false;
-    }
-    auto it = m_windowBorders.find(getWindowId(w));
-    if (it == m_windowBorders.end() || !it->shaderApplied) {
-        return false;
-    }
-    // A transition owning the slot is handled by paintWindow's transition
-    // branch before this is ever reached; guard anyway so a border-shader push
-    // never lands on a window the animation system has taken over.
-    if (m_shaderManager.findTransition(w)) {
-        return false;
-    }
+    // drawWindow (the sole caller) has already resolved @p border, confirmed it
+    // is applied, ruled out a transition owning the slot, and bound the shader,
+    // so this just computes and writes the uniforms onto the bound program.
     KWin::GLShader* shader = m_borderShader.get();
-    if (!shader) {
-        return false;
-    }
 
     // The shader locates the visible edge from the texture alpha (a ring of taps)
     // and GATES the band against the window FRAME rect so an interior subsurface's
@@ -578,9 +557,9 @@ bool PlasmaZonesEffect::pushBorderUniforms(KWin::EffectWindow* w, qreal scale)
     const QVector2D frameTopLeft(static_cast<float>((frame.left() - expanded.left()) * scale),
                                  static_cast<float>((frame.top() - expanded.top()) * scale));
     const QVector2D frameSize(static_cast<float>(frame.width() * scale), static_cast<float>(frame.height() * scale));
-    const float thickness = static_cast<float>(it->width * scale);
+    const float thickness = static_cast<float>(border.width * scale);
 
-    const QColor& c = it->color;
+    const QColor& c = border.color;
     const QVector4D outlineColor(static_cast<float>(c.redF()), static_cast<float>(c.greenF()),
                                  static_cast<float>(c.blueF()), static_cast<float>(c.alphaF()));
 
@@ -603,7 +582,6 @@ bool PlasmaZonesEffect::pushBorderUniforms(KWin::EffectWindow* w, qreal scale)
     if (m_borderUOutlineColorLoc >= 0) {
         shader->setUniform(m_borderUOutlineColorLoc, outlineColor);
     }
-    return true;
 }
 
 void PlasmaZonesEffect::drawWindow(const KWin::RenderTarget& renderTarget, const KWin::RenderViewport& viewport,
@@ -624,7 +602,7 @@ void PlasmaZonesEffect::drawWindow(const KWin::RenderTarget& renderTarget, const
         const auto bit = m_windowBorders.constFind(getWindowId(w));
         if (bit != m_windowBorders.constEnd() && bit->shaderApplied) {
             KWin::ShaderBinder binder(m_borderShader.get());
-            pushBorderUniforms(w, viewport.scale());
+            pushBorderUniforms(w, *bit, viewport.scale());
         }
     }
     KWin::OffscreenEffect::drawWindow(renderTarget, viewport, w, mask, deviceRegion, data);

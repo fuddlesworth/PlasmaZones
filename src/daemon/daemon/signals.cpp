@@ -924,19 +924,29 @@ void Daemon::applyStartupInsetCorrection()
     }
     m_startupInsetCorrectionDone = true;
 
-    // Re-resolve every snapped window's frame against the now fully loaded
-    // snapping show-border / border-width settings. resnapCurrentAssignments
-    // recomputes each target via WindowTrackingService::resolveZoneGeometry,
-    // which applies insetSnapFrame — so a window the effect restored to the
-    // un-inset full-zone rect is corrected to the inset frame. No-op (and a
-    // single suppressed feedback) when there are no snapped windows.
+    // Correct the login-restore burst, which placed windows before the snapping
+    // show-border / border-width / hide-title-bars settings finished loading.
+    reapplyBorderInsets();
+}
+
+void Daemon::reapplyBorderInsets()
+{
+    // Re-resolve every snapped window's frame against the CURRENT border settings.
+    // resnapCurrentAssignments recomputes each target via
+    // WindowTrackingService::resolveZoneGeometry, which applies
+    // PhosphorGeometry::insetRect — so a window placed under the old settings (the
+    // un-inset full-zone rect, or a stale inset width) is corrected to the right
+    // frame. No-op (and a single suppressed feedback) when there are no snapped
+    // windows. Drives both the one-shot startup correction and the debounced
+    // runtime path (border settings changed via the KCM), since the inset is read
+    // live and nothing else resnaps/retiles on a pure border-setting change.
     if (m_snapAdaptor && m_snapEngine) {
-        m_suppressResnapOsd = 1; // resnapCurrentAssignments emits one feedback
+        ++m_suppressResnapOsd; // resnapCurrentAssignments emits one feedback; additive so any in-flight credit survives
         m_snapAdaptor->resnapCurrentAssignments();
     }
 
     // Mirror for autotile: retile every autotile screen so applyTiling re-runs
-    // its per-tile border inset against the loaded autotile show-border state.
+    // its per-tile border inset against the current autotile show-border state.
     // Guarded on isEnabled() so this is inert when autotile is off.
     if (m_autotileEngine && m_autotileEngine->isEnabled()) {
         m_autotileEngine->retile();

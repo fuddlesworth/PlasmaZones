@@ -95,6 +95,11 @@ private Q_SLOTS:
     {
         StubSettings settings;
         settings.setSnappingShowBorder(true);
+        // Decorated mode so the show-border + hide-title-bars gates both pass and
+        // the negative width reaches the qMax(0, ...) clamp under test — without
+        // this the StubSettings default (hideTitleBars=true) would return 0 at the
+        // borderless gate, passing the test for the wrong reason.
+        settings.setSnappingHideTitleBars(false);
         settings.setSnappingBorderWidth(-7);
         DaemonGeometryResolver resolver(&settings);
         QCOMPARE(resolver.snapBorderInset(), 0);

@@ -416,7 +416,7 @@ private Q_SLOTS:
         const QVector<ZoneAssignmentEntry> entries = engine->calculateRotation(/*clockwise=*/true, QString());
         QCOMPARE(entries.size(), 1);
 
-        const QString targetZoneId = entries[0].targetGeometry.isValid() ? entries[0].targetZoneId : QString();
+        const QString targetZoneId = entries[0].targetZoneId;
         // Inset 0 (border off) → committed frame equals the full zone rect.
         QCOMPARE(entries[0].targetGeometry, m_service->zoneGeometry(targetZoneId, QString()));
 

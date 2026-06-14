@@ -33,10 +33,11 @@ current code, so nothing is missed during implementation.
   CONSTANT bounds only) + `TilingAppearancePage.qml` (Colors / Decorations / Borders cards,
   binding directly to `appSettings.autotile*`). Registered `regPage(m_tilingAppearancePage,
   "tiling-visual-cat", "Appearance", "TilingAppearancePage.qml", …)`.
-- **Effect render:** `kwin-effect/.../borders.cpp` draws a native `KWin::OutlinedBorderItem`
-  parented under each window's `KWin::WindowItem` (NOT a shader/overlay); title-bar hiding is
-  KWin's `setNoBorder(true)` (`autotilehandler/state.cpp::setWindowBorderless`). The draw code
-  is **mode-agnostic** — it only asks the gating predicate `shouldShowBorderForWindow(windowId)`.
+- **Effect render:** `kwin-effect/.../borders.cpp` recolours each bordered window's outermost
+  band via an offscreen edge shader (KWin redirects the window to an FBO and `pushBorderUniforms`
+  drives an outline-only fragment shader; the prior scene-graph `KWin::OutlinedBorderItem` was
+  replaced). Title-bar hiding is owned by the `DecorationManager`. The draw code is
+  **mode-agnostic** — it only asks the gating predicate `shouldShowBorderForWindow(windowId)`.
 - **State + gating:** `BorderState` (`libs/phosphor-compositor/.../AutotileState.h`), owned by
   `AutotileHandler` as `m_border`, holds width/radius/colour/show/hide plus per-screen
   `tiledWindowsByScreen` / `borderlessWindowsByScreen` buckets. `shouldShowBorderForWindow`
@@ -217,8 +218,8 @@ full add-a-setting chain mirroring `autotile*`.
 ## 8. Phase 3 — Mode-aware window borders + title-bar hiding (effect)
 
 The heavy phase. Generalise the border machinery so a window's border/title-bar uses the
-settings of the **mode that manages it** (snap vs autotile). Reuse `OutlinedBorderItem` draw +
-`setNoBorder` hide — change only the gating + settings source.
+settings of the **mode that manages it** (snap vs autotile). Reuse the offscreen border-shader
+draw + `DecorationManager` title-bar hide — change only the gating + settings source.
 
 ### Tasks (ordered)
 1. Decide where the effect learns "window X is snap-committed" (no decoration tracking exists
@@ -246,5 +247,5 @@ settings of the **mode that manages it** (snap vs autotile). Reuse `OutlinedBord
 ### Top gotchas
 - A snapped window stays user-draggable; hiding its title bar removes the drag handle until
   re-shown (accepted per the "full mirror" decision).
-- Don't duplicate `OutlinedBorderItem` logic — extend the gating/settings, keep one draw path.
+- Don't duplicate the border-shader draw logic — extend the gating/settings, keep one draw path.
 - Active/inactive colour is a runtime check against `effects->activeWindow()`, not stored state.

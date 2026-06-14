@@ -674,13 +674,15 @@ private:
     void reconcileBorderShader(const QString& windowId, KWin::EffectWindow* w);
 
     /// Per-frame uniform push for a bordered window painted through the border
-    /// shader. Binds the border shader, sets the 6 geometry/appearance uniforms
-    /// from the window's frame/expanded geometry × @p scale, then returns —
-    /// the caller routes the actual draw through effects->drawWindow so KWin's
-    /// OffscreenData::paint binds uTexture0 and runs the shader. Returns true
-    /// when it handled the window (border shader active, no transition); false
-    /// when the caller should fall through to its normal draw.
-    bool pushBorderUniforms(KWin::EffectWindow* w, qreal scale);
+    /// shader. Sets the 5 geometry/appearance uniforms (windowExpandedSize,
+    /// frameTopLeft, frameSize, thickness, outlineColor) from @p border and the
+    /// window's frame/expanded geometry × @p scale on the ALREADY-BOUND border
+    /// shader — the caller owns the KWin::ShaderBinder and routes the actual draw
+    /// through OffscreenEffect::drawWindow, whose OffscreenData::paint re-binds
+    /// the same program and runs the shader. Does NOT bind/unbind or re-validate
+    /// the window: drawWindow is the sole caller and has already confirmed the
+    /// border is applied and no transition owns the slot.
+    void pushBorderUniforms(KWin::EffectWindow* w, const WindowBorder& border, qreal scale);
 
     /// Compiled border MapTexture shader + cached uniform locations. The shader
     /// is shared by every bordered window (uniforms are per-window); compiled

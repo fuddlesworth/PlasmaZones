@@ -3454,28 +3454,16 @@ void AutotileEngine::applyTiling(const QString& screenId)
     if (auto* s = autotileSettings(); s && s->autotileShowBorder() && !s->autotileHideTitleBars()) {
         borderInset = qMax(0, s->autotileBorderWidth());
     }
-    auto insetTile = [borderInset](QRect geo) -> QRect {
-        if (borderInset <= 0 || geo.isEmpty()) {
-            return geo;
-        }
-        QRect r = geo.adjusted(borderInset, borderInset, -borderInset, -borderInset);
-        // Degenerate clamp: a tile too small to absorb 2*inset keeps a >= 1 px
-        // extent rather than collapsing to an empty or inverted rect.
-        if (r.width() < 1) {
-            r.setWidth(1);
-        }
-        if (r.height() < 1) {
-            r.setHeight(1);
-        }
-        return r;
-    };
 
     QJsonArray arr;
     for (int i = 0; i < tileCount; ++i) {
         if (filterForPreview && windows[i] == filteredWindowId) {
             continue;
         }
-        const QRect geo = insetTile(zones[i]);
+        // Inset each tile via the shared PhosphorGeometry helper (also used by
+        // the snap path) so the two border-inset gates cannot drift; it no-ops
+        // when borderInset <= 0 and applies the same degenerate >= 1 px clamp.
+        const QRect geo = PhosphorGeometry::insetRect(zones[i], borderInset);
         QJsonObject obj;
         obj[QLatin1String("windowId")] = windows[i];
         obj[QLatin1String("screenId")] = screenId;
