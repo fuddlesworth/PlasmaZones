@@ -8,8 +8,6 @@
 #include <effect/effectwindow.h>
 #include <opengl/glshader.h>
 #include <opengl/glshadermanager.h>
-#include <scene/borderradius.h>
-#include <window.h>
 
 #include "../autotilehandler.h"
 #include "../snaphandler.h"
@@ -84,16 +82,6 @@ void PlasmaZonesEffect::removeWindowBorder(const QString& windowId)
         return;
     }
     WindowBorder& wb = it.value();
-    // Restore the KWin window BorderRadius we set so the decoration/shadow stop
-    // rounding once the border is gone (look the window up by id — the entry may
-    // outlive the EffectWindow only on a closed window, where restore is moot).
-    if (wb.windowRadiusApplied) {
-        if (KWin::EffectWindow* w = findWindowById(windowId)) {
-            if (KWin::Window* kw = w->window()) {
-                kw->setBorderRadius(wb.savedWindowRadius);
-            }
-        }
-    }
     // Release the offscreen redirect + border shader slot IF this border owns
     // it. When an animation transition currently owns the slot (shaderApplied
     // is false — the transition's begin took it over), we must NOT touch
@@ -193,20 +181,16 @@ void PlasmaZonesEffect::updateWindowBorder(const QString& windowId, KWin::Effect
     wb.radius = br;
     wb.color = bc;
 
-    // Corner rounding is the SHADER's job now (the rounded-rect SDF in
-    // pushBorderUniforms clips the frame corners + draws the outline, identically
-    // for decorated and borderless windows). The shader rounds the redirected
-    // texture's corners, but KWin's own decoration + drop shadow were rendered
-    // square — so set the KWin window's BorderRadius to the OUTER radius (border
-    // radius + width) so the decoration/shadow clip follows the same rounded
-    // rect. Saved + restored on teardown. Unlike the old Item::setBorderRadius
-    // clip this does NOT recurse into inner Wayland subsurfaces, so a translucent
-    // terminal with an opaque child widget no longer gets a corner cutout.
-    if (KWin::Window* kw = w->window()) {
-        wb.savedWindowRadius = kw->borderRadius();
-        kw->setBorderRadius(KWin::BorderRadius(br + bw));
-        wb.windowRadiusApplied = true;
-    }
+    // Corner rounding is entirely the SHADER's job (the rounded-rect SDF in the
+    // border fragment shader clips the frame corners + draws the outline,
+    // identically for decorated and borderless windows). It operates on the
+    // COMPOSITED redirected texture, so it never clips individual client
+    // subsurfaces — and crucially we do NOT touch the KWin window's own
+    // BorderRadius: setting it made KWin clip the client surface independently,
+    // which on a server-side-decorated window cut the inner surface and left the
+    // shader's corner inset behind KWin's. KWin's square drop-shadow corner is
+    // left as-is for now (a small nub at the rounded corner); synthesising the
+    // shadow in-shader, KDE-Rounded-Corners style, is the follow-up.
 
     m_windowBorders.insert(windowId, wb);
 
@@ -359,8 +343,9 @@ KWin::GLShader* PlasmaZonesEffect::borderShader()
     //     overhang (inside the frame box, outside the rounded rect), AA'd by
     //     fwidth. The drop shadow in the expanded margin is preserved (the cut is
     //     gated to the frame box). The redirected texture includes the server-side
-    //     decoration, so a visible titlebar's corners round too — and we set the
-    //     KWin window BorderRadius to match so its decoration/shadow clip follows.
+    //     decoration, so a visible titlebar's corners round too. We do NOT set the
+    //     KWin window BorderRadius (that clips the client surface independently and
+    //     insets the corner); KWin's square shadow corner is left as-is for now.
     //
     //   * Outline: an inner band of `thickness` just inside the rounded edge, from
     //     the SAME field (d in [-thickness, 0]). Confined to the window body so it
@@ -554,8 +539,7 @@ void PlasmaZonesEffect::pushBorderUniforms(KWin::EffectWindow* w, const WindowBo
     const QVector2D frameSize(static_cast<float>(frame.width() * scale), static_cast<float>(frame.height() * scale));
     const float thickness = static_cast<float>(border.width * scale);
     // OUTER radius = content radius + border width, so the outline band sits inside
-    // it and the content corner ends at `radius`, matching the KWin window
-    // BorderRadius we set to (radius + width) for the decoration/shadow clip.
+    // it and the content corner ends one band-width in, at `border.radius`.
     const float radius = static_cast<float>((border.radius + border.width) * scale);
 
     const QColor& c = border.color;

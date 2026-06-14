@@ -671,9 +671,10 @@ private:
     // the `width` outline band, using KWin's own MVP so it is flush over the
     // server-side decoration (the prior scene-graph OutlinedBorderItem composited
     // UNDER the decoration and looked inset). Same path for decorated + borderless
-    // windows; the KWin window BorderRadius is set to match so its shadow follows.
-    // Coordinated with the per-window animation transition on the SAME
-    // OffscreenEffect setShader() slot — see borders.cpp.
+    // windows; it clips the COMPOSITED texture, never the client surface, so the
+    // window's own BorderRadius is left untouched (setting it inset the corner and
+    // clipped the inner surface). Coordinated with the per-window animation
+    // transition on the SAME OffscreenEffect setShader() slot — see borders.cpp.
 
     /// Lazily compile the border MapTexture shader on first use. Returns the
     /// cached shader (or nullptr if compilation failed — borders then no-op).

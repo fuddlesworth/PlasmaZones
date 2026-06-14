@@ -7,7 +7,6 @@
 
 #include <opengl/glshader.h>
 #include <opengl/gltexture.h>
-#include <scene/borderradius.h>
 
 #include <QColor>
 #include <QRect>
@@ -38,11 +37,12 @@ namespace PlasmaZones {
 /// window FRAME and does TWO things from it, IDENTICALLY for decorated and
 /// borderless windows: it clips the frame corners (reducing content alpha so the
 /// corners round) and draws the outline as an inner band of `width` just inside
-/// the rounded edge. The drop shadow in the expanded-geometry margin is left
-/// untouched (the clip cuts only the corner overhang INSIDE the frame box). To
-/// keep KWin's own decoration/shadow following the rounded corner, the window's
-/// BorderRadius is set to the outer radius for the border's lifetime and
-/// restored on teardown.
+/// the rounded edge. It runs over the COMPOSITED redirected texture, so it
+/// rounds the outer frame corners (titlebar included) without ever clipping an
+/// individual client subsurface. The drop shadow in the expanded-geometry margin
+/// is left untouched (the clip cuts only the corner overhang INSIDE the frame
+/// box); KWin's own square shadow corner is currently left as-is (in-shader
+/// shadow synthesis is a follow-up).
 ///
 /// The resolved appearance (width / radius / colour) is stored in LOGICAL
 /// pixels; pushBorderUniforms multiplies by `viewport.scale()` per frame to
@@ -54,13 +54,6 @@ struct WindowBorder
     int width = 0;
     int radius = 0;
     QColor color;
-
-    /// KWin window BorderRadius captured before we set our own (so the
-    /// decoration + drop shadow round to match the shader), restored on teardown.
-    /// windowRadiusApplied gates the restore: false when we never wrote it (e.g.
-    /// the EffectWindow had no backing KWin::Window).
-    KWin::BorderRadius savedWindowRadius;
-    bool windowRadiusApplied = false;
 
     /// True when THIS border owns the window's OffscreenEffect redirect +
     /// border shader slot. False while an animation transition has taken over
