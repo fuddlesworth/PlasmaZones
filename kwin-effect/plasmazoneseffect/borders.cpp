@@ -181,16 +181,15 @@ void PlasmaZonesEffect::updateWindowBorder(const QString& windowId, KWin::Effect
     wb.radius = br;
     wb.color = bc;
 
-    // Corner rounding is entirely the SHADER's job (the rounded-rect SDF in the
-    // border fragment shader clips the frame corners + draws the outline,
-    // identically for decorated and borderless windows). It operates on the
-    // COMPOSITED redirected texture, so it never clips individual client
-    // subsurfaces — and crucially we do NOT touch the KWin window's own
-    // BorderRadius: setting it made KWin clip the client surface independently,
-    // which on a server-side-decorated window cut the inner surface and left the
-    // shader's corner inset behind KWin's. KWin's square drop-shadow corner is
-    // left as-is for now (a small nub at the rounded corner); synthesising the
-    // shadow in-shader, KDE-Rounded-Corners style, is the follow-up.
+    // Corner rounding, the outline, AND the drop shadow are entirely the SHADER's
+    // job (the rounded-rect SDF in the border fragment shader), identically for
+    // decorated and borderless windows. It operates on the COMPOSITED redirected
+    // texture, so it never clips individual client subsurfaces — and crucially we
+    // do NOT touch the KWin window's own BorderRadius: setting it made KWin clip
+    // the client surface independently, which on a server-side-decorated window
+    // cut the inner surface and left the shader's corner inset behind KWin's. The
+    // shader instead reconstructs KWin's square-cornered drop shadow into a
+    // rounded one in-shader (KDE-Rounded-Corners' native-shadow technique).
 
     m_windowBorders.insert(windowId, wb);
 
@@ -339,13 +338,17 @@ KWin::GLShader* PlasmaZonesEffect::borderShader()
     // IDENTICALLY for decorated and borderless windows — no alpha-edge detection,
     // no per-window-type branch:
     //
-    //   * Corner clip: the content alpha is multiplied down to 0 in the corner
-    //     overhang (inside the frame box, outside the rounded rect), AA'd by
-    //     fwidth. The drop shadow in the expanded margin is preserved (the cut is
-    //     gated to the frame box). The redirected texture includes the server-side
-    //     decoration, so a visible titlebar's corners round too. We do NOT set the
-    //     KWin window BorderRadius (that clips the client surface independently and
-    //     insets the corner); KWin's square shadow corner is left as-is for now.
+    //   * Corner clip: inside the rounded rect is the window content; outside is
+    //     the reconstructed shadow; the two are blended across the AA edge (premult)
+    //     so the corner rounds with no bright/dark fringe. The redirected texture
+    //     includes the server-side decoration, so a visible titlebar's corners round
+    //     too. We do NOT set the KWin window BorderRadius (that clips the client
+    //     surface independently and insets the corner).
+    //
+    //   * Shadow: KWin draws the drop shadow for a SQUARE window, so its corner is
+    //     square. The shadow is uniform along each straight edge (a function of
+    //     distance from the edge), so we resample that profile at the rounded-SDF
+    //     distance and shape it round — straight regions unchanged, corners fixed.
     //
     //   * Outline: an inner band of `thickness` just inside the rounded edge, from
     //     the SAME field (d in [-thickness, 0]). Confined to the window body so it
@@ -418,35 +421,52 @@ KWin::GLShader* PlasmaZonesEffect::borderShader()
         "    float d  = min(max(q.x, q.y), 0.0) + length(max(q, 0.0)) - r;\n"
         "    float aa = max(fwidth(d), 1e-3);\n"
         "\n"
-        "    // Axis-aligned frame-box distance; < 0 inside the frame rect. The drop\n"
-        "    // shadow lives OUTSIDE this box (in the expanded margin), so gating the\n"
-        "    // corner cut on it leaves the shadow untouched — only the corner overhang\n"
-        "    // INSIDE the frame box (between the square corner and the rounded arc) is\n"
-        "    // removed. Interior subsurfaces are never individually clipped.\n"
-        "    float boxD       = max(abs(p.x - cen.x) - halfSz.x, abs(p.y - cen.y) - halfSz.y);\n"
-        "    float inFrameBox = 1.0 - smoothstep(-aa, aa, boxD);\n"
-        "    float inRound    = 1.0 - smoothstep(-aa, aa, d);\n"
-        "    // Cut = the corner overhang ONLY: the region inside the square frame box\n"
-        "    // yet outside the rounded rect. (inFrameBox - inRound) is exactly that\n"
-        "    // difference and, crucially, is 0 along STRAIGHT edges (there boxD == d so\n"
-        "    // the two masks cancel) — so straight window edges keep full content with\n"
-        "    // no 1px transparency seam. A product like inFrameBox*(1-inRound) does NOT\n"
-        "    // cancel at the edges and leaves that seam.\n"
-        "    float cut = clamp(inFrameBox - inRound, 0.0, 1.0);\n"
+        "    float insideMask = 1.0 - smoothstep(-aa, aa, d); // 1 inside rounded rect, 0 outside\n"
         "\n"
-        "    // Outline: an inner band of `thickness` just inside the rounded edge,\n"
-        "    // from the SAME SDF (d in [-thickness, 0]). Confined to the window body\n"
-        "    // so it never paints onto the shadow margin.\n"
-        "    float band = inFrameBox * inRound * smoothstep(-thickness - aa, -thickness + aa, d);\n"
+        "    // Outline: an inner band of `thickness` just inside the rounded edge, from\n"
+        "    // the SAME SDF (d in [-thickness, 0]). insideMask confines it to the body.\n"
+        "    float band = smoothstep(-thickness - aa, -thickness + aa, d) * insideMask;\n"
         "\n"
-        "    // PREMULTIPLIED-ALPHA compositing. uTexture0 is premultiplied and KWin\n"
-        "    // composites our output premultiplied, so the corner clip must scale rgb\n"
-        "    // AND alpha together — scaling alpha alone leaves full-bright rgb over a\n"
-        "    // falling alpha, i.e. a bright halo along the rounded corners/edges.\n"
-        "    vec4 content = tex * (1.0 - cut);                  // clipped content, stays premultiplied\n"
-        "    float oa = band * outlineColor.a;                 // outline coverage * its own alpha\n"
-        "    vec4 outlineSrc = vec4(outlineColor.rgb * oa, oa); // premultiplied 'over' source\n"
-        "    fragColor = outlineSrc + content * (1.0 - oa);\n"
+        "    // Window content + premultiplied outline 'over'. uTexture0 is premultiplied\n"
+        "    // and KWin composites our output premultiplied, so the outline source is\n"
+        "    // premultiplied (rgb * coverage) and blended over the content premultiplied.\n"
+        "    float oa = band * outlineColor.a;\n"
+        "    vec4 windowOver = vec4(outlineColor.rgb * oa, oa) + tex * (1.0 - oa);\n"
+        "\n"
+        "    // Deep interior: no shadow work, just the content/outline.\n"
+        "    if (d <= -aa) {\n"
+        "        fragColor = windowOver;\n"
+        "        return;\n"
+        "    }\n"
+        "\n"
+        "    // Outside the rounded rect (corner overhang + shadow margin): reconstruct\n"
+        "    // KWin's drop shadow SHAPED to the rounded corner. KWin renders the shadow\n"
+        "    // for a SQUARE window, so its corner is square and pokes past our rounded\n"
+        "    // corner. But that shadow is uniform along each straight edge — a function\n"
+        "    // of distance from the edge — so resample it at the rounded-SDF distance d\n"
+        "    // from the relevant straight edge(s): straight regions read the same value\n"
+        "    // (unchanged) while corners become round. This is KDE-Rounded-Corners'\n"
+        "    // native-shadow reconstruction; the kwin-effects-glass alternative (writing\n"
+        "    // the window BorderRadius so KWin reshapes its own shadow) also clips the\n"
+        "    // client surface, which we can't accept. Needs no extra uniforms.\n"
+        "    float dd = max(d, 0.0);\n"
+        "    vec2 invSize = 1.0 / max(windowExpandedSize, vec2(1.0));\n"
+        "    float yEdge = (p.y < cen.y) ? (cen.y - halfSz.y - dd) : (cen.y + halfSz.y + dd);\n"
+        "    float xEdge = (p.x < cen.x) ? (cen.x - halfSz.x - dd) : (cen.x + halfSz.x + dd);\n"
+        "    // Sample each reference at the edge CENTRE so the profile is from a\n"
+        "    // guaranteed-straight (never-corner) part of KWin's shadow. textureLod\n"
+        "    // (explicit LOD) because these samples are in non-uniform control flow\n"
+        "    // (after the early return) where implicit-LOD derivatives are undefined.\n"
+        "    vec4 tbShadow = textureLod(uTexture0, vec2(cen.x * invSize.x, 1.0 - yEdge * invSize.y), 0.0);\n"
+        "    vec4 lrShadow = textureLod(uTexture0, vec2(xEdge * invSize.x, 1.0 - cen.y * invSize.y), 0.0);\n"
+        "    vec2 e = abs(p - cen) - halfSz; // per-axis distance outside the frame box\n"
+        "    float wTB = max(e.y, 0.0);      // off the top/bottom edge\n"
+        "    float wLR = max(e.x, 0.0);      // off the left/right edge\n"
+        "    float wSum = wTB + wLR;\n"
+        "    vec4 shadow = (wSum > 1e-3) ? (wTB * tbShadow + wLR * lrShadow) / wSum\n"
+        "                                : 0.5 * (tbShadow + lrShadow);\n"
+        "\n"
+        "    fragColor = mix(shadow, windowOver, insideMask);\n"
         "}\n");
 
     if (!KWin::effects) {

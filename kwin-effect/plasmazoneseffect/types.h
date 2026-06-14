@@ -34,15 +34,14 @@ namespace PlasmaZones {
 /// so the outline is flush and the SAME path rounds the corners.
 ///
 /// The shader evaluates one analytic rounded-rect signed-distance field over the
-/// window FRAME and does TWO things from it, IDENTICALLY for decorated and
-/// borderless windows: it clips the frame corners (reducing content alpha so the
-/// corners round) and draws the outline as an inner band of `width` just inside
-/// the rounded edge. It runs over the COMPOSITED redirected texture, so it
-/// rounds the outer frame corners (titlebar included) without ever clipping an
-/// individual client subsurface. The drop shadow in the expanded-geometry margin
-/// is left untouched (the clip cuts only the corner overhang INSIDE the frame
-/// box); KWin's own square shadow corner is currently left as-is (in-shader
-/// shadow synthesis is a follow-up).
+/// window FRAME and does THREE things from it, IDENTICALLY for decorated and
+/// borderless windows: it rounds the frame corners (window content inside the
+/// rounded rect), draws the outline as an inner band of `width` just inside the
+/// rounded edge, and reconstructs KWin's square-cornered drop shadow into a
+/// rounded one (resampling the per-edge shadow profile at the rounded distance).
+/// It runs over the COMPOSITED redirected texture, so it rounds the outer frame
+/// corners (titlebar included) without ever clipping an individual client
+/// subsurface.
 ///
 /// The resolved appearance (width / radius / colour) is stored in LOGICAL
 /// pixels; pushBorderUniforms multiplies by `viewport.scale()` per frame to
