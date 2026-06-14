@@ -351,111 +351,23 @@ private Q_SLOTS:
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
-    // Autotile border inset: when the autotile show-border setting is on, each
-    // tiled window's frame is shrunk by the border width so the border the KWin
-    // effect draws on the window edge sits INSIDE the tile, separating adjacent
-    // tiles. Drives retile with known calculatedZones and asserts the emitted
-    // windowsTiled geometry against the inset rect.
+    // Tile geometry: a tiled window fills its zone EXACTLY — there is NO border
+    // inset. The KWin effect's border shader recolours each window's own outermost
+    // band (inside the frame), so the border never pushes the tile past its slot
+    // (mirrors the snap side, DaemonGeometryResolver::snapBorderInset == 0). Tile
+    // spacing comes from the zone gap/padding settings, not the border width.
     // ═══════════════════════════════════════════════════════════════════════════
 
-    void testTileGeometry_insetByAutotileBorder()
+    void testTileGeometry_fillsZoneNoBorderInset()
     {
         AutotileEngine engine(nullptr, nullptr, nullptr, PlasmaZones::TestHelpers::testRegistry());
         const QString screen = QStringLiteral("eDP-1");
         engine.setAutotileScreens({screen});
         engine.setAlgorithm(QLatin1String("master-stack"));
 
-        constexpr int kBorder = 6;
+        // Show-border on with a non-zero width must still NOT inset the tiles.
         Settings settings;
         settings.setAutotileShowBorder(true);
-        settings.setAutotileBorderWidth(kBorder);
-        engine.setEngineSettings(&settings);
-
-        engine.windowOpened(QStringLiteral("win-1"), screen);
-        engine.windowOpened(QStringLiteral("win-2"), screen);
-        QCoreApplication::processEvents();
-
-        QSignalSpy tiledSpy(&engine, &AutotileEngine::windowsTiled);
-
-        PhosphorTiles::TilingState* state = engine.tilingStateForScreen(screen);
-        QVERIFY(state);
-        const QRect zoneA(10, 10, 950, 1060);
-        const QRect zoneB(960, 10, 950, 1060);
-        state->setCalculatedZones({zoneA, zoneB});
-        engine.retile(screen);
-
-        QVERIFY(tiledSpy.count() >= 1);
-        const QJsonArray arr = QJsonDocument::fromJson(tiledSpy.last().first().toString().toUtf8()).array();
-        QCOMPARE(arr.size(), 2);
-
-        // Map each emitted entry by windowId, then compare to the inset of its
-        // source zone (master-stack order: win-1 → zoneA, win-2 → zoneB).
-        QHash<QString, QRect> emitted;
-        for (const QJsonValue& v : arr) {
-            const QJsonObject o = v.toObject();
-            emitted.insert(o.value(QLatin1String("windowId")).toString(),
-                           QRect(o.value(QLatin1String("x")).toInt(), o.value(QLatin1String("y")).toInt(),
-                                 o.value(QLatin1String("width")).toInt(), o.value(QLatin1String("height")).toInt()));
-        }
-        QCOMPARE(emitted.value(QStringLiteral("win-1")), zoneA.adjusted(kBorder, kBorder, -kBorder, -kBorder));
-        QCOMPARE(emitted.value(QStringLiteral("win-2")), zoneB.adjusted(kBorder, kBorder, -kBorder, -kBorder));
-    }
-
-    void testTileGeometry_noInsetWhenBorderOff()
-    {
-        AutotileEngine engine(nullptr, nullptr, nullptr, PlasmaZones::TestHelpers::testRegistry());
-        const QString screen = QStringLiteral("eDP-1");
-        engine.setAutotileScreens({screen});
-        engine.setAlgorithm(QLatin1String("master-stack"));
-
-        Settings settings;
-        settings.setAutotileShowBorder(false);
-        settings.setAutotileBorderWidth(6);
-        engine.setEngineSettings(&settings);
-
-        engine.windowOpened(QStringLiteral("win-1"), screen);
-        engine.windowOpened(QStringLiteral("win-2"), screen);
-        QCoreApplication::processEvents();
-
-        QSignalSpy tiledSpy(&engine, &AutotileEngine::windowsTiled);
-
-        PhosphorTiles::TilingState* state = engine.tilingStateForScreen(screen);
-        QVERIFY(state);
-        const QRect zoneA(10, 10, 950, 1060);
-        const QRect zoneB(960, 10, 950, 1060);
-        state->setCalculatedZones({zoneA, zoneB});
-        engine.retile(screen);
-
-        QVERIFY(tiledSpy.count() >= 1);
-        const QJsonArray arr = QJsonDocument::fromJson(tiledSpy.last().first().toString().toUtf8()).array();
-        QCOMPARE(arr.size(), 2);
-        // Show-border off → geometry is the un-inset tile rect.
-        QHash<QString, QRect> emitted;
-        for (const QJsonValue& v : arr) {
-            const QJsonObject o = v.toObject();
-            emitted.insert(o.value(QLatin1String("windowId")).toString(),
-                           QRect(o.value(QLatin1String("x")).toInt(), o.value(QLatin1String("y")).toInt(),
-                                 o.value(QLatin1String("width")).toInt(), o.value(QLatin1String("height")).toInt()));
-        }
-        QCOMPARE(emitted.value(QStringLiteral("win-1")), zoneA);
-        QCOMPARE(emitted.value(QStringLiteral("win-2")), zoneB);
-    }
-
-    void testTileGeometry_noInsetWhenTitleBarsHidden()
-    {
-        // Borderless (hide-title-bars) autotile: even with show-border on and a
-        // non-zero width, the window fills its tile and the border is recoloured
-        // inside the content edge — so the tile must NOT be inset (mirrors the
-        // snap-side DaemonGeometryResolver borderless gate). Guards the
-        // `!autotileHideTitleBars()` term in the applyTiling inset gate.
-        AutotileEngine engine(nullptr, nullptr, nullptr, PlasmaZones::TestHelpers::testRegistry());
-        const QString screen = QStringLiteral("eDP-1");
-        engine.setAutotileScreens({screen});
-        engine.setAlgorithm(QLatin1String("master-stack"));
-
-        Settings settings;
-        settings.setAutotileShowBorder(true);
-        settings.setAutotileHideTitleBars(true);
         settings.setAutotileBorderWidth(6);
         engine.setEngineSettings(&settings);
 
@@ -482,52 +394,10 @@ private Q_SLOTS:
                            QRect(o.value(QLatin1String("x")).toInt(), o.value(QLatin1String("y")).toInt(),
                                  o.value(QLatin1String("width")).toInt(), o.value(QLatin1String("height")).toInt()));
         }
-        // Borderless → un-inset tile rect, despite show-border on + non-zero width.
+        // Tiles fill their zones exactly — no border inset (master-stack order:
+        // win-1 → zoneA, win-2 → zoneB).
         QCOMPARE(emitted.value(QStringLiteral("win-1")), zoneA);
         QCOMPARE(emitted.value(QStringLiteral("win-2")), zoneB);
-    }
-
-    void testTileGeometry_degenerateClampWhenTileSmallerThanInset()
-    {
-        // A tile too small to absorb 2*inset must keep a >= 1 px extent rather than
-        // collapse to an empty/inverted rect (the PhosphorGeometry::insetRect
-        // degenerate clamp). zone 8x8 inset by 6 → top-left shifts +6, extent
-        // clamps to 1x1.
-        AutotileEngine engine(nullptr, nullptr, nullptr, PlasmaZones::TestHelpers::testRegistry());
-        const QString screen = QStringLiteral("eDP-1");
-        engine.setAutotileScreens({screen});
-        engine.setAlgorithm(QLatin1String("master-stack"));
-
-        constexpr int kBorder = 6;
-        Settings settings;
-        settings.setAutotileShowBorder(true);
-        settings.setAutotileHideTitleBars(false); // decorated → inset applies
-        settings.setAutotileBorderWidth(kBorder);
-        engine.setEngineSettings(&settings);
-
-        engine.windowOpened(QStringLiteral("win-1"), screen);
-        engine.windowOpened(QStringLiteral("win-2"), screen);
-        QCoreApplication::processEvents();
-
-        QSignalSpy tiledSpy(&engine, &AutotileEngine::windowsTiled);
-
-        PhosphorTiles::TilingState* state = engine.tilingStateForScreen(screen);
-        QVERIFY(state);
-        const QRect tiny(100, 200, 8, 8);
-        state->setCalculatedZones({tiny, tiny});
-        engine.retile(screen);
-
-        QVERIFY(tiledSpy.count() >= 1);
-        const QJsonArray arr = QJsonDocument::fromJson(tiledSpy.last().first().toString().toUtf8()).array();
-        QCOMPARE(arr.size(), 2);
-        for (const QJsonValue& v : arr) {
-            const QJsonObject o = v.toObject();
-            const QRect r(o.value(QLatin1String("x")).toInt(), o.value(QLatin1String("y")).toInt(),
-                          o.value(QLatin1String("width")).toInt(), o.value(QLatin1String("height")).toInt());
-            // adjusted(6,6,-6,-6) on (100,200,8,8) inverts → clamped to 1x1 at the
-            // inset top-left (106, 206).
-            QCOMPARE(r, QRect(106, 206, 1, 1));
-        }
     }
 };
 

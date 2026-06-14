@@ -3450,35 +3450,17 @@ void AutotileEngine::applyTiling(const QString& screenId)
                                     return z == zones[0];
                                 });
 
-    // Uniform inset (same width on all four edges) so the KWin effect's autotile
-    // border, drawn on each tiled window's own edge, sits INSIDE the tile —
-    // separating adjacent tiles by the border width. Mirrors exactly what the
-    // effect borders autotiled windows
-    // with: a single global autotile border width for every tiled window (the
-    // effect's autotile BorderState carries one per-mode width; no per-window
-    // override). Zero when the autotile show-border setting is off, so this is a
-    // no-op then and tile geometry is unchanged. Resolved once per pass.
-    // Per-window SetBorderVisible rules on otherwise-borderless windows are out
-    // of scope (resolved compositor-side, not reachable here) and are not inset.
-    // Gate on title-bar mode (mirrors DaemonGeometryResolver::snapBorderInset):
-    // inset only when title bars are SHOWN (decorated) — the border sits on the
-    // decoration edge and would otherwise push the tile past its slot. With title
-    // bars hidden (borderless) the window fills the tile and the border is drawn
-    // inside the content edge, so no inset (insetting would leave an empty gap).
-    int borderInset = 0;
-    if (auto* s = autotileSettings(); s && s->autotileShowBorder() && !s->autotileHideTitleBars()) {
-        borderInset = qMax(0, s->autotileBorderWidth());
-    }
-
     QJsonArray arr;
     for (int i = 0; i < tileCount; ++i) {
         if (filterForPreview && windows[i] == filteredWindowId) {
             continue;
         }
-        // Inset each tile via the shared PhosphorGeometry helper (also used by
-        // the snap path) so the two border-inset gates cannot drift; it no-ops
-        // when borderInset <= 0 and applies the same degenerate >= 1 px clamp.
-        const QRect geo = PhosphorGeometry::insetRect(zones[i], borderInset);
+        // No inset: the KWin effect's border shader recolours each window's own
+        // outermost band (inside the frame), so a tiled window fills its zone
+        // exactly and the border never pushes past the slot into the neighbour
+        // (mirrors the snap side, DaemonGeometryResolver::snapBorderInset == 0).
+        // Tile spacing comes from the zone gap/padding settings, not the border.
+        const QRect geo = zones[i];
         QJsonObject obj;
         obj[QLatin1String("windowId")] = windows[i];
         obj[QLatin1String("screenId")] = screenId;
