@@ -25,12 +25,6 @@ constexpr int InactiveAlpha = 64;
 constexpr int BorderAlpha = 200;
 constexpr int OpaqueAlpha = 255;
 
-// Window-border alpha. The snap/autotile border drawn AROUND a managed window
-// must be clearly visible, so it is near-opaque — distinct from the translucent
-// zone-FILL alphas above (which would render a barely-visible border).
-constexpr int WindowBorderActiveAlpha = 255;
-constexpr int WindowBorderInactiveAlpha = 160;
-
 // Default colors (use inline so they're defined exactly once across TUs).
 inline const QColor HighlightColor{0, 120, 212, HighlightAlpha}; ///< Windows blue
 inline const QColor InactiveColor{128, 128, 128, InactiveAlpha};

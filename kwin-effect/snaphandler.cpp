@@ -86,8 +86,8 @@ void SnapHandler::markWindowSnapped(const QString& windowId, const QString& scre
     }
 
     // Border overlays are visual-only, so skip the off-desktop case (consistent
-    // with updateAllBorders): redirecting an invisible window through the border
-    // shader is wasted work. When the user switches to that window's desktop, the
+    // with updateAllBorders): an OutlinedBorderItem for an invisible window is
+    // wasted work. When the user switches to that window's desktop, the
     // desktopChanged → updateAllBorders connection rebuilds its border.
     if (w->isOnCurrentDesktop()) {
         m_effect->updateWindowBorder(windowId, w);
@@ -147,15 +147,15 @@ void SnapHandler::clearSnapTracking()
     // Bookkeeping only. Physical title-bar restores are the
     // DecorationManager's job — teardown callers pair this with
     // DecorationManager::restoreAll(). Callers also pair it with
-    // clearAllBorders() to release the per-window border shader redirect.
+    // clearAllBorders() to tear down the OutlinedBorderItem scene items.
     m_border.tiledWindowsByScreen.clear();
 }
 
 void SnapHandler::onWindowClosed(const QString& windowId)
 {
     // Pure bookkeeping — the window is being destroyed, so no setNoBorder /
-    // removeWindowBorder is needed (the effect's close path drops the border
-    // entry / shader redirect and the title bar dies with the window).
+    // removeWindowBorder is needed (the border item is removed by the effect's
+    // close path and the title bar dies with the window).
     AutotileStateHelpers::removeFromAllScreens(m_border, windowId);
 }
 

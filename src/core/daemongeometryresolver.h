@@ -3,8 +3,6 @@
 
 #pragma once
 
-#include "plasmazones_export.h"
-
 #include <PhosphorPlacement/IGeometryResolver.h>
 
 #include <QString>
@@ -27,7 +25,7 @@ class ISettings;
 /// (supplied via callbacks so this stays free of a workspaces dependency),
 /// consistent with the current-desktop occupancy filter already used at the
 /// snap-geometry call sites.
-class PLASMAZONES_EXPORT DaemonGeometryResolver : public PhosphorPlacement::IGeometryResolver
+class DaemonGeometryResolver : public PhosphorPlacement::IGeometryResolver
 {
 public:
     explicit DaemonGeometryResolver(ISettings* settings, PhosphorZones::LayoutRegistry* layoutRegistry = nullptr,
@@ -44,7 +42,6 @@ public:
     PhosphorLayout::EdgeGaps resolveOuterGaps(PhosphorZones::Layout* layout, const QString& screenId) const override;
     int defaultBorderWidth() const override;
     int defaultBorderRadius() const override;
-    int snapBorderInset() const override;
 
 private:
     /// Build a PerScreenSnappingKey-shaped override map from the context rules

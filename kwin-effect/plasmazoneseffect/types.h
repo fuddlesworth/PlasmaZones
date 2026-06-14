@@ -7,8 +7,10 @@
 
 #include <opengl/glshader.h>
 #include <opengl/gltexture.h>
+#include <scene/borderradius.h>
 
-#include <QColor>
+#include <QMetaObject>
+#include <QPointer>
 #include <QRect>
 #include <QString>
 #include <QVector4D>
@@ -19,47 +21,20 @@
 namespace KWin {
 class EffectWindow;
 class Item;
+class OutlinedBorderItem;
 }
 
 namespace PlasmaZones {
 
-/// Per-window border + rounded corners, rendered by sampling the redirected
-/// window through an offscreen MapTexture fragment shader (the KDE-Rounded-
-/// Corners / shapecorners technique) rather than a scene-graph
-/// `OutlinedBorderItem`.
-///
-/// A scene-graph child item composites against KWin's own decoration frame +
-/// drop shadow, so on server-side-decorated windows an outline looks "inset".
-/// Sampling the redirected texture runs over the decoration with KWin's own MVP,
-/// so the outline is flush and the SAME path rounds the corners.
-///
-/// The shader evaluates one analytic rounded-rect signed-distance field over the
-/// window FRAME and does TWO things from it, IDENTICALLY for decorated and
-/// borderless windows: it clips the window content to the INNER rounded rect
-/// (inset by the border width) and lays the outline band of `width` OVER the
-/// background just outside it — so the content sits inside the border and a
-/// translucent border blends with the desktop, not the content. It runs over the
-/// COMPOSITED redirected texture, so it rounds the outer frame corners (titlebar
-/// included) without ever clipping an individual client subsurface. No drop
-/// shadow is drawn (KWin does not render one into this texture).
-///
-/// The resolved appearance (width / radius / colour) is stored in LOGICAL
-/// pixels; pushBorderUniforms multiplies by `viewport.scale()` per frame to
-/// reach the device-pixel uniforms the shader works in.
+/// Per-window native border (scene graph item).
+/// `item` is a QPointer because OutlinedBorderItem is parented to WindowItem —
+/// Qt parent-child ownership may destroy it before removeWindowBorder() runs.
 struct WindowBorder
 {
-    /// Resolved border appearance in LOGICAL pixels (the paint path multiplies
-    /// width/radius by `viewport.scale()` to reach device px for the shader).
-    int width = 0;
-    int radius = 0;
-    QColor color;
-
-    /// True when THIS border owns the window's OffscreenEffect redirect +
-    /// border shader slot. False while an animation transition has taken over
-    /// the slot (the animation path's begin/end coordinates the handover) —
-    /// the per-frame uniform push and the transition-end re-apply both consult
-    /// this so the border path never fights the transition lifecycle.
-    bool shaderApplied = false;
+    QPointer<KWin::OutlinedBorderItem> item;
+    QMetaObject::Connection geometryConnection;
+    QPointer<KWin::Item> clippedContainer;
+    KWin::BorderRadius savedContainerRadius;
 };
 
 /// User-texture cache entry. Owns the uploaded `GLTexture` and tracks the wrap

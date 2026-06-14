@@ -698,15 +698,14 @@ void PlasmaZonesEffect::loadCachedSettings()
     });
 
     loadSettingAsync(QStringLiteral("autotileBorderWidth"), [this](const QVariant& v) {
-        // Effect side only redraws here: borders are an offscreen edge shader
-        // recolouring the window's outermost band, so changing the width just
-        // re-pushes the shader thickness via updateAllBorders() — no scene
-        // geometry to rebuild. The tile INSET that depends on this width is the
-        // DAEMON's concern: AutotileEngine::applyTiling reads it live and the
-        // daemon re-insets existing tiles itself (Daemon::reapplyBorderInsets,
-        // armed by autotileBorderWidthChanged). So this handler must NOT retile —
-        // doing so would duplicate the daemon's pass. Symmetric with the snapping
-        // width handler below, which also only redraws.
+        // No retile on width change: borders are OutlinedBorderItem overlays
+        // drawn INSIDE the window frame, so zone geometry is width-independent.
+        // The retileAllScreens this handler used to fire was a leftover from
+        // the geometry-inset border era (windows were once shrunk by the
+        // border width); the inset surface was removed long ago and nothing
+        // daemon-side consumes autotileBorderWidth. updateAllBorders()
+        // rebuilds the overlays at the new thickness — symmetric with the
+        // snapping width handler below, which never retiled.
         const int bw = qBound(DecorationDefaults::BorderWidthMin, v.toInt(), DecorationDefaults::BorderWidthMax);
         if (m_autotileHandler->borderWidth() != bw) {
             m_autotileHandler->setBorderWidth(bw);

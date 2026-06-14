@@ -228,15 +228,8 @@ private Q_SLOTS:
         // stale the test.
         QCOMPARE(ConfigDefaults::snappingHideTitleBars(), ::PhosphorCompositor::DecorationDefaults::HideTitleBars);
         QCOMPARE(ConfigDefaults::snappingShowBorder(), ::PhosphorCompositor::DecorationDefaults::ShowBorder);
-        // Border colours share the zone highlight/inactive HUE but force the
-        // near-opaque window-border alpha — the translucent zone-fill alpha would
-        // render a barely-visible border.
-        QColor expectedActiveBorder = ConfigDefaults::highlightColor();
-        expectedActiveBorder.setAlpha(::PhosphorZones::ZoneDefaults::WindowBorderActiveAlpha);
-        QColor expectedInactiveBorder = ConfigDefaults::inactiveColor();
-        expectedInactiveBorder.setAlpha(::PhosphorZones::ZoneDefaults::WindowBorderInactiveAlpha);
-        QCOMPARE(ConfigDefaults::snappingBorderColor(), expectedActiveBorder);
-        QCOMPARE(ConfigDefaults::snappingInactiveBorderColor(), expectedInactiveBorder);
+        QCOMPARE(ConfigDefaults::snappingBorderColor(), ConfigDefaults::highlightColor());
+        QCOMPARE(ConfigDefaults::snappingInactiveBorderColor(), ConfigDefaults::inactiveColor());
         QCOMPARE(ConfigDefaults::snappingBorderWidth(), ::PhosphorCompositor::DecorationDefaults::BorderWidth);
         QCOMPARE(ConfigDefaults::snappingBorderRadius(), ::PhosphorCompositor::DecorationDefaults::BorderRadius);
         QCOMPARE(ConfigDefaults::autotileBorderWidthMin(), ::PhosphorCompositor::DecorationDefaults::BorderWidthMin);

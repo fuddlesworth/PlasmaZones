@@ -902,35 +902,6 @@ private:
     // After geometry updates settle, request KWin effect to re-apply window positions (panel editor fix)
     QTimer m_reapplyGeometriesTimer;
 
-    // Startup inset correction. The per-window border inset (PhosphorGeometry::
-    // insetRect, applied by both resolveZoneGeometry and applyTiling) is resolved
-    // live from settings, but the FIRST geometry the KWin effect applies to
-    // session-restored windows on login can be authored before the daemon is
-    // fully queryable for the snap/autotile show-border state — so windows land
-    // filling the full zone instead of inset by the border width. (A manual
-    // daemon restart resolves correctly because the windows are already present
-    // and resnapped against fully loaded settings.) Once the first restore commit
-    // lands on a started daemon, arm a single-shot debounce; on timeout, re-resolve
-    // every snapped window's geometry (inset-aware via resnapCurrentAssignments)
-    // and retile autotile screens once, so both modes pick up the correct inset.
-    // Runs exactly once per session; the debounce coalesces the whole login
-    // restore burst so the correction does not fight the in-flight per-window
-    // restores.
-    QTimer m_startupInsetCorrectionTimer;
-    bool m_startupInsetCorrectionDone = false;
-    void scheduleStartupInsetCorrection();
-    void applyStartupInsetCorrection();
-
-    // Runtime inset correction. The border inset is read live, but nothing else
-    // resnaps/retiles on a pure border-setting change — so a runtime KCM edit of
-    // the snap/autotile show-border, border-width, or hide-title-bars settings
-    // would leave already-snapped/tiled windows at their old inset until the next
-    // re-snap or restart. The six border-setting change signals arm this debounce
-    // (coalescing a multi-key batch save into one pass); on timeout
-    // reapplyBorderInsets() re-resolves snap geometry and retiles autotile.
-    QTimer m_borderInsetReapplyTimer;
-    void reapplyBorderInsets();
-
     // Watchdog: if the KWin effect has not registered as a compositor bridge
     // within a grace period after startup, window control is dead (drags and
     // shortcuts do nothing). On timeout the daemon logs a diagnostic warning

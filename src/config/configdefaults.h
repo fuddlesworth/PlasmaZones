@@ -1089,17 +1089,11 @@ public:
     }
     static QColor autotileBorderColor()
     {
-        // Same hue as the zone highlight, but near-opaque so the drawn border is
-        // clearly visible (the zone-fill alpha would render it barely visible).
-        QColor c = ::PhosphorZones::ZoneDefaults::HighlightColor;
-        c.setAlpha(::PhosphorZones::ZoneDefaults::WindowBorderActiveAlpha);
-        return c;
+        return ::PhosphorZones::ZoneDefaults::HighlightColor;
     }
     static QColor autotileInactiveBorderColor()
     {
-        QColor c = ::PhosphorZones::ZoneDefaults::InactiveColor;
-        c.setAlpha(::PhosphorZones::ZoneDefaults::WindowBorderInactiveAlpha);
-        return c;
+        return ::PhosphorZones::ZoneDefaults::InactiveColor;
     }
     static bool autotileUseSystemBorderColors()
     {
