@@ -517,6 +517,14 @@ void PlasmaZonesEffect::reconcileBorderShader(const QString& windowId, KWin::Eff
         // Compile-on-first-use; a failed compile latches and no-ops.
         KWin::GLShader* shader = borderShader();
         if (!shader) {
+            // No border shader available (compile failed/latched). Don't leave the
+            // window stuck redirected with a stale shader bound: a transition that
+            // just ended hands the slot back here still redirected (its setShader
+            // remains until we clear it), so tear the redirect down rather than
+            // blit a dead shader forever. setShader(nullptr)/unredirect are no-ops
+            // when the window was never redirected.
+            setShader(w, nullptr);
+            unredirect(w);
             it->shaderApplied = false;
             return;
         }

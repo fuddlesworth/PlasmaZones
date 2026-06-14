@@ -401,10 +401,10 @@ void PlasmaZonesEffect::slotWindowActivated(KWin::EffectWindow* w)
     // pointer is correct if opacity rules are added before the next activation.
     m_lastActivatedWindow = w;
 
-    // Recreate all borders so the active window gets the active color
-    // and inactive windows get the inactive color.  A full recreate is
-    // used instead of in-place setOutline() because the latter may not
-    // trigger a scene-graph repaint in all KWin versions.
+    // Re-resolve every window's border against the new focus state so the
+    // active window picks up the active colour and the rest the inactive one.
+    // updateAllBorders tears down and re-applies the per-window border shader
+    // (reconcileBorderShader) for each tracked window.
     updateAllBorders();
 }
 

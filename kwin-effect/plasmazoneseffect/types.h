@@ -38,11 +38,10 @@ namespace PlasmaZones {
 /// The resolved appearance (width / radius / colour in LOGICAL pixels) is
 /// stored here and pushed as shader uniforms per-frame in the drawWindow
 /// override (pushBorderUniforms). The shader is OUTLINE-ONLY: it locates the
-/// outermost `width` band from the
-/// window's own alpha edge and recolours it, leaving interior pixels untouched,
-/// so no translucency is required. The band traces whatever corners the window
-/// has — its decoration's (Breeze) or, for a window WE made borderless, the
-/// rounding supplied below.
+/// outermost `width` band from the window's own alpha edge and recolours it,
+/// leaving interior pixels untouched, so no translucency is required. The band
+/// traces whatever corners the window has — its decoration's (Breeze) or, for a
+/// window WE made borderless, the rounding supplied below.
 struct WindowBorder
 {
     /// Corner-rounding clip applied to the windowContainer, ONLY for windows with
