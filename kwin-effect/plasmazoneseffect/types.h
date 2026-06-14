@@ -36,8 +36,9 @@ namespace PlasmaZones {
 /// over the decoration with KWin's own MVP, so the outline is always flush.
 ///
 /// The resolved appearance (width / radius / colour in LOGICAL pixels) is
-/// stored here and pushed as shader uniforms per-frame in paintWindow. The
-/// shader is OUTLINE-ONLY: it locates the outermost `width` band from the
+/// stored here and pushed as shader uniforms per-frame in the drawWindow
+/// override (pushBorderUniforms). The shader is OUTLINE-ONLY: it locates the
+/// outermost `width` band from the
 /// window's own alpha edge and recolours it, leaving interior pixels untouched,
 /// so no translucency is required. The band traces whatever corners the window
 /// has — its decoration's (Breeze) or, for a window WE made borderless, the
