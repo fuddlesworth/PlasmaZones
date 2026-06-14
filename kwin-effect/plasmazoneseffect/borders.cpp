@@ -337,9 +337,11 @@ KWin::GLShader* PlasmaZonesEffect::borderShader()
     // generated convention: KWin's built-in MapTexture vertex stage names its
     // texcoord varying differently from our `vTexCoord`, and a name mismatch
     // would leave the fragment's `in vec2 vTexCoord` unlinked. The vertex stage
-    // is byte-for-byte the one the animation transition path uses
-    // (shader_transitions.cpp's kKwinDefaultVertexSource) so the same
-    // attribute-slot + Y-flip contract holds.
+    // shares the attribute-slot layout (position @ location 0, texCoord @ 1, the
+    // modelViewProjectionMatrix uniform) with the animation transition path's
+    // kKwinDefaultVertexSource, but DELIBERATELY omits its Y-flip — see the
+    // `vTexCoord = texCoord` note below; the fragment reconstructs the top-down
+    // device pixel itself, so the rounded-rect gate lines up without it.
     //
     // `uTexture0` is the redirected window content (expanded geometry, device
     // px). KWin's OffscreenData::paint binds it to texture unit 0; a sampler2D
