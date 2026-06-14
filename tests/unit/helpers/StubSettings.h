@@ -867,31 +867,26 @@ public:
     }
     bool snappingHideTitleBars() const override
     {
-        // Member-backed so the border-inset tests can toggle decorated vs
-        // borderless mode. Defaults to true (distinct from snappingShowBorder's
-        // default) so the D-Bus batch test can still detect a registration swap
-        // between the two adjacent bool keys via value-mirroring.
-        return m_snappingHideTitleBars;
+        // Distinct from snappingShowBorder so the D-Bus batch test can detect a
+        // registration swap between the two adjacent bool keys via value-mirroring.
+        return true;
     }
-    void setSnappingHideTitleBars(bool v) override
+    void setSnappingHideTitleBars(bool) override
     {
-        m_snappingHideTitleBars = v;
     }
     bool snappingShowBorder() const override
     {
-        return m_snappingShowBorder;
+        return false;
     }
-    void setSnappingShowBorder(bool value) override
+    void setSnappingShowBorder(bool) override
     {
-        m_snappingShowBorder = value;
     }
     int snappingBorderWidth() const override
     {
-        return m_snappingBorderWidth;
+        return 2;
     }
-    void setSnappingBorderWidth(int value) override
+    void setSnappingBorderWidth(int) override
     {
-        m_snappingBorderWidth = value;
     }
     int snappingBorderRadius() const override
     {
@@ -1179,12 +1174,6 @@ private:
     bool m_snapUnfloatFallbackToZone = false;
     bool m_snappingFocusNewWindows = false;
     bool m_snappingFocusFollowsMouse = false;
-    // Defaults mirror the prior hardcoded returns (show-border off, 2px width)
-    // so tests that read the stub's defaults are unaffected; settable so the
-    // DaemonGeometryResolver inset-gate test can flip the show-border state.
-    bool m_snappingShowBorder = false;
-    bool m_snappingHideTitleBars = true;
-    int m_snappingBorderWidth = 2;
     QStringList m_snappingLayoutOrder;
     QStringList m_tilingAlgorithmOrder;
     QVariantList m_dragActivationTriggers;

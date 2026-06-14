@@ -1332,33 +1332,11 @@ void PlasmaZonesEffect::endShaderTransition(KWin::EffectWindow* window)
                 surfaceExtentRepaint = output->geometry();
             }
         }
-        // Border-vs-animation slot handover: if the window still has a border,
-        // the border shader — not "no shader" — is the correct resting state.
-        // The animation transition borrowed the OffscreenEffect setShader slot
-        // (its begin overrode whatever the border path had set); on teardown,
-        // hand the slot BACK to the border shader and KEEP the redirect, rather
-        // than unredirecting. Unredirecting here would drop the border outline
-        // on every snapped window the moment its open/focus/move animation
-        // ends. reconcileBorderShader re-applies the border shader (setShader +
-        // redirect, both idempotent) and stamps WindowBorder::shaderApplied so
-        // the per-frame uniform push and removeWindowBorder resume owning the
-        // slot. We must erase the transition FIRST so reconcileBorderShader's
-        // own findTransition() check sees no live transition and takes the
-        // apply branch.
-        m_shaderManager.eraseTransition(window);
-        st = nullptr;
-        const QString wid = getWindowId(window);
-        const bool stillBordered = m_windowBorders.contains(wid);
-        if (stillBordered) {
-            reconcileBorderShader(wid, window);
-        } else {
-            setShader(window, nullptr);
-            unredirect(window);
-        }
-    } else {
-        m_shaderManager.eraseTransition(window);
-        st = nullptr;
+        setShader(window, nullptr);
+        unredirect(window);
     }
+    st = nullptr;
+    m_shaderManager.eraseTransition(window);
     if (!surfaceExtentRepaint.isEmpty() && KWin::effects) {
         KWin::effects->addRepaint(surfaceExtentRepaint);
     }

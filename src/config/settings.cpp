@@ -2941,29 +2941,21 @@ void Settings::applySystemColorScheme()
 
 void Settings::applyAutotileBorderSystemColor()
 {
-    // Adopt the system accent hue (the zone highlight/inactive colours track it),
-    // but force the near-opaque WINDOW-border alpha — the zone-fill alpha those
-    // colours carry would render a barely-visible border. Route through the
-    // setters so the Store stays the source of truth (and NOTIFY signals fire).
-    QColor active = highlightColor();
-    active.setAlpha(::PhosphorZones::ZoneDefaults::WindowBorderActiveAlpha);
-    QColor inactive = inactiveColor();
-    inactive.setAlpha(::PhosphorZones::ZoneDefaults::WindowBorderInactiveAlpha);
-    setAutotileBorderColor(active);
-    setAutotileInactiveBorderColor(inactive);
+    // Use the exact snapping zone highlight/inactive colors including their
+    // alpha. Route through the setters so the Store stays the source of
+    // truth (and the NOTIFY signals fire as a side effect).
+    setAutotileBorderColor(highlightColor());
+    setAutotileInactiveBorderColor(inactiveColor());
 }
 
 void Settings::applySnappingBorderSystemColor()
 {
-    // Mirror applyAutotileBorderSystemColor: adopt the system accent hue but force
-    // the near-opaque window-border alpha so the snapped-window border is clearly
-    // visible. Route through the setters so the Store stays the source of truth.
-    QColor active = highlightColor();
-    active.setAlpha(::PhosphorZones::ZoneDefaults::WindowBorderActiveAlpha);
-    QColor inactive = inactiveColor();
-    inactive.setAlpha(::PhosphorZones::ZoneDefaults::WindowBorderInactiveAlpha);
-    setSnappingBorderColor(active);
-    setSnappingInactiveBorderColor(inactive);
+    // Mirror applyAutotileBorderSystemColor: adopt the zone highlight/inactive
+    // colors (which themselves track the system accent) so the snapped-window
+    // border follows the system accent. Route through the setters so the Store
+    // stays the source of truth and NOTIFY signals fire.
+    setSnappingBorderColor(highlightColor());
+    setSnappingInactiveBorderColor(inactiveColor());
 }
 
 #undef P_STORE_GET

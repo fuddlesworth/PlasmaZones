@@ -54,10 +54,6 @@ add_executable(test_wts_queries core/test_wts_queries.cpp)
 target_link_libraries(test_wts_queries PRIVATE Qt6::Test Qt6::Core Qt6::DBus plasmazones_core)
 add_test(NAME test_wts_queries COMMAND test_wts_queries)
 
-add_executable(test_daemongeometryresolver_inset core/test_daemongeometryresolver_inset.cpp)
-target_link_libraries(test_daemongeometryresolver_inset PRIVATE Qt6::Test Qt6::Core Qt6::DBus plasmazones_core)
-add_test(NAME test_daemongeometryresolver_inset COMMAND test_daemongeometryresolver_inset)
-
 add_executable(test_wts_clearfloat core/test_wts_clearfloat.cpp)
 target_link_libraries(test_wts_clearfloat PRIVATE Qt6::Test Qt6::Core Qt6::DBus plasmazones_core)
 add_test(NAME test_wts_clearfloat COMMAND test_wts_clearfloat)

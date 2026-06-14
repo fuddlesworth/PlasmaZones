@@ -312,18 +312,16 @@ void PlasmaZonesEffect::slotWindowClosed(KWin::EffectWindow* w)
 
     // Mirror that cleanup for snapping's own border set. Pure bookkeeping —
     // the window is being destroyed, so no setNoBorder/removeWindowBorder is
-    // needed here (the border entry / shader redirect is dropped just below and
-    // the title bar dies with the window).
+    // needed here (the border item is removed just below and the title bar
+    // dies with the window).
     m_snapHandler->onWindowClosed(closedWindowId);
     // Drop the window's decoration ownership state (mode owners, rule
     // overrides, vetoes). forgetWindow makes zero compositor calls — the
     // decoration dies with the window.
     m_decorationManager->forgetWindow(closedWindowId);
 
-    // Drop the window's border entry and release its border-shader redirect
-    // (the redirect is auto-released on delete, but clearing here keeps our
-    // tracking hash free of stale entries and clears the shader slot while the
-    // closing window is still live).
+    // Remove the window's border item (parent WindowItem is being destroyed anyway,
+    // but clean up our tracking hash to avoid stale entries).
     removeWindowBorder(closedWindowId);
 
     // Notify general daemon for cleanup
@@ -379,14 +377,13 @@ void PlasmaZonesEffect::slotWindowActivated(KWin::EffectWindow* w)
 
         // A focus-scoped SetOpacity rule changes a window's resolved opacity
         // when it gains or loses focus. updateAllBorders() below repaints any
-        // bordered window (updateWindowBorder requests a full repaint), but an
-        // opacity-only (borderless) window has no border to re-resolve — so
-        // without an explicit repaint its re-resolved opacity would not reach
-        // the screen until some unrelated damage happened to repaint it. Force a
-        // repaint of both the window gaining focus (w) and the one losing it
-        // (m_lastActivatedWindow). Gated on hasOpacityRules() because pure
-        // border-colour changes are already covered by updateAllBorders()'s
-        // per-window repaint.
+        // window that carries a border item, but an opacity-only (borderless)
+        // window has nothing to recreate — so without an explicit repaint its
+        // re-resolved opacity would not reach the screen until some unrelated
+        // damage happened to repaint it. Force a repaint of both the window
+        // gaining focus (w) and the one losing it (m_lastActivatedWindow).
+        // Gated on hasOpacityRules() because pure border-colour changes are
+        // already covered by updateAllBorders()'s item recreate.
         if (m_shaderManager.hasOpacityRules()) {
             if (w) {
                 w->addRepaintFull();
@@ -401,10 +398,10 @@ void PlasmaZonesEffect::slotWindowActivated(KWin::EffectWindow* w)
     // pointer is correct if opacity rules are added before the next activation.
     m_lastActivatedWindow = w;
 
-    // Re-resolve every window's border against the new focus state so the
-    // active window picks up the active colour and the rest the inactive one.
-    // updateAllBorders tears down and re-applies the per-window border shader
-    // (reconcileBorderShader) for each tracked window.
+    // Recreate all borders so the active window gets the active color
+    // and inactive windows get the inactive color.  A full recreate is
+    // used instead of in-place setOutline() because the latter may not
+    // trigger a scene-graph repaint in all KWin versions.
     updateAllBorders();
 }
 
