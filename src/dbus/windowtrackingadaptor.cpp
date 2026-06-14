@@ -312,8 +312,24 @@ void WindowTrackingAdaptor::captureWindowPlacement(const QString& windowId)
             // Floated windows carry a shared free-geometry rect; snapped/tiled windows
             // don't (the live frame IS the zone/tile rect). Snapping now produces only
             // snapped/floating (the `free` state is retired) and autotile produces
-            // tiled/floating — so the unmanaged check is simply `floating`.
-            const bool unmanagedState = (slot.state == PhosphorEngine::WindowPlacement::stateFloating());
+            // tiled/floating — so the owning-engine check is simply `floating`.
+            //
+            // The owning-engine slot state is NOT sufficient on its own across a
+            // mode flip. The free geometry is SHARED between both engines, but
+            // m_frameGeometry is just the last frame the effect reported — it is not
+            // re-validated against the slot. When a window TILED by autotile flips to
+            // a snapping-mode screen (or straddles screens), isWindowInAutotileMode
+            // goes false, snap becomes the owning engine and reports `floating`, yet
+            // m_frameGeometry still holds the autotile TILE rect (the window has not
+            // been repositioned yet). Writing it would poison the float-back with a
+            // tile rect — which a later snap reopen then restores as the floated
+            // position (the "tiled geometry restored to floated in snapping mode"
+            // bug). The other engine still owning the window as actively tiled means
+            // the live frame is its managed rect, not a genuine free frame, so refuse
+            // the write — exactly as recordFreeGeometry refuses tiled frames. The
+            // window's prior, genuine free geometry stays intact for the float-back.
+            const bool unmanagedState = (slot.state == PhosphorEngine::WindowPlacement::stateFloating())
+                && !m_service->isWindowAutotileTiled(windowId);
             if (unmanagedState) {
                 const QRect frame = m_frameGeometry.value(windowId);
                 if (frame.isValid()) {
