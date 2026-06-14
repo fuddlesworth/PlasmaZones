@@ -435,9 +435,20 @@ public:
     {
         return true;
     }
-    static bool restoreUnsnappedWindowsOnLogin()
+    // Restore a FLOATED window to its previous position on reopen. Per-engine
+    // (snap-floated vs autotile-floated); snapping delegates to the autotile
+    // canonical so both modes start identical, mirroring the border defaults.
+    static bool autotileRestoreFloatedWindowsOnLogin()
     {
         return true;
+    }
+    static bool snappingRestoreFloatedWindowsOnLogin()
+    {
+        return autotileRestoreFloatedWindowsOnLogin();
+    }
+    static bool snapUnfloatFallbackToZone()
+    {
+        return false;
     }
     static bool autoAssignAllLayouts()
     {

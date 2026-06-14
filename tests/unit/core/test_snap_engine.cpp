@@ -1239,20 +1239,27 @@ private Q_SLOTS:
         const QList<QVariant> floatArgs = floatSpy.takeFirst();
         QCOMPARE(floatArgs.at(1).toBool(), true);
         QCOMPARE(floatArgs.at(2).toString(), QStringLiteral("DP-1"));
-        // A FIFO-reopened record (live id != recorded id) is CONSUMED, not re-recorded.
-        QVERIFY2(!m_wts->placementStore().contains(QStringLiteral("app|orig"), QStringLiteral("app")),
-                 "a cross-screen floating restore must consume the record");
-        // Consumption must not leak a duplicate under the live id either — the
-        // record is gone, not silently re-recorded against app|new.
-        QVERIFY2(!m_wts->placementStore().contains(QStringLiteral("app|new"), QStringLiteral("app")),
-                 "consuming a floating record must not re-record it under the live window id");
+        // A FIFO-reopened record (live id != recorded id) is RE-RECORDED under the
+        // LIVE windowId so the window's float-back survives logout/login (KWin assigns
+        // a new uuid at login). The stale recorded-uuid entry is rebound, not left as
+        // a duplicate.
+        QVERIFY2(m_wts->placementStore().contains(QStringLiteral("app|new")),
+                 "a cross-screen floating restore re-records under the live window id");
+        QVERIFY2(!m_wts->placementStore().contains(QStringLiteral("app|orig")),
+                 "the stale recorded-uuid entry is rebound to the live id, not left behind");
+        // The float-back geometry is preserved on the re-recorded placement, so a
+        // later float after login restores the pre-logout position.
+        const auto reRec = m_wts->placementStore().peek(QStringLiteral("app|new"), QStringLiteral("app"));
+        QVERIFY(reRec.has_value());
+        QCOMPARE(reRec->freeGeometryFor(QStringLiteral("DP-1")), dp1Geo);
         m_wts->setSnapState(nullptr);
     }
 
-    // Same-screen free restore (option #2: restore the full position, not only the
-    // monitor). With the predicate opted in, a free record reopening on its OWN
-    // recorded screen still gets its global position re-applied.
-    void testResolveWindowRestore_freeSameScreen_restoresWhenPredicateOptsIn()
+    // LEGACY `free` record restored as floating (the retired third state). A `free`
+    // slot persisted by an older build is now treated as floating: the merged branch
+    // marks it floating (windowFloatingChanged true) AND, with the predicate opted
+    // in, re-applies its recorded position on its own screen.
+    void testResolveWindowRestore_legacyFreeSameScreen_restoresAsFloatingWhenPredicateOptsIn()
     {
         SnapEngine engine(m_layoutManager, m_wts, nullptr, nullptr, nullptr);
         engine.setEngineSettings(m_settings);
@@ -1267,11 +1274,12 @@ private Q_SLOTS:
         rec.appId = QStringLiteral("app");
         rec.screenId = QStringLiteral("DP-1");
         PhosphorEngine::EngineSlot slot;
-        slot.state = PhosphorEngine::WindowPlacement::stateFree();
+        slot.state = PhosphorEngine::WindowPlacement::stateFree(); // legacy token
         rec.engines.insert(PhosphorEngine::WindowPlacement::snapEngineId(), slot);
         rec.freeGeometryByScreen.insert(QStringLiteral("DP-1"), dp1Geo);
         m_wts->placementStore().record(rec);
 
+        QSignalSpy floatSpy(&engine, &PhosphorEngine::PlacementEngineBase::windowFloatingChanged);
         QSignalSpy geoSpy(&engine, &PhosphorEngine::PlacementEngineBase::geometryRestoreRequested);
 
         // Reopens on its own recorded screen DP-1.
@@ -1279,6 +1287,9 @@ private Q_SLOTS:
             engine.resolveWindowRestore(QStringLiteral("app|new"), QStringLiteral("DP-1"), /*sticky*/ false);
 
         QVERIFY(!result.shouldSnap);
+        // Legacy free now marks floating (the old free branch did NOT).
+        QCOMPARE(floatSpy.count(), 1);
+        QCOMPARE(floatSpy.takeFirst().at(1).toBool(), true);
         QCOMPARE(geoSpy.count(), 1);
         const QList<QVariant> args = geoSpy.takeFirst();
         QCOMPARE(args.at(1).toRect(), dp1Geo);
@@ -1288,10 +1299,10 @@ private Q_SLOTS:
 
     // The predicate's RETURN VALUE is honored (not merely its presence): a free
     // record reopening on its own screen with the predicate returning false is
-    // still consumed (same-screen eligibility) but its position is NOT re-applied.
-    // This is the load-bearing consume-but-gate-move boundary the free branch
-    // documents.
-    void testResolveWindowRestore_freeSameScreen_consumesButSkipsMoveWhenPredicateDenies()
+    // still eligible (same-screen) and re-recorded under the live id, but its
+    // position is NOT re-applied. This is the load-bearing re-record-but-gate-move
+    // boundary the free branch documents.
+    void testResolveWindowRestore_freeSameScreen_reRecordsButSkipsMoveWhenPredicateDenies()
     {
         SnapEngine engine(m_layoutManager, m_wts, nullptr, nullptr, nullptr);
         engine.setEngineSettings(m_settings);
@@ -1318,17 +1329,22 @@ private Q_SLOTS:
         QVERIFY(!result.shouldSnap);
         // A predicate that denies restore must skip the geometry move.
         QCOMPARE(geoSpy.count(), 0);
-        QVERIFY2(!m_wts->placementStore().contains(QStringLiteral("app|orig"), QStringLiteral("app")),
-                 "a same-screen free record is still consumed even when the move is skipped");
+        // The record is still rebound to the live id (float-back survives) even
+        // though the move is skipped; the stale recorded-uuid entry is gone.
+        QVERIFY2(m_wts->placementStore().contains(QStringLiteral("app|new")),
+                 "a same-screen free record is re-recorded under the live id even when the move is skipped");
+        QVERIFY2(!m_wts->placementStore().contains(QStringLiteral("app|orig")),
+                 "the stale recorded-uuid entry is rebound, not left behind");
         m_wts->setSnapState(nullptr);
     }
 
-    // The floating branch deliberately does NOT re-gate the geometry move on the
-    // restore-position predicate (unlike the free branch): once a floating record
-    // is consumed it always re-emits its recorded position. Pin that the move
-    // fires even when the predicate DENIES — proving the floating restore is the
-    // historical float-back path, independent of the unsnapped-restore opt-in.
-    void testResolveWindowRestore_floatingSameScreen_restoresEvenWhenPredicateDenies()
+    // Two-state model: the merged floated-restore branch ALWAYS marks the window
+    // floating (windowFloatingChanged true), but the geometry MOVE is now gated on
+    // the restore-position predicate for ALL floated windows (the
+    // snappingRestoreFloatedWindowsOnLogin setting / RestorePosition rule). When the
+    // predicate DENIES, the window comes back floating but stays where the
+    // compositor placed it — the move is skipped.
+    void testResolveWindowRestore_floatingSameScreen_marksFloatingButSkipsMoveWhenPredicateDenies()
     {
         SnapEngine engine(m_layoutManager, m_wts, nullptr, nullptr, nullptr);
         engine.setEngineSettings(m_settings);
@@ -1357,23 +1373,24 @@ private Q_SLOTS:
             engine.resolveWindowRestore(QStringLiteral("app|new"), QStringLiteral("DP-1"), /*sticky*/ false);
 
         QVERIFY(!result.shouldSnap);
-        QVERIFY2(geoSpy.count() == 1, "floating restore re-emits its position regardless of the restore predicate");
-        QCOMPARE(geoSpy.takeFirst().at(1).toRect(), dp1Geo);
+        // Marked floating unconditionally...
         QCOMPARE(floatSpy.count(), 1);
         const QList<QVariant> floatArgs = floatSpy.takeFirst();
         QCOMPARE(floatArgs.at(1).toBool(), true);
         QCOMPARE(floatArgs.at(2).toString(), QStringLiteral("DP-1"));
+        // ...but the geometry move is gated by the predicate (denied → skipped).
+        QVERIFY2(geoSpy.count() == 0, "floated move is gated on the restore-position predicate; denied → no move");
         m_wts->setSnapState(nullptr);
     }
 
-    // Opt-in cross-screen eligibility (consumption) and the geometry move are
-    // SEPARATELY gated. A free record reopening cross-screen is consumed purely on
+    // Opt-in cross-screen eligibility (re-record) and the geometry move are
+    // SEPARATELY gated. A free record reopening cross-screen is eligible purely on
     // the predicate opt-in, but the move only fires when restoreScreen has a
     // recorded position. With geometry captured on a THIRD screen (not the
     // record's own restoreScreen), freeGeometryFor(restoreScreen) is invalid, so
-    // the record is consumed without a move — the removed anyFreeGeometry()
-    // cross-screen fallback must NOT resurrect some other screen's rect.
-    void testResolveWindowRestore_freeCrossScreen_optInNoGeometryForRestoreScreen_consumesWithoutMove()
+    // the record is re-recorded (under the live id) without a move — the removed
+    // anyFreeGeometry() cross-screen fallback must NOT resurrect some other screen's rect.
+    void testResolveWindowRestore_freeCrossScreen_optInNoGeometryForRestoreScreen_reRecordsWithoutMove()
     {
         SnapEngine engine(m_layoutManager, m_wts, nullptr, nullptr, nullptr);
         engine.setEngineSettings(m_settings);
@@ -1402,8 +1419,119 @@ private Q_SLOTS:
         QVERIFY(!result.shouldSnap);
         QVERIFY2(geoSpy.count() == 0,
                  "no recorded position for restoreScreen → move skipped (no anyFreeGeometry fallback)");
-        QVERIFY2(!m_wts->placementStore().contains(QStringLiteral("app|orig"), QStringLiteral("app")),
-                 "opt-in consumes the cross-screen free record even when the move is skipped");
+        QVERIFY2(m_wts->placementStore().contains(QStringLiteral("app|new")),
+                 "opt-in re-records the cross-screen free record under the live id even when the move is skipped");
+        QVERIFY2(!m_wts->placementStore().contains(QStringLiteral("app|orig")),
+                 "the stale recorded-uuid entry is rebound, not left behind");
+        m_wts->setSnapState(nullptr);
+    }
+
+    // =========================================================================
+    // Two-state model: snapping has only `snapped` / `floated` — no `free`.
+    // =========================================================================
+
+    // capturePlacement of an unmanaged window (neither snapped nor floating in the
+    // runtime SnapState) records a FLOATING slot — the retired `free` state. An
+    // untracked window has no effective screen, so capturePlacement's snap-mode gate
+    // is bypassed and it reaches the state if/else.
+    void testCapturePlacement_unmanagedWindowRecordsFloating()
+    {
+        SnapEngine engine(m_layoutManager, m_wts, nullptr, nullptr, nullptr);
+        engine.setEngineSettings(m_settings);
+        m_wts->setSnapState(engine.snapState());
+
+        const auto p = engine.capturePlacement(QStringLiteral("app|unmanaged"));
+        QVERIFY(p.has_value());
+        const PhosphorEngine::EngineSlot slot = p->slotFor(PhosphorEngine::WindowPlacement::snapEngineId());
+        QCOMPARE(slot.state, QString(PhosphorEngine::WindowPlacement::stateFloating()));
+        QVERIFY2(slot.state != PhosphorEngine::WindowPlacement::stateFree(),
+                 "the retired `free` state must never be produced");
+        m_wts->setSnapState(nullptr);
+    }
+
+    // A new window that matches no auto-snap rule on a snap-mode screen defaults to
+    // FLOATED (not the retired `free`): resolveWindowRestore marks it floating
+    // (windowFloatingChanged true) and returns noSnap. The guiless fixture wires no
+    // mode providers, so the unconfigured DP-1 resolves to the default Snapping mode
+    // (LayoutRegistry::resolveDefaultAssignmentEntry → default-constructed entry,
+    // Mode::Snapping == 0). The window therefore deterministically reaches the
+    // snap-mode no-match fallthrough; the distinctive log line pins that path.
+    void testResolveWindowRestore_newWindowNoMatch_defaultsToFloating()
+    {
+        SnapEngine engine(m_layoutManager, m_wts, nullptr, nullptr, nullptr);
+        engine.setEngineSettings(m_settings);
+        m_wts->setSnapState(engine.snapState());
+
+        auto* layout = createTestLayout(2, m_layoutManager);
+        m_layoutManager->addLayout(layout);
+        m_layoutManager->setActiveLayout(layout);
+
+        QSignalSpy floatSpy(&engine, &PhosphorEngine::PlacementEngineBase::windowFloatingChanged);
+
+        PhosphorEngine::SnapResult result;
+        const QStringList lines =
+            captureResolveLogs(engine, QStringLiteral("app|brand-new"), QStringLiteral("DP-1"), &result);
+        const QString joined = lines.join(QLatin1Char('\n'));
+
+        QVERIFY(!result.shouldSnap);
+        QVERIFY2(joined.contains(QStringLiteral("defaulting to floated")),
+                 "a no-match window on a snap-mode screen must default to floated");
+        QCOMPARE(floatSpy.count(), 1);
+        QCOMPARE(floatSpy.takeFirst().at(1).toBool(), true);
+        m_wts->setSnapState(nullptr);
+    }
+
+    // The unfloatFallbackToZone setting GATES the fallback: with it off, a window
+    // that has no pre-float zone gets no fallback target (resolveFallbackUnfloatGeometry
+    // returns not-found), so unfloat keeps it floating. (The on-success geometry path
+    // needs a valid zoneGeometry, which this guiless fixture cannot produce — null
+    // QGuiApplication::primaryScreen(); it is covered end-to-end in the QTEST_MAIN
+    // test_snap_unfloat_fallback.cpp instead.)
+    void testResolveFallbackUnfloatGeometry_offReturnsNotFound()
+    {
+        SnapEngine engine(m_layoutManager, m_wts, nullptr, nullptr, nullptr);
+        engine.setEngineSettings(m_settings);
+        m_wts->setSnapState(engine.snapState());
+
+        auto* layout = createTestLayout(2, m_layoutManager);
+        m_layoutManager->addLayout(layout);
+        m_layoutManager->setActiveLayout(layout);
+
+        // A floating window with no pre-float zone, on a known screen.
+        engine.snapState()->setFloatingOnScreen(QStringLiteral("app|nofloatzone"), QStringLiteral("DP-1"), 0);
+
+        // Setting OFF (the StubSettings default) → no fallback, regardless of layout.
+        m_settings->setSnapUnfloatFallbackToZone(false);
+        QVERIFY2(
+            !engine.resolveFallbackUnfloatGeometry(QStringLiteral("app|nofloatzone"), QStringLiteral("DP-1")).found,
+            "unfloatFallbackToZone off → no fallback target");
+        m_wts->setSnapState(nullptr);
+    }
+
+    // Companion to the OFF test: with the setting ON, the resolver runs the full
+    // chain PAST the opt-in gate — effective-screen resolution, layout lookup, and
+    // zone selection (last-used → first-empty → first zone) — and reaches the final
+    // geometry gate. Under QTEST_GUILESS_MAIN there is no QScreen, so zoneGeometry()
+    // returns an invalid QRect and the result is still not-found. This pins that (a)
+    // the post-gate chain executes without crashing on a real layout, and (b) the
+    // headless geometry limitation — not a broken gate — is what produces not-found
+    // here (the on-success geometry path is covered in test_snap_unfloat_fallback.cpp).
+    void testResolveFallbackUnfloatGeometry_onButHeadlessReturnsNotFound()
+    {
+        SnapEngine engine(m_layoutManager, m_wts, nullptr, nullptr, nullptr);
+        engine.setEngineSettings(m_settings);
+        m_wts->setSnapState(engine.snapState());
+
+        auto* layout = createTestLayout(2, m_layoutManager);
+        m_layoutManager->addLayout(layout);
+        m_layoutManager->setActiveLayout(layout);
+
+        engine.snapState()->setFloatingOnScreen(QStringLiteral("app|nofloatzone"), QStringLiteral("DP-1"), 0);
+
+        m_settings->setSnapUnfloatFallbackToZone(true);
+        QVERIFY2(
+            !engine.resolveFallbackUnfloatGeometry(QStringLiteral("app|nofloatzone"), QStringLiteral("DP-1")).found,
+            "unfloatFallbackToZone on, but headless zoneGeometry is invalid → still no fallback target");
         m_wts->setSnapState(nullptr);
     }
 

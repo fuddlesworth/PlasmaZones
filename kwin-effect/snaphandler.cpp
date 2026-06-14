@@ -277,15 +277,17 @@ void SnapHandler::handleCursorMoved(const QPointF& pos, const QString& screenId)
     // (follows the cursor between snapped windows) once a snapped window is
     // active. Scoped to the cursor's screen (mirrors AutotileHandler::
     // handleCursorMoved, discussion #461 + follow-up): a window active on another
-    // monitor must not freeze FFM on the monitor the cursor is on. Our own
-    // full-screen overlays never count as the kind of active window worth
-    // protecting. (Autotile pauses on the same principle — floated/popup/under-
+    // monitor must not freeze FFM on the monitor the cursor is on. The daemon's
+    // own passthrough overlay surface never counts as the kind of active window
+    // worth protecting; the interactive editor DOES (it is not a passthrough
+    // overlay, so it falls through to the not-snapped pause below and keeps
+    // focus). (Autotile pauses on the same principle — floated/popup/under-
     // min-size — but everything else there is tiled, so it has no never-managed
     // "free" case; snap does, hence the single not-snapped predicate.)
     if (KWin::EffectWindow* active = KWin::effects->activeWindow()) {
         // Cheap overlay-class check first, then the heavier screen resolution
         // (mirrors the autotile guard's predicate ordering).
-        if (!PlasmaZonesEffect::isOwnOverlayClass(active->windowClass())
+        if (!PlasmaZonesEffect::isOwnPassthroughOverlayClass(active->windowClass())
             && m_effect->getWindowScreenId(active) == screenId && !isTiledWindow(m_effect->getWindowId(active))) {
             return;
         }
@@ -304,10 +306,12 @@ void SnapHandler::handleCursorMoved(const QPointF& pos, const QString& screenId)
         if (!w->frameGeometry().contains(pos)) {
             continue;
         }
-        // Look through our own overlay/editor layer-shell surfaces — they are full-screen
-        // and always topmost, so a bail here would kill FFM whenever an overlay is up
-        // (mirrors the autotile FFM guard).
-        if (PlasmaZonesEffect::isOwnOverlayClass(w->windowClass())) {
+        // Look through the daemon's own passthrough overlay surface — it is
+        // full-screen and always topmost, so a bail here would kill FFM whenever
+        // an overlay is up (mirrors the autotile FFM guard). The interactive
+        // editor is NOT looked through: it falls to the not-snapped bail below,
+        // so FFM leaves focus on it instead of stealing to a snapped window.
+        if (PlasmaZonesEffect::isOwnPassthroughOverlayClass(w->windowClass())) {
             continue;
         }
         // The window directly under the cursor is not snapped (a floating dialog, popup,
@@ -631,18 +635,24 @@ void SnapHandler::slotPendingRestoresAvailable()
         w->deleteLater();
 
         QDBusPendingReply<QStringList> reply = *w;
-        QSet<QString> trackedAppIds;
+        QSet<QString> trackedWindowIds;
 
         if (reply.isValid()) {
-            // Extract app IDs from tracked windows for comparison
+            // Track by FULL windowId (appId|uuid), NOT appId. A multi-window app
+            // (e.g. several ghostty terminals, each snapped to its own zone) has one
+            // tracked entry PER window; deduping by appId would treat the whole app
+            // as "handled" the moment ONE of its windows restored, and skip every
+            // sibling below — including a window that individually failed its early
+            // restore (it raced startup and got a not-ready no-snap) and is the exact
+            // window this retry net exists to recover. The daemon tracks restored
+            // windows by their live id, which matches getWindowId() here.
             const QStringList trackedWindows = reply.value();
             for (const QString& windowId : trackedWindows) {
-                QString appId = ::PhosphorIdentity::WindowId::extractAppId(windowId);
-                if (!appId.isEmpty()) {
-                    trackedAppIds.insert(appId);
+                if (!windowId.isEmpty()) {
+                    trackedWindowIds.insert(windowId);
                 }
             }
-            qCDebug(lcEffect) << "Got" << trackedAppIds.size() << "tracked windows from daemon";
+            qCDebug(lcEffect) << "Got" << trackedWindowIds.size() << "tracked windows from daemon";
         } else {
             qCWarning(lcEffect) << "Failed to get tracked windows:" << reply.error().message();
             // Continue anyway - will try to restore all windows (daemon will handle duplicates)
@@ -663,10 +673,10 @@ void SnapHandler::slotPendingRestoresAvailable()
                 continue;
             }
 
-            // Check if this window is already tracked using local set lookup (O(1))
+            // Check if THIS window is already tracked (exact id, O(1)). A snapped
+            // sibling of the same app no longer masks an untracked window here.
             QString windowId = m_effect->getWindowId(window);
-            QString appId = ::PhosphorIdentity::WindowId::extractAppId(windowId);
-            if (trackedAppIds.contains(appId)) {
+            if (trackedWindowIds.contains(windowId)) {
                 continue; // Already tracked
             }
 

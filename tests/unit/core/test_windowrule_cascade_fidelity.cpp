@@ -678,6 +678,180 @@ private Q_SLOTS:
         // A context the rules do not pin → no override (cascade falls through).
         QVERIFY(f.registry->resolveContextGaps(QStringLiteral("DP-2"), 0, QString()).isEmpty());
     }
+
+    // ─── Context lock resolution (ActionSlot::Locked) ─────────────────────
+    // resolveContextLocked reads the boolean Locked slot off a matching
+    // context rule. Mode-agnostic, never persisted — the daemon's
+    // isContextLocked ORs it over the manual lock store.
+
+    void testContextLock_resolution()
+    {
+        const auto lockRule = [](const QString& name, PWR::Field field, const QVariant& value, bool locked) {
+            PWR::RuleAction a;
+            a.type = QString(PWR::ActionType::LockContext);
+            a.params.insert(QString(PWR::ActionParam::Value), locked);
+            PWR::WindowRule r;
+            r.id = QUuid::createUuid();
+            r.name = name;
+            r.enabled = true;
+            r.priority = 400;
+            r.match = PWR::MatchExpression::makeLeaf(field, PWR::Operator::Equals, value);
+            r.actions = {a};
+            return r;
+        };
+
+        RegistryFixture f = makeRegistryFixture();
+        // A monitor lock (value = true) on DP-1, and an activity lock scoped to
+        // "work". An explicit value = false lock on DP-3 must NOT lock.
+        const PWR::WindowRule lockMonitor =
+            lockRule(QStringLiteral("lock DP-1"), PWR::Field::ScreenId, QStringLiteral("DP-1"), true);
+        const PWR::WindowRule lockActivity =
+            lockRule(QStringLiteral("lock work"), PWR::Field::Activity, QStringLiteral("work-uuid"), true);
+        const PWR::WindowRule unlockMonitor =
+            lockRule(QStringLiteral("unlock DP-3"), PWR::Field::ScreenId, QStringLiteral("DP-3"), false);
+        // A desktop-scoped lock: fires on virtual desktop 2 regardless of
+        // screen/activity, proving the desktop axis of the context match.
+        const PWR::WindowRule lockDesktop =
+            lockRule(QStringLiteral("lock desktop 2"), PWR::Field::VirtualDesktop, 2, true);
+        // A mixed (context + window-property) lock rule: All{ScreenId == DP-4,
+        // AppId == firefox} carrying a LockContext action at a far-above band.
+        // Against the windowless context query the AppId leaf evaluates false,
+        // so the All{} fails and DP-4 must NOT lock — symmetric to the
+        // assignment-path mixed-rule inertness proof (testMixedRule* above).
+        PWR::RuleAction mixedLockAction;
+        mixedLockAction.type = QString(PWR::ActionType::LockContext);
+        mixedLockAction.params.insert(QString(PWR::ActionParam::Value), true);
+        PWR::WindowRule mixedLock;
+        mixedLock.id = QUuid::createUuid();
+        mixedLock.name = QStringLiteral("mixed lock DP-4");
+        mixedLock.enabled = true;
+        mixedLock.priority = 999;
+        mixedLock.match = PWR::MatchExpression::makeAll(
+            {PWR::MatchExpression::makeLeaf(PWR::Field::ScreenId, PWR::Operator::Equals, QStringLiteral("DP-4")),
+             PWR::MatchExpression::makeLeaf(PWR::Field::AppId, PWR::Operator::Equals, QStringLiteral("firefox"))});
+        mixedLock.actions = {mixedLockAction};
+        QVERIFY(f.store->setAllRules({lockMonitor, lockActivity, unlockMonitor, lockDesktop, mixedLock}));
+
+        // DP-1 is locked regardless of desktop/activity (screen-only match).
+        QVERIFY(f.registry->resolveContextLocked(QStringLiteral("DP-1"), 0, QString()));
+        QVERIFY(f.registry->resolveContextLocked(QStringLiteral("DP-1"), 3, QStringLiteral("anything")));
+        // The activity lock fires only inside "work".
+        QVERIFY(f.registry->resolveContextLocked(QStringLiteral("DP-2"), 0, QStringLiteral("work-uuid")));
+        QVERIFY(!f.registry->resolveContextLocked(QStringLiteral("DP-2"), 0, QStringLiteral("play-uuid")));
+        // The desktop lock fires on desktop 2 (any screen, no activity) and
+        // not on other desktops.
+        QVERIFY(f.registry->resolveContextLocked(QStringLiteral("HDMI-2"), 2, QString()));
+        QVERIFY(!f.registry->resolveContextLocked(QStringLiteral("HDMI-2"), 1, QString()));
+        // value = false resolves to not-locked (explicit no-op overlay).
+        QVERIFY(!f.registry->resolveContextLocked(QStringLiteral("DP-3"), 0, QString()));
+        // The mixed rule's AppId leaf can't match a windowless query → DP-4 not
+        // locked, even though its band (999) would dominate if it leaked.
+        QVERIFY(!f.registry->resolveContextLocked(QStringLiteral("DP-4"), 0, QString()));
+        // A context no rule pins → not locked.
+        QVERIFY(!f.registry->resolveContextLocked(QStringLiteral("HDMI-1"), 0, QString()));
+
+        // Disabling the lock rule drops the lock (revision-invalidated cache):
+        // DP-1 was primed locked above, so a stale cache would keep returning
+        // true here — the post-mutation false proves the revision bump evicts.
+        PWR::WindowRule disabled = lockMonitor;
+        disabled.enabled = false;
+        QVERIFY(f.store->setAllRules({disabled, lockActivity, unlockMonitor, lockDesktop, mixedLock}));
+        QVERIFY(!f.registry->resolveContextLocked(QStringLiteral("DP-1"), 0, QString()));
+        // The eviction is a whole-cache drop, not a zeroing: a lock left intact
+        // (lockDesktop, also primed above) must still resolve true after the
+        // revision bump rebuilds the cache.
+        QVERIFY(f.registry->resolveContextLocked(QStringLiteral("HDMI-2"), 2, QString()));
+    }
+
+    // ─── Context lock — slot conflict resolution ──────────────────────────
+    // When two LockContext rules pin the SAME context with opposing values,
+    // the single Locked slot is won by the highest-priority rule (then list
+    // order on a tie), exactly like the layout slot (testTieBreakIsListOrder).
+    // The value itself does not bias the contest — proven by running it both
+    // directions so neither "true always wins" nor "false always wins" passes.
+
+    void testContextLock_priorityResolution()
+    {
+        const auto lockRuleAt = [](const QString& name, const QString& screenId, bool locked, int priority) {
+            PWR::RuleAction a;
+            a.type = QString(PWR::ActionType::LockContext);
+            a.params.insert(QString(PWR::ActionParam::Value), locked);
+            PWR::WindowRule r;
+            r.id = QUuid::createUuid();
+            r.name = name;
+            r.enabled = true;
+            r.priority = priority;
+            r.match = PWR::MatchExpression::makeLeaf(PWR::Field::ScreenId, PWR::Operator::Equals, screenId);
+            r.actions = {a};
+            return r;
+        };
+
+        RegistryFixture f = makeRegistryFixture();
+        // DP-9: higher-priority rule says NOT locked → wins over a lower one
+        // that says locked.
+        const PWR::WindowRule dp9High = lockRuleAt(QStringLiteral("dp9 unlock"), QStringLiteral("DP-9"), false, 500);
+        const PWR::WindowRule dp9Low = lockRuleAt(QStringLiteral("dp9 lock"), QStringLiteral("DP-9"), true, 400);
+        // DP-10: the inverse — higher-priority rule says locked → wins.
+        const PWR::WindowRule dp10High = lockRuleAt(QStringLiteral("dp10 lock"), QStringLiteral("DP-10"), true, 500);
+        const PWR::WindowRule dp10Low = lockRuleAt(QStringLiteral("dp10 unlock"), QStringLiteral("DP-10"), false, 400);
+        // DP-11: equal priority, lock=true first — first-listed rule wins.
+        const PWR::WindowRule dp11First = lockRuleAt(QStringLiteral("dp11 a"), QStringLiteral("DP-11"), true, 400);
+        const PWR::WindowRule dp11Second = lockRuleAt(QStringLiteral("dp11 b"), QStringLiteral("DP-11"), false, 400);
+        // DP-12: the inverse tie-break — lock=false first at the same priority.
+        // Run both directions so the tie-break is proven to be list-order, not
+        // value-bias: a "true always wins on a tie" bug would pass DP-11 alone.
+        const PWR::WindowRule dp12First = lockRuleAt(QStringLiteral("dp12 a"), QStringLiteral("DP-12"), false, 400);
+        const PWR::WindowRule dp12Second = lockRuleAt(QStringLiteral("dp12 b"), QStringLiteral("DP-12"), true, 400);
+        QVERIFY(
+            f.store->setAllRules({dp9High, dp9Low, dp10High, dp10Low, dp11First, dp11Second, dp12First, dp12Second}));
+
+        // Highest priority wins regardless of the value it carries.
+        QVERIFY(!f.registry->resolveContextLocked(QStringLiteral("DP-9"), 0, QString()));
+        QVERIFY(f.registry->resolveContextLocked(QStringLiteral("DP-10"), 0, QString()));
+        // Equal priority → first-listed wins, in both directions.
+        QVERIFY(f.registry->resolveContextLocked(QStringLiteral("DP-11"), 0, QString()));
+        QVERIFY(!f.registry->resolveContextLocked(QStringLiteral("DP-12"), 0, QString()));
+    }
+
+    // ─── Context lock composes with a layout/engine assignment ────────────
+    // LockContext is terminal=false and fills the dedicated Locked slot, so a
+    // lock-only rule must co-exist with a separate context-assignment rule on
+    // the SAME context: the lock surfaces via resolveContextLocked AND the
+    // layout still surfaces via assignmentEntryForScreen. Neither slot shadows
+    // the other — the whole reason the action is non-terminal.
+
+    void testContextLock_composesWithAssignment()
+    {
+        RegistryFixture f = makeRegistryFixture();
+
+        // A lock-only rule (Locked slot) and a separate layout-assignment rule
+        // (engine/layout slots), both pinned to DP-7 (screen-only match).
+        PWR::RuleAction lockAction;
+        lockAction.type = QString(PWR::ActionType::LockContext);
+        lockAction.params.insert(QString(PWR::ActionParam::Value), true);
+        PWR::WindowRule lock;
+        lock.id = QUuid::createUuid();
+        lock.name = QStringLiteral("lock DP-7");
+        lock.enabled = true;
+        lock.priority = 400;
+        lock.match =
+            PWR::MatchExpression::makeLeaf(PWR::Field::ScreenId, PWR::Operator::Equals, QStringLiteral("DP-7"));
+        lock.actions = {lockAction};
+
+        const PWR::WindowRule assign =
+            CRB::makeAssignmentRule(QStringLiteral("layout DP-7"), QStringLiteral("DP-7"), 0, QString(),
+                                    QStringLiteral("snapping"), QStringLiteral("{ctx-layout}"), QString());
+        QVERIFY(f.store->setAllRules({lock, assign}));
+
+        // The lock surfaces (Locked slot) ...
+        QVERIFY(f.registry->resolveContextLocked(QStringLiteral("DP-7"), 1, QString()));
+        // ... and the layout assignment still surfaces (engine/layout slots),
+        // unshadowed by the non-terminal lock rule.
+        const PhosphorZones::AssignmentEntry entry =
+            f.registry->assignmentEntryForScreen(QStringLiteral("DP-7"), 1, QString());
+        QCOMPARE(entry.mode, PhosphorZones::AssignmentEntry::Snapping);
+        QCOMPARE(entry.snappingLayout, QStringLiteral("{ctx-layout}"));
+    }
 };
 
 QTEST_MAIN(TestWindowRuleCascadeFidelity)

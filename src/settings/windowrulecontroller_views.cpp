@@ -127,6 +127,18 @@ QVariantList WindowRuleController::monitorOverview(const QVariantList& screens) 
         QString engineMode;
         QString snappingLayout;
         QString tilingAlgorithm;
+        // Layout-lock state from the highest-priority matching `LockContext`
+        // rule on this screen. `lockResolved` is the first-wins guard (indices
+        // are priority-DESC, so the first LockContext rule seen is the winner of
+        // the daemon's single-winner Locked slot); `locked` is that rule's
+        // boolean value — a higher-priority `value:false` rule reports unlocked
+        // even when a lower one says lock, mirroring `resolveContextLocked`.
+        // Like the engine/disable slots above, this does NOT model terminal-
+        // action (Exclude) cascade termination — but Exclude is window-domain
+        // and these accumulators only see context-only rules, which never carry
+        // it, so the omission is unreachable here.
+        bool lockResolved = false;
+        bool locked = false;
     };
     QHash<QString, Summary> byScreen;
 
@@ -183,6 +195,12 @@ QVariantList WindowRuleController::monitorOverview(const QVariantList& screens) 
                     s.disabledEngineMode = a.params.value(PhosphorWindowRule::ActionParam::Mode).toString();
                 else if (a.type == ActionType::SetEngineMode)
                     ruleHasEngineMode = true;
+                else if (a.type == ActionType::LockContext && !s.lockResolved) {
+                    // First-wins on the single Locked slot (priority-DESC): the
+                    // highest-priority LockContext rule decides, value and all.
+                    s.lockResolved = true;
+                    s.locked = a.params.value(PhosphorWindowRule::ActionParam::Value).toBool();
+                }
             }
             // Engine/layout: capture from the FIRST rule (highest priority) that
             // carries a SetEngineMode action — the assignment winner. Read its
@@ -277,6 +295,9 @@ QVariantList WindowRuleController::monitorOverview(const QVariantList& screens) 
         tile[QStringLiteral("tilingEnabled")] = !engineDisabled;
         tile[QStringLiteral("ruleCount")] = summary.ruleCount;
         tile[QStringLiteral("assigned")] = assigned;
+        // True when a LockContext rule pins this monitor's layout (the
+        // highest-priority matching rule's value). The tile shows a lock badge.
+        tile[QStringLiteral("locked")] = summary.locked;
         out.append(tile);
     }
     return out;

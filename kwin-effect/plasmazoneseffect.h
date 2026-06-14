@@ -352,17 +352,31 @@ private:
     static bool isPlasmaShellSurface(const QString& windowClass);
 
     /**
-     * @brief Recognise the daemon's own overlay / editor layer-shell surfaces
+     * @brief Recognise the daemon's own overlay surface AND the editor window
      *        by window class.
      *
-     * The shouldHandleWindow filter rejects these as "own overlay/editor
-     * window class" so the snap/tile pipeline never targets them. Other paths
-     * (focus-follows-mouse stacking-order walks) need to *look through* them
-     * to the real user window beneath, rather than treating them as legitimate
-     * occluders the way they'd treat an emoji picker or xdg-desktop-portal
-     * surface. Sharing one substring match keeps both call sites in lockstep.
+     * The shouldHandleWindow filter rejects both as "own overlay/editor window
+     * class" so the snap/tile pipeline never targets them — that is the right
+     * scope for tiling exclusion: neither the daemon overlay nor the editor may
+     * ever be tiled.
+     *
+     * Do NOT use this for the focus-follows-mouse look-through — the editor is
+     * an interactive window that must keep its focus. Use
+     * isOwnPassthroughOverlayClass() there instead.
      */
     static bool isOwnOverlayClass(const QString& windowClass);
+
+    /**
+     * @brief Recognise only the daemon's non-interactive passthrough overlay
+     *        surface ("plasmazonesd") by window class.
+     *
+     * The focus-follows-mouse stacking walks look THROUGH this surface to the
+     * real user window beneath, because it is full-screen, permanently topmost,
+     * and never holds keyboard focus (PR #517 / discussion #461 #3). The
+     * interactive editor is intentionally excluded so FFM treats it as a real
+     * occluder and leaves focus on it.
+     */
+    static bool isOwnPassthroughOverlayClass(const QString& windowClass);
 
     /**
      * @brief Reject XDG desktop portal surfaces by window class.

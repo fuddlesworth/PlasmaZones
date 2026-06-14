@@ -313,6 +313,159 @@ private Q_SLOTS:
         QCOMPARE(store.size(), 0);
     }
 
+    void testHasRestorableContent()
+    {
+        // Valid free/float geometry → content.
+        QVERIFY(make(QStringLiteral("a|1"), QStringLiteral("a"), WindowPlacement::stateFree(),
+                     WindowPlacement::snapEngineId())
+                    .hasRestorableContent());
+        QVERIFY(make(QStringLiteral("a|1"), QStringLiteral("a"), WindowPlacement::stateFloating(),
+                     WindowPlacement::snapEngineId())
+                    .hasRestorableContent());
+        // A managed slot (snapped / tiled) → content even with no geometry.
+        QVERIFY(make(QStringLiteral("a|1"), QStringLiteral("a"), WindowPlacement::stateSnapped(),
+                     WindowPlacement::snapEngineId())
+                    .hasRestorableContent());
+        QVERIFY(make(QStringLiteral("a|1"), QStringLiteral("a"), WindowPlacement::stateTiled(),
+                     WindowPlacement::autotileEngineId())
+                    .hasRestorableContent());
+
+        // A bare {free, no geometry, no zones} record — the residue a window leaves
+        // when captured frame-less — has nothing to restore.
+        WindowPlacement bare;
+        bare.windowId = QStringLiteral("a|1");
+        bare.appId = QStringLiteral("a");
+        EngineSlot freeSlot;
+        freeSlot.state = WindowPlacement::stateFree();
+        bare.engines.insert(WindowPlacement::snapEngineId(), freeSlot);
+        QVERIFY(!bare.hasRestorableContent());
+
+        // CRITICAL (two-state model): snapping now defaults every unmanaged window to
+        // `floating`, so a bare {floating, no geometry, no zones} record is the new
+        // residue and MUST also be rejected — otherwise geometry-less floated records
+        // flood the per-app FIFO and re-trigger the residue-eviction bug.
+        WindowPlacement bareFloating;
+        bareFloating.windowId = QStringLiteral("b|1");
+        bareFloating.appId = QStringLiteral("b");
+        EngineSlot bareFloatSlot;
+        bareFloatSlot.state = WindowPlacement::stateFloating();
+        bareFloating.engines.insert(WindowPlacement::snapEngineId(), bareFloatSlot);
+        QVERIFY(!bareFloating.hasRestorableContent());
+
+        // A floated-from-snap window keeping its pre-float zones (no geometry yet) is
+        // still restorable — the zones let it resnap.
+        WindowPlacement floatWithZones = bare;
+        EngineSlot floatSlot;
+        floatSlot.state = WindowPlacement::stateFloating();
+        floatSlot.zoneIds = QStringList{QStringLiteral("z1")};
+        floatWithZones.engines.insert(WindowPlacement::snapEngineId(), floatSlot);
+        QVERIFY(floatWithZones.hasRestorableContent());
+
+        // A free snap slot alongside a tiled autotile slot is restorable (autotile).
+        WindowPlacement freeButTiled = bare;
+        EngineSlot tiled;
+        tiled.state = WindowPlacement::stateTiled();
+        tiled.order = 2;
+        freeButTiled.engines.insert(WindowPlacement::autotileEngineId(), tiled);
+        QVERIFY(freeButTiled.hasRestorableContent());
+    }
+
+    void testTake_contentlessResidueRejectedSoRealPlacementWins()
+    {
+        // Regression (floating geometry restore on login): a window the user floated
+        // and resized is captured LAST at logout, so its content-bearing `floating`
+        // record (with freeGeometry) sits at the BACK of the appId FIFO, behind OLDER
+        // contentless residue records left by earlier-closed windows of the same app.
+        // The snap engine's restore ACCEPT predicate rejects contentless residue
+        // (hasRestorableContent() == false), so the FIFO never consumes it ahead of
+        // the real placement — the saved position is the one taken on reopen, and the
+        // residue is left untouched (later drained by MaxPerApp eviction / save-time
+        // hasRestorableContent filter).
+        WindowPlacementStore store;
+        // Older contentless free record (empty screen, no geometry) — residue.
+        WindowPlacement residue;
+        residue.windowId = QStringLiteral("kate|old");
+        residue.appId = QStringLiteral("kate");
+        EngineSlot freeSlot;
+        freeSlot.state = WindowPlacement::stateFree();
+        residue.engines.insert(WindowPlacement::snapEngineId(), freeSlot);
+        store.record(residue);
+        // Newer floating record carrying the resized geometry.
+        store.record(make(QStringLiteral("kate|floated"), QStringLiteral("kate"), WindowPlacement::stateFloating(),
+                          WindowPlacement::snapEngineId(), QStringLiteral("DP-1")));
+
+        // Mirror the engine's predicates: snapped records are eligible cross-screen;
+        // contentless residue is rejected; other content is accepted (restore-unsnapped
+        // on). The preference is snapped-on-snapping only (the stronger intent).
+        const auto accept = [](const WindowPlacement& p) {
+            if (p.slotFor(WindowPlacement::snapEngineId()).state == WindowPlacement::stateSnapped()) {
+                return true;
+            }
+            return p.hasRestorableContent();
+        };
+        const auto preferred = [](const WindowPlacement& p) {
+            return p.slotFor(WindowPlacement::snapEngineId()).state == WindowPlacement::stateSnapped();
+        };
+
+        auto p = store.take(QStringLiteral("kate|new"), QStringLiteral("kate"), accept, preferred);
+        QVERIFY(p.has_value());
+        QCOMPARE(p->windowId, QStringLiteral("kate|floated")); // the record with geometry, not the residue
+        QVERIFY(p->anyFreeGeometry().isValid());
+        QCOMPARE(store.size(), 1); // residue remains, rejected (not consumed)
+    }
+
+    void testTake_snappedSiblingPreferredOverOlderFloatingContent()
+    {
+        // The preferred ranking must keep a SNAPPED placement ahead of an OLDER
+        // content-bearing floating sibling of the same app (snapping is the stronger
+        // restore intent). Guards against a regression where broadening `preferred`
+        // to "any free geometry" let the older floating record win by age — and, in
+        // the cross-mode case, let a snap-screen open consume a record it could not use.
+        WindowPlacementStore store;
+        store.record(make(QStringLiteral("kate|floated"), QStringLiteral("kate"), WindowPlacement::stateFloating(),
+                          WindowPlacement::snapEngineId(), QStringLiteral("DP-1"))); // older, content (geometry)
+        store.record(make(QStringLiteral("kate|snapped"), QStringLiteral("kate"), WindowPlacement::stateSnapped(),
+                          WindowPlacement::snapEngineId(), QStringLiteral("DP-1"))); // newer, snapped
+
+        const auto accept = [](const WindowPlacement& p) {
+            if (p.slotFor(WindowPlacement::snapEngineId()).state == WindowPlacement::stateSnapped()) {
+                return true;
+            }
+            return p.hasRestorableContent();
+        };
+        const auto preferred = [](const WindowPlacement& p) {
+            return p.slotFor(WindowPlacement::snapEngineId()).state == WindowPlacement::stateSnapped();
+        };
+
+        auto p = store.take(QStringLiteral("kate|new"), QStringLiteral("kate"), accept, preferred);
+        QVERIFY(p.has_value());
+        QCOMPARE(p->windowId, QStringLiteral("kate|snapped")); // snapped wins despite being newer
+        QCOMPARE(store.size(), 1); // the older floating record remains for the next instance
+    }
+
+    void testSerializeDropsContentlessRecords()
+    {
+        // The save keep-predicate (hasRestorableContent) must keep records that carry
+        // something to restore and drop bare {free, no geometry} residue, so it never
+        // reaches disk to crowd the next session's FIFO.
+        WindowPlacementStore store;
+        store.record(make(QStringLiteral("good|1"), QStringLiteral("good"), WindowPlacement::stateFloating(),
+                          WindowPlacement::snapEngineId(), QStringLiteral("DP-1")));
+        WindowPlacement residue;
+        residue.windowId = QStringLiteral("noise|1");
+        residue.appId = QStringLiteral("noise");
+        EngineSlot freeSlot;
+        freeSlot.state = WindowPlacement::stateFree();
+        residue.engines.insert(WindowPlacement::snapEngineId(), freeSlot);
+        store.record(residue);
+
+        const QJsonObject json = store.serialize([](const WindowPlacement& p) {
+            return p.hasRestorableContent();
+        });
+        QVERIFY(json.contains(QStringLiteral("good")));
+        QVERIFY(!json.contains(QStringLiteral("noise")));
+    }
+
     void testRecord_evictsOldestBeyondMaxPerApp()
     {
         // The per-app cap drops the OLDEST record when exceeded. 17 instances of one

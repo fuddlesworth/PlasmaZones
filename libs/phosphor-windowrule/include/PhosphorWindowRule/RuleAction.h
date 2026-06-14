@@ -240,6 +240,13 @@ inline constexpr QLatin1StringView SetEngineMode{"setEngineMode"};
 inline constexpr QLatin1StringView SetSnappingLayout{"setSnappingLayout"};
 inline constexpr QLatin1StringView SetTilingAlgorithm{"setTilingAlgorithm"};
 inline constexpr QLatin1StringView DisableEngine{"disableEngine"};
+/// Lock the active layout for the matched screen/desktop/activity context so
+/// it can't be switched — the rule-driven equivalent of the manual
+/// ToggleLayoutLock shortcut. Context domain (matches only context fields);
+/// mode-agnostic (a `true` lock applies to both the snapping and tiling
+/// engines). The daemon resolves it LIVE on the context-lock path and never
+/// persists it, so rule locks and manual toggles never overwrite each other.
+inline constexpr QLatin1StringView LockContext{"lockContext"};
 inline constexpr QLatin1StringView Exclude{"exclude"};
 inline constexpr QLatin1StringView Float{"float"};
 inline constexpr QLatin1StringView OverrideAnimationShader{"overrideAnimationShader"};
@@ -261,13 +268,14 @@ inline constexpr QLatin1StringView SetOpacity{"setOpacity"};
 /// settings lists by the v3→v4 chain.
 inline constexpr QLatin1StringView ExcludeAnimations{"excludeAnimations"};
 
-/// Per-window override for unsnapped-position restore on login. A boolean
-/// `value` action: true forces the window's previous free/floating position
-/// (and original monitor) to be restored, false suppresses it. Overrides the
-/// global `restoreUnsnappedWindowsOnLogin` setting for matched windows —
-/// resolved by the daemon-injected restore-position predicate and consulted
-/// inside SnapEngine::resolveWindowRestore. Domain Window (matches window
-/// properties).
+/// Per-window override for floated-position restore on login. A boolean `value`
+/// action: true forces the window's previous floated position (and original
+/// monitor) to be restored, false suppresses it. Engine-neutral — overrides the
+/// per-engine `snappingRestoreFloatedWindowsOnLogin` /
+/// `autotileRestoreFloatedWindowsOnLogin` settings for matched windows. Resolved
+/// by the daemon-injected restore-position predicate and consulted inside both
+/// SnapEngine::resolveWindowRestore and AutotileEngine::insertWindow. Domain
+/// Window (matches window properties).
 inline constexpr QLatin1StringView RestorePosition{"restorePosition"};
 
 // ── Per-window border / title-bar appearance overrides (domain Window) ──
@@ -332,6 +340,20 @@ inline bool isEffectRuleAction(const QString& type)
 {
     return isAnimationOverrideAction(type) || type == SetOpacity || isBorderAppearanceAction(type);
 }
+
+/// True when @p type is one of the five context-domain layout/engine actions
+/// that pin a screen/desktop/activity's layout behaviour — engine mode,
+/// snapping layout, tiling algorithm, disable-engine, or the layout lock. The
+/// settings layer clusters these into the "Layout & engine" picker category and
+/// treats any of them as marking a Monitor & Layout rule; keeping the list in
+/// one place stops those call-sites from drifting when a sixth such action is
+/// added. (Gap overrides are also context-domain but cluster separately, so
+/// they are intentionally excluded here.)
+inline bool isLayoutEngineContextAction(const QString& type)
+{
+    return type == SetEngineMode || type == SetSnappingLayout || type == SetTilingAlgorithm || type == DisableEngine
+        || type == LockContext;
+}
 } // namespace ActionType
 
 // ── Action param keys — canonical wire strings ──
@@ -365,6 +387,9 @@ namespace ActionSlot {
 inline constexpr QLatin1StringView EngineMode{"engine-mode"};
 inline constexpr QLatin1StringView Layout{"layout"};
 inline constexpr QLatin1StringView EngineEnable{"engine-enable"};
+/// Context-domain layout-lock slot — filled by `ActionType::LockContext`.
+/// A single boolean: a winning rule with `value == true` locks the context.
+inline constexpr QLatin1StringView Locked{"locked"};
 inline constexpr QLatin1StringView Manage{"manage"};
 inline constexpr QLatin1StringView Float{"float"};
 inline constexpr QLatin1StringView Opacity{"opacity"};

@@ -314,6 +314,14 @@ public:
     ContextGapOverride resolveContextGaps(const QString& screenId, int virtualDesktop,
                                           const QString& activity) const override;
 
+    /// Resolve whether a context rule locks the active layout for the
+    /// (screen, desktop, activity) context by evaluating a windowless
+    /// WindowQuery through the RuleEvaluator and reading the
+    /// `ActionSlot::Locked` slot. Mode-agnostic per-slot read (mirrors @ref
+    /// resolveContextGaps); returns true iff the winning Locked-slot action's
+    /// `value` is true. Same owner-thread affinity as the rest of the registry.
+    bool resolveContextLocked(const QString& screenId, int virtualDesktop, const QString& activity) const override;
+
     Q_INVOKABLE void clearAssignment(const QString& screenId, int virtualDesktop = 0,
                                      const QString& activity = QString());
     /// True iff a context-assignment rule whose match is exactly this
@@ -526,7 +534,8 @@ private:
     /// linear walk. No explicit signal-time clear is required: a real edit
     /// bumps the revision (see @c WindowRuleSet::setRules), so the next
     /// resolve sees the bump and re-populates. A soft cap (256 entries — see
-    /// the @c kMaxEntries constant in @c layoutregistry_assignments.cpp)
+    /// the per-cache @c kMaxEntries constant in
+    /// @c layoutregistry_assignments.cpp; each context cache declares its own)
     /// guards against pathological growth from clients probing unique
     /// non-existent tuples; on overflow the cache is cleared entirely (the
     /// next walk re-seeds it cleanly). 256 sits comfortably above any
@@ -636,6 +645,39 @@ private:
         return h;
     }
 
+    /// Shared revision-invalidated memoization for the three context resolvers
+    /// (@ref resolveAssignmentEntry, @ref resolveContextGaps,
+    /// @ref resolveContextLocked). Drops @p cache wholesale whenever the rule
+    /// set's monotonic revision moves past @p cacheRevision, returns a cached
+    /// hit, else runs @p compute, then soft-caps the cache at 256 entries —
+    /// dropping the whole cache on overflow rather than evicting one key, which
+    /// keeps the structure simple and lets the next walk re-seed cleanly — and
+    /// stores the result (a @c nullopt / false value is cached too, so a genuine
+    /// miss pays the walk once per revision, not on every cursor frame). Callers
+    /// that must short-circuit on a null evaluator do so BEFORE calling this.
+    template<typename V, typename ComputeFn>
+    V resolveCachedContext(QHash<ContextResolveKey, V>& cache, quint64& cacheRevision, const QString& screenId,
+                           int virtualDesktop, const QString& activity, ComputeFn&& compute) const
+    {
+        const quint64 revision = m_ruleStore->ruleSet().revision();
+        if (revision != cacheRevision) {
+            cache.clear();
+            cacheRevision = revision;
+        }
+        const ContextResolveKey key{screenId, virtualDesktop, activity};
+        const auto cached = cache.constFind(key);
+        if (cached != cache.constEnd()) {
+            return cached.value();
+        }
+        V value = compute();
+        constexpr qsizetype kMaxEntries = 256;
+        if (cache.size() >= kMaxEntries) {
+            cache.clear();
+        }
+        cache.insert(key, value);
+        return value;
+    }
+
     /// Cache of @ref resolveAssignmentEntry results keyed by context tuple.
     /// A @c nullopt value caches a genuine cascade miss (no pinned context
     /// rule wins) — so a missed lookup pays the linear walk exactly once per
@@ -656,6 +698,14 @@ private:
     /// so memoizing collapses those repeats to one walk per rule-set revision.
     mutable QHash<ContextResolveKey, ContextGapOverride> m_contextGapCache;
     mutable quint64 m_contextGapCacheRevision = 0;
+
+    /// Hot-path cache for @ref resolveContextLocked, keyed and
+    /// revision-invalidated exactly like @c m_contextGapCache. The lock check
+    /// runs on overlay/selector updates (per cursor-move while a selector is
+    /// open) as well as every layout-switch attempt, so memoizing the per-slot
+    /// walk collapses repeats to one walk per rule-set revision.
+    mutable QHash<ContextResolveKey, bool> m_contextLockCache;
+    mutable quint64 m_contextLockCacheRevision = 0;
 
     std::function<QString()> m_defaultLayoutIdProvider; ///< Empty = provider disabled; falls back to first layout
     /// Empty = provider disabled. Returns the user's default autotile

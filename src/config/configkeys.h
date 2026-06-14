@@ -226,7 +226,10 @@ public:
     P_CONFIG_KEY(moveNewToLastZoneKey, "MoveNewToLastZone")
     P_CONFIG_KEY(restoreOnUnsnapKey, "RestoreOnUnsnap")
     P_CONFIG_KEY(restoreOnLoginKey, "RestoreOnLogin")
-    P_CONFIG_KEY(restoreUnsnappedOnLoginKey, "RestoreUnsnappedOnLogin")
+    // Shared by Snapping.Behavior.WindowHandling + Tiling.Behavior — restore a
+    // FLOATED (unsnapped / untiled) window to its previous position on reopen.
+    P_CONFIG_KEY(restoreFloatedOnLoginKey, "RestoreFloatedOnLogin")
+    P_CONFIG_KEY(unfloatFallbackToZoneKey, "UnfloatFallbackToZone")
     P_CONFIG_KEY(autoAssignAllLayoutsKey, "AutoAssignAllLayouts")
     P_CONFIG_KEY(stickyWindowHandlingKey, "StickyWindowHandling")
     P_CONFIG_KEY(defaultLayoutIdKey, "DefaultLayoutId")

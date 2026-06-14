@@ -2741,8 +2741,8 @@ bool AutotileEngine::insertWindow(const QString& windowId, const QString& screen
     // holds both engines' slots + the shared per-screen free geometry. Take it once
     // and branch on the autotile slot — a FLOATING slot restores the window floating
     // (consumed only when the record's screen matches the opening screen or is
-    // empty; the GEOMETRY fallback below may still come from anyFreeGeometry(),
-    // i.e. any screen); a TILED slot restores it at its saved
+    // empty; the GEOMETRY move below uses ONLY the screen-local recorded rect for
+    // restoreScreen — no cross-screen fallback); a TILED slot restores it at its saved
     // order in the SAME context (index-based — best-effort if neighbours moved;
     // wasFloating is not relevant since the slot state IS the intent). Re-record
     // bound to the live windowId so the snap slot + per-screen free geometry survive
@@ -2762,29 +2762,43 @@ bool AutotileEngine::insertWindow(const QString& windowId, const QString& screen
             return false;
         });
         if (rec) {
-            // Same window across a daemon restart (uuid-exact) re-records the FULL
-            // record so the snap slot + per-screen free geometry survive; a reopened
-            // instance (appId FIFO) consumes instead, so a second instance can't steal
-            // this placement.
-            const bool wasExact = (rec->windowId == windowId);
+            // Re-record bound to the LIVE windowId so the autotile slot + per-screen
+            // free/float geometry survive the reopen. KWin assigns a NEW uuid at
+            // logout/login, so the record matches by appId FIFO (not uuid-exact);
+            // without re-binding, a FIFO reopen consumes the record and the window
+            // loses its remembered float-back. Re-binding appends under the live uuid
+            // (newest in the appId bucket), so a SECOND instance of the same app still
+            // takes an OLDER sibling record first on its own reopen — multi-instance
+            // FIFO distribution is preserved.
             const PhosphorEngine::EngineSlot slot = rec->slotFor(engineId());
             const QString restoreScreen = rec->screenId.isEmpty() ? screenId : rec->screenId;
-            if (wasExact) {
-                m_windowTracker->placementStore().record(*rec);
-            }
+            rec->windowId = windowId;
+            m_windowTracker->placementStore().record(*rec);
             if (slot.state == WindowPlacement::stateFloating()) {
                 state->addWindow(windowId);
                 state->setFloating(windowId, true);
                 inserted = true;
-                QRect freeGeo = rec->freeGeometryFor(restoreScreen);
-                if (!freeGeo.isValid()) {
-                    freeGeo = rec->anyFreeGeometry();
-                }
-                if (freeGeo.isValid()) {
+                // SCREEN-LOCAL recorded position only — deliberately NOT the
+                // anyFreeGeometry() cross-screen fallback (mirroring snap's
+                // resolveWindowRestore). The free geometry is in global compositor
+                // coordinates; applying a rect captured on a DIFFERENT screen while
+                // the float tracking points at restoreScreen would teleport the
+                // window to a third monitor with the state saying otherwise — a
+                // visible/state desync. No recorded rect for restoreScreen → nothing
+                // meaningful to restore, so the move is skipped.
+                const QRect freeGeo = rec->freeGeometryFor(restoreScreen);
+                // The window is marked floating unconditionally above; the geometry
+                // MOVE is gated on the floated-position-restore opt-in (daemon-wired
+                // autotileRestoreFloatedWindowsOnLogin setting + per-window
+                // RestorePosition rule). When the predicate is unset (tests / no
+                // daemon) the move always fires, preserving historical behaviour.
+                const bool restorePosition = !m_restorePositionPredicate || m_restorePositionPredicate(windowId);
+                if (freeGeo.isValid() && restorePosition) {
                     Q_EMIT geometryRestoreRequested(windowId, freeGeo, restoreScreen);
                 }
                 qCInfo(PhosphorTileEngine::lcTileEngine)
-                    << "insertWindow: float-restore for" << windowId << "to" << freeGeo << "on" << restoreScreen;
+                    << "insertWindow: float-restore for" << windowId << "to" << freeGeo << "on" << restoreScreen
+                    << "move=" << (freeGeo.isValid() && restorePosition);
             } else {
                 const int savedPos = slot.order;
                 const int clampedPos = savedPos < 0 ? state->windowCount() : qMin(savedPos, state->windowCount());

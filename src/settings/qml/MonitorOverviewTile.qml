@@ -26,9 +26,10 @@ Rectangle {
     /// connectorName, isPrimary, width/height, etc.).
     required property var screenData
     /// Rule-related data: `{ screenId, layoutName, tilingEnabled, ruleCount,
-    /// assigned }` from `WindowRuleController.monitorOverview(screens)`, which
-    /// emits a tile for every screen. A screen with no pinned rules carries
-    /// `assigned: false` and renders a "Not assigned" caption; the property only
+    /// assigned, locked }` from `WindowRuleController.monitorOverview(screens)`,
+    /// which emits a tile for every screen. A screen with no pinned rules carries
+    /// `assigned: false` and renders a "Not assigned" caption; `locked` is true
+    /// when a LockContext rule pins the monitor's layout; the property only
     /// stays `undefined` if no overview payload is supplied at all.
     property var tileData: undefined
     /// True when this tile is the active monitor filter.
@@ -40,6 +41,8 @@ Rectangle {
     // "NaN rules" in the caption.
     readonly property int _ruleCount: (tile.tileData !== undefined && tile.tileData.ruleCount !== undefined ? Number(tile.tileData.ruleCount) : 0) || 0
     readonly property bool _isPrimary: tile.screenData.isPrimary === true
+    /// True when a LockContext rule pins this monitor's layout — drives the lock badge.
+    readonly property bool _locked: tile.tileData !== undefined && tile.tileData.locked === true
 
     signal clicked
 
@@ -116,6 +119,18 @@ Rectangle {
         RowLayout {
             Layout.alignment: Qt.AlignHCenter
             spacing: Kirigami.Units.smallSpacing
+
+            // Lock badge — shown when a LockContext rule pins this monitor's
+            // layout, mirroring the "object-locked" icon used by the lock-layout
+            // rule template and the overlay lock affordances.
+            Kirigami.Icon {
+                source: "object-locked"
+                visible: tile._locked
+                Layout.preferredWidth: Kirigami.Units.iconSizes.small
+                Layout.preferredHeight: Kirigami.Units.iconSizes.small
+                opacity: 0.7
+                Accessible.name: i18nc("@info:accessibility monitor tile", "Layout locked")
+            }
 
             Kirigami.Icon {
                 source: tile._assigned ? (tile.tileData.tilingEnabled ? "view-grid" : "dialog-cancel") : "edit-none"

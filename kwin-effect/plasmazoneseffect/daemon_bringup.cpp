@@ -12,7 +12,6 @@
 
 #include <PhosphorAnimation/AnimationLimits.h>
 #include <PhosphorAnimation/CurveRegistry.h>
-#include <PhosphorIdentity/WindowId.h>
 #include <PhosphorProtocol/ClientHelpers.h>
 #include <PhosphorProtocol/ServiceConstants.h>
 #include <PhosphorProtocol/BridgeMarshalling.h>
@@ -396,7 +395,7 @@ void PlasmaZonesEffect::processDaemonReadyWindowState()
 
             // Re-drive per-window chrome (snap border / hidden title bar,
             // autotile border) for windows the daemon already considers managed.
-            QSet<QString> trackedAppIds;
+            QSet<QString> trackedWindowIds;
             {
                 // On daemon loss the effect cleared its window-appearance state
                 // (DecorationManager::restoreAll + the handlers' tiled-tracking
@@ -413,9 +412,8 @@ void PlasmaZonesEffect::processDaemonReadyWindowState()
 
                 const QStringList trackedWindows = reply.value();
                 for (const QString& windowId : trackedWindows) {
-                    QString appId = ::PhosphorIdentity::WindowId::extractAppId(windowId);
-                    if (!appId.isEmpty()) {
-                        trackedAppIds.insert(appId);
+                    if (!windowId.isEmpty()) {
+                        trackedWindowIds.insert(windowId);
                     }
                 }
             }
@@ -451,8 +449,12 @@ void PlasmaZonesEffect::processDaemonReadyWindowState()
                 if (window->isMinimized()) {
                     continue;
                 }
-                QString appId = ::PhosphorIdentity::WindowId::extractAppId(getWindowId(window));
-                if (trackedAppIds.contains(appId)) {
+                // Skip only if THIS window is already tracked (exact id). Deduping by
+                // appId would skip an untracked window whose app has another tracked
+                // window — stranding e.g. a multi-window terminal's window that raced
+                // startup. The daemon tracks restored windows by live id, matching
+                // getWindowId(). (Mirrors SnapHandler::slotPendingRestoresAvailable.)
+                if (trackedWindowIds.contains(getWindowId(window))) {
                     continue;
                 }
                 toRestore.append(QPointer<KWin::EffectWindow>(window));

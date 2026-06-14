@@ -167,14 +167,21 @@ void WindowTrackingAdaptor::saveState()
     tracking->deleteKey(ConfigKeys::floatRestoreQueuesKey());
 
     // Unified WindowPlacementStore — the single source of truth for per-window
-    // restore state (snapped / floated / free). The keep predicate reuses the
-    // single disabled-context gate, so a record on a disabled monitor/desktop
-    // never persists. refreshOpenWindowPlacements() (top of saveState) has already
+    // restore state (snapped / floated). The keep predicate reuses the single
+    // disabled-context gate, so a record on a disabled monitor/desktop never
+    // persists. refreshOpenWindowPlacements() (top of saveState) has already
     // re-captured open floating windows' live geometry into the store.
     if (dirty & D::DirtyWindowPlacements) {
         const QJsonObject placements =
             m_service->placementStore().serialize([this](const PhosphorEngine::WindowPlacement& p) {
-                return !isPersistedContextDisabled(p.screenId, p.virtualDesktop, p.activity);
+                // Persist only records with something to restore. A contentless
+                // {floating, no geometry, no zones} residue carries nothing yet and,
+                // at MaxPerApp per app, would crowd out a real placement in the next
+                // session's FIFO — so it must never reach disk. (refreshOpenWindowPlacements
+                // above re-captures live geometry, so an actually-floating window is
+                // content-bearing here.)
+                return p.hasRestorableContent()
+                    && !isPersistedContextDisabled(p.screenId, p.virtualDesktop, p.activity);
             });
         if (!placements.isEmpty()) {
             tracking->writeString(ConfigKeys::windowPlacementsKey(),
