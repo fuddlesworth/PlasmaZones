@@ -468,7 +468,7 @@ KWin::GLShader* PlasmaZonesEffect::borderShader()
         "    // Straight 'over' composite of the border colour onto the window\n"
         "    // content, weighted by band coverage AND the colour's own alpha (a true\n"
         "    // blend, not a premultiplied dim). coverage 1 + alpha 1 => solid border;\n"
-        "    // coverage 1 + alpha 0.5 => a true 50%% blend over the content.\n"
+        "    // coverage 1 + alpha 0.5 => a true 50% blend over the content.\n"
         "    float coverage = band * outlineColor.a;\n"
         "    vec3 rgb = mix(tex.rgb, outlineColor.rgb, coverage);\n"
         "    fragColor = vec4(rgb, max(a, coverage));\n"

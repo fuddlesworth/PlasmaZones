@@ -3436,9 +3436,10 @@ void AutotileEngine::applyTiling(const QString& screenId)
                                     return z == zones[0];
                                 });
 
-    // Per-side inset so the KWin effect's autotile border, drawn on each tiled
-    // window's own edge, sits INSIDE the tile — separating adjacent tiles by the
-    // border width. Mirrors exactly what the effect borders autotiled windows
+    // Uniform inset (same width on all four edges) so the KWin effect's autotile
+    // border, drawn on each tiled window's own edge, sits INSIDE the tile —
+    // separating adjacent tiles by the border width. Mirrors exactly what the
+    // effect borders autotiled windows
     // with: a single global autotile border width for every tiled window (the
     // effect's autotile BorderState carries one per-mode width; no per-window
     // override). Zero when the autotile show-border setting is off, so this is a
