@@ -53,30 +53,14 @@ int DaemonGeometryResolver::defaultBorderRadius() const
 
 int DaemonGeometryResolver::snapBorderInset() const
 {
-    // No settings → no border drawn → no inset.
-    if (!m_settings || !m_settings->snappingShowBorder()) {
-        return 0;
-    }
-    // Gate on title-bar mode — this is the crux of why borderless and decorated
-    // windows need OPPOSITE handling:
-    //   * Title bars SHOWN (decorated): the effect draws our border on the
-    //     window's DECORATION edge, which sits at the frame boundary. A window
-    //     filling its zone exactly puts that border on the zone edge, so it spills
-    //     past / collides with the neighbour. Inset the frame by the border width
-    //     to keep the decorated window + its border inside the zone.
-    //   * Title bars HIDDEN (borderless): the window is stripped to its content
-    //     and fills the zone; the border is recoloured INSIDE the outermost
-    //     content band, so it never extends past the window. Insetting here would
-    //     just leave an empty border-width gap to the zone edge ("too small").
-    if (m_settings->snappingHideTitleBars()) {
-        return 0;
-    }
-    // Mirror the effect's snap border width exactly: the global snapping border
-    // width applied to every snapped window's frame edge (snaphandler's single
-    // per-mode BorderState::width, fed from snappingBorderWidth via
-    // daemon_bringup.cpp). Zone custom widths only style snap-assist previews,
-    // not committed frames, so they must NOT drive the inset.
-    return qMax(0, m_settings->snappingBorderWidth());
+    // No inset. The KWin effect's border shader recolours the window's OWN
+    // outermost band (inside the frame), for decorated and borderless windows
+    // alike, so the border never extends past the frame edge into the neighbour.
+    // A snapped window therefore fills its zone exactly; any visible separation
+    // between tiles must come from the zone gap/padding settings, not from a
+    // border-width inset (which previously assumed the border was drawn OUTSIDE
+    // the frame and added a spurious 2x-border-width gap between tiles).
+    return 0;
 }
 
 } // namespace PlasmaZones
