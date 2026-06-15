@@ -291,14 +291,17 @@ void TestNavigationCrossSurface::crossDesktop_moveRight_relocatesToNextDesktopAn
     const QString rightmost = wins.at(1);
 
     QSignalSpy moveSpy(engine.get(), &AutotileEngine::windowDesktopMoveRequested);
-    // Move right off the edge of desktop 1 → relocate onto desktop 2.
+    // Move right off the edge of desktop 1 → ask the compositor to relocate the
+    // real window to desktop 2. The engine does NOT mutate tiling state here: a
+    // desktop move is owned by the compositor, exactly like a native KWin
+    // desktop move. The reactive windowClosed (effect: "moved off current
+    // desktop") reflows the source, and windowOpened tiles it on the target when
+    // that desktop becomes visible. Proactively shuffling state here is what
+    // corrupted m_windowToStateKey and left windows tracked nowhere (stuck
+    // decoration / no reflow). End-to-end reflow is covered by
+    // test_navigation_retile with a real algorithm.
     engine->swapFocusedInDirection(QStringLiteral("right"), ctx(rightmost));
 
-    // Gone from desktop 1.
-    QVERIFY(!engine->tilingStateForScreen(kScreen)->tiledWindows().contains(rightmost));
-    // Present on desktop 2.
-    engine->setCurrentDesktop(2);
-    QVERIFY(engine->tilingStateForScreen(kScreen)->tiledWindows().contains(rightmost));
     // The compositor was asked to move the real window to desktop 2.
     QCOMPARE(moveSpy.count(), 1);
     const QList<QVariant> args = moveSpy.takeFirst();

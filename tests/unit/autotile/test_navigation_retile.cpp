@@ -109,6 +109,55 @@ private Q_SLOTS:
         QVERIFY(engine.tilingStateForScreen(QStringLiteral("DP-1"))->tiledWindows().contains(rightWin));
         QVERIFY(!engine.tilingStateForScreen(QStringLiteral("DP-2"))->tiledWindows().contains(rightWin));
     }
+
+    // A cross-DESKTOP move leaves desktop placement to the compositor: the
+    // engine only emits windowDesktopMoveRequested, and the source reflows
+    // REACTIVELY when the effect reports the window left the current desktop
+    // (windowClosed → onWindowRemoved → retile) — the same path a native KWin
+    // desktop move takes. This is the "retiling isn't happening when we move a
+    // window off a context" bug: prove the remaining window on the source
+    // context reflows AND the reflow geometry is emitted, with a real algorithm.
+    void contextRemoval_reactiveWindowClosed_reflowsSource()
+    {
+        PhosphorScreens::FakeScreenProvider provider;
+        provider.addScreen(QStringLiteral("DP-1"), QRect(0, 0, 1920, 1080));
+        PhosphorScreens::ScreenManager manager(
+            PhosphorScreens::ScreenManagerConfig{.screenProvider = &provider, .useGeometrySensors = false});
+        manager.start();
+
+        AutotileEngine engine(nullptr, nullptr, &manager, PlasmaZones::TestHelpers::testRegistry());
+        engine.setAutotileScreens({QStringLiteral("DP-1")});
+        engine.windowOpened(QStringLiteral("a1"), QStringLiteral("DP-1"));
+        engine.windowOpened(QStringLiteral("a2"), QStringLiteral("DP-1"));
+        QTest::qWait(20);
+
+        PhosphorTiles::TilingState* d1 = engine.tilingStateForScreen(QStringLiteral("DP-1"));
+        QCOMPARE(d1->tiledWindows().size(), 2);
+        QCOMPARE(d1->calculatedZones().size(), 2);
+        const QString leaving = d1->tiledWindows().at(0);
+        const QString staying = d1->tiledWindows().at(1);
+
+        QSignalSpy tiledSpy(&engine, &AutotileEngine::windowsTiled);
+        // Simulate the compositor reporting the window left the context — exactly
+        // what the effect's "moved off current desktop, removed from autotile"
+        // sends after windowToDesktops relocates the real window.
+        engine.windowClosed(leaving);
+        QTest::qWait(20);
+
+        PhosphorTiles::TilingState* after = engine.tilingStateForScreen(QStringLiteral("DP-1"));
+        QCOMPARE(after->tiledWindows().size(), 1);
+        QCOMPARE(after->calculatedZones().size(), 1);
+        QVERIFY2(after->calculatedZones().first().width() > 1500,
+                 "remaining window did not reflow after the other left the context (still half-width)");
+
+        bool reflowEmitted = false;
+        for (const auto& call : tiledSpy) {
+            if (call.at(0).toString().contains(staying)) {
+                reflowEmitted = true;
+            }
+        }
+        QVERIFY2(reflowEmitted, "context-removal reflow geometry was never emitted to the compositor");
+    }
 };
 
 QTEST_MAIN(TestNavigationRetile)

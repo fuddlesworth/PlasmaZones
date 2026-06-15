@@ -298,24 +298,20 @@ bool NavigationController::crossDesktopMove(const QString& sourceScreenId, const
     if (targetDesktop <= 0) {
         return false;
     }
-    const PhosphorEngine::TilingStateKey sourceKey = m_engine->currentKeyForScreen(sourceScreenId);
-    const PhosphorEngine::TilingStateKey targetKey{sourceScreenId, targetDesktop, m_engine->m_currentActivity};
-    PhosphorTiles::TilingState* sourceState = m_engine->stateForKey(sourceKey);
-    PhosphorTiles::TilingState* targetState = m_engine->stateForKey(targetKey);
-    if (!sourceState || !targetState) {
-        return false;
-    }
-
-    const bool forward = (direction == QLatin1String("right") || direction == QLatin1String("down"));
-    sourceState->removeWindow(focused);
-    targetState->addWindow(focused, forward ? 0 : -1);
-    m_engine->m_windowToStateKey[focused] = targetKey;
-    // Close the hole on the (visible) source desktop SYNCHRONOUSLY so its
-    // reflow reaches the compositor now, not via a deferred retile a reactive
-    // event could race (same fix as crossOutputMove). The target desktop is not
-    // current, so it tiles when it next becomes visible.
-    m_engine->retileAfterOperation(sourceScreenId, true);
-    // Ask the compositor to move the real KWin window to the target desktop.
+    Q_UNUSED(sourceScreenId)
+    // Move the window the way a NATIVE KWin desktop move works: just ask the
+    // compositor to move it to the target desktop, then let the existing
+    // reactive machinery do the rest. When the window leaves the current
+    // desktop the effect fires "moved off current desktop" → windowClosed,
+    // which removes it from the source autotile state and reflows the source;
+    // when the user switches to the target desktop the effect fires
+    // windowOpened, which tiles it there.
+    //
+    // Do NOT touch the source/target TilingStates here. The previous version
+    // added the window to the target state and re-pointed m_windowToStateKey at
+    // it — but the effect's windowClosed then removed it from that very state,
+    // leaving the window tracked NOWHERE: stuck decoration, broken tiling. The
+    // compositor is the single source of truth for which desktop a window is on.
     Q_EMIT m_engine->windowDesktopMoveRequested(focused, targetDesktop);
     return true;
 }
