@@ -73,7 +73,11 @@ void AutotileHandler::slotWindowsTileRequested(const PhosphorProtocol::TileReque
         return;
     }
 
-    ++m_autotileStaggerGeneration;
+    // Stagger generations are bumped PER SCREEN below, once this batch's target
+    // screens are known (see m_autotileStaggerGenByScreen). A blanket global
+    // bump here would let a cross-output move's destination batch cancel the
+    // source reflow's still-staggered windows. The global generation is reserved
+    // for desktop/screen switches (slotScreensChanged).
     // NOTE: m_autotileTargetZones and m_centeredWaylandZones are intentionally
     // NOT cleared globally here. Each retile fires for a single screen at a
     // time (per-VS retile after a swap/rotate), so a global clear would wipe
@@ -232,6 +236,7 @@ void AutotileHandler::slotWindowsTileRequested(const PhosphorProtocol::TileReque
         toApply.append({QPointer<KWin::EffectWindow>(e.window), e.geometry, e.windowId, screenId, e.isMonocle});
     }
 
+    // Global epoch (desktop/screen switch) captured for the apply guards below.
     const uint64_t gen = m_autotileStaggerGeneration;
 
     // Build per-screen "new request" sets so the onComplete cleanup can
@@ -242,7 +247,17 @@ void AutotileHandler::slotWindowsTileRequested(const PhosphorProtocol::TileReque
         newTiledByScreen[s.screenId].insert(s.windowId);
     }
 
-    auto onComplete = [this, toApply, newTiledByScreen, savedGlobalStack, gen]() {
+    // Bump the per-screen generation for every screen this batch retiles, and
+    // capture the bumped values. The staggered apply / onComplete below treat a
+    // window as superseded only when ITS screen's generation has advanced past
+    // the captured value — so a later batch for another screen can no longer
+    // cancel this batch's windows.
+    QHash<QString, uint64_t> genByScreen;
+    for (auto it = newTiledByScreen.constBegin(); it != newTiledByScreen.constEnd(); ++it) {
+        genByScreen.insert(it.key(), ++m_autotileStaggerGenByScreen[it.key()]);
+    }
+
+    auto onComplete = [this, toApply, newTiledByScreen, savedGlobalStack, gen, genByScreen]() {
         if (m_autotileStaggerGeneration != gen) {
             return;
         }
@@ -255,6 +270,13 @@ void AutotileHandler::slotWindowsTileRequested(const PhosphorProtocol::TileReque
         bool anyDeferred = false;
         for (auto screenIt = newTiledByScreen.constBegin(); screenIt != newTiledByScreen.constEnd(); ++screenIt) {
             const QString& screenId = screenIt.key();
+            // A newer retile of this screen has superseded us — it owns this
+            // screen's untile cleanup now. (Other screens in this batch may still
+            // be current, so skip per-screen rather than aborting the whole
+            // onComplete.)
+            if (m_autotileStaggerGenByScreen.value(screenId) != genByScreen.value(screenId)) {
+                continue;
+            }
             const QSet<QString>& newSet = screenIt.value();
             const QSet<QString> previous = AutotileStateHelpers::tiledOnScreen(m_border, screenId);
             const QSet<QString> untiled = previous - newSet;
@@ -358,11 +380,16 @@ void AutotileHandler::slotWindowsTileRequested(const PhosphorProtocol::TileReque
 
     m_effect->applyStaggeredOrImmediate(
         toApply.size(),
-        [this, toApply, gen](int i) {
-            if (m_autotileStaggerGeneration != gen) {
+        [this, toApply, gen, genByScreen](int i) {
+            const TileSnap& snap = toApply[i];
+            // Drop this apply if superseded by a desktop/screen switch (global
+            // epoch) OR by a newer retile of THIS window's screen (per-screen).
+            // A batch for a DIFFERENT screen no longer cancels us — that was the
+            // cross-output "hole on the source monitor" bug.
+            if (m_autotileStaggerGeneration != gen
+                || m_autotileStaggerGenByScreen.value(snap.screenId) != genByScreen.value(snap.screenId)) {
                 return;
             }
-            const TileSnap& snap = toApply[i];
             if (!snap.window || snap.window->isDeleted()) {
                 return;
             }

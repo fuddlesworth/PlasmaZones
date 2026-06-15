@@ -422,7 +422,17 @@ private:
     /// minimize/unminimize cycles that KWin emits on tiled windows when
     /// plasmashell notification popups transiently change stacking.
     QHash<QString, QPointer<QTimer>> m_pendingMinimizeFloat;
+    /// Global stagger epoch, bumped on a desktop/screen switch (slotScreensChanged)
+    /// to cancel EVERY in-flight staggered apply — geometry computed for the old
+    /// context must never land in the new one.
     uint64_t m_autotileStaggerGeneration = 0;
+    /// Per-screen stagger generation. A retile bumps only its own screen(s), so a
+    /// newer batch for the SAME screen supersedes an earlier one while a batch for
+    /// a DIFFERENT screen leaves it untouched. Without this, the destination batch
+    /// of a cross-output move (emitted microseconds after the source reflow)
+    /// cancelled the source's still-staggered windows via the single global
+    /// generation — they never moved, leaving a hole on the source monitor.
+    QHash<QString, uint64_t> m_autotileStaggerGenByScreen;
     QHash<QString, QRect> m_autotileTargetZones;
     QHash<QString, QRect> m_centeredWaylandZones; ///< zones where Wayland windows were last centered
     QString m_pendingAutotileFocusWindowId;
