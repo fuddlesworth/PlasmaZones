@@ -39,7 +39,7 @@ qreal spanOverlap(qreal a0, qreal a1, qreal b0, qreal b1)
 
 } // namespace
 
-int directionalNeighbor(const QRectF& focus, const QList<QRectF>& candidates, Direction direction)
+int directionalNeighbor(const QRectF& focus, const QList<QRectF>& candidates, Direction direction, bool requireOverlap)
 {
     const bool horizontal = (direction == Direction::Left || direction == Direction::Right);
     const bool forward = (direction == Direction::Right || direction == Direction::Down);
@@ -83,6 +83,15 @@ int directionalNeighbor(const QRectF& focus, const QList<QRectF>& candidates, Di
             gap = forward ? (c.top() - focus.bottom()) : (focus.top() - c.bottom());
             overlaps = spanOverlap(focus.left(), focus.right(), c.left(), c.right()) > 0;
             perp = std::abs(cc.x() - focusCenter.x());
+        }
+
+        // Window navigation: a purely diagonal candidate (no perpendicular
+        // overlap) is not a real neighbour in this direction — reject it so the
+        // caller treats this as a layout boundary and crosses to the next
+        // output, rather than swapping with a window that sits up/down (or
+        // left/right) of the focus.
+        if (requireOverlap && !overlaps) {
+            continue;
         }
 
         // Rects overlapping on the primary axis too yield a negative gap; clamp

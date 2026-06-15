@@ -47,11 +47,20 @@ PHOSPHORGEOMETRY_EXPORT std::optional<Direction> directionFromString(QStringView
  * Coordinate-system agnostic: @p focus and every entry of @p candidates must
  * live in one shared space (absolute pixels, normalized [0,1], etc.).
  *
+ * @param requireOverlap when true, candidates that do not overlap @p focus on
+ *        the perpendicular axis (i.e. purely diagonal ones) are rejected
+ *        outright rather than used as a last-resort fallback. Window
+ *        navigation wants this: a diagonal tile is not a real left/right/up/down
+ *        neighbour, so the move should hit the layout boundary (and cross to the
+ *        next output) instead of swapping with a window that's offset away.
+ *        Zone-adjacency / cross-output callers leave it false (default) so an
+ *        offset-but-present neighbour still resolves.
+ *
  * @return index into @p candidates, or -1 when no candidate lies in
  *         @p direction. Candidates sharing @p focus's centre are skipped.
  */
 PHOSPHORGEOMETRY_EXPORT int directionalNeighbor(const QRectF& focus, const QList<QRectF>& candidates,
-                                                Direction direction);
+                                                Direction direction, bool requireOverlap = false);
 
 /**
  * @brief The virtual desktop reached by stepping @p direction from

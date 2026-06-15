@@ -162,7 +162,15 @@ QString NavigationController::directionalNeighborWindow(PhosphorTiles::TilingSta
         sourceIndex.append(i);
     }
 
-    const int pick = PhosphorGeometry::directionalNeighbor(QRectF(focusRect), candidates, *dir);
+    // requireOverlap: in-surface navigation only treats a window as a
+    // left/right/up/down neighbour when it overlaps the focus on the
+    // perpendicular axis. A purely diagonal tile (e.g. the top-right window when
+    // moving "right" from a wider bottom-right tile in a tatami/pinwheel layout)
+    // is NOT a neighbour — returning empty here makes the caller hit the surface
+    // boundary and cross to the next output instead of swapping the window
+    // up/down.
+    const int pick = PhosphorGeometry::directionalNeighbor(QRectF(focusRect), candidates, *dir,
+                                                           /*requireOverlap=*/true);
     if (pick < 0) {
         return QString(); // no tiled window in that direction — the surface boundary
     }

@@ -26,6 +26,7 @@ private Q_SLOTS:
     void overlapPreference_beatsNearerDiagonal();
     void overlappingTier_nearestGapWins();
     void tie_isDeterministicByOrder();
+    void requireOverlap_diagonalOnly_returnsMinusOne();
     void emptyCandidates_returnsMinusOne();
 
     void desktopGrid_2x2_steps();
@@ -126,6 +127,28 @@ void TestDirectionalNeighbor::tie_isDeterministicByOrder()
     const QList<QRectF> b{lowerRight, upperRight};
     QCOMPARE(directionalNeighbor(focus, a, Direction::Right), 0);
     QCOMPARE(directionalNeighbor(focus, b, Direction::Right), 0);
+}
+
+void TestDirectionalNeighbor::requireOverlap_diagonalOnly_returnsMinusOne()
+{
+    // Real-hardware tatami/pinwheel bug: pressing "right" from the bottom-right
+    // tile swapped it UP with the top-right tile. The bottom-right tile is wider,
+    // so its centre sits LEFT of the top-right tile's centre — putting top-right
+    // in the "right" half-plane even though the two share NO vertical overlap.
+    // Geometry mirrors the logged layout (115107, 4-window tatami).
+    const QRectF bottomRight(1445, 894, 1747, 846); // focus, centre x≈2318
+    const QRectF topRight(1762, 40, 1430, 846); // diagonal up-right, centre x≈2477
+    const QRectF topLeft(8, 40, 1746, 846);
+    const QRectF bottomLeft(8, 894, 1429, 846);
+    const QList<QRectF> candidates{topLeft, topRight, bottomLeft};
+
+    // Default (fallback) behaviour still resolves the diagonal (index 1).
+    QCOMPARE(directionalNeighbor(bottomRight, candidates, Direction::Right), 1);
+    // Window navigation rejects the diagonal → boundary (cross to next output).
+    QCOMPARE(directionalNeighbor(bottomRight, candidates, Direction::Right, /*requireOverlap=*/true), -1);
+    // ...but a genuine perpendicular-overlapping neighbour still resolves:
+    // "left" from bottom-right finds bottom-left (shared y-band), overlap or not.
+    QCOMPARE(directionalNeighbor(bottomRight, candidates, Direction::Left, /*requireOverlap=*/true), 2);
 }
 
 void TestDirectionalNeighbor::emptyCandidates_returnsMinusOne()
