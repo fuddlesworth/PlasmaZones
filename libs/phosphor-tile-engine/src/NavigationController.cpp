@@ -310,9 +310,11 @@ bool NavigationController::crossDesktopMove(const QString& sourceScreenId, const
     sourceState->removeWindow(focused);
     targetState->addWindow(focused, forward ? 0 : -1);
     m_engine->m_windowToStateKey[focused] = targetKey;
-    // Close the hole on the source desktop; the target desktop tiles when it
-    // next becomes current.
-    m_engine->scheduleRetileForScreen(sourceScreenId);
+    // Close the hole on the (visible) source desktop SYNCHRONOUSLY so its
+    // reflow reaches the compositor now, not via a deferred retile a reactive
+    // event could race (same fix as crossOutputMove). The target desktop is not
+    // current, so it tiles when it next becomes visible.
+    m_engine->retileAfterOperation(sourceScreenId, true);
     // Ask the compositor to move the real KWin window to the target desktop.
     Q_EMIT m_engine->windowDesktopMoveRequested(focused, targetDesktop);
     return true;
