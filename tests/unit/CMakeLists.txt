@@ -448,6 +448,18 @@ target_include_directories(test_navigation_cross_surface
 target_link_libraries(test_navigation_cross_surface PRIVATE Qt6::Test Qt6::Core plasmazones_core)
 add_test(NAME test_navigation_cross_surface COMMAND test_navigation_cross_surface)
 
+# Real-retile cross-output test: drives the actual tile pipeline, so it needs
+# the FakeScreenProvider AND the bundled Luau algorithms (P_SOURCE_DIR).
+add_executable(test_navigation_retile
+               autotile/test_navigation_retile.cpp
+               ${CMAKE_SOURCE_DIR}/libs/phosphor-screens/tests/FakeScreenProvider.cpp)
+target_include_directories(test_navigation_retile
+               PRIVATE ${CMAKE_SOURCE_DIR}/libs/phosphor-screens/tests)
+target_compile_definitions(test_navigation_retile PRIVATE "P_SOURCE_DIR=\"${PROJECT_SOURCE_DIR}\"")
+target_link_libraries(test_navigation_retile PRIVATE Qt6::Test Qt6::Core plasmazones_core)
+add_test(NAME test_navigation_retile COMMAND test_navigation_retile)
+set_tests_properties(test_navigation_retile PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
+
 # ═══════════════════════════════════════════════════════════════════════════════
 # autotile/ - Engine Settings Tests (replaces deleted test_settings_bridge)
 # ═══════════════════════════════════════════════════════════════════════════════

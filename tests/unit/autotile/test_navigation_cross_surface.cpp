@@ -95,7 +95,6 @@ private Q_SLOTS:
     void swap_exchangesWithSpatialNeighbour();
 
     void crossOutput_focusRight_entersLeftEdgeOfNeighbourOutput();
-    void crossOutput_moveRight_relocatesWindowToNeighbourOutput();
     void crossVirtualScreen_focusRight_crossesToSiblingVirtualScreen();
 
     void crossDesktop_focusRight_activatesEntryWindowOnNextDesktop();
@@ -215,67 +214,6 @@ void TestNavigationCrossSurface::crossOutput_focusRight_entersLeftEdgeOfNeighbou
     QCOMPARE(activateSpy.takeFirst().at(0).toString(), QStringLiteral("b1"));
 }
 
-void TestNavigationCrossSurface::crossOutput_moveRight_relocatesWindowToNeighbourOutput()
-{
-    TwoOutputFixture fx;
-    // Moving a2 "right" off the edge of DP-1 relocates it onto DP-2.
-    fx.engine->swapFocusedInDirection(QStringLiteral("right"),
-                                      NavigationContext{QStringLiteral("a2"), QStringLiteral("DP-1")});
-    QVERIFY(!fx.engine->tilingStateForScreen(QStringLiteral("DP-1"))->tiledWindows().contains(QStringLiteral("a2")));
-    QVERIFY(fx.engine->tilingStateForScreen(QStringLiteral("DP-2"))->tiledWindows().contains(QStringLiteral("a2")));
-}
-
-void TestNavigationCrossSurface::crossDesktop_focusRight_activatesEntryWindowOnNextDesktop()
-{
-    std::unique_ptr<AutotileEngine> engine(PlasmaZones::TestHelpers::createEngineWithWindows(kScreen, 2));
-    FakeCrossSurfaceResolver resolver;
-    engine->setCrossSurfaceResolver(&resolver);
-
-    // Seed a window on desktop 2, then return to desktop 1.
-    engine->setCurrentDesktop(2);
-    engine->windowOpened(QStringLiteral("d2win"), kScreen);
-    QCoreApplication::processEvents();
-    engine->setCurrentDesktop(1);
-
-    PhosphorTiles::TilingState* d1 = engine->tilingStateForScreen(kScreen);
-    d1->setCalculatedZones({QRect(0, 0, 960, 1080), QRect(960, 0, 960, 1080)});
-    const QStringList wins = d1->tiledWindows();
-
-    // Focus right from the rightmost window on desktop 1: no in-surface
-    // neighbour, no neighbour output → cross to desktop 2's entry window.
-    QSignalSpy activateSpy(engine.get(), &AutotileEngine::activateWindowRequested);
-    engine->focusInDirection(QStringLiteral("right"), ctx(wins.at(1)));
-    QCOMPARE(activateSpy.count(), 1);
-    QCOMPARE(activateSpy.takeFirst().at(0).toString(), QStringLiteral("d2win"));
-}
-
-void TestNavigationCrossSurface::crossDesktop_moveRight_relocatesToNextDesktopAndRequestsKWinMove()
-{
-    std::unique_ptr<AutotileEngine> engine(PlasmaZones::TestHelpers::createEngineWithWindows(kScreen, 2));
-    FakeCrossSurfaceResolver resolver;
-    engine->setCrossSurfaceResolver(&resolver);
-
-    PhosphorTiles::TilingState* d1 = engine->tilingStateForScreen(kScreen);
-    d1->setCalculatedZones({QRect(0, 0, 960, 1080), QRect(960, 0, 960, 1080)});
-    const QStringList wins = d1->tiledWindows();
-    const QString rightmost = wins.at(1);
-
-    QSignalSpy moveSpy(engine.get(), &AutotileEngine::windowDesktopMoveRequested);
-    // Move right off the edge of desktop 1 → relocate onto desktop 2.
-    engine->swapFocusedInDirection(QStringLiteral("right"), ctx(rightmost));
-
-    // Gone from desktop 1.
-    QVERIFY(!engine->tilingStateForScreen(kScreen)->tiledWindows().contains(rightmost));
-    // Present on desktop 2.
-    engine->setCurrentDesktop(2);
-    QVERIFY(engine->tilingStateForScreen(kScreen)->tiledWindows().contains(rightmost));
-    // The compositor was asked to move the real window to desktop 2.
-    QCOMPARE(moveSpy.count(), 1);
-    const QList<QVariant> args = moveSpy.takeFirst();
-    QCOMPARE(args.at(0).toString(), rightmost);
-    QCOMPARE(args.at(1).toInt(), 2);
-}
-
 void TestNavigationCrossSurface::crossVirtualScreen_focusRight_crossesToSiblingVirtualScreen()
 {
     // Virtual screens are standardised first-class outputs: one physical
@@ -316,6 +254,56 @@ void TestNavigationCrossSurface::crossVirtualScreen_focusRight_crossesToSiblingV
     engine.focusInDirection(QStringLiteral("right"), NavigationContext{QStringLiteral("a"), vs0});
     QCOMPARE(activateSpy.count(), 1);
     QCOMPARE(activateSpy.takeFirst().at(0).toString(), QStringLiteral("b"));
+}
+
+void TestNavigationCrossSurface::crossDesktop_focusRight_activatesEntryWindowOnNextDesktop()
+{
+    std::unique_ptr<AutotileEngine> engine(PlasmaZones::TestHelpers::createEngineWithWindows(kScreen, 2));
+    FakeCrossSurfaceResolver resolver;
+    engine->setCrossSurfaceResolver(&resolver);
+
+    // Seed a window on desktop 2, then return to desktop 1.
+    engine->setCurrentDesktop(2);
+    engine->windowOpened(QStringLiteral("d2win"), kScreen);
+    QCoreApplication::processEvents();
+    engine->setCurrentDesktop(1);
+
+    PhosphorTiles::TilingState* d1 = engine->tilingStateForScreen(kScreen);
+    d1->setCalculatedZones({QRect(0, 0, 960, 1080), QRect(960, 0, 960, 1080)});
+    const QStringList wins = d1->tiledWindows();
+
+    // Focus right from the rightmost window on desktop 1: no in-surface
+    // neighbour, no neighbour output → cross to desktop 2's entry window.
+    QSignalSpy activateSpy(engine.get(), &AutotileEngine::activateWindowRequested);
+    engine->focusInDirection(QStringLiteral("right"), ctx(wins.at(1)));
+    QCOMPARE(activateSpy.count(), 1);
+    QCOMPARE(activateSpy.takeFirst().at(0).toString(), QStringLiteral("d2win"));
+}
+void TestNavigationCrossSurface::crossDesktop_moveRight_relocatesToNextDesktopAndRequestsKWinMove()
+{
+    std::unique_ptr<AutotileEngine> engine(PlasmaZones::TestHelpers::createEngineWithWindows(kScreen, 2));
+    FakeCrossSurfaceResolver resolver;
+    engine->setCrossSurfaceResolver(&resolver);
+
+    PhosphorTiles::TilingState* d1 = engine->tilingStateForScreen(kScreen);
+    d1->setCalculatedZones({QRect(0, 0, 960, 1080), QRect(960, 0, 960, 1080)});
+    const QStringList wins = d1->tiledWindows();
+    const QString rightmost = wins.at(1);
+
+    QSignalSpy moveSpy(engine.get(), &AutotileEngine::windowDesktopMoveRequested);
+    // Move right off the edge of desktop 1 → relocate onto desktop 2.
+    engine->swapFocusedInDirection(QStringLiteral("right"), ctx(rightmost));
+
+    // Gone from desktop 1.
+    QVERIFY(!engine->tilingStateForScreen(kScreen)->tiledWindows().contains(rightmost));
+    // Present on desktop 2.
+    engine->setCurrentDesktop(2);
+    QVERIFY(engine->tilingStateForScreen(kScreen)->tiledWindows().contains(rightmost));
+    // The compositor was asked to move the real window to desktop 2.
+    QCOMPARE(moveSpy.count(), 1);
+    const QList<QVariant> args = moveSpy.takeFirst();
+    QCOMPARE(args.at(0).toString(), rightmost);
+    QCOMPARE(args.at(1).toInt(), 2);
 }
 
 QTEST_MAIN(TestNavigationCrossSurface)

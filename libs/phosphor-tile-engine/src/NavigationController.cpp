@@ -246,10 +246,17 @@ bool NavigationController::crossOutputMove(const QString& sourceScreenId, const 
     // update it would resolve back to the source screen and re-add it there.
     m_engine->m_windowToStateKey[focused] = newKey;
     // migrateWindowBetweenKeys removes the window from the source state (with
-    // its onWindowRemoved lifecycle), adds it on the neighbour output, and
-    // retiles both surfaces.
+    // its onWindowRemoved lifecycle) and adds it on the neighbour output. It
+    // schedules DEFERRED retiles for both — but those can be raced by the
+    // reactive screen-change event the move triggers (observed on real
+    // hardware: the source monitor failed to reflow). Retile both surfaces
+    // SYNCHRONOUSLY here, exactly as the in-surface swap does, so the source's
+    // reflow and the destination's placement reach the compositor within this
+    // handler, before activateWindowRequested.
     m_engine->migrateWindowBetweenKeys(focused, oldKey, neighbor);
     m_engine->m_activeScreen = neighbor;
+    m_engine->retileAfterOperation(sourceScreenId, true);
+    m_engine->retileAfterOperation(neighbor, true);
     Q_EMIT m_engine->activateWindowRequested(focused);
     return true;
 }
@@ -318,7 +325,11 @@ void NavigationController::swapFocusedInDirection(const QString& direction, cons
     PhosphorTiles::TilingState* state = nullptr;
     const QStringList windows = tiledWindowsForFocusedScreen(screenId, state, explicitWindowId);
 
-    if (windows.size() < 2 || !state) {
+    // A single tiled window has no in-surface swap partner, but it CAN still
+    // cross to another output / desktop — so don't bail on size < 2 here; that
+    // check belongs to the order-based fallback below. Only an absent state or
+    // empty surface is a hard stop.
+    if (!state || windows.isEmpty()) {
         Q_EMIT m_engine->navigationFeedback(false, action, QStringLiteral("nothing_to_swap"), QString(), QString(),
                                             screenId);
         return;
@@ -358,6 +369,13 @@ void NavigationController::swapFocusedInDirection(const QString& direction, cons
     }
 
     // Geometry not computed yet: fall back to order-based neighbour with wrap.
+    // This needs a partner — a single window has nothing to swap with and no
+    // geometry to cross a boundary, so report nothing_to_swap.
+    if (windows.size() < 2) {
+        Q_EMIT m_engine->navigationFeedback(false, action, QStringLiteral("nothing_to_swap"), QString(), QString(),
+                                            screenId);
+        return;
+    }
     const bool forward = (direction == QLatin1String("right") || direction == QLatin1String("down"));
     const int currentIndex = windows.indexOf(focused);
     if (currentIndex < 0) {
