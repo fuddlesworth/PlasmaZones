@@ -99,7 +99,7 @@ SettingsCard {
                             Layout.minimumWidth: Kirigami.Units.gridUnit * 10
                             appSettings: root.appSettings
                             noneText: i18n("None")
-                            showPreview: root.viewMode === 0
+                            showPreview: true
                             layoutFilter: root.viewMode === 1 ? 1 : 0
                             resolvedDefaultId: ""
                             currentLayoutId: {
