@@ -236,6 +236,19 @@ void AutotileHandler::slotWindowsTileRequested(const PhosphorProtocol::TileReque
         toApply.append({QPointer<KWin::EffectWindow>(e.window), e.geometry, e.windowId, screenId, e.isMonocle});
     }
 
+    // A window the daemon asked us to tile that we could not resolve to a live
+    // EffectWindow is dropped from this batch. Surface it: a silent drop here is
+    // exactly how a source-monitor reflow loses windows (only the resolvable
+    // ones move, the rest are stranded).
+    if (toApply.size() != validatedRequests.size()) {
+        QStringList resolved;
+        for (const TileSnap& s : toApply) {
+            resolved << s.windowId;
+        }
+        qCInfo(lcEffect) << "slotWindowsTileRequested: sent" << validatedRequests.size() << "requests, resolved"
+                         << toApply.size() << "windows — applying:" << resolved;
+    }
+
     // Global epoch (desktop/screen switch) captured for the apply guards below.
     const uint64_t gen = m_autotileStaggerGeneration;
 
@@ -381,7 +394,9 @@ void AutotileHandler::slotWindowsTileRequested(const PhosphorProtocol::TileReque
     m_effect->applyStaggeredOrImmediate(
         toApply.size(),
         [this, toApply, gen, genByScreen](int i) {
-            const TileSnap& snap = toApply[i];
+            // Local copy (not const ref) so a stale window pointer can be
+            // re-resolved below; the rest of the body reads snap.window.
+            TileSnap snap = toApply[i];
             // Drop this apply if superseded by a desktop/screen switch (global
             // epoch) OR by a newer retile of THIS window's screen (per-screen).
             // A batch for a DIFFERENT screen no longer cancels us — that was the
@@ -391,6 +406,15 @@ void AutotileHandler::slotWindowsTileRequested(const PhosphorProtocol::TileReque
                 return;
             }
             if (!snap.window || snap.window->isDeleted()) {
+                // The QPointer was captured when this batch was built; under the
+                // rapid window churn of a cross-output move it can go stale
+                // before this staggered timer fires. Re-resolve by id rather
+                // than silently dropping the window — dropping it stranded the
+                // source monitor's reflow (windows past the first never moved).
+                snap.window = m_effect->findWindowById(snap.windowId);
+            }
+            if (!snap.window || snap.window->isDeleted()) {
+                qCInfo(lcEffect) << "Autotile apply: window unresolvable at apply time, skipping" << snap.windowId;
                 return;
             }
             // Suppress the windowFrameGeometryChanged crossing-detection paths for the

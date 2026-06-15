@@ -3796,6 +3796,14 @@ void AutotileEngine::retileAfterOperation(const QString& screenId, bool operatio
         return;
     }
 
+    // This synchronous retile recomputes from the current state, so any deferred
+    // retile already queued for the SAME screen is now redundant. Drop it —
+    // otherwise processPendingRetiles fires a second batch for this screen
+    // microseconds later, and that duplicate supersedes the staggered apply of
+    // this one, stranding every window past the first (a cross-output move left
+    // the source monitor with windows that never reflowed).
+    m_pendingRetileScreens.remove(screenId);
+
     // When already inside retile(), still recalc and apply for this screen so
     // navigation (rotate, swap, etc.) is never dropped — user expects geometry
     // to update immediately. Do not clear m_retiling; let the outer retile() do that.
