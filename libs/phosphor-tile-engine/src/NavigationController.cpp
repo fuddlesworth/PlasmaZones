@@ -261,6 +261,14 @@ bool NavigationController::crossOutputMove(const QString& sourceScreenId, const 
     // SYNCHRONOUSLY here, exactly as the in-surface swap does, so the source's
     // reflow and the destination's placement reach the compositor within this
     // handler, before activateWindowRequested.
+    // Tell the compositor the imminent physical output change for this window
+    // is daemon-owned: this migration plus the two reflows below ARE the move.
+    // Without this, the effect's reactive outputChanged handler re-issues
+    // windowClosed/windowOpened, which (the map already points at the
+    // destination) tears down this placement and strands the source's reflow.
+    // Emit BEFORE the retiles so the marker is recorded ahead of the
+    // tile-request apply that triggers outputChanged.
+    Q_EMIT m_engine->windowOutputMoveExpected(focused, neighbor);
     m_engine->migrateWindowBetweenKeys(focused, oldKey, neighbor);
     m_engine->m_activeScreen = neighbor;
     m_engine->retileAfterOperation(sourceScreenId, true);

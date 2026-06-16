@@ -1,6 +1,7 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: GPL-3.0-or-later
 
+#include "../autotilehandler.h"
 #include "../plasmazoneseffect.h"
 
 #include <PhosphorAnimation/ProfilePaths.h>
@@ -77,6 +78,18 @@ void PlasmaZonesEffect::slotWindowDesktopMoveRequested(const QString& windowId, 
     // 1-based desktop → the matching VirtualDesktop. Single-desktop membership
     // (not on-all-desktops) so the window genuinely moves to the target.
     KWin::effects->windowToDesktops(w, {all.at(desktop - 1)});
+}
+
+void PlasmaZonesEffect::slotWindowOutputMoveExpected(const QString& windowId, const QString& targetScreenId)
+{
+    if (windowId.isEmpty() || targetScreenId.isEmpty()) {
+        return;
+    }
+    // Hand the one-shot to the autotile handler: it owns the cross-output
+    // outputChanged transfer path that would otherwise re-issue close/open.
+    if (AutotileHandler* handler = m_autotileHandler.get()) {
+        handler->markExpectedOutputMove(windowId, targetScreenId);
+    }
 }
 
 // slotToggleWindowFloatRequested removed — the daemon now handles float-toggle

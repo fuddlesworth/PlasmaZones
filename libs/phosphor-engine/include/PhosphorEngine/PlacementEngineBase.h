@@ -72,6 +72,19 @@ Q_SIGNALS:
     /// over D-Bus to the KWin effect, which calls windowToDesktops.
     void windowDesktopMoveRequested(const QString& windowId, int desktop);
 
+    /// Emitted when daemon-initiated directional navigation moves a window
+    /// across physical outputs: the engine has already migrated its own tiling
+    /// state (removed from the source key, re-added on @p targetScreenId) and
+    /// scheduled both reflows. The compositor's resulting KWin::Window::
+    /// outputChanged for this window is therefore EXPECTED and must NOT be
+    /// re-processed as a fresh close/open — doing so re-resolves the window to
+    /// the already-updated destination key and tears down the daemon's
+    /// placement (the source monitor's gap then never reflows). The effect
+    /// records this one-shot and, on the matching outputChanged, only refreshes
+    /// its bookkeeping + moves the decoration claim. Genuine USER-DRAG
+    /// cross-output moves carry no such marker and still drive close/open.
+    void windowOutputMoveExpected(const QString& windowId, const QString& targetScreenId);
+
     /// Emitted to sync floating state without restoring geometry.
     /// Passive state-sync: engine-internal divergence correction.
     void windowFloatingStateSynced(const QString& windowId, bool floating, const QString& screenId);

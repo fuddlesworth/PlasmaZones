@@ -396,6 +396,32 @@ void AutotileHandler::handleWindowOutputChanged(KWin::EffectWindow* w)
         return;
     }
 
+    // Daemon-owned cross-output move: the daemon already migrated its tiling
+    // state for this window onto newScreenId and reflowed BOTH outputs. KWin's
+    // outputChanged here is the expected echo of that move. Re-issuing
+    // windowClosed/windowOpened now would (the daemon's map already points at
+    // newScreenId) re-resolve the close to the destination and tear down the
+    // placement — the source monitor's reflow then never lands. Update our own
+    // bookkeeping and move the decoration claim, then stop. Consume the marker
+    // one-shot; only honour it when the destination matches: a mismatch means a
+    // later, genuine move superseded it, so fall through to the normal transfer.
+    if (const auto expIt = m_expectedOutputMove.constFind(windowId); expIt != m_expectedOutputMove.constEnd()) {
+        const QString expectedScreen = expIt.value();
+        m_expectedOutputMove.erase(expIt);
+        if (expectedScreen == newScreenId) {
+            m_notifiedWindowScreens[windowId] = newScreenId;
+            // The daemon's destination tile request moves the decoration claim
+            // (releaseOthersOfKind + acquire in slotWindowsTileRequested); keep
+            // our claim coherent here without a physical flap.
+            if (newIsAutotile) {
+                m_effect->decorationManager()->releaseOthersOfKind(windowId, DecorationManager::OwnerKind::Autotile,
+                                                                   newScreenId);
+            }
+            m_effect->updateAllBorders();
+            return;
+        }
+    }
+
     qCInfo(lcEffect) << "Window moved between monitors:" << windowId << oldScreenId << "->" << newScreenId;
 
     // Snapshot the pre-autotile geometry BEFORE onWindowClosed clears it
@@ -591,6 +617,9 @@ void AutotileHandler::onWindowClosed(const QString& windowId, const QString& scr
     // the instant it was created (the consume site erases it, and
     // clearDesktopMoveStash covers genuine window destruction).
     m_savedNotifiedForDesktopReturn.remove(windowId);
+    // Drop any unconsumed cross-output expected-move marker so a move aborted
+    // before its outputChanged arrived can't strand the entry for the session.
+    m_expectedOutputMove.remove(windowId);
     auto pendingConn = m_pendingCrossScreenRestore.find(windowId);
     if (pendingConn != m_pendingCrossScreenRestore.end()) {
         QObject::disconnect(pendingConn.value());

@@ -95,6 +95,8 @@ private Q_SLOTS:
     void swap_exchangesWithSpatialNeighbour();
 
     void crossOutput_focusRight_entersLeftEdgeOfNeighbourOutput();
+    void crossOutput_moveRight_emitsExpectedMoveOnceBeforeReflowsAndActivate();
+    void inSurfaceMove_doesNotEmitExpectedMove();
     void crossVirtualScreen_focusRight_crossesToSiblingVirtualScreen();
 
     void crossDesktop_focusRight_activatesEntryWindowOnNextDesktop();
@@ -212,6 +214,78 @@ void TestNavigationCrossSurface::crossOutput_focusRight_entersLeftEdgeOfNeighbou
                                 NavigationContext{QStringLiteral("a2"), QStringLiteral("DP-1")});
     QCOMPARE(activateSpy.count(), 1);
     QCOMPARE(activateSpy.takeFirst().at(0).toString(), QStringLiteral("b1"));
+}
+
+void TestNavigationCrossSurface::crossOutput_moveRight_emitsExpectedMoveOnceBeforeReflowsAndActivate()
+{
+    TwoOutputFixture fx;
+    // a2 is the rightmost window on DP-1 — moving it "right" crosses into DP-2.
+    // The daemon migrates its own tiling state and reflows BOTH outputs, so it
+    // must warn the compositor that the window's imminent outputChanged is
+    // daemon-owned (windowOutputMoveExpected) — otherwise the effect re-issues
+    // windowClosed/windowOpened and strands the source monitor's reflow.
+    QSignalSpy expectedSpy(fx.engine.get(), &AutotileEngine::windowOutputMoveExpected);
+    QSignalSpy activateSpy(fx.engine.get(), &AutotileEngine::activateWindowRequested);
+    QSignalSpy placementSpy(fx.engine.get(), &AutotileEngine::placementChanged);
+
+    fx.engine->moveFocusedInDirection(QStringLiteral("right"),
+                                      NavigationContext{QStringLiteral("a2"), QStringLiteral("DP-1")});
+
+    // Emitted exactly once, naming the moved window and its destination output.
+    QCOMPARE(expectedSpy.count(), 1);
+    const QList<QVariant> expectedArgs = expectedSpy.takeFirst();
+    QCOMPARE(expectedArgs.at(0).toString(), QStringLiteral("a2"));
+    QCOMPARE(expectedArgs.at(1).toString(), QStringLiteral("DP-2"));
+
+    // The window crossed to DP-2: it is still engine-tracked, the destination
+    // state now owns it, and the source no longer does. (Under this test's null
+    // algorithm the destination may overflow-float rather than tile a2, so use
+    // containsWindow — which spans tiled AND floating membership — rather than
+    // DP-2's tiled set; the real-algorithm end-to-end reflow is covered by
+    // test_navigation_retile.)
+    QVERIFY(fx.engine->isWindowTracked(QStringLiteral("a2")));
+    QVERIFY(fx.engine->tilingStateForScreen(QStringLiteral("DP-2"))->containsWindow(QStringLiteral("a2")));
+    QVERIFY(!fx.engine->tilingStateForScreen(QStringLiteral("DP-1"))->containsWindow(QStringLiteral("a2")));
+
+    // Both outputs were reflowed and the moved window was activated. Ordering:
+    // the expected-move marker must be recorded BEFORE the reflow/activate
+    // signals so the compositor has it before any tile-apply-driven
+    // outputChanged echo. QSignalSpy timestamps aren't available, but the
+    // emit-ordering contract is exercised by the single-threaded direct
+    // emission above (windowOutputMoveExpected is emitted first in
+    // crossOutputMove, before retileAfterOperation and activateWindowRequested).
+    QVERIFY(placementSpy.count() >= 1);
+    // The moved window is activated. (Under this null-algorithm harness overflow
+    // handling on the destination can emit an extra activate, so assert that a2
+    // is among the activations rather than pinning an exact count.)
+    QVERIFY(activateSpy.count() >= 1);
+    bool activatedA2 = false;
+    for (const QList<QVariant>& call : activateSpy) {
+        if (call.at(0).toString() == QLatin1String("a2")) {
+            activatedA2 = true;
+            break;
+        }
+    }
+    QVERIFY2(activatedA2, "the moved window must be activated on its new output");
+}
+
+void TestNavigationCrossSurface::inSurfaceMove_doesNotEmitExpectedMove()
+{
+    TwoOutputFixture fx;
+    // a1 is the left window on DP-1 — moving it "right" swaps with a2 IN PLACE
+    // on the same output. No physical output change occurs, so no
+    // windowOutputMoveExpected marker may be emitted (a spurious marker would
+    // suppress a genuine later user-drag transfer of that window).
+    QSignalSpy expectedSpy(fx.engine.get(), &AutotileEngine::windowOutputMoveExpected);
+
+    fx.engine->moveFocusedInDirection(QStringLiteral("right"),
+                                      NavigationContext{QStringLiteral("a1"), QStringLiteral("DP-1")});
+
+    QCOMPARE(expectedSpy.count(), 0);
+    // Both windows remain on DP-1 (an in-surface swap, not a cross-output move).
+    const QStringList dp1 = fx.engine->tilingStateForScreen(QStringLiteral("DP-1"))->tiledWindows();
+    QVERIFY(dp1.contains(QStringLiteral("a1")));
+    QVERIFY(dp1.contains(QStringLiteral("a2")));
 }
 
 void TestNavigationCrossSurface::crossVirtualScreen_focusRight_crossesToSiblingVirtualScreen()

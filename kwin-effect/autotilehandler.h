@@ -245,6 +245,14 @@ public:
         m_pendingReactivateWindow = w;
     }
 
+    /// Record a daemon-initiated cross-output move so the next outputChanged
+    /// for @p windowId to @p targetScreenId updates bookkeeping only. See
+    /// m_expectedOutputMove.
+    void markExpectedOutputMove(const QString& windowId, const QString& targetScreenId)
+    {
+        m_expectedOutputMove.insert(windowId, targetScreenId);
+    }
+
 public Q_SLOTS:
     // Autotile D-Bus signal handlers
     void slotWindowsTileRequested(const PhosphorProtocol::TileRequestList& tileRequests);
@@ -399,6 +407,15 @@ private:
     QHash<QString, QStringList> m_savedAutotileStackingOrder; ///< autotile stacking order, restored on snap→autotile
     QSet<QString> m_notifiedWindows;
     QHash<QString, QString> m_notifiedWindowScreens; ///< windowId → screen ID at time of notification
+    /// Daemon-initiated cross-output moves: windowId → expected destination
+    /// screen. Set when the daemon emits windowOutputMoveExpected (it has
+    /// already migrated its tiling state and reflowed both outputs). Consumed
+    /// one-shot by handleWindowOutputChanged on the matching outputChanged so
+    /// that transfer only updates bookkeeping + decoration, never re-issues
+    /// windowClosed/windowOpened. A stale entry (no outputChanged ever arrives,
+    /// or a different destination) is cleared on the next outputChanged for the
+    /// window and on close.
+    QHash<QString, QString> m_expectedOutputMove;
     QSet<QString> m_savedNotifiedForDesktopReturn; ///< windows removed from m_notifiedWindows on desktop switch
     /// Pre-autotile geometry preserved when a window is moved to another
     /// desktop. Keyed by windowId; value holds (sourceScreenId, frameRect)

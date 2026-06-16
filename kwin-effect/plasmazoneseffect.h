@@ -169,6 +169,7 @@ private Q_SLOTS:
                                     const QString& screenId, bool sizeOnly);
     void slotActivateWindowRequested(const QString& windowId);
     void slotWindowDesktopMoveRequested(const QString& windowId, int desktop);
+    void slotWindowOutputMoveExpected(const QString& windowId, const QString& targetScreenId);
 
     // Float toggle is entirely daemon-local — no effect-side slot needed.
 

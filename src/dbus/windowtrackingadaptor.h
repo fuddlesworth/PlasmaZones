@@ -775,6 +775,13 @@ Q_SIGNALS:
     /// desktop @p desktop (1-based). The effect calls windowToDesktops.
     void windowDesktopMoveRequested(const QString& windowId, int desktop);
 
+    /// Daemon-initiated cross-output move: the daemon has migrated its own
+    /// tiling state for @p windowId onto @p targetScreenId and scheduled both
+    /// reflows. The window's resulting outputChanged is expected; the effect
+    /// must update bookkeeping + decoration only, not re-issue windowClosed/
+    /// windowOpened. User-drag cross-output moves carry no marker.
+    void windowOutputMoveExpected(const QString& windowId, const QString& targetScreenId);
+
     /**
      * @brief Daemon requests KWin to apply geometries for a batch of windows
      * @param geometries List of window geometry entries to apply

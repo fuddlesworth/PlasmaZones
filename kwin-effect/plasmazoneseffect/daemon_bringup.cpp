@@ -874,6 +874,16 @@ void PlasmaZonesEffect::connectNavigationSignals()
                                           QStringLiteral("windowDesktopMoveRequested"), this,
                                           SLOT(slotWindowDesktopMoveRequested(QString, int)));
 
+    // Daemon-initiated cross-output move: the daemon already migrated its
+    // tiling state and reflowed both outputs; record the window so the
+    // autotile handler's reactive outputChanged path updates bookkeeping only
+    // instead of re-issuing windowClosed/windowOpened (which would tear down
+    // the daemon's placement and strand the source monitor's reflow).
+    QDBusConnection::sessionBus().connect(PhosphorProtocol::Service::Name, PhosphorProtocol::Service::ObjectPath,
+                                          PhosphorProtocol::Service::Interface::WindowTracking,
+                                          QStringLiteral("windowOutputMoveExpected"), this,
+                                          SLOT(slotWindowOutputMoveExpected(QString, QString)));
+
     // Float toggle is entirely daemon-local: the daemon reads the active
     // window from its own shadow, calls toggleFloatForWindow internally, and
     // emits applyGeometryRequested to paint the outcome. The effect no longer

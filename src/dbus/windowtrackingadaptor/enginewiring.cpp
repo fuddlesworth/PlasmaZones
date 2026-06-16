@@ -45,6 +45,10 @@ void WindowTrackingAdaptor::setEngines(PhosphorEngine::PlacementEngineBase* snap
     }
     if (m_autotileEngine) {
         disconnect(m_autotileEngine, &PhosphorEngine::PlacementEngineBase::windowDesktopMoveRequested, this, nullptr);
+        // The cross-output expected-move relay is autotile-only (snap never
+        // does a daemon-side cross-output tiling migration); drop it on the
+        // same anti-duplicate-connection rewire.
+        disconnect(m_autotileEngine, &PhosphorEngine::PlacementEngineBase::windowOutputMoveExpected, this, nullptr);
     }
     // Drop the common float-restore geometry relay from BOTH outgoing engines
     // before reassigning, so a re-wire (mode toggle / daemon teardown) can't
@@ -198,6 +202,16 @@ void WindowTrackingAdaptor::setEngines(PhosphorEngine::PlacementEngineBase* snap
     if (m_snapEngine) {
         connect(m_snapEngine, &PhosphorEngine::PlacementEngineBase::windowDesktopMoveRequested, this,
                 &WindowTrackingAdaptor::windowDesktopMoveRequested);
+    }
+
+    // Daemon-initiated cross-output directional move: the autotile engine
+    // migrates its own tiling state and reflows both outputs, then asks the
+    // effect to treat the window's resulting outputChanged as expected (skip
+    // the reactive close/open re-issue). Snap mode never performs a daemon-side
+    // cross-output tiling migration, so only the autotile engine is wired.
+    if (m_autotileEngine) {
+        connect(m_autotileEngine, &PhosphorEngine::PlacementEngineBase::windowOutputMoveExpected, this,
+                &WindowTrackingAdaptor::windowOutputMoveExpected);
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
