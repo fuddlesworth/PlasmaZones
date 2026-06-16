@@ -11,6 +11,9 @@
 // algorithms can't disturb the manual-zone tests.
 
 #include <QCoreApplication>
+#include <QJsonArray>
+#include <QJsonDocument>
+#include <QJsonObject>
 #include <QSignalSpy>
 #include <QTest>
 
@@ -27,6 +30,26 @@
 
 using PhosphorEngine::NavigationContext;
 using PhosphorTileEngine::AutotileEngine;
+
+namespace {
+// True if any windowsTiled batch in @p spy carries a tile request whose
+// "windowId" is EXACTLY @p windowId. windowsTiled's payload is a JSON array of
+// {windowId, geometry} objects, so this parses it rather than substring-matching
+// the raw blob — an id that is a prefix of another ("a1" vs "a10") or collides
+// with a screen/JSON token can't false-positive.
+bool anyBatchTiles(const QSignalSpy& spy, const QString& windowId)
+{
+    for (const auto& call : spy) {
+        const QJsonArray arr = QJsonDocument::fromJson(call.at(0).toString().toUtf8()).array();
+        for (const QJsonValue& entry : arr) {
+            if (entry.toObject().value(QLatin1String("windowId")).toString() == windowId) {
+                return true;
+            }
+        }
+    }
+    return false;
+}
+} // namespace
 
 class TestNavigationRetile : public QObject
 {
@@ -91,13 +114,7 @@ private Q_SLOTS:
 
         // BUG 2 (the real-hardware half): the reflow geometry must be EMITTED to
         // the compositor, not just recomputed in the engine's state.
-        bool sourceReflowEmitted = false;
-        for (const auto& call : tiledSpy) {
-            if (call.at(0).toString().contains(remainingWin)) {
-                sourceReflowEmitted = true;
-            }
-        }
-        QVERIFY2(sourceReflowEmitted, "source reflow geometry was never emitted to the compositor");
+        QVERIFY2(anyBatchTiles(tiledSpy, remainingWin), "source reflow geometry was never emitted to the compositor");
 
         // The window moved to DP-2 and tiled there.
         PhosphorTiles::TilingState* d2 = engine.tilingStateForScreen(QStringLiteral("DP-2"));
@@ -150,13 +167,8 @@ private Q_SLOTS:
         QVERIFY2(after->calculatedZones().first().width() > 1500,
                  "remaining window did not reflow after the other left the context (still half-width)");
 
-        bool reflowEmitted = false;
-        for (const auto& call : tiledSpy) {
-            if (call.at(0).toString().contains(staying)) {
-                reflowEmitted = true;
-            }
-        }
-        QVERIFY2(reflowEmitted, "context-removal reflow geometry was never emitted to the compositor");
+        QVERIFY2(anyBatchTiles(tiledSpy, staying),
+                 "context-removal reflow geometry was never emitted to the compositor");
     }
 };
 
