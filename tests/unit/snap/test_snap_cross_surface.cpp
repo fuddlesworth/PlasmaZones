@@ -232,6 +232,9 @@ private Q_SLOTS:
     void swap_zoneEmptyOnThisOutputWithSibling_movesToEmptyNotCrossOutput();
     void swap_noAdjacentZone_crossesAndSwapsWithNeighbourOutputOccupant();
     void swap_noAdjacentZone_emptyNeighbourEntryZone_movesToEmptyAcrossOutput();
+    void move_autotileNeighbourOutput_defersInsteadOfSnapping();
+    void swap_autotileNeighbourOutput_defersInsteadOfSnapping();
+    void focus_autotileNeighbourOutput_stillCrosses();
     void cycle_zoneSharedWithSiblingScreen_staysOnThisScreen();
     void cycle_oneOccupantPerMonitorSharedZone_reportsSingleWindow();
     void cycle_screenIdSkew_fallsBackToUnfilteredRing();
@@ -510,6 +513,103 @@ void TestSnapCrossSurface::swap_noAdjacentZone_emptyNeighbourEntryZone_movesToEm
     QCOMPARE(result.screenName, QStringLiteral("DP-2"));
     QVERIFY(result.windowId2.isEmpty()); // nothing to send back
     QVERIFY(result.screenName2.isEmpty());
+}
+
+void TestSnapCrossSurface::move_autotileNeighbourOutput_defersInsteadOfSnapping()
+{
+    // The neighbour output (DP-2) is in autotile mode. Even though its assigned
+    // layout still enumerates a left-edge entry zone, a MOVE must NOT snap the
+    // window onto it — it reports the boundary so the engine hands the window to
+    // the autotile engine cross-mode. Regression for the "treats DP3 as snapping"
+    // bug where a snapped window was wrongly snapped onto a tiled monitor.
+    FakeWindowTracking wts;
+    wts.zoneOfWindow[QStringLiteral("w1")] = QStringLiteral("z-a");
+    wts.zoneGeo[key(QStringLiteral("z-b"), QStringLiteral("DP-2"))] = QRect(1920, 0, 960, 1080);
+
+    FakeZoneAdjacency adj;
+    adj.adjacent = QString();
+    adj.firstInDir[key(QStringLiteral("left"), QStringLiteral("DP-2"))] = QStringLiteral("z-b");
+
+    FakeCrossSurface cross;
+    cross.neighborOut[key(QStringLiteral("DP-1"), QStringLiteral("right"))] = QStringLiteral("DP-2");
+
+    std::unique_ptr<PhosphorZones::LayoutRegistry> layoutManager(
+        PlasmaZones::TestHelpers::makeLayoutRegistry(QStringLiteral("test-snap-cross")));
+    SnapNavigationTargetResolver resolver(&wts, layoutManager.get(), &adj, {});
+    resolver.setCrossSurfaceResolver(&cross);
+    resolver.setNeighbourAutotileProvider([](const QString& screenId) {
+        return screenId == QStringLiteral("DP-2");
+    });
+
+    const auto result =
+        resolver.getMoveTargetForWindow(QStringLiteral("w1"), QStringLiteral("right"), QStringLiteral("DP-1"));
+    QVERIFY(!result.success); // not snapped onto the autotile neighbour
+    QCOMPARE(result.reason, QStringLiteral("no_adjacent_zone")); // deferred to the engine handoff
+}
+
+void TestSnapCrossSurface::swap_autotileNeighbourOutput_defersInsteadOfSnapping()
+{
+    // Same gate for SWAP: an autotile neighbour is a cross-mode exchange, not a
+    // snap-into-zone. Even with an occupant in the entry zone, the resolver
+    // reports the boundary rather than snapping/swapping onto the tiled screen.
+    FakeWindowTracking wts;
+    wts.zoneOfWindow[QStringLiteral("w1")] = QStringLiteral("z-a");
+    wts.zoneGeo[key(QStringLiteral("z-a"), QStringLiteral("DP-1"))] = QRect(0, 0, 960, 1080);
+    wts.zoneGeo[key(QStringLiteral("z-b"), QStringLiteral("DP-2"))] = QRect(1920, 0, 960, 1080);
+    wts.windowsByZone[QStringLiteral("z-b")] = {QStringLiteral("w2")};
+    wts.screenOfWindow[QStringLiteral("w2")] = QStringLiteral("DP-2");
+
+    FakeZoneAdjacency adj;
+    adj.adjacent = QString();
+    adj.firstInDir[key(QStringLiteral("left"), QStringLiteral("DP-2"))] = QStringLiteral("z-b");
+
+    FakeCrossSurface cross;
+    cross.neighborOut[key(QStringLiteral("DP-1"), QStringLiteral("right"))] = QStringLiteral("DP-2");
+
+    std::unique_ptr<PhosphorZones::LayoutRegistry> layoutManager(
+        PlasmaZones::TestHelpers::makeLayoutRegistry(QStringLiteral("test-snap-cross")));
+    SnapNavigationTargetResolver resolver(&wts, layoutManager.get(), &adj, {});
+    resolver.setCrossSurfaceResolver(&cross);
+    resolver.setNeighbourAutotileProvider([](const QString& screenId) {
+        return screenId == QStringLiteral("DP-2");
+    });
+
+    const auto result =
+        resolver.getSwapTargetForWindow(QStringLiteral("w1"), QStringLiteral("right"), QStringLiteral("DP-1"));
+    QVERIFY(!result.success);
+    QCOMPARE(result.reason, QStringLiteral("no_adjacent_zone"));
+}
+
+void TestSnapCrossSurface::focus_autotileNeighbourOutput_stillCrosses()
+{
+    // FOCUS is NOT gated on the neighbour's mode: focus may cross to a window on
+    // an autotile screen. With the same autotile-neighbour provider set, the
+    // cross-output focus still lands on the entry-zone window.
+    FakeWindowTracking wts;
+    wts.zoneOfWindow[QStringLiteral("w1")] = QStringLiteral("z-a");
+    wts.zoneGeo[key(QStringLiteral("z-b"), QStringLiteral("DP-2"))] = QRect(1920, 0, 960, 1080);
+    wts.windowsByZone[QStringLiteral("z-b")] = {QStringLiteral("w2")};
+    wts.screenOfWindow[QStringLiteral("w2")] = QStringLiteral("DP-2");
+
+    FakeZoneAdjacency adj;
+    adj.adjacent = QString();
+    adj.firstInDir[key(QStringLiteral("left"), QStringLiteral("DP-2"))] = QStringLiteral("z-b");
+
+    FakeCrossSurface cross;
+    cross.neighborOut[key(QStringLiteral("DP-1"), QStringLiteral("right"))] = QStringLiteral("DP-2");
+
+    std::unique_ptr<PhosphorZones::LayoutRegistry> layoutManager(
+        PlasmaZones::TestHelpers::makeLayoutRegistry(QStringLiteral("test-snap-cross")));
+    SnapNavigationTargetResolver resolver(&wts, layoutManager.get(), &adj, {});
+    resolver.setCrossSurfaceResolver(&cross);
+    resolver.setNeighbourAutotileProvider([](const QString& screenId) {
+        return screenId == QStringLiteral("DP-2");
+    });
+
+    const auto result =
+        resolver.getFocusTargetForWindow(QStringLiteral("w1"), QStringLiteral("right"), QStringLiteral("DP-1"));
+    QVERIFY(result.success); // focus crosses regardless of neighbour mode
+    QCOMPARE(result.windowIdToActivate, QStringLiteral("w2"));
 }
 
 void TestSnapCrossSurface::cycle_zoneSharedWithSiblingScreen_staysOnThisScreen()
