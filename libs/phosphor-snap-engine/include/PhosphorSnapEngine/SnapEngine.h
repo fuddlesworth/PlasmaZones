@@ -79,6 +79,15 @@ public:
     int currentVirtualDesktop() const;
     QString currentActivity() const;
 
+    /// Resolve the zone on @p screenId's @p targetDesktop layout that is
+    /// positionally equivalent to @p currentZoneId (1-based index of zones sorted
+    /// by number), plus its pixel geometry. Returns an empty pair when the target
+    /// desktop has no layout, no matching slot, or invalid geometry. Public (like
+    /// the desktop/activity accessors) so cross-surface handoff logic and tests
+    /// can map a window's slot onto another desktop's layout.
+    std::pair<QString, QRect> resolveCrossDesktopZone(const QString& currentZoneId, const QString& screenId,
+                                                      int targetDesktop) const;
+
     // ═══════════════════════════════════════════════════════════════════════════
     // IPlacementEngine — lifecycle
     // ═══════════════════════════════════════════════════════════════════════════
@@ -677,17 +686,15 @@ private:
     SnapNavigationTargetResolver* ensureTargetResolver(const QString& action = QString());
 
     /// Move @p windowId to the virtual desktop adjacent to the current one in
-    /// @p direction (re-stamping its SnapState desktop and emitting
-    /// windowDesktopMoveRequested so the compositor moves the real window).
-    /// Used when directional move reaches a zone-layout boundary with no
-    /// neighbour output. Returns false when there is no neighbour desktop.
-    ///
-    /// Unlike autotile's cross-desktop move (which emits unconditionally and
-    /// lets the compositor be the sole source of truth), this gates the emit on
-    /// the SnapState desktop re-stamp succeeding: snap PRESERVES the window's
-    /// zone slot across the hop, so its desktop attribute must stay coherent. A
-    /// no-op re-stamp (unassigned, or already on the target desktop) therefore
-    /// means there is nothing to move.
+    /// @p direction. Re-snaps the window into the EQUIVALENT zone on the target
+    /// desktop's layout (same zone id when the layout is shared, else the
+    /// positionally-equivalent zone), updating SnapState + the placement-store
+    /// record, asking the compositor to relocate the real window
+    /// (windowDesktopMoveRequested) and applying the target zone's geometry so it
+    /// lands snapped rather than floating. Falls back to a bare desktop re-stamp
+    /// when no equivalent zone is resolvable. Used when directional move reaches a
+    /// zone-layout boundary with no neighbour output. Returns false when there is
+    /// no neighbour desktop or the window is not snapped.
     bool tryCrossDesktopMove(const QString& windowId, const QString& direction, const QString& screenId);
 
     /// Focus a window on the virtual desktop adjacent to the current one in

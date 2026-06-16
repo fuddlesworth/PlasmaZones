@@ -264,6 +264,31 @@ private Q_SLOTS:
         QVERIFY(m_service->isWindowFloating(windowIdNew));
     }
 
+    // ── Cross-desktop re-snap (Phase 1): SnapEngine::resolveCrossDesktopZone maps
+    //    a window's zone onto the target desktop's layout so a snap→snap
+    //    cross-desktop move lands snapped in the equivalent zone, not floating. ──
+    void testCrossDesktopZone_sharedLayout_resolvesEquivalentZone()
+    {
+        // layoutForScreen(screen, desktop, activity) falls back to defaultLayout()
+        // when the target (screen,desktop) has no explicit assignment — point the
+        // default at the test layout so desktop 2 resolves to the same layout.
+        const QString layoutId = m_testLayout->id().toString();
+        m_layoutManager->setDefaultLayoutIdProvider([layoutId]() {
+            return layoutId;
+        });
+
+        // Shared layout → the middle zone maps back to itself (1-based position
+        // round-trips), and the pixel geometry resolves (QTEST_MAIN primary screen).
+        const auto [zoneId, geo] = m_engine->resolveCrossDesktopZone(m_zoneIds.at(1), QStringLiteral("DP-1"), 2);
+        QCOMPARE(zoneId, m_zoneIds.at(1));
+        QVERIFY(geo.isValid());
+
+        // An unknown source zone has no position → no equivalent zone resolvable.
+        const auto [missZone, missGeo] =
+            m_engine->resolveCrossDesktopZone(QStringLiteral("not-a-zone"), QStringLiteral("DP-1"), 2);
+        QVERIFY(missZone.isEmpty());
+    }
+
     // testPreSnapGeometry_stableIdFallback removed: the per-engine unmanaged-geometry
     // store was collapsed into the unified WindowPlacementStore. The appId-fallback
     // lookup for float-back geometry is now exercised by the WindowPlacementStore

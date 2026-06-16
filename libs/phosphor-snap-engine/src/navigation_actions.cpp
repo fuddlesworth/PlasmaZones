@@ -26,9 +26,13 @@
 #include <PhosphorSnapEngine/SnapState.h>
 
 #include <PhosphorEngine/ICrossSurfaceResolver.h>
+#include <PhosphorEngine/IWindowTrackingService.h>
+#include <PhosphorEngine/WindowPlacementStore.h>
 
 #include <PhosphorSnapEngine/INavigationStateProvider.h>
 #include <PhosphorZones/Layout.h>
+#include <PhosphorZones/LayoutUtils.h>
+#include <PhosphorZones/Zone.h>
 
 #include <PhosphorWindowRule/RuleEvaluator.h>
 #include <PhosphorWindowRule/WindowQuery.h>
@@ -303,18 +307,82 @@ bool SnapEngine::tryCrossDesktopMove(const QString& windowId, const QString& dir
     if (targetDesktop <= 0) {
         return false;
     }
-    // Re-stamp the window's desktop membership (keeping its snapped slot). If it
-    // is unassigned or already on the target desktop, reassignDesktop is a no-op
-    // and returns false — there is nothing to move, so report no crossing and let
-    // the caller emit the boundary feedback instead of a phantom "moved" signal.
-    if (!m_snapState->reassignDesktop(windowId, targetDesktop)) {
+    // Only snapped windows cross-desktop: this path is reached via the
+    // no_adjacent_zone boundary, which requires a current zone. An unsnapped
+    // window has nothing to carry — report no crossing so the caller emits the
+    // boundary feedback instead of a phantom "moved" signal.
+    const QString currentZoneId = m_snapState->zoneForWindow(windowId);
+    if (currentZoneId.isEmpty()) {
         return false;
     }
-    // Ask the compositor to move the real window to the target desktop.
+
+    // Land the window snapped in the EQUIVALENT zone on the target desktop's
+    // layout, not floating at its old geometry. Desktops occupy the same
+    // physical space, so the window keeps its slot: map by zone position
+    // (1-based, zones sorted by number) into the target desktop's layout — a
+    // shared layout yields the same zone id, a different layout the
+    // positionally-equivalent zone. Mirrors calculateResnapFromPreviousLayout.
+    const auto [targetZoneId, targetGeo] = resolveCrossDesktopZone(currentZoneId, screenId, targetDesktop);
+
+    if (targetZoneId.isEmpty()) {
+        // No resolvable equivalent zone on the target desktop (no layout / no
+        // matching slot / invalid geometry): fall back to a bare desktop
+        // re-stamp + move. The window relocates but keeps its slot memory for
+        // when its own layout is restored — graceful degradation.
+        if (!m_snapState->reassignDesktop(windowId, targetDesktop)) {
+            return false;
+        }
+        Q_EMIT windowDesktopMoveRequested(windowId, targetDesktop);
+        Q_EMIT navigationFeedback(true, QStringLiteral("move"), QStringLiteral("desktop:") + direction, QString(),
+                                  QString(), screenId);
+        return true;
+    }
+
+    // Re-snap into the equivalent zone: update SnapState (zone + screen +
+    // desktop), refresh the placement-store record (desktop + snap slot), ask
+    // the compositor to relocate the real window, then apply the target zone's
+    // geometry. The effect's geometry apply has no current-desktop guard, so it
+    // lands correctly even though the target desktop isn't visible yet.
+    m_snapState->assignWindowToZone(windowId, targetZoneId, screenId, targetDesktop);
+    if (m_windowTracker) {
+        if (auto placement = capturePlacement(windowId)) {
+            placement->virtualDesktop = targetDesktop;
+            m_windowTracker->placementStore().record(std::move(*placement));
+        }
+    }
     Q_EMIT windowDesktopMoveRequested(windowId, targetDesktop);
+    Q_EMIT applyGeometryRequested(windowId, targetGeo.x(), targetGeo.y(), targetGeo.width(), targetGeo.height(),
+                                  targetZoneId, screenId, false);
     Q_EMIT navigationFeedback(true, QStringLiteral("move"), QStringLiteral("desktop:") + direction, QString(),
                               QString(), screenId);
     return true;
+}
+
+std::pair<QString, QRect> SnapEngine::resolveCrossDesktopZone(const QString& currentZoneId, const QString& screenId,
+                                                              int targetDesktop) const
+{
+    PhosphorZones::Layout* targetLayout =
+        m_layoutManager ? m_layoutManager->layoutForScreen(screenId, targetDesktop, currentActivity()) : nullptr;
+    if (!targetLayout || targetLayout->zones().isEmpty()) {
+        return {};
+    }
+    // Position is the 1-based enumeration index of zones sorted by zone number
+    // (NOT the raw zone number) — the same scheme the resnap path uses.
+    const int position =
+        PhosphorZones::LayoutUtils::buildGlobalZonePositionMap(m_layoutManager->layouts()).value(currentZoneId, 0);
+    QVector<PhosphorZones::Zone*> zones = targetLayout->zones();
+    PhosphorZones::LayoutUtils::sortZonesByNumber(zones);
+    PhosphorZones::Zone* targetZone =
+        (position >= 1 && position <= zones.size()) ? zones.value(position - 1, nullptr) : nullptr;
+    if (!targetZone) {
+        return {};
+    }
+    const QString targetZoneId = targetZone->id().toString();
+    const QRect geo = m_windowTracker ? m_windowTracker->zoneGeometry(targetZoneId, screenId) : QRect();
+    if (!geo.isValid()) {
+        return {};
+    }
+    return {targetZoneId, geo};
 }
 
 void SnapEngine::swapFocusedInDirection(const QString& direction, const NavigationContext& ctx)
