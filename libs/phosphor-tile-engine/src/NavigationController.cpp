@@ -204,6 +204,52 @@ QRect NavigationController::rectForWindowInState(PhosphorTiles::TilingState* sta
     return zones.at(idx);
 }
 
+QString NavigationController::entryWindowOnScreen(const QString& screenId, const QString& direction) const
+{
+    // Non-creating lookup: a miss must not persist an empty state.
+    PhosphorTiles::TilingState* state = m_engine->m_screenStates.value(m_engine->currentKeyForScreen(screenId));
+    if (!state) {
+        return QString();
+    }
+    const QStringList windows = state->tiledWindows();
+    if (windows.isEmpty()) {
+        return QString();
+    }
+    const QVector<QRect> zones = state->calculatedZones();
+    if (zones.size() != windows.size()) {
+        // Geometry not computed — first tiled window (the master) is the best
+        // available entry approximation.
+        return windows.first();
+    }
+    // The entry edge faces back toward the source: a crossing moving "right"
+    // enters the target's LEFT edge, "down" its TOP, etc. Pick the extreme tile
+    // on that edge.
+    int best = 0;
+    for (int i = 1; i < zones.size(); ++i) {
+        const QRect& r = zones.at(i);
+        const QRect& b = zones.at(best);
+        if (direction == QLatin1String("right") && r.x() < b.x()) {
+            best = i;
+        } else if (direction == QLatin1String("left") && r.x() > b.x()) {
+            best = i;
+        } else if (direction == QLatin1String("down") && r.y() < b.y()) {
+            best = i;
+        } else if (direction == QLatin1String("up") && r.y() > b.y()) {
+            best = i;
+        }
+    }
+    return windows.at(best);
+}
+
+int NavigationController::tileIndexOnScreen(const QString& screenId, const QString& windowId) const
+{
+    PhosphorTiles::TilingState* state = m_engine->m_screenStates.value(m_engine->currentKeyForScreen(screenId));
+    if (!state) {
+        return -1;
+    }
+    return state->tiledWindows().indexOf(windowId);
+}
+
 QString NavigationController::crossOutputFocusTarget(const QString& sourceScreenId, const QString& focused,
                                                      const QString& direction) const
 {
@@ -256,7 +302,7 @@ QString NavigationController::crossOutputFocusTarget(const QString& sourceScreen
 }
 
 bool NavigationController::crossOutputMove(const QString& sourceScreenId, const QString& focused,
-                                           const QString& direction)
+                                           const QString& direction, const QString& action)
 {
     if (!m_engine->m_crossSurfaceResolver) {
         return false;
@@ -281,11 +327,16 @@ bool NavigationController::crossOutputMove(const QString& sourceScreenId, const 
     if (!m_engine->isAutotileScreen(neighbor)) {
         // The neighbour output is a DIFFERENT tiling mode (snap). Autotile has no
         // state there, so defer to the daemon: it relinquishes the window from
-        // this engine and hands it to the snap engine, which snaps it into the
-        // neighbour's entry zone. The daemon slot is a direct (synchronous)
-        // connection, so the handoff completes before this returns. Same-desktop
-        // monitor crossing → targetDesktop 0 (current).
-        Q_EMIT m_engine->crossModeMoveRequested(focused, neighbor, 0, direction);
+        // this engine and hands it to the snap engine. A "swap" trades places with
+        // the entry zone's occupant (two-way); a "move" inserts one-way into the
+        // entry zone. The daemon slot is a direct (synchronous) connection, so the
+        // handoff completes before this returns. Same-desktop monitor crossing →
+        // targetDesktop 0 (current).
+        if (action == QLatin1String("swap")) {
+            Q_EMIT m_engine->crossModeSwapRequested(focused, neighbor, 0, direction);
+        } else {
+            Q_EMIT m_engine->crossModeMoveRequested(focused, neighbor, 0, direction);
+        }
         return true;
     }
     const PhosphorEngine::TilingStateKey oldKey = m_engine->currentKeyForScreen(sourceScreenId);
@@ -358,7 +409,7 @@ QString NavigationController::crossDesktopFocusTarget(const QString& sourceScree
 }
 
 bool NavigationController::crossDesktopMove(const QString& sourceScreenId, const QString& focused,
-                                            const QString& direction)
+                                            const QString& direction, const QString& action)
 {
     if (!m_engine->m_crossSurfaceResolver) {
         return false;
@@ -378,7 +429,11 @@ bool NavigationController::crossDesktopMove(const QString& sourceScreenId, const
     if (m_engine->m_layoutManager
         && m_engine->m_layoutManager->modeForScreen(sourceScreenId, targetDesktop, m_engine->m_currentActivity)
             == PhosphorZones::AssignmentEntry::Snapping) {
-        Q_EMIT m_engine->crossModeMoveRequested(focused, sourceScreenId, targetDesktop, direction);
+        if (action == QLatin1String("swap")) {
+            Q_EMIT m_engine->crossModeSwapRequested(focused, sourceScreenId, targetDesktop, direction);
+        } else {
+            Q_EMIT m_engine->crossModeMoveRequested(focused, sourceScreenId, targetDesktop, direction);
+        }
         return true;
     }
     // Same-mode (autotile) target desktop: move the window the way a NATIVE KWin
@@ -434,12 +489,12 @@ void NavigationController::swapFocusedInDirection(const QString& direction, cons
     if (hasGeometry) {
         // The focused window is at the layout edge in this direction — try the
         // adjacent output first, then the adjacent desktop, before giving up.
-        if (crossOutputMove(screenId, focused, direction)) {
+        if (crossOutputMove(screenId, focused, direction, action)) {
             Q_EMIT m_engine->navigationFeedback(true, action, QStringLiteral("screen:") + direction, QString(),
                                                 QString(), screenId);
             return;
         }
-        if (crossDesktopMove(screenId, focused, direction)) {
+        if (crossDesktopMove(screenId, focused, direction, action)) {
             Q_EMIT m_engine->navigationFeedback(true, action, QStringLiteral("desktop:") + direction, QString(),
                                                 QString(), screenId);
             return;

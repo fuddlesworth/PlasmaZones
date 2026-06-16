@@ -846,6 +846,22 @@ private Q_SLOTS:
                              const QString& direction);
 
     /**
+     * @brief Orchestrate a cross-MODE directional swap handoff (two-way).
+     *
+     * Wired to both engines' crossModeSwapRequested. Resolves the swap partner —
+     * the target surface's entry-edge window facing the source in @p direction
+     * (autotile: the edge tile; snap: the entry zone's occupant). With no partner
+     * the entry slot is empty, so it degrades to a plain cross-mode move. With a
+     * partner it captures both landing slots, relinquishes both windows from their
+     * engines, and re-places them swapped: the focused window takes the partner's
+     * slot on the target, the partner takes the focused window's vacated slot on
+     * the source. Emits windowOutputMoveExpected for each window that crosses
+     * outputs so the effect doesn't tear the placements down.
+     */
+    void handleCrossModeSwap(const QString& windowId, const QString& targetScreenId, int targetDesktop,
+                             const QString& direction);
+
+    /**
      * @brief Handle layout change by validating zone assignments
      *
      * When the active layout changes, windows may be assigned to zones that

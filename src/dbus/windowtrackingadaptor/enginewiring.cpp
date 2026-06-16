@@ -232,6 +232,19 @@ void WindowTrackingAdaptor::setEngines(PhosphorEngine::PlacementEngineBase* snap
                 &WindowTrackingAdaptor::handleCrossModeMove, Qt::DirectConnection);
     }
 
+    // Cross-MODE directional swap: like the move above, but a two-way exchange —
+    // handleCrossModeSwap also relinquishes the target's entry-edge partner and
+    // sends it back to the focused window's vacated slot. DirectConnection for the
+    // same synchronous-handoff reason.
+    if (m_autotileEngine) {
+        connect(m_autotileEngine, &PhosphorEngine::PlacementEngineBase::crossModeSwapRequested, this,
+                &WindowTrackingAdaptor::handleCrossModeSwap, Qt::DirectConnection);
+    }
+    if (m_snapEngine) {
+        connect(m_snapEngine, &PhosphorEngine::PlacementEngineBase::crossModeSwapRequested, this,
+                &WindowTrackingAdaptor::handleCrossModeSwap, Qt::DirectConnection);
+    }
+
     // ═══════════════════════════════════════════════════════════════════════════
     // Common float-restore geometry channel
     //
@@ -429,6 +442,112 @@ void WindowTrackingAdaptor::handleCrossModeMove(const QString& windowId, const Q
     // the target engine's placement geometry already relocated the window.
     if (targetDesktop > 0) {
         Q_EMIT windowDesktopMoveRequested(windowId, targetDesktop);
+    }
+}
+
+void WindowTrackingAdaptor::handleCrossModeSwap(const QString& windowId, const QString& targetScreenId,
+                                                int targetDesktop, const QString& direction)
+{
+    auto* sourceEngine = qobject_cast<PhosphorEngine::PlacementEngineBase*>(sender());
+    if (!sourceEngine || windowId.isEmpty() || targetScreenId.isEmpty() || !m_layoutManager) {
+        return;
+    }
+
+    // Cross-DESKTOP cross-mode swap (the reactive autotile-desktop-arrival case)
+    // is not yet a two-way exchange — fall back to the one-way move handler so the
+    // window still relocates correctly. True cross-desktop swap is a later phase.
+    if (targetDesktop > 0) {
+        handleCrossModeMove(windowId, targetScreenId, targetDesktop, direction);
+        return;
+    }
+
+    const QString activity = m_layoutManager->currentActivity();
+    const bool targetIsAutotile = m_layoutManager->modeForScreen(targetScreenId, currentDesktop(), activity)
+        == PhosphorZones::AssignmentEntry::Autotile;
+    PhosphorEngine::PlacementEngineBase* targetEngine =
+        targetIsAutotile ? m_autotileEngine.data() : m_snapEngine.data();
+    if (!targetEngine || targetEngine == sourceEngine) {
+        return; // target engine unavailable, or not actually cross-mode
+    }
+    const QString sourceScreen = sourceEngine->screenForTrackedWindow(windowId);
+    if (sourceScreen.isEmpty()) {
+        return;
+    }
+
+    // ── Resolve the swap partner: the target surface's entry-edge window facing
+    //    the source, and the slot the focused window will land in (the partner's
+    //    slot). ──
+    QString partner;
+    QStringList focusedLandingZones; // F's landing on a SNAP target (the entry zone)
+    int focusedLandingIndex = -1; // F's landing on an AUTOTILE target (partner's index)
+    if (targetIsAutotile) {
+        if (auto* autotileTarget = qobject_cast<PhosphorTileEngine::AutotileEngine*>(targetEngine)) {
+            partner = autotileTarget->entryWindowForCrossing(targetScreenId, direction);
+            if (!partner.isEmpty()) {
+                focusedLandingIndex = autotileTarget->tileIndexForWindow(targetScreenId, partner);
+            }
+        }
+    } else if (auto* snapTarget = qobject_cast<PhosphorSnapEngine::SnapEngine*>(targetEngine)) {
+        const QString entryZone = snapTarget->entryZoneForCrossing(direction, targetScreenId);
+        if (!entryZone.isEmpty()) {
+            focusedLandingZones = QStringList{entryZone};
+            partner = snapTarget->windowInZoneOnScreen(entryZone, targetScreenId);
+        }
+    }
+
+    // No partner (empty entry slot) → a plain one-way cross-mode move.
+    if (partner.isEmpty()) {
+        handleCrossModeMove(windowId, targetScreenId, targetDesktop, direction);
+        return;
+    }
+
+    // ── Capture the partner's landing on the SOURCE: the focused window's vacated
+    //    slot. Captured BEFORE any relinquish so the indices/zones are still live. ──
+    QStringList partnerLandingZones; // partner's landing on a SNAP source (F's zone)
+    int partnerLandingIndex = -1; // partner's landing on an AUTOTILE source (F's index)
+    if (sourceEngine == m_autotileEngine.data()) {
+        if (auto* autotileSource = qobject_cast<PhosphorTileEngine::AutotileEngine*>(sourceEngine)) {
+            partnerLandingIndex = autotileSource->tileIndexForWindow(sourceScreen, windowId);
+        }
+    } else if (auto* snapSource = qobject_cast<PhosphorSnapEngine::SnapEngine*>(sourceEngine)) {
+        const QString fZone = snapSource->snapState() ? snapSource->snapState()->zoneForWindow(windowId) : QString();
+        if (!fZone.isEmpty()) {
+            partnerLandingZones = QStringList{fZone};
+        }
+    }
+
+    // ── A monitor crossing physically relocates BOTH windows to a different
+    //    output (F → target, partner → source). Arm the daemon-owned-move marker
+    //    for each so the effect's reactive outputChanged doesn't tear the
+    //    placements down (see handleCrossModeMove). ──
+    Q_EMIT windowOutputMoveExpected(windowId, targetScreenId);
+    Q_EMIT windowOutputMoveExpected(partner, sourceScreen);
+
+    // ── Relinquish both windows from their current engines (tracking-only). ──
+    sourceEngine->handoffRelease(windowId);
+    targetEngine->handoffRelease(partner);
+
+    // ── Place the focused window on the target, in the partner's slot. ──
+    {
+        PhosphorEngine::IPlacementEngine::HandoffContext ctx;
+        ctx.windowId = windowId;
+        ctx.toScreenId = targetScreenId;
+        ctx.fromEngineId = sourceEngine->engineId();
+        ctx.sourceZoneIds = focusedLandingZones;
+        ctx.insertIndex = focusedLandingIndex;
+        ctx.wasFloating = false;
+        targetEngine->handoffReceive(ctx);
+    }
+    // ── Place the partner on the source, in the focused window's vacated slot. ──
+    {
+        PhosphorEngine::IPlacementEngine::HandoffContext ctx;
+        ctx.windowId = partner;
+        ctx.toScreenId = sourceScreen;
+        ctx.fromEngineId = targetEngine->engineId();
+        ctx.sourceZoneIds = partnerLandingZones;
+        ctx.insertIndex = partnerLandingIndex;
+        ctx.wasFloating = false;
+        sourceEngine->handoffReceive(ctx);
     }
 }
 

@@ -74,6 +74,22 @@ public:
 
     void adjustMasterCount(int delta);
 
+    /**
+     * @brief The tiled window at @p screenId's entry edge facing the source when
+     *        a crossing arrives in @p direction (crossing "right" enters the
+     *        target's LEFT edge → the leftmost tile, etc.). Empty when the screen
+     *        has no tiling state or no tiled windows. Used by the daemon to pick
+     *        the cross-mode swap partner on an autotile target.
+     */
+    QString entryWindowOnScreen(const QString& screenId, const QString& direction) const;
+
+    /**
+     * @brief The tile-order index of @p windowId on @p screenId's current state,
+     *        or -1 when not tiled there. Lets the daemon capture a window's slot
+     *        before a cross-mode swap so its counterpart lands in the same place.
+     */
+    int tileIndexOnScreen(const QString& screenId, const QString& windowId) const;
+
 private:
     /**
      * @brief Resolve active screen for navigation feedback
@@ -144,9 +160,14 @@ private:
     /**
      * @brief Move @p focused from @p sourceScreenId into the adjacent output in
      *        @p direction, migrating its tiling state and activating it there.
+     * @param action "move" or "swap" — selects the cross-mode signal emitted when
+     *        the neighbour output is a different (snap) mode: a "swap" defers to
+     *        crossModeSwapRequested (two-way exchange), a "move" to
+     *        crossModeMoveRequested (one-way insert).
      * @return false when there is no resolver or no neighbour output.
      */
-    bool crossOutputMove(const QString& sourceScreenId, const QString& focused, const QString& direction);
+    bool crossOutputMove(const QString& sourceScreenId, const QString& focused, const QString& direction,
+                         const QString& action);
 
     /**
      * @brief The window to focus when directional navigation crosses to the
@@ -165,7 +186,8 @@ private:
      *        emitting windowDesktopMoveRequested so the compositor moves the
      *        real window. Returns false when there is no neighbour desktop.
      */
-    bool crossDesktopMove(const QString& sourceScreenId, const QString& focused, const QString& direction);
+    bool crossDesktopMove(const QString& sourceScreenId, const QString& focused, const QString& direction,
+                          const QString& action);
 
     /**
      * @brief The global-coordinate rect of @p windowId within @p state, or an

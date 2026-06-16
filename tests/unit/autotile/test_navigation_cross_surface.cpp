@@ -95,6 +95,8 @@ private Q_SLOTS:
     void focus_fromTopRight_resolvesEachDirectionGeometrically();
     void swap_exchangesWithSpatialNeighbour();
 
+    void entryWindowForCrossing_picksEdgeTileFacingSource();
+    void crossOutput_swapTowardNonAutotileOutput_emitsCrossModeSwap();
     void crossOutput_focusRight_entersLeftEdgeOfNeighbourOutput();
     void crossOutput_moveRight_emitsExpectedMoveOnceBeforeReflowsAndActivate();
     void crossOutput_moveTowardNonAutotileOutput_doesNotStrandWindow();
@@ -288,6 +290,64 @@ void TestNavigationCrossSurface::crossOutput_moveRight_emitsExpectedMoveOnceBefo
         }
     }
     QVERIFY2(activatedA2, "the moved window must be activated on its new output");
+}
+
+void TestNavigationCrossSurface::entryWindowForCrossing_picksEdgeTileFacingSource()
+{
+    // Binary split: win1 left (x=0), win2 top-right (x=960,y=0), win3 bottom-right
+    // (x=960,y=540). The entry window for a crossing arriving in `direction` is the
+    // tile at the edge facing back toward the source — i.e. the extreme tile on
+    // the OPPOSITE edge from the travel direction.
+    std::unique_ptr<AutotileEngine> engine(PlasmaZones::TestHelpers::createEngineWithWindows(kScreen, 3));
+    installBinarySplitLayout(engine.get());
+    const QStringList wins = engine->tilingStateForScreen(kScreen)->tiledWindows();
+
+    // Crossing right enters the target's LEFT edge → the leftmost tile (win1).
+    QCOMPARE(engine->entryWindowForCrossing(kScreen, QStringLiteral("right")), wins.at(0));
+    // Crossing left enters the RIGHT edge → a right-column tile (win2/win3).
+    const QString leftEntry = engine->entryWindowForCrossing(kScreen, QStringLiteral("left"));
+    QVERIFY2(leftEntry == wins.at(1) || leftEntry == wins.at(2), "left crossing enters a right-column tile");
+    // Crossing down enters the TOP edge; up enters the BOTTOM edge.
+    const QString downEntry = engine->entryWindowForCrossing(kScreen, QStringLiteral("down"));
+    QVERIFY2(downEntry == wins.at(0) || downEntry == wins.at(1), "down crossing enters a top-row tile");
+    QCOMPARE(engine->entryWindowForCrossing(kScreen, QStringLiteral("up")), wins.at(2)); // bottom-right
+}
+
+void TestNavigationCrossSurface::crossOutput_swapTowardNonAutotileOutput_emitsCrossModeSwap()
+{
+    // DP-2 is a SNAP (non-autotile) neighbour. An autotile SWAP toward it is a
+    // cross-MODE swap: crossOutputMove must emit crossModeSwapRequested (the
+    // daemon does the two-way exchange) — NOT crossModeMoveRequested.
+    PhosphorScreens::FakeScreenProvider provider;
+    provider.addScreen(QStringLiteral("DP-1"), QRect(0, 0, 1920, 1080));
+    provider.addScreen(QStringLiteral("DP-2"), QRect(1920, 0, 1920, 1080));
+    auto manager = std::make_unique<PhosphorScreens::ScreenManager>(
+        PhosphorScreens::ScreenManagerConfig{.screenProvider = &provider, .useGeometrySensors = false});
+    manager->start();
+    auto engine =
+        std::make_unique<AutotileEngine>(nullptr, nullptr, manager.get(), PlasmaZones::TestHelpers::testRegistry());
+    auto resolver = std::make_unique<PlasmaZones::CrossSurfaceResolver>(manager.get(), nullptr);
+    engine->setCrossSurfaceResolver(resolver.get());
+    engine->setAutotileScreens({QStringLiteral("DP-1")}); // DP-2 deliberately NOT autotile
+    engine->windowOpened(QStringLiteral("a1"), QStringLiteral("DP-1"));
+    engine->windowOpened(QStringLiteral("a2"), QStringLiteral("DP-1"));
+    QCoreApplication::processEvents();
+    engine->tilingStateForScreen(QStringLiteral("DP-1"))
+        ->setCalculatedZones({QRect(0, 0, 960, 1080), QRect(960, 0, 960, 1080)});
+
+    QSignalSpy swapSpy(engine.get(), &AutotileEngine::crossModeSwapRequested);
+    QSignalSpy moveSpy(engine.get(), &AutotileEngine::crossModeMoveRequested);
+    // a2 is the right tile — swapping it "right" reaches the DP-2 snap boundary.
+    engine->swapFocusedInDirection(QStringLiteral("right"),
+                                   NavigationContext{QStringLiteral("a2"), QStringLiteral("DP-1")});
+
+    QCOMPARE(moveSpy.count(), 0); // a swap, not a move
+    QCOMPARE(swapSpy.count(), 1);
+    const QList<QVariant> args = swapSpy.takeFirst();
+    QCOMPARE(args.at(0).toString(), QStringLiteral("a2"));
+    QCOMPARE(args.at(1).toString(), QStringLiteral("DP-2"));
+    QCOMPARE(args.at(2).toInt(), 0); // monitor crossing, current desktop
+    QCOMPARE(args.at(3).toString(), QStringLiteral("right"));
 }
 
 void TestNavigationCrossSurface::crossOutput_moveTowardNonAutotileOutput_doesNotStrandWindow()

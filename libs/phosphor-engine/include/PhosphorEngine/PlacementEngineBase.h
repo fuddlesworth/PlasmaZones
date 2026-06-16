@@ -98,6 +98,18 @@ Q_SIGNALS:
     void crossModeMoveRequested(const QString& windowId, const QString& targetScreenId, int targetDesktop,
                                 const QString& direction);
 
+    /// Emitted when a directional SWAP reaches a context boundary whose target is
+    /// a DIFFERENT tiling mode than the source — the two-way cross-mode exchange.
+    /// The daemon resolves the target's entry-edge window (the partner facing the
+    /// source in @p direction) and trades the two: the focused window crosses to
+    /// the partner's position on the target surface, the partner returns to the
+    /// focused window's vacated position on the source. With no partner (empty
+    /// entry edge) it degrades to a plain cross-mode move. Same parameter meaning
+    /// as crossModeMoveRequested: @p targetDesktop is 0 for a monitor crossing,
+    /// else the 1-based destination desktop; @p direction is the swap direction.
+    void crossModeSwapRequested(const QString& windowId, const QString& targetScreenId, int targetDesktop,
+                                const QString& direction);
+
     /// Emitted to sync floating state without restoring geometry.
     /// Passive state-sync: engine-internal divergence correction.
     void windowFloatingStateSynced(const QString& windowId, bool floating, const QString& screenId);

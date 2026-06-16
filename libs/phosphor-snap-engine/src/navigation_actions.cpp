@@ -422,6 +422,44 @@ bool SnapEngine::tryCrossModeOutputMove(const QString& windowId, const QString& 
     return true;
 }
 
+bool SnapEngine::trySwapCrossModeOutput(const QString& windowId, const QString& direction, const QString& screenId)
+{
+    if (!m_crossSurfaceResolver || !m_layoutManager) {
+        return false;
+    }
+    const QString neighbour = m_crossSurfaceResolver->neighborOutputInDirection(screenId, direction);
+    if (neighbour.isEmpty()) {
+        return false;
+    }
+    // Only an AUTOTILE neighbour is a cross-mode swap; a snap neighbour with no
+    // entry zone was already handled (or rejected) by the resolver's
+    // crossOutputSwapTarget. Defer to the daemon to trade the focused window with
+    // the neighbour's entry-edge tile.
+    if (m_layoutManager->modeForScreen(neighbour, currentVirtualDesktop(), currentActivity())
+        != PhosphorZones::AssignmentEntry::Autotile) {
+        return false;
+    }
+    Q_EMIT crossModeSwapRequested(windowId, neighbour, 0, direction);
+    return true;
+}
+
+QString SnapEngine::windowInZoneOnScreen(const QString& zoneId, const QString& screenId) const
+{
+    if (!m_windowTracker || zoneId.isEmpty()) {
+        return QString();
+    }
+    // windowsInZone is screen-agnostic (a zone UUID is shared by every output the
+    // layout drives), so pin to the daemon's stored screen assignment.
+    const QStringList windows = m_windowTracker->windowsInZone(zoneId);
+    const QHash<QString, QString>& screens = m_windowTracker->screenAssignments();
+    for (const QString& windowId : windows) {
+        if (screens.value(windowId) == screenId) {
+            return windowId;
+        }
+    }
+    return QString();
+}
+
 QString SnapEngine::entryZoneForCrossing(const QString& direction, const QString& neighbourScreen) const
 {
     if (!m_zoneAdjacencyResolver) {
@@ -460,13 +498,14 @@ bool SnapEngine::trySwapCrossDesktop(const QString& windowId, const QString& dir
     if (currentZoneId.isEmpty()) {
         return false;
     }
-    // A cross-MODE desktop swap (the target desktop is autotile) needs a
-    // bidirectional handoff between the two engines — deferred to the cross-mode
-    // swap phase. Report no crossing here rather than half-swapping.
+    // A cross-MODE desktop swap (the target desktop is autotile) is a two-way
+    // exchange handled by the daemon: it trades the focused window with the
+    // entry-edge tile on the target autotile desktop. Defer via crossModeSwap.
     if (m_layoutManager
         && m_layoutManager->modeForScreen(screenId, targetDesktop, currentActivity())
             == PhosphorZones::AssignmentEntry::Autotile) {
-        return false;
+        Q_EMIT crossModeSwapRequested(windowId, screenId, targetDesktop, direction);
+        return true;
     }
     // Map the focused window's zone to the positionally-equivalent zone on the
     // target desktop's layout (shared layout → same id, different layout →
@@ -561,10 +600,14 @@ void SnapEngine::swapFocusedInDirection(const QString& direction, const Navigati
     const QString screenId = resolveNavScreen(m_navState, windowId, m_windowTracker, ctx.screenId);
     PhosphorProtocol::SwapTargetResult result = resolver->getSwapTargetForWindow(windowId, direction, screenId);
     if (!result.success) {
-        // At a zone-layout boundary with no neighbour output, the resolver
-        // deferred the decision to us — try swapping across the adjacent desktop
-        // before reporting the boundary.
+        // At a zone-layout boundary with no SNAP neighbour, the resolver deferred
+        // to us. Try, in order: a cross-MODE swap onto an autotile neighbour
+        // output (two-way exchange via the daemon), then a snap cross-desktop
+        // swap, before reporting the boundary.
         if (result.reason == QLatin1String("no_adjacent_zone")) {
+            if (trySwapCrossModeOutput(windowId, direction, screenId)) {
+                return;
+            }
             if (trySwapCrossDesktop(windowId, direction, screenId)) {
                 return;
             }

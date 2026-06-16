@@ -95,6 +95,12 @@ public:
     /// the daemon cross-mode handoff to place a window arriving on a snap monitor.
     QString entryZoneForCrossing(const QString& direction, const QString& neighbourScreen) const;
 
+    /// The window snapped to @p zoneId on @p screenId (the daemon's stored
+    /// assignment pins it to that output), or empty if the zone is unoccupied
+    /// there. Used by the cross-mode swap to find the snap partner when THIS
+    /// engine is the swap target.
+    QString windowInZoneOnScreen(const QString& zoneId, const QString& screenId) const;
+
     // ═══════════════════════════════════════════════════════════════════════════
     // IPlacementEngine — lifecycle
     // ═══════════════════════════════════════════════════════════════════════════
@@ -723,6 +729,13 @@ private:
     /// snapped, the target desktop is a different (autotile) mode, or no
     /// equivalent zone is resolvable.
     bool trySwapCrossDesktop(const QString& windowId, const QString& direction, const QString& screenId);
+
+    /// If the neighbour OUTPUT in @p direction is autotile mode, emit
+    /// crossModeSwapRequested so the daemon trades the focused window with the
+    /// neighbour's entry-edge tile, and return true. Returns false when there is
+    /// no neighbour output or it is also snap-mode (handled by the resolver's
+    /// cross-output swap path).
+    bool trySwapCrossModeOutput(const QString& windowId, const QString& direction, const QString& screenId);
 
     /// Focus a window on the virtual desktop adjacent to the current one in
     /// @p direction (the entry window on @p screenId there), switching KWin to

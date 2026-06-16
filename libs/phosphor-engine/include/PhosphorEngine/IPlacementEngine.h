@@ -377,6 +377,10 @@ public:
         QRect sourceGeometry; ///< window's frame at handoff time (for size preservation)
         QStringList sourceZoneIds; ///< zones the window held at source (empty if not snapped)
         bool wasFloating = false; ///< window was floating in source engine
+        int insertIndex = -1; ///< autotile target: tile-order position to insert at
+                              ///< (-1 = insertion-order policy). Used by a cross-mode
+                              ///< SWAP so the arriving window takes the departed
+                              ///< partner's exact slot. Ignored by snap targets.
     };
 
     /// Receive ownership of a window from another engine.

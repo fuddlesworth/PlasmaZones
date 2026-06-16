@@ -734,6 +734,16 @@ public:
     void swapFocusedInDirection(const QString& direction, const PhosphorEngine::NavigationContext& ctx) override;
     void moveFocusedToPosition(int position, const PhosphorEngine::NavigationContext& ctx) override;
     void rotateWindows(bool clockwise, const PhosphorEngine::NavigationContext& ctx) override;
+
+    /// Cross-mode swap support (queried by the daemon when THIS engine is the
+    /// target): the tiled window at @p screenId's entry edge facing the source
+    /// for a crossing arriving in @p direction — the swap partner. Empty when
+    /// the screen has no tiled windows.
+    QString entryWindowForCrossing(const QString& screenId, const QString& direction) const;
+    /// The tile-order index of @p windowId on @p screenId (current desktop), or
+    /// -1 when not tiled there — lets the daemon land a swap counterpart in the
+    /// same slot the departing window held.
+    int tileIndexForWindow(const QString& screenId, const QString& windowId) const;
     void reapplyLayout(const PhosphorEngine::NavigationContext& ctx) override;
     void reapplyManagedWindowAppearance() override;
     std::optional<PhosphorEngine::WindowPlacement> capturePlacement(const QString& windowId) const override;

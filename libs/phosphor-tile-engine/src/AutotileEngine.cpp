@@ -1916,10 +1916,14 @@ void AutotileEngine::handoffReceive(const HandoffContext& ctx)
     }
 
     // Insert at the position dictated by the insertion-order setting (a
-    // directional cross-mode move should land where new windows land), except a
-    // drag-drop carrying a cursor position, which the drag-insert path places
-    // separately — there we keep the simple append so the drop point wins.
-    if (ctx.dropPos.isNull()) {
+    // directional cross-mode move should land where new windows land), except:
+    //   - a cross-mode SWAP carries an explicit insertIndex so the arriving
+    //     window takes the departed partner's exact slot;
+    //   - a drag-drop carrying a cursor position, which the drag-insert path
+    //     places separately — there we keep the simple append so the drop wins.
+    if (ctx.insertIndex >= 0 && ctx.dropPos.isNull()) {
+        state->addWindow(windowId, ctx.insertIndex);
+    } else if (ctx.dropPos.isNull()) {
         insertWindowByConfigOrder(state, windowId);
     } else {
         state->addWindow(windowId);
@@ -4047,6 +4051,16 @@ void AutotileEngine::moveFocusedInDirection(const QString& direction, const Navi
 void AutotileEngine::swapFocusedInDirection(const QString& direction, const NavigationContext& ctx)
 {
     m_navigation->swapFocusedInDirection(direction, QStringLiteral("swap"), canonicalizeForLookup(ctx.windowId));
+}
+
+QString AutotileEngine::entryWindowForCrossing(const QString& screenId, const QString& direction) const
+{
+    return m_navigation->entryWindowOnScreen(screenId, direction);
+}
+
+int AutotileEngine::tileIndexForWindow(const QString& screenId, const QString& windowId) const
+{
+    return m_navigation->tileIndexOnScreen(screenId, canonicalizeForLookup(windowId));
 }
 
 void AutotileEngine::moveFocusedToPosition(int position, const NavigationContext& ctx)
