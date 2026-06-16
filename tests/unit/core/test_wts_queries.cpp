@@ -35,6 +35,9 @@
 #include <PhosphorZones/Layout.h>
 #include <PhosphorZones/Zone.h>
 #include <PhosphorWorkspaces/VirtualDesktopManager.h>
+#include <PhosphorEngine/ICrossSurfaceResolver.h>
+#include <PhosphorEngine/NavigationContext.h>
+#include <PhosphorSnapEngine/IZoneAdjacencyResolver.h>
 #include "core/utils.h"
 #include "../helpers/IsolatedConfigGuard.h"
 #include "../helpers/LayoutRegistryTestHelpers.h"
@@ -42,6 +45,42 @@
 using namespace PlasmaZones;
 using PhosphorEngine::ZoneAssignmentEntry;
 using namespace PhosphorSnapEngine;
+
+namespace {
+
+/// Minimal cross-surface resolver: maps a direction to a neighbour desktop,
+/// reports no neighbour OUTPUT (so cross-output swap fails and the engine falls
+/// through to the cross-desktop path).
+class FakeCrossSurfaceQueries : public PhosphorEngine::ICrossSurfaceResolver
+{
+public:
+    int desktopRight = 0;
+    QString neighborOutputInDirection(const QString&, const QString&) const override
+    {
+        return QString();
+    }
+    int neighborDesktopInDirection(int, const QString& dir) const override
+    {
+        return dir == QLatin1String("right") ? desktopRight : 0;
+    }
+};
+
+/// Minimal zone-adjacency resolver: no adjacent zone on any output (forces the
+/// no_adjacent_zone boundary), no first-in-direction zone.
+class FakeAdjacencyQueries : public PhosphorSnapEngine::IZoneAdjacencyResolver
+{
+public:
+    QString getAdjacentZone(const QString&, const QString&, const QString&) const override
+    {
+        return QString();
+    }
+    QString getFirstZoneInDirection(const QString&, const QString&) const override
+    {
+        return QString();
+    }
+};
+
+} // namespace
 using PlasmaZones::TestHelpers::IsolatedConfigGuard;
 
 // =========================================================================
@@ -287,6 +326,59 @@ private Q_SLOTS:
         const auto [missZone, missGeo] =
             m_engine->resolveCrossDesktopZone(QStringLiteral("not-a-zone"), QStringLiteral("DP-1"), 2);
         QVERIFY(missZone.isEmpty());
+    }
+
+    // ── Cross-desktop swap (Phase 4b): swapping a snapped window toward a
+    //    monitor edge with no neighbour OUTPUT crosses to the adjacent desktop
+    //    and trades places with the occupant of the equivalent zone there. ──
+    void testCrossDesktopSwap_swapsWithEquivalentZoneOccupant()
+    {
+        const QString layoutId = m_testLayout->id().toString();
+        m_layoutManager->setDefaultLayoutIdProvider([layoutId]() {
+            return layoutId;
+        });
+
+        // No neighbour output (cross-output swap fails) but desktop 2 lies to the
+        // right; no in-surface adjacent zone, so the resolver hits the boundary.
+        FakeCrossSurfaceQueries cross;
+        cross.desktopRight = 2;
+        FakeAdjacencyQueries adj;
+        m_engine->setZoneAdjacencyResolver(&adj);
+        m_engine->setCrossSurfaceResolver(&cross);
+
+        // Focused window F snapped in the last zone on DP-1 (current desktop 0 —
+        // no VirtualDesktopManager is wired, so currentVirtualDesktop() is 0);
+        // partner P snapped in the SAME (equivalent, shared-layout) zone on the
+        // target desktop 2.
+        const QString f = QStringLiteral("appF:win:1");
+        const QString p = QStringLiteral("appP:win:2");
+        SnapState* snap = m_engine->snapState();
+        snap->assignWindowToZone(f, m_zoneIds.at(2), QStringLiteral("DP-1"), 0);
+        snap->assignWindowToZone(p, m_zoneIds.at(2), QStringLiteral("DP-1"), 2);
+
+        QSignalSpy desktopSpy(m_engine, &SnapEngine::windowDesktopMoveRequested);
+        QSignalSpy geoSpy(m_engine, &SnapEngine::applyGeometryRequested);
+
+        PhosphorEngine::NavigationContext ctx;
+        ctx.windowId = f;
+        ctx.screenId = QStringLiteral("DP-1");
+        m_engine->swapFocusedInDirection(QStringLiteral("right"), ctx);
+
+        // Both windows relocate: F → desktop 2, partner P → the current desktop 0.
+        QCOMPARE(desktopSpy.count(), 2);
+        QCOMPARE(desktopSpy.at(0).at(0).toString(), f);
+        QCOMPARE(desktopSpy.at(0).at(1).toInt(), 2);
+        QCOMPARE(desktopSpy.at(1).at(0).toString(), p);
+        QCOMPARE(desktopSpy.at(1).at(1).toInt(), 0);
+        // Each relocation also re-applies a zone geometry (snapped, not floating).
+        QCOMPARE(geoSpy.count(), 2);
+
+        // SnapState reflects the exchange: F now lives on desktop 2, P on 0.
+        QCOMPARE(snap->windowsOnScreenAndDesktop(QStringLiteral("DP-1"), 2), QStringList{f});
+        QCOMPARE(snap->windowsOnScreenAndDesktop(QStringLiteral("DP-1"), 0), QStringList{p});
+
+        m_engine->setCrossSurfaceResolver(nullptr);
+        m_engine->setZoneAdjacencyResolver(nullptr);
     }
 
     // testPreSnapGeometry_stableIdFallback removed: the per-engine unmanaged-geometry
