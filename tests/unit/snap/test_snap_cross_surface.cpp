@@ -228,6 +228,7 @@ private Q_SLOTS:
     void focus_crossOutputZoneSharedWithSourceScreen_picksNeighbourOutputWindow();
     void focus_inSurfaceZoneSharedWithSiblingScreen_picksThisScreenWindow();
     void focus_inSurfaceScreenIdSkew_fallsBackToZoneOccupant();
+    void swap_inSurfaceZoneSharedWithSiblingScreen_picksThisScreenPartner();
     void move_noNeighbourOutput_reportsBoundary();
 
     void reassignDesktop_restampsAssignedWindowKeepingZone();
@@ -370,6 +371,32 @@ void TestSnapCrossSurface::focus_inSurfaceScreenIdSkew_fallsBackToZoneOccupant()
         resolver.getFocusTargetForWindow(QStringLiteral("w1"), QStringLiteral("right"), QStringLiteral("DP-1"));
     QVERIFY(result.success);
     QCOMPARE(result.windowIdToActivate, QStringLiteral("wHere")); // fallback occupant, not no_window_in_zone
+}
+
+void TestSnapCrossSurface::swap_inSurfaceZoneSharedWithSiblingScreen_picksThisScreenPartner()
+{
+    // In-surface swap counterpart selection: the adjacent zone's UUID also exists
+    // on a sibling monitor. The swap partner must be the occupant on THIS output
+    // (DP-1), not the sibling's list-first occupant — mirroring the focus path.
+    FakeWindowTracking wts;
+    wts.zoneOfWindow[QStringLiteral("w1")] = QStringLiteral("z-a");
+    wts.zoneGeo[key(QStringLiteral("z-a"), QStringLiteral("DP-1"))] = QRect(0, 0, 960, 1080);
+    wts.zoneGeo[key(QStringLiteral("z-target"), QStringLiteral("DP-1"))] = QRect(960, 0, 960, 1080);
+    wts.windowsByZone[QStringLiteral("z-target")] = {QStringLiteral("wThere"), QStringLiteral("wHere")};
+    wts.screenOfWindow[QStringLiteral("wHere")] = QStringLiteral("DP-1");
+    wts.screenOfWindow[QStringLiteral("wThere")] = QStringLiteral("DP-2");
+
+    FakeZoneAdjacency adj;
+    adj.adjacent = QStringLiteral("z-target");
+
+    std::unique_ptr<PhosphorZones::LayoutRegistry> layoutManager(
+        PlasmaZones::TestHelpers::makeLayoutRegistry(QStringLiteral("test-snap-cross")));
+    SnapNavigationTargetResolver resolver(&wts, layoutManager.get(), &adj, {});
+
+    const auto result =
+        resolver.getSwapTargetForWindow(QStringLiteral("w1"), QStringLiteral("right"), QStringLiteral("DP-1"));
+    QVERIFY(result.success);
+    QCOMPARE(result.windowId2, QStringLiteral("wHere")); // the DP-1 partner, not list-first wThere
 }
 
 void TestSnapCrossSurface::move_noNeighbourOutput_reportsBoundary()

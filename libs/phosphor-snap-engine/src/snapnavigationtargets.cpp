@@ -500,7 +500,14 @@ PhosphorProtocol::SwapTargetResult SnapNavigationTargetResolver::getSwapTargetFo
                           effectiveScreenId, currentZoneId, targetZoneId);
     }
 
-    QString targetWindowId = windowsInTargetZone.first();
+    // Prefer the swap partner actually on this output, mirroring the focus path:
+    // a zone UUID shared with a sibling monitor must not supply the counterpart
+    // when a same-output occupant exists. Best-effort — fall back to the
+    // unfiltered first occupant on screen-id-form skew (see getFocusTargetForWindow).
+    QString targetWindowId = firstWindowInZoneOnScreen(targetZoneId, effectiveScreenId);
+    if (targetWindowId.isEmpty()) {
+        targetWindowId = windowsInTargetZone.first();
+    }
     emitFeedback(true, QStringLiteral("swap"), direction, currentZoneId, targetZoneId, effectiveScreenId);
     return swapResult(true, QString(), windowId, targetGeom.x(), targetGeom.y(), targetGeom.width(),
                       targetGeom.height(), targetZoneId, targetWindowId, currentGeom.x(), currentGeom.y(),
