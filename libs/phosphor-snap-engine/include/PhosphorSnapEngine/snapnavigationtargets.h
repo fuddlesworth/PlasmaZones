@@ -127,6 +127,14 @@ private:
     PhosphorProtocol::MoveTargetResult crossOutputEntryTarget(const QString& currentZoneId, const QString& direction,
                                                               const QString& sourceScreenId) const;
 
+    /// First window snapped to @p zoneId on @p screenName, or empty if none.
+    /// windowsInZone() is screen-agnostic — the same zone UUID is shared by
+    /// every output the layout is assigned to (zones resolve by UUID across all
+    /// layouts), so a bare windowsInZone(zoneId).first() can return a window on
+    /// the WRONG output when one layout drives multiple monitors. Filtering by
+    /// the daemon's screen assignment pins the result to the intended output.
+    QString firstWindowInZoneOnScreen(const QString& zoneId, const QString& screenName) const;
+
     PhosphorEngine::IWindowTrackingService* m_service = nullptr;
     PhosphorZones::LayoutRegistry* m_layoutManager = nullptr;
     IZoneAdjacencyResolver* m_zoneAdjacency = nullptr;

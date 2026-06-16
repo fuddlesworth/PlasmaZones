@@ -2030,6 +2030,13 @@ void Daemon::stop()
     m_snapEngine.reset();
     m_autotileEngine.reset();
 
+    // Both engines borrowed m_crossSurfaceResolver (injected at construction).
+    // They are destroyed immediately above, so the borrow is already dead;
+    // reset the resolver here too so the teardown order is explicit and
+    // grep-discoverable — matching the exclude-rule / window-rule borrow
+    // severing above — and survives a future member-declaration reorder.
+    m_crossSurfaceResolver.reset();
+
     // Unregister D-Bus object path and service to prevent late calls during shutdown
     QDBusConnection bus = QDBusConnection::sessionBus();
     bus.unregisterObject(QString(PhosphorProtocol::Service::ObjectPath));

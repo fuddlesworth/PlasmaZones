@@ -687,8 +687,9 @@ private:
     /// @p direction (the entry window on @p screenId there), switching KWin to
     /// it. Used when directional focus reaches a zone-layout boundary with no
     /// neighbour output. Returns false when there is no neighbour desktop or no
-    /// window on it.
-    bool tryCrossDesktopFocus(const QString& windowId, const QString& direction, const QString& screenId);
+    /// window on it. The focused window's id is not needed — the entry window is
+    /// chosen from the target desktop's occupants, not relative to the source.
+    bool tryCrossDesktopFocus(const QString& direction, const QString& screenId);
 
     /// Check whether the window is excluded from the given navigation
     /// action by a terminal `Exclude` action in the unified WindowRule

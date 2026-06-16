@@ -204,7 +204,7 @@ void SnapEngine::focusInDirection(const QString& direction, const NavigationCont
         // At a zone-layout boundary with no neighbour output, the resolver
         // deferred the decision to us — try focusing onto the adjacent desktop.
         if (result.reason == QLatin1String("no_adjacent_zone")) {
-            if (tryCrossDesktopFocus(windowId, direction, screenId)) {
+            if (tryCrossDesktopFocus(direction, screenId)) {
                 return;
             }
             Q_EMIT navigationFeedback(false, QStringLiteral("focus"), QStringLiteral("no_adjacent_zone"), QString(),
@@ -217,9 +217,8 @@ void SnapEngine::focusInDirection(const QString& direction, const NavigationCont
     }
 }
 
-bool SnapEngine::tryCrossDesktopFocus(const QString& windowId, const QString& direction, const QString& screenId)
+bool SnapEngine::tryCrossDesktopFocus(const QString& direction, const QString& screenId)
 {
-    Q_UNUSED(windowId)
     if (!m_crossSurfaceResolver || !m_snapState) {
         return false;
     }
@@ -304,9 +303,14 @@ bool SnapEngine::tryCrossDesktopMove(const QString& windowId, const QString& dir
     if (targetDesktop <= 0) {
         return false;
     }
-    // Re-stamp the window's desktop membership (keeping its snapped slot) and
-    // ask the compositor to move the real window to the target desktop.
-    m_snapState->reassignDesktop(windowId, targetDesktop);
+    // Re-stamp the window's desktop membership (keeping its snapped slot). If it
+    // is unassigned or already on the target desktop, reassignDesktop is a no-op
+    // and returns false — there is nothing to move, so report no crossing and let
+    // the caller emit the boundary feedback instead of a phantom "moved" signal.
+    if (!m_snapState->reassignDesktop(windowId, targetDesktop)) {
+        return false;
+    }
+    // Ask the compositor to move the real window to the target desktop.
     Q_EMIT windowDesktopMoveRequested(windowId, targetDesktop);
     Q_EMIT navigationFeedback(true, QStringLiteral("move"), QStringLiteral("desktop:") + direction, QString(),
                               QString(), screenId);

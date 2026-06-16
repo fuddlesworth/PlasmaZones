@@ -104,6 +104,8 @@ private Q_SLOTS:
 
     void crossDesktop_focusRight_activatesEntryWindowOnNextDesktop();
     void crossDesktop_moveRight_relocatesToNextDesktopAndRequestsKWinMove();
+    void crossDesktop_focusLeft_atGridEdge_doesNotActivate();
+    void crossDesktop_moveLeft_atGridEdge_doesNotRequestKWinMove();
 };
 
 void TestNavigationCrossSurface::focusRight_fromLeftColumn_picksWindowToTheRight()
@@ -231,6 +233,21 @@ void TestNavigationCrossSurface::crossOutput_moveRight_emitsExpectedMoveOnceBefo
     QSignalSpy activateSpy(fx.engine.get(), &AutotileEngine::activateWindowRequested);
     QSignalSpy placementSpy(fx.engine.get(), &AutotileEngine::placementChanged);
 
+    // Cross-signal emit order: QSignalSpy only timestamps within a single signal,
+    // so record all three into one ordered list to actually verify the contract
+    // (the expected-move marker must precede every reflow/activate so the
+    // compositor holds it before any tile-apply-driven outputChanged echo).
+    QStringList emitOrder;
+    QObject::connect(fx.engine.get(), &AutotileEngine::windowOutputMoveExpected, fx.engine.get(), [&emitOrder]() {
+        emitOrder.append(QStringLiteral("expected"));
+    });
+    QObject::connect(fx.engine.get(), &AutotileEngine::placementChanged, fx.engine.get(), [&emitOrder]() {
+        emitOrder.append(QStringLiteral("placement"));
+    });
+    QObject::connect(fx.engine.get(), &AutotileEngine::activateWindowRequested, fx.engine.get(), [&emitOrder]() {
+        emitOrder.append(QStringLiteral("activate"));
+    });
+
     fx.engine->moveFocusedInDirection(QStringLiteral("right"),
                                       NavigationContext{QStringLiteral("a2"), QStringLiteral("DP-1")});
 
@@ -250,13 +267,13 @@ void TestNavigationCrossSurface::crossOutput_moveRight_emitsExpectedMoveOnceBefo
     QVERIFY(fx.engine->tilingStateForScreen(QStringLiteral("DP-2"))->containsWindow(QStringLiteral("a2")));
     QVERIFY(!fx.engine->tilingStateForScreen(QStringLiteral("DP-1"))->containsWindow(QStringLiteral("a2")));
 
-    // Both outputs were reflowed and the moved window was activated. Ordering:
-    // the expected-move marker must be recorded BEFORE the reflow/activate
-    // signals so the compositor has it before any tile-apply-driven
-    // outputChanged echo. QSignalSpy timestamps aren't available, but the
-    // emit-ordering contract is exercised by the single-threaded direct
-    // emission above (windowOutputMoveExpected is emitted first in
-    // crossOutputMove, before retileAfterOperation and activateWindowRequested).
+    // Both outputs were reflowed and the moved window was activated. The
+    // expected-move marker must come FIRST in the global emit order, ahead of
+    // every reflow (placementChanged) and the activate.
+    QVERIFY(!emitOrder.isEmpty());
+    QCOMPARE(emitOrder.first(), QStringLiteral("expected"));
+    QVERIFY(emitOrder.indexOf(QStringLiteral("expected"))
+            < emitOrder.indexOf(QStringLiteral("activate"))); // marker precedes activation
     QVERIFY(placementSpy.count() >= 1);
     // The moved window is activated. (Under this null-algorithm harness overflow
     // handling on the destination can emit an extra activate, so assert that a2
@@ -411,6 +428,7 @@ void TestNavigationCrossSurface::crossDesktop_focusRight_activatesEntryWindowOnN
     QCOMPARE(activateSpy.count(), 1);
     QCOMPARE(activateSpy.takeFirst().at(0).toString(), QStringLiteral("d2win"));
 }
+
 void TestNavigationCrossSurface::crossDesktop_moveRight_relocatesToNextDesktopAndRequestsKWinMove()
 {
     std::unique_ptr<AutotileEngine> engine(PlasmaZones::TestHelpers::createEngineWithWindows(kScreen, 2));
@@ -439,6 +457,49 @@ void TestNavigationCrossSurface::crossDesktop_moveRight_relocatesToNextDesktopAn
     const QList<QVariant> args = moveSpy.takeFirst();
     QCOMPARE(args.at(0).toString(), rightmost);
     QCOMPARE(args.at(1).toInt(), 2);
+}
+
+void TestNavigationCrossSurface::crossDesktop_focusLeft_atGridEdge_doesNotActivate()
+{
+    // Desktop 1 is the left edge of the grid: FakeCrossSurfaceResolver returns 0
+    // ("no neighbour") for "left" there. Focusing left from the leftmost window
+    // has no in-surface neighbour, no neighbour output, and no neighbour desktop
+    // — nothing may be activated.
+    std::unique_ptr<AutotileEngine> engine(PlasmaZones::TestHelpers::createEngineWithWindows(kScreen, 2));
+    FakeCrossSurfaceResolver resolver;
+    engine->setCrossSurfaceResolver(&resolver);
+    engine->setCurrentDesktop(1);
+
+    PhosphorTiles::TilingState* d1 = engine->tilingStateForScreen(kScreen);
+    d1->setCalculatedZones({QRect(0, 0, 960, 1080), QRect(960, 0, 960, 1080)});
+    const QStringList wins = d1->tiledWindows();
+
+    QSignalSpy activateSpy(engine.get(), &AutotileEngine::activateWindowRequested);
+    engine->focusInDirection(QStringLiteral("left"), ctx(wins.at(0))); // leftmost window
+    QCOMPARE(activateSpy.count(), 0);
+}
+
+void TestNavigationCrossSurface::crossDesktop_moveLeft_atGridEdge_doesNotRequestKWinMove()
+{
+    // Mirror of the focus case for move/swap: at the grid's left edge there is no
+    // neighbour output and no neighbour desktop, so the window must be left
+    // untouched — neither a KWin desktop move nor an output-move marker fires.
+    std::unique_ptr<AutotileEngine> engine(PlasmaZones::TestHelpers::createEngineWithWindows(kScreen, 2));
+    FakeCrossSurfaceResolver resolver;
+    engine->setCrossSurfaceResolver(&resolver);
+    engine->setCurrentDesktop(1);
+
+    PhosphorTiles::TilingState* d1 = engine->tilingStateForScreen(kScreen);
+    d1->setCalculatedZones({QRect(0, 0, 960, 1080), QRect(960, 0, 960, 1080)});
+    const QStringList wins = d1->tiledWindows();
+    const QString leftmost = wins.at(0);
+
+    QSignalSpy moveSpy(engine.get(), &AutotileEngine::windowDesktopMoveRequested);
+    QSignalSpy expectedSpy(engine.get(), &AutotileEngine::windowOutputMoveExpected);
+    engine->swapFocusedInDirection(QStringLiteral("left"), ctx(leftmost));
+    QCOMPARE(moveSpy.count(), 0);
+    QCOMPARE(expectedSpy.count(), 0);
+    QVERIFY(engine->tilingStateForScreen(kScreen)->containsWindow(leftmost));
 }
 
 QTEST_MAIN(TestNavigationCrossSurface)

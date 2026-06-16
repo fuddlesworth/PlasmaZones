@@ -311,8 +311,13 @@ QString NavigationController::crossDesktopFocusTarget(const QString& sourceScree
     if (!m_engine->m_crossSurfaceResolver) {
         return QString();
     }
-    const int targetDesktop =
-        m_engine->m_crossSurfaceResolver->neighborDesktopInDirection(m_engine->m_currentDesktop, direction);
+    // Base the neighbour-desktop arithmetic on the source screen's EFFECTIVE
+    // desktop, not the global current desktop: a screen sticky-pinned by the
+    // "virtualdesktopsonlyonprimary" model (m_screenDesktopOverride) shows — and
+    // its TilingState is keyed on — its pinned desktop, which currentKeyForScreen
+    // resolves. For unpinned screens this is identical to m_currentDesktop.
+    const int baseDesktop = m_engine->currentKeyForScreen(sourceScreenId).desktop;
+    const int targetDesktop = m_engine->m_crossSurfaceResolver->neighborDesktopInDirection(baseDesktop, direction);
     if (targetDesktop <= 0) {
         return QString();
     }
@@ -341,12 +346,14 @@ bool NavigationController::crossDesktopMove(const QString& sourceScreenId, const
     if (!m_engine->m_crossSurfaceResolver) {
         return false;
     }
-    const int targetDesktop =
-        m_engine->m_crossSurfaceResolver->neighborDesktopInDirection(m_engine->m_currentDesktop, direction);
+    // Base on the source screen's effective desktop (sticky-pin aware), exactly
+    // as crossDesktopFocusTarget does — for unpinned screens this equals
+    // m_currentDesktop.
+    const int baseDesktop = m_engine->currentKeyForScreen(sourceScreenId).desktop;
+    const int targetDesktop = m_engine->m_crossSurfaceResolver->neighborDesktopInDirection(baseDesktop, direction);
     if (targetDesktop <= 0) {
         return false;
     }
-    Q_UNUSED(sourceScreenId)
     // Move the window the way a NATIVE KWin desktop move works: just ask the
     // compositor to move it to the target desktop, then let the existing
     // reactive machinery do the rest. When the window leaves the current

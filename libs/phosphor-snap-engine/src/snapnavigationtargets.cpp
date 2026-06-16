@@ -145,7 +145,9 @@ SnapNavigationTargetResolver::crossOutputEntryTarget(const QString& currentZoneI
                                                      const QString& sourceScreenId) const
 {
     const QString fail = QString();
-    if (!m_crossSurface || !m_zoneAdjacency || !m_service) {
+    // m_service is a ctor invariant (Q_ASSERT'd, never null and never reset);
+    // only the late-bound resolvers are genuinely optional here.
+    if (!m_crossSurface || !m_zoneAdjacency) {
         return moveResult(false, fail, QString(), QRect(), currentZoneId, sourceScreenId);
     }
     const QString neighborScreen = m_crossSurface->neighborOutputInDirection(sourceScreenId, direction);
@@ -164,6 +166,18 @@ SnapNavigationTargetResolver::crossOutputEntryTarget(const QString& currentZoneI
     // Success: the entry zone on the neighbour output. Feedback is emitted by
     // the caller so the move/focus tag is correct.
     return moveResult(true, QString(), entryZone, geo, currentZoneId, neighborScreen);
+}
+
+QString SnapNavigationTargetResolver::firstWindowInZoneOnScreen(const QString& zoneId, const QString& screenName) const
+{
+    const QStringList windows = m_service->windowsInZone(zoneId);
+    const QHash<QString, QString>& screens = m_service->screenAssignments();
+    for (const QString& windowId : windows) {
+        if (screens.value(windowId) == screenName) {
+            return windowId;
+        }
+    }
+    return QString();
 }
 
 // Feedback callback emission goes through SnapNavigationTargetResolver::emitFeedback
@@ -304,12 +318,14 @@ PhosphorProtocol::FocusTargetResult SnapNavigationTargetResolver::getFocusTarget
         const PhosphorProtocol::MoveTargetResult cross =
             crossOutputEntryTarget(currentZoneId, direction, effectiveScreenId);
         if (cross.success) {
-            const QStringList crossWindows = m_service->windowsInZone(cross.zoneId);
-            if (!crossWindows.isEmpty()) {
+            // Pin the entry window to the neighbour output: windowsInZone is
+            // screen-agnostic and the entry zone's UUID can also exist on the
+            // source output when one layout drives both monitors.
+            const QString entryWindow = firstWindowInZoneOnScreen(cross.zoneId, cross.screenName);
+            if (!entryWindow.isEmpty()) {
                 emitFeedback(true, QStringLiteral("focus"), QStringLiteral("screen:") + direction, currentZoneId,
                              cross.zoneId, cross.screenName);
-                return focusResult(true, QString(), crossWindows.first(), currentZoneId, cross.zoneId,
-                                   cross.screenName);
+                return focusResult(true, QString(), entryWindow, currentZoneId, cross.zoneId, cross.screenName);
             }
         }
         // Defer the boundary decision (and feedback) to the caller when a
@@ -323,8 +339,11 @@ PhosphorProtocol::FocusTargetResult SnapNavigationTargetResolver::getFocusTarget
                            effectiveScreenId);
     }
 
-    QStringList windowsInZone = m_service->windowsInZone(targetZoneId);
-    if (windowsInZone.isEmpty()) {
+    // Same screen-agnostic windowsInZone caveat as the cross-output path above:
+    // restrict to the window actually on this output so a shared zone UUID on a
+    // sibling monitor can't hijack same-surface focus.
+    const QString targetWindow = firstWindowInZoneOnScreen(targetZoneId, effectiveScreenId);
+    if (targetWindow.isEmpty()) {
         emitFeedback(false, QStringLiteral("focus"), QStringLiteral("no_window_in_zone"), currentZoneId, targetZoneId,
                      effectiveScreenId);
         return focusResult(false, QStringLiteral("no_window_in_zone"), QString(), currentZoneId, targetZoneId,
@@ -332,7 +351,7 @@ PhosphorProtocol::FocusTargetResult SnapNavigationTargetResolver::getFocusTarget
     }
 
     emitFeedback(true, QStringLiteral("focus"), direction, currentZoneId, targetZoneId, effectiveScreenId);
-    return focusResult(true, QString(), windowsInZone.first(), currentZoneId, targetZoneId, effectiveScreenId);
+    return focusResult(true, QString(), targetWindow, currentZoneId, targetZoneId, effectiveScreenId);
 }
 
 PhosphorProtocol::RestoreTargetResult SnapNavigationTargetResolver::getRestoreForWindow(const QString& windowId,

@@ -732,6 +732,12 @@ void AutotileHandler::onDaemonReady()
     // screenId ever seen, never pruned), so resetting here both restarts the
     // staggered-apply epochs cleanly and keeps the map bounded across reconnects.
     m_autotileStaggerGenByScreen.clear();
+    // Daemon-owned cross-output move markers belong to the dead session. A
+    // stale one-shot armed before the restart (windowOutputMoveExpected fired,
+    // matching outputChanged not yet seen) would swallow the next genuine
+    // outputChanged for that window — taking the bookkeeping-only path and
+    // skipping the real transfer. Clear it like every other per-session map.
+    m_expectedOutputMove.clear();
     // In-flight debounced minimize→float commits and minimize-float records
     // belong to the dead daemon session — a timer firing now would issue a
     // setWindowFloatingForScreen against state the new daemon never had, and

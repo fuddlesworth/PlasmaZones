@@ -41,6 +41,7 @@ public:
     QHash<QString, QString> zoneOfWindow; // windowId  -> zoneId
     QHash<QString, QStringList> windowsByZone; // zoneId    -> windowIds
     QHash<QString, QRect> zoneGeo; // "zone|screen" -> rect
+    QHash<QString, QString> screenOfWindow; // windowId  -> screenId
 
     QString zoneForWindow(const QString& w) const override
     {
@@ -60,7 +61,7 @@ public:
     }
     const QHash<QString, QString>& screenAssignments() const override
     {
-        return m_screenAssign;
+        return screenOfWindow;
     }
     const QHash<QString, QStringList>& zoneAssignments() const override
     {
@@ -181,7 +182,6 @@ public:
     }
 
 private:
-    QHash<QString, QString> m_screenAssign;
     QHash<QString, QStringList> m_zoneAssign;
     QHash<QString, QList<PhosphorEngine::PendingRestore>> m_pending;
     PhosphorEngine::WindowPlacementStore m_store;
@@ -225,6 +225,7 @@ class TestSnapCrossSurface : public QObject
 private Q_SLOTS:
     void move_noAdjacentZone_crossesToNeighbourOutputEntryZone();
     void focus_noAdjacentZone_focusesWindowInNeighbourOutputEntryZone();
+    void focus_crossOutputZoneSharedWithSourceScreen_picksNeighbourOutputWindow();
     void move_noNeighbourOutput_reportsBoundary();
 
     void reassignDesktop_restampsAssignedWindowKeepingZone();
@@ -262,6 +263,7 @@ void TestSnapCrossSurface::focus_noAdjacentZone_focusesWindowInNeighbourOutputEn
     wts.zoneOfWindow[QStringLiteral("w1")] = QStringLiteral("z-a");
     wts.zoneGeo[key(QStringLiteral("z-b"), QStringLiteral("DP-2"))] = QRect(1920, 0, 960, 1080);
     wts.windowsByZone[QStringLiteral("z-b")] = {QStringLiteral("w2")};
+    wts.screenOfWindow[QStringLiteral("w2")] = QStringLiteral("DP-2"); // entry window lives on the neighbour output
 
     FakeZoneAdjacency adj;
     adj.adjacent = QString();
@@ -279,6 +281,39 @@ void TestSnapCrossSurface::focus_noAdjacentZone_focusesWindowInNeighbourOutputEn
         resolver.getFocusTargetForWindow(QStringLiteral("w1"), QStringLiteral("right"), QStringLiteral("DP-1"));
     QVERIFY(result.success);
     QCOMPARE(result.windowIdToActivate, QStringLiteral("w2"));
+    QCOMPARE(result.screenName, QStringLiteral("DP-2"));
+}
+
+void TestSnapCrossSurface::focus_crossOutputZoneSharedWithSourceScreen_picksNeighbourOutputWindow()
+{
+    // The entry zone's UUID also exists on the SOURCE output (one layout drives
+    // both monitors). windowsInZone(z-b) therefore returns a window on each
+    // screen; the cross-output focus must pick the one on the neighbour output
+    // (DP-2), never the same-zone window still on the source (DP-1).
+    FakeWindowTracking wts;
+    wts.zoneOfWindow[QStringLiteral("w1")] = QStringLiteral("z-a");
+    wts.zoneGeo[key(QStringLiteral("z-b"), QStringLiteral("DP-2"))] = QRect(1920, 0, 960, 1080);
+    // wSrc is in zone z-b but on DP-1; wDst is in zone z-b on DP-2.
+    wts.windowsByZone[QStringLiteral("z-b")] = {QStringLiteral("wSrc"), QStringLiteral("wDst")};
+    wts.screenOfWindow[QStringLiteral("wSrc")] = QStringLiteral("DP-1");
+    wts.screenOfWindow[QStringLiteral("wDst")] = QStringLiteral("DP-2");
+
+    FakeZoneAdjacency adj;
+    adj.adjacent = QString();
+    adj.firstInDir[key(QStringLiteral("left"), QStringLiteral("DP-2"))] = QStringLiteral("z-b");
+
+    FakeCrossSurface cross;
+    cross.neighborOut[key(QStringLiteral("DP-1"), QStringLiteral("right"))] = QStringLiteral("DP-2");
+
+    std::unique_ptr<PhosphorZones::LayoutRegistry> layoutManager(
+        PlasmaZones::TestHelpers::makeLayoutRegistry(QStringLiteral("test-snap-cross")));
+    SnapNavigationTargetResolver resolver(&wts, layoutManager.get(), &adj, {});
+    resolver.setCrossSurfaceResolver(&cross);
+
+    const auto result =
+        resolver.getFocusTargetForWindow(QStringLiteral("w1"), QStringLiteral("right"), QStringLiteral("DP-1"));
+    QVERIFY(result.success);
+    QCOMPARE(result.windowIdToActivate, QStringLiteral("wDst")); // the DP-2 occupant, not wSrc
     QCOMPARE(result.screenName, QStringLiteral("DP-2"));
 }
 
@@ -300,6 +335,12 @@ void TestSnapCrossSurface::move_noNeighbourOutput_reportsBoundary()
     const auto result =
         resolver.getMoveTargetForWindow(QStringLiteral("w1"), QStringLiteral("right"), QStringLiteral("DP-1"));
     QVERIFY(!result.success);
+    // Verify it is specifically the boundary path (no adjacent zone, no neighbour
+    // output), not some other failure (invalid window / no zone detection) that
+    // would satisfy a bare !success — the test name promises the boundary reason.
+    QCOMPARE(result.reason, QStringLiteral("no_adjacent_zone"));
+    QVERIFY(result.zoneId.isEmpty());
+    QCOMPARE(result.sourceZoneId, QStringLiteral("z-a"));
 }
 
 void TestSnapCrossSurface::reassignDesktop_restampsAssignedWindowKeepingZone()
