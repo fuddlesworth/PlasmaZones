@@ -12,9 +12,7 @@
 #include <PhosphorEngine/ICrossSurfaceResolver.h>
 #include <PhosphorScreens/Manager.h>
 
-#include <QScreen>
 #include <algorithm>
-#include <PhosphorScreens/ScreenIdentity.h>
 
 namespace PhosphorTileEngine {
 
