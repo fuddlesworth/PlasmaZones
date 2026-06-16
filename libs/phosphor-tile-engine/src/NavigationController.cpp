@@ -712,7 +712,14 @@ QStringList NavigationController::tiledWindowsForFocusedScreen(QString& outScree
     // it — using the daemon's value avoids operating on the wrong window.
     if (!explicitWindowId.isEmpty()) {
         for (auto it = m_engine->m_screenStates.constBegin(); it != m_engine->m_screenStates.constEnd(); ++it) {
-            if (it.key().desktop != m_engine->m_currentDesktop || it.key().activity != m_engine->m_currentActivity) {
+            // Match each screen's EFFECTIVE desktop, not the raw global one: a
+            // screen sticky-pinned by the "virtualdesktopsonlyonprimary" model
+            // (m_screenDesktopOverride) keeps its TilingState on its pinned
+            // desktop, so a bare `!= m_currentDesktop` would skip the pinned
+            // screen and miss the explicit window living there. currentKeyForScreen
+            // resolves the override; for unpinned screens it is m_currentDesktop.
+            if (it.key().desktop != m_engine->currentKeyForScreen(it.key().screenId).desktop
+                || it.key().activity != m_engine->m_currentActivity) {
                 continue;
             }
             PhosphorTiles::TilingState* state = it.value();
@@ -741,9 +748,11 @@ QStringList NavigationController::tiledWindowsForFocusedScreen(QString& outScree
         }
     }
 
-    // Fallback: scan states for current desktop/activity (e.g., if m_activeScreen is stale)
+    // Fallback: scan states for current desktop/activity (e.g., if m_activeScreen is stale).
+    // Same sticky-pin-aware desktop match as the explicit-window scan above.
     for (auto it = m_engine->m_screenStates.constBegin(); it != m_engine->m_screenStates.constEnd(); ++it) {
-        if (it.key().desktop != m_engine->m_currentDesktop || it.key().activity != m_engine->m_currentActivity) {
+        if (it.key().desktop != m_engine->currentKeyForScreen(it.key().screenId).desktop
+            || it.key().activity != m_engine->m_currentActivity) {
             continue;
         }
         PhosphorTiles::TilingState* state = it.value();

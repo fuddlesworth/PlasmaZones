@@ -170,6 +170,11 @@ target_link_libraries(PhosphorScreensCore
         Qt6::Core
         Qt6::Gui   # QRect / QRectF / QScreen in public headers
         PhosphorIdentity::PhosphorIdentity
+    PRIVATE
+        # Shared geometric directional selector for virtual-screen swap — used
+        # only in swapper.cpp, so PRIVATE. PhosphorGeometry depends only on
+        # Qt6::Core, so no dependency cycle.
+        PhosphorGeometry::PhosphorGeometry
 )
 
 _phosphorscreens_target_defaults(PhosphorScreensCore)

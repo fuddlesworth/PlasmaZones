@@ -106,6 +106,7 @@ private Q_SLOTS:
     void crossDesktop_moveRight_relocatesToNextDesktopAndRequestsKWinMove();
     void crossDesktop_focusLeft_atGridEdge_doesNotActivate();
     void crossDesktop_moveLeft_atGridEdge_doesNotRequestKWinMove();
+    void stickyPinnedScreen_explicitFocusResolvesPinnedState();
 };
 
 void TestNavigationCrossSurface::focusRight_fromLeftColumn_picksWindowToTheRight()
@@ -500,6 +501,46 @@ void TestNavigationCrossSurface::crossDesktop_moveLeft_atGridEdge_doesNotRequest
     QCOMPARE(moveSpy.count(), 0);
     QCOMPARE(expectedSpy.count(), 0);
     QVERIFY(engine->tilingStateForScreen(kScreen)->containsWindow(leftmost));
+}
+
+void TestNavigationCrossSurface::stickyPinnedScreen_explicitFocusResolvesPinnedState()
+{
+    // A screen sticky-pinned (virtualdesktopsonlyonprimary) to a non-current
+    // desktop keeps its TilingState on the pinned desktop. An explicit-window
+    // focus request for a window on that pinned screen must resolve the pinned
+    // state — even when m_activeScreen (and its focused window) points at a
+    // DIFFERENT screen on the current desktop, which would otherwise hijack the
+    // resolution. Regression guard for the desktop-filter scan in
+    // tiledWindowsForFocusedScreen being sticky-pin aware.
+    TwoOutputFixture fx;
+    // Pin DP-1 (a1, a2 both "sticky"/on-all-desktops); DP-2 stays unpinned.
+    fx.engine->updateStickyScreenPins([](const QString& w) {
+        return w == QLatin1String("a1") || w == QLatin1String("a2");
+    });
+
+    // Switch desktops: DP-1 stays pinned to desktop 1; DP-2 follows to desktop 2.
+    fx.engine->setCurrentDesktop(2);
+
+    // Give DP-2 a focused window on desktop 2 so the active-screen path resolves
+    // to DP-2 — the decoy that the OLD bare `!= m_currentDesktop` scan would
+    // wrongly fall through to instead of finding the pinned DP-1 state.
+    fx.engine->windowOpened(QStringLiteral("c1"), QStringLiteral("DP-2"));
+    QCoreApplication::processEvents();
+    fx.engine->windowFocused(QStringLiteral("c1"), QStringLiteral("DP-2")); // m_activeScreen = DP-2
+
+    // Re-assert DP-1's pinned-state geometry right before the focus (the desktop
+    // switch / window-open may have recomputed zones).
+    fx.engine->tilingStateForScreen(QStringLiteral("DP-1"))
+        ->setCalculatedZones({QRect(0, 0, 960, 1080), QRect(960, 0, 960, 1080)});
+
+    // Focus right from a1 (left window on the pinned DP-1): the explicit-window
+    // resolution must find DP-1's pinned state and land on a2 — NOT operate on
+    // DP-2 where m_activeScreen points.
+    QSignalSpy activateSpy(fx.engine.get(), &AutotileEngine::activateWindowRequested);
+    fx.engine->focusInDirection(QStringLiteral("right"),
+                                NavigationContext{QStringLiteral("a1"), QStringLiteral("DP-1")});
+    QCOMPARE(activateSpy.count(), 1);
+    QCOMPARE(activateSpy.takeFirst().at(0).toString(), QStringLiteral("a2"));
 }
 
 QTEST_MAIN(TestNavigationCrossSurface)
