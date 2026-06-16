@@ -17,6 +17,7 @@
 #include <PhosphorEngine/ICrossSurfaceResolver.h>
 #include <PhosphorEngine/NavigationContext.h>
 #include <PhosphorScreens/Manager.h>
+#include <PhosphorTileEngine/AutotileConfig.h>
 #include <PhosphorTileEngine/AutotileEngine.h>
 #include <PhosphorTiles/TilingState.h>
 
@@ -96,6 +97,8 @@ private Q_SLOTS:
 
     void crossOutput_focusRight_entersLeftEdgeOfNeighbourOutput();
     void crossOutput_moveRight_emitsExpectedMoveOnceBeforeReflowsAndActivate();
+    void crossOutput_moveTowardNonAutotileOutput_doesNotStrandWindow();
+    void crossOutput_moveTowardFullAutotileOutput_doesNotStrandWindow();
     void inSurfaceMove_doesNotEmitExpectedMove();
     void crossVirtualScreen_focusRight_crossesToSiblingVirtualScreen();
 
@@ -267,6 +270,61 @@ void TestNavigationCrossSurface::crossOutput_moveRight_emitsExpectedMoveOnceBefo
         }
     }
     QVERIFY2(activatedA2, "the moved window must be activated on its new output");
+}
+
+void TestNavigationCrossSurface::crossOutput_moveTowardNonAutotileOutput_doesNotStrandWindow()
+{
+    // Two side-by-side outputs, but only DP-1 is autotile-managed. The
+    // CrossSurfaceResolver still returns DP-2 as the geometric right-neighbour
+    // (it has no autotile knowledge), so moving a2 "right" reaches crossOutputMove
+    // with a NON-autotile destination. migrateWindowBetweenKeys would remove a2
+    // from DP-1 but never re-add it on a non-autotile screen — stranding it
+    // (tracked nowhere). crossOutputMove must REFUSE before mutating any state:
+    // no windowOutputMoveExpected marker, and a2 stays tiled and tracked on DP-1.
+    PhosphorScreens::FakeScreenProvider provider;
+    provider.addScreen(QStringLiteral("DP-1"), QRect(0, 0, 1920, 1080));
+    provider.addScreen(QStringLiteral("DP-2"), QRect(1920, 0, 1920, 1080));
+    auto manager = std::make_unique<PhosphorScreens::ScreenManager>(
+        PhosphorScreens::ScreenManagerConfig{.screenProvider = &provider, .useGeometrySensors = false});
+    manager->start();
+    auto engine =
+        std::make_unique<AutotileEngine>(nullptr, nullptr, manager.get(), PlasmaZones::TestHelpers::testRegistry());
+    auto resolver = std::make_unique<PlasmaZones::CrossSurfaceResolver>(manager.get(), nullptr);
+    engine->setCrossSurfaceResolver(resolver.get());
+    engine->setAutotileScreens({QStringLiteral("DP-1")}); // DP-2 deliberately NOT autotile
+    engine->windowOpened(QStringLiteral("a1"), QStringLiteral("DP-1"));
+    engine->windowOpened(QStringLiteral("a2"), QStringLiteral("DP-1"));
+    QCoreApplication::processEvents();
+    engine->tilingStateForScreen(QStringLiteral("DP-1"))
+        ->setCalculatedZones({QRect(0, 0, 960, 1080), QRect(960, 0, 960, 1080)});
+
+    QSignalSpy expectedSpy(engine.get(), &AutotileEngine::windowOutputMoveExpected);
+    engine->moveFocusedInDirection(QStringLiteral("right"),
+                                   NavigationContext{QStringLiteral("a2"), QStringLiteral("DP-1")});
+
+    QCOMPARE(expectedSpy.count(), 0);
+    QVERIFY(engine->isWindowTracked(QStringLiteral("a2")));
+    QVERIFY(engine->tilingStateForScreen(QStringLiteral("DP-1"))->containsWindow(QStringLiteral("a2")));
+}
+
+void TestNavigationCrossSurface::crossOutput_moveTowardFullAutotileOutput_doesNotStrandWindow()
+{
+    TwoOutputFixture fx;
+    // DP-2 is autotile but already holds maxWindows tiled windows (b1, b2).
+    // Moving a2 "right" toward it reaches crossOutputMove with a FULL autotile
+    // destination: onWindowAdded rejects the insert (count >= max) AFTER a2 was
+    // already removed from DP-1 and re-keyed — stranding it. The capacity guard
+    // must refuse before any state mutation or marker emit: a2 stays tiled and
+    // tracked on DP-1.
+    fx.engine->config()->maxWindows = 2;
+
+    QSignalSpy expectedSpy(fx.engine.get(), &AutotileEngine::windowOutputMoveExpected);
+    fx.engine->moveFocusedInDirection(QStringLiteral("right"),
+                                      NavigationContext{QStringLiteral("a2"), QStringLiteral("DP-1")});
+
+    QCOMPARE(expectedSpy.count(), 0);
+    QVERIFY(fx.engine->isWindowTracked(QStringLiteral("a2")));
+    QVERIFY(fx.engine->tilingStateForScreen(QStringLiteral("DP-1"))->containsWindow(QStringLiteral("a2")));
 }
 
 void TestNavigationCrossSurface::inSurfaceMove_doesNotEmitExpectedMove()

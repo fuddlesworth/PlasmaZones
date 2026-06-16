@@ -240,21 +240,29 @@ void AutotileHandler::slotWindowsTileRequested(const PhosphorProtocol::TileReque
         // getWindowScreenId() still returns the SOURCE screen — which made the
         // destination batch bump the SOURCE screen's stagger generation and
         // cancel the source monitor's own reflow (its remaining windows never
-        // re-tiled). req.screenId is the screen the daemon tiled the window on.
-        QString screenId = !e.screenId.isEmpty() ? e.screenId : m_effect->getWindowScreenId(e.window);
-        toApply.append({QPointer<KWin::EffectWindow>(e.window), e.geometry, e.windowId, screenId, e.isMonocle});
+        // re-tiled). req.screenId is the screen the daemon tiled the window on,
+        // and TileRequestEntry::validationError() rejects an empty screenId
+        // before it ever reaches `entries`, so it is always present here.
+        toApply.append({QPointer<KWin::EffectWindow>(e.window), e.geometry, e.windowId, e.screenId, e.isMonocle});
     }
 
-    // A window the daemon asked us to tile that we could not resolve to a live
-    // EffectWindow is dropped from this batch. Surface it: a silent drop here is
-    // exactly how a source-monitor reflow loses windows (only the resolvable
-    // ones move, the rest are stranded).
-    if (toApply.size() != validatedRequests.size()) {
+    // A TILE window the daemon asked us to tile that we could not resolve to a
+    // live EffectWindow is dropped from this batch. Surface it: a silent drop
+    // here is exactly how a source-monitor reflow loses windows (only the
+    // resolvable ones move, the rest are stranded). Compare against the count of
+    // TILE requests only — float entries (req.floating) are validated but
+    // handled inline above and never enter `toApply`, so counting them would
+    // make every batch containing a float falsely report stranded windows.
+    const qsizetype tileRequestCount =
+        std::count_if(validatedRequests.cbegin(), validatedRequests.cend(), [](const auto& r) {
+            return !r.floating;
+        });
+    if (toApply.size() != tileRequestCount) {
         QStringList resolved;
         for (const TileSnap& s : toApply) {
             resolved << s.windowId;
         }
-        qCInfo(lcEffect) << "slotWindowsTileRequested: sent" << validatedRequests.size() << "requests, resolved"
+        qCInfo(lcEffect) << "slotWindowsTileRequested: sent" << tileRequestCount << "tile requests, resolved"
                          << toApply.size() << "windows — applying:" << resolved;
     }
 

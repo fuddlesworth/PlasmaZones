@@ -204,7 +204,11 @@ QString NavigationController::crossOutputFocusTarget(const QString& sourceScreen
     if (neighbor.isEmpty()) {
         return QString();
     }
-    PhosphorTiles::TilingState* neighborState = m_engine->tilingStateForScreen(neighbor);
+    // Non-creating lookup: this is a const read-only focus probe. tilingStateForScreen
+    // would CREATE and persist an empty TilingState for the neighbour on a miss,
+    // leaking a state on every directional-focus keypress at a layout edge with
+    // no neighbour window.
+    PhosphorTiles::TilingState* neighborState = m_engine->m_screenStates.value(m_engine->currentKeyForScreen(neighbor));
     if (!neighborState) {
         return QString();
     }
@@ -219,7 +223,12 @@ QString NavigationController::crossOutputFocusTarget(const QString& sourceScreen
     // rect (global coordinates) — directionalNeighbor picks the closest with
     // perpendicular overlap. Fall back to the first tiled window when geometry
     // is unavailable.
-    const QRect focusRect = rectForWindowInState(m_engine->tilingStateForScreen(sourceScreenId), focused);
+    // Non-creating lookup, like the neighbour probe above: this is a read-only
+    // focus probe. The source state exists whenever we get here (hasGeometry was
+    // true), and rectForWindowInState null-guards its argument, so a miss yields
+    // the same first-tiled-window fallback without persisting an empty state.
+    const QRect focusRect =
+        rectForWindowInState(m_engine->m_screenStates.value(m_engine->currentKeyForScreen(sourceScreenId)), focused);
     const auto dir = PhosphorGeometry::directionFromString(direction);
     const QVector<QRect> neighborZones = neighborState->calculatedZones();
     if (dir.has_value() && focusRect.isValid() && neighborZones.size() == neighborWindows.size()) {
@@ -246,8 +255,28 @@ bool NavigationController::crossOutputMove(const QString& sourceScreenId, const 
     if (neighbor.isEmpty()) {
         return false;
     }
+    // The resolver returns ANY connected output in the direction — it has no
+    // autotile knowledge, and even an autotile destination can be full.
+    // migrateWindowBetweenKeys removes the window from the source state and only
+    // re-adds it when the neighbour is an autotile screen under its maxWindows
+    // cap (onWindowAdded rejects WITHOUT inserting otherwise). Committing the
+    // move toward a destination that won't accept the window would remove it
+    // from the source, re-key it to a screen with no TilingState, and strand it
+    // (tracked nowhere) — the exact failure the cross-desktop path was rewritten
+    // to avoid. Refuse here, BEFORE any state mutation or the
+    // windowOutputMoveExpected marker (a marker emitted for a move that never
+    // happens would arm a one-shot that swallows the next genuine outputChanged
+    // for this window), so swapFocusedInDirection falls through to cross-desktop
+    // / no_neighbor instead.
+    if (!m_engine->isAutotileScreen(neighbor)) {
+        return false;
+    }
     const PhosphorEngine::TilingStateKey oldKey = m_engine->currentKeyForScreen(sourceScreenId);
     const PhosphorEngine::TilingStateKey newKey = m_engine->currentKeyForScreen(neighbor);
+    if (const PhosphorTiles::TilingState* destState = m_engine->m_screenStates.value(newKey);
+        destState && destState->tiledWindowCount() >= m_engine->effectiveMaxWindows(neighbor)) {
+        return false;
+    }
     // Re-point the window's state-key BEFORE migrating, exactly as the reactive
     // windowFocused() path does: migrateWindowBetweenKeys re-adds the window via
     // onWindowAdded() → screenForWindow(), which reads this map. Without the
@@ -288,7 +317,10 @@ QString NavigationController::crossDesktopFocusTarget(const QString& sourceScree
         return QString();
     }
     const PhosphorEngine::TilingStateKey targetKey{sourceScreenId, targetDesktop, m_engine->m_currentActivity};
-    PhosphorTiles::TilingState* targetState = m_engine->stateForKey(targetKey);
+    // Non-creating lookup: stateForKey would CREATE and persist an empty
+    // TilingState for the target desktop on a miss, leaking a state on every
+    // cross-desktop focus probe to a desktop with no tiled windows.
+    PhosphorTiles::TilingState* targetState = m_engine->m_screenStates.value(targetKey);
     if (!targetState) {
         return QString();
     }

@@ -46,6 +46,7 @@ private Q_SLOTS:
     void onKWinCurrentChanged(const QString& desktopId);
     void onKWinDesktopCreated();
     void onKWinDesktopRemoved();
+    void onKWinDesktopRowsChanged();
 
 private:
     void initKWinDBus();

@@ -58,6 +58,14 @@ void VirtualDesktopManager::initKWinDBus()
         QDBusConnection::sessionBus().connect(QStringLiteral("org.kde.KWin"), QStringLiteral("/VirtualDesktopManager"),
                                               QStringLiteral("org.kde.KWin.VirtualDesktopManager"),
                                               QStringLiteral("desktopRemoved"), this, SLOT(onKWinDesktopRemoved()));
+
+        // A live grid reshape (e.g. 1×4 → 2×2) changes `rows` WITHOUT changing
+        // the desktop count, so it fires neither countChanged nor created/removed
+        // — without this the cached row count goes stale and cross-desktop
+        // directional navigation computes neighbours against the wrong grid shape.
+        QDBusConnection::sessionBus().connect(QStringLiteral("org.kde.KWin"), QStringLiteral("/VirtualDesktopManager"),
+                                              QStringLiteral("org.kde.KWin.VirtualDesktopManager"),
+                                              QStringLiteral("rowsChanged"), this, SLOT(onKWinDesktopRowsChanged()));
     } else {
         delete m_kwinVDInterface;
         m_kwinVDInterface = nullptr;
@@ -209,6 +217,13 @@ void VirtualDesktopManager::onKWinDesktopRemoved()
 {
     refreshFromKWin();
     Q_EMIT desktopCountChanged(m_desktopCount);
+}
+
+void VirtualDesktopManager::onKWinDesktopRowsChanged()
+{
+    // Re-read the grid shape; refreshFromKWin emits desktopRowsChanged only when
+    // the row count actually changed (the desktop count is unaffected here).
+    refreshFromKWin();
 }
 
 void VirtualDesktopManager::start()

@@ -727,6 +727,11 @@ void AutotileHandler::onDaemonReady()
     // expects the caller to re-assert geometry).
     m_autotileTargetZones.clear();
     m_centeredWaylandZones.clear();
+    // Per-screen stagger generations describe the dead session's in-flight
+    // batches. They are otherwise only ever inserted (one entry per distinct
+    // screenId ever seen, never pruned), so resetting here both restarts the
+    // staggered-apply epochs cleanly and keeps the map bounded across reconnects.
+    m_autotileStaggerGenByScreen.clear();
     // In-flight debounced minimize→float commits and minimize-float records
     // belong to the dead daemon session — a timer firing now would issue a
     // setWindowFloatingForScreen against state the new daemon never had, and
