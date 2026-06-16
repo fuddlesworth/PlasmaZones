@@ -523,7 +523,15 @@ PhosphorProtocol::SwapTargetResult SnapNavigationTargetResolver::getSwapTargetFo
                           0, QString(), effectiveScreenId, currentZoneId, targetZoneId);
     }
 
-    QStringList windowsInTargetZone = m_service->windowsInZone(targetZoneId);
+    // The swap counterpart must be on THIS output: the target zone's UUID is
+    // shared by every monitor the layout drives, so an unfiltered windowsInZone
+    // could surface a sibling-monitor occupant. Pin BOTH the empty-zone decision
+    // and the partner pick to effectiveScreenId — a zone empty on THIS output is a
+    // move-to-empty (never yank a window off another monitor), and the partner is
+    // the same-output occupant. Unlike the focus path, swap does NOT fall back to
+    // the unfiltered ring on a miss: mis-swapping a window across outputs is far
+    // more disruptive than focus, so the safe degradation is move-to-empty.
+    const QStringList windowsInTargetZone = windowsInZoneOnScreen(targetZoneId, effectiveScreenId);
     if (windowsInTargetZone.isEmpty()) {
         emitFeedback(true, QStringLiteral("swap"), direction, currentZoneId, targetZoneId, effectiveScreenId);
         return swapResult(true, QStringLiteral("moved_to_empty"), windowId, targetGeom.x(), targetGeom.y(),
@@ -531,14 +539,7 @@ PhosphorProtocol::SwapTargetResult SnapNavigationTargetResolver::getSwapTargetFo
                           effectiveScreenId, currentZoneId, targetZoneId);
     }
 
-    // Prefer the swap partner actually on this output, mirroring the focus path:
-    // a zone UUID shared with a sibling monitor must not supply the counterpart
-    // when a same-output occupant exists. Best-effort — fall back to the
-    // unfiltered first occupant on screen-id-form skew (see getFocusTargetForWindow).
-    QString targetWindowId = firstWindowInZoneOnScreen(targetZoneId, effectiveScreenId);
-    if (targetWindowId.isEmpty()) {
-        targetWindowId = windowsInTargetZone.first();
-    }
+    const QString targetWindowId = windowsInTargetZone.first();
     emitFeedback(true, QStringLiteral("swap"), direction, currentZoneId, targetZoneId, effectiveScreenId);
     return swapResult(true, QString(), windowId, targetGeom.x(), targetGeom.y(), targetGeom.width(),
                       targetGeom.height(), targetZoneId, targetWindowId, currentGeom.x(), currentGeom.y(),

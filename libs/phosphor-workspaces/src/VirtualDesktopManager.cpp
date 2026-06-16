@@ -150,11 +150,10 @@ void VirtualDesktopManager::refreshFromKWin()
     // arithmetic by zero.
     QVariant rowsVar = m_kwinVDInterface->property("rows");
     if (rowsVar.isValid()) {
-        const int rows = qMax(1, rowsVar.toInt());
-        if (rows != m_desktopRows) {
-            m_desktopRows = rows;
-            Q_EMIT desktopRowsChanged(m_desktopRows);
-        }
+        // Read-only cache for the on-demand desktopRows() pull used by
+        // cross-desktop directional navigation; no NOTIFY signal — nothing
+        // subscribes to row-shape changes, the value is re-read per navigation.
+        m_desktopRows = qMax(1, rowsVar.toInt());
     }
 
     QVariant currentVar = m_kwinVDInterface->property("current");
@@ -221,8 +220,8 @@ void VirtualDesktopManager::onKWinDesktopRemoved()
 
 void VirtualDesktopManager::onKWinDesktopRowsChanged()
 {
-    // Re-read the grid shape; refreshFromKWin emits desktopRowsChanged only when
-    // the row count actually changed (the desktop count is unaffected here).
+    // Re-read the grid shape so the on-demand desktopRows() pull stays fresh
+    // after a live grid reshape (the desktop count is unaffected here).
     refreshFromKWin();
 }
 

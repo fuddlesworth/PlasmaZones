@@ -114,8 +114,12 @@ VirtualScreenSwapper::Result VirtualScreenSwapper::swapInDirection(const QString
                                    << currentVirtualScreenId;
         return Result::NotVirtual;
     }
-    if (direction != Direction::Left && direction != Direction::Right && direction != Direction::Up
-        && direction != Direction::Down) {
+    // Parse + validate the direction through the shared geometry parser (single
+    // source of truth — the same tokens directionalNeighbor consumes). An unknown
+    // token is InvalidDirection, checked here so the error precedence matches the
+    // original (a bad direction is reported before subdivision / membership).
+    const auto dir = PhosphorGeometry::directionFromString(direction);
+    if (!dir.has_value()) {
         qCDebug(lcPhosphorScreens) << "VirtualScreenSwapper::swapInDirection: invalid direction:" << direction;
         return Result::InvalidDirection;
     }
@@ -141,16 +145,13 @@ VirtualScreenSwapper::Result VirtualScreenSwapper::swapInDirection(const QString
         return Result::UnknownVirtualScreen;
     }
 
-    // Direction is already validated above, so parsing always succeeds; the
-    // shared geometric selector (half-plane filter → perpendicular-overlap
+    // The shared geometric selector (half-plane filter → perpendicular-overlap
     // preference → nearest edge gap → deterministic tie-break) is the same
     // primitive zone and autotile-window navigation use, so virtual-screen swap
     // ranks neighbours identically. directionalNeighbor skips the rect sharing
     // the focus centre, so passing the full region list (including the current
     // one) is safe.
-    const auto dir = PhosphorGeometry::directionFromString(direction);
-    const int targetIndex =
-        dir.has_value() ? PhosphorGeometry::directionalNeighbor(regions[currentIndex], regions, *dir) : -1;
+    const int targetIndex = PhosphorGeometry::directionalNeighbor(regions[currentIndex], regions, *dir);
     if (targetIndex < 0) {
         qCDebug(lcPhosphorScreens) << "VirtualScreenSwapper::swapInDirection: no adjacent VS in direction" << direction;
         return Result::NoSiblingInDirection;

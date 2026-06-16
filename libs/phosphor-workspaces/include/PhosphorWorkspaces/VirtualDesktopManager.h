@@ -37,7 +37,6 @@ public:
 Q_SIGNALS:
     void currentDesktopChanged(int desktop);
     void desktopCountChanged(int count);
-    void desktopRowsChanged(int rows);
 
 private Q_SLOTS:
     void onCurrentDesktopChanged(int desktop);

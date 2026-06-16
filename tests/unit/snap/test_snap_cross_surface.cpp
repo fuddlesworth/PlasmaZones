@@ -229,6 +229,7 @@ private Q_SLOTS:
     void focus_inSurfaceZoneSharedWithSiblingScreen_picksThisScreenWindow();
     void focus_inSurfaceScreenIdSkew_fallsBackToZoneOccupant();
     void swap_inSurfaceZoneSharedWithSiblingScreen_picksThisScreenPartner();
+    void swap_zoneEmptyOnThisOutputWithSibling_movesToEmptyNotCrossOutput();
     void cycle_zoneSharedWithSiblingScreen_staysOnThisScreen();
     void cycle_oneOccupantPerMonitorSharedZone_reportsSingleWindow();
     void cycle_screenIdSkew_fallsBackToUnfilteredRing();
@@ -400,6 +401,35 @@ void TestSnapCrossSurface::swap_inSurfaceZoneSharedWithSiblingScreen_picksThisSc
         resolver.getSwapTargetForWindow(QStringLiteral("w1"), QStringLiteral("right"), QStringLiteral("DP-1"));
     QVERIFY(result.success);
     QCOMPARE(result.windowId2, QStringLiteral("wHere")); // the DP-1 partner, not list-first wThere
+}
+
+void TestSnapCrossSurface::swap_zoneEmptyOnThisOutputWithSibling_movesToEmptyNotCrossOutput()
+{
+    // The target zone's UUID is shared with a sibling monitor: it is EMPTY on this
+    // output (DP-1) but occupied on DP-2. The swap must report move-to-empty
+    // (relocate into the empty same-output zone), NOT swap with — and yank
+    // cross-output — the DP-2 occupant. Regression guard: the moved-to-empty
+    // decision is screen-pinned, not based on the unfiltered ring.
+    FakeWindowTracking wts;
+    wts.zoneOfWindow[QStringLiteral("w1")] = QStringLiteral("z-a");
+    wts.zoneGeo[key(QStringLiteral("z-a"), QStringLiteral("DP-1"))] = QRect(0, 0, 960, 1080);
+    wts.zoneGeo[key(QStringLiteral("z-target"), QStringLiteral("DP-1"))] = QRect(960, 0, 960, 1080);
+    // z-target is occupied ONLY on DP-2 (sibling); empty on DP-1.
+    wts.windowsByZone[QStringLiteral("z-target")] = {QStringLiteral("wSibling")};
+    wts.screenOfWindow[QStringLiteral("wSibling")] = QStringLiteral("DP-2");
+
+    FakeZoneAdjacency adj;
+    adj.adjacent = QStringLiteral("z-target");
+
+    std::unique_ptr<PhosphorZones::LayoutRegistry> layoutManager(
+        PlasmaZones::TestHelpers::makeLayoutRegistry(QStringLiteral("test-snap-cross")));
+    SnapNavigationTargetResolver resolver(&wts, layoutManager.get(), &adj, {});
+
+    const auto result =
+        resolver.getSwapTargetForWindow(QStringLiteral("w1"), QStringLiteral("right"), QStringLiteral("DP-1"));
+    QVERIFY(result.success);
+    QCOMPARE(result.reason, QStringLiteral("moved_to_empty")); // not a cross-output swap
+    QVERIFY(result.windowId2.isEmpty()); // no partner dragged across outputs
 }
 
 void TestSnapCrossSurface::cycle_zoneSharedWithSiblingScreen_staysOnThisScreen()
