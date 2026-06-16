@@ -27,6 +27,8 @@ private Q_SLOTS:
     void overlappingTier_nearestGapWins();
     void tie_isDeterministicByOrder();
     void requireOverlap_diagonalOnly_returnsMinusOne();
+    void requireOverlap_nearestGapAmongOverlapping_wins();
+    void requireOverlap_tie_isDeterministicByOrder();
     void emptyCandidates_returnsMinusOne();
 
     void desktopGrid_2x2_steps();
@@ -149,6 +151,32 @@ void TestDirectionalNeighbor::requireOverlap_diagonalOnly_returnsMinusOne()
     // ...but a genuine perpendicular-overlapping neighbour still resolves:
     // "left" from bottom-right finds bottom-left (shared y-band), overlap or not.
     QCOMPARE(directionalNeighbor(bottomRight, candidates, Direction::Left, /*requireOverlap=*/true), 2);
+}
+
+void TestDirectionalNeighbor::requireOverlap_nearestGapAmongOverlapping_wins()
+{
+    // The production window-nav caller always passes requireOverlap=true, so the
+    // "two perpendicular-overlapping candidates at different gaps → nearest wins"
+    // path is the hot path. Verify it ranks by gap under the flag, not just in
+    // the default mode.
+    const QRectF focus(0, 0, 100, 100);
+    const QRectF near(110, 0, 100, 100); // gap 10, full y-overlap
+    const QRectF far(400, 0, 100, 100); // gap 300, full y-overlap
+    const QList<QRectF> candidates{far, near};
+    QCOMPARE(directionalNeighbor(focus, candidates, Direction::Right, /*requireOverlap=*/true), 1); // near
+}
+
+void TestDirectionalNeighbor::requireOverlap_tie_isDeterministicByOrder()
+{
+    // Determinism under the production flag: two equally-ranked overlapping
+    // candidates → first in the list wins, independent of iteration order.
+    const QRectF focus(0, 0, 100, 1000);
+    const QRectF upperRight(110, 0, 100, 100); // gap 10, perp distance 450
+    const QRectF lowerRight(110, 900, 100, 100); // gap 10, perp distance 450
+    const QList<QRectF> a{upperRight, lowerRight};
+    const QList<QRectF> b{lowerRight, upperRight};
+    QCOMPARE(directionalNeighbor(focus, a, Direction::Right, /*requireOverlap=*/true), 0);
+    QCOMPARE(directionalNeighbor(focus, b, Direction::Right, /*requireOverlap=*/true), 0);
 }
 
 void TestDirectionalNeighbor::emptyCandidates_returnsMinusOne()

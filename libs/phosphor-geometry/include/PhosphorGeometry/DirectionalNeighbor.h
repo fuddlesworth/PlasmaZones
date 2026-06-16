@@ -67,7 +67,10 @@ PHOSPHORGEOMETRY_EXPORT int directionalNeighbor(const QRectF& focus, const QList
  *        @p currentDesktop on a @p rows-high desktop grid.
  *
  * Desktops are 1-based and laid out row-major across `ceil(desktopCount/rows)`
- * columns, matching KWin's desktop-grid model. A step that leaves the grid —
+ * columns, matching KWin's DEFAULT (horizontal-fill) desktop-grid layout. KWin
+ * can also be configured to fill the grid column-first; that orientation is not
+ * expressible through @p rows alone and is not modelled here — under it the
+ * Up/Down vs Left/Right mapping would differ. A step that leaves the grid —
  * past an edge, into a missing cell on a partial last row, or a horizontal move
  * that would wrap onto another row — returns 0 (no neighbour) rather than
  * wrapping, so callers can treat 0 as "no desktop that way; try another axis".

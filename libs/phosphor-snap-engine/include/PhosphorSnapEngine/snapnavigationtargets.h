@@ -127,7 +127,9 @@ private:
     PhosphorProtocol::MoveTargetResult crossOutputEntryTarget(const QString& currentZoneId, const QString& direction,
                                                               const QString& sourceScreenId) const;
 
-    /// First window snapped to @p zoneId on @p screenName, or empty if none.
+    /// A window snapped to @p zoneId whose stored screen is @p screenName, or
+    /// empty if none (first in windowsInZone() iteration order — deterministic
+    /// per process, not a visual ordering).
     /// windowsInZone() is screen-agnostic — the same zone UUID is shared by
     /// every output the layout is assigned to (zones resolve by UUID across all
     /// layouts), so a bare windowsInZone(zoneId).first() can return a window on

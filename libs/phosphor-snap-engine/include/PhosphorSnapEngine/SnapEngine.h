@@ -681,6 +681,13 @@ private:
     /// windowDesktopMoveRequested so the compositor moves the real window).
     /// Used when directional move reaches a zone-layout boundary with no
     /// neighbour output. Returns false when there is no neighbour desktop.
+    ///
+    /// Unlike autotile's cross-desktop move (which emits unconditionally and
+    /// lets the compositor be the sole source of truth), this gates the emit on
+    /// the SnapState desktop re-stamp succeeding: snap PRESERVES the window's
+    /// zone slot across the hop, so its desktop attribute must stay coherent. A
+    /// no-op re-stamp (unassigned, or already on the target desktop) therefore
+    /// means there is nothing to move.
     bool tryCrossDesktopMove(const QString& windowId, const QString& direction, const QString& screenId);
 
     /// Focus a window on the virtual desktop adjacent to the current one in

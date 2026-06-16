@@ -339,10 +339,21 @@ PhosphorProtocol::FocusTargetResult SnapNavigationTargetResolver::getFocusTarget
                            effectiveScreenId);
     }
 
-    // Same screen-agnostic windowsInZone caveat as the cross-output path above:
-    // restrict to the window actually on this output so a shared zone UUID on a
-    // sibling monitor can't hijack same-surface focus.
-    const QString targetWindow = firstWindowInZoneOnScreen(targetZoneId, effectiveScreenId);
+    // Prefer the occupant actually on this output so a shared zone UUID on a
+    // sibling monitor can't hijack same-surface focus. Unlike the cross-output
+    // path, this is best-effort: the target zone already belongs to
+    // effectiveScreenId, so if the screen filter finds nothing — e.g. the stored
+    // assignment was recorded under a different screen-id form (virtual vs bare
+    // physical) than effectiveScreenId resolved to — fall back to the unfiltered
+    // occupant rather than spuriously reporting an empty zone. The strict filter
+    // only has to be authoritative across the cross-OUTPUT boundary.
+    QString targetWindow = firstWindowInZoneOnScreen(targetZoneId, effectiveScreenId);
+    if (targetWindow.isEmpty()) {
+        const QStringList windowsInZone = m_service->windowsInZone(targetZoneId);
+        if (!windowsInZone.isEmpty()) {
+            targetWindow = windowsInZone.first();
+        }
+    }
     if (targetWindow.isEmpty()) {
         emitFeedback(false, QStringLiteral("focus"), QStringLiteral("no_window_in_zone"), currentZoneId, targetZoneId,
                      effectiveScreenId);

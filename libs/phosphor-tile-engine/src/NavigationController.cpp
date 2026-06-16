@@ -20,6 +20,16 @@ namespace PhosphorTileEngine {
 
 namespace PerScreenKeys = PhosphorEngine::PerScreenKeys;
 
+namespace {
+/// "Forward" in cycle/entry-extreme terms: right and down step toward the end
+/// of the order, left and up toward the start. Shared by the order-based
+/// cycling fallbacks and the cross-desktop entry-extreme selection.
+bool isForwardDirection(const QString& direction)
+{
+    return direction == QLatin1String("right") || direction == QLatin1String("down");
+}
+} // namespace
+
 NavigationController::NavigationController(AutotileEngine* engine)
     : m_engine(engine)
 {
@@ -336,7 +346,7 @@ QString NavigationController::crossDesktopFocusTarget(const QString& sourceScree
     // Desktops occupy the same physical space, so direction doesn't map to a
     // geometric edge across them — enter at the order extreme: first tiled
     // window stepping forward (right/down), last stepping backward.
-    const bool forward = (direction == QLatin1String("right") || direction == QLatin1String("down"));
+    const bool forward = isForwardDirection(direction);
     return forward ? targetWindows.first() : targetWindows.last();
 }
 
@@ -429,7 +439,7 @@ void NavigationController::swapFocusedInDirection(const QString& direction, cons
                                             screenId);
         return;
     }
-    const bool forward = (direction == QLatin1String("right") || direction == QLatin1String("down"));
+    const bool forward = isForwardDirection(direction);
     const int currentIndex = windows.indexOf(focused);
     if (currentIndex < 0) {
         Q_EMIT m_engine->navigationFeedback(false, action, QStringLiteral("no_focus"), QString(), QString(), screenId);
@@ -494,7 +504,7 @@ void NavigationController::focusInDirection(const QString& direction, const QStr
 
     // Geometry not computed yet: fall back to order-based cycling so navigation
     // still works on a surface whose layout has not been calculated.
-    const bool forward = (direction == QLatin1String("right") || direction == QLatin1String("down"));
+    const bool forward = isForwardDirection(direction);
     const int currentIndex = qMax(0, windows.indexOf(focused));
     const int targetIndex = (currentIndex + (forward ? 1 : -1) + windows.size()) % windows.size();
     Q_EMIT m_engine->activateWindowRequested(windows.at(targetIndex));
