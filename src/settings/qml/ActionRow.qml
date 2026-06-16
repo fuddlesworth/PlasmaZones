@@ -116,9 +116,10 @@ ColumnLayout {
     // Parse decides which mode to seed the dialog with; Apply encodes the
     // dialog's working state back into one of those forms.
     property Component _curveEditorEditor
-    // Shader-effect picker — `availableShaderEffects()` returns rows with
-    // `{id, name, …}`. Wire value is the effect id; the dropdown shows the
-    // friendly name.
+    // Shader-effect picker — a cascading category menu fed by the path-aware
+    // `availableShaderEffectsForPath(event)`, so shaders group by category and
+    // ones incompatible with the action's target event render dimmed. Wire
+    // value is the effect id.
     property Component _shaderEffectEditor
     // Inline shader-uniform editor for OverrideAnimationShader actions. The
     // action stores a nested `params` object (the shader uniform values);
@@ -686,10 +687,10 @@ ColumnLayout {
 
             items: _effects
             currentId: row.action[_param.key] || ""
-            // Surface a stale / uninstalled shader id verbatim rather than
-            // collapsing the closed picker to a blank — mirrors the old combo's
-            // displayText fallback.
-            placeholderText: row.action[_param.key] || i18n("Choose a shader…")
+            // CategoryMenuButton renders "(missing: <id>)" on its own for a
+            // stale / uninstalled shader id, so the placeholder is only seen
+            // when nothing is selected.
+            placeholderText: i18n("Choose a shader…")
             Accessible.description: _param.label
             onSelected: function (id) {
                 row.actionEdited(row._withParam(_param.key, id));

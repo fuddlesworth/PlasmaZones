@@ -107,6 +107,14 @@ private Q_SLOTS:
 
         b.id = QStringLiteral("morph");
         QVERIFY(a != b);
+
+        // operator== must observe appliesTo: two effects differing ONLY in
+        // their declared event classes are not equal. Without the dedicated
+        // branch this would falsely compare equal.
+        AnimationShaderEffect c = a;
+        AnimationShaderEffect d = a;
+        d.appliesTo = QStringList{QStringLiteral("geometry")};
+        QVERIFY(c != d);
     }
 
     /// Multipass / wallpaper / depth / buffer fields survive a full
@@ -258,6 +266,22 @@ private Q_SLOTS:
         bad.append(QStringLiteral("nonsense"));
         allBad.insert(QLatin1String("appliesTo"), bad);
         QVERIFY(AnimationShaderEffect::fromJson(allBad).appliesTo.isEmpty());
+
+        // A non-array value (scalar where an array is expected) and non-string
+        // array elements are both hand-authoring mistakes — neither should
+        // throw or smuggle garbage in; the field reduces to universal/valid.
+        QJsonObject scalar = obj;
+        scalar.insert(QLatin1String("appliesTo"), QStringLiteral("geometry"));
+        QVERIFY(AnimationShaderEffect::fromJson(scalar).appliesTo.isEmpty());
+
+        QJsonObject mixed;
+        mixed.insert(QLatin1String("id"), QStringLiteral("y"));
+        mixed.insert(QLatin1String("fragmentShader"), QStringLiteral("effect.frag"));
+        QJsonArray mixedArr;
+        mixedArr.append(QStringLiteral("geometry"));
+        mixedArr.append(7); // numeric element silently skipped
+        mixed.insert(QLatin1String("appliesTo"), mixedArr);
+        QCOMPARE(AnimationShaderEffect::fromJson(mixed).appliesTo, (QStringList{QStringLiteral("geometry")}));
     }
 
     /// The (effect × path) predicate: a geometry-only effect is compatible
@@ -273,19 +297,38 @@ private Q_SLOTS:
         morph.fragmentShaderPath = QStringLiteral("effect.frag");
         morph.appliesTo = QStringList{QStringLiteral("geometry")};
 
-        QVERIFY(shaderEffectAppliesToEventPath(morph, QStringLiteral("window.move")));
-        QVERIFY(shaderEffectAppliesToEventPath(morph, QStringLiteral("window.snapIn")));
-        QVERIFY(shaderEffectAppliesToEventPath(morph, QStringLiteral("window.maximize")));
-        QVERIFY(!shaderEffectAppliesToEventPath(morph, QStringLiteral("window.open")));
-        QVERIFY(!shaderEffectAppliesToEventPath(morph, QStringLiteral("popup.layoutPicker.show")));
-        // Mixed ancestor → unclassified → not provably incompatible.
+        // Every geometry leg eventClassForPath classifies must be compatible
+        // with a geometry-only effect — pin the full disjunction so dropping
+        // any leg from the classifier is caught.
+        for (const char* geo : {"window.move", "window.resize", "window.snapIn", "window.snapOut", "window.snapResize",
+                                "window.layoutSwitch", "window.maximize"}) {
+            QVERIFY2(shaderEffectAppliesToEventPath(morph, QString::fromLatin1(geo)), geo);
+        }
+        // Every appearance leg must be incompatible with a geometry-only effect.
+        for (const char* app : {"window.open", "window.close", "window.minimize", "window.focus", "osd.show",
+                                "osd.hide", "popup.layoutPicker.show", "popup.zoneSelector.hide"}) {
+            QVERIFY2(!shaderEffectAppliesToEventPath(morph, QString::fromLatin1(app)), app);
+        }
+        // Unclassified paths (mixed `window` root, non-window families) are
+        // never provably incompatible — the predicate stays permissive.
         QVERIFY(shaderEffectAppliesToEventPath(morph, QStringLiteral("window")));
+        QVERIFY(shaderEffectAppliesToEventPath(morph, QStringLiteral("editor.snapIn")));
+        QVERIFY(shaderEffectAppliesToEventPath(morph, QStringLiteral("panel.slideIn")));
 
         AnimationShaderEffect fade; // universal (no appliesTo)
         fade.id = QStringLiteral("fade");
         fade.fragmentShaderPath = QStringLiteral("effect.frag");
         QVERIFY(shaderEffectAppliesToEventPath(fade, QStringLiteral("window.open")));
         QVERIFY(shaderEffectAppliesToEventPath(fade, QStringLiteral("window.move")));
+
+        // Appearance-only effect: mirror image — incompatible on geometry legs,
+        // compatible on appearance legs.
+        AnimationShaderEffect appearanceOnly;
+        appearanceOnly.id = QStringLiteral("aretha-materialize");
+        appearanceOnly.fragmentShaderPath = QStringLiteral("effect.frag");
+        appearanceOnly.appliesTo = QStringList{QStringLiteral("appearance")};
+        QVERIFY(shaderEffectAppliesToEventPath(appearanceOnly, QStringLiteral("window.open")));
+        QVERIFY(!shaderEffectAppliesToEventPath(appearanceOnly, QStringLiteral("window.move")));
     }
 };
 

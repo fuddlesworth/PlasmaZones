@@ -3,11 +3,13 @@
 
 // Shader-leg methods for AnimationsPageController:
 //   * Available-shader enumeration (availableShaderEffects,
-//     shaderParameters, supportsShaderLeg).
+//     availableShaderEffectsForPath, shaderEffectInfo, shaderParameters,
+//     supportsShaderLeg).
 //   * User shader directory + shader-pack install
 //     (userShaderDirectoryPath, ensureUserShaderDirectory,
 //     openUserShaderDirectory, installShaderPack).
-//   * Per-event shader override (setShaderOverride, clearShaderOverride,
+//   * Per-event shader read + override (rawShaderProfile,
+//     resolvedShaderProfile, setShaderOverride, clearShaderOverride,
 //     shaderOverrideDescendantCount, clearShaderOverrideDescendants,
 //     shaderEffectUsages).
 //

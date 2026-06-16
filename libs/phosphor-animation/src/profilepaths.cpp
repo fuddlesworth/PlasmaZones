@@ -223,6 +223,10 @@ QString defaultShaderEffectIdForPath(const QString& path)
 {
     // Window move/resize events default to the geometry-morph shader so a
     // window animates via shader cross-fade when it snaps/tiles/reflows.
+    // This is the same geometry leg set `eventClassForPath` classes as
+    // EventClassGeometry, MINUS maximize (maximize is geometry-classed so
+    // morph is selectable there, but it isn't a built-in default) — keep the
+    // two lists in sync if a new geometry leg is added.
     if (path == WindowMove || path == WindowResize || path == WindowSnapIn || path == WindowSnapOut
         || path == WindowSnapResize || path == WindowLayoutSwitch) {
         return QStringLiteral("window-morph");
