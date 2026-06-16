@@ -716,20 +716,6 @@ private:
     /// or it is also snap-mode (handled by the resolver's entry-zone path).
     bool tryCrossModeOutputMove(const QString& windowId, const QString& direction, const QString& screenId);
 
-    /// Swap a snapped window with the occupant of the positionally-equivalent
-    /// zone on the virtual desktop adjacent to the current one in @p direction
-    /// (constructed-surface swap across desktops). The focused window lands in
-    /// the equivalent zone on the target desktop; that zone's occupant (if any)
-    /// returns to the focused window's old zone on the current desktop. Both
-    /// windows are re-stamped (SnapState + placement record), relocated
-    /// (windowDesktopMoveRequested) and re-geometried (applyGeometryRequested).
-    /// An empty equivalent zone degrades to a move-to-empty crossing. Used when
-    /// directional swap reaches a zone-layout boundary with no neighbour output.
-    /// Returns false when there is no neighbour desktop, the window is not
-    /// snapped, the target desktop is a different (autotile) mode, or no
-    /// equivalent zone is resolvable.
-    bool trySwapCrossDesktop(const QString& windowId, const QString& direction, const QString& screenId);
-
     /// If the neighbour OUTPUT in @p direction is autotile mode, emit
     /// crossModeSwapRequested so the daemon trades the focused window with the
     /// neighbour's entry-edge tile, and return true. Returns false when there is

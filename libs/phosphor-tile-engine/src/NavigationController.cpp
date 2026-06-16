@@ -409,7 +409,7 @@ QString NavigationController::crossDesktopFocusTarget(const QString& sourceScree
 }
 
 bool NavigationController::crossDesktopMove(const QString& sourceScreenId, const QString& focused,
-                                            const QString& direction, const QString& action)
+                                            const QString& direction)
 {
     if (!m_engine->m_crossSurfaceResolver) {
         return false;
@@ -429,11 +429,9 @@ bool NavigationController::crossDesktopMove(const QString& sourceScreenId, const
     if (m_engine->m_layoutManager
         && m_engine->m_layoutManager->modeForScreen(sourceScreenId, targetDesktop, m_engine->m_currentActivity)
             == PhosphorZones::AssignmentEntry::Snapping) {
-        if (action == QLatin1String("swap")) {
-            Q_EMIT m_engine->crossModeSwapRequested(focused, sourceScreenId, targetDesktop, direction);
-        } else {
-            Q_EMIT m_engine->crossModeMoveRequested(focused, sourceScreenId, targetDesktop, direction);
-        }
+        // Only a MOVE reaches here (swap doesn't cross desktops), so this is
+        // always the one-way cross-mode move into the equivalent snap zone.
+        Q_EMIT m_engine->crossModeMoveRequested(focused, sourceScreenId, targetDesktop, direction);
         return true;
     }
     // Same-mode (autotile) target desktop: move the window the way a NATIVE KWin
@@ -494,7 +492,10 @@ void NavigationController::swapFocusedInDirection(const QString& direction, cons
                                                 QString(), screenId);
             return;
         }
-        if (crossDesktopMove(screenId, focused, direction, action)) {
+        // A SWAP is not extended across virtual desktops — exchanging with a
+        // window on a desktop you can't see is meaningless; move owns "send to
+        // another desktop". So only a MOVE action crosses the desktop boundary.
+        if (action != QLatin1String("swap") && crossDesktopMove(screenId, focused, direction)) {
             Q_EMIT m_engine->navigationFeedback(true, action, QStringLiteral("desktop:") + direction, QString(),
                                                 QString(), screenId);
             return;

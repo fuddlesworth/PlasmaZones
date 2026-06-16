@@ -186,8 +186,7 @@ private:
      *        emitting windowDesktopMoveRequested so the compositor moves the
      *        real window. Returns false when there is no neighbour desktop.
      */
-    bool crossDesktopMove(const QString& sourceScreenId, const QString& focused, const QString& direction,
-                          const QString& action);
+    bool crossDesktopMove(const QString& sourceScreenId, const QString& focused, const QString& direction);
 
     /**
      * @brief The global-coordinate rect of @p windowId within @p state, or an

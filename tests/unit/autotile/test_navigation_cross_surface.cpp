@@ -106,6 +106,7 @@ private Q_SLOTS:
 
     void crossDesktop_focusRight_activatesEntryWindowOnNextDesktop();
     void crossDesktop_moveRight_relocatesToNextDesktopAndRequestsKWinMove();
+    void crossDesktop_swapRight_doesNotRelocate();
     void crossDesktop_focusLeft_atGridEdge_doesNotActivate();
     void crossDesktop_moveLeft_atGridEdge_doesNotRequestKWinMove();
     void stickyPinnedScreen_explicitFocusResolvesPinnedState();
@@ -511,13 +512,33 @@ void TestNavigationCrossSurface::crossDesktop_moveRight_relocatesToNextDesktopAn
     // corrupted m_windowToStateKey and left windows tracked nowhere (stuck
     // decoration / no reflow). End-to-end reflow is covered by
     // test_navigation_retile with a real algorithm.
-    engine->swapFocusedInDirection(QStringLiteral("right"), ctx(rightmost));
+    //
+    // MOVE owns cross-desktop relocation (swap does not cross desktops).
+    engine->moveFocusedInDirection(QStringLiteral("right"), ctx(rightmost));
 
     // The compositor was asked to move the real window to desktop 2.
     QCOMPARE(moveSpy.count(), 1);
     const QList<QVariant> args = moveSpy.takeFirst();
     QCOMPARE(args.at(0).toString(), rightmost);
     QCOMPARE(args.at(1).toInt(), 2);
+}
+
+void TestNavigationCrossSurface::crossDesktop_swapRight_doesNotRelocate()
+{
+    // Swap is NOT extended across virtual desktops — only MOVE relocates to an
+    // adjacent desktop. Swapping the edge window toward the next desktop is a
+    // no-op: no windowDesktopMoveRequested.
+    std::unique_ptr<AutotileEngine> engine(PlasmaZones::TestHelpers::createEngineWithWindows(kScreen, 2));
+    FakeCrossSurfaceResolver resolver;
+    engine->setCrossSurfaceResolver(&resolver);
+    PhosphorTiles::TilingState* d1 = engine->tilingStateForScreen(kScreen);
+    d1->setCalculatedZones({QRect(0, 0, 960, 1080), QRect(960, 0, 960, 1080)});
+    const QString rightmost = d1->tiledWindows().at(1);
+
+    QSignalSpy moveSpy(engine.get(), &AutotileEngine::windowDesktopMoveRequested);
+    engine->swapFocusedInDirection(QStringLiteral("right"), ctx(rightmost));
+
+    QCOMPARE(moveSpy.count(), 0); // swap stops at the desktop boundary
 }
 
 void TestNavigationCrossSurface::crossDesktop_focusLeft_atGridEdge_doesNotActivate()

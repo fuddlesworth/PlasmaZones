@@ -330,33 +330,27 @@ private Q_SLOTS:
         QVERIFY(missZone.isEmpty());
     }
 
-    // ── Cross-desktop swap (Phase 4b): swapping a snapped window toward a
-    //    monitor edge with no neighbour OUTPUT crosses to the adjacent desktop
-    //    and trades places with the occupant of the equivalent zone there. ──
-    void testCrossDesktopSwap_swapsWithEquivalentZoneOccupant()
+    // ── Swap does NOT cross virtual desktops: exchanging with a window on a
+    //    desktop you can't see is meaningless (move owns cross-desktop
+    //    relocation). A swap at a desktop boundary is a clean no-op. ──
+    void testCrossDesktopSwap_isNoOp_doesNotRelocate()
     {
         const QString layoutId = m_testLayout->id().toString();
         m_layoutManager->setDefaultLayoutIdProvider([layoutId]() {
             return layoutId;
         });
 
-        // No neighbour output (cross-output swap fails) but desktop 2 lies to the
-        // right; no in-surface adjacent zone, so the resolver hits the boundary.
+        // No neighbour output; desktop 2 lies to the right; no in-surface adjacent
+        // zone — so the only crossing available is to the adjacent desktop.
         FakeCrossSurfaceQueries cross;
         cross.desktopRight = 2;
         FakeAdjacencyQueries adj;
         m_engine->setZoneAdjacencyResolver(&adj);
         m_engine->setCrossSurfaceResolver(&cross);
 
-        // Focused window F snapped in the last zone on DP-1 (current desktop 0 —
-        // no VirtualDesktopManager is wired, so currentVirtualDesktop() is 0);
-        // partner P snapped in the SAME (equivalent, shared-layout) zone on the
-        // target desktop 2.
         const QString f = QStringLiteral("appF:win:1");
-        const QString p = QStringLiteral("appP:win:2");
         SnapState* snap = m_engine->snapState();
         snap->assignWindowToZone(f, m_zoneIds.at(2), QStringLiteral("DP-1"), 0);
-        snap->assignWindowToZone(p, m_zoneIds.at(2), QStringLiteral("DP-1"), 2);
 
         QSignalSpy desktopSpy(m_engine, &SnapEngine::windowDesktopMoveRequested);
         QSignalSpy geoSpy(m_engine, &SnapEngine::applyGeometryRequested);
@@ -366,18 +360,11 @@ private Q_SLOTS:
         ctx.screenId = QStringLiteral("DP-1");
         m_engine->swapFocusedInDirection(QStringLiteral("right"), ctx);
 
-        // Both windows relocate: F → desktop 2, partner P → the current desktop 0.
-        QCOMPARE(desktopSpy.count(), 2);
-        QCOMPARE(desktopSpy.at(0).at(0).toString(), f);
-        QCOMPARE(desktopSpy.at(0).at(1).toInt(), 2);
-        QCOMPARE(desktopSpy.at(1).at(0).toString(), p);
-        QCOMPARE(desktopSpy.at(1).at(1).toInt(), 0);
-        // Each relocation also re-applies a zone geometry (snapped, not floating).
-        QCOMPARE(geoSpy.count(), 2);
-
-        // SnapState reflects the exchange: F now lives on desktop 2, P on 0.
-        QCOMPARE(snap->windowsOnScreenAndDesktop(QStringLiteral("DP-1"), 2), QStringList{f});
-        QCOMPARE(snap->windowsOnScreenAndDesktop(QStringLiteral("DP-1"), 0), QStringList{p});
+        // The window does not relocate and is not re-geometried — swap stops at
+        // the desktop boundary.
+        QCOMPARE(desktopSpy.count(), 0);
+        QCOMPARE(geoSpy.count(), 0);
+        QCOMPARE(snap->windowsOnScreenAndDesktop(QStringLiteral("DP-1"), 0), QStringList{f});
 
         m_engine->setCrossSurfaceResolver(nullptr);
         m_engine->setZoneAdjacencyResolver(nullptr);

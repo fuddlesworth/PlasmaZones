@@ -453,11 +453,11 @@ void WindowTrackingAdaptor::handleCrossModeSwap(const QString& windowId, const Q
         return;
     }
 
-    // Cross-DESKTOP cross-mode swap (the reactive autotile-desktop-arrival case)
-    // is not yet a two-way exchange — fall back to the one-way move handler so the
-    // window still relocates correctly. True cross-desktop swap is a later phase.
+    // Swap is never extended across virtual desktops (exchanging with a window on
+    // a desktop you can't see is meaningless — move owns cross-desktop relocation).
+    // No engine emits a cross-desktop crossModeSwapRequested; this guard is
+    // defensive so a stray desktop-targeted swap is a clean no-op, never a move.
     if (targetDesktop > 0) {
-        handleCrossModeMove(windowId, targetScreenId, targetDesktop, direction);
         return;
     }
 
