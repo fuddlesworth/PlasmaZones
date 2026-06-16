@@ -391,6 +391,19 @@ void WindowTrackingAdaptor::handleCrossModeMove(const QString& windowId, const Q
         sourceEngine->retile(sourceScreen);
     }
 
+    // A MONITOR crossing physically relocates the window to a different output.
+    // Tell the compositor the imminent output change is daemon-owned BEFORE the
+    // placement geometry triggers it — otherwise the effect's reactive
+    // outputChanged handler re-issues windowClosed/windowOpened and tears down
+    // the placement we're about to make (the exact tear-down NavigationController's
+    // in-mode cross-output move guards against). A cross-DESKTOP crossing keeps the
+    // window on the same screen (targetScreenId == sourceScreen), so no marker —
+    // arming a one-shot for an output change that never comes would swallow the
+    // next genuine outputChanged for this window.
+    if (!sourceScreen.isEmpty() && targetScreenId != sourceScreen) {
+        Q_EMIT windowOutputMoveExpected(windowId, targetScreenId);
+    }
+
     // Place on the target. A cross-DESKTOP move onto an AUTOTILE desktop uses the
     // existing reactive path: the window changes desktops below and the autotile
     // effect catch-scan tiles it (honouring insertion-order) when that desktop
