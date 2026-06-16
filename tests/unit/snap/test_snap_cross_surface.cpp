@@ -230,6 +230,8 @@ private Q_SLOTS:
     void focus_inSurfaceScreenIdSkew_fallsBackToZoneOccupant();
     void swap_inSurfaceZoneSharedWithSiblingScreen_picksThisScreenPartner();
     void swap_zoneEmptyOnThisOutputWithSibling_movesToEmptyNotCrossOutput();
+    void swap_noAdjacentZone_crossesAndSwapsWithNeighbourOutputOccupant();
+    void swap_noAdjacentZone_emptyNeighbourEntryZone_movesToEmptyAcrossOutput();
     void cycle_zoneSharedWithSiblingScreen_staysOnThisScreen();
     void cycle_oneOccupantPerMonitorSharedZone_reportsSingleWindow();
     void cycle_screenIdSkew_fallsBackToUnfilteredRing();
@@ -430,6 +432,84 @@ void TestSnapCrossSurface::swap_zoneEmptyOnThisOutputWithSibling_movesToEmptyNot
     QVERIFY(result.success);
     QCOMPARE(result.reason, QStringLiteral("moved_to_empty")); // not a cross-output swap
     QVERIFY(result.windowId2.isEmpty()); // no partner dragged across outputs
+}
+
+void TestSnapCrossSurface::swap_noAdjacentZone_crossesAndSwapsWithNeighbourOutputOccupant()
+{
+    // Constructed-surface swap: w1 is in zone z-a on DP-1 with no adjacent zone to
+    // the right (DP-1's edge). Swapping right must cross into DP-2's left-edge
+    // entry zone (z-b) and trade places with its occupant: w1 lands in z-b on
+    // DP-2, the occupant returns to z-a on DP-1. The entry zone's UUID is also
+    // present on the SOURCE output (one layout drives both), so its window list
+    // carries a DP-1 sibling too — the partner must be the DP-2 occupant.
+    FakeWindowTracking wts;
+    wts.zoneOfWindow[QStringLiteral("w1")] = QStringLiteral("z-a");
+    wts.zoneGeo[key(QStringLiteral("z-a"), QStringLiteral("DP-1"))] = QRect(0, 0, 960, 1080); // w2's destination
+    wts.zoneGeo[key(QStringLiteral("z-b"), QStringLiteral("DP-2"))] = QRect(1920, 0, 960, 1080); // w1's destination
+    wts.windowsByZone[QStringLiteral("z-b")] = {QStringLiteral("wSibling"), QStringLiteral("w2")};
+    wts.screenOfWindow[QStringLiteral("wSibling")] = QStringLiteral("DP-1"); // same zone UUID, wrong output
+    wts.screenOfWindow[QStringLiteral("w2")] = QStringLiteral("DP-2"); // the real entry-zone occupant
+
+    FakeZoneAdjacency adj;
+    adj.adjacent = QString(); // no adjacent zone on DP-1 → boundary
+    adj.firstInDir[key(QStringLiteral("left"), QStringLiteral("DP-2"))] = QStringLiteral("z-b"); // entry from the left
+
+    FakeCrossSurface cross;
+    cross.neighborOut[key(QStringLiteral("DP-1"), QStringLiteral("right"))] = QStringLiteral("DP-2");
+
+    std::unique_ptr<PhosphorZones::LayoutRegistry> layoutManager(
+        PlasmaZones::TestHelpers::makeLayoutRegistry(QStringLiteral("test-snap-cross")));
+    SnapNavigationTargetResolver resolver(&wts, layoutManager.get(), &adj, {});
+    resolver.setCrossSurfaceResolver(&cross);
+
+    const auto result =
+        resolver.getSwapTargetForWindow(QStringLiteral("w1"), QStringLiteral("right"), QStringLiteral("DP-1"));
+    QVERIFY(result.success);
+    QVERIFY(result.reason.isEmpty()); // a real two-way swap, not move-to-empty
+    // w1 → z-b on the neighbour output.
+    QCOMPARE(result.windowId1, QStringLiteral("w1"));
+    QCOMPARE(result.zoneId1, QStringLiteral("z-b"));
+    QCOMPARE(result.screenName, QStringLiteral("DP-2"));
+    QCOMPARE(QRect(result.x1, result.y1, result.w1, result.h1), QRect(1920, 0, 960, 1080));
+    // w2 (the DP-2 occupant, not the DP-1 sibling) → z-a back on the source output.
+    QCOMPARE(result.windowId2, QStringLiteral("w2"));
+    QCOMPARE(result.zoneId2, QStringLiteral("z-a"));
+    QCOMPARE(result.screenName2, QStringLiteral("DP-1"));
+    QCOMPARE(QRect(result.x2, result.y2, result.w2, result.h2), QRect(0, 0, 960, 1080));
+}
+
+void TestSnapCrossSurface::swap_noAdjacentZone_emptyNeighbourEntryZone_movesToEmptyAcrossOutput()
+{
+    // The neighbour output's entry zone is empty: the cross-surface swap degrades
+    // to a move-to-empty crossing — w1 relocates into DP-2's entry zone, with no
+    // counterpart to send back (screenName2 stays empty).
+    FakeWindowTracking wts;
+    wts.zoneOfWindow[QStringLiteral("w1")] = QStringLiteral("z-a");
+    wts.zoneGeo[key(QStringLiteral("z-a"), QStringLiteral("DP-1"))] = QRect(0, 0, 960, 1080);
+    wts.zoneGeo[key(QStringLiteral("z-b"), QStringLiteral("DP-2"))] = QRect(1920, 0, 960, 1080);
+    // z-b empty on the neighbour output (no entry in windowsByZone).
+
+    FakeZoneAdjacency adj;
+    adj.adjacent = QString();
+    adj.firstInDir[key(QStringLiteral("left"), QStringLiteral("DP-2"))] = QStringLiteral("z-b");
+
+    FakeCrossSurface cross;
+    cross.neighborOut[key(QStringLiteral("DP-1"), QStringLiteral("right"))] = QStringLiteral("DP-2");
+
+    std::unique_ptr<PhosphorZones::LayoutRegistry> layoutManager(
+        PlasmaZones::TestHelpers::makeLayoutRegistry(QStringLiteral("test-snap-cross")));
+    SnapNavigationTargetResolver resolver(&wts, layoutManager.get(), &adj, {});
+    resolver.setCrossSurfaceResolver(&cross);
+
+    const auto result =
+        resolver.getSwapTargetForWindow(QStringLiteral("w1"), QStringLiteral("right"), QStringLiteral("DP-1"));
+    QVERIFY(result.success);
+    QCOMPARE(result.reason, QStringLiteral("moved_to_empty"));
+    QCOMPARE(result.windowId1, QStringLiteral("w1"));
+    QCOMPARE(result.zoneId1, QStringLiteral("z-b"));
+    QCOMPARE(result.screenName, QStringLiteral("DP-2"));
+    QVERIFY(result.windowId2.isEmpty()); // nothing to send back
+    QVERIFY(result.screenName2.isEmpty());
 }
 
 void TestSnapCrossSurface::cycle_zoneSharedWithSiblingScreen_staysOnThisScreen()

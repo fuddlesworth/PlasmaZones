@@ -489,7 +489,14 @@ void SnapEngine::swapFocusedInDirection(const QString& direction, const Navigati
                                   result.screenName, false);
 
     if (!result.windowId2.isEmpty()) {
-        QString screen2 = m_snapState->screenAssignments().value(result.windowId2);
+        // A cross-output swap sends window2 to the SOURCE output (screenName2),
+        // not where it currently lives — its stored assignment is the neighbour
+        // it's leaving. For an in-surface swap screenName2 is empty, so fall back
+        // to its current assignment (then window1's screen) as before.
+        QString screen2 = result.screenName2;
+        if (screen2.isEmpty()) {
+            screen2 = m_snapState->screenAssignments().value(result.windowId2);
+        }
         if (screen2.isEmpty()) {
             screen2 = result.screenName;
         }

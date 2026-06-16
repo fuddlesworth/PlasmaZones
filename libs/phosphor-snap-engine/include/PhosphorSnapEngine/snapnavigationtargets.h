@@ -127,6 +127,18 @@ private:
     PhosphorProtocol::MoveTargetResult crossOutputEntryTarget(const QString& currentZoneId, const QString& direction,
                                                               const QString& sourceScreenId) const;
 
+    /// Cross-output swap target on a no-adjacent-zone boundary: the focused
+    /// window (@p windowId, in @p currentZoneId on @p sourceScreenId) crosses to
+    /// the neighbour output's entry zone, trading places with that zone's
+    /// occupant. window1 lands on the neighbour (screenName), window2 returns to
+    /// the source output (screenName2). An empty entry zone degrades to a
+    /// move-to-empty crossing (no window2). Returns a non-success result when
+    /// there's no neighbour output / entry zone / valid geometry; the caller
+    /// emits feedback so the swap tag stays correct.
+    PhosphorProtocol::SwapTargetResult crossOutputSwapTarget(const QString& windowId, const QString& currentZoneId,
+                                                             const QString& direction,
+                                                             const QString& sourceScreenId) const;
+
     /// Windows snapped to @p zoneId whose stored screen is @p screenName, in
     /// windowsInZone() iteration order.
     /// windowsInZone() is screen-agnostic — the same zone UUID is shared by
