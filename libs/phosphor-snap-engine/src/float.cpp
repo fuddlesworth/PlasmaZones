@@ -318,7 +318,22 @@ void SnapEngine::handoffReceive(const HandoffContext& ctx)
     if (!ctx.sourceZoneIds.isEmpty()) {
         QRect zoneGeo = m_windowTracker->resolveZoneGeometry(ctx.sourceZoneIds, ctx.toScreenId);
         if (zoneGeo.isValid()) {
-            if (ctx.sourceZoneIds.size() > 1) {
+            const int curDesktop = currentVirtualDesktop();
+            if (ctx.toDesktop > 0 && ctx.toDesktop != curDesktop) {
+                // Cross-DESKTOP handoff: the target desktop isn't the visible one,
+                // so assign the snap slot directly on it (commitSnap would stamp
+                // the current desktop) and refresh the placement-store record.
+                if (ctx.sourceZoneIds.size() > 1) {
+                    m_snapState->assignWindowToZones(ctx.windowId, ctx.sourceZoneIds, ctx.toScreenId, ctx.toDesktop);
+                } else {
+                    m_snapState->assignWindowToZone(ctx.windowId, ctx.sourceZoneIds.first(), ctx.toScreenId,
+                                                    ctx.toDesktop);
+                }
+                if (auto placement = capturePlacement(ctx.windowId)) {
+                    placement->virtualDesktop = ctx.toDesktop;
+                    m_windowTracker->placementStore().record(std::move(*placement));
+                }
+            } else if (ctx.sourceZoneIds.size() > 1) {
                 commitMultiZoneSnap(ctx.windowId, ctx.sourceZoneIds, ctx.toScreenId, SnapIntent::UserInitiated);
             } else {
                 commitSnap(ctx.windowId, ctx.sourceZoneIds.first(), ctx.toScreenId, SnapIntent::UserInitiated);

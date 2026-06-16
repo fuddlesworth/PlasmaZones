@@ -14,6 +14,7 @@
 #include <PhosphorZones/AssignmentEntry.h>
 #include <PhosphorZones/LayoutRegistry.h>
 #include <PhosphorSnapEngine/SnapState.h>
+#include <PhosphorSnapEngine/IZoneAdjacencyResolver.h>
 #include <PhosphorWindowRule/MatchExpression.h>
 #include <PhosphorWindowRule/MatchTypes.h>
 #include <PhosphorWindowRule/RuleAction.h>
@@ -1722,6 +1723,49 @@ private Q_SLOTS:
         QVERIFY(!engine.isAppIdExcluded(QStringLiteral("appA")));
         QVERIFY(!engine.isAppIdExcluded(QStringLiteral("appB")));
         QVERIFY(!engine.isAppIdExcluded(QStringLiteral("appC")));
+    }
+
+    // ── Cross-mode handoff (Phase 3): the entry zone a window enters when it
+    //    crosses onto a snap neighbour is the edge zone facing back toward the
+    //    source (crossing "right" → the neighbour's LEFT-edge zone). ────────────
+    void testEntryZoneForCrossing_facingEdge()
+    {
+        // Minimal adjacency stub: records the (direction, screen) it is asked for
+        // and returns a deterministic zone id so we can assert the opposite-edge
+        // mapping entryZoneForCrossing applies.
+        struct FakeAdjacency : PhosphorSnapEngine::IZoneAdjacencyResolver
+        {
+            mutable QString lastDirection;
+            mutable QString lastScreen;
+            QString getAdjacentZone(const QString&, const QString&, const QString&) const override
+            {
+                return {};
+            }
+            QString getFirstZoneInDirection(const QString& direction, const QString& screenId) const override
+            {
+                lastDirection = direction;
+                lastScreen = screenId;
+                return QStringLiteral("entry:") + direction;
+            }
+        };
+        FakeAdjacency adj;
+        SnapEngine engine(nullptr, m_wts, nullptr, nullptr, nullptr);
+        engine.setZoneAdjacencyResolver(&adj);
+
+        // Crossing RIGHT enters the neighbour from its LEFT edge.
+        QCOMPARE(engine.entryZoneForCrossing(QStringLiteral("right"), QStringLiteral("DP-2")),
+                 QStringLiteral("entry:left"));
+        QCOMPARE(adj.lastDirection, QStringLiteral("left"));
+        QCOMPARE(adj.lastScreen, QStringLiteral("DP-2"));
+        // The other directions invert correctly.
+        QCOMPARE(engine.entryZoneForCrossing(QStringLiteral("left"), QStringLiteral("DP-2")),
+                 QStringLiteral("entry:right"));
+        QCOMPARE(engine.entryZoneForCrossing(QStringLiteral("up"), QStringLiteral("DP-2")),
+                 QStringLiteral("entry:down"));
+        QCOMPARE(engine.entryZoneForCrossing(QStringLiteral("down"), QStringLiteral("DP-2")),
+                 QStringLiteral("entry:up"));
+        // An unknown token yields no entry zone.
+        QVERIFY(engine.entryZoneForCrossing(QStringLiteral("diagonal"), QStringLiteral("DP-2")).isEmpty());
     }
 };
 

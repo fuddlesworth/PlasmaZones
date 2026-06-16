@@ -11,6 +11,8 @@
 #include <PhosphorGeometry/DirectionalNeighbor.h>
 #include <PhosphorEngine/ICrossSurfaceResolver.h>
 #include <PhosphorScreens/Manager.h>
+#include <PhosphorZones/AssignmentEntry.h>
+#include <PhosphorZones/LayoutRegistry.h>
 
 #include <algorithm>
 
@@ -277,7 +279,14 @@ bool NavigationController::crossOutputMove(const QString& sourceScreenId, const 
     // for this window), so swapFocusedInDirection falls through to cross-desktop
     // / no_neighbor instead.
     if (!m_engine->isAutotileScreen(neighbor)) {
-        return false;
+        // The neighbour output is a DIFFERENT tiling mode (snap). Autotile has no
+        // state there, so defer to the daemon: it relinquishes the window from
+        // this engine and hands it to the snap engine, which snaps it into the
+        // neighbour's entry zone. The daemon slot is a direct (synchronous)
+        // connection, so the handoff completes before this returns. Same-desktop
+        // monitor crossing → targetDesktop 0 (current).
+        Q_EMIT m_engine->crossModeMoveRequested(focused, neighbor, 0, direction);
+        return true;
     }
     const PhosphorEngine::TilingStateKey oldKey = m_engine->currentKeyForScreen(sourceScreenId);
     const PhosphorEngine::TilingStateKey newKey = m_engine->currentKeyForScreen(neighbor);
@@ -362,7 +371,18 @@ bool NavigationController::crossDesktopMove(const QString& sourceScreenId, const
     if (targetDesktop <= 0) {
         return false;
     }
-    // Move the window the way a NATIVE KWin desktop move works: just ask the
+    // If the target desktop on this screen is a DIFFERENT mode (snap), autotile
+    // has no state there — defer to the daemon cross-mode handoff, which snaps
+    // the window into the equivalent zone on the target snap desktop. The daemon
+    // slot is a direct (synchronous) connection.
+    if (m_engine->m_layoutManager
+        && m_engine->m_layoutManager->modeForScreen(sourceScreenId, targetDesktop, m_engine->m_currentActivity)
+            == PhosphorZones::AssignmentEntry::Snapping) {
+        Q_EMIT m_engine->crossModeMoveRequested(focused, sourceScreenId, targetDesktop, direction);
+        return true;
+    }
+    // Same-mode (autotile) target desktop: move the window the way a NATIVE KWin
+    // desktop move works: just ask the
     // compositor to move it to the target desktop, then let the existing
     // reactive machinery do the rest. When the window leaves the current
     // desktop the effect fires "moved off current desktop" → windowClosed,

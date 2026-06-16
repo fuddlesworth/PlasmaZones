@@ -30,6 +30,7 @@
 #include <PhosphorEngine/WindowPlacementStore.h>
 
 #include <PhosphorSnapEngine/INavigationStateProvider.h>
+#include <PhosphorSnapEngine/IZoneAdjacencyResolver.h>
 #include <PhosphorZones/Layout.h>
 #include <PhosphorZones/LayoutUtils.h>
 #include <PhosphorZones/Zone.h>
@@ -38,6 +39,7 @@
 #include <PhosphorWindowRule/WindowQuery.h>
 #include <PhosphorWindowRule/WindowRuleSet.h>
 #include <PhosphorZones/LayoutRegistry.h>
+#include <PhosphorZones/AssignmentEntry.h>
 #include "snapenginelogging.h"
 #include <PhosphorScreens/Manager.h>
 #include <PhosphorSnapEngine/snapnavigationtargets.h>
@@ -276,6 +278,10 @@ void SnapEngine::moveFocusedInDirection(const QString& direction, const Navigati
         // At a zone-layout boundary with no neighbour output, the resolver
         // deferred the decision to us — try crossing to the adjacent desktop.
         if (result.reason == QLatin1String("no_adjacent_zone")) {
+            // A neighbour OUTPUT in autotile mode → hand the window to autotile.
+            if (tryCrossModeOutputMove(windowId, direction, screenId)) {
+                return;
+            }
             if (tryCrossDesktopMove(windowId, direction, screenId)) {
                 return;
             }
@@ -314,6 +320,16 @@ bool SnapEngine::tryCrossDesktopMove(const QString& windowId, const QString& dir
     const QString currentZoneId = m_snapState->zoneForWindow(windowId);
     if (currentZoneId.isEmpty()) {
         return false;
+    }
+
+    // If the target desktop on this screen is a DIFFERENT mode (autotile), snap
+    // has no zone to land in — hand the window to the autotile engine via the
+    // daemon cross-mode handoff, which inserts it into the target desktop's stack.
+    if (m_layoutManager
+        && m_layoutManager->modeForScreen(screenId, targetDesktop, currentActivity())
+            == PhosphorZones::AssignmentEntry::Autotile) {
+        Q_EMIT crossModeMoveRequested(windowId, screenId, targetDesktop, direction);
+        return true;
     }
 
     // Land the window snapped in the EQUIVALENT zone on the target desktop's
@@ -383,6 +399,49 @@ std::pair<QString, QRect> SnapEngine::resolveCrossDesktopZone(const QString& cur
         return {};
     }
     return {targetZoneId, geo};
+}
+
+bool SnapEngine::tryCrossModeOutputMove(const QString& windowId, const QString& direction, const QString& screenId)
+{
+    if (!m_crossSurfaceResolver || !m_layoutManager) {
+        return false;
+    }
+    const QString neighbour = m_crossSurfaceResolver->neighborOutputInDirection(screenId, direction);
+    if (neighbour.isEmpty()) {
+        return false;
+    }
+    // Reaching here means the resolver found no snap entry zone on the neighbour
+    // (getMoveTargetForWindow returned no_adjacent_zone). If the neighbour is an
+    // autotile output, defer to the daemon to insert the window into its stack.
+    // A snap neighbour with no entry zone is a genuine boundary — leave it.
+    if (m_layoutManager->modeForScreen(neighbour, currentVirtualDesktop(), currentActivity())
+        != PhosphorZones::AssignmentEntry::Autotile) {
+        return false;
+    }
+    Q_EMIT crossModeMoveRequested(windowId, neighbour, 0, direction);
+    return true;
+}
+
+QString SnapEngine::entryZoneForCrossing(const QString& direction, const QString& neighbourScreen) const
+{
+    if (!m_zoneAdjacencyResolver) {
+        return {};
+    }
+    // Enter the neighbour from the edge facing back toward the source: crossing
+    // "right" lands on the neighbour's LEFT-edge zone, "down" on its TOP, etc.
+    QString opposite;
+    if (direction == QLatin1String("left")) {
+        opposite = QStringLiteral("right");
+    } else if (direction == QLatin1String("right")) {
+        opposite = QStringLiteral("left");
+    } else if (direction == QLatin1String("up")) {
+        opposite = QStringLiteral("down");
+    } else if (direction == QLatin1String("down")) {
+        opposite = QStringLiteral("up");
+    } else {
+        return {};
+    }
+    return m_zoneAdjacencyResolver->getFirstZoneInDirection(opposite, neighbourScreen);
 }
 
 void SnapEngine::swapFocusedInDirection(const QString& direction, const NavigationContext& ctx)

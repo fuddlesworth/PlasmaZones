@@ -88,6 +88,13 @@ public:
     std::pair<QString, QRect> resolveCrossDesktopZone(const QString& currentZoneId, const QString& screenId,
                                                       int targetDesktop) const;
 
+    /// The zone a window ENTERS when it crosses onto @p neighbourScreen moving in
+    /// @p direction: the first zone on the edge facing back toward the source
+    /// (crossing "right" enters the neighbour's left-edge zone). Empty when no
+    /// zone-adjacency resolver is wired or the neighbour has no such zone. Used by
+    /// the daemon cross-mode handoff to place a window arriving on a snap monitor.
+    QString entryZoneForCrossing(const QString& direction, const QString& neighbourScreen) const;
+
     // ═══════════════════════════════════════════════════════════════════════════
     // IPlacementEngine — lifecycle
     // ═══════════════════════════════════════════════════════════════════════════
@@ -696,6 +703,12 @@ private:
     /// zone-layout boundary with no neighbour output. Returns false when there is
     /// no neighbour desktop or the window is not snapped.
     bool tryCrossDesktopMove(const QString& windowId, const QString& direction, const QString& screenId);
+
+    /// If the neighbour OUTPUT in @p direction is a DIFFERENT mode (autotile),
+    /// emit crossModeMoveRequested so the daemon hands the window to the autotile
+    /// engine, and return true. Returns false when there is no neighbour output
+    /// or it is also snap-mode (handled by the resolver's entry-zone path).
+    bool tryCrossModeOutputMove(const QString& windowId, const QString& direction, const QString& screenId);
 
     /// Focus a window on the virtual desktop adjacent to the current one in
     /// @p direction (the entry window on @p screenId there), switching KWin to

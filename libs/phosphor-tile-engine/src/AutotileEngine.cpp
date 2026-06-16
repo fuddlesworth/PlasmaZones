@@ -1915,7 +1915,15 @@ void AutotileEngine::handoffReceive(const HandoffContext& ctx)
         handoffRelease(windowId);
     }
 
-    state->addWindow(windowId);
+    // Insert at the position dictated by the insertion-order setting (a
+    // directional cross-mode move should land where new windows land), except a
+    // drag-drop carrying a cursor position, which the drag-insert path places
+    // separately — there we keep the simple append so the drop point wins.
+    if (ctx.dropPos.isNull()) {
+        insertWindowByConfigOrder(state, windowId);
+    } else {
+        state->addWindow(windowId);
+    }
     // Autotile-engine policy on receive: a window arriving as "floating in
     // the source" stays floating here too — drag-from-snap typically falls
     // into this branch, and the user's drop position is where they want it.
@@ -2813,18 +2821,7 @@ bool AutotileEngine::insertWindow(const QString& windowId, const QString& screen
 
     if (!inserted) {
         // Insert based on config preference
-        switch (m_config->insertPosition) {
-        case AutotileConfig::InsertPosition::End:
-            state->addWindow(windowId);
-            break;
-        case AutotileConfig::InsertPosition::AfterFocused:
-            state->insertAfterFocused(windowId);
-            break;
-        case AutotileConfig::InsertPosition::AsMaster:
-            state->addWindow(windowId);
-            state->moveToFront(windowId);
-            break;
-        }
+        insertWindowByConfigOrder(state, windowId);
     }
 
     // Float restore is handled entirely by the record take() above (a floating
@@ -2834,6 +2831,22 @@ bool AutotileEngine::insertWindow(const QString& windowId, const QString& screen
 
     m_windowToStateKey.insert(windowId, currentKey);
     return true;
+}
+
+void AutotileEngine::insertWindowByConfigOrder(PhosphorTiles::TilingState* state, const QString& windowId)
+{
+    switch (m_config->insertPosition) {
+    case AutotileConfig::InsertPosition::End:
+        state->addWindow(windowId);
+        break;
+    case AutotileConfig::InsertPosition::AfterFocused:
+        state->insertAfterFocused(windowId);
+        break;
+    case AutotileConfig::InsertPosition::AsMaster:
+        state->addWindow(windowId);
+        state->moveToFront(windowId);
+        break;
+    }
 }
 
 void AutotileEngine::removeWindow(const QString& windowId)

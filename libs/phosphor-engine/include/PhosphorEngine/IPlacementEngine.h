@@ -368,6 +368,11 @@ public:
         QString windowId;
         QString fromEngineId; ///< source engine identity ("snap" / "autotile" / "")
         QString toScreenId; ///< destination screen (must be owned by `to` engine)
+        int toDesktop = 0; ///< destination virtual desktop (1-based); 0 = current
+                           ///< desktop (drag-drop / same-desktop monitor crossing).
+                           ///< Set for a cross-VIRTUAL-DESKTOP handoff so the
+                           ///< receiver places the window in the target desktop's
+                           ///< state/layout, not the currently-visible one.
         QPoint dropPos; ///< cursor position at drop, or invalid for non-drag handoffs
         QRect sourceGeometry; ///< window's frame at handoff time (for size preservation)
         QStringList sourceZoneIds; ///< zones the window held at source (empty if not snapped)

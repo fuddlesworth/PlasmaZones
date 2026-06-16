@@ -16,7 +16,10 @@
 #include <PhosphorEngine/IPlacementEngine.h>
 #include <PhosphorIdentity/WindowId.h>
 #include <PhosphorSnapEngine/SnapEngine.h>
+#include <PhosphorSnapEngine/SnapState.h>
 #include <PhosphorTileEngine/AutotileEngine.h>
+#include <PhosphorZones/AssignmentEntry.h>
+#include <PhosphorZones/LayoutRegistry.h>
 #include <PhosphorWindowRule/RuleAction.h>
 #include <PhosphorWindowRule/RuleEvaluator.h>
 #include <PhosphorWindowRule/WindowQuery.h>
@@ -214,6 +217,21 @@ void WindowTrackingAdaptor::setEngines(PhosphorEngine::PlacementEngineBase* snap
                 &WindowTrackingAdaptor::windowOutputMoveExpected);
     }
 
+    // Cross-MODE directional move: a source engine reached a boundary whose
+    // target context is a different tiling mode and cannot place the window
+    // itself. Both engines defer here; handleCrossModeMove relinquishes from the
+    // source and hands the window to the target engine (autotile insert / snap
+    // zone). DirectConnection so the handoff completes synchronously within the
+    // navigation call (the engine returns true expecting the window has moved).
+    if (m_autotileEngine) {
+        connect(m_autotileEngine, &PhosphorEngine::PlacementEngineBase::crossModeMoveRequested, this,
+                &WindowTrackingAdaptor::handleCrossModeMove, Qt::DirectConnection);
+    }
+    if (m_snapEngine) {
+        connect(m_snapEngine, &PhosphorEngine::PlacementEngineBase::crossModeMoveRequested, this,
+                &WindowTrackingAdaptor::handleCrossModeMove, Qt::DirectConnection);
+    }
+
     // ═══════════════════════════════════════════════════════════════════════════
     // Common float-restore geometry channel
     //
@@ -312,6 +330,93 @@ bool WindowTrackingAdaptor::shouldRestoreFloatedPosition(const QString& windowId
         return action->params.value(QString(PhosphorWindowRule::ActionParam::Value)).toBool();
     }
     return globalDefault;
+}
+
+void WindowTrackingAdaptor::handleCrossModeMove(const QString& windowId, const QString& targetScreenId,
+                                                int targetDesktop, const QString& direction)
+{
+    auto* sourceEngine = qobject_cast<PhosphorEngine::PlacementEngineBase*>(sender());
+    if (!sourceEngine || windowId.isEmpty() || targetScreenId.isEmpty() || !m_layoutManager) {
+        return;
+    }
+
+    // Target mode at the DESTINATION context: a cross-desktop crossing targets a
+    // (possibly different) mode on the same screen's target desktop; a monitor
+    // crossing targets the neighbour screen on the current desktop (targetDesktop
+    // == 0).
+    const int effectiveDesktop = targetDesktop > 0 ? targetDesktop : currentDesktop();
+    const QString activity = m_layoutManager->currentActivity();
+    const bool targetIsAutotile = m_layoutManager->modeForScreen(targetScreenId, effectiveDesktop, activity)
+        == PhosphorZones::AssignmentEntry::Autotile;
+    PhosphorEngine::PlacementEngineBase* targetEngine =
+        targetIsAutotile ? m_autotileEngine.data() : m_snapEngine.data();
+    if (!targetEngine || targetEngine == sourceEngine) {
+        return; // target engine unavailable, or not actually cross-mode
+    }
+
+    // Where the window currently lives — for the source reflow.
+    const QString sourceScreen = sourceEngine->screenForTrackedWindow(windowId);
+
+    // For a SNAP target, resolve the landing zone BEFORE relinquishing the source
+    // (snap→snap cross-desktop maps the source's slot; everything else enters the
+    // neighbour's edge zone).
+    QStringList landingZoneIds;
+    if (!targetIsAutotile) {
+        auto* snapTarget = qobject_cast<PhosphorSnapEngine::SnapEngine*>(targetEngine);
+        QString zoneId;
+        if (snapTarget) {
+            if (targetDesktop > 0) {
+                if (auto* snapSource = qobject_cast<PhosphorSnapEngine::SnapEngine*>(sourceEngine)) {
+                    const QString srcZone =
+                        snapSource->snapState() ? snapSource->snapState()->zoneForWindow(windowId) : QString();
+                    if (!srcZone.isEmpty()) {
+                        zoneId = snapTarget->resolveCrossDesktopZone(srcZone, targetScreenId, targetDesktop).first;
+                    }
+                }
+            }
+            if (zoneId.isEmpty()) {
+                zoneId = snapTarget->entryZoneForCrossing(direction, targetScreenId);
+            }
+        }
+        if (!zoneId.isEmpty()) {
+            landingZoneIds = QStringList{zoneId};
+        }
+    }
+
+    // Relinquish from the source (tracking-only). An autotile source must reflow
+    // — the remaining tiles expand into the vacated slot; handoffRelease does not
+    // retile. A snap source just vacates a zone (no reflow).
+    sourceEngine->handoffRelease(windowId);
+    if (!sourceScreen.isEmpty() && sourceEngine == m_autotileEngine.data()) {
+        sourceEngine->retile(sourceScreen);
+    }
+
+    // Place on the target. A cross-DESKTOP move onto an AUTOTILE desktop uses the
+    // existing reactive path: the window changes desktops below and the autotile
+    // effect catch-scan tiles it (honouring insertion-order) when that desktop
+    // becomes current — handoffReceive would mis-place it on the *current*
+    // desktop's state. Every other case places immediately:
+    //   - monitor crossing (current desktop): handoffReceive tiles / snaps it now;
+    //   - cross-desktop onto a SNAP desktop: snap handoffReceive honours toDesktop
+    //     (assigns the zone on the target desktop + off-desktop geometry).
+    const bool reactiveAutotileDesktopArrival = targetIsAutotile && targetDesktop > 0;
+    if (!reactiveAutotileDesktopArrival) {
+        PhosphorEngine::IPlacementEngine::HandoffContext ctx;
+        ctx.windowId = windowId;
+        ctx.toScreenId = targetScreenId;
+        ctx.toDesktop = targetDesktop;
+        ctx.fromEngineId = sourceEngine->engineId();
+        ctx.sourceZoneIds = landingZoneIds;
+        ctx.wasFloating = false; // an explicit move always places, never floats
+        targetEngine->handoffReceive(ctx);
+    }
+
+    // Physical relocation for a cross-desktop crossing: ask the compositor to
+    // move the real window to the target desktop. A monitor crossing needs none —
+    // the target engine's placement geometry already relocated the window.
+    if (targetDesktop > 0) {
+        Q_EMIT windowDesktopMoveRequested(windowId, targetDesktop);
+    }
 }
 
 } // namespace PlasmaZones

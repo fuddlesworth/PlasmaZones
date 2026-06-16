@@ -829,6 +829,23 @@ public:
 
 private Q_SLOTS:
     /**
+     * @brief Orchestrate a cross-MODE directional move handoff.
+     *
+     * Wired to both engines' crossModeMoveRequested. The source engine (the
+     * signal sender) reached a context boundary whose target is a different
+     * tiling mode and deferred here. This resolves the target mode at the
+     * destination context, relinquishes the window from the source engine
+     * (handoffRelease + source reflow for an autotile source), and hands it to
+     * the target engine (handoffReceive): autotile inserts it per the
+     * insertion-order setting; snap snaps it into the entry zone (monitor
+     * crossing) or the equivalent zone (snap→snap desktop crossing). For a
+     * cross-desktop crossing it then asks the compositor to move the real window
+     * to @p targetDesktop.
+     */
+    void handleCrossModeMove(const QString& windowId, const QString& targetScreenId, int targetDesktop,
+                             const QString& direction);
+
+    /**
      * @brief Handle layout change by validating zone assignments
      *
      * When the active layout changes, windows may be assigned to zones that

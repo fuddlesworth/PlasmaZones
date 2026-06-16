@@ -85,6 +85,19 @@ Q_SIGNALS:
     /// cross-output moves carry no such marker and still drive close/open.
     void windowOutputMoveExpected(const QString& windowId, const QString& targetScreenId);
 
+    /// Emitted when a directional MOVE reaches a context boundary whose target
+    /// is a DIFFERENT tiling mode than the source — the source engine cannot
+    /// place the window itself (it has no state for the other mode), so it defers
+    /// to the daemon. The daemon resolves the target mode, relinquishes the
+    /// window from this engine (handoffRelease) and hands it to the target engine
+    /// (handoffReceive): autotile inserts it into the stack, snap snaps it into
+    /// the entry zone (monitor crossing) or equivalent zone (desktop crossing).
+    /// @p targetDesktop is 0 for a same-desktop monitor crossing, or the 1-based
+    /// destination desktop for a virtual-desktop crossing. @p direction is the
+    /// move direction ("left"/"right"/"up"/"down").
+    void crossModeMoveRequested(const QString& windowId, const QString& targetScreenId, int targetDesktop,
+                                const QString& direction);
+
     /// Emitted to sync floating state without restoring geometry.
     /// Passive state-sync: engine-internal divergence correction.
     void windowFloatingStateSynced(const QString& windowId, bool floating, const QString& screenId);
