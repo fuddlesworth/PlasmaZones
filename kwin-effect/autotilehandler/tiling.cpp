@@ -105,6 +105,7 @@ void AutotileHandler::slotWindowsTileRequested(const PhosphorProtocol::TileReque
         KWin::EffectWindow* window = nullptr;
         QVector<KWin::EffectWindow*> candidates;
         bool isMonocle = false;
+        QString screenId; ///< daemon's TARGET screen for this window (req.screenId)
     };
     QVector<Entry> entries;
 
@@ -168,6 +169,7 @@ void AutotileHandler::slotWindowsTileRequested(const PhosphorProtocol::TileReque
         entry.geometry = normalizedGeometry;
         entry.window = w;
         entry.isMonocle = req.monocle;
+        entry.screenId = req.screenId;
         if (candidates.size() > 1) {
             entry.candidates = candidates;
         }
@@ -232,7 +234,14 @@ void AutotileHandler::slotWindowsTileRequested(const PhosphorProtocol::TileReque
         if (!e.window) {
             continue;
         }
-        QString screenId = m_effect->getWindowScreenId(e.window);
+        // Key on the daemon's TARGET screen (from the tile request), NOT the
+        // window's current physical screen. On a cross-output move the moved
+        // window has not physically relocated when this batch is built, so
+        // getWindowScreenId() still returns the SOURCE screen — which made the
+        // destination batch bump the SOURCE screen's stagger generation and
+        // cancel the source monitor's own reflow (its remaining windows never
+        // re-tiled). req.screenId is the screen the daemon tiled the window on.
+        QString screenId = !e.screenId.isEmpty() ? e.screenId : m_effect->getWindowScreenId(e.window);
         toApply.append({QPointer<KWin::EffectWindow>(e.window), e.geometry, e.windowId, screenId, e.isMonocle});
     }
 
@@ -403,6 +412,15 @@ void AutotileHandler::slotWindowsTileRequested(const PhosphorProtocol::TileReque
             // cross-output "hole on the source monitor" bug.
             if (m_autotileStaggerGeneration != gen
                 || m_autotileStaggerGenByScreen.value(snap.screenId) != genByScreen.value(snap.screenId)) {
+                // A genuinely newer retile of this window's screen has
+                // superseded this apply — normal during rapid ops. Logged at
+                // debug to keep the supersession trail available without
+                // production noise (it was the smoking gun for the cross-output
+                // "source doesn't reflow" bug: a destination batch keyed to the
+                // moved window's STALE screen bumped the source screen's gen).
+                qCDebug(lcEffect) << "Autotile apply: skip superseded" << snap.windowId << "screen" << snap.screenId
+                                  << "| screenGen now" << m_autotileStaggerGenByScreen.value(snap.screenId)
+                                  << "captured" << genByScreen.value(snap.screenId);
                 return;
             }
             if (!snap.window || snap.window->isDeleted()) {
