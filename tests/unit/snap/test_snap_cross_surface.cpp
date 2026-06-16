@@ -229,6 +229,7 @@ private Q_SLOTS:
     void focus_inSurfaceZoneSharedWithSiblingScreen_picksThisScreenWindow();
     void focus_inSurfaceScreenIdSkew_fallsBackToZoneOccupant();
     void swap_inSurfaceZoneSharedWithSiblingScreen_picksThisScreenPartner();
+    void cycle_zoneSharedWithSiblingScreen_staysOnThisScreen();
     void move_noNeighbourOutput_reportsBoundary();
 
     void reassignDesktop_restampsAssignedWindowKeepingZone();
@@ -397,6 +398,31 @@ void TestSnapCrossSurface::swap_inSurfaceZoneSharedWithSiblingScreen_picksThisSc
         resolver.getSwapTargetForWindow(QStringLiteral("w1"), QStringLiteral("right"), QStringLiteral("DP-1"));
     QVERIFY(result.success);
     QCOMPARE(result.windowId2, QStringLiteral("wHere")); // the DP-1 partner, not list-first wThere
+}
+
+void TestSnapCrossSurface::cycle_zoneSharedWithSiblingScreen_staysOnThisScreen()
+{
+    // Cycling focus within a zone must stay on this output: a layout shared with
+    // a sibling monitor shares the zone UUID, so the unfiltered ring would
+    // include the sibling's window and cycle focus would jump monitors.
+    FakeWindowTracking wts;
+    wts.zoneOfWindow[QStringLiteral("w1")] = QStringLiteral("z-a");
+    // Same zone UUID occupied on both outputs; the sibling (wOther/DP-2) sits
+    // BETWEEN the two DP-1 windows in iteration order to prove it is skipped.
+    wts.windowsByZone[QStringLiteral("z-a")] = {QStringLiteral("w1"), QStringLiteral("wOther"), QStringLiteral("w1b")};
+    wts.screenOfWindow[QStringLiteral("w1")] = QStringLiteral("DP-1");
+    wts.screenOfWindow[QStringLiteral("w1b")] = QStringLiteral("DP-1");
+    wts.screenOfWindow[QStringLiteral("wOther")] = QStringLiteral("DP-2");
+
+    FakeZoneAdjacency adj;
+    std::unique_ptr<PhosphorZones::LayoutRegistry> layoutManager(
+        PlasmaZones::TestHelpers::makeLayoutRegistry(QStringLiteral("test-snap-cross")));
+    SnapNavigationTargetResolver resolver(&wts, layoutManager.get(), &adj, {});
+
+    const auto result =
+        resolver.getCycleTargetForWindow(QStringLiteral("w1"), /*forward=*/true, QStringLiteral("DP-1"));
+    QVERIFY(result.success);
+    QCOMPARE(result.windowIdToActivate, QStringLiteral("w1b")); // the other DP-1 window, not wOther on DP-2
 }
 
 void TestSnapCrossSurface::move_noNeighbourOutput_reportsBoundary()

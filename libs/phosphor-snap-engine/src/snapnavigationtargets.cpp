@@ -168,16 +168,23 @@ SnapNavigationTargetResolver::crossOutputEntryTarget(const QString& currentZoneI
     return moveResult(true, QString(), entryZone, geo, currentZoneId, neighborScreen);
 }
 
-QString SnapNavigationTargetResolver::firstWindowInZoneOnScreen(const QString& zoneId, const QString& screenName) const
+QStringList SnapNavigationTargetResolver::windowsInZoneOnScreen(const QString& zoneId, const QString& screenName) const
 {
+    QStringList result;
     const QStringList windows = m_service->windowsInZone(zoneId);
     const QHash<QString, QString>& screens = m_service->screenAssignments();
     for (const QString& windowId : windows) {
         if (screens.value(windowId) == screenName) {
-            return windowId;
+            result.append(windowId);
         }
     }
-    return QString();
+    return result;
+}
+
+QString SnapNavigationTargetResolver::firstWindowInZoneOnScreen(const QString& zoneId, const QString& screenName) const
+{
+    const QStringList onScreen = windowsInZoneOnScreen(zoneId, screenName);
+    return onScreen.isEmpty() ? QString() : onScreen.first();
 }
 
 // Feedback callback emission goes through SnapNavigationTargetResolver::emitFeedback
@@ -405,7 +412,27 @@ SnapNavigationTargetResolver::getCycleTargetForWindow(const QString& windowId, b
         return cycleResult(false, QStringLiteral("not_snapped"), QString(), QString(), screenId);
     }
 
-    QStringList windowsInZone = m_service->windowsInZone(currentZoneId);
+    // Cycle only among co-located windows on this output: a layout shared across
+    // two monitors shares the zone UUID, so the unfiltered ring would include
+    // sibling-monitor windows and cycle focus would jump outputs. Resolve the
+    // window's effective screen the same way the move/focus paths do (the stored
+    // assignment is authoritative over the effect-reported screen for same-model
+    // multi-monitor setups), then pin the ring to it.
+    QString effectiveScreenId = screenId;
+    {
+        const QString storedScreen = m_service->screenAssignments().value(windowId);
+        if (isStoredScreenValid(m_service ? m_service->screenManager() : nullptr, storedScreen)) {
+            effectiveScreenId = storedScreen;
+        }
+    }
+    QStringList windowsInZone = windowsInZoneOnScreen(currentZoneId, effectiveScreenId);
+    if (windowsInZone.size() < 2) {
+        // Best-effort fallback (mirrors focus/swap): the screen filter may collapse
+        // the ring when a stored assignment's id-form differs from effectiveScreenId
+        // (virtual vs bare physical). Fall back to the unfiltered ring so cycling
+        // still works rather than spuriously reporting single_window.
+        windowsInZone = m_service->windowsInZone(currentZoneId);
+    }
     if (windowsInZone.size() < 2) {
         emitFeedback(false, QStringLiteral("cycle"), QStringLiteral("single_window"), currentZoneId, currentZoneId,
                      screenId);
