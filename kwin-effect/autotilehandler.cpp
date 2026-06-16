@@ -409,13 +409,26 @@ void AutotileHandler::handleWindowOutputChanged(KWin::EffectWindow* w)
         const QString expectedScreen = expIt.value();
         m_expectedOutputMove.erase(expIt);
         if (expectedScreen == newScreenId) {
-            m_notifiedWindowScreens[windowId] = newScreenId;
-            // The daemon's destination tile request moves the decoration claim
-            // (releaseOthersOfKind + acquire in slotWindowsTileRequested); keep
-            // our claim coherent here without a physical flap.
             if (newIsAutotile) {
+                m_notifiedWindowScreens[windowId] = newScreenId;
+                // The daemon's destination tile request moves the decoration claim
+                // (releaseOthersOfKind + acquire in slotWindowsTileRequested); keep
+                // our claim coherent here without a physical flap.
                 m_effect->decorationManager()->releaseOthersOfKind(windowId, DecorationManager::OwnerKind::Autotile,
                                                                    newScreenId);
+            } else {
+                // Cross-MODE move: the window left autotile for a SNAP screen. The
+                // daemon already relinquished it from the autotile engine, so do a
+                // tracking-only teardown of the effect-side autotile state (NOT
+                // onWindowClosed, which would re-notify the daemon) — otherwise it
+                // lingers in m_notifiedWindows as a phantom autotile window and a
+                // later frameGeometryChanged mis-detects a VS crossing. Release
+                // autotile's decoration claim; the snap side owns it now.
+                m_effect->decorationManager()->releaseKind(windowId, DecorationManager::OwnerKind::Autotile);
+                AutotileStateHelpers::AutotileWindowState windowState{
+                    m_notifiedWindows,      m_notifiedWindowScreens,   m_minimizeFloatedWindows, m_autotileTargetZones,
+                    m_centeredWaylandZones, m_monocleMaximizedWindows, m_preAutotileGeometries};
+                AutotileStateHelpers::cleanupClosedWindowState(windowId, m_border, windowState);
             }
             m_effect->updateAllBorders();
             return;

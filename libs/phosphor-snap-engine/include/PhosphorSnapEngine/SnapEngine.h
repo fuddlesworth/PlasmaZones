@@ -711,25 +711,22 @@ private:
     bool tryCrossDesktopMove(const QString& windowId, const QString& direction, const QString& screenId);
 
     /// If the neighbour OUTPUT in @p direction is a DIFFERENT mode (autotile),
-    /// emit crossModeMoveRequested so the daemon hands the window to the autotile
-    /// engine, and return true. Returns false when there is no neighbour output
-    /// or it is also snap-mode (handled by the resolver's entry-zone path).
-    bool tryCrossModeOutputMove(const QString& windowId, const QString& direction, const QString& screenId);
-
-    /// If the neighbour OUTPUT in @p direction is autotile mode, emit
-    /// crossModeSwapRequested so the daemon trades the focused window with the
-    /// neighbour's entry-edge tile, and return true. Returns false when there is
-    /// no neighbour output or it is also snap-mode (handled by the resolver's
-    /// cross-output swap path).
-    bool trySwapCrossModeOutput(const QString& windowId, const QString& direction, const QString& screenId);
+    /// defer to the daemon cross-mode handoff and return true: a move
+    /// (@p swap false) emits crossModeMoveRequested so autotile inserts the
+    /// window into its stack; a swap (@p swap true) emits crossModeSwapRequested
+    /// so it trades the window with the neighbour's entry-edge tile. Returns
+    /// false when there is no neighbour output or it is also snap-mode (handled
+    /// by the resolver's entry-zone / cross-output-swap path).
+    bool tryCrossModeOutput(const QString& windowId, const QString& direction, const QString& screenId, bool swap);
 
     /// Focus a window on the virtual desktop adjacent to the current one in
     /// @p direction (the entry window on @p screenId there), switching KWin to
     /// it. Used when directional focus reaches a zone-layout boundary with no
     /// neighbour output. Returns false when there is no neighbour desktop or no
-    /// window on it. The focused window's id is not needed — the entry window is
-    /// chosen from the target desktop's occupants, not relative to the source.
-    bool tryCrossDesktopFocus(const QString& direction, const QString& screenId);
+    /// window on it. @p focusedWindowId is excluded from the target desktop's
+    /// occupants so an on-all-desktops (sticky) source window can't be picked as
+    /// its own cross-desktop focus target.
+    bool tryCrossDesktopFocus(const QString& focusedWindowId, const QString& direction, const QString& screenId);
 
     /// Check whether the window is excluded from the given navigation
     /// action by a terminal `Exclude` action in the unified WindowRule

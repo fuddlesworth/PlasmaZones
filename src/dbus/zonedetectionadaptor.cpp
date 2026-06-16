@@ -15,7 +15,7 @@
 #include <QScreen>
 #include <limits>
 #include <PhosphorScreens/ScreenIdentity.h>
-#include <PhosphorScreens/Swapper.h>
+#include <PhosphorScreens/Swapper.h> // PhosphorScreens::Direction
 
 namespace PlasmaZones {
 

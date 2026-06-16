@@ -412,6 +412,84 @@ private Q_SLOTS:
         m_engine->setZoneAdjacencyResolver(nullptr);
     }
 
+    // ── Cross-mode MOVE (Phase 3): moving a snapped window toward an AUTOTILE
+    //    neighbour output defers to the daemon via crossModeMoveRequested (the
+    //    one-way insert), rather than snapping onto the tiled screen. ──
+    void testCrossModeMove_autotileNeighbourOutput_emitsCrossModeMoveRequested()
+    {
+        const QString layoutId = m_testLayout->id().toString();
+        m_layoutManager->setDefaultLayoutIdProvider([layoutId]() {
+            return layoutId;
+        });
+        PhosphorZones::AssignmentEntry autotileEntry;
+        autotileEntry.mode = PhosphorZones::AssignmentEntry::Autotile;
+        m_layoutManager->setAssignmentEntryDirect(QStringLiteral("DP-2"), 0, QString(), autotileEntry);
+
+        FakeCrossSurfaceQueries cross;
+        cross.outputRight = QStringLiteral("DP-2");
+        FakeAdjacencyQueries adj;
+        m_engine->setZoneAdjacencyResolver(&adj);
+        m_engine->setCrossSurfaceResolver(&cross);
+
+        const QString f = QStringLiteral("appF:win:1");
+        m_engine->snapState()->assignWindowToZone(f, m_zoneIds.at(2), QStringLiteral("DP-1"), 0);
+
+        QSignalSpy moveSpy(m_engine, &SnapEngine::crossModeMoveRequested);
+
+        PhosphorEngine::NavigationContext ctx;
+        ctx.windowId = f;
+        ctx.screenId = QStringLiteral("DP-1");
+        m_engine->moveFocusedInDirection(QStringLiteral("right"), ctx);
+
+        QCOMPARE(moveSpy.count(), 1);
+        const QList<QVariant> args = moveSpy.takeFirst();
+        QCOMPARE(args.at(0).toString(), f);
+        QCOMPARE(args.at(1).toString(), QStringLiteral("DP-2"));
+        QCOMPARE(args.at(2).toInt(), 0); // monitor crossing, current desktop
+        QCOMPARE(args.at(3).toString(), QStringLiteral("right"));
+
+        m_engine->setCrossSurfaceResolver(nullptr);
+        m_engine->setZoneAdjacencyResolver(nullptr);
+    }
+
+    // ── A SNAP (non-autotile) neighbour output with no entry zone is a genuine
+    //    boundary: the engine must NOT emit a cross-mode handoff (no
+    //    crossModeSwapRequested) — it reports the boundary instead. ──
+    void testCrossModeSwap_snapNeighbourOutput_doesNotEmit()
+    {
+        const QString layoutId = m_testLayout->id().toString();
+        m_layoutManager->setDefaultLayoutIdProvider([layoutId]() {
+            return layoutId;
+        });
+        // DP-2 has NO assignment → defaults to Snapping mode (not autotile).
+        FakeCrossSurfaceQueries cross;
+        cross.outputRight = QStringLiteral("DP-2");
+        FakeAdjacencyQueries adj; // getFirstZoneInDirection empty → no entry zone
+        m_engine->setZoneAdjacencyResolver(&adj);
+        m_engine->setCrossSurfaceResolver(&cross);
+
+        const QString f = QStringLiteral("appF:win:1");
+        m_engine->snapState()->assignWindowToZone(f, m_zoneIds.at(2), QStringLiteral("DP-1"), 0);
+
+        QSignalSpy swapSpy(m_engine, &SnapEngine::crossModeSwapRequested);
+        QSignalSpy feedbackSpy(m_engine, &SnapEngine::navigationFeedback);
+
+        PhosphorEngine::NavigationContext ctx;
+        ctx.windowId = f;
+        ctx.screenId = QStringLiteral("DP-1");
+        m_engine->swapFocusedInDirection(QStringLiteral("right"), ctx);
+
+        QCOMPARE(swapSpy.count(), 0); // snap neighbour → no cross-mode handoff
+        // The boundary is reported (a failure feedback for the swap action).
+        QVERIFY(feedbackSpy.count() >= 1);
+        const QList<QVariant> fb = feedbackSpy.takeLast();
+        QCOMPARE(fb.at(0).toBool(), false);
+        QCOMPARE(fb.at(2).toString(), QStringLiteral("no_adjacent_zone"));
+
+        m_engine->setCrossSurfaceResolver(nullptr);
+        m_engine->setZoneAdjacencyResolver(nullptr);
+    }
+
     // testPreSnapGeometry_stableIdFallback removed: the per-engine unmanaged-geometry
     // store was collapsed into the unified WindowPlacementStore. The appId-fallback
     // lookup for float-back geometry is now exercised by the WindowPlacementStore

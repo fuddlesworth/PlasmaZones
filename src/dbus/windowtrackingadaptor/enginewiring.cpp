@@ -62,6 +62,19 @@ void WindowTrackingAdaptor::setEngines(PhosphorEngine::PlacementEngineBase* snap
     if (m_autotileEngine) {
         disconnect(m_autotileEngine, &PhosphorEngine::PlacementEngineBase::geometryRestoreRequested, this, nullptr);
     }
+    // Drop the cross-mode handoff slots (move + swap) from BOTH outgoing engines —
+    // same anti-duplicate-connection rule. Without this, a rewire with the same
+    // engine pointers would double-connect and fire handleCrossModeMove/Swap twice
+    // per signal (double windowOutputMoveExpected, a second handoffReceive on
+    // already-moved state).
+    if (m_snapEngine) {
+        disconnect(m_snapEngine, &PhosphorEngine::PlacementEngineBase::crossModeMoveRequested, this, nullptr);
+        disconnect(m_snapEngine, &PhosphorEngine::PlacementEngineBase::crossModeSwapRequested, this, nullptr);
+    }
+    if (m_autotileEngine) {
+        disconnect(m_autotileEngine, &PhosphorEngine::PlacementEngineBase::crossModeMoveRequested, this, nullptr);
+        disconnect(m_autotileEngine, &PhosphorEngine::PlacementEngineBase::crossModeSwapRequested, this, nullptr);
+    }
 
     // Detach the snap restore predicate from the outgoing engine before dropping
     // the reference. The predicate captures `this`; clearing it honours the engine
@@ -518,10 +531,13 @@ void WindowTrackingAdaptor::handleCrossModeSwap(const QString& windowId, const Q
 
     // ── A monitor crossing physically relocates BOTH windows to a different
     //    output (F → target, partner → source). Arm the daemon-owned-move marker
-    //    for each so the effect's reactive outputChanged doesn't tear the
-    //    placements down (see handleCrossModeMove). ──
-    Q_EMIT windowOutputMoveExpected(windowId, targetScreenId);
-    Q_EMIT windowOutputMoveExpected(partner, sourceScreen);
+    //    for each — but only when that window actually changes output, mirroring
+    //    handleCrossModeMove's guard: arming a one-shot for an output change that
+    //    never comes would swallow the window's next genuine outputChanged. ──
+    if (targetScreenId != sourceScreen) {
+        Q_EMIT windowOutputMoveExpected(windowId, targetScreenId);
+        Q_EMIT windowOutputMoveExpected(partner, sourceScreen);
+    }
 
     // ── Relinquish both windows from their current engines (tracking-only). ──
     sourceEngine->handoffRelease(windowId);

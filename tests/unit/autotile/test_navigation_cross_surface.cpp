@@ -563,9 +563,11 @@ void TestNavigationCrossSurface::crossDesktop_focusLeft_atGridEdge_doesNotActiva
 
 void TestNavigationCrossSurface::crossDesktop_moveLeft_atGridEdge_doesNotRequestKWinMove()
 {
-    // Mirror of the focus case for move/swap: at the grid's left edge there is no
-    // neighbour output and no neighbour desktop, so the window must be left
-    // untouched — neither a KWin desktop move nor an output-move marker fires.
+    // At the grid's left edge there is no neighbour output and no neighbour
+    // desktop, so a MOVE must leave the window untouched — neither a KWin desktop
+    // move nor an output-move marker fires. (Drives moveFocusedInDirection, the
+    // action this test is named for; swap-at-the-desktop-boundary no-op is covered
+    // by crossDesktop_swapRight_doesNotRelocate.)
     std::unique_ptr<AutotileEngine> engine(PlasmaZones::TestHelpers::createEngineWithWindows(kScreen, 2));
     FakeCrossSurfaceResolver resolver;
     engine->setCrossSurfaceResolver(&resolver);
@@ -578,7 +580,7 @@ void TestNavigationCrossSurface::crossDesktop_moveLeft_atGridEdge_doesNotRequest
 
     QSignalSpy moveSpy(engine.get(), &AutotileEngine::windowDesktopMoveRequested);
     QSignalSpy expectedSpy(engine.get(), &AutotileEngine::windowOutputMoveExpected);
-    engine->swapFocusedInDirection(QStringLiteral("left"), ctx(leftmost));
+    engine->moveFocusedInDirection(QStringLiteral("left"), ctx(leftmost));
     QCOMPARE(moveSpy.count(), 0);
     QCOMPARE(expectedSpy.count(), 0);
     QVERIFY(engine->tilingStateForScreen(kScreen)->containsWindow(leftmost));

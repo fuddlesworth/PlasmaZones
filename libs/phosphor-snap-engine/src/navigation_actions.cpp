@@ -210,7 +210,7 @@ void SnapEngine::focusInDirection(const QString& direction, const NavigationCont
         // At a zone-layout boundary with no neighbour output, the resolver
         // deferred the decision to us — try focusing onto the adjacent desktop.
         if (result.reason == QLatin1String("no_adjacent_zone")) {
-            if (tryCrossDesktopFocus(direction, screenId)) {
+            if (tryCrossDesktopFocus(windowId, direction, screenId)) {
                 return;
             }
             Q_EMIT navigationFeedback(false, QStringLiteral("focus"), QStringLiteral("no_adjacent_zone"), QString(),
@@ -223,7 +223,7 @@ void SnapEngine::focusInDirection(const QString& direction, const NavigationCont
     }
 }
 
-bool SnapEngine::tryCrossDesktopFocus(const QString& direction, const QString& screenId)
+bool SnapEngine::tryCrossDesktopFocus(const QString& focusedWindowId, const QString& direction, const QString& screenId)
 {
     if (!m_crossSurfaceResolver || !m_snapState) {
         return false;
@@ -232,7 +232,11 @@ bool SnapEngine::tryCrossDesktopFocus(const QString& direction, const QString& s
     if (targetDesktop <= 0) {
         return false;
     }
-    const QStringList candidates = m_snapState->windowsOnScreenAndDesktop(screenId, targetDesktop);
+    QStringList candidates = m_snapState->windowsOnScreenAndDesktop(screenId, targetDesktop);
+    // Exclude the source window: an on-all-desktops (sticky) window is listed on
+    // every desktop, so it could otherwise be picked as its own cross-desktop
+    // focus target — a no-op "success" that swallows the boundary.
+    candidates.removeAll(focusedWindowId);
     if (candidates.isEmpty()) {
         return false;
     }
@@ -279,7 +283,7 @@ void SnapEngine::moveFocusedInDirection(const QString& direction, const Navigati
         // deferred the decision to us — try crossing to the adjacent desktop.
         if (result.reason == QLatin1String("no_adjacent_zone")) {
             // A neighbour OUTPUT in autotile mode → hand the window to autotile.
-            if (tryCrossModeOutputMove(windowId, direction, screenId)) {
+            if (tryCrossModeOutput(windowId, direction, screenId, /*swap=*/false)) {
                 return;
             }
             if (tryCrossDesktopMove(windowId, direction, screenId)) {
@@ -329,6 +333,10 @@ bool SnapEngine::tryCrossDesktopMove(const QString& windowId, const QString& dir
         && m_layoutManager->modeForScreen(screenId, targetDesktop, currentActivity())
             == PhosphorZones::AssignmentEntry::Autotile) {
         Q_EMIT crossModeMoveRequested(windowId, screenId, targetDesktop, direction);
+        // Same success OSD as the snap-zone branches below — the daemon's
+        // cross-mode handler relocates the window; it emits no feedback itself.
+        Q_EMIT navigationFeedback(true, QStringLiteral("move"), QStringLiteral("desktop:") + direction, QString(),
+                                  QString(), screenId);
         return true;
     }
 
@@ -364,6 +372,11 @@ bool SnapEngine::tryCrossDesktopMove(const QString& windowId, const QString& dir
         if (auto placement = capturePlacement(windowId)) {
             placement->virtualDesktop = targetDesktop;
             m_windowTracker->placementStore().record(std::move(*placement));
+        } else {
+            // SnapState now says targetDesktop but the placement store keeps the
+            // old desktop — surface the divergence rather than letting it hide.
+            qCDebug(PhosphorSnapEngine::lcSnapEngine) << "tryCrossDesktopMove: capturePlacement miss for" << windowId
+                                                      << "— placement-store desktop not updated to" << targetDesktop;
         }
     }
     Q_EMIT windowDesktopMoveRequested(windowId, targetDesktop);
@@ -401,7 +414,8 @@ std::pair<QString, QRect> SnapEngine::resolveCrossDesktopZone(const QString& cur
     return {targetZoneId, geo};
 }
 
-bool SnapEngine::tryCrossModeOutputMove(const QString& windowId, const QString& direction, const QString& screenId)
+bool SnapEngine::tryCrossModeOutput(const QString& windowId, const QString& direction, const QString& screenId,
+                                    bool swap)
 {
     if (!m_crossSurfaceResolver || !m_layoutManager) {
         return false;
@@ -411,35 +425,19 @@ bool SnapEngine::tryCrossModeOutputMove(const QString& windowId, const QString& 
         return false;
     }
     // Reaching here means the resolver found no snap entry zone on the neighbour
-    // (getMoveTargetForWindow returned no_adjacent_zone). If the neighbour is an
-    // autotile output, defer to the daemon to insert the window into its stack.
-    // A snap neighbour with no entry zone is a genuine boundary — leave it.
+    // (the resolver returned no_adjacent_zone). Only an AUTOTILE neighbour is a
+    // cross-mode handoff; a snap neighbour with no entry zone is a genuine
+    // boundary — leave it. A move inserts the window into the neighbour's stack;
+    // a swap trades it with the neighbour's entry-edge tile.
     if (m_layoutManager->modeForScreen(neighbour, currentVirtualDesktop(), currentActivity())
         != PhosphorZones::AssignmentEntry::Autotile) {
         return false;
     }
-    Q_EMIT crossModeMoveRequested(windowId, neighbour, 0, direction);
-    return true;
-}
-
-bool SnapEngine::trySwapCrossModeOutput(const QString& windowId, const QString& direction, const QString& screenId)
-{
-    if (!m_crossSurfaceResolver || !m_layoutManager) {
-        return false;
+    if (swap) {
+        Q_EMIT crossModeSwapRequested(windowId, neighbour, 0, direction);
+    } else {
+        Q_EMIT crossModeMoveRequested(windowId, neighbour, 0, direction);
     }
-    const QString neighbour = m_crossSurfaceResolver->neighborOutputInDirection(screenId, direction);
-    if (neighbour.isEmpty()) {
-        return false;
-    }
-    // Only an AUTOTILE neighbour is a cross-mode swap; a snap neighbour with no
-    // entry zone was already handled (or rejected) by the resolver's
-    // crossOutputSwapTarget. Defer to the daemon to trade the focused window with
-    // the neighbour's entry-edge tile.
-    if (m_layoutManager->modeForScreen(neighbour, currentVirtualDesktop(), currentActivity())
-        != PhosphorZones::AssignmentEntry::Autotile) {
-        return false;
-    }
-    Q_EMIT crossModeSwapRequested(windowId, neighbour, 0, direction);
     return true;
 }
 
@@ -526,7 +524,7 @@ void SnapEngine::swapFocusedInDirection(const QString& direction, const Navigati
         // is meaningless; use move to send a window to another desktop. So a
         // desktop-boundary swap simply reports the boundary.
         if (result.reason == QLatin1String("no_adjacent_zone")) {
-            if (trySwapCrossModeOutput(windowId, direction, screenId)) {
+            if (tryCrossModeOutput(windowId, direction, screenId, /*swap=*/true)) {
                 return;
             }
             Q_EMIT navigationFeedback(false, QStringLiteral("swap"), QStringLiteral("no_adjacent_zone"), QString(),
