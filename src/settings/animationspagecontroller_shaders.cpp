@@ -82,6 +82,27 @@ struct MutatingShaderTreeScope
     MutatingShaderTreeScope(const MutatingShaderTreeScope&) = delete;
     MutatingShaderTreeScope& operator=(const MutatingShaderTreeScope&) = delete;
 };
+
+/// Human-readable tooltip for an effect that can't drive an event row of
+/// class @p pathClass. Only called when a mismatch is proven, so @p
+/// pathClass is always a concrete class and the effect supports the OTHER
+/// one. The two messages name the events the effect DOES apply to so the
+/// user knows where to use it instead.
+QString shaderPathMismatchReason(const PhosphorAnimationShaders::AnimationShaderEffect& effect,
+                                 const QString& pathClass)
+{
+    namespace PP = PhosphorAnimation::ProfilePaths;
+    if (pathClass == PP::EventClassAppearance) {
+        // Effect is geometry-only (e.g. window-morph) on an appearance row.
+        return PhosphorI18n::tr(
+                   "“%1” needs an old and new geometry — it only applies to move, resize, snap and tile events.")
+            .arg(effect.name);
+    }
+    // pathClass == geometry: effect is appearance-only on a geometry row.
+    return PhosphorI18n::tr(
+               "“%1” animates a surface fading in or out — it has no effect on move, resize, snap or tile events.")
+        .arg(effect.name);
+}
 } // namespace
 
 bool AnimationsPageController::supportsShaderLeg(const QString& path) const
@@ -98,6 +119,29 @@ QVariantList AnimationsPageController::availableShaderEffects() const
     result.reserve(effects.size());
     for (const auto& effect : effects)
         result.append(effectToMap(effect));
+    return result;
+}
+
+QVariantList AnimationsPageController::availableShaderEffectsForPath(const QString& path) const
+{
+    QVariantList result;
+    if (!m_shaderRegistry)
+        return result;
+
+    // Class of this event row — drives the dim reason. Computed once; empty
+    // for an ambiguous row, in which case nothing dims (the predicate
+    // returns true for every effect).
+    const QString pathClass = PhosphorAnimation::ProfilePaths::eventClassForPath(path);
+
+    const auto effects = m_shaderRegistry->availableEffects();
+    result.reserve(effects.size());
+    for (const auto& effect : effects) {
+        QVariantMap m = effectToMap(effect);
+        const bool compatible = PhosphorAnimationShaders::shaderEffectAppliesToEventPath(effect, path);
+        m.insert(QLatin1String("dimmed"), !compatible);
+        m.insert(QLatin1String("dimReason"), compatible ? QString() : shaderPathMismatchReason(effect, pathClass));
+        result.append(m);
+    }
     return result;
 }
 

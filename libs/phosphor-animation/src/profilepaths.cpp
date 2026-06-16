@@ -9,6 +9,11 @@ namespace ProfilePaths {
 // Root
 const QString Global = QStringLiteral("global");
 
+// Event-class tokens (see ProfilePaths.h). Kept as QStringLiteral so they
+// compare cheaply against AnimationShaderEffect::appliesTo entries.
+const QString EventClassGeometry = QStringLiteral("geometry");
+const QString EventClassAppearance = QStringLiteral("appearance");
+
 // window.*
 const QString Window = QStringLiteral("window");
 const QString WindowOpen = QStringLiteral("window.open");
@@ -182,6 +187,36 @@ QString parentPath(const QString& path)
         return Global;
     }
     return path.left(dotIdx);
+}
+
+QString eventClassForPath(const QString& path)
+{
+    // Geometry legs carry an old rect and a new rect (move/resize/snap/
+    // tile/layoutSwitch/maximize). Mirrors the geometry set that
+    // defaultShaderEffectIdForPath seeds with window-morph, plus maximize
+    // (a maximize IS a geometry change with a before/after rect — morph can
+    // drive it even though it isn't a built-in default there).
+    if (path == WindowMove || path == WindowResize || path == WindowSnapIn || path == WindowSnapOut
+        || path == WindowSnapResize || path == WindowLayoutSwitch || path == WindowMaximize) {
+        return EventClassGeometry;
+    }
+    // Appearance legs animate a single surface in or out. Window lifecycle
+    // leaves (open/close/minimize/focus) plus every OSD and popup surface —
+    // the osd/popup roots and all their show/hide/pop descendants. A
+    // `startsWith` on the family roots keeps future popup sub-surfaces
+    // classified without touching this list.
+    if (path == WindowOpen || path == WindowClose || path == WindowMinimize || path == WindowFocus) {
+        return EventClassAppearance;
+    }
+    if (path == Osd || path == Popup || path.startsWith(Osd + QLatin1Char('.'))
+        || path.startsWith(Popup + QLatin1Char('.'))) {
+        return EventClassAppearance;
+    }
+    // `window` root (mixed: spans both classes), `global`, and the
+    // editor/panel/widget/cursor/shader families have no single class — the
+    // predicate treats empty as "don't dim" so an ambiguous row never
+    // suppresses a compatible effect.
+    return QString();
 }
 
 QString defaultShaderEffectIdForPath(const QString& path)

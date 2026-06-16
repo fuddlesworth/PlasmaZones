@@ -3,6 +3,7 @@
 
 #include <PhosphorAnimation/AnimationShaderEffect.h>
 
+#include <QJsonArray>
 #include <QJsonDocument>
 #include <QTest>
 
@@ -212,6 +213,79 @@ private Q_SLOTS:
 
         const AnimationShaderEffect restored = AnimationShaderEffect::fromJson(original.toJson());
         QCOMPARE(restored.fboExtentKind, AnimationShaderEffect::FboExtentKind::Surface);
+    }
+
+    /// `appliesTo` round-trips through JSON, and an unset list stays empty
+    /// (universal) without emitting the key.
+    void testAppliesToRoundTrip()
+    {
+        AnimationShaderEffect original;
+        original.id = QStringLiteral("window-morph");
+        original.fragmentShaderPath = QStringLiteral("effect.frag");
+        original.appliesTo = QStringList{QStringLiteral("geometry")};
+
+        const QJsonObject json = original.toJson();
+        QVERIFY(json.contains(QLatin1String("appliesTo")));
+        const AnimationShaderEffect restored = AnimationShaderEffect::fromJson(json);
+        QCOMPARE(restored.appliesTo, original.appliesTo);
+
+        // Universal (empty) effect omits the key entirely.
+        AnimationShaderEffect universal;
+        universal.id = QStringLiteral("fade");
+        universal.fragmentShaderPath = QStringLiteral("effect.frag");
+        QVERIFY(!universal.toJson().contains(QLatin1String("appliesTo")));
+        QVERIFY(AnimationShaderEffect::fromJson(universal.toJson()).appliesTo.isEmpty());
+    }
+
+    /// Unknown / duplicate tokens are dropped at parse time; a list that
+    /// validates down to empty is treated as universal.
+    void testAppliesToValidation()
+    {
+        QJsonObject obj;
+        obj.insert(QLatin1String("id"), QStringLiteral("x"));
+        obj.insert(QLatin1String("fragmentShader"), QStringLiteral("effect.frag"));
+        QJsonArray arr;
+        arr.append(QStringLiteral("geometry"));
+        arr.append(QStringLiteral("geometry")); // duplicate
+        arr.append(QStringLiteral("teleport")); // unknown
+        obj.insert(QLatin1String("appliesTo"), arr);
+
+        const AnimationShaderEffect e = AnimationShaderEffect::fromJson(obj);
+        QCOMPARE(e.appliesTo, (QStringList{QStringLiteral("geometry")}));
+
+        QJsonObject allBad = obj;
+        QJsonArray bad;
+        bad.append(QStringLiteral("nonsense"));
+        allBad.insert(QLatin1String("appliesTo"), bad);
+        QVERIFY(AnimationShaderEffect::fromJson(allBad).appliesTo.isEmpty());
+    }
+
+    /// The (effect × path) predicate: a geometry-only effect is compatible
+    /// with geometry legs, incompatible with appearance legs, and a
+    /// universal effect is compatible everywhere. An ambiguous row (the
+    /// mixed `window` root) is never reported incompatible.
+    void testShaderEffectAppliesToEventPath()
+    {
+        using PhosphorAnimationShaders::shaderEffectAppliesToEventPath;
+
+        AnimationShaderEffect morph;
+        morph.id = QStringLiteral("window-morph");
+        morph.fragmentShaderPath = QStringLiteral("effect.frag");
+        morph.appliesTo = QStringList{QStringLiteral("geometry")};
+
+        QVERIFY(shaderEffectAppliesToEventPath(morph, QStringLiteral("window.move")));
+        QVERIFY(shaderEffectAppliesToEventPath(morph, QStringLiteral("window.snapIn")));
+        QVERIFY(shaderEffectAppliesToEventPath(morph, QStringLiteral("window.maximize")));
+        QVERIFY(!shaderEffectAppliesToEventPath(morph, QStringLiteral("window.open")));
+        QVERIFY(!shaderEffectAppliesToEventPath(morph, QStringLiteral("popup.layoutPicker.show")));
+        // Mixed ancestor → unclassified → not provably incompatible.
+        QVERIFY(shaderEffectAppliesToEventPath(morph, QStringLiteral("window")));
+
+        AnimationShaderEffect fade; // universal (no appliesTo)
+        fade.id = QStringLiteral("fade");
+        fade.fragmentShaderPath = QStringLiteral("effect.frag");
+        QVERIFY(shaderEffectAppliesToEventPath(fade, QStringLiteral("window.open")));
+        QVERIFY(shaderEffectAppliesToEventPath(fade, QStringLiteral("window.move")));
     }
 };
 

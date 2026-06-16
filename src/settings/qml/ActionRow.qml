@@ -664,28 +664,35 @@ ColumnLayout {
     }
 
     _shaderEffectEditor: Component {
-        WideComboBox {
+        // Cascading category menu (same widget as the action-type picker above
+        // and the animations page's shader picker) instead of a flat combo, so
+        // shaders group by category. The list is path-aware: each effect
+        // carries `dimmed`/`dimReason` for this action's target event, so a
+        // geometry-only shader (window-morph) is greyed out with a warning
+        // tooltip on a show/hide event — matching the animations page and the
+        // WHEN/THEN pickers in this same editor.
+        PZCommon.CategoryMenuButton {
             readonly property var _param: parent.modelData
+            // Reading `row.action.event` makes the dim state re-evaluate when
+            // the user changes the action's target event. Empty event → the
+            // controller leaves every shader compatible (nothing to dim yet).
             readonly property var _effects: {
                 var controller = row.appSettings ? row.appSettings.animationsController : null;
-                return controller ? controller.availableShaderEffects() : [];
+                if (!controller)
+                    return [];
+
+                return controller.availableShaderEffectsForPath(row.action.event || "");
             }
 
-            model: _effects
-            textRole: "name"
-            valueRole: "id"
-            currentIndex: {
-                var target = row.action[_param.key];
-                for (var i = 0; i < _effects.length; ++i) {
-                    if (_effects[i].id === target)
-                        return i;
-                }
-                return -1;
-            }
-            displayText: currentIndex >= 0 ? currentText : (row.action[_param.key] || i18n("Choose a shader…"))
-            Accessible.name: _param.label
-            onActivated: function (index) {
-                row.actionEdited(row._withParam(_param.key, currentValue));
+            items: _effects
+            currentId: row.action[_param.key] || ""
+            // Surface a stale / uninstalled shader id verbatim rather than
+            // collapsing the closed picker to a blank — mirrors the old combo's
+            // displayText fallback.
+            placeholderText: row.action[_param.key] || i18n("Choose a shader…")
+            Accessible.description: _param.label
+            onSelected: function (id) {
+                row.actionEdited(row._withParam(_param.key, id));
             }
         }
     }

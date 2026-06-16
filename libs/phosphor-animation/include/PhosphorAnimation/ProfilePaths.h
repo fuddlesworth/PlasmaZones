@@ -127,6 +127,32 @@ PHOSPHORANIMATION_EXPORT extern const QString WidgetZoneHighlightBorder;
 // content effect on the overlay, not a per-zone animation.
 PHOSPHORANIMATION_EXPORT extern const QString WidgetZoneOverlayFlash;
 
+// ── Event classes ───────────────────────────────────────────────────────
+// A coarse capability axis layered over the path taxonomy: an animation
+// either reshapes a window's GEOMETRY (it has a before-rect and an
+// after-rect) or it changes a surface's APPEARANCE (a single surface fading
+// / scaling / glitching in or out). A geometry-only shader such as
+// window-morph cross-fades `iFromRect → iToRect` and is a silent no-op on an
+// appearance event, so a shader can declare which classes it supports
+// (AnimationShaderEffect::appliesTo) and the settings UI dims the rows it
+// can't drive. These string tokens are the SSOT for that vocabulary —
+// matched verbatim against `appliesTo` entries and `eventClassForPath`.
+
+/// Geometry transitions: move, resize, snapIn/snapOut/snapResize,
+/// layoutSwitch, maximize — every leg that carries an old and new rect.
+PHOSPHORANIMATION_EXPORT extern const QString EventClassGeometry;
+
+/// Appearance transitions: open, close, minimize, focus, and every OSD /
+/// popup show/hide — a single surface materialising or dissolving.
+PHOSPHORANIMATION_EXPORT extern const QString EventClassAppearance;
+
+/// Classify @p path into an event class, or empty string when the path has
+/// no single class (a mixed ancestor like `window`, or a path outside the
+/// window/OSD/popup families). Resolution is leaf-aware: the OSD and popup
+/// roots and all their descendants are `appearance`; the window leaves split
+/// by motion-vs-lifecycle; the `window` root itself is mixed → empty.
+PHOSPHORANIMATION_EXPORT QString eventClassForPath(const QString& path);
+
 /// Full list of built-in paths in taxonomy order.
 PHOSPHORANIMATION_EXPORT QStringList allBuiltInPaths();
 
