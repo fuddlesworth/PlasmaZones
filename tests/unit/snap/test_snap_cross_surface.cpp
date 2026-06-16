@@ -230,6 +230,8 @@ private Q_SLOTS:
     void focus_inSurfaceScreenIdSkew_fallsBackToZoneOccupant();
     void swap_inSurfaceZoneSharedWithSiblingScreen_picksThisScreenPartner();
     void cycle_zoneSharedWithSiblingScreen_staysOnThisScreen();
+    void cycle_oneOccupantPerMonitorSharedZone_reportsSingleWindow();
+    void cycle_screenIdSkew_fallsBackToUnfilteredRing();
     void move_noNeighbourOutput_reportsBoundary();
 
     void reassignDesktop_restampsAssignedWindowKeepingZone();
@@ -423,6 +425,55 @@ void TestSnapCrossSurface::cycle_zoneSharedWithSiblingScreen_staysOnThisScreen()
         resolver.getCycleTargetForWindow(QStringLiteral("w1"), /*forward=*/true, QStringLiteral("DP-1"));
     QVERIFY(result.success);
     QCOMPARE(result.windowIdToActivate, QStringLiteral("w1b")); // the other DP-1 window, not wOther on DP-2
+}
+
+void TestSnapCrossSurface::cycle_oneOccupantPerMonitorSharedZone_reportsSingleWindow()
+{
+    // Regression guard for the cycle filter's fallback CONDITION: exactly one
+    // window per monitor sharing a zone UUID. The DP-1 window has no co-located
+    // cycle partner, so cycle must report single_window. It must NOT fall back to
+    // the unfiltered ring (which would pull in the DP-2 sibling and jump focus to
+    // the other output) — the fallback fires only when the filtered ring is EMPTY
+    // (id-skew), not merely size 1.
+    FakeWindowTracking wts;
+    wts.zoneOfWindow[QStringLiteral("w1")] = QStringLiteral("z-a");
+    wts.windowsByZone[QStringLiteral("z-a")] = {QStringLiteral("w1"), QStringLiteral("wOther")};
+    wts.screenOfWindow[QStringLiteral("w1")] = QStringLiteral("DP-1");
+    wts.screenOfWindow[QStringLiteral("wOther")] = QStringLiteral("DP-2");
+
+    FakeZoneAdjacency adj;
+    std::unique_ptr<PhosphorZones::LayoutRegistry> layoutManager(
+        PlasmaZones::TestHelpers::makeLayoutRegistry(QStringLiteral("test-snap-cross")));
+    SnapNavigationTargetResolver resolver(&wts, layoutManager.get(), &adj, {});
+
+    const auto result =
+        resolver.getCycleTargetForWindow(QStringLiteral("w1"), /*forward=*/true, QStringLiteral("DP-1"));
+    QVERIFY(!result.success);
+    QCOMPARE(result.reason, QStringLiteral("single_window")); // not a jump to wOther on DP-2
+}
+
+void TestSnapCrossSurface::cycle_screenIdSkew_fallsBackToUnfilteredRing()
+{
+    // If even the calling window's stored screen-id form doesn't match
+    // effectiveScreenId (virtual vs bare physical), the filtered ring is EMPTY,
+    // so cycle must fall back to the unfiltered ring rather than dead-ending at
+    // single_window. Both occupants are genuinely on this output, just stored
+    // under a skewed id form.
+    FakeWindowTracking wts;
+    wts.zoneOfWindow[QStringLiteral("w1")] = QStringLiteral("z-a");
+    wts.windowsByZone[QStringLiteral("z-a")] = {QStringLiteral("w1"), QStringLiteral("w1b")};
+    wts.screenOfWindow[QStringLiteral("w1")] = QStringLiteral("virtual:DP-1#abc");
+    wts.screenOfWindow[QStringLiteral("w1b")] = QStringLiteral("virtual:DP-1#abc");
+
+    FakeZoneAdjacency adj;
+    std::unique_ptr<PhosphorZones::LayoutRegistry> layoutManager(
+        PlasmaZones::TestHelpers::makeLayoutRegistry(QStringLiteral("test-snap-cross")));
+    SnapNavigationTargetResolver resolver(&wts, layoutManager.get(), &adj, {});
+
+    const auto result =
+        resolver.getCycleTargetForWindow(QStringLiteral("w1"), /*forward=*/true, QStringLiteral("DP-1"));
+    QVERIFY(result.success);
+    QCOMPARE(result.windowIdToActivate, QStringLiteral("w1b")); // fallback ring cycled
 }
 
 void TestSnapCrossSurface::move_noNeighbourOutput_reportsBoundary()

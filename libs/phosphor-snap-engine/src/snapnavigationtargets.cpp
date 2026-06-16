@@ -426,17 +426,21 @@ SnapNavigationTargetResolver::getCycleTargetForWindow(const QString& windowId, b
         }
     }
     QStringList windowsInZone = windowsInZoneOnScreen(currentZoneId, effectiveScreenId);
-    if (windowsInZone.size() < 2) {
-        // Best-effort fallback (mirrors focus/swap): the screen filter may collapse
-        // the ring when a stored assignment's id-form differs from effectiveScreenId
-        // (virtual vs bare physical). Fall back to the unfiltered ring so cycling
-        // still works rather than spuriously reporting single_window.
+    if (windowsInZone.isEmpty()) {
+        // Best-effort skew rescue (mirrors focus/swap, which fall back only on an
+        // EMPTY filtered result): an empty filtered ring means even the calling
+        // window's own stored screen-id form didn't match effectiveScreenId
+        // (virtual vs bare physical), so fall back to the unfiltered ring. When
+        // the filtered ring is non-empty it already contains the calling window,
+        // so a size-1 filtered ring is a genuine single-occupant-on-this-output
+        // zone — NOT a reason to pull in sibling-monitor windows (doing so would
+        // jump cycle focus to another output, the bug this filter prevents).
         windowsInZone = m_service->windowsInZone(currentZoneId);
     }
     if (windowsInZone.size() < 2) {
         emitFeedback(false, QStringLiteral("cycle"), QStringLiteral("single_window"), currentZoneId, currentZoneId,
-                     screenId);
-        return cycleResult(false, QStringLiteral("single_window"), QString(), currentZoneId, screenId);
+                     effectiveScreenId);
+        return cycleResult(false, QStringLiteral("single_window"), QString(), currentZoneId, effectiveScreenId);
     }
 
     int currentIndex = windowsInZone.indexOf(windowId);
@@ -458,8 +462,8 @@ SnapNavigationTargetResolver::getCycleTargetForWindow(const QString& windowId, b
                             : (currentIndex - 1 + windowsInZone.size()) % windowsInZone.size();
     QString targetWindowId = windowsInZone.at(nextIndex);
 
-    emitFeedback(true, QStringLiteral("cycle"), QString(), currentZoneId, currentZoneId, screenId);
-    return cycleResult(true, QString(), targetWindowId, currentZoneId, screenId);
+    emitFeedback(true, QStringLiteral("cycle"), QString(), currentZoneId, currentZoneId, effectiveScreenId);
+    return cycleResult(true, QString(), targetWindowId, currentZoneId, effectiveScreenId);
 }
 
 PhosphorProtocol::SwapTargetResult SnapNavigationTargetResolver::getSwapTargetForWindow(const QString& windowId,
