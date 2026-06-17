@@ -137,8 +137,8 @@ bool MatchExpression::isContextOnly() const
     // ctor builds. The first two are not "context-only" in any useful
     // sense — they encode rule shapes that fire (or fail to fire) based on
     // no window context at all. The catch-all is genuinely context-only
-    // by the same vacuous semantics but we keep `isCatchAll()` as the
-    // narrow accessor for it (header line 109-112); returning false here
+    // by the same vacuous semantics but we keep the narrow `isCatchAll()`
+    // accessor for it (declared in the header); returning false here
     // for empty Any/None lets `validationIssues()` flag those shapes as
     // sus rather than coercing them into context-only behaviour.
     if (m_children.isEmpty()) {
@@ -150,6 +150,23 @@ bool MatchExpression::isContextOnly() const
         }
     }
     return true;
+}
+
+bool MatchExpression::referencesAnyField(const QSet<Field>& fields) const
+{
+    if (m_kind == Kind::Leaf) {
+        return fields.contains(m_predicate.field);
+    }
+    // Recurse through every child regardless of composite kind — a field
+    // mentioned inside a `none{}` negation still counts as "the rule talks
+    // about this field". An empty composite has no children and references
+    // nothing.
+    for (const auto& child : m_children) {
+        if (child.referencesAnyField(fields)) {
+            return true;
+        }
+    }
+    return false;
 }
 
 void MatchExpression::ensureRegex()

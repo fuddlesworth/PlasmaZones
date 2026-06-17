@@ -493,7 +493,7 @@ void PlasmaZonesEffect::processDaemonReadyWindowState()
                     continue;
                 }
                 // Snapshot geometry before the async call; if it changes after
-                // applySnapGeometry, we know a moveResize happened.
+                // applyWindowGeometry, we know a moveResize happened.
                 QRectF geoBefore = safeWindow->frameGeometry();
 
                 m_snapHandler->callResolveWindowRestore(

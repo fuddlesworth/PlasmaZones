@@ -134,8 +134,8 @@ void PlasmaZonesEffect::slotApplyGeometryRequested(const QString& windowId, int 
             // Drag-out unsnap: the daemon kept us at the drop position but restored pre-snap
             // dimensions. Logically a snap-out (the window is leaving zone-managed sizing),
             // not an in-zone resize.
-            applySnapGeometry(w, sizeOnlyGeo, /*allowDuringDrag=*/false, /*skipAnimation=*/false,
-                              PhosphorAnimation::ProfilePaths::WindowSnapOut);
+            applyWindowGeometry(w, sizeOnlyGeo, /*allowDuringDrag=*/false, /*skipAnimation=*/false,
+                                PhosphorAnimation::ProfilePaths::WindowSnapOut);
             // Drag-out unsnap: the window left zone-managed sizing.
             m_snapHandler->clearWindowSnapped(liveWindowId);
         } else {
@@ -188,7 +188,7 @@ void PlasmaZonesEffect::slotApplyGeometryRequested(const QString& windowId, int 
     // daemon restart the reapply can race ahead of the disk-persisted pre-tile
     // load; the move-check makes it robust regardless of ordering.
     if (!zoneId.isEmpty() && w->frameGeometry().toRect() != geometry) {
-        // Capture frame geometry synchronously BEFORE applySnapGeometry moves the window.
+        // Capture frame geometry synchronously BEFORE applyWindowGeometry moves the window.
         // ensurePreSnapGeometryStored is async (D-Bus hasPreTileGeometry check) — without
         // pre-capturing, the callback would read the post-move geometry instead of the
         // original free-floating position.
@@ -198,9 +198,9 @@ void PlasmaZonesEffect::slotApplyGeometryRequested(const QString& windowId, int 
     // Empty zoneId = float-restore (daemon placing the window back at its pre-snap geometry, e.g.
     // autotile drag-to-float, drag-out unsnap). Non-empty zoneId = snap into a target zone. The
     // shader-tree path differs accordingly so users can give snap-in and snap-out distinct effects.
-    applySnapGeometry(w, geometry, /*allowDuringDrag=*/false, /*skipAnimation=*/false,
-                      zoneId.isEmpty() ? PhosphorAnimation::ProfilePaths::WindowSnapOut
-                                       : PhosphorAnimation::ProfilePaths::WindowSnapIn);
+    applyWindowGeometry(w, geometry, /*allowDuringDrag=*/false, /*skipAnimation=*/false,
+                        zoneId.isEmpty() ? PhosphorAnimation::ProfilePaths::WindowSnapOut
+                                         : PhosphorAnimation::ProfilePaths::WindowSnapIn);
     // Track snapping's own border set (mirrors how autotile records at its
     // tile-apply) using a discriminator analogous to the batch path
     // (slotApplyGeometriesBatch). The batch path discriminates on screenId (empty =
@@ -326,12 +326,12 @@ void PlasmaZonesEffect::slotApplyGeometriesBatch(const PhosphorProtocol::WindowG
                 return;
             }
             // Seed the tracked-screen cache from the daemon's authoritative answer for
-            // this batch BEFORE applySnapGeometry, not after. Empty screenId means the
+            // this batch BEFORE applyWindowGeometry, not after. Empty screenId means the
             // daemon didn't supply an authoritative answer (e.g. autotile float-restore
             // path) — fall through to the existing geometry-based behavior in that case.
             // The pre-seed handles async follow-up frame changes; m_inDaemonGeometryApply
             // (set below) handles the synchronous frame change emitted from inside
-            // applySnapGeometry, which would otherwise resolve the new position against
+            // applyWindowGeometry, which would otherwise resolve the new position against
             // pre-rotation m_virtualScreenDefs and report a phantom cross-VS unsnap.
             if (!p.screenId.isEmpty()) {
                 m_trackedScreenPerWindow[p.window] = p.screenId;
@@ -341,8 +341,8 @@ void PlasmaZonesEffect::slotApplyGeometriesBatch(const PhosphorProtocol::WindowG
             const auto guard = qScopeGuard([this] {
                 m_inDaemonGeometryApply = false;
             });
-            applySnapGeometry(p.window, p.geometry, /*allowDuringDrag=*/false,
-                              /*skipAnimation=*/false, batchProfilePath);
+            applyWindowGeometry(p.window, p.geometry, /*allowDuringDrag=*/false,
+                                /*skipAnimation=*/false, batchProfilePath);
             // Snapping owns its border set (mirrors autotile). The daemon
             // supplies a non-empty authoritative screenId only for real
             // placements; an EMPTY screenId marks a float/restore entry

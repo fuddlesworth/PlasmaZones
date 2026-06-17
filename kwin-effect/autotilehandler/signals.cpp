@@ -227,7 +227,7 @@ void AutotileHandler::slotScreensChanged(const QStringList& screenIds, bool isDe
                 // later switch onto this desktop.
                 const QRectF savedGeo = findPreAutotileGeometry(windowId);
                 if (savedGeo.isValid() && wasTracked) {
-                    // applySnapGeometry's moveResize, and the maximize-state
+                    // applyWindowGeometry's moveResize, and the maximize-state
                     // clear below, emit windowFrameGeometryChanged
                     // synchronously; suppress the VS-crossing detectors
                     // (autotile slotWindowFrameGeometryChanged and the
@@ -249,7 +249,7 @@ void AutotileHandler::slotScreensChanged(const QStringList& screenIds, bool isDe
                         kw->maximize(KWin::MaximizeRestore);
                         --m_suppressMaximizeChanged;
                     }
-                    m_effect->applySnapGeometry(w, savedGeo.toRect());
+                    m_effect->applyWindowGeometry(w, savedGeo.toRect());
                 } else if (wasTracked) {
                     // No local bucket entry but the window WAS tile-managed
                     // here: it was snap-managed when it entered autotile, so

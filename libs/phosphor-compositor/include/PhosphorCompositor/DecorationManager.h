@@ -90,7 +90,7 @@ public:
     /// How the physical hide coordinates with geometry application.
     enum class Placement {
         /// The caller applies the zone geometry immediately after acquire
-        /// (autotile tile path: hide first, applySnapGeometry supplies the
+        /// (autotile tile path: hide first, applyWindowGeometry supplies the
         /// frame). The manager only toggles the decoration.
         CallerWillPlace,
         /// The window is already at (or moving toward) its target: capture

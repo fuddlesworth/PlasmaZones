@@ -6,6 +6,7 @@
 #include <QJsonObject>
 #include <QList>
 #include <QRegularExpression>
+#include <QSet>
 #include <QString>
 #include <QVariant>
 
@@ -115,6 +116,16 @@ public:
     /// VirtualDesktop / Activity) — i.e. a windowless context rule. An empty
     /// catch-all is context-only by this definition.
     bool isContextOnly() const;
+
+    /// True if any leaf predicate anywhere in the tree (including inside
+    /// `none{}` negations) tests one of @p fields. This is a purely
+    /// structural query about what the expression *mentions*, independent of
+    /// whether it matches any particular window — callers use it to ask
+    /// "does this rule deliberately target a window type?" (e.g. a rule that
+    /// references IsTransient / WindowType is opting into transient windows,
+    /// whereas a class-only rule that merely happens to match a tooltip is
+    /// not). An empty composite references nothing and returns false.
+    bool referencesAnyField(const QSet<Field>& fields) const;
 
     /**
      * @brief Evaluate this expression against @p query.

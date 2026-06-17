@@ -5,6 +5,7 @@
 
 #include <QHash>
 #include <QList>
+#include <QSet>
 #include <QString>
 
 #include <algorithm>
@@ -167,6 +168,21 @@ public:
     /// Not concurrency-safe against a rule set containing a `Regex` predicate
     /// — see the class-level thread-safety note.
     bool hasAnyMatch(const WindowQuery& query) const;
+
+    /// True if at least one enabled rule **both** matches @p query **and**
+    /// references one of @p fields in its match expression. The cheap
+    /// structural `referencesAnyField` filter runs before the (potentially
+    /// regex-bearing) `evaluate`, so a rule that does not mention any of the
+    /// fields never pays the match cost.
+    ///
+    /// Used by the animation window-filter to distinguish a rule that
+    /// deliberately targets a window type (so it should override the global
+    /// "ignore transient / ignore notifications-OSD" exclusion) from one that
+    /// merely matches a transient window by class as a side effect. Iterates
+    /// in rule-set list order — priority is irrelevant to an existence check.
+    ///
+    /// Same concurrency constraints as `hasAnyMatch` (regex leaves).
+    bool hasMatchTargetingFields(const WindowQuery& query, const QSet<Field>& fields) const;
 
     /// The single highest-priority **enabled** rule that matches @p query and
     /// passes the optional @p filter, or nullptr if none qualifies.

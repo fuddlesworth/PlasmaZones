@@ -264,12 +264,12 @@ void KWinCompositorBridge::raiseWindow(WindowHandle w)
     }
 }
 
-void KWinCompositorBridge::applySnapGeometry(WindowHandle w, const QRectF& geometry, bool skipAnimation)
+void KWinCompositorBridge::applyWindowGeometry(WindowHandle w, const QRectF& geometry, bool skipAnimation)
 {
     auto* ew = toEffectWindow(w);
     if (!ew)
         return;
-    m_effect.applySnapGeometry(ew, GeometryHelpers::snapToRect(geometry), false, skipAnimation);
+    m_effect.applyWindowGeometry(ew, GeometryHelpers::snapToRect(geometry), false, skipAnimation);
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════

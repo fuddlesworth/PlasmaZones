@@ -5,11 +5,14 @@
 
 #include <PhosphorProtocol/ClientHelpers.h>
 #include <PhosphorProtocol/ServiceConstants.h>
+#include <PhosphorWindowRule/MatchTypes.h>
+#include <PhosphorWindowRule/RuleEvaluator.h>
 
 #include <effect/effecthandler.h>
 #include <window.h>
 
 #include <QLoggingCategory>
+#include <QSet>
 
 #include <optional>
 
@@ -247,8 +250,9 @@ bool PlasmaZonesEffect::shouldAnimateWindow(KWin::EffectWindow* w) const
     // gate AND the exclusion gate below. Both gates take the same full-
     // context WindowQuery (AppId / WindowClass / Title / WindowRole /
     // DesktopFile / WindowType / Pid / state flags), and `windowRuleQueryFor`
-    // walks ~10 KWin accessors plus several QString copies — wasted work
-    // when both rule sets fire. The std::optional memoises so the function
+    // walks ~30 KWin accessors plus several QString copies — wasted work
+    // when both rule sets fire (same note as on `resolveWindowRuleActions`
+    // above). The std::optional memoises so the function
     // pays at most one build no matter how many gates consult it, while
     // the `!isEmpty()` fast paths below keep the no-rules user's cost at
     // two pointer reads (query never built).
@@ -260,54 +264,64 @@ bool PlasmaZonesEffect::shouldAnimateWindow(KWin::EffectWindow* w) const
         return *cachedQuery;
     };
 
-    // Rule-override path. ANY animation rule whose match expression matches
-    // the window signals deliberate user intent to animate this app — the
-    // event-scoped slot (shader vs timing, which eventPath) is NOT narrowed
-    // here because the user's act of creating a rule whose match resolves
-    // for this window is itself the opt-in signal. `hasAnyMatch` is the
-    // event-agnostic query for exactly this — a yes/no over the bound
-    // animation rule set without allocating a ResolvedActions.
-    //
-    // `m_shaderManager.animationRuleSet()` is filtered to OverrideAnimation*
-    // /SetOpacity rules at admission (shader_transitions.cpp's
-    // `isEffectRuleAction` loop), so this `hasAnyMatch` never surfaces
-    // a rule whose actions are EXCLUSIVELY `ExcludeAnimations` — those
-    // are routed through the exclusion gate below. A mixed-action rule
-    // carrying BOTH an OverrideAnimation* action AND an `ExcludeAnimations`
-    // action would be admitted to `animationRuleSet` (it matches
-    // `isEffectRuleAction`) and the rule-override path would short-circuit
-    // before the exclusion gate fires. Mixed shapes like that are
-    // ambiguous user intent — they don't appear in the v3→v4 migration
-    // output and the rule editor doesn't author them today.
-    if (!m_shaderManager.animationRuleSet().isEmpty()) {
-        if (m_shaderManager.animationRuleEvaluator().hasAnyMatch(query())) {
-            return true;
-        }
-    }
+    // Structural type exclusions (notification / OSD and the transient /
+    // popup family) are AUTHORITATIVE over a coincidental class match. A
+    // per-app rule like "firefox → dissolve" matches by windowClass, which
+    // also catches Firefox's tooltips/popups (they share the class) — but the
+    // user enabling "ignore transient" / "ignore notifications-OSD" must not
+    // be silently overridden just because such a rule happens to match. A
+    // rule re-enables an excluded window ONLY when it *deliberately targets
+    // the window type*: its match expression references a type field. This
+    // mirrors the global toggle — the user opts into transients via the
+    // setting; a rule opts in via an explicit type predicate. The probe runs
+    // against the animation rule set only (via the evaluator bound to it), so
+    // a snapping/float rule that merely carries a windowType clause never
+    // re-enables animation. These checks sit BEFORE the generic rule-override
+    // gate so a class-only match cannot bypass them.
+    const PhosphorWindowRule::RuleEvaluator& animationEvaluator = m_shaderManager.animationRuleEvaluator();
+    const bool haveAnimationRules = !m_shaderManager.animationRuleSet().isEmpty();
 
-    // Notification and OSD surfaces — excluded by default via the
-    // Window Filtering toggle (animationExcludeNotificationsAndOsd).
-    // Most shell notifications/OSDs are layer-shell surfaces already
-    // rejected by the structural block above; this catches the
-    // remainder — notification windows some apps spawn as ordinary
-    // toplevels. Placed after the rule-override so a class-targeted
-    // rule can still re-enable them, mirroring the transient filter.
     if (m_animationExcludeNotificationsAndOsd
         && (w->isNotification() || w->isCriticalNotification() || w->isOnScreenDisplay())) {
-        return false;
-    }
-
-    // Transient-window filter — covers dialogs / popups / tooltips /
-    // dropdowns / menus / utility windows. Mirrors the snapping
-    // exclusion's transient bucket, plus the popup-window family that
-    // KWin distinguishes (PopupMenu, DropdownMenu, Tooltip) so a user
-    // who wants the popup category animated can still opt out of these
-    // sub-types via the toggle.
-    if (m_animationExcludeTransientWindows) {
-        if (w->isDialog() || w->isUtility() || w->isPopupWindow() || w->isPopupMenu() || w->isDropdownMenu()
-            || w->isTooltip() || w->isMenu() || w->isSplash() || w->transientFor()) {
+        // IsNotification covers notification/critical/OSD; WindowType lets a
+        // rule target a specific NET type. `!haveAnimationRules` short-circuits
+        // so the WindowQuery is never built when there are no rules to probe.
+        static const QSet<PhosphorWindowRule::Field> kOsdTypeFields = {PhosphorWindowRule::Field::IsNotification,
+                                                                       PhosphorWindowRule::Field::WindowType};
+        if (!haveAnimationRules || !animationEvaluator.hasMatchTargetingFields(query(), kOsdTypeFields)) {
             return false;
         }
+    }
+
+    // Transient-window filter — dialogs / popups / tooltips / dropdowns /
+    // menus / utility windows, plus any window with a transient parent.
+    // Overridable only by a rule referencing IsTransient (the same
+    // dialog/utility/popup/menu/tooltip/splash/transient-parent family),
+    // WindowType, or IsModal.
+    if (m_animationExcludeTransientWindows
+        && (w->isDialog() || w->isUtility() || w->isPopupWindow() || w->isPopupMenu() || w->isDropdownMenu()
+            || w->isTooltip() || w->isMenu() || w->isSplash() || w->transientFor())) {
+        static const QSet<PhosphorWindowRule::Field> kTransientTypeFields = {PhosphorWindowRule::Field::IsTransient,
+                                                                             PhosphorWindowRule::Field::WindowType,
+                                                                             PhosphorWindowRule::Field::IsModal};
+        if (!haveAnimationRules || !animationEvaluator.hasMatchTargetingFields(query(), kTransientTypeFields)) {
+            return false;
+        }
+    }
+
+    // Generic rule-override gate. A window that cleared the structural type
+    // exclusions above and matches ANY animation rule is force-animated even
+    // when the min-size / user-exclusion filters below would otherwise drop
+    // it — the user's act of authoring a matching rule is the opt-in signal.
+    // (Type exclusions are handled above and are NOT bypassable here.)
+    //
+    // `m_shaderManager.animationRuleSet()` is filtered to OverrideAnimation* /
+    // SetOpacity rules at admission (shader_transitions.cpp's
+    // `isEffectRuleAction` loop), so `hasAnyMatch` never surfaces a rule whose
+    // actions are EXCLUSIVELY `ExcludeAnimations` — those route through the
+    // exclusion gate below.
+    if (haveAnimationRules && animationEvaluator.hasAnyMatch(query())) {
+        return true;
     }
 
     // Min-size filter — windows narrower or shorter than the threshold

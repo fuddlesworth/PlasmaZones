@@ -534,18 +534,20 @@ private:
                                 const QString& sourceZoneId = QString(), const QString& targetZoneId = QString(),
                                 const QString& screenId = QString());
 
-    // Apply snap geometry to window.
+    // Move a window to a target geometry, running the configured placement
+    // transition (snap / tile / move). Shared chokepoint for snap zones,
+    // autotile tiles, and float restores — not snap-specific despite history.
     // When allowDuringDrag is true, applies immediately even if window is in user move state (snap-on-hover).
     // When false and the window is being dragged, defers via windowFinishUserMovedResized signal.
     //
     // profilePath drives the shader-transition resolve (see ShaderProfileTree). This used to be
-    // hardcoded to "window.snapIn" inside applySnapGeometry, which fired the same shader for every
+    // hardcoded to "window.snapIn" inside applyWindowGeometry, which fired the same shader for every
     // motion that flowed through this chokepoint — snap-in, snap-out, resnap, resize, restore, etc.
     // Callers now pass the logical event path so the shader tree can route each one independently.
     // Default is WindowSnapIn (the kwin-effect's default snap-into-zone window animation).
-    void applySnapGeometry(KWin::EffectWindow* window, const QRect& geometry, bool allowDuringDrag = false,
-                           bool skipAnimation = false,
-                           const QString& profilePath = PhosphorAnimation::ProfilePaths::WindowSnapIn);
+    void applyWindowGeometry(KWin::EffectWindow* window, const QRect& geometry, bool allowDuringDrag = false,
+                             bool skipAnimation = false,
+                             const QString& profilePath = PhosphorAnimation::ProfilePaths::WindowSnapIn);
     void repaintSnapRegions(KWin::EffectWindow* window, const QRectF& oldFrame, const QRect& newGeo);
 
     // Async D-Bus helper for 5-arg snap replies (x, y, w, h, shouldSnap).

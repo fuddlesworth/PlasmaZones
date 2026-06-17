@@ -75,7 +75,7 @@ public:
     void setMaximized(WindowHandle w, bool maximized) override;
     void activateWindow(WindowHandle w) override;
     void raiseWindow(WindowHandle w) override;
-    void applySnapGeometry(WindowHandle w, const QRectF& geometry, bool skipAnimation) override;
+    void applyWindowGeometry(WindowHandle w, const QRectF& geometry, bool skipAnimation) override;
 
     QObject* asQObject() override;
     bool isDaemonReady() const override;

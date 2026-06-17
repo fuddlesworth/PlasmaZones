@@ -259,7 +259,7 @@ void SnapEngine::reapplyManagedWindowAppearance()
     // The compositor routes a non-empty-zoneId applyGeometryRequested through
     // its snap-commit path (markWindowSnapped), which re-hides the title bar and
     // redraws the snap border. The window is already in its zone, so the
-    // compositor's applySnapGeometry no-ops the move — this only re-drives the
+    // compositor's applyWindowGeometry no-ops the move — this only re-drives the
     // chrome the compositor dropped on bridge reconnect. No zone reassignment.
     const QStringList snapped = m_snapState->snappedWindows();
     for (const QString& windowId : snapped) {

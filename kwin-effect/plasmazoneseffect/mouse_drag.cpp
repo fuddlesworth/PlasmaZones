@@ -50,7 +50,7 @@ void PlasmaZonesEffect::slotMouseChanged(const QPointF& pos, const QPointF& oldp
             // windowFinishUserMovedResized wouldn't fire until ALL buttons are
             // released. forceEnd() gives immediate snap response on LMB release.
             //
-            // After forceEnd, applySnapGeometry will defer (retry every 100 ms)
+            // After forceEnd, applyWindowGeometry will defer (retry every 100 ms)
             // until isUserMove() clears when the remaining buttons are released.
             m_dragTracker->forceEnd(pos);
         } else if (modifiersChanged || buttonsChanged) {
