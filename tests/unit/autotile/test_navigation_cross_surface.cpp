@@ -29,6 +29,9 @@
 
 #include "../helpers/AutotileTestHelpers.h"
 #include "../helpers/VirtualScreenTestHelpers.h"
+#include "../helpers/LayoutRegistryTestHelpers.h"
+#include <PhosphorZones/LayoutRegistry.h>
+#include <PhosphorZones/AssignmentEntry.h>
 
 using PhosphorEngine::NavigationContext;
 using PhosphorTileEngine::AutotileEngine;
@@ -106,6 +109,7 @@ private Q_SLOTS:
 
     void crossDesktop_focusRight_activatesEntryWindowOnNextDesktop();
     void crossDesktop_moveRight_relocatesToNextDesktopAndRequestsKWinMove();
+    void crossDesktop_moveToSnapTargetDesktop_emitsCrossModeMove();
     void crossDesktop_swapRight_doesNotRelocate();
     void crossDesktop_focusLeft_atGridEdge_doesNotActivate();
     void crossDesktop_moveLeft_atGridEdge_doesNotRequestKWinMove();
@@ -532,6 +536,47 @@ void TestNavigationCrossSurface::crossDesktop_moveRight_relocatesToNextDesktopAn
     const QList<QVariant> args = moveSpy.takeFirst();
     QCOMPARE(args.at(0).toString(), rightmost);
     QCOMPARE(args.at(1).toInt(), 2);
+}
+
+void TestNavigationCrossSurface::crossDesktop_moveToSnapTargetDesktop_emitsCrossModeMove()
+{
+    // Autotile→SNAP cross-DESKTOP MOVE: moving an autotile window to an adjacent
+    // desktop whose mode is Snapping is a cross-mode handoff — crossDesktopMove
+    // must emit crossModeMoveRequested (the reciprocal of the snap→autotile
+    // cross-desktop move). Needs a real LayoutRegistry so modeForScreen resolves;
+    // the engine-helper tests pass a null registry, so they never hit this branch.
+    std::unique_ptr<PhosphorZones::LayoutRegistry> registry(
+        PlasmaZones::TestHelpers::makeLayoutRegistry(QStringLiteral("autotile-cross-mode-desktop")));
+    PhosphorZones::AssignmentEntry snapEntry;
+    snapEntry.mode = PhosphorZones::AssignmentEntry::Snapping;
+    registry->setAssignmentEntryDirect(kScreen, 2, QString(), snapEntry); // desktop 2 = snap
+
+    std::unique_ptr<AutotileEngine> engine(
+        new AutotileEngine(registry.get(), nullptr, nullptr, PlasmaZones::TestHelpers::testRegistry()));
+    engine->setAutotileScreens({kScreen});
+    FakeCrossSurfaceResolver resolver; // right → next desktop; no neighbour output
+    engine->setCrossSurfaceResolver(&resolver);
+    engine->setCurrentDesktop(1);
+    engine->windowOpened(QStringLiteral("w0"), kScreen);
+    engine->windowOpened(QStringLiteral("w1"), kScreen);
+    QCoreApplication::processEvents();
+    PhosphorTiles::TilingState* state = engine->tilingStateForScreen(kScreen);
+    state->setCalculatedZones({QRect(0, 0, 960, 1080), QRect(960, 0, 960, 1080)});
+    const QString rightmost = state->tiledWindows().at(1);
+
+    QSignalSpy crossModeSpy(engine.get(), &AutotileEngine::crossModeMoveRequested);
+    QSignalSpy desktopSpy(engine.get(), &AutotileEngine::windowDesktopMoveRequested);
+    engine->moveFocusedInDirection(QStringLiteral("right"), ctx(rightmost));
+
+    // The snap target desktop triggers the cross-mode handoff, not a same-mode
+    // windowDesktopMoveRequested.
+    QCOMPARE(crossModeSpy.count(), 1);
+    const QList<QVariant> args = crossModeSpy.takeFirst();
+    QCOMPARE(args.at(0).toString(), rightmost);
+    QCOMPARE(args.at(1).toString(), kScreen); // same screen, target desktop
+    QCOMPARE(args.at(2).toInt(), 2); // the snap target desktop
+    QCOMPARE(args.at(3).toString(), QStringLiteral("right"));
+    QCOMPARE(desktopSpy.count(), 0);
 }
 
 void TestNavigationCrossSurface::crossDesktop_swapRight_doesNotRelocate()
