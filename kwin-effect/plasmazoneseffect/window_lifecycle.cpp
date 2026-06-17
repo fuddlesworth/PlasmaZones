@@ -275,8 +275,9 @@ void PlasmaZonesEffect::slotWindowClosed(KWin::EffectWindow* w)
     // window close. The daemon clears its side in windowClosed(). Done here while
     // getWindowId(w) still resolves (before the windowId cache drops the entry),
     // so a reused id can't inherit a stale zone.
-    m_navigationHandler->setWindowFloating(getWindowId(w), false);
-    m_navigationHandler->clearWindowZone(getWindowId(w));
+    const QString closingWindowId = getWindowId(w);
+    m_navigationHandler->setWindowFloating(closingWindowId, false);
+    m_navigationHandler->clearWindowZone(closingWindowId);
 
     // Tear down any in-flight zone.* shader transition first — this window
     // is going away and we don't want a half-faded zone shader fighting the

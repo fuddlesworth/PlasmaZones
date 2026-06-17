@@ -21,7 +21,11 @@ namespace PhosphorCompositor {
  *     a floated window resolvable across that rename.
  *   - App-wide floats (a bare appId, e.g. a session-restore marker floating every
  *     instance of an app) are keyed by appId and match every instance via the
- *     fallback in @c isFloating.
+ *     fallback in @c isFloating. Unlike the instanceId keyspace, this one is NOT
+ *     class-mutation-safe: a bare-appId entry inserted as `slack` is not resolved
+ *     by a later `Slack`. This matches the authoritative daemon's own appId-keyed
+ *     markers (same exposure); the rename-robustness guarantee covers only the
+ *     instance keyspace above.
  *
  * Mirrors the authoritative @c WindowTrackingService::setFloating: unfloating a
  * specific instance ALSO drops the coarse app-wide (bare appId) entry. Still-
