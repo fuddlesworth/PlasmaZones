@@ -4,6 +4,7 @@
 #include <PhosphorAnimation/AnimationShaderEffect.h>
 
 #include <PhosphorAnimation/AnimationShaderContract.h>
+#include <PhosphorAnimation/ProfilePaths.h>
 
 #include <QJsonArray>
 #include <QJsonValue>
@@ -70,6 +71,15 @@ QJsonObject AnimationShaderEffect::toJson() const
         obj.insert(QLatin1String("version"), version);
     if (!category.isEmpty())
         obj.insert(QLatin1String("category"), category);
+    // Emit `appliesTo` only when the effect constrains itself — the empty
+    // (universal) default stays omitted so the bulk of metadata.json files
+    // are unchanged, same terse-by-default idiom as fboExtent/multipass.
+    if (!appliesTo.isEmpty()) {
+        QJsonArray arr;
+        for (const auto& c : appliesTo)
+            arr.append(c);
+        obj.insert(QLatin1String("appliesTo"), arr);
+    }
     if (!fragmentShaderPath.isEmpty())
         obj.insert(QLatin1String("fragmentShader"), fragmentShaderPath);
     if (!vertexShaderPath.isEmpty())
@@ -190,6 +200,28 @@ AnimationShaderEffect AnimationShaderEffect::fromJson(const QJsonObject& obj)
     e.author = obj.value(QLatin1String("author")).toString();
     e.version = obj.value(QLatin1String("version")).toString();
     e.category = obj.value(QLatin1String("category")).toString();
+    // `appliesTo` (array of event-class tokens). Only the documented
+    // vocabulary — "geometry" / "appearance" — is accepted; an unknown
+    // token is a typo or a foreign import and is dropped with a warning so
+    // it neither restricts the picker on a class that doesn't exist nor
+    // round-trips the typo back to disk via toJson. An array that validates
+    // down to empty is indistinguishable from "universal", which is the
+    // correct fallback (the effect applies everywhere).
+    {
+        namespace PP = PhosphorAnimation::ProfilePaths;
+        const QJsonArray appliesArr = obj.value(QLatin1String("appliesTo")).toArray();
+        for (const QJsonValue& v : appliesArr) {
+            const QString token = v.toString().trimmed();
+            if (token == PP::EventClassGeometry || token == PP::EventClassAppearance) {
+                if (!e.appliesTo.contains(token))
+                    e.appliesTo.append(token);
+            } else if (!token.isEmpty()) {
+                qCWarning(lcAnimationShader)
+                    << "AnimationShaderEffect::fromJson: unknown appliesTo token" << token << "for effect" << e.id
+                    << "— accepted values are \"geometry\" and \"appearance\"; dropping.";
+            }
+        }
+    }
     e.fragmentShaderPath = obj.value(QLatin1String("fragmentShader")).toString();
     e.vertexShaderPath = obj.value(QLatin1String("vertexShader")).toString();
     e.previewPath = obj.value(QLatin1String("preview")).toString();
@@ -327,6 +359,8 @@ bool AnimationShaderEffect::operator==(const AnimationShaderEffect& other) const
         return false;
     if (author != other.author || version != other.version || category != other.category)
         return false;
+    if (appliesTo != other.appliesTo)
+        return false;
     if (fragmentShaderPath != other.fragmentShaderPath || vertexShaderPath != other.vertexShaderPath)
         return false;
     if (sourceDir != other.sourceDir || isUserEffect != other.isUserEffect)
@@ -360,6 +394,21 @@ bool AnimationShaderEffect::operator==(const AnimationShaderEffect& other) const
     if (textures != other.textures)
         return false;
     return true;
+}
+
+bool shaderEffectAppliesToEventPath(const AnimationShaderEffect& effect, const QString& path)
+{
+    // Universal effect (no declared constraint) runs everywhere.
+    if (effect.appliesTo.isEmpty())
+        return true;
+    // Only report false on a PROVABLE mismatch: the path resolves to a
+    // concrete class AND the effect doesn't list it. An ambiguous row
+    // (mixed ancestor / non-window path → empty class) is left compatible
+    // so the picker never dims an effect on a row it can't classify.
+    const QString cls = PhosphorAnimation::ProfilePaths::eventClassForPath(path);
+    if (cls.isEmpty())
+        return true;
+    return effect.appliesTo.contains(cls);
 }
 
 } // namespace PhosphorAnimationShaders
