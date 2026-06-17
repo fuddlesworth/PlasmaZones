@@ -61,6 +61,23 @@ struct PHOSPHORANIMATION_EXPORT AnimationShaderEffect
     /// Category for settings-UI grouping (e.g. "Fade", "Geometric", "Glitch").
     QString category;
 
+    /// Event-class tokens this effect is meaningful on. Each token is one
+    /// of `PhosphorAnimation::ProfilePaths::EventClassAppearance`
+    /// ("appearance" — open/close/minimize/focus + OSD/popup show/hide) or
+    /// `EventClassGeometry` ("geometry" — move/resize/snap*/layoutSwitch/
+    /// maximize). EMPTY (the default) means "universal" — the effect applies
+    /// to every event class, which is the right answer for the bulk of
+    /// transitions (fade, glitch, dissolve …) that operate on a single
+    /// surface and need no before/after geometry.
+    ///
+    /// A geometry-only effect like `window-morph` cross-fades an old rect
+    /// into a new rect (`iFromRect → iToRect`); that pair only exists on
+    /// geometry legs, so on an appearance event it would render nothing.
+    /// Declaring `["geometry"]` lets the settings picker dim the effect on
+    /// appearance rows with an explanatory tooltip instead of letting a
+    /// user assign a silent no-op. See `shaderEffectAppliesToEventPath`.
+    QStringList appliesTo;
+
     /// Path to the fragment shader (relative to the effect dir). The same
     /// source is used on both QtQuick and KWin paths — ShaderNodeRhi
     /// handles backend differences at the RHI level.
@@ -246,6 +263,23 @@ struct PHOSPHORANIMATION_EXPORT AnimationShaderEffect
         return !(*this == other);
     }
 };
+
+/// True iff @p effect may meaningfully run on event @p path.
+///
+/// An effect with an empty `appliesTo` is universal and always returns
+/// true. Otherwise the predicate maps @p path to its event class via
+/// `PhosphorAnimation::ProfilePaths::eventClassForPath` and checks
+/// membership. A path with no determinable class (a mixed ancestor like
+/// `window`, or a non-window/overlay path) also returns true — the
+/// predicate only reports false when it can PROVE a mismatch, so it never
+/// over-restricts a row whose class is ambiguous.
+///
+/// This is the (effect × path) analogue of
+/// `PlasmaZones::eventPathSupportsShaderLeg(path)`, which gates whether a
+/// path can run ANY shader. Both the settings picker (to dim incompatible
+/// effects) and any future runtime verification consult this one predicate
+/// so the policy has a single source of truth.
+PHOSPHORANIMATION_EXPORT bool shaderEffectAppliesToEventPath(const AnimationShaderEffect& effect, const QString& path);
 
 } // namespace PhosphorAnimationShaders
 

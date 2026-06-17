@@ -1,0 +1,63 @@
+{
+    "id": "aretha-materialize",
+    "name": "Aretha Materialize",
+    "description": "Cyberpunk hex-grid materialize: the window resolves hexagon-by-hexagon along a diagonal data sweep with a glowing cyan leading edge, chromatic glitch and scanlines — matching the Aretha / Ghost-in-the-Shell shell aesthetic.",
+    "author": "PlasmaZones",
+    "version": "1.0",
+    "category": "Glitch",
+    "fragmentShader": "effect.frag",
+    "parameters": [
+        {
+            "id": "hexSize",
+            "name": "Hex Size",
+            "type": "float",
+            "default": 26.0,
+            "min": 8.0,
+            "max": 80.0
+        },
+        {
+            "id": "randomness",
+            "name": "Scatter",
+            "type": "float",
+            "default": 0.55,
+            "min": 0.0,
+            "max": 1.0
+        },
+        {
+            "id": "glitch",
+            "name": "Glitch",
+            "type": "float",
+            "default": 0.6,
+            "min": 0.0,
+            "max": 1.0
+        },
+        {
+            "id": "rgbSplit",
+            "name": "RGB Split",
+            "type": "float",
+            "default": 0.02,
+            "min": 0.0,
+            "max": 0.08
+        },
+        {
+            "id": "edgeGlow",
+            "name": "Edge Glow",
+            "type": "float",
+            "default": 1.0,
+            "min": 0.0,
+            "max": 2.0
+        },
+        {
+            "id": "colorEdge",
+            "name": "Edge Color",
+            "type": "color",
+            "default": "#55AAFF"
+        },
+        {
+            "id": "colorGlitch",
+            "name": "Glitch Color",
+            "type": "color",
+            "default": "#FF557F"
+        }
+    ]
+}

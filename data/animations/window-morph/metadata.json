@@ -5,6 +5,7 @@
     "author": "PlasmaZones",
     "version": "1.0",
     "category": "Distortion",
+    "appliesTo": ["geometry"],
     "fragmentShader": "effect.frag",
     "vertexShader": "effect.vert",
     "fboExtent": "surface",
