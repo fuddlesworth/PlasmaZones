@@ -210,6 +210,13 @@ public:
     /// call @ref refreshLabels.
     void setActivityLabelLookup(LabelLookup fn);
 
+    /// Inject the zone-uuid → zone-name resolver used when rendering `Zone` leaf
+    /// predicates, so a snap-zone rule renders "Right column" rather than a raw
+    /// `{uuid}`. Install-once setter; lookups are read live every time `data()` is
+    /// invoked. To refresh visible labels after a lookup-source change, call
+    /// @ref refreshLabels.
+    void setZoneLabelLookup(LabelLookup fn);
+
     /// Inject the layoutId / algorithm-token → display-name resolvers used by
     /// the action summary so `SetSnappingLayout` and `SetTilingAlgorithm`
     /// render "Binary Split" rather than the wire token / UUID. Split into a
@@ -268,6 +275,7 @@ private:
     QList<PhosphorWindowRule::WindowRule> m_rules;
     LabelLookup m_screenLookup;
     LabelLookup m_activityLookup;
+    LabelLookup m_zoneLookup;
     // Split so a SetSnappingLayout action whose layoutId happens to
     // tokenise (e.g. matches an algorithm token by coincidence) and a
     // SetTilingAlgorithm action with a UUID-shaped algorithm name
