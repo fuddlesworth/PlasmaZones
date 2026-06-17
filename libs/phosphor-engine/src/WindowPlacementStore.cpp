@@ -125,65 +125,71 @@ bool WindowPlacementStore::collapsePureFloatSiblings(const QString& appId, const
     }
     QList<WindowPlacement>& bucket = bit.value();
 
-    int keepIdx = -1;
-    for (int i = 0; i < bucket.size(); ++i) {
-        if (bucket.at(i).windowId == keepWindowId) {
-            keepIdx = i;
-            break;
+    const auto findKeep = [&]() -> int {
+        for (int i = 0; i < bucket.size(); ++i) {
+            if (bucket.at(i).windowId == keepWindowId) {
+                return i;
+            }
         }
-    }
+        return -1;
+    };
+    int keepIdx = findKeep();
     // Only collapse when the kept record is itself a pure float — a managed
-    // (snapped/tiled) close has no business pruning float siblings.
-    if (keepIdx < 0 || !isPureFloatRecord(bucket.at(keepIdx))) {
-        return false;
-    }
-    // Snapshot the kept record's remembered float screens; a sibling sharing any
-    // of them is a stale duplicate of the same per-app/per-screen float memory.
-    const QList<QString> keptScreens = bucket.at(keepIdx).freeGeometryByScreen.keys();
-    if (keptScreens.isEmpty()) {
+    // (snapped/tiled) close has no business pruning float siblings — and only when
+    // it actually remembers a float position.
+    if (keepIdx < 0 || !isPureFloatRecord(bucket.at(keepIdx)) || bucket.at(keepIdx).freeGeometryByScreen.isEmpty()) {
         return false;
     }
 
+    // Fixpoint prune: remove every pure-float sibling that shares a screen the kept
+    // record currently covers, absorbing the sibling's OTHER-screen geometry first
+    // (so a different-monitor position the sibling alone held is never dropped). The
+    // kept record's coverage grows as it absorbs, so re-scanning until stable
+    // collapses the WHOLE set of float records transitively connected by a shared
+    // screen — regardless of FIFO order — into the single kept record, leaving no
+    // residual same-screen duplicate to rotate to. bucket <= MaxPerApp, so the
+    // repeat is cheap. Wholly different-monitor records (no shared screen) are never
+    // pruned: distinct-monitor float memory is preserved as its own record.
     bool removedAny = false;
-    for (int i = bucket.size() - 1; i >= 0; --i) {
-        if (i == keepIdx) {
-            continue;
+    bool changed = true;
+    while (changed) {
+        changed = false;
+        keepIdx = findKeep();
+        if (keepIdx < 0) {
+            break; // defensive — the kept record itself is never removed
         }
-        const WindowPlacement& other = bucket.at(i);
-        if (!isPureFloatRecord(other)) {
-            continue; // never prune a managed placement
-        }
-        bool sharesScreen = false;
-        for (const QString& screen : keptScreens) {
-            if (other.freeGeometryByScreen.contains(screen)) {
-                sharesScreen = true;
-                break;
+        for (int i = bucket.size() - 1; i >= 0; --i) {
+            if (i == keepIdx) {
+                continue;
             }
-        }
-        if (sharesScreen) {
-            // Absorb the sibling's float memory for any screen the kept record
-            // does NOT already cover, so collapsing a same-screen duplicate never
-            // silently drops a DIFFERENT-monitor position the sibling alone held.
-            // The kept record is newest, so its own per-screen geometry wins; the
-            // sibling only fills gaps. (keptScreens is the kept record's ORIGINAL
-            // coverage snapshot, so a gap-filled screen does not retroactively make
-            // an older sibling a "share" — its geometry for that screen is the same
-            // memory and is correctly left untouched.)
-            //
-            // Copy the sibling's geometry out first: mutating bucket[keepIdx] below
-            // could detach/reallocate the list and dangle the `other` reference.
+            const WindowPlacement& other = bucket.at(i);
+            if (!isPureFloatRecord(other)) {
+                continue; // never prune a managed placement
+            }
+            bool sharesScreen = false;
+            for (auto git = other.freeGeometryByScreen.constBegin(); git != other.freeGeometryByScreen.constEnd();
+                 ++git) {
+                if (bucket.at(keepIdx).freeGeometryByScreen.contains(git.key())) {
+                    sharesScreen = true;
+                    break;
+                }
+            }
+            if (!sharesScreen) {
+                continue; // wholly different-monitor record — distinct memory, kept
+            }
+            // Copy the sibling's geometry out before mutating bucket[keepIdx]:
+            // operator[] may detach/reallocate the list and dangle `other`.
             const QHash<QString, QRect> otherFree = other.freeGeometryByScreen;
             WindowPlacement& keep = bucket[keepIdx];
             for (auto git = otherFree.constBegin(); git != otherFree.constEnd(); ++git) {
                 if (!keep.freeGeometryByScreen.contains(git.key())) {
-                    keep.freeGeometryByScreen.insert(git.key(), git.value());
+                    keep.freeGeometryByScreen.insert(git.key(), git.value()); // kept (newest) wins; fill gaps only
                 }
             }
             bucket.removeAt(i);
             removedAny = true;
-            if (i < keepIdx) {
-                --keepIdx; // the kept record shifted down by the removal
-            }
+            changed = true;
+            break; // indices + keepIdx shifted; restart the scan
         }
     }
     return removedAny;

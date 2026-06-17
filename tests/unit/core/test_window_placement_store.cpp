@@ -652,6 +652,35 @@ private Q_SLOTS:
         QVERIFY(kept->freeGeometryFor(QStringLiteral("S1")).isValid());
         QVERIFY(kept->freeGeometryFor(QStringLiteral("S2")).isValid()); // absorbed from the pruned sibling
     }
+
+    void testCollapse_transitiveCollapseIsOrderIndependent()
+    {
+        // bridge(S1+S2) connects keep(S1) to leaf(S2). The leaf shares NO screen
+        // with the kept record directly — only through the screen the bridge
+        // contributes. A naive single backward pass would process the leaf (newer,
+        // higher index) before the bridge and miss it; the fixpoint re-scans after
+        // absorbing the bridge's S2 and prunes the leaf too. Whole connected set
+        // collapses into keep regardless of FIFO order.
+        WindowPlacementStore store;
+        store.record(make(QStringLiteral("dolphin|bridge"), QStringLiteral("dolphin"), WindowPlacement::stateFloating(),
+                          WindowPlacement::snapEngineId(), QStringLiteral("S1")));
+        store.record(make(QStringLiteral("dolphin|bridge"), QStringLiteral("dolphin"), WindowPlacement::stateFloating(),
+                          WindowPlacement::snapEngineId(), QStringLiteral("S2"))); // bridge now S1+S2
+        store.record(make(QStringLiteral("dolphin|leaf"), QStringLiteral("dolphin"), WindowPlacement::stateFloating(),
+                          WindowPlacement::snapEngineId(), QStringLiteral("S2"))); // newer than bridge
+        store.record(make(QStringLiteral("dolphin|keep"), QStringLiteral("dolphin"), WindowPlacement::stateFloating(),
+                          WindowPlacement::snapEngineId(), QStringLiteral("S1"))); // newest
+
+        QVERIFY(store.collapsePureFloatSiblings(QStringLiteral("dolphin"), QStringLiteral("dolphin|keep")));
+
+        QVERIFY(store.contains(QStringLiteral("dolphin|keep")));
+        QVERIFY(!store.contains(QStringLiteral("dolphin|bridge"))); // shares S1 → pruned (S2 absorbed)
+        QVERIFY(!store.contains(QStringLiteral("dolphin|leaf"))); // connected via absorbed S2 → pruned
+        const auto kept = store.peek(QStringLiteral("dolphin|keep"), QStringLiteral("dolphin"));
+        QVERIFY(kept.has_value());
+        QVERIFY(kept->freeGeometryFor(QStringLiteral("S1")).isValid());
+        QVERIFY(kept->freeGeometryFor(QStringLiteral("S2")).isValid());
+    }
 };
 
 QTEST_MAIN(TestWindowPlacementStore)
