@@ -87,11 +87,11 @@ private Q_SLOTS:
         engine.setAutotileScreens({QStringLiteral("DP-1"), QStringLiteral("DP-2")});
         engine.windowOpened(QStringLiteral("a1"), QStringLiteral("DP-1"));
         engine.windowOpened(QStringLiteral("a2"), QStringLiteral("DP-1"));
-        QTest::qWait(20); // let the post-open retile compute real zones
-
+        // Deterministically wait for the async post-open retile to compute real
+        // zones (poll, not a fixed sleep — robust under CI load).
         PhosphorTiles::TilingState* d1 = engine.tilingStateForScreen(QStringLiteral("DP-1"));
+        QTRY_COMPARE(d1->calculatedZones().size(), 2); // two real, non-empty tiles
         QCOMPARE(d1->tiledWindows().size(), 2);
-        QCOMPARE(d1->calculatedZones().size(), 2); // two real, non-empty tiles
 
         // Cross the geometrically-rightmost window right to DP-2.
         const QStringList d1wins = d1->tiledWindows();
@@ -109,13 +109,12 @@ private Q_SLOTS:
         // the move onward.
         QSignalSpy tiledSpy(&engine, &AutotileEngine::windowsTiled);
         engine.swapFocusedInDirection(QStringLiteral("right"), NavigationContext{rightWin, QStringLiteral("DP-1")});
-        QTest::qWait(20);
 
         // BUG 2: the source monitor must reflow — its one remaining window now
         // fills (nearly) the whole monitor, not the old half-width tile.
         PhosphorTiles::TilingState* d1after = engine.tilingStateForScreen(QStringLiteral("DP-1"));
+        QTRY_COMPARE(d1after->calculatedZones().size(), 1);
         QCOMPARE(d1after->tiledWindows().size(), 1);
-        QCOMPARE(d1after->calculatedZones().size(), 1);
         QVERIFY2(d1after->calculatedZones().first().width() > 1500,
                  "source monitor did not reflow after the window left (still half-width)");
 
@@ -129,8 +128,7 @@ private Q_SLOTS:
 
         // BUG 1: that lone window on DP-2 must be movable back to DP-1.
         engine.swapFocusedInDirection(QStringLiteral("left"), NavigationContext{rightWin, QStringLiteral("DP-2")});
-        QTest::qWait(20);
-        QVERIFY(engine.tilingStateForScreen(QStringLiteral("DP-1"))->tiledWindows().contains(rightWin));
+        QTRY_VERIFY(engine.tilingStateForScreen(QStringLiteral("DP-1"))->tiledWindows().contains(rightWin));
         QVERIFY(!engine.tilingStateForScreen(QStringLiteral("DP-2"))->tiledWindows().contains(rightWin));
     }
 
@@ -153,11 +151,10 @@ private Q_SLOTS:
         engine.setAutotileScreens({QStringLiteral("DP-1")});
         engine.windowOpened(QStringLiteral("a1"), QStringLiteral("DP-1"));
         engine.windowOpened(QStringLiteral("a2"), QStringLiteral("DP-1"));
-        QTest::qWait(20);
 
         PhosphorTiles::TilingState* d1 = engine.tilingStateForScreen(QStringLiteral("DP-1"));
+        QTRY_COMPARE(d1->calculatedZones().size(), 2);
         QCOMPARE(d1->tiledWindows().size(), 2);
-        QCOMPARE(d1->calculatedZones().size(), 2);
         const QString leaving = d1->tiledWindows().at(0);
         const QString staying = d1->tiledWindows().at(1);
 
@@ -166,11 +163,10 @@ private Q_SLOTS:
         // what the effect's "moved off current desktop, removed from autotile"
         // sends after windowToDesktops relocates the real window.
         engine.windowClosed(leaving);
-        QTest::qWait(20);
 
         PhosphorTiles::TilingState* after = engine.tilingStateForScreen(QStringLiteral("DP-1"));
+        QTRY_COMPARE(after->calculatedZones().size(), 1);
         QCOMPARE(after->tiledWindows().size(), 1);
-        QCOMPARE(after->calculatedZones().size(), 1);
         QVERIFY2(after->calculatedZones().first().width() > 1500,
                  "remaining window did not reflow after the other left the context (still half-width)");
 

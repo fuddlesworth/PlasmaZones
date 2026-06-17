@@ -327,8 +327,17 @@ void SnapEngine::handoffReceive(const HandoffContext& ctx)
             const int curDesktop = currentVirtualDesktop();
             if (ctx.toDesktop > 0 && ctx.toDesktop != curDesktop) {
                 // Cross-DESKTOP handoff: the target desktop isn't the visible one,
-                // so assign the snap slot directly on it (commitSnap would stamp
-                // the current desktop) and refresh the placement-store record.
+                // so assign the snap slot directly on SnapState for that desktop
+                // (commitSnap would stamp the current desktop) and refresh the
+                // placement-store record. This is the same path tryCrossDesktopMove
+                // uses, and it is safe to bypass commitSnap's WTS orchestration
+                // here: SnapState is the very store WTS queries (Daemon wires
+                // setSnapState(snapEngine->snapState())), so zoneForWindow et al.
+                // see this assignment; the snap chrome is applied below via the
+                // non-empty-zoneId applyGeometryRequested (→ markWindowSnapped); and
+                // persistence flows through the placement-store record. The only
+                // caller, handleCrossModeMove, always passes wasFloating==false, so
+                // there is no floating flag to clear.
                 if (ctx.sourceZoneIds.size() > 1) {
                     m_snapState->assignWindowToZones(ctx.windowId, ctx.sourceZoneIds, ctx.toScreenId, ctx.toDesktop);
                 } else {
@@ -338,6 +347,12 @@ void SnapEngine::handoffReceive(const HandoffContext& ctx)
                 if (auto placement = capturePlacement(ctx.windowId)) {
                     placement->virtualDesktop = ctx.toDesktop;
                     m_windowTracker->placementStore().record(std::move(*placement));
+                } else {
+                    // Mirror tryCrossDesktopMove: surface the SnapState↔placement
+                    // divergence rather than letting it hide.
+                    qCDebug(PhosphorSnapEngine::lcSnapEngine)
+                        << "handoffReceive: capturePlacement miss for" << ctx.windowId
+                        << "— placement-store desktop not updated to" << ctx.toDesktop;
                 }
             } else if (ctx.sourceZoneIds.size() > 1) {
                 commitMultiZoneSnap(ctx.windowId, ctx.sourceZoneIds, ctx.toScreenId, SnapIntent::UserInitiated);
