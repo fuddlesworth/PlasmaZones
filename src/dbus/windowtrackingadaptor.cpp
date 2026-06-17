@@ -24,7 +24,7 @@
 #include "../core/types.h"
 #include <PhosphorEngine/WindowRegistry.h>
 // Complete type required where ~WindowTrackingAdaptor destroys the
-// unique_ptr<RuleEvaluator> member (m_restorePositionEvaluator).
+// unique_ptr<RuleEvaluator> member (m_windowRuleEvaluator).
 #include <PhosphorWindowRule/RuleEvaluator.h>
 #include <QJsonArray>
 #include <QJsonDocument>

@@ -348,6 +348,58 @@ private Q_SLOTS:
     }
 
     // ────────────────────────────────────────────────────────────────────
+    // Float rule resolves through the composite windowId. shouldFloatByRule is
+    // purely rule-driven (no global default): the verdict is the presence of a
+    // matched Float slot, resolved through the same bare-instance-id extraction
+    // as RestorePosition. An unmatched window — and the no-store case — is false.
+    // ────────────────────────────────────────────────────────────────────
+    void floatRule_floatsMatchedWindow_viaCompositeWindowId()
+    {
+        QTemporaryDir dir;
+        QVERIFY(dir.isValid());
+        PhosphorWindowRule::WindowRuleStore store(dir.filePath(QStringLiteral("windowrules.json")));
+
+        PhosphorWindowRule::WindowRule rule;
+        rule.id = QUuid::createUuid();
+        rule.name = QStringLiteral("float-dolphin");
+        rule.enabled = true;
+        rule.priority = 100;
+        rule.match = PhosphorWindowRule::MatchExpression::makeLeaf(
+            PhosphorWindowRule::Field::AppId, PhosphorWindowRule::Operator::Equals, QStringLiteral("org.kde.dolphin"));
+        PhosphorWindowRule::RuleAction action;
+        action.type = QString(PhosphorWindowRule::ActionType::Float);
+        rule.actions.append(action);
+        QVERIFY(store.addRule(rule));
+
+        m_wta->setWindowRuleStore(&store);
+        const auto detach = qScopeGuard([this] {
+            m_wta->setWindowRuleStore(nullptr);
+        });
+
+        const QString dolphinInstance = QStringLiteral("dolphin-float-1");
+        m_registry->upsert(dolphinInstance, {QStringLiteral("org.kde.dolphin"), QString(), QString()});
+
+        QVERIFY2(m_wta->shouldFloatByRule(
+                     PhosphorIdentity::WindowId::buildCompositeId(QStringLiteral("org.kde.dolphin"), dolphinInstance)),
+                 "a matched Float rule must open the window floating (resolved via the composite windowId)");
+
+        // An unmatched window is never floated — Float has no global default.
+        const QString konsoleInstance = QStringLiteral("konsole-float-1");
+        m_registry->upsert(konsoleInstance, {QStringLiteral("org.kde.konsole"), QString(), QString()});
+        QVERIFY2(!m_wta->shouldFloatByRule(
+                     PhosphorIdentity::WindowId::buildCompositeId(QStringLiteral("org.kde.konsole"), konsoleInstance)),
+                 "an unmatched window must not be floated (no global float-on-open default)");
+    }
+
+    void floatRule_falsesWithoutStore()
+    {
+        m_wta->setWindowRuleStore(nullptr);
+        QVERIFY2(!m_wta->shouldFloatByRule(PhosphorIdentity::WindowId::buildCompositeId(
+                     QStringLiteral("org.kde.dolphin"), QStringLiteral("any-uuid"))),
+                 "with no rule store, no window is rule-floated");
+    }
+
+    // ────────────────────────────────────────────────────────────────────
     // The no-rule fallback branches: with no store, or a store that has no
     // metadata for the window, the per-engine *RestoreFloatedWindowsOnLogin
     // setting is the whole policy. Guards the early-outs in

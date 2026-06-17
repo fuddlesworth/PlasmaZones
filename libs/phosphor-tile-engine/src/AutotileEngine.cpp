@@ -2832,6 +2832,16 @@ bool AutotileEngine::insertWindow(const QString& windowId, const QString& screen
     // parallel saved-floating set — the WindowPlacement record is the single
     // source of truth for cross-mode float state.
 
+    // A matched "Float this app" window rule opens the window floating: it is
+    // inserted above (so it stays managed and Meta+F can re-tile it), then marked
+    // floating here, identical to a manual float toggle. Guarded on not-already-
+    // floating so the placement-record float-restore branch above is not
+    // re-applied. onWindowAdded then emits windowFloatingStateSynced so the daemon
+    // mirrors the state.
+    if (m_floatPredicate && !state->isFloating(windowId) && m_floatPredicate(windowId)) {
+        state->setFloating(windowId, true);
+    }
+
     m_windowToStateKey.insert(windowId, currentKey);
     return true;
 }

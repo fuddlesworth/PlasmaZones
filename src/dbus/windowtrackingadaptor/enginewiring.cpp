@@ -56,9 +56,11 @@ void WindowTrackingAdaptor::setEngines(PhosphorEngine::PlacementEngineBase* snap
     if (m_cachedSnapEngine) {
         m_cachedSnapEngine->setShouldRestorePredicate({});
         m_cachedSnapEngine->setRestorePositionPredicate({});
+        m_cachedSnapEngine->setFloatPredicate({});
     }
     if (m_cachedAutotileEngine) {
         m_cachedAutotileEngine->setRestorePositionPredicate({});
+        m_cachedAutotileEngine->setFloatPredicate({});
     }
 
     m_snapEngine = snapEngine;
@@ -113,6 +115,13 @@ void WindowTrackingAdaptor::setEngines(PhosphorEngine::PlacementEngineBase* snap
         // `snappingRestoreFloatedWindowsOnLogin` setting (Mode::Snapping here).
         snap->setRestorePositionPredicate([this](const QString& windowId) -> bool {
             return shouldRestoreFloatedPosition(windowId, PhosphorZones::AssignmentEntry::Mode::Snapping);
+        });
+
+        // Open-floating gate (snap). A matched "Float this app" rule opens the
+        // window floating instead of auto-snapping it. Purely rule-driven (no
+        // global default), so the same resolver serves both engines.
+        snap->setFloatPredicate([this](const QString& windowId) -> bool {
+            return shouldFloatByRule(windowId);
         });
 
         // Snap-specific signal: carries PhosphorProtocol::WindowStateEntry which is snap-mode-only.
@@ -176,6 +185,11 @@ void WindowTrackingAdaptor::setEngines(PhosphorEngine::PlacementEngineBase* snap
             m_cachedAutotileEngine->setRestorePositionPredicate([this](const QString& windowId) -> bool {
                 return shouldRestoreFloatedPosition(windowId, PhosphorZones::AssignmentEntry::Mode::Autotile);
             });
+            // Open-floating gate (autotile). Same rule-driven resolver as snap; the
+            // window is inserted then marked floating so it stays managed.
+            m_cachedAutotileEngine->setFloatPredicate([this](const QString& windowId) -> bool {
+                return shouldFloatByRule(windowId);
+            });
         }
     }
 
@@ -214,41 +228,33 @@ void WindowTrackingAdaptor::setWindowRuleStore(PhosphorWindowRule::WindowRuleSto
     }
     m_windowRuleStore = store;
     // Drop the evaluator bound to the previous set; it rebuilds lazily against
-    // the new one on the next shouldRestoreFloatedPosition call.
-    m_restorePositionEvaluator.reset();
+    // the new one on the next per-window resolve.
+    m_windowRuleEvaluator.reset();
 }
 
-bool WindowTrackingAdaptor::shouldRestoreFloatedPosition(const QString& windowId,
-                                                         PhosphorZones::AssignmentEntry::Mode mode)
+namespace {
+// Build a per-window rule query from the registry metadata, or nullopt when no
+// metadata is tracked (the caller falls back to its own default). Shared by the
+// RestorePosition and Float resolvers so the metadata→query derivation lives in
+// one place. windowClass is not tracked daemon-side (the compositor reports
+// appId, which is class-derived), so rules match on appId / title / role / type
+// / desktop / pid plus the recorded desktop / activity context; screenId stays
+// empty (a window-domain rule does not pin a screen).
+std::optional<PhosphorWindowRule::WindowQuery>
+buildRuleQueryForWindow(const QPointer<PhosphorEngine::WindowRegistry>& registry, const QString& windowId)
 {
-    // m_settings is a hard ctor dependency (qFatal on null), so it is non-null
-    // here — deref unguarded like every other method in this class. The global
-    // default is per-engine (snap-floated vs autotile-floated); the RestorePosition
-    // rule override below is engine-neutral.
-    const bool globalDefault = mode == PhosphorZones::AssignmentEntry::Mode::Autotile
-        ? m_settings->autotileRestoreFloatedWindowsOnLogin()
-        : m_settings->snappingRestoreFloatedWindowsOnLogin();
-
-    // No rule store / metadata → the global setting is the whole policy.
-    if (!m_windowRuleStore || m_windowRegistry.isNull()) {
-        return globalDefault;
+    if (registry.isNull()) {
+        return std::nullopt;
     }
     // WindowRegistry is keyed by the BARE instance id; the engine hands us the
     // composite `appId|instanceId`. Extract first — every other registry reader
     // (currentAppIdFor, windowClosed, AutotileEngine) does the same. Looking up by
-    // the composite id always misses, which would silently make RestorePosition
-    // rules inert and collapse the feature to the global setting.
+    // the composite id always misses, which would silently make the rule inert.
     const QString instanceId = PhosphorIdentity::WindowId::extractInstanceId(windowId);
-    const std::optional<PhosphorEngine::WindowMetadata> meta = m_windowRegistry->metadata(instanceId);
+    const std::optional<PhosphorEngine::WindowMetadata> meta = registry->metadata(instanceId);
     if (!meta) {
-        return globalDefault;
+        return std::nullopt;
     }
-
-    // Build a per-window query from the registry metadata. windowClass is not
-    // tracked daemon-side (the compositor reports appId, which is class-derived),
-    // so RestorePosition rules match on appId / title / role / type — the common
-    // per-app case. Context fields come from the window's recorded desktop /
-    // activity; screenId stays empty (a window-domain rule does not pin a screen).
     PhosphorWindowRule::WindowQuery query;
     query.appId = meta->appId;
     if (!meta->title.isEmpty()) {
@@ -266,17 +272,61 @@ bool WindowTrackingAdaptor::shouldRestoreFloatedPosition(const QString& windowId
     query.windowType = meta->windowType;
     query.virtualDesktop = meta->virtualDesktop;
     query.activity = meta->activity;
+    return query;
+}
+} // namespace
 
-    if (!m_restorePositionEvaluator) {
-        m_restorePositionEvaluator = std::make_unique<PhosphorWindowRule::RuleEvaluator>(m_windowRuleStore->ruleSet());
+bool WindowTrackingAdaptor::shouldRestoreFloatedPosition(const QString& windowId,
+                                                         PhosphorZones::AssignmentEntry::Mode mode)
+{
+    // m_settings is a hard ctor dependency (qFatal on null), so it is non-null
+    // here — deref unguarded like every other method in this class. The global
+    // default is per-engine (snap-floated vs autotile-floated); the RestorePosition
+    // rule override below is engine-neutral.
+    const bool globalDefault = mode == PhosphorZones::AssignmentEntry::Mode::Autotile
+        ? m_settings->autotileRestoreFloatedWindowsOnLogin()
+        : m_settings->snappingRestoreFloatedWindowsOnLogin();
+
+    // No rule store / metadata → the global setting is the whole policy.
+    if (!m_windowRuleStore) {
+        return globalDefault;
     }
-    const PhosphorWindowRule::ResolvedActions resolved = m_restorePositionEvaluator->resolveCached(windowId, query);
+    const std::optional<PhosphorWindowRule::WindowQuery> query = buildRuleQueryForWindow(m_windowRegistry, windowId);
+    if (!query) {
+        return globalDefault;
+    }
+
+    if (!m_windowRuleEvaluator) {
+        m_windowRuleEvaluator = std::make_unique<PhosphorWindowRule::RuleEvaluator>(m_windowRuleStore->ruleSet());
+    }
+    const PhosphorWindowRule::ResolvedActions resolved = m_windowRuleEvaluator->resolveCached(windowId, *query);
     if (const std::optional<PhosphorWindowRule::RuleAction> action =
             resolved.slot(QString(PhosphorWindowRule::ActionSlot::RestorePosition))) {
         // A matched RestorePosition rule overrides the global setting.
         return action->params.value(QString(PhosphorWindowRule::ActionParam::Value)).toBool();
     }
     return globalDefault;
+}
+
+bool WindowTrackingAdaptor::shouldFloatByRule(const QString& windowId)
+{
+    // Float is purely rule-driven: there is no global "float on open" setting, so
+    // absent a matching rule the answer is "do not float".
+    if (!m_windowRuleStore) {
+        return false;
+    }
+    const std::optional<PhosphorWindowRule::WindowQuery> query = buildRuleQueryForWindow(m_windowRegistry, windowId);
+    if (!query) {
+        return false;
+    }
+
+    if (!m_windowRuleEvaluator) {
+        m_windowRuleEvaluator = std::make_unique<PhosphorWindowRule::RuleEvaluator>(m_windowRuleStore->ruleSet());
+    }
+    const PhosphorWindowRule::ResolvedActions resolved = m_windowRuleEvaluator->resolveCached(windowId, *query);
+    // The Float action carries free-form params (no Value key), so the verdict is
+    // the PRESENCE of the filled slot, not a bool payload.
+    return resolved.slot(QString(PhosphorWindowRule::ActionSlot::Float)).has_value();
 }
 
 } // namespace PlasmaZones

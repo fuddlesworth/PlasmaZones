@@ -422,6 +422,18 @@ SnapResult SnapEngine::resolveWindowRestore(const QString& windowId, const QStri
         return SnapResult::noSnap();
     }
 
+    // A matched "Float this app" window rule opens the window floating, exactly
+    // as if the user had toggled float. Runs after the exclusion gate (excluded
+    // windows return earlier) and the already-floating guard, before the
+    // auto-snap chain — so a rule-floated window never auto-snaps to a zone.
+    // Mirrors the no-match default-float terminal at the end of this function.
+    if (m_floatPredicate && m_floatPredicate(windowId)) {
+        m_snapState->setFloatingOnScreen(windowId, screenId, currentVirtualDesktop());
+        Q_EMIT windowFloatingChanged(windowId, true, screenId);
+        qCInfo(PhosphorSnapEngine::lcSnapEngine) << "resolveWindowRestore:" << windowId << "floated by rule";
+        return SnapResult::noSnap();
+    }
+
     // 1. App rules (highest priority). May cross-screen migrate.
     {
         SnapResult result = calculateSnapToAppRule(windowId, screenId, sticky);

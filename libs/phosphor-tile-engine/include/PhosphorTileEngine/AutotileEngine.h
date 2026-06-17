@@ -449,6 +449,21 @@ public:
         m_restorePositionPredicate = std::move(predicate);
     }
 
+    /**
+     * Predicate deciding whether an opening window should start FLOATING because a
+     * "Float this app" window rule matched it. Daemon-injected, keyed by the live
+     * windowId. The window is still inserted (so it stays managed and Meta+F can
+     * re-tile it); it is just marked floating, identical to a manual float. When
+     * UNSET (default) no window is rule-floated. Clear with `{}` before destroying
+     * any state the closure captured.
+     */
+    using FloatPredicate = std::function<bool(const QString& windowId)>;
+
+    void setFloatPredicate(FloatPredicate predicate)
+    {
+        m_floatPredicate = std::move(predicate);
+    }
+
     // Cross-engine handoff (see PhosphorEngine/IPlacementEngine.h for contract)
     QString engineId() const override
     {
@@ -1311,6 +1326,10 @@ private:
     // the engine always re-applies a floated window's recorded position (historical
     // behaviour). See RestorePositionPredicate doc above.
     RestorePositionPredicate m_restorePositionPredicate{};
+
+    // Rule-driven open-floating gate. Empty until the daemon wires it; while empty
+    // no window is rule-floated. See FloatPredicate doc above.
+    FloatPredicate m_floatPredicate{};
 
     QSet<QString> m_autotileScreens;
     QString m_algorithmId;
