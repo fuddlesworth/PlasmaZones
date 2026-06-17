@@ -48,13 +48,13 @@ class CrossSurfaceResolver;
 
 struct EngineSet
 {
+    /// Shared neighbour-output / neighbour-desktop resolver injected into the
+    /// engines. Declared FIRST so it is destroyed LAST (members destruct in
+    /// reverse declaration order) — it must outlive the engines that borrow it.
+    std::unique_ptr<CrossSurfaceResolver> crossSurfaceResolver;
     std::unique_ptr<PhosphorTileEngine::AutotileEngine> autotile;
     std::unique_ptr<PhosphorSnapEngine::SnapEngine> snap;
     std::unique_ptr<ScreenModeRouter> router;
-    /// Shared neighbour-output / neighbour-desktop resolver injected into the
-    /// engines. Listed last so the daemon keeps it alive; it must outlive the
-    /// engines that borrow it.
-    std::unique_ptr<CrossSurfaceResolver> crossSurfaceResolver;
 };
 
 /**
@@ -79,15 +79,13 @@ struct EngineSet
  * @param settings        Settings instance (borrowed)
  * @param vdm             Virtual desktop manager (borrowed)
  * @param windowRegistry  Window registry for class lookups (borrowed)
- * @param parent          Unused (engines use unique_ptr ownership)
- * @return EngineSet with all three objects constructed
+ * @return EngineSet with all engines and the resolver constructed
  */
 EngineSet createEngines(PhosphorZones::LayoutRegistry* layoutManager,
                         PhosphorPlacement::WindowTrackingService* windowTracker,
                         PhosphorScreens::ScreenManager* screenManager,
                         PhosphorTiles::ITileAlgorithmRegistry* algorithmRegistry,
                         PhosphorZones::IZoneDetector* zoneDetector, ISettings* settings,
-                        PhosphorWorkspaces::VirtualDesktopManager* vdm, PhosphorEngine::WindowRegistry* windowRegistry,
-                        QObject* parent);
+                        PhosphorWorkspaces::VirtualDesktopManager* vdm, PhosphorEngine::WindowRegistry* windowRegistry);
 
 } // namespace PlasmaZones

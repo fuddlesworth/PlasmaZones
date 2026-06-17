@@ -134,8 +134,11 @@ PhosphorProtocol::MoveTargetResult SnapNavigationTargetResolver::crossOutputEntr
                                                                                         bool requireSnapNeighbour) const
 {
     const QString fail = QString();
-    // m_service is a ctor invariant (Q_ASSERT'd, never null and never reset);
-    // only the late-bound resolvers are genuinely optional here.
+    // m_service is a ctor invariant (Q_ASSERT'd, never null and never reset):
+    // SnapEngine::ensureTargetResolver is the sole construction site and returns
+    // early without building this resolver when its tracker is null, so no live
+    // resolver can hold a null m_service. Only the late-bound resolvers (set
+    // post-construction) are genuinely optional here.
     if (!m_crossSurface || !m_zoneAdjacency) {
         return moveResult(false, fail, QString(), QRect(), currentZoneId, sourceScreenId);
     }
@@ -392,6 +395,12 @@ PhosphorProtocol::FocusTargetResult SnapNavigationTargetResolver::getFocusTarget
                 return focusResult(true, QString(), entryWindow, currentZoneId, cross.zoneId, cross.screenName);
             }
         }
+        // Reaching here means either no cross-output entry zone was found OR one
+        // was found but is unoccupied on the neighbour (firstWindowInZoneOnScreen
+        // empty — you cannot focus an empty zone). Both collapse to the same
+        // "no_adjacent_zone" reason: from the caller's perspective there is no
+        // window to land on that way, so it should try the desktop axis next. The
+        // reason intentionally does not distinguish the empty-zone case.
         // Defer the boundary decision (and feedback) to the caller when a
         // cross-surface resolver is present — SnapEngine may focus a window on
         // the adjacent desktop. Without one, emit the boundary feedback here.

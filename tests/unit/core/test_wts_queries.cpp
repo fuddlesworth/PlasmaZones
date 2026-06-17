@@ -282,10 +282,19 @@ private Q_SLOTS:
         const QRect zone1 = m_service->zoneGeometry(m_zoneIds[1], QString());
         QVERIFY(zone0.isValid());
         QVERIFY(zone1.isValid());
-        // The multi-zone geometry is the bounding union — valid and covering both zones.
+        // The multi-zone geometry must be the TIGHT bounding union of the two
+        // zones — not merely a rect that happens to contain both (which the whole
+        // screen would also satisfy). multiZoneGeometry computes the bounds with
+        // QRectF-style exclusive extents, so each edge may sit up to 1px beyond
+        // QRect::united's inclusive convention; assert tightness within that 1px.
+        const QRect expectedUnion = zone0.united(zone1);
         QVERIFY(geo.isValid());
         QVERIFY(geo.contains(zone0));
         QVERIFY(geo.contains(zone1));
+        QVERIFY(qAbs(geo.left() - expectedUnion.left()) <= 1);
+        QVERIFY(qAbs(geo.top() - expectedUnion.top()) <= 1);
+        QVERIFY(qAbs(geo.right() - expectedUnion.right()) <= 1);
+        QVERIFY(qAbs(geo.bottom() - expectedUnion.bottom()) <= 1);
     }
 
     // =====================================================================

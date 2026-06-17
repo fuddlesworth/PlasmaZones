@@ -83,11 +83,12 @@ public:
     /// No-op for a window that isn't currently assigned. Returns true on change.
     bool reassignDesktop(const QString& windowId, int virtualDesktop);
 
-    /// Windows (snapped OR floated) tracked on @p screenId whose desktop
+    /// Windows with a recorded desktop assignment (snapped, or floated-on-screen
+    /// via setFloatingOnScreen / unsnapForFloat) on @p screenId whose desktop
     /// membership is @p virtualDesktop, sorted by id for deterministic
-    /// entry-window choice. Iterates the desktop-assignment map, which holds
-    /// both snapped and floated windows. Used by cross-desktop directional
-    /// focus to find a window to land on.
+    /// entry-window choice. Iterates the desktop-assignment map; a window floated
+    /// without a desktop slot is not in that map and is excluded. Used by
+    /// cross-desktop directional focus to find a window to land on.
     QStringList windowsOnScreenAndDesktop(const QString& screenId, int virtualDesktop) const;
 
     const QHash<QString, QString>& screenAssignments() const

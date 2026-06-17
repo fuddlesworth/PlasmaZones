@@ -14,8 +14,8 @@ namespace PhosphorEngine {
  * Implemented daemon-side over the screen-topology and virtual-desktop services
  * and injected into the placement engines, so the geometry/desktop knowledge
  * lives in exactly one place and the autotile and snap engines resolve
- * crossings identically (the engines just ask). Both directions are 1:1 with
- * the lower-case tokens "left" / "right" / "up" / "down".
+ * crossings identically (the engines just ask). Both methods take the
+ * lower-case direction tokens "left" / "right" / "up" / "down".
  */
 class ICrossSurfaceResolver
 {

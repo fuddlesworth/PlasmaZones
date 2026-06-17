@@ -377,10 +377,12 @@ public:
         QRect sourceGeometry; ///< window's frame at handoff time (for size preservation)
         QStringList sourceZoneIds; ///< zones the window held at source (empty if not snapped)
         bool wasFloating = false; ///< window was floating in source engine
-        int insertIndex = -1; ///< autotile target: tile-order position to insert at
-                              ///< (-1 = insertion-order policy). Used by a cross-mode
-                              ///< SWAP so the arriving window takes the departed
-                              ///< partner's exact slot. Ignored by snap targets.
+        int insertIndex = -1; ///< autotile target: raw window-order index (position
+                              ///< in windowOrder(), counting floats — NOT the
+                              ///< tiled-only index) to insert at. -1 = insertion-order
+                              ///< policy. Used by a cross-mode SWAP so the arriving
+                              ///< window takes the departed partner's exact slot.
+                              ///< Ignored by snap targets.
     };
 
     /// Receive ownership of a window from another engine.
@@ -479,8 +481,10 @@ public:
         Q_UNUSED(activity)
     }
     /// Inject the cross-surface resolver used to find a neighbouring output /
-    /// desktop when directional navigation reaches a surface boundary. Engines
-    /// that don't support cross-surface navigation ignore it.
+    /// desktop when directional navigation reaches a surface boundary. The
+    /// resolver is borrowed, not owned; the caller must keep it alive for the
+    /// engine's lifetime (in the daemon it outlives both engines by member
+    /// order). Engines that don't support cross-surface navigation ignore it.
     virtual void setCrossSurfaceResolver(ICrossSurfaceResolver* resolver)
     {
         Q_UNUSED(resolver)

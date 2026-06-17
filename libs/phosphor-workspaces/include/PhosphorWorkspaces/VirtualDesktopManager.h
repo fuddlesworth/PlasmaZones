@@ -39,7 +39,6 @@ Q_SIGNALS:
     void desktopCountChanged(int count);
 
 private Q_SLOTS:
-    void onCurrentDesktopChanged(int desktop);
     void onNumberOfDesktopsChanged(int count);
     void refreshFromKWin();
     void onKWinCurrentChanged(const QString& desktopId);

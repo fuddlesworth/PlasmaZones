@@ -336,6 +336,12 @@ bool SnapEngine::tryCrossDesktopMove(const QString& windowId, const QString& dir
     if (m_layoutManager
         && m_layoutManager->modeForScreen(screenId, targetDesktop, currentActivity())
             == PhosphorZones::AssignmentEntry::Autotile) {
+        // Deliberately do NOT touch SnapState / the placement store here: the
+        // daemon's handleCrossModeMove resolves this engine as the source and
+        // calls handoffRelease(windowId) on it, vacating the snap zone before the
+        // autotile target receives the window. Re-stamping the desktop locally
+        // would leave the window double-tracked (snapped here, tiled there) until
+        // that release lands. The release is the source-of-truth uncommit.
         Q_EMIT crossModeMoveRequested(windowId, screenId, targetDesktop, direction);
         // Same success OSD as the snap-zone branches below — the daemon's
         // cross-mode handler relocates the window; it emits no feedback itself.

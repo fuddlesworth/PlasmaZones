@@ -28,7 +28,7 @@ Item {
 
     // ── Data properties ───────────────────────────────────────────────────
     property bool success: true
-    property string action: "" // "move", "focus", "push", "restore", "float", "swap", "rotate", "snap", "cycle", "algorithm", "swap_vs", "rotate_vs"
+    property string action: "" // one of the tokens handled by messageText(): "rotate", "move", "focus", "swap", "push", "restore", "float", "snap", "cycle", "focus_master", "swap_master", "master_ratio", "master_count", "retile", "resnap", "algorithm", "swap_vs", "rotate_vs"
     property string reason: "" // Failure reason if !success, direction for rotation (clockwise/counterclockwise), or float state (floated/unfloated)
     property var zones: []
     property var highlightedZoneIds: [] // Zone IDs involved (target zones)
@@ -225,7 +225,7 @@ Item {
         // "screen:left", "desktop:right". Strip it to the bare token so the
         // arrow matches the actual direction (an unstripped "screen:left" used
         // to fall through to the default "→", pointing the wrong way).
-        var token = dir.indexOf(":") >= 0 ? dir.slice(dir.indexOf(":") + 1) : dir;
+        const token = dir.indexOf(":") >= 0 ? dir.slice(dir.indexOf(":") + 1) : dir;
         switch (token) {
         case "left":
             return "←";

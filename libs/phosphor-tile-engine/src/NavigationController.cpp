@@ -343,10 +343,24 @@ bool NavigationController::crossOutputMove(const QString& sourceScreenId, const 
         }
         return true;
     }
+    // Autotile → autotile output crossing is ALWAYS a one-way move: there is no
+    // entry-zone partner to trade back, so @p action ("swap" vs "move") does not
+    // apply here (the daemon's cross-mode swap machinery exists only for the
+    // different-mode snap neighbour above). Same-mode swap-across-outputs is not a
+    // supported gesture; a "swap" toward another autotile output relocates the
+    // window without returning a partner.
     const PhosphorEngine::TilingStateKey oldKey = m_engine->currentKeyForScreen(sourceScreenId);
     const PhosphorEngine::TilingStateKey newKey = m_engine->currentKeyForScreen(neighbor);
     if (const PhosphorTiles::TilingState* destState = m_engine->m_screenStates.value(newKey);
         destState && destState->tiledWindowCount() >= m_engine->effectiveMaxWindows(neighbor)) {
+        return false;
+    }
+    // The other reason onWindowAdded rejects a re-add (see its
+    // isAutotileScreen || shouldTileWindow gate): a window that would not tile on
+    // the destination (floating / excluded / invalid geometry). Migrating it would
+    // remove it from the source and strand it — the same stranding the cap guard
+    // above prevents. Refuse before any state mutation or the marker emit.
+    if (!m_engine->shouldTileWindow(focused)) {
         return false;
     }
     // Re-point the window's state-key BEFORE migrating, exactly as the reactive

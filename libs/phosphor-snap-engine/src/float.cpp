@@ -171,13 +171,19 @@ bool SnapEngine::applyGeometryForFloat(const QString& windowId, const QString& s
         }
     }
 
-    auto geo = m_windowTracker->validatedUnmanagedGeometry(windowId, screenId);
-    if (geo) {
-        qCInfo(PhosphorSnapEngine::lcSnapEngine)
-            << "applyGeometryForFloat:" << windowId << "restoring to" << *geo << "(legacy unmanaged store)";
-        Q_EMIT applyGeometryRequested(windowId, geo->x(), geo->y(), geo->width(), geo->height(), QString(), screenId,
-                                      false);
-        return true;
+    // Legacy-store fallback (no placement record yet). Guard m_windowTracker:
+    // the placement-record block above is itself gated on a non-null tracker, so
+    // a null tracker falls straight here — deref it unconditionally and a
+    // headless-test engine (nullptr tracker) would crash.
+    if (m_windowTracker) {
+        auto geo = m_windowTracker->validatedUnmanagedGeometry(windowId, screenId);
+        if (geo) {
+            qCInfo(PhosphorSnapEngine::lcSnapEngine)
+                << "applyGeometryForFloat:" << windowId << "restoring to" << *geo << "(legacy unmanaged store)";
+            Q_EMIT applyGeometryRequested(windowId, geo->x(), geo->y(), geo->width(), geo->height(), QString(),
+                                          screenId, false);
+            return true;
+        }
     }
     qCWarning(PhosphorSnapEngine::lcSnapEngine) << "applyGeometryForFloat:" << windowId << "no pre-tile geometry found";
     return false;

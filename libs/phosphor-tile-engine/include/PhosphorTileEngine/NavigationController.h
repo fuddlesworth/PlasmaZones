@@ -188,9 +188,11 @@ private:
 
     /**
      * @brief Move @p focused from @p sourceScreenId's current desktop onto the
-     *        adjacent desktop in @p direction, re-keying its tiling state and
-     *        emitting windowDesktopMoveRequested so the compositor moves the
-     *        real window. Returns false when there is no neighbour desktop.
+     *        adjacent desktop in @p direction. Does NOT touch tiling state itself:
+     *        it emits windowDesktopMoveRequested (or crossModeMoveRequested for a
+     *        snap target) so the compositor moves the real window, and the reactive
+     *        windowClosed/windowOpened path then reflows the source and tiles the
+     *        target. Returns false when there is no neighbour desktop.
      */
     bool crossDesktopMove(const QString& sourceScreenId, const QString& focused, const QString& direction);
 

@@ -337,8 +337,14 @@ void TestSnapCrossSurface::focus_inSurfaceZoneSharedWithSiblingScreen_picksThisS
     // output (DP-1), not the sibling's — even though the sibling's is list-first.
     FakeWindowTracking wts;
     wts.zoneOfWindow[QStringLiteral("w1")] = QStringLiteral("z-a");
-    wts.windowsByZone[QStringLiteral("z-target")] = {QStringLiteral("wThere"), QStringLiteral("wHere")};
+    // wThere (sibling output) is list-first, wHereLast (this output) is list-last,
+    // and the expected wHere sits between them. That makes the screen filter the
+    // ONLY thing that can pick wHere: a "return list-first" bug yields wThere, a
+    // "return list-last" bug yields wHereLast — both wrong.
+    wts.windowsByZone[QStringLiteral("z-target")] = {QStringLiteral("wThere"), QStringLiteral("wHere"),
+                                                     QStringLiteral("wHereLast")};
     wts.screenOfWindow[QStringLiteral("wHere")] = QStringLiteral("DP-1");
+    wts.screenOfWindow[QStringLiteral("wHereLast")] = QStringLiteral("DP-1");
     wts.screenOfWindow[QStringLiteral("wThere")] = QStringLiteral("DP-2");
 
     FakeZoneAdjacency adj;
@@ -391,8 +397,12 @@ void TestSnapCrossSurface::swap_inSurfaceZoneSharedWithSiblingScreen_picksThisSc
     wts.zoneOfWindow[QStringLiteral("w1")] = QStringLiteral("z-a");
     wts.zoneGeo[key(QStringLiteral("z-a"), QStringLiteral("DP-1"))] = QRect(0, 0, 960, 1080);
     wts.zoneGeo[key(QStringLiteral("z-target"), QStringLiteral("DP-1"))] = QRect(960, 0, 960, 1080);
-    wts.windowsByZone[QStringLiteral("z-target")] = {QStringLiteral("wThere"), QStringLiteral("wHere")};
+    // wThere (sibling) list-first, wHereLast (this output) list-last, expected
+    // wHere between them — so only the screen filter, not list position, can pick it.
+    wts.windowsByZone[QStringLiteral("z-target")] = {QStringLiteral("wThere"), QStringLiteral("wHere"),
+                                                     QStringLiteral("wHereLast")};
     wts.screenOfWindow[QStringLiteral("wHere")] = QStringLiteral("DP-1");
+    wts.screenOfWindow[QStringLiteral("wHereLast")] = QStringLiteral("DP-1");
     wts.screenOfWindow[QStringLiteral("wThere")] = QStringLiteral("DP-2");
 
     FakeZoneAdjacency adj;

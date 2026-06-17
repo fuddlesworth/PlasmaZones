@@ -74,6 +74,13 @@ void PlasmaZonesEffect::slotWindowDesktopMoveRequested(const QString& windowId, 
         qCDebug(lcEffect) << "slotWindowDesktopMoveRequested: desktop" << desktop << "out of range, have" << all.size();
         return;
     }
+    // A sticky (on-all-desktops) window is already present on the target; pinning
+    // it to a single desktop here would silently un-sticky it. Directional
+    // cross-desktop move is meaningless for an everywhere window — leave it.
+    if (w->isOnAllDesktops()) {
+        qCDebug(lcEffect) << "slotWindowDesktopMoveRequested: window is on all desktops, ignoring" << windowId;
+        return;
+    }
     // 1-based desktop → the matching VirtualDesktop. Single-desktop membership
     // (not on-all-desktops) so the window genuinely moves to the target.
     KWin::effects->windowToDesktops(w, {all.at(desktop - 1)});

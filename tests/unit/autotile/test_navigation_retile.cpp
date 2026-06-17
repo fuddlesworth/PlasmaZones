@@ -67,6 +67,13 @@ private Q_SLOTS:
 
     void crossOutput_move_retilesSourceAndAllowsMoveBack()
     {
+        // NOTE: this drives swapFocusedInDirection, not moveFocusedInDirection.
+        // Onto an EMPTY destination output the two are physically identical (the
+        // window relocates, nothing comes back), but swap deliberately avoids the
+        // windowOutputMoveExpected one-shot the MOVE path arms — this test is
+        // about source reflow + move-back, which the marker-free swap exercises
+        // cleanly. The MOVE-path marker/stranding semantics are covered in
+        // test_navigation_cross_surface.cpp.
         PhosphorScreens::FakeScreenProvider provider;
         provider.addScreen(QStringLiteral("DP-1"), QRect(0, 0, 1920, 1080));
         provider.addScreen(QStringLiteral("DP-2"), QRect(1920, 0, 1920, 1080));

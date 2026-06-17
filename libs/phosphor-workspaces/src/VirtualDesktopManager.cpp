@@ -262,16 +262,6 @@ void VirtualDesktopManager::setCurrentDesktop(int desktop)
     }
 }
 
-void VirtualDesktopManager::onCurrentDesktopChanged(int desktop)
-{
-    if (m_currentDesktop == desktop) {
-        return;
-    }
-
-    m_currentDesktop = desktop;
-    Q_EMIT currentDesktopChanged(desktop);
-}
-
 void VirtualDesktopManager::onNumberOfDesktopsChanged(int count)
 {
     if (m_desktopCount == count) {
@@ -284,8 +274,11 @@ void VirtualDesktopManager::onNumberOfDesktopsChanged(int count)
         refreshFromKWin();
     }
 
-    if (m_currentDesktop > count) {
-        m_currentDesktop = count;
+    // Clamp against the (possibly refreshed) live count, not the signal arg:
+    // refreshFromKWin() may have re-read m_desktopCount from KWin's property,
+    // and the current desktop must stay within whatever count is now authoritative.
+    if (m_currentDesktop > m_desktopCount) {
+        m_currentDesktop = m_desktopCount;
         Q_EMIT currentDesktopChanged(m_currentDesktop);
     }
 

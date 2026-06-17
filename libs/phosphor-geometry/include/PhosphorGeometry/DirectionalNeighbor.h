@@ -41,8 +41,10 @@ PHOSPHORGEOMETRY_EXPORT std::optional<Direction> directionFromString(QStringView
  *   3. **Nearest along the travel axis** — within the preferred tier, the
  *      smallest edge gap toward @p direction wins.
  *   4. **Perpendicular-centre tie-break** — equal gaps break by the smaller
- *      orthogonal centre distance, so the result is deterministic and never
- *      depends on candidate ordering.
+ *      orthogonal centre distance. The result is deterministic for a given
+ *      candidate list; two candidates identical on every tier (same overlap,
+ *      gap within epsilon, equal perpendicular centre distance) resolve to the
+ *      lower index.
  *
  * Coordinate-system agnostic: @p focus and every entry of @p candidates must
  * live in one shared space (absolute pixels, normalized [0,1], etc.).
@@ -74,6 +76,8 @@ PHOSPHORGEOMETRY_EXPORT int directionalNeighbor(const QRectF& focus, const QList
  * past an edge, into a missing cell on a partial last row, or a horizontal move
  * that would wrap onto another row — returns 0 (no neighbour) rather than
  * wrapping, so callers can treat 0 as "no desktop that way; try another axis".
+ *
+ * @param rows grid height; values < 1 are clamped to 1 (a single-row grid).
  *
  * @return the 1-based target desktop, or 0 when there is no neighbour in
  *         @p direction (including for out-of-range inputs).

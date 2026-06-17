@@ -126,10 +126,15 @@ void TestNavigationCrossSurface::focusRight_fromLeftColumn_picksWindowToTheRight
     engine->focusInDirection(QStringLiteral("right"), ctx(wins.at(0))); // win1 (left column)
 
     QCOMPARE(activateSpy.count(), 1);
-    // The target must be one of the right-column windows (win2 or win3), never
-    // win1 itself — and specifically the geometric right neighbour.
+    // win1 is the full-height left tile; win2 (top-right) and win3 (bottom-right)
+    // are BOTH genuine right-neighbours — equal horizontal gap and, because win1's
+    // vertical centre sits exactly on the win2/win3 boundary, equal perpendicular
+    // centre distance. That is a true geometric tie, so either right-column window
+    // is a correct answer (the exact pick is the lower-index tie-break, an
+    // implementation detail not worth pinning). The only wrong answer is win1.
     const QString target = activateSpy.takeFirst().at(0).toString();
     QVERIFY2(target == wins.at(1) || target == wins.at(2), "right from the left column must land in the right column");
+    QVERIFY2(target != wins.at(0), "right from the left column must not re-select the source window");
 }
 
 void TestNavigationCrossSurface::focus_fromTopRight_resolvesEachDirectionGeometrically()
@@ -419,6 +424,10 @@ void TestNavigationCrossSurface::crossOutput_moveTowardFullAutotileOutput_doesNo
     QCOMPARE(expectedSpy.count(), 0);
     QVERIFY(fx.engine->isWindowTracked(QStringLiteral("a2")));
     QVERIFY(fx.engine->tilingStateForScreen(QStringLiteral("DP-1"))->containsWindow(QStringLiteral("a2")));
+    // The other half of the stranding bug: a2 must NOT have leaked onto the full
+    // destination either. A refusal that removed-then-rejected would leave it
+    // duplicated on DP-2; the asserts above alone would not catch that.
+    QVERIFY(!fx.engine->tilingStateForScreen(QStringLiteral("DP-2"))->containsWindow(QStringLiteral("a2")));
 }
 
 void TestNavigationCrossSurface::inSurfaceMove_doesNotEmitExpectedMove()

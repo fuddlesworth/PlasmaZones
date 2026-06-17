@@ -20,10 +20,8 @@ EngineSet createEngines(PhosphorZones::LayoutRegistry* layoutManager,
                         PhosphorScreens::ScreenManager* screenManager,
                         PhosphorTiles::ITileAlgorithmRegistry* algorithmRegistry,
                         PhosphorZones::IZoneDetector* zoneDetector, ISettings* settings,
-                        PhosphorWorkspaces::VirtualDesktopManager* vdm, PhosphorEngine::WindowRegistry* windowRegistry,
-                        QObject* parent)
+                        PhosphorWorkspaces::VirtualDesktopManager* vdm, PhosphorEngine::WindowRegistry* windowRegistry)
 {
-    Q_UNUSED(parent)
     // --- AutotileEngine ---
     auto autotile = std::make_unique<PhosphorTileEngine::AutotileEngine>(layoutManager, windowTracker, screenManager,
                                                                          algorithmRegistry, nullptr);
@@ -50,7 +48,10 @@ EngineSet createEngines(PhosphorZones::LayoutRegistry* layoutManager,
     // --- ScreenModeRouter ---
     auto router = std::make_unique<ScreenModeRouter>(layoutManager, snap.get(), autotile.get());
 
-    return EngineSet{std::move(autotile), std::move(snap), std::move(router), std::move(crossSurfaceResolver)};
+    return EngineSet{.crossSurfaceResolver = std::move(crossSurfaceResolver),
+                     .autotile = std::move(autotile),
+                     .snap = std::move(snap),
+                     .router = std::move(router)};
 }
 
 } // namespace PlasmaZones

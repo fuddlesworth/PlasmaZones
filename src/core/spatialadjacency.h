@@ -26,8 +26,8 @@ namespace PlasmaZones::SpatialAdjacency {
  * side-by-side beats diagonal), then nearest edge gap, then a deterministic
  * centre tie-break.
  *
- * @param direction one of `PhosphorScreens::Direction::{Left,Right,Up,Down}`
- *        (the lower-case tokens "left"/"right"/"up"/"down"). Any other token
+ * @param direction a lower-case direction token — "left"/"right"/"up"/"down"
+ *        (parsed via `PhosphorGeometry::directionFromString`). Any other token
  *        yields -1 (no match) rather than a defaulted direction.
  *
  * @note Coordinate-system agnostic — @p current and all @p candidates must

@@ -1081,7 +1081,7 @@ bool Daemon::init()
     // wiring before moving into the base-class unique_ptr members.
     auto engines = createEngines(m_layoutManager.get(), m_windowTrackingAdaptor->service(), m_screenManager.get(),
                                  m_algorithmRegistry.get(), m_zoneDetector.get(), m_settings.get(),
-                                 m_virtualDesktopManager.get(), m_windowRegistry.get(), this);
+                                 m_virtualDesktopManager.get(), m_windowRegistry.get());
     auto* autotileEngine = engines.autotile.get();
     auto* snapEngine = engines.snap.get();
     // Move the shared cross-surface resolver BEFORE the engines so it is

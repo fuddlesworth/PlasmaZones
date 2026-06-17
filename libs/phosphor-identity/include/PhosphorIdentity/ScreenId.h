@@ -12,6 +12,7 @@
 // C++17 inline-function-static rule.
 
 #include <QByteArray>
+#include <QCoreApplication>
 #include <QDir>
 #include <QFile>
 #include <QHash>
@@ -20,6 +21,7 @@
 #include <QLatin1String>
 #include <QString>
 #include <QStringList>
+#include <QThread>
 
 #include <cstdint>
 
@@ -59,6 +61,15 @@ inline QHash<QString, int>& edidMissCounter()
     return s_counter;
 }
 
+/// Debug-build enforcement of the documented single-thread contract: the
+/// function-local-static caches are mutated without synchronisation, so every
+/// public entry point must run on the application (GUI/main) thread. A null
+/// instance (headless unit test before any QCoreApplication) is permitted.
+inline void assertMainThread()
+{
+    Q_ASSERT(!QCoreApplication::instance() || QThread::currentThread() == QCoreApplication::instance()->thread());
+}
+
 } // namespace detail
 
 /**
@@ -75,6 +86,7 @@ inline QHash<QString, int>& edidMissCounter()
  */
 inline QString readEdidHeaderSerial(const QString& connectorName)
 {
+    detail::assertMainThread();
     auto& cache = detail::edidSerialCache();
     auto cacheIt = cache.constFind(connectorName);
     if (cacheIt != cache.constEnd()) {
@@ -136,6 +148,7 @@ inline QString readEdidHeaderSerial(const QString& connectorName)
  */
 inline void invalidateEdidCache(const QString& connectorName = QString())
 {
+    detail::assertMainThread();
     if (connectorName.isEmpty()) {
         detail::edidSerialCache().clear();
         detail::edidMissCounter().clear();
