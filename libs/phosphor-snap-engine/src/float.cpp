@@ -171,13 +171,19 @@ bool SnapEngine::applyGeometryForFloat(const QString& windowId, const QString& s
         }
     }
 
-    auto geo = m_windowTracker->validatedUnmanagedGeometry(windowId, screenId);
-    if (geo) {
-        qCInfo(PhosphorSnapEngine::lcSnapEngine)
-            << "applyGeometryForFloat:" << windowId << "restoring to" << *geo << "(legacy unmanaged store)";
-        Q_EMIT applyGeometryRequested(windowId, geo->x(), geo->y(), geo->width(), geo->height(), QString(), screenId,
-                                      false);
-        return true;
+    // Legacy-store fallback (no placement record yet). Guard m_windowTracker:
+    // the placement-record block above is itself gated on a non-null tracker, so
+    // a null tracker falls straight here — deref it unconditionally and a
+    // headless-test engine (nullptr tracker) would crash.
+    if (m_windowTracker) {
+        auto geo = m_windowTracker->validatedUnmanagedGeometry(windowId, screenId);
+        if (geo) {
+            qCInfo(PhosphorSnapEngine::lcSnapEngine)
+                << "applyGeometryForFloat:" << windowId << "restoring to" << *geo << "(legacy unmanaged store)";
+            Q_EMIT applyGeometryRequested(windowId, geo->x(), geo->y(), geo->width(), geo->height(), QString(),
+                                          screenId, false);
+            return true;
+        }
     }
     qCWarning(PhosphorSnapEngine::lcSnapEngine) << "applyGeometryForFloat:" << windowId << "no pre-tile geometry found";
     return false;
@@ -318,7 +324,37 @@ void SnapEngine::handoffReceive(const HandoffContext& ctx)
     if (!ctx.sourceZoneIds.isEmpty()) {
         QRect zoneGeo = m_windowTracker->resolveZoneGeometry(ctx.sourceZoneIds, ctx.toScreenId);
         if (zoneGeo.isValid()) {
-            if (ctx.sourceZoneIds.size() > 1) {
+            const int curDesktop = currentVirtualDesktop();
+            if (ctx.toDesktop > 0 && ctx.toDesktop != curDesktop) {
+                // Cross-DESKTOP handoff: the target desktop isn't the visible one,
+                // so assign the snap slot directly on SnapState for that desktop
+                // (commitSnap would stamp the current desktop) and refresh the
+                // placement-store record. This is the same path tryCrossDesktopMove
+                // uses, and it is safe to bypass commitSnap's WTS orchestration
+                // here: SnapState is the very store WTS queries (Daemon wires
+                // setSnapState(snapEngine->snapState())), so zoneForWindow et al.
+                // see this assignment; the snap chrome is applied below via the
+                // non-empty-zoneId applyGeometryRequested (→ markWindowSnapped); and
+                // persistence flows through the placement-store record. The only
+                // caller, handleCrossModeMove, always passes wasFloating==false, so
+                // there is no floating flag to clear.
+                if (ctx.sourceZoneIds.size() > 1) {
+                    m_snapState->assignWindowToZones(ctx.windowId, ctx.sourceZoneIds, ctx.toScreenId, ctx.toDesktop);
+                } else {
+                    m_snapState->assignWindowToZone(ctx.windowId, ctx.sourceZoneIds.first(), ctx.toScreenId,
+                                                    ctx.toDesktop);
+                }
+                if (auto placement = capturePlacement(ctx.windowId)) {
+                    placement->virtualDesktop = ctx.toDesktop;
+                    m_windowTracker->placementStore().record(std::move(*placement));
+                } else {
+                    // Mirror tryCrossDesktopMove: surface the SnapState↔placement
+                    // divergence rather than letting it hide.
+                    qCDebug(PhosphorSnapEngine::lcSnapEngine)
+                        << "handoffReceive: capturePlacement miss for" << ctx.windowId
+                        << "— placement-store desktop not updated to" << ctx.toDesktop;
+                }
+            } else if (ctx.sourceZoneIds.size() > 1) {
                 commitMultiZoneSnap(ctx.windowId, ctx.sourceZoneIds, ctx.toScreenId, SnapIntent::UserInitiated);
             } else {
                 commitSnap(ctx.windowId, ctx.sourceZoneIds.first(), ctx.toScreenId, SnapIntent::UserInitiated);

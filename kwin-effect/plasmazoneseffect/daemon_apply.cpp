@@ -59,6 +59,45 @@ void PlasmaZonesEffect::slotActivateWindowRequested(const QString& windowId)
     }
 }
 
+void PlasmaZonesEffect::slotWindowDesktopMoveRequested(const QString& windowId, int desktop)
+{
+    if (desktop < 1) {
+        return;
+    }
+    KWin::EffectWindow* w = findWindowById(windowId);
+    if (!w) {
+        qCDebug(lcEffect) << "slotWindowDesktopMoveRequested: window not found" << windowId;
+        return;
+    }
+    const QList<KWin::VirtualDesktop*> all = KWin::effects->desktops();
+    if (desktop > all.size()) {
+        qCDebug(lcEffect) << "slotWindowDesktopMoveRequested: desktop" << desktop << "out of range, have" << all.size();
+        return;
+    }
+    // A sticky (on-all-desktops) window is already present on the target; pinning
+    // it to a single desktop here would silently un-sticky it. Directional
+    // cross-desktop move is meaningless for an everywhere window — leave it.
+    if (w->isOnAllDesktops()) {
+        qCDebug(lcEffect) << "slotWindowDesktopMoveRequested: window is on all desktops, ignoring" << windowId;
+        return;
+    }
+    // 1-based desktop → the matching VirtualDesktop. Single-desktop membership
+    // (not on-all-desktops) so the window genuinely moves to the target.
+    KWin::effects->windowToDesktops(w, {all.at(desktop - 1)});
+}
+
+void PlasmaZonesEffect::slotWindowOutputMoveExpected(const QString& windowId, const QString& targetScreenId)
+{
+    if (windowId.isEmpty() || targetScreenId.isEmpty()) {
+        return;
+    }
+    // Hand the one-shot to the autotile handler: it owns the cross-output
+    // outputChanged transfer path that would otherwise re-issue close/open.
+    if (AutotileHandler* handler = m_autotileHandler.get()) {
+        handler->markExpectedOutputMove(windowId, targetScreenId);
+    }
+}
+
 // slotToggleWindowFloatRequested removed — the daemon now handles float-toggle
 // locally against its active-window + frame-geometry shadow and emits
 // applyGeometryRequested directly. See WindowTrackingAdaptor::toggleWindowFloat.

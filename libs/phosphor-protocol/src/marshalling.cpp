@@ -277,7 +277,7 @@ QDBusArgument& operator<<(QDBusArgument& arg, const SwapTargetResult& e)
 {
     arg.beginStructure();
     arg << e.success << e.reason << e.windowId1 << e.x1 << e.y1 << e.w1 << e.h1 << e.zoneId1 << e.windowId2 << e.x2
-        << e.y2 << e.w2 << e.h2 << e.zoneId2 << e.screenName << e.sourceZoneId << e.targetZoneId;
+        << e.y2 << e.w2 << e.h2 << e.zoneId2 << e.screenName << e.sourceZoneId << e.targetZoneId << e.screenName2;
     arg.endStructure();
     return arg;
 }
@@ -286,7 +286,7 @@ const QDBusArgument& operator>>(const QDBusArgument& arg, SwapTargetResult& e)
 {
     arg.beginStructure();
     arg >> e.success >> e.reason >> e.windowId1 >> e.x1 >> e.y1 >> e.w1 >> e.h1 >> e.zoneId1 >> e.windowId2 >> e.x2
-        >> e.y2 >> e.w2 >> e.h2 >> e.zoneId2 >> e.screenName >> e.sourceZoneId >> e.targetZoneId;
+        >> e.y2 >> e.w2 >> e.h2 >> e.zoneId2 >> e.screenName >> e.sourceZoneId >> e.targetZoneId >> e.screenName2;
     arg.endStructure();
     return arg;
 }

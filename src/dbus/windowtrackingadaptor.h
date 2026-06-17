@@ -788,6 +788,17 @@ Q_SIGNALS:
      */
     void activateWindowRequested(const QString& windowId);
 
+    /// Cross-desktop directional move: KWin should move @p windowId to virtual
+    /// desktop @p desktop (1-based). The effect calls windowToDesktops.
+    void windowDesktopMoveRequested(const QString& windowId, int desktop);
+
+    /// Daemon-initiated cross-output move: the daemon has migrated its own
+    /// tiling state for @p windowId onto @p targetScreenId and scheduled both
+    /// reflows. The window's resulting outputChanged is expected; the effect
+    /// must update bookkeeping + decoration only, not re-issue windowClosed/
+    /// windowOpened. User-drag cross-output moves carry no marker.
+    void windowOutputMoveExpected(const QString& windowId, const QString& targetScreenId);
+
     /**
      * @brief Daemon requests KWin to apply geometries for a batch of windows
      * @param geometries List of window geometry entries to apply
@@ -834,6 +845,39 @@ public:
     void requestMoveSpecificWindowToZone(const QString& windowId, const QString& zoneId, const QRect& geometry);
 
 private Q_SLOTS:
+    /**
+     * @brief Orchestrate a cross-MODE directional move handoff.
+     *
+     * Wired to both engines' crossModeMoveRequested. The source engine (the
+     * signal sender) reached a context boundary whose target is a different
+     * tiling mode and deferred here. This resolves the target mode at the
+     * destination context, relinquishes the window from the source engine
+     * (handoffRelease + source reflow for an autotile source), and hands it to
+     * the target engine (handoffReceive): autotile inserts it per the
+     * insertion-order setting; snap snaps it into the entry zone (monitor
+     * crossing) or the equivalent zone (snap→snap desktop crossing). For a
+     * cross-desktop crossing it then asks the compositor to move the real window
+     * to @p targetDesktop.
+     */
+    void handleCrossModeMove(const QString& windowId, const QString& targetScreenId, int targetDesktop,
+                             const QString& direction);
+
+    /**
+     * @brief Orchestrate a cross-MODE directional swap handoff (two-way).
+     *
+     * Wired to both engines' crossModeSwapRequested. Resolves the swap partner —
+     * the target surface's entry-edge window facing the source in @p direction
+     * (autotile: the edge tile; snap: the entry zone's occupant). With no partner
+     * the entry slot is empty, so it degrades to a plain cross-mode move. With a
+     * partner it captures both landing slots, relinquishes both windows from their
+     * engines, and re-places them swapped: the focused window takes the partner's
+     * slot on the target, the partner takes the focused window's vacated slot on
+     * the source. Emits windowOutputMoveExpected for each window that crosses
+     * outputs so the effect doesn't tear the placements down.
+     */
+    void handleCrossModeSwap(const QString& windowId, const QString& targetScreenId, int targetDesktop,
+                             const QString& direction);
+
     /**
      * @brief Handle layout change by validating zone assignments
      *

@@ -58,6 +58,14 @@ void VirtualDesktopManager::initKWinDBus()
         QDBusConnection::sessionBus().connect(QStringLiteral("org.kde.KWin"), QStringLiteral("/VirtualDesktopManager"),
                                               QStringLiteral("org.kde.KWin.VirtualDesktopManager"),
                                               QStringLiteral("desktopRemoved"), this, SLOT(onKWinDesktopRemoved()));
+
+        // A live grid reshape (e.g. 1×4 → 2×2) changes `rows` WITHOUT changing
+        // the desktop count, so it fires neither countChanged nor created/removed
+        // — without this the cached row count goes stale and cross-desktop
+        // directional navigation computes neighbours against the wrong grid shape.
+        QDBusConnection::sessionBus().connect(QStringLiteral("org.kde.KWin"), QStringLiteral("/VirtualDesktopManager"),
+                                              QStringLiteral("org.kde.KWin.VirtualDesktopManager"),
+                                              QStringLiteral("rowsChanged"), this, SLOT(onKWinDesktopRowsChanged()));
     } else {
         delete m_kwinVDInterface;
         m_kwinVDInterface = nullptr;
@@ -137,6 +145,17 @@ void VirtualDesktopManager::refreshFromKWin()
         m_desktopCount = countVar.toInt();
     }
 
+    // Grid row count — drives the shape cross-desktop directional navigation
+    // walks. Clamp to >= 1 so a missing / zero property can't divide the grid
+    // arithmetic by zero.
+    QVariant rowsVar = m_kwinVDInterface->property("rows");
+    if (rowsVar.isValid()) {
+        // Read-only cache for the on-demand desktopRows() pull used by
+        // cross-desktop directional navigation; no NOTIFY signal — nothing
+        // subscribes to row-shape changes, the value is re-read per navigation.
+        m_desktopRows = qMax(1, rowsVar.toInt());
+    }
+
     QVariant currentVar = m_kwinVDInterface->property("current");
     QString currentId;
     if (currentVar.isValid()) {
@@ -199,6 +218,13 @@ void VirtualDesktopManager::onKWinDesktopRemoved()
     Q_EMIT desktopCountChanged(m_desktopCount);
 }
 
+void VirtualDesktopManager::onKWinDesktopRowsChanged()
+{
+    // Re-read the grid shape so the on-demand desktopRows() pull stays fresh
+    // after a live grid reshape (the desktop count is unaffected here).
+    refreshFromKWin();
+}
+
 void VirtualDesktopManager::start()
 {
     if (m_running) {
@@ -236,16 +262,6 @@ void VirtualDesktopManager::setCurrentDesktop(int desktop)
     }
 }
 
-void VirtualDesktopManager::onCurrentDesktopChanged(int desktop)
-{
-    if (m_currentDesktop == desktop) {
-        return;
-    }
-
-    m_currentDesktop = desktop;
-    Q_EMIT currentDesktopChanged(desktop);
-}
-
 void VirtualDesktopManager::onNumberOfDesktopsChanged(int count)
 {
     if (m_desktopCount == count) {
@@ -258,8 +274,11 @@ void VirtualDesktopManager::onNumberOfDesktopsChanged(int count)
         refreshFromKWin();
     }
 
-    if (m_currentDesktop > count) {
-        m_currentDesktop = count;
+    // Clamp against the (possibly refreshed) live count, not the signal arg:
+    // refreshFromKWin() may have re-read m_desktopCount from KWin's property,
+    // and the current desktop must stay within whatever count is now authoritative.
+    if (m_currentDesktop > m_desktopCount) {
+        m_currentDesktop = m_desktopCount;
         Q_EMIT currentDesktopChanged(m_currentDesktop);
     }
 
@@ -269,6 +288,11 @@ void VirtualDesktopManager::onNumberOfDesktopsChanged(int count)
 int VirtualDesktopManager::desktopCount() const
 {
     return m_useKWinDBus ? m_desktopCount : 1;
+}
+
+int VirtualDesktopManager::desktopRows() const
+{
+    return m_useKWinDBus ? qMax(1, m_desktopRows) : 1;
 }
 
 QStringList VirtualDesktopManager::desktopNames() const

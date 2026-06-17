@@ -79,6 +79,28 @@ public:
     int currentVirtualDesktop() const;
     QString currentActivity() const;
 
+    /// Resolve the zone on @p screenId's @p targetDesktop layout that is
+    /// positionally equivalent to @p currentZoneId (1-based index of zones sorted
+    /// by number), plus its pixel geometry. Returns an empty pair when the target
+    /// desktop has no layout, no matching slot, or invalid geometry. Public (like
+    /// the desktop/activity accessors) so cross-surface handoff logic and tests
+    /// can map a window's slot onto another desktop's layout.
+    std::pair<QString, QRect> resolveCrossDesktopZone(const QString& currentZoneId, const QString& screenId,
+                                                      int targetDesktop) const;
+
+    /// The zone a window ENTERS when it crosses onto @p neighbourScreen moving in
+    /// @p direction: the first zone on the edge facing back toward the source
+    /// (crossing "right" enters the neighbour's left-edge zone). Empty when no
+    /// zone-adjacency resolver is wired or the neighbour has no such zone. Used by
+    /// the daemon cross-mode handoff to place a window arriving on a snap monitor.
+    QString entryZoneForCrossing(const QString& direction, const QString& neighbourScreen) const;
+
+    /// The window snapped to @p zoneId on @p screenId (the daemon's stored
+    /// assignment pins it to that output), or empty if the zone is unoccupied
+    /// there. Used by the cross-mode swap to find the snap partner when THIS
+    /// engine is the swap target.
+    QString windowInZoneOnScreen(const QString& zoneId, const QString& screenId) const;
+
     // ═══════════════════════════════════════════════════════════════════════════
     // IPlacementEngine — lifecycle
     // ═══════════════════════════════════════════════════════════════════════════
@@ -341,6 +363,11 @@ public:
      * @param resolver Non-owning pointer; must outlive SnapEngine.
      */
     void setZoneAdjacencyResolver(IZoneAdjacencyResolver* resolver);
+
+    /// Inject the cross-surface resolver (neighbour output / desktop lookup),
+    /// threaded into the navigation target resolver so a no-adjacent-zone
+    /// boundary crosses into the neighbouring output instead of failing.
+    void setCrossSurfaceResolver(PhosphorEngine::ICrossSurfaceResolver* resolver) override;
 
     // ═══════════════════════════════════════════════════════════════════════════
     // Navigation state provider
@@ -652,6 +679,7 @@ private:
     QPointer<QObject> m_autotileEngineObj;
     PhosphorEngine::IPlacementEngine* m_autotileEngineTyped = nullptr;
     IZoneAdjacencyResolver* m_zoneAdjacencyResolver = nullptr;
+    PhosphorEngine::ICrossSurfaceResolver* m_crossSurfaceResolver = nullptr;
     // Typed navigation-state provider — replaces the opaque QObject* m_wta
     // back-reference. Provides read-only access to compositor-layer shadows
     // (last-active window, last-active screen, last-cursor screen, frame
@@ -685,6 +713,36 @@ private:
     /// empty @p action to skip the emit (for call sites that want to
     /// handle the null case themselves).
     SnapNavigationTargetResolver* ensureTargetResolver(const QString& action = QString());
+
+    /// Move @p windowId to the virtual desktop adjacent to the current one in
+    /// @p direction. Re-snaps the window into the EQUIVALENT zone on the target
+    /// desktop's layout (same zone id when the layout is shared, else the
+    /// positionally-equivalent zone), updating SnapState + the placement-store
+    /// record, asking the compositor to relocate the real window
+    /// (windowDesktopMoveRequested) and applying the target zone's geometry so it
+    /// lands snapped rather than floating. Falls back to a bare desktop re-stamp
+    /// when no equivalent zone is resolvable. Used when directional move reaches a
+    /// zone-layout boundary with no neighbour output. Returns false when there is
+    /// no neighbour desktop or the window is not snapped.
+    bool tryCrossDesktopMove(const QString& windowId, const QString& direction, const QString& screenId);
+
+    /// If the neighbour OUTPUT in @p direction is a DIFFERENT mode (autotile),
+    /// defer to the daemon cross-mode handoff and return true: a move
+    /// (@p swap false) emits crossModeMoveRequested so autotile inserts the
+    /// window into its stack; a swap (@p swap true) emits crossModeSwapRequested
+    /// so it trades the window with the neighbour's entry-edge tile. Returns
+    /// false when there is no neighbour output or it is also snap-mode (handled
+    /// by the resolver's entry-zone / cross-output-swap path).
+    bool tryCrossModeOutput(const QString& windowId, const QString& direction, const QString& screenId, bool swap);
+
+    /// Focus a window on the virtual desktop adjacent to the current one in
+    /// @p direction (the entry window on @p screenId there), switching KWin to
+    /// it. Used when directional focus reaches a zone-layout boundary with no
+    /// neighbour output. Returns false when there is no neighbour desktop or no
+    /// window on it. @p focusedWindowId is excluded from the target desktop's
+    /// occupants so an on-all-desktops (sticky) source window can't be picked as
+    /// its own cross-desktop focus target.
+    bool tryCrossDesktopFocus(const QString& focusedWindowId, const QString& direction, const QString& screenId);
 
     /// Check whether the window is excluded from the given navigation
     /// action by a terminal `Exclude` action in the unified WindowRule

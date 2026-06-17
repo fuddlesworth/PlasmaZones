@@ -66,6 +66,50 @@ Q_SIGNALS:
     void windowFloatingChanged(const QString& windowId, bool floating, const QString& screenId);
     void activateWindowRequested(const QString& windowId);
 
+    /// Emitted when directional navigation moves a window across virtual
+    /// desktops: the engine has already re-keyed its own tiling state, and the
+    /// compositor must move the real window to @p desktop (1-based). Relayed
+    /// over D-Bus to the KWin effect, which calls windowToDesktops.
+    void windowDesktopMoveRequested(const QString& windowId, int desktop);
+
+    /// Emitted when daemon-initiated directional navigation moves a window
+    /// across physical outputs: the engine has already migrated its own tiling
+    /// state (removed from the source key, re-added on @p targetScreenId) and
+    /// scheduled both reflows. The compositor's resulting KWin::Window::
+    /// outputChanged for this window is therefore EXPECTED and must NOT be
+    /// re-processed as a fresh close/open — doing so re-resolves the window to
+    /// the already-updated destination key and tears down the daemon's
+    /// placement (the source monitor's gap then never reflows). The effect
+    /// records this one-shot and, on the matching outputChanged, only refreshes
+    /// its bookkeeping + moves the decoration claim. Genuine USER-DRAG
+    /// cross-output moves carry no such marker and still drive close/open.
+    void windowOutputMoveExpected(const QString& windowId, const QString& targetScreenId);
+
+    /// Emitted when a directional MOVE reaches a context boundary whose target
+    /// is a DIFFERENT tiling mode than the source — the source engine cannot
+    /// place the window itself (it has no state for the other mode), so it defers
+    /// to the daemon. The daemon resolves the target mode, relinquishes the
+    /// window from this engine (handoffRelease) and hands it to the target engine
+    /// (handoffReceive): autotile inserts it into the stack, snap snaps it into
+    /// the entry zone (monitor crossing) or equivalent zone (desktop crossing).
+    /// @p targetDesktop is 0 for a same-desktop monitor crossing, or the 1-based
+    /// destination desktop for a virtual-desktop crossing. @p direction is the
+    /// move direction ("left"/"right"/"up"/"down").
+    void crossModeMoveRequested(const QString& windowId, const QString& targetScreenId, int targetDesktop,
+                                const QString& direction);
+
+    /// Emitted when a directional SWAP reaches a context boundary whose target is
+    /// a DIFFERENT tiling mode than the source — the two-way cross-mode exchange.
+    /// The daemon resolves the target's entry-edge window (the partner facing the
+    /// source in @p direction) and trades the two: the focused window crosses to
+    /// the partner's position on the target surface, the partner returns to the
+    /// focused window's vacated position on the source. With no partner (empty
+    /// entry edge) it degrades to a plain cross-mode move. Same parameter meaning
+    /// as crossModeMoveRequested: @p targetDesktop is 0 for a monitor crossing,
+    /// else the 1-based destination desktop; @p direction is the swap direction.
+    void crossModeSwapRequested(const QString& windowId, const QString& targetScreenId, int targetDesktop,
+                                const QString& direction);
+
     /// Emitted to sync floating state without restoring geometry.
     /// Passive state-sync: engine-internal divergence correction.
     void windowFloatingStateSynced(const QString& windowId, bool floating, const QString& screenId);

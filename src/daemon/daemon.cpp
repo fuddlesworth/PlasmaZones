@@ -1081,9 +1081,13 @@ bool Daemon::init()
     // wiring before moving into the base-class unique_ptr members.
     auto engines = createEngines(m_layoutManager.get(), m_windowTrackingAdaptor->service(), m_screenManager.get(),
                                  m_algorithmRegistry.get(), m_zoneDetector.get(), m_settings.get(),
-                                 m_virtualDesktopManager.get(), m_windowRegistry.get(), this);
+                                 m_virtualDesktopManager.get(), m_windowRegistry.get());
     auto* autotileEngine = engines.autotile.get();
     auto* snapEngine = engines.snap.get();
+    // Move the shared cross-surface resolver BEFORE the engines so it is
+    // destroyed AFTER them (they borrow it). Declared earlier than the engines
+    // in daemon.h for the same reason.
+    m_crossSurfaceResolver = std::move(engines.crossSurfaceResolver);
     m_autotileEngine = std::move(engines.autotile);
     m_snapEngine = std::move(engines.snap);
     m_screenModeRouter = std::move(engines.router);
@@ -2025,6 +2029,13 @@ void Daemon::stop()
     // Destroy engines now (during stop(), before Qt child destruction order).
     m_snapEngine.reset();
     m_autotileEngine.reset();
+
+    // Both engines borrowed m_crossSurfaceResolver (injected at construction).
+    // They are destroyed immediately above, so the borrow is already dead;
+    // reset the resolver here too so the teardown order is explicit and
+    // grep-discoverable — matching the exclude-rule / window-rule borrow
+    // severing above — and survives a future member-declaration reorder.
+    m_crossSurfaceResolver.reset();
 
     // Unregister D-Bus object path and service to prevent late calls during shutdown
     QDBusConnection bus = QDBusConnection::sessionBus();

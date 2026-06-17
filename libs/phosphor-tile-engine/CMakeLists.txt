@@ -74,6 +74,7 @@ target_link_libraries(PhosphorTileEngine
         PhosphorScreens::Runtime  # AutotileEngine queries screen geometry via ScreenManager
         PhosphorIdentity::PhosphorIdentity
         PhosphorZones::PhosphorZones
+        PhosphorGeometry::PhosphorGeometry  # geometric directional-neighbour selection
 )
 
 # ═══════════════════════════════════════════════════════════════════════════════
