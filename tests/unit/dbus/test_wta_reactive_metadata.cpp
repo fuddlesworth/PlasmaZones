@@ -39,6 +39,8 @@
 #include <PhosphorWindowRule/WindowRule.h>
 #include <PhosphorIdentity/WindowId.h>
 #include <PhosphorWindowRule/WindowRuleStore.h>
+#include <PhosphorProtocol/ServiceConstants.h>
+#include <PhosphorProtocol/WindowTypeEnum.h>
 #include <PhosphorZones/Zone.h>
 #include "dbus/windowtrackingadaptor.h"
 
@@ -284,7 +286,7 @@ private Q_SLOTS:
     // ────────────────────────────────────────────────────────────────────
     // RestorePosition rule override resolves through the composite windowId.
     //
-    // Regression: shouldRestoreUnsnappedPosition must extract the BARE instance
+    // Regression: shouldRestoreFloatedPosition must extract the BARE instance
     // id from the composite `appId|instanceId` before the WindowRegistry lookup
     // (the registry is keyed by instance id). Looking up by the composite id
     // always misses, which would silently disable every RestorePosition rule and
@@ -316,7 +318,7 @@ private Q_SLOTS:
         const auto detach = qScopeGuard([this] {
             m_wta->setWindowRuleStore(nullptr);
         });
-        m_settings->setRestoreUnsnappedWindowsOnLogin(true); // global default ON
+        m_settings->setSnappingRestoreFloatedWindowsOnLogin(true); // global default ON
 
         // Dolphin's metadata is registered under the BARE instance id.
         const QString dolphinInstance = QStringLiteral("dolphin-uuid-1");
@@ -326,23 +328,220 @@ private Q_SLOTS:
         // the same identity helper the daemon uses) — the rule must still resolve
         // (false) and override the global ON. On the pre-fix code metadata() missed
         // and this returned the global default (true).
-        QVERIFY2(!m_wta->shouldRestoreUnsnappedPosition(
-                     PhosphorIdentity::WindowId::buildCompositeId(QStringLiteral("org.kde.dolphin"), dolphinInstance)),
+        QVERIFY2(!m_wta->shouldRestoreFloatedPosition(
+                     PhosphorIdentity::WindowId::buildCompositeId(QStringLiteral("org.kde.dolphin"), dolphinInstance),
+                     PhosphorZones::AssignmentEntry::Mode::Snapping),
                  "a matched RestorePosition(false) rule must override the global ON setting");
+
+        // The RestorePosition rule is engine-neutral: it overrides the global for
+        // autotile-floated windows too.
+        QVERIFY2(!m_wta->shouldRestoreFloatedPosition(
+                     PhosphorIdentity::WindowId::buildCompositeId(QStringLiteral("org.kde.dolphin"), dolphinInstance),
+                     PhosphorZones::AssignmentEntry::Mode::Autotile),
+                 "a matched RestorePosition(false) rule must override the global ON setting (autotile too)");
 
         // An unmatched window falls back to the global setting (ON).
         const QString konsoleInstance = QStringLiteral("konsole-uuid-1");
         m_registry->upsert(konsoleInstance, {QStringLiteral("org.kde.konsole"), QString(), QString()});
-        QVERIFY2(m_wta->shouldRestoreUnsnappedPosition(
+        QVERIFY2(m_wta->shouldRestoreFloatedPosition(
+                     PhosphorIdentity::WindowId::buildCompositeId(QStringLiteral("org.kde.konsole"), konsoleInstance),
+                     PhosphorZones::AssignmentEntry::Mode::Snapping),
+                 "an unmatched window falls back to the global snappingRestoreFloatedWindowsOnLogin = true");
+    }
+
+    // ────────────────────────────────────────────────────────────────────
+    // Float rule resolves through the composite windowId. shouldFloatByRule is
+    // purely rule-driven (no global default): the verdict is the presence of a
+    // matched Float slot, resolved through the same bare-instance-id extraction
+    // as RestorePosition. An unmatched window — and the no-store case — is false.
+    // ────────────────────────────────────────────────────────────────────
+    void floatRule_floatsMatchedWindow_viaCompositeWindowId()
+    {
+        QTemporaryDir dir;
+        QVERIFY(dir.isValid());
+        PhosphorWindowRule::WindowRuleStore store(dir.filePath(QStringLiteral("windowrules.json")));
+
+        PhosphorWindowRule::WindowRule rule;
+        rule.id = QUuid::createUuid();
+        rule.name = QStringLiteral("float-dolphin");
+        rule.enabled = true;
+        rule.priority = 100;
+        rule.match = PhosphorWindowRule::MatchExpression::makeLeaf(
+            PhosphorWindowRule::Field::AppId, PhosphorWindowRule::Operator::Equals, QStringLiteral("org.kde.dolphin"));
+        PhosphorWindowRule::RuleAction action;
+        action.type = QString(PhosphorWindowRule::ActionType::Float);
+        rule.actions.append(action);
+        QVERIFY(store.addRule(rule));
+
+        m_wta->setWindowRuleStore(&store);
+        const auto detach = qScopeGuard([this] {
+            m_wta->setWindowRuleStore(nullptr);
+        });
+
+        const QString dolphinInstance = QStringLiteral("dolphin-float-1");
+        m_registry->upsert(dolphinInstance, {QStringLiteral("org.kde.dolphin"), QString(), QString()});
+
+        QVERIFY2(m_wta->shouldFloatByRule(
+                     PhosphorIdentity::WindowId::buildCompositeId(QStringLiteral("org.kde.dolphin"), dolphinInstance)),
+                 "a matched Float rule must open the window floating (resolved via the composite windowId)");
+
+        // An unmatched window is never floated — Float has no global default.
+        const QString konsoleInstance = QStringLiteral("konsole-float-1");
+        m_registry->upsert(konsoleInstance, {QStringLiteral("org.kde.konsole"), QString(), QString()});
+        QVERIFY2(!m_wta->shouldFloatByRule(
                      PhosphorIdentity::WindowId::buildCompositeId(QStringLiteral("org.kde.konsole"), konsoleInstance)),
-                 "an unmatched window falls back to the global restoreUnsnappedWindowsOnLogin = true");
+                 "an unmatched window must not be floated (no global float-on-open default)");
+    }
+
+    void floatRule_falsesWithoutStore()
+    {
+        m_wta->setWindowRuleStore(nullptr);
+        QVERIFY2(!m_wta->shouldFloatByRule(PhosphorIdentity::WindowId::buildCompositeId(
+                     QStringLiteral("org.kde.dolphin"), QStringLiteral("any-uuid"))),
+                 "with no rule store, no window is rule-floated");
+    }
+
+    // ────────────────────────────────────────────────────────────────────
+    // Extended window properties carried by setWindowMetadata's trailing a{sv}
+    // reach the Float resolver, so a rule keyed on a KWin-property / geometry
+    // field (not just appId) resolves daemon-side. Exercises the full path:
+    // setWindowMetadata QVariantMap unpack → WindowMetadata optionals →
+    // buildRuleQueryForWindow → rule evaluation. Also pins the engage-only-when-
+    // known contract: ABSENT keys leave the fields disengaged → predicate inert.
+    //
+    // Each scenario uses a DISTINCT instanceId: shouldFloatByRule resolves through
+    // resolveCached, keyed on (windowId, ruleSet revision), so the verdict for a
+    // given window is memoised — the production invariant (a window is resolved
+    // once at open). Reusing one windowId across differing metadata would read the
+    // first cached verdict, not the new metadata.
+    // ────────────────────────────────────────────────────────────────────
+    void floatRule_matchesExtendedProperty_isModalAndWidth()
+    {
+        QTemporaryDir dir;
+        QVERIFY(dir.isValid());
+        PhosphorWindowRule::WindowRuleStore store(dir.filePath(QStringLiteral("windowrules.json")));
+
+        // "Float any modal dialog narrower than 500px" — a bool field AND an int
+        // field, both carried only via the extended a{sv}, combined under All.
+        PhosphorWindowRule::WindowRule rule;
+        rule.id = QUuid::createUuid();
+        rule.name = QStringLiteral("float-narrow-modal");
+        rule.enabled = true;
+        rule.priority = 100;
+        rule.match = PhosphorWindowRule::MatchExpression::makeAll(
+            {PhosphorWindowRule::MatchExpression::makeLeaf(PhosphorWindowRule::Field::IsModal,
+                                                           PhosphorWindowRule::Operator::Equals, true),
+             PhosphorWindowRule::MatchExpression::makeLeaf(PhosphorWindowRule::Field::Width,
+                                                           PhosphorWindowRule::Operator::LessThan, 500)});
+        PhosphorWindowRule::RuleAction action;
+        action.type = QString(PhosphorWindowRule::ActionType::Float);
+        rule.actions.append(action);
+        QVERIFY(store.addRule(rule));
+
+        m_wta->setWindowRuleStore(&store);
+        const auto detach = qScopeGuard([this] {
+            m_wta->setWindowRuleStore(nullptr);
+        });
+
+        namespace Key = PhosphorProtocol::Service::WindowMetadataKey;
+        const QString appId = QStringLiteral("org.kde.someapp");
+        const int normalType = static_cast<int>(PhosphorProtocol::WindowType::Normal);
+        // Pushes the extended snapshot for a fresh window and returns its open-time
+        // float verdict. Distinct instanceId per call → distinct resolveCached key.
+        const auto floatVerdict = [&](const QString& instance, const QVariantMap& extended) {
+            m_wta->setWindowMetadata(instance, appId, QString(), QString(), QString(), 0, 0, QString(), normalType,
+                                     extended);
+            return m_wta->shouldFloatByRule(PhosphorIdentity::WindowId::buildCompositeId(appId, instance));
+        };
+
+        // Modal + width 400 → both leaves match → float.
+        QVariantMap modalNarrow;
+        modalNarrow.insert(Key::IsModal, true);
+        modalNarrow.insert(Key::Width, 400);
+        QVERIFY2(floatVerdict(QStringLiteral("modal-narrow-1"), modalNarrow),
+                 "modal dialog narrower than 500px must float (extended bool + int props matched)");
+
+        // Modal but wide (800) → Width leaf fails → no float.
+        QVariantMap modalWide;
+        modalWide.insert(Key::IsModal, true);
+        modalWide.insert(Key::Width, 800);
+        QVERIFY2(!floatVerdict(QStringLiteral("modal-wide-1"), modalWide),
+                 "a wide modal must not float (Width >= 500 fails the All)");
+
+        // Narrow but not modal → IsModal leaf fails → no float.
+        QVariantMap nonModalNarrow;
+        nonModalNarrow.insert(Key::IsModal, false);
+        nonModalNarrow.insert(Key::Width, 400);
+        QVERIFY2(!floatVerdict(QStringLiteral("nonmodal-narrow-1"), nonModalNarrow),
+                 "a non-modal narrow window must not float (IsModal == true fails)");
+
+        // Absent keys → both fields disengaged → predicate inert → no float.
+        QVERIFY2(!floatVerdict(QStringLiteral("no-props-1"), QVariantMap()),
+                 "with the extended props absent, an IsModal/Width rule stays inert (engage-only-when-known)");
+    }
+
+    // ────────────────────────────────────────────────────────────────────
+    // A caption-only metadata refresh (chatty title tick) sends an EMPTY extended
+    // a{sv}; the daemon must PRESERVE the window's prior extended snapshot rather
+    // than wipe it. Without the merge, the next title tick would clear IsModal /
+    // geometry and a property-based Float rule would silently stop matching.
+    // ────────────────────────────────────────────────────────────────────
+    void floatRule_captionOnlyPushPreservesExtendedSnapshot()
+    {
+        QTemporaryDir dir;
+        QVERIFY(dir.isValid());
+        PhosphorWindowRule::WindowRuleStore store(dir.filePath(QStringLiteral("windowrules.json")));
+
+        PhosphorWindowRule::WindowRule rule;
+        rule.id = QUuid::createUuid();
+        rule.name = QStringLiteral("float-modal");
+        rule.enabled = true;
+        rule.priority = 100;
+        rule.match = PhosphorWindowRule::MatchExpression::makeLeaf(PhosphorWindowRule::Field::IsModal,
+                                                                   PhosphorWindowRule::Operator::Equals, true);
+        PhosphorWindowRule::RuleAction action;
+        action.type = QString(PhosphorWindowRule::ActionType::Float);
+        rule.actions.append(action);
+        QVERIFY(store.addRule(rule));
+
+        m_wta->setWindowRuleStore(&store);
+        const auto detach = qScopeGuard([this] {
+            m_wta->setWindowRuleStore(nullptr);
+        });
+
+        namespace Key = PhosphorProtocol::Service::WindowMetadataKey;
+        const QString appId = QStringLiteral("org.kde.someapp");
+        const int normalType = static_cast<int>(PhosphorProtocol::WindowType::Normal);
+
+        // Window opens with the full extended snapshot (IsModal=true, title v1).
+        const QString instance = QStringLiteral("modal-merge-1");
+        QVariantMap modal;
+        modal.insert(Key::IsModal, true);
+        m_wta->setWindowMetadata(instance, appId, QString(), QStringLiteral("Title v1"), QString(), 0, 0, QString(),
+                                 normalType, modal);
+        // Caption-only refresh: title changes, extended map EMPTY. The daemon must
+        // preserve IsModal. Resolve only AFTER the merge (resolveCached memoises per
+        // windowId), so the verdict reflects the merged registry state.
+        m_wta->setWindowMetadata(instance, appId, QString(), QStringLiteral("Title v2 — chatty"), QString(), 0, 0,
+                                 QString(), normalType, QVariantMap());
+        QVERIFY2(
+            m_wta->shouldFloatByRule(PhosphorIdentity::WindowId::buildCompositeId(appId, instance)),
+            "a caption-only (empty a{sv}) push must preserve the prior IsModal snapshot, so the rule still matches");
+
+        // Control: a window whose ONLY push was an empty map has nothing to
+        // preserve → IsModal stays absent → the rule is inert.
+        const QString bare = QStringLiteral("modal-merge-bare-1");
+        m_wta->setWindowMetadata(bare, appId, QString(), QString(), QString(), 0, 0, QString(), normalType,
+                                 QVariantMap());
+        QVERIFY2(!m_wta->shouldFloatByRule(PhosphorIdentity::WindowId::buildCompositeId(appId, bare)),
+                 "with no prior snapshot, an empty-map push leaves IsModal absent → no float");
     }
 
     // ────────────────────────────────────────────────────────────────────
     // The no-rule fallback branches: with no store, or a store that has no
-    // metadata for the window, the global restoreUnsnappedWindowsOnLogin
+    // metadata for the window, the per-engine *RestoreFloatedWindowsOnLogin
     // setting is the whole policy. Guards the early-outs in
-    // shouldRestoreUnsnappedPosition (null store / registry, metadata miss) —
+    // shouldRestoreFloatedPosition (null store / registry, metadata miss) —
     // a regression flipping either to a hardcoded false would silently disable
     // restore for every not-yet-registered window at session start.
     // ────────────────────────────────────────────────────────────────────
@@ -351,12 +550,22 @@ private Q_SLOTS:
         const QString unseen = PhosphorIdentity::WindowId::buildCompositeId(QStringLiteral("org.kde.dolphin"),
                                                                             QStringLiteral("unseen-uuid"));
 
-        // No store wired → global setting decides, both polarities.
+        // No store wired → per-engine global setting decides, both polarities. The
+        // two engine defaults are independent: Mode::Snapping reads the snapping
+        // setting, Mode::Autotile reads the autotile setting.
         m_wta->setWindowRuleStore(nullptr);
-        m_settings->setRestoreUnsnappedWindowsOnLogin(true);
-        QVERIFY2(m_wta->shouldRestoreUnsnappedPosition(unseen), "no store → global ON restores");
-        m_settings->setRestoreUnsnappedWindowsOnLogin(false);
-        QVERIFY2(!m_wta->shouldRestoreUnsnappedPosition(unseen), "no store → global OFF suppresses");
+        m_settings->setSnappingRestoreFloatedWindowsOnLogin(true);
+        m_settings->setAutotileRestoreFloatedWindowsOnLogin(false);
+        QVERIFY2(m_wta->shouldRestoreFloatedPosition(unseen, PhosphorZones::AssignmentEntry::Mode::Snapping),
+                 "no store → snapping global ON restores");
+        QVERIFY2(!m_wta->shouldRestoreFloatedPosition(unseen, PhosphorZones::AssignmentEntry::Mode::Autotile),
+                 "no store → autotile global OFF suppresses (independent of snapping)");
+        m_settings->setSnappingRestoreFloatedWindowsOnLogin(false);
+        m_settings->setAutotileRestoreFloatedWindowsOnLogin(true);
+        QVERIFY2(!m_wta->shouldRestoreFloatedPosition(unseen, PhosphorZones::AssignmentEntry::Mode::Snapping),
+                 "no store → snapping global OFF suppresses");
+        QVERIFY2(m_wta->shouldRestoreFloatedPosition(unseen, PhosphorZones::AssignmentEntry::Mode::Autotile),
+                 "no store → autotile global ON restores (independent of snapping)");
 
         // Store wired, but this window was never registered → metadata miss →
         // still the global setting (no rule can match a window with no query).
@@ -367,8 +576,8 @@ private Q_SLOTS:
         const auto detach = qScopeGuard([this] {
             m_wta->setWindowRuleStore(nullptr);
         });
-        m_settings->setRestoreUnsnappedWindowsOnLogin(true);
-        QVERIFY2(m_wta->shouldRestoreUnsnappedPosition(unseen),
+        m_settings->setSnappingRestoreFloatedWindowsOnLogin(true);
+        QVERIFY2(m_wta->shouldRestoreFloatedPosition(unseen, PhosphorZones::AssignmentEntry::Mode::Snapping),
                  "store wired but no metadata for this window → global ON");
     }
 

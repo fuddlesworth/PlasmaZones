@@ -80,7 +80,7 @@ When `updateDragCursor` is called during a drag, the daemon resolves the cursor 
 
 The plugin's `slotDragPolicyChanged` handler diffs old vs new and applies the compositor-level transition:
 
-- **snap → autotile**: cancel snap overlay, enter autotile bypass, clear pending snap state. Do NOT call `handleDragToFloat` mid-drag — it schedules an `applySnapGeometry` that would race against the drop-time snap (see the comment in the handler for the original debug story).
+- **snap → autotile**: cancel snap overlay, enter autotile bypass, clear pending snap state. Do NOT call `handleDragToFloat` mid-drag — it schedules an `applyWindowGeometry` that would race against the drop-time snap (see the comment in the handler for the original debug story).
 - **autotile → snap**: drop bypass flag, call `onWindowClosed` on the old autotile screen to clear tracking state, initialize snap-drag state at the new cursor position, grab keyboard.
 - **autotile → different autotile** (same `bypassReason`, different `screenId`): update tracked bypass screen id. Drop-time `endDrag` will apply `ApplyFloat` to the final screen.
 - **snap → snap**: no-op.
@@ -91,7 +91,7 @@ Internally calls the legacy `dragStopped` (still present as a private C++ helper
 
 The plugin's `callEndDrag` helper sends the D-Bus call and applies the returned outcome verbatim via a switch on `DragOutcome::action`:
 
-- `ApplySnap` / `RestoreSize` — paint via `applySnapGeometry` (same as the legacy path)
+- `ApplySnap` / `RestoreSize` — paint via `applyWindowGeometry` (same as the legacy path)
 - `ApplyFloat` — call `handleDragToFloat` + `setWindowFloatingForScreen` for the drop screen
 - `NoOp` / `CancelSnap` / `NotifyDragOutUnsnap` — nothing to paint; daemon handled its own cleanup
 - `requestSnapAssist` true — show the window picker via `asyncShow`

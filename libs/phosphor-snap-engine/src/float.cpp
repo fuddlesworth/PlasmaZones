@@ -3,8 +3,12 @@
 
 #include <PhosphorSnapEngine/SnapEngine.h>
 #include <PhosphorSnapEngine/SnapState.h>
+#include <PhosphorSnapEngine/ISnapSettings.h>
 #include <PhosphorScreens/Manager.h>
 #include <PhosphorScreens/ScreenIdentity.h>
+#include <PhosphorZones/Layout.h>
+#include <PhosphorZones/LayoutRegistry.h>
+#include <PhosphorZones/Zone.h>
 #include "snapenginelogging.h"
 
 namespace PhosphorSnapEngine {
@@ -82,12 +86,30 @@ bool SnapEngine::unfloatToZone(const QString& windowId, const QString& screenId)
 {
     UnfloatResult unfloat = resolveUnfloatGeometry(windowId, screenId);
     if (!unfloat.found) {
+        // No pre-float zone (a never-snapped window that defaulted to floating).
+        // With the unfloatFallbackToZone setting on, snap it to a fallback zone
+        // instead of refusing; otherwise return false so the caller keeps it
+        // floating with feedback.
+        unfloat = resolveFallbackUnfloatGeometry(windowId, screenId);
+        if (!unfloat.found) {
+            return false;
+        }
+    }
+
+    // Both resolvers populate zoneIds before setting found, so a found result
+    // always carries at least one zone — but UnfloatResult does not structurally
+    // enforce that, and the commit / applyGeometryRequested calls below deref
+    // zoneIds.first() unconditionally. Guard the invariant so a future resolver
+    // change can never turn a found-but-empty result into an out-of-range crash.
+    if (unfloat.zoneIds.isEmpty()) {
         return false;
     }
 
-    // No saved-float entry to consume — the snap commit below re-captures the
-    // window's snap slot as "snapped" in the unified record, so a future mode
-    // transition restores it snapped, not floating (single source of truth).
+    // Whether the target came from the pre-float zone or the no-pre-float-zone
+    // fallback, there is no saved-float entry to consume — the snap commit below
+    // re-captures the window's snap slot as "snapped" in the unified record, so a
+    // future mode transition restores it snapped, not floating (single source of
+    // truth).
 
     // Commit the snap via the unified orchestration. User-initiated because
     // the user just toggled float off — they want this snap to update the
@@ -149,13 +171,19 @@ bool SnapEngine::applyGeometryForFloat(const QString& windowId, const QString& s
         }
     }
 
-    auto geo = m_windowTracker->validatedUnmanagedGeometry(windowId, screenId);
-    if (geo) {
-        qCInfo(PhosphorSnapEngine::lcSnapEngine)
-            << "applyGeometryForFloat:" << windowId << "restoring to" << *geo << "(legacy unmanaged store)";
-        Q_EMIT applyGeometryRequested(windowId, geo->x(), geo->y(), geo->width(), geo->height(), QString(), screenId,
-                                      false);
-        return true;
+    // Legacy-store fallback (no placement record yet). Guard m_windowTracker:
+    // the placement-record block above is itself gated on a non-null tracker, so
+    // a null tracker falls straight here — deref it unconditionally and a
+    // headless-test engine (nullptr tracker) would crash.
+    if (m_windowTracker) {
+        auto geo = m_windowTracker->validatedUnmanagedGeometry(windowId, screenId);
+        if (geo) {
+            qCInfo(PhosphorSnapEngine::lcSnapEngine)
+                << "applyGeometryForFloat:" << windowId << "restoring to" << *geo << "(legacy unmanaged store)";
+            Q_EMIT applyGeometryRequested(windowId, geo->x(), geo->y(), geo->width(), geo->height(), QString(),
+                                          screenId, false);
+            return true;
+        }
     }
     qCWarning(PhosphorSnapEngine::lcSnapEngine) << "applyGeometryForFloat:" << windowId << "no pre-tile geometry found";
     return false;
@@ -168,6 +196,24 @@ bool SnapEngine::applyGeometryForFloat(const QString& windowId, const QString& s
 // identical: commitSnap emits windowFloatingClearedForSnap, WTA relays
 // it as windowFloatingChanged on the same D-Bus interface.
 
+QString SnapEngine::resolveUnfloatScreen(const QString& primaryScreen, const QString& fallbackScreen) const
+{
+    QString screen = primaryScreen;
+    if (!screen.isEmpty()) {
+        screen = m_windowTracker->resolveEffectiveScreenId(screen);
+        auto* mgr = m_windowTracker->screenManager();
+        const bool screenExists = mgr ? mgr->physicalScreenFor(screen).isValid()
+                                      : (PhosphorScreens::ScreenIdentity::findByIdOrName(screen) != nullptr);
+        if (!screenExists) {
+            screen.clear();
+        }
+    }
+    if (screen.isEmpty() && !fallbackScreen.isEmpty()) {
+        screen = m_windowTracker->resolveEffectiveScreenId(fallbackScreen);
+    }
+    return screen;
+}
+
 UnfloatResult SnapEngine::resolveUnfloatGeometry(const QString& windowId, const QString& fallbackScreen) const
 {
     UnfloatResult result;
@@ -177,19 +223,7 @@ UnfloatResult SnapEngine::resolveUnfloatGeometry(const QString& windowId, const 
         return result;
     }
 
-    QString restoreScreen = m_windowTracker->preFloatScreen(windowId);
-    if (!restoreScreen.isEmpty()) {
-        restoreScreen = m_windowTracker->resolveEffectiveScreenId(restoreScreen);
-        auto* mgr = m_windowTracker->screenManager();
-        const bool screenExists = mgr ? mgr->physicalScreenFor(restoreScreen).isValid()
-                                      : (PhosphorScreens::ScreenIdentity::findByIdOrName(restoreScreen) != nullptr);
-        if (!screenExists) {
-            restoreScreen.clear();
-        }
-    }
-    if (restoreScreen.isEmpty() && !fallbackScreen.isEmpty()) {
-        restoreScreen = m_windowTracker->resolveEffectiveScreenId(fallbackScreen);
-    }
+    const QString restoreScreen = resolveUnfloatScreen(m_windowTracker->preFloatScreen(windowId), fallbackScreen);
 
     QRect geo = m_windowTracker->resolveZoneGeometry(zoneIds, restoreScreen);
     if (!geo.isValid()) {
@@ -200,6 +234,78 @@ UnfloatResult SnapEngine::resolveUnfloatGeometry(const QString& windowId, const 
     result.zoneIds = zoneIds;
     result.geometry = geo;
     result.screenId = restoreScreen;
+    return result;
+}
+
+UnfloatResult SnapEngine::resolveFallbackUnfloatGeometry(const QString& windowId, const QString& fallbackScreen) const
+{
+    UnfloatResult result;
+
+    // Opt-in only: when the setting is off, a no-pre-float-zone unfloat leaves the
+    // window floating (the caller emits feedback). The engine reads the bool via the
+    // settings-agnostic ISnapSettings seam, like moveNewWindowsToLastZone.
+    auto* s = snapSettings();
+    if (!s || !s->unfloatFallbackToZone()) {
+        return result;
+    }
+
+    // Resolve the window's effective screen — its tracked float screen, else the
+    // caller's fallback. A tracked screen that no longer exists (output unplugged)
+    // is discarded in favour of the caller's fallback. Zone geometry is resolved on
+    // the resulting screen so the fallback lands where the window currently is.
+    const QString screen = resolveUnfloatScreen(m_snapState->screenAssignments().value(windowId), fallbackScreen);
+    if (screen.isEmpty() || !m_layoutManager) {
+        return result;
+    }
+    PhosphorZones::Layout* layout = m_layoutManager->resolveLayoutForScreen(screen);
+    if (!layout) {
+        return result;
+    }
+
+    // Target resolution order: last-used zone (if it exists in this screen's layout)
+    // → first empty zone → first zone in the layout. The last two reuse the same
+    // accessors as the auto-snap chain (findEmptyZoneInLayout / zoneGeometry).
+    QString zoneId;
+    const QString lastUsed = m_snapState->lastUsedZoneId();
+    // lastUsedZoneId() is GLOBAL (last zone used on any screen). zoneGeometry()
+    // resolves a zone from any layout against this screen, so the geometry check
+    // alone would let a zone from another monitor's layout win here. Scope it to
+    // THIS screen's resolved layout via zoneById so "exists in this screen's
+    // layout" (above) actually holds.
+    if (!lastUsed.isEmpty()) {
+        const QUuid lastUsedUuid(lastUsed);
+        if (!lastUsedUuid.isNull() && layout->zoneById(lastUsedUuid)
+            && m_windowTracker->zoneGeometry(lastUsed, screen).isValid()) {
+            zoneId = lastUsed;
+        }
+    }
+    if (zoneId.isEmpty()) {
+        const int desktopFilter = m_virtualDesktopManager ? m_virtualDesktopManager->currentDesktop() : 0;
+        zoneId = m_windowTracker->findEmptyZoneInLayout(layout, screen, desktopFilter);
+    }
+    if (zoneId.isEmpty()) {
+        // Final fallback: the first zone in the layout. May already be occupied —
+        // snapping supports multiple windows per zone (stacking), so that is fine.
+        const QVector<PhosphorZones::Zone*> zones = layout->zones();
+        if (!zones.isEmpty() && zones.first()) {
+            zoneId = zones.first()->id().toString();
+        }
+    }
+    if (zoneId.isEmpty()) {
+        return result;
+    }
+
+    const QRect geo = m_windowTracker->zoneGeometry(zoneId, screen);
+    if (!geo.isValid()) {
+        return result;
+    }
+
+    result.found = true;
+    result.zoneIds = QStringList{zoneId};
+    result.geometry = geo;
+    result.screenId = screen;
+    qCInfo(PhosphorSnapEngine::lcSnapEngine)
+        << "resolveFallbackUnfloatGeometry:" << windowId << "→ zone" << zoneId << "on" << screen;
     return result;
 }
 
@@ -218,7 +324,37 @@ void SnapEngine::handoffReceive(const HandoffContext& ctx)
     if (!ctx.sourceZoneIds.isEmpty()) {
         QRect zoneGeo = m_windowTracker->resolveZoneGeometry(ctx.sourceZoneIds, ctx.toScreenId);
         if (zoneGeo.isValid()) {
-            if (ctx.sourceZoneIds.size() > 1) {
+            const int curDesktop = currentVirtualDesktop();
+            if (ctx.toDesktop > 0 && ctx.toDesktop != curDesktop) {
+                // Cross-DESKTOP handoff: the target desktop isn't the visible one,
+                // so assign the snap slot directly on SnapState for that desktop
+                // (commitSnap would stamp the current desktop) and refresh the
+                // placement-store record. This is the same path tryCrossDesktopMove
+                // uses, and it is safe to bypass commitSnap's WTS orchestration
+                // here: SnapState is the very store WTS queries (Daemon wires
+                // setSnapState(snapEngine->snapState())), so zoneForWindow et al.
+                // see this assignment; the snap chrome is applied below via the
+                // non-empty-zoneId applyGeometryRequested (→ markWindowSnapped); and
+                // persistence flows through the placement-store record. The only
+                // caller, handleCrossModeMove, always passes wasFloating==false, so
+                // there is no floating flag to clear.
+                if (ctx.sourceZoneIds.size() > 1) {
+                    m_snapState->assignWindowToZones(ctx.windowId, ctx.sourceZoneIds, ctx.toScreenId, ctx.toDesktop);
+                } else {
+                    m_snapState->assignWindowToZone(ctx.windowId, ctx.sourceZoneIds.first(), ctx.toScreenId,
+                                                    ctx.toDesktop);
+                }
+                if (auto placement = capturePlacement(ctx.windowId)) {
+                    placement->virtualDesktop = ctx.toDesktop;
+                    m_windowTracker->placementStore().record(std::move(*placement));
+                } else {
+                    // Mirror tryCrossDesktopMove: surface the SnapState↔placement
+                    // divergence rather than letting it hide.
+                    qCDebug(PhosphorSnapEngine::lcSnapEngine)
+                        << "handoffReceive: capturePlacement miss for" << ctx.windowId
+                        << "— placement-store desktop not updated to" << ctx.toDesktop;
+                }
+            } else if (ctx.sourceZoneIds.size() > 1) {
                 commitMultiZoneSnap(ctx.windowId, ctx.sourceZoneIds, ctx.toScreenId, SnapIntent::UserInitiated);
             } else {
                 commitSnap(ctx.windowId, ctx.sourceZoneIds.first(), ctx.toScreenId, SnapIntent::UserInitiated);

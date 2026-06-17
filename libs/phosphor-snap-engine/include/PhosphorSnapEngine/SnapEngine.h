@@ -79,6 +79,28 @@ public:
     int currentVirtualDesktop() const;
     QString currentActivity() const;
 
+    /// Resolve the zone on @p screenId's @p targetDesktop layout that is
+    /// positionally equivalent to @p currentZoneId (1-based index of zones sorted
+    /// by number), plus its pixel geometry. Returns an empty pair when the target
+    /// desktop has no layout, no matching slot, or invalid geometry. Public (like
+    /// the desktop/activity accessors) so cross-surface handoff logic and tests
+    /// can map a window's slot onto another desktop's layout.
+    std::pair<QString, QRect> resolveCrossDesktopZone(const QString& currentZoneId, const QString& screenId,
+                                                      int targetDesktop) const;
+
+    /// The zone a window ENTERS when it crosses onto @p neighbourScreen moving in
+    /// @p direction: the first zone on the edge facing back toward the source
+    /// (crossing "right" enters the neighbour's left-edge zone). Empty when no
+    /// zone-adjacency resolver is wired or the neighbour has no such zone. Used by
+    /// the daemon cross-mode handoff to place a window arriving on a snap monitor.
+    QString entryZoneForCrossing(const QString& direction, const QString& neighbourScreen) const;
+
+    /// The window snapped to @p zoneId on @p screenId (the daemon's stored
+    /// assignment pins it to that output), or empty if the zone is unoccupied
+    /// there. Used by the cross-mode swap to find the snap partner when THIS
+    /// engine is the swap target.
+    QString windowInZoneOnScreen(const QString& zoneId, const QString& screenId) const;
+
     // ═══════════════════════════════════════════════════════════════════════════
     // IPlacementEngine — lifecycle
     // ═══════════════════════════════════════════════════════════════════════════
@@ -133,36 +155,34 @@ public:
     }
 
     /**
-     * @brief Predicate consulted in `resolveWindowRestore` to decide whether an
-     *        UNSNAPPED window (a genuinely free record, or a snap-floated one)
-     *        should have its previous global position restored on open.
+     * @brief Predicate consulted in `resolveWindowRestore` to decide whether a
+     *        FLOATED window should have its previous global position restored on
+     *        open. (Snapping is two-state — snapped or floated; "floated" is the
+     *        only unsnapped state.)
      *
      * Keyed by the live windowId so the daemon closure can build a full
      * WindowQuery (window class / title / role) from its WindowRegistry and
-     * evaluate the per-window RestorePosition rule, falling back to the global
-     * `restoreUnsnappedWindowsOnLogin` setting. Like @ref ShouldRestorePredicate
+     * evaluate the per-window RestorePosition rule, falling back to the
+     * `snappingRestoreFloatedWindowsOnLogin` setting. Like @ref ShouldRestorePredicate
      * the engine stays settings-agnostic (LGPL boundary) — it only asks.
      *
      * Returns true to restore the recorded position (cross-screen allowed —
      * stored geometry is in global compositor coordinates, so re-applying it
      * lands the window back on its original monitor).
      *
-     * The gate governs two distinct things, both ONLY for free/floating records
-     * (snapped-to-zone restore is unaffected):
+     * The gate governs two things for FLOATED records (snapped-to-zone restore is
+     * unaffected):
      *   - cross-screen CONSUMPTION eligibility — a record whose recorded screen
      *     differs from the reopening screen is only consumed when the predicate
      *     opts the window in; otherwise consumption stays gated on the opening
-     *     screen (free and floating alike);
-     *   - the free branch additionally re-gates the geometry MOVE on the
-     *     predicate (a same-screen free record is consumed but only repositioned
-     *     when opted in). The floating branch does NOT re-gate the move — once a
-     *     floating record is consumed it always re-emits its recorded position
-     *     on restoreScreen (historical float-restore behaviour).
+     *     screen;
+     *   - the geometry MOVE — a floated record ALWAYS re-marks the window floating
+     *     (windowFloatingChanged), but its recorded position is re-applied only
+     *     when the predicate opts in.
      *
      * When the predicate is UNSET (default), the engine preserves its historical
-     * behaviour: free records are inert (consumed on the opening screen, no move)
-     * and floating records restore only on the screen they reopen on — the path
-     * unit tests rely on.
+     * behaviour: a floated record is consumed only on the screen it reopens on and
+     * is marked floating without a position move — the path unit tests rely on.
      */
     using RestorePositionPredicate = std::function<bool(const QString& windowId)>;
 
@@ -175,6 +195,22 @@ public:
     void setRestorePositionPredicate(RestorePositionPredicate predicate)
     {
         m_restorePositionPredicate = std::move(predicate);
+    }
+
+    /**
+     * @brief Predicate deciding whether an opening window should start FLOATING
+     *        because a "Float this app" window rule matched it. Daemon-injected,
+     *        keyed by the live windowId, evaluated on the window-open path. When
+     *        UNSET (default) no window is rule-floated and the engine keeps its
+     *        historical open behaviour (path unit tests rely on this). Same
+     *        lifetime contract as setRestorePositionPredicate — clear with `{}`
+     *        before destroying any state the closure captured.
+     */
+    using FloatPredicate = std::function<bool(const QString& windowId)>;
+
+    void setFloatPredicate(FloatPredicate predicate)
+    {
+        m_floatPredicate = std::move(predicate);
     }
 
     void windowClosed(const QString& windowId) override;
@@ -272,10 +308,9 @@ public:
     /**
      * @brief Resolve auto-snap for a newly opened window
      *
-     * First consults the unified WindowPlacementStore: a snapped / floating /
-     * free record reopens the window from its stored placement (cross-screen
-     * where the predicates allow). If no stored record applies, runs the
-     * fallback chain:
+     * First consults the unified WindowPlacementStore: a snapped or floated
+     * record reopens the window from its stored placement (cross-screen where the
+     * predicates allow). If no stored record applies, runs the fallback chain:
      *   1. App rules (highest priority)
      *   2. Auto-assign to empty zone
      *   3. Snap to last zone (final fallback)
@@ -328,6 +363,11 @@ public:
      * @param resolver Non-owning pointer; must outlive SnapEngine.
      */
     void setZoneAdjacencyResolver(IZoneAdjacencyResolver* resolver);
+
+    /// Inject the cross-surface resolver (neighbour output / desktop lookup),
+    /// threaded into the navigation target resolver so a no-adjacent-zone
+    /// boundary crosses into the neighbouring output instead of failing.
+    void setCrossSurfaceResolver(PhosphorEngine::ICrossSurfaceResolver* resolver) override;
 
     // ═══════════════════════════════════════════════════════════════════════════
     // Navigation state provider
@@ -393,7 +433,7 @@ public:
     void reapplyManagedWindowAppearance() override;
 
     /// Unified placement model — report this window's current snap state
-    /// (snapped / floated / free) for persistence, or nullopt if untracked.
+    /// (snapped or floated) for persistence, or nullopt if untracked.
     std::optional<PhosphorEngine::WindowPlacement> capturePlacement(const QString& windowId) const override;
 
     /// Snap every unmanaged window on the screen. The IPlacementEngine
@@ -432,6 +472,15 @@ public:
     void uncommitSnap(const QString& windowId);
 
     PhosphorEngine::UnfloatResult resolveUnfloatGeometry(const QString& windowId, const QString& fallbackScreen) const;
+
+    /// Fallback unfloat target for a window with NO pre-float zone (a never-snapped
+    /// window that defaulted to floating). Returns a found result ONLY when the
+    /// `unfloatFallbackToZone` setting is on, resolving last-used → first-empty →
+    /// first zone in the window's screen's layout. Returns not-found when the
+    /// setting is off or no zone can be resolved (so the caller keeps the window
+    /// floating with feedback).
+    PhosphorEngine::UnfloatResult resolveFallbackUnfloatGeometry(const QString& windowId,
+                                                                 const QString& fallbackScreen) const;
 
     PhosphorProtocol::WindowGeometryList
     applyBatchAssignments(const QVector<PhosphorEngine::ZoneAssignmentEntry>& entries,
@@ -615,6 +664,13 @@ private:
     void commitSnapImpl(const QString& windowId, const QStringList& zoneIds, const QString& screenId,
                         PhosphorEngine::SnapIntent intent);
 
+    /// Resolve an unfloat target screen: take @p primaryScreen if it still exists
+    /// (resolving virtual IDs), otherwise fall back to @p fallbackScreen. Returns an
+    /// empty string when neither resolves. Shared by resolveUnfloatGeometry (primary
+    /// = pre-float screen) and resolveFallbackUnfloatGeometry (primary = tracked
+    /// float screen) so the screen-existence handling stays in one place.
+    QString resolveUnfloatScreen(const QString& primaryScreen, const QString& fallbackScreen) const;
+
     PhosphorZones::LayoutRegistry* m_layoutManager = nullptr;
     PhosphorEngine::IWindowTrackingService* m_windowTracker = nullptr;
     SnapState* m_snapState = nullptr;
@@ -623,6 +679,7 @@ private:
     QPointer<QObject> m_autotileEngineObj;
     PhosphorEngine::IPlacementEngine* m_autotileEngineTyped = nullptr;
     IZoneAdjacencyResolver* m_zoneAdjacencyResolver = nullptr;
+    PhosphorEngine::ICrossSurfaceResolver* m_crossSurfaceResolver = nullptr;
     // Typed navigation-state provider — replaces the opaque QObject* m_wta
     // back-reference. Provides read-only access to compositor-layer shadows
     // (last-active window, last-active screen, last-cursor screen, frame
@@ -656,6 +713,36 @@ private:
     /// empty @p action to skip the emit (for call sites that want to
     /// handle the null case themselves).
     SnapNavigationTargetResolver* ensureTargetResolver(const QString& action = QString());
+
+    /// Move @p windowId to the virtual desktop adjacent to the current one in
+    /// @p direction. Re-snaps the window into the EQUIVALENT zone on the target
+    /// desktop's layout (same zone id when the layout is shared, else the
+    /// positionally-equivalent zone), updating SnapState + the placement-store
+    /// record, asking the compositor to relocate the real window
+    /// (windowDesktopMoveRequested) and applying the target zone's geometry so it
+    /// lands snapped rather than floating. Falls back to a bare desktop re-stamp
+    /// when no equivalent zone is resolvable. Used when directional move reaches a
+    /// zone-layout boundary with no neighbour output. Returns false when there is
+    /// no neighbour desktop or the window is not snapped.
+    bool tryCrossDesktopMove(const QString& windowId, const QString& direction, const QString& screenId);
+
+    /// If the neighbour OUTPUT in @p direction is a DIFFERENT mode (autotile),
+    /// defer to the daemon cross-mode handoff and return true: a move
+    /// (@p swap false) emits crossModeMoveRequested so autotile inserts the
+    /// window into its stack; a swap (@p swap true) emits crossModeSwapRequested
+    /// so it trades the window with the neighbour's entry-edge tile. Returns
+    /// false when there is no neighbour output or it is also snap-mode (handled
+    /// by the resolver's entry-zone / cross-output-swap path).
+    bool tryCrossModeOutput(const QString& windowId, const QString& direction, const QString& screenId, bool swap);
+
+    /// Focus a window on the virtual desktop adjacent to the current one in
+    /// @p direction (the entry window on @p screenId there), switching KWin to
+    /// it. Used when directional focus reaches a zone-layout boundary with no
+    /// neighbour output. Returns false when there is no neighbour desktop or no
+    /// window on it. @p focusedWindowId is excluded from the target desktop's
+    /// occupants so an on-all-desktops (sticky) source window can't be picked as
+    /// its own cross-desktop focus target.
+    bool tryCrossDesktopFocus(const QString& focusedWindowId, const QString& direction, const QString& screenId);
 
     /// Check whether the window is excluded from the given navigation
     /// action by a terminal `Exclude` action in the unified WindowRule
@@ -708,10 +795,14 @@ private:
     ShouldRestorePredicate m_shouldRestorePredicate{};
 
     // Unsnapped-position-restore gate. Empty until the daemon wires it; while
-    // empty the engine restores no free positions and floating positions only
-    // on the reopening screen — the historical behaviour unit tests rely on.
+    // empty the engine marks floated windows floating but restores their position
+    // only on the reopening screen — the historical behaviour unit tests rely on.
     // See RestorePositionPredicate doc above.
     RestorePositionPredicate m_restorePositionPredicate{};
+
+    // Rule-driven open-floating gate. Empty until the daemon wires it; while
+    // empty no window is rule-floated. See FloatPredicate doc above.
+    FloatPredicate m_floatPredicate{};
 };
 
 } // namespace PhosphorSnapEngine

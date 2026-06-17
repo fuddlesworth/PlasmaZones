@@ -5,6 +5,7 @@
 
 #include <QJsonArray>
 #include <QJsonObject>
+#include <QSet>
 #include <QTest>
 #include <QVariant>
 #include <QVariantList>
@@ -182,6 +183,52 @@ private Q_SLOTS:
         QVERIFY(!MatchExpression::makeLeaf(Field::Width, Operator::Contains, QStringLiteral("25")).isValid());
     }
 
+    // Leaf evaluation for the KWin-property / geometry / placement-state fields
+    // added in this PR — confirms each routes through the right operator branch
+    // (bool Equals-only, numeric GT/LT/Equals incl. a negative coordinate, string
+    // ops) and that an absent field stays inert (the windowless-context contract).
+    void testNewMatchFields_evaluateLeaf()
+    {
+        WindowQuery q;
+        q.appId = QStringLiteral("firefox");
+        q.positionX = 1920;
+        q.positionY = -40; // monitor stacked above the primary
+        q.isModal = true;
+        q.keepAbove = false;
+        q.captionNormal = QStringLiteral("Save As");
+        q.zone = QStringLiteral("{a1b2c3d4-0000-0000-0000-000000000001}");
+        q.isFloating = true;
+        q.isSnapped = false;
+
+        // Numeric position fields (including a negative coordinate).
+        QVERIFY(MatchExpression::makeLeaf(Field::PositionX, Operator::GreaterThan, 1000).evaluate(q));
+        QVERIFY(MatchExpression::makeLeaf(Field::PositionX, Operator::Equals, 1920).evaluate(q));
+        QVERIFY(MatchExpression::makeLeaf(Field::PositionY, Operator::LessThan, 0).evaluate(q));
+
+        // Bool state / accessory / placement fields — only Equals is meaningful.
+        QVERIFY(MatchExpression::makeLeaf(Field::IsModal, Operator::Equals, true).evaluate(q));
+        QVERIFY(!MatchExpression::makeLeaf(Field::IsModal, Operator::Equals, false).evaluate(q));
+        QVERIFY(MatchExpression::makeLeaf(Field::KeepAbove, Operator::Equals, false).evaluate(q));
+        QVERIFY(MatchExpression::makeLeaf(Field::IsFloating, Operator::Equals, true).evaluate(q));
+        QVERIFY(MatchExpression::makeLeaf(Field::IsSnapped, Operator::Equals, false).evaluate(q));
+
+        // String fields.
+        QVERIFY(
+            MatchExpression::makeLeaf(Field::CaptionNormal, Operator::Contains, QStringLiteral("Save")).evaluate(q));
+        QVERIFY(MatchExpression::makeLeaf(Field::Zone, Operator::Equals,
+                                          QStringLiteral("{a1b2c3d4-0000-0000-0000-000000000001}"))
+                    .evaluate(q));
+
+        // Absent field → predicate inert (false), even though appId is present.
+        WindowQuery bare;
+        bare.appId = QStringLiteral("firefox");
+        QVERIFY(!MatchExpression::makeLeaf(Field::IsModal, Operator::Equals, true).evaluate(bare));
+        QVERIFY(!MatchExpression::makeLeaf(Field::PositionX, Operator::GreaterThan, 0).evaluate(bare));
+        QVERIFY(!MatchExpression::makeLeaf(Field::Zone, Operator::Equals,
+                                           QStringLiteral("{a1b2c3d4-0000-0000-0000-000000000001}"))
+                     .evaluate(bare));
+    }
+
     void testWindowTypeField()
     {
         const auto expr =
@@ -279,6 +326,50 @@ private Q_SLOTS:
 
         const auto mixedComposite = MatchExpression::makeAll({ctxLeaf, winLeaf});
         QVERIFY(!mixedComposite.isContextOnly());
+    }
+
+    // ── referencesAnyField ──
+
+    void testReferencesAnyField()
+    {
+        const QSet<Field> typeFields = {Field::IsTransient, Field::WindowType, Field::IsModal};
+
+        // A class-only leaf references none of the type fields — this is the
+        // "firefox → dissolve matches a tooltip by class" case the animation
+        // filter must NOT treat as deliberate type targeting.
+        const auto classLeaf =
+            MatchExpression::makeLeaf(Field::WindowClass, Operator::Contains, QStringLiteral("firefox"));
+        QVERIFY(!classLeaf.referencesAnyField(typeFields));
+
+        // A direct type-field leaf references the set.
+        const auto transientLeaf = MatchExpression::makeLeaf(Field::IsTransient, Operator::Equals, true);
+        QVERIFY(transientLeaf.referencesAnyField(typeFields));
+
+        // A type predicate nested inside a composite — including under a
+        // `none{}` negation, like the user's PiP rule's `none:[windowType==2]`
+        // — still counts as referencing the field.
+        const auto nestedAll = MatchExpression::makeAll({
+            classLeaf,
+            MatchExpression::makeNone(
+                {MatchExpression::makeLeaf(Field::WindowType, Operator::Equals, static_cast<int>(WindowType::Dialog))}),
+        });
+        QVERIFY(nestedAll.referencesAnyField(typeFields));
+
+        // A composite of only non-type predicates references nothing in the set.
+        const auto titleAndClass = MatchExpression::makeAll({
+            classLeaf,
+            MatchExpression::makeLeaf(Field::Title, Operator::Contains, QStringLiteral("Settings")),
+        });
+        QVERIFY(!titleAndClass.referencesAnyField(typeFields));
+
+        // An empty composite references nothing.
+        QVERIFY(!MatchExpression::makeAll({}).referencesAnyField(typeFields));
+
+        // An empty field set matches nothing — even a direct type leaf.
+        QVERIFY(!transientLeaf.referencesAnyField({}));
+
+        // An unrelated field is not matched by a disjoint set.
+        QVERIFY(!transientLeaf.referencesAnyField({Field::IsNotification}));
     }
 
     // ── Validation ──

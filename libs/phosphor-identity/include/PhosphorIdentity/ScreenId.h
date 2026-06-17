@@ -12,6 +12,7 @@
 // C++17 inline-function-static rule.
 
 #include <QByteArray>
+#include <QCoreApplication>
 #include <QDir>
 #include <QFile>
 #include <QHash>
@@ -20,6 +21,7 @@
 #include <QLatin1String>
 #include <QString>
 #include <QStringList>
+#include <QThread>
 
 #include <cstdint>
 
@@ -59,6 +61,15 @@ inline QHash<QString, int>& edidMissCounter()
     return s_counter;
 }
 
+/// Debug-build enforcement of the documented single-thread contract: the
+/// function-local-static caches are mutated without synchronisation, so every
+/// public entry point must run on the application (GUI/main) thread. A null
+/// instance (headless unit test before any QCoreApplication) is permitted.
+inline void assertMainThread()
+{
+    Q_ASSERT(!QCoreApplication::instance() || QThread::currentThread() == QCoreApplication::instance()->thread());
+}
+
 } // namespace detail
 
 /**
@@ -75,6 +86,7 @@ inline QHash<QString, int>& edidMissCounter()
  */
 inline QString readEdidHeaderSerial(const QString& connectorName)
 {
+    detail::assertMainThread();
     auto& cache = detail::edidSerialCache();
     auto cacheIt = cache.constFind(connectorName);
     if (cacheIt != cache.constEnd()) {
@@ -136,6 +148,7 @@ inline QString readEdidHeaderSerial(const QString& connectorName)
  */
 inline void invalidateEdidCache(const QString& connectorName = QString())
 {
+    detail::assertMainThread();
     if (connectorName.isEmpty()) {
         detail::edidSerialCache().clear();
         detail::edidMissCounter().clear();
@@ -183,18 +196,30 @@ inline QString buildBaseId(const QString& manufacturer, const QString& model, co
 }
 
 /**
- * @brief Build a base ID from raw EDID fields with sysfs serial fallback.
+ * @brief Build a base ID from raw EDID fields, sysfs serial authoritative.
  *
- * Tries `serialNumber` (after `normalizeHexSerial`) first, then sysfs.
- * Returns the connector name as a final fallback so the result is
- * always a non-empty stable string.
+ * The per-connector sysfs EDID header serial is read FIRST and only falls
+ * back to `QScreen::serialNumber()` (via `normalizeHexSerial`) when sysfs
+ * yields nothing. Both decode the same EDID header field (bytes 12-15), so a
+ * correctly-paired monitor produces a byte-identical id either way — but the
+ * sysfs read is keyed by the real DRM connector and therefore cannot be
+ * mis-paired, whereas `QScreen::serialNumber()` can: KWin's Wayland QPA hands
+ * two IDENTICAL-model panels (same manuf+model, distinct serials) each other's
+ * serial, stamping the wrong serial onto each logical output. That swap flips
+ * left/right for every cross-output neighbour decision (a window "moved left"
+ * lands on the right monitor, the OSD arrow points the wrong way, the source
+ * monitor's reflow targets the wrong screen). Anchoring identity on the
+ * connector-keyed sysfs value aligns us with the kernel/KWin geometry pairing.
+ *
+ * Returns the connector name as a final fallback so the result is always a
+ * non-empty stable string.
  */
 inline QString buildScreenBaseId(const QString& manufacturer, const QString& model, const QString& serialNumber,
                                  const QString& connectorName)
 {
-    QString serial = normalizeHexSerial(serialNumber);
+    QString serial = readEdidHeaderSerial(connectorName);
     if (serial.isEmpty()) {
-        serial = readEdidHeaderSerial(connectorName);
+        serial = normalizeHexSerial(serialNumber);
     }
     QString baseId = buildBaseId(manufacturer, model, serial);
     return baseId.isEmpty() ? connectorName : baseId;

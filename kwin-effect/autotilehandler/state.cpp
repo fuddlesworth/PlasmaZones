@@ -238,7 +238,7 @@ void AutotileHandler::requestDaemonPreTileRestore(KWin::EffectWindow* w, const Q
             kw->maximize(KWin::MaximizeRestore);
             --m_suppressMaximizeChanged;
         }
-        m_effect->applySnapGeometry(safeW, QRect(reply.argumentAt<1>(), reply.argumentAt<2>(), rw, rh));
+        m_effect->applyWindowGeometry(safeW, QRect(reply.argumentAt<1>(), reply.argumentAt<2>(), rw, rh));
         qCInfo(lcEffect) << "Desktop switch: restored pre-snap geometry from daemon for orphaned window" << windowId;
     });
 }

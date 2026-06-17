@@ -130,6 +130,19 @@ bool RuleEvaluator::hasAnyMatch(const WindowQuery& query) const
     return false;
 }
 
+bool RuleEvaluator::hasMatchTargetingFields(const WindowQuery& query, const QSet<Field>& fields) const
+{
+    for (const WindowRule& rule : m_ruleSet.rules()) {
+        // Structural `referencesAnyField` is a cheap tree walk with no regex
+        // dispatch — gate the (possibly regex-bearing) `evaluate` behind it so
+        // a rule that never mentions one of `fields` is rejected for free.
+        if (rule.enabled && rule.match.referencesAnyField(fields) && rule.match.evaluate(query)) {
+            return true;
+        }
+    }
+    return false;
+}
+
 const WindowRule* RuleEvaluator::highestPriorityMatch(const WindowQuery& query,
                                                       const std::function<bool(const WindowRule&)>& filter) const
 {
@@ -213,6 +226,15 @@ ResolvedActions RuleEvaluator::resolveCached(const QString& windowId, const Wind
     m_cache.insert(windowId, CacheEntry{revision, m_cacheInsertSeq++, result});
     evictCache(revision);
     return result;
+}
+
+std::optional<ResolvedActions> RuleEvaluator::resolveCachedIfPresent(const QString& windowId) const
+{
+    const auto it = m_cache.constFind(windowId);
+    if (it != m_cache.constEnd() && it->revision == m_ruleSet.revision()) {
+        return it->actions;
+    }
+    return std::nullopt;
 }
 
 void RuleEvaluator::clearCache() const

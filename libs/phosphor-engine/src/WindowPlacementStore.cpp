@@ -95,6 +95,106 @@ bool WindowPlacementStore::record(WindowPlacement incoming)
     return true;
 }
 
+namespace {
+/// True when @p p carries float-back geometry but NO managed (snapped/tiled)
+/// engine slot — i.e. a pure floating placement whose only value is its
+/// remembered free position. A record with a snapped/tiled slot is a managed
+/// placement and is never a collapse candidate.
+bool isPureFloatRecord(const WindowPlacement& p)
+{
+    if (p.engines.isEmpty()) {
+        return false;
+    }
+    for (auto it = p.engines.constBegin(); it != p.engines.constEnd(); ++it) {
+        if (it.value().state == WindowPlacement::stateSnapped() || it.value().state == WindowPlacement::stateTiled()) {
+            return false;
+        }
+    }
+    return true;
+}
+} // namespace
+
+bool WindowPlacementStore::collapsePureFloatSiblings(const QString& appId, const QString& keepWindowId)
+{
+    if (appId.isEmpty() || keepWindowId.isEmpty()) {
+        return false;
+    }
+    auto bit = m_byApp.find(appId);
+    if (bit == m_byApp.end()) {
+        return false;
+    }
+    QList<WindowPlacement>& bucket = bit.value();
+
+    const auto findKeep = [&]() -> int {
+        for (int i = 0; i < bucket.size(); ++i) {
+            if (bucket.at(i).windowId == keepWindowId) {
+                return i;
+            }
+        }
+        return -1;
+    };
+    int keepIdx = findKeep();
+    // Only collapse when the kept record is itself a pure float — a managed
+    // (snapped/tiled) close has no business pruning float siblings — and only when
+    // it actually remembers a float position.
+    if (keepIdx < 0 || !isPureFloatRecord(bucket.at(keepIdx)) || bucket.at(keepIdx).freeGeometryByScreen.isEmpty()) {
+        return false;
+    }
+
+    // Fixpoint prune: remove every pure-float sibling that shares a screen the kept
+    // record currently covers, absorbing the sibling's OTHER-screen geometry first
+    // (so a different-monitor position the sibling alone held is never dropped). The
+    // kept record's coverage grows as it absorbs, so re-scanning until stable
+    // collapses the WHOLE set of float records transitively connected by a shared
+    // screen — regardless of FIFO order — into the single kept record, leaving no
+    // residual same-screen duplicate to rotate to. bucket <= MaxPerApp, so the
+    // repeat is cheap. Wholly different-monitor records (no shared screen) are never
+    // pruned: distinct-monitor float memory is preserved as its own record.
+    bool removedAny = false;
+    bool changed = true;
+    while (changed) {
+        changed = false;
+        keepIdx = findKeep();
+        if (keepIdx < 0) {
+            break; // defensive — the kept record itself is never removed
+        }
+        for (int i = bucket.size() - 1; i >= 0; --i) {
+            if (i == keepIdx) {
+                continue;
+            }
+            const WindowPlacement& other = bucket.at(i);
+            if (!isPureFloatRecord(other)) {
+                continue; // never prune a managed placement
+            }
+            bool sharesScreen = false;
+            for (auto git = other.freeGeometryByScreen.constBegin(); git != other.freeGeometryByScreen.constEnd();
+                 ++git) {
+                if (bucket.at(keepIdx).freeGeometryByScreen.contains(git.key())) {
+                    sharesScreen = true;
+                    break;
+                }
+            }
+            if (!sharesScreen) {
+                continue; // wholly different-monitor record — distinct memory, kept
+            }
+            // Copy the sibling's geometry out before mutating bucket[keepIdx]:
+            // operator[] may detach/reallocate the list and dangle `other`.
+            const QHash<QString, QRect> otherFree = other.freeGeometryByScreen;
+            WindowPlacement& keep = bucket[keepIdx];
+            for (auto git = otherFree.constBegin(); git != otherFree.constEnd(); ++git) {
+                if (!keep.freeGeometryByScreen.contains(git.key())) {
+                    keep.freeGeometryByScreen.insert(git.key(), git.value()); // kept (newest) wins; fill gaps only
+                }
+            }
+            bucket.removeAt(i);
+            removedAny = true;
+            changed = true;
+            break; // indices + keepIdx shifted; restart the scan
+        }
+    }
+    return removedAny;
+}
+
 std::optional<WindowPlacement> WindowPlacementStore::take(const QString& windowId, const QString& appId,
                                                           const std::function<bool(const WindowPlacement&)>& accept,
                                                           const std::function<bool(const WindowPlacement&)>& preferred)

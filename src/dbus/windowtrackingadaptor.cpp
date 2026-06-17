@@ -24,8 +24,9 @@
 #include "../core/types.h"
 #include <PhosphorEngine/WindowRegistry.h>
 // Complete type required where ~WindowTrackingAdaptor destroys the
-// unique_ptr<RuleEvaluator> member (m_restorePositionEvaluator).
+// unique_ptr<RuleEvaluator> member (m_windowRuleEvaluator).
 #include <PhosphorWindowRule/RuleEvaluator.h>
+#include <PhosphorProtocol/ServiceConstants.h>
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
@@ -266,17 +267,17 @@ void WindowTrackingAdaptor::setZoneDetectionAdaptor(ZoneDetectionAdaptor* adapto
     // except record the pointer for any WTA-side consumers.
 }
 
-void WindowTrackingAdaptor::captureWindowPlacement(const QString& windowId)
+void WindowTrackingAdaptor::captureWindowPlacement(const QString& windowId, const QString& authoritativeScreen)
 {
     if (windowId.isEmpty() || !m_service) {
         return;
     }
     // Capture from the engine that CURRENTLY OWNS this window, not merely the first
     // engine that returns a placement. The engines keep INDEPENDENT state (snap:
-    // snapped / floated / free; autotile: tiled / floated), so a window now managed
-    // by autotile can still carry stale snap state — e.g. leftover unmanaged
-    // geometry from a prior snap session — which SnapEngine::capturePlacement would
-    // claim as a "free" record before autotile is ever asked.
+    // snapped / floated; autotile: tiled / floated), so a window now managed by
+    // autotile can still carry stale snap state — e.g. leftover unmanaged geometry
+    // from a prior snap session — which SnapEngine::capturePlacement would claim as
+    // a floated record before autotile is ever asked.
     //
     // Owning engine = the engine matching the window's CURRENT screen mode, via the
     // SAME predicate that routes the float resolver / writer / float-back geometry
@@ -301,7 +302,7 @@ void WindowTrackingAdaptor::captureWindowPlacement(const QString& windowId)
             // The engine's capturePlacement fills ONLY its own slot (state + zone IDs
             // / tile order) — never a rectangle. Here is the SINGLE point that writes
             // the shared free/float geometry, and it does so ONLY when the window is
-            // genuinely free or floating in this engine. For a snapped/tiled window
+            // floated in this engine. For a snapped/tiled window
             // the live frame IS the zone/tile rect, so writing it would poison the
             // float-back — exactly the per-mode geometry leak this model removes. By
             // gating the write on the slot state (not a fragile frame-vs-zone compare),
@@ -309,8 +310,27 @@ void WindowTrackingAdaptor::captureWindowPlacement(const QString& windowId)
             // record() leaves any other screen's free geometry and the other engine's
             // slot intact.
             const PhosphorEngine::EngineSlot slot = p->slotFor(e->engineId());
-            const bool unmanagedState = (slot.state == PhosphorEngine::WindowPlacement::stateFree()
-                                         || slot.state == PhosphorEngine::WindowPlacement::stateFloating());
+            // Floated windows carry a shared free-geometry rect; snapped/tiled windows
+            // don't (the live frame IS the zone/tile rect). Snapping now produces only
+            // snapped/floating (the `free` state is retired) and autotile produces
+            // tiled/floating — so the owning-engine check is simply `floating`.
+            //
+            // The owning-engine slot state is NOT sufficient on its own across a
+            // mode flip. The free geometry is SHARED between both engines, but
+            // m_frameGeometry is just the last frame the effect reported — it is not
+            // re-validated against the slot. When a window TILED by autotile flips to
+            // a snapping-mode screen (or straddles screens), isWindowInAutotileMode
+            // goes false, snap becomes the owning engine and reports `floating`, yet
+            // m_frameGeometry still holds the autotile TILE rect (the window has not
+            // been repositioned yet). Writing it would poison the float-back with a
+            // tile rect — which a later snap reopen then restores as the floated
+            // position (the "tiled geometry restored to floated in snapping mode"
+            // bug). The other engine still owning the window as actively tiled means
+            // the live frame is its managed rect, not a genuine free frame, so refuse
+            // the write — exactly as recordFreeGeometry refuses tiled frames. The
+            // window's prior, genuine free geometry stays intact for the float-back.
+            const bool unmanagedState = (slot.state == PhosphorEngine::WindowPlacement::stateFloating())
+                && !m_service->isWindowAutotileTiled(windowId);
             if (unmanagedState) {
                 const QRect frame = m_frameGeometry.value(windowId);
                 if (frame.isValid()) {
@@ -336,9 +356,9 @@ void WindowTrackingAdaptor::captureWindowPlacement(const QString& windowId)
                     }
                 }
             }
-            // A capture that yields no restorable content — a bare {free} slot with
-            // no frame geometry (the window has no reported frame: closing, or never
-            // mapped) and no managed slot — carries nothing to restore. Recording it
+            // A capture that yields no restorable content — a bare {floating} slot
+            // with no frame geometry (the window has no reported frame: closing, or
+            // never mapped) and no zones — carries nothing to restore. Recording it
             // would only append FIFO noise that, at MaxPerApp entries per app, starves
             // and eventually evicts (removeFirst) the window's REAL placement, silently
             // breaking float/free geometry restore on the next open. Skip it: any
@@ -356,6 +376,18 @@ void WindowTrackingAdaptor::captureWindowPlacement(const QString& windowId)
             if (m_service->placementStore().record(*p)) {
                 m_service->markDirty(PhosphorPlacement::WindowTrackingService::DirtyWindowPlacements);
             }
+            // Close-capture convergence (see WindowPlacementStore::collapsePureFloatSiblings).
+            // Only on the close path (authoritativeScreen supplied): a window closing
+            // floating supersedes stale pure-float duplicates of the same app on the
+            // same screen, so a reopen restores to one consistent spot instead of
+            // rotating between leftover records. Live captures (refresh / float-change)
+            // pass no screen and never prune live siblings.
+            if (!authoritativeScreen.isEmpty()
+                && m_service->placementStore().collapsePureFloatSiblings(p->appId, p->windowId)) {
+                // The prune mutated the store; flag dirty in case the record()
+                // above was a content-identical no-op (then this is the only change).
+                m_service->markDirty(PhosphorPlacement::WindowTrackingService::DirtyWindowPlacements);
+            }
             return;
         }
     }
@@ -367,6 +399,24 @@ void WindowTrackingAdaptor::captureWindowPlacement(const QString& windowId)
     // state (record()), consumed on restore (take), or removed by an explicit
     // exclude-rule prune (removeIf) — never by a capture miss. (Stale records are
     // bounded by MaxPerApp and consumed on reopen.)
+    //
+    // Authoritative close-screen fallback. A window dragged cross-screen and then
+    // closed reaches here with NEITHER engine tracking it: the source engine was
+    // cleared when the window left its screen (onWindowRemoved) and the destination
+    // engine never adopted it (a same-engine-type cross-screen move skips the
+    // handoff, and a floated window is not inserted into the destination tile
+    // layout). With both capturePlacement calls declined, the record's screen would
+    // keep the stale source value and a reopen would restore to the wrong monitor.
+    // The caller (windowClosed) supplies the window's true current screen from KWin;
+    // record the float-back there so the next open restores to the right monitor.
+    // Scoped to the engine-miss path so a normally-tracked close (an engine captured
+    // above and returned) is never second-guessed.
+    if (!authoritativeScreen.isEmpty() && m_service && !m_service->isWindowAutotileTiled(windowId)) {
+        const QRect frame = m_frameGeometry.value(windowId);
+        if (frame.isValid()) {
+            m_service->recordFloatingClose(windowId, authoritativeScreen, frame);
+        }
+    }
 }
 
 void WindowTrackingAdaptor::refreshOpenWindowPlacements()
@@ -579,7 +629,7 @@ void WindowTrackingAdaptor::setWindowSticky(const QString& windowId, bool sticky
 // Window Lifecycle - Delegate to Service
 // ═══════════════════════════════════════════════════════════════════════════════
 
-void WindowTrackingAdaptor::windowClosed(const QString& windowId, int windowKind)
+void WindowTrackingAdaptor::windowClosed(const QString& windowId, int windowKind, const QString& screenId)
 {
     if (!validateWindowId(windowId, QStringLiteral("clean up closed window"))) {
         return;
@@ -597,11 +647,16 @@ void WindowTrackingAdaptor::windowClosed(const QString& windowId, int windowKind
     // Capture the window's final live placement before teardown drops the
     // frame-geometry shadow + per-engine state below. For a FLOATING window this
     // records a floated WindowPlacement at its live geometry (the single source
-    // of truth a future reopen restores from); for a snapped/free window it
-    // records the corresponding state. Runs while the window is still floating
+    // of truth a future reopen restores from); for a snapped window it records the
+    // corresponding state. Runs while the window is still floating
     // (m_service->windowClosed below tears that down) and before m_frameGeometry
     // is dropped, so the live floated geometry is captured.
-    captureWindowPlacement(windowId);
+    //
+    // Pass the effect's authoritative close screen: when a cross-screen move has
+    // orphaned the window from both engines' tracking by close time, both engine
+    // capturePlacement calls miss/decline and the real screen would be lost —
+    // captureWindowPlacement falls back to this screen to record the float-back.
+    captureWindowPlacement(windowId, screenId);
 
     // Drop frame-geometry shadow entry for this window.
     m_frameGeometry.remove(windowId);
@@ -674,7 +729,7 @@ void WindowTrackingAdaptor::setWindowRegistry(PhosphorEngine::WindowRegistry* re
 void WindowTrackingAdaptor::setWindowMetadata(const QString& instanceId, const QString& appId,
                                               const QString& desktopFile, const QString& title,
                                               const QString& windowRole, int pid, int virtualDesktop,
-                                              const QString& activity, int windowType)
+                                              const QString& activity, int windowType, const QVariantMap& extended)
 {
     if (!m_windowRegistry) {
         // Registry not wired yet — during daemon startup the kwin-effect may
@@ -719,6 +774,75 @@ void WindowTrackingAdaptor::setWindowMetadata(const QString& instanceId, const Q
                                 << instanceId << "— treating as Unknown";
     }
     meta.windowType = PhosphorProtocol::windowTypeFromInt(windowType);
+
+    // Extended window-property snapshot (the trailing a{sv}). An EMPTY map is a
+    // caption-only refresh (the effect skips the snapshot on chatty title ticks):
+    // carry forward the registry's existing extended fields so a per-frame title
+    // update does not wipe geometry/state. A non-empty map fully replaces them —
+    // each key present only when the effect could observe the value, so an absent
+    // key disengages the optional (and its derived WindowQuery field), mirroring the
+    // effect-side engage-only-when-known contract in window_query.cpp. Lenient
+    // QVariant conversions are the boundary policy here, matching the pid /
+    // windowType clamping above (a malformed caller cannot corrupt placement).
+    if (extended.isEmpty()) {
+        if (const std::optional<PhosphorEngine::WindowMetadata> existing = m_windowRegistry->metadata(instanceId)) {
+            meta.isMinimized = existing->isMinimized;
+            meta.isFullscreen = existing->isFullscreen;
+            meta.isSticky = existing->isSticky;
+            meta.isMaximized = existing->isMaximized;
+            meta.isFocused = existing->isFocused;
+            meta.isTransient = existing->isTransient;
+            meta.isNotification = existing->isNotification;
+            meta.keepAbove = existing->keepAbove;
+            meta.keepBelow = existing->keepBelow;
+            meta.skipTaskbar = existing->skipTaskbar;
+            meta.skipPager = existing->skipPager;
+            meta.skipSwitcher = existing->skipSwitcher;
+            meta.isModal = existing->isModal;
+            meta.hasDecoration = existing->hasDecoration;
+            meta.isResizable = existing->isResizable;
+            meta.width = existing->width;
+            meta.height = existing->height;
+            meta.positionX = existing->positionX;
+            meta.positionY = existing->positionY;
+            meta.captionNormal = existing->captionNormal;
+        }
+    } else {
+        namespace Key = PhosphorProtocol::Service::WindowMetadataKey;
+        const auto optBool = [&extended](QLatin1String key) -> std::optional<bool> {
+            const auto it = extended.constFind(QString(key));
+            return it != extended.constEnd() ? std::optional<bool>(it.value().toBool()) : std::nullopt;
+        };
+        const auto optInt = [&extended](QLatin1String key) -> std::optional<int> {
+            const auto it = extended.constFind(QString(key));
+            return it != extended.constEnd() ? std::optional<int>(it.value().toInt()) : std::nullopt;
+        };
+        const auto optString = [&extended](QLatin1String key) -> std::optional<QString> {
+            const auto it = extended.constFind(QString(key));
+            return it != extended.constEnd() ? std::optional<QString>(it.value().toString()) : std::nullopt;
+        };
+        meta.isMinimized = optBool(Key::IsMinimized);
+        meta.isFullscreen = optBool(Key::IsFullscreen);
+        meta.isSticky = optBool(Key::IsSticky);
+        meta.isMaximized = optBool(Key::IsMaximized);
+        meta.isFocused = optBool(Key::IsFocused);
+        meta.isTransient = optBool(Key::IsTransient);
+        meta.isNotification = optBool(Key::IsNotification);
+        meta.keepAbove = optBool(Key::KeepAbove);
+        meta.keepBelow = optBool(Key::KeepBelow);
+        meta.skipTaskbar = optBool(Key::SkipTaskbar);
+        meta.skipPager = optBool(Key::SkipPager);
+        meta.skipSwitcher = optBool(Key::SkipSwitcher);
+        meta.isModal = optBool(Key::IsModal);
+        meta.hasDecoration = optBool(Key::HasDecoration);
+        meta.isResizable = optBool(Key::IsResizable);
+        meta.width = optInt(Key::Width);
+        meta.height = optInt(Key::Height);
+        meta.positionX = optInt(Key::PositionX);
+        meta.positionY = optInt(Key::PositionY);
+        meta.captionNormal = optString(Key::CaptionNormal);
+    }
+
     m_windowRegistry->upsert(instanceId, meta);
 }
 

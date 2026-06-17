@@ -82,6 +82,17 @@ add_executable(test_snap_engine core/test_snap_engine.cpp)
 target_link_libraries(test_snap_engine PRIVATE Qt6::Test Qt6::Core Qt6::DBus plasmazones_core)
 add_test(NAME test_snap_engine COMMAND test_snap_engine)
 
+# resolveFallbackUnfloatGeometry on-success coverage. QTEST_MAIN (not GUILESS) so a
+# QGuiApplication + offscreen primary screen exists and zoneGeometry() resolves —
+# the geometry-dependent path test_snap_engine.cpp (guiless) cannot reach.
+add_executable(test_snap_unfloat_fallback core/test_snap_unfloat_fallback.cpp)
+# Qt6::Gui is explicit (not transitive via plasmazones_core) so QTEST_MAIN
+# resolves to QGuiApplication — the offscreen primary screen it provides is what
+# makes zoneGeometry() resolve. Relying on the transitive pull would silently
+# degrade to QCoreApplication (null primaryScreen) if core dropped Gui PUBLIC.
+target_link_libraries(test_snap_unfloat_fallback PRIVATE Qt6::Test Qt6::Core Qt6::Gui Qt6::DBus plasmazones_core)
+add_test(NAME test_snap_unfloat_fallback COMMAND test_snap_unfloat_fallback)
+
 # ═══════════════════════════════════════════════════════════════════════════════
 # core/ - PlacementEngineBase Tests (LGPL shared engine base: settings injection + base prune)
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -425,6 +436,28 @@ target_compile_definitions(test_per_screen_config PRIVATE "P_SOURCE_DIR=\"${PROJ
 # autotile/ - Navigation Controller Tests
 # ═══════════════════════════════════════════════════════════════════════════════
 p_add_test(test_navigation_controller autotile/test_navigation_controller.cpp)
+p_add_test(test_snap_cross_surface snap/test_snap_cross_surface.cpp)
+
+# Cross-surface navigation exercises cross-output handoff, which needs real
+# output geometry — compile in the FakeScreenProvider (like the WTA tests).
+add_executable(test_navigation_cross_surface
+               autotile/test_navigation_cross_surface.cpp
+               ${CMAKE_SOURCE_DIR}/libs/phosphor-screens/tests/FakeScreenProvider.cpp)
+target_include_directories(test_navigation_cross_surface
+               PRIVATE ${CMAKE_SOURCE_DIR}/libs/phosphor-screens/tests)
+target_link_libraries(test_navigation_cross_surface PRIVATE Qt6::Test Qt6::Core plasmazones_core)
+add_test(NAME test_navigation_cross_surface COMMAND test_navigation_cross_surface)
+
+# Real-retile cross-output test: drives the actual tile pipeline, so it needs
+# the FakeScreenProvider AND the bundled Luau algorithms (P_SOURCE_DIR).
+add_executable(test_navigation_retile
+               autotile/test_navigation_retile.cpp
+               ${CMAKE_SOURCE_DIR}/libs/phosphor-screens/tests/FakeScreenProvider.cpp)
+target_include_directories(test_navigation_retile
+               PRIVATE ${CMAKE_SOURCE_DIR}/libs/phosphor-screens/tests)
+target_compile_definitions(test_navigation_retile PRIVATE "P_SOURCE_DIR=\"${PROJECT_SOURCE_DIR}\"")
+target_link_libraries(test_navigation_retile PRIVATE Qt6::Test Qt6::Core plasmazones_core)
+add_test(NAME test_navigation_retile COMMAND test_navigation_retile)
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # autotile/ - Engine Settings Tests (replaces deleted test_settings_bridge)
@@ -771,7 +804,7 @@ set_tests_properties(bench_dbus_adaptors PROPERTIES LABELS "bench")
 # ═══════════════════════════════════════════════════════════════════════════════
 # compositor-common/ - Shared Library Types Tests (split for <800-line limit)
 #   test_wire_types: D-Bus wire type signature/roundtrip tests
-#   test_floating_cache: FloatingCache + TriggerParser tests
+#   test_floating_cache: FloatingCache + ZoneCache + TriggerParser tests
 #   test_autotile_state: AutotileStateHelpers + WindowId tests
 #   test_decoration_manager: DecorationManager ownership/veto behavioral spec
 #   test_decoration_manager_timers: DecorationManager deferred-drain/fallback timers

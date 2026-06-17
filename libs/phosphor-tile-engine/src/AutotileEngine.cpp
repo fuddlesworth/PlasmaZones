@@ -1915,7 +1915,19 @@ void AutotileEngine::handoffReceive(const HandoffContext& ctx)
         handoffRelease(windowId);
     }
 
-    state->addWindow(windowId);
+    // Insert at the position dictated by the insertion-order setting (a
+    // directional cross-mode move should land where new windows land), except:
+    //   - a cross-mode SWAP carries an explicit insertIndex so the arriving
+    //     window takes the departed partner's exact slot;
+    //   - a drag-drop carrying a cursor position, which the drag-insert path
+    //     places separately — there we keep the simple append so the drop wins.
+    if (ctx.insertIndex >= 0 && ctx.dropPos.isNull()) {
+        state->addWindow(windowId, ctx.insertIndex);
+    } else if (ctx.dropPos.isNull()) {
+        insertWindowByConfigOrder(state, windowId);
+    } else {
+        state->addWindow(windowId);
+    }
     // Autotile-engine policy on receive: a window arriving as "floating in
     // the source" stays floating here too — drag-from-snap typically falls
     // into this branch, and the user's drop position is where they want it.
@@ -2476,7 +2488,13 @@ void AutotileEngine::onWindowAdded(const QString& windowId)
 
     PhosphorTiles::TilingState* state = tilingStateForScreen(screenId);
     const int maxWin = effectiveMaxWindows(screenId);
-    if (state && state->tiledWindowCount() >= maxWin) {
+    // A window matched by a "Float this app" rule must bypass the tiled-window
+    // cap: it opens floating and so consumes no tile slot (tiledWindowCount
+    // excludes floats), and insertWindow marks it floating once inserted. Dropping
+    // it here would leave it untracked — neither floating in autotile (so the
+    // IsFloating match field stays false) nor re-tileable via Meta+F.
+    const bool ruleWillFloat = m_floatPredicate && m_floatPredicate(windowId);
+    if (state && state->tiledWindowCount() >= maxWin && !ruleWillFloat) {
         qCDebug(PhosphorTileEngine::lcTileEngine)
             << "Max window limit reached for screen" << screenId << "(max=" << maxWin << ")";
         // Purge this window from pending initial orders so the order doesn't
@@ -2489,23 +2507,8 @@ void AutotileEngine::onWindowAdded(const QString& windowId)
 
     const bool inserted = insertWindow(windowId, screenId);
 
-    // Sync floating state to daemon. Float state is per-mode:
-    // - Restored as floating from autotile's saved set → notify daemon to set WTS floating
-    // - Inserted as tiled but WTS says floating (stale snap-mode float) → clear WTS floating
-    //
-    // Use windowFloatingStateSynced (not windowFloatingChanged): this is a
-    // passive state-sync on window insertion, not a user float toggle. The
-    // daemon must NOT restore pre-tile geometry here — the window was just
-    // added (e.g. dropped onto an autotile VS from a snap VS) and already
-    // has a valid position. Routing through windowFloatingChanged causes
-    // syncAutotileFloatState to call applyGeometryForFloat, which teleports
-    // the window to a cross-screen-adjusted rect and resizes it.
-    if (inserted && state) {
-        if (state->isFloating(windowId)) {
-            Q_EMIT windowFloatingStateSynced(windowId, true, screenId);
-        } else if (m_windowTracker && m_windowTracker->isWindowFloating(windowId)) {
-            Q_EMIT windowFloatingStateSynced(windowId, false, screenId);
-        }
+    if (inserted) {
+        emitInsertFloatStateSync(windowId, screenId);
     }
 
     if (inserted && m_config && m_config->focusNewWindows) {
@@ -2621,6 +2624,33 @@ void AutotileEngine::onLayoutChanged(PhosphorZones::Layout* layout)
 // ═══════════════════════════════════════════════════════════════════════════════
 // Internal implementation
 // ═══════════════════════════════════════════════════════════════════════════════
+
+void AutotileEngine::emitInsertFloatStateSync(const QString& windowId, const QString& screenId)
+{
+    // Read-only lookup — must NOT lazily materialize a state. tilingStateForScreen
+    // would create one for a known-but-stateless screen; this method only reads
+    // isFloating right after a successful insertWindow, so the state already exists.
+    PhosphorTiles::TilingState* state = m_screenStates.value(currentKeyForScreen(screenId));
+    if (!state) {
+        return;
+    }
+    // Sync floating state to daemon. Float state is per-mode:
+    // - Restored as floating from autotile's saved set → notify daemon to set WTS floating
+    // - Inserted as tiled but WTS says floating (stale snap-mode float) → clear WTS floating
+    //
+    // Use windowFloatingStateSynced (not windowFloatingChanged): this is a
+    // passive state-sync on window insertion, not a user float toggle. The
+    // daemon must NOT restore pre-tile geometry here — the window was just
+    // added (e.g. dropped onto an autotile VS from a snap VS) and already
+    // has a valid position. Routing through windowFloatingChanged causes
+    // syncAutotileFloatState to call applyGeometryForFloat, which teleports
+    // the window to a cross-screen-adjusted rect and resizes it.
+    if (state->isFloating(windowId)) {
+        Q_EMIT windowFloatingStateSynced(windowId, true, screenId);
+    } else if (m_windowTracker && m_windowTracker->isWindowFloating(windowId)) {
+        Q_EMIT windowFloatingStateSynced(windowId, false, screenId);
+    }
+}
 
 bool AutotileEngine::insertWindow(const QString& windowId, const QString& screenId)
 {
@@ -2741,8 +2771,8 @@ bool AutotileEngine::insertWindow(const QString& windowId, const QString& screen
     // holds both engines' slots + the shared per-screen free geometry. Take it once
     // and branch on the autotile slot — a FLOATING slot restores the window floating
     // (consumed only when the record's screen matches the opening screen or is
-    // empty; the GEOMETRY fallback below may still come from anyFreeGeometry(),
-    // i.e. any screen); a TILED slot restores it at its saved
+    // empty; the GEOMETRY move below uses ONLY the screen-local recorded rect for
+    // restoreScreen — no cross-screen fallback); a TILED slot restores it at its saved
     // order in the SAME context (index-based — best-effort if neighbours moved;
     // wasFloating is not relevant since the slot state IS the intent). Re-record
     // bound to the live windowId so the snap slot + per-screen free geometry survive
@@ -2778,15 +2808,27 @@ bool AutotileEngine::insertWindow(const QString& windowId, const QString& screen
                 state->addWindow(windowId);
                 state->setFloating(windowId, true);
                 inserted = true;
-                QRect freeGeo = rec->freeGeometryFor(restoreScreen);
-                if (!freeGeo.isValid()) {
-                    freeGeo = rec->anyFreeGeometry();
-                }
-                if (freeGeo.isValid()) {
+                // SCREEN-LOCAL recorded position only — deliberately NOT the
+                // anyFreeGeometry() cross-screen fallback (mirroring snap's
+                // resolveWindowRestore). The free geometry is in global compositor
+                // coordinates; applying a rect captured on a DIFFERENT screen while
+                // the float tracking points at restoreScreen would teleport the
+                // window to a third monitor with the state saying otherwise — a
+                // visible/state desync. No recorded rect for restoreScreen → nothing
+                // meaningful to restore, so the move is skipped.
+                const QRect freeGeo = rec->freeGeometryFor(restoreScreen);
+                // The window is marked floating unconditionally above; the geometry
+                // MOVE is gated on the floated-position-restore opt-in (daemon-wired
+                // autotileRestoreFloatedWindowsOnLogin setting + per-window
+                // RestorePosition rule). When the predicate is unset (tests / no
+                // daemon) the move always fires, preserving historical behaviour.
+                const bool restorePosition = !m_restorePositionPredicate || m_restorePositionPredicate(windowId);
+                if (freeGeo.isValid() && restorePosition) {
                     Q_EMIT geometryRestoreRequested(windowId, freeGeo, restoreScreen);
                 }
                 qCInfo(PhosphorTileEngine::lcTileEngine)
-                    << "insertWindow: float-restore for" << windowId << "to" << freeGeo << "on" << restoreScreen;
+                    << "insertWindow: float-restore for" << windowId << "to" << freeGeo << "on" << restoreScreen
+                    << "move=" << (freeGeo.isValid() && restorePosition);
             } else {
                 const int savedPos = slot.order;
                 const int clampedPos = savedPos < 0 ? state->windowCount() : qMin(savedPos, state->windowCount());
@@ -2801,18 +2843,7 @@ bool AutotileEngine::insertWindow(const QString& windowId, const QString& screen
 
     if (!inserted) {
         // Insert based on config preference
-        switch (m_config->insertPosition) {
-        case AutotileConfig::InsertPosition::End:
-            state->addWindow(windowId);
-            break;
-        case AutotileConfig::InsertPosition::AfterFocused:
-            state->insertAfterFocused(windowId);
-            break;
-        case AutotileConfig::InsertPosition::AsMaster:
-            state->addWindow(windowId);
-            state->moveToFront(windowId);
-            break;
-        }
+        insertWindowByConfigOrder(state, windowId);
     }
 
     // Float restore is handled entirely by the record take() above (a floating
@@ -2820,8 +2851,34 @@ bool AutotileEngine::insertWindow(const QString& windowId, const QString& screen
     // parallel saved-floating set — the WindowPlacement record is the single
     // source of truth for cross-mode float state.
 
+    // A matched "Float this app" window rule opens the window floating: it is
+    // inserted above (so it stays managed and Meta+F can re-tile it), then marked
+    // floating here, identical to a manual float toggle. Guarded on not-already-
+    // floating so the placement-record float-restore branch above is not
+    // re-applied. onWindowAdded then emits windowFloatingStateSynced so the daemon
+    // mirrors the state.
+    if (m_floatPredicate && !state->isFloating(windowId) && m_floatPredicate(windowId)) {
+        state->setFloating(windowId, true);
+    }
+
     m_windowToStateKey.insert(windowId, currentKey);
     return true;
+}
+
+void AutotileEngine::insertWindowByConfigOrder(PhosphorTiles::TilingState* state, const QString& windowId)
+{
+    switch (m_config->insertPosition) {
+    case AutotileConfig::InsertPosition::End:
+        state->addWindow(windowId);
+        break;
+    case AutotileConfig::InsertPosition::AfterFocused:
+        state->insertAfterFocused(windowId);
+        break;
+    case AutotileConfig::InsertPosition::AsMaster:
+        state->addWindow(windowId);
+        state->moveToFront(windowId);
+        break;
+    }
 }
 
 void AutotileEngine::removeWindow(const QString& windowId)
@@ -3575,16 +3632,25 @@ QRect AutotileEngine::screenGeometry(const QString& screenId) const
         return m_screenManager->screenAvailableGeometry(screenId);
     }
 
-    // Physical screens: existing behavior
+    // Physical screens: resolve through the manager's cache-backed string
+    // overload, which reads the tracked-screen snapshot (from the screen
+    // provider) rather than a live QScreen. This is behaviourally identical to
+    // the old findByIdOrName + actualAvailableGeometry(QScreen*) path on a real
+    // system (both feed the same available-geometry/strut cache) AND resolves
+    // synthetic, QScreen-less screens from a test provider — without it,
+    // directional cross-output navigation cannot be exercised headlessly.
+    const QRect geom = m_screenManager->screenAvailableGeometry(screenId);
+    if (geom.isValid()) {
+        return geom;
+    }
+
+    // Last resort: a live QScreen the manager has not tracked yet (a hotplug
+    // race). The QScreen* overload resolves the connector and falls back to
+    // QScreen::availableGeometry().
     QScreen* screen = PhosphorScreens::ScreenIdentity::findByIdOrName(screenId);
     if (!screen) {
         return QRect();
     }
-
-    // m_screenManager is non-null here — the !m_screenManager early-return
-    // at the top of this function already handled that case. The QScreen*
-    // overload resolves the connector and falls back to
-    // QScreen::availableGeometry() when it is not tracked.
     return m_screenManager->actualAvailableGeometry(screen);
 }
 
@@ -3596,6 +3662,14 @@ bool AutotileEngine::isKnownScreen(const QString& screenId) const
     }
     if (PhosphorIdentity::VirtualScreenId::isVirtual(screenId)) {
         return m_screenManager->screenGeometry(screenId).isValid();
+    }
+    // Physical screens: resolve via the manager's tracked-screen snapshot
+    // (the screen provider), which is equivalent to a live-QScreen lookup on a
+    // real system but also recognises synthetic, QScreen-less screens from a
+    // test provider — keeping this consistent with screenGeometry() above.
+    // Fall back to findByIdOrName for a not-yet-tracked hotplug race.
+    if (m_screenManager->screenGeometry(screenId).isValid()) {
+        return true;
     }
     return PhosphorScreens::ScreenIdentity::findByIdOrName(screenId) != nullptr;
 }
@@ -3679,7 +3753,17 @@ void AutotileEngine::backfillWindows()
             }
         }
         for (const QString& windowId : candidates) {
-            insertWindow(windowId, screenId);
+            const bool inserted = insertWindow(windowId, screenId);
+            // Same passive float-state sync onWindowAdded does: a window that
+            // insertWindow floats here (matched Float rule / restored saved float)
+            // — or whose stale WTS float must be cleared because it was placed
+            // tiled — would otherwise desync from the daemon until its next add.
+            // emitInsertFloatStateSync uses windowFloatingStateSynced (NOT
+            // windowFloatingChanged), so it applies no geometry and cannot drive
+            // the mid-transition feedback loop the overflow-recovery note warns of.
+            if (inserted) {
+                emitInsertFloatStateSync(windowId, screenId);
+            }
             if (state->tiledWindowCount() >= maxWin) {
                 break;
             }
@@ -3766,6 +3850,14 @@ void AutotileEngine::retileAfterOperation(const QString& screenId, bool operatio
     if (!isAutotileScreen(screenId)) {
         return;
     }
+
+    // This synchronous retile recomputes from the current state, so any deferred
+    // retile already queued for the SAME screen is now redundant. Drop it —
+    // otherwise processPendingRetiles fires a second batch for this screen
+    // microseconds later, and that duplicate supersedes the staggered apply of
+    // this one, stranding every window past the first (a cross-output move left
+    // the source monitor with windows that never reflowed).
+    m_pendingRetileScreens.remove(screenId);
 
     // When already inside retile(), still recalc and apply for this screen so
     // navigation (rotate, swap, etc.) is never dropped — user expects geometry
@@ -3997,6 +4089,16 @@ void AutotileEngine::moveFocusedInDirection(const QString& direction, const Navi
 void AutotileEngine::swapFocusedInDirection(const QString& direction, const NavigationContext& ctx)
 {
     m_navigation->swapFocusedInDirection(direction, QStringLiteral("swap"), canonicalizeForLookup(ctx.windowId));
+}
+
+QString AutotileEngine::entryWindowForCrossing(const QString& screenId, const QString& direction) const
+{
+    return m_navigation->entryWindowOnScreen(screenId, direction);
+}
+
+int AutotileEngine::windowOrderIndexForWindow(const QString& screenId, const QString& windowId) const
+{
+    return m_navigation->windowOrderIndexOnScreen(screenId, canonicalizeForLookup(windowId));
 }
 
 void AutotileEngine::moveFocusedToPosition(int position, const NavigationContext& ctx)

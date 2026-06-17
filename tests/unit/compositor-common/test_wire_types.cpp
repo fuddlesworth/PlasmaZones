@@ -554,10 +554,11 @@ private Q_SLOTS:
                                                  QStringLiteral("{zone-right}"),
                                                  QStringLiteral("screen-0"),
                                                  QStringLiteral("{zone-left}"),
-                                                 QStringLiteral("{zone-right}")};
+                                                 QStringLiteral("{zone-right}"),
+                                                 QStringLiteral("screen-1")};
 
         const QString sig = dbusSignature(entry);
-        QCOMPARE(sig, QStringLiteral("(bssiiiissiiiissss)"));
+        QCOMPARE(sig, QStringLiteral("(bssiiiissiiiisssss)"));
 
         const int typeId = qMetaTypeId<PhosphorProtocol::SwapTargetResult>();
         QVERIFY(typeId != QMetaType::UnknownType);
@@ -578,6 +579,7 @@ private Q_SLOTS:
         QCOMPARE(entry.screenName, QStringLiteral("screen-0"));
         QCOMPARE(entry.sourceZoneId, QStringLiteral("{zone-left}"));
         QCOMPARE(entry.targetZoneId, QStringLiteral("{zone-right}"));
+        QCOMPARE(entry.screenName2, QStringLiteral("screen-1")); // cross-output: window2's target screen
     }
 
     // =================================================================

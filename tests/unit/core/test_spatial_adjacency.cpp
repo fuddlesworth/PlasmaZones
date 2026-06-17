@@ -8,6 +8,8 @@
 #include "core/spatialadjacency.h"
 #include "core/utils.h"
 
+#include <PhosphorScreens/Swapper.h>
+
 using namespace PlasmaZones;
 
 class TestSpatialAdjacency : public QObject
@@ -57,8 +59,9 @@ void TestSpatialAdjacency::twoSplitVertical()
 
 void TestSpatialAdjacency::gridPrefersSameRow()
 {
-    // 2x2 grid: from top-left, going right should land on top-right,
-    // not bottom-right (same-row wins via 2x perpendicular weighting).
+    // 2x2 grid: from top-left, going right should land on top-right, not
+    // bottom-right. top-right overlaps the source's vertical span so it wins by
+    // the overlap preference; the diagonal bottom-right does not overlap.
     const QRectF topLeft(0, 0, 0.5, 0.5);
     const QRectF topRight(0.5, 0, 0.5, 0.5);
     const QRectF bottomLeft(0, 0.5, 0.5, 0.5);
@@ -87,14 +90,21 @@ void TestSpatialAdjacency::gridPrefersSameColumn()
 
 void TestSpatialAdjacency::skipsCurrentByCentre()
 {
-    // The helper skips any candidate whose centre equals `current`, so
-    // passing the current rect itself in the list is a no-op.
+    // Any candidate sharing `current`'s centre — the current rect itself OR a
+    // duplicate stacked exactly on it — must never be selected. The explicit
+    // centre-equality skip excludes it (and the in-direction filter would too,
+    // its centre not being past `current`'s, were that skip ever removed). Put a
+    // co-centred duplicate BETWEEN `current` and the genuine neighbour so a
+    // regression that admitted equal-centre candidates would wrongly return the
+    // duplicate's index.
     const QRectF left(0, 0, 0.5, 1.0);
+    const QRectF leftDuplicate(0, 0, 0.5, 1.0); // identical centre to `left`
     const QRectF right(0.5, 0, 0.5, 1.0);
-    const QList<QRectF> rects{left, right};
+    const QList<QRectF> rects{left, leftDuplicate, right};
 
-    // `current` equals `left` — from left, the only valid neighbour is right.
-    QCOMPARE(SpatialAdjacency::findAdjacentRect(left, rects, PhosphorScreens::Direction::Right), 1);
+    // `current` equals `left`; both co-centred entries (index 0 and 1) are
+    // skipped, so the only valid right-hand neighbour is `right` at index 2.
+    QCOMPARE(SpatialAdjacency::findAdjacentRect(left, rects, PhosphorScreens::Direction::Right), 2);
 }
 
 void TestSpatialAdjacency::noMatchInDirection()
@@ -125,20 +135,20 @@ void TestSpatialAdjacency::threeColumnChain()
 void TestSpatialAdjacency::asymmetricGridFirstSeenWins()
 {
     // Asymmetric layout: a tall left column and two stacked right cells.
-    // From Left, going Right, both right cells are equidistant on the
-    // weighted distance metric (same dx, perpendicular offsets symmetric
-    // around the left's center). The helper does not promise a specific
-    // winner — it walks the candidate list in order and keeps strictly-
-    // smaller results, so first-seen wins on ties. Pin that behavior so
-    // the implementation can't drift to a non-deterministic sort.
+    // From Left, going Right, both right cells are a genuine tie: equal edge
+    // gap (same dx) and equal perpendicular centre distance (their centres sit
+    // symmetrically above/below the left column's centre). The helper resolves
+    // exact ties to the lowest candidate index (first-seen), keeping only
+    // strictly-smaller results. Pin that behavior so the implementation can't
+    // drift to a non-deterministic sort.
     const QRectF left(0.0, 0.0, 0.5, 1.0); // center (0.25, 0.5)
     const QRectF topRight(0.5, 0.0, 0.5, 0.5); // center (0.75, 0.25)
     const QRectF bottomRight(0.5, 0.5, 0.5, 0.5); // center (0.75, 0.75)
     const QList<QRectF> rects{left, topRight, bottomRight};
 
-    // dy from left to topRight = |0.25 - 0.5| = 0.25, weighted 2x = 0.5
-    // dy from left to bottomRight = |0.75 - 0.5| = 0.25, weighted 2x = 0.5
-    // Both have dx = 0.5, so weighted distance is equal — first-seen (topRight, idx 1) wins.
+    // perp centre distance left→topRight    = |0.25 - 0.5| = 0.25
+    // perp centre distance left→bottomRight = |0.75 - 0.5| = 0.25
+    // Equal gap (dx = 0.5) and equal perp distance — a true tie, so first-seen (topRight, idx 1) wins.
     QCOMPARE(SpatialAdjacency::findAdjacentRect(left, rects, PhosphorScreens::Direction::Right), 1);
 
     // Reverse order in the input — now bottomRight is seen first.

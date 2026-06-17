@@ -280,6 +280,13 @@ public:
      */
     void setCurrentDesktop(int desktop) override;
 
+    /// Inject the cross-surface resolver (neighbouring output / desktop lookup)
+    /// used by directional navigation when it reaches a layout boundary.
+    void setCrossSurfaceResolver(PhosphorEngine::ICrossSurfaceResolver* resolver) override
+    {
+        m_crossSurfaceResolver = resolver;
+    }
+
     /**
      * @brief Set the current activity for per-activity tiling state
      *
@@ -426,6 +433,42 @@ public:
     {
         m_persistSaveFn = std::move(saveFn);
         m_persistLoadFn = std::move(loadFn);
+    }
+
+    /**
+     * @brief Predicate consulted on reopen to decide whether a FLOATED (untiled)
+     *        window should have its previous global position re-applied.
+     *
+     * Mirrors SnapEngine::RestorePositionPredicate: the daemon resolves the global
+     * `autotileRestoreFloatedWindowsOnLogin` setting plus the per-window
+     * RestorePosition rule and injects the result here, keyed by the live windowId.
+     * The float STATE is always restored (the window comes back floating); only the
+     * geometry MOVE is gated. When UNSET (default), the engine preserves its
+     * historical behaviour of always re-applying the recorded position — the path
+     * unit tests rely on.
+     */
+    using RestorePositionPredicate = std::function<bool(const QString& windowId)>;
+
+    /// Inject the floated-position-restore gate. Clear with `{}` before destroying
+    /// any state captured by the closure (the daemon honours this on re-wire).
+    void setRestorePositionPredicate(RestorePositionPredicate predicate)
+    {
+        m_restorePositionPredicate = std::move(predicate);
+    }
+
+    /**
+     * Predicate deciding whether an opening window should start FLOATING because a
+     * "Float this app" window rule matched it. Daemon-injected, keyed by the live
+     * windowId. The window is still inserted (so it stays managed and Meta+F can
+     * re-tile it); it is just marked floating, identical to a manual float. When
+     * UNSET (default) no window is rule-floated. Clear with `{}` before destroying
+     * any state the closure captured.
+     */
+    using FloatPredicate = std::function<bool(const QString& windowId)>;
+
+    void setFloatPredicate(FloatPredicate predicate)
+    {
+        m_floatPredicate = std::move(predicate);
     }
 
     // Cross-engine handoff (see PhosphorEngine/IPlacementEngine.h for contract)
@@ -706,6 +749,17 @@ public:
     void swapFocusedInDirection(const QString& direction, const PhosphorEngine::NavigationContext& ctx) override;
     void moveFocusedToPosition(int position, const PhosphorEngine::NavigationContext& ctx) override;
     void rotateWindows(bool clockwise, const PhosphorEngine::NavigationContext& ctx) override;
+
+    /// Cross-mode swap support (queried by the daemon when THIS engine is the
+    /// target): the tiled window at @p screenId's entry edge facing the source
+    /// for a crossing arriving in @p direction — the swap partner. Empty when
+    /// the screen has no tiled windows.
+    QString entryWindowForCrossing(const QString& screenId, const QString& direction) const;
+    /// The RAW window-order index of @p windowId on @p screenId (current desktop;
+    /// counts floats, matching TilingState::addWindow), or -1 when not present —
+    /// lets the daemon land a swap counterpart in the same slot the departing
+    /// window held when re-inserted via HandoffContext.insertIndex.
+    int windowOrderIndexForWindow(const QString& screenId, const QString& windowId) const;
     void reapplyLayout(const PhosphorEngine::NavigationContext& ctx) override;
     void reapplyManagedWindowAppearance() override;
     std::optional<PhosphorEngine::WindowPlacement> capturePlacement(const QString& windowId) const override;
@@ -1011,6 +1065,15 @@ private Q_SLOTS:
 private:
     void connectSignals();
     bool insertWindow(const QString& windowId, const QString& screenId);
+    // Passive float-state sync after insertWindow() places a window: notify the
+    // daemon it opened floating (matched Float rule / restored saved float), or
+    // clear a stale WTS float when it was placed tiled. Shared by onWindowAdded
+    // and backfillWindows so the two cannot diverge.
+    void emitInsertFloatStateSync(const QString& windowId, const QString& screenId);
+    /// Add @p windowId to @p state at the position dictated by the
+    /// insertion-order setting (End / AfterFocused / AsMaster). Shared by
+    /// insertWindow's new-window path and handoffReceive's cross-engine adopt.
+    void insertWindowByConfigOrder(PhosphorTiles::TilingState* state, const QString& windowId);
     void removeWindow(const QString& windowId);
 
     /// Algorithm lifecycle REMOVE hook + state removal for a tracked window,
@@ -1274,6 +1337,10 @@ private:
     PhosphorZones::LayoutRegistry* m_layoutManager = nullptr;
     PhosphorEngine::IWindowTrackingService* m_windowTracker = nullptr;
     PhosphorScreens::ScreenManager* m_screenManager = nullptr;
+    /// Borrowed cross-surface resolver (neighbouring output / desktop lookup);
+    /// null when not injected, in which case directional navigation stops at the
+    /// layout boundary instead of crossing surfaces.
+    PhosphorEngine::ICrossSurfaceResolver* m_crossSurfaceResolver = nullptr;
     PhosphorEngine::IWindowRegistry* m_windowRegistry = nullptr;
     PhosphorTiles::ITileAlgorithmRegistry* m_algorithmRegistry = nullptr; ///< Borrowed; outlives engine
     std::unique_ptr<AutotileConfig> m_config;
@@ -1285,6 +1352,15 @@ private:
     // Persistence delegates (KConfig stays in WTA layer)
     std::function<void()> m_persistSaveFn;
     std::function<void()> m_persistLoadFn;
+
+    // Floated-position-restore gate. Empty until the daemon wires it; while empty
+    // the engine always re-applies a floated window's recorded position (historical
+    // behaviour). See RestorePositionPredicate doc above.
+    RestorePositionPredicate m_restorePositionPredicate{};
+
+    // Rule-driven open-floating gate. Empty until the daemon wires it; while empty
+    // no window is rule-floated. See FloatPredicate doc above.
+    FloatPredicate m_floatPredicate{};
 
     QSet<QString> m_autotileScreens;
     QString m_algorithmId;

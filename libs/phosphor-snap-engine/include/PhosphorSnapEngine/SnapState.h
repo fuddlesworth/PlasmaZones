@@ -76,6 +76,21 @@ public:
     QString screenForWindow(const QString& windowId) const;
     int desktopForWindow(const QString& windowId) const;
 
+    /// Re-stamp a snapped window's virtual-desktop membership to @p virtualDesktop,
+    /// keeping its zone and screen. The ONE place a desktop other than the live
+    /// current one is written — used by cross-desktop directional move, where
+    /// the window relocates to another desktop but keeps its snapped slot.
+    /// No-op for a window that isn't currently assigned. Returns true on change.
+    bool reassignDesktop(const QString& windowId, int virtualDesktop);
+
+    /// Windows with a recorded desktop assignment (snapped, or floated-on-screen
+    /// via setFloatingOnScreen / unsnapForFloat) on @p screenId whose desktop
+    /// membership is @p virtualDesktop, sorted by id for deterministic
+    /// entry-window choice. Iterates the desktop-assignment map; a window floated
+    /// without a desktop slot is not in that map and is excluded. Used by
+    /// cross-desktop directional focus to find a window to land on.
+    QStringList windowsOnScreenAndDesktop(const QString& screenId, int virtualDesktop) const;
+
     const QHash<QString, QString>& screenAssignments() const
     {
         return m_windowScreenAssignments;

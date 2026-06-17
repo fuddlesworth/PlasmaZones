@@ -16,7 +16,10 @@
 #include <PhosphorEngine/IPlacementEngine.h>
 #include <PhosphorIdentity/WindowId.h>
 #include <PhosphorSnapEngine/SnapEngine.h>
+#include <PhosphorSnapEngine/SnapState.h>
 #include <PhosphorTileEngine/AutotileEngine.h>
+#include <PhosphorZones/AssignmentEntry.h>
+#include <PhosphorZones/LayoutRegistry.h>
 #include <PhosphorWindowRule/RuleAction.h>
 #include <PhosphorWindowRule/RuleEvaluator.h>
 #include <PhosphorWindowRule/WindowQuery.h>
@@ -38,6 +41,18 @@ void WindowTrackingAdaptor::setEngines(PhosphorEngine::PlacementEngineBase* snap
     if (m_autotileEngine) {
         disconnect(m_autotileEngine, &PhosphorEngine::PlacementEngineBase::navigationFeedback, this, nullptr);
     }
+    // Drop the cross-desktop move relay from BOTH outgoing engines before
+    // reassigning (same anti-duplicate-connection reason as the float relay).
+    if (m_snapEngine) {
+        disconnect(m_snapEngine, &PhosphorEngine::PlacementEngineBase::windowDesktopMoveRequested, this, nullptr);
+    }
+    if (m_autotileEngine) {
+        disconnect(m_autotileEngine, &PhosphorEngine::PlacementEngineBase::windowDesktopMoveRequested, this, nullptr);
+        // The cross-output expected-move relay is autotile-only (snap never
+        // does a daemon-side cross-output tiling migration); drop it on the
+        // same anti-duplicate-connection rewire.
+        disconnect(m_autotileEngine, &PhosphorEngine::PlacementEngineBase::windowOutputMoveExpected, this, nullptr);
+    }
     // Drop the common float-restore geometry relay from BOTH outgoing engines
     // before reassigning, so a re-wire (mode toggle / daemon teardown) can't
     // accumulate duplicate connections.
@@ -46,6 +61,26 @@ void WindowTrackingAdaptor::setEngines(PhosphorEngine::PlacementEngineBase* snap
     }
     if (m_autotileEngine) {
         disconnect(m_autotileEngine, &PhosphorEngine::PlacementEngineBase::geometryRestoreRequested, this, nullptr);
+    }
+    // Drop the cross-mode handoff slots (move + swap) from BOTH outgoing engines —
+    // same anti-duplicate-connection rule. Without this, a rewire with the same
+    // engine pointers would double-connect and fire handleCrossModeMove/Swap twice
+    // per signal (double windowOutputMoveExpected, a second handoffReceive on
+    // already-moved state).
+    if (m_snapEngine) {
+        disconnect(m_snapEngine, &PhosphorEngine::PlacementEngineBase::crossModeMoveRequested, this, nullptr);
+        disconnect(m_snapEngine, &PhosphorEngine::PlacementEngineBase::crossModeSwapRequested, this, nullptr);
+    }
+    if (m_autotileEngine) {
+        disconnect(m_autotileEngine, &PhosphorEngine::PlacementEngineBase::crossModeMoveRequested, this, nullptr);
+        disconnect(m_autotileEngine, &PhosphorEngine::PlacementEngineBase::crossModeSwapRequested, this, nullptr);
+    }
+    // Drop the snap-specific state signals (snap-mode-only types, connected below
+    // on the typed engine) from the outgoing snap engine — same rule. Uses the
+    // cached typed pointer, still valid here (reassigned further down).
+    if (m_cachedSnapEngine) {
+        disconnect(m_cachedSnapEngine, &PhosphorSnapEngine::SnapEngine::windowSnapStateChanged, this, nullptr);
+        disconnect(m_cachedSnapEngine, &PhosphorSnapEngine::SnapEngine::windowFloatingClearedForSnap, this, nullptr);
     }
 
     // Detach the snap restore predicate from the outgoing engine before dropping
@@ -56,17 +91,25 @@ void WindowTrackingAdaptor::setEngines(PhosphorEngine::PlacementEngineBase* snap
     if (m_cachedSnapEngine) {
         m_cachedSnapEngine->setShouldRestorePredicate({});
         m_cachedSnapEngine->setRestorePositionPredicate({});
+        m_cachedSnapEngine->setFloatPredicate({});
+    }
+    if (m_cachedAutotileEngine) {
+        m_cachedAutotileEngine->setRestorePositionPredicate({});
+        m_cachedAutotileEngine->setFloatPredicate({});
     }
 
     m_snapEngine = snapEngine;
     m_autotileEngine = autotileEngine;
     m_cachedSnapEngine = qobject_cast<PhosphorSnapEngine::SnapEngine*>(snapEngine);
+    m_cachedAutotileEngine = qobject_cast<PhosphorTileEngine::AutotileEngine*>(autotileEngine);
 
     // ═══════════════════════════════════════════════════════════════════════════
     // Cross-engine references — SnapEngine needs AutotileEngine for
     // isActiveOnScreen() routing and ZoneDetectionAdaptor for adjacency queries.
-    // When clearing (nullptr, nullptr), we also clear stale cross-references
-    // to prevent dangling pointer access.
+    // These are wired only when a live SnapEngine is supplied; a teardown call
+    // (nullptr, nullptr) has no SnapEngine to clear them on, so the stale borrows
+    // are released by the engines' own destruction (Daemon::stop resets both
+    // engines immediately after this call), not here.
     // ═══════════════════════════════════════════════════════════════════════════
     if (auto* snap = qobject_cast<PhosphorSnapEngine::SnapEngine*>(snapEngine)) {
         snap->setZoneAdjacencyResolver(m_zoneDetectionAdaptor);
@@ -75,7 +118,8 @@ void WindowTrackingAdaptor::setEngines(PhosphorEngine::PlacementEngineBase* snap
         }
 
         // Disabled-context gate for snap auto-restore (discussion #461 item 7).
-        // The persist-on-close gate (setShouldTrackPredicate above) blocks NEW
+        // The persist-on-close gate (setShouldTrackPredicate, installed in the
+        // WindowTrackingAdaptor constructor) blocks NEW
         // PendingRestore entries on disabled contexts, but pre-existing
         // in-memory entries (recorded before the user toggled the disable, or
         // before the disable propagated through settingsChanged) would still
@@ -100,15 +144,22 @@ void WindowTrackingAdaptor::setEngines(PhosphorEngine::PlacementEngineBase* snap
             return !isPersistedContextDisabled(screenId, currentDesktop());
         });
 
-        // Unsnapped-position restore gate (free / snap-floated windows). On open
-        // the engine asks whether THIS window should return to its recorded global
-        // position — which, being in compositor-global coords, brings it back to
-        // its original monitor even when KWin's session restore reopened it on
-        // another output. shouldRestoreUnsnappedPosition resolves the per-window
-        // RestorePosition rule when one matches, otherwise the global
-        // `restoreUnsnappedWindowsOnLogin` setting.
+        // Floated-position restore gate (snap-floated windows). On open the engine
+        // asks whether THIS window should return to its recorded global position —
+        // which, being in compositor-global coords, brings it back to its original
+        // monitor even when KWin's session restore reopened it on another output.
+        // shouldRestoreFloatedPosition resolves the per-window RestorePosition rule
+        // when one matches, otherwise the per-engine
+        // `snappingRestoreFloatedWindowsOnLogin` setting (Mode::Snapping here).
         snap->setRestorePositionPredicate([this](const QString& windowId) -> bool {
-            return shouldRestoreUnsnappedPosition(windowId);
+            return shouldRestoreFloatedPosition(windowId, PhosphorZones::AssignmentEntry::Mode::Snapping);
+        });
+
+        // Open-floating gate (snap). A matched "Float this app" rule opens the
+        // window floating instead of auto-snapping it. Purely rule-driven (no
+        // global default), so the same resolver serves both engines.
+        snap->setFloatPredicate([this](const QString& windowId) -> bool {
+            return shouldFloatByRule(windowId);
         });
 
         // Snap-specific signal: carries PhosphorProtocol::WindowStateEntry which is snap-mode-only.
@@ -161,7 +212,74 @@ void WindowTrackingAdaptor::setEngines(PhosphorEngine::PlacementEngineBase* snap
                 &WindowTrackingAdaptor::navigationFeedback);
         // Autotile's disabled-context gate is applied centrally at save time by the
         // WindowPlacementStore serialize keep-predicate (isPersistedContextDisabled),
-        // so no engine-side predicate injection is needed.
+        // so no engine-side disabled-context predicate injection is needed.
+        //
+        // Floated-position restore IS gated per-engine, mirroring snap: an
+        // autotile-floated (untiled) window only returns to its recorded position
+        // when the autotile `restoreFloatedWindowsOnLogin` setting (or a per-window
+        // RestorePosition rule) opts it in. Same closure shape as the snap wiring
+        // above, with Mode::Autotile selecting the autotile default.
+        if (m_cachedAutotileEngine) {
+            m_cachedAutotileEngine->setRestorePositionPredicate([this](const QString& windowId) -> bool {
+                return shouldRestoreFloatedPosition(windowId, PhosphorZones::AssignmentEntry::Mode::Autotile);
+            });
+            // Open-floating gate (autotile). Same rule-driven resolver as snap; the
+            // window is inserted then marked floating so it stays managed.
+            m_cachedAutotileEngine->setFloatPredicate([this](const QString& windowId) -> bool {
+                return shouldFloatByRule(windowId);
+            });
+        }
+    }
+
+    // Cross-desktop directional move: both engines emit windowDesktopMoveRequested
+    // when they re-key a window onto another virtual desktop; relay it to the
+    // KWin effect (which performs the real windowToDesktops) over the
+    // mode-agnostic WindowTracking interface.
+    if (m_autotileEngine) {
+        connect(m_autotileEngine, &PhosphorEngine::PlacementEngineBase::windowDesktopMoveRequested, this,
+                &WindowTrackingAdaptor::windowDesktopMoveRequested);
+    }
+    if (m_snapEngine) {
+        connect(m_snapEngine, &PhosphorEngine::PlacementEngineBase::windowDesktopMoveRequested, this,
+                &WindowTrackingAdaptor::windowDesktopMoveRequested);
+    }
+
+    // Daemon-initiated cross-output directional move: the autotile engine
+    // migrates its own tiling state and reflows both outputs, then asks the
+    // effect to treat the window's resulting outputChanged as expected (skip
+    // the reactive close/open re-issue). Snap mode never performs a daemon-side
+    // cross-output tiling migration, so only the autotile engine is wired.
+    if (m_autotileEngine) {
+        connect(m_autotileEngine, &PhosphorEngine::PlacementEngineBase::windowOutputMoveExpected, this,
+                &WindowTrackingAdaptor::windowOutputMoveExpected);
+    }
+
+    // Cross-MODE directional move: a source engine reached a boundary whose
+    // target context is a different tiling mode and cannot place the window
+    // itself. Both engines defer here; handleCrossModeMove relinquishes from the
+    // source and hands the window to the target engine (autotile insert / snap
+    // zone). DirectConnection so the handoff completes synchronously within the
+    // navigation call (the engine returns true expecting the window has moved).
+    if (m_autotileEngine) {
+        connect(m_autotileEngine, &PhosphorEngine::PlacementEngineBase::crossModeMoveRequested, this,
+                &WindowTrackingAdaptor::handleCrossModeMove, Qt::DirectConnection);
+    }
+    if (m_snapEngine) {
+        connect(m_snapEngine, &PhosphorEngine::PlacementEngineBase::crossModeMoveRequested, this,
+                &WindowTrackingAdaptor::handleCrossModeMove, Qt::DirectConnection);
+    }
+
+    // Cross-MODE directional swap: like the move above, but a two-way exchange —
+    // handleCrossModeSwap also relinquishes the target's entry-edge partner and
+    // sends it back to the focused window's vacated slot. DirectConnection for the
+    // same synchronous-handoff reason.
+    if (m_autotileEngine) {
+        connect(m_autotileEngine, &PhosphorEngine::PlacementEngineBase::crossModeSwapRequested, this,
+                &WindowTrackingAdaptor::handleCrossModeSwap, Qt::DirectConnection);
+    }
+    if (m_snapEngine) {
+        connect(m_snapEngine, &PhosphorEngine::PlacementEngineBase::crossModeSwapRequested, this,
+                &WindowTrackingAdaptor::handleCrossModeSwap, Qt::DirectConnection);
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
@@ -199,36 +317,39 @@ void WindowTrackingAdaptor::setWindowRuleStore(PhosphorWindowRule::WindowRuleSto
     }
     m_windowRuleStore = store;
     // Drop the evaluator bound to the previous set; it rebuilds lazily against
-    // the new one on the next shouldRestoreUnsnappedPosition call.
-    m_restorePositionEvaluator.reset();
+    // the new one on the next per-window resolve.
+    m_windowRuleEvaluator.reset();
 }
 
-bool WindowTrackingAdaptor::shouldRestoreUnsnappedPosition(const QString& windowId)
+namespace {
+// Build a per-window rule query from the registry metadata, or nullopt when no
+// metadata is tracked (the caller falls back to its own default). Shared by the
+// RestorePosition and Float resolvers so the metadata→query derivation lives in
+// one place. windowClass is not tracked daemon-side (the compositor reports
+// appId, which is class-derived), so rules match on appId / title / role / type
+// / desktop / pid plus the recorded desktop / activity context; screenId stays
+// empty (a window-domain rule does not pin a screen). The extended window
+// properties (state flags, geometry, accessory flags, captionNormal) are carried
+// straight through from the effect's snapshot (setWindowMetadata's a{sv}), so a
+// Float / RestorePosition rule keyed on e.g. IsModal or Width matches the same
+// values the effect path resolves live. Placement state (IsFloating / IsSnapped /
+// Zone) is deliberately absent: these resolvers run at window-open, before any
+// placement exists, so a predicate over them must stay inert.
+std::optional<PhosphorWindowRule::WindowQuery>
+buildRuleQueryForWindow(const QPointer<PhosphorEngine::WindowRegistry>& registry, const QString& windowId)
 {
-    // m_settings is a hard ctor dependency (qFatal on null), so it is non-null
-    // here — deref unguarded like every other method in this class.
-    const bool globalDefault = m_settings->restoreUnsnappedWindowsOnLogin();
-
-    // No rule store / metadata → the global setting is the whole policy.
-    if (!m_windowRuleStore || m_windowRegistry.isNull()) {
-        return globalDefault;
+    if (registry.isNull()) {
+        return std::nullopt;
     }
     // WindowRegistry is keyed by the BARE instance id; the engine hands us the
     // composite `appId|instanceId`. Extract first — every other registry reader
     // (currentAppIdFor, windowClosed, AutotileEngine) does the same. Looking up by
-    // the composite id always misses, which would silently make RestorePosition
-    // rules inert and collapse the feature to the global setting.
+    // the composite id always misses, which would silently make the rule inert.
     const QString instanceId = PhosphorIdentity::WindowId::extractInstanceId(windowId);
-    const std::optional<PhosphorEngine::WindowMetadata> meta = m_windowRegistry->metadata(instanceId);
+    const std::optional<PhosphorEngine::WindowMetadata> meta = registry->metadata(instanceId);
     if (!meta) {
-        return globalDefault;
+        return std::nullopt;
     }
-
-    // Build a per-window query from the registry metadata. windowClass is not
-    // tracked daemon-side (the compositor reports appId, which is class-derived),
-    // so RestorePosition rules match on appId / title / role / type — the common
-    // per-app case. Context fields come from the window's recorded desktop /
-    // activity; screenId stays empty (a window-domain rule does not pin a screen).
     PhosphorWindowRule::WindowQuery query;
     query.appId = meta->appId;
     if (!meta->title.isEmpty()) {
@@ -246,17 +367,303 @@ bool WindowTrackingAdaptor::shouldRestoreUnsnappedPosition(const QString& window
     query.windowType = meta->windowType;
     query.virtualDesktop = meta->virtualDesktop;
     query.activity = meta->activity;
+    // Extended properties — optional→optional copy preserves engagement exactly,
+    // so a field the effect could not observe stays disengaged and inert here too.
+    query.isMinimized = meta->isMinimized;
+    query.isFullscreen = meta->isFullscreen;
+    query.isSticky = meta->isSticky;
+    query.isMaximized = meta->isMaximized;
+    query.isFocused = meta->isFocused;
+    query.isTransient = meta->isTransient;
+    query.isNotification = meta->isNotification;
+    query.keepAbove = meta->keepAbove;
+    query.keepBelow = meta->keepBelow;
+    query.skipTaskbar = meta->skipTaskbar;
+    query.skipPager = meta->skipPager;
+    query.skipSwitcher = meta->skipSwitcher;
+    query.isModal = meta->isModal;
+    query.hasDecoration = meta->hasDecoration;
+    query.isResizable = meta->isResizable;
+    query.width = meta->width;
+    query.height = meta->height;
+    query.positionX = meta->positionX;
+    query.positionY = meta->positionY;
+    query.captionNormal = meta->captionNormal;
+    return query;
+}
+} // namespace
 
-    if (!m_restorePositionEvaluator) {
-        m_restorePositionEvaluator = std::make_unique<PhosphorWindowRule::RuleEvaluator>(m_windowRuleStore->ruleSet());
+bool WindowTrackingAdaptor::shouldRestoreFloatedPosition(const QString& windowId,
+                                                         PhosphorZones::AssignmentEntry::Mode mode)
+{
+    // m_settings is a hard ctor dependency (qFatal on null), so it is non-null
+    // here — deref unguarded like every other method in this class. The global
+    // default is per-engine (snap-floated vs autotile-floated); the RestorePosition
+    // rule override below is engine-neutral.
+    const bool globalDefault = mode == PhosphorZones::AssignmentEntry::Mode::Autotile
+        ? m_settings->autotileRestoreFloatedWindowsOnLogin()
+        : m_settings->snappingRestoreFloatedWindowsOnLogin();
+
+    // No rule store / metadata → the global setting is the whole policy.
+    if (!m_windowRuleStore) {
+        return globalDefault;
     }
-    const PhosphorWindowRule::ResolvedActions resolved = m_restorePositionEvaluator->resolveCached(windowId, query);
+    const std::optional<PhosphorWindowRule::WindowQuery> query = buildRuleQueryForWindow(m_windowRegistry, windowId);
+    if (!query) {
+        return globalDefault;
+    }
+
+    if (!m_windowRuleEvaluator) {
+        m_windowRuleEvaluator = std::make_unique<PhosphorWindowRule::RuleEvaluator>(m_windowRuleStore->ruleSet());
+    }
+    // Shares m_windowRuleEvaluator with shouldFloatByRule; resolveCached is keyed on
+    // (windowId, ruleSet revision) and ignores the query on a hit. Safe because both
+    // are open-path (resolved once per window lifetime — see shouldFloatByRule) and
+    // the effect pushes the window's full metadata before the engine's open-path
+    // resolve, so the first (and only) resolve for a window sees complete metadata.
+    const PhosphorWindowRule::ResolvedActions resolved = m_windowRuleEvaluator->resolveCached(windowId, *query);
     if (const std::optional<PhosphorWindowRule::RuleAction> action =
             resolved.slot(QString(PhosphorWindowRule::ActionSlot::RestorePosition))) {
         // A matched RestorePosition rule overrides the global setting.
         return action->params.value(QString(PhosphorWindowRule::ActionParam::Value)).toBool();
     }
     return globalDefault;
+}
+
+bool WindowTrackingAdaptor::shouldFloatByRule(const QString& windowId)
+{
+    // Float is purely rule-driven: there is no global "float on open" setting, so
+    // absent a matching rule the answer is "do not float".
+    if (!m_windowRuleStore) {
+        return false;
+    }
+    const std::optional<PhosphorWindowRule::WindowQuery> query = buildRuleQueryForWindow(m_windowRegistry, windowId);
+    if (!query) {
+        return false;
+    }
+
+    if (!m_windowRuleEvaluator) {
+        m_windowRuleEvaluator = std::make_unique<PhosphorWindowRule::RuleEvaluator>(m_windowRuleStore->ruleSet());
+    }
+    // resolveCached is keyed on (windowId, ruleSet revision); on a cache hit the
+    // freshly built `query` is ignored. That is safe because windowId is both
+    // lifetime-stable AND unique: a reopened window gets a fresh instanceId (new
+    // key → miss) and a mid-session appId rename changes the composite key too, so
+    // a cached verdict can never outlive the metadata it was built from. Both the
+    // float and restore predicates are open-path (resolved once per lifetime).
+    const PhosphorWindowRule::ResolvedActions resolved = m_windowRuleEvaluator->resolveCached(windowId, *query);
+    // The Float action carries free-form params (no Value key), so the verdict is
+    // the PRESENCE of the filled slot, not a bool payload.
+    return resolved.slot(QString(PhosphorWindowRule::ActionSlot::Float)).has_value();
+}
+
+void WindowTrackingAdaptor::handleCrossModeMove(const QString& windowId, const QString& targetScreenId,
+                                                int targetDesktop, const QString& direction)
+{
+    auto* sourceEngine = qobject_cast<PhosphorEngine::PlacementEngineBase*>(sender());
+    if (!sourceEngine || windowId.isEmpty() || targetScreenId.isEmpty() || !m_layoutManager) {
+        return;
+    }
+
+    // Target mode at the DESTINATION context: a cross-desktop crossing targets a
+    // (possibly different) mode on the same screen's target desktop; a monitor
+    // crossing targets the neighbour screen on the current desktop (targetDesktop
+    // == 0).
+    const int effectiveDesktop = targetDesktop > 0 ? targetDesktop : currentDesktop();
+    const QString activity = m_layoutManager->currentActivity();
+    const bool targetIsAutotile = m_layoutManager->modeForScreen(targetScreenId, effectiveDesktop, activity)
+        == PhosphorZones::AssignmentEntry::Autotile;
+    PhosphorEngine::PlacementEngineBase* targetEngine =
+        targetIsAutotile ? m_autotileEngine.data() : m_snapEngine.data();
+    if (!targetEngine || targetEngine == sourceEngine) {
+        return; // target engine unavailable, or not actually cross-mode
+    }
+
+    // Where the window currently lives — for the source reflow.
+    const QString sourceScreen = sourceEngine->screenForTrackedWindow(windowId);
+
+    // For a SNAP target, resolve the landing zone BEFORE relinquishing the source
+    // (snap→snap cross-desktop maps the source's slot; everything else enters the
+    // neighbour's edge zone).
+    QStringList landingZoneIds;
+    if (!targetIsAutotile) {
+        auto* snapTarget = qobject_cast<PhosphorSnapEngine::SnapEngine*>(targetEngine);
+        QString zoneId;
+        if (snapTarget) {
+            if (targetDesktop > 0) {
+                if (auto* snapSource = qobject_cast<PhosphorSnapEngine::SnapEngine*>(sourceEngine)) {
+                    const QString srcZone =
+                        snapSource->snapState() ? snapSource->snapState()->zoneForWindow(windowId) : QString();
+                    if (!srcZone.isEmpty()) {
+                        zoneId = snapTarget->resolveCrossDesktopZone(srcZone, targetScreenId, targetDesktop).first;
+                    }
+                }
+            }
+            if (zoneId.isEmpty()) {
+                zoneId = snapTarget->entryZoneForCrossing(direction, targetScreenId);
+            }
+        }
+        if (!zoneId.isEmpty()) {
+            landingZoneIds = QStringList{zoneId};
+        }
+    }
+
+    // Relinquish from the source (tracking-only). An autotile source must reflow
+    // — the remaining tiles expand into the vacated slot; handoffRelease does not
+    // retile. A snap source just vacates a zone (no reflow).
+    sourceEngine->handoffRelease(windowId);
+    if (!sourceScreen.isEmpty() && sourceEngine == m_autotileEngine.data()) {
+        sourceEngine->retile(sourceScreen);
+    }
+
+    // A MONITOR crossing physically relocates the window to a different output.
+    // Tell the compositor the imminent output change is daemon-owned BEFORE the
+    // placement geometry triggers it — otherwise the effect's reactive
+    // outputChanged handler re-issues windowClosed/windowOpened and tears down
+    // the placement we're about to make (the exact tear-down NavigationController's
+    // in-mode cross-output move guards against). A cross-DESKTOP crossing keeps the
+    // window on the same screen (targetScreenId == sourceScreen), so no marker —
+    // arming a one-shot for an output change that never comes would swallow the
+    // next genuine outputChanged for this window.
+    if (!sourceScreen.isEmpty() && targetScreenId != sourceScreen) {
+        Q_EMIT windowOutputMoveExpected(windowId, targetScreenId);
+    }
+
+    // Place on the target. A cross-DESKTOP move onto an AUTOTILE desktop uses the
+    // existing reactive path: the window changes desktops below and the autotile
+    // effect catch-scan tiles it (honouring insertion-order) when that desktop
+    // becomes current — handoffReceive would mis-place it on the *current*
+    // desktop's state. Every other case places immediately:
+    //   - monitor crossing (current desktop): handoffReceive tiles / snaps it now;
+    //   - cross-desktop onto a SNAP desktop: snap handoffReceive honours toDesktop
+    //     (assigns the zone on the target desktop + off-desktop geometry).
+    const bool reactiveAutotileDesktopArrival = targetIsAutotile && targetDesktop > 0;
+    if (!reactiveAutotileDesktopArrival) {
+        PhosphorEngine::IPlacementEngine::HandoffContext ctx;
+        ctx.windowId = windowId;
+        ctx.toScreenId = targetScreenId;
+        ctx.toDesktop = targetDesktop;
+        ctx.fromEngineId = sourceEngine->engineId();
+        ctx.sourceZoneIds = landingZoneIds;
+        ctx.wasFloating = false; // an explicit move always places, never floats
+        targetEngine->handoffReceive(ctx);
+    }
+
+    // Physical relocation for a cross-desktop crossing: ask the compositor to
+    // move the real window to the target desktop. A monitor crossing needs none —
+    // the target engine's placement geometry already relocated the window.
+    if (targetDesktop > 0) {
+        Q_EMIT windowDesktopMoveRequested(windowId, targetDesktop);
+    }
+}
+
+void WindowTrackingAdaptor::handleCrossModeSwap(const QString& windowId, const QString& targetScreenId,
+                                                int targetDesktop, const QString& direction)
+{
+    auto* sourceEngine = qobject_cast<PhosphorEngine::PlacementEngineBase*>(sender());
+    if (!sourceEngine || windowId.isEmpty() || targetScreenId.isEmpty() || !m_layoutManager) {
+        return;
+    }
+
+    // Swap is never extended across virtual desktops (exchanging with a window on
+    // a desktop you can't see is meaningless — move owns cross-desktop relocation).
+    // No engine emits a cross-desktop crossModeSwapRequested; this guard is
+    // defensive so a stray desktop-targeted swap is a clean no-op, never a move.
+    if (targetDesktop > 0) {
+        return;
+    }
+
+    const QString activity = m_layoutManager->currentActivity();
+    const bool targetIsAutotile = m_layoutManager->modeForScreen(targetScreenId, currentDesktop(), activity)
+        == PhosphorZones::AssignmentEntry::Autotile;
+    PhosphorEngine::PlacementEngineBase* targetEngine =
+        targetIsAutotile ? m_autotileEngine.data() : m_snapEngine.data();
+    if (!targetEngine || targetEngine == sourceEngine) {
+        return; // target engine unavailable, or not actually cross-mode
+    }
+    const QString sourceScreen = sourceEngine->screenForTrackedWindow(windowId);
+    if (sourceScreen.isEmpty()) {
+        return;
+    }
+
+    // ── Resolve the swap partner: the target surface's entry-edge window facing
+    //    the source, and the slot the focused window will land in (the partner's
+    //    slot). ──
+    QString partner;
+    QStringList focusedLandingZones; // F's landing on a SNAP target (the entry zone)
+    int focusedLandingIndex = -1; // F's landing on an AUTOTILE target (partner's index)
+    if (targetIsAutotile) {
+        if (auto* autotileTarget = qobject_cast<PhosphorTileEngine::AutotileEngine*>(targetEngine)) {
+            partner = autotileTarget->entryWindowForCrossing(targetScreenId, direction);
+            if (!partner.isEmpty()) {
+                focusedLandingIndex = autotileTarget->windowOrderIndexForWindow(targetScreenId, partner);
+            }
+        }
+    } else if (auto* snapTarget = qobject_cast<PhosphorSnapEngine::SnapEngine*>(targetEngine)) {
+        const QString entryZone = snapTarget->entryZoneForCrossing(direction, targetScreenId);
+        if (!entryZone.isEmpty()) {
+            focusedLandingZones = QStringList{entryZone};
+            partner = snapTarget->windowInZoneOnScreen(entryZone, targetScreenId);
+        }
+    }
+
+    // No partner (empty entry slot) → a plain one-way cross-mode move.
+    if (partner.isEmpty()) {
+        handleCrossModeMove(windowId, targetScreenId, targetDesktop, direction);
+        return;
+    }
+
+    // ── Capture the partner's landing on the SOURCE: the focused window's vacated
+    //    slot. Captured BEFORE any relinquish so the indices/zones are still live. ──
+    QStringList partnerLandingZones; // partner's landing on a SNAP source (F's zone)
+    int partnerLandingIndex = -1; // partner's landing on an AUTOTILE source (F's index)
+    if (sourceEngine == m_autotileEngine.data()) {
+        if (auto* autotileSource = qobject_cast<PhosphorTileEngine::AutotileEngine*>(sourceEngine)) {
+            partnerLandingIndex = autotileSource->windowOrderIndexForWindow(sourceScreen, windowId);
+        }
+    } else if (auto* snapSource = qobject_cast<PhosphorSnapEngine::SnapEngine*>(sourceEngine)) {
+        const QString fZone = snapSource->snapState() ? snapSource->snapState()->zoneForWindow(windowId) : QString();
+        if (!fZone.isEmpty()) {
+            partnerLandingZones = QStringList{fZone};
+        }
+    }
+
+    // ── A monitor crossing physically relocates BOTH windows to a different
+    //    output (F → target, partner → source). Arm the daemon-owned-move marker
+    //    for each — but only when that window actually changes output, mirroring
+    //    handleCrossModeMove's guard: arming a one-shot for an output change that
+    //    never comes would swallow the window's next genuine outputChanged. ──
+    if (targetScreenId != sourceScreen) {
+        Q_EMIT windowOutputMoveExpected(windowId, targetScreenId);
+        Q_EMIT windowOutputMoveExpected(partner, sourceScreen);
+    }
+
+    // ── Relinquish both windows from their current engines (tracking-only). ──
+    sourceEngine->handoffRelease(windowId);
+    targetEngine->handoffRelease(partner);
+
+    // ── Place the focused window on the target, in the partner's slot. ──
+    {
+        PhosphorEngine::IPlacementEngine::HandoffContext ctx;
+        ctx.windowId = windowId;
+        ctx.toScreenId = targetScreenId;
+        ctx.fromEngineId = sourceEngine->engineId();
+        ctx.sourceZoneIds = focusedLandingZones;
+        ctx.insertIndex = focusedLandingIndex;
+        ctx.wasFloating = false;
+        targetEngine->handoffReceive(ctx);
+    }
+    // ── Place the partner on the source, in the focused window's vacated slot. ──
+    {
+        PhosphorEngine::IPlacementEngine::HandoffContext ctx;
+        ctx.windowId = partner;
+        ctx.toScreenId = sourceScreen;
+        ctx.fromEngineId = targetEngine->engineId();
+        ctx.sourceZoneIds = partnerLandingZones;
+        ctx.insertIndex = partnerLandingIndex;
+        ctx.wasFloating = false;
+        sourceEngine->handoffReceive(ctx);
+    }
 }
 
 } // namespace PlasmaZones

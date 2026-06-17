@@ -20,7 +20,18 @@ RowLayout {
     property string formLabel
     property color color
 
-    signal clicked()
+    signal clicked
+
+    // Qt's color.toString() drops the alpha channel when fully opaque
+    // (#RRGGBB) but keeps it otherwise (#AARRGGBB), so the label width
+    // jumps between 6 and 8 digits and misaligns the rows. Always emit
+    // the full 8-digit #AARRGGBB form.
+    function _toHexArgb(c) {
+        function pad(v) {
+            return Math.round(v * 255).toString(16).padStart(2, '0');
+        }
+        return ("#" + pad(c.a) + pad(c.r) + pad(c.g) + pad(c.b)).toUpperCase();
+    }
 
     Kirigami.FormData.label: formLabel
     spacing: Kirigami.Units.smallSpacing
@@ -31,8 +42,7 @@ RowLayout {
     }
 
     Label {
-        text: root.color.toString().toUpperCase()
+        text: root._toHexArgb(root.color)
         font: Kirigami.Theme.fixedWidthFont
     }
-
 }

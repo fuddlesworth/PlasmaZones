@@ -52,7 +52,10 @@ void NavigationHandler::syncFloatingWindowsFromDaemon()
             m_floatingCache.insert(id);
         }
 
-        qCDebug(lcEffect) << "Synced" << m_floatingCache.size() << "floating windows from daemon";
+        // Report the count of synced entries, not m_floatingCache.size() — the
+        // latter sums the instance and app-wide keyspaces and would misreport when
+        // both carry entries for the same app.
+        qCDebug(lcEffect) << "Synced" << floatingIds.size() << "floating windows from daemon";
     });
 }
 
@@ -82,6 +85,48 @@ void NavigationHandler::syncFloatingStateForWindow(const QString& windowId)
             }
         }
         w->deleteLater();
+    });
+}
+
+void NavigationHandler::syncZonesFromDaemon()
+{
+    if (!m_effect->isDaemonReady("sync window zones")) {
+        return;
+    }
+
+    QDBusPendingCall pendingCall = PhosphorProtocol::ClientHelpers::asyncCall(
+        PhosphorProtocol::Service::Interface::WindowTracking, QStringLiteral("getAllWindowStates"));
+    auto* watcher = new QDBusPendingCallWatcher(pendingCall, this);
+
+    connect(watcher, &QDBusPendingCallWatcher::finished, this, [this](QDBusPendingCallWatcher* w) {
+        w->deleteLater();
+
+        // Authoritative refresh: drop any stale entries from a prior daemon session
+        // up front — this is the ONLY place daemon-ready clears the zone cache, so a
+        // failed reply leaves it empty (no stale matches) rather than keeping last
+        // session's zones, and there is no clear racing the seed below.
+        clearAllZoneState();
+
+        QDBusPendingReply<PhosphorProtocol::WindowStateList> reply = *w;
+        if (!reply.isValid()) {
+            qCDebug(lcEffect) << "Failed to get window states from daemon";
+            return;
+        }
+
+        // Seed every snapped window's zone. A window with an empty zoneId (floating
+        // / unmanaged) carries no entry. setWindowZone keys by instanceId (see header).
+        const PhosphorProtocol::WindowStateList states = reply.value();
+        for (const PhosphorProtocol::WindowStateEntry& state : states) {
+            if (!state.zoneId.isEmpty()) {
+                setWindowZone(state.windowId, state.zoneId);
+            }
+        }
+        qCDebug(lcEffect) << "Synced" << zoneEntryCount() << "snapped-window zones from daemon";
+        // Re-seeding the zone cache changes the IsSnapped / Zone match inputs; drop
+        // the stale placement-scoped opacity verdicts so a `WHEN isSnapped` /
+        // `Zone(...)` SetOpacity rule re-resolves against the fresh state on the
+        // next frame (mirrors the daemon-loss invalidation).
+        m_effect->invalidateAllRuleCaches();
     });
 }
 

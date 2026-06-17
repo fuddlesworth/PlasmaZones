@@ -34,6 +34,7 @@ add_library(PhosphorSnapEngine SHARED
     src/lifecycle.cpp
     src/navigation.cpp
     src/navigation_actions.cpp
+    src/navigation_crosssurface.cpp
     src/resnap_calc.cpp
     src/snapnavigationtargets.cpp
     src/snapenginelogging.h

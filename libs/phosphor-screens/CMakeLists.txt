@@ -86,6 +86,15 @@ if(NOT TARGET PhosphorProtocol::Types)
     find_package(PhosphorProtocol CONFIG REQUIRED)
 endif()
 
+# PhosphorGeometry ships the shared directional-neighbour selector used by
+# swapper.cpp for virtual-screen swap. Qt6::Core-only, so no dependency cycle.
+# In the umbrella build the in-tree target already exists (phosphor-geometry is
+# configured before phosphor-screens); the guarded find_package satisfies a
+# standalone phosphor-screens configure. Matches the sibling-dependency pattern.
+if(NOT TARGET PhosphorGeometry::PhosphorGeometry)
+    find_package(PhosphorGeometry CONFIG REQUIRED)
+endif()
+
 if(NOT DEFINED KDE_INSTALL_INCLUDEDIR)
     include(GNUInstallDirs)
     set(KDE_INSTALL_INCLUDEDIR ${CMAKE_INSTALL_INCLUDEDIR})
@@ -170,6 +179,11 @@ target_link_libraries(PhosphorScreensCore
         Qt6::Core
         Qt6::Gui   # QRect / QRectF / QScreen in public headers
         PhosphorIdentity::PhosphorIdentity
+    PRIVATE
+        # Shared geometric directional selector for virtual-screen swap — used
+        # only in swapper.cpp, so PRIVATE. PhosphorGeometry depends only on
+        # Qt6::Core, so no dependency cycle.
+        PhosphorGeometry::PhosphorGeometry
 )
 
 _phosphorscreens_target_defaults(PhosphorScreensCore)

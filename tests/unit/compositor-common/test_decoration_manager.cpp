@@ -263,6 +263,45 @@ private Q_SLOTS:
         QVERIFY(m_bridge->callLog.isEmpty());
     }
 
+    void testResyncReHidesAfterCrossScreenTransferReset()
+    {
+        // Regression: an autotiled, title-bar-hidden window moved across
+        // OUTPUTS keeps its Autotile claim, which the destination retile
+        // transfers with releaseOthersOfKind + acquire. The manager still
+        // believes the window hidden, so reconcile re-asserts nothing — and
+        // when KWin then asynchronously resets noBorder on the output change,
+        // a follow-up resync (driven effect-side off windowFrameGeometryChanged)
+        // must re-hide. Before the fix nothing re-invoked resyncWindow after
+        // that reset and the title bar stayed back.
+        auto* fw = m_bridge->addWindow(Win1);
+        fw->moveResizeGeo = Zone;
+
+        m_mgr->acquire(Win1, DecorationManager::autotile(Screen1), Placement::CallerWillPlace);
+        QCOMPARE(fw->noBorder, true);
+
+        // Cross-output transfer: drop the source-screen claim, acquire the
+        // destination's. Pure owner-set surgery — no physical toggle, and the
+        // entry stays physicallyHidden across the hop.
+        m_bridge->clearLog();
+        m_mgr->releaseOthersOfKind(Win1, OwnerKind::Autotile, Screen2);
+        m_mgr->acquire(Win1, DecorationManager::autotile(Screen2), Placement::CallerWillPlace);
+        QVERIFY(m_bridge->callLog.isEmpty());
+        QVERIFY(m_mgr->isBorderless(Win1));
+        QVERIFY(m_mgr->isOwnedBy(Win1, DecorationManager::autotile(Screen2)));
+
+        // KWin asynchronously resets noBorder when the window changes output —
+        // AFTER the synchronous retile. The deferred resync then lands.
+        fw->noBorder = false;
+        m_bridge->clearLog();
+        m_mgr->resyncWindow(Win1);
+        const QStringList expected{
+            QStringLiteral("setNoBorder(app|1,true)"),
+            QStringLiteral("moveResize(app|1,640x480)"),
+        };
+        QCOMPARE(m_bridge->callLog, expected);
+        QCOMPARE(fw->noBorder, true);
+    }
+
     void testVetoWinsOverOwners()
     {
         auto* fw = m_bridge->addWindow(Win1);

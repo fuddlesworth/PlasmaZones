@@ -26,6 +26,9 @@
 #include <QScopeGuard>
 #include <QSet>
 #include <QStringList>
+#include <QTimer>
+
+#include <utility>
 
 #include "../autotilehandler.h"
 #include "../navigationhandler.h"
@@ -56,6 +59,45 @@ void PlasmaZonesEffect::slotActivateWindowRequested(const QString& windowId)
         KWin::effects->activateWindow(w);
     } else {
         qCDebug(lcEffect) << "slotActivateWindowRequested: window not found" << windowId;
+    }
+}
+
+void PlasmaZonesEffect::slotWindowDesktopMoveRequested(const QString& windowId, int desktop)
+{
+    if (desktop < 1) {
+        return;
+    }
+    KWin::EffectWindow* w = findWindowById(windowId);
+    if (!w) {
+        qCDebug(lcEffect) << "slotWindowDesktopMoveRequested: window not found" << windowId;
+        return;
+    }
+    const QList<KWin::VirtualDesktop*> all = KWin::effects->desktops();
+    if (desktop > all.size()) {
+        qCDebug(lcEffect) << "slotWindowDesktopMoveRequested: desktop" << desktop << "out of range, have" << all.size();
+        return;
+    }
+    // A sticky (on-all-desktops) window is already present on the target; pinning
+    // it to a single desktop here would silently un-sticky it. Directional
+    // cross-desktop move is meaningless for an everywhere window — leave it.
+    if (w->isOnAllDesktops()) {
+        qCDebug(lcEffect) << "slotWindowDesktopMoveRequested: window is on all desktops, ignoring" << windowId;
+        return;
+    }
+    // 1-based desktop → the matching VirtualDesktop. Single-desktop membership
+    // (not on-all-desktops) so the window genuinely moves to the target.
+    KWin::effects->windowToDesktops(w, {all.at(desktop - 1)});
+}
+
+void PlasmaZonesEffect::slotWindowOutputMoveExpected(const QString& windowId, const QString& targetScreenId)
+{
+    if (windowId.isEmpty() || targetScreenId.isEmpty()) {
+        return;
+    }
+    // Hand the one-shot to the autotile handler: it owns the cross-output
+    // outputChanged transfer path that would otherwise re-issue close/open.
+    if (AutotileHandler* handler = m_autotileHandler.get()) {
+        handler->markExpectedOutputMove(windowId, targetScreenId);
     }
 }
 
@@ -92,8 +134,8 @@ void PlasmaZonesEffect::slotApplyGeometryRequested(const QString& windowId, int 
             // Drag-out unsnap: the daemon kept us at the drop position but restored pre-snap
             // dimensions. Logically a snap-out (the window is leaving zone-managed sizing),
             // not an in-zone resize.
-            applySnapGeometry(w, sizeOnlyGeo, /*allowDuringDrag=*/false, /*skipAnimation=*/false,
-                              PhosphorAnimation::ProfilePaths::WindowSnapOut);
+            applyWindowGeometry(w, sizeOnlyGeo, /*allowDuringDrag=*/false, /*skipAnimation=*/false,
+                                PhosphorAnimation::ProfilePaths::WindowSnapOut);
             // Drag-out unsnap: the window left zone-managed sizing.
             m_snapHandler->clearWindowSnapped(liveWindowId);
         } else {
@@ -146,7 +188,7 @@ void PlasmaZonesEffect::slotApplyGeometryRequested(const QString& windowId, int 
     // daemon restart the reapply can race ahead of the disk-persisted pre-tile
     // load; the move-check makes it robust regardless of ordering.
     if (!zoneId.isEmpty() && w->frameGeometry().toRect() != geometry) {
-        // Capture frame geometry synchronously BEFORE applySnapGeometry moves the window.
+        // Capture frame geometry synchronously BEFORE applyWindowGeometry moves the window.
         // ensurePreSnapGeometryStored is async (D-Bus hasPreTileGeometry check) — without
         // pre-capturing, the callback would read the post-move geometry instead of the
         // original free-floating position.
@@ -156,9 +198,9 @@ void PlasmaZonesEffect::slotApplyGeometryRequested(const QString& windowId, int 
     // Empty zoneId = float-restore (daemon placing the window back at its pre-snap geometry, e.g.
     // autotile drag-to-float, drag-out unsnap). Non-empty zoneId = snap into a target zone. The
     // shader-tree path differs accordingly so users can give snap-in and snap-out distinct effects.
-    applySnapGeometry(w, geometry, /*allowDuringDrag=*/false, /*skipAnimation=*/false,
-                      zoneId.isEmpty() ? PhosphorAnimation::ProfilePaths::WindowSnapOut
-                                       : PhosphorAnimation::ProfilePaths::WindowSnapIn);
+    applyWindowGeometry(w, geometry, /*allowDuringDrag=*/false, /*skipAnimation=*/false,
+                        zoneId.isEmpty() ? PhosphorAnimation::ProfilePaths::WindowSnapOut
+                                         : PhosphorAnimation::ProfilePaths::WindowSnapIn);
     // Track snapping's own border set (mirrors how autotile records at its
     // tile-apply) using a discriminator analogous to the batch path
     // (slotApplyGeometriesBatch). The batch path discriminates on screenId (empty =
@@ -284,12 +326,12 @@ void PlasmaZonesEffect::slotApplyGeometriesBatch(const PhosphorProtocol::WindowG
                 return;
             }
             // Seed the tracked-screen cache from the daemon's authoritative answer for
-            // this batch BEFORE applySnapGeometry, not after. Empty screenId means the
+            // this batch BEFORE applyWindowGeometry, not after. Empty screenId means the
             // daemon didn't supply an authoritative answer (e.g. autotile float-restore
             // path) — fall through to the existing geometry-based behavior in that case.
             // The pre-seed handles async follow-up frame changes; m_inDaemonGeometryApply
             // (set below) handles the synchronous frame change emitted from inside
-            // applySnapGeometry, which would otherwise resolve the new position against
+            // applyWindowGeometry, which would otherwise resolve the new position against
             // pre-rotation m_virtualScreenDefs and report a phantom cross-VS unsnap.
             if (!p.screenId.isEmpty()) {
                 m_trackedScreenPerWindow[p.window] = p.screenId;
@@ -299,8 +341,8 @@ void PlasmaZonesEffect::slotApplyGeometriesBatch(const PhosphorProtocol::WindowG
             const auto guard = qScopeGuard([this] {
                 m_inDaemonGeometryApply = false;
             });
-            applySnapGeometry(p.window, p.geometry, /*allowDuringDrag=*/false,
-                              /*skipAnimation=*/false, batchProfilePath);
+            applyWindowGeometry(p.window, p.geometry, /*allowDuringDrag=*/false,
+                                /*skipAnimation=*/false, batchProfilePath);
             // Snapping owns its border set (mirrors autotile). The daemon
             // supplies a non-empty authoritative screenId only for real
             // placements; an EMPTY screenId marks a float/restore entry
@@ -430,6 +472,98 @@ void PlasmaZonesEffect::slotWindowFloatingChanged(const QString& windowId, bool 
         // authoritative daemon path so the window stays floating. Keyed by
         // appId to survive the window's identity change across close/reopen.
         m_snapHandler->invalidateRestore(::PhosphorIdentity::WindowId::extractAppId(windowId));
+    }
+    // isFloating is now a rule MATCH field — re-resolve appearance / animation
+    // rules for this window so a `WHEN isFloating` border / opacity re-applies.
+    invalidateRuleCacheForStateChange(windowId);
+}
+
+void PlasmaZonesEffect::slotWindowStateChanged(const QString& windowId, const PhosphorProtocol::WindowStateEntry& state)
+{
+    // Validate the daemon payload at the boundary, mirroring the other
+    // daemon-data slots (DragPolicy / BridgeRegistrationResult). A garbled entry
+    // naming no window must not write a zone keyed by an empty/garbage id.
+    if (const QString err = state.validationError(); !err.isEmpty()) {
+        qCWarning(lcEffect) << "slotWindowStateChanged: rejecting invalid entry —" << err;
+        return;
+    }
+    // Keep the effect-side zone cache current so the IsSnapped / Zone rule-match
+    // fields resolve against the live placement. An empty zoneId (unsnapped /
+    // floated / screen-changed) removes the entry. The isFloating cache WRITE lives
+    // on the separate windowFloatingChanged path, so it is not duplicated here; the
+    // rule-cache invalidation below coalesces with the floating path's (a float
+    // toggle emits both signals — see flushPendingRuleInvalidations).
+    m_navigationHandler->setWindowZone(windowId, state.zoneId);
+    invalidateRuleCacheForStateChange(windowId);
+}
+
+void PlasmaZonesEffect::invalidateRuleCacheForStateChange(const QString& windowId)
+{
+    if (m_shaderManager.animationRuleSet().isEmpty()) {
+        return;
+    }
+    // Coalesce: a single float toggle emits BOTH windowFloatingChanged and
+    // windowStateChanged, so this runs twice per logical change. Accumulate the
+    // affected windowIds and flush once at the end of the event-loop turn — the
+    // match-cache clear is global (running it per call is wasteful) and the
+    // per-window border rebuild is otherwise repeated. The flush before the next
+    // paint keeps the re-resolved border / opacity visually immediate.
+    //
+    // Only the CACHED verdicts (border / opacity) need invalidation. shouldHandleWindow's
+    // exclusion query is evaluated on-demand every time it is consulted (drag start,
+    // lifecycle filtering), so a snap/float/zone change is picked up at the next natural
+    // call without eager re-filtering.
+    const bool wasEmpty = m_pendingRuleInvalidations.isEmpty();
+    m_pendingRuleInvalidations.insert(windowId);
+    if (wasEmpty) {
+        // `this` as the context object cancels the callback if the effect is torn
+        // down before the turn ends.
+        QTimer::singleShot(0, this, [this] {
+            flushPendingRuleInvalidations();
+        });
+    }
+}
+
+void PlasmaZonesEffect::flushPendingRuleInvalidations()
+{
+    const QSet<QString> windowIds = std::exchange(m_pendingRuleInvalidations, {});
+    if (windowIds.isEmpty() || m_shaderManager.animationRuleSet().isEmpty()) {
+        return;
+    }
+    // The match cache is keyed on (windowId, ruleSet revision); neither moves on a
+    // placement-state change, so drop it once so border / opacity rules re-resolve
+    // against the new snapped / floating / zone state.
+    m_shaderManager.animationRuleEvaluator().clearCache();
+    const bool hasOpacity = m_shaderManager.hasOpacityRules();
+    for (const QString& windowId : windowIds) {
+        KWin::EffectWindow* w = findWindowById(windowId);
+        if (!w) {
+            continue;
+        }
+        // Recreate this window's border so a state-scoped border colour re-applies.
+        updateWindowBorder(windowId, w);
+        // An opacity-only (borderless) window needs an explicit repaint for its
+        // re-resolved opacity to reach the screen (mirrors slotWindowActivated).
+        if (hasOpacity) {
+            w->addRepaintFull();
+        }
+    }
+}
+
+void PlasmaZonesEffect::invalidateAllRuleCaches()
+{
+    if (m_shaderManager.animationRuleSet().isEmpty()) {
+        return;
+    }
+    // A bulk placement change (daemon loss clears the zone/floating caches; the
+    // daemon-ready re-seed repopulates them) moves neither the windowId nor the
+    // ruleSet revision the match cache is keyed on, so every placement-scoped
+    // verdict would survive stale. Drop the whole cache; the full repaint makes
+    // every opacity-only window re-resolve against the current placement on the
+    // next frame (border windows recover through their own restore/rebuild path).
+    m_shaderManager.animationRuleEvaluator().clearCache();
+    if (KWin::effects && m_shaderManager.hasOpacityRules()) {
+        KWin::effects->addRepaintFull();
     }
 }
 

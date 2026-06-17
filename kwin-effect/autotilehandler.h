@@ -103,6 +103,12 @@ public:
      *        overtakes an in-flight windowOpened.
      */
     void onWindowClosed(const QString& windowId, const QString& screenId, bool windowDestroyed = false);
+    /// Tear down all effect-side autotile tracking for @p windowId (shared +
+    /// KWin-specific state, incl. the pending cross-screen-restore connection)
+    /// WITHOUT notifying the daemon. Shared by onWindowClosed (which adds the
+    /// daemon windowClosed call) and the cross-mode-move marker path (where the
+    /// daemon already relinquished the window via handoffRelease).
+    void cleanupAutotileTracking(const QString& windowId, const QString& screenId);
     /// Drop a destroyed window's desktop-move geometry stash. Separate from
     /// onWindowClosed because the desktop-MOVE path calls onWindowClosed
     /// right after creating the stash (the window must look "closed" to this
@@ -243,6 +249,14 @@ public:
     void setPendingReactivateWindow(KWin::EffectWindow* w)
     {
         m_pendingReactivateWindow = w;
+    }
+
+    /// Record a daemon-initiated cross-output move so the next outputChanged
+    /// for @p windowId to @p targetScreenId updates bookkeeping only. See
+    /// m_expectedOutputMove.
+    void markExpectedOutputMove(const QString& windowId, const QString& targetScreenId)
+    {
+        m_expectedOutputMove.insert(windowId, targetScreenId);
     }
 
 public Q_SLOTS:
@@ -399,6 +413,15 @@ private:
     QHash<QString, QStringList> m_savedAutotileStackingOrder; ///< autotile stacking order, restored on snap→autotile
     QSet<QString> m_notifiedWindows;
     QHash<QString, QString> m_notifiedWindowScreens; ///< windowId → screen ID at time of notification
+    /// Daemon-initiated cross-output moves: windowId → expected destination
+    /// screen. Set when the daemon emits windowOutputMoveExpected (it has
+    /// already migrated its tiling state and reflowed both outputs). Consumed
+    /// one-shot by handleWindowOutputChanged on the matching outputChanged so
+    /// that transfer only updates bookkeeping + decoration, never re-issues
+    /// windowClosed/windowOpened. A stale entry (no outputChanged ever arrives,
+    /// or a different destination) is cleared on the next outputChanged for the
+    /// window and on close.
+    QHash<QString, QString> m_expectedOutputMove;
     QSet<QString> m_savedNotifiedForDesktopReturn; ///< windows removed from m_notifiedWindows on desktop switch
     /// Pre-autotile geometry preserved when a window is moved to another
     /// desktop. Keyed by windowId; value holds (sourceScreenId, frameRect)
@@ -422,7 +445,17 @@ private:
     /// minimize/unminimize cycles that KWin emits on tiled windows when
     /// plasmashell notification popups transiently change stacking.
     QHash<QString, QPointer<QTimer>> m_pendingMinimizeFloat;
+    /// Global stagger epoch, bumped on a desktop/screen switch (slotScreensChanged)
+    /// to cancel EVERY in-flight staggered apply — geometry computed for the old
+    /// context must never land in the new one.
     uint64_t m_autotileStaggerGeneration = 0;
+    /// Per-screen stagger generation. A retile bumps only its own screen(s), so a
+    /// newer batch for the SAME screen supersedes an earlier one while a batch for
+    /// a DIFFERENT screen leaves it untouched. Without this, the destination batch
+    /// of a cross-output move (emitted microseconds after the source reflow)
+    /// cancelled the source's still-staggered windows via the single global
+    /// generation — they never moved, leaving a hole on the source monitor.
+    QHash<QString, uint64_t> m_autotileStaggerGenByScreen;
     QHash<QString, QRect> m_autotileTargetZones;
     QHash<QString, QRect> m_centeredWaylandZones; ///< zones where Wayland windows were last centered
     QString m_pendingAutotileFocusWindowId;

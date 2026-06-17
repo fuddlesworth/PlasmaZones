@@ -100,6 +100,72 @@ private Q_SLOTS:
         QCOMPARE(q.valueForField(Field::Height)->toInt(), 240);
         QVERIFY(q.hasWindow());
     }
+
+    void testValueForField_kwinPropertyFields()
+    {
+        WindowQuery q;
+        // Absent by default — inert during windowless context resolution.
+        QVERIFY(!q.valueForField(Field::KeepAbove).has_value());
+        QVERIFY(!q.valueForField(Field::KeepBelow).has_value());
+        QVERIFY(!q.valueForField(Field::SkipTaskbar).has_value());
+        QVERIFY(!q.valueForField(Field::SkipPager).has_value());
+        QVERIFY(!q.valueForField(Field::SkipSwitcher).has_value());
+        QVERIFY(!q.valueForField(Field::IsModal).has_value());
+        QVERIFY(!q.valueForField(Field::HasDecoration).has_value());
+        QVERIFY(!q.valueForField(Field::IsResizable).has_value());
+        QVERIFY(!q.valueForField(Field::PositionX).has_value());
+        QVERIFY(!q.valueForField(Field::PositionY).has_value());
+        QVERIFY(!q.valueForField(Field::CaptionNormal).has_value());
+        QVERIFY(!q.hasWindow());
+
+        q.keepAbove = true;
+        q.keepBelow = false;
+        q.skipTaskbar = true;
+        q.skipPager = false;
+        q.skipSwitcher = true;
+        q.isModal = false;
+        q.hasDecoration = true;
+        q.isResizable = false;
+        q.positionX = -50; // a negative X is valid (window straddling the left edge)
+        q.positionY = 100;
+        q.captionNormal = QStringLiteral("Firefox");
+
+        QCOMPARE(q.valueForField(Field::KeepAbove)->toBool(), true);
+        // Present even though false (the bool-field contract).
+        QVERIFY(q.valueForField(Field::KeepBelow).has_value());
+        QCOMPARE(q.valueForField(Field::KeepBelow)->toBool(), false);
+        QCOMPARE(q.valueForField(Field::SkipTaskbar)->toBool(), true);
+        QCOMPARE(q.valueForField(Field::SkipPager)->toBool(), false);
+        QCOMPARE(q.valueForField(Field::SkipSwitcher)->toBool(), true);
+        QCOMPARE(q.valueForField(Field::IsModal)->toBool(), false);
+        QCOMPARE(q.valueForField(Field::HasDecoration)->toBool(), true);
+        QCOMPARE(q.valueForField(Field::IsResizable)->toBool(), false);
+        QCOMPARE(q.valueForField(Field::PositionX)->toInt(), -50);
+        QCOMPARE(q.valueForField(Field::PositionY)->toInt(), 100);
+        QCOMPARE(q.valueForField(Field::CaptionNormal)->toString(), QStringLiteral("Firefox"));
+        QVERIFY(q.hasWindow());
+    }
+
+    void testValueForField_pzStateFields()
+    {
+        WindowQuery q;
+        // Absent by default — inert during windowless context resolution.
+        QVERIFY(!q.valueForField(Field::IsFloating).has_value());
+        QVERIFY(!q.valueForField(Field::IsSnapped).has_value());
+        QVERIFY(!q.valueForField(Field::Zone).has_value());
+        QVERIFY(!q.hasWindow());
+
+        q.isFloating = false;
+        q.isSnapped = true;
+        q.zone = QStringLiteral("{a1b2c3d4-0000-0000-0000-000000000001}");
+
+        // Present even though false (the bool-field contract).
+        QVERIFY(q.valueForField(Field::IsFloating).has_value());
+        QCOMPARE(q.valueForField(Field::IsFloating)->toBool(), false);
+        QCOMPARE(q.valueForField(Field::IsSnapped)->toBool(), true);
+        QCOMPARE(q.valueForField(Field::Zone)->toString(), QStringLiteral("{a1b2c3d4-0000-0000-0000-000000000001}"));
+        QVERIFY(q.hasWindow());
+    }
 };
 
 QTEST_GUILESS_MAIN(TestWindowQuery)

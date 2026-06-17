@@ -3,6 +3,7 @@
 
 #include "RuleTestHelpers.h"
 
+#include <QSet>
 #include <QTest>
 
 using namespace PhosphorWindowRule;
@@ -322,6 +323,101 @@ private Q_SLOTS:
         QVERIFY(!eval.hasAnyMatch(other));
     }
 
+    // ── hasMatchTargetingFields ──
+
+    void testHasMatchTargetingFields()
+    {
+        const QSet<Field> transientFields = {Field::IsTransient, Field::WindowType, Field::IsModal};
+
+        // The real-world scenario: a class-only "firefox → dissolve open" rule.
+        // A Firefox tooltip shares the class, so it MATCHES the rule — but the
+        // rule references no type field, so it must NOT count as deliberately
+        // targeting the transient type.
+        WindowRuleSet classOnly;
+        classOnly.addRule(
+            makeRule(QStringLiteral("firefox dissolve"), 100,
+                     MatchExpression::makeLeaf(Field::WindowClass, Operator::Contains, QStringLiteral("firefox")),
+                     {overrideShader(QStringLiteral("window.open"), QStringLiteral("dissolve"))}));
+        RuleEvaluator classEval(classOnly);
+
+        WindowQuery firefoxTooltip;
+        firefoxTooltip.windowClass = QStringLiteral("firefox");
+        firefoxTooltip.isTransient = true;
+        // Matches by class, but no type-field targeting → false.
+        QVERIFY(classEval.hasAnyMatch(firefoxTooltip));
+        QVERIFY(!classEval.hasMatchTargetingFields(firefoxTooltip, transientFields));
+
+        // A rule that explicitly references a type field (here windowType,
+        // mirroring the user's PiP rule) DOES count — and only when it also
+        // matches the window. WindowType::Dialog == 2 on the wire.
+        WindowRuleSet typed;
+        typed.addRule(makeRule(
+            QStringLiteral("firefox PiP"), 100,
+            MatchExpression::makeAll({
+                MatchExpression::makeLeaf(Field::WindowClass, Operator::Contains, QStringLiteral("firefox")),
+                MatchExpression::makeNone({MatchExpression::makeLeaf(
+                    Field::WindowType, Operator::Equals, static_cast<int>(PhosphorProtocol::WindowType::Dialog))}),
+            }),
+            {overrideShader(QStringLiteral("window.open"), QStringLiteral("fade"))}));
+        RuleEvaluator typedEval(typed);
+
+        WindowQuery firefoxWin;
+        firefoxWin.windowClass = QStringLiteral("firefox");
+        firefoxWin.windowType = PhosphorProtocol::WindowType::Normal; // != Dialog(2) → passes the none{} clause
+        firefoxWin.isTransient = true;
+        QVERIFY(typedEval.hasMatchTargetingFields(firefoxWin, transientFields));
+
+        // References the field but does NOT match the window (Dialog==2 fails
+        // the none{} clause) → false: targeting requires an actual match.
+        WindowQuery dialogWin;
+        dialogWin.windowClass = QStringLiteral("firefox");
+        dialogWin.windowType = PhosphorProtocol::WindowType::Dialog;
+        dialogWin.isTransient = true;
+        QVERIFY(!typedEval.hasMatchTargetingFields(dialogWin, transientFields));
+
+        // A disabled type-targeting rule does not count.
+        WindowRuleSet disabled;
+        WindowRule r = makeRule(QStringLiteral("transient rule"), 100,
+                                MatchExpression::makeLeaf(Field::IsTransient, Operator::Equals, true),
+                                {overrideShader(QStringLiteral("window.open"), QStringLiteral("fade"))});
+        r.enabled = false;
+        disabled.addRule(r);
+        RuleEvaluator disabledEval(disabled);
+        QVERIFY(!disabledEval.hasMatchTargetingFields(firefoxTooltip, transientFields));
+
+        // Multi-rule set (the production shape): a non-targeting class-only
+        // rule listed first plus a later type-targeting rule. The existence
+        // check must find the targeting rule regardless of list position.
+        WindowRuleSet mixed;
+        mixed.addRule(
+            makeRule(QStringLiteral("class only"), 100,
+                     MatchExpression::makeLeaf(Field::WindowClass, Operator::Contains, QStringLiteral("firefox")),
+                     {overrideShader(QStringLiteral("window.open"), QStringLiteral("dissolve"))}));
+        mixed.addRule(makeRule(QStringLiteral("targets transient"), 90,
+                               MatchExpression::makeLeaf(Field::IsTransient, Operator::Equals, true),
+                               {overrideShader(QStringLiteral("window.open"), QStringLiteral("fade"))}));
+        RuleEvaluator mixedEval(mixed);
+        QVERIFY(mixedEval.hasMatchTargetingFields(firefoxTooltip, transientFields));
+
+        // The OSD/notification escape set {IsNotification, WindowType} is the
+        // other production field set. A rule targeting IsNotification re-enables
+        // an OSD/notification window the same way.
+        const QSet<Field> osdFields = {Field::IsNotification, Field::WindowType};
+        WindowRuleSet osd;
+        osd.addRule(makeRule(QStringLiteral("targets notification"), 100,
+                             MatchExpression::makeLeaf(Field::IsNotification, Operator::Equals, true),
+                             {overrideShader(QStringLiteral("window.open"), QStringLiteral("fade"))}));
+        RuleEvaluator osdEval(osd);
+        WindowQuery notif;
+        notif.windowClass = QStringLiteral("firefox");
+        notif.isNotification = true;
+        QVERIFY(osdEval.hasMatchTargetingFields(notif, osdFields));
+        // The class-only firefox rule MATCHES this notification by class but
+        // references no type field → does not re-enable it through the OSD set.
+        QVERIFY(classEval.hasAnyMatch(notif));
+        QVERIFY(!classEval.hasMatchTargetingFields(notif, osdFields));
+    }
+
     // ── Cache ──
 
     void testResolveCached_returnsSameResult()
@@ -334,6 +430,34 @@ private Q_SLOTS:
         const ResolvedActions second = eval.resolveCached(winId, konsoleQuery());
         QVERIFY(first == second);
         QCOMPARE(eval.cacheSize(), 1);
+    }
+
+    // The read-only peek used by the effect's per-frame paint path to skip the
+    // (expensive) WindowQuery build on a cache hit. It must be revision-gated and
+    // must not mutate the cache.
+    void testResolveCachedIfPresent_peeksWithoutResolving()
+    {
+        WindowRuleSet set;
+        set.addRule(makeRule(QStringLiteral("a"), 100, MatchExpression{}, {floatAction()}));
+        RuleEvaluator eval(set);
+        const QString winId = QStringLiteral("org.kde.konsole|abc");
+
+        // (a) Unseeded cache → miss (nullopt), no entry created by the peek.
+        QVERIFY(!eval.resolveCachedIfPresent(winId).has_value());
+        QCOMPARE(eval.cacheSize(), 0);
+
+        // (b) After resolveCached seeds the entry, the peek returns the SAME verdict
+        //     and does NOT grow the cache.
+        const ResolvedActions resolved = eval.resolveCached(winId, konsoleQuery());
+        const std::optional<ResolvedActions> peeked = eval.resolveCachedIfPresent(winId);
+        QVERIFY(peeked.has_value());
+        QVERIFY(*peeked == resolved);
+        QCOMPARE(eval.cacheSize(), 1);
+
+        // (c) A rule-set mutation bumps the revision, so the now-stale entry reads as
+        //     a miss — the peek is revision-gated exactly like resolveCached.
+        set.addRule(makeRule(QStringLiteral("b"), 50, MatchExpression{}, {floatAction()}));
+        QVERIFY(!eval.resolveCachedIfPresent(winId).has_value());
     }
 
     void testResolveCached_invalidatedByRevisionBump()

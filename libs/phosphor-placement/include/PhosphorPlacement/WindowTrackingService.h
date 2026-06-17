@@ -372,6 +372,17 @@ public:
     void recordFreeGeometry(const QString& windowId, const QString& screenId, const QRect& geometry,
                             bool overwrite) override;
 
+    /// Authoritative float-back capture for a window closing on @p screenId.
+    /// Unlike recordFreeGeometry (a geometry-only partial that deliberately leaves
+    /// the managed-context screen untouched), this records the float geometry AND
+    /// updates the record's managed `screenId` to @p screenId — carrying an engine
+    /// slot so the store merge adopts the new screen. Used by the close-capture
+    /// fallback when a cross-screen move has orphaned the window from both engines,
+    /// so the only authoritative source of its final screen is KWin (passed down
+    /// from the effect). The existing record's per-engine slots and desktop/activity
+    /// are preserved; only the screen and this screen's free geometry change.
+    void recordFloatingClose(const QString& windowId, const QString& screenId, const QRect& geometry);
+
     /// Clear a window's shared free/float geometry from the record. See
     /// IWindowTrackingService::clearFreeGeometry.
     void clearFreeGeometry(const QString& windowId) override;

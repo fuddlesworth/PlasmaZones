@@ -406,6 +406,58 @@ void WindowTrackingService::recordFreeGeometry(const QString& windowId, const QS
     }
 }
 
+void WindowTrackingService::recordFloatingClose(const QString& windowId, const QString& screenId, const QRect& geometry)
+{
+    if (windowId.isEmpty() || screenId.isEmpty() || !geometry.isValid()) {
+        return;
+    }
+    // Never let a tile rect become the float-back — same invariant recordFreeGeometry
+    // enforces. (An orphaned cross-screen-dragged window is floating, not tiled, so
+    // this is belt-and-braces.)
+    if (isWindowAutotileTiled(windowId)) {
+        return;
+    }
+    const QString appId = currentAppIdFor(windowId);
+    if (appId.isEmpty()) {
+        return;
+    }
+    PhosphorEngine::WindowPlacement p;
+    p.windowId = windowId;
+    p.appId = appId;
+    p.screenId = screenId;
+    p.freeGeometryByScreen.insert(screenId, geometry);
+    // Preserve the existing record's per-engine slots and context. Carrying a
+    // non-empty engine map is what makes the store merge adopt the new screenId
+    // (a geometry-only partial, like recordFreeGeometry, would leave the stale
+    // managed screen in place — exactly the bug this fixes).
+    if (const auto existing = m_placementStore.peek(windowId, appId)) {
+        p.virtualDesktop = existing->virtualDesktop;
+        p.activity = existing->activity;
+        p.kind = existing->kind;
+        p.engines = existing->engines;
+    }
+    if (p.engines.isEmpty()) {
+        // No prior record (first close after a cross-screen drag): synthesize a
+        // floating slot so the merge still adopts the screen. A floated restore
+        // keys off screenId + freeGeometryByScreen, not the slot's engine id, so
+        // the slot id is not load-bearing here.
+        PhosphorEngine::EngineSlot slot;
+        slot.state = PhosphorEngine::WindowPlacement::stateFloating();
+        p.engines.insert(QString(PhosphorEngine::WindowPlacement::snapEngineId()), slot);
+    }
+    if (m_placementStore.record(p)) {
+        markDirty(DirtyWindowPlacements);
+    }
+    // Close-capture convergence: this orphaned cross-screen close is the freshest
+    // authority for the app's float-back, so drop stale pure-float duplicates on
+    // the same screen (see WindowPlacementStore::collapsePureFloatSiblings). Mark
+    // dirty when it pruned — the record() above may have been a no-op, leaving this
+    // as the only mutation to persist.
+    if (m_placementStore.collapsePureFloatSiblings(appId, windowId)) {
+        markDirty(DirtyWindowPlacements);
+    }
+}
+
 void WindowTrackingService::clearFreeGeometry(const QString& windowId)
 {
     if (windowId.isEmpty()) {

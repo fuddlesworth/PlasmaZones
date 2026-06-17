@@ -220,9 +220,24 @@ public:
     Q_INVOKABLE bool supportsShaderLeg(const QString& path) const;
 
     /// Installed `AnimationShaderEffect`s flattened to a QML-friendly list.
-    /// Each row: id / name / description / author / version / category /
-    /// isUserEffect / parameters (QVariantList of ParameterInfo maps).
+    /// Each row mirrors `animations_controller_detail::effectToMap`:
+    /// id / name / description / author / version / category / appliesTo
+    /// (QStringList of event-class tokens, empty = universal) / isUserEffect /
+    /// previewPath / parameters (QVariantList of ParameterInfo maps).
     Q_INVOKABLE QVariantList availableShaderEffects() const;
+
+    /// Path-aware variant of @c availableShaderEffects: the same rows, each
+    /// additionally carrying `dimmed` (bool) and `dimReason` (string) for
+    /// the event @p path. An effect whose declared `appliesTo` class can't
+    /// drive @p path (e.g. the geometry-only window-morph on a window.open
+    /// row) comes back `dimmed: true` with a human-readable reason. The
+    /// per-event shader picker feeds this straight to the cascading
+    /// category menu, which renders dimmed items with a warning tooltip —
+    /// the same affordance the window-rule action picker uses for actions
+    /// that can't fire against the current match. Mirrors that pattern:
+    /// dimmed items stay SELECTABLE; the UI surfaces the consequence rather
+    /// than hard-blocking the choice.
+    Q_INVOKABLE QVariantList availableShaderEffectsForPath(const QString& path) const;
 
     /// Single-effect lookup. Empty map when @p effectId is unknown.
     Q_INVOKABLE QVariantMap shaderEffectInfo(const QString& effectId) const;

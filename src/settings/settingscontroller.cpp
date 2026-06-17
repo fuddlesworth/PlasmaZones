@@ -118,6 +118,7 @@ SettingsController::~SettingsController()
     if (m_windowRulesPage) {
         m_windowRulesPage->setScreenLookup({});
         m_windowRulesPage->setActivityLookup({});
+        m_windowRulesPage->setZoneLookup({});
         m_windowRulesPage->setSnappingLayoutLookup({});
         m_windowRulesPage->setTilingAlgorithmLookup({});
         // The shader resolver captures `this` and reaches m_animationShaderRegistry;
@@ -541,6 +542,32 @@ SettingsController::SettingsController(QObject* parent)
             }
         }
         return activityId;
+    });
+    // Zone (snap-zone UUID) → friendly "<layout> — <zone>" label, walking the
+    // local manual layouts for the zone whose id matches. Resolved live so a
+    // later layout/zone rename surfaces on the next refreshLabels(). The zone-name
+    // data is not in the LayoutPreview list (it carries geometry + numbers, not
+    // UUIDs), so this reads the registry's actual Zone objects directly. Unknown
+    // ids (deleted layout, hand-edited rule) round-trip verbatim.
+    m_windowRulesPage->setZoneLookup([this](const QString& zoneId) -> QString {
+        if (zoneId.isEmpty() || !m_localLayoutManager) {
+            return zoneId;
+        }
+        for (PhosphorZones::Layout* layout : m_localLayoutManager->layouts()) {
+            if (!layout) {
+                continue;
+            }
+            for (PhosphorZones::Zone* zone : layout->zones()) {
+                if (!zone || zone->id().toString() != zoneId) {
+                    continue;
+                }
+                const QString zoneName =
+                    zone->name().isEmpty() ? PhosphorI18n::tr("Zone %1").arg(zone->zoneNumber()) : zone->name();
+                const QString layoutName = layout->name();
+                return layoutName.isEmpty() ? zoneName : PhosphorI18n::tr("%1 — %2").arg(layoutName, zoneName);
+            }
+        }
+        return zoneId;
     });
     // SettingsController::layouts() is the union of snapping layouts
     // (UUID-keyed) and autotile entries (algorithm-token-keyed via the

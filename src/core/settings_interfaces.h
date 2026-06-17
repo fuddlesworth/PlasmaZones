@@ -364,14 +364,24 @@ public:
     virtual void setSnappingStickyWindowHandling(StickyWindowHandling handling) = 0;
     virtual bool restoreWindowsToZonesOnLogin() const = 0;
     virtual void setRestoreWindowsToZonesOnLogin(bool restore) = 0;
-    /// When true, the daemon restores an UNSNAPPED window (genuinely free, or
-    /// snap-floated) to its previous global position on login — including back
-    /// to the monitor it was on at logout, whereas KWin's own session restore
-    /// may otherwise place it on a different output. Snapped-to-zone restore is
-    /// governed separately by @ref restoreWindowsToZonesOnLogin. Per-window
-    /// overrides via the RestorePosition window rule.
-    virtual bool restoreUnsnappedWindowsOnLogin() const = 0;
-    virtual void setRestoreUnsnappedWindowsOnLogin(bool restore) = 0;
+    /// When true, the daemon restores a FLOATED window to its previous global
+    /// position on reopen/login — including back to the monitor it was on at
+    /// logout, whereas KWin's own session restore may otherwise place it on a
+    /// different output. Parallel per-engine toggles: snap-floated (unsnapped) and
+    /// autotile-floated (untiled) windows are gated independently. The managed
+    /// restore (snapped-to-zone / tiled) is governed separately by
+    /// @ref restoreWindowsToZonesOnLogin. Per-window overrides via the
+    /// engine-neutral RestorePosition window rule.
+    virtual bool snappingRestoreFloatedWindowsOnLogin() const = 0;
+    virtual void setSnappingRestoreFloatedWindowsOnLogin(bool restore) = 0;
+    virtual bool autotileRestoreFloatedWindowsOnLogin() const = 0;
+    virtual void setAutotileRestoreFloatedWindowsOnLogin(bool restore) = 0;
+    /// When a window that was never snapped (no pre-float zone to return to) is
+    /// unfloated (Meta+F), snap it to a fallback zone (last-used → first-empty →
+    /// first zone) instead of leaving it floating. Default off: unfloat with no
+    /// pre-float zone emits OSD feedback and the window stays floating.
+    virtual bool snapUnfloatFallbackToZone() const = 0;
+    virtual void setSnapUnfloatFallbackToZone(bool enabled) = 0;
     virtual bool autoAssignAllLayouts() const = 0;
     virtual void setAutoAssignAllLayouts(bool enabled) = 0;
     virtual bool snapAssistFeatureEnabled() const = 0;

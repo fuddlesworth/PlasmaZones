@@ -36,7 +36,7 @@
  *  - findAllWindowsById does NOT honor fuzzyFindByAppId — it stays
  *    exact-match even when the flag is set, so multi-match fuzzy scenarios
  *    (several windows sharing an appId) cannot be exercised through it.
- *  - applySnapGeometry is logged as a moveResize entry in callLog (it
+ *  - applyWindowGeometry is logged as a moveResize entry in callLog (it
  *    delegates to the same record mutation), so call-order assertions
  *    cannot distinguish the two paths.
  *  - stackingOrder() returns std::map key order (lexicographic by id), NOT
@@ -253,7 +253,7 @@ public:
     {
     }
 
-    void applySnapGeometry(PhosphorCompositor::WindowHandle w, const QRectF& geometry, bool) override
+    void applyWindowGeometry(PhosphorCompositor::WindowHandle w, const QRectF& geometry, bool) override
     {
         moveResize(w, geometry);
     }

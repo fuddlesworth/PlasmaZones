@@ -50,13 +50,25 @@ PhosphorProtocol::WindowType windowTypeFor(KWin::EffectWindow* w);
 ///     `setWindowMetadata` derivation). `screenId` requires the effect's
 ///     output→stable-id resolution, which is not available to this free
 ///     helper, so the caller passes it via @p screenId (typically
-///     `getWindowScreenId(w)`); left empty it stays disengaged. NOTE: a window
+///     `getWindowScreenId(w)`). Unlike the window string fields, `screenId` is a
+///     non-optional context field that is always present; passing it empty
+///     resolves as the empty/unknown screen value (the all/unknown convention),
+///     not a disengaged optional. NOTE: a window
 ///     query carrying a populated context only ENABLES context-pinned
 ///     window-domain rules to match — it does not affect the windowless
 ///     context cascade, which routes through `ContextRuleBridge`.
 ///
+/// PlasmaZones placement state (@p isFloating / @p isSnapped / @p zoneId) is
+/// supplied by the caller because it lives in the effect's runtime caches
+/// (NavigationHandler), not on the KWin window. The caller passes
+/// `isWindowFloating(wid)`, `isWindowSnapped(wid)`, `zoneForWindow(wid)`. These
+/// are REQUIRED (no defaults) so every call site is compiler-forced to supply
+/// them — a site that silently omitted them would leave IsFloating / IsSnapped /
+/// Zone unmatched in that resolver path only.
+///
 /// Confined to the effect translation unit so the LGPL phosphor-windowrule
 /// library never sees a KWin type.
-PhosphorWindowRule::WindowQuery windowRuleQueryFor(KWin::EffectWindow* w, const QString& screenId = {});
+PhosphorWindowRule::WindowQuery windowRuleQueryFor(KWin::EffectWindow* w, const QString& screenId, bool isFloating,
+                                                   bool isSnapped, const QString& zoneId);
 
 } // namespace PlasmaZones

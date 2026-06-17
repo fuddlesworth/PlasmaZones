@@ -540,7 +540,7 @@ bool PlasmaZonesEffect::beginShaderTransition(KWin::EffectWindow* window,
     // `tryBeginShaderForEvent`) covers BOTH callsite categories
     // uniformly: window-lifecycle events that flow through
     // `tryBeginShaderForEvent`, and zone.* events that flow through
-    // `applySnapGeometry → beginShaderTransition` directly. Without
+    // `applyWindowGeometry → beginShaderTransition` directly. Without
     // this gate the zone.* path would still install shader transitions
     // even with global animations off.
     if (m_windowAnimator && !m_windowAnimator->isEnabled()) {
@@ -1405,7 +1405,7 @@ void PlasmaZonesEffect::tryBeginShaderForEvent(KWin::EffectWindow* window, const
     }
     // Fast-path early-out on the global animations toggle. The
     // authoritative gate also lives in `beginShaderTransition` (so
-    // zone.* callers via `applySnapGeometry` are gated too), but
+    // zone.* callers via `applyWindowGeometry` are gated too), but
     // dispatching there would still pay the shader-tree resolve cost
     // — this skips it entirely when the global toggle is off.
     if (m_windowAnimator && !m_windowAnimator->isEnabled()) {
@@ -1418,7 +1418,7 @@ void PlasmaZonesEffect::tryBeginShaderForEvent(KWin::EffectWindow* window, const
     // expression resolves for the window's full WindowQuery (AppId /
     // WindowClass / Title / WindowRole / DesktopFile / WindowType / Pid /
     // state flags). Skipping this for shader transitions only would leave
-    // the motion-side cascade in `applySnapGeometry` doing its own check;
+    // the motion-side cascade in `applyWindowGeometry` doing its own check;
     // both call sites gate identically so the filter is a single concept
     // across the two paths.
     if (!shouldAnimateWindow(window)) {
@@ -1436,7 +1436,7 @@ void PlasmaZonesEffect::tryBeginShaderForEvent(KWin::EffectWindow* window, const
     // also resolves its slot. Caching across resolver calls is built
     // into the evaluator's `resolveCached(windowId, …)` path; the query
     // here is only the match input, not the cache key.
-    const PhosphorWindowRule::WindowQuery query = windowRuleQueryFor(window, getWindowScreenId(window));
+    const PhosphorWindowRule::WindowQuery query = windowRuleQuery(window);
     const QString windowId = getWindowId(window);
     const auto& profileTree = m_shaderManager.profileTree();
     // Per-event base duration. The daemon mirrors its motion

@@ -519,6 +519,74 @@ private Q_SLOTS:
         delete snap;
     }
 
+    void testFloatRestore_tiledFrameNeverPoisonsSnapFloatBack()
+    {
+        // Regression (Steam "tiled geometry restored to floated in snapping mode"):
+        // the shared free/float geometry is written by captureWindowPlacement from
+        // the live frame whenever the OWNING engine reports `floating`. Across a mode
+        // flip, a window TILED by autotile becomes snap-owned and snap reports
+        // `floating`, yet the live frame still holds the autotile TILE rect (the
+        // window has not been repositioned). Writing it poisons the float-back, and a
+        // later snap reopen restores the tile rect as the floated position. The write
+        // must be refused while the autotile engine still reports the window tiled —
+        // the genuine prior free geometry stays intact.
+        const QString screenId = QStringLiteral("DP-9");
+        const QRect screenRect(0, 0, 3840, 2160);
+        PhosphorScreens::FakeScreenProvider fake;
+        fake.addScreen(screenId, screenRect, screenId);
+        PhosphorScreens::ScreenManager screenMgr(
+            PhosphorScreens::ScreenManagerConfig{.screenProvider = &fake, .useGeometrySensors = false});
+        screenMgr.start();
+
+        QObject parent;
+        auto* wta = new WindowTrackingAdaptor(m_layoutManager, m_zoneDetector, &screenMgr, m_settings, nullptr, nullptr,
+                                              &parent);
+        auto* snap = new SnapEngine(m_layoutManager, wta->service(), m_zoneDetector, nullptr, nullptr);
+        snap->setEngineSettings(m_settings);
+        wta->service()->setSnapState(snap->snapState());
+        wta->service()->setSnapEngine(snap);
+        wta->setEngines(snap, nullptr);
+
+        const QString w1 = QStringLiteral("steam|abc123");
+        const QRect goodFloat(918, 624, 1608, 957); // a genuine floated geometry
+        const QRect tileRect(8, 1138, 3184, 602); // a full-width bottom-row tile rect
+
+        // The autotile engine still reports this window actively tiled.
+        wta->service()->setAutotileTiledPredicate([&](const QString& id) {
+            return id == w1;
+        });
+
+        // Seed a genuine prior free geometry (as an earlier honest snap-float capture
+        // would have). Recorded directly so the seed is independent of the guard.
+        PhosphorEngine::WindowPlacement seed;
+        seed.windowId = w1;
+        seed.appId = QStringLiteral("steam");
+        seed.screenId = screenId;
+        PhosphorEngine::EngineSlot snapSlot;
+        snapSlot.state = PhosphorEngine::WindowPlacement::stateFloating();
+        seed.engines.insert(PhosphorEngine::WindowPlacement::snapEngineId(), snapSlot);
+        seed.freeGeometryByScreen.insert(screenId, goodFloat);
+        wta->service()->placementStore().record(seed);
+
+        // Now the window is snap-floating but its live frame is the TILE rect.
+        snap->setWindowFloat(w1, true);
+        QVERIFY(wta->service()->isWindowFloating(w1));
+        wta->setFrameGeometry(w1, tileRect.x(), tileRect.y(), tileRect.width(), tileRect.height());
+
+        wta->captureWindowPlacement(w1);
+
+        // The tile rect must NOT have overwritten the genuine float-back.
+        auto rec = wta->service()->placementStore().peek(w1, QStringLiteral("steam"));
+        QVERIFY(rec.has_value());
+        QCOMPARE(rec->freeGeometryFor(screenId), goodFloat);
+        QVERIFY(rec->freeGeometryFor(screenId) != tileRect);
+
+        wta->service()->setAutotileTiledPredicate({});
+        wta->service()->setSnapEngine(nullptr);
+        wta->service()->setSnapState(nullptr);
+        delete snap;
+    }
+
     // =====================================================================
     // swapWindowsById
     // =====================================================================

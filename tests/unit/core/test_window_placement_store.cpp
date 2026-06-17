@@ -340,6 +340,18 @@ private Q_SLOTS:
         bare.engines.insert(WindowPlacement::snapEngineId(), freeSlot);
         QVERIFY(!bare.hasRestorableContent());
 
+        // CRITICAL (two-state model): snapping now defaults every unmanaged window to
+        // `floating`, so a bare {floating, no geometry, no zones} record is the new
+        // residue and MUST also be rejected — otherwise geometry-less floated records
+        // flood the per-app FIFO and re-trigger the residue-eviction bug.
+        WindowPlacement bareFloating;
+        bareFloating.windowId = QStringLiteral("b|1");
+        bareFloating.appId = QStringLiteral("b");
+        EngineSlot bareFloatSlot;
+        bareFloatSlot.state = WindowPlacement::stateFloating();
+        bareFloating.engines.insert(WindowPlacement::snapEngineId(), bareFloatSlot);
+        QVERIFY(!bareFloating.hasRestorableContent());
+
         // A floated-from-snap window keeping its pre-float zones (no geometry yet) is
         // still restorable — the zones let it resnap.
         WindowPlacement floatWithZones = bare;
@@ -556,6 +568,118 @@ private Q_SLOTS:
         const EngineSlot gotSlot = got->slotFor(WindowPlacement::autotileEngineId());
         QCOMPARE(gotSlot.state, QString(WindowPlacement::stateTiled()));
         QCOMPARE(gotSlot.order, 3);
+    }
+
+    // ── collapsePureFloatSiblings (close-capture convergence) ──
+
+    void testCollapse_dropsSameScreenFloatDuplicate()
+    {
+        // Two pure-float records for one app on the same screen — the duplicate
+        // state that makes a reopen "open in a different spot each time" under the
+        // oldest-first take(). Collapsing keeps the named (closing) record only.
+        WindowPlacementStore store;
+        store.record(make(QStringLiteral("dolphin|old"), QStringLiteral("dolphin"), WindowPlacement::stateFloating(),
+                          WindowPlacement::snapEngineId(), QStringLiteral("S1")));
+        store.record(make(QStringLiteral("dolphin|new"), QStringLiteral("dolphin"), WindowPlacement::stateFloating(),
+                          WindowPlacement::snapEngineId(), QStringLiteral("S1")));
+
+        store.collapsePureFloatSiblings(QStringLiteral("dolphin"), QStringLiteral("dolphin|new"));
+
+        // Exact-windowId checks (no appId): contains(id, appId) would pass on any
+        // surviving bucket record, so it can't prove the RIGHT record was kept.
+        QVERIFY(store.contains(QStringLiteral("dolphin|new")));
+        QVERIFY(!store.contains(QStringLiteral("dolphin|old")));
+    }
+
+    void testCollapse_keepsManagedAndOtherScreenSiblings()
+    {
+        WindowPlacementStore store;
+        // Snapped (managed) sibling — never pruned.
+        store.record(make(QStringLiteral("dolphin|snapped"), QStringLiteral("dolphin"), WindowPlacement::stateSnapped(),
+                          WindowPlacement::snapEngineId(), QStringLiteral("S1")));
+        // Pure-float on a DIFFERENT screen — distinct memory, kept.
+        store.record(make(QStringLiteral("dolphin|other"), QStringLiteral("dolphin"), WindowPlacement::stateFloating(),
+                          WindowPlacement::snapEngineId(), QStringLiteral("S2")));
+        // Pure-float on the SAME screen as the kept record — pruned.
+        store.record(make(QStringLiteral("dolphin|dup"), QStringLiteral("dolphin"), WindowPlacement::stateFloating(),
+                          WindowPlacement::snapEngineId(), QStringLiteral("S1")));
+        store.record(make(QStringLiteral("dolphin|keep"), QStringLiteral("dolphin"), WindowPlacement::stateFloating(),
+                          WindowPlacement::snapEngineId(), QStringLiteral("S1")));
+
+        store.collapsePureFloatSiblings(QStringLiteral("dolphin"), QStringLiteral("dolphin|keep"));
+
+        QVERIFY(store.contains(QStringLiteral("dolphin|keep"))); // exact survival
+        QVERIFY(store.contains(QStringLiteral("dolphin|snapped"))); // managed — kept
+        QVERIFY(store.contains(QStringLiteral("dolphin|other"))); // different screen — kept
+        QVERIFY(!store.contains(QStringLiteral("dolphin|dup"))); // same-screen float dup — pruned
+    }
+
+    void testCollapse_noopWhenKeptRecordIsManaged()
+    {
+        // A managed (snapped) close must not prune float siblings.
+        WindowPlacementStore store;
+        store.record(make(QStringLiteral("dolphin|float"), QStringLiteral("dolphin"), WindowPlacement::stateFloating(),
+                          WindowPlacement::snapEngineId(), QStringLiteral("S1")));
+        store.record(make(QStringLiteral("dolphin|snapped"), QStringLiteral("dolphin"), WindowPlacement::stateSnapped(),
+                          WindowPlacement::snapEngineId(), QStringLiteral("S1")));
+
+        store.collapsePureFloatSiblings(QStringLiteral("dolphin"), QStringLiteral("dolphin|snapped"));
+
+        QVERIFY(store.contains(QStringLiteral("dolphin|float")));
+        QVERIFY(store.contains(QStringLiteral("dolphin|snapped")));
+    }
+
+    void testCollapse_absorbsPrunedSiblingOtherScreenGeometry()
+    {
+        // A pruned same-screen duplicate may also hold a float position on a
+        // DIFFERENT monitor the kept record lacks. That position must not be lost
+        // — the kept record absorbs it before the duplicate is removed.
+        WindowPlacementStore store;
+        // Sibling floated on S1 then S2 — its single record accumulates both.
+        store.record(make(QStringLiteral("dolphin|sib"), QStringLiteral("dolphin"), WindowPlacement::stateFloating(),
+                          WindowPlacement::snapEngineId(), QStringLiteral("S1")));
+        store.record(make(QStringLiteral("dolphin|sib"), QStringLiteral("dolphin"), WindowPlacement::stateFloating(),
+                          WindowPlacement::snapEngineId(), QStringLiteral("S2")));
+        // Kept record floated only on S1.
+        store.record(make(QStringLiteral("dolphin|keep"), QStringLiteral("dolphin"), WindowPlacement::stateFloating(),
+                          WindowPlacement::snapEngineId(), QStringLiteral("S1")));
+
+        QVERIFY(store.collapsePureFloatSiblings(QStringLiteral("dolphin"), QStringLiteral("dolphin|keep")));
+
+        QVERIFY(!store.contains(QStringLiteral("dolphin|sib"))); // S1-sharing duplicate pruned
+        const auto kept = store.peek(QStringLiteral("dolphin|keep"), QStringLiteral("dolphin"));
+        QVERIFY(kept.has_value());
+        QVERIFY(kept->freeGeometryFor(QStringLiteral("S1")).isValid());
+        QVERIFY(kept->freeGeometryFor(QStringLiteral("S2")).isValid()); // absorbed from the pruned sibling
+    }
+
+    void testCollapse_transitiveCollapseIsOrderIndependent()
+    {
+        // bridge(S1+S2) connects keep(S1) to leaf(S2). The leaf shares NO screen
+        // with the kept record directly — only through the screen the bridge
+        // contributes. A naive single backward pass would process the leaf (newer,
+        // higher index) before the bridge and miss it; the fixpoint re-scans after
+        // absorbing the bridge's S2 and prunes the leaf too. Whole connected set
+        // collapses into keep regardless of FIFO order.
+        WindowPlacementStore store;
+        store.record(make(QStringLiteral("dolphin|bridge"), QStringLiteral("dolphin"), WindowPlacement::stateFloating(),
+                          WindowPlacement::snapEngineId(), QStringLiteral("S1")));
+        store.record(make(QStringLiteral("dolphin|bridge"), QStringLiteral("dolphin"), WindowPlacement::stateFloating(),
+                          WindowPlacement::snapEngineId(), QStringLiteral("S2"))); // bridge now S1+S2
+        store.record(make(QStringLiteral("dolphin|leaf"), QStringLiteral("dolphin"), WindowPlacement::stateFloating(),
+                          WindowPlacement::snapEngineId(), QStringLiteral("S2"))); // newer than bridge
+        store.record(make(QStringLiteral("dolphin|keep"), QStringLiteral("dolphin"), WindowPlacement::stateFloating(),
+                          WindowPlacement::snapEngineId(), QStringLiteral("S1"))); // newest
+
+        QVERIFY(store.collapsePureFloatSiblings(QStringLiteral("dolphin"), QStringLiteral("dolphin|keep")));
+
+        QVERIFY(store.contains(QStringLiteral("dolphin|keep")));
+        QVERIFY(!store.contains(QStringLiteral("dolphin|bridge"))); // shares S1 → pruned (S2 absorbed)
+        QVERIFY(!store.contains(QStringLiteral("dolphin|leaf"))); // connected via absorbed S2 → pruned
+        const auto kept = store.peek(QStringLiteral("dolphin|keep"), QStringLiteral("dolphin"));
+        QVERIFY(kept.has_value());
+        QVERIFY(kept->freeGeometryFor(QStringLiteral("S1")).isValid());
+        QVERIFY(kept->freeGeometryFor(QStringLiteral("S2")).isValid());
     }
 };
 

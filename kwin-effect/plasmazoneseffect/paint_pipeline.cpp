@@ -288,8 +288,7 @@ void PlasmaZonesEffect::prePaintWindow(KWin::RenderView* view, KWin::EffectWindo
     if (w && m_shaderManager.hasOpacityRules()) {
         const QString winClass = w->windowClass();
         if (!isOwnOverlayClass(winClass) && !isPlasmaShellSurface(winClass)) {
-            const auto opacity = resolveWindowOpacity(m_shaderManager.animationRuleEvaluator(),
-                                                      windowRuleQueryFor(w, getWindowScreenId(w)), getWindowId(w));
+            const auto opacity = resolveWindowOpacity(resolveWindowRuleActions(w, getWindowId(w)));
             m_shaderManager.cacheFrameOpacity(w, opacity);
             // Clear the deviceOpaque region so KWin recomposites whatever
             // sits behind a dimmed window — without it, stale background
@@ -407,8 +406,7 @@ void PlasmaZonesEffect::paintWindow(const KWin::RenderTarget& renderTarget, cons
             if (m_shaderManager.frameOpacityCached(w)) {
                 opacity = m_shaderManager.cachedFrameOpacity(w);
             } else {
-                opacity = resolveWindowOpacity(m_shaderManager.animationRuleEvaluator(),
-                                               windowRuleQueryFor(w, getWindowScreenId(w)), getWindowId(w));
+                opacity = resolveWindowOpacity(resolveWindowRuleActions(w, getWindowId(w)));
                 m_shaderManager.cacheFrameOpacity(w, opacity);
             }
             if (opacity) {
@@ -468,7 +466,7 @@ void PlasmaZonesEffect::paintWindow(const KWin::RenderTarget& renderTarget, cons
         // ShaderTransition's docstring). Lifecycle events (window.*)
         // started via tryBeginShaderForEvent set durationMs > 0 and drive
         // progress from monotonic steady-clock elapsed; zone.* events flowed
-        // through applySnapGeometry leave durationMs = 0 and ride the
+        // through applyWindowGeometry leave durationMs = 0 and ride the
         // m_windowAnimator timeline so the shader matches the geometry
         // animation.
         qreal progress = 0.0;
