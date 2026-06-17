@@ -95,11 +95,14 @@ void SnapEngine::windowOpened(const QString& windowId, const QString& screenId, 
 // geometry application.
 //
 // Screen mode semantics:
-//   - The placement-store restore and app rules (chain level 1) may
-//     cross-screen migrate: a stored record's own screenId or an app rule can
+//   - SNAPPED placement-store restore and app rules (chain level 1) may
+//     cross-screen migrate: a snapped record's own screenId or an app rule can
 //     route a window to a different screen, and the store's take() accept
 //     predicate / snapped-branch screen check keep an autotile-mode screen from
-//     being snapped onto (autotile on that screen will own it).
+//     being snapped onto (autotile on that screen will own it). FLOATED records
+//     are screen-local — a float-back is restored only when the window reopens
+//     on its recorded screen, never moved across monitors (the accept predicate
+//     gates floated records on the opening screen).
 //   - The empty-zone (level 2) and last-zone (level 3) fallbacks inherently use
 //     the caller screen as the target, so they are ONLY valid when the caller's
 //     screen is in snap mode. On autotile screens they're short-circuited —
@@ -229,11 +232,9 @@ SnapResult SnapEngine::resolveWindowRestore(const QString& windowId, const QStri
                 // on the wrong monitor, unsnapped. The RECORDED screen must still be
                 // in snapping mode, though: a snapped record whose own screen is now
                 // autotile-owned must not snap-restore there (the early gate leaves it
-                // for autotile). A floated position is screen-local UNLESS the
-                // user opted into unsnapped-position restore (global setting / rule),
-                // in which case the record is eligible cross-screen so the window
-                // returns to its recorded monitor; otherwise it stays gated on the
-                // opening screen.
+                // for autotile). A floated position is ALWAYS screen-local: it is
+                // eligible only when the window opens on its recorded monitor (the
+                // gate below). Float restore never MOVES a window across monitors.
                 if (p.slotFor(engineId()).state == WindowPlacement::stateSnapped()) {
                     return recordedSnapScreenIsSnapping(p);
                 }
@@ -251,9 +252,17 @@ SnapResult SnapEngine::resolveWindowRestore(const QString& windowId, const QStri
                 if (!p.hasRestorableContent()) {
                     return false;
                 }
-                if (restoreFloatedPosition) {
-                    return true;
-                }
+                // A floated record is SCREEN-LOCAL: eligible only when the window
+                // opens on the monitor it was recorded on (or an unscreened record).
+                // Float restore must NEVER move a window to a different monitor —
+                // a stale float record left by an earlier instance on another output
+                // (matched via the appId FIFO, not an exact-windowId match) would
+                // otherwise teleport a freshly-launched window onto a monitor it never
+                // occupied, and the wrong-monitor capture that follows re-cements the
+                // bad record into a self-perpetuating cross-monitor jump. The opening
+                // monitor is owned by KWin's placement / session restore; PlasmaZones
+                // only restores the floated POSITION within that monitor (gated on the
+                // restore-floated opt-in at the geometry-move step below).
                 return p.screenId.isEmpty() || p.screenId == screenId;
             },
             [&](const WindowPlacement& p) {
