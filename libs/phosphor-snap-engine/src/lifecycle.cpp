@@ -229,11 +229,9 @@ SnapResult SnapEngine::resolveWindowRestore(const QString& windowId, const QStri
                 // on the wrong monitor, unsnapped. The RECORDED screen must still be
                 // in snapping mode, though: a snapped record whose own screen is now
                 // autotile-owned must not snap-restore there (the early gate leaves it
-                // for autotile). A floated position is screen-local UNLESS the
-                // user opted into unsnapped-position restore (global setting / rule),
-                // in which case the record is eligible cross-screen so the window
-                // returns to its recorded monitor; otherwise it stays gated on the
-                // opening screen.
+                // for autotile). A floated position is ALWAYS screen-local: it is
+                // eligible only when the window opens on its recorded monitor (the
+                // gate below). Float restore never MOVES a window across monitors.
                 if (p.slotFor(engineId()).state == WindowPlacement::stateSnapped()) {
                     return recordedSnapScreenIsSnapping(p);
                 }
@@ -251,9 +249,17 @@ SnapResult SnapEngine::resolveWindowRestore(const QString& windowId, const QStri
                 if (!p.hasRestorableContent()) {
                     return false;
                 }
-                if (restoreFloatedPosition) {
-                    return true;
-                }
+                // A floated record is SCREEN-LOCAL: eligible only when the window
+                // opens on the monitor it was recorded on (or an unscreened record).
+                // Float restore must NEVER move a window to a different monitor —
+                // a stale float record left by an earlier instance on another output
+                // (matched via the appId FIFO, not an exact-windowId match) would
+                // otherwise teleport a freshly-launched window onto a monitor it never
+                // occupied, and the wrong-monitor capture that follows re-cements the
+                // bad record into a self-perpetuating cross-monitor jump. The opening
+                // monitor is owned by KWin's placement / session restore; PlasmaZones
+                // only restores the floated POSITION within that monitor (gated on the
+                // restore-floated opt-in at the geometry-move step below).
                 return p.screenId.isEmpty() || p.screenId == screenId;
             },
             [&](const WindowPlacement& p) {
