@@ -38,10 +38,16 @@ struct PickerCategory
 
 /// Group a match Field into a picker category. The `Field` enum interleaves
 /// state and context (e.g. IsMaximized sits after Activity), so the picker
-/// groups by THIS classification, never by enum / emit order.
+/// groups by THIS classification, never by enum / emit order. The categories
+/// are deliberately fine-grained: a single flat "State" bucket of ~19 entries
+/// is hard to scan, so the window-kind, taskbar/switcher-hint, and
+/// PlasmaZones-tiling concepts each get their own top-level fly-out. Items
+/// within a category are sorted alphabetically by CategoryMenuButton; only the
+/// returned order int controls the relative position of the categories.
 PickerCategory fieldCategory(Field f)
 {
     switch (f) {
+    // Who the window is — identifiers a rule matches against.
     case Field::AppId:
     case Field::WindowClass:
     case Field::DesktopFile:
@@ -50,35 +56,43 @@ PickerCategory fieldCategory(Field f)
     case Field::Title:
     case Field::CaptionNormal:
         return {PhosphorI18n::tr("Identity"), 0};
+    // What kind of window it is (its role/type), not a toggled runtime state.
     case Field::WindowType:
-    case Field::IsSticky:
-    case Field::IsFullscreen:
-    case Field::IsMinimized:
-    case Field::IsMaximized:
-    case Field::IsFocused:
     case Field::IsTransient:
+    case Field::IsModal:
     case Field::IsNotification:
+        return {PhosphorI18n::tr("Type"), 1};
+    // Live window-manager state and chrome flags.
+    case Field::IsMaximized:
+    case Field::IsMinimized:
+    case Field::IsFullscreen:
+    case Field::IsFocused:
     case Field::KeepAbove:
     case Field::KeepBelow:
+    case Field::IsSticky:
+    case Field::HasDecoration:
+    case Field::IsResizable:
+        return {PhosphorI18n::tr("State"), 2};
+    // NETWM "skip" hints — whether the window opts out of the taskbar, pager,
+    // or Alt+Tab switcher.
     case Field::SkipTaskbar:
     case Field::SkipPager:
     case Field::SkipSwitcher:
-    case Field::IsModal:
-    case Field::HasDecoration:
-    case Field::IsResizable:
+        return {PhosphorI18n::tr("Taskbar & switcher"), 3};
+    // PlasmaZones-owned placement state.
     case Field::IsFloating:
     case Field::IsSnapped:
     case Field::Zone:
-        return {PhosphorI18n::tr("State"), 1};
+        return {PhosphorI18n::tr("Tiling"), 4};
     case Field::Width:
     case Field::Height:
     case Field::PositionX:
     case Field::PositionY:
-        return {PhosphorI18n::tr("Size"), 2};
+        return {PhosphorI18n::tr("Size"), 5};
     case Field::ScreenId:
     case Field::VirtualDesktop:
     case Field::Activity:
-        return {PhosphorI18n::tr("Context"), 3};
+        return {PhosphorI18n::tr("Context"), 6};
     }
     return {PhosphorI18n::tr("Other"), 99};
 }
