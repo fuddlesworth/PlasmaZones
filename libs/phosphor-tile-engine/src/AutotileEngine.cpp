@@ -2476,7 +2476,13 @@ void AutotileEngine::onWindowAdded(const QString& windowId)
 
     PhosphorTiles::TilingState* state = tilingStateForScreen(screenId);
     const int maxWin = effectiveMaxWindows(screenId);
-    if (state && state->tiledWindowCount() >= maxWin) {
+    // A window matched by a "Float this app" rule must bypass the tiled-window
+    // cap: it opens floating and so consumes no tile slot (tiledWindowCount
+    // excludes floats), and insertWindow marks it floating once inserted. Dropping
+    // it here would leave it untracked — neither floating in autotile (so the
+    // IsFloating match field stays false) nor re-tileable via Meta+F.
+    const bool ruleWillFloat = m_floatPredicate && m_floatPredicate(windowId);
+    if (state && state->tiledWindowCount() >= maxWin && !ruleWillFloat) {
         qCDebug(PhosphorTileEngine::lcTileEngine)
             << "Max window limit reached for screen" << screenId << "(max=" << maxWin << ")";
         // Purge this window from pending initial orders so the order doesn't
@@ -2609,7 +2615,10 @@ void AutotileEngine::onLayoutChanged(PhosphorZones::Layout* layout)
 
 void AutotileEngine::emitInsertFloatStateSync(const QString& windowId, const QString& screenId)
 {
-    PhosphorTiles::TilingState* state = tilingStateForScreen(screenId);
+    // Read-only lookup — must NOT lazily materialize a state. tilingStateForScreen
+    // would create one for a known-but-stateless screen; this method only reads
+    // isFloating right after a successful insertWindow, so the state already exists.
+    PhosphorTiles::TilingState* state = m_screenStates.value(currentKeyForScreen(screenId));
     if (!state) {
         return;
     }

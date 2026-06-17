@@ -18,7 +18,8 @@ namespace PhosphorCompositor {
  * Sibling of @c FloatingCache — together the two describe a window's placement
  * for the IsSnapped / Zone / IsFloating window-rule match fields. Both caches key
  * per-instance state by the stable instanceId (below); FloatingCache additionally
- * carries an app-wide appId keyspace for rules that float every instance of an app.
+ * carries an app-wide appId keyspace (a bare appId, e.g. a session-restore marker
+ * floating every instance of an app).
  *
  * Keyed by the STABLE instanceId, not the full composite windowId. A window's
  * appId can mutate mid-session (Electron / CEF apps rename their window class),
@@ -41,7 +42,7 @@ public:
     /// True iff @p windowId is snapped into a zone (has a non-empty entry).
     bool isSnapped(const QString& windowId) const
     {
-        return !m_byInstance.value(::PhosphorIdentity::WindowId::extractInstanceId(windowId)).isEmpty();
+        return !zoneForWindow(windowId).isEmpty();
     }
 
     /// Record @p windowId's zone. An empty @p zoneId removes the entry (the
@@ -49,6 +50,11 @@ public:
     void setZone(const QString& windowId, const QString& zoneId)
     {
         const QString instanceId = ::PhosphorIdentity::WindowId::extractInstanceId(windowId);
+        // A composite with an empty instanceId ("appId|") is malformed: keying it
+        // would alias every empty-instance window onto one wildcard slot. Ignore.
+        if (instanceId.isEmpty()) {
+            return;
+        }
         if (zoneId.isEmpty()) {
             m_byInstance.remove(instanceId);
         } else {

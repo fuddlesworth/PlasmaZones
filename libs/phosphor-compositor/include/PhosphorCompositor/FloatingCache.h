@@ -5,7 +5,6 @@
 
 #include <PhosphorIdentity/WindowId.h>
 
-#include <QHash>
 #include <QSet>
 #include <QString>
 
@@ -20,12 +19,16 @@ namespace PhosphorCompositor {
  *     mid-session (Electron / CEF apps rename their window class), changing the
  *     composite `appId|instanceId` but never the instanceId — keying by it keeps
  *     a floated window resolvable across that rename.
- *   - App-wide floats (a bare appId, e.g. a rule floating every instance of an
- *     app) are keyed by appId and match every instance via the fallback below.
+ *   - App-wide floats (a bare appId, e.g. a session-restore marker floating every
+ *     instance of an app) are keyed by appId and match every instance via the
+ *     fallback in @c isFloating.
  *
- * setFloating(false) on a specific instance also clears the app-wide entry once
- * no sibling instance remains floating, so the app-wide fallback does not keep
- * reporting a window as floating after its last instance was unfloated.
+ * Mirrors the authoritative @c WindowTrackingService::setFloating: unfloating a
+ * specific instance ALSO drops the coarse app-wide (bare appId) entry. Still-
+ * floating siblings keep their own instance entries, so this never clears them;
+ * it only removes the session-restore appId marker (matching the daemon, which
+ * removes the appId entry unconditionally on instance unfloat — no sibling scan,
+ * which would not survive a mid-session class rename anyway).
  */
 class FloatingCache
 {
@@ -44,28 +47,25 @@ public:
     {
         const QString appId = ::PhosphorIdentity::WindowId::extractAppId(windowId);
         const bool isComposite = (appId != windowId); // bare appId has no separator
-        if (floating) {
-            if (isComposite) {
-                m_byInstance.insert(::PhosphorIdentity::WindowId::extractInstanceId(windowId), appId);
+        if (isComposite) {
+            const QString instanceId = ::PhosphorIdentity::WindowId::extractInstanceId(windowId);
+            // A composite with an empty instanceId ("appId|") is malformed: keying
+            // it would alias every other empty-instance window onto one wildcard
+            // slot. Reject rather than corrupt the cache.
+            if (instanceId.isEmpty()) {
+                return;
+            }
+            if (floating) {
+                m_byInstance.insert(instanceId);
             } else {
-                m_byAppId.insert(windowId);
-            }
-        } else if (isComposite) {
-            m_byInstance.remove(::PhosphorIdentity::WindowId::extractInstanceId(windowId));
-            // Drop the app-wide entry only once no sibling instance is still
-            // floating, mirroring the old single-set guard: without this, clearing
-            // "firefox|1" would orphan a bare "firefox" that keeps isFloating()
-            // true for every other instance via the fallback.
-            bool otherInstanceFloating = false;
-            for (const QString& entryAppId : m_byInstance) {
-                if (entryAppId == appId) {
-                    otherInstanceFloating = true;
-                    break;
-                }
-            }
-            if (!otherInstanceFloating) {
+                m_byInstance.remove(instanceId);
+                // Mirror WindowTrackingService::setFloating: an explicit instance
+                // unfloat also drops the coarse app-wide fallback. Siblings keep
+                // their own instance entries, so this only clears the appId marker.
                 m_byAppId.remove(appId);
             }
+        } else if (floating) {
+            m_byAppId.insert(windowId);
         } else {
             m_byAppId.remove(windowId);
         }
@@ -96,7 +96,7 @@ public:
     }
 
 private:
-    QHash<QString, QString> m_byInstance; ///< stable instanceId → appId (instance floats)
+    QSet<QString> m_byInstance; ///< instance floats, keyed by stable instanceId
     QSet<QString> m_byAppId; ///< app-wide floats, keyed by appId
 };
 

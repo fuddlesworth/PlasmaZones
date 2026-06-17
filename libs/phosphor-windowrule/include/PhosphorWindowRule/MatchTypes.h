@@ -80,8 +80,8 @@ enum class Operator : int {
     Regex = 4, ///< QRegularExpression, precompiled & cached per predicate
     AppIdMatches = 5, ///< segment-aware reverse-DNS match (AppId only)
     In = 6, ///< value is a set; membership test
-    GreaterThan = 7, ///< numeric compare (Pid / VirtualDesktop / Width / Height)
-    LessThan = 8, ///< numeric compare (Pid / VirtualDesktop / Width / Height)
+    GreaterThan = 7, ///< numeric compare (Pid / VirtualDesktop / Width / Height / PositionX / PositionY)
+    LessThan = 8, ///< numeric compare (Pid / VirtualDesktop / Width / Height / PositionX / PositionY)
 };
 
 /// The number of distinct `Operator` enumerators. `Operator` is a contiguous
@@ -301,7 +301,8 @@ inline bool fieldIsString(Field field)
     return false;
 }
 
-/// True if @p field carries a numeric value (Pid / VirtualDesktop / Width / Height).
+/// True if @p field carries a numeric value
+/// (Pid / VirtualDesktop / Width / Height / PositionX / PositionY).
 inline bool fieldIsNumeric(Field field)
 {
     return field == Field::Pid || field == Field::VirtualDesktop || field == Field::Width || field == Field::Height

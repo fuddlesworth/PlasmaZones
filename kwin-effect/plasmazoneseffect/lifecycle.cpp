@@ -754,6 +754,16 @@ PlasmaZonesEffect::PlasmaZonesEffect()
         // suppressing the handler across the burst.
         m_autotileHandler->clearTiledTracking();
         m_snapHandler->clearSnapTracking();
+        // Drop the zone / floating caches that feed the IsSnapped / Zone /
+        // IsFloating rule-match fields. Unlike the exclusion / animation rule
+        // sets (deliberately preserved below), these caches mirror per-window
+        // PLACEMENT state owned by the now-dead daemon session. Keeping them
+        // would let a `WHEN IsSnapped` / `Zone(...)` / `IsFloating` rule match
+        // against stale state during the bringup race until the async
+        // syncZonesFromDaemon / getFloatingWindows re-seed lands. Both are
+        // authoritatively repopulated on daemon-ready.
+        m_navigationHandler->clearAllZoneState();
+        m_navigationHandler->clearAllFloatingState();
         m_decorationManager->restoreAll();
         m_autotileHandler->restoreAllMonocleMaximized();
         clearAllBorders();

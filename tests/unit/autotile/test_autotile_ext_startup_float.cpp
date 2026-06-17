@@ -201,6 +201,92 @@ private Q_SLOTS:
         engine.floatWindow(QStringLiteral("win1"));
         QCOMPARE(floatSpy.count(), 0);
     }
+
+    // =========================================================================
+    // Float-on-open rule predicate (FloatPredicate)
+    //
+    // The daemon injects a predicate that returns true when a "Float this app"
+    // rule matched the opening window. onWindowAdded must then insert it FLOATING
+    // (so it stays managed and IsFloating reflects it) and emit
+    // windowFloatingStateSynced so the daemon mirrors the state. Autotile tiles
+    // carry no zone, so these windows are floating-but-tracked, never snapped.
+    // =========================================================================
+
+    void testFloatPredicate_opensMatchedWindowFloating()
+    {
+        AutotileEngine engine(nullptr, nullptr, nullptr, PlasmaZones::TestHelpers::testRegistry());
+        const QString screen = QStringLiteral("eDP-1");
+        engine.setAutotileScreens({screen});
+
+        engine.setFloatPredicate([](const QString& id) {
+            return id == QStringLiteral("float-me");
+        });
+
+        QSignalSpy syncSpy(&engine, &PhosphorEngine::PlacementEngineBase::windowFloatingStateSynced);
+
+        engine.windowOpened(QStringLiteral("float-me"), screen);
+        QCoreApplication::processEvents();
+
+        PhosphorTiles::TilingState* state = engine.tilingStateForScreen(screen);
+        QVERIFY(state);
+        QVERIFY(state->containsWindow(QStringLiteral("float-me")));
+        QVERIFY(state->isFloating(QStringLiteral("float-me")));
+
+        bool foundSync = false;
+        for (const auto& args : syncSpy) {
+            if (args.at(0).toString() == QStringLiteral("float-me") && args.at(1).toBool()) {
+                foundSync = true;
+                break;
+            }
+        }
+        QVERIFY2(foundSync, "rule-floated window must emit windowFloatingStateSynced(true)");
+    }
+
+    void testFloatPredicate_unsetOpensWindowTiled()
+    {
+        AutotileEngine engine(nullptr, nullptr, nullptr, PlasmaZones::TestHelpers::testRegistry());
+        const QString screen = QStringLiteral("eDP-1");
+        engine.setAutotileScreens({screen});
+
+        // No predicate set — the gate is inert and the window tiles normally.
+        engine.windowOpened(QStringLiteral("win1"), screen);
+        QCoreApplication::processEvents();
+
+        PhosphorTiles::TilingState* state = engine.tilingStateForScreen(screen);
+        QVERIFY(state);
+        QVERIFY(state->containsWindow(QStringLiteral("win1")));
+        QVERIFY(!state->isFloating(QStringLiteral("win1")));
+    }
+
+    void testFloatPredicate_bypassesTiledWindowCap()
+    {
+        AutotileEngine engine(nullptr, nullptr, nullptr, PlasmaZones::TestHelpers::testRegistry());
+        const QString screen = QStringLiteral("eDP-1");
+        engine.config()->maxWindows = 1;
+        engine.setAutotileScreens({screen});
+
+        engine.setFloatPredicate([](const QString& id) {
+            return id == QStringLiteral("float-me");
+        });
+
+        // Fill the single tile slot.
+        engine.windowOpened(QStringLiteral("tiled-1"), screen);
+        QCoreApplication::processEvents();
+
+        PhosphorTiles::TilingState* state = engine.tilingStateForScreen(screen);
+        QVERIFY(state);
+        QCOMPARE(state->tiledWindowCount(), 1);
+
+        // A rule-floated window opening while the screen is already at the tiled
+        // cap must NOT be dropped: a floating window consumes no tile slot, so the
+        // cap does not apply. It is inserted floating and stays tracked.
+        engine.windowOpened(QStringLiteral("float-me"), screen);
+        QCoreApplication::processEvents();
+
+        QVERIFY(state->containsWindow(QStringLiteral("float-me")));
+        QVERIFY(state->isFloating(QStringLiteral("float-me")));
+        QCOMPARE(state->tiledWindowCount(), 1);
+    }
 };
 
 QTEST_MAIN(TestAutotileExtStartupFloat)

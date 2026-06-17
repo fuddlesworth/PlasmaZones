@@ -3,9 +3,10 @@
 
 /**
  * @file test_floating_cache.cpp
- * @brief Unit tests for FloatingCache and TriggerParser
+ * @brief Unit tests for FloatingCache, ZoneCache and TriggerParser
  *
- * Tests FloatingCache set/get/clear/appId-fallback logic and
+ * Tests FloatingCache set/get/clear/appId-fallback and class-mutation
+ * robustness, ZoneCache snap-zone tracking and class-mutation robustness, and
  * TriggerParser modifier checking and anyTriggerHeld.
  */
 
