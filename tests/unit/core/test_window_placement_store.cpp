@@ -628,6 +628,30 @@ private Q_SLOTS:
         QVERIFY(store.contains(QStringLiteral("dolphin|float")));
         QVERIFY(store.contains(QStringLiteral("dolphin|snapped")));
     }
+
+    void testCollapse_absorbsPrunedSiblingOtherScreenGeometry()
+    {
+        // A pruned same-screen duplicate may also hold a float position on a
+        // DIFFERENT monitor the kept record lacks. That position must not be lost
+        // — the kept record absorbs it before the duplicate is removed.
+        WindowPlacementStore store;
+        // Sibling floated on S1 then S2 — its single record accumulates both.
+        store.record(make(QStringLiteral("dolphin|sib"), QStringLiteral("dolphin"), WindowPlacement::stateFloating(),
+                          WindowPlacement::snapEngineId(), QStringLiteral("S1")));
+        store.record(make(QStringLiteral("dolphin|sib"), QStringLiteral("dolphin"), WindowPlacement::stateFloating(),
+                          WindowPlacement::snapEngineId(), QStringLiteral("S2")));
+        // Kept record floated only on S1.
+        store.record(make(QStringLiteral("dolphin|keep"), QStringLiteral("dolphin"), WindowPlacement::stateFloating(),
+                          WindowPlacement::snapEngineId(), QStringLiteral("S1")));
+
+        QVERIFY(store.collapsePureFloatSiblings(QStringLiteral("dolphin"), QStringLiteral("dolphin|keep")));
+
+        QVERIFY(!store.contains(QStringLiteral("dolphin|sib"))); // S1-sharing duplicate pruned
+        const auto kept = store.peek(QStringLiteral("dolphin|keep"), QStringLiteral("dolphin"));
+        QVERIFY(kept.has_value());
+        QVERIFY(kept->freeGeometryFor(QStringLiteral("S1")).isValid());
+        QVERIFY(kept->freeGeometryFor(QStringLiteral("S2")).isValid()); // absorbed from the pruned sibling
+    }
 };
 
 QTEST_MAIN(TestWindowPlacementStore)

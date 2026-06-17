@@ -161,6 +161,24 @@ bool WindowPlacementStore::collapsePureFloatSiblings(const QString& appId, const
             }
         }
         if (sharesScreen) {
+            // Absorb the sibling's float memory for any screen the kept record
+            // does NOT already cover, so collapsing a same-screen duplicate never
+            // silently drops a DIFFERENT-monitor position the sibling alone held.
+            // The kept record is newest, so its own per-screen geometry wins; the
+            // sibling only fills gaps. (keptScreens is the kept record's ORIGINAL
+            // coverage snapshot, so a gap-filled screen does not retroactively make
+            // an older sibling a "share" — its geometry for that screen is the same
+            // memory and is correctly left untouched.)
+            //
+            // Copy the sibling's geometry out first: mutating bucket[keepIdx] below
+            // could detach/reallocate the list and dangle the `other` reference.
+            const QHash<QString, QRect> otherFree = other.freeGeometryByScreen;
+            WindowPlacement& keep = bucket[keepIdx];
+            for (auto git = otherFree.constBegin(); git != otherFree.constEnd(); ++git) {
+                if (!keep.freeGeometryByScreen.contains(git.key())) {
+                    keep.freeGeometryByScreen.insert(git.key(), git.value());
+                }
+            }
             bucket.removeAt(i);
             removedAny = true;
             if (i < keepIdx) {
