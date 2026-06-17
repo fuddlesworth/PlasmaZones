@@ -267,7 +267,7 @@ void WindowTrackingAdaptor::setZoneDetectionAdaptor(ZoneDetectionAdaptor* adapto
     // except record the pointer for any WTA-side consumers.
 }
 
-void WindowTrackingAdaptor::captureWindowPlacement(const QString& windowId)
+void WindowTrackingAdaptor::captureWindowPlacement(const QString& windowId, const QString& authoritativeScreen)
 {
     if (windowId.isEmpty() || !m_service) {
         return;
@@ -376,6 +376,15 @@ void WindowTrackingAdaptor::captureWindowPlacement(const QString& windowId)
             if (m_service->placementStore().record(*p)) {
                 m_service->markDirty(PhosphorPlacement::WindowTrackingService::DirtyWindowPlacements);
             }
+            // Close-capture convergence (see WindowPlacementStore::collapsePureFloatSiblings).
+            // Only on the close path (authoritativeScreen supplied): a window closing
+            // floating supersedes stale pure-float duplicates of the same app on the
+            // same screen, so a reopen restores to one consistent spot instead of
+            // rotating between leftover records. Live captures (refresh / float-change)
+            // pass no screen and never prune live siblings.
+            if (!authoritativeScreen.isEmpty()) {
+                m_service->placementStore().collapsePureFloatSiblings(p->appId, p->windowId);
+            }
             return;
         }
     }
@@ -387,6 +396,24 @@ void WindowTrackingAdaptor::captureWindowPlacement(const QString& windowId)
     // state (record()), consumed on restore (take), or removed by an explicit
     // exclude-rule prune (removeIf) — never by a capture miss. (Stale records are
     // bounded by MaxPerApp and consumed on reopen.)
+    //
+    // Authoritative close-screen fallback. A window dragged cross-screen and then
+    // closed reaches here with NEITHER engine tracking it: the source engine was
+    // cleared when the window left its screen (onWindowRemoved) and the destination
+    // engine never adopted it (a same-engine-type cross-screen move skips the
+    // handoff, and a floated window is not inserted into the destination tile
+    // layout). With both capturePlacement calls declined, the record's screen would
+    // keep the stale source value and a reopen would restore to the wrong monitor.
+    // The caller (windowClosed) supplies the window's true current screen from KWin;
+    // record the float-back there so the next open restores to the right monitor.
+    // Scoped to the engine-miss path so a normally-tracked close (an engine captured
+    // above and returned) is never second-guessed.
+    if (!authoritativeScreen.isEmpty() && m_service && !m_service->isWindowAutotileTiled(windowId)) {
+        const QRect frame = m_frameGeometry.value(windowId);
+        if (frame.isValid()) {
+            m_service->recordFloatingClose(windowId, authoritativeScreen, frame);
+        }
+    }
 }
 
 void WindowTrackingAdaptor::refreshOpenWindowPlacements()
@@ -599,7 +626,7 @@ void WindowTrackingAdaptor::setWindowSticky(const QString& windowId, bool sticky
 // Window Lifecycle - Delegate to Service
 // ═══════════════════════════════════════════════════════════════════════════════
 
-void WindowTrackingAdaptor::windowClosed(const QString& windowId, int windowKind)
+void WindowTrackingAdaptor::windowClosed(const QString& windowId, int windowKind, const QString& screenId)
 {
     if (!validateWindowId(windowId, QStringLiteral("clean up closed window"))) {
         return;
@@ -621,7 +648,12 @@ void WindowTrackingAdaptor::windowClosed(const QString& windowId, int windowKind
     // corresponding state. Runs while the window is still floating
     // (m_service->windowClosed below tears that down) and before m_frameGeometry
     // is dropped, so the live floated geometry is captured.
-    captureWindowPlacement(windowId);
+    //
+    // Pass the effect's authoritative close screen: when a cross-screen move has
+    // orphaned the window from both engines' tracking by close time, both engine
+    // capturePlacement calls miss/decline and the real screen would be lost —
+    // captureWindowPlacement falls back to this screen to record the float-back.
+    captureWindowPlacement(windowId, screenId);
 
     // Drop frame-geometry shadow entry for this window.
     m_frameGeometry.remove(windowId);

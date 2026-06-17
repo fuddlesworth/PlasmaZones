@@ -74,6 +74,22 @@ public:
     /// any record in that appId bucket.
     bool contains(const QString& windowId, const QString& appId = QString()) const;
 
+    /// Collapse stale pure-float duplicates for an app, keeping @p keepWindowId.
+    /// A "pure-float" record carries float-back geometry but NO managed
+    /// (snapped/tiled) engine slot. When @p keepWindowId names a pure-float
+    /// record, every OTHER pure-float record in the same @p appId bucket that
+    /// remembers a float position on a screen @p keepWindowId also covers is
+    /// removed. Records carrying a snapped/tiled slot are never touched (managed
+    /// placements whose multi-instance distribution must survive). No-op when the
+    /// kept record is absent or itself managed.
+    ///
+    /// Called ONLY from close-capture paths: a window closing floating is the
+    /// freshest authority for its app's float-back on that screen, so duplicate
+    /// siblings (left by rapid open/close or overlapping short-lived instances)
+    /// are stale. Without this the oldest-first take() rotates a reopening window
+    /// between the duplicates — it "opens in a different spot each time."
+    void collapsePureFloatSiblings(const QString& appId, const QString& keepWindowId);
+
     /// Drop any record for the exact windowId (and prune the empty bucket).
     /// Returns true if a record was actually removed.
     bool clear(const QString& windowId);

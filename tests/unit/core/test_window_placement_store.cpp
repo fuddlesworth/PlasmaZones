@@ -569,6 +569,63 @@ private Q_SLOTS:
         QCOMPARE(gotSlot.state, QString(WindowPlacement::stateTiled()));
         QCOMPARE(gotSlot.order, 3);
     }
+
+    // ── collapsePureFloatSiblings (close-capture convergence) ──
+
+    void testCollapse_dropsSameScreenFloatDuplicate()
+    {
+        // Two pure-float records for one app on the same screen — the duplicate
+        // state that makes a reopen "open in a different spot each time" under the
+        // oldest-first take(). Collapsing keeps the named (closing) record only.
+        WindowPlacementStore store;
+        store.record(make(QStringLiteral("dolphin|old"), QStringLiteral("dolphin"), WindowPlacement::stateFloating(),
+                          WindowPlacement::snapEngineId(), QStringLiteral("S1")));
+        store.record(make(QStringLiteral("dolphin|new"), QStringLiteral("dolphin"), WindowPlacement::stateFloating(),
+                          WindowPlacement::snapEngineId(), QStringLiteral("S1")));
+
+        store.collapsePureFloatSiblings(QStringLiteral("dolphin"), QStringLiteral("dolphin|new"));
+
+        QVERIFY(store.contains(QStringLiteral("dolphin|new"), QStringLiteral("dolphin")));
+        QVERIFY(!store.contains(QStringLiteral("dolphin|old")));
+    }
+
+    void testCollapse_keepsManagedAndOtherScreenSiblings()
+    {
+        WindowPlacementStore store;
+        // Snapped (managed) sibling — never pruned.
+        store.record(make(QStringLiteral("dolphin|snapped"), QStringLiteral("dolphin"), WindowPlacement::stateSnapped(),
+                          WindowPlacement::snapEngineId(), QStringLiteral("S1")));
+        // Pure-float on a DIFFERENT screen — distinct memory, kept.
+        store.record(make(QStringLiteral("dolphin|other"), QStringLiteral("dolphin"), WindowPlacement::stateFloating(),
+                          WindowPlacement::snapEngineId(), QStringLiteral("S2")));
+        // Pure-float on the SAME screen as the kept record — pruned.
+        store.record(make(QStringLiteral("dolphin|dup"), QStringLiteral("dolphin"), WindowPlacement::stateFloating(),
+                          WindowPlacement::snapEngineId(), QStringLiteral("S1")));
+        store.record(make(QStringLiteral("dolphin|keep"), QStringLiteral("dolphin"), WindowPlacement::stateFloating(),
+                          WindowPlacement::snapEngineId(), QStringLiteral("S1")));
+
+        store.collapsePureFloatSiblings(QStringLiteral("dolphin"), QStringLiteral("dolphin|keep"));
+
+        QVERIFY(store.contains(QStringLiteral("dolphin|keep"), QStringLiteral("dolphin")));
+        QVERIFY(store.contains(QStringLiteral("dolphin|snapped"))); // managed — kept
+        QVERIFY(store.contains(QStringLiteral("dolphin|other"))); // different screen — kept
+        QVERIFY(!store.contains(QStringLiteral("dolphin|dup"))); // same-screen float dup — pruned
+    }
+
+    void testCollapse_noopWhenKeptRecordIsManaged()
+    {
+        // A managed (snapped) close must not prune float siblings.
+        WindowPlacementStore store;
+        store.record(make(QStringLiteral("dolphin|float"), QStringLiteral("dolphin"), WindowPlacement::stateFloating(),
+                          WindowPlacement::snapEngineId(), QStringLiteral("S1")));
+        store.record(make(QStringLiteral("dolphin|snapped"), QStringLiteral("dolphin"), WindowPlacement::stateSnapped(),
+                          WindowPlacement::snapEngineId(), QStringLiteral("S1")));
+
+        store.collapsePureFloatSiblings(QStringLiteral("dolphin"), QStringLiteral("dolphin|snapped"));
+
+        QVERIFY(store.contains(QStringLiteral("dolphin|float")));
+        QVERIFY(store.contains(QStringLiteral("dolphin|snapped")));
+    }
 };
 
 QTEST_MAIN(TestWindowPlacementStore)

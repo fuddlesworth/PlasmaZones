@@ -841,9 +841,15 @@ void PlasmaZonesEffect::notifyWindowClosed(KWin::EffectWindow* w)
     }
 
     const int kindInt = static_cast<int>(classifyWindowKind(w));
-    qCInfo(lcEffect) << "Notifying daemon: windowClosed" << windowId << "kind=" << kindInt;
+    // Pass KWin's authoritative current screen for the window. The daemon uses it
+    // as the final-placement screen when a cross-screen move has left the window
+    // untracked by both engines at close — otherwise its float-back records the
+    // stale source screen and it reopens on the wrong monitor.
+    const QString closeScreenId = getWindowScreenId(w);
+    qCInfo(lcEffect) << "Notifying daemon: windowClosed" << windowId << "kind=" << kindInt
+                     << "screen=" << closeScreenId;
     PhosphorProtocol::ClientHelpers::fireAndForget(this, PhosphorProtocol::Service::Interface::WindowTracking,
-                                                   QStringLiteral("windowClosed"), {windowId, kindInt});
+                                                   QStringLiteral("windowClosed"), {windowId, kindInt, closeScreenId});
 }
 
 void PlasmaZonesEffect::notifyWindowActivated(KWin::EffectWindow* w)

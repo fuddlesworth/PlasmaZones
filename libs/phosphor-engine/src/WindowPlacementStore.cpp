@@ -95,6 +95,79 @@ bool WindowPlacementStore::record(WindowPlacement incoming)
     return true;
 }
 
+namespace {
+/// True when @p p carries float-back geometry but NO managed (snapped/tiled)
+/// engine slot — i.e. a pure floating placement whose only value is its
+/// remembered free position. A record with a snapped/tiled slot is a managed
+/// placement and is never a collapse candidate.
+bool isPureFloatRecord(const WindowPlacement& p)
+{
+    if (p.engines.isEmpty()) {
+        return false;
+    }
+    for (auto it = p.engines.constBegin(); it != p.engines.constEnd(); ++it) {
+        if (it.value().state == WindowPlacement::stateSnapped() || it.value().state == WindowPlacement::stateTiled()) {
+            return false;
+        }
+    }
+    return true;
+}
+} // namespace
+
+void WindowPlacementStore::collapsePureFloatSiblings(const QString& appId, const QString& keepWindowId)
+{
+    if (appId.isEmpty() || keepWindowId.isEmpty()) {
+        return;
+    }
+    auto bit = m_byApp.find(appId);
+    if (bit == m_byApp.end()) {
+        return;
+    }
+    QList<WindowPlacement>& bucket = bit.value();
+
+    int keepIdx = -1;
+    for (int i = 0; i < bucket.size(); ++i) {
+        if (bucket.at(i).windowId == keepWindowId) {
+            keepIdx = i;
+            break;
+        }
+    }
+    // Only collapse when the kept record is itself a pure float — a managed
+    // (snapped/tiled) close has no business pruning float siblings.
+    if (keepIdx < 0 || !isPureFloatRecord(bucket.at(keepIdx))) {
+        return;
+    }
+    // Snapshot the kept record's remembered float screens; a sibling sharing any
+    // of them is a stale duplicate of the same per-app/per-screen float memory.
+    const QList<QString> keptScreens = bucket.at(keepIdx).freeGeometryByScreen.keys();
+    if (keptScreens.isEmpty()) {
+        return;
+    }
+
+    for (int i = bucket.size() - 1; i >= 0; --i) {
+        if (i == keepIdx) {
+            continue;
+        }
+        const WindowPlacement& other = bucket.at(i);
+        if (!isPureFloatRecord(other)) {
+            continue; // never prune a managed placement
+        }
+        bool sharesScreen = false;
+        for (const QString& screen : keptScreens) {
+            if (other.freeGeometryByScreen.contains(screen)) {
+                sharesScreen = true;
+                break;
+            }
+        }
+        if (sharesScreen) {
+            bucket.removeAt(i);
+            if (i < keepIdx) {
+                --keepIdx; // the kept record shifted down by the removal
+            }
+        }
+    }
+}
+
 std::optional<WindowPlacement> WindowPlacementStore::take(const QString& windowId, const QString& appId,
                                                           const std::function<bool(const WindowPlacement&)>& accept,
                                                           const std::function<bool(const WindowPlacement&)>& preferred)

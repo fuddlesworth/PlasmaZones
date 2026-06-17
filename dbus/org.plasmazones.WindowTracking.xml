@@ -386,6 +386,9 @@ SPDX-License-Identifier: GPL-3.0-or-later
             <arg name="windowKind" type="i" direction="in">
                 <annotation name="org.gtk.GDBus.DocString" value="Structural kind of the closing window (0=Unknown, 1=Normal, 2=Transient). Recorded on the PendingRestore entry if one is enqueued. Pass 0 to opt out of the gate (legacy callers)."/>
             </arg>
+            <arg name="screenId" type="s" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="The window's authoritative current screen at close (KWin's getWindowScreenId). Used by the final placement capture to record the float-back on the screen the window actually closed on, even when a cross-screen move has torn down both engines' tracking. Empty opts out (legacy callers)."/>
+            </arg>
         </method>
         <method name="windowActivated">
             <annotation name="org.gtk.GDBus.DocString" value="Notify daemon that a window was activated/focused."/>
