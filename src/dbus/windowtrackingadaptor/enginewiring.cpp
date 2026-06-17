@@ -239,7 +239,13 @@ namespace {
 // one place. windowClass is not tracked daemon-side (the compositor reports
 // appId, which is class-derived), so rules match on appId / title / role / type
 // / desktop / pid plus the recorded desktop / activity context; screenId stays
-// empty (a window-domain rule does not pin a screen).
+// empty (a window-domain rule does not pin a screen). The extended window
+// properties (state flags, geometry, accessory flags, captionNormal) are carried
+// straight through from the effect's snapshot (setWindowMetadata's a{sv}), so a
+// Float / RestorePosition rule keyed on e.g. IsModal or Width matches the same
+// values the effect path resolves live. Placement state (IsFloating / IsSnapped /
+// Zone) is deliberately absent: these resolvers run at window-open, before any
+// placement exists, so a predicate over them must stay inert.
 std::optional<PhosphorWindowRule::WindowQuery>
 buildRuleQueryForWindow(const QPointer<PhosphorEngine::WindowRegistry>& registry, const QString& windowId)
 {
@@ -272,6 +278,28 @@ buildRuleQueryForWindow(const QPointer<PhosphorEngine::WindowRegistry>& registry
     query.windowType = meta->windowType;
     query.virtualDesktop = meta->virtualDesktop;
     query.activity = meta->activity;
+    // Extended properties — optional→optional copy preserves engagement exactly,
+    // so a field the effect could not observe stays disengaged and inert here too.
+    query.isMinimized = meta->isMinimized;
+    query.isFullscreen = meta->isFullscreen;
+    query.isSticky = meta->isSticky;
+    query.isMaximized = meta->isMaximized;
+    query.isFocused = meta->isFocused;
+    query.isTransient = meta->isTransient;
+    query.isNotification = meta->isNotification;
+    query.keepAbove = meta->keepAbove;
+    query.keepBelow = meta->keepBelow;
+    query.skipTaskbar = meta->skipTaskbar;
+    query.skipPager = meta->skipPager;
+    query.skipSwitcher = meta->skipSwitcher;
+    query.isModal = meta->isModal;
+    query.hasDecoration = meta->hasDecoration;
+    query.isResizable = meta->isResizable;
+    query.width = meta->width;
+    query.height = meta->height;
+    query.positionX = meta->positionX;
+    query.positionY = meta->positionY;
+    query.captionNormal = meta->captionNormal;
     return query;
 }
 } // namespace
@@ -323,6 +351,12 @@ bool WindowTrackingAdaptor::shouldFloatByRule(const QString& windowId)
     if (!m_windowRuleEvaluator) {
         m_windowRuleEvaluator = std::make_unique<PhosphorWindowRule::RuleEvaluator>(m_windowRuleStore->ruleSet());
     }
+    // resolveCached is keyed on (windowId, ruleSet revision); on a cache hit the
+    // freshly built `query` is ignored. That is safe because windowId is both
+    // lifetime-stable AND unique: a reopened window gets a fresh instanceId (new
+    // key → miss) and a mid-session appId rename changes the composite key too, so
+    // a cached verdict can never outlive the metadata it was built from. Both the
+    // float and restore predicates are open-path (resolved once per lifetime).
     const PhosphorWindowRule::ResolvedActions resolved = m_windowRuleEvaluator->resolveCached(windowId, *query);
     // The Float action carries free-form params (no Value key), so the verdict is
     // the PRESENCE of the filled slot, not a bool payload.

@@ -17,6 +17,7 @@
 #include <QString>
 #include <QStringList>
 #include <QHash>
+#include <QVariantMap>
 #include <QJsonArray>
 #include <QQueue>
 #include <QRect>
@@ -242,6 +243,14 @@ public Q_SLOTS:
      * @param activity       Activity UUID (empty = all activities / unknown)
      * @param windowType     PhosphorProtocol::WindowType underlying value; out-of-range
      *                       values are clamped to WindowType::Unknown
+     * @param extended       Extended window-property snapshot keyed by
+     *                       PhosphorProtocol::Service::WindowMetadataKey (state flags,
+     *                       geometry, accessory flags, captionNormal). A key is
+     *                       present only when the value is known; absent keys leave
+     *                       the corresponding WindowMetadata optional disengaged so a
+     *                       window-rule predicate over it stays inert. Lets the
+     *                       daemon's resolvers match the same KWin-property fields the
+     *                       effect path resolves live (window_query.cpp).
      *
      * Emits no D-Bus signal. Populates the daemon's WindowRegistry; consumers
      * subscribe to the registry's Qt signals directly.
@@ -251,7 +260,7 @@ public Q_SLOTS:
      */
     void setWindowMetadata(const QString& instanceId, const QString& appId, const QString& desktopFile,
                            const QString& title, const QString& windowRole, int pid, int virtualDesktop,
-                           const QString& activity, int windowType);
+                           const QString& activity, int windowType, const QVariantMap& extended);
 
     // windowSnapped, windowSnappedMultiZone, windowUnsnapped, windowsSnappedBatch,
     // recordSnapIntent moved to SnapAdaptor (org.plasmazones.Snap D-Bus interface).

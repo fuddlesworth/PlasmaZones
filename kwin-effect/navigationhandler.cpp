@@ -52,7 +52,10 @@ void NavigationHandler::syncFloatingWindowsFromDaemon()
             m_floatingCache.insert(id);
         }
 
-        qCDebug(lcEffect) << "Synced" << m_floatingCache.size() << "floating windows from daemon";
+        // Report the count of synced entries, not m_floatingCache.size() — the
+        // latter sums the instance and app-wide keyspaces and would misreport when
+        // both carry entries for the same app.
+        qCDebug(lcEffect) << "Synced" << floatingIds.size() << "floating windows from daemon";
     });
 }
 

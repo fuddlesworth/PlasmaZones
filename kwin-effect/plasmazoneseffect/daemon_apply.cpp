@@ -455,6 +455,12 @@ void PlasmaZonesEffect::invalidateRuleCacheForStateChange(const QString& windowI
     // The match cache is keyed on (windowId, ruleSet revision); neither moves on
     // a placement-state change, so drop it so border / opacity rules re-resolve
     // against the new snapped / floating / zone state.
+    //
+    // Only the CACHED verdicts (border / opacity) need explicit invalidation here.
+    // shouldHandleWindow's exclusion query is evaluated on-demand every time it is
+    // consulted (drag start, lifecycle filtering), so a snap/float/zone change is
+    // picked up at the next natural call without eager re-filtering — re-running it
+    // for every window on every state change would be a needless hot-path cost.
     m_shaderManager.animationRuleEvaluator().clearCache();
     KWin::EffectWindow* w = findWindowById(windowId);
     if (w) {
