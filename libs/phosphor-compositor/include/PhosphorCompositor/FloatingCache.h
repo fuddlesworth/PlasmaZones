@@ -5,6 +5,7 @@
 
 #include <PhosphorIdentity/WindowId.h>
 
+#include <QHash>
 #include <QSet>
 #include <QString>
 
@@ -13,60 +14,72 @@ namespace PhosphorCompositor {
 /**
  * @brief Compositor-agnostic floating window state cache
  *
- * Tracks which windows are floating using full windowId with appId fallback.
- * Shared by all compositor plugins to avoid duplicating the lookup logic.
+ * Tracks which windows are floating, dual-keyed so both float kinds resolve:
+ *   - Instance-specific floats (a single window the user/rule floated) are keyed
+ *     by the STABLE instanceId, like @c ZoneCache. A window's appId can mutate
+ *     mid-session (Electron / CEF apps rename their window class), changing the
+ *     composite `appId|instanceId` but never the instanceId — keying by it keeps
+ *     a floated window resolvable across that rename.
+ *   - App-wide floats (a bare appId, e.g. a rule floating every instance of an
+ *     app) are keyed by appId and match every instance via the fallback below.
  *
- * setFloating(false) removes the exact windowId and only removes the bare
- * appId key if no other full-ID entry shares it. This ensures clearing
- * "firefox|1" does not affect "firefox|2"'s float state via the appId
- * fallback in isFloating().
+ * setFloating(false) on a specific instance also clears the app-wide entry once
+ * no sibling instance remains floating, so the app-wide fallback does not keep
+ * reporting a window as floating after its last instance was unfloated.
  */
 class FloatingCache
 {
 public:
     bool isFloating(const QString& windowId) const
     {
-        if (m_floatingWindows.contains(windowId)) {
+        // Instance-specific float — survives appId (class) mutation.
+        if (m_byInstance.contains(::PhosphorIdentity::WindowId::extractInstanceId(windowId))) {
             return true;
         }
-        QString appId = ::PhosphorIdentity::WindowId::extractAppId(windowId);
-        return (appId != windowId && m_floatingWindows.contains(appId));
+        // App-wide float — a bare appId matches every instance of that app.
+        return m_byAppId.contains(::PhosphorIdentity::WindowId::extractAppId(windowId));
     }
 
     void setFloating(const QString& windowId, bool floating)
     {
+        const QString appId = ::PhosphorIdentity::WindowId::extractAppId(windowId);
+        const bool isComposite = (appId != windowId); // bare appId has no separator
         if (floating) {
-            m_floatingWindows.insert(windowId);
-        } else {
-            m_floatingWindows.remove(windowId);
-            QString appId = ::PhosphorIdentity::WindowId::extractAppId(windowId);
-            if (appId != windowId) {
-                // Only remove bare appId key if no other full-ID entry shares it.
-                // Without this guard, clearing "firefox|1" would also clear the bare
-                // "firefox" key, making isFloating("firefox|2") return false via the
-                // appId fallback even though "firefox|2" is still floating.
-                bool otherFullIdExists = false;
-                for (const QString& entry : m_floatingWindows) {
-                    if (entry != appId && ::PhosphorIdentity::WindowId::extractAppId(entry) == appId) {
-                        otherFullIdExists = true;
-                        break;
-                    }
-                }
-                if (!otherFullIdExists) {
-                    m_floatingWindows.remove(appId);
+            if (isComposite) {
+                m_byInstance.insert(::PhosphorIdentity::WindowId::extractInstanceId(windowId), appId);
+            } else {
+                m_byAppId.insert(windowId);
+            }
+        } else if (isComposite) {
+            m_byInstance.remove(::PhosphorIdentity::WindowId::extractInstanceId(windowId));
+            // Drop the app-wide entry only once no sibling instance is still
+            // floating, mirroring the old single-set guard: without this, clearing
+            // "firefox|1" would orphan a bare "firefox" that keeps isFloating()
+            // true for every other instance via the fallback.
+            bool otherInstanceFloating = false;
+            for (const QString& entryAppId : m_byInstance) {
+                if (entryAppId == appId) {
+                    otherInstanceFloating = true;
+                    break;
                 }
             }
+            if (!otherInstanceFloating) {
+                m_byAppId.remove(appId);
+            }
+        } else {
+            m_byAppId.remove(windowId);
         }
     }
 
     void clear()
     {
-        m_floatingWindows.clear();
+        m_byInstance.clear();
+        m_byAppId.clear();
     }
 
     int size() const
     {
-        return m_floatingWindows.size();
+        return m_byInstance.size() + m_byAppId.size();
     }
 
     /// Convenience alias for setFloating(windowId, true). Kept symmetric
@@ -83,7 +96,8 @@ public:
     }
 
 private:
-    QSet<QString> m_floatingWindows;
+    QHash<QString, QString> m_byInstance; ///< stable instanceId → appId (instance floats)
+    QSet<QString> m_byAppId; ///< app-wide floats, keyed by appId
 };
 
 } // namespace PhosphorCompositor

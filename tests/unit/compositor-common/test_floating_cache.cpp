@@ -62,10 +62,38 @@ private Q_SLOTS:
     void testFloatingCacheClear()
     {
         PhosphorCompositor::FloatingCache cache;
-        cache.setFloating(QStringLiteral("app1|1"), true);
-        cache.setFloating(QStringLiteral("app2|1"), true);
+        // Distinct instanceIds — real instanceIds are unique per window. Two ids
+        // sharing an instanceId would (correctly) collide on the instanceId key.
+        cache.setFloating(QStringLiteral("app1|uuid-1"), true);
+        cache.setFloating(QStringLiteral("app2|uuid-2"), true);
         QCOMPARE(cache.size(), 2);
         cache.clear();
+        QCOMPARE(cache.size(), 0);
+    }
+
+    // =================================================================
+    // FloatingCache: instance float survives appId (class) mutation
+    // =================================================================
+
+    void testFloatingCacheClassMutationRobustness()
+    {
+        PhosphorCompositor::FloatingCache cache;
+        // A specific window floated under its original appId.
+        cache.setFloating(QStringLiteral("slack|uuid-1"), true);
+        QVERIFY(cache.isFloating(QStringLiteral("slack|uuid-1")));
+
+        // The app renames its window class mid-session (Electron / CEF): the
+        // composite id's appId changes, the instanceId does not — the float must
+        // still resolve because instance floats key by instanceId.
+        QVERIFY(cache.isFloating(QStringLiteral("Slack|uuid-1")));
+
+        // A different INSTANCE of the same app is not floating (distinct instanceId,
+        // and no app-wide entry exists).
+        QVERIFY(!cache.isFloating(QStringLiteral("slack|uuid-2")));
+
+        // Unfloating via the mutated id clears it (same instanceId key).
+        cache.setFloating(QStringLiteral("Slack|uuid-1"), false);
+        QVERIFY(!cache.isFloating(QStringLiteral("slack|uuid-1")));
         QCOMPARE(cache.size(), 0);
     }
 

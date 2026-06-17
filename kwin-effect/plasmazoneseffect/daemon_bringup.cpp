@@ -244,9 +244,6 @@ void PlasmaZonesEffect::continueDaemonReadySetup()
             QDBusPendingReply<QStringList> reply = *w;
             if (reply.isValid()) {
                 m_navigationHandler->clearAllFloatingState();
-                // Drop stale snap-zone entries from a prior daemon session too;
-                // syncZonesFromDaemon() below repopulates them authoritatively.
-                m_navigationHandler->clearAllZoneState();
                 QStringList floatingIds = reply.value();
                 for (const QString& id : floatingIds) {
                     m_navigationHandler->setWindowFloating(id, true);

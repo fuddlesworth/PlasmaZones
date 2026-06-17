@@ -2489,23 +2489,8 @@ void AutotileEngine::onWindowAdded(const QString& windowId)
 
     const bool inserted = insertWindow(windowId, screenId);
 
-    // Sync floating state to daemon. Float state is per-mode:
-    // - Restored as floating from autotile's saved set → notify daemon to set WTS floating
-    // - Inserted as tiled but WTS says floating (stale snap-mode float) → clear WTS floating
-    //
-    // Use windowFloatingStateSynced (not windowFloatingChanged): this is a
-    // passive state-sync on window insertion, not a user float toggle. The
-    // daemon must NOT restore pre-tile geometry here — the window was just
-    // added (e.g. dropped onto an autotile VS from a snap VS) and already
-    // has a valid position. Routing through windowFloatingChanged causes
-    // syncAutotileFloatState to call applyGeometryForFloat, which teleports
-    // the window to a cross-screen-adjusted rect and resizes it.
-    if (inserted && state) {
-        if (state->isFloating(windowId)) {
-            Q_EMIT windowFloatingStateSynced(windowId, true, screenId);
-        } else if (m_windowTracker && m_windowTracker->isWindowFloating(windowId)) {
-            Q_EMIT windowFloatingStateSynced(windowId, false, screenId);
-        }
+    if (inserted) {
+        emitInsertFloatStateSync(windowId, screenId);
     }
 
     if (inserted && m_config && m_config->focusNewWindows) {
@@ -2621,6 +2606,30 @@ void AutotileEngine::onLayoutChanged(PhosphorZones::Layout* layout)
 // ═══════════════════════════════════════════════════════════════════════════════
 // Internal implementation
 // ═══════════════════════════════════════════════════════════════════════════════
+
+void AutotileEngine::emitInsertFloatStateSync(const QString& windowId, const QString& screenId)
+{
+    PhosphorTiles::TilingState* state = tilingStateForScreen(screenId);
+    if (!state) {
+        return;
+    }
+    // Sync floating state to daemon. Float state is per-mode:
+    // - Restored as floating from autotile's saved set → notify daemon to set WTS floating
+    // - Inserted as tiled but WTS says floating (stale snap-mode float) → clear WTS floating
+    //
+    // Use windowFloatingStateSynced (not windowFloatingChanged): this is a
+    // passive state-sync on window insertion, not a user float toggle. The
+    // daemon must NOT restore pre-tile geometry here — the window was just
+    // added (e.g. dropped onto an autotile VS from a snap VS) and already
+    // has a valid position. Routing through windowFloatingChanged causes
+    // syncAutotileFloatState to call applyGeometryForFloat, which teleports
+    // the window to a cross-screen-adjusted rect and resizes it.
+    if (state->isFloating(windowId)) {
+        Q_EMIT windowFloatingStateSynced(windowId, true, screenId);
+    } else if (m_windowTracker && m_windowTracker->isWindowFloating(windowId)) {
+        Q_EMIT windowFloatingStateSynced(windowId, false, screenId);
+    }
+}
 
 bool AutotileEngine::insertWindow(const QString& windowId, const QString& screenId)
 {
@@ -3701,7 +3710,17 @@ void AutotileEngine::backfillWindows()
             }
         }
         for (const QString& windowId : candidates) {
-            insertWindow(windowId, screenId);
+            const bool inserted = insertWindow(windowId, screenId);
+            // Same passive float-state sync onWindowAdded does: a window that
+            // insertWindow floats here (matched Float rule / restored saved float)
+            // — or whose stale WTS float must be cleared because it was placed
+            // tiled — would otherwise desync from the daemon until its next add.
+            // emitInsertFloatStateSync uses windowFloatingStateSynced (NOT
+            // windowFloatingChanged), so it applies no geometry and cannot drive
+            // the mid-transition feedback loop the overflow-recovery note warns of.
+            if (inserted) {
+                emitInsertFloatStateSync(windowId, screenId);
+            }
             if (state->tiledWindowCount() >= maxWin) {
                 break;
             }

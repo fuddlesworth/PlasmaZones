@@ -1047,6 +1047,11 @@ private Q_SLOTS:
 private:
     void connectSignals();
     bool insertWindow(const QString& windowId, const QString& screenId);
+    // Passive float-state sync after insertWindow() places a window: notify the
+    // daemon it opened floating (matched Float rule / restored saved float), or
+    // clear a stale WTS float when it was placed tiled. Shared by onWindowAdded
+    // and backfillWindows so the two cannot diverge.
+    void emitInsertFloatStateSync(const QString& windowId, const QString& screenId);
     void removeWindow(const QString& windowId);
 
     /// Algorithm lifecycle REMOVE hook + state removal for a tracked window,

@@ -98,16 +98,20 @@ void NavigationHandler::syncZonesFromDaemon()
     connect(watcher, &QDBusPendingCallWatcher::finished, this, [this](QDBusPendingCallWatcher* w) {
         w->deleteLater();
 
+        // Authoritative refresh: drop any stale entries from a prior daemon session
+        // up front — this is the ONLY place daemon-ready clears the zone cache, so a
+        // failed reply leaves it empty (no stale matches) rather than keeping last
+        // session's zones, and there is no clear racing the seed below.
+        clearAllZoneState();
+
         QDBusPendingReply<PhosphorProtocol::WindowStateList> reply = *w;
         if (!reply.isValid()) {
             qCDebug(lcEffect) << "Failed to get window states from daemon";
             return;
         }
 
-        // Authoritative refresh: clear, then seed every snapped window's zone.
-        // A window with an empty zoneId (floating / unmanaged) carries no entry.
-        // setWindowZone keys by the stable instanceId (see header).
-        clearAllZoneState();
+        // Seed every snapped window's zone. A window with an empty zoneId (floating
+        // / unmanaged) carries no entry. setWindowZone keys by instanceId (see header).
         const PhosphorProtocol::WindowStateList states = reply.value();
         for (const PhosphorProtocol::WindowStateEntry& state : states) {
             if (!state.zoneId.isEmpty()) {

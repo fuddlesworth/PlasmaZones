@@ -440,8 +440,9 @@ void PlasmaZonesEffect::slotWindowStateChanged(const QString& windowId, const Ph
 {
     // Keep the effect-side zone cache current so the IsSnapped / Zone rule-match
     // fields resolve against the live placement. An empty zoneId (unsnapped /
-    // floated / screen-changed) removes the entry. isFloating flows through the
-    // separate windowFloatingChanged path, so it is not duplicated here.
+    // floated / screen-changed) removes the entry. The isFloating cache WRITE lives
+    // on the separate windowFloatingChanged path, so it is not duplicated here; the
+    // rule-cache invalidation below may still run on both paths (it is idempotent).
     m_navigationHandler->setWindowZone(windowId, state.zoneId);
     invalidateRuleCacheForStateChange(windowId);
 }

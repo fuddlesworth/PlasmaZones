@@ -16,7 +16,9 @@ namespace PhosphorCompositor {
  * Maps a window to the snap-zone UUID it occupies. A window is "snapped" iff it
  * has a non-empty zone entry; a floating or unmanaged window carries no entry.
  * Sibling of @c FloatingCache — together the two describe a window's placement
- * for the IsSnapped / Zone / IsFloating window-rule match fields.
+ * for the IsSnapped / Zone / IsFloating window-rule match fields. Both caches key
+ * per-instance state by the stable instanceId (below); FloatingCache additionally
+ * carries an app-wide appId keyspace for rules that float every instance of an app.
  *
  * Keyed by the STABLE instanceId, not the full composite windowId. A window's
  * appId can mutate mid-session (Electron / CEF apps rename their window class),
