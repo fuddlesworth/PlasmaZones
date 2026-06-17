@@ -13,6 +13,7 @@
 
 #include <PhosphorCompositor/FloatingCache.h>
 #include <PhosphorCompositor/TriggerParser.h>
+#include <PhosphorCompositor/ZoneCache.h>
 
 class TestFloatingCache : public QObject
 {
@@ -83,6 +84,70 @@ private Q_SLOTS:
         QVERIFY(!cache.isFloating(QStringLiteral("firefox|1")));
         // "firefox|2" was never individually floating, and bare appId is gone:
         QVERIFY(!cache.isFloating(QStringLiteral("firefox|2")));
+    }
+
+    // =================================================================
+    // ZoneCache: basic set / get / unsnap
+    // =================================================================
+
+    void testZoneCacheBasic()
+    {
+        PhosphorCompositor::ZoneCache cache;
+        QVERIFY(!cache.isSnapped(QStringLiteral("app|1")));
+        QVERIFY(cache.zoneForWindow(QStringLiteral("app|1")).isEmpty());
+
+        cache.setZone(QStringLiteral("app|1"), QStringLiteral("{z1}"));
+        QVERIFY(cache.isSnapped(QStringLiteral("app|1")));
+        QCOMPARE(cache.zoneForWindow(QStringLiteral("app|1")), QStringLiteral("{z1}"));
+        QCOMPARE(cache.size(), 1);
+
+        // An empty zoneId removes the entry (unsnapped / floated / screen-changed).
+        cache.setZone(QStringLiteral("app|1"), QString());
+        QVERIFY(!cache.isSnapped(QStringLiteral("app|1")));
+        QCOMPARE(cache.size(), 0);
+    }
+
+    // =================================================================
+    // ZoneCache: keyed by instanceId — survives appId (class) mutation
+    // =================================================================
+
+    void testZoneCacheClassMutationRobustness()
+    {
+        PhosphorCompositor::ZoneCache cache;
+        // Snap recorded under the original appId.
+        cache.setZone(QStringLiteral("slack|uuid-1"), QStringLiteral("{zone-a}"));
+        QVERIFY(cache.isSnapped(QStringLiteral("slack|uuid-1")));
+
+        // The app renames its window class mid-session (Electron / CEF): the
+        // composite id's appId changes, but the instanceId is unchanged — the
+        // zone must still resolve because the cache keys by instanceId.
+        QVERIFY(cache.isSnapped(QStringLiteral("Slack|uuid-1")));
+        QCOMPARE(cache.zoneForWindow(QStringLiteral("Slack|uuid-1")), QStringLiteral("{zone-a}"));
+
+        // A different INSTANCE of the same app is not snapped (distinct instanceId).
+        QVERIFY(!cache.isSnapped(QStringLiteral("slack|uuid-2")));
+    }
+
+    // =================================================================
+    // ZoneCache: remove / clear
+    // =================================================================
+
+    void testZoneCacheRemoveAndClear()
+    {
+        PhosphorCompositor::ZoneCache cache;
+        // Distinct instanceIds — real instanceIds are unique per window. Two ids
+        // sharing an instanceId would (correctly) collide on the instanceId key.
+        cache.setZone(QStringLiteral("a|uuid-1"), QStringLiteral("{z}"));
+        cache.setZone(QStringLiteral("b|uuid-2"), QStringLiteral("{z}"));
+        QCOMPARE(cache.size(), 2);
+
+        cache.remove(QStringLiteral("a|uuid-1"));
+        QVERIFY(!cache.isSnapped(QStringLiteral("a|uuid-1")));
+        QVERIFY(cache.isSnapped(QStringLiteral("b|uuid-2")));
+        QCOMPARE(cache.size(), 1);
+
+        cache.clear();
+        QCOMPARE(cache.size(), 0);
     }
 
     // =================================================================

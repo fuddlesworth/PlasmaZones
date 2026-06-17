@@ -106,14 +106,15 @@ void NavigationHandler::syncZonesFromDaemon()
 
         // Authoritative refresh: clear, then seed every snapped window's zone.
         // A window with an empty zoneId (floating / unmanaged) carries no entry.
-        m_zoneByWindow.clear();
+        // setWindowZone keys by the stable instanceId (see header).
+        clearAllZoneState();
         const PhosphorProtocol::WindowStateList states = reply.value();
         for (const PhosphorProtocol::WindowStateEntry& state : states) {
             if (!state.zoneId.isEmpty()) {
-                m_zoneByWindow.insert(state.windowId, state.zoneId);
+                setWindowZone(state.windowId, state.zoneId);
             }
         }
-        qCDebug(lcEffect) << "Synced" << m_zoneByWindow.size() << "snapped-window zones from daemon";
+        qCDebug(lcEffect) << "Synced" << zoneEntryCount() << "snapped-window zones from daemon";
     });
 }
 

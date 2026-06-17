@@ -4,8 +4,8 @@
 #pragma once
 
 #include <PhosphorCompositor/FloatingCache.h>
+#include <PhosphorCompositor/ZoneCache.h>
 
-#include <QHash>
 #include <QObject>
 #include <QString>
 
@@ -16,6 +16,7 @@ namespace PlasmaZones {
 // Targeted using-declaration, not a namespace-wide directive: headers must
 // not leak the whole PhosphorCompositor namespace into every includer.
 using PhosphorCompositor::FloatingCache;
+using PhosphorCompositor::ZoneCache;
 
 class PlasmaZonesEffect;
 
@@ -55,43 +56,43 @@ public:
 
     // Snap-zone tracking — synced from the daemon's windowStateChanged signal,
     // queried by the rule-query builder for the IsSnapped / Zone match fields.
-    // Keyed by the full composite windowId. A window is "snapped" iff it has a
-    // non-empty zone entry (snap mode only — autotile tiles carry no zone UUID
-    // and never appear here). Floating state is tracked separately above.
+    // Delegates to the shared ZoneCache (sibling of FloatingCache), which keys by
+    // the stable instanceId so a class-mutating snapped window stays resolvable.
 
     /// The snap-zone UUID @p windowId occupies, or empty if it occupies none.
     QString zoneForWindow(const QString& windowId) const
     {
-        return m_zoneByWindow.value(windowId);
+        return m_zoneCache.zoneForWindow(windowId);
     }
-    /// True iff @p windowId is snapped into a zone (has a non-empty zone entry).
+    /// True iff @p windowId is snapped into a zone (snap mode only — autotile
+    /// tiles carry no zone UUID and never appear here).
     bool isWindowSnapped(const QString& windowId) const
     {
-        return !m_zoneByWindow.value(windowId).isEmpty();
+        return m_zoneCache.isSnapped(windowId);
     }
     /// Record @p windowId's zone. An empty @p zoneId removes the entry (the
     /// window left its zone — unsnapped / floated / screen-changed).
     void setWindowZone(const QString& windowId, const QString& zoneId)
     {
-        if (zoneId.isEmpty()) {
-            m_zoneByWindow.remove(windowId);
-        } else {
-            m_zoneByWindow.insert(windowId, zoneId);
-        }
+        m_zoneCache.setZone(windowId, zoneId);
     }
     void clearWindowZone(const QString& windowId)
     {
-        m_zoneByWindow.remove(windowId);
+        m_zoneCache.remove(windowId);
     }
     void clearAllZoneState()
     {
-        m_zoneByWindow.clear();
+        m_zoneCache.clear();
+    }
+    int zoneEntryCount() const
+    {
+        return m_zoneCache.size();
     }
 
 private:
     PlasmaZonesEffect* m_effect;
     FloatingCache m_floatingCache;
-    QHash<QString, QString> m_zoneByWindow; ///< composite windowId → snap-zone UUID
+    ZoneCache m_zoneCache;
 };
 
 } // namespace PlasmaZones

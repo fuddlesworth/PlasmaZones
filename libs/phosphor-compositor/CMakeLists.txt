@@ -47,6 +47,7 @@ add_library(PhosphorCompositor SHARED
     include/PhosphorCompositor/DecorationDefaults.h
     include/PhosphorCompositor/DecorationManager.h
     include/PhosphorCompositor/FloatingCache.h
+    include/PhosphorCompositor/ZoneCache.h
     include/PhosphorCompositor/DebouncedAction.h
     include/PhosphorCompositor/GeometryHelpers.h
     include/PhosphorCompositor/SnapAssistFilter.h
