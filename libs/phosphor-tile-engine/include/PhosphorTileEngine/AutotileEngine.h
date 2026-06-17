@@ -280,6 +280,13 @@ public:
      */
     void setCurrentDesktop(int desktop) override;
 
+    /// Inject the cross-surface resolver (neighbouring output / desktop lookup)
+    /// used by directional navigation when it reaches a layout boundary.
+    void setCrossSurfaceResolver(PhosphorEngine::ICrossSurfaceResolver* resolver) override
+    {
+        m_crossSurfaceResolver = resolver;
+    }
+
     /**
      * @brief Set the current activity for per-activity tiling state
      *
@@ -727,6 +734,17 @@ public:
     void swapFocusedInDirection(const QString& direction, const PhosphorEngine::NavigationContext& ctx) override;
     void moveFocusedToPosition(int position, const PhosphorEngine::NavigationContext& ctx) override;
     void rotateWindows(bool clockwise, const PhosphorEngine::NavigationContext& ctx) override;
+
+    /// Cross-mode swap support (queried by the daemon when THIS engine is the
+    /// target): the tiled window at @p screenId's entry edge facing the source
+    /// for a crossing arriving in @p direction — the swap partner. Empty when
+    /// the screen has no tiled windows.
+    QString entryWindowForCrossing(const QString& screenId, const QString& direction) const;
+    /// The RAW window-order index of @p windowId on @p screenId (current desktop;
+    /// counts floats, matching TilingState::addWindow), or -1 when not present —
+    /// lets the daemon land a swap counterpart in the same slot the departing
+    /// window held when re-inserted via HandoffContext.insertIndex.
+    int windowOrderIndexForWindow(const QString& screenId, const QString& windowId) const;
     void reapplyLayout(const PhosphorEngine::NavigationContext& ctx) override;
     void reapplyManagedWindowAppearance() override;
     std::optional<PhosphorEngine::WindowPlacement> capturePlacement(const QString& windowId) const override;
@@ -1032,6 +1050,10 @@ private Q_SLOTS:
 private:
     void connectSignals();
     bool insertWindow(const QString& windowId, const QString& screenId);
+    /// Add @p windowId to @p state at the position dictated by the
+    /// insertion-order setting (End / AfterFocused / AsMaster). Shared by
+    /// insertWindow's new-window path and handoffReceive's cross-engine adopt.
+    void insertWindowByConfigOrder(PhosphorTiles::TilingState* state, const QString& windowId);
     void removeWindow(const QString& windowId);
 
     /// Algorithm lifecycle REMOVE hook + state removal for a tracked window,
@@ -1295,6 +1317,10 @@ private:
     PhosphorZones::LayoutRegistry* m_layoutManager = nullptr;
     PhosphorEngine::IWindowTrackingService* m_windowTracker = nullptr;
     PhosphorScreens::ScreenManager* m_screenManager = nullptr;
+    /// Borrowed cross-surface resolver (neighbouring output / desktop lookup);
+    /// null when not injected, in which case directional navigation stops at the
+    /// layout boundary instead of crossing surfaces.
+    PhosphorEngine::ICrossSurfaceResolver* m_crossSurfaceResolver = nullptr;
     PhosphorEngine::IWindowRegistry* m_windowRegistry = nullptr;
     PhosphorTiles::ITileAlgorithmRegistry* m_algorithmRegistry = nullptr; ///< Borrowed; outlives engine
     std::unique_ptr<AutotileConfig> m_config;

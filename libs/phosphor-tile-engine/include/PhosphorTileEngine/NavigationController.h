@@ -4,6 +4,7 @@
 #pragma once
 
 #include <phosphortileengine_export.h>
+#include <QRect>
 #include <QString>
 #include <QStringList>
 #include <functional>
@@ -73,6 +74,28 @@ public:
 
     void adjustMasterCount(int delta);
 
+    /**
+     * @brief The tiled window at @p screenId's entry edge facing the source when
+     *        a crossing arrives in @p direction (crossing "right" enters the
+     *        target's LEFT edge → the leftmost tile, etc.). Empty when the screen
+     *        has no tiling state or no tiled windows. Used by the daemon to pick
+     *        the cross-mode swap partner on an autotile target.
+     * @note When geometry isn't computed yet OR the screen is over its maxWindows
+     *       cap (calculatedZones covers only the capped subset, so it can't align
+     *       1:1 with tiledWindows), this degrades to the first tiled window (the
+     *       master) rather than the geometric edge tile.
+     */
+    QString entryWindowOnScreen(const QString& screenId, const QString& direction) const;
+
+    /**
+     * @brief The RAW window-order index of @p windowId on @p screenId's current
+     *        state (counting floating windows, as TilingState::addWindow does),
+     *        or -1 when not present. Lets the daemon capture a window's slot
+     *        before a cross-mode swap so its counterpart lands in the same place
+     *        when re-inserted via HandoffContext.insertIndex.
+     */
+    int windowOrderIndexOnScreen(const QString& screenId, const QString& windowId) const;
+
 private:
     /**
      * @brief Resolve active screen for navigation feedback
@@ -105,6 +128,79 @@ private:
      */
     QStringList tiledWindowsForFocusedScreen(QString& outScreenId, PhosphorTiles::TilingState*& outState,
                                              const QString& explicitWindowId = QString());
+
+    /**
+     * @brief Pick the tiled window spatially adjacent to @p focused in
+     *        @p direction, using the engine's computed per-window geometry.
+     *
+     * Selection is geometric (via PhosphorGeometry::directionalNeighbor over
+     * the state's calculatedZones(), which are index-aligned with @p windows),
+     * not order-based — so "right" lands on the window to the right, never the
+     * one below.
+     *
+     * @param windows the state's tiledWindows() list.
+     * @param outHasGeometry set true when the surface has a computed layout
+     *        (zones align 1:1 with @p windows and the focused window has a
+     *        valid rect); false when geometry is not yet available, so callers
+     *        can fall back to order-based cycling.
+     * @return the target windowId, or an empty string when no tiled window
+     *         lies in @p direction (the layout boundary — the seam where
+     *         cross-surface navigation takes over) or geometry is unavailable.
+     */
+    QString directionalNeighborWindow(PhosphorTiles::TilingState* state, const QStringList& windows,
+                                      const QString& focused, const QString& direction, bool& outHasGeometry) const;
+
+    /**
+     * @brief The window to focus when directional navigation crosses from
+     *        @p sourceScreenId into the adjacent output in @p direction.
+     *
+     * Resolves the neighbour output via the injected cross-surface resolver,
+     * then picks that output's tiled window nearest the crossing edge (the
+     * directional neighbour of @p focused's rect in global coordinates),
+     * falling back to its first tiled window. Returns an empty string when
+     * there is no resolver, no neighbour output, or it has no tiled windows.
+     */
+    QString crossOutputFocusTarget(const QString& sourceScreenId, const QString& focused,
+                                   const QString& direction) const;
+
+    /**
+     * @brief Move @p focused from @p sourceScreenId into the adjacent output in
+     *        @p direction, migrating its tiling state and activating it there.
+     * @param action "move" or "swap" — selects the cross-mode signal emitted when
+     *        the neighbour output is a different (snap) mode: a "swap" defers to
+     *        crossModeSwapRequested (two-way exchange), a "move" to
+     *        crossModeMoveRequested (one-way insert).
+     * @return false when there is no resolver or no neighbour output.
+     */
+    bool crossOutputMove(const QString& sourceScreenId, const QString& focused, const QString& direction,
+                         const QString& action);
+
+    /**
+     * @brief The window to focus when directional navigation crosses to the
+     *        adjacent virtual desktop on @p sourceScreenId in @p direction.
+     *
+     * Resolves the neighbour desktop via the cross-surface resolver and returns
+     * that (screen, desktop) state's entry window — the first tiled window for
+     * a forward step (right/down), the last for a backward step. Empty when
+     * there is no neighbour desktop or it has no tiled windows on this screen.
+     */
+    QString crossDesktopFocusTarget(const QString& sourceScreenId, const QString& direction) const;
+
+    /**
+     * @brief Move @p focused from @p sourceScreenId's current desktop onto the
+     *        adjacent desktop in @p direction. Does NOT touch tiling state itself:
+     *        it emits windowDesktopMoveRequested (or crossModeMoveRequested for a
+     *        snap target) so the compositor moves the real window, and the reactive
+     *        windowClosed/windowOpened path then reflows the source and tiles the
+     *        target. Returns false when there is no neighbour desktop.
+     */
+    bool crossDesktopMove(const QString& sourceScreenId, const QString& focused, const QString& direction);
+
+    /**
+     * @brief The global-coordinate rect of @p windowId within @p state, or an
+     *        invalid rect when the state has no computed geometry for it.
+     */
+    QRect rectForWindowInState(PhosphorTiles::TilingState* state, const QString& windowId) const;
 
     /**
      * @brief Helper to apply an operation to all screen states

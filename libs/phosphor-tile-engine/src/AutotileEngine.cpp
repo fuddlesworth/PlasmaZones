@@ -1915,7 +1915,19 @@ void AutotileEngine::handoffReceive(const HandoffContext& ctx)
         handoffRelease(windowId);
     }
 
-    state->addWindow(windowId);
+    // Insert at the position dictated by the insertion-order setting (a
+    // directional cross-mode move should land where new windows land), except:
+    //   - a cross-mode SWAP carries an explicit insertIndex so the arriving
+    //     window takes the departed partner's exact slot;
+    //   - a drag-drop carrying a cursor position, which the drag-insert path
+    //     places separately — there we keep the simple append so the drop wins.
+    if (ctx.insertIndex >= 0 && ctx.dropPos.isNull()) {
+        state->addWindow(windowId, ctx.insertIndex);
+    } else if (ctx.dropPos.isNull()) {
+        insertWindowByConfigOrder(state, windowId);
+    } else {
+        state->addWindow(windowId);
+    }
     // Autotile-engine policy on receive: a window arriving as "floating in
     // the source" stays floating here too — drag-from-snap typically falls
     // into this branch, and the user's drop position is where they want it.
@@ -2813,18 +2825,7 @@ bool AutotileEngine::insertWindow(const QString& windowId, const QString& screen
 
     if (!inserted) {
         // Insert based on config preference
-        switch (m_config->insertPosition) {
-        case AutotileConfig::InsertPosition::End:
-            state->addWindow(windowId);
-            break;
-        case AutotileConfig::InsertPosition::AfterFocused:
-            state->insertAfterFocused(windowId);
-            break;
-        case AutotileConfig::InsertPosition::AsMaster:
-            state->addWindow(windowId);
-            state->moveToFront(windowId);
-            break;
-        }
+        insertWindowByConfigOrder(state, windowId);
     }
 
     // Float restore is handled entirely by the record take() above (a floating
@@ -2834,6 +2835,22 @@ bool AutotileEngine::insertWindow(const QString& windowId, const QString& screen
 
     m_windowToStateKey.insert(windowId, currentKey);
     return true;
+}
+
+void AutotileEngine::insertWindowByConfigOrder(PhosphorTiles::TilingState* state, const QString& windowId)
+{
+    switch (m_config->insertPosition) {
+    case AutotileConfig::InsertPosition::End:
+        state->addWindow(windowId);
+        break;
+    case AutotileConfig::InsertPosition::AfterFocused:
+        state->insertAfterFocused(windowId);
+        break;
+    case AutotileConfig::InsertPosition::AsMaster:
+        state->addWindow(windowId);
+        state->moveToFront(windowId);
+        break;
+    }
 }
 
 void AutotileEngine::removeWindow(const QString& windowId)
@@ -3587,16 +3604,25 @@ QRect AutotileEngine::screenGeometry(const QString& screenId) const
         return m_screenManager->screenAvailableGeometry(screenId);
     }
 
-    // Physical screens: existing behavior
+    // Physical screens: resolve through the manager's cache-backed string
+    // overload, which reads the tracked-screen snapshot (from the screen
+    // provider) rather than a live QScreen. This is behaviourally identical to
+    // the old findByIdOrName + actualAvailableGeometry(QScreen*) path on a real
+    // system (both feed the same available-geometry/strut cache) AND resolves
+    // synthetic, QScreen-less screens from a test provider — without it,
+    // directional cross-output navigation cannot be exercised headlessly.
+    const QRect geom = m_screenManager->screenAvailableGeometry(screenId);
+    if (geom.isValid()) {
+        return geom;
+    }
+
+    // Last resort: a live QScreen the manager has not tracked yet (a hotplug
+    // race). The QScreen* overload resolves the connector and falls back to
+    // QScreen::availableGeometry().
     QScreen* screen = PhosphorScreens::ScreenIdentity::findByIdOrName(screenId);
     if (!screen) {
         return QRect();
     }
-
-    // m_screenManager is non-null here — the !m_screenManager early-return
-    // at the top of this function already handled that case. The QScreen*
-    // overload resolves the connector and falls back to
-    // QScreen::availableGeometry() when it is not tracked.
     return m_screenManager->actualAvailableGeometry(screen);
 }
 
@@ -3608,6 +3634,14 @@ bool AutotileEngine::isKnownScreen(const QString& screenId) const
     }
     if (PhosphorIdentity::VirtualScreenId::isVirtual(screenId)) {
         return m_screenManager->screenGeometry(screenId).isValid();
+    }
+    // Physical screens: resolve via the manager's tracked-screen snapshot
+    // (the screen provider), which is equivalent to a live-QScreen lookup on a
+    // real system but also recognises synthetic, QScreen-less screens from a
+    // test provider — keeping this consistent with screenGeometry() above.
+    // Fall back to findByIdOrName for a not-yet-tracked hotplug race.
+    if (m_screenManager->screenGeometry(screenId).isValid()) {
+        return true;
     }
     return PhosphorScreens::ScreenIdentity::findByIdOrName(screenId) != nullptr;
 }
@@ -3778,6 +3812,14 @@ void AutotileEngine::retileAfterOperation(const QString& screenId, bool operatio
     if (!isAutotileScreen(screenId)) {
         return;
     }
+
+    // This synchronous retile recomputes from the current state, so any deferred
+    // retile already queued for the SAME screen is now redundant. Drop it —
+    // otherwise processPendingRetiles fires a second batch for this screen
+    // microseconds later, and that duplicate supersedes the staggered apply of
+    // this one, stranding every window past the first (a cross-output move left
+    // the source monitor with windows that never reflowed).
+    m_pendingRetileScreens.remove(screenId);
 
     // When already inside retile(), still recalc and apply for this screen so
     // navigation (rotate, swap, etc.) is never dropped — user expects geometry
@@ -4009,6 +4051,16 @@ void AutotileEngine::moveFocusedInDirection(const QString& direction, const Navi
 void AutotileEngine::swapFocusedInDirection(const QString& direction, const NavigationContext& ctx)
 {
     m_navigation->swapFocusedInDirection(direction, QStringLiteral("swap"), canonicalizeForLookup(ctx.windowId));
+}
+
+QString AutotileEngine::entryWindowForCrossing(const QString& screenId, const QString& direction) const
+{
+    return m_navigation->entryWindowOnScreen(screenId, direction);
+}
+
+int AutotileEngine::windowOrderIndexForWindow(const QString& screenId, const QString& windowId) const
+{
+    return m_navigation->windowOrderIndexOnScreen(screenId, canonicalizeForLookup(windowId));
 }
 
 void AutotileEngine::moveFocusedToPosition(int position, const NavigationContext& ctx)
