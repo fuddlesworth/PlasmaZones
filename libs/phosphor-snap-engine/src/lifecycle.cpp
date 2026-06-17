@@ -95,11 +95,14 @@ void SnapEngine::windowOpened(const QString& windowId, const QString& screenId, 
 // geometry application.
 //
 // Screen mode semantics:
-//   - The placement-store restore and app rules (chain level 1) may
-//     cross-screen migrate: a stored record's own screenId or an app rule can
+//   - SNAPPED placement-store restore and app rules (chain level 1) may
+//     cross-screen migrate: a snapped record's own screenId or an app rule can
 //     route a window to a different screen, and the store's take() accept
 //     predicate / snapped-branch screen check keep an autotile-mode screen from
-//     being snapped onto (autotile on that screen will own it).
+//     being snapped onto (autotile on that screen will own it). FLOATED records
+//     are screen-local — a float-back is restored only when the window reopens
+//     on its recorded screen, never moved across monitors (the accept predicate
+//     gates floated records on the opening screen).
 //   - The empty-zone (level 2) and last-zone (level 3) fallbacks inherently use
 //     the caller screen as the target, so they are ONLY valid when the caller's
 //     screen is in snap mode. On autotile screens they're short-circuited —
