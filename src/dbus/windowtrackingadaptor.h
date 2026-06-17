@@ -352,9 +352,15 @@ public Q_SLOTS:
      * @param windowId Window ID that was closed
      * @param windowKind PhosphorEngine::WindowKind wire value (Unknown/Normal/
      *        Transient) — gates the snap-restore consume on reopen
+     * @param screenId The window's authoritative current screen at close (KWin's
+     *        getWindowScreenId). Threaded into the final placement capture so a
+     *        window dragged cross-screen and closed records its float-back on the
+     *        screen it actually closed on — by close time a cross-screen move has
+     *        torn down both engines' tracking, so neither capturePlacement can
+     *        report the real screen. Empty = legacy/opt-out.
      * @note Call this when KWin reports a window has been closed to prevent memory leaks
      */
-    void windowClosed(const QString& windowId, int windowKind);
+    void windowClosed(const QString& windowId, int windowKind, const QString& screenId = QString());
 
     /**
      * Notify daemon that a window was activated/focused
@@ -600,7 +606,16 @@ public:
     /// the WindowPlacementStore (or clear the record if no engine manages it).
     /// Shadow-written in P1; the single funnel every state-change + close hook
     /// calls so the persisted record always reflects the window's live state.
-    void captureWindowPlacement(const QString& windowId);
+    ///
+    /// @p authoritativeScreen, when non-empty (the close path passes KWin's
+    /// getWindowScreenId), is the window's true current screen. It is used ONLY
+    /// as a fallback when NEITHER engine produces a placement — the case where a
+    /// cross-screen move has removed the window from the source engine's tracking
+    /// and the destination engine has not adopted it, so both capturePlacement
+    /// calls return nullopt and the live screen would otherwise be lost. In that
+    /// case the float-back is recorded on @p authoritativeScreen via
+    /// WindowTrackingService::recordFloatingClose.
+    void captureWindowPlacement(const QString& windowId, const QString& authoritativeScreen = QString());
 
     /// Re-capture every open floating window's live geometry into the unified
     /// store at save time (no per-move hook fires for drags). Called before the
