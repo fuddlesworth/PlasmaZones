@@ -122,6 +122,11 @@ void NavigationHandler::syncZonesFromDaemon()
             }
         }
         qCDebug(lcEffect) << "Synced" << zoneEntryCount() << "snapped-window zones from daemon";
+        // Re-seeding the zone cache changes the IsSnapped / Zone match inputs; drop
+        // the stale placement-scoped opacity verdicts so a `WHEN isSnapped` /
+        // `Zone(...)` SetOpacity rule re-resolves against the fresh state on the
+        // next frame (mirrors the daemon-loss invalidation).
+        m_effect->invalidateAllRuleCaches();
     });
 }
 

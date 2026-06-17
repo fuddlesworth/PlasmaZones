@@ -678,6 +678,18 @@ private:
     /// there are no animation rules.
     void invalidateRuleCacheForStateChange(const QString& windowId);
 
+    /// Bulk analog of invalidateRuleCacheForStateChange for placement changes that
+    /// affect EVERY window at once — daemon loss (the zone / floating caches are
+    /// cleared) and the daemon-ready re-seed (they are repopulated). The match
+    /// cache is keyed (windowId, ruleSet revision); neither moves on a bulk
+    /// placement change, so a placement-scoped opacity verdict would otherwise
+    /// stay cached (e.g. a `WHEN isSnapped` SetOpacity window staying dimmed after
+    /// the cache that made it "snapped" was cleared). Drops the whole match cache
+    /// and forces a full repaint so opacity rules re-resolve against the current
+    /// IsSnapped / IsFloating / Zone state. Borders recover via their own
+    /// restore / rebuild path. No-op when there are no animation rules.
+    void invalidateAllRuleCaches();
+
     /// Resolve which mode's BorderState manages @p windowId — autotile first,
     /// then snap — or nullptr if neither draws a border for it.
     const PhosphorCompositor::BorderState* resolveBorderStateFor(const QString& windowId) const;

@@ -764,6 +764,13 @@ PlasmaZonesEffect::PlasmaZonesEffect()
         // authoritatively repopulated on daemon-ready.
         m_navigationHandler->clearAllZoneState();
         m_navigationHandler->clearAllFloatingState();
+        // The placement caches above feed placement-scoped rule match inputs. A
+        // SetOpacity rule keyed on IsSnapped/IsFloating/Zone caches its verdict
+        // per (windowId, ruleSet revision) — neither moves here — so without this
+        // the window keeps its stale opacity (borders revert via restoreAll /
+        // clearAllBorders below, but opacity would not). Re-resolve every opacity
+        // window against the now-cleared placement, matching the border teardown.
+        invalidateAllRuleCaches();
         m_decorationManager->restoreAll();
         m_autotileHandler->restoreAllMonocleMaximized();
         clearAllBorders();

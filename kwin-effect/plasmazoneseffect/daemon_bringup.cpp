@@ -249,6 +249,11 @@ void PlasmaZonesEffect::continueDaemonReadySetup()
                     m_navigationHandler->setWindowFloating(id, true);
                 }
                 qCDebug(lcEffect) << "Synced" << floatingIds.size() << "floating windows from daemon";
+                // Re-seeding the float cache changes the IsFloating match input for
+                // these windows; drop the stale placement-scoped opacity verdicts so
+                // a `WHEN isFloating` SetOpacity rule re-resolves against the fresh
+                // state on the next frame (mirrors the daemon-loss invalidation).
+                invalidateAllRuleCaches();
             }
         });
     }

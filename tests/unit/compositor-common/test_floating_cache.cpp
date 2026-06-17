@@ -116,6 +116,23 @@ private Q_SLOTS:
     }
 
     // =================================================================
+    // FloatingCache: malformed composite with empty instanceId is rejected
+    // =================================================================
+
+    void testFloatingCacheRejectsEmptyInstanceId()
+    {
+        PhosphorCompositor::FloatingCache cache;
+        // A composite "app|" (trailing separator → empty instanceId) is malformed.
+        // It must be rejected, not inserted under an empty-string key — otherwise
+        // every empty-instance window would alias onto one wildcard slot.
+        cache.setFloating(QStringLiteral("app|"), true);
+        QCOMPARE(cache.size(), 0);
+        QVERIFY(!cache.isFloating(QStringLiteral("app|")));
+        // A different malformed id must not resolve as floating via a shared key.
+        QVERIFY(!cache.isFloating(QStringLiteral("other|")));
+    }
+
+    // =================================================================
     // ZoneCache: basic set / get / unsnap
     // =================================================================
 
@@ -177,6 +194,22 @@ private Q_SLOTS:
 
         cache.clear();
         QCOMPARE(cache.size(), 0);
+    }
+
+    // =================================================================
+    // ZoneCache: malformed composite with empty instanceId is rejected
+    // =================================================================
+
+    void testZoneCacheRejectsEmptyInstanceId()
+    {
+        PhosphorCompositor::ZoneCache cache;
+        // A composite "app|" (trailing separator → empty instanceId) is malformed
+        // and must be ignored, not keyed under an empty string (which would alias
+        // every empty-instance window onto one wildcard slot).
+        cache.setZone(QStringLiteral("app|"), QStringLiteral("{z}"));
+        QCOMPARE(cache.size(), 0);
+        QVERIFY(!cache.isSnapped(QStringLiteral("app|")));
+        QVERIFY(!cache.isSnapped(QStringLiteral("other|")));
     }
 
     // =================================================================

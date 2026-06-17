@@ -151,7 +151,7 @@ void PlasmaZonesEffect::updateWindowBorder(const QString& windowId, KWin::Effect
     // pick the one matching the window's current focus state. A per-window
     // SetBorderColor rule, when matched, overrides it. Focus-dependence of the
     // RULE colour is expressed in the rule itself via the IsFocused match
-    // condition: `windowRuleQueryFor` set the query's isFocused flag, so a
+    // condition: `windowRuleQuery` sets the query's isFocused flag, so a
     // focus-scoped rule (`WHEN focused`/`WHEN NOT focused`) only fills the
     // border-colour slot in its matching state, while a focus-agnostic rule
     // applies in both. Either way `ovr->borderColor` already holds the colour

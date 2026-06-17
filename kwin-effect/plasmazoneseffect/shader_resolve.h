@@ -42,8 +42,8 @@ namespace PlasmaZones {
  * the GPL-side caller via `PlasmaZonesEffect::windowRuleQuery(w)`, which threads
  * the effect's floating / snapped / zone caches into the free `windowRuleQueryFor`
  * builder. Pre-PR the resolvers took a bare `windowClass` and the rule layer
- * matched exclusively on `WindowClass Contains <pattern>`; v4 widened the match shape so a
- * user-authored rule may pin to `AppId` / `DesktopFile` / `Title` / etc.
+ * matched exclusively on `WindowClass Contains <pattern>`; v4 widened the match
+ * shape so a user-authored rule may pin to `AppId` / `DesktopFile` / `Title` / etc.
  * Routing the full query through to the resolver keeps the rule-override
  * gate (which already builds the full query) and the slot resolution in
  * lockstep — a rule that passes the gate also resolves its slot.

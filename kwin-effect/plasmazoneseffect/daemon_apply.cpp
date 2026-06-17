@@ -513,6 +513,23 @@ void PlasmaZonesEffect::invalidateRuleCacheForStateChange(const QString& windowI
     }
 }
 
+void PlasmaZonesEffect::invalidateAllRuleCaches()
+{
+    if (m_shaderManager.animationRuleSet().isEmpty()) {
+        return;
+    }
+    // A bulk placement change (daemon loss clears the zone/floating caches; the
+    // daemon-ready re-seed repopulates them) moves neither the windowId nor the
+    // ruleSet revision the match cache is keyed on, so every placement-scoped
+    // verdict would survive stale. Drop the whole cache; the full repaint makes
+    // every opacity-only window re-resolve against the current placement on the
+    // next frame (border windows recover through their own restore/rebuild path).
+    m_shaderManager.animationRuleEvaluator().clearCache();
+    if (KWin::effects && m_shaderManager.hasOpacityRules()) {
+        KWin::effects->addRepaintFull();
+    }
+}
+
 void PlasmaZonesEffect::slotWindowMinimizedChanged(KWin::EffectWindow* w)
 {
     if (!w || !shouldHandleWindow(w) || !isTileableWindow(w)) {

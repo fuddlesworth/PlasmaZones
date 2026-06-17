@@ -77,6 +77,11 @@ public:
         m_byAppId.clear();
     }
 
+    /// Total entries across BOTH keyspaces (instance floats + app-wide floats).
+    /// Not a window count: an app floated both app-wide and per-instance counts
+    /// in each. Diagnostics that want "how many windows did the daemon report
+    /// floating" should log the source list size, not this (see
+    /// NavigationHandler::syncFloatingWindowsFromDaemon).
     int size() const
     {
         return m_byInstance.size() + m_byAppId.size();
