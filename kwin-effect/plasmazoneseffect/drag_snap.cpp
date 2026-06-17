@@ -192,7 +192,7 @@ void PlasmaZonesEffect::callEndDrag(KWin::EffectWindow* window, const QString& w
                     // If the window is still in user-move state because only
                     // the activation mouse button is held (LMB already
                     // released), cancel KWin's interactive move so we can
-                    // snap immediately. Without this, applySnapGeometry
+                    // snap immediately. Without this, applyWindowGeometry
                     // defers (100ms retry) until ALL buttons are released —
                     // noticeable delay when using a mouse button (RMB) for
                     // zone activation.
@@ -201,7 +201,7 @@ void PlasmaZonesEffect::callEndDrag(KWin::EffectWindow* window, const QString& w
                             kw->cancelInteractiveMoveResize();
                         }
                     }
-                    applySnapGeometry(safeWindow, snapGeometry);
+                    applyWindowGeometry(safeWindow, snapGeometry);
                     // Drag-drop snap committed — record in snapping's border set,
                     // but only for a resolved snap-mode screen. An empty
                     // (unresolved) or autotile-managed screen is owned by
@@ -252,8 +252,8 @@ void PlasmaZonesEffect::callEndDrag(KWin::EffectWindow* window, const QString& w
                         }
                     }
                     // Drag-to-unsnap: window leaves zone-managed sizing, restore pre-snap dimensions.
-                    applySnapGeometry(safeWindow, geo, /*allowDuringDrag=*/false, /*skipAnimation=*/false,
-                                      PhosphorAnimation::ProfilePaths::WindowSnapOut);
+                    applyWindowGeometry(safeWindow, geo, /*allowDuringDrag=*/false, /*skipAnimation=*/false,
+                                        PhosphorAnimation::ProfilePaths::WindowSnapOut);
                     // Drag-to-unsnap: window left zone-managed sizing.
                     m_snapHandler->clearWindowSnapped(windowId);
                     break;
@@ -322,7 +322,7 @@ void PlasmaZonesEffect::tryAsyncSnapCall(const QString& interface, const QString
                         // `reply.argumentAt<4>() && window` check above), so the
                         // ternary fall-through to QRectF() is unreachable.
                         m_snapHandler->ensurePreSnapGeometryStored(window, windowId, window->frameGeometry());
-                    applySnapGeometry(window, geo, false, skipAnimation);
+                    applyWindowGeometry(window, geo, false, skipAnimation);
                     // Async snap (keyboard / empty-zone / last-zone / auto-fill)
                     // committed — record in snapping's border set, but only for
                     // a resolved snap-mode screen (autotile windows are tracked
@@ -371,8 +371,8 @@ void PlasmaZonesEffect::repaintSnapRegions(KWin::EffectWindow* window, const QRe
     }
 }
 
-void PlasmaZonesEffect::applySnapGeometry(KWin::EffectWindow* window, const QRect& geometry, bool allowDuringDrag,
-                                          bool skipAnimation, const QString& profilePath)
+void PlasmaZonesEffect::applyWindowGeometry(KWin::EffectWindow* window, const QRect& geometry, bool allowDuringDrag,
+                                            bool skipAnimation, const QString& profilePath)
 {
     if (!window) {
         qCWarning(lcEffect) << "applyGeometry: window is null";
@@ -434,7 +434,7 @@ void PlasmaZonesEffect::applySnapGeometry(KWin::EffectWindow* window, const QRec
     // restart double-processing).
     //
     // When an animation IS in flight, frameGeometry() already reflects the
-    // committed target from the previous applySnapGeometry's moveResize —
+    // committed target from the previous applyWindowGeometry's moveResize —
     // but the visual position is still mid-transition. A rapid reversal
     // (float → unfloat, rotate → rotate back) legitimately targets the same
     // committed geometry and must NOT be skipped, because the animation needs
@@ -477,7 +477,7 @@ void PlasmaZonesEffect::applySnapGeometry(KWin::EffectWindow* window, const QRec
                         [this, safeWindow, geo, skipAnimation, profilePath, conn](KWin::EffectWindow*) {
                             disconnect(*conn);
                             if (safeWindow && !safeWindow->isDeleted() && !safeWindow->isFullScreen()) {
-                                applySnapGeometry(safeWindow, geo, false, skipAnimation, profilePath);
+                                applyWindowGeometry(safeWindow, geo, false, skipAnimation, profilePath);
                             }
                         });
         return;
@@ -494,7 +494,25 @@ void PlasmaZonesEffect::applySnapGeometry(KWin::EffectWindow* window, const QRec
     // filter when the rule's class matcher matches. Falling through to
     // the non-animated path just runs the moveResize without the snap
     // motion / shader.
-    if (!skipAnimation && !allowDuringDrag && m_windowAnimator->isEnabled() && shouldAnimateWindow(window)) {
+    //
+    // First-placement-on-open carve-out: when a window is moved into its
+    // zone/tile moments after opening, a window.open shader is still in
+    // flight — uniquely identified by the held WindowAddedGrabRole
+    // (ShaderTransition::addedGrabHeld, set only by the slotWindowAdded open
+    // path). Installing the snap/tile morph here would supersede it (one
+    // transition per window), so the user's configured window.open animation
+    // never plays — the window appears to morph into place instead. Skip the
+    // morph in that case and fall through to the plain moveResize: the window
+    // lands at its target geometry and the open shader plays into the final
+    // rect (the first-frame open suppression in slotWindowAdded holds it
+    // hidden until the moveResize lands, so the shader starts at the
+    // destination, not the spawn point). Later moves — no open shader in
+    // flight — morph normally.
+    const auto* inFlightTransition = m_shaderManager.findTransition(window);
+    const bool firstPlacementWithOpenShader = inFlightTransition && inFlightTransition->addedGrabHeld;
+
+    if (!skipAnimation && !allowDuringDrag && !firstPlacementWithOpenShader && m_windowAnimator->isEnabled()
+        && shouldAnimateWindow(window)) {
         const QRectF targetFrame(geo);
 
         // Bail before any work when the in-flight animation already
@@ -702,8 +720,8 @@ void PlasmaZonesEffect::slotRestoreSizeDuringDrag(const QString& windowId, int w
     qCDebug(lcEffect) << "Restoring size during drag:" << windowId << geometry;
     // Live drag-out unsnap: restoring pre-snap dimensions while the user is still dragging.
     // Logically a snap-out (the window is leaving zone-managed sizing).
-    applySnapGeometry(window, geometry, /*allowDuringDrag=*/true, /*skipAnimation=*/false,
-                      PhosphorAnimation::ProfilePaths::WindowSnapOut);
+    applyWindowGeometry(window, geometry, /*allowDuringDrag=*/true, /*skipAnimation=*/false,
+                        PhosphorAnimation::ProfilePaths::WindowSnapOut);
 }
 
 void PlasmaZonesEffect::slotDragPolicyChanged(const QString& windowId, const PhosphorProtocol::DragPolicy& newPolicy)

@@ -550,7 +550,7 @@ void AutotileHandler::handleWindowOutputChanged(KWin::EffectWindow* w)
                         }
                         const QRectF frame = safeW->frameGeometry();
                         const QRect geo(qRound(frame.x()), qRound(frame.y()), restoreW, restoreH);
-                        m_effect->applySnapGeometry(safeW, geo);
+                        m_effect->applyWindowGeometry(safeW, geo);
                         return;
                     }
 
@@ -579,7 +579,7 @@ void AutotileHandler::handleWindowOutputChanged(KWin::EffectWindow* w)
                                               }
                                               const QRectF frame = safeW->frameGeometry();
                                               const QRect geo(qRound(frame.x()), qRound(frame.y()), restoreW, restoreH);
-                                              m_effect->applySnapGeometry(safeW, geo);
+                                              m_effect->applyWindowGeometry(safeW, geo);
                                           });
                     m_pendingCrossScreenRestore[wid] = *sharedConn;
                 });
@@ -616,7 +616,7 @@ void AutotileHandler::cleanupAutotileTracking(const QString& windowId, const QSt
     // here — the desktop-move path stashes it immediately before close (consume
     // site / clearDesktopMoveStash cover it). Also drop the unconsumed output-move
     // marker and the pending cross-screen-restore connection (a stale one could
-    // fire a spurious applySnapGeometry).
+    // fire a spurious applyWindowGeometry).
     m_savedNotifiedForDesktopReturn.remove(windowId);
     m_expectedOutputMove.remove(windowId);
     if (auto pendingConn = m_pendingCrossScreenRestore.find(windowId);
@@ -685,7 +685,7 @@ void AutotileHandler::handleDragToFloat(KWin::EffectWindow* w, const QString& wi
                     newX = qRound(cursor.x() - cursorOffsetRatio * savedW);
                 }
                 QRect sizeRestored(newX, newY, savedW, savedH);
-                m_effect->applySnapGeometry(w, sizeRestored, /*allowDuringDrag=*/true);
+                m_effect->applyWindowGeometry(w, sizeRestored, /*allowDuringDrag=*/true);
                 qCInfo(lcEffect) << "Drag-start float: restored pre-autotile size for" << windowId << savedW << "x"
                                  << savedH;
             } else {
@@ -706,7 +706,7 @@ void AutotileHandler::handleDragToFloat(KWin::EffectWindow* w, const QString& wi
                     }
                     QRectF currentFrame = wp->frameGeometry();
                     QRect sizeRestored(qRound(currentFrame.x()), qRound(currentFrame.y()), savedW, savedH);
-                    effect->applySnapGeometry(wp, sizeRestored);
+                    effect->applyWindowGeometry(wp, sizeRestored);
                     qCInfo(lcEffect) << "Drag-to-float: restored pre-autotile size for" << windowId << savedW << "x"
                                      << savedH;
                 });

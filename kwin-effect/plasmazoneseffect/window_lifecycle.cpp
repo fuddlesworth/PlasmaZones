@@ -146,7 +146,7 @@ void PlasmaZonesEffect::slotWindowAdded(KWin::EffectWindow* w)
     // populates the cache only for pending restores whose saved screen is in snap
     // mode, so an entry being present means "this app wants to land on a
     // snap-mode zone". Cross-VS/cross-monitor teleport works because moveResize
-    // takes absolute compositor coordinates, so applySnapGeometry moves the
+    // takes absolute compositor coordinates, so applyWindowGeometry moves the
     // window to whichever screen the cached rect lives on. After teleport,
     // re-evaluate onAutotileScreen because KWin updates the window's output
     // assignment.
@@ -174,7 +174,7 @@ void PlasmaZonesEffect::slotWindowAdded(KWin::EffectWindow* w)
                 // already reports the resolved zone — the surface-extent
                 // open shader (bounce, fly-in) plays into the zone from
                 // the first painted frame without any anchor pinning.
-                applySnapGeometry(w, cached->geometry, false, /*skipAnimation=*/true);
+                applyWindowGeometry(w, cached->geometry, false, /*skipAnimation=*/true);
                 // Re-evaluate screen after teleport — cross-VS/cross-monitor
                 // moveResize updates KWin's output assignment, so the window
                 // may no longer be on an autotile screen.
@@ -536,7 +536,7 @@ void PlasmaZonesEffect::setupWindowConnections(KWin::EffectWindow* w)
             // Suppress crossing detection while the daemon is moving this window in response
             // to a VS swap/rotate or resnap. The cached m_virtualScreenDefs may still hold
             // pre-rotation regions when the geometry change fires synchronously from
-            // applySnapGeometry, so getWindowScreenId would resolve the new position against
+            // applyWindowGeometry, so getWindowScreenId would resolve the new position against
             // stale boundaries and report a phantom crossing.
             if (m_inDaemonGeometryApply) {
                 return;
@@ -766,7 +766,7 @@ void PlasmaZonesEffect::setupWindowConnections(KWin::EffectWindow* w)
     // Body 1 — first-frame open suppression release: a window withheld
     // from compositing on open (see RestoreSuppression) is released the
     // moment its reposition configure lands — detected as the live
-    // geometry leaving the spawn point once applySnapGeometry has
+    // geometry leaving the spawn point once applyWindowGeometry has
     // stamped the resolved target. Before the target is known a
     // geometry change is just the client's own initial size negotiation
     // and is ignored. Full-rect compare (not just topLeft) catches

@@ -152,6 +152,23 @@ bool MatchExpression::isContextOnly() const
     return true;
 }
 
+bool MatchExpression::referencesAnyField(const QSet<Field>& fields) const
+{
+    if (m_kind == Kind::Leaf) {
+        return fields.contains(m_predicate.field);
+    }
+    // Recurse through every child regardless of composite kind — a field
+    // mentioned inside a `none{}` negation still counts as "the rule talks
+    // about this field". An empty composite has no children and references
+    // nothing.
+    for (const auto& child : m_children) {
+        if (child.referencesAnyField(fields)) {
+            return true;
+        }
+    }
+    return false;
+}
+
 void MatchExpression::ensureRegex()
 {
     if (m_kind != Kind::Leaf || m_predicate.op != Operator::Regex || m_compiledRegex) {

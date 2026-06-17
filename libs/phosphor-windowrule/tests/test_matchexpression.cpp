@@ -5,6 +5,7 @@
 
 #include <QJsonArray>
 #include <QJsonObject>
+#include <QSet>
 #include <QTest>
 #include <QVariant>
 #include <QVariantList>
@@ -325,6 +326,46 @@ private Q_SLOTS:
 
         const auto mixedComposite = MatchExpression::makeAll({ctxLeaf, winLeaf});
         QVERIFY(!mixedComposite.isContextOnly());
+    }
+
+    // ── referencesAnyField ──
+
+    void testReferencesAnyField()
+    {
+        const QSet<Field> typeFields = {Field::IsTransient, Field::WindowType, Field::IsModal};
+
+        // A class-only leaf references none of the type fields — this is the
+        // "firefox → dissolve matches a tooltip by class" case the animation
+        // filter must NOT treat as deliberate type targeting.
+        const auto classLeaf =
+            MatchExpression::makeLeaf(Field::WindowClass, Operator::Contains, QStringLiteral("firefox"));
+        QVERIFY(!classLeaf.referencesAnyField(typeFields));
+
+        // A direct type-field leaf references the set.
+        const auto transientLeaf = MatchExpression::makeLeaf(Field::IsTransient, Operator::Equals, true);
+        QVERIFY(transientLeaf.referencesAnyField(typeFields));
+
+        // A type predicate nested inside a composite — including under a
+        // `none{}` negation, like the user's PiP rule's `none:[windowType==2]`
+        // — still counts as referencing the field.
+        const auto nestedAll = MatchExpression::makeAll({
+            classLeaf,
+            MatchExpression::makeNone({MatchExpression::makeLeaf(Field::WindowType, Operator::Equals, 2)}),
+        });
+        QVERIFY(nestedAll.referencesAnyField(typeFields));
+
+        // A composite of only non-type predicates references nothing in the set.
+        const auto titleAndClass = MatchExpression::makeAll({
+            classLeaf,
+            MatchExpression::makeLeaf(Field::Title, Operator::Contains, QStringLiteral("Settings")),
+        });
+        QVERIFY(!titleAndClass.referencesAnyField(typeFields));
+
+        // An empty composite references nothing.
+        QVERIFY(!MatchExpression::makeAll({}).referencesAnyField(typeFields));
+
+        // An unrelated field is not matched by a disjoint set.
+        QVERIFY(!transientLeaf.referencesAnyField({Field::IsNotification}));
     }
 
     // ── Validation ──

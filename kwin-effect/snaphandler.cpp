@@ -436,11 +436,11 @@ void SnapHandler::slotMoveSpecificWindowToZoneRequested(const QString& windowId,
         return;
     }
 
-    // Capture geometry BEFORE applySnapGeometry resizes the window. The async D-Bus
+    // Capture geometry BEFORE applyWindowGeometry resizes the window. The async D-Bus
     // callback in ensurePreSnapGeometryStored would read frameGeometry() after the
     // resize, corrupting the pre-tile entry with zone dimensions.
     ensurePreSnapGeometryStored(targetWindow, m_effect->getWindowId(targetWindow), targetWindow->frameGeometry());
-    m_effect->applySnapGeometry(targetWindow, geometry);
+    m_effect->applyWindowGeometry(targetWindow, geometry);
 
     // Derive screen from the applied geometry center. Use resolveEffectiveScreenId
     // to get the virtual screen ID (not just the physical output).

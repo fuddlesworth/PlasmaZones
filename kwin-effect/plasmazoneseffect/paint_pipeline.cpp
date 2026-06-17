@@ -466,7 +466,7 @@ void PlasmaZonesEffect::paintWindow(const KWin::RenderTarget& renderTarget, cons
         // ShaderTransition's docstring). Lifecycle events (window.*)
         // started via tryBeginShaderForEvent set durationMs > 0 and drive
         // progress from monotonic steady-clock elapsed; zone.* events flowed
-        // through applySnapGeometry leave durationMs = 0 and ride the
+        // through applyWindowGeometry leave durationMs = 0 and ride the
         // m_windowAnimator timeline so the shader matches the geometry
         // animation.
         qreal progress = 0.0;

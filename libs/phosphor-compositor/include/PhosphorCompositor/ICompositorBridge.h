@@ -179,8 +179,9 @@ public:
     /// Raise a window in the stacking order
     virtual void raiseWindow(WindowHandle w) = 0;
 
-    /// Apply snap geometry with optional animation
-    virtual void applySnapGeometry(WindowHandle w, const QRectF& geometry, bool skipAnimation = false) = 0;
+    /// Move a window to a target geometry, running the configured placement
+    /// transition (snap / tile / move) unless @p skipAnimation is set.
+    virtual void applyWindowGeometry(WindowHandle w, const QRectF& geometry, bool skipAnimation = false) = 0;
 
     // ═══════════════════════════════════════════════════════════════════
     // D-Bus Integration (convenience wrappers using compositor as parent)

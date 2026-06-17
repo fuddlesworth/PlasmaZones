@@ -140,7 +140,7 @@ void AutotileHandler::slotWindowsTileRequested(const PhosphorProtocol::TileReque
                     const auto floatGuard = qScopeGuard([this] {
                         m_effect->m_inDaemonGeometryApply = false;
                     });
-                    m_effect->applySnapGeometry(floatWin, savedGeo.toRect());
+                    m_effect->applyWindowGeometry(floatWin, savedGeo.toRect());
                     qCInfo(lcEffect) << "Restored pre-autotile geometry for overflow" << windowId << savedGeo.toRect();
                 }
             }
@@ -444,7 +444,7 @@ void AutotileHandler::slotWindowsTileRequested(const PhosphorProtocol::TileReque
                 return;
             }
             // Suppress the windowFrameGeometryChanged crossing-detection paths for the
-            // duration of this per-window apply. applySnapGeometry's moveResize emits
+            // duration of this per-window apply. applyWindowGeometry's moveResize emits
             // frameGeometryChanged synchronously, and after a VS swap/rotate the cached
             // m_virtualScreenDefs may still hold pre-rotation regions — without this
             // guard the slot would resolve the new position against stale boundaries
@@ -468,7 +468,7 @@ void AutotileHandler::slotWindowsTileRequested(const PhosphorProtocol::TileReque
             if (m_border.hideTitleBars) {
                 // Cross-screen transfer: move the decoration claim to this
                 // screen without a physical flap, then hide BEFORE the
-                // applySnapGeometry below supplies the zone frame
+                // applyWindowGeometry below supplies the zone frame
                 // (CallerWillPlace — the placement sees the final
                 // frame/client relationship).
                 m_effect->decorationManager()->releaseOthersOfKind(
@@ -490,10 +490,10 @@ void AutotileHandler::slotWindowsTileRequested(const PhosphorProtocol::TileReque
                     if (!wasAlreadyMaximized) {
                         m_monocleMaximizedWindows.insert(snap.windowId);
                     }
-                    m_effect->applySnapGeometry(snap.window, snap.geometry);
+                    m_effect->applyWindowGeometry(snap.window, snap.geometry);
                     --m_suppressMaximizeChanged;
                 } else {
-                    m_effect->applySnapGeometry(snap.window, snap.geometry);
+                    m_effect->applyWindowGeometry(snap.window, snap.geometry);
                 }
             } else {
                 unmaximizeMonocleWindow(snap.windowId);
@@ -508,7 +508,7 @@ void AutotileHandler::slotWindowsTileRequested(const PhosphorProtocol::TileReque
                 // for monocle; a user-maximized window is never in that set.
                 //
                 // The MaximizeRestore call resizes the window to its pre-
-                // maximize restore geometry before applySnapGeometry below
+                // maximize restore geometry before applyWindowGeometry below
                 // overwrites it; that intermediate frameGeometryChanged is
                 // intentionally absorbed by the m_inDaemonGeometryApply guard
                 // set at the top of this lambda — a refactor that moves or
@@ -543,7 +543,7 @@ void AutotileHandler::slotWindowsTileRequested(const PhosphorProtocol::TileReque
 
                 if (!skipMoveResize) {
                     m_centeredWaylandZones.remove(snap.windowId);
-                    m_effect->applySnapGeometry(snap.window, geo);
+                    m_effect->applyWindowGeometry(snap.window, geo);
                 }
             }
 

@@ -3,6 +3,7 @@
 
 #include "RuleTestHelpers.h"
 
+#include <QSet>
 #include <QTest>
 
 using namespace PhosphorWindowRule;
@@ -320,6 +321,68 @@ private Q_SLOTS:
         other.windowClass = QStringLiteral("firefox");
         other.screenId = QStringLiteral("DP-2");
         QVERIFY(!eval.hasAnyMatch(other));
+    }
+
+    // ── hasMatchTargetingFields ──
+
+    void testHasMatchTargetingFields()
+    {
+        const QSet<Field> transientFields = {Field::IsTransient, Field::WindowType, Field::IsModal};
+
+        // The real-world scenario: a class-only "firefox → dissolve open" rule.
+        // A Firefox tooltip shares the class, so it MATCHES the rule — but the
+        // rule references no type field, so it must NOT count as deliberately
+        // targeting the transient type.
+        WindowRuleSet classOnly;
+        classOnly.addRule(
+            makeRule(QStringLiteral("firefox dissolve"), 100,
+                     MatchExpression::makeLeaf(Field::WindowClass, Operator::Contains, QStringLiteral("firefox")),
+                     {overrideShader(QStringLiteral("window.open"), QStringLiteral("dissolve"))}));
+        RuleEvaluator classEval(classOnly);
+
+        WindowQuery firefoxTooltip;
+        firefoxTooltip.windowClass = QStringLiteral("firefox");
+        firefoxTooltip.isTransient = true;
+        // Matches by class, but no type-field targeting → false.
+        QVERIFY(classEval.hasAnyMatch(firefoxTooltip));
+        QVERIFY(!classEval.hasMatchTargetingFields(firefoxTooltip, transientFields));
+
+        // A rule that explicitly references a type field (here windowType,
+        // mirroring the user's PiP rule) DOES count — and only when it also
+        // matches the window. WindowType::Dialog == 2 on the wire.
+        WindowRuleSet typed;
+        typed.addRule(
+            makeRule(QStringLiteral("firefox PiP"), 100,
+                     MatchExpression::makeAll({
+                         MatchExpression::makeLeaf(Field::WindowClass, Operator::Contains, QStringLiteral("firefox")),
+                         MatchExpression::makeNone({MatchExpression::makeLeaf(Field::WindowType, Operator::Equals, 2)}),
+                     }),
+                     {overrideShader(QStringLiteral("window.open"), QStringLiteral("fade"))}));
+        RuleEvaluator typedEval(typed);
+
+        WindowQuery firefoxWin;
+        firefoxWin.windowClass = QStringLiteral("firefox");
+        firefoxWin.windowType = PhosphorProtocol::WindowType::Normal; // != Dialog(2) → passes the none{} clause
+        firefoxWin.isTransient = true;
+        QVERIFY(typedEval.hasMatchTargetingFields(firefoxWin, transientFields));
+
+        // References the field but does NOT match the window (Dialog==2 fails
+        // the none{} clause) → false: targeting requires an actual match.
+        WindowQuery dialogWin;
+        dialogWin.windowClass = QStringLiteral("firefox");
+        dialogWin.windowType = PhosphorProtocol::WindowType::Dialog;
+        dialogWin.isTransient = true;
+        QVERIFY(!typedEval.hasMatchTargetingFields(dialogWin, transientFields));
+
+        // A disabled type-targeting rule does not count.
+        WindowRuleSet disabled;
+        WindowRule r = makeRule(QStringLiteral("transient rule"), 100,
+                                MatchExpression::makeLeaf(Field::IsTransient, Operator::Equals, true),
+                                {overrideShader(QStringLiteral("window.open"), QStringLiteral("fade"))});
+        r.enabled = false;
+        disabled.addRule(r);
+        RuleEvaluator disabledEval(disabled);
+        QVERIFY(!disabledEval.hasMatchTargetingFields(firefoxTooltip, transientFields));
     }
 
     // ── Cache ──
