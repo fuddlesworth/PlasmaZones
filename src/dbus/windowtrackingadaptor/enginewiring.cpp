@@ -116,7 +116,8 @@ void WindowTrackingAdaptor::setEngines(PhosphorEngine::PlacementEngineBase* snap
         }
 
         // Disabled-context gate for snap auto-restore (discussion #461 item 7).
-        // The persist-on-close gate (setShouldTrackPredicate above) blocks NEW
+        // The persist-on-close gate (setShouldTrackPredicate, installed in the
+        // WindowTrackingAdaptor constructor) blocks NEW
         // PendingRestore entries on disabled contexts, but pre-existing
         // in-memory entries (recorded before the user toggled the disable, or
         // before the disable propagated through settingsChanged) would still
