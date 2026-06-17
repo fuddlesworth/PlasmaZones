@@ -662,6 +662,28 @@ QString WindowRuleModel::fieldLabel(Field field)
         return PhosphorI18n::tr("Width");
     case Field::Height:
         return PhosphorI18n::tr("Height");
+    case Field::KeepAbove:
+        return PhosphorI18n::tr("Keep above");
+    case Field::KeepBelow:
+        return PhosphorI18n::tr("Keep below");
+    case Field::SkipTaskbar:
+        return PhosphorI18n::tr("Skip taskbar");
+    case Field::SkipPager:
+        return PhosphorI18n::tr("Skip pager");
+    case Field::SkipSwitcher:
+        return PhosphorI18n::tr("Skip switcher");
+    case Field::IsModal:
+        return PhosphorI18n::tr("Modal");
+    case Field::HasDecoration:
+        return PhosphorI18n::tr("Decorated");
+    case Field::IsResizable:
+        return PhosphorI18n::tr("Resizable");
+    case Field::PositionX:
+        return PhosphorI18n::tr("Position X");
+    case Field::PositionY:
+        return PhosphorI18n::tr("Position Y");
+    case Field::CaptionNormal:
+        return PhosphorI18n::tr("Title (no suffix)");
     }
     return QString();
 }

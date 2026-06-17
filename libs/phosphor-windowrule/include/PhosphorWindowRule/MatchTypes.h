@@ -42,12 +42,26 @@ enum class Field : int {
     // Window geometry (numeric)
     Width = 17, ///< frame width in px
     Height = 18, ///< frame height in px
+    // Window stacking / accessory state (appended — append-only for value stability)
+    KeepAbove = 19, ///< window set to stay above others (always on top)
+    KeepBelow = 20, ///< window set to stay below others
+    SkipTaskbar = 21, ///< hidden from the taskbar
+    SkipPager = 22, ///< hidden from the pager
+    SkipSwitcher = 23, ///< hidden from the window switcher (Alt+Tab)
+    IsModal = 24, ///< modal dialog
+    HasDecoration = 25, ///< has a server-side title-bar / border
+    IsResizable = 26, ///< window can be resized
+    // Window geometry (numeric) — position
+    PositionX = 27, ///< frame left edge X in px
+    PositionY = 28, ///< frame top edge Y in px
+    // Window content
+    CaptionNormal = 29, ///< title without the WM-added application-name suffix
 };
 
 /// The number of distinct `Field` enumerators. `Field` is a contiguous range
 /// `[0, FieldCount)`; bump this whenever an enumerator is added — round-trip
 /// tests iterate the range using it as the upper bound.
-inline constexpr int FieldCount = static_cast<int>(Field::Height) + 1;
+inline constexpr int FieldCount = static_cast<int>(Field::CaptionNormal) + 1;
 
 /// Match operators. Not every operator is valid against every field —
 /// validity is enforced by Predicate::isValid(), not the parser.
@@ -109,6 +123,28 @@ inline QString fieldToString(Field field)
         return QStringLiteral("width");
     case Field::Height:
         return QStringLiteral("height");
+    case Field::KeepAbove:
+        return QStringLiteral("keepAbove");
+    case Field::KeepBelow:
+        return QStringLiteral("keepBelow");
+    case Field::SkipTaskbar:
+        return QStringLiteral("skipTaskbar");
+    case Field::SkipPager:
+        return QStringLiteral("skipPager");
+    case Field::SkipSwitcher:
+        return QStringLiteral("skipSwitcher");
+    case Field::IsModal:
+        return QStringLiteral("isModal");
+    case Field::HasDecoration:
+        return QStringLiteral("hasDecoration");
+    case Field::IsResizable:
+        return QStringLiteral("isResizable");
+    case Field::PositionX:
+        return QStringLiteral("positionX");
+    case Field::PositionY:
+        return QStringLiteral("positionY");
+    case Field::CaptionNormal:
+        return QStringLiteral("captionNormal");
     }
     return QStringLiteral("appId");
 }
@@ -137,6 +173,17 @@ inline std::optional<Field> fieldFromString(QStringView s)
         {QLatin1StringView("isNotification"), Field::IsNotification},
         {QLatin1StringView("width"), Field::Width},
         {QLatin1StringView("height"), Field::Height},
+        {QLatin1StringView("keepAbove"), Field::KeepAbove},
+        {QLatin1StringView("keepBelow"), Field::KeepBelow},
+        {QLatin1StringView("skipTaskbar"), Field::SkipTaskbar},
+        {QLatin1StringView("skipPager"), Field::SkipPager},
+        {QLatin1StringView("skipSwitcher"), Field::SkipSwitcher},
+        {QLatin1StringView("isModal"), Field::IsModal},
+        {QLatin1StringView("hasDecoration"), Field::HasDecoration},
+        {QLatin1StringView("isResizable"), Field::IsResizable},
+        {QLatin1StringView("positionX"), Field::PositionX},
+        {QLatin1StringView("positionY"), Field::PositionY},
+        {QLatin1StringView("captionNormal"), Field::CaptionNormal},
     };
     for (const auto& [token, field] : kTable) {
         if (s.compare(token, Qt::CaseInsensitive) == 0) {
@@ -206,6 +253,7 @@ inline bool fieldIsString(Field field)
     case Field::Title:
     case Field::ScreenId:
     case Field::Activity:
+    case Field::CaptionNormal:
         return true;
     case Field::Pid:
     case Field::VirtualDesktop:
@@ -219,6 +267,16 @@ inline bool fieldIsString(Field field)
     case Field::IsNotification:
     case Field::Width:
     case Field::Height:
+    case Field::KeepAbove:
+    case Field::KeepBelow:
+    case Field::SkipTaskbar:
+    case Field::SkipPager:
+    case Field::SkipSwitcher:
+    case Field::IsModal:
+    case Field::HasDecoration:
+    case Field::IsResizable:
+    case Field::PositionX:
+    case Field::PositionY:
         return false;
     }
     return false;
@@ -227,7 +285,8 @@ inline bool fieldIsString(Field field)
 /// True if @p field carries a numeric value (Pid / VirtualDesktop / Width / Height).
 inline bool fieldIsNumeric(Field field)
 {
-    return field == Field::Pid || field == Field::VirtualDesktop || field == Field::Width || field == Field::Height;
+    return field == Field::Pid || field == Field::VirtualDesktop || field == Field::Width || field == Field::Height
+        || field == Field::PositionX || field == Field::PositionY;
 }
 
 /// True if @p field carries a boolean value (window-state flags).
@@ -235,7 +294,9 @@ inline bool fieldIsBool(Field field)
 {
     return field == Field::IsSticky || field == Field::IsFullscreen || field == Field::IsMinimized
         || field == Field::IsMaximized || field == Field::IsFocused || field == Field::IsTransient
-        || field == Field::IsNotification;
+        || field == Field::IsNotification || field == Field::KeepAbove || field == Field::KeepBelow
+        || field == Field::SkipTaskbar || field == Field::SkipPager || field == Field::SkipSwitcher
+        || field == Field::IsModal || field == Field::HasDecoration || field == Field::IsResizable;
 }
 
 /// True if @p field describes the **context** a window appears in
