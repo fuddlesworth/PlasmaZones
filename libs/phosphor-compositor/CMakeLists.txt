@@ -4,7 +4,7 @@
 # PhosphorCompositor — Compositor-plugin SDK for Phosphor.
 #
 # Provides ICompositorBridge interface, shared types (WindowInfo,
-# AutotileState, FloatingCache), trigger parsing, and snap-assist
+# AutotileState, FloatingCache, ZoneCache), trigger parsing, and snap-assist
 # candidate filtering. Compositor plugins implement ICompositorBridge
 # and talk to the Phosphor daemon over D-Bus.
 

@@ -416,6 +416,11 @@ bool WindowTrackingAdaptor::shouldRestoreFloatedPosition(const QString& windowId
     if (!m_windowRuleEvaluator) {
         m_windowRuleEvaluator = std::make_unique<PhosphorWindowRule::RuleEvaluator>(m_windowRuleStore->ruleSet());
     }
+    // Shares m_windowRuleEvaluator with shouldFloatByRule; resolveCached is keyed on
+    // (windowId, ruleSet revision) and ignores the query on a hit. Safe because both
+    // are open-path (resolved once per window lifetime — see shouldFloatByRule) and
+    // the effect pushes the window's full metadata before the engine's open-path
+    // resolve, so the first (and only) resolve for a window sees complete metadata.
     const PhosphorWindowRule::ResolvedActions resolved = m_windowRuleEvaluator->resolveCached(windowId, *query);
     if (const std::optional<PhosphorWindowRule::RuleAction> action =
             resolved.slot(QString(PhosphorWindowRule::ActionSlot::RestorePosition))) {

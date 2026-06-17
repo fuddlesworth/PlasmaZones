@@ -38,7 +38,11 @@ struct WindowMetadata
     std::optional<bool> isFullscreen;
     std::optional<bool> isSticky; ///< on all virtual desktops
     std::optional<bool> isMaximized; ///< MaximizeFull (both axes)
-    std::optional<bool> isFocused; ///< the active window at snapshot time
+    std::optional<bool> isFocused; ///< focused at metadata-push time (point-in-time, NOT
+                                   ///< refreshed on focus change) — the open-path Float /
+                                   ///< RestorePosition resolvers read it at window-open, where
+                                   ///< it is fresh; the effect path reads live isFocused for
+                                   ///< continuously-evaluated border / opacity rules.
     std::optional<bool> isTransient; ///< dialog/utility/popup/menu/tooltip/splash family or has a transient parent
     std::optional<bool> isNotification; ///< notification / critical-notification / on-screen-display
     std::optional<bool> keepAbove;

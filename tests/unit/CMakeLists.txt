@@ -804,7 +804,7 @@ set_tests_properties(bench_dbus_adaptors PROPERTIES LABELS "bench")
 # ═══════════════════════════════════════════════════════════════════════════════
 # compositor-common/ - Shared Library Types Tests (split for <800-line limit)
 #   test_wire_types: D-Bus wire type signature/roundtrip tests
-#   test_floating_cache: FloatingCache + TriggerParser tests
+#   test_floating_cache: FloatingCache + ZoneCache + TriggerParser tests
 #   test_autotile_state: AutotileStateHelpers + WindowId tests
 #   test_decoration_manager: DecorationManager ownership/veto behavioral spec
 #   test_decoration_manager_timers: DecorationManager deferred-drain/fallback timers

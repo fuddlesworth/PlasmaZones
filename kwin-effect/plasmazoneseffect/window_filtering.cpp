@@ -100,9 +100,11 @@ PhosphorWindowRule::ResolvedActions PlasmaZonesEffect::resolveWindowRuleActions(
     if (std::optional<PhosphorWindowRule::ResolvedActions> cached = evaluator.resolveCachedIfPresent(windowId)) {
         return std::move(*cached);
     }
-    // Miss → build the query once and resolve (caching the result). A windowless
-    // query (sub-surface / drop shadow / proxy) can't fill any slot; return empty
-    // actions WITHOUT caching, so the paint hot path doesn't churn the cache for it.
+    // Miss → build the query once and resolve (caching the result). Defensive guard
+    // against a windowless query (no engaged window attribute): it can't fill any
+    // slot, so return empty actions WITHOUT caching to avoid a useless cache entry.
+    // In practice a non-null w always engages placement/state attributes, so this
+    // only ever covers the already-handled empty-windowId case — kept as a belt.
     const PhosphorWindowRule::WindowQuery query = windowRuleQuery(w);
     if (!query.hasWindow()) {
         return {};
