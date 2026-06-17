@@ -350,7 +350,8 @@ private Q_SLOTS:
         // — still counts as referencing the field.
         const auto nestedAll = MatchExpression::makeAll({
             classLeaf,
-            MatchExpression::makeNone({MatchExpression::makeLeaf(Field::WindowType, Operator::Equals, 2)}),
+            MatchExpression::makeNone(
+                {MatchExpression::makeLeaf(Field::WindowType, Operator::Equals, static_cast<int>(WindowType::Dialog))}),
         });
         QVERIFY(nestedAll.referencesAnyField(typeFields));
 
@@ -363,6 +364,9 @@ private Q_SLOTS:
 
         // An empty composite references nothing.
         QVERIFY(!MatchExpression::makeAll({}).referencesAnyField(typeFields));
+
+        // An empty field set matches nothing — even a direct type leaf.
+        QVERIFY(!transientLeaf.referencesAnyField({}));
 
         // An unrelated field is not matched by a disjoint set.
         QVERIFY(!transientLeaf.referencesAnyField({Field::IsNotification}));

@@ -137,8 +137,8 @@ bool MatchExpression::isContextOnly() const
     // ctor builds. The first two are not "context-only" in any useful
     // sense — they encode rule shapes that fire (or fail to fire) based on
     // no window context at all. The catch-all is genuinely context-only
-    // by the same vacuous semantics but we keep `isCatchAll()` as the
-    // narrow accessor for it (header line 109-112); returning false here
+    // by the same vacuous semantics but we keep the narrow `isCatchAll()`
+    // accessor for it (declared in the header); returning false here
     // for empty Any/None lets `validationIssues()` flag those shapes as
     // sus rather than coercing them into context-only behaviour.
     if (m_children.isEmpty()) {

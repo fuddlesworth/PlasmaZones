@@ -6,7 +6,7 @@ import QtQuick
 // AnimationEventCardList (only visible AnimationEventCards build) — see
 // that component for the rationale.
 //
-// `window.snapResize` (resize-only branch of applySnapGeometry) is
+// `window.snapResize` (resize-only branch of applyWindowGeometry) is
 // intentionally NOT listed: no kwin-effect callsite routes a resize-only
 // event through tryBeginShaderForEvent today, so a card here would be
 // runtime-dead.

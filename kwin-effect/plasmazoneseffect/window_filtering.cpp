@@ -250,8 +250,9 @@ bool PlasmaZonesEffect::shouldAnimateWindow(KWin::EffectWindow* w) const
     // gate AND the exclusion gate below. Both gates take the same full-
     // context WindowQuery (AppId / WindowClass / Title / WindowRole /
     // DesktopFile / WindowType / Pid / state flags), and `windowRuleQueryFor`
-    // walks ~10 KWin accessors plus several QString copies — wasted work
-    // when both rule sets fire. The std::optional memoises so the function
+    // walks ~30 KWin accessors plus several QString copies — wasted work
+    // when both rule sets fire (same note as on `resolveWindowRuleActions`
+    // above). The std::optional memoises so the function
     // pays at most one build no matter how many gates consult it, while
     // the `!isEmpty()` fast paths below keep the no-rules user's cost at
     // two pointer reads (query never built).

@@ -495,19 +495,15 @@ void PlasmaZonesEffect::applyWindowGeometry(KWin::EffectWindow* window, const QR
     // the non-animated path just runs the moveResize without the snap
     // motion / shader.
     //
-    // First-placement-on-open carve-out: when a window is moved into its
-    // zone/tile moments after opening, a window.open shader is still in
-    // flight — uniquely identified by the held WindowAddedGrabRole
-    // (ShaderTransition::addedGrabHeld, set only by the slotWindowAdded open
-    // path). Installing the snap/tile morph here would supersede it (one
-    // transition per window), so the user's configured window.open animation
-    // never plays — the window appears to morph into place instead. Skip the
-    // morph in that case and fall through to the plain moveResize: the window
-    // lands at its target geometry and the open shader plays into the final
-    // rect (the first-frame open suppression in slotWindowAdded holds it
-    // hidden until the moveResize lands, so the shader starts at the
-    // destination, not the spawn point). Later moves — no open shader in
-    // flight — morph normally.
+    // First-placement-on-open carve-out: a window moved into its zone/tile
+    // moments after opening still has its window.open shader in flight —
+    // uniquely marked by the held WindowAddedGrabRole (addedGrabHeld, set only
+    // by the slotWindowAdded open path). Installing the snap/tile morph would
+    // supersede it (one transition per window), so the open animation never
+    // plays. Skip the morph and fall through to the plain moveResize: the
+    // first-frame open suppression keeps the window hidden until the move
+    // lands, so the open shader plays into the destination rect. Later moves
+    // (no open shader in flight) morph normally.
     const auto* inFlightTransition = m_shaderManager.findTransition(window);
     const bool firstPlacementWithOpenShader = inFlightTransition && inFlightTransition->addedGrabHeld;
 

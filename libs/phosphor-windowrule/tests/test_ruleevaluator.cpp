@@ -351,13 +351,14 @@ private Q_SLOTS:
         // mirroring the user's PiP rule) DOES count — and only when it also
         // matches the window. WindowType::Dialog == 2 on the wire.
         WindowRuleSet typed;
-        typed.addRule(
-            makeRule(QStringLiteral("firefox PiP"), 100,
-                     MatchExpression::makeAll({
-                         MatchExpression::makeLeaf(Field::WindowClass, Operator::Contains, QStringLiteral("firefox")),
-                         MatchExpression::makeNone({MatchExpression::makeLeaf(Field::WindowType, Operator::Equals, 2)}),
-                     }),
-                     {overrideShader(QStringLiteral("window.open"), QStringLiteral("fade"))}));
+        typed.addRule(makeRule(
+            QStringLiteral("firefox PiP"), 100,
+            MatchExpression::makeAll({
+                MatchExpression::makeLeaf(Field::WindowClass, Operator::Contains, QStringLiteral("firefox")),
+                MatchExpression::makeNone({MatchExpression::makeLeaf(
+                    Field::WindowType, Operator::Equals, static_cast<int>(PhosphorProtocol::WindowType::Dialog))}),
+            }),
+            {overrideShader(QStringLiteral("window.open"), QStringLiteral("fade"))}));
         RuleEvaluator typedEval(typed);
 
         WindowQuery firefoxWin;
@@ -383,6 +384,38 @@ private Q_SLOTS:
         disabled.addRule(r);
         RuleEvaluator disabledEval(disabled);
         QVERIFY(!disabledEval.hasMatchTargetingFields(firefoxTooltip, transientFields));
+
+        // Multi-rule set (the production shape): a non-targeting class-only
+        // rule listed first plus a later type-targeting rule. The existence
+        // check must find the targeting rule regardless of list position.
+        WindowRuleSet mixed;
+        mixed.addRule(
+            makeRule(QStringLiteral("class only"), 100,
+                     MatchExpression::makeLeaf(Field::WindowClass, Operator::Contains, QStringLiteral("firefox")),
+                     {overrideShader(QStringLiteral("window.open"), QStringLiteral("dissolve"))}));
+        mixed.addRule(makeRule(QStringLiteral("targets transient"), 90,
+                               MatchExpression::makeLeaf(Field::IsTransient, Operator::Equals, true),
+                               {overrideShader(QStringLiteral("window.open"), QStringLiteral("fade"))}));
+        RuleEvaluator mixedEval(mixed);
+        QVERIFY(mixedEval.hasMatchTargetingFields(firefoxTooltip, transientFields));
+
+        // The OSD/notification escape set {IsNotification, WindowType} is the
+        // other production field set. A rule targeting IsNotification re-enables
+        // an OSD/notification window the same way.
+        const QSet<Field> osdFields = {Field::IsNotification, Field::WindowType};
+        WindowRuleSet osd;
+        osd.addRule(makeRule(QStringLiteral("targets notification"), 100,
+                             MatchExpression::makeLeaf(Field::IsNotification, Operator::Equals, true),
+                             {overrideShader(QStringLiteral("window.open"), QStringLiteral("fade"))}));
+        RuleEvaluator osdEval(osd);
+        WindowQuery notif;
+        notif.windowClass = QStringLiteral("firefox");
+        notif.isNotification = true;
+        QVERIFY(osdEval.hasMatchTargetingFields(notif, osdFields));
+        // The class-only firefox rule MATCHES this notification by class but
+        // references no type field → does not re-enable it through the OSD set.
+        QVERIFY(classEval.hasAnyMatch(notif));
+        QVERIFY(!classEval.hasMatchTargetingFields(notif, osdFields));
     }
 
     // ── Cache ──
