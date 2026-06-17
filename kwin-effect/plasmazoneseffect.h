@@ -467,6 +467,16 @@ private:
     /// KWin-only and can't reach the effect's caches.
     PhosphorWindowRule::WindowQuery windowRuleQuery(KWin::EffectWindow* w) const;
 
+    /// Resolve the animation rule-action verdict for @p w, skipping the per-frame
+    /// `windowRuleQuery(w)` build (≈30 KWin accessor reads) when the evaluator
+    /// already has a cached verdict for @p windowId. Peek-then-build: a cache hit
+    /// returns the memoised actions directly; a miss builds the query and resolves
+    /// (caching the result). An empty windowId or a windowless query yields empty
+    /// actions (no slots) WITHOUT caching, matching the resolvers' old
+    /// short-circuit (avoids churning the cache for sub-surfaces / proxies). The
+    /// per-frame opacity / border resolvers consume the returned ResolvedActions.
+    PhosphorWindowRule::ResolvedActions resolveWindowRuleActions(KWin::EffectWindow* w, const QString& windowId) const;
+
     /**
      * @brief True if the window is currently snap-managed (tiled into a snap zone).
      * Its frame geometry is the zone rect, NOT a free-floating position — callers

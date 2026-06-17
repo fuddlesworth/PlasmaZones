@@ -125,7 +125,7 @@ void PlasmaZonesEffect::updateWindowBorder(const QString& windowId, KWin::Effect
     // with no rules pay nothing.
     std::optional<ResolvedWindowAppearance> ovr;
     if (w && !m_shaderManager.animationRuleSet().isEmpty()) {
-        ovr = resolveWindowAppearance(m_shaderManager.animationRuleEvaluator(), windowRuleQuery(w), windowId);
+        ovr = resolveWindowAppearance(resolveWindowRuleActions(w, windowId));
     }
 
     // Merge: a rule field wins; otherwise fall back to the owning mode's value
@@ -309,8 +309,7 @@ void PlasmaZonesEffect::reconcileRuleHiddenTitleBar(const QString& windowId, KWi
     // The manager owns the capability gate, the mode-ownership coordination
     // the old m_ruleHiddenTitleBars/modeBorderless dance approximated, and
     // the geometry re-assert across veto-driven decoration flips.
-    const std::optional<ResolvedWindowAppearance> ovr =
-        resolveWindowAppearance(m_shaderManager.animationRuleEvaluator(), windowRuleQuery(w), windowId);
+    const std::optional<ResolvedWindowAppearance> ovr = resolveWindowAppearance(resolveWindowRuleActions(w, windowId));
     m_decorationManager->setRuleOverride(windowId, ovr ? ovr->hideTitleBar : std::nullopt);
 }
 

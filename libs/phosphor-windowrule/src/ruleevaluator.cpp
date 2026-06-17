@@ -215,6 +215,15 @@ ResolvedActions RuleEvaluator::resolveCached(const QString& windowId, const Wind
     return result;
 }
 
+std::optional<ResolvedActions> RuleEvaluator::resolveCachedIfPresent(const QString& windowId) const
+{
+    const auto it = m_cache.constFind(windowId);
+    if (it != m_cache.constEnd() && it->revision == m_ruleSet.revision()) {
+        return it->actions;
+    }
+    return std::nullopt;
+}
+
 void RuleEvaluator::clearCache() const
 {
     m_cache.clear();

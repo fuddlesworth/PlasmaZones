@@ -86,6 +86,30 @@ PhosphorWindowRule::WindowQuery PlasmaZonesEffect::windowRuleQuery(KWin::EffectW
                               zoneForWindow(windowId));
 }
 
+PhosphorWindowRule::ResolvedActions PlasmaZonesEffect::resolveWindowRuleActions(KWin::EffectWindow* w,
+                                                                                const QString& windowId) const
+{
+    const PhosphorWindowRule::RuleEvaluator& evaluator = m_shaderManager.animationRuleEvaluator();
+    // An empty windowId can't key the per-window cache; nothing to resolve.
+    if (windowId.isEmpty()) {
+        return {};
+    }
+    // Cache hit → skip the ≈30-accessor windowRuleQuery(w) build entirely. The
+    // cached verdict already reflects whatever query produced it, and resolveCached
+    // ignores the query on a hit anyway.
+    if (std::optional<PhosphorWindowRule::ResolvedActions> cached = evaluator.resolveCachedIfPresent(windowId)) {
+        return std::move(*cached);
+    }
+    // Miss → build the query once and resolve (caching the result). A windowless
+    // query (sub-surface / drop shadow / proxy) can't fill any slot; return empty
+    // actions WITHOUT caching, so the paint hot path doesn't churn the cache for it.
+    const PhosphorWindowRule::WindowQuery query = windowRuleQuery(w);
+    if (!query.hasWindow()) {
+        return {};
+    }
+    return evaluator.resolveCached(windowId, query);
+}
+
 bool PlasmaZonesEffect::isStructurallyUnmanageableWindowType(KWin::EffectWindow* w, QString* rejectReason) const
 {
     // Single source of truth for the window-TYPE rejection set shared by
