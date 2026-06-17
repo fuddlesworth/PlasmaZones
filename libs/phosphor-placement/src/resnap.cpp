@@ -157,7 +157,7 @@ QStringList WindowTrackingService::buildZoneOrderedWindowList(const QString& scr
     // geometry there (switching to the autotile desktop would corrupt the snap
     // desktop's window positions). Scope to the current desktop; desktop==0
     // (sticky / unknown) stays desktop-agnostic and is kept. Mirrors the
-    // desktopFilter guard in collectSnapCandidates.
+    // desktopFilter guard in populateResnapBufferForAllScreens (addCandidate).
     const int currentDesktop = m_virtualDesktopManager ? m_virtualDesktopManager->currentDesktop() : 0;
 
     int insertionIdx = 0;
