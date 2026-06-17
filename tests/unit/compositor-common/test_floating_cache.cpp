@@ -3,9 +3,10 @@
 
 /**
  * @file test_floating_cache.cpp
- * @brief Unit tests for FloatingCache and TriggerParser
+ * @brief Unit tests for FloatingCache, ZoneCache and TriggerParser
  *
- * Tests FloatingCache set/get/clear/appId-fallback logic and
+ * Tests FloatingCache set/get/clear/appId-fallback and class-mutation
+ * robustness, ZoneCache snap-zone tracking and class-mutation robustness, and
  * TriggerParser modifier checking and anyTriggerHeld.
  */
 
@@ -13,6 +14,7 @@
 
 #include <PhosphorCompositor/FloatingCache.h>
 #include <PhosphorCompositor/TriggerParser.h>
+#include <PhosphorCompositor/ZoneCache.h>
 
 class TestFloatingCache : public QObject
 {
@@ -61,10 +63,38 @@ private Q_SLOTS:
     void testFloatingCacheClear()
     {
         PhosphorCompositor::FloatingCache cache;
-        cache.setFloating(QStringLiteral("app1|1"), true);
-        cache.setFloating(QStringLiteral("app2|1"), true);
+        // Distinct instanceIds — real instanceIds are unique per window. Two ids
+        // sharing an instanceId would (correctly) collide on the instanceId key.
+        cache.setFloating(QStringLiteral("app1|uuid-1"), true);
+        cache.setFloating(QStringLiteral("app2|uuid-2"), true);
         QCOMPARE(cache.size(), 2);
         cache.clear();
+        QCOMPARE(cache.size(), 0);
+    }
+
+    // =================================================================
+    // FloatingCache: instance float survives appId (class) mutation
+    // =================================================================
+
+    void testFloatingCacheClassMutationRobustness()
+    {
+        PhosphorCompositor::FloatingCache cache;
+        // A specific window floated under its original appId.
+        cache.setFloating(QStringLiteral("slack|uuid-1"), true);
+        QVERIFY(cache.isFloating(QStringLiteral("slack|uuid-1")));
+
+        // The app renames its window class mid-session (Electron / CEF): the
+        // composite id's appId changes, the instanceId does not — the float must
+        // still resolve because instance floats key by instanceId.
+        QVERIFY(cache.isFloating(QStringLiteral("Slack|uuid-1")));
+
+        // A different INSTANCE of the same app is not floating (distinct instanceId,
+        // and no app-wide entry exists).
+        QVERIFY(!cache.isFloating(QStringLiteral("slack|uuid-2")));
+
+        // Unfloating via the mutated id clears it (same instanceId key).
+        cache.setFloating(QStringLiteral("Slack|uuid-1"), false);
+        QVERIFY(!cache.isFloating(QStringLiteral("slack|uuid-1")));
         QCOMPARE(cache.size(), 0);
     }
 
@@ -83,6 +113,103 @@ private Q_SLOTS:
         QVERIFY(!cache.isFloating(QStringLiteral("firefox|1")));
         // "firefox|2" was never individually floating, and bare appId is gone:
         QVERIFY(!cache.isFloating(QStringLiteral("firefox|2")));
+    }
+
+    // =================================================================
+    // FloatingCache: malformed composite with empty instanceId is rejected
+    // =================================================================
+
+    void testFloatingCacheRejectsEmptyInstanceId()
+    {
+        PhosphorCompositor::FloatingCache cache;
+        // A composite "app|" (trailing separator → empty instanceId) is malformed.
+        // It must be rejected, not inserted under an empty-string key — otherwise
+        // every empty-instance window would alias onto one wildcard slot.
+        cache.setFloating(QStringLiteral("app|"), true);
+        QCOMPARE(cache.size(), 0);
+        QVERIFY(!cache.isFloating(QStringLiteral("app|")));
+        // A different malformed id must not resolve as floating via a shared key.
+        QVERIFY(!cache.isFloating(QStringLiteral("other|")));
+    }
+
+    // =================================================================
+    // ZoneCache: basic set / get / unsnap
+    // =================================================================
+
+    void testZoneCacheBasic()
+    {
+        PhosphorCompositor::ZoneCache cache;
+        QVERIFY(!cache.isSnapped(QStringLiteral("app|1")));
+        QVERIFY(cache.zoneForWindow(QStringLiteral("app|1")).isEmpty());
+
+        cache.setZone(QStringLiteral("app|1"), QStringLiteral("{z1}"));
+        QVERIFY(cache.isSnapped(QStringLiteral("app|1")));
+        QCOMPARE(cache.zoneForWindow(QStringLiteral("app|1")), QStringLiteral("{z1}"));
+        QCOMPARE(cache.size(), 1);
+
+        // An empty zoneId removes the entry (unsnapped / floated / screen-changed).
+        cache.setZone(QStringLiteral("app|1"), QString());
+        QVERIFY(!cache.isSnapped(QStringLiteral("app|1")));
+        QCOMPARE(cache.size(), 0);
+    }
+
+    // =================================================================
+    // ZoneCache: keyed by instanceId — survives appId (class) mutation
+    // =================================================================
+
+    void testZoneCacheClassMutationRobustness()
+    {
+        PhosphorCompositor::ZoneCache cache;
+        // Snap recorded under the original appId.
+        cache.setZone(QStringLiteral("slack|uuid-1"), QStringLiteral("{zone-a}"));
+        QVERIFY(cache.isSnapped(QStringLiteral("slack|uuid-1")));
+
+        // The app renames its window class mid-session (Electron / CEF): the
+        // composite id's appId changes, but the instanceId is unchanged — the
+        // zone must still resolve because the cache keys by instanceId.
+        QVERIFY(cache.isSnapped(QStringLiteral("Slack|uuid-1")));
+        QCOMPARE(cache.zoneForWindow(QStringLiteral("Slack|uuid-1")), QStringLiteral("{zone-a}"));
+
+        // A different INSTANCE of the same app is not snapped (distinct instanceId).
+        QVERIFY(!cache.isSnapped(QStringLiteral("slack|uuid-2")));
+    }
+
+    // =================================================================
+    // ZoneCache: remove / clear
+    // =================================================================
+
+    void testZoneCacheRemoveAndClear()
+    {
+        PhosphorCompositor::ZoneCache cache;
+        // Distinct instanceIds — real instanceIds are unique per window. Two ids
+        // sharing an instanceId would (correctly) collide on the instanceId key.
+        cache.setZone(QStringLiteral("a|uuid-1"), QStringLiteral("{z}"));
+        cache.setZone(QStringLiteral("b|uuid-2"), QStringLiteral("{z}"));
+        QCOMPARE(cache.size(), 2);
+
+        cache.remove(QStringLiteral("a|uuid-1"));
+        QVERIFY(!cache.isSnapped(QStringLiteral("a|uuid-1")));
+        QVERIFY(cache.isSnapped(QStringLiteral("b|uuid-2")));
+        QCOMPARE(cache.size(), 1);
+
+        cache.clear();
+        QCOMPARE(cache.size(), 0);
+    }
+
+    // =================================================================
+    // ZoneCache: malformed composite with empty instanceId is rejected
+    // =================================================================
+
+    void testZoneCacheRejectsEmptyInstanceId()
+    {
+        PhosphorCompositor::ZoneCache cache;
+        // A composite "app|" (trailing separator → empty instanceId) is malformed
+        // and must be ignored, not keyed under an empty string (which would alias
+        // every empty-instance window onto one wildcard slot).
+        cache.setZone(QStringLiteral("app|"), QStringLiteral("{z}"));
+        QCOMPARE(cache.size(), 0);
+        QVERIFY(!cache.isSnapped(QStringLiteral("app|")));
+        QVERIFY(!cache.isSnapped(QStringLiteral("other|")));
     }
 
     // =================================================================

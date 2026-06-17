@@ -19,6 +19,7 @@ class CurveRegistry;
 
 namespace PhosphorWindowRule {
 class RuleEvaluator;
+class ResolvedActions;
 }
 
 namespace PlasmaZones {
@@ -38,11 +39,12 @@ namespace PlasmaZones {
  *
  * Every resolver takes a `PhosphorWindowRule::WindowQuery` carrying the FULL
  * window context (AppId / WindowClass / Title / WindowRole / DesktopFile /
- * WindowType / Pid / state flags), built once per window by the GPL-side
- * caller via `windowRuleQueryFor(KWin::EffectWindow*)`. Pre-PR the resolvers
- * took a bare `windowClass` and the rule layer matched exclusively on
- * `WindowClass Contains <pattern>`; v4 widened the match shape so a
- * user-authored rule may pin to `AppId` / `DesktopFile` / `Title` / etc.
+ * WindowType / Pid / state flags / placement state), built once per window by
+ * the GPL-side caller via `PlasmaZonesEffect::windowRuleQuery(w)`, which threads
+ * the effect's floating / snapped / zone caches into the free `windowRuleQueryFor`
+ * builder. Pre-PR the resolvers took a bare `windowClass` and the rule layer
+ * matched exclusively on `WindowClass Contains <pattern>`; v4 widened the match
+ * shape so a user-authored rule may pin to `AppId` / `DesktopFile` / `Title` / etc.
  * Routing the full query through to the resolver keeps the rule-override
  * gate (which already builds the full query) and the slot resolution in
  * lockstep — a rule that passes the gate also resolves its slot.
@@ -116,36 +118,33 @@ PhosphorAnimation::Profile resolveAnimationMotionProfile(const PhosphorWindowRul
  * @brief Per-window opacity cascade — the runtime consumer for
  *        `SetOpacity` rules.
  *
- * Returns the rule-resolved opacity in `[0.0, 1.0]` when an enabled rule
- * whose match expression resolves for @p query fills the `opacity` slot
- * with a valid `value` param, or `std::nullopt` when no rule matches / the
- * param is missing / the value falls outside the documented range. Caller
- * applies the returned value via `KWin::WindowPaintData::setOpacity`
- * (absolute set, not multiplicative — SetOpacity semantics are "make the
- * window THIS opaque," not "scale by this factor").
+ * Returns the rule-resolved opacity in `[0.0, 1.0]` when an enabled rule fills
+ * the `opacity` slot of @p resolved with a valid `value` param, or `std::nullopt`
+ * when no rule filled it / the param is missing / the value falls outside the
+ * documented range. Caller applies the returned value via
+ * `KWin::WindowPaintData::setOpacity` (absolute set, not multiplicative —
+ * SetOpacity semantics are "make the window THIS opaque," not "scale by this
+ * factor").
  *
- * Windowless @p query (`hasWindow()` false) or empty @p windowId
- * short-circuit to `nullopt` — a windowless query can't match any
- * window-side predicate, and an empty windowId can't key the cache.
- *
- * Caller is the effect's `paintWindow` hook. The resolver does NOT cache
- * across calls — the evaluator's per-window cache (`resolveCached`) is
- * the right cache scope for this lookup, and the resolver consumes it.
+ * @p resolved comes from the effect's `resolveWindowRuleActions` helper, which
+ * peeks the evaluator's per-window cache and only builds the WindowQuery on a
+ * miss — so this pure extractor stays off the per-frame query-build hot path. An
+ * empty `resolved` (windowless / unmatched window) simply has no opacity slot →
+ * `nullopt`.
  */
-std::optional<qreal> resolveWindowOpacity(const PhosphorWindowRule::RuleEvaluator& evaluator,
-                                          const PhosphorWindowRule::WindowQuery& query, const QString& windowId);
+std::optional<qreal> resolveWindowOpacity(const PhosphorWindowRule::ResolvedActions& resolved);
 
 /**
  * @brief Per-window border / title-bar appearance override — the runtime
  *        consumer for the SetBorder* / SetHideTitleBar rules.
  *
- * Each field is set only when an enabled rule whose match resolves for
- * @p query fills the corresponding slot with a valid param (bool for
- * hideTitleBar/showBorder, an int in the descriptor range for width/radius, a
- * parseable `#AARRGGBB` for the colours). Unset fields mean "no override — fall
- * back to the global snap/autotile border state." Returns `std::nullopt` when
- * @p query is windowless / @p windowId is empty / no rule fills any slot, so
- * the caller can skip the merge entirely.
+ * Each field is set only when an enabled rule fills the corresponding slot of
+ * @p resolved with a valid param (bool for hideTitleBar/showBorder, an int in
+ * the descriptor range for width/radius, a parseable `#AARRGGBB` for the
+ * colours). Unset fields mean "no override — fall back to the global
+ * snap/autotile border state." Returns `std::nullopt` when no rule fills any
+ * slot (including the windowless / empty `resolved` case), so the caller can
+ * skip the merge entirely.
  *
  * Applies to ANY matched window (snapped OR floating), mirroring
  * `resolveWindowOpacity`. The bool/int re-reads here mirror the load-time
@@ -173,8 +172,6 @@ struct ResolvedWindowAppearance
     }
 };
 
-std::optional<ResolvedWindowAppearance> resolveWindowAppearance(const PhosphorWindowRule::RuleEvaluator& evaluator,
-                                                                const PhosphorWindowRule::WindowQuery& query,
-                                                                const QString& windowId);
+std::optional<ResolvedWindowAppearance> resolveWindowAppearance(const PhosphorWindowRule::ResolvedActions& resolved);
 
 } // namespace PlasmaZones

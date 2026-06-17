@@ -45,6 +45,20 @@ struct WindowQuery
     std::optional<bool> isNotification; ///< notification / critical-notification / on-screen-display surface
     std::optional<int> width; ///< frame width in px
     std::optional<int> height; ///< frame height in px
+    std::optional<bool> keepAbove; ///< window set to stay above others
+    std::optional<bool> keepBelow; ///< window set to stay below others
+    std::optional<bool> skipTaskbar; ///< hidden from the taskbar
+    std::optional<bool> skipPager; ///< hidden from the pager
+    std::optional<bool> skipSwitcher; ///< hidden from the window switcher
+    std::optional<bool> isModal; ///< modal dialog
+    std::optional<bool> hasDecoration; ///< has a server-side title-bar / border
+    std::optional<bool> isResizable; ///< window can be resized
+    std::optional<int> positionX; ///< frame left edge X in px
+    std::optional<int> positionY; ///< frame top edge Y in px
+    std::optional<QString> captionNormal; ///< title without the WM-added app-name suffix
+    std::optional<bool> isFloating; ///< floated out of tiling (snap or autotile)
+    std::optional<bool> isSnapped; ///< occupies a snap zone (snap mode only)
+    std::optional<QString> zone; ///< the snap zone's UUID the window occupies
 
     // ── Context attributes — always present ──
     QString screenId;
@@ -58,7 +72,11 @@ struct WindowQuery
         return appId.has_value() || windowClass.has_value() || title.has_value() || windowRole.has_value()
             || desktopFile.has_value() || pid.has_value() || windowType.has_value() || isSticky.has_value()
             || isFullscreen.has_value() || isMinimized.has_value() || isMaximized.has_value() || isFocused.has_value()
-            || isTransient.has_value() || isNotification.has_value() || width.has_value() || height.has_value();
+            || isTransient.has_value() || isNotification.has_value() || width.has_value() || height.has_value()
+            || keepAbove.has_value() || keepBelow.has_value() || skipTaskbar.has_value() || skipPager.has_value()
+            || skipSwitcher.has_value() || isModal.has_value() || hasDecoration.has_value() || isResizable.has_value()
+            || positionX.has_value() || positionY.has_value() || captionNormal.has_value() || isFloating.has_value()
+            || isSnapped.has_value() || zone.has_value();
     }
 
     /**
@@ -113,6 +131,34 @@ struct WindowQuery
             return width ? std::optional<QVariant>(*width) : std::nullopt;
         case Field::Height:
             return height ? std::optional<QVariant>(*height) : std::nullopt;
+        case Field::KeepAbove:
+            return keepAbove ? std::optional<QVariant>(*keepAbove) : std::nullopt;
+        case Field::KeepBelow:
+            return keepBelow ? std::optional<QVariant>(*keepBelow) : std::nullopt;
+        case Field::SkipTaskbar:
+            return skipTaskbar ? std::optional<QVariant>(*skipTaskbar) : std::nullopt;
+        case Field::SkipPager:
+            return skipPager ? std::optional<QVariant>(*skipPager) : std::nullopt;
+        case Field::SkipSwitcher:
+            return skipSwitcher ? std::optional<QVariant>(*skipSwitcher) : std::nullopt;
+        case Field::IsModal:
+            return isModal ? std::optional<QVariant>(*isModal) : std::nullopt;
+        case Field::HasDecoration:
+            return hasDecoration ? std::optional<QVariant>(*hasDecoration) : std::nullopt;
+        case Field::IsResizable:
+            return isResizable ? std::optional<QVariant>(*isResizable) : std::nullopt;
+        case Field::PositionX:
+            return positionX ? std::optional<QVariant>(*positionX) : std::nullopt;
+        case Field::PositionY:
+            return positionY ? std::optional<QVariant>(*positionY) : std::nullopt;
+        case Field::CaptionNormal:
+            return captionNormal ? std::optional<QVariant>(*captionNormal) : std::nullopt;
+        case Field::IsFloating:
+            return isFloating ? std::optional<QVariant>(*isFloating) : std::nullopt;
+        case Field::IsSnapped:
+            return isSnapped ? std::optional<QVariant>(*isSnapped) : std::nullopt;
+        case Field::Zone:
+            return zone ? std::optional<QVariant>(*zone) : std::nullopt;
         }
         return std::nullopt;
     }

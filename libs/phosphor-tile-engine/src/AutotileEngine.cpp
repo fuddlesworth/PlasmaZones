@@ -2488,7 +2488,13 @@ void AutotileEngine::onWindowAdded(const QString& windowId)
 
     PhosphorTiles::TilingState* state = tilingStateForScreen(screenId);
     const int maxWin = effectiveMaxWindows(screenId);
-    if (state && state->tiledWindowCount() >= maxWin) {
+    // A window matched by a "Float this app" rule must bypass the tiled-window
+    // cap: it opens floating and so consumes no tile slot (tiledWindowCount
+    // excludes floats), and insertWindow marks it floating once inserted. Dropping
+    // it here would leave it untracked — neither floating in autotile (so the
+    // IsFloating match field stays false) nor re-tileable via Meta+F.
+    const bool ruleWillFloat = m_floatPredicate && m_floatPredicate(windowId);
+    if (state && state->tiledWindowCount() >= maxWin && !ruleWillFloat) {
         qCDebug(PhosphorTileEngine::lcTileEngine)
             << "Max window limit reached for screen" << screenId << "(max=" << maxWin << ")";
         // Purge this window from pending initial orders so the order doesn't
@@ -2501,23 +2507,8 @@ void AutotileEngine::onWindowAdded(const QString& windowId)
 
     const bool inserted = insertWindow(windowId, screenId);
 
-    // Sync floating state to daemon. Float state is per-mode:
-    // - Restored as floating from autotile's saved set → notify daemon to set WTS floating
-    // - Inserted as tiled but WTS says floating (stale snap-mode float) → clear WTS floating
-    //
-    // Use windowFloatingStateSynced (not windowFloatingChanged): this is a
-    // passive state-sync on window insertion, not a user float toggle. The
-    // daemon must NOT restore pre-tile geometry here — the window was just
-    // added (e.g. dropped onto an autotile VS from a snap VS) and already
-    // has a valid position. Routing through windowFloatingChanged causes
-    // syncAutotileFloatState to call applyGeometryForFloat, which teleports
-    // the window to a cross-screen-adjusted rect and resizes it.
-    if (inserted && state) {
-        if (state->isFloating(windowId)) {
-            Q_EMIT windowFloatingStateSynced(windowId, true, screenId);
-        } else if (m_windowTracker && m_windowTracker->isWindowFloating(windowId)) {
-            Q_EMIT windowFloatingStateSynced(windowId, false, screenId);
-        }
+    if (inserted) {
+        emitInsertFloatStateSync(windowId, screenId);
     }
 
     if (inserted && m_config && m_config->focusNewWindows) {
@@ -2633,6 +2624,33 @@ void AutotileEngine::onLayoutChanged(PhosphorZones::Layout* layout)
 // ═══════════════════════════════════════════════════════════════════════════════
 // Internal implementation
 // ═══════════════════════════════════════════════════════════════════════════════
+
+void AutotileEngine::emitInsertFloatStateSync(const QString& windowId, const QString& screenId)
+{
+    // Read-only lookup — must NOT lazily materialize a state. tilingStateForScreen
+    // would create one for a known-but-stateless screen; this method only reads
+    // isFloating right after a successful insertWindow, so the state already exists.
+    PhosphorTiles::TilingState* state = m_screenStates.value(currentKeyForScreen(screenId));
+    if (!state) {
+        return;
+    }
+    // Sync floating state to daemon. Float state is per-mode:
+    // - Restored as floating from autotile's saved set → notify daemon to set WTS floating
+    // - Inserted as tiled but WTS says floating (stale snap-mode float) → clear WTS floating
+    //
+    // Use windowFloatingStateSynced (not windowFloatingChanged): this is a
+    // passive state-sync on window insertion, not a user float toggle. The
+    // daemon must NOT restore pre-tile geometry here — the window was just
+    // added (e.g. dropped onto an autotile VS from a snap VS) and already
+    // has a valid position. Routing through windowFloatingChanged causes
+    // syncAutotileFloatState to call applyGeometryForFloat, which teleports
+    // the window to a cross-screen-adjusted rect and resizes it.
+    if (state->isFloating(windowId)) {
+        Q_EMIT windowFloatingStateSynced(windowId, true, screenId);
+    } else if (m_windowTracker && m_windowTracker->isWindowFloating(windowId)) {
+        Q_EMIT windowFloatingStateSynced(windowId, false, screenId);
+    }
+}
 
 bool AutotileEngine::insertWindow(const QString& windowId, const QString& screenId)
 {
@@ -2832,6 +2850,16 @@ bool AutotileEngine::insertWindow(const QString& windowId, const QString& screen
     // autotile slot inserts floating + applies the shared free geometry). No
     // parallel saved-floating set — the WindowPlacement record is the single
     // source of truth for cross-mode float state.
+
+    // A matched "Float this app" window rule opens the window floating: it is
+    // inserted above (so it stays managed and Meta+F can re-tile it), then marked
+    // floating here, identical to a manual float toggle. Guarded on not-already-
+    // floating so the placement-record float-restore branch above is not
+    // re-applied. onWindowAdded then emits windowFloatingStateSynced so the daemon
+    // mirrors the state.
+    if (m_floatPredicate && !state->isFloating(windowId) && m_floatPredicate(windowId)) {
+        state->setFloating(windowId, true);
+    }
 
     m_windowToStateKey.insert(windowId, currentKey);
     return true;
@@ -3725,7 +3753,17 @@ void AutotileEngine::backfillWindows()
             }
         }
         for (const QString& windowId : candidates) {
-            insertWindow(windowId, screenId);
+            const bool inserted = insertWindow(windowId, screenId);
+            // Same passive float-state sync onWindowAdded does: a window that
+            // insertWindow floats here (matched Float rule / restored saved float)
+            // — or whose stale WTS float must be cleared because it was placed
+            // tiled — would otherwise desync from the daemon until its next add.
+            // emitInsertFloatStateSync uses windowFloatingStateSynced (NOT
+            // windowFloatingChanged), so it applies no geometry and cannot drive
+            // the mid-transition feedback loop the overflow-recovery note warns of.
+            if (inserted) {
+                emitInsertFloatStateSync(windowId, screenId);
+            }
             if (state->tiledWindowCount() >= maxWin) {
                 break;
             }

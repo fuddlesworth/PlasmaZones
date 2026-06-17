@@ -82,6 +82,19 @@ struct WindowStateEntry
     QString changeType; ///< "snapped", "unsnapped", "floated", "unfloated", "screen_changed"
     QStringList zoneIds; ///< D-Bus type 'as' — all zone IDs for multi-zone span (query only)
     bool isSticky = false; ///< Whether window is on all virtual desktops (query only)
+
+    /// Returns empty QString if valid, else a human-readable description of the
+    /// invariant violation. Called at the windowStateChanged unmarshal site (like
+    /// DragPolicy / BridgeRegistrationResult on their paths) so a garbled entry —
+    /// one naming no window — can't perturb the effect's zone cache. zoneId is
+    /// intentionally unchecked: empty is the valid "unsnapped / floated" signal.
+    QString validationError() const
+    {
+        if (windowId.isEmpty()) {
+            return QStringLiteral("WindowStateEntry: empty windowId");
+        }
+        return QString();
+    }
 };
 
 using WindowStateList = QList<WindowStateEntry>;

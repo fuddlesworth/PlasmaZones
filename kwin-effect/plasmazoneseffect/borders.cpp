@@ -125,8 +125,7 @@ void PlasmaZonesEffect::updateWindowBorder(const QString& windowId, KWin::Effect
     // with no rules pay nothing.
     std::optional<ResolvedWindowAppearance> ovr;
     if (w && !m_shaderManager.animationRuleSet().isEmpty()) {
-        ovr = resolveWindowAppearance(m_shaderManager.animationRuleEvaluator(),
-                                      windowRuleQueryFor(w, getWindowScreenId(w)), windowId);
+        ovr = resolveWindowAppearance(resolveWindowRuleActions(w, windowId));
     }
 
     // Merge: a rule field wins; otherwise fall back to the owning mode's value
@@ -152,7 +151,7 @@ void PlasmaZonesEffect::updateWindowBorder(const QString& windowId, KWin::Effect
     // pick the one matching the window's current focus state. A per-window
     // SetBorderColor rule, when matched, overrides it. Focus-dependence of the
     // RULE colour is expressed in the rule itself via the IsFocused match
-    // condition: `windowRuleQueryFor` set the query's isFocused flag, so a
+    // condition: `windowRuleQuery` sets the query's isFocused flag, so a
     // focus-scoped rule (`WHEN focused`/`WHEN NOT focused`) only fills the
     // border-colour slot in its matching state, while a focus-agnostic rule
     // applies in both. Either way `ovr->borderColor` already holds the colour
@@ -310,8 +309,7 @@ void PlasmaZonesEffect::reconcileRuleHiddenTitleBar(const QString& windowId, KWi
     // The manager owns the capability gate, the mode-ownership coordination
     // the old m_ruleHiddenTitleBars/modeBorderless dance approximated, and
     // the geometry re-assert across veto-driven decoration flips.
-    const std::optional<ResolvedWindowAppearance> ovr = resolveWindowAppearance(
-        m_shaderManager.animationRuleEvaluator(), windowRuleQueryFor(w, getWindowScreenId(w)), windowId);
+    const std::optional<ResolvedWindowAppearance> ovr = resolveWindowAppearance(resolveWindowRuleActions(w, windowId));
     m_decorationManager->setRuleOverride(windowId, ovr ? ovr->hideTitleBar : std::nullopt);
 }
 

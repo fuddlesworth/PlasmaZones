@@ -1036,6 +1036,64 @@ private Q_SLOTS:
     }
 
     // =========================================================================
+    // resolveWindowRestore — open-floating gate (FloatPredicate)
+    //
+    // The daemon injects a predicate that returns true when a "Float this app"
+    // rule matched the opening window. resolveWindowRestore must then mark the
+    // window floating and refuse the auto-snap chain, logging the distinctive
+    // "floated by rule" line so the test can assert it was THAT branch — not the
+    // no-match default-float terminal, which floats the window in this guiless
+    // fixture too.
+    // =========================================================================
+
+    void testResolveWindowRestore_floatPredicate_floatsMatchedWindow()
+    {
+        SnapEngine engine(m_layoutManager, m_wts, nullptr, nullptr, nullptr);
+        engine.setEngineSettings(m_settings);
+        m_wts->setSnapState(engine.snapState());
+
+        engine.setFloatPredicate([](const QString&) {
+            return true;
+        });
+
+        const QString windowId = QStringLiteral("app|uuid-float-rule");
+        QSignalSpy floatSpy(&engine, &SnapEngine::windowFloatingChanged);
+
+        PhosphorEngine::SnapResult result;
+        const QStringList lines = captureResolveLogs(engine, windowId, QStringLiteral("DP-1"), &result);
+
+        QVERIFY2(!result.shouldSnap, "a rule-floated window must not auto-snap");
+        QVERIFY2(engine.snapState()->isFloating(windowId), "the matched window must be marked floating");
+        QVERIFY2(lines.join(QLatin1Char('\n')).contains(QStringLiteral("floated by rule")),
+                 "the open-floating gate must be the branch that floated the window");
+        QCOMPARE(floatSpy.count(), 1);
+        QCOMPARE(floatSpy.at(0).at(0).toString(), windowId);
+        QCOMPARE(floatSpy.at(0).at(1).toBool(), true);
+        m_wts->setSnapState(nullptr);
+    }
+
+    void testResolveWindowRestore_floatPredicate_unsetOrFalse_gateInactive()
+    {
+        SnapEngine engine(m_layoutManager, m_wts, nullptr, nullptr, nullptr);
+        engine.setEngineSettings(m_settings);
+        m_wts->setSnapState(engine.snapState());
+
+        // Predicate present but returns false — the gate must not fire. (No
+        // predicate at all is the same: m_floatPredicate is empty.)
+        engine.setFloatPredicate([](const QString&) {
+            return false;
+        });
+
+        PhosphorEngine::SnapResult result;
+        const QStringList lines =
+            captureResolveLogs(engine, QStringLiteral("app|uuid-no-float-rule"), QStringLiteral("DP-1"), &result);
+
+        QVERIFY2(!lines.join(QLatin1Char('\n')).contains(QStringLiteral("floated by rule")),
+                 "an unmatched window must not be floated by the open-floating gate");
+        m_wts->setSnapState(nullptr);
+    }
+
+    // =========================================================================
     // resolveWindowRestore — cross-screen ownership gate (multi-monitor login)
     //
     // A window snapped on a SNAP monitor can be reopened by KWin's session

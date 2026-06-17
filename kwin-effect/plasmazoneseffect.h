@@ -185,6 +185,7 @@ private Q_SLOTS:
     void slotRaiseWindowsRequested(const QStringList& windowIds);
 
     void slotWindowFloatingChanged(const QString& windowId, bool isFloating, const QString& screenId);
+    void slotWindowStateChanged(const QString& windowId, const PhosphorProtocol::WindowStateEntry& state);
     void slotRunningWindowsRequested();
     void slotRestoreSizeDuringDrag(const QString& windowId, int width, int height);
 
@@ -250,8 +251,18 @@ private:
      * Safe to call unconditionally on every observation — the daemon de-dupes.
      * Called from slotWindowAdded for initial registration, and from
      * windowClassChanged / desktopFileNameChanged handlers for live updates.
+     *
+     * @param includeExtended When false, the extended-property snapshot (the
+     * trailing a{sv}: state flags, geometry, accessory flags, captionNormal) is
+     * NOT rebuilt or sent — the daemon preserves whatever it already has. Used by
+     * the captionChanged handler: terminals/browsers rewrite their title every
+     * frame, and the rule-relevant extended fields don't change on a title tick,
+     * so rebuilding/marshalling a ~20-entry map per frame is pure waste. The
+     * extended snapshot is captured at window-open and refreshed on identity
+     * changes (class/desktop/activity), which is when it matters for the daemon's
+     * open-path Float / RestorePosition resolvers.
      */
-    void pushWindowMetadata(KWin::EffectWindow* w);
+    void pushWindowMetadata(KWin::EffectWindow* w, bool includeExtended = true);
 
     /**
      * @brief Snapping/zone-management window filter.
@@ -443,6 +454,28 @@ private:
      * @return true if window is floating
      */
     bool isWindowFloating(const QString& windowId) const;
+    /// True iff @p windowId is snapped into a zone (snap mode; delegates to the
+    /// NavigationHandler zone cache). Autotile tiles carry no zone and are not
+    /// snapped under this definition.
+    bool isWindowSnapped(const QString& windowId) const;
+    /// The snap-zone UUID @p windowId occupies, or empty when it occupies none.
+    QString zoneForWindow(const QString& windowId) const;
+    /// Build a window-rule match query for @p w with the effect's runtime
+    /// placement state (floating / snapped / zone) threaded into the free
+    /// `windowRuleQueryFor` builder. Use this at EVERY rule-evaluation site so
+    /// IsFloating / IsSnapped / Zone resolve uniformly; the free builder stays
+    /// KWin-only and can't reach the effect's caches.
+    PhosphorWindowRule::WindowQuery windowRuleQuery(KWin::EffectWindow* w) const;
+
+    /// Resolve the animation rule-action verdict for @p w, skipping the per-frame
+    /// `windowRuleQuery(w)` build (≈30 KWin accessor reads) when the evaluator
+    /// already has a cached verdict for @p windowId. Peek-then-build: a cache hit
+    /// returns the memoised actions directly; a miss builds the query and resolves
+    /// (caching the result). An empty windowId or a windowless query yields empty
+    /// actions (no slots) WITHOUT caching, matching the resolvers' old
+    /// short-circuit (avoids churning the cache for sub-surfaces / proxies). The
+    /// per-frame opacity / border resolvers consume the returned ResolvedActions.
+    PhosphorWindowRule::ResolvedActions resolveWindowRuleActions(KWin::EffectWindow* w, const QString& windowId) const;
 
     /**
      * @brief True if the window is currently snap-managed (tiled into a snap zone).
@@ -656,6 +689,34 @@ private:
     void removeWindowBorder(const QString& windowId);
     void updateAllBorders();
     void clearAllBorders();
+
+    /// Drop the per-window rule match cache and refresh @p windowId's border /
+    /// opacity after its placement state (snapped / floating / zone) changed.
+    /// Those are rule MATCH inputs now, so without this a window stays resolved
+    /// at its prior state (e.g. a `WHEN isSnapped` border never reverting on
+    /// unsnap). Mirrors slotWindowActivated's focus invalidation; no-op when
+    /// there are no animation rules.
+    void invalidateRuleCacheForStateChange(const QString& windowId);
+
+    /// Bulk analog of invalidateRuleCacheForStateChange for placement changes that
+    /// affect EVERY window at once — daemon loss (the zone / floating caches are
+    /// cleared) and the daemon-ready re-seed (they are repopulated). The match
+    /// cache is keyed (windowId, ruleSet revision); neither moves on a bulk
+    /// placement change, so a placement-scoped opacity verdict would otherwise
+    /// stay cached (e.g. a `WHEN isSnapped` SetOpacity window staying dimmed after
+    /// the cache that made it "snapped" was cleared). Drops the whole match cache
+    /// and forces a full repaint so opacity rules re-resolve against the current
+    /// IsSnapped / IsFloating / Zone state. Borders recover via their own
+    /// restore / rebuild path. No-op when there are no animation rules.
+    void invalidateAllRuleCaches();
+
+    /// Flush coalesced per-window rule-cache invalidations queued by
+    /// invalidateRuleCacheForStateChange within one event-loop turn: drops the
+    /// match cache once and re-resolves the border / opacity of each affected
+    /// window. Posted via a queued single-shot so a float toggle (which emits
+    /// both windowFloatingChanged AND windowStateChanged) clears the cache once
+    /// instead of twice.
+    void flushPendingRuleInvalidations();
 
     /// Resolve which mode's BorderState manages @p windowId — autotile first,
     /// then snap — or nullptr if neither draws a border for it.
@@ -929,6 +990,11 @@ private:
     // Entries are consumed (removed) when slotApplyGeometryRequested skips
     // the geometry restore for a drag-floated window.
     QSet<QString> m_dragFloatedWindowIds;
+
+    // Per-window rule-cache invalidations accumulated within one event-loop turn,
+    // flushed once by flushPendingRuleInvalidations(). Coalesces the double
+    // invalidation a float toggle triggers (windowFloatingChanged + windowStateChanged).
+    QSet<QString> m_pendingRuleInvalidations;
 
     // Cached daemon D-Bus service registration state.
     // Updated via QDBusServiceWatcher signals (registration/unregistration) to avoid

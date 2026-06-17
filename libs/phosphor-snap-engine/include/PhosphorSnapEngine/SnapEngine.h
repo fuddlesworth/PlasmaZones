@@ -197,6 +197,22 @@ public:
         m_restorePositionPredicate = std::move(predicate);
     }
 
+    /**
+     * @brief Predicate deciding whether an opening window should start FLOATING
+     *        because a "Float this app" window rule matched it. Daemon-injected,
+     *        keyed by the live windowId, evaluated on the window-open path. When
+     *        UNSET (default) no window is rule-floated and the engine keeps its
+     *        historical open behaviour (path unit tests rely on this). Same
+     *        lifetime contract as setRestorePositionPredicate — clear with `{}`
+     *        before destroying any state the closure captured.
+     */
+    using FloatPredicate = std::function<bool(const QString& windowId)>;
+
+    void setFloatPredicate(FloatPredicate predicate)
+    {
+        m_floatPredicate = std::move(predicate);
+    }
+
     void windowClosed(const QString& windowId) override;
     void windowFocused(const QString& windowId, const QString& screenId) override;
     void toggleWindowFloat(const QString& windowId, const QString& screenId) override;
@@ -783,6 +799,10 @@ private:
     // only on the reopening screen — the historical behaviour unit tests rely on.
     // See RestorePositionPredicate doc above.
     RestorePositionPredicate m_restorePositionPredicate{};
+
+    // Rule-driven open-floating gate. Empty until the daemon wires it; while
+    // empty no window is rule-floated. See FloatPredicate doc above.
+    FloatPredicate m_floatPredicate{};
 };
 
 } // namespace PhosphorSnapEngine

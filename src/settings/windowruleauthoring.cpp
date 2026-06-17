@@ -48,6 +48,7 @@ PickerCategory fieldCategory(Field f)
     case Field::WindowRole:
     case Field::Pid:
     case Field::Title:
+    case Field::CaptionNormal:
         return {PhosphorI18n::tr("Identity"), 0};
     case Field::WindowType:
     case Field::IsSticky:
@@ -57,9 +58,22 @@ PickerCategory fieldCategory(Field f)
     case Field::IsFocused:
     case Field::IsTransient:
     case Field::IsNotification:
+    case Field::KeepAbove:
+    case Field::KeepBelow:
+    case Field::SkipTaskbar:
+    case Field::SkipPager:
+    case Field::SkipSwitcher:
+    case Field::IsModal:
+    case Field::HasDecoration:
+    case Field::IsResizable:
+    case Field::IsFloating:
+    case Field::IsSnapped:
+    case Field::Zone:
         return {PhosphorI18n::tr("State"), 1};
     case Field::Width:
     case Field::Height:
+    case Field::PositionX:
+    case Field::PositionY:
         return {PhosphorI18n::tr("Size"), 2};
     case Field::ScreenId:
     case Field::VirtualDesktop:
@@ -108,6 +122,35 @@ QString fieldDescription(Field f)
         return PhosphorI18n::tr("The window's width in pixels.");
     case Field::Height:
         return PhosphorI18n::tr("The window's height in pixels.");
+    case Field::KeepAbove:
+        return PhosphorI18n::tr("Whether the window is set to stay above other windows (always on top).");
+    case Field::KeepBelow:
+        return PhosphorI18n::tr("Whether the window is set to stay below other windows.");
+    case Field::SkipTaskbar:
+        return PhosphorI18n::tr("Whether the window is hidden from the taskbar.");
+    case Field::SkipPager:
+        return PhosphorI18n::tr("Whether the window is hidden from the pager.");
+    case Field::SkipSwitcher:
+        return PhosphorI18n::tr("Whether the window is hidden from the window switcher (Alt+Tab).");
+    case Field::IsModal:
+        return PhosphorI18n::tr("Whether the window is a modal dialog.");
+    case Field::HasDecoration:
+        return PhosphorI18n::tr("Whether the window has a server-side title-bar and border.");
+    case Field::IsResizable:
+        return PhosphorI18n::tr("Whether the window can be resized.");
+    case Field::PositionX:
+        return PhosphorI18n::tr("The window's left-edge X position in pixels.");
+    case Field::PositionY:
+        return PhosphorI18n::tr("The window's top-edge Y position in pixels.");
+    case Field::CaptionNormal:
+        return PhosphorI18n::tr("The window's title without the application-name suffix the window manager adds.");
+    case Field::IsFloating:
+        return PhosphorI18n::tr("Whether the window has been floated out of tiling (snap or autotile).");
+    case Field::IsSnapped:
+        return PhosphorI18n::tr(
+            "Whether the window is snapped into a zone (manual-zone mode; tiled windows are not snapped).");
+    case Field::Zone:
+        return PhosphorI18n::tr("The zone the window is snapped into (manual-zone mode only).");
     case Field::ScreenId:
         return PhosphorI18n::tr("The monitor the window is on.");
     case Field::VirtualDesktop:

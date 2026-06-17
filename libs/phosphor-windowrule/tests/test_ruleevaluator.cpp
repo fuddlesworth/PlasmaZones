@@ -336,6 +336,34 @@ private Q_SLOTS:
         QCOMPARE(eval.cacheSize(), 1);
     }
 
+    // The read-only peek used by the effect's per-frame paint path to skip the
+    // (expensive) WindowQuery build on a cache hit. It must be revision-gated and
+    // must not mutate the cache.
+    void testResolveCachedIfPresent_peeksWithoutResolving()
+    {
+        WindowRuleSet set;
+        set.addRule(makeRule(QStringLiteral("a"), 100, MatchExpression{}, {floatAction()}));
+        RuleEvaluator eval(set);
+        const QString winId = QStringLiteral("org.kde.konsole|abc");
+
+        // (a) Unseeded cache → miss (nullopt), no entry created by the peek.
+        QVERIFY(!eval.resolveCachedIfPresent(winId).has_value());
+        QCOMPARE(eval.cacheSize(), 0);
+
+        // (b) After resolveCached seeds the entry, the peek returns the SAME verdict
+        //     and does NOT grow the cache.
+        const ResolvedActions resolved = eval.resolveCached(winId, konsoleQuery());
+        const std::optional<ResolvedActions> peeked = eval.resolveCachedIfPresent(winId);
+        QVERIFY(peeked.has_value());
+        QVERIFY(*peeked == resolved);
+        QCOMPARE(eval.cacheSize(), 1);
+
+        // (c) A rule-set mutation bumps the revision, so the now-stale entry reads as
+        //     a miss — the peek is revision-gated exactly like resolveCached.
+        set.addRule(makeRule(QStringLiteral("b"), 50, MatchExpression{}, {floatAction()}));
+        QVERIFY(!eval.resolveCachedIfPresent(winId).has_value());
+    }
+
     void testResolveCached_invalidatedByRevisionBump()
     {
         WindowRuleSet set;

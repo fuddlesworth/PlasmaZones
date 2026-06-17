@@ -166,19 +166,8 @@ PhosphorAnimation::Profile resolveAnimationMotionProfile(const PhosphorWindowRul
     return out;
 }
 
-std::optional<qreal> resolveWindowOpacity(const PhosphorWindowRule::RuleEvaluator& evaluator,
-                                          const PhosphorWindowRule::WindowQuery& query, const QString& windowId)
+std::optional<qreal> resolveWindowOpacity(const PhosphorWindowRule::ResolvedActions& resolved)
 {
-    // Empty inputs short-circuit — a windowless query can't match any
-    // window-side predicate, and windowId keys the evaluator's per-window
-    // cache. Either being absent means there is nothing to resolve, and
-    // avoiding the cached walk here keeps the paint hot path from churning
-    // the cache on every paint of a window with no rule-side attributes
-    // (sub-surfaces, drop shadows, screen-edge proxies).
-    if (!query.hasWindow() || windowId.isEmpty()) {
-        return std::nullopt;
-    }
-    const PhosphorWindowRule::ResolvedActions resolved = evaluator.resolveCached(windowId, query);
     // The opacity-slot id is a constant; hoist its QString materialisation
     // out of the per-paint hot path so each `resolveWindowOpacity` call
     // reuses the same heap allocation. `static const` is thread-safe under
@@ -233,17 +222,8 @@ std::optional<qreal> resolveWindowOpacity(const PhosphorWindowRule::RuleEvaluato
     return value;
 }
 
-std::optional<ResolvedWindowAppearance> resolveWindowAppearance(const PhosphorWindowRule::RuleEvaluator& evaluator,
-                                                                const PhosphorWindowRule::WindowQuery& query,
-                                                                const QString& windowId)
+std::optional<ResolvedWindowAppearance> resolveWindowAppearance(const PhosphorWindowRule::ResolvedActions& resolved)
 {
-    // Same short-circuit rationale as resolveWindowOpacity: a windowless query
-    // can't match a window predicate, and windowId keys the per-window cache.
-    if (!query.hasWindow() || windowId.isEmpty()) {
-        return std::nullopt;
-    }
-    const PhosphorWindowRule::ResolvedActions resolved = evaluator.resolveCached(windowId, query);
-
     // Each reader re-validates the param type even though the load-time
     // descriptor validators already did — defence in depth against a
     // programmatically-built / hand-edited payload that bypassed the parser

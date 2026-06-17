@@ -21,6 +21,11 @@ void WindowRuleController::setActivityLookup(WindowRuleModel::LabelLookup fn)
     m_model.setActivityLabelLookup(std::move(fn));
 }
 
+void WindowRuleController::setZoneLookup(WindowRuleModel::LabelLookup fn)
+{
+    m_model.setZoneLabelLookup(std::move(fn));
+}
+
 void WindowRuleController::setSnappingLayoutLookup(WindowRuleModel::LabelLookup fn)
 {
     m_snappingLayoutLookup = std::move(fn);

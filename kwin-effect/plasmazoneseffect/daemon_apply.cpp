@@ -26,6 +26,9 @@
 #include <QScopeGuard>
 #include <QSet>
 #include <QStringList>
+#include <QTimer>
+
+#include <utility>
 
 #include "../autotilehandler.h"
 #include "../navigationhandler.h"
@@ -469,6 +472,98 @@ void PlasmaZonesEffect::slotWindowFloatingChanged(const QString& windowId, bool 
         // authoritative daemon path so the window stays floating. Keyed by
         // appId to survive the window's identity change across close/reopen.
         m_snapHandler->invalidateRestore(::PhosphorIdentity::WindowId::extractAppId(windowId));
+    }
+    // isFloating is now a rule MATCH field — re-resolve appearance / animation
+    // rules for this window so a `WHEN isFloating` border / opacity re-applies.
+    invalidateRuleCacheForStateChange(windowId);
+}
+
+void PlasmaZonesEffect::slotWindowStateChanged(const QString& windowId, const PhosphorProtocol::WindowStateEntry& state)
+{
+    // Validate the daemon payload at the boundary, mirroring the other
+    // daemon-data slots (DragPolicy / BridgeRegistrationResult). A garbled entry
+    // naming no window must not write a zone keyed by an empty/garbage id.
+    if (const QString err = state.validationError(); !err.isEmpty()) {
+        qCWarning(lcEffect) << "slotWindowStateChanged: rejecting invalid entry —" << err;
+        return;
+    }
+    // Keep the effect-side zone cache current so the IsSnapped / Zone rule-match
+    // fields resolve against the live placement. An empty zoneId (unsnapped /
+    // floated / screen-changed) removes the entry. The isFloating cache WRITE lives
+    // on the separate windowFloatingChanged path, so it is not duplicated here; the
+    // rule-cache invalidation below coalesces with the floating path's (a float
+    // toggle emits both signals — see flushPendingRuleInvalidations).
+    m_navigationHandler->setWindowZone(windowId, state.zoneId);
+    invalidateRuleCacheForStateChange(windowId);
+}
+
+void PlasmaZonesEffect::invalidateRuleCacheForStateChange(const QString& windowId)
+{
+    if (m_shaderManager.animationRuleSet().isEmpty()) {
+        return;
+    }
+    // Coalesce: a single float toggle emits BOTH windowFloatingChanged and
+    // windowStateChanged, so this runs twice per logical change. Accumulate the
+    // affected windowIds and flush once at the end of the event-loop turn — the
+    // match-cache clear is global (running it per call is wasteful) and the
+    // per-window border rebuild is otherwise repeated. The flush before the next
+    // paint keeps the re-resolved border / opacity visually immediate.
+    //
+    // Only the CACHED verdicts (border / opacity) need invalidation. shouldHandleWindow's
+    // exclusion query is evaluated on-demand every time it is consulted (drag start,
+    // lifecycle filtering), so a snap/float/zone change is picked up at the next natural
+    // call without eager re-filtering.
+    const bool wasEmpty = m_pendingRuleInvalidations.isEmpty();
+    m_pendingRuleInvalidations.insert(windowId);
+    if (wasEmpty) {
+        // `this` as the context object cancels the callback if the effect is torn
+        // down before the turn ends.
+        QTimer::singleShot(0, this, [this] {
+            flushPendingRuleInvalidations();
+        });
+    }
+}
+
+void PlasmaZonesEffect::flushPendingRuleInvalidations()
+{
+    const QSet<QString> windowIds = std::exchange(m_pendingRuleInvalidations, {});
+    if (windowIds.isEmpty() || m_shaderManager.animationRuleSet().isEmpty()) {
+        return;
+    }
+    // The match cache is keyed on (windowId, ruleSet revision); neither moves on a
+    // placement-state change, so drop it once so border / opacity rules re-resolve
+    // against the new snapped / floating / zone state.
+    m_shaderManager.animationRuleEvaluator().clearCache();
+    const bool hasOpacity = m_shaderManager.hasOpacityRules();
+    for (const QString& windowId : windowIds) {
+        KWin::EffectWindow* w = findWindowById(windowId);
+        if (!w) {
+            continue;
+        }
+        // Recreate this window's border so a state-scoped border colour re-applies.
+        updateWindowBorder(windowId, w);
+        // An opacity-only (borderless) window needs an explicit repaint for its
+        // re-resolved opacity to reach the screen (mirrors slotWindowActivated).
+        if (hasOpacity) {
+            w->addRepaintFull();
+        }
+    }
+}
+
+void PlasmaZonesEffect::invalidateAllRuleCaches()
+{
+    if (m_shaderManager.animationRuleSet().isEmpty()) {
+        return;
+    }
+    // A bulk placement change (daemon loss clears the zone/floating caches; the
+    // daemon-ready re-seed repopulates them) moves neither the windowId nor the
+    // ruleSet revision the match cache is keyed on, so every placement-scoped
+    // verdict would survive stale. Drop the whole cache; the full repaint makes
+    // every opacity-only window re-resolve against the current placement on the
+    // next frame (border windows recover through their own restore/rebuild path).
+    m_shaderManager.animationRuleEvaluator().clearCache();
+    if (KWin::effects && m_shaderManager.hasOpacityRules()) {
+        KWin::effects->addRepaintFull();
     }
 }
 

@@ -17,6 +17,7 @@
 #include <QString>
 #include <QStringList>
 #include <QHash>
+#include <QVariantMap>
 #include <QJsonArray>
 #include <QQueue>
 #include <QRect>
@@ -242,6 +243,14 @@ public Q_SLOTS:
      * @param activity       Activity UUID (empty = all activities / unknown)
      * @param windowType     PhosphorProtocol::WindowType underlying value; out-of-range
      *                       values are clamped to WindowType::Unknown
+     * @param extended       Extended window-property snapshot keyed by
+     *                       PhosphorProtocol::Service::WindowMetadataKey (state flags,
+     *                       geometry, accessory flags, captionNormal). A key is
+     *                       present only when the value is known; absent keys leave
+     *                       the corresponding WindowMetadata optional disengaged so a
+     *                       window-rule predicate over it stays inert. Lets the
+     *                       daemon's resolvers match the same KWin-property fields the
+     *                       effect path resolves live (window_query.cpp).
      *
      * Emits no D-Bus signal. Populates the daemon's WindowRegistry; consumers
      * subscribe to the registry's Qt signals directly.
@@ -251,7 +260,7 @@ public Q_SLOTS:
      */
     void setWindowMetadata(const QString& instanceId, const QString& appId, const QString& desktopFile,
                            const QString& title, const QString& windowRole, int pid, int virtualDesktop,
-                           const QString& activity, int windowType);
+                           const QString& activity, int windowType, const QVariantMap& extended);
 
     // windowSnapped, windowSnappedMultiZone, windowUnsnapped, windowsSnappedBatch,
     // recordSnapIntent moved to SnapAdaptor (org.plasmazones.Snap D-Bus interface).
@@ -619,6 +628,14 @@ public:
     /// per-engine `*RestoreFloatedWindowsOnLogin` setting decides. Builds a
     /// WindowQuery from the window registry metadata.
     bool shouldRestoreFloatedPosition(const QString& windowId, PhosphorZones::AssignmentEntry::Mode mode);
+
+    /// Resolve whether an opening window should start FLOATING because a "Float
+    /// this app" window rule matched it. Consulted by the float predicate the
+    /// daemon injects into BOTH engines (in-process, not via D-Bus). Unlike
+    /// RestorePosition there is no global default — Float is purely rule-driven,
+    /// so the answer is false unless a Float rule matches. The Float action's
+    /// params are free-form, so the verdict is the presence of the filled slot.
+    bool shouldFloatByRule(const QString& windowId);
     /**
      * @brief Drop unified WindowPlacement records for excluded appIds.
      *
@@ -1043,12 +1060,14 @@ private:
     QPointer<PhosphorEngine::WindowRegistry> m_windowRegistry;
 
     // Unified window-rule store (daemon-owned, not owned here) + a lazily-built
-    // evaluator over its full rule set, used only by shouldRestoreFloatedPosition.
-    // The evaluator self-invalidates on in-place rule edits via the set revision,
-    // so it is built once on first use. Reset in setWindowRuleStore only when the
-    // store pointer actually changes (a same-store rebind keeps the evaluator).
+    // evaluator over its full rule set, shared by shouldRestoreFloatedPosition
+    // and shouldFloatByRule (resolveCached returns every matched slot, so one
+    // evaluator serves both per-window resolvers). The evaluator self-invalidates
+    // on in-place rule edits via the set revision, so it is built once on first
+    // use. Reset in setWindowRuleStore only when the store pointer actually
+    // changes (a same-store rebind keeps the evaluator).
     PhosphorWindowRule::WindowRuleStore* m_windowRuleStore = nullptr;
-    std::unique_ptr<PhosphorWindowRule::RuleEvaluator> m_restorePositionEvaluator;
+    std::unique_ptr<PhosphorWindowRule::RuleEvaluator> m_windowRuleEvaluator;
 
     // ═══════════════════════════════════════════════════════════════════════════════
     // Persistence (adaptor responsibility: session.json save/load)

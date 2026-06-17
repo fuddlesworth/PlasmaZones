@@ -134,7 +134,7 @@ bool matchIsSimpleConjunction(const MatchExpression& match)
 /// "identity" so the function stays usable in code paths that have not yet
 /// wired the SettingsController-backed resolvers.
 QString leafLabel(const MatchExpression::Predicate& predicate, const WindowRuleModel::LabelLookup& screenLookup,
-                  const WindowRuleModel::LabelLookup& activityLookup)
+                  const WindowRuleModel::LabelLookup& activityLookup, const WindowRuleModel::LabelLookup& zoneLookup)
 {
     // Pick the lookup matching the leaf's field. An empty lookup degenerates
     // to identity so this stays usable from code paths that have not yet
@@ -144,6 +144,8 @@ QString leafLabel(const MatchExpression::Predicate& predicate, const WindowRuleM
         lookup = &screenLookup;
     } else if (predicate.field == Field::Activity) {
         lookup = &activityLookup;
+    } else if (predicate.field == Field::Zone) {
+        lookup = &zoneLookup;
     }
     const auto resolveOne = [lookup](const QString& raw) {
         if (!lookup || !*lookup) {
@@ -662,6 +664,34 @@ QString WindowRuleModel::fieldLabel(Field field)
         return PhosphorI18n::tr("Width");
     case Field::Height:
         return PhosphorI18n::tr("Height");
+    case Field::KeepAbove:
+        return PhosphorI18n::tr("Keep above");
+    case Field::KeepBelow:
+        return PhosphorI18n::tr("Keep below");
+    case Field::SkipTaskbar:
+        return PhosphorI18n::tr("Skip taskbar");
+    case Field::SkipPager:
+        return PhosphorI18n::tr("Skip pager");
+    case Field::SkipSwitcher:
+        return PhosphorI18n::tr("Skip switcher");
+    case Field::IsModal:
+        return PhosphorI18n::tr("Modal");
+    case Field::HasDecoration:
+        return PhosphorI18n::tr("Decorated");
+    case Field::IsResizable:
+        return PhosphorI18n::tr("Resizable");
+    case Field::PositionX:
+        return PhosphorI18n::tr("Position X");
+    case Field::PositionY:
+        return PhosphorI18n::tr("Position Y");
+    case Field::CaptionNormal:
+        return PhosphorI18n::tr("Title (no suffix)");
+    case Field::IsFloating:
+        return PhosphorI18n::tr("Floating");
+    case Field::IsSnapped:
+        return PhosphorI18n::tr("Snapped");
+    case Field::Zone:
+        return PhosphorI18n::tr("Zone");
     }
     return QString();
 }
@@ -672,14 +702,14 @@ QString WindowRuleModel::matchSummary(const MatchExpression& match) const
         return PhosphorI18n::tr("Any window");
     }
     if (match.isLeaf()) {
-        return leafLabel(match.predicate(), m_screenLookup, m_activityLookup);
+        return leafLabel(match.predicate(), m_screenLookup, m_activityLookup, m_zoneLookup);
     }
     // A simple AND renders its leaves joined by " · ".
     if (match.kind() == MatchExpression::Kind::All) {
         QStringList parts;
         for (const MatchExpression& child : match.children()) {
             if (child.isLeaf()) {
-                parts.append(leafLabel(child.predicate(), m_screenLookup, m_activityLookup));
+                parts.append(leafLabel(child.predicate(), m_screenLookup, m_activityLookup, m_zoneLookup));
             } else {
                 parts.append(PhosphorI18n::tr("(condition group)"));
             }
@@ -740,6 +770,11 @@ void WindowRuleModel::setScreenLabelLookup(LabelLookup fn)
 void WindowRuleModel::setActivityLabelLookup(LabelLookup fn)
 {
     m_activityLookup = std::move(fn);
+}
+
+void WindowRuleModel::setZoneLabelLookup(LabelLookup fn)
+{
+    m_zoneLookup = std::move(fn);
 }
 
 void WindowRuleModel::setSnappingLayoutLabelLookup(LabelLookup fn)

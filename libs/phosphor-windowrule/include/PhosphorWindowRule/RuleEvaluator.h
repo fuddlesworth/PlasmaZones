@@ -149,6 +149,15 @@ public:
     /// is bounded — see the class doc for the eviction policy.
     ResolvedActions resolveCached(const QString& windowId, const WindowQuery& query) const;
 
+    /// Peek the match cache without resolving: returns the cached verdict for
+    /// @p windowId iff one exists at the CURRENT rule-set revision, else nullopt.
+    /// Lets a hot-path caller (per-frame paint resolvers) skip building the
+    /// WindowQuery entirely on a cache hit — the cached verdict already reflects
+    /// whatever query produced it, and the query is ignored by resolveCached on a
+    /// hit anyway. A stale-revision entry reads as a miss (nullopt) here; it is
+    /// pruned lazily on the next resolveCached call, not by this read-only peek.
+    std::optional<ResolvedActions> resolveCachedIfPresent(const QString& windowId) const;
+
     /// True if at least one enabled rule matches @p query — an existence
     /// test that does not allocate a ResolvedActions. Used by hot paths that
     /// only need a yes/no ("does any rule re-enable this class"). Iterates in

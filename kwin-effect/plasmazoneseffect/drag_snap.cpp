@@ -535,7 +535,7 @@ void PlasmaZonesEffect::applySnapGeometry(KWin::EffectWindow* window, const QRec
         // resolver call below — matches the shape `shouldAnimateWindow`
         // uses for its rule-override gate, so a rule that gates the
         // animation also resolves its curve / timing / shader slots.
-        const PhosphorWindowRule::WindowQuery query = windowRuleQueryFor(window, getWindowScreenId(window));
+        const PhosphorWindowRule::WindowQuery query = windowRuleQuery(window);
         const auto& baseProfile = m_windowAnimator->profile();
         const PhosphorAnimation::Profile* motionOverridePtr = nullptr;
         PhosphorAnimation::Profile motionProfile;

@@ -87,6 +87,8 @@ public:
     /// registration via the typed snappingLayout/tilingAlgorithm pair.
     void setScreenLookup(WindowRuleModel::LabelLookup fn);
     void setActivityLookup(WindowRuleModel::LabelLookup fn);
+    /// zone UUID → zone-name resolver for `Zone` match-leaf labels.
+    void setZoneLookup(WindowRuleModel::LabelLookup fn);
     /// layoutId UUID → display label resolver for SetSnappingLayout actions.
     void setSnappingLayoutLookup(WindowRuleModel::LabelLookup fn);
     /// Algorithm token ("bsp", …) → display label resolver for SetTilingAlgorithm actions.

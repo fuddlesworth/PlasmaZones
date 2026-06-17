@@ -456,6 +456,21 @@ public:
         m_restorePositionPredicate = std::move(predicate);
     }
 
+    /**
+     * Predicate deciding whether an opening window should start FLOATING because a
+     * "Float this app" window rule matched it. Daemon-injected, keyed by the live
+     * windowId. The window is still inserted (so it stays managed and Meta+F can
+     * re-tile it); it is just marked floating, identical to a manual float. When
+     * UNSET (default) no window is rule-floated. Clear with `{}` before destroying
+     * any state the closure captured.
+     */
+    using FloatPredicate = std::function<bool(const QString& windowId)>;
+
+    void setFloatPredicate(FloatPredicate predicate)
+    {
+        m_floatPredicate = std::move(predicate);
+    }
+
     // Cross-engine handoff (see PhosphorEngine/IPlacementEngine.h for contract)
     QString engineId() const override
     {
@@ -1050,6 +1065,11 @@ private Q_SLOTS:
 private:
     void connectSignals();
     bool insertWindow(const QString& windowId, const QString& screenId);
+    // Passive float-state sync after insertWindow() places a window: notify the
+    // daemon it opened floating (matched Float rule / restored saved float), or
+    // clear a stale WTS float when it was placed tiled. Shared by onWindowAdded
+    // and backfillWindows so the two cannot diverge.
+    void emitInsertFloatStateSync(const QString& windowId, const QString& screenId);
     /// Add @p windowId to @p state at the position dictated by the
     /// insertion-order setting (End / AfterFocused / AsMaster). Shared by
     /// insertWindow's new-window path and handoffReceive's cross-engine adopt.
@@ -1337,6 +1357,10 @@ private:
     // the engine always re-applies a floated window's recorded position (historical
     // behaviour). See RestorePositionPredicate doc above.
     RestorePositionPredicate m_restorePositionPredicate{};
+
+    // Rule-driven open-floating gate. Empty until the daemon wires it; while empty
+    // no window is rule-floated. See FloatPredicate doc above.
+    FloatPredicate m_floatPredicate{};
 
     QSet<QString> m_autotileScreens;
     QString m_algorithmId;

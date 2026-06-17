@@ -249,9 +249,19 @@ void PlasmaZonesEffect::continueDaemonReadySetup()
                     m_navigationHandler->setWindowFloating(id, true);
                 }
                 qCDebug(lcEffect) << "Synced" << floatingIds.size() << "floating windows from daemon";
+                // Re-seeding the float cache changes the IsFloating match input for
+                // these windows; drop the stale placement-scoped opacity verdicts so
+                // a `WHEN isFloating` SetOpacity rule re-resolves against the fresh
+                // state on the next frame (mirrors the daemon-loss invalidation).
+                invalidateAllRuleCaches();
             }
         });
     }
+
+    // Repopulate the snap-zone cache from the daemon's authoritative state so
+    // windows snapped before this effect / daemon started are matchable by the
+    // IsSnapped / Zone rule fields without waiting for their next state change.
+    m_navigationHandler->syncZonesFromDaemon();
 
     // One-shot WindowRules subscription. The daemon emits rulesChanged per
     // per-rule mutation; slotWindowRulesChanged debounces via a 50ms timer to
@@ -930,6 +940,14 @@ void PlasmaZonesEffect::connectNavigationSignals()
                                           PhosphorProtocol::Service::Interface::WindowTracking,
                                           QStringLiteral("windowFloatingChanged"), this,
                                           SLOT(slotWindowFloatingChanged(QString, bool, QString)));
+
+    // Snap-zone state sync — feeds the effect-side zone cache the IsSnapped /
+    // Zone rule-match fields read. Carries the per-window WindowStateEntry
+    // (zoneId / changeType) on every snap / unsnap / float / screen-change.
+    QDBusConnection::sessionBus().connect(PhosphorProtocol::Service::Name, PhosphorProtocol::Service::ObjectPath,
+                                          PhosphorProtocol::Service::Interface::WindowTracking,
+                                          QStringLiteral("windowStateChanged"), this,
+                                          SLOT(slotWindowStateChanged(QString, PhosphorProtocol::WindowStateEntry)));
 
     // Settings: window picker for KCM exclusion list
     QDBusConnection::sessionBus().connect(PhosphorProtocol::Service::Name, PhosphorProtocol::Service::ObjectPath,

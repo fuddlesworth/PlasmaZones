@@ -56,11 +56,21 @@ PhosphorProtocol::WindowType windowTypeFor(KWin::EffectWindow* w)
     return WindowType::Unknown;
 }
 
-PhosphorWindowRule::WindowQuery windowRuleQueryFor(KWin::EffectWindow* w, const QString& screenId)
+PhosphorWindowRule::WindowQuery windowRuleQueryFor(KWin::EffectWindow* w, const QString& screenId, bool isFloating,
+                                                   bool isSnapped, const QString& zoneId)
 {
     PhosphorWindowRule::WindowQuery query;
     if (!w) {
         return query;
+    }
+    // PlasmaZones placement state — caller-supplied from the effect's runtime
+    // caches (see header). Bools are always engaged when the window exists; the
+    // zone UUID is gated on non-empty so a non-snapped window stays a non-match
+    // (the engaged-empty foot-gun the string fields below also avoid).
+    query.isFloating = isFloating;
+    query.isSnapped = isSnapped;
+    if (!zoneId.isEmpty()) {
+        query.zone = zoneId;
     }
     // Context fields — let a window-domain rule pin screen / desktop / activity
     // (e.g. "red border on monitor 2"). screenId is resolved by the caller (the
@@ -135,6 +145,18 @@ PhosphorWindowRule::WindowQuery windowRuleQueryFor(KWin::EffectWindow* w, const 
     // surprise rules that target "is the window maximized."
     if (kw) {
         query.isMaximized = (kw->maximizeMode() == KWin::MaximizeFull);
+        // KWin::Window-only accessory / capability flags (not exposed on
+        // EffectWindow). Always engaged when the underlying window exists.
+        query.skipTaskbar = kw->skipTaskbar();
+        query.skipPager = kw->skipPager();
+        query.isResizable = kw->isResizable();
+        // captionNormal is the raw WM_NAME without the WM-added " — App" suffix
+        // that caption() (used for Title above) includes. Gate non-empty like
+        // the other string fields so a disengaged optional stays a non-match.
+        const QString captionNormal = kw->captionNormal();
+        if (!captionNormal.isEmpty()) {
+            query.captionNormal = captionNormal;
+        }
     }
     // isFocused mirrors the live active-window state so a rule like
     // "isFocused=false ⇒ SetBorderColor(gray)" resolves correctly. The
@@ -157,9 +179,19 @@ PhosphorWindowRule::WindowQuery windowRuleQueryFor(KWin::EffectWindow* w, const 
     query.isTransient = w->isDialog() || w->isUtility() || w->isPopupWindow() || w->isPopupMenu() || w->isDropdownMenu()
         || w->isTooltip() || w->isMenu() || w->isSplash() || w->transientFor() != nullptr;
     query.isNotification = w->isNotification() || w->isCriticalNotification() || w->isOnScreenDisplay();
+    // Stacking / accessory flags read straight off EffectWindow. Always engaged
+    // when the window exists, like the other bool flags above.
+    query.keepAbove = w->keepAbove();
+    query.keepBelow = w->keepBelow();
+    query.isModal = w->isModal();
+    query.hasDecoration = w->hasDecoration();
+    query.skipSwitcher = w->isSkipSwitcher();
     const QRectF frame = w->frameGeometry();
     query.width = static_cast<int>(frame.width());
     query.height = static_cast<int>(frame.height());
+    // Frame position — from the same frameGeometry() already read for the size.
+    query.positionX = static_cast<int>(frame.x());
+    query.positionY = static_cast<int>(frame.y());
     // virtualDesktop: first desktop's 1-based x11 number (0 = all/unknown).
     // activity: first activity UUID (empty = all/unknown). Both mirror the
     // daemon-side setWindowMetadata derivation in window_identity.cpp so a

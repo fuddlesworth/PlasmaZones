@@ -182,6 +182,52 @@ private Q_SLOTS:
         QVERIFY(!MatchExpression::makeLeaf(Field::Width, Operator::Contains, QStringLiteral("25")).isValid());
     }
 
+    // Leaf evaluation for the KWin-property / geometry / placement-state fields
+    // added in this PR — confirms each routes through the right operator branch
+    // (bool Equals-only, numeric GT/LT/Equals incl. a negative coordinate, string
+    // ops) and that an absent field stays inert (the windowless-context contract).
+    void testNewMatchFields_evaluateLeaf()
+    {
+        WindowQuery q;
+        q.appId = QStringLiteral("firefox");
+        q.positionX = 1920;
+        q.positionY = -40; // monitor stacked above the primary
+        q.isModal = true;
+        q.keepAbove = false;
+        q.captionNormal = QStringLiteral("Save As");
+        q.zone = QStringLiteral("{a1b2c3d4-0000-0000-0000-000000000001}");
+        q.isFloating = true;
+        q.isSnapped = false;
+
+        // Numeric position fields (including a negative coordinate).
+        QVERIFY(MatchExpression::makeLeaf(Field::PositionX, Operator::GreaterThan, 1000).evaluate(q));
+        QVERIFY(MatchExpression::makeLeaf(Field::PositionX, Operator::Equals, 1920).evaluate(q));
+        QVERIFY(MatchExpression::makeLeaf(Field::PositionY, Operator::LessThan, 0).evaluate(q));
+
+        // Bool state / accessory / placement fields — only Equals is meaningful.
+        QVERIFY(MatchExpression::makeLeaf(Field::IsModal, Operator::Equals, true).evaluate(q));
+        QVERIFY(!MatchExpression::makeLeaf(Field::IsModal, Operator::Equals, false).evaluate(q));
+        QVERIFY(MatchExpression::makeLeaf(Field::KeepAbove, Operator::Equals, false).evaluate(q));
+        QVERIFY(MatchExpression::makeLeaf(Field::IsFloating, Operator::Equals, true).evaluate(q));
+        QVERIFY(MatchExpression::makeLeaf(Field::IsSnapped, Operator::Equals, false).evaluate(q));
+
+        // String fields.
+        QVERIFY(
+            MatchExpression::makeLeaf(Field::CaptionNormal, Operator::Contains, QStringLiteral("Save")).evaluate(q));
+        QVERIFY(MatchExpression::makeLeaf(Field::Zone, Operator::Equals,
+                                          QStringLiteral("{a1b2c3d4-0000-0000-0000-000000000001}"))
+                    .evaluate(q));
+
+        // Absent field → predicate inert (false), even though appId is present.
+        WindowQuery bare;
+        bare.appId = QStringLiteral("firefox");
+        QVERIFY(!MatchExpression::makeLeaf(Field::IsModal, Operator::Equals, true).evaluate(bare));
+        QVERIFY(!MatchExpression::makeLeaf(Field::PositionX, Operator::GreaterThan, 0).evaluate(bare));
+        QVERIFY(!MatchExpression::makeLeaf(Field::Zone, Operator::Equals,
+                                           QStringLiteral("{a1b2c3d4-0000-0000-0000-000000000001}"))
+                     .evaluate(bare));
+    }
+
     void testWindowTypeField()
     {
         const auto expr =

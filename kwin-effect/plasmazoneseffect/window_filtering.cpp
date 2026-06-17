@@ -69,6 +69,49 @@ bool PlasmaZonesEffect::isWindowFloating(const QString& windowId) const
     return m_navigationHandler->isWindowFloating(windowId);
 }
 
+bool PlasmaZonesEffect::isWindowSnapped(const QString& windowId) const
+{
+    return m_navigationHandler->isWindowSnapped(windowId);
+}
+
+QString PlasmaZonesEffect::zoneForWindow(const QString& windowId) const
+{
+    return m_navigationHandler->zoneForWindow(windowId);
+}
+
+PhosphorWindowRule::WindowQuery PlasmaZonesEffect::windowRuleQuery(KWin::EffectWindow* w) const
+{
+    const QString windowId = getWindowId(w);
+    return windowRuleQueryFor(w, getWindowScreenId(w), isWindowFloating(windowId), isWindowSnapped(windowId),
+                              zoneForWindow(windowId));
+}
+
+PhosphorWindowRule::ResolvedActions PlasmaZonesEffect::resolveWindowRuleActions(KWin::EffectWindow* w,
+                                                                                const QString& windowId) const
+{
+    const PhosphorWindowRule::RuleEvaluator& evaluator = m_shaderManager.animationRuleEvaluator();
+    // An empty windowId can't key the per-window cache; nothing to resolve.
+    if (windowId.isEmpty()) {
+        return {};
+    }
+    // Cache hit → skip the ≈30-accessor windowRuleQuery(w) build entirely. The
+    // cached verdict already reflects whatever query produced it, and resolveCached
+    // ignores the query on a hit anyway.
+    if (std::optional<PhosphorWindowRule::ResolvedActions> cached = evaluator.resolveCachedIfPresent(windowId)) {
+        return std::move(*cached);
+    }
+    // Miss → build the query once and resolve (caching the result). Defensive guard
+    // against a windowless query (no engaged window attribute): it can't fill any
+    // slot, so return empty actions WITHOUT caching to avoid a useless cache entry.
+    // In practice a non-null w always engages placement/state attributes, so this
+    // only ever covers the already-handled empty-windowId case — kept as a belt.
+    const PhosphorWindowRule::WindowQuery query = windowRuleQuery(w);
+    if (!query.hasWindow()) {
+        return {};
+    }
+    return evaluator.resolveCached(windowId, query);
+}
+
 bool PlasmaZonesEffect::isStructurallyUnmanageableWindowType(KWin::EffectWindow* w, QString* rejectReason) const
 {
     // Single source of truth for the window-TYPE rejection set shared by
@@ -159,7 +202,7 @@ bool PlasmaZonesEffect::shouldHandleWindow(KWin::EffectWindow* w, QString* rejec
     // `!isEmpty()` fast path keeps a no-exclusions user at two pointer
     // reads — same cost as the prior list-derived check.
     if (!m_snappingExclusionRuleSet.isEmpty()) {
-        if (m_snappingExclusionEvaluator.resolve(windowRuleQueryFor(w, getWindowScreenId(w))).isExcluded()) {
+        if (m_snappingExclusionEvaluator.resolve(windowRuleQuery(w)).isExcluded()) {
             return rejectedBecause(rejectReason, "user exclusion rule match");
         }
     }
@@ -212,7 +255,7 @@ bool PlasmaZonesEffect::shouldAnimateWindow(KWin::EffectWindow* w) const
     std::optional<PhosphorWindowRule::WindowQuery> cachedQuery;
     auto query = [&]() -> const PhosphorWindowRule::WindowQuery& {
         if (!cachedQuery) {
-            cachedQuery = windowRuleQueryFor(w, getWindowScreenId(w));
+            cachedQuery = windowRuleQuery(w);
         }
         return *cachedQuery;
     };
