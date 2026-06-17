@@ -481,6 +481,63 @@ private Q_SLOTS:
     }
 
     // ────────────────────────────────────────────────────────────────────
+    // A caption-only metadata refresh (chatty title tick) sends an EMPTY extended
+    // a{sv}; the daemon must PRESERVE the window's prior extended snapshot rather
+    // than wipe it. Without the merge, the next title tick would clear IsModal /
+    // geometry and a property-based Float rule would silently stop matching.
+    // ────────────────────────────────────────────────────────────────────
+    void floatRule_captionOnlyPushPreservesExtendedSnapshot()
+    {
+        QTemporaryDir dir;
+        QVERIFY(dir.isValid());
+        PhosphorWindowRule::WindowRuleStore store(dir.filePath(QStringLiteral("windowrules.json")));
+
+        PhosphorWindowRule::WindowRule rule;
+        rule.id = QUuid::createUuid();
+        rule.name = QStringLiteral("float-modal");
+        rule.enabled = true;
+        rule.priority = 100;
+        rule.match = PhosphorWindowRule::MatchExpression::makeLeaf(PhosphorWindowRule::Field::IsModal,
+                                                                   PhosphorWindowRule::Operator::Equals, true);
+        PhosphorWindowRule::RuleAction action;
+        action.type = QString(PhosphorWindowRule::ActionType::Float);
+        rule.actions.append(action);
+        QVERIFY(store.addRule(rule));
+
+        m_wta->setWindowRuleStore(&store);
+        const auto detach = qScopeGuard([this] {
+            m_wta->setWindowRuleStore(nullptr);
+        });
+
+        namespace Key = PhosphorProtocol::Service::WindowMetadataKey;
+        const QString appId = QStringLiteral("org.kde.someapp");
+        const int normalType = static_cast<int>(PhosphorProtocol::WindowType::Normal);
+
+        // Window opens with the full extended snapshot (IsModal=true, title v1).
+        const QString instance = QStringLiteral("modal-merge-1");
+        QVariantMap modal;
+        modal.insert(Key::IsModal, true);
+        m_wta->setWindowMetadata(instance, appId, QString(), QStringLiteral("Title v1"), QString(), 0, 0, QString(),
+                                 normalType, modal);
+        // Caption-only refresh: title changes, extended map EMPTY. The daemon must
+        // preserve IsModal. Resolve only AFTER the merge (resolveCached memoises per
+        // windowId), so the verdict reflects the merged registry state.
+        m_wta->setWindowMetadata(instance, appId, QString(), QStringLiteral("Title v2 — chatty"), QString(), 0, 0,
+                                 QString(), normalType, QVariantMap());
+        QVERIFY2(
+            m_wta->shouldFloatByRule(PhosphorIdentity::WindowId::buildCompositeId(appId, instance)),
+            "a caption-only (empty a{sv}) push must preserve the prior IsModal snapshot, so the rule still matches");
+
+        // Control: a window whose ONLY push was an empty map has nothing to
+        // preserve → IsModal stays absent → the rule is inert.
+        const QString bare = QStringLiteral("modal-merge-bare-1");
+        m_wta->setWindowMetadata(bare, appId, QString(), QString(), QString(), 0, 0, QString(), normalType,
+                                 QVariantMap());
+        QVERIFY2(!m_wta->shouldFloatByRule(PhosphorIdentity::WindowId::buildCompositeId(appId, bare)),
+                 "with no prior snapshot, an empty-map push leaves IsModal absent → no float");
+    }
+
+    // ────────────────────────────────────────────────────────────────────
     // The no-rule fallback branches: with no store, or a store that has no
     // metadata for the window, the per-engine *RestoreFloatedWindowsOnLogin
     // setting is the whole policy. Guards the early-outs in

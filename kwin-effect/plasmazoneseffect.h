@@ -251,8 +251,18 @@ private:
      * Safe to call unconditionally on every observation — the daemon de-dupes.
      * Called from slotWindowAdded for initial registration, and from
      * windowClassChanged / desktopFileNameChanged handlers for live updates.
+     *
+     * @param includeExtended When false, the extended-property snapshot (the
+     * trailing a{sv}: state flags, geometry, accessory flags, captionNormal) is
+     * NOT rebuilt or sent — the daemon preserves whatever it already has. Used by
+     * the captionChanged handler: terminals/browsers rewrite their title every
+     * frame, and the rule-relevant extended fields don't change on a title tick,
+     * so rebuilding/marshalling a ~20-entry map per frame is pure waste. The
+     * extended snapshot is captured at window-open and refreshed on identity
+     * changes (class/desktop/activity), which is when it matters for the daemon's
+     * open-path Float / RestorePosition resolvers.
      */
-    void pushWindowMetadata(KWin::EffectWindow* w);
+    void pushWindowMetadata(KWin::EffectWindow* w, bool includeExtended = true);
 
     /**
      * @brief Snapping/zone-management window filter.
@@ -690,6 +700,14 @@ private:
     /// restore / rebuild path. No-op when there are no animation rules.
     void invalidateAllRuleCaches();
 
+    /// Flush coalesced per-window rule-cache invalidations queued by
+    /// invalidateRuleCacheForStateChange within one event-loop turn: drops the
+    /// match cache once and re-resolves the border / opacity of each affected
+    /// window. Posted via a queued single-shot so a float toggle (which emits
+    /// both windowFloatingChanged AND windowStateChanged) clears the cache once
+    /// instead of twice.
+    void flushPendingRuleInvalidations();
+
     /// Resolve which mode's BorderState manages @p windowId — autotile first,
     /// then snap — or nullptr if neither draws a border for it.
     const PhosphorCompositor::BorderState* resolveBorderStateFor(const QString& windowId) const;
@@ -962,6 +980,11 @@ private:
     // Entries are consumed (removed) when slotApplyGeometryRequested skips
     // the geometry restore for a drag-floated window.
     QSet<QString> m_dragFloatedWindowIds;
+
+    // Per-window rule-cache invalidations accumulated within one event-loop turn,
+    // flushed once by flushPendingRuleInvalidations(). Coalesces the double
+    // invalidation a float toggle triggers (windowFloatingChanged + windowStateChanged).
+    QSet<QString> m_pendingRuleInvalidations;
 
     // Cached daemon D-Bus service registration state.
     // Updated via QDBusServiceWatcher signals (registration/unregistration) to avoid

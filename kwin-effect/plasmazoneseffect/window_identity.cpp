@@ -79,7 +79,7 @@ QString PlasmaZonesEffect::getWindowAppId(KWin::EffectWindow* w) const
     return ::PhosphorIdentity::WindowId::normalizeAppId(window->desktopFileName(), w->windowClass());
 }
 
-void PlasmaZonesEffect::pushWindowMetadata(KWin::EffectWindow* w)
+void PlasmaZonesEffect::pushWindowMetadata(KWin::EffectWindow* w, bool includeExtended)
 {
     if (!w) {
         return;
@@ -139,68 +139,74 @@ void PlasmaZonesEffect::pushWindowMetadata(KWin::EffectWindow* w)
     // the present (engaged) optionals are inserted, so an unknown field (e.g. no
     // underlying KWin::Window) leaves the daemon-side WindowQuery field disengaged,
     // mirroring the engage-only-when-known contract on both ends.
-    const PhosphorWindowRule::WindowQuery props = windowRuleQueryFor(w, QString(), false, false, QString());
-    namespace Key = PhosphorProtocol::Service::WindowMetadataKey;
+    //
+    // Skipped entirely on a caption-only refresh (@p includeExtended false): the
+    // map stays empty and the daemon preserves the existing extended snapshot,
+    // avoiding a per-frame query build + a{sv} marshal for chatty-title windows.
     QVariantMap extended;
-    if (props.isMinimized) {
-        extended.insert(Key::IsMinimized, *props.isMinimized);
-    }
-    if (props.isFullscreen) {
-        extended.insert(Key::IsFullscreen, *props.isFullscreen);
-    }
-    if (props.isSticky) {
-        extended.insert(Key::IsSticky, *props.isSticky);
-    }
-    if (props.isMaximized) {
-        extended.insert(Key::IsMaximized, *props.isMaximized);
-    }
-    if (props.isFocused) {
-        extended.insert(Key::IsFocused, *props.isFocused);
-    }
-    if (props.isTransient) {
-        extended.insert(Key::IsTransient, *props.isTransient);
-    }
-    if (props.isNotification) {
-        extended.insert(Key::IsNotification, *props.isNotification);
-    }
-    if (props.keepAbove) {
-        extended.insert(Key::KeepAbove, *props.keepAbove);
-    }
-    if (props.keepBelow) {
-        extended.insert(Key::KeepBelow, *props.keepBelow);
-    }
-    if (props.skipTaskbar) {
-        extended.insert(Key::SkipTaskbar, *props.skipTaskbar);
-    }
-    if (props.skipPager) {
-        extended.insert(Key::SkipPager, *props.skipPager);
-    }
-    if (props.skipSwitcher) {
-        extended.insert(Key::SkipSwitcher, *props.skipSwitcher);
-    }
-    if (props.isModal) {
-        extended.insert(Key::IsModal, *props.isModal);
-    }
-    if (props.hasDecoration) {
-        extended.insert(Key::HasDecoration, *props.hasDecoration);
-    }
-    if (props.isResizable) {
-        extended.insert(Key::IsResizable, *props.isResizable);
-    }
-    if (props.width) {
-        extended.insert(Key::Width, *props.width);
-    }
-    if (props.height) {
-        extended.insert(Key::Height, *props.height);
-    }
-    if (props.positionX) {
-        extended.insert(Key::PositionX, *props.positionX);
-    }
-    if (props.positionY) {
-        extended.insert(Key::PositionY, *props.positionY);
-    }
-    if (props.captionNormal) {
-        extended.insert(Key::CaptionNormal, *props.captionNormal);
+    if (includeExtended) {
+        const PhosphorWindowRule::WindowQuery props = windowRuleQueryFor(w, QString(), false, false, QString());
+        namespace Key = PhosphorProtocol::Service::WindowMetadataKey;
+        if (props.isMinimized) {
+            extended.insert(Key::IsMinimized, *props.isMinimized);
+        }
+        if (props.isFullscreen) {
+            extended.insert(Key::IsFullscreen, *props.isFullscreen);
+        }
+        if (props.isSticky) {
+            extended.insert(Key::IsSticky, *props.isSticky);
+        }
+        if (props.isMaximized) {
+            extended.insert(Key::IsMaximized, *props.isMaximized);
+        }
+        if (props.isFocused) {
+            extended.insert(Key::IsFocused, *props.isFocused);
+        }
+        if (props.isTransient) {
+            extended.insert(Key::IsTransient, *props.isTransient);
+        }
+        if (props.isNotification) {
+            extended.insert(Key::IsNotification, *props.isNotification);
+        }
+        if (props.keepAbove) {
+            extended.insert(Key::KeepAbove, *props.keepAbove);
+        }
+        if (props.keepBelow) {
+            extended.insert(Key::KeepBelow, *props.keepBelow);
+        }
+        if (props.skipTaskbar) {
+            extended.insert(Key::SkipTaskbar, *props.skipTaskbar);
+        }
+        if (props.skipPager) {
+            extended.insert(Key::SkipPager, *props.skipPager);
+        }
+        if (props.skipSwitcher) {
+            extended.insert(Key::SkipSwitcher, *props.skipSwitcher);
+        }
+        if (props.isModal) {
+            extended.insert(Key::IsModal, *props.isModal);
+        }
+        if (props.hasDecoration) {
+            extended.insert(Key::HasDecoration, *props.hasDecoration);
+        }
+        if (props.isResizable) {
+            extended.insert(Key::IsResizable, *props.isResizable);
+        }
+        if (props.width) {
+            extended.insert(Key::Width, *props.width);
+        }
+        if (props.height) {
+            extended.insert(Key::Height, *props.height);
+        }
+        if (props.positionX) {
+            extended.insert(Key::PositionX, *props.positionX);
+        }
+        if (props.positionY) {
+            extended.insert(Key::PositionY, *props.positionY);
+        }
+        if (props.captionNormal) {
+            extended.insert(Key::CaptionNormal, *props.captionNormal);
+        }
     }
 
     // Fire-and-forget — the daemon side is idempotent.

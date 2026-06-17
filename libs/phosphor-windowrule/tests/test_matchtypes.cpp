@@ -125,6 +125,20 @@ private Q_SLOTS:
         QVERIFY(!fieldIsContext(Field::IsNotification));
         QVERIFY(!fieldIsContext(Field::Width));
         QVERIFY(!fieldIsContext(Field::Height));
+        QVERIFY(!fieldIsContext(Field::KeepAbove));
+        QVERIFY(!fieldIsContext(Field::KeepBelow));
+        QVERIFY(!fieldIsContext(Field::SkipTaskbar));
+        QVERIFY(!fieldIsContext(Field::SkipPager));
+        QVERIFY(!fieldIsContext(Field::SkipSwitcher));
+        QVERIFY(!fieldIsContext(Field::IsModal));
+        QVERIFY(!fieldIsContext(Field::HasDecoration));
+        QVERIFY(!fieldIsContext(Field::IsResizable));
+        QVERIFY(!fieldIsContext(Field::PositionX));
+        QVERIFY(!fieldIsContext(Field::PositionY));
+        QVERIFY(!fieldIsContext(Field::CaptionNormal));
+        QVERIFY(!fieldIsContext(Field::IsFloating));
+        QVERIFY(!fieldIsContext(Field::IsSnapped));
+        QVERIFY(!fieldIsContext(Field::Zone));
     }
 
     void testFieldIsContext_coversAllFields_data()

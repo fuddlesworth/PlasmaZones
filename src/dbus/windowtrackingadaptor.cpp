@@ -740,45 +740,73 @@ void WindowTrackingAdaptor::setWindowMetadata(const QString& instanceId, const Q
     }
     meta.windowType = PhosphorProtocol::windowTypeFromInt(windowType);
 
-    // Extended window-property snapshot (the trailing a{sv}). Each key is present
-    // only when the effect could observe the value, so an absent key leaves the
-    // optional disengaged and the derived WindowQuery field inert — mirroring the
+    // Extended window-property snapshot (the trailing a{sv}). An EMPTY map is a
+    // caption-only refresh (the effect skips the snapshot on chatty title ticks):
+    // carry forward the registry's existing extended fields so a per-frame title
+    // update does not wipe geometry/state. A non-empty map fully replaces them —
+    // each key present only when the effect could observe the value, so an absent
+    // key disengages the optional (and its derived WindowQuery field), mirroring the
     // effect-side engage-only-when-known contract in window_query.cpp. Lenient
     // QVariant conversions are the boundary policy here, matching the pid /
     // windowType clamping above (a malformed caller cannot corrupt placement).
-    namespace Key = PhosphorProtocol::Service::WindowMetadataKey;
-    const auto optBool = [&extended](QLatin1String key) -> std::optional<bool> {
-        const auto it = extended.constFind(QString(key));
-        return it != extended.constEnd() ? std::optional<bool>(it.value().toBool()) : std::nullopt;
-    };
-    const auto optInt = [&extended](QLatin1String key) -> std::optional<int> {
-        const auto it = extended.constFind(QString(key));
-        return it != extended.constEnd() ? std::optional<int>(it.value().toInt()) : std::nullopt;
-    };
-    const auto optString = [&extended](QLatin1String key) -> std::optional<QString> {
-        const auto it = extended.constFind(QString(key));
-        return it != extended.constEnd() ? std::optional<QString>(it.value().toString()) : std::nullopt;
-    };
-    meta.isMinimized = optBool(Key::IsMinimized);
-    meta.isFullscreen = optBool(Key::IsFullscreen);
-    meta.isSticky = optBool(Key::IsSticky);
-    meta.isMaximized = optBool(Key::IsMaximized);
-    meta.isFocused = optBool(Key::IsFocused);
-    meta.isTransient = optBool(Key::IsTransient);
-    meta.isNotification = optBool(Key::IsNotification);
-    meta.keepAbove = optBool(Key::KeepAbove);
-    meta.keepBelow = optBool(Key::KeepBelow);
-    meta.skipTaskbar = optBool(Key::SkipTaskbar);
-    meta.skipPager = optBool(Key::SkipPager);
-    meta.skipSwitcher = optBool(Key::SkipSwitcher);
-    meta.isModal = optBool(Key::IsModal);
-    meta.hasDecoration = optBool(Key::HasDecoration);
-    meta.isResizable = optBool(Key::IsResizable);
-    meta.width = optInt(Key::Width);
-    meta.height = optInt(Key::Height);
-    meta.positionX = optInt(Key::PositionX);
-    meta.positionY = optInt(Key::PositionY);
-    meta.captionNormal = optString(Key::CaptionNormal);
+    if (extended.isEmpty()) {
+        if (const std::optional<PhosphorEngine::WindowMetadata> existing = m_windowRegistry->metadata(instanceId)) {
+            meta.isMinimized = existing->isMinimized;
+            meta.isFullscreen = existing->isFullscreen;
+            meta.isSticky = existing->isSticky;
+            meta.isMaximized = existing->isMaximized;
+            meta.isFocused = existing->isFocused;
+            meta.isTransient = existing->isTransient;
+            meta.isNotification = existing->isNotification;
+            meta.keepAbove = existing->keepAbove;
+            meta.keepBelow = existing->keepBelow;
+            meta.skipTaskbar = existing->skipTaskbar;
+            meta.skipPager = existing->skipPager;
+            meta.skipSwitcher = existing->skipSwitcher;
+            meta.isModal = existing->isModal;
+            meta.hasDecoration = existing->hasDecoration;
+            meta.isResizable = existing->isResizable;
+            meta.width = existing->width;
+            meta.height = existing->height;
+            meta.positionX = existing->positionX;
+            meta.positionY = existing->positionY;
+            meta.captionNormal = existing->captionNormal;
+        }
+    } else {
+        namespace Key = PhosphorProtocol::Service::WindowMetadataKey;
+        const auto optBool = [&extended](QLatin1String key) -> std::optional<bool> {
+            const auto it = extended.constFind(QString(key));
+            return it != extended.constEnd() ? std::optional<bool>(it.value().toBool()) : std::nullopt;
+        };
+        const auto optInt = [&extended](QLatin1String key) -> std::optional<int> {
+            const auto it = extended.constFind(QString(key));
+            return it != extended.constEnd() ? std::optional<int>(it.value().toInt()) : std::nullopt;
+        };
+        const auto optString = [&extended](QLatin1String key) -> std::optional<QString> {
+            const auto it = extended.constFind(QString(key));
+            return it != extended.constEnd() ? std::optional<QString>(it.value().toString()) : std::nullopt;
+        };
+        meta.isMinimized = optBool(Key::IsMinimized);
+        meta.isFullscreen = optBool(Key::IsFullscreen);
+        meta.isSticky = optBool(Key::IsSticky);
+        meta.isMaximized = optBool(Key::IsMaximized);
+        meta.isFocused = optBool(Key::IsFocused);
+        meta.isTransient = optBool(Key::IsTransient);
+        meta.isNotification = optBool(Key::IsNotification);
+        meta.keepAbove = optBool(Key::KeepAbove);
+        meta.keepBelow = optBool(Key::KeepBelow);
+        meta.skipTaskbar = optBool(Key::SkipTaskbar);
+        meta.skipPager = optBool(Key::SkipPager);
+        meta.skipSwitcher = optBool(Key::SkipSwitcher);
+        meta.isModal = optBool(Key::IsModal);
+        meta.hasDecoration = optBool(Key::HasDecoration);
+        meta.isResizable = optBool(Key::IsResizable);
+        meta.width = optInt(Key::Width);
+        meta.height = optInt(Key::Height);
+        meta.positionX = optInt(Key::PositionX);
+        meta.positionY = optInt(Key::PositionY);
+        meta.captionNormal = optString(Key::CaptionNormal);
+    }
 
     m_windowRegistry->upsert(instanceId, meta);
 }

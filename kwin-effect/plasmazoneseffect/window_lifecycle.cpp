@@ -597,6 +597,16 @@ void PlasmaZonesEffect::setupWindowConnections(KWin::EffectWindow* w)
                 pushWindowMetadata(safeW);
             }
         };
+        // Caption changes fire every frame for terminals / browsers; the extended
+        // property snapshot (geometry / state flags) doesn't change on a title tick,
+        // so refresh the registry's core metadata (title) WITHOUT rebuilding and
+        // marshalling the ~20-entry a{sv} each frame. The daemon preserves the
+        // existing extended fields when none are sent.
+        auto pushCaptionOnly = [this, safeW]() {
+            if (safeW && !safeW->isDeleted()) {
+                pushWindowMetadata(safeW, /*includeExtended=*/false);
+            }
+        };
         // Class / desktop-file mutations invalidate the animation rule
         // evaluator's per-window match cache. The cache is keyed on the
         // window's frozen composite id but the cascade resolves against
@@ -614,7 +624,7 @@ void PlasmaZonesEffect::setupWindowConnections(KWin::EffectWindow* w)
         connect(kw, &KWin::Window::windowClassChanged, this, invalidateRuleCache);
         connect(kw, &KWin::Window::desktopFileNameChanged, this, pushLatest);
         connect(kw, &KWin::Window::desktopFileNameChanged, this, invalidateRuleCache);
-        connect(kw, &KWin::Window::captionChanged, this, pushLatest);
+        connect(kw, &KWin::Window::captionChanged, this, pushCaptionOnly);
         // Per-window virtual-desktop / activity / role changes also refresh the
         // registry so context-aware rule resolution sees current values. Same
         // record-only contract: no retroactive re-evaluation of committed state.
