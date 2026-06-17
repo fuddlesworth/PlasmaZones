@@ -66,6 +66,9 @@ PickerCategory fieldCategory(Field f)
     case Field::IsModal:
     case Field::HasDecoration:
     case Field::IsResizable:
+    case Field::IsFloating:
+    case Field::IsSnapped:
+    case Field::Zone:
         return {PhosphorI18n::tr("State"), 1};
     case Field::Width:
     case Field::Height:
@@ -141,6 +144,13 @@ QString fieldDescription(Field f)
         return PhosphorI18n::tr("The window's top-edge Y position in pixels.");
     case Field::CaptionNormal:
         return PhosphorI18n::tr("The window's title without the application-name suffix the window manager adds.");
+    case Field::IsFloating:
+        return PhosphorI18n::tr("Whether the window is floating (not snapped or tiled).");
+    case Field::IsSnapped:
+        return PhosphorI18n::tr(
+            "Whether the window is snapped into a zone (manual-zone mode; tiled windows are not snapped).");
+    case Field::Zone:
+        return PhosphorI18n::tr("The zone the window is snapped into (manual-zone mode only).");
     case Field::ScreenId:
         return PhosphorI18n::tr("The monitor the window is on.");
     case Field::VirtualDesktop:

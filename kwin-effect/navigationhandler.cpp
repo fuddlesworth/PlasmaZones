@@ -85,4 +85,36 @@ void NavigationHandler::syncFloatingStateForWindow(const QString& windowId)
     });
 }
 
+void NavigationHandler::syncZonesFromDaemon()
+{
+    if (!m_effect->isDaemonReady("sync window zones")) {
+        return;
+    }
+
+    QDBusPendingCall pendingCall = PhosphorProtocol::ClientHelpers::asyncCall(
+        PhosphorProtocol::Service::Interface::WindowTracking, QStringLiteral("getAllWindowStates"));
+    auto* watcher = new QDBusPendingCallWatcher(pendingCall, this);
+
+    connect(watcher, &QDBusPendingCallWatcher::finished, this, [this](QDBusPendingCallWatcher* w) {
+        w->deleteLater();
+
+        QDBusPendingReply<PhosphorProtocol::WindowStateList> reply = *w;
+        if (!reply.isValid()) {
+            qCDebug(lcEffect) << "Failed to get window states from daemon";
+            return;
+        }
+
+        // Authoritative refresh: clear, then seed every snapped window's zone.
+        // A window with an empty zoneId (floating / unmanaged) carries no entry.
+        m_zoneByWindow.clear();
+        const PhosphorProtocol::WindowStateList states = reply.value();
+        for (const PhosphorProtocol::WindowStateEntry& state : states) {
+            if (!state.zoneId.isEmpty()) {
+                m_zoneByWindow.insert(state.windowId, state.zoneId);
+            }
+        }
+        qCDebug(lcEffect) << "Synced" << m_zoneByWindow.size() << "snapped-window zones from daemon";
+    });
+}
+
 } // namespace PlasmaZones

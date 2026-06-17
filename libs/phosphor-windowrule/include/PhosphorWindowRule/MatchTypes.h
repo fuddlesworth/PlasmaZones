@@ -56,12 +56,19 @@ enum class Field : int {
     PositionY = 28, ///< frame top edge Y in px
     // Window content
     CaptionNormal = 29, ///< title without the WM-added application-name suffix
+    // PlasmaZones placement state (snap-mode semantics; see WindowQuery population).
+    // IsFloating covers both snap- and autotile-floated windows; IsSnapped / Zone
+    // reflect snap-mode zone membership only — autotile tiles carry no persistent
+    // zone UUID, so they are neither IsSnapped nor matched by Zone.
+    IsFloating = 30, ///< window floated out of tiling (snap or autotile)
+    IsSnapped = 31, ///< window occupies a snap zone
+    Zone = 32, ///< the snap zone's UUID the window occupies
 };
 
 /// The number of distinct `Field` enumerators. `Field` is a contiguous range
 /// `[0, FieldCount)`; bump this whenever an enumerator is added — round-trip
 /// tests iterate the range using it as the upper bound.
-inline constexpr int FieldCount = static_cast<int>(Field::CaptionNormal) + 1;
+inline constexpr int FieldCount = static_cast<int>(Field::Zone) + 1;
 
 /// Match operators. Not every operator is valid against every field —
 /// validity is enforced by Predicate::isValid(), not the parser.
@@ -145,6 +152,12 @@ inline QString fieldToString(Field field)
         return QStringLiteral("positionY");
     case Field::CaptionNormal:
         return QStringLiteral("captionNormal");
+    case Field::IsFloating:
+        return QStringLiteral("isFloating");
+    case Field::IsSnapped:
+        return QStringLiteral("isSnapped");
+    case Field::Zone:
+        return QStringLiteral("zone");
     }
     return QStringLiteral("appId");
 }
@@ -184,6 +197,9 @@ inline std::optional<Field> fieldFromString(QStringView s)
         {QLatin1StringView("positionX"), Field::PositionX},
         {QLatin1StringView("positionY"), Field::PositionY},
         {QLatin1StringView("captionNormal"), Field::CaptionNormal},
+        {QLatin1StringView("isFloating"), Field::IsFloating},
+        {QLatin1StringView("isSnapped"), Field::IsSnapped},
+        {QLatin1StringView("zone"), Field::Zone},
     };
     for (const auto& [token, field] : kTable) {
         if (s.compare(token, Qt::CaseInsensitive) == 0) {
@@ -254,6 +270,7 @@ inline bool fieldIsString(Field field)
     case Field::ScreenId:
     case Field::Activity:
     case Field::CaptionNormal:
+    case Field::Zone:
         return true;
     case Field::Pid:
     case Field::VirtualDesktop:
@@ -277,6 +294,8 @@ inline bool fieldIsString(Field field)
     case Field::IsResizable:
     case Field::PositionX:
     case Field::PositionY:
+    case Field::IsFloating:
+    case Field::IsSnapped:
         return false;
     }
     return false;
@@ -296,7 +315,8 @@ inline bool fieldIsBool(Field field)
         || field == Field::IsMaximized || field == Field::IsFocused || field == Field::IsTransient
         || field == Field::IsNotification || field == Field::KeepAbove || field == Field::KeepBelow
         || field == Field::SkipTaskbar || field == Field::SkipPager || field == Field::SkipSwitcher
-        || field == Field::IsModal || field == Field::HasDecoration || field == Field::IsResizable;
+        || field == Field::IsModal || field == Field::HasDecoration || field == Field::IsResizable
+        || field == Field::IsFloating || field == Field::IsSnapped;
 }
 
 /// True if @p field describes the **context** a window appears in

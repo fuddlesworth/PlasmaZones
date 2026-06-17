@@ -431,6 +431,40 @@ void PlasmaZonesEffect::slotWindowFloatingChanged(const QString& windowId, bool 
         // appId to survive the window's identity change across close/reopen.
         m_snapHandler->invalidateRestore(::PhosphorIdentity::WindowId::extractAppId(windowId));
     }
+    // isFloating is now a rule MATCH field — re-resolve appearance / animation
+    // rules for this window so a `WHEN isFloating` border / opacity re-applies.
+    invalidateRuleCacheForStateChange(windowId);
+}
+
+void PlasmaZonesEffect::slotWindowStateChanged(const QString& windowId, const PhosphorProtocol::WindowStateEntry& state)
+{
+    // Keep the effect-side zone cache current so the IsSnapped / Zone rule-match
+    // fields resolve against the live placement. An empty zoneId (unsnapped /
+    // floated / screen-changed) removes the entry. isFloating flows through the
+    // separate windowFloatingChanged path, so it is not duplicated here.
+    m_navigationHandler->setWindowZone(windowId, state.zoneId);
+    invalidateRuleCacheForStateChange(windowId);
+}
+
+void PlasmaZonesEffect::invalidateRuleCacheForStateChange(const QString& windowId)
+{
+    if (m_shaderManager.animationRuleSet().isEmpty()) {
+        return;
+    }
+    // The match cache is keyed on (windowId, ruleSet revision); neither moves on
+    // a placement-state change, so drop it so border / opacity rules re-resolve
+    // against the new snapped / floating / zone state.
+    m_shaderManager.animationRuleEvaluator().clearCache();
+    KWin::EffectWindow* w = findWindowById(windowId);
+    if (w) {
+        // Recreate this window's border so a state-scoped border colour re-applies.
+        updateWindowBorder(windowId, w);
+        // An opacity-only (borderless) window needs an explicit repaint for its
+        // re-resolved opacity to reach the screen (mirrors slotWindowActivated).
+        if (m_shaderManager.hasOpacityRules()) {
+            w->addRepaintFull();
+        }
+    }
 }
 
 void PlasmaZonesEffect::slotWindowMinimizedChanged(KWin::EffectWindow* w)

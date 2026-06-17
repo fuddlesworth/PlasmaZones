@@ -38,8 +38,10 @@ namespace PlasmaZones {
  *
  * Every resolver takes a `PhosphorWindowRule::WindowQuery` carrying the FULL
  * window context (AppId / WindowClass / Title / WindowRole / DesktopFile /
- * WindowType / Pid / state flags), built once per window by the GPL-side
- * caller via `windowRuleQueryFor(KWin::EffectWindow*)`. Pre-PR the resolvers
+ * WindowType / Pid / state flags / placement state), built once per window by
+ * the GPL-side caller via `PlasmaZonesEffect::windowRuleQuery(w)`, which threads
+ * the effect's floating / snapped / zone caches into the free `windowRuleQueryFor`
+ * builder. Pre-PR the resolvers
  * took a bare `windowClass` and the rule layer matched exclusively on
  * `WindowClass Contains <pattern>`; v4 widened the match shape so a
  * user-authored rule may pin to `AppId` / `DesktopFile` / `Title` / etc.

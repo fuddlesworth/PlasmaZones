@@ -684,6 +684,12 @@ QString WindowRuleModel::fieldLabel(Field field)
         return PhosphorI18n::tr("Position Y");
     case Field::CaptionNormal:
         return PhosphorI18n::tr("Title (no suffix)");
+    case Field::IsFloating:
+        return PhosphorI18n::tr("Floating");
+    case Field::IsSnapped:
+        return PhosphorI18n::tr("Snapped");
+    case Field::Zone:
+        return PhosphorI18n::tr("Zone");
     }
     return QString();
 }

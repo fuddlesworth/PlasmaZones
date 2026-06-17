@@ -56,6 +56,9 @@ struct WindowQuery
     std::optional<int> positionX; ///< frame left edge X in px
     std::optional<int> positionY; ///< frame top edge Y in px
     std::optional<QString> captionNormal; ///< title without the WM-added app-name suffix
+    std::optional<bool> isFloating; ///< floated out of tiling (snap or autotile)
+    std::optional<bool> isSnapped; ///< occupies a snap zone (snap mode only)
+    std::optional<QString> zone; ///< the snap zone's UUID the window occupies
 
     // ── Context attributes — always present ──
     QString screenId;
@@ -72,7 +75,8 @@ struct WindowQuery
             || isTransient.has_value() || isNotification.has_value() || width.has_value() || height.has_value()
             || keepAbove.has_value() || keepBelow.has_value() || skipTaskbar.has_value() || skipPager.has_value()
             || skipSwitcher.has_value() || isModal.has_value() || hasDecoration.has_value() || isResizable.has_value()
-            || positionX.has_value() || positionY.has_value() || captionNormal.has_value();
+            || positionX.has_value() || positionY.has_value() || captionNormal.has_value() || isFloating.has_value()
+            || isSnapped.has_value() || zone.has_value();
     }
 
     /**
@@ -149,6 +153,12 @@ struct WindowQuery
             return positionY ? std::optional<QVariant>(*positionY) : std::nullopt;
         case Field::CaptionNormal:
             return captionNormal ? std::optional<QVariant>(*captionNormal) : std::nullopt;
+        case Field::IsFloating:
+            return isFloating ? std::optional<QVariant>(*isFloating) : std::nullopt;
+        case Field::IsSnapped:
+            return isSnapped ? std::optional<QVariant>(*isSnapped) : std::nullopt;
+        case Field::Zone:
+            return zone ? std::optional<QVariant>(*zone) : std::nullopt;
         }
         return std::nullopt;
     }

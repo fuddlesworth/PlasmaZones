@@ -288,8 +288,8 @@ void PlasmaZonesEffect::prePaintWindow(KWin::RenderView* view, KWin::EffectWindo
     if (w && m_shaderManager.hasOpacityRules()) {
         const QString winClass = w->windowClass();
         if (!isOwnOverlayClass(winClass) && !isPlasmaShellSurface(winClass)) {
-            const auto opacity = resolveWindowOpacity(m_shaderManager.animationRuleEvaluator(),
-                                                      windowRuleQueryFor(w, getWindowScreenId(w)), getWindowId(w));
+            const auto opacity =
+                resolveWindowOpacity(m_shaderManager.animationRuleEvaluator(), windowRuleQuery(w), getWindowId(w));
             m_shaderManager.cacheFrameOpacity(w, opacity);
             // Clear the deviceOpaque region so KWin recomposites whatever
             // sits behind a dimmed window — without it, stale background
@@ -407,8 +407,8 @@ void PlasmaZonesEffect::paintWindow(const KWin::RenderTarget& renderTarget, cons
             if (m_shaderManager.frameOpacityCached(w)) {
                 opacity = m_shaderManager.cachedFrameOpacity(w);
             } else {
-                opacity = resolveWindowOpacity(m_shaderManager.animationRuleEvaluator(),
-                                               windowRuleQueryFor(w, getWindowScreenId(w)), getWindowId(w));
+                opacity =
+                    resolveWindowOpacity(m_shaderManager.animationRuleEvaluator(), windowRuleQuery(w), getWindowId(w));
                 m_shaderManager.cacheFrameOpacity(w, opacity);
             }
             if (opacity) {

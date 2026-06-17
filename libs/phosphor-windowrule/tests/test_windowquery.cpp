@@ -145,6 +145,27 @@ private Q_SLOTS:
         QCOMPARE(q.valueForField(Field::CaptionNormal)->toString(), QStringLiteral("Firefox"));
         QVERIFY(q.hasWindow());
     }
+
+    void testValueForField_pzStateFields()
+    {
+        WindowQuery q;
+        // Absent by default — inert during windowless context resolution.
+        QVERIFY(!q.valueForField(Field::IsFloating).has_value());
+        QVERIFY(!q.valueForField(Field::IsSnapped).has_value());
+        QVERIFY(!q.valueForField(Field::Zone).has_value());
+        QVERIFY(!q.hasWindow());
+
+        q.isFloating = false;
+        q.isSnapped = true;
+        q.zone = QStringLiteral("{a1b2c3d4-0000-0000-0000-000000000001}");
+
+        // Present even though false (the bool-field contract).
+        QVERIFY(q.valueForField(Field::IsFloating).has_value());
+        QCOMPARE(q.valueForField(Field::IsFloating)->toBool(), false);
+        QCOMPARE(q.valueForField(Field::IsSnapped)->toBool(), true);
+        QCOMPARE(q.valueForField(Field::Zone)->toString(), QStringLiteral("{a1b2c3d4-0000-0000-0000-000000000001}"));
+        QVERIFY(q.hasWindow());
+    }
 };
 
 QTEST_GUILESS_MAIN(TestWindowQuery)

@@ -69,6 +69,23 @@ bool PlasmaZonesEffect::isWindowFloating(const QString& windowId) const
     return m_navigationHandler->isWindowFloating(windowId);
 }
 
+bool PlasmaZonesEffect::isWindowSnapped(const QString& windowId) const
+{
+    return m_navigationHandler->isWindowSnapped(windowId);
+}
+
+QString PlasmaZonesEffect::zoneForWindow(const QString& windowId) const
+{
+    return m_navigationHandler->zoneForWindow(windowId);
+}
+
+PhosphorWindowRule::WindowQuery PlasmaZonesEffect::windowRuleQuery(KWin::EffectWindow* w) const
+{
+    const QString windowId = getWindowId(w);
+    return windowRuleQueryFor(w, getWindowScreenId(w), isWindowFloating(windowId), isWindowSnapped(windowId),
+                              zoneForWindow(windowId));
+}
+
 bool PlasmaZonesEffect::isStructurallyUnmanageableWindowType(KWin::EffectWindow* w, QString* rejectReason) const
 {
     // Single source of truth for the window-TYPE rejection set shared by
@@ -159,7 +176,7 @@ bool PlasmaZonesEffect::shouldHandleWindow(KWin::EffectWindow* w, QString* rejec
     // `!isEmpty()` fast path keeps a no-exclusions user at two pointer
     // reads — same cost as the prior list-derived check.
     if (!m_snappingExclusionRuleSet.isEmpty()) {
-        if (m_snappingExclusionEvaluator.resolve(windowRuleQueryFor(w, getWindowScreenId(w))).isExcluded()) {
+        if (m_snappingExclusionEvaluator.resolve(windowRuleQuery(w)).isExcluded()) {
             return rejectedBecause(rejectReason, "user exclusion rule match");
         }
     }
@@ -212,7 +229,7 @@ bool PlasmaZonesEffect::shouldAnimateWindow(KWin::EffectWindow* w) const
     std::optional<PhosphorWindowRule::WindowQuery> cachedQuery;
     auto query = [&]() -> const PhosphorWindowRule::WindowQuery& {
         if (!cachedQuery) {
-            cachedQuery = windowRuleQueryFor(w, getWindowScreenId(w));
+            cachedQuery = windowRuleQuery(w);
         }
         return *cachedQuery;
     };

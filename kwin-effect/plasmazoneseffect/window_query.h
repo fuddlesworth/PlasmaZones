@@ -55,8 +55,17 @@ PhosphorProtocol::WindowType windowTypeFor(KWin::EffectWindow* w);
 ///     window-domain rules to match — it does not affect the windowless
 ///     context cascade, which routes through `ContextRuleBridge`.
 ///
+/// PlasmaZones placement state (@p isFloating / @p isSnapped / @p zoneId) is
+/// supplied by the caller because it lives in the effect's runtime caches
+/// (NavigationHandler), not on the KWin window. The caller passes
+/// `isWindowFloating(wid)`, `isWindowSnapped(wid)`, `zoneForWindow(wid)`. These
+/// are REQUIRED (no defaults) so every call site is compiler-forced to supply
+/// them — a site that silently omitted them would leave IsFloating / IsSnapped /
+/// Zone unmatched in that resolver path only.
+///
 /// Confined to the effect translation unit so the LGPL phosphor-windowrule
 /// library never sees a KWin type.
-PhosphorWindowRule::WindowQuery windowRuleQueryFor(KWin::EffectWindow* w, const QString& screenId = {});
+PhosphorWindowRule::WindowQuery windowRuleQueryFor(KWin::EffectWindow* w, const QString& screenId, bool isFloating,
+                                                   bool isSnapped, const QString& zoneId);
 
 } // namespace PlasmaZones

@@ -56,11 +56,21 @@ PhosphorProtocol::WindowType windowTypeFor(KWin::EffectWindow* w)
     return WindowType::Unknown;
 }
 
-PhosphorWindowRule::WindowQuery windowRuleQueryFor(KWin::EffectWindow* w, const QString& screenId)
+PhosphorWindowRule::WindowQuery windowRuleQueryFor(KWin::EffectWindow* w, const QString& screenId, bool isFloating,
+                                                   bool isSnapped, const QString& zoneId)
 {
     PhosphorWindowRule::WindowQuery query;
     if (!w) {
         return query;
+    }
+    // PlasmaZones placement state — caller-supplied from the effect's runtime
+    // caches (see header). Bools are always engaged when the window exists; the
+    // zone UUID is gated on non-empty so a non-snapped window stays a non-match
+    // (the engaged-empty foot-gun the string fields below also avoid).
+    query.isFloating = isFloating;
+    query.isSnapped = isSnapped;
+    if (!zoneId.isEmpty()) {
+        query.zone = zoneId;
     }
     // Context fields — let a window-domain rule pin screen / desktop / activity
     // (e.g. "red border on monitor 2"). screenId is resolved by the caller (the

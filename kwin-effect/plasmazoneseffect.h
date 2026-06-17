@@ -183,6 +183,7 @@ private Q_SLOTS:
     void slotRaiseWindowsRequested(const QStringList& windowIds);
 
     void slotWindowFloatingChanged(const QString& windowId, bool isFloating, const QString& screenId);
+    void slotWindowStateChanged(const QString& windowId, const PhosphorProtocol::WindowStateEntry& state);
     void slotRunningWindowsRequested();
     void slotRestoreSizeDuringDrag(const QString& windowId, int width, int height);
 
@@ -441,6 +442,18 @@ private:
      * @return true if window is floating
      */
     bool isWindowFloating(const QString& windowId) const;
+    /// True iff @p windowId is snapped into a zone (snap mode; delegates to the
+    /// NavigationHandler zone cache). Autotile tiles carry no zone and are not
+    /// snapped under this definition.
+    bool isWindowSnapped(const QString& windowId) const;
+    /// The snap-zone UUID @p windowId occupies, or empty when it occupies none.
+    QString zoneForWindow(const QString& windowId) const;
+    /// Build a window-rule match query for @p w with the effect's runtime
+    /// placement state (floating / snapped / zone) threaded into the free
+    /// `windowRuleQueryFor` builder. Use this at EVERY rule-evaluation site so
+    /// IsFloating / IsSnapped / Zone resolve uniformly; the free builder stays
+    /// KWin-only and can't reach the effect's caches.
+    PhosphorWindowRule::WindowQuery windowRuleQuery(KWin::EffectWindow* w) const;
 
     /**
      * @brief True if the window is currently snap-managed (tiled into a snap zone).
@@ -654,6 +667,14 @@ private:
     void removeWindowBorder(const QString& windowId);
     void updateAllBorders();
     void clearAllBorders();
+
+    /// Drop the per-window rule match cache and refresh @p windowId's border /
+    /// opacity after its placement state (snapped / floating / zone) changed.
+    /// Those are rule MATCH inputs now, so without this a window stays resolved
+    /// at its prior state (e.g. a `WHEN isSnapped` border never reverting on
+    /// unsnap). Mirrors slotWindowActivated's focus invalidation; no-op when
+    /// there are no animation rules.
+    void invalidateRuleCacheForStateChange(const QString& windowId);
 
     /// Resolve which mode's BorderState manages @p windowId — autotile first,
     /// then snap — or nullptr if neither draws a border for it.
