@@ -396,15 +396,14 @@ void AutotileHandler::handleWindowOutputChanged(KWin::EffectWindow* w)
         return;
     }
 
-    // Daemon-owned cross-output move: the daemon already migrated its tiling
-    // state for this window onto newScreenId and reflowed BOTH outputs. KWin's
-    // outputChanged here is the expected echo of that move. Re-issuing
-    // windowClosed/windowOpened now would (the daemon's map already points at
-    // newScreenId) re-resolve the close to the destination and tear down the
-    // placement — the source monitor's reflow then never lands. Update our own
-    // bookkeeping and move the decoration claim, then stop. Consume the marker
-    // one-shot; only honour it when the destination matches: a mismatch means a
-    // later, genuine move superseded it, so fall through to the normal transfer.
+    // Daemon-owned cross-output move: the daemon already migrated its tiling state
+    // onto newScreenId and reflowed both outputs; KWin's outputChanged is the
+    // expected echo. Re-issuing windowClosed/windowOpened now would re-resolve the
+    // close to the destination (the daemon's map already points there) and tear
+    // down the placement, so the source reflow never lands — update our bookkeeping
+    // and move the decoration claim, then stop. Consume the marker one-shot; honour
+    // it only when the destination matches (a mismatch means a later genuine move
+    // superseded it → fall through to the normal transfer).
     if (const auto expIt = m_expectedOutputMove.constFind(windowId); expIt != m_expectedOutputMove.constEnd()) {
         const QString expectedScreen = expIt.value();
         m_expectedOutputMove.erase(expIt);
@@ -417,18 +416,11 @@ void AutotileHandler::handleWindowOutputChanged(KWin::EffectWindow* w)
                 m_effect->decorationManager()->releaseOthersOfKind(windowId, DecorationManager::OwnerKind::Autotile,
                                                                    newScreenId);
             } else {
-                // Cross-MODE move: the window left autotile for a SNAP screen. The
-                // daemon already relinquished it from the autotile engine, so do a
-                // tracking-only teardown of the effect-side autotile state (NOT
-                // onWindowClosed, which would re-notify the daemon) — otherwise it
-                // lingers in m_notifiedWindows as a phantom autotile window and a
-                // later frameGeometryChanged mis-detects a VS crossing. Release
-                // autotile's decoration claim; the snap side owns it now.
+                // Cross-MODE move: window left autotile for a SNAP screen. Release
+                // the decoration claim and drop effect-side autotile tracking (daemon
+                // already relinquished via handoffRelease) — else it lingers phantom.
                 m_effect->decorationManager()->releaseKind(windowId, DecorationManager::OwnerKind::Autotile);
-                AutotileStateHelpers::AutotileWindowState windowState{
-                    m_notifiedWindows,      m_notifiedWindowScreens,   m_minimizeFloatedWindows, m_autotileTargetZones,
-                    m_centeredWaylandZones, m_monocleMaximizedWindows, m_preAutotileGeometries};
-                AutotileStateHelpers::cleanupClosedWindowState(windowId, m_border, windowState);
+                cleanupAutotileTracking(windowId, oldScreenId);
             }
             m_effect->updateAllBorders();
             return;
@@ -602,6 +594,31 @@ void AutotileHandler::handleWindowOutputChanged(KWin::EffectWindow* w)
     m_effect->updateAllBorders();
 }
 
+void AutotileHandler::cleanupAutotileTracking(const QString& windowId, const QString& screenId)
+{
+    // Compositor-agnostic state cleanup (shared helper).
+    AutotileStateHelpers::AutotileWindowState windowState{
+        m_notifiedWindows,      m_notifiedWindowScreens,   m_minimizeFloatedWindows, m_autotileTargetZones,
+        m_centeredWaylandZones, m_monocleMaximizedWindows, m_preAutotileGeometries};
+    AutotileStateHelpers::cleanupClosedWindowState(windowId, m_border, windowState);
+    cancelPendingMinimizeFloat(windowId);
+    // KWin-specific cleanup. NOTE: m_savedPreAutotileForDesktopMove is NOT cleared
+    // here — the desktop-move path stashes it immediately before close (consume
+    // site / clearDesktopMoveStash cover it). Also drop the unconsumed output-move
+    // marker and the pending cross-screen-restore connection (a stale one could
+    // fire a spurious applySnapGeometry).
+    m_savedNotifiedForDesktopReturn.remove(windowId);
+    m_expectedOutputMove.remove(windowId);
+    if (auto pendingConn = m_pendingCrossScreenRestore.find(windowId);
+        pendingConn != m_pendingCrossScreenRestore.end()) {
+        QObject::disconnect(pendingConn.value());
+        m_pendingCrossScreenRestore.erase(pendingConn);
+    }
+    if (m_savedAutotileStackingOrder.contains(screenId)) {
+        m_savedAutotileStackingOrder[screenId].removeAll(windowId);
+    }
+}
+
 void AutotileHandler::onWindowClosed(const QString& windowId, const QString& screenId, bool windowDestroyed)
 {
     // If we haven't notified the daemon about this window yet, record the
@@ -614,34 +631,7 @@ void AutotileHandler::onWindowClosed(const QString& windowId, const QString& scr
         m_pendingCloses.insert(windowId);
     }
 
-    // Delegate compositor-agnostic state cleanup to the shared helper
-    AutotileStateHelpers::AutotileWindowState windowState{
-        m_notifiedWindows,      m_notifiedWindowScreens,   m_minimizeFloatedWindows, m_autotileTargetZones,
-        m_centeredWaylandZones, m_monocleMaximizedWindows, m_preAutotileGeometries};
-    AutotileStateHelpers::cleanupClosedWindowState(windowId, m_border, windowState);
-    // Cancel any pending debounced minimize→float commit — it must not fire
-    // against a destroyed window.
-    cancelPendingMinimizeFloat(windowId);
-
-    // KWin-specific cleanup not covered by the shared helper.
-    // NOTE: m_savedPreAutotileForDesktopMove is deliberately NOT cleared
-    // here — the desktop-move path calls savePreAutotileForDesktopMove
-    // immediately before this function, so clearing it would wipe the stash
-    // the instant it was created (the consume site erases it, and
-    // clearDesktopMoveStash covers genuine window destruction).
-    m_savedNotifiedForDesktopReturn.remove(windowId);
-    // Drop any unconsumed cross-output expected-move marker so a move aborted
-    // before its outputChanged arrived can't strand the entry for the session.
-    m_expectedOutputMove.remove(windowId);
-    auto pendingConn = m_pendingCrossScreenRestore.find(windowId);
-    if (pendingConn != m_pendingCrossScreenRestore.end()) {
-        QObject::disconnect(pendingConn.value());
-        m_pendingCrossScreenRestore.erase(pendingConn);
-    }
-    // Remove from the saved stacking order so stale IDs don't accumulate
-    if (m_savedAutotileStackingOrder.contains(screenId)) {
-        m_savedAutotileStackingOrder[screenId].removeAll(windowId);
-    }
+    cleanupAutotileTracking(windowId, screenId);
 
     // Notify autotile daemon
     if (m_autotileScreens.contains(screenId)) {

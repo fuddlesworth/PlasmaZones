@@ -354,12 +354,14 @@ void TestNavigationCrossSurface::crossOutput_swapTowardNonAutotileOutput_emitsCr
 void TestNavigationCrossSurface::crossOutput_moveTowardNonAutotileOutput_doesNotStrandWindow()
 {
     // Two side-by-side outputs, but only DP-1 is autotile-managed. The
-    // CrossSurfaceResolver still returns DP-2 as the geometric right-neighbour
-    // (it has no autotile knowledge), so moving a2 "right" reaches crossOutputMove
-    // with a NON-autotile destination. migrateWindowBetweenKeys would remove a2
-    // from DP-1 but never re-add it on a non-autotile screen — stranding it
-    // (tracked nowhere). crossOutputMove must REFUSE before mutating any state:
-    // no windowOutputMoveExpected marker, and a2 stays tiled and tracked on DP-1.
+    // CrossSurfaceResolver returns DP-2 as the geometric right-neighbour (it has
+    // no mode knowledge), so moving a2 "right" reaches crossOutputMove with a
+    // NON-autotile (snap) destination. This is a cross-MODE move: the engine must
+    // NOT migrate its own tiling state (that would strand a2 — re-keyed to a
+    // screen with no autotile state) and must NOT arm a windowOutputMoveExpected
+    // marker (the engine doesn't perform the output move — the daemon does).
+    // Instead it emits crossModeMoveRequested and leaves a2 tiled/tracked on DP-1
+    // until the daemon handoff relocates it.
     PhosphorScreens::FakeScreenProvider provider;
     provider.addScreen(QStringLiteral("DP-1"), QRect(0, 0, 1920, 1080));
     provider.addScreen(QStringLiteral("DP-2"), QRect(1920, 0, 1920, 1080));
@@ -378,9 +380,18 @@ void TestNavigationCrossSurface::crossOutput_moveTowardNonAutotileOutput_doesNot
         ->setCalculatedZones({QRect(0, 0, 960, 1080), QRect(960, 0, 960, 1080)});
 
     QSignalSpy expectedSpy(engine.get(), &AutotileEngine::windowOutputMoveExpected);
+    QSignalSpy crossModeSpy(engine.get(), &AutotileEngine::crossModeMoveRequested);
     engine->moveFocusedInDirection(QStringLiteral("right"),
                                    NavigationContext{QStringLiteral("a2"), QStringLiteral("DP-1")});
 
+    // The cross-mode handoff is requested (autotile→snap MOVE), with NO output
+    // marker, and a2 is left untouched in DP-1's autotile state.
+    QCOMPARE(crossModeSpy.count(), 1);
+    const QList<QVariant> args = crossModeSpy.takeFirst();
+    QCOMPARE(args.at(0).toString(), QStringLiteral("a2"));
+    QCOMPARE(args.at(1).toString(), QStringLiteral("DP-2"));
+    QCOMPARE(args.at(2).toInt(), 0); // monitor crossing, current desktop
+    QCOMPARE(args.at(3).toString(), QStringLiteral("right"));
     QCOMPARE(expectedSpy.count(), 0);
     QVERIFY(engine->isWindowTracked(QStringLiteral("a2")));
     QVERIFY(engine->tilingStateForScreen(QStringLiteral("DP-1"))->containsWindow(QStringLiteral("a2")));

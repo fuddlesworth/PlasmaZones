@@ -103,6 +103,12 @@ public:
      *        overtakes an in-flight windowOpened.
      */
     void onWindowClosed(const QString& windowId, const QString& screenId, bool windowDestroyed = false);
+    /// Tear down all effect-side autotile tracking for @p windowId (shared +
+    /// KWin-specific state, incl. the pending cross-screen-restore connection)
+    /// WITHOUT notifying the daemon. Shared by onWindowClosed (which adds the
+    /// daemon windowClosed call) and the cross-mode-move marker path (where the
+    /// daemon already relinquished the window via handoffRelease).
+    void cleanupAutotileTracking(const QString& windowId, const QString& screenId);
     /// Drop a destroyed window's desktop-move geometry stash. Separate from
     /// onWindowClosed because the desktop-MOVE path calls onWindowClosed
     /// right after creating the stash (the window must look "closed" to this
