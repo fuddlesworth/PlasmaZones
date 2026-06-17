@@ -89,14 +89,20 @@ void TestSpatialAdjacency::gridPrefersSameColumn()
 
 void TestSpatialAdjacency::skipsCurrentByCentre()
 {
-    // The helper skips any candidate whose centre equals `current`, so
-    // passing the current rect itself in the list is a no-op.
+    // Any candidate sharing `current`'s centre — the current rect itself OR a
+    // duplicate stacked exactly on it — must never be selected (it is excluded
+    // both by the in-direction filter, its centre not being past `current`'s,
+    // and by the explicit centre-equality skip). Put a co-centred duplicate
+    // BETWEEN `current` and the genuine neighbour so a regression that admitted
+    // equal-centre candidates would wrongly return the duplicate's index.
     const QRectF left(0, 0, 0.5, 1.0);
+    const QRectF leftDuplicate(0, 0, 0.5, 1.0); // identical centre to `left`
     const QRectF right(0.5, 0, 0.5, 1.0);
-    const QList<QRectF> rects{left, right};
+    const QList<QRectF> rects{left, leftDuplicate, right};
 
-    // `current` equals `left` — from left, the only valid neighbour is right.
-    QCOMPARE(SpatialAdjacency::findAdjacentRect(left, rects, PhosphorScreens::Direction::Right), 1);
+    // `current` equals `left`; both co-centred entries (index 0 and 1) are
+    // skipped, so the only valid right-hand neighbour is `right` at index 2.
+    QCOMPARE(SpatialAdjacency::findAdjacentRect(left, rects, PhosphorScreens::Direction::Right), 2);
 }
 
 void TestSpatialAdjacency::noMatchInDirection()
