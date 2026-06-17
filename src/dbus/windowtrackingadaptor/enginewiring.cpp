@@ -75,6 +75,13 @@ void WindowTrackingAdaptor::setEngines(PhosphorEngine::PlacementEngineBase* snap
         disconnect(m_autotileEngine, &PhosphorEngine::PlacementEngineBase::crossModeMoveRequested, this, nullptr);
         disconnect(m_autotileEngine, &PhosphorEngine::PlacementEngineBase::crossModeSwapRequested, this, nullptr);
     }
+    // Drop the snap-specific state signals (snap-mode-only types, connected below
+    // on the typed engine) from the outgoing snap engine — same rule. Uses the
+    // cached typed pointer, still valid here (reassigned further down).
+    if (m_cachedSnapEngine) {
+        disconnect(m_cachedSnapEngine, &PhosphorSnapEngine::SnapEngine::windowSnapStateChanged, this, nullptr);
+        disconnect(m_cachedSnapEngine, &PhosphorSnapEngine::SnapEngine::windowFloatingClearedForSnap, this, nullptr);
+    }
 
     // Detach the snap restore predicate from the outgoing engine before dropping
     // the reference. The predicate captures `this`; clearing it honours the engine
@@ -497,7 +504,7 @@ void WindowTrackingAdaptor::handleCrossModeSwap(const QString& windowId, const Q
         if (auto* autotileTarget = qobject_cast<PhosphorTileEngine::AutotileEngine*>(targetEngine)) {
             partner = autotileTarget->entryWindowForCrossing(targetScreenId, direction);
             if (!partner.isEmpty()) {
-                focusedLandingIndex = autotileTarget->tileIndexForWindow(targetScreenId, partner);
+                focusedLandingIndex = autotileTarget->windowOrderIndexForWindow(targetScreenId, partner);
             }
         }
     } else if (auto* snapTarget = qobject_cast<PhosphorSnapEngine::SnapEngine*>(targetEngine)) {
@@ -520,7 +527,7 @@ void WindowTrackingAdaptor::handleCrossModeSwap(const QString& windowId, const Q
     int partnerLandingIndex = -1; // partner's landing on an AUTOTILE source (F's index)
     if (sourceEngine == m_autotileEngine.data()) {
         if (auto* autotileSource = qobject_cast<PhosphorTileEngine::AutotileEngine*>(sourceEngine)) {
-            partnerLandingIndex = autotileSource->tileIndexForWindow(sourceScreen, windowId);
+            partnerLandingIndex = autotileSource->windowOrderIndexForWindow(sourceScreen, windowId);
         }
     } else if (auto* snapSource = qobject_cast<PhosphorSnapEngine::SnapEngine*>(sourceEngine)) {
         const QString fZone = snapSource->snapState() ? snapSource->snapState()->zoneForWindow(windowId) : QString();

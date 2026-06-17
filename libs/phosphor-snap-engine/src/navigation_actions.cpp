@@ -18,8 +18,11 @@
  * last-cursor screen, frame geometry) are now accessed through the typed
  * INavigationStateProvider interface rather than opaque QObject* invoke.
  *
- * Signals emitted by these methods are SnapEngine signals; SnapAdaptor
- * relays them to WindowTrackingAdaptor, which exposes them on D-Bus.
+ * Signals emitted by these methods are SnapEngine signals. The feedback/state
+ * signals are relayed by SnapAdaptor to WindowTrackingAdaptor for D-Bus; the
+ * cross-mode handoff signals (crossModeMoveRequested / crossModeSwapRequested /
+ * windowDesktopMoveRequested) are instead wired DIRECTLY from the engine base
+ * class to WindowTrackingAdaptor's handlers in setEngines().
  */
 
 #include <PhosphorSnapEngine/SnapEngine.h>
@@ -233,9 +236,10 @@ bool SnapEngine::tryCrossDesktopFocus(const QString& focusedWindowId, const QStr
         return false;
     }
     QStringList candidates = m_snapState->windowsOnScreenAndDesktop(screenId, targetDesktop);
-    // Exclude the source window: an on-all-desktops (sticky) window is listed on
-    // every desktop, so it could otherwise be picked as its own cross-desktop
-    // focus target — a no-op "success" that swallows the boundary.
+    // Exclude the source window so it can't be picked as its own cross-desktop
+    // focus target (a no-op "success" that swallows the boundary). It only appears
+    // here if it is itself assigned to the target desktop — windowsOnScreenAndDesktop
+    // filters by exact desktop, so this is a narrow guard, not the common path.
     candidates.removeAll(focusedWindowId);
     if (candidates.isEmpty()) {
         return false;
@@ -463,18 +467,10 @@ QString SnapEngine::entryZoneForCrossing(const QString& direction, const QString
     if (!m_zoneAdjacencyResolver) {
         return {};
     }
-    // Enter the neighbour from the edge facing back toward the source: crossing
-    // "right" lands on the neighbour's LEFT-edge zone, "down" on its TOP, etc.
-    QString opposite;
-    if (direction == QLatin1String("left")) {
-        opposite = QStringLiteral("right");
-    } else if (direction == QLatin1String("right")) {
-        opposite = QStringLiteral("left");
-    } else if (direction == QLatin1String("up")) {
-        opposite = QStringLiteral("down");
-    } else if (direction == QLatin1String("down")) {
-        opposite = QStringLiteral("up");
-    } else {
+    // Enter the neighbour from the edge facing back toward the source (crossing
+    // "right" lands on the neighbour's LEFT-edge zone, etc.) — shared mapping.
+    const QString opposite = oppositeCrossingDirection(direction);
+    if (opposite.isEmpty()) {
         return {};
     }
     return m_zoneAdjacencyResolver->getFirstZoneInDirection(opposite, neighbourScreen);

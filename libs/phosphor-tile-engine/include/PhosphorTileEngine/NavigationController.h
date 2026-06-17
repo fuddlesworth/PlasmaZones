@@ -80,15 +80,21 @@ public:
      *        target's LEFT edge → the leftmost tile, etc.). Empty when the screen
      *        has no tiling state or no tiled windows. Used by the daemon to pick
      *        the cross-mode swap partner on an autotile target.
+     * @note When geometry isn't computed yet OR the screen is over its maxWindows
+     *       cap (calculatedZones covers only the capped subset, so it can't align
+     *       1:1 with tiledWindows), this degrades to the first tiled window (the
+     *       master) rather than the geometric edge tile.
      */
     QString entryWindowOnScreen(const QString& screenId, const QString& direction) const;
 
     /**
-     * @brief The tile-order index of @p windowId on @p screenId's current state,
-     *        or -1 when not tiled there. Lets the daemon capture a window's slot
-     *        before a cross-mode swap so its counterpart lands in the same place.
+     * @brief The RAW window-order index of @p windowId on @p screenId's current
+     *        state (counting floating windows, as TilingState::addWindow does),
+     *        or -1 when not present. Lets the daemon capture a window's slot
+     *        before a cross-mode swap so its counterpart lands in the same place
+     *        when re-inserted via HandoffContext.insertIndex.
      */
-    int tileIndexOnScreen(const QString& screenId, const QString& windowId) const;
+    int windowOrderIndexOnScreen(const QString& screenId, const QString& windowId) const;
 
 private:
     /**

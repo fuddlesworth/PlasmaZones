@@ -740,10 +740,11 @@ public:
     /// for a crossing arriving in @p direction — the swap partner. Empty when
     /// the screen has no tiled windows.
     QString entryWindowForCrossing(const QString& screenId, const QString& direction) const;
-    /// The tile-order index of @p windowId on @p screenId (current desktop), or
-    /// -1 when not tiled there — lets the daemon land a swap counterpart in the
-    /// same slot the departing window held.
-    int tileIndexForWindow(const QString& screenId, const QString& windowId) const;
+    /// The RAW window-order index of @p windowId on @p screenId (current desktop;
+    /// counts floats, matching TilingState::addWindow), or -1 when not present —
+    /// lets the daemon land a swap counterpart in the same slot the departing
+    /// window held when re-inserted via HandoffContext.insertIndex.
+    int windowOrderIndexForWindow(const QString& screenId, const QString& windowId) const;
     void reapplyLayout(const PhosphorEngine::NavigationContext& ctx) override;
     void reapplyManagedWindowAppearance() override;
     std::optional<PhosphorEngine::WindowPlacement> capturePlacement(const QString& windowId) const override;

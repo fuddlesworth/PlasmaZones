@@ -45,25 +45,6 @@ PhosphorProtocol::CycleTargetResult cycleResult(bool success, const QString& rea
     return {success, reason, windowIdToActivate, zoneId, screenId};
 }
 
-/// The direction one enters a neighbour output from: crossing right lands on
-/// its left edge, down on its top, etc. Empty for an unknown token.
-QString oppositeDirection(const QString& direction)
-{
-    if (direction == QLatin1String("left")) {
-        return QStringLiteral("right");
-    }
-    if (direction == QLatin1String("right")) {
-        return QStringLiteral("left");
-    }
-    if (direction == QLatin1String("up")) {
-        return QStringLiteral("down");
-    }
-    if (direction == QLatin1String("down")) {
-        return QStringLiteral("up");
-    }
-    return QString();
-}
-
 PhosphorProtocol::SwapTargetResult swapResult(bool success, const QString& reason, const QString& windowId1, int x1,
                                               int y1, int w1, int h1, const QString& zoneId1, const QString& windowId2,
                                               int x2, int y2, int w2, int h2, const QString& zoneId2,
@@ -170,7 +151,8 @@ PhosphorProtocol::MoveTargetResult SnapNavigationTargetResolver::crossOutputEntr
         return moveResult(false, fail, QString(), QRect(), currentZoneId, sourceScreenId);
     }
     // Enter the neighbour output from the edge facing back toward the source.
-    const QString entryZone = m_zoneAdjacency->getFirstZoneInDirection(oppositeDirection(direction), neighborScreen);
+    const QString entryZone =
+        m_zoneAdjacency->getFirstZoneInDirection(oppositeCrossingDirection(direction), neighborScreen);
     if (entryZone.isEmpty()) {
         return moveResult(false, fail, QString(), QRect(), currentZoneId, sourceScreenId);
     }
@@ -206,7 +188,8 @@ SnapNavigationTargetResolver::crossOutputSwapTarget(const QString& windowId, con
         return fail(QString());
     }
     // Enter the neighbour output from the edge facing back toward the source.
-    const QString entryZone = m_zoneAdjacency->getFirstZoneInDirection(oppositeDirection(direction), neighborScreen);
+    const QString entryZone =
+        m_zoneAdjacency->getFirstZoneInDirection(oppositeCrossingDirection(direction), neighborScreen);
     if (entryZone.isEmpty()) {
         return fail(QString());
     }

@@ -24,6 +24,27 @@ namespace PhosphorSnapEngine {
 class ISettings;
 class IZoneAdjacencyResolver;
 
+/// The edge a neighbour surface is entered from when crossing in @p direction:
+/// crossing "right" lands on the neighbour's LEFT edge, "down" on its TOP, etc.
+/// Empty for an unknown token. Shared by the resolver's cross-output entry/swap
+/// targets and SnapEngine::entryZoneForCrossing so the mapping lives in one place.
+inline QString oppositeCrossingDirection(const QString& direction)
+{
+    if (direction == QLatin1String("left")) {
+        return QStringLiteral("right");
+    }
+    if (direction == QLatin1String("right")) {
+        return QStringLiteral("left");
+    }
+    if (direction == QLatin1String("up")) {
+        return QStringLiteral("down");
+    }
+    if (direction == QLatin1String("down")) {
+        return QStringLiteral("up");
+    }
+    return {};
+}
+
 /**
  * @brief Pure snap-mode navigation target resolver.
  *

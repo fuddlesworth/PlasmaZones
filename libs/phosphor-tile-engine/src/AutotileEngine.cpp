@@ -4058,9 +4058,9 @@ QString AutotileEngine::entryWindowForCrossing(const QString& screenId, const QS
     return m_navigation->entryWindowOnScreen(screenId, direction);
 }
 
-int AutotileEngine::tileIndexForWindow(const QString& screenId, const QString& windowId) const
+int AutotileEngine::windowOrderIndexForWindow(const QString& screenId, const QString& windowId) const
 {
-    return m_navigation->tileIndexOnScreen(screenId, canonicalizeForLookup(windowId));
+    return m_navigation->windowOrderIndexOnScreen(screenId, canonicalizeForLookup(windowId));
 }
 
 void AutotileEngine::moveFocusedToPosition(int position, const NavigationContext& ctx)

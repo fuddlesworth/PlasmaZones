@@ -490,6 +490,48 @@ private Q_SLOTS:
         m_engine->setZoneAdjacencyResolver(nullptr);
     }
 
+    // ── Cross-mode cross-DESKTOP MOVE: moving a snapped window to an adjacent
+    //    desktop whose layout is AUTOTILE defers to the daemon via
+    //    crossModeMoveRequested with the target desktop (not 0). ──
+    void testCrossModeMove_autotileTargetDesktop_emitsCrossModeMoveRequested()
+    {
+        const QString layoutId = m_testLayout->id().toString();
+        m_layoutManager->setDefaultLayoutIdProvider([layoutId]() {
+            return layoutId;
+        });
+        // DP-1's desktop 2 is autotile mode (the current desktop, 0, stays snap).
+        PhosphorZones::AssignmentEntry autotileEntry;
+        autotileEntry.mode = PhosphorZones::AssignmentEntry::Autotile;
+        m_layoutManager->setAssignmentEntryDirect(QStringLiteral("DP-1"), 2, QString(), autotileEntry);
+
+        // No neighbour output; desktop 2 lies to the right; no in-surface adjacent.
+        FakeCrossSurfaceQueries cross;
+        cross.desktopRight = 2;
+        FakeAdjacencyQueries adj;
+        m_engine->setZoneAdjacencyResolver(&adj);
+        m_engine->setCrossSurfaceResolver(&cross);
+
+        const QString f = QStringLiteral("appF:win:1");
+        m_engine->snapState()->assignWindowToZone(f, m_zoneIds.at(2), QStringLiteral("DP-1"), 0);
+
+        QSignalSpy moveSpy(m_engine, &SnapEngine::crossModeMoveRequested);
+
+        PhosphorEngine::NavigationContext ctx;
+        ctx.windowId = f;
+        ctx.screenId = QStringLiteral("DP-1");
+        m_engine->moveFocusedInDirection(QStringLiteral("right"), ctx);
+
+        QCOMPARE(moveSpy.count(), 1);
+        const QList<QVariant> args = moveSpy.takeFirst();
+        QCOMPARE(args.at(0).toString(), f);
+        QCOMPARE(args.at(1).toString(), QStringLiteral("DP-1")); // same screen, target desktop
+        QCOMPARE(args.at(2).toInt(), 2); // the autotile target desktop
+        QCOMPARE(args.at(3).toString(), QStringLiteral("right"));
+
+        m_engine->setCrossSurfaceResolver(nullptr);
+        m_engine->setZoneAdjacencyResolver(nullptr);
+    }
+
     // testPreSnapGeometry_stableIdFallback removed: the per-engine unmanaged-geometry
     // store was collapsed into the unified WindowPlacementStore. The appId-fallback
     // lookup for float-back geometry is now exercised by the WindowPlacementStore

@@ -241,13 +241,17 @@ QString NavigationController::entryWindowOnScreen(const QString& screenId, const
     return windows.at(best);
 }
 
-int NavigationController::tileIndexOnScreen(const QString& screenId, const QString& windowId) const
+int NavigationController::windowOrderIndexOnScreen(const QString& screenId, const QString& windowId) const
 {
     PhosphorTiles::TilingState* state = m_engine->m_screenStates.value(m_engine->currentKeyForScreen(screenId));
     if (!state) {
         return -1;
     }
-    return state->tiledWindows().indexOf(windowId);
+    // Raw window-order index (NOT the tiled-only index): TilingState::addWindow —
+    // the consumer of HandoffContext.insertIndex — inserts into windowOrder(),
+    // which counts floating windows too. Returning the tiled index here would land
+    // a cross-mode-swap arrival too far forward by the count of preceding floats.
+    return state->windowOrder().indexOf(windowId);
 }
 
 QString NavigationController::crossOutputFocusTarget(const QString& sourceScreenId, const QString& focused,

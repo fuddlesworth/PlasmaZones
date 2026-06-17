@@ -149,6 +149,30 @@ private Q_SLOTS:
         QCOMPARE(after2.last(), QStringLiteral("g"));
     }
 
+    void testWindowOrderIndexForWindow_countsFloatsForInsertSlot()
+    {
+        // The cross-mode-swap insert slot must be a RAW window-order index (which
+        // counts floating windows), not the tiled-only index — TilingState::
+        // addWindow (the insertIndex consumer) inserts into the raw order. With a
+        // leading float, the partner's raw index differs from its tiled index;
+        // returning the tiled index would land the swap arrival too far forward.
+        AutotileEngine engine(nullptr, nullptr, nullptr, PlasmaZones::TestHelpers::testRegistry());
+        const QString screen = QLatin1String(Screen1);
+        engine.setAutotileScreens({screen});
+        PhosphorTiles::TilingState* state = engine.tilingStateForScreen(screen);
+        QVERIFY(state);
+        // windowOrder = [fl(float), a(tiled), p(tiled)]; tiledWindows = [a, p].
+        state->addWindow(QStringLiteral("fl"));
+        state->setFloating(QStringLiteral("fl"), true);
+        state->addWindow(QStringLiteral("a"));
+        state->addWindow(QStringLiteral("p"));
+
+        // p's RAW index is 2 (counts the float), NOT its tiled index 1.
+        QCOMPARE(engine.windowOrderIndexForWindow(screen, QStringLiteral("p")), 2);
+        QCOMPARE(state->tiledWindows().indexOf(QStringLiteral("p")), 1); // the wrong value the bug returned
+        QCOMPARE(engine.windowOrderIndexForWindow(screen, QStringLiteral("missing")), -1);
+    }
+
     void testHandoffReceive_rejectsNonAutotileScreen()
     {
         AutotileEngine engine(nullptr, nullptr, nullptr, PlasmaZones::TestHelpers::testRegistry());
