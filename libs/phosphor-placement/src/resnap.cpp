@@ -146,6 +146,19 @@ QStringList WindowTrackingService::buildZoneOrderedWindowList(const QString& scr
     // depending on the code path. Use screensMatch() for format-agnostic comparison.
     const QHash<QString, QString>& snapScreens = m_snapState->screenAssignments();
     const QHash<QString, QStringList>& snapZones = m_snapState->zoneAssignments();
+    const QHash<QString, int>& snapDesktops = m_snapState->desktopAssignments();
+
+    // This list SEEDS the autotile state for (screenId, CURRENT virtual desktop).
+    // Snap assignments are screen-keyed but desktop-agnostic, so the same screen
+    // can hold windows snapped on a DIFFERENT desktop (e.g. screen S snaps on VD1
+    // and autotiles on VD2 via per-desktop rules). Those off-desktop windows must
+    // NOT be pulled into this desktop's autotile state — doing so eagerly inserts
+    // and tiles a window that lives on another desktop, overwriting its snap
+    // geometry there (switching to the autotile desktop would corrupt the snap
+    // desktop's window positions). Scope to the current desktop; desktop==0
+    // (sticky / unknown) stays desktop-agnostic and is kept. Mirrors the
+    // desktopFilter guard in populateResnapBufferForAllScreens (addCandidate).
+    const int currentDesktop = m_virtualDesktopManager ? m_virtualDesktopManager->currentDesktop() : 0;
 
     int insertionIdx = 0;
     QVector<std::tuple<int, int, QString>> windowsByZone; // (zoneNum, insertionIdx, windowId)
@@ -154,6 +167,10 @@ QStringList WindowTrackingService::buildZoneOrderedWindowList(const QString& scr
             continue;
         }
         const QString& windowId = it.key();
+        const int windowDesktop = snapDesktops.value(windowId, 0);
+        if (currentDesktop > 0 && windowDesktop != 0 && windowDesktop != currentDesktop) {
+            continue;
+        }
         // Skip floating windows — they should not participate in zone-ordered
         // transitions (the user's manual-mode float choice should be preserved).
         if (isWindowFloating(windowId)) {
