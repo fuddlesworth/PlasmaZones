@@ -5,7 +5,6 @@
 
 #include "../autotilehandler.h"
 #include "../dragtracker.h"
-#include "../snapassisthandler.h"
 #include "../snaphandler.h"
 #include "../windowanimator.h"
 #include "shader_resolve.h"
@@ -26,7 +25,6 @@
 #include <QDBusPendingReply>
 #include <QLoggingCategory>
 #include <QPointer>
-#include <QTimer>
 
 #include <memory>
 
