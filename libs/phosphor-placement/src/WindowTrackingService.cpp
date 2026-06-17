@@ -450,8 +450,12 @@ void WindowTrackingService::recordFloatingClose(const QString& windowId, const Q
     }
     // Close-capture convergence: this orphaned cross-screen close is the freshest
     // authority for the app's float-back, so drop stale pure-float duplicates on
-    // the same screen (see WindowPlacementStore::collapsePureFloatSiblings).
-    m_placementStore.collapsePureFloatSiblings(appId, windowId);
+    // the same screen (see WindowPlacementStore::collapsePureFloatSiblings). Mark
+    // dirty when it pruned — the record() above may have been a no-op, leaving this
+    // as the only mutation to persist.
+    if (m_placementStore.collapsePureFloatSiblings(appId, windowId)) {
+        markDirty(DirtyWindowPlacements);
+    }
 }
 
 void WindowTrackingService::clearFreeGeometry(const QString& windowId)

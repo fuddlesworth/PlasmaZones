@@ -382,8 +382,11 @@ void WindowTrackingAdaptor::captureWindowPlacement(const QString& windowId, cons
             // same screen, so a reopen restores to one consistent spot instead of
             // rotating between leftover records. Live captures (refresh / float-change)
             // pass no screen and never prune live siblings.
-            if (!authoritativeScreen.isEmpty()) {
-                m_service->placementStore().collapsePureFloatSiblings(p->appId, p->windowId);
+            if (!authoritativeScreen.isEmpty()
+                && m_service->placementStore().collapsePureFloatSiblings(p->appId, p->windowId)) {
+                // The prune mutated the store; flag dirty in case the record()
+                // above was a content-identical no-op (then this is the only change).
+                m_service->markDirty(PhosphorPlacement::WindowTrackingService::DirtyWindowPlacements);
             }
             return;
         }

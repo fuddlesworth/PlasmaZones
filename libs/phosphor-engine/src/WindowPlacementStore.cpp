@@ -114,14 +114,14 @@ bool isPureFloatRecord(const WindowPlacement& p)
 }
 } // namespace
 
-void WindowPlacementStore::collapsePureFloatSiblings(const QString& appId, const QString& keepWindowId)
+bool WindowPlacementStore::collapsePureFloatSiblings(const QString& appId, const QString& keepWindowId)
 {
     if (appId.isEmpty() || keepWindowId.isEmpty()) {
-        return;
+        return false;
     }
     auto bit = m_byApp.find(appId);
     if (bit == m_byApp.end()) {
-        return;
+        return false;
     }
     QList<WindowPlacement>& bucket = bit.value();
 
@@ -135,15 +135,16 @@ void WindowPlacementStore::collapsePureFloatSiblings(const QString& appId, const
     // Only collapse when the kept record is itself a pure float — a managed
     // (snapped/tiled) close has no business pruning float siblings.
     if (keepIdx < 0 || !isPureFloatRecord(bucket.at(keepIdx))) {
-        return;
+        return false;
     }
     // Snapshot the kept record's remembered float screens; a sibling sharing any
     // of them is a stale duplicate of the same per-app/per-screen float memory.
     const QList<QString> keptScreens = bucket.at(keepIdx).freeGeometryByScreen.keys();
     if (keptScreens.isEmpty()) {
-        return;
+        return false;
     }
 
+    bool removedAny = false;
     for (int i = bucket.size() - 1; i >= 0; --i) {
         if (i == keepIdx) {
             continue;
@@ -161,11 +162,13 @@ void WindowPlacementStore::collapsePureFloatSiblings(const QString& appId, const
         }
         if (sharesScreen) {
             bucket.removeAt(i);
+            removedAny = true;
             if (i < keepIdx) {
                 --keepIdx; // the kept record shifted down by the removal
             }
         }
     }
+    return removedAny;
 }
 
 std::optional<WindowPlacement> WindowPlacementStore::take(const QString& windowId, const QString& appId,

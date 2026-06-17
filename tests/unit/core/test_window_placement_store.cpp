@@ -585,7 +585,9 @@ private Q_SLOTS:
 
         store.collapsePureFloatSiblings(QStringLiteral("dolphin"), QStringLiteral("dolphin|new"));
 
-        QVERIFY(store.contains(QStringLiteral("dolphin|new"), QStringLiteral("dolphin")));
+        // Exact-windowId checks (no appId): contains(id, appId) would pass on any
+        // surviving bucket record, so it can't prove the RIGHT record was kept.
+        QVERIFY(store.contains(QStringLiteral("dolphin|new")));
         QVERIFY(!store.contains(QStringLiteral("dolphin|old")));
     }
 
@@ -606,7 +608,7 @@ private Q_SLOTS:
 
         store.collapsePureFloatSiblings(QStringLiteral("dolphin"), QStringLiteral("dolphin|keep"));
 
-        QVERIFY(store.contains(QStringLiteral("dolphin|keep"), QStringLiteral("dolphin")));
+        QVERIFY(store.contains(QStringLiteral("dolphin|keep"))); // exact survival
         QVERIFY(store.contains(QStringLiteral("dolphin|snapped"))); // managed — kept
         QVERIFY(store.contains(QStringLiteral("dolphin|other"))); // different screen — kept
         QVERIFY(!store.contains(QStringLiteral("dolphin|dup"))); // same-screen float dup — pruned

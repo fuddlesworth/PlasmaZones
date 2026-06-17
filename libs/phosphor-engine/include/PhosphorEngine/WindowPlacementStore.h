@@ -88,7 +88,12 @@ public:
     /// siblings (left by rapid open/close or overlapping short-lived instances)
     /// are stale. Without this the oldest-first take() rotates a reopening window
     /// between the duplicates — it "opens in a different spot each time."
-    void collapsePureFloatSiblings(const QString& appId, const QString& keepWindowId);
+    ///
+    /// Returns true if at least one sibling was removed, so the caller can mark
+    /// its persistence dirty: the preceding record() may have been a
+    /// content-identical no-op, in which case this prune is the only mutation and
+    /// would otherwise not reach disk until an incidental save.
+    bool collapsePureFloatSiblings(const QString& appId, const QString& keepWindowId);
 
     /// Drop any record for the exact windowId (and prune the empty bucket).
     /// Returns true if a record was actually removed.
