@@ -369,6 +369,16 @@ void AutotileHandler::handleWindowOutputChanged(KWin::EffectWindow* w)
         // Window not tracked — but if it moved TO an autotile screen, add it
         if (m_autotileScreens.contains(newScreenId) && m_effect->shouldHandleWindow(w) && !w->isMinimized()
             && w->isOnCurrentDesktop() && w->isOnCurrentActivity()) {
+            // A cross-mode SWAP arms windowOutputMoveExpected for the snap partner
+            // migrating onto this (autotile) source screen. That partner is untracked
+            // effect-side, so its outputChanged lands here rather than the tracked
+            // branch below — its arrival IS the marker's expected echo, so consume
+            // the one-shot (mirroring the tracked-branch erase) instead of stranding
+            // it. The daemon already placed the window via handoffReceive; the
+            // notifyWindowAdded below establishes the effect-side tracking the daemon
+            // does not touch, and is a no-op daemon-side (insertWindow rejects an
+            // already-tracked window).
+            m_expectedOutputMove.remove(windowId);
             notifyWindowAdded(w);
             m_effect->updateAllBorders();
         }
