@@ -96,13 +96,10 @@ QString shaderPathMismatchReason(const PhosphorAnimationShaders::AnimationShader
     namespace PP = PhosphorAnimation::ProfilePaths;
     if (pathClass == PP::EventClassAppearance) {
         // Effect is geometry-only (e.g. window-morph) on an appearance row.
-        return PhosphorI18n::tr(
-                   "“%1” needs an old and new geometry — it only applies to move, resize, snap and tile events.")
-            .arg(effect.name);
+        return PhosphorI18n::tr("“%1” only applies to move, resize, snap, and tile events.").arg(effect.name);
     }
     // pathClass == geometry: effect is appearance-only on a geometry row.
-    return PhosphorI18n::tr(
-               "“%1” animates a surface fading in or out — it has no effect on move, resize, snap or tile events.")
+    return PhosphorI18n::tr("“%1” only applies to show and hide events, not move, resize, snap, or tile.")
         .arg(effect.name);
 }
 } // namespace
