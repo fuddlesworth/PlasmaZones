@@ -12,8 +12,6 @@
 #include <QUuid>
 #include <QVector>
 
-#include <memory>
-
 class QImage;
 
 namespace KWin {
@@ -51,11 +49,11 @@ class SnapAssistThumbnailCapture : public QObject
     Q_OBJECT
 
 public:
-    /// Each candidate is just a QUuid — the EffectWindow internal id that
-    /// WindowThumbnail's @c wId property accepts. The braced @c toString()
-    /// form is also the daemon's image-provider cache key, so we derive it
-    /// once at post time inside @ref postThumbnail rather than carrying both
-    /// representations through every queue entry.
+    /// Each candidate is just a QUuid — the EffectWindow internal id passed to
+    /// @c effects->findWindow() to locate the window to render. The braced
+    /// @c toString() form is also the daemon's image-provider cache key, so we
+    /// derive it once at post time inside @ref postThumbnail rather than
+    /// carrying both representations through every queue entry.
     struct Candidate
     {
         QUuid internalId;
@@ -64,13 +62,9 @@ public:
     explicit SnapAssistThumbnailCapture(QObject* parent = nullptr);
     ~SnapAssistThumbnailCapture() override;
 
-    /// Default thumbnail bounding box. C++ overrides @c boxSize on the
-    /// QML root before every render via setProperty, so the QML literal
-    /// fallback (in SnapAssistThumb.qml) is unreachable in production —
-    /// it exists only to keep the QML scene previewable in Qt Creator's
-    /// QML tooling. Kept here as the canonical value and as the default
-    /// argument for @ref captureCandidates; if you change the size,
-    /// update the QML literal so design-time previews still match.
+    /// Default thumbnail bounding box. The captured window is fit within this
+    /// box (aspect ratio preserved) by @ref grabWindowImage. Used as the
+    /// default argument for @ref captureCandidates.
     static constexpr QSize DefaultThumbnailSize = QSize(256, 256);
 
     /**
@@ -81,8 +75,8 @@ public:
      * candidate set is stale and shouldn't burn render budget. The queue is
      * drained one capture at a time — see the @c processNext loop.
      *
-     * @param maxSize Bounding box for each thumbnail; aspect ratio
-     *        preserved by WindowThumbnail itself.
+     * @param maxSize Bounding box for each thumbnail; aspect ratio is
+     *        preserved by @ref grabWindowImage.
      */
     void captureCandidates(const QVector<Candidate>& candidates, QSize maxSize = DefaultThumbnailSize);
 
@@ -115,11 +109,10 @@ private:
         QSize maxSize;
     };
 
-    /// Read back the current scene buffer for @p p; on a null buffer, retry
-    /// once with a longer delay before giving up. Compositor stalls
-    /// occasionally drop the very first frame after binding @c wId to a
-    /// fresh window; one retry is enough in practice and falls back to the
-    /// icon path otherwise.
+    /// Render and read back the thumbnail for @p p; on a null image, retry
+    /// once with a longer delay before giving up. A freshly mapped window
+    /// occasionally has no renderable frame on the first attempt; one retry is
+    /// enough in practice and falls back to the icon path otherwise.
     void attemptCapture(Pending p, int delayMs, int retriesLeft);
 
     /// Mark @p handle as posted to the daemon, evicting the least-recently-

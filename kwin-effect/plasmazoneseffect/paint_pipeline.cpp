@@ -17,6 +17,7 @@
 #include <QVector2D>
 #include <QVector4D>
 
+#include <chrono>
 #include <type_traits>
 
 #include "../windowanimator.h"

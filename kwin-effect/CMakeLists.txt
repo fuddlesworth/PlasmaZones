@@ -13,7 +13,9 @@ set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 # Widgets dropped — no QWidget / QtWidgets usage in kwin-effect/.
-find_package(Qt6 6.10 REQUIRED COMPONENTS Core Gui DBus Qml Quick Svg)
+# Qml/Quick dropped — snap-assist capture renders windows into a GLFramebuffer
+# directly (KWin 6.7 removed the OffscreenQuickScene readback that needed them).
+find_package(Qt6 6.10 REQUIRED COMPONENTS Core Gui DBus Svg)
 set(QT_DEFAULT_MAJOR_VERSION 6)
 
 # Find KWin for effect development
@@ -91,11 +93,6 @@ target_link_libraries(kwin_effect_plasmazones PRIVATE
     Qt6::Core
     Qt6::Gui
     Qt6::DBus
-    # Snap-assist thumbnail capture: OffscreenQuickScene loads a tiny QML
-    # scene that hosts org.kde.kwin's WindowThumbnail. Both Qml (engine,
-    # setProperty) and Quick (QQuickItem* root) are needed.
-    Qt6::Qml
-    Qt6::Quick
     Qt6::Svg
     PhosphorCompositor::PhosphorCompositor
     # `plasmazoneseffect.h` directly includes `<PhosphorEngine/EngineTypes.h>`

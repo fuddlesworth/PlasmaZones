@@ -33,13 +33,11 @@ Q_LOGGING_CATEGORY(lcSnapAssistCapture, "kwin.effect.plasmazones.snapassist.capt
 namespace PlasmaZones {
 
 namespace {
-/// Render-settle delay after binding @c wId to a fresh window. WindowThumbnail
-/// has to look up the EffectWindow, attach to its surface, and post a frame —
-/// none of that is synchronous with the property write. A single frame at
-/// 60Hz (~16ms) is reliably enough for KWin's surface->thumbnail pipeline to
-/// produce non-empty output, while not adding meaningful latency to the
-/// snap-assist UI (which already shows icons immediately and fades thumbs in
-/// asynchronously).
+/// Settle delay before the first capture attempt for a candidate. A freshly
+/// mapped window may not have a renderable compositor frame the instant it is
+/// queued; one frame at 60Hz (~16ms) is reliably enough for drawWindow to read
+/// non-empty content, while not adding meaningful latency to the snap-assist UI
+/// (which already shows icons immediately and fades thumbs in asynchronously).
 constexpr int RENDER_SETTLE_MS = 16;
 /// Retry delay used when the first render produced an empty buffer. Four
 /// frames at 60Hz: long enough for a stalled compositor frame to clear,
