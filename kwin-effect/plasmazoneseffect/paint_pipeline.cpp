@@ -32,8 +32,8 @@ void PlasmaZonesEffect::prePaintScreen(KWin::ScreenPrePaintData& data)
     // ourselves. CompositorClock's epoch is steady_clock by contract, so a
     // current-time sample is the correct (and only available) source — KWin's
     // own effects likewise read "now" rather than the target present time.
-    const auto presentTime = std::chrono::duration_cast<std::chrono::milliseconds>(
-        std::chrono::steady_clock::now().time_since_epoch());
+    const auto presentTime =
+        std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now().time_since_epoch());
 
     // Feed presentTime to the clock for THIS output so animations
     // bound to other outputs' clocks read stale `now` on their
