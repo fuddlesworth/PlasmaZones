@@ -587,7 +587,10 @@ jobs:
           github_access_token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Build via flake
-        run: nix build -L .#default
+        # --fallback: build from source if a binary substitute fails, so
+        # transient cache.nixos.org corruption (e.g. a hash mismatch on a
+        # transitive dep's NAR) can't red a release. Mirrors ci.yml.
+        run: nix build -L --fallback .#default
 
       - name: Verify package version
         run: |
