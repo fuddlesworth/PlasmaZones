@@ -15,11 +15,11 @@
 #include <PhosphorZones/LayoutRegistry.h>
 #include <PhosphorSnapEngine/SnapState.h>
 #include <PhosphorSnapEngine/IZoneAdjacencyResolver.h>
-#include <PhosphorWindowRule/MatchExpression.h>
-#include <PhosphorWindowRule/MatchTypes.h>
-#include <PhosphorWindowRule/RuleAction.h>
-#include <PhosphorWindowRule/WindowRule.h>
-#include <PhosphorWindowRule/WindowRuleSet.h>
+#include <PhosphorWindowRules/MatchExpression.h>
+#include <PhosphorWindowRules/MatchTypes.h>
+#include <PhosphorWindowRules/RuleAction.h>
+#include <PhosphorWindowRules/WindowRule.h>
+#include <PhosphorWindowRules/WindowRuleSet.h>
 #include "config/configbackends.h"
 #include "core/interfaces.h"
 
@@ -1616,7 +1616,7 @@ private Q_SLOTS:
     void testExcludeWiring_emptySetReturnsFalse()
     {
         SnapEngine engine(nullptr, m_wts, nullptr, nullptr, nullptr);
-        PhosphorWindowRule::WindowRuleSet emptySet;
+        PhosphorWindowRules::WindowRuleSet emptySet;
         engine.setExcludeRuleSet(&emptySet);
         QVERIFY(!engine.isAppIdExcluded(QStringLiteral("firefox")));
     }
@@ -1625,15 +1625,15 @@ private Q_SLOTS:
     {
         SnapEngine engine(nullptr, m_wts, nullptr, nullptr, nullptr);
 
-        PhosphorWindowRule::WindowRuleSet set;
-        PhosphorWindowRule::WindowRule rule;
+        PhosphorWindowRules::WindowRuleSet set;
+        PhosphorWindowRules::WindowRule rule;
         rule.id = QUuid::createUuid();
         rule.name = QStringLiteral("exclude-firefox");
         rule.enabled = true;
-        rule.match = PhosphorWindowRule::MatchExpression::makeLeaf(
-            PhosphorWindowRule::Field::AppId, PhosphorWindowRule::Operator::AppIdMatches, QStringLiteral("firefox"));
-        PhosphorWindowRule::RuleAction action;
-        action.type = QString(PhosphorWindowRule::ActionType::Exclude);
+        rule.match = PhosphorWindowRules::MatchExpression::makeLeaf(
+            PhosphorWindowRules::Field::AppId, PhosphorWindowRules::Operator::AppIdMatches, QStringLiteral("firefox"));
+        PhosphorWindowRules::RuleAction action;
+        action.type = QString(PhosphorWindowRules::ActionType::Exclude);
         rule.actions.append(action);
         QVERIFY(set.addRule(rule));
 
@@ -1648,25 +1648,25 @@ private Q_SLOTS:
     {
         SnapEngine engine(nullptr, m_wts, nullptr, nullptr, nullptr);
 
-        PhosphorWindowRule::WindowRuleSet firefoxSet;
-        PhosphorWindowRule::WindowRule firefoxRule;
+        PhosphorWindowRules::WindowRuleSet firefoxSet;
+        PhosphorWindowRules::WindowRule firefoxRule;
         firefoxRule.id = QUuid::createUuid();
         firefoxRule.enabled = true;
-        firefoxRule.match = PhosphorWindowRule::MatchExpression::makeLeaf(
-            PhosphorWindowRule::Field::AppId, PhosphorWindowRule::Operator::AppIdMatches, QStringLiteral("firefox"));
-        PhosphorWindowRule::RuleAction firefoxAction;
-        firefoxAction.type = QString(PhosphorWindowRule::ActionType::Exclude);
+        firefoxRule.match = PhosphorWindowRules::MatchExpression::makeLeaf(
+            PhosphorWindowRules::Field::AppId, PhosphorWindowRules::Operator::AppIdMatches, QStringLiteral("firefox"));
+        PhosphorWindowRules::RuleAction firefoxAction;
+        firefoxAction.type = QString(PhosphorWindowRules::ActionType::Exclude);
         firefoxRule.actions.append(firefoxAction);
         QVERIFY(firefoxSet.addRule(firefoxRule));
 
-        PhosphorWindowRule::WindowRuleSet konsoleSet;
-        PhosphorWindowRule::WindowRule konsoleRule;
+        PhosphorWindowRules::WindowRuleSet konsoleSet;
+        PhosphorWindowRules::WindowRule konsoleRule;
         konsoleRule.id = QUuid::createUuid();
         konsoleRule.enabled = true;
-        konsoleRule.match = PhosphorWindowRule::MatchExpression::makeLeaf(
-            PhosphorWindowRule::Field::AppId, PhosphorWindowRule::Operator::AppIdMatches, QStringLiteral("konsole"));
-        PhosphorWindowRule::RuleAction konsoleAction;
-        konsoleAction.type = QString(PhosphorWindowRule::ActionType::Exclude);
+        konsoleRule.match = PhosphorWindowRules::MatchExpression::makeLeaf(
+            PhosphorWindowRules::Field::AppId, PhosphorWindowRules::Operator::AppIdMatches, QStringLiteral("konsole"));
+        PhosphorWindowRules::RuleAction konsoleAction;
+        konsoleAction.type = QString(PhosphorWindowRules::ActionType::Exclude);
         konsoleRule.actions.append(konsoleAction);
         QVERIFY(konsoleSet.addRule(konsoleRule));
 
@@ -1712,7 +1712,7 @@ private Q_SLOTS:
     {
         SnapEngine engine(nullptr, m_wts, nullptr, nullptr, nullptr);
 
-        PhosphorWindowRule::WindowRuleSet set;
+        PhosphorWindowRules::WindowRuleSet set;
         // Wire BEFORE adding rules so the bound pointer doesn't change
         // when we mutate the set; this is the daemon's actual pattern
         // (setExcludeRuleSet wired once at init, edits happen via
@@ -1720,13 +1720,13 @@ private Q_SLOTS:
         engine.setExcludeRuleSet(&set);
 
         const auto excludeRule = [](const QString& pattern) {
-            PhosphorWindowRule::WindowRule r;
+            PhosphorWindowRules::WindowRule r;
             r.id = QUuid::createUuid();
             r.enabled = true;
-            r.match = PhosphorWindowRule::MatchExpression::makeLeaf(
-                PhosphorWindowRule::Field::AppId, PhosphorWindowRule::Operator::AppIdMatches, pattern);
-            PhosphorWindowRule::RuleAction a;
-            a.type = QString(PhosphorWindowRule::ActionType::Exclude);
+            r.match = PhosphorWindowRules::MatchExpression::makeLeaf(
+                PhosphorWindowRules::Field::AppId, PhosphorWindowRules::Operator::AppIdMatches, pattern);
+            PhosphorWindowRules::RuleAction a;
+            a.type = QString(PhosphorWindowRules::ActionType::Exclude);
             r.actions.append(a);
             return r;
         };

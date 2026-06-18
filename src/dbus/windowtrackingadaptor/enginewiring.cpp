@@ -20,10 +20,10 @@
 #include <PhosphorTileEngine/AutotileEngine.h>
 #include <PhosphorZones/AssignmentEntry.h>
 #include <PhosphorZones/LayoutRegistry.h>
-#include <PhosphorWindowRule/RuleAction.h>
-#include <PhosphorWindowRule/RuleEvaluator.h>
-#include <PhosphorWindowRule/WindowQuery.h>
-#include <PhosphorWindowRule/WindowRuleStore.h>
+#include <PhosphorWindowRules/RuleAction.h>
+#include <PhosphorWindowRules/RuleEvaluator.h>
+#include <PhosphorWindowRules/WindowQuery.h>
+#include <PhosphorWindowRules/WindowRuleStore.h>
 
 namespace PlasmaZones {
 
@@ -310,7 +310,7 @@ void WindowTrackingAdaptor::setEngines(PhosphorEngine::PlacementEngineBase* snap
     }
 }
 
-void WindowTrackingAdaptor::setWindowRuleStore(PhosphorWindowRule::WindowRuleStore* store)
+void WindowTrackingAdaptor::setWindowRuleStore(PhosphorWindowRules::WindowRuleStore* store)
 {
     if (m_windowRuleStore == store) {
         return;
@@ -335,7 +335,7 @@ namespace {
 // values the effect path resolves live. Placement state (IsFloating / IsSnapped /
 // Zone) is deliberately absent: these resolvers run at window-open, before any
 // placement exists, so a predicate over them must stay inert.
-std::optional<PhosphorWindowRule::WindowQuery>
+std::optional<PhosphorWindowRules::WindowQuery>
 buildRuleQueryForWindow(const QPointer<PhosphorEngine::WindowRegistry>& registry, const QString& windowId)
 {
     if (registry.isNull()) {
@@ -350,7 +350,7 @@ buildRuleQueryForWindow(const QPointer<PhosphorEngine::WindowRegistry>& registry
     if (!meta) {
         return std::nullopt;
     }
-    PhosphorWindowRule::WindowQuery query;
+    PhosphorWindowRules::WindowQuery query;
     query.appId = meta->appId;
     if (!meta->title.isEmpty()) {
         query.title = meta->title;
@@ -408,24 +408,24 @@ bool WindowTrackingAdaptor::shouldRestoreFloatedPosition(const QString& windowId
     if (!m_windowRuleStore) {
         return globalDefault;
     }
-    const std::optional<PhosphorWindowRule::WindowQuery> query = buildRuleQueryForWindow(m_windowRegistry, windowId);
+    const std::optional<PhosphorWindowRules::WindowQuery> query = buildRuleQueryForWindow(m_windowRegistry, windowId);
     if (!query) {
         return globalDefault;
     }
 
     if (!m_windowRuleEvaluator) {
-        m_windowRuleEvaluator = std::make_unique<PhosphorWindowRule::RuleEvaluator>(m_windowRuleStore->ruleSet());
+        m_windowRuleEvaluator = std::make_unique<PhosphorWindowRules::RuleEvaluator>(m_windowRuleStore->ruleSet());
     }
     // Shares m_windowRuleEvaluator with shouldFloatByRule; resolveCached is keyed on
     // (windowId, ruleSet revision) and ignores the query on a hit. Safe because both
     // are open-path (resolved once per window lifetime — see shouldFloatByRule) and
     // the effect pushes the window's full metadata before the engine's open-path
     // resolve, so the first (and only) resolve for a window sees complete metadata.
-    const PhosphorWindowRule::ResolvedActions resolved = m_windowRuleEvaluator->resolveCached(windowId, *query);
-    if (const std::optional<PhosphorWindowRule::RuleAction> action =
-            resolved.slot(QString(PhosphorWindowRule::ActionSlot::RestorePosition))) {
+    const PhosphorWindowRules::ResolvedActions resolved = m_windowRuleEvaluator->resolveCached(windowId, *query);
+    if (const std::optional<PhosphorWindowRules::RuleAction> action =
+            resolved.slot(QString(PhosphorWindowRules::ActionSlot::RestorePosition))) {
         // A matched RestorePosition rule overrides the global setting.
-        return action->params.value(QString(PhosphorWindowRule::ActionParam::Value)).toBool();
+        return action->params.value(QString(PhosphorWindowRules::ActionParam::Value)).toBool();
     }
     return globalDefault;
 }
@@ -437,13 +437,13 @@ bool WindowTrackingAdaptor::shouldFloatByRule(const QString& windowId)
     if (!m_windowRuleStore) {
         return false;
     }
-    const std::optional<PhosphorWindowRule::WindowQuery> query = buildRuleQueryForWindow(m_windowRegistry, windowId);
+    const std::optional<PhosphorWindowRules::WindowQuery> query = buildRuleQueryForWindow(m_windowRegistry, windowId);
     if (!query) {
         return false;
     }
 
     if (!m_windowRuleEvaluator) {
-        m_windowRuleEvaluator = std::make_unique<PhosphorWindowRule::RuleEvaluator>(m_windowRuleStore->ruleSet());
+        m_windowRuleEvaluator = std::make_unique<PhosphorWindowRules::RuleEvaluator>(m_windowRuleStore->ruleSet());
     }
     // resolveCached is keyed on (windowId, ruleSet revision); on a cache hit the
     // freshly built `query` is ignored. That is safe because windowId is both
@@ -451,10 +451,10 @@ bool WindowTrackingAdaptor::shouldFloatByRule(const QString& windowId)
     // key → miss) and a mid-session appId rename changes the composite key too, so
     // a cached verdict can never outlive the metadata it was built from. Both the
     // float and restore predicates are open-path (resolved once per lifetime).
-    const PhosphorWindowRule::ResolvedActions resolved = m_windowRuleEvaluator->resolveCached(windowId, *query);
+    const PhosphorWindowRules::ResolvedActions resolved = m_windowRuleEvaluator->resolveCached(windowId, *query);
     // The Float action carries free-form params (no Value key), so the verdict is
     // the PRESENCE of the filled slot, not a bool payload.
-    return resolved.slot(QString(PhosphorWindowRule::ActionSlot::Float)).has_value();
+    return resolved.slot(QString(PhosphorWindowRules::ActionSlot::Float)).has_value();
 }
 
 void WindowTrackingAdaptor::handleCrossModeMove(const QString& windowId, const QString& targetScreenId,

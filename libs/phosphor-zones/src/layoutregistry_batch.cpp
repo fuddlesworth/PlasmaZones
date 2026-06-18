@@ -12,15 +12,15 @@
 #include "layoutregistry_rulehelpers_p.h"
 #include "zoneslogging.h"
 
-#include <PhosphorWindowRule/ContextRuleBridge.h>
-#include <PhosphorWindowRule/RuleAction.h>
-#include <PhosphorWindowRule/WindowRule.h>
+#include <PhosphorWindowRules/ContextRuleBridge.h>
+#include <PhosphorWindowRules/RuleAction.h>
+#include <PhosphorWindowRules/WindowRule.h>
 
 #include <utility>
 
 namespace PhosphorZones {
 
-namespace PWR = PhosphorWindowRule;
+namespace PWR = PhosphorWindowRules;
 
 using namespace RuleHelpers;
 

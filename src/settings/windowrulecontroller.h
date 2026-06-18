@@ -10,7 +10,7 @@
 #include <QVariantList>
 #include <QVariantMap>
 
-#include <PhosphorWindowRule/WindowRule.h>
+#include <PhosphorWindowRules/WindowRule.h>
 
 #include "windowrulemodel.h"
 
@@ -394,7 +394,7 @@ private:
     /// emit applyResult on the reply. Returns false ONLY for the up-front
     /// validation failure (a rule was rejected client-side) — the async leg
     /// covers transport errors via the applyResult signal.
-    bool pushToDaemonAsync(const QList<PhosphorWindowRule::WindowRule>& rules);
+    bool pushToDaemonAsync(const QList<PhosphorWindowRules::WindowRule>& rules);
 
     /// Renormalize every rule's priority so descending list order ⇒
     /// descending priority. Keeps the migrated-context bands roughly intact

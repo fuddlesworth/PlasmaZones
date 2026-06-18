@@ -20,14 +20,14 @@
 #include <QTest>
 #include <QUuid>
 
-#include <PhosphorWindowRule/WindowRuleStore.h>
+#include <PhosphorWindowRules/WindowRuleStore.h>
 
-#include <PhosphorWindowRule/ContextRuleBridge.h>
-#include <PhosphorWindowRule/WindowRule.h>
-#include <PhosphorWindowRule/WindowRuleSet.h>
+#include <PhosphorWindowRules/ContextRuleBridge.h>
+#include <PhosphorWindowRules/WindowRule.h>
+#include <PhosphorWindowRules/WindowRuleSet.h>
 
-using namespace PhosphorWindowRule;
-namespace PWR = PhosphorWindowRule;
+using namespace PhosphorWindowRules;
+namespace PWR = PhosphorWindowRules;
 
 class TestWindowRuleStore : public QObject
 {

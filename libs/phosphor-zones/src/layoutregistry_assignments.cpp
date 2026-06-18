@@ -23,18 +23,18 @@
 #include <PhosphorScreens/ScreenIdentity.h>
 #include <PhosphorScreens/VirtualScreen.h>
 
-#include <PhosphorWindowRule/ContextRuleBridge.h>
-#include <PhosphorWindowRule/MatchExpression.h>
-#include <PhosphorWindowRule/RuleAction.h>
-#include <PhosphorWindowRule/WindowQuery.h>
-#include <PhosphorWindowRule/WindowRule.h>
+#include <PhosphorWindowRules/ContextRuleBridge.h>
+#include <PhosphorWindowRules/MatchExpression.h>
+#include <PhosphorWindowRules/RuleAction.h>
+#include <PhosphorWindowRules/WindowQuery.h>
+#include <PhosphorWindowRules/WindowRule.h>
 
 #include <algorithm>
 #include <optional>
 
 namespace PhosphorZones {
 
-namespace PWR = PhosphorWindowRule;
+namespace PWR = PhosphorWindowRules;
 
 // The rule-shape classification / context helpers (contextRuleName,
 // decodeDims, the matchIsExactContext* family, hasEngineModeAction,
@@ -155,7 +155,7 @@ bool LayoutRegistry::hasExactContextRule(const QString& screenId, int virtualDes
 {
     return findExactContextRule(screenId, virtualDesktop, activity) != nullptr;
 }
-const PhosphorWindowRule::WindowRule* LayoutRegistry::findExactContextRule(const QString& screenId, int virtualDesktop,
+const PhosphorWindowRules::WindowRule* LayoutRegistry::findExactContextRule(const QString& screenId, int virtualDesktop,
                                                                            const QString& activity) const
 {
     // The deterministic v5 derivation lets us look up a stored assignment by

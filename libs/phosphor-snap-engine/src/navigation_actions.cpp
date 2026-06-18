@@ -38,9 +38,9 @@
 #include <PhosphorZones/LayoutUtils.h>
 #include <PhosphorZones/Zone.h>
 
-#include <PhosphorWindowRule/RuleEvaluator.h>
-#include <PhosphorWindowRule/WindowQuery.h>
-#include <PhosphorWindowRule/WindowRuleSet.h>
+#include <PhosphorWindowRules/RuleEvaluator.h>
+#include <PhosphorWindowRules/WindowQuery.h>
+#include <PhosphorWindowRules/WindowRuleSet.h>
 #include <PhosphorZones/LayoutRegistry.h>
 #include <PhosphorZones/AssignmentEntry.h>
 #include "snapenginelogging.h"
@@ -132,7 +132,7 @@ QString effectiveScreenId(const NavigationContext& ctx, INavigationStateProvider
 
 } // namespace
 
-void SnapEngine::setExcludeRuleSet(const PhosphorWindowRule::WindowRuleSet* ruleSet)
+void SnapEngine::setExcludeRuleSet(const PhosphorWindowRules::WindowRuleSet* ruleSet)
 {
     if (m_excludeRuleSet == ruleSet) {
         return;
@@ -161,7 +161,7 @@ bool SnapEngine::isAppIdExcluded(const QString& appId) const
     if (!m_excludeEvaluator) {
         m_excludeEvaluator.emplace(*m_excludeRuleSet);
     }
-    PhosphorWindowRule::WindowQuery query;
+    PhosphorWindowRules::WindowQuery query;
     query.appId = appId;
     return m_excludeEvaluator->resolve(query).isExcluded();
 }

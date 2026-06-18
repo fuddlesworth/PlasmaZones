@@ -12,7 +12,7 @@
  * first.
  *
  * This suite is the correctness proof of the @ref
- * PhosphorWindowRule::ContextRuleBridge priority formula. It ports the
+ * PhosphorWindowRules::ContextRuleBridge priority formula. It ports the
  * behavioural scenarios from tests/unit/core/test_layoutmanager_assignment.cpp
  * — exact-match-wins, activity-beats-desktop, screen-only display default,
  * mode-only autotile entries, provider-default fallback — and asserts a
@@ -43,13 +43,13 @@
 #include <memory>
 #include <vector>
 
-#include <PhosphorWindowRule/ContextRuleBridge.h>
-#include <PhosphorWindowRule/RuleAction.h>
-#include <PhosphorWindowRule/RuleEvaluator.h>
-#include <PhosphorWindowRule/WindowQuery.h>
-#include <PhosphorWindowRule/WindowRule.h>
-#include <PhosphorWindowRule/WindowRuleSet.h>
-#include <PhosphorWindowRule/WindowRuleStore.h>
+#include <PhosphorWindowRules/ContextRuleBridge.h>
+#include <PhosphorWindowRules/RuleAction.h>
+#include <PhosphorWindowRules/RuleEvaluator.h>
+#include <PhosphorWindowRules/WindowQuery.h>
+#include <PhosphorWindowRules/WindowRule.h>
+#include <PhosphorWindowRules/WindowRuleSet.h>
+#include <PhosphorWindowRules/WindowRuleStore.h>
 
 #include <PhosphorZones/AssignmentEntry.h>
 #include <PhosphorZones/LayoutRegistry.h>
@@ -58,8 +58,8 @@
 #include "config/configdefaults.h"
 #include "config/configkeys.h"
 
-namespace PWR = PhosphorWindowRule;
-namespace CRB = PhosphorWindowRule::ContextRuleBridge;
+namespace PWR = PhosphorWindowRules;
+namespace CRB = PhosphorWindowRules::ContextRuleBridge;
 
 using PlasmaZones::ConfigDefaults;
 using PlasmaZones::TestHelpers::IsolatedConfigGuard;

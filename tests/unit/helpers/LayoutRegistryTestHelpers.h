@@ -3,7 +3,7 @@
 
 #pragma once
 
-#include <PhosphorWindowRule/WindowRuleStore.h>
+#include <PhosphorWindowRules/WindowRuleStore.h>
 #include <PhosphorZones/LayoutRegistry.h>
 
 #include "config/configdefaults.h"
@@ -16,7 +16,7 @@ namespace TestHelpers {
  *
  * Phase 3b removed the temporary IBackend-taking LayoutRegistry ctor — the
  * registry now resolves its per-context assignment cascade entirely through a
- * @ref PhosphorWindowRule::WindowRuleStore. Tests need a store that outlives
+ * @ref PhosphorWindowRules::WindowRuleStore. Tests need a store that outlives
  * the registry (the registry's RuleEvaluator holds a reference to the store's
  * rule set), so this helper creates the store first, hands its pointer to the
  * registry, then re-parents the store to the registry: the store is destroyed
@@ -33,7 +33,7 @@ namespace TestHelpers {
  */
 inline PhosphorZones::LayoutRegistry* makeLayoutRegistry(const QString& layoutSubdirectory, QObject* parent = nullptr)
 {
-    auto* store = new PhosphorWindowRule::WindowRuleStore(ConfigDefaults::windowRulesFilePath());
+    auto* store = new PhosphorWindowRules::WindowRuleStore(ConfigDefaults::windowRulesFilePath());
     auto* registry = new PhosphorZones::LayoutRegistry(store, layoutSubdirectory, parent);
     store->setParent(registry);
     return registry;

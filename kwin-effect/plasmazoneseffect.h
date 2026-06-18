@@ -17,8 +17,8 @@
 #include <PhosphorAnimation/CurveRegistry.h>
 #include <PhosphorAnimation/ProfilePaths.h>
 
-#include <PhosphorWindowRule/RuleEvaluator.h>
-#include <PhosphorWindowRule/WindowRuleSet.h>
+#include <PhosphorWindowRules/RuleEvaluator.h>
+#include <PhosphorWindowRules/WindowRuleSet.h>
 #include <effect/effect.h>
 #include <effect/effecthandler.h>
 #include <effect/effectwindow.h>
@@ -465,7 +465,7 @@ private:
     /// `windowRuleQueryFor` builder. Use this at EVERY rule-evaluation site so
     /// IsFloating / IsSnapped / Zone resolve uniformly; the free builder stays
     /// KWin-only and can't reach the effect's caches.
-    PhosphorWindowRule::WindowQuery windowRuleQuery(KWin::EffectWindow* w) const;
+    PhosphorWindowRules::WindowQuery windowRuleQuery(KWin::EffectWindow* w) const;
 
     /// Resolve the animation rule-action verdict for @p w, skipping the per-frame
     /// `windowRuleQuery(w)` build (≈30 KWin accessor reads) when the evaluator
@@ -475,7 +475,7 @@ private:
     /// actions (no slots) WITHOUT caching, matching the resolvers' old
     /// short-circuit (avoids churning the cache for sub-surfaces / proxies). The
     /// per-frame opacity / border resolvers consume the returned ResolvedActions.
-    PhosphorWindowRule::ResolvedActions resolveWindowRuleActions(KWin::EffectWindow* w, const QString& windowId) const;
+    PhosphorWindowRules::ResolvedActions resolveWindowRuleActions(KWin::EffectWindow* w, const QString& windowId) const;
 
     /**
      * @brief True if the window is currently snap-managed (tiled into a snap zone).
@@ -883,12 +883,12 @@ private:
     // unified WindowRule store the effect mirrors over D-Bus. Filled by
     // loadWindowRuleAnimationsFromDbus's parse step (which already
     // deserialises the full rule set for the animation override path),
-    // via `PhosphorWindowRule::ExclusionRules::excludeRulesFrom`. The
+    // via `PhosphorWindowRules::ExclusionRules::excludeRulesFrom`. The
     // bound RuleEvaluator drives shouldHandleWindow()'s exclusion gate.
     // Declaration ORDER MATTERS — the rule set must precede (and outlive)
     // the evaluator that binds a reference to it.
-    PhosphorWindowRule::WindowRuleSet m_snappingExclusionRuleSet;
-    PhosphorWindowRule::RuleEvaluator m_snappingExclusionEvaluator{m_snappingExclusionRuleSet};
+    PhosphorWindowRules::WindowRuleSet m_snappingExclusionRuleSet;
+    PhosphorWindowRules::RuleEvaluator m_snappingExclusionEvaluator{m_snappingExclusionRuleSet};
 
     // Minimum window size for autotile eligibility. Windows smaller than this
     // are rejected by isEligibleForAutotileNotify() to prevent small utility
@@ -927,12 +927,12 @@ private:
     // Filled by loadWindowRuleAnimationsFromDbus's parse step (which
     // already deserialises the full rule set for the animation override
     // path), via
-    // `PhosphorWindowRule::ExclusionRules::excludeAnimationsRulesFrom`.
+    // `PhosphorWindowRules::ExclusionRules::excludeAnimationsRulesFrom`.
     // The bound RuleEvaluator drives shouldAnimateWindow()'s exclusion
     // gate. Declaration ORDER MATTERS — the rule set must precede (and
     // outlive) the evaluator that binds a reference to it.
-    PhosphorWindowRule::WindowRuleSet m_animationExclusionRuleSet;
-    PhosphorWindowRule::RuleEvaluator m_animationExclusionEvaluator{m_animationExclusionRuleSet};
+    PhosphorWindowRules::WindowRuleSet m_animationExclusionRuleSet;
+    PhosphorWindowRules::RuleEvaluator m_animationExclusionEvaluator{m_animationExclusionRuleSet};
 
     // Autotile: true when the current drag was started on an autotile screen
     // (callDragStarted was skipped). Captured at drag start so the drag end

@@ -50,13 +50,13 @@
 #include "../../../src/config/settings.h"
 #include "../helpers/IsolatedConfigGuard.h"
 
-#include <PhosphorWindowRule/ContextRuleBridge.h>
-#include <PhosphorWindowRule/WindowRule.h>
-#include <PhosphorWindowRule/WindowRuleSet.h>
+#include <PhosphorWindowRules/ContextRuleBridge.h>
+#include <PhosphorWindowRules/WindowRule.h>
+#include <PhosphorWindowRules/WindowRuleSet.h>
 
 using namespace PlasmaZones;
 using PlasmaZones::TestHelpers::IsolatedConfigGuard;
-namespace CRB = PhosphorWindowRule::ContextRuleBridge;
+namespace CRB = PhosphorWindowRules::ContextRuleBridge;
 
 class TestMigrationV3ToV4 : public QObject
 {
@@ -527,11 +527,11 @@ private Q_SLOTS:
 
         // makeDisableRule's priority must agree with the migration output for
         // a multi-dimension entry — a screen+desktop disable rule pins 410.
-        const PhosphorWindowRule::WindowRule directDesktop = CRB::makeDisableRule(
+        const PhosphorWindowRules::WindowRule directDesktop = CRB::makeDisableRule(
             QStringLiteral("d"), QStringLiteral("DP-1"), /*virtualDesktop=*/4, QString(), QStringLiteral("snapping"));
         QCOMPARE(directDesktop.priority, 410);
         // A screen+activity disable rule pins 510 — activity outranks desktop.
-        const PhosphorWindowRule::WindowRule directActivity = CRB::makeDisableRule(
+        const PhosphorWindowRules::WindowRule directActivity = CRB::makeDisableRule(
             QStringLiteral("a"), QStringLiteral("DP-1"), 0, QStringLiteral("act-uuid-7"), QStringLiteral("autotile"));
         QCOMPARE(directActivity.priority, 510);
         QVERIFY(directActivity.priority > directDesktop.priority);
@@ -735,9 +735,9 @@ private Q_SLOTS:
         // The user authors a new rule via the rule editor — load the store,
         // append a rule, persist it. This rule exists ONLY in windowrules.json;
         // it has no counterpart in assignments.json.
-        auto setWithUserRule = PhosphorWindowRule::WindowRuleSet::loadFromFile(ConfigDefaults::windowRulesFilePath());
+        auto setWithUserRule = PhosphorWindowRules::WindowRuleSet::loadFromFile(ConfigDefaults::windowRulesFilePath());
         QVERIFY2(setWithUserRule.has_value(), "windowrules.json must parse as a v4 rule set");
-        const PhosphorWindowRule::WindowRule userRule =
+        const PhosphorWindowRules::WindowRule userRule =
             CRB::makeDisableRule(QStringLiteral("User-authored · DP-9"), QStringLiteral("DP-9"),
                                  /*virtualDesktop=*/0, QString(), QStringLiteral("snapping"));
         const QUuid userRuleId = userRule.id;
@@ -760,7 +760,7 @@ private Q_SLOTS:
         QVERIFY(ConfigMigration::ensureJsonConfig());
 
         // The user's rule MUST survive — windowrules.json was not rebuilt.
-        auto afterRerun = PhosphorWindowRule::WindowRuleSet::loadFromFile(ConfigDefaults::windowRulesFilePath());
+        auto afterRerun = PhosphorWindowRules::WindowRuleSet::loadFromFile(ConfigDefaults::windowRulesFilePath());
         QVERIFY2(afterRerun.has_value(), "windowrules.json must still parse as a v4 rule set after the re-run");
         QVERIFY2(afterRerun->ruleById(userRuleId).has_value(),
                  "the user-authored rule must survive a re-run with assignments.json still present");
@@ -1533,7 +1533,7 @@ private Q_SLOTS:
         // (hand-written JSON would silently drift if the library tightens
         // its load contract, flipping windowRulesAlreadyConverted to false
         // and silently rebuilding instead of taking the cleanup branch).
-        PhosphorWindowRule::WindowRuleSet emptySet;
+        PhosphorWindowRules::WindowRuleSet emptySet;
         QDir().mkpath(QFileInfo(ConfigDefaults::windowRulesFilePath()).absolutePath());
         QVERIFY(emptySet.saveToFile(ConfigDefaults::windowRulesFilePath()));
         const QByteArray windowRulesBefore = [&] {

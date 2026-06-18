@@ -53,7 +53,7 @@ class VirtualDesktopManager;
 class ActivityManager;
 }
 
-namespace PhosphorWindowRule {
+namespace PhosphorWindowRules {
 class WindowRuleStore;
 class RuleEvaluator;
 }
@@ -158,7 +158,7 @@ public:
      * rule set; it self-invalidates on in-place rule edits via the set's
      * revision counter, so no rulesChanged subscription is required.
      */
-    void setWindowRuleStore(PhosphorWindowRule::WindowRuleStore* store);
+    void setWindowRuleStore(PhosphorWindowRules::WindowRuleStore* store);
 
     /**
      * @brief Set engine references for routing operations per-screen
@@ -675,7 +675,7 @@ public:
      *   3. Daemon::finalizeStartup, after AutotileEngine::loadState has restored its
      *      placement records, so any autotile records loaded then are pruned too.
      * The daemon derives @p patterns from the unified WindowRule store via
-     * `PhosphorWindowRule::ExclusionRules::applicationExcludePatternsFrom`.
+     * `PhosphorWindowRules::ExclusionRules::applicationExcludePatternsFrom`.
      *
      * Safe to call at any time. An empty @p patterns short-circuits.
      */
@@ -1081,8 +1081,8 @@ private:
     // on in-place rule edits via the set revision, so it is built once on first
     // use. Reset in setWindowRuleStore only when the store pointer actually
     // changes (a same-store rebind keeps the evaluator).
-    PhosphorWindowRule::WindowRuleStore* m_windowRuleStore = nullptr;
-    std::unique_ptr<PhosphorWindowRule::RuleEvaluator> m_windowRuleEvaluator;
+    PhosphorWindowRules::WindowRuleStore* m_windowRuleStore = nullptr;
+    std::unique_ptr<PhosphorWindowRules::RuleEvaluator> m_windowRuleEvaluator;
 
     // ═══════════════════════════════════════════════════════════════════════════════
     // Persistence (adaptor responsibility: session.json save/load)

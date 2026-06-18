@@ -16,7 +16,7 @@ namespace PlasmaZones::WindowRuleAuthoring {
 /// table.
 QVariantList matchFields();
 
-/// Operators valid for @p fieldValue (a `PhosphorWindowRule::Field` enum int).
+/// Operators valid for @p fieldValue (a `PhosphorWindowRules::Field` enum int).
 /// Each entry: `{ value: int (Operator enum), wire: QString, label }`.
 QVariantList operatorsForField(int fieldValue);
 
