@@ -175,30 +175,29 @@ QString fieldDescription(Field f)
     return QString();
 }
 
-/// Group an action type (wire string) into a picker category. Mirrors the
-/// preferred-order clustering in actionTypes(): engine/layout, gaps, window
-/// management, appearance, animation.
+/// Group an action type into a picker category. Derives from the
+/// descriptor's `category` field — adding a new action to an existing
+/// category requires zero changes here.
 PickerCategory actionCategory(const QString& type)
 {
-    if (ActionType::isLayoutEngineContextAction(type)) {
+    const auto desc = PhosphorWindowRule::ActionRegistry::instance().descriptor(type);
+    if (!desc.has_value()) {
+        return {PhosphorI18n::tr("Other"), 99};
+    }
+    const QString& cat = desc->category;
+    if (cat == QLatin1String("layoutEngine")) {
         return {PhosphorI18n::tr("Layout & engine"), 0};
     }
-    if (type == ActionType::SetZonePadding || type == ActionType::SetOuterGap
-        || type == ActionType::SetUsePerSideOuterGap || type == ActionType::SetOuterGapTop
-        || type == ActionType::SetOuterGapBottom || type == ActionType::SetOuterGapLeft
-        || type == ActionType::SetOuterGapRight) {
+    if (cat == QLatin1String("gap")) {
         return {PhosphorI18n::tr("Gaps"), 1};
     }
-    if (type == ActionType::Exclude || type == ActionType::Float || type == ActionType::RestorePosition) {
+    if (cat == QLatin1String("windowManagement")) {
         return {PhosphorI18n::tr("Window"), 2};
     }
-    if (type == ActionType::SetOpacity || type == ActionType::SetHideTitleBar || type == ActionType::SetBorderVisible
-        || type == ActionType::SetBorderWidth || type == ActionType::SetBorderRadius
-        || type == ActionType::SetBorderColor) {
+    if (cat == QLatin1String("appearance") || cat == QLatin1String("borderAppearance")) {
         return {PhosphorI18n::tr("Appearance"), 3};
     }
-    if (type == ActionType::OverrideAnimationShader || type == ActionType::OverrideAnimationCurve
-        || type == ActionType::OverrideAnimationTiming || type == ActionType::ExcludeAnimations) {
+    if (cat == QLatin1String("animation")) {
         return {PhosphorI18n::tr("Animation"), 4};
     }
     return {PhosphorI18n::tr("Other"), 99};
@@ -643,85 +642,44 @@ QVariantList allOperators()
 
 QVariantList actionTypes()
 {
-    // The picker order is meaningful (engine-mode first, then layout-shaping,
-    // then per-window overrides), but the registry returns types in QHash
-    // iteration order. Anchoring the order here keeps the picker stable
-    // without bringing back the hand-maintained type list — registered
-    // types not in this order list are appended after, alphabetically by
-    // wire string, so a future descriptor automatically shows up in the
-    // picker the moment it sets `userAuthorable = true`.
-    static const QList<QLatin1StringView> kPreferredOrder = {
-        ActionType::SetEngineMode,
-        ActionType::SetSnappingLayout,
-        ActionType::SetTilingAlgorithm,
-        ActionType::DisableEngine,
-        ActionType::LockContext,
-        // Per-context gap overrides (context-domain, grouped with the other
-        // context actions above).
-        ActionType::SetZonePadding,
-        ActionType::SetOuterGap,
-        ActionType::SetUsePerSideOuterGap,
-        ActionType::SetOuterGapTop,
-        ActionType::SetOuterGapBottom,
-        ActionType::SetOuterGapLeft,
-        ActionType::SetOuterGapRight,
-        ActionType::Exclude,
-        ActionType::Float,
-        ActionType::RestorePosition,
-        ActionType::SetOpacity,
-        // Per-window border / title-bar overrides (window-domain, grouped with
-        // the other per-window appearance actions).
-        ActionType::SetHideTitleBar,
-        ActionType::SetBorderVisible,
-        ActionType::SetBorderWidth,
-        ActionType::SetBorderRadius,
-        ActionType::SetBorderColor,
-        ActionType::OverrideAnimationShader,
-        ActionType::OverrideAnimationCurve,
-        ActionType::OverrideAnimationTiming,
-        ActionType::ExcludeAnimations,
-    };
     const PhosphorWindowRule::ActionRegistry& registry = PhosphorWindowRule::ActionRegistry::instance();
-    QList<QString> orderedTypes;
-    QSet<QString> seen;
-    for (QLatin1StringView t : kPreferredOrder) {
-        const QString type = QString::fromLatin1(t);
-        const auto desc = registry.descriptor(type);
-        if (desc.has_value() && desc->userAuthorable) {
-            orderedTypes.append(type);
-            seen.insert(type);
-        }
-    }
-    QStringList trailing;
+
+    struct TypeEntry
+    {
+        QString type;
+        QString categoryLabel;
+        int categoryOrder;
+        int displayOrder;
+    };
+    QList<TypeEntry> entries;
     for (const QString& type : registry.registeredTypes()) {
-        if (seen.contains(type)) {
+        const auto desc = registry.descriptor(type);
+        if (!desc.has_value() || !desc->userAuthorable) {
             continue;
         }
-        const auto desc = registry.descriptor(type);
-        if (desc.has_value() && desc->userAuthorable) {
-            trailing.append(type);
-        }
+        const PickerCategory acat = actionCategory(type);
+        entries.append({type, acat.label, acat.order, desc->displayOrder});
     }
-    std::sort(trailing.begin(), trailing.end());
-    orderedTypes.append(trailing);
+    std::sort(entries.begin(), entries.end(), [](const TypeEntry& a, const TypeEntry& b) {
+        if (a.categoryOrder != b.categoryOrder) {
+            return a.categoryOrder < b.categoryOrder;
+        }
+        if (a.displayOrder != b.displayOrder) {
+            return a.displayOrder < b.displayOrder;
+        }
+        return a.type < b.type;
+    });
 
     QVariantList out;
-    for (const QString& typeStr : orderedTypes) {
+    for (const TypeEntry& e : entries) {
         QVariantMap entry;
-        entry[QStringLiteral("value")] = typeStr;
-        entry[QStringLiteral("label")] = actionTypeLabelImpl(typeStr);
-        entry[QStringLiteral("params")] = paramsForActionTypeImpl(typeStr);
-        const PickerCategory acat = actionCategory(typeStr);
-        entry[QStringLiteral("category")] = acat.label;
-        entry[QStringLiteral("categoryOrder")] = acat.order;
-        // Domain wire string drives the action row's incompatibility warning —
-        // the QML side flags a context-domain action as never-firing when the
-        // match references window-property fields (ActionRow's
-        // `_currentTypeIncompatible` chip + the sheet's InlineMessage). Looked
-        // up via a probe RuleAction so the descriptor's own `domain` field
-        // stays the single source of truth.
+        entry[QStringLiteral("value")] = e.type;
+        entry[QStringLiteral("label")] = actionTypeLabelImpl(e.type);
+        entry[QStringLiteral("params")] = paramsForActionTypeImpl(e.type);
+        entry[QStringLiteral("category")] = e.categoryLabel;
+        entry[QStringLiteral("categoryOrder")] = e.categoryOrder;
         RuleAction probe;
-        probe.type = typeStr;
+        probe.type = e.type;
         const auto domain = registry.domainFor(probe);
         entry[QStringLiteral("domain")] =
             domain == PhosphorWindowRule::ActionDomain::Context ? QStringLiteral("context") : QStringLiteral("window");

@@ -564,7 +564,7 @@ void ActionRegistry::registerBuiltins()
                      .scale = 0.01,
                      .defaultDisplay = 100.0}},
         .category = QStringLiteral("appearance"),
-        .displayOrder = 0,
+        .displayOrder = -1,
         .tags = {QString(Tag::Effect)},
     });
 
