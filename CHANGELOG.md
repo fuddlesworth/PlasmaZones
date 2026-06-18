@@ -7,6 +7,16 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [3.0.16] - 2026-06-18
+
+### Changed
+
+- **Support KDE Plasma 6.7** ([#638](https://github.com/fuddlesworth/PlasmaZones/pull/638)): the build baseline moves to the Plasma 6.7 stack — KDE Frameworks 6.26, Qt 6.10, and KWin 6.7 — and the KWin C++ effect is ported to the 6.7 effect API. Notable upstream changes handled: `prePaintScreen`/`prePaintWindow` dropped their `presentTime` argument (the effect now self-sources frame time from a steady clock, matching KWin's own effects), `EffectWindow::frameGeometry()` and `EffectsHandler::clientArea()` now return `KWin::RectF`, the `clientArea` per-desktop overload was removed, `addRepaint()` gained `RectF`/`Rect`/`Region` overloads, and `GLShader::isValid()` was removed. Plasma 6.6 is no longer supported.
+
+### Fixed
+
+- **Snap-assist window thumbnails on Plasma 6.7** ([#638](https://github.com/fuddlesworth/PlasmaZones/pull/638)): KWin 6.7 removed the offscreen-QML readback (`OffscreenQuickView::bufferAsImage()`) that the in-process thumbnail capture relied on. Capture was reworked to render each candidate window into an offscreen `GLFramebuffer` via `effects->drawWindow()` and read it back with `GLTexture::toImage()`, so snap-assist thumbnails keep working without a second screenshot round-trip.
+
 ## [3.0.15] - 2026-05-28
 
 ### Fixed
@@ -1441,7 +1451,8 @@ Initial packaged release. Wayland-only (X11 support removed). Requires KDE Plasm
 - Session restoration and rotation after login ([#66])
 - Window tracking: snap/restore behavior, zone clearing, startup timing, rotation zone ID matching, floating window exclusion ([#67])
 
-[Unreleased]: https://github.com/fuddlesworth/PlasmaZones/compare/v3.0.15...HEAD
+[Unreleased]: https://github.com/fuddlesworth/PlasmaZones/compare/v3.0.16...HEAD
+[3.0.16]: https://github.com/fuddlesworth/PlasmaZones/compare/v3.0.15...v3.0.16
 [3.0.15]: https://github.com/fuddlesworth/PlasmaZones/compare/v3.0.14...v3.0.15
 [3.0.14]: https://github.com/fuddlesworth/PlasmaZones/compare/v3.0.13...v3.0.14
 [3.0.13]: https://github.com/fuddlesworth/PlasmaZones/compare/v3.0.12...v3.0.13
