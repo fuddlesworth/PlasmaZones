@@ -17,51 +17,40 @@ namespace PhosphorWindowRule {
 /// evaluates false, which is what makes window-property rules naturally
 /// inert during context resolution without special-casing.
 enum class Field : int {
-    // Window identity
+    // ── Window properties [0, 29] ────────────────────────────────────────
     AppId = 0,
     WindowClass = 1,
     DesktopFile = 2,
     WindowRole = 3,
     Pid = 4,
-    // Window content
     Title = 5,
-    // Window state
     WindowType = 6,
     IsSticky = 7,
     IsFullscreen = 8,
     IsMinimized = 9,
-    // Context
-    ScreenId = 10,
-    VirtualDesktop = 11,
-    Activity = 12,
-    // Window state (appended — keeping enum values stable across versions)
+    ScreenId = 10, ///< context — always present
+    VirtualDesktop = 11, ///< context — always present
+    Activity = 12, ///< context — always present
     IsMaximized = 13,
-    IsFocused = 14, ///< true when the window is the focused / active window
-    IsTransient = 15, ///< dialog/utility/popup/menu/tooltip/splash family, or has a transient parent
-    IsNotification = 16, ///< notification / critical-notification / on-screen-display surface
-    // Window geometry (numeric)
-    Width = 17, ///< frame width in px
-    Height = 18, ///< frame height in px
-    // Window stacking / accessory state (appended — append-only for value stability)
-    KeepAbove = 19, ///< window set to stay above others (always on top)
-    KeepBelow = 20, ///< window set to stay below others
-    SkipTaskbar = 21, ///< hidden from the taskbar
-    SkipPager = 22, ///< hidden from the pager
-    SkipSwitcher = 23, ///< hidden from the window switcher (Alt+Tab)
-    IsModal = 24, ///< modal dialog
-    HasDecoration = 25, ///< has a server-side title-bar / border
-    IsResizable = 26, ///< window can be resized
-    // Window geometry (numeric) — position
-    PositionX = 27, ///< frame left edge X in px
-    PositionY = 28, ///< frame top edge Y in px
-    // Window content
-    CaptionNormal = 29, ///< title without the WM-added application-name suffix
-    // PlasmaZones placement state (snap-mode semantics; see WindowQuery population).
-    // IsFloating covers both snap- and autotile-floated windows; IsSnapped / Zone
-    // reflect snap-mode zone membership only — autotile tiles carry no persistent
-    // zone UUID, so they are neither IsSnapped nor matched by Zone.
-    IsFloating = 30, ///< window floated out of tiling (snap or autotile)
-    IsSnapped = 31, ///< window occupies a snap zone
+    IsFocused = 14,
+    IsTransient = 15,
+    IsNotification = 16,
+    Width = 17,
+    Height = 18,
+    KeepAbove = 19,
+    KeepBelow = 20,
+    SkipTaskbar = 21,
+    SkipPager = 22,
+    SkipSwitcher = 23,
+    IsModal = 24,
+    HasDecoration = 25,
+    IsResizable = 26,
+    PositionX = 27,
+    PositionY = 28,
+    CaptionNormal = 29,
+    // ── PlasmaZones extension fields [30, 32] ────────────────────────────
+    IsFloating = 30, ///< floated out of tiling (snap or autotile)
+    IsSnapped = 31, ///< occupies a snap zone
     Zone = 32, ///< the snap zone's UUID the window occupies
 };
 
