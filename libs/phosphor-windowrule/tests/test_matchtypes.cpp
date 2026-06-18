@@ -141,6 +141,13 @@ private Q_SLOTS:
         QVERIFY(!fieldIsContext(Field::Zone));
     }
 
+    void testFieldTableOrdering()
+    {
+        for (int i = 0; i < FieldCount; ++i) {
+            QCOMPARE(static_cast<int>(kFieldTable[i].field), i);
+        }
+    }
+
     void testFieldIsContext_coversAllFields_data()
     {
         // Canary — every Field must answer the context question. Data-driving

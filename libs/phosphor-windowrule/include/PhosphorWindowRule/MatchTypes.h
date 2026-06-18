@@ -70,6 +70,143 @@ enum class Field : int {
 /// tests iterate the range using it as the upper bound.
 inline constexpr int FieldCount = static_cast<int>(Field::Zone) + 1;
 
+// ── Field descriptor table ──────────────────────────────────────────────────
+// Single source of truth for every field's wire string, value-kind, and
+// source classification. Adding a new field: append an enum value above,
+// bump FieldCount, and add one row here — the classifier functions below
+// derive everything from this table.
+
+/// Value-kind of a field's payload in a WindowQuery.
+enum class FieldType : int {
+    String, ///< QString-valued (operators: Equals/Contains/StartsWith/EndsWith/Regex/In)
+    Bool, ///< bool-valued (operator: Equals)
+    Int, ///< int-valued (operators: Equals/GreaterThan/LessThan)
+    Enum, ///< enum-as-int (WindowType) — Equals/In only
+};
+
+/// Whether a field is a window property or a context attribute.
+enum class FieldSource : int {
+    Window, ///< absent during windowless context queries
+    Context, ///< always present (screen / desktop / activity)
+};
+
+/// Compile-time descriptor for one Field.
+struct FieldDescriptor
+{
+    Field field;
+    QLatin1StringView wire;
+    FieldType type;
+    FieldSource source;
+};
+
+/// The master field table — indexed by `static_cast<int>(field)`.
+inline constexpr FieldDescriptor kFieldTable[] = {
+    // [0, 29] — Generic window properties
+    {Field::AppId,          QLatin1StringView("appId"),          FieldType::String, FieldSource::Window},
+    {Field::WindowClass,    QLatin1StringView("windowClass"),    FieldType::String, FieldSource::Window},
+    {Field::DesktopFile,    QLatin1StringView("desktopFile"),    FieldType::String, FieldSource::Window},
+    {Field::WindowRole,     QLatin1StringView("windowRole"),     FieldType::String, FieldSource::Window},
+    {Field::Pid,            QLatin1StringView("pid"),            FieldType::Int,    FieldSource::Window},
+    {Field::Title,          QLatin1StringView("title"),          FieldType::String, FieldSource::Window},
+    {Field::WindowType,     QLatin1StringView("windowType"),     FieldType::Enum,   FieldSource::Window},
+    {Field::IsSticky,       QLatin1StringView("isSticky"),       FieldType::Bool,   FieldSource::Window},
+    {Field::IsFullscreen,   QLatin1StringView("isFullscreen"),   FieldType::Bool,   FieldSource::Window},
+    {Field::IsMinimized,    QLatin1StringView("isMinimized"),    FieldType::Bool,   FieldSource::Window},
+    {Field::ScreenId,       QLatin1StringView("screenId"),       FieldType::String, FieldSource::Context},
+    {Field::VirtualDesktop, QLatin1StringView("virtualDesktop"), FieldType::Int,    FieldSource::Context},
+    {Field::Activity,       QLatin1StringView("activity"),       FieldType::String, FieldSource::Context},
+    {Field::IsMaximized,    QLatin1StringView("isMaximized"),    FieldType::Bool,   FieldSource::Window},
+    {Field::IsFocused,      QLatin1StringView("isFocused"),      FieldType::Bool,   FieldSource::Window},
+    {Field::IsTransient,    QLatin1StringView("isTransient"),    FieldType::Bool,   FieldSource::Window},
+    {Field::IsNotification, QLatin1StringView("isNotification"), FieldType::Bool,   FieldSource::Window},
+    {Field::Width,          QLatin1StringView("width"),          FieldType::Int,    FieldSource::Window},
+    {Field::Height,         QLatin1StringView("height"),         FieldType::Int,    FieldSource::Window},
+    {Field::KeepAbove,      QLatin1StringView("keepAbove"),      FieldType::Bool,   FieldSource::Window},
+    {Field::KeepBelow,      QLatin1StringView("keepBelow"),      FieldType::Bool,   FieldSource::Window},
+    {Field::SkipTaskbar,    QLatin1StringView("skipTaskbar"),    FieldType::Bool,   FieldSource::Window},
+    {Field::SkipPager,      QLatin1StringView("skipPager"),      FieldType::Bool,   FieldSource::Window},
+    {Field::SkipSwitcher,   QLatin1StringView("skipSwitcher"),   FieldType::Bool,   FieldSource::Window},
+    {Field::IsModal,        QLatin1StringView("isModal"),        FieldType::Bool,   FieldSource::Window},
+    {Field::HasDecoration,  QLatin1StringView("hasDecoration"),  FieldType::Bool,   FieldSource::Window},
+    {Field::IsResizable,    QLatin1StringView("isResizable"),    FieldType::Bool,   FieldSource::Window},
+    {Field::PositionX,      QLatin1StringView("positionX"),      FieldType::Int,    FieldSource::Window},
+    {Field::PositionY,      QLatin1StringView("positionY"),      FieldType::Int,    FieldSource::Window},
+    {Field::CaptionNormal,  QLatin1StringView("captionNormal"),  FieldType::String, FieldSource::Window},
+    // [30, 32] — PlasmaZones extension fields
+    {Field::IsFloating,     QLatin1StringView("isFloating"),     FieldType::Bool,   FieldSource::Window},
+    {Field::IsSnapped,      QLatin1StringView("isSnapped"),      FieldType::Bool,   FieldSource::Window},
+    {Field::Zone,           QLatin1StringView("zone"),           FieldType::String, FieldSource::Window},
+};
+static_assert(sizeof(kFieldTable) / sizeof(kFieldTable[0]) == static_cast<unsigned>(FieldCount),
+              "kFieldTable must have one entry per Field");
+
+consteval bool verifyFieldTableOrder()
+{
+    for (int i = 0; i < FieldCount; ++i) {
+        if (static_cast<int>(kFieldTable[i].field) != i)
+            return false;
+    }
+    return true;
+}
+static_assert(verifyFieldTableOrder(), "kFieldTable entries must be in Field enum order");
+
+// ── Classifier functions (table-derived) ────────────────────────────────────
+
+/// Canonical lowercase wire string for a Field.
+inline QString fieldToString(Field field)
+{
+    const int idx = static_cast<int>(field);
+    if (idx >= 0 && idx < FieldCount) {
+        return QString(kFieldTable[idx].wire);
+    }
+    return QStringLiteral("appId");
+}
+
+/// Strict parse: an unknown token returns nullopt so the loader can drop the
+/// malformed predicate rather than silently coercing typos to a default.
+inline std::optional<Field> fieldFromString(QStringView s)
+{
+    for (const auto& d : kFieldTable) {
+        if (s.compare(d.wire, Qt::CaseInsensitive) == 0) {
+            return d.field;
+        }
+    }
+    return std::nullopt;
+}
+
+/// True if @p field carries a string value (the four string operators and
+/// Regex apply to these; numeric/bool fields do not).
+inline bool fieldIsString(Field field)
+{
+    const int idx = static_cast<int>(field);
+    return idx >= 0 && idx < FieldCount && kFieldTable[idx].type == FieldType::String;
+}
+
+/// True if @p field carries a numeric value.
+inline bool fieldIsNumeric(Field field)
+{
+    const int idx = static_cast<int>(field);
+    return idx >= 0 && idx < FieldCount && kFieldTable[idx].type == FieldType::Int;
+}
+
+/// True if @p field carries a boolean value (window-state flags).
+inline bool fieldIsBool(Field field)
+{
+    const int idx = static_cast<int>(field);
+    return idx >= 0 && idx < FieldCount && kFieldTable[idx].type == FieldType::Bool;
+}
+
+/// True if @p field describes the **context** a window appears in
+/// (screen / virtual desktop / activity) rather than a property of the
+/// window itself.
+inline bool fieldIsContext(Field field)
+{
+    const int idx = static_cast<int>(field);
+    return idx >= 0 && idx < FieldCount && kFieldTable[idx].source == FieldSource::Context;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+
 /// Match operators. Not every operator is valid against every field —
 /// validity is enforced by Predicate::isValid(), not the parser.
 enum class Operator : int {
@@ -87,127 +224,6 @@ enum class Operator : int {
 /// The number of distinct `Operator` enumerators. `Operator` is a contiguous
 /// range `[0, OperatorCount)`; bump this whenever an enumerator is added.
 inline constexpr int OperatorCount = static_cast<int>(Operator::LessThan) + 1;
-
-/// Canonical lowercase wire string for a Field.
-inline QString fieldToString(Field field)
-{
-    switch (field) {
-    case Field::AppId:
-        return QStringLiteral("appId");
-    case Field::WindowClass:
-        return QStringLiteral("windowClass");
-    case Field::DesktopFile:
-        return QStringLiteral("desktopFile");
-    case Field::WindowRole:
-        return QStringLiteral("windowRole");
-    case Field::Pid:
-        return QStringLiteral("pid");
-    case Field::Title:
-        return QStringLiteral("title");
-    case Field::WindowType:
-        return QStringLiteral("windowType");
-    case Field::IsSticky:
-        return QStringLiteral("isSticky");
-    case Field::IsFullscreen:
-        return QStringLiteral("isFullscreen");
-    case Field::IsMinimized:
-        return QStringLiteral("isMinimized");
-    case Field::ScreenId:
-        return QStringLiteral("screenId");
-    case Field::VirtualDesktop:
-        return QStringLiteral("virtualDesktop");
-    case Field::Activity:
-        return QStringLiteral("activity");
-    case Field::IsMaximized:
-        return QStringLiteral("isMaximized");
-    case Field::IsFocused:
-        return QStringLiteral("isFocused");
-    case Field::IsTransient:
-        return QStringLiteral("isTransient");
-    case Field::IsNotification:
-        return QStringLiteral("isNotification");
-    case Field::Width:
-        return QStringLiteral("width");
-    case Field::Height:
-        return QStringLiteral("height");
-    case Field::KeepAbove:
-        return QStringLiteral("keepAbove");
-    case Field::KeepBelow:
-        return QStringLiteral("keepBelow");
-    case Field::SkipTaskbar:
-        return QStringLiteral("skipTaskbar");
-    case Field::SkipPager:
-        return QStringLiteral("skipPager");
-    case Field::SkipSwitcher:
-        return QStringLiteral("skipSwitcher");
-    case Field::IsModal:
-        return QStringLiteral("isModal");
-    case Field::HasDecoration:
-        return QStringLiteral("hasDecoration");
-    case Field::IsResizable:
-        return QStringLiteral("isResizable");
-    case Field::PositionX:
-        return QStringLiteral("positionX");
-    case Field::PositionY:
-        return QStringLiteral("positionY");
-    case Field::CaptionNormal:
-        return QStringLiteral("captionNormal");
-    case Field::IsFloating:
-        return QStringLiteral("isFloating");
-    case Field::IsSnapped:
-        return QStringLiteral("isSnapped");
-    case Field::Zone:
-        return QStringLiteral("zone");
-    }
-    return QStringLiteral("appId");
-}
-
-/// Strict parse: an unknown token returns nullopt so the loader can drop the
-/// malformed predicate rather than silently coercing typos to a default.
-inline std::optional<Field> fieldFromString(QStringView s)
-{
-    static constexpr std::pair<QLatin1StringView, Field> kTable[] = {
-        {QLatin1StringView("appId"), Field::AppId},
-        {QLatin1StringView("windowClass"), Field::WindowClass},
-        {QLatin1StringView("desktopFile"), Field::DesktopFile},
-        {QLatin1StringView("windowRole"), Field::WindowRole},
-        {QLatin1StringView("pid"), Field::Pid},
-        {QLatin1StringView("title"), Field::Title},
-        {QLatin1StringView("windowType"), Field::WindowType},
-        {QLatin1StringView("isSticky"), Field::IsSticky},
-        {QLatin1StringView("isFullscreen"), Field::IsFullscreen},
-        {QLatin1StringView("isMinimized"), Field::IsMinimized},
-        {QLatin1StringView("screenId"), Field::ScreenId},
-        {QLatin1StringView("virtualDesktop"), Field::VirtualDesktop},
-        {QLatin1StringView("activity"), Field::Activity},
-        {QLatin1StringView("isMaximized"), Field::IsMaximized},
-        {QLatin1StringView("isFocused"), Field::IsFocused},
-        {QLatin1StringView("isTransient"), Field::IsTransient},
-        {QLatin1StringView("isNotification"), Field::IsNotification},
-        {QLatin1StringView("width"), Field::Width},
-        {QLatin1StringView("height"), Field::Height},
-        {QLatin1StringView("keepAbove"), Field::KeepAbove},
-        {QLatin1StringView("keepBelow"), Field::KeepBelow},
-        {QLatin1StringView("skipTaskbar"), Field::SkipTaskbar},
-        {QLatin1StringView("skipPager"), Field::SkipPager},
-        {QLatin1StringView("skipSwitcher"), Field::SkipSwitcher},
-        {QLatin1StringView("isModal"), Field::IsModal},
-        {QLatin1StringView("hasDecoration"), Field::HasDecoration},
-        {QLatin1StringView("isResizable"), Field::IsResizable},
-        {QLatin1StringView("positionX"), Field::PositionX},
-        {QLatin1StringView("positionY"), Field::PositionY},
-        {QLatin1StringView("captionNormal"), Field::CaptionNormal},
-        {QLatin1StringView("isFloating"), Field::IsFloating},
-        {QLatin1StringView("isSnapped"), Field::IsSnapped},
-        {QLatin1StringView("zone"), Field::Zone},
-    };
-    for (const auto& [token, field] : kTable) {
-        if (s.compare(token, Qt::CaseInsensitive) == 0) {
-            return field;
-        }
-    }
-    return std::nullopt;
-}
 
 /// Canonical lowercase wire string for an Operator.
 inline QString operatorToString(Operator op)
@@ -255,83 +271,6 @@ inline std::optional<Operator> operatorFromString(QStringView s)
         }
     }
     return std::nullopt;
-}
-
-/// True if @p field carries a string value (the four string operators and
-/// Regex apply to these; numeric/bool fields do not).
-inline bool fieldIsString(Field field)
-{
-    switch (field) {
-    case Field::AppId:
-    case Field::WindowClass:
-    case Field::DesktopFile:
-    case Field::WindowRole:
-    case Field::Title:
-    case Field::ScreenId:
-    case Field::Activity:
-    case Field::CaptionNormal:
-    case Field::Zone:
-        return true;
-    case Field::Pid:
-    case Field::VirtualDesktop:
-    case Field::WindowType:
-    case Field::IsSticky:
-    case Field::IsFullscreen:
-    case Field::IsMinimized:
-    case Field::IsMaximized:
-    case Field::IsFocused:
-    case Field::IsTransient:
-    case Field::IsNotification:
-    case Field::Width:
-    case Field::Height:
-    case Field::KeepAbove:
-    case Field::KeepBelow:
-    case Field::SkipTaskbar:
-    case Field::SkipPager:
-    case Field::SkipSwitcher:
-    case Field::IsModal:
-    case Field::HasDecoration:
-    case Field::IsResizable:
-    case Field::PositionX:
-    case Field::PositionY:
-    case Field::IsFloating:
-    case Field::IsSnapped:
-        return false;
-    }
-    return false;
-}
-
-/// True if @p field carries a numeric value
-/// (Pid / VirtualDesktop / Width / Height / PositionX / PositionY).
-inline bool fieldIsNumeric(Field field)
-{
-    return field == Field::Pid || field == Field::VirtualDesktop || field == Field::Width || field == Field::Height
-        || field == Field::PositionX || field == Field::PositionY;
-}
-
-/// True if @p field carries a boolean value (window-state flags).
-inline bool fieldIsBool(Field field)
-{
-    return field == Field::IsSticky || field == Field::IsFullscreen || field == Field::IsMinimized
-        || field == Field::IsMaximized || field == Field::IsFocused || field == Field::IsTransient
-        || field == Field::IsNotification || field == Field::KeepAbove || field == Field::KeepBelow
-        || field == Field::SkipTaskbar || field == Field::SkipPager || field == Field::SkipSwitcher
-        || field == Field::IsModal || field == Field::HasDecoration || field == Field::IsResizable
-        || field == Field::IsFloating || field == Field::IsSnapped;
-}
-
-/// True if @p field describes the **context** a window appears in
-/// (screen / virtual desktop / activity) rather than a property of the
-/// window itself. Context fields are populated on every `WindowQuery`,
-/// including the windowless queries the context-mode evaluator issues;
-/// non-context (window-property) fields are absent on those queries and
-/// any predicate over them evaluates false there. Action/match
-/// compatibility (a `SetEngineMode` rule whose match references only
-/// window properties never fires during context resolution) is computed
-/// off this classification.
-inline bool fieldIsContext(Field field)
-{
-    return field == Field::ScreenId || field == Field::VirtualDesktop || field == Field::Activity;
 }
 
 } // namespace PhosphorWindowRule

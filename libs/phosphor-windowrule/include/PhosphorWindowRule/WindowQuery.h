@@ -69,14 +69,12 @@ struct WindowQuery
     /// rather than a windowless context query.
     bool hasWindow() const
     {
-        return appId.has_value() || windowClass.has_value() || title.has_value() || windowRole.has_value()
-            || desktopFile.has_value() || pid.has_value() || windowType.has_value() || isSticky.has_value()
-            || isFullscreen.has_value() || isMinimized.has_value() || isMaximized.has_value() || isFocused.has_value()
-            || isTransient.has_value() || isNotification.has_value() || width.has_value() || height.has_value()
-            || keepAbove.has_value() || keepBelow.has_value() || skipTaskbar.has_value() || skipPager.has_value()
-            || skipSwitcher.has_value() || isModal.has_value() || hasDecoration.has_value() || isResizable.has_value()
-            || positionX.has_value() || positionY.has_value() || captionNormal.has_value() || isFloating.has_value()
-            || isSnapped.has_value() || zone.has_value();
+        for (const auto& d : kFieldTable) {
+            if (d.source == FieldSource::Window && valueForField(d.field).has_value()) {
+                return true;
+            }
+        }
+        return false;
     }
 
     /**
