@@ -20,17 +20,19 @@ namespace PlasmaZones {
 namespace {
 
 namespace ActionType = PhosphorWindowRule::ActionType;
+namespace Tag = PhosphorWindowRule::Tag;
 using PhosphorWindowRule::Field;
 using PhosphorWindowRule::MatchExpression;
 using PhosphorWindowRule::Operator;
 using PhosphorWindowRule::RuleAction;
 using PhosphorWindowRule::WindowRule;
 
-/// True if @p actions carry an OverrideAnimation* action.
+/// True if @p actions carry an OverrideAnimation* action (Animation ∩ Effect).
 bool hasAnimationAction(const QList<RuleAction>& actions)
 {
+    const auto& registry = PhosphorWindowRule::ActionRegistry::instance();
     for (const RuleAction& a : actions) {
-        if (ActionType::isAnimationOverrideAction(a.type)) {
+        if (registry.hasTag(a.type, Tag::Animation) && registry.hasTag(a.type, Tag::Effect)) {
             return true;
         }
     }
@@ -41,8 +43,9 @@ bool hasAnimationAction(const QList<RuleAction>& actions)
 /// disable / lock) — the kind a Monitor & Layout rule produces.
 bool hasContextAction(const QList<RuleAction>& actions)
 {
+    const auto& registry = PhosphorWindowRule::ActionRegistry::instance();
     for (const RuleAction& a : actions) {
-        if (ActionType::isLayoutEngineContextAction(a.type)) {
+        if (registry.hasTag(a.type, Tag::LayoutEngine)) {
             return true;
         }
     }

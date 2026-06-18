@@ -340,51 +340,35 @@ inline constexpr QLatin1StringView SetOuterGapBottom{"setOuterGapBottom"};
 inline constexpr QLatin1StringView SetOuterGapLeft{"setOuterGapLeft"};
 inline constexpr QLatin1StringView SetOuterGapRight{"setOuterGapRight"};
 
-/// True when @p type is one of the three OverrideAnimation* action wire
-/// strings — shader / timing / curve. The trio shares the same cascade
-/// (animation event resolution + per-window scope) so call-sites repeatedly
-/// need the same three-way OR; this helper keeps the action-type list in one
-/// place so adding a fourth override variant only updates here.
+/// @deprecated Use `ActionRegistry::hasTag(type, Tag::Animation) && hasTag(type, Tag::Effect)` instead.
+[[deprecated("use ActionRegistry::hasTag with Tag::Animation ∩ Tag::Effect")]]
 inline bool isAnimationOverrideAction(const QString& type)
 {
     return type == OverrideAnimationShader || type == OverrideAnimationTiming || type == OverrideAnimationCurve;
 }
 
-/// True when @p type is one of the five per-window border / title-bar
-/// appearance override actions. Grouped here so `isEffectRuleAction` (which
-/// admits these to the effect's rule set) has one definition to delegate to —
-/// adding a sixth appearance override only updates this helper.
+/// @deprecated Use `ActionRegistry::hasTag(type, Tag::Border)` instead.
+[[deprecated("use ActionRegistry::hasTag with Tag::Border")]]
 inline bool isBorderAppearanceAction(const QString& type)
 {
     return type == SetHideTitleBar || type == SetBorderVisible || type == SetBorderWidth || type == SetBorderRadius
         || type == SetBorderColor;
 }
 
-/// True when @p type is one of the actions the KWin effect's **shader
-/// manager** loads into its OverrideAnimation rule set — the three
-/// OverrideAnimation* variants plus SetOpacity. ExcludeAnimations is
-/// DELIBERATELY NOT in this set even though the effect consumes it: it
-/// flows into the effect's separate `m_animationExclusionRuleSet`
-/// (filtered by `ExclusionRules::excludeAnimationsRulesFrom`), and
-/// admitting it into the shader manager would surface it through the
-/// rule-override `hasAnyMatch` path in `shouldAnimateWindow` and INVERT
-/// the user's exclude intent into an opt-in. The two slices are
-/// disjoint by action type by construction; do NOT re-admit
-/// ExcludeAnimations here without restructuring the rule-override
-/// path's `hasAnyMatch` query to filter on action type.
+/// @deprecated Use `ActionRegistry::hasTag(type, Tag::Effect)` instead.
+/// Note: ExcludeAnimations deliberately omits Tag::Effect — it flows into the
+/// effect's separate `m_animationExclusionRuleSet`.
+[[deprecated("use ActionRegistry::hasTag with Tag::Effect")]]
 inline bool isEffectRuleAction(const QString& type)
 {
+    #pragma GCC diagnostic push
+    #pragma GCC diagnostic ignored "-Wdeprecated-declarations"
     return isAnimationOverrideAction(type) || type == SetOpacity || isBorderAppearanceAction(type);
+    #pragma GCC diagnostic pop
 }
 
-/// True when @p type is one of the five context-domain layout/engine actions
-/// that pin a screen/desktop/activity's layout behaviour — engine mode,
-/// snapping layout, tiling algorithm, disable-engine, or the layout lock. The
-/// settings layer clusters these into the "Layout & engine" picker category and
-/// treats any of them as marking a Monitor & Layout rule; keeping the list in
-/// one place stops those call-sites from drifting when a sixth such action is
-/// added. (Gap overrides are also context-domain but cluster separately, so
-/// they are intentionally excluded here.)
+/// @deprecated Use `ActionRegistry::hasTag(type, Tag::LayoutEngine)` instead.
+[[deprecated("use ActionRegistry::hasTag with Tag::LayoutEngine")]]
 inline bool isLayoutEngineContextAction(const QString& type)
 {
     return type == SetEngineMode || type == SetSnappingLayout || type == SetTilingAlgorithm || type == DisableEngine
