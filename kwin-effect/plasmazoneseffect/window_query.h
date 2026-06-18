@@ -69,6 +69,6 @@ PhosphorProtocol::WindowType windowTypeFor(KWin::EffectWindow* w);
 /// Confined to the effect translation unit so the LGPL phosphor-window-rules
 /// library never sees a KWin type.
 PhosphorWindowRules::WindowQuery windowRuleQueryFor(KWin::EffectWindow* w, const QString& screenId, bool isFloating,
-                                                   bool isSnapped, const QString& zoneId);
+                                                    bool isSnapped, const QString& zoneId);
 
 } // namespace PlasmaZones

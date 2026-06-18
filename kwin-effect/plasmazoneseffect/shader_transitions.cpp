@@ -1667,7 +1667,8 @@ void PlasmaZonesEffect::loadWindowRuleAnimationsFromDbus()
             // SetHideTitleBar appearance action — see isEffectRuleAction).
             bool admitted = false;
             for (const PhosphorWindowRules::RuleAction& action : rule.actions) {
-                if (PhosphorWindowRules::ActionRegistry::instance().hasTag(action.type, PhosphorWindowRules::Tag::Effect)) {
+                if (PhosphorWindowRules::ActionRegistry::instance().hasTag(action.type,
+                                                                           PhosphorWindowRules::Tag::Effect)) {
                     admitted = true;
                     break;
                 }

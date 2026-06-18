@@ -1811,11 +1811,12 @@ QStringList parseDisableList(const QString& csv)
 }
 
 /// Build a context rule from a v3 monitor disable-list entry (`screenId`).
-PhosphorWindowRules::WindowRule disableRuleForMonitor(const QString& screenId, PhosphorZones::AssignmentEntry::Mode mode)
+PhosphorWindowRules::WindowRule disableRuleForMonitor(const QString& screenId,
+                                                      PhosphorZones::AssignmentEntry::Mode mode)
 {
     const QString name = disableRulePrefixFor(mode) + screenId;
     return PhosphorWindowRules::ContextRuleBridge::makeDisableRule(name, screenId, 0, QString(),
-                                                                  PhosphorZones::modeToWireString(mode));
+                                                                   PhosphorZones::modeToWireString(mode));
 }
 
 /// Build a context rule from a v3 desktop disable-list entry (`screenId/N`).
@@ -1826,7 +1827,7 @@ PhosphorWindowRules::WindowRule disableRuleForMonitor(const QString& screenId, P
 /// truncated. This matches the `screenId/desktop` composite-key convention used
 /// by Settings::writeDisableEntries.
 std::optional<PhosphorWindowRules::WindowRule> disableRuleForDesktop(const QString& entry,
-                                                                    PhosphorZones::AssignmentEntry::Mode mode)
+                                                                     PhosphorZones::AssignmentEntry::Mode mode)
 {
     const int slash = entry.lastIndexOf(QLatin1Char('/'));
     if (slash <= 0 || slash == entry.size() - 1) {
@@ -1840,7 +1841,7 @@ std::optional<PhosphorWindowRules::WindowRule> disableRuleForDesktop(const QStri
     }
     const QString name = disableRulePrefixFor(mode) + screenId + disableRuleDesktopSuffix(desktop);
     return PhosphorWindowRules::ContextRuleBridge::makeDisableRule(name, screenId, desktop, QString(),
-                                                                  PhosphorZones::modeToWireString(mode));
+                                                                   PhosphorZones::modeToWireString(mode));
 }
 
 /// Build a context rule from a v3 activity disable-list entry
@@ -1855,7 +1856,7 @@ std::optional<PhosphorWindowRules::WindowRule> disableRuleForDesktop(const QStri
 /// suffix). Matches the live `Settings::writeDisableEntries` decoder in
 /// src/config/settings.cpp.
 std::optional<PhosphorWindowRules::WindowRule> disableRuleForActivity(const QString& entry,
-                                                                     PhosphorZones::AssignmentEntry::Mode mode)
+                                                                      PhosphorZones::AssignmentEntry::Mode mode)
 {
     const int slash = entry.lastIndexOf(QLatin1Char('/'));
     if (slash <= 0 || slash == entry.size() - 1) {
@@ -1865,7 +1866,7 @@ std::optional<PhosphorWindowRules::WindowRule> disableRuleForActivity(const QStr
     const QString activity = entry.mid(slash + 1);
     const QString name = disableRulePrefixFor(mode) + screenId + disableRuleActivitySuffix();
     return PhosphorWindowRules::ContextRuleBridge::makeDisableRule(name, screenId, 0, activity,
-                                                                  PhosphorZones::modeToWireString(mode));
+                                                                   PhosphorZones::modeToWireString(mode));
 }
 
 /// Parse one Assignment:* group name into (screenId, desktop, activity).
@@ -2055,7 +2056,7 @@ PhosphorWindowRules::WindowRule buildAnimationAppRule(const QJsonObject& source,
     rule.enabled = true;
     rule.priority = count - i;
     rule.match = PhosphorWindowRules::MatchExpression::makeLeaf(PhosphorWindowRules::Field::WindowClass,
-                                                               PhosphorWindowRules::Operator::Contains, classPattern);
+                                                                PhosphorWindowRules::Operator::Contains, classPattern);
     rule.actions.append(action);
     return rule;
 }
@@ -2189,6 +2190,55 @@ void appendExclusionRulesFromStash(QList<PhosphorWindowRules::WindowRule>& rules
     // Both lists feed AppId rules — see the comment block above.
     appendOne(stash.value(ConfigKeys::Legacy::v3ExcludedApplicationsKey()).toString());
     appendOne(stash.value(ConfigKeys::Legacy::v3ExcludedWindowClassesKey()).toString());
+}
+
+/// Seed the premade "Steam" Window Rule into a freshly-built v4 rule set.
+///
+/// Steam is a CEF/XWayland client that spawns most of its UI — the Friends
+/// List, the self-drawn `notificationtoasts_<N>_desktop` popups, Settings, and
+/// chat windows — as separate top-level windows. They all share the `steam`
+/// window class but report a title other than the main library window's
+/// `Steam`. The transient/popup/menu members are already filtered structurally
+/// by the effect's `shouldHandleWindow()` (see the `transientFor()` /
+/// `isStructurallyUnmanageableWindowType()` net referenced in discussion #461),
+/// but the Normal-type top-levels (Friends List, the notification toasts) slip
+/// that filter and get auto-tiled — the long-standing "Steam breaks tiling"
+/// bug other compositors ship rules for.
+///
+/// The rule excludes every `steam`-class window whose title is NOT exactly
+/// `Steam`, leaving the main library window tileable (the Hyprland
+/// `title:^(?!Steam$).*` idiom). `Exclude` is enforced at the effect's
+/// `shouldHandleWindow()` gate, which evaluates the FULL WindowQuery
+/// (windowClass + title) — so the composite match resolves there even though
+/// the daemon-side appId-only fast paths (`isAppIdExcluded`, pending-restore
+/// prune) ignore non-AppId leaves; those gate keyboard navigation / state
+/// cleanup, not whether the window is tiled.
+///
+/// `WindowClass Contains "steam"` matches KWin's raw `"resourceName
+/// resourceClass"` string (e.g. `"steam Steam"`, `"steamwebhelper Steam"`)
+/// case-insensitively; the `Title Equals "Steam"` guard is likewise
+/// case-insensitive (see MatchTypes operator semantics). The id is a fixed
+/// deterministic UUIDv5 so a re-run never produces a duplicate.
+void appendSteamDefaultRule(QList<PhosphorWindowRules::WindowRule>& rules)
+{
+    using namespace PhosphorWindowRules;
+    WindowRule rule;
+    rule.id = QUuid::createUuidV5(exclusionMigrationNamespace(),
+                                  Detail::encodeSegment(QStringLiteral("steam-default-exclude")));
+    rule.name = QStringLiteral("Steam");
+    rule.enabled = true;
+    // priority 0 mirrors the migrated exclusion rules: an Exclude rule's
+    // precedence is irrelevant to the boolean exclusion slice the effect
+    // evaluates, and the controller renormalizes display order on load.
+    rule.priority = 0;
+    rule.match = MatchExpression::makeAll(
+        {MatchExpression::makeLeaf(Field::WindowClass, Operator::Contains, QStringLiteral("steam")),
+         MatchExpression::makeNone(
+             {MatchExpression::makeLeaf(Field::Title, Operator::Equals, QStringLiteral("Steam"))})});
+    RuleAction action;
+    action.type = QString(ActionType::Exclude);
+    rule.actions.append(action);
+    rules.append(rule);
 }
 
 /// Drain the v4 ANIMATION exclusion stash into @p rules. Mirrors
@@ -2635,6 +2685,17 @@ bool ConfigMigration::finalizeV4Conversion(const QString& jsonPath)
     // so an upgrading user's "no animations for firefox" rule keeps the
     // same matching behaviour.
     appendAnimationExclusionRulesFromStash(rules, animationExclusionStash);
+
+    // ── Premade Steam rule ─────────────────────────────────────────────────
+    // Ship the built-in fix for Steam's tiling misbehaviour — the Friends List
+    // and self-drawn notification-toast top-levels that slip the effect's
+    // structural popup filter and get auto-tiled. Seeded once here so every
+    // fresh install AND every v3→v4 upgrade gets it; the
+    // `windowRulesAlreadyConverted` gate at the top of this function keeps the
+    // rebuild path from re-seeding it (or resurrecting it after a user deletes
+    // it) on any later run. See `appendSteamDefaultRule` for the match/enforcement
+    // rationale.
+    appendSteamDefaultRule(rules);
 
     // ── Relocate QuickLayouts to the quicklayouts.json sidecar (FIRST) ─────
     // Quick-layout slots are NOT window rules — they belong in the sibling

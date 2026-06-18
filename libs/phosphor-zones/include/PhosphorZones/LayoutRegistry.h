@@ -567,7 +567,7 @@ private:
     /// any match carrying a window-property leaf — only a pure context-only
     /// match is an exact context rule.
     const PhosphorWindowRules::WindowRule* findExactContextRule(const QString& screenId, int virtualDesktop,
-                                                               const QString& activity) const;
+                                                                const QString& activity) const;
 
     /// Find the id of the exact-shape context rule for a (screen, desktop,
     /// activity) tuple, or a null QUuid if none exists.

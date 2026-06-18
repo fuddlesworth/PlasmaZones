@@ -51,6 +51,7 @@
 #include "../helpers/IsolatedConfigGuard.h"
 
 #include <PhosphorWindowRules/ContextRuleBridge.h>
+#include <PhosphorWindowRules/ExclusionRules.h>
 #include <PhosphorWindowRules/WindowRule.h>
 #include <PhosphorWindowRules/WindowRuleSet.h>
 
@@ -395,10 +396,20 @@ private Q_SLOTS:
         QVERIFY(ConfigMigration::ensureJsonConfig());
 
         const QJsonArray rules = rulesFromWindowRules();
-        const QList<QJsonObject> defaults = allRulesByPriority(rules, 0);
-        QCOMPARE(defaults.size(), 1);
+        // Priority 0 is the shared exclusion/catch-all band: the migrated AppId
+        // Exclude rules AND the premade Steam exclusion rule also live at 0, so
+        // the catch-all is no longer the sole priority-0 rule. Identify it by
+        // its defining empty-All{} match instead of by priority alone.
+        QList<QJsonObject> catchAlls;
+        for (const QJsonObject& r : allRulesByPriority(rules, 0)) {
+            const QJsonObject m = r.value(QStringLiteral("match")).toObject();
+            if (m.contains(QStringLiteral("all")) && m.value(QStringLiteral("all")).toArray().isEmpty()) {
+                catchAlls.append(r);
+            }
+        }
+        QCOMPARE(catchAlls.size(), 1);
 
-        const QJsonObject def = defaults.first();
+        const QJsonObject def = catchAlls.first();
         // The catch-all match is an empty All{} — serialized as { "all": [] }.
         const QJsonObject match = def.value(QStringLiteral("match")).toObject();
         QVERIFY(match.contains(QStringLiteral("all")));
@@ -589,9 +600,19 @@ private Q_SLOTS:
 
         QVERIFY(QFile::exists(ConfigDefaults::windowRulesFilePath()));
         const QJsonArray rules = rulesFromWindowRules();
-        // Exactly one rule: the provider-default catch-all.
-        QCOMPARE(rules.size(), 1);
-        const QJsonObject def = rules.first().toObject();
+        // Two rules: the provider-default catch-all + the premade Steam
+        // exclusion rule (seeded unconditionally on every fresh/migrated v4
+        // config). Identify the catch-all by its empty-All{} match.
+        QCOMPARE(rules.size(), 2);
+        QJsonObject def;
+        for (const QJsonValue& v : rules) {
+            const QJsonObject r = v.toObject();
+            const QJsonObject m = r.value(QStringLiteral("match")).toObject();
+            if (m.contains(QStringLiteral("all")) && m.value(QStringLiteral("all")).toArray().isEmpty()) {
+                def = r;
+            }
+        }
+        QVERIFY2(!def.isEmpty(), "provider-default catch-all must be present");
         QCOMPARE(def.value(QStringLiteral("priority")).toInt(), 0);
 
         // With no DefaultLayoutId and no Tiling default algorithm, the
@@ -603,6 +624,72 @@ private Q_SLOTS:
         const QJsonArray actions = def.value(QStringLiteral("actions")).toArray();
         QCOMPARE(actions.size(), 1);
         QCOMPARE(actions.first().toObject().value(QStringLiteral("mode")).toString(), QStringLiteral("snapping"));
+    }
+
+    // ─── Premade Steam rule ───────────────────────────────────────────────
+    // Every fresh install and every v3→v4 upgrade is seeded with the built-in
+    // Steam tiling fix: exclude every `steam`-class window whose title is NOT
+    // exactly "Steam" (Friends List, notification toasts, settings, chat),
+    // leaving the main library window tileable.
+
+    void testSteamDefaultRule_seeded()
+    {
+        IsolatedConfigGuard guard;
+        QJsonObject cfg;
+        cfg.insert(QStringLiteral("_version"), 3);
+        writeJson(ConfigDefaults::configFilePath(), cfg);
+
+        QVERIFY(ConfigMigration::ensureJsonConfig());
+
+        const QJsonArray rules = rulesFromWindowRules();
+        QJsonObject steam;
+        for (const QJsonValue& v : rules) {
+            const QJsonObject r = v.toObject();
+            if (r.value(QStringLiteral("name")).toString() == QLatin1String("Steam")) {
+                steam = r;
+            }
+        }
+        QVERIFY2(!steam.isEmpty(), "premade Steam rule must be seeded on a fresh/migrated v4 config");
+        QVERIFY(steam.value(QStringLiteral("enabled")).toBool());
+
+        // A single terminal Exclude action — the window is left unmanaged by
+        // snap/tile.
+        QCOMPARE(actionTypes(steam), (QStringList{QStringLiteral("exclude")}));
+
+        // Match shape: All{ WindowClass contains "steam", None{ Title equals "Steam" } }.
+        const QJsonObject match = steam.value(QStringLiteral("match")).toObject();
+        QVERIFY(match.contains(QStringLiteral("all")));
+        const QJsonArray all = match.value(QStringLiteral("all")).toArray();
+        QCOMPARE(all.size(), 2);
+
+        // WindowClass contains "steam" (matches KWin's raw "resourceName
+        // resourceClass" string case-insensitively).
+        QCOMPARE(matchLeafValueByOp(steam, QStringLiteral("windowClass"), QStringLiteral("contains")),
+                 QStringLiteral("steam"));
+
+        // None{ Title equals "Steam" } — the negative guard that keeps the
+        // main library window (title exactly "Steam") tileable.
+        bool foundTitleGuard = false;
+        for (const QJsonValue& v : all) {
+            const QJsonObject child = v.toObject();
+            if (!child.contains(QStringLiteral("none"))) {
+                continue;
+            }
+            const QJsonArray none = child.value(QStringLiteral("none")).toArray();
+            QCOMPARE(none.size(), 1);
+            const QJsonObject leaf = none.first().toObject();
+            QCOMPARE(leaf.value(QStringLiteral("field")).toString(), QStringLiteral("title"));
+            QCOMPARE(leaf.value(QStringLiteral("op")).toString(), QStringLiteral("equals"));
+            QCOMPARE(leaf.value(QStringLiteral("value")).toVariant().toString(), QStringLiteral("Steam"));
+            foundTitleGuard = true;
+        }
+        QVERIFY2(foundTitleGuard, "Steam rule must carry a None{ Title equals \"Steam\" } guard");
+
+        // The rule is sliced into the Exclude rule set the daemon/effect
+        // consume — i.e. it actually participates in the exclusion gate.
+        const auto set = PhosphorWindowRules::WindowRuleSet::loadFromFile(ConfigDefaults::windowRulesFilePath());
+        QVERIFY(set.has_value());
+        QCOMPARE(PhosphorWindowRules::ExclusionRules::excludeRulesFrom(*set).count(), 1);
     }
 
     // ─── Superseding: assignments.json retired to .migrated ───────────────

@@ -90,7 +90,7 @@ PhosphorWindowRules::WindowQuery PlasmaZonesEffect::windowRuleQuery(KWin::Effect
 }
 
 PhosphorWindowRules::ResolvedActions PlasmaZonesEffect::resolveWindowRuleActions(KWin::EffectWindow* w,
-                                                                                const QString& windowId) const
+                                                                                 const QString& windowId) const
 {
     const PhosphorWindowRules::RuleEvaluator& evaluator = m_shaderManager.animationRuleEvaluator();
     // An empty windowId can't key the per-window cache; nothing to resolve.
@@ -287,7 +287,7 @@ bool PlasmaZonesEffect::shouldAnimateWindow(KWin::EffectWindow* w) const
         // rule target a specific NET type. `!haveAnimationRules` short-circuits
         // so the WindowQuery is never built when there are no rules to probe.
         static const QSet<PhosphorWindowRules::Field> kOsdTypeFields = {PhosphorWindowRules::Field::IsNotification,
-                                                                       PhosphorWindowRules::Field::WindowType};
+                                                                        PhosphorWindowRules::Field::WindowType};
         if (!haveAnimationRules || !animationEvaluator.hasMatchTargetingFields(query(), kOsdTypeFields)) {
             return false;
         }
@@ -302,8 +302,8 @@ bool PlasmaZonesEffect::shouldAnimateWindow(KWin::EffectWindow* w) const
         && (w->isDialog() || w->isUtility() || w->isPopupWindow() || w->isPopupMenu() || w->isDropdownMenu()
             || w->isTooltip() || w->isMenu() || w->isSplash() || w->transientFor())) {
         static const QSet<PhosphorWindowRules::Field> kTransientTypeFields = {PhosphorWindowRules::Field::IsTransient,
-                                                                             PhosphorWindowRules::Field::WindowType,
-                                                                             PhosphorWindowRules::Field::IsModal};
+                                                                              PhosphorWindowRules::Field::WindowType,
+                                                                              PhosphorWindowRules::Field::IsModal};
         if (!haveAnimationRules || !animationEvaluator.hasMatchTargetingFields(query(), kTransientTypeFields)) {
             return false;
         }

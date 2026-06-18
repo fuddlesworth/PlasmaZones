@@ -303,8 +303,9 @@ private Q_SLOTS:
         rule.name = QStringLiteral("no-restore-dolphin");
         rule.enabled = true;
         rule.priority = 100;
-        rule.match = PhosphorWindowRules::MatchExpression::makeLeaf(
-            PhosphorWindowRules::Field::AppId, PhosphorWindowRules::Operator::Equals, QStringLiteral("org.kde.dolphin"));
+        rule.match = PhosphorWindowRules::MatchExpression::makeLeaf(PhosphorWindowRules::Field::AppId,
+                                                                    PhosphorWindowRules::Operator::Equals,
+                                                                    QStringLiteral("org.kde.dolphin"));
         PhosphorWindowRules::RuleAction action;
         action.type = QString(PhosphorWindowRules::ActionType::RestorePosition);
         action.params.insert(QString(PhosphorWindowRules::ActionParam::Value), false);
@@ -366,8 +367,9 @@ private Q_SLOTS:
         rule.name = QStringLiteral("float-dolphin");
         rule.enabled = true;
         rule.priority = 100;
-        rule.match = PhosphorWindowRules::MatchExpression::makeLeaf(
-            PhosphorWindowRules::Field::AppId, PhosphorWindowRules::Operator::Equals, QStringLiteral("org.kde.dolphin"));
+        rule.match = PhosphorWindowRules::MatchExpression::makeLeaf(PhosphorWindowRules::Field::AppId,
+                                                                    PhosphorWindowRules::Operator::Equals,
+                                                                    QStringLiteral("org.kde.dolphin"));
         PhosphorWindowRules::RuleAction action;
         action.type = QString(PhosphorWindowRules::ActionType::Float);
         rule.actions.append(action);
@@ -430,9 +432,9 @@ private Q_SLOTS:
         rule.priority = 100;
         rule.match = PhosphorWindowRules::MatchExpression::makeAll(
             {PhosphorWindowRules::MatchExpression::makeLeaf(PhosphorWindowRules::Field::IsModal,
-                                                           PhosphorWindowRules::Operator::Equals, true),
+                                                            PhosphorWindowRules::Operator::Equals, true),
              PhosphorWindowRules::MatchExpression::makeLeaf(PhosphorWindowRules::Field::Width,
-                                                           PhosphorWindowRules::Operator::LessThan, 500)});
+                                                            PhosphorWindowRules::Operator::LessThan, 500)});
         PhosphorWindowRules::RuleAction action;
         action.type = QString(PhosphorWindowRules::ActionType::Float);
         rule.actions.append(action);
@@ -498,7 +500,7 @@ private Q_SLOTS:
         rule.enabled = true;
         rule.priority = 100;
         rule.match = PhosphorWindowRules::MatchExpression::makeLeaf(PhosphorWindowRules::Field::IsModal,
-                                                                   PhosphorWindowRules::Operator::Equals, true);
+                                                                    PhosphorWindowRules::Operator::Equals, true);
         PhosphorWindowRules::RuleAction action;
         action.type = QString(PhosphorWindowRules::ActionType::Float);
         rule.actions.append(action);

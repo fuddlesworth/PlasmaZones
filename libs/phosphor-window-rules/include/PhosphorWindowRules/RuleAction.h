@@ -361,10 +361,10 @@ inline bool isBorderAppearanceAction(const QString& type)
 [[deprecated("use ActionRegistry::hasTag with Tag::Effect")]]
 inline bool isEffectRuleAction(const QString& type)
 {
-    #pragma GCC diagnostic push
-    #pragma GCC diagnostic ignored "-Wdeprecated-declarations"
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wdeprecated-declarations"
     return isAnimationOverrideAction(type) || type == SetOpacity || isBorderAppearanceAction(type);
-    #pragma GCC diagnostic pop
+#pragma GCC diagnostic pop
 }
 
 /// @deprecated Use `ActionRegistry::hasTag(type, Tag::LayoutEngine)` instead.

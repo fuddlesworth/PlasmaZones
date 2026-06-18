@@ -156,7 +156,7 @@ bool LayoutRegistry::hasExactContextRule(const QString& screenId, int virtualDes
     return findExactContextRule(screenId, virtualDesktop, activity) != nullptr;
 }
 const PhosphorWindowRules::WindowRule* LayoutRegistry::findExactContextRule(const QString& screenId, int virtualDesktop,
-                                                                           const QString& activity) const
+                                                                            const QString& activity) const
 {
     // The deterministic v5 derivation lets us look up a stored assignment by
     // its identity tuple — the bridge guarantees identical tuples produce
