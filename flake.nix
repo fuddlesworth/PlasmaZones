@@ -31,7 +31,7 @@
 # its own version string in every plugin it loads as an IID (Interface
 # Identifier). At runtime, KWin checks that the IID of any plugin it loads
 # matches the running KWin's own version string *exactly* — even a patch
-# version mismatch (6.6.4 vs 6.6.5) causes KWin to silently refuse the plugin.
+# version mismatch (6.7.0 vs 6.7.1) causes KWin to silently refuse the plugin.
 #
 # This means: the `kwin` package used to *compile* the plugin must be the
 # same `kwin` the user is *running*. On a rolling nixos-unstable system,
@@ -50,7 +50,7 @@
 #     if they diverge. Re-run `nix flake update` + reinstall after any
 #     system plasma/kwin update to stay in sync.
 {
-  description = "FancyZones-style window tiling and autotiling for KDE Plasma 6.6+";
+  description = "FancyZones-style window tiling and autotiling for KDE Plasma 6.7+";
 
   inputs = {
     # Track nixos-unstable for the most current KDE Frameworks and KWin packages.
@@ -135,7 +135,7 @@
         {
           options.programs.plasmazones = {
             enable = lib.mkEnableOption
-              "PlasmaZones window tiling for KDE Plasma 6.6+";
+              "PlasmaZones window tiling for KDE Plasma 6.7+";
 
             package = lib.mkOption {
               type        = lib.types.package;
@@ -204,7 +204,7 @@
         {
           options.programs.plasmazones = {
             enable = lib.mkEnableOption
-              "PlasmaZones window tiling for KDE Plasma 6.6+";
+              "PlasmaZones window tiling for KDE Plasma 6.7+";
 
             package = lib.mkOption {
               type        = lib.types.package;

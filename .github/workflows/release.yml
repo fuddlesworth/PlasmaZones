@@ -85,7 +85,7 @@ jobs:
           echo "Version: $VERSION (prerelease=$IS_PRE)"
 
   # ═══════════════════════════════════════════════════════════════════════════
-  # Build Debian Package (KDE Neon - ships Plasma/KF6 6.6+)
+  # Build Debian Package (KDE Neon - ships Plasma/KF6 6.7+)
   # ═══════════════════════════════════════════════════════════════════════════
   build-deb:
     name: Build .deb (KDE Neon)
@@ -164,7 +164,9 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        fedora: [43, 44]
+        # Fedora 44 is the earliest release whose repos carry Plasma 6.7
+        # (KF 6.26 / Qt 6.10 / KWin 6.7), the PlasmaZones build baseline.
+        fedora: [44]
     container:
       image: fedora:${{ matrix.fedora }}
 
@@ -670,8 +672,6 @@ jobs:
             echo ""
             echo "**Fedora (manual RPM):**"
             echo '```bash'
-            echo "# Fedora 43"
-            echo "sudo dnf install plasmazones-${VERSION}-*.fc43.x86_64.rpm"
             echo "# Fedora 44"
             echo "sudo dnf install plasmazones-${VERSION}-*.fc44.x86_64.rpm"
             echo '```'
@@ -990,7 +990,7 @@ jobs:
   #      (Home Project -> Create Package), or via osc:
   #        osc meta pkg -e home:fuddlesworth plasmazones
   #   3. In the project's "Repositories" tab add openSUSE_Tumbleweed for
-  #      x86_64 and aarch64. PlasmaZones needs Plasma/KF6/Qt 6.6+, so Leap
+  #      x86_64 and aarch64. PlasmaZones needs Plasma/KF6/Qt 6.7+, so Leap
   #      is not a viable target — Tumbleweed (and optionally Slowroll) only.
   #   4. Add two GitHub Actions secrets (Settings -> Secrets and variables
   #      -> Actions):

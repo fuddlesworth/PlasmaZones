@@ -6,7 +6,7 @@ export DEB_BUILD_MAINT_OPTIONS = hardening=+all
 
 # Exact KWin version pin. The kwin-effect plugin's IID embeds KWin's upstream
 # version string; KWin refuses to load effects whose IID doesn't match its own
-# version, including across patch bumps (e.g. 6.6.4 -> 6.6.5). We capture the
+# version, including across patch bumps (e.g. 6.7.0 -> 6.7.1). We capture the
 # build-time kwin-dev version (kwin-dev is an explicit Build-Depend and shares
 # its source-package version with kwin-common) and substitute it into
 # debian/control as ${kwin:Version} so the package refuses to install on a
