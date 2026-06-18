@@ -29,11 +29,11 @@ namespace PhosphorAnimationShaders {
 class AnimationShaderRegistry;
 }
 
-namespace PhosphorWindowRule {
+namespace PhosphorWindowRules {
 // Forward-declared for the `std::unique_ptr<WindowRuleStore>` member
 // below. The complete type is needed only in settingscontroller.cpp
 // (where m_localRuleStore is constructed); pulling
-// <PhosphorWindowRule/WindowRuleStore.h> into the header would force
+// <PhosphorWindowRules/WindowRuleStore.h> into the header would force
 // every consumer of this controller to re-parse the WindowRuleStore
 // dependency graph.
 class WindowRuleStore;
@@ -607,10 +607,10 @@ private:
 
     /// Single WindowRule store shared by m_settings (disable lists) and the
     /// LayoutRegistry. Declared FIRST so it outlives all borrowers.
-    std::unique_ptr<PhosphorWindowRule::WindowRuleStore> m_localRuleStore;
+    std::unique_ptr<PhosphorWindowRules::WindowRuleStore> m_localRuleStore;
     /// Opt-in cross-process auto-reload of m_localRuleStore on external writes
     /// (mainly the no-daemon case). Declared after the store; tears down first.
-    std::unique_ptr<PhosphorWindowRule::WindowRuleStoreWatcher> m_localRuleStoreWatcher;
+    std::unique_ptr<PhosphorWindowRules::WindowRuleStoreWatcher> m_localRuleStoreWatcher;
     /// Installs the process-global screen-id resolver before `m_settings`, whose
     /// constructor load()s and canonicalises per-screen override keys via
     /// `idForName`. Declared (and initialised) immediately before `m_settings`

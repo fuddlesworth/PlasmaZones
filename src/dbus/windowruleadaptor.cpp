@@ -5,9 +5,9 @@
 
 #include "core/logging.h"
 
-#include <PhosphorWindowRule/WindowRule.h>
-#include <PhosphorWindowRule/WindowRuleSet.h>
-#include <PhosphorWindowRule/WindowRuleStore.h>
+#include <PhosphorWindowRules/WindowRule.h>
+#include <PhosphorWindowRules/WindowRuleSet.h>
+#include <PhosphorWindowRules/WindowRuleStore.h>
 
 #include <QJsonArray>
 #include <QJsonDocument>
@@ -33,12 +33,12 @@ std::optional<QJsonObject> parseObject(const QString& json)
 
 } // namespace
 
-WindowRuleAdaptor::WindowRuleAdaptor(PhosphorWindowRule::WindowRuleStore* store, QObject* parent)
+WindowRuleAdaptor::WindowRuleAdaptor(PhosphorWindowRules::WindowRuleStore* store, QObject* parent)
     : QDBusAbstractAdaptor(parent)
     , m_store(store)
 {
     if (m_store) {
-        connect(m_store, &PhosphorWindowRule::WindowRuleStore::rulesChanged, this, &WindowRuleAdaptor::rulesChanged);
+        connect(m_store, &PhosphorWindowRules::WindowRuleStore::rulesChanged, this, &WindowRuleAdaptor::rulesChanged);
     }
 }
 
@@ -90,12 +90,12 @@ bool WindowRuleAdaptor::setAllRules(const QString& rulesJson)
         return false;
     }
     const QJsonArray rulesArray = rulesValue.toArray();
-    QList<PhosphorWindowRule::WindowRule> rules;
+    QList<PhosphorWindowRules::WindowRule> rules;
     for (const QJsonValue& v : rulesArray) {
         if (!v.isObject()) {
             continue;
         }
-        if (const auto rule = PhosphorWindowRule::WindowRule::fromJson(v.toObject())) {
+        if (const auto rule = PhosphorWindowRules::WindowRule::fromJson(v.toObject())) {
             rules.append(*rule);
         }
     }
@@ -121,7 +121,7 @@ bool WindowRuleAdaptor::addRule(const QString& ruleJson)
     if (!obj) {
         return false;
     }
-    const auto rule = PhosphorWindowRule::WindowRule::fromJson(*obj);
+    const auto rule = PhosphorWindowRules::WindowRule::fromJson(*obj);
     if (!rule) {
         qCWarning(lcDbus) << "WindowRuleAdaptor::addRule: rule failed validation";
         return false;
@@ -138,7 +138,7 @@ bool WindowRuleAdaptor::updateRule(const QString& ruleJson)
     if (!obj) {
         return false;
     }
-    const auto rule = PhosphorWindowRule::WindowRule::fromJson(*obj);
+    const auto rule = PhosphorWindowRules::WindowRule::fromJson(*obj);
     if (!rule) {
         qCWarning(lcDbus) << "WindowRuleAdaptor::updateRule: rule failed validation";
         return false;

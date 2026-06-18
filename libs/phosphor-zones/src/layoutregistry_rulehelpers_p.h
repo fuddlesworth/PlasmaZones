@@ -20,18 +20,18 @@
 
 #include <PhosphorZones/AssignmentEntry.h>
 
-#include <PhosphorWindowRule/WindowQuery.h>
+#include <PhosphorWindowRules/WindowQuery.h>
 
 #include <QString>
 
-namespace PhosphorWindowRule {
+namespace PhosphorWindowRules {
 class MatchExpression;
 class WindowRule;
-} // namespace PhosphorWindowRule
+} // namespace PhosphorWindowRules
 
 namespace PhosphorZones::RuleHelpers {
 
-namespace PWR = PhosphorWindowRule;
+namespace PWR = PhosphorWindowRules;
 
 // The decoded (screenId, virtualDesktop, activity) context a context-rule's
 // match expression pins. A non-context / nested-composite match leaves all

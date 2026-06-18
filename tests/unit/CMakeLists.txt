@@ -267,13 +267,13 @@ p_add_test(test_configmigration config/test_configmigration.cpp)
 # v3 → v4 window-rule consolidation migration.
 add_executable(test_migration_v3_to_v4 config/test_migration_v3_to_v4.cpp)
 target_link_libraries(test_migration_v3_to_v4
-    PRIVATE Qt6::Test Qt6::Core plasmazones_core PhosphorWindowRule::PhosphorWindowRule)
+    PRIVATE Qt6::Test Qt6::Core plasmazones_core PhosphorWindowRules::PhosphorWindowRules)
 add_test(NAME test_migration_v3_to_v4 COMMAND test_migration_v3_to_v4)
 
 # WindowRuleStore — daemon-side windowrules.json persistence + mutation API.
 add_executable(test_windowrule_store config/test_windowrule_store.cpp)
 target_link_libraries(test_windowrule_store
-    PRIVATE Qt6::Test Qt6::Core plasmazones_core PhosphorWindowRule::PhosphorWindowRule)
+    PRIVATE Qt6::Test Qt6::Core plasmazones_core PhosphorWindowRules::PhosphorWindowRules)
 add_test(NAME test_windowrule_store COMMAND test_windowrule_store)
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -353,7 +353,7 @@ p_add_test(test_daemon_dual_store_race core/test_daemon_dual_store_race.cpp)
 # formula reproduces the legacy zone-Assignment cascade.
 add_executable(test_windowrule_cascade_fidelity core/test_windowrule_cascade_fidelity.cpp)
 target_link_libraries(test_windowrule_cascade_fidelity
-    PRIVATE Qt6::Test Qt6::Core PhosphorWindowRule::PhosphorWindowRule PhosphorZones::PhosphorZones plasmazones_core)
+    PRIVATE Qt6::Test Qt6::Core PhosphorWindowRules::PhosphorWindowRules PhosphorZones::PhosphorZones plasmazones_core)
 add_test(NAME test_windowrule_cascade_fidelity COMMAND test_windowrule_cascade_fidelity)
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -737,7 +737,7 @@ target_link_libraries(test_window_rule_model
     PRIVATE
         Qt6::Test
         Qt6::Core
-        PhosphorWindowRule::PhosphorWindowRule
+        PhosphorWindowRules::PhosphorWindowRules
         plasmazones_core
 )
 add_test(NAME test_window_rule_model COMMAND test_window_rule_model)
@@ -763,7 +763,7 @@ target_link_libraries(test_window_rule_controller
         Qt6::Test
         Qt6::Core
         Qt6::DBus
-        PhosphorWindowRule::PhosphorWindowRule
+        PhosphorWindowRules::PhosphorWindowRules
         PhosphorControl::PhosphorControl
         plasmazones_core
 )

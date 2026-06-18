@@ -86,8 +86,8 @@
 #include "../dbus/compositorbridgeadaptor.h"
 #include "../dbus/controladaptor.h"
 #include "../dbus/windowruleadaptor.h"
-#include <PhosphorWindowRule/ExclusionRules.h>
-#include <PhosphorWindowRule/WindowRuleStore.h>
+#include <PhosphorWindowRules/ExclusionRules.h>
+#include <PhosphorWindowRules/WindowRuleStore.h>
 #include "enginefactory.h"
 #include <PhosphorTileEngine/AutotileEngine.h>
 #include <PhosphorTiles/ScriptedAlgorithmLoader.h>
@@ -151,7 +151,7 @@ Daemon::Daemon(QObject* parent)
     // Unified WindowRule store — loads windowrules.json (written by the v3→v4
     // migration). Daemon is the sole writer; the WindowRuleAdaptor exposes it.
     // Declared/constructed before m_layoutManager so the registry can borrow it.
-    , m_windowRuleStore(std::make_unique<PhosphorWindowRule::WindowRuleStore>(ConfigDefaults::windowRulesFilePath()))
+    , m_windowRuleStore(std::make_unique<PhosphorWindowRules::WindowRuleStore>(ConfigDefaults::windowRulesFilePath()))
     , m_layoutManager(std::make_unique<PhosphorZones::LayoutRegistry>(m_windowRuleStore.get(),
                                                                       QStringLiteral("plasmazones/layouts")))
     , m_layoutComputeService(std::make_unique<PhosphorZones::LayoutComputeService>(nullptr))
@@ -1159,9 +1159,9 @@ bool Daemon::init()
     //     populated by WTA::loadState above.
     snapEngine->setExcludeRuleSet(&m_excludeRuleSet);
     m_excludeRuleSet.setRules(
-        PhosphorWindowRule::ExclusionRules::excludeRulesFrom(m_windowRuleStore->ruleSet()).rules());
+        PhosphorWindowRules::ExclusionRules::excludeRulesFrom(m_windowRuleStore->ruleSet()).rules());
     m_windowTrackingAdaptor->pruneExcludedPendingRestores(
-        PhosphorWindowRule::ExclusionRules::applicationExcludePatternsFrom(m_excludeRuleSet));
+        PhosphorWindowRules::ExclusionRules::applicationExcludePatternsFrom(m_excludeRuleSet));
 
     auto refilterExcludeRules = [this, snapEnginePtr = QPointer(snapEngine)] {
         // QPointer null-checks defend the rulesChanged subscription
@@ -1190,8 +1190,8 @@ bool Daemon::init()
         // `QList<WindowRule>` slices element-wise (the same semantics as
         // `WindowRuleSet::operator==`, which delegates to this list compare) —
         // exactly the rules-list-only comparison we want.
-        const QList<PhosphorWindowRule::WindowRule> newSlice =
-            PhosphorWindowRule::ExclusionRules::excludeRulesFrom(m_windowRuleStore->ruleSet()).rules();
+        const QList<PhosphorWindowRules::WindowRule> newSlice =
+            PhosphorWindowRules::ExclusionRules::excludeRulesFrom(m_windowRuleStore->ruleSet()).rules();
         if (newSlice == m_excludeRuleSet.rules()) {
             return;
         }
@@ -1210,10 +1210,10 @@ bool Daemon::init()
         if (m_windowTrackingAdaptor) {
             // Shutdown-window guard, mirrors snapEnginePtr null-check above.
             m_windowTrackingAdaptor->pruneExcludedPendingRestores(
-                PhosphorWindowRule::ExclusionRules::applicationExcludePatternsFrom(m_excludeRuleSet));
+                PhosphorWindowRules::ExclusionRules::applicationExcludePatternsFrom(m_excludeRuleSet));
         }
     };
-    connect(m_windowRuleStore.get(), &PhosphorWindowRule::WindowRuleStore::rulesChanged, this,
+    connect(m_windowRuleStore.get(), &PhosphorWindowRules::WindowRuleStore::rulesChanged, this,
             [refilterExcludeRules](bool /*persisted*/) {
                 refilterExcludeRules();
             });
@@ -1224,7 +1224,7 @@ bool Daemon::init()
     // open zone selectors / the layout picker in sync would miss it. Re-push
     // the lock state to any open overlay on every rule change. QPointer guards
     // the shutdown window (overlay reset before ~Daemon disconnects).
-    connect(m_windowRuleStore.get(), &PhosphorWindowRule::WindowRuleStore::rulesChanged, this,
+    connect(m_windowRuleStore.get(), &PhosphorWindowRules::WindowRuleStore::rulesChanged, this,
             [overlay = QPointer(m_overlayService.get())](bool /*persisted*/) {
                 if (overlay) {
                     overlay->refreshContextLockState();

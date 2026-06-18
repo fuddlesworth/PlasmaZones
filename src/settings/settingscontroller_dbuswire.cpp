@@ -27,7 +27,7 @@
 #include "dbusutils.h"
 
 #include <PhosphorProtocol/ClientHelpers.h>
-#include <PhosphorWindowRule/WindowRuleStore.h>
+#include <PhosphorWindowRules/WindowRuleStore.h>
 
 #include <QDBusConnection>
 #include <QString>

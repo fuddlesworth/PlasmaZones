@@ -17,8 +17,8 @@
 #include <PhosphorTiles/AlgorithmRegistry.h>
 #include <PhosphorTiles/ITileAlgorithmRegistry.h>
 #include <PhosphorTiles/ScriptedAlgorithmLoader.h>
-#include <PhosphorWindowRule/WindowRuleStore.h>
-#include <PhosphorWindowRule/WindowRuleStoreWatcher.h>
+#include <PhosphorWindowRules/WindowRuleStore.h>
+#include <PhosphorWindowRules/WindowRuleStoreWatcher.h>
 #include <PhosphorZones/IZoneLayoutRegistry.h>
 #include "../common/layoutpreviewserialize.h"
 #include "../core/constants.h"
@@ -51,8 +51,8 @@ EditorController::EditorController(QObject* parent)
     , m_templateService(new TemplateService(this))
     , m_undoController(new UndoController(this))
     , m_localAlgorithmRegistry(std::make_unique<PhosphorTiles::AlgorithmRegistry>(nullptr))
-    , m_localRuleStore(std::make_unique<PhosphorWindowRule::WindowRuleStore>(ConfigDefaults::windowRulesFilePath()))
-    , m_localRuleStoreWatcher(std::make_unique<PhosphorWindowRule::WindowRuleStoreWatcher>(*m_localRuleStore))
+    , m_localRuleStore(std::make_unique<PhosphorWindowRules::WindowRuleStore>(ConfigDefaults::windowRulesFilePath()))
+    , m_localRuleStoreWatcher(std::make_unique<PhosphorWindowRules::WindowRuleStoreWatcher>(*m_localRuleStore))
     , m_localLayoutManager(std::make_unique<PhosphorZones::LayoutRegistry>(m_localRuleStore.get(),
                                                                            QStringLiteral("plasmazones/layouts")))
 {

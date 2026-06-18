@@ -7,14 +7,14 @@
 
 #include "layoutregistry_rulehelpers_p.h"
 
-#include <PhosphorWindowRule/ContextRuleBridge.h>
-#include <PhosphorWindowRule/MatchExpression.h>
-#include <PhosphorWindowRule/RuleAction.h>
-#include <PhosphorWindowRule/WindowRule.h>
+#include <PhosphorWindowRules/ContextRuleBridge.h>
+#include <PhosphorWindowRules/MatchExpression.h>
+#include <PhosphorWindowRules/RuleAction.h>
+#include <PhosphorWindowRules/WindowRule.h>
 
 namespace PhosphorZones::RuleHelpers {
 
-namespace CRB = PhosphorWindowRule::ContextRuleBridge;
+namespace CRB = PhosphorWindowRules::ContextRuleBridge;
 
 PWR::WindowQuery makeContextQuery(const QString& screenId, int virtualDesktop, const QString& activity)
 {
@@ -119,7 +119,7 @@ AssignmentEntry entryFromRuleMatchActions(const PWR::WindowRule& rule)
             // Decode through `modeFromWireString` so every token the
             // ActionRegistry validator accepts round-trips end-to-end.
             // The canonical vocabulary lives at `engineModeOptions()` in
-            // libs/phosphor-windowrule/src/ruleaction.cpp — today
+            // libs/phosphor-window-rules/src/ruleaction.cpp — today
             // snapping / autotile / scrolling. The previous two-valued
             // `== "autotile"` ternary silently coerced every non-Autotile
             // token to Snapping — including the registered, picker-exposed

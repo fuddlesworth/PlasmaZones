@@ -2304,50 +2304,52 @@ void AutotileEngine::windowFocused(const QString& rawWindowId, const QString& sc
     const TilingStateKey oldKey = tracked ? trackedIt.value() : TilingStateKey{};
     const QString oldScreen = oldKey.screenId;
     if (!screenId.isEmpty() && tracked) {
-        if (isAutotileScreen(screenId)) {
-            const TilingStateKey newKey = currentKeyForScreen(screenId);
-            // FULL key comparison, not just screenId: a focus event landing
-            // between setCurrentDesktop and the catch-scan's windowOpened
-            // re-announce (window moved to another desktop, same screen)
-            // changes the key's desktop dimension only. Refreshing the map
-            // without migrating would leave the window in the OLD desktop's
-            // TilingState as a permanent ghost — windowOpened's own
-            // ghost-removal then skips (map already equals newKey), the old
-            // desktop retiles around a window living elsewhere forever.
-            if (!(newKey == oldKey)) {
-                if (oldKey.screenId == screenId) {
-                    // Context-only delta (desktop/activity changed, screen
-                    // unchanged): the focus event may have OUTRUN the
-                    // daemon's context push (alt-tab to a window on another
-                    // desktop fires focus and desktop-change from different
-                    // D-Bus sources with no ordering guarantee). Migrating
-                    // now against a stale m_currentDesktop would yank a
-                    // correctly-tiled window into the wrong desktop's state
-                    // (visible flicker, order/float reset). Defer one event
-                    // loop pass — by then the in-flight context push has
-                    // been processed — and migrate only if the mismatch
-                    // persists. The map is left untouched here so the
-                    // catch-scan's windowOpened ghost-removal still detects
-                    // a genuine move in the meantime.
-                    QMetaObject::invokeMethod(
-                        this,
-                        [this, windowId, screenId]() {
-                            revalidateWindowContext(windowId, screenId);
-                        },
-                        Qt::QueuedConnection);
-                } else {
-                    m_windowToStateKey[windowId] = newKey;
-                    migrateWindowBetweenKeys(windowId, oldKey, screenId);
-                }
+        if (oldKey.screenId == screenId) {
+            // SAME SCREEN: the window has NOT moved monitors, so any key delta
+            // is a context-only delta — the current desktop/activity changed
+            // underneath the window, not the window's location. This fires when
+            // a focus/activation event for the previously-active window lands
+            // during a desktop switch: KWin re-activates the last-focused window
+            // (e.g. the active window when the user left the desktop), and that
+            // focus arrives with the daemon's current desktop already advanced.
+            //
+            // isAutotileScreen() is evaluated against the CURRENT desktop, so it
+            // reads FALSE here whenever the window's own desktop differs from the
+            // one just switched to — even though the screen IS autotile on the
+            // window's real desktop. The old code took that false reading as
+            // "window moved to a non-autotile screen" and removed it from its
+            // (still-live, off-desktop) TilingState, silently dropping the window
+            // from that desktop's tiling so the survivors reflowed on return.
+            //
+            // Never migrate or remove on a same-screen focus. Defer one event
+            // loop pass: revalidateWindowContext migrates ONLY if a real
+            // desktop/activity move persists after the in-flight context push
+            // settles, and leaves the window untouched in its owning state when
+            // the screen is still non-autotile then (the window genuinely
+            // belongs to another desktop — windowDesktopsChanged owns real
+            // desktop moves). The map is left untouched here so the catch-scan's
+            // windowOpened ghost-removal still detects a genuine move meanwhile.
+            const bool alreadyCorrect = isAutotileScreen(screenId) && currentKeyForScreen(screenId) == oldKey;
+            if (!alreadyCorrect) {
+                QMetaObject::invokeMethod(
+                    this,
+                    [this, windowId, screenId]() {
+                        revalidateWindowContext(windowId, screenId);
+                    },
+                    Qt::QueuedConnection);
             }
+        } else if (isAutotileScreen(screenId)) {
+            // Genuine cross-screen move to an autotile screen: migrate now.
+            m_windowToStateKey[windowId] = currentKeyForScreen(screenId);
+            migrateWindowBetweenKeys(windowId, oldKey, screenId);
         } else {
-            // Window moved to a non-autotile screen — remove tracking entirely.
-            // Leaving a stale entry pointing at a snap screen causes phantom
-            // lookups and prevents clean re-entry if the window returns.
-            // Drop the per-window caches too: removeWindow()/windowClosed()
-            // clear these on their paths, and a lingering autotile-floated
-            // marker would keep feeding the daemon's mode-flip logic while a
-            // stored min-size would survive a later re-entry stale.
+            // Genuine cross-screen move to a non-autotile screen — remove
+            // tracking entirely. Leaving a stale entry pointing at a snap screen
+            // causes phantom lookups and prevents clean re-entry if the window
+            // returns. Drop the per-window caches too: removeWindow()/
+            // windowClosed() clear these on their paths, and a lingering
+            // autotile-floated marker would keep feeding the daemon's mode-flip
+            // logic while a stored min-size would survive a later re-entry stale.
             m_windowToStateKey.remove(windowId);
             m_windowMinSizes.remove(windowId);
             m_autotileFloatedWindows.remove(windowId);

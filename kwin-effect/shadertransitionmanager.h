@@ -9,8 +9,8 @@
 #include <PhosphorAnimation/ShaderProfile.h>
 #include <PhosphorAnimation/ShaderProfileTree.h>
 
-#include <PhosphorWindowRule/RuleEvaluator.h>
-#include <PhosphorWindowRule/WindowRuleSet.h>
+#include <PhosphorWindowRules/RuleEvaluator.h>
+#include <PhosphorWindowRules/WindowRuleSet.h>
 
 #include <opengl/glshader.h>
 #include <opengl/gltexture.h>
@@ -91,7 +91,7 @@ public:
     /// Rebuild the effect-rule `WindowRuleSet` from `m_windowRuleAnimationRules`
     /// — the rules from `windowrules.json` that carry any effect-consumed
     /// action (the `OverrideAnimation*` triple plus `SetOpacity`; see
-    /// `PhosphorWindowRule::ActionType::isEffectRuleAction`). Call after
+    /// `PhosphorWindowRules::ActionType::isEffectRuleAction`). Call after
     /// every mutation of that list. The bound `RuleEvaluator` picks up
     /// the new revision transparently and its match cache is invalidated.
     void rebuildAnimationRuleSet();
@@ -103,19 +103,19 @@ public:
     /// effect rule authored in the settings UI fires without a restart.
     /// Triggers `rebuildAnimationRuleSet()` only when the list actually
     /// changes — a no-op rewrite keeps the evaluator's match cache warm.
-    void setWindowRuleAnimationRules(QList<PhosphorWindowRule::WindowRule> rules);
+    void setWindowRuleAnimationRules(QList<PhosphorWindowRules::WindowRule> rules);
 
     /// The evaluator bound to the effect-rule set. Resolution of the
     /// per-window cascade for every effect-consumed action (the
     /// `OverrideAnimation*` triple plus `SetOpacity`) routes through
     /// this evaluator.
-    const PhosphorWindowRule::RuleEvaluator& animationRuleEvaluator() const
+    const PhosphorWindowRules::RuleEvaluator& animationRuleEvaluator() const
     {
         return m_animationRuleEvaluator;
     }
 
     /// The animation rule set itself — for the `!isEmpty()` fast path.
-    const PhosphorWindowRule::WindowRuleSet& animationRuleSet() const
+    const PhosphorWindowRules::WindowRuleSet& animationRuleSet() const
     {
         return m_animationRuleSet;
     }
@@ -318,11 +318,11 @@ private:
     PhosphorAnimation::ProfileTree m_motionProfileTree;
     // Rules from windowrules.json that carry any effect-consumed action
     // (`OverrideAnimation*` triple OR `SetOpacity` — see
-    // `PhosphorWindowRule::ActionType::isEffectRuleAction`). Refreshed
+    // `PhosphorWindowRules::ActionType::isEffectRuleAction`). Refreshed
     // from the daemon's org.plasmazones.WindowRules interface on every
     // `rulesChanged` signal; mirrored into `m_animationRuleSet` so the
     // bound RuleEvaluator picks up the new revision.
-    QList<PhosphorWindowRule::WindowRule> m_windowRuleAnimationRules;
+    QList<PhosphorWindowRules::WindowRule> m_windowRuleAnimationRules;
 
     // ═══════════════════════════════════════════════════════════════════════════
     // Window-rule view of the animation rules
@@ -332,8 +332,8 @@ private:
     // `m_animationRuleEvaluator` binds a const reference to it — declaration
     // ORDER MATTERS: the rule set must outlive (and precede) the evaluator.
     // ═══════════════════════════════════════════════════════════════════════════
-    PhosphorWindowRule::WindowRuleSet m_animationRuleSet;
-    PhosphorWindowRule::RuleEvaluator m_animationRuleEvaluator{m_animationRuleSet};
+    PhosphorWindowRules::WindowRuleSet m_animationRuleSet;
+    PhosphorWindowRules::RuleEvaluator m_animationRuleEvaluator{m_animationRuleSet};
 
     // Cached "any enabled rule carries SetOpacity" predicate — recomputed in
     // rebuildAnimationRuleSet() so the per-frame opacity resolve can skip the

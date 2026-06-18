@@ -236,7 +236,7 @@ inline QString modeToWireString(AssignmentEntry::Mode mode)
     // (`engineModeOptions().contains(...)`), so a malformed disable rule
     // fails load loudly. NOTE: `SetEngineMode`'s validator only checks
     // `hasNonEmptyString` (open-vocabulary by design — see
-    // `libs/phosphor-windowrule/src/ruleaction.cpp:225-238`), so a
+    // `libs/phosphor-window-rules/src/ruleaction.cpp:225-238`), so a
     // malformed assignment rule survives load but is silently coerced
     // back to Snapping at consumption via
     // `entryFromRuleMatchActions → modeFromWireString → nullopt`. The

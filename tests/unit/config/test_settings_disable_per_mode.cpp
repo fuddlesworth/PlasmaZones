@@ -24,7 +24,7 @@
 #include "../../../src/core/settings_interfaces.h"
 #include "../helpers/IsolatedConfigGuard.h"
 
-#include <PhosphorWindowRule/WindowRuleStore.h>
+#include <PhosphorWindowRules/WindowRuleStore.h>
 
 using namespace PlasmaZones;
 using PlasmaZones::TestHelpers::IsolatedConfigGuard;
@@ -353,7 +353,7 @@ private Q_SLOTS:
     void testBorrowedStore_writesLandInCallerStore()
     {
         IsolatedConfigGuard guard;
-        PhosphorWindowRule::WindowRuleStore store(ConfigDefaults::windowRulesFilePath());
+        PhosphorWindowRules::WindowRuleStore store(ConfigDefaults::windowRulesFilePath());
         QCOMPARE(store.count(), 0);
 
         Settings settings(&store, nullptr);
@@ -388,7 +388,7 @@ private Q_SLOTS:
     void testBorrowedStore_settingsLoadDoesNotReloadIt()
     {
         IsolatedConfigGuard guard;
-        PhosphorWindowRule::WindowRuleStore store(ConfigDefaults::windowRulesFilePath());
+        PhosphorWindowRules::WindowRuleStore store(ConfigDefaults::windowRulesFilePath());
         Settings settings(&store, nullptr);
 
         // Establish a known baseline on disk (the Settings ctor's config

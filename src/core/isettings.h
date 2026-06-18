@@ -138,7 +138,7 @@ public:
     // animationExcludedApplications / animationExcludedWindowClasses virtuals
     // retired in v4 — the lists folded into ExcludeAnimations WindowRules; the
     // KWin effect now derives its m_animationExclusionRuleSet from the unified
-    // rule store via PhosphorWindowRule::ExclusionRules::excludeAnimationsRulesFrom.
+    // rule store via PhosphorWindowRules::ExclusionRules::excludeAnimationsRulesFrom.
 
     // Autotile decoration settings (fetched by KWin effect via D-Bus)
     virtual bool autotileFocusFollowsMouse() const = 0;
@@ -395,7 +395,7 @@ Q_SIGNALS:
     // excludedApplications / excludedWindowClasses signals retired in v4
     // — see settings_interfaces.h for the rationale (lists folded into
     // unified Exclude WindowRules; consumers subscribe to the rule store
-    // through PhosphorWindowRule::WindowRuleStore::rulesChanged instead).
+    // through PhosphorWindowRules::WindowRuleStore::rulesChanged instead).
     void excludeTransientWindowsChanged();
     void minimumWindowWidthChanged();
     void minimumWindowHeightChanged();

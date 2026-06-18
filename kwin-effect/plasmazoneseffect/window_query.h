@@ -4,7 +4,7 @@
 #pragma once
 
 #include <PhosphorProtocol/WindowTypeEnum.h>
-#include <PhosphorWindowRule/WindowQuery.h>
+#include <PhosphorWindowRules/WindowQuery.h>
 
 namespace KWin {
 class EffectWindow;
@@ -22,7 +22,7 @@ namespace PlasmaZones {
 /// WindowType).
 PhosphorProtocol::WindowType windowTypeFor(KWin::EffectWindow* w);
 
-/// Build a per-window PhosphorWindowRule::WindowQuery from a live KWin window,
+/// Build a per-window PhosphorWindowRules::WindowQuery from a live KWin window,
 /// populating every window-side field declared on `WindowQuery` so user-
 /// authored rules can match on any of them. The unified shape means a rule
 /// that passes the rule-override gate (hasAnyMatch) also resolves its slot
@@ -66,9 +66,9 @@ PhosphorProtocol::WindowType windowTypeFor(KWin::EffectWindow* w);
 /// them — a site that silently omitted them would leave IsFloating / IsSnapped /
 /// Zone unmatched in that resolver path only.
 ///
-/// Confined to the effect translation unit so the LGPL phosphor-windowrule
+/// Confined to the effect translation unit so the LGPL phosphor-window-rules
 /// library never sees a KWin type.
-PhosphorWindowRule::WindowQuery windowRuleQueryFor(KWin::EffectWindow* w, const QString& screenId, bool isFloating,
-                                                   bool isSnapped, const QString& zoneId);
+PhosphorWindowRules::WindowQuery windowRuleQueryFor(KWin::EffectWindow* w, const QString& screenId, bool isFloating,
+                                                    bool isSnapped, const QString& zoneId);
 
 } // namespace PlasmaZones

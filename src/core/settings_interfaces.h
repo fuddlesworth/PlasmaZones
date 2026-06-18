@@ -288,7 +288,7 @@ public:
     // excludedWindowClasses) retired in v4 — the legacy QStringList settings
     // folded into Application-subject Exclude WindowRules, and all consumers
     // (snap-engine, KWin effect, WTA pending-restore prune) now route through
-    // PhosphorWindowRule::ExclusionRules over the unified rule store.
+    // PhosphorWindowRules::ExclusionRules over the unified rule store.
 
     virtual bool excludeTransientWindows() const = 0;
     virtual void setExcludeTransientWindows(bool exclude) = 0;

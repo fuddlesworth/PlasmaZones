@@ -11,13 +11,13 @@
 #include <PhosphorAnimation/Profile.h>
 #include <PhosphorConfig/MigrationRunner.h>
 #include <PhosphorConfig/Schema.h>
-#include <PhosphorWindowRule/ContextRuleBridge.h>
-#include <PhosphorWindowRule/IdentityKey.h>
-#include <PhosphorWindowRule/MatchExpression.h>
-#include <PhosphorWindowRule/MatchTypes.h>
-#include <PhosphorWindowRule/RuleAction.h>
-#include <PhosphorWindowRule/WindowRule.h>
-#include <PhosphorWindowRule/WindowRuleSet.h>
+#include <PhosphorWindowRules/ContextRuleBridge.h>
+#include <PhosphorWindowRules/IdentityKey.h>
+#include <PhosphorWindowRules/MatchExpression.h>
+#include <PhosphorWindowRules/MatchTypes.h>
+#include <PhosphorWindowRules/RuleAction.h>
+#include <PhosphorWindowRules/WindowRule.h>
+#include <PhosphorWindowRules/WindowRuleSet.h>
 
 #include <QColor>
 #include <QDir>
@@ -1811,11 +1811,12 @@ QStringList parseDisableList(const QString& csv)
 }
 
 /// Build a context rule from a v3 monitor disable-list entry (`screenId`).
-PhosphorWindowRule::WindowRule disableRuleForMonitor(const QString& screenId, PhosphorZones::AssignmentEntry::Mode mode)
+PhosphorWindowRules::WindowRule disableRuleForMonitor(const QString& screenId,
+                                                      PhosphorZones::AssignmentEntry::Mode mode)
 {
     const QString name = disableRulePrefixFor(mode) + screenId;
-    return PhosphorWindowRule::ContextRuleBridge::makeDisableRule(name, screenId, 0, QString(),
-                                                                  PhosphorZones::modeToWireString(mode));
+    return PhosphorWindowRules::ContextRuleBridge::makeDisableRule(name, screenId, 0, QString(),
+                                                                   PhosphorZones::modeToWireString(mode));
 }
 
 /// Build a context rule from a v3 desktop disable-list entry (`screenId/N`).
@@ -1825,8 +1826,8 @@ PhosphorWindowRule::WindowRule disableRuleForMonitor(const QString& screenId, Ph
 /// (split on `lastIndexOf('/')`), so a screen id with embedded slashes would be
 /// truncated. This matches the `screenId/desktop` composite-key convention used
 /// by Settings::writeDisableEntries.
-std::optional<PhosphorWindowRule::WindowRule> disableRuleForDesktop(const QString& entry,
-                                                                    PhosphorZones::AssignmentEntry::Mode mode)
+std::optional<PhosphorWindowRules::WindowRule> disableRuleForDesktop(const QString& entry,
+                                                                     PhosphorZones::AssignmentEntry::Mode mode)
 {
     const int slash = entry.lastIndexOf(QLatin1Char('/'));
     if (slash <= 0 || slash == entry.size() - 1) {
@@ -1839,8 +1840,8 @@ std::optional<PhosphorWindowRule::WindowRule> disableRuleForDesktop(const QStrin
         return std::nullopt;
     }
     const QString name = disableRulePrefixFor(mode) + screenId + disableRuleDesktopSuffix(desktop);
-    return PhosphorWindowRule::ContextRuleBridge::makeDisableRule(name, screenId, desktop, QString(),
-                                                                  PhosphorZones::modeToWireString(mode));
+    return PhosphorWindowRules::ContextRuleBridge::makeDisableRule(name, screenId, desktop, QString(),
+                                                                   PhosphorZones::modeToWireString(mode));
 }
 
 /// Build a context rule from a v3 activity disable-list entry
@@ -1854,8 +1855,8 @@ std::optional<PhosphorWindowRule::WindowRule> disableRuleForDesktop(const QStrin
 /// to the left is the screen ID (which may carry an embedded `/CONNECTOR`
 /// suffix). Matches the live `Settings::writeDisableEntries` decoder in
 /// src/config/settings.cpp.
-std::optional<PhosphorWindowRule::WindowRule> disableRuleForActivity(const QString& entry,
-                                                                     PhosphorZones::AssignmentEntry::Mode mode)
+std::optional<PhosphorWindowRules::WindowRule> disableRuleForActivity(const QString& entry,
+                                                                      PhosphorZones::AssignmentEntry::Mode mode)
 {
     const int slash = entry.lastIndexOf(QLatin1Char('/'));
     if (slash <= 0 || slash == entry.size() - 1) {
@@ -1864,8 +1865,8 @@ std::optional<PhosphorWindowRule::WindowRule> disableRuleForActivity(const QStri
     const QString screenId = entry.left(slash);
     const QString activity = entry.mid(slash + 1);
     const QString name = disableRulePrefixFor(mode) + screenId + disableRuleActivitySuffix();
-    return PhosphorWindowRule::ContextRuleBridge::makeDisableRule(name, screenId, 0, activity,
-                                                                  PhosphorZones::modeToWireString(mode));
+    return PhosphorWindowRules::ContextRuleBridge::makeDisableRule(name, screenId, 0, activity,
+                                                                   PhosphorZones::modeToWireString(mode));
 }
 
 /// Parse one Assignment:* group name into (screenId, desktop, activity).
@@ -1931,7 +1932,7 @@ QString assignmentRuleName(const QString& screenId, int desktop, const QString& 
 }
 
 // ─── Animation App Rule → WindowRule conversion ─────────────────────────────
-// Ports the (now-deleted) PhosphorWindowRule::AnimationAppRuleBridge logic
+// Ports the (now-deleted) PhosphorWindowRules::AnimationAppRuleBridge logic
 // against the raw stash JSON. The legacy AnimationAppRule type is gone in v4+,
 // so the conversion lives here — the migration is its sole remaining caller.
 
@@ -1986,20 +1987,20 @@ bool isValidAnimationAppRuleSource(const QJsonObject& source)
 ///               list — used to derive `priority = count - i`.
 /// @param count  total VALID source entries (priority floors at 1, reserving
 ///               0 for the provider-default catch-all band).
-PhosphorWindowRule::WindowRule buildAnimationAppRule(const QJsonObject& source, int i, int count)
+PhosphorWindowRules::WindowRule buildAnimationAppRule(const QJsonObject& source, int i, int count)
 {
-    namespace ActionParam = PhosphorWindowRule::ActionParam;
+    namespace ActionParam = PhosphorWindowRules::ActionParam;
 
     const QString classPattern = source.value(kKeyClassPattern).toString();
     const QString eventPath = source.value(kKeyEventPath).toString();
     const QString kindStr = source.value(kKeyKind).toString();
     const bool isShader = kindStr.compare(kKindShader, Qt::CaseInsensitive) == 0;
 
-    PhosphorWindowRule::RuleAction action;
+    PhosphorWindowRules::RuleAction action;
     QJsonObject params;
     params.insert(ActionParam::Event, eventPath);
     if (isShader) {
-        action.type = QString(PhosphorWindowRule::ActionType::OverrideAnimationShader);
+        action.type = QString(PhosphorWindowRules::ActionType::OverrideAnimationShader);
         // effectId is always written — the empty string is the engaged-blocking
         // sentinel ("disable shader for matching windows"), distinct from an
         // unfilled slot ("no rule matched").
@@ -2025,7 +2026,7 @@ PhosphorWindowRule::WindowRule buildAnimationAppRule(const QJsonObject& source, 
                 i, qPrintable(classPattern));
         }
     } else {
-        action.type = QString(PhosphorWindowRule::ActionType::OverrideAnimationTiming);
+        action.type = QString(PhosphorWindowRules::ActionType::OverrideAnimationTiming);
         const QString curve = source.value(kKeyCurve).toString();
         if (!curve.isEmpty()) {
             params.insert(ActionParam::Curve, curve);
@@ -2041,7 +2042,7 @@ PhosphorWindowRule::WindowRule buildAnimationAppRule(const QJsonObject& source, 
     }
     action.params = params;
 
-    PhosphorWindowRule::WindowRule rule;
+    PhosphorWindowRules::WindowRule rule;
     // Deterministic id from the source identity tuple so repeated migrations
     // yield byte-identical rules — keeps the conversion idempotent under
     // crash-and-retry. The third segment uses the canonical lowercase kind
@@ -2050,12 +2051,12 @@ PhosphorWindowRule::WindowRule buildAnimationAppRule(const QJsonObject& source, 
     // case-insensitive.
     rule.id = QUuid::createUuidV5(
         animationAppRuleNamespaceUuid(),
-        PhosphorWindowRule::Detail::encodeSegment(classPattern) + PhosphorWindowRule::Detail::encodeSegment(eventPath)
-            + PhosphorWindowRule::Detail::encodeSegment(isShader ? kKindShader : kKindTiming));
+        PhosphorWindowRules::Detail::encodeSegment(classPattern) + PhosphorWindowRules::Detail::encodeSegment(eventPath)
+            + PhosphorWindowRules::Detail::encodeSegment(isShader ? kKindShader : kKindTiming));
     rule.enabled = true;
     rule.priority = count - i;
-    rule.match = PhosphorWindowRule::MatchExpression::makeLeaf(PhosphorWindowRule::Field::WindowClass,
-                                                               PhosphorWindowRule::Operator::Contains, classPattern);
+    rule.match = PhosphorWindowRules::MatchExpression::makeLeaf(PhosphorWindowRules::Field::WindowClass,
+                                                                PhosphorWindowRules::Operator::Contains, classPattern);
     rule.actions.append(action);
     return rule;
 }
@@ -2067,7 +2068,7 @@ PhosphorWindowRule::WindowRule buildAnimationAppRule(const QJsonObject& source, 
 /// entries don't leave gaps in the descending-by-list-order priority
 /// sequence (`AnimationAppRuleList::fromJson` filtered first; `toRuleSet`
 /// then used the filtered `entries.size()` as count).
-void appendAnimationRulesFromStash(QList<PhosphorWindowRule::WindowRule>& rules, const QJsonArray& stash)
+void appendAnimationRulesFromStash(QList<PhosphorWindowRules::WindowRule>& rules, const QJsonArray& stash)
 {
     QList<QJsonObject> valid;
     valid.reserve(stash.size());
@@ -2131,14 +2132,14 @@ inline const QUuid& exclusionMigrationNamespace()
 // ExcludeAnimations wire-string static_assert below guards against. MatchTypes.h
 // already documents "keeping enum values stable across versions"; pin the exact
 // values the derivation depends on so a renumber breaks the build instead.
-static_assert(static_cast<int>(PhosphorWindowRule::Field::AppId) == 0
-                  && static_cast<int>(PhosphorWindowRule::Field::WindowClass) == 1
-                  && static_cast<int>(PhosphorWindowRule::Field::DesktopFile) == 2,
+static_assert(static_cast<int>(PhosphorWindowRules::Field::AppId) == 0
+                  && static_cast<int>(PhosphorWindowRules::Field::WindowClass) == 1
+                  && static_cast<int>(PhosphorWindowRules::Field::DesktopFile) == 2,
               "Field enum values feed migrated exclusion-rule UUIDs — renumbering them silently "
               "changes every migrated rule id. Bump the schema version and write a v4→v5 migration "
               "if a renumber is truly needed.");
-static_assert(static_cast<int>(PhosphorWindowRule::Operator::Contains) == 1
-                  && static_cast<int>(PhosphorWindowRule::Operator::AppIdMatches) == 5,
+static_assert(static_cast<int>(PhosphorWindowRules::Operator::Contains) == 1
+                  && static_cast<int>(PhosphorWindowRules::Operator::AppIdMatches) == 5,
               "Operator enum values feed migrated exclusion-rule UUIDs — renumbering them silently "
               "changes every migrated rule id. Bump the schema version and write a v4→v5 migration "
               "if a renumber is truly needed.");
@@ -2153,9 +2154,9 @@ static_assert(static_cast<int>(PhosphorWindowRule::Operator::Contains) == 1
 /// one `AppId AppIdMatches <pattern>` matcher with a terminal `Exclude`
 /// action. Empty / whitespace-only patterns are dropped, mirroring the
 /// runtime bridge's `pattern.trimmed().isEmpty()` skip.
-void appendExclusionRulesFromStash(QList<PhosphorWindowRule::WindowRule>& rules, const QJsonObject& stash)
+void appendExclusionRulesFromStash(QList<PhosphorWindowRules::WindowRule>& rules, const QJsonObject& stash)
 {
-    using namespace PhosphorWindowRule;
+    using namespace PhosphorWindowRules;
     const auto appendOne = [&rules](const QString& rawCsv) {
         for (const QString& part : rawCsv.split(QLatin1Char(','), Qt::SkipEmptyParts)) {
             const QString pattern = part.trimmed();
@@ -2218,9 +2219,9 @@ void appendExclusionRulesFromStash(QList<PhosphorWindowRule::WindowRule>& rules,
 /// case-insensitively; the `Title Equals "Steam"` guard is likewise
 /// case-insensitive (see MatchTypes operator semantics). The id is a fixed
 /// deterministic UUIDv5 so a re-run never produces a duplicate.
-void appendSteamDefaultRule(QList<PhosphorWindowRule::WindowRule>& rules)
+void appendSteamDefaultRule(QList<PhosphorWindowRules::WindowRule>& rules)
 {
-    using namespace PhosphorWindowRule;
+    using namespace PhosphorWindowRules;
     WindowRule rule;
     rule.id = QUuid::createUuidV5(exclusionMigrationNamespace(),
                                   Detail::encodeSegment(QStringLiteral("steam-default-exclude")));
@@ -2250,9 +2251,9 @@ void appendSteamDefaultRule(QList<PhosphorWindowRule::WindowRule>& rules)
 /// match-field distinction (unlike the snapping-side migration above,
 /// which folded both into AppId rules because the daemon's runtime
 /// bridge already collapsed the distinction).
-void appendAnimationExclusionRulesFromStash(QList<PhosphorWindowRule::WindowRule>& rules, const QJsonObject& stash)
+void appendAnimationExclusionRulesFromStash(QList<PhosphorWindowRules::WindowRule>& rules, const QJsonObject& stash)
 {
-    using namespace PhosphorWindowRule;
+    using namespace PhosphorWindowRules;
     // Pin the wire-string for ExcludeAnimations against a future rename.
     // The animation-exclusion rule id is derived as
     // `UUIDv5(namespace, "<field>" + "<op>" + "<pattern>" + "<actionType>")`
@@ -2337,7 +2338,7 @@ bool ConfigMigration::finalizeV4Conversion(const QString& jsonPath)
     // an unrelated version namespace) — a file that parses as a v4 rule set is
     // by definition the completed conversion output.
     const bool windowRulesAlreadyConverted =
-        QFile::exists(windowRulesPath) && PhosphorWindowRule::WindowRuleSet::loadFromFile(windowRulesPath).has_value();
+        QFile::exists(windowRulesPath) && PhosphorWindowRules::WindowRuleSet::loadFromFile(windowRulesPath).has_value();
 
     if (windowRulesAlreadyConverted) {
         // The conversion is complete. NEVER rebuild + overwrite windowrules.json
@@ -2514,7 +2515,7 @@ bool ConfigMigration::finalizeV4Conversion(const QString& jsonPath)
     // an empty rule set is written — the daemon's store still needs a stable
     // file to exist on disk.
 
-    QList<PhosphorWindowRule::WindowRule> rules;
+    QList<PhosphorWindowRules::WindowRule> rules;
 
     // ── Assignment rules ───────────────────────────────────────────────────
     QJsonObject quickLayoutsToRelocate;
@@ -2550,7 +2551,7 @@ bool ConfigMigration::finalizeV4Conversion(const QString& jsonPath)
             const QString snappingLayout = grp.value(ConfigKeys::Legacy::v3AssignmentLayout()).toString();
             const QString tilingAlgorithm = grp.value(ConfigKeys::Legacy::v3AssignmentAlgorithm()).toString();
 
-            rules.append(PhosphorWindowRule::ContextRuleBridge::makeAssignmentRule(
+            rules.append(PhosphorWindowRules::ContextRuleBridge::makeAssignmentRule(
                 assignmentRuleName(screenId, desktop, activity), screenId, desktop, activity,
                 PhosphorZones::modeToWireString(mode), snappingLayout, tilingAlgorithm));
         }
@@ -2587,7 +2588,7 @@ bool ConfigMigration::finalizeV4Conversion(const QString& jsonPath)
         const auto defaultMode = (defaultLayoutId.isEmpty() && !defaultAlgorithm.isEmpty())
             ? PhosphorZones::AssignmentEntry::Autotile
             : PhosphorZones::AssignmentEntry::Snapping;
-        rules.append(PhosphorWindowRule::ContextRuleBridge::makeProviderDefaultRule(
+        rules.append(PhosphorWindowRules::ContextRuleBridge::makeProviderDefaultRule(
             QStringLiteral("Default"), PhosphorZones::modeToWireString(defaultMode), defaultLayoutId,
             defaultAlgorithm));
     }
@@ -2598,7 +2599,7 @@ bool ConfigMigration::finalizeV4Conversion(const QString& jsonPath)
     // merged into the final set — migrateV2ToV3 duplicates each v2 value into
     // both the snapping and autotile lists, so a stash carried forward from a
     // hand-edited or doubly-migrated config can hold the same entry twice.
-    QList<PhosphorWindowRule::WindowRule> disableRules;
+    QList<PhosphorWindowRules::WindowRule> disableRules;
     auto appendMonitorRules = [&disableRules](const QString& csv, PhosphorZones::AssignmentEntry::Mode mode) {
         for (const QString& entry : parseDisableList(csv)) {
             disableRules.append(disableRuleForMonitor(entry, mode));
@@ -2630,9 +2631,9 @@ bool ConfigMigration::finalizeV4Conversion(const QString& jsonPath)
     // (mode-token, screenId, desktop, activity) so the migrated store is no
     // noisier than necessary.
     {
-        namespace CRB = PhosphorWindowRule::ContextRuleBridge;
+        namespace CRB = PhosphorWindowRules::ContextRuleBridge;
         QSet<QString> seen;
-        for (const PhosphorWindowRule::WindowRule& rule : std::as_const(disableRules)) {
+        for (const PhosphorWindowRules::WindowRule& rule : std::as_const(disableRules)) {
             QString screenId;
             int desktop = 0;
             QString activity;
@@ -2748,7 +2749,7 @@ bool ConfigMigration::finalizeV4Conversion(const QString& jsonPath)
     // run. It MUST go after the sidecar relocation (see comment above) — once
     // this file exists as a valid v4 rule set, the cleanup-only branch
     // short-circuits the rebuild forever.
-    PhosphorWindowRule::WindowRuleSet ruleSet;
+    PhosphorWindowRules::WindowRuleSet ruleSet;
     const int inputRuleCount = rules.size();
     ruleSet.setRules(rules);
     const int storedRuleCount = ruleSet.count();

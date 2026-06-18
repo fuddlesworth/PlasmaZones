@@ -21,17 +21,16 @@
 #include <PhosphorShaders/ShaderEntryPoint.h>
 #include <PhosphorShaders/ShaderIncludeResolver.h>
 #include <PhosphorShaders/ShaderParamPreamble.h>
-#include <PhosphorWindowRule/ExclusionRules.h>
-#include <PhosphorWindowRule/RuleAction.h>
-#include <PhosphorWindowRule/WindowRule.h>
-#include <PhosphorWindowRule/WindowRuleSet.h>
+#include <PhosphorWindowRules/ExclusionRules.h>
+#include <PhosphorWindowRules/RuleAction.h>
+#include <PhosphorWindowRules/WindowRule.h>
+#include <PhosphorWindowRules/WindowRuleSet.h>
 
 #include <QDBusConnection>
 #include <QDBusMessage>
 #include <QDBusPendingCall>
 #include <QDBusPendingCallWatcher>
 #include <QDBusPendingReply>
-#include <QJsonDocument>
 
 #include <effect/effecthandler.h>
 #include <opengl/glshader.h>
@@ -1436,7 +1435,7 @@ void PlasmaZonesEffect::tryBeginShaderForEvent(KWin::EffectWindow* window, const
     // also resolves its slot. Caching across resolver calls is built
     // into the evaluator's `resolveCached(windowId, …)` path; the query
     // here is only the match input, not the cache key.
-    const PhosphorWindowRule::WindowQuery query = windowRuleQuery(window);
+    const PhosphorWindowRules::WindowQuery query = windowRuleQuery(window);
     const QString windowId = getWindowId(window);
     const auto& profileTree = m_shaderManager.profileTree();
     // Per-event base duration. The daemon mirrors its motion
@@ -1629,7 +1628,7 @@ void PlasmaZonesEffect::loadWindowRuleAnimationsFromDbus()
             qCWarning(lcEffect) << "loadWindowRuleAnimationsFromDbus: getAllRules returned non-object JSON";
             return;
         }
-        const auto setOpt = PhosphorWindowRule::WindowRuleSet::fromJson(doc.object());
+        const auto setOpt = PhosphorWindowRules::WindowRuleSet::fromJson(doc.object());
         if (!setOpt) {
             qCWarning(lcEffect) << "loadWindowRuleAnimationsFromDbus: WindowRuleSet::fromJson refused payload";
             return;
@@ -1642,9 +1641,9 @@ void PlasmaZonesEffect::loadWindowRuleAnimationsFromDbus()
         // last-painted opacity when the user removed the last SetOpacity rule.
         bool hadSetOpacity = false;
         const auto& priorRules = m_shaderManager.animationRuleSet().rules();
-        for (const PhosphorWindowRule::WindowRule& rule : priorRules) {
-            for (const PhosphorWindowRule::RuleAction& action : rule.actions) {
-                if (action.type == PhosphorWindowRule::ActionType::SetOpacity) {
+        for (const PhosphorWindowRules::WindowRule& rule : priorRules) {
+            for (const PhosphorWindowRules::RuleAction& action : rule.actions) {
+                if (action.type == PhosphorWindowRules::ActionType::SetOpacity) {
                     hadSetOpacity = true;
                     break;
                 }
@@ -1654,8 +1653,8 @@ void PlasmaZonesEffect::loadWindowRuleAnimationsFromDbus()
             }
         }
 
-        QList<PhosphorWindowRule::WindowRule> animationRules;
-        for (const PhosphorWindowRule::WindowRule& rule : setOpt->rules()) {
+        QList<PhosphorWindowRules::WindowRule> animationRules;
+        for (const PhosphorWindowRules::WindowRule& rule : setOpt->rules()) {
             if (!rule.enabled) {
                 // Skip disabled rules — they exist in the store but must not
                 // contribute to the evaluator. (RuleEvaluator already gates
@@ -1667,8 +1666,9 @@ void PlasmaZonesEffect::loadWindowRuleAnimationsFromDbus()
             // (the OverrideAnimation* triple, SetOpacity, or a SetBorder* /
             // SetHideTitleBar appearance action — see isEffectRuleAction).
             bool admitted = false;
-            for (const PhosphorWindowRule::RuleAction& action : rule.actions) {
-                if (PhosphorWindowRule::ActionType::isEffectRuleAction(action.type)) {
+            for (const PhosphorWindowRules::RuleAction& action : rule.actions) {
+                if (PhosphorWindowRules::ActionRegistry::instance().hasTag(action.type,
+                                                                           PhosphorWindowRules::Tag::Effect)) {
                     admitted = true;
                     break;
                 }
@@ -1702,14 +1702,14 @@ void PlasmaZonesEffect::loadWindowRuleAnimationsFromDbus()
         // on its next walk (these evaluators call uncached `resolve()`, so
         // there is no per-window match cache to drop — the sort index is
         // the only revision-keyed artifact).
-        m_snappingExclusionRuleSet.setRules(PhosphorWindowRule::ExclusionRules::excludeRulesFrom(*setOpt).rules());
+        m_snappingExclusionRuleSet.setRules(PhosphorWindowRules::ExclusionRules::excludeRulesFrom(*setOpt).rules());
 
         // Same refresh for the animation-side exclusion rule set, sliced
         // for `ExcludeAnimations`-action rules. The two slices stay
         // independent so a user can have a window excluded from animations
         // but NOT from snap (or vice versa).
         m_animationExclusionRuleSet.setRules(
-            PhosphorWindowRule::ExclusionRules::excludeAnimationsRulesFrom(*setOpt).rules());
+            PhosphorWindowRules::ExclusionRules::excludeAnimationsRulesFrom(*setOpt).rules());
         // Force a full repaint on EITHER bookend so a user-authored rule
         // applies to static (un-damaged) windows immediately AND so a
         // removed rule reverts previously-dimmed windows immediately, not
