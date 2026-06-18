@@ -10,7 +10,7 @@ include(CMakeFindDependencyMacro)
 # wire transitively. PhosphorIdentity / PhosphorScreens are PRIVATE, so
 # they ride in the exported targets as `$<LINK_ONLY:...>` and don't need
 # their own find_dependency.
-find_dependency(Qt6 6.6 COMPONENTS Core Gui)
+find_dependency(Qt6 6.10 COMPONENTS Core Gui)
 find_dependency(PhosphorLayoutApi)
 find_dependency(PhosphorGeometry)
 find_dependency(PhosphorConfig)

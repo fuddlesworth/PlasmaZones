@@ -1,7 +1,7 @@
 # SPDX-FileCopyrightText: 2026 fuddlesworth
 # SPDX-License-Identifier: GPL-3.0-or-later
 #
-# Requires Plasma 6.6+ (KF6 6.6, Qt 6.6, KWin 6.6).
+# Requires Plasma 6.7+ (KF6 6.26, Qt 6.10, KWin 6.7).
 # Compatible with both KDE Neon (which ships `qt6-shadertools-dev`, `qt6-svg-dev`)
 # and vanilla Debian/Ubuntu (which ship `libqt6shadertools6-dev`, `libqt6svg6-dev`).
 Source: plasmazones
@@ -12,23 +12,23 @@ Build-Depends:
  debhelper-compat (= 13),
  cmake (>= 3.16),
  ninja-build,
- extra-cmake-modules (>= 6.6.0),
+ extra-cmake-modules (>= 6.26.0),
  pkg-kde-tools,
- qt6-base-dev (>= 6.6.0),
+ qt6-base-dev (>= 6.10.0),
  qt6-base-private-dev,
  qt6-declarative-dev,
  qt6-tools-dev,
  qt6-shadertools-dev | libqt6shadertools6-dev,
  qt6-svg-dev | libqt6svg6-dev,
- libkf6kcmutils-dev (>= 6.6.0),
- libkf6globalaccel-dev (>= 6.6.0),
- libkf6kirigami-dev (>= 6.6.0) | kf6-kirigami-dev (>= 6.6.0),
- kwin-dev (>= 6.6.0),
+ libkf6kcmutils-dev (>= 6.26.0),
+ libkf6globalaccel-dev (>= 6.26.0),
+ libkf6kirigami-dev (>= 6.26.0) | kf6-kirigami-dev (>= 6.26.0),
+ kwin-dev (>= 6.7.0),
  libxkbcommon-dev,
  libwayland-dev,
  libvulkan-dev,
- qt6-wayland-dev (>= 6.6.0),
- qt6-wayland-private-dev (>= 6.6.0),
+ qt6-wayland-dev (>= 6.10.0),
+ qt6-wayland-private-dev (>= 6.10.0),
  plasma-activities-dev,
 Standards-Version: 4.6.2
 Homepage: https://github.com/fuddlesworth/PlasmaZones
@@ -42,16 +42,16 @@ Depends:
  ${shlibs:Depends},
  ${misc:Depends},
  kwin-common (= ${kwin:Version}),
- qt6-wayland (>= 6.6.0),
- libqt6shadertools6 (>= 6.6.0) | qt6-shadertools,
- libkf6kirigami-bin (>= 6.6.0) | kf6-kirigami | qml6-module-org-kde-kirigami,
- libkf6kcmutils-bin (>= 6.6.0) | kcmutils6,
+ qt6-wayland (>= 6.10.0),
+ libqt6shadertools6 (>= 6.10.0) | qt6-shadertools,
+ libkf6kirigami-bin (>= 6.26.0) | kf6-kirigami | qml6-module-org-kde-kirigami,
+ libkf6kcmutils-bin (>= 6.26.0) | kcmutils6,
 Recommends:
  systemd,
 Suggests:
  plasma-activities,
 Description: Window tiling and autotiling for KDE Plasma
- PlasmaZones is a window tiling and zone management tool for KDE Plasma 6.6+.
+ PlasmaZones is a window tiling and zone management tool for KDE Plasma 6.7+.
  It allows users to create custom zone layouts and snap windows using
  drag-and-drop or keyboard shortcuts, with automatic tiling support.
  .

@@ -114,10 +114,12 @@ public:
     void reconfigure(ReconfigureFlags flags) override;
     bool isActive() const override;
 
-    void prePaintScreen(KWin::ScreenPrePaintData& data, std::chrono::milliseconds presentTime) override;
+    // KWin 6.7 dropped the explicit presentTime parameter from the prePaint
+    // hooks; effects now self-source time (our CompositorClock samples
+    // std::chrono::steady_clock, matching KWin's own AnimationEffect clock).
+    void prePaintScreen(KWin::ScreenPrePaintData& data) override;
     void postPaintScreen() override;
-    void prePaintWindow(KWin::RenderView* view, KWin::EffectWindow* w, KWin::WindowPrePaintData& data,
-                        std::chrono::milliseconds presentTime) override;
+    void prePaintWindow(KWin::RenderView* view, KWin::EffectWindow* w, KWin::WindowPrePaintData& data) override;
     // paintScreen override removed — borders are now rendered natively by KWin's
     // scene graph (OutlinedBorderItem), no custom GL drawing needed.
     void paintWindow(const KWin::RenderTarget& renderTarget, const KWin::RenderViewport& viewport,

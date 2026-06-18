@@ -77,11 +77,10 @@ private:
     bool m_snapAssistEnabled = false;
     /// Lazy — constructed on first asyncShow that produces candidates.
     /// Snap-assist may never trigger in a typical session (autotile-
-    /// only setups, users that never drag-snap), so the
-    /// OffscreenQuickScene + WindowThumbnail QML compile is deferred
-    /// until the capture path is actually exercised. Eager construction
-    /// would pay that cost at compositor startup for users who never
-    /// hit the path. Owned via QObject parent (this);
+    /// only setups, users that never drag-snap), so the capture object
+    /// and its bookkeeping are deferred until the capture path is
+    /// actually exercised rather than allocated at compositor startup
+    /// for users who never hit the path. Owned via QObject parent (this);
     /// ~SnapAssistHandler tears it down.
     SnapAssistThumbnailCapture* m_capture = nullptr;
 };

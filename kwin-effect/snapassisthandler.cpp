@@ -113,8 +113,8 @@ void SnapAssistHandler::asyncShow(const QString& excludeWindowId, const QString&
                 // Kick off in-process thumbnail captures alongside the
                 // showSnapAssist D-Bus call. The two are independent — the
                 // overlay opens on icons, and per-window setSnapAssistThumbnail
-                // calls land asynchronously as KWin's WindowThumbnail produces
-                // each frame. Either ordering is safe on the daemon side: a
+                // calls land asynchronously as each window is rendered and
+                // posted. Either ordering is safe on the daemon side: a
                 // late thumbnail updates the live candidate list, an early one
                 // is held in the bounded LRU and applied when the overlay
                 // shows.

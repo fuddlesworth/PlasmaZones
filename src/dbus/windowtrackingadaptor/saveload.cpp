@@ -22,6 +22,7 @@
 #include <QTimer>
 #include <PhosphorScreens/ScreenIdentity.h>
 #include <PhosphorIdentity/WindowId.h>
+#include <PhosphorEngine/EngineTypes.h>
 
 namespace PlasmaZones {
 using namespace WindowTrackingInternal;
@@ -445,12 +446,12 @@ void WindowTrackingAdaptor::loadState()
     // daemon-only restart (KWin still running, UUIDs stable). Also build appId-keyed
     // pending queues as fallback for KWin restarts (UUIDs change).
 
-    QHash<QString, QList<PendingRestore>> pendingQueues;
+    QHash<QString, QList<PhosphorEngine::PendingRestore>> pendingQueues;
 
     // Pending entries derived from active assignments (fallback for KWin restarts where
     // UUIDs change). Collected separately from persisted pending queues so we can do
     // count-based merging — prevents exponential growth while preserving multi-instance entries.
-    QHash<QString, QList<PendingRestore>> activePending;
+    QHash<QString, QList<PhosphorEngine::PendingRestore>> activePending;
 
     // Try full-windowId format first (preserves multi-instance distinction)
     QHash<QString, QStringList> fullZones;
@@ -516,7 +517,7 @@ void WindowTrackingAdaptor::loadState()
                 if (!PhosphorIdentity::WindowId::isValidAppId(appId)) {
                     continue;
                 }
-                PendingRestore pending;
+                PhosphorEngine::PendingRestore pending;
                 pending.zoneIds = zoneIds;
                 pending.screenId = screen;
                 pending.virtualDesktop = desktop;
@@ -556,7 +557,7 @@ void WindowTrackingAdaptor::loadState()
                         continue;
                     }
                     QJsonObject entryObj = entryVal.toObject();
-                    PendingRestore entry;
+                    PhosphorEngine::PendingRestore entry;
                     // Parse zoneIds
                     for (const QJsonValue& v : entryObj[QLatin1String("zoneIds")].toArray()) {
                         if (v.isString() && !v.toString().isEmpty()) {
@@ -620,12 +621,12 @@ void WindowTrackingAdaptor::loadState()
     // entry doubling on every daemon restart.
     for (auto activeIt = activePending.constBegin(); activeIt != activePending.constEnd(); ++activeIt) {
         const QString& appId = activeIt.key();
-        QList<PendingRestore> persistedList = pendingQueues.value(appId);
+        QList<PhosphorEngine::PendingRestore> persistedList = pendingQueues.value(appId);
         QVector<bool> persistedUsed(persistedList.size(), false);
 
         // Phase 1: For each active entry, find a matching persisted entry to enrich it.
         // Active entries go to the front of the queue (most recent state first).
-        QList<PendingRestore> activeEnriched;
+        QList<PhosphorEngine::PendingRestore> activeEnriched;
         for (const auto& activeEntry : activeIt.value()) {
             bool matched = false;
             for (int i = 0; i < persistedList.size(); ++i) {
@@ -646,7 +647,7 @@ void WindowTrackingAdaptor::loadState()
         }
 
         // Phase 2: Collect unmatched persisted entries (from previously-closed windows).
-        QList<PendingRestore> unmatchedPersisted;
+        QList<PhosphorEngine::PendingRestore> unmatchedPersisted;
         for (int i = 0; i < persistedList.size(); ++i) {
             if (!persistedUsed[i]) {
                 unmatchedPersisted.append(persistedList[i]);
@@ -654,7 +655,7 @@ void WindowTrackingAdaptor::loadState()
         }
 
         // Rebuild queue: active entries first, then stale entries from older sessions.
-        QList<PendingRestore> merged;
+        QList<PhosphorEngine::PendingRestore> merged;
         merged.reserve(activeEnriched.size() + unmatchedPersisted.size());
         merged.append(activeEnriched);
         merged.append(unmatchedPersisted);

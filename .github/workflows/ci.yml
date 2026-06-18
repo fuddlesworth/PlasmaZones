@@ -246,11 +246,14 @@ jobs:
       - name: Show flake outputs
         run: nix flake show
 
+      # --fallback: build from source if a binary substitute fails. Guards
+      # against transient cache.nixos.org corruption (e.g. a hash mismatch on a
+      # transitive dep's NAR) turning an otherwise-fine build red.
       - name: Flake check
-        run: nix flake check -L
+        run: nix flake check -L --fallback
 
       - name: Build default package
-        run: nix build -L .#default
+        run: nix build -L --fallback .#default
 
       - name: Verify binary
         run: |
@@ -259,7 +262,7 @@ jobs:
           ./result/bin/plasmazonesd --version || true
 
       - name: Verify devShell
-        run: nix develop -c echo "devShell OK"
+        run: nix develop --fallback -c echo "devShell OK"
 
   # ═══════════════════════════════════════════════════════════════════════════
   # Draft Arch Package (opt-in PR builds)

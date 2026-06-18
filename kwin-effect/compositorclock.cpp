@@ -146,7 +146,9 @@ void CompositorClock::requestFrame()
         // a subsequent hotplug cycle logs the first empty-frame again
         // rather than being silently suppressed.
         m_loggedEmptyGeometry = false;
-        KWin::effects->addRepaint(geo);
+        // KWin 6.7's addRepaint overloads (RectF/Rect/Region) make a bare QRect
+        // ambiguous; wrap in KWin::Rect to select the integer-rect overload.
+        KWin::effects->addRepaint(KWin::Rect(geo));
         return;
     }
     if (m_wasBound && !m_loggedStaleOutput) {

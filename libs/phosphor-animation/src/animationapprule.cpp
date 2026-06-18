@@ -3,6 +3,8 @@
 
 #include <PhosphorAnimation/AnimationAppRule.h>
 
+#include <QJsonArray>
+#include <QJsonObject>
 #include <QJsonValue>
 #include <QLoggingCategory>
 

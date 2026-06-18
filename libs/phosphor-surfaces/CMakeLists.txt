@@ -28,7 +28,7 @@ include(GenerateExportHeader)
 # Dependencies
 # ═══════════════════════════════════════════════════════════════════════════════
 
-find_package(Qt6 6.6 REQUIRED COMPONENTS Core Quick)
+find_package(Qt6 6.10 REQUIRED COMPONENTS Core Quick)
 
 # In-tree builds set up PhosphorShellPatterns::PhosphorShellPatterns via
 # add_subdirectory in the top-level CMakeLists; stand-alone builds need

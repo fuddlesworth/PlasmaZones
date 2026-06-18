@@ -12,12 +12,10 @@
 #include <QUuid>
 #include <QVector>
 
-#include <memory>
-
 class QImage;
 
 namespace KWin {
-class OffscreenQuickScene;
+class EffectWindow;
 }
 
 namespace PlasmaZones {
@@ -25,16 +23,22 @@ namespace PlasmaZones {
 /**
  * @brief Captures snap-assist window thumbnails inside the KWin process.
  *
- * Uses @c KWin::OffscreenQuickScene plus the @c WindowThumbnail QML element
- * from @c org.kde.kwin to render each candidate window through the live
- * compositor texture and grab the result as a QImage. No ScreenShot2 D-Bus
- * round-trip, no daemon-side @c X-KDE-DBUS-Restricted-Interfaces gate, no
- * second render of the window — KWin reuses the texture it already has.
+ * Renders each candidate @c KWin::EffectWindow into an offscreen
+ * @c GLFramebuffer (via @c effects->drawWindow) and reads it back with
+ * @c GLTexture::toImage(). This reuses the live compositor texture KWin
+ * already holds for the window — no ScreenShot2 D-Bus round-trip, no
+ * daemon-side @c X-KDE-DBUS-Restricted-Interfaces gate, no second scene-graph
+ * pass over the window.
  *
- * Captures run sequentially through one shared scene so at most one
- * QSGRenderContext + grab pass is in flight, mirroring the throttling the
- * daemon's previous ScreenShot2 path needed (concurrent CaptureWindow calls
- * could starve KWin's screenshot queue). Each completed image is posted
+ * KWin 6.7 removed the public offscreen-QML readback (@c OffscreenQuickView
+ * lost @c bufferAsImage() and @c update() now requires an @c OutputFrame), so
+ * the earlier @c OffscreenQuickScene + @c WindowThumbnail QML approach is no
+ * longer available; the direct GLFramebuffer render is its replacement.
+ *
+ * Captures run sequentially, one render+readback at a time, mirroring the
+ * throttling the daemon's previous ScreenShot2 path needed (concurrent
+ * CaptureWindow calls could starve KWin's screenshot queue). Each completed
+ * image is posted
  * back to the daemon via @c org.plasmazones.Overlay.setSnapAssistThumbnail
  * as raw ARGB32 (non-premultiplied) bytes plus dimensions — no PNG encode,
  * no base64. The daemon validates the buffer shape and copies the bytes
@@ -45,11 +49,11 @@ class SnapAssistThumbnailCapture : public QObject
     Q_OBJECT
 
 public:
-    /// Each candidate is just a QUuid — the EffectWindow internal id that
-    /// WindowThumbnail's @c wId property accepts. The braced @c toString()
-    /// form is also the daemon's image-provider cache key, so we derive it
-    /// once at post time inside @ref postThumbnail rather than carrying both
-    /// representations through every queue entry.
+    /// Each candidate is just a QUuid — the EffectWindow internal id passed to
+    /// @c effects->findWindow() to locate the window to render. The braced
+    /// @c toString() form is also the daemon's image-provider cache key, so we
+    /// derive it once at post time inside @ref postThumbnail rather than
+    /// carrying both representations through every queue entry.
     struct Candidate
     {
         QUuid internalId;
@@ -58,13 +62,9 @@ public:
     explicit SnapAssistThumbnailCapture(QObject* parent = nullptr);
     ~SnapAssistThumbnailCapture() override;
 
-    /// Default thumbnail bounding box. C++ overrides @c boxSize on the
-    /// QML root before every render via setProperty, so the QML literal
-    /// fallback (in SnapAssistThumb.qml) is unreachable in production —
-    /// it exists only to keep the QML scene previewable in Qt Creator's
-    /// QML tooling. Kept here as the canonical value and as the default
-    /// argument for @ref captureCandidates; if you change the size,
-    /// update the QML literal so design-time previews still match.
+    /// Default thumbnail bounding box. The captured window is fit within this
+    /// box (aspect ratio preserved) by @ref grabWindowImage. Used as the
+    /// default argument for @ref captureCandidates.
     static constexpr QSize DefaultThumbnailSize = QSize(256, 256);
 
     /**
@@ -75,8 +75,8 @@ public:
      * candidate set is stale and shouldn't burn render budget. The queue is
      * drained one capture at a time — see the @c processNext loop.
      *
-     * @param maxSize Bounding box for each thumbnail; aspect ratio
-     *        preserved by WindowThumbnail itself.
+     * @param maxSize Bounding box for each thumbnail; aspect ratio is
+     *        preserved by @ref grabWindowImage.
      */
     void captureCandidates(const QVector<Candidate>& candidates, QSize maxSize = DefaultThumbnailSize);
 
@@ -94,16 +94,14 @@ private Q_SLOTS:
     void processNext();
 
 private:
-    void ensureScene();
+    /// Render @p w into an offscreen GLFramebuffer fit within @p box (aspect
+    /// ratio preserved) and read it back as a straight-alpha ARGB32 QImage.
+    /// Returns a null image if the window can't be found/rendered. MUST run on
+    /// the compositor thread; it makes the GL context current itself, so it is
+    /// safe to call outside a paint pass (KWin 6.7's drawWindow/GLFramebuffer
+    /// path needs no OutputFrame).
+    QImage grabWindowImage(KWin::EffectWindow* w, QSize box) const;
     void postThumbnail(const QUuid& internalId, const QImage& image);
-
-    /// Common cleanup for early-bail paths in @ref processNext and the
-    /// @ref attemptCapture timer lambda: drop the in-flight queue and
-    /// release @c m_busy so a subsequent @ref captureCandidates can
-    /// dispatch fresh work. Leaving @c m_busy=true without a follow-up
-    /// dispatch would silently wedge the queue forever, so every error
-    /// exit must route through here (or set both fields inline).
-    void dropQueueAndIdle();
 
     struct Pending
     {
@@ -111,11 +109,10 @@ private:
         QSize maxSize;
     };
 
-    /// Read back the current scene buffer for @p p; on a null buffer, retry
-    /// once with a longer delay before giving up. Compositor stalls
-    /// occasionally drop the very first frame after binding @c wId to a
-    /// fresh window; one retry is enough in practice and falls back to the
-    /// icon path otherwise.
+    /// Render and read back the thumbnail for @p p; on a null image, retry
+    /// once with a longer delay before giving up. A freshly mapped window
+    /// occasionally has no renderable frame on the first attempt; one retry is
+    /// enough in practice and falls back to the icon path otherwise.
     void attemptCapture(Pending p, int delayMs, int retriesLeft);
 
     /// Mark @p handle as posted to the daemon, evicting the least-recently-
@@ -169,7 +166,6 @@ private:
                   "RecentPostedCapacity must be positive — the eviction loop in markRecentlyPosted "
                   "assumes the just-inserted handle survives the capacity check.");
 
-    std::unique_ptr<KWin::OffscreenQuickScene> m_scene;
     QQueue<Pending> m_queue;
     /// Bookkeeping for @ref wasRecentlyPosted: O(1) membership via the set,
     /// O(1) oldest-first eviction via the queue. Kept strictly in sync.

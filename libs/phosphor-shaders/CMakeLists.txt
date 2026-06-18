@@ -35,7 +35,7 @@ include(GenerateExportHeader)
 # Dependencies
 # ═══════════════════════════════════════════════════════════════════════════════
 
-find_package(Qt6 6.6 REQUIRED COMPONENTS Core Gui)
+find_package(Qt6 6.10 REQUIRED COMPONENTS Core Gui)
 
 # PhosphorFsLoader — shared filesystem-loader scaffolding (used by
 # ShaderRegistry's WatchedDirectorySet + ShaderScanStrategy).

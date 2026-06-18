@@ -9,7 +9,7 @@ include(CMakeFindDependencyMacro)
 # running older Qt would otherwise fail later inside this library's
 # headers with a confusing template / missing-symbol error rather than
 # a clean find_package rejection at configure time.
-find_dependency(Qt6 6.6 COMPONENTS Core Gui Qml Quick)
+find_dependency(Qt6 6.10 COMPONENTS Core Gui Qml Quick)
 
 # PhosphorWayland dependency is baked at library-build time via the
 # PHOSPHORLAYER_WITH_PHOSPHORWAYLAND option. When OFF the .so has no

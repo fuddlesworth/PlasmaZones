@@ -20,7 +20,7 @@
 
 cmake_minimum_required(VERSION 3.16)
 
-find_package(Qt6 6.6 REQUIRED COMPONENTS Quick Qml)
+find_package(Qt6 6.10 REQUIRED COMPONENTS Quick Qml)
 
 # qt_add_qml_module's metatype generation walks AUTOMOC-produced
 # json files. Without AUTOMOC the call fails inside qt6_extract_metatypes

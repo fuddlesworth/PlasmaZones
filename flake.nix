@@ -31,7 +31,7 @@
 # its own version string in every plugin it loads as an IID (Interface
 # Identifier). At runtime, KWin checks that the IID of any plugin it loads
 # matches the running KWin's own version string *exactly* — even a patch
-# version mismatch (6.6.4 vs 6.6.5) causes KWin to silently refuse the plugin.
+# version mismatch (6.7.0 vs 6.7.1) causes KWin to silently refuse the plugin.
 #
 # This means: the `kwin` package used to *compile* the plugin must be the
 # same `kwin` the user is *running*. On a rolling nixos-unstable system,
@@ -50,13 +50,18 @@
 #     if they diverge. Re-run `nix flake update` + reinstall after any
 #     system plasma/kwin update to stay in sync.
 {
-  description = "FancyZones-style window tiling and autotiling for KDE Plasma 6.6+";
+  description = "FancyZones-style window tiling and autotiling for KDE Plasma 6.7+";
 
   inputs = {
-    # Track nixos-unstable for the most current KDE Frameworks and KWin packages.
+    # Normally tracks nixos-unstable for the most current KDE Frameworks and
+    # KWin packages. Temporarily pinned to the nixpkgs master commit that landed
+    # Plasma 6.7 / KWin 6.7 (NixOS/nixpkgs#520160) because the nixos-unstable
+    # channel still ships KWin 6.6.5 and our kwin-effect requires the 6.7 effect
+    # API. Revert to "github:NixOS/nixpkgs/nixos-unstable" once the channel has
+    # advanced past Plasma 6.7 (the weekly update-flake-lock job will do this).
     # If you need a stable channel, use nixos-24.11 or later, but be aware that
     # stable channels may lag behind upstream KDE releases.
-    nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
+    nixpkgs.url = "github:NixOS/nixpkgs/c190319055bb5c31acfd7bb8356ce9ab05cb2b36";
   };
 
   outputs = { self, nixpkgs }:
@@ -135,7 +140,7 @@
         {
           options.programs.plasmazones = {
             enable = lib.mkEnableOption
-              "PlasmaZones window tiling for KDE Plasma 6.6+";
+              "PlasmaZones window tiling for KDE Plasma 6.7+";
 
             package = lib.mkOption {
               type        = lib.types.package;
@@ -204,7 +209,7 @@
         {
           options.programs.plasmazones = {
             enable = lib.mkEnableOption
-              "PlasmaZones window tiling for KDE Plasma 6.6+";
+              "PlasmaZones window tiling for KDE Plasma 6.7+";
 
             package = lib.mkOption {
               type        = lib.types.package;

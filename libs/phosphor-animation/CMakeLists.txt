@@ -41,7 +41,7 @@ include(GenerateExportHeader)
 # ===============================================================================
 
 # Pin to 6.6 to match sibling phosphor-* libraries.
-find_package(Qt6 6.6 REQUIRED COMPONENTS Core Gui Quick Qml)
+find_package(Qt6 6.10 REQUIRED COMPONENTS Core Gui Quick Qml)
 
 # PhosphorMotionAnimation inherits QQuickPropertyAnimation which lives
 # in a private Qt Quick header (<QtQuick/private/qquickanimation_p.h>).
@@ -292,6 +292,11 @@ target_include_directories(PhosphorAnimationQml
         $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
         $<BUILD_INTERFACE:${CMAKE_CURRENT_BINARY_DIR}>
         $<INSTALL_INTERFACE:${KDE_INSTALL_INCLUDEDIR}>
+    PRIVATE
+        # Qt 6.10+ qmltyperegistrar emits the generated *_qmltyperegistrations.cpp
+        # #includes by header basename (e.g. <PhosphorMotionAnimation.h>), so the
+        # header subdirectory must be on the path for those includes to resolve.
+        $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include/PhosphorAnimation>
 )
 
 target_compile_features(PhosphorAnimationQml PUBLIC cxx_std_20)
@@ -333,6 +338,10 @@ if(PHOSPHOR_ANIMATION_QML_INSTALL)
             $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
             $<BUILD_INTERFACE:${CMAKE_CURRENT_BINARY_DIR}>
             $<INSTALL_INTERFACE:${KDE_INSTALL_INCLUDEDIR}>
+        PRIVATE
+            # See PhosphorAnimationQml: Qt 6.10+ qmltyperegistrar emits generated
+            # #includes by header basename, so the subdir must be on the path.
+            $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include/PhosphorAnimation>
     )
 
     # The SHARED variant compiles the same sources under a different target

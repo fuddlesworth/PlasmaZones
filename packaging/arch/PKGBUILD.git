@@ -17,9 +17,9 @@ license=('GPL-3.0-or-later' 'LGPL-2.1-or-later')
 
 # Exact KWin upstream pin. The kwin-effect plugin's IID embeds KWin's exact
 # upstream version string; KWin refuses to load effects whose IID doesn't
-# match its own version, including across patch bumps (e.g. 6.6.4 -> 6.6.5).
+# match its own version, including across patch bumps (e.g. 6.7.0 -> 6.7.1).
 # kwin is in makedepends below, so it is installed before makepkg evaluates
-# depends. cut strips Arch's pkgrel so we pin to upstream (e.g. "6.6.5").
+# depends. cut strips Arch's pkgrel so we pin to upstream (e.g. "6.7.0").
 _kwin_ver=$(pacman -Q kwin 2>/dev/null | awk '{print $2}' | cut -d- -f1)
 
 depends=(

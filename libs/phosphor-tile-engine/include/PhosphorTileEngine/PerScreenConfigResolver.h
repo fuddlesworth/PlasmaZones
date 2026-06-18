@@ -5,6 +5,7 @@
 
 #include <phosphortileengine_export.h>
 #include <PhosphorEngine/PerScreenKeys.h>
+#include <PhosphorLayoutApi/EdgeGaps.h>
 #include <QHash>
 #include <QString>
 #include <QVariantMap>

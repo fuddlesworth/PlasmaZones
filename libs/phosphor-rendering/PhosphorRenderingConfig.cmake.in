@@ -11,7 +11,7 @@ include(CMakeFindDependencyMacro)
 # defines the Qt6::GuiPrivate target inside Qt6GuiConfig.cmake — see the
 # matching guarded pattern in the project's top-level CMakeLists.txt.
 # Mirror it here so find_package(PhosphorRendering) is portable across both.
-find_dependency(Qt6 6.6 COMPONENTS Core Gui Quick)
+find_dependency(Qt6 6.10 COMPONENTS Core Gui Quick)
 if(NOT TARGET Qt6::GuiPrivate)
     find_dependency(Qt6GuiPrivate 6.6)
 endif()

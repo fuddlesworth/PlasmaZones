@@ -250,39 +250,39 @@ void PlasmaZonesEffect::tryAsyncSnapCall(const QString& interface, const QString
 {
     QDBusPendingCall call = PhosphorProtocol::ClientHelpers::asyncCall(interface, method, args);
     auto* watcher = new QDBusPendingCallWatcher(call, this);
-    connect(watcher, &QDBusPendingCallWatcher::finished, this,
-            [this, window, windowId, storePreSnap, method, fallback, onSnapSuccess, args, skipAnimation,
-             onComplete](QDBusPendingCallWatcher* w) {
-                w->deleteLater();
-                QDBusPendingReply<int, int, int, int, bool> reply = *w;
-                if (reply.isError()) {
-                    qCDebug(lcEffect) << method << "error:" << reply.error().message();
-                    if (fallback)
-                        fallback();
-                    if (onComplete)
-                        onComplete();
-                    return;
-                }
-                if (reply.argumentAt<4>() && window) {
-                    QRect geo(reply.argumentAt<0>(), reply.argumentAt<1>(), reply.argumentAt<2>(),
-                              reply.argumentAt<3>());
-                    qCInfo(lcEffect) << method << "snapping" << windowId << "to:" << geo;
-                    if (storePreSnap)
-                        ensurePreSnapGeometryStored(window, windowId, window ? window->frameGeometry() : QRectF());
-                    applySnapGeometry(window, geo, false, skipAnimation);
-                    // args[1] is screenId (e.g. for snapToEmptyZone, snapToLastZone)
-                    if (onSnapSuccess && args.size() >= 2) {
-                        onSnapSuccess(windowId, args[1].toString());
-                    }
-                    if (onComplete)
-                        onComplete();
-                    return;
-                }
+    connect(
+        watcher, &QDBusPendingCallWatcher::finished, this,
+        [this, window, windowId, storePreSnap, method, fallback, onSnapSuccess, args, skipAnimation,
+         onComplete](QDBusPendingCallWatcher* w) {
+            w->deleteLater();
+            QDBusPendingReply<int, int, int, int, bool> reply = *w;
+            if (reply.isError()) {
+                qCDebug(lcEffect) << method << "error:" << reply.error().message();
                 if (fallback)
                     fallback();
                 if (onComplete)
                     onComplete();
-            });
+                return;
+            }
+            if (reply.argumentAt<4>() && window) {
+                QRect geo(reply.argumentAt<0>(), reply.argumentAt<1>(), reply.argumentAt<2>(), reply.argumentAt<3>());
+                qCInfo(lcEffect) << method << "snapping" << windowId << "to:" << geo;
+                if (storePreSnap)
+                    ensurePreSnapGeometryStored(window, windowId, window ? QRectF(window->frameGeometry()) : QRectF());
+                applySnapGeometry(window, geo, false, skipAnimation);
+                // args[1] is screenId (e.g. for snapToEmptyZone, snapToLastZone)
+                if (onSnapSuccess && args.size() >= 2) {
+                    onSnapSuccess(windowId, args[1].toString());
+                }
+                if (onComplete)
+                    onComplete();
+                return;
+            }
+            if (fallback)
+                fallback();
+            if (onComplete)
+                onComplete();
+        });
 }
 
 void PlasmaZonesEffect::repaintSnapRegions(KWin::EffectWindow* window, const QRectF& oldFrame, const QRect& newGeo)
@@ -296,9 +296,9 @@ void PlasmaZonesEffect::repaintSnapRegions(KWin::EffectWindow* window, const QRe
     // QPointer-checked reference at the call site).
     if (KWin::effects) {
         if (oldFrame.isValid()) {
-            KWin::effects->addRepaint(oldFrame.toAlignedRect());
+            KWin::effects->addRepaint(KWin::Rect(oldFrame.toAlignedRect()));
         }
-        KWin::effects->addRepaint(newGeo);
+        KWin::effects->addRepaint(KWin::Rect(newGeo));
     }
 }
 
@@ -672,7 +672,7 @@ void PlasmaZonesEffect::slotDragPolicyChanged(const QString& windowId, const Pho
         m_dragActivationDetected = false;
         m_dragStartedSent = false;
         m_pendingDragWindowId = windowId;
-        m_pendingDragGeometry = dragW ? dragW->frameGeometry() : QRectF();
+        m_pendingDragGeometry = dragW ? QRectF(dragW->frameGeometry()) : QRectF();
         m_snapDragStartScreenId = newPolicy.screenId;
         if (!m_keyboardGrabbed) {
             KWin::effects->grabKeyboard(this);
