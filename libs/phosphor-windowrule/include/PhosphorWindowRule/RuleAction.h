@@ -3,6 +3,7 @@
 
 #pragma once
 
+#include <QLatin1StringView>
 #include <QHash>
 #include <QJsonObject>
 #include <QString>
@@ -119,6 +120,23 @@ struct PHOSPHORWINDOWRULE_EXPORT ParamSchema
     QStringList enumWireValues{}; ///< wire values for `kind == "enum"`; empty otherwise
 };
 
+// ── Action tags — structural metadata for consumer-side filtering ──────────
+// Tags classify actions into overlapping behavioural groups. Consumers use
+// `ActionRegistry::hasTag()` / `typesWithTag()` instead of maintaining
+// parallel type-list helpers. Adding a tag to a new action is one descriptor
+// field edit; no consumer call-site changes. Tags compose via intersection:
+// e.g. the set that `isAnimationOverrideAction` covers (the 3 Override*
+// actions, NOT ExcludeAnimations) = Tag::Animation ∩ Tag::Effect.
+namespace Tag {
+/// Actions consumed by the KWin effect's rule set (shader manager +
+/// border appearance). ExcludeAnimations deliberately omits this tag.
+inline constexpr QLatin1StringView Effect{"effect"};
+inline constexpr QLatin1StringView Border{"border"};
+inline constexpr QLatin1StringView Animation{"animation"};
+inline constexpr QLatin1StringView LayoutEngine{"layoutEngine"};
+inline constexpr QLatin1StringView Gap{"gap"};
+} // namespace Tag
+
 /**
  * @brief Static metadata describing one registered action type.
  *
@@ -130,10 +148,12 @@ struct PHOSPHORWINDOWRULE_EXPORT ParamSchema
  *   - the set of param keys the action accepts (`allowedKeys`) — the strict
  *     loader rejects any action carrying a key not in this set,
  *   - whether the action is **terminal** (an `Exclude` action stops evaluation),
- *   - the structural `params` schema consumed by the editor UI, and
+ *   - the structural `params` schema consumed by the editor UI,
  *   - the `userAuthorable` visibility flag used by the action-type picker
  *     to filter out actions that are registered for back-compat / loader
- *     completeness but should not appear in the new-rule wizard.
+ *     completeness but should not appear in the new-rule wizard, and
+ *   - `category` / `displayOrder` / `tags` for UI grouping and consumer-side
+ *     filtering.
  */
 struct PHOSPHORWINDOWRULE_EXPORT ActionDescriptor
 {
@@ -173,6 +193,16 @@ struct PHOSPHORWINDOWRULE_EXPORT ActionDescriptor
     /// authorable through the standard wizard (e.g. an action whose
     /// runtime consumer hasn't shipped yet).
     bool userAuthorable = true;
+    /// UI grouping category for the action-type picker. Actions with the
+    /// same category are clustered together; empty means uncategorized.
+    QString category{};
+    /// Sort key within a category (lower = earlier). Actions with the same
+    /// displayOrder are sorted by type string.
+    int displayOrder = 0;
+    /// Behavioural tags for consumer-side filtering. Values are from the
+    /// `Tag::` namespace constants. Use `ActionRegistry::hasTag()` /
+    /// `typesWithTag()` for queries.
+    QStringList tags{};
 };
 
 /**
@@ -226,6 +256,12 @@ public:
 
     /// All registered type ids — for UI enumeration / tests.
     QStringList registeredTypes() const;
+
+    /// True if the descriptor for @p type carries @p tag.
+    bool hasTag(const QString& type, QLatin1StringView tag) const;
+
+    /// All registered type ids whose descriptor carries @p tag.
+    QStringList typesWithTag(QLatin1StringView tag) const;
 
 private:
     ActionRegistry();

@@ -243,6 +243,27 @@ QStringList ActionRegistry::registeredTypes() const
     return m_descriptors.keys();
 }
 
+bool ActionRegistry::hasTag(const QString& type, QLatin1StringView tag) const
+{
+    const auto it = m_descriptors.constFind(type);
+    if (it == m_descriptors.constEnd()) {
+        return false;
+    }
+    return it->tags.contains(QString(tag));
+}
+
+QStringList ActionRegistry::typesWithTag(QLatin1StringView tag) const
+{
+    QStringList result;
+    const QString tagStr(tag);
+    for (auto it = m_descriptors.constBegin(); it != m_descriptors.constEnd(); ++it) {
+        if (it->tags.contains(tagStr)) {
+            result.append(it.key());
+        }
+    }
+    return result;
+}
+
 namespace {
 
 /// Helper to keep the registerBuiltins body legible — every built-in shares
@@ -310,6 +331,9 @@ void ActionRegistry::registerBuiltins()
         .params = {P{.key = QString(ActionParam::Mode),
                      .kind = QStringLiteral("enum"),
                      .enumWireValues = engineModeOptions()}},
+        .category = QStringLiteral("layoutEngine"),
+        .displayOrder = 0,
+        .tags = {QString(Tag::LayoutEngine)},
     });
 
     // ── layout slot — both layout-shaping actions share it ──
@@ -324,6 +348,9 @@ void ActionRegistry::registerBuiltins()
         .allowedKeys = {QString(ActionParam::LayoutId)},
         .domain = ActionDomain::Context,
         .params = {P{.key = QString(ActionParam::LayoutId), .kind = QStringLiteral("snappingLayout")}},
+        .category = QStringLiteral("layoutEngine"),
+        .displayOrder = 1,
+        .tags = {QString(Tag::LayoutEngine)},
     });
     registerAction(ActionDescriptor{
         .type = QString(ActionType::SetTilingAlgorithm),
@@ -336,6 +363,9 @@ void ActionRegistry::registerBuiltins()
         .allowedKeys = {QString(ActionParam::Algorithm)},
         .domain = ActionDomain::Context,
         .params = {P{.key = QString(ActionParam::Algorithm), .kind = QStringLiteral("tilingAlgorithm")}},
+        .category = QStringLiteral("layoutEngine"),
+        .displayOrder = 2,
+        .tags = {QString(Tag::LayoutEngine)},
     });
 
     // ── engine-enable slot ──
@@ -350,10 +380,6 @@ void ActionRegistry::registerBuiltins()
     registerAction(ActionDescriptor{
         .type = QString(ActionType::DisableEngine),
         .slotFor = constantSlot(ActionSlot::EngineEnable),
-        // Single source of truth — the picker enum and the validator both
-        // read from `engineModeOptions()`. Adding a new token to that list
-        // automatically updates both surfaces; the prior hand-rolled OR
-        // chain would silently drift if someone updated only one side.
         .validate =
             [](const QJsonObject& p) {
                 return engineModeOptions().contains(p.value(ActionParam::Mode).toString());
@@ -364,6 +390,9 @@ void ActionRegistry::registerBuiltins()
         .params = {P{.key = QString(ActionParam::Mode),
                      .kind = QStringLiteral("enum"),
                      .enumWireValues = engineModeOptions()}},
+        .category = QStringLiteral("layoutEngine"),
+        .displayOrder = 3,
+        .tags = {QString(Tag::LayoutEngine)},
     });
 
     // ── locked slot — context-domain layout lock ──
@@ -389,6 +418,9 @@ void ActionRegistry::registerBuiltins()
         .allowedKeys = {QString(ActionParam::Value)},
         .domain = ActionDomain::Context,
         .params = {P{.key = QString(ActionParam::Value), .kind = QStringLiteral("bool"), .defaultDisplay = 1.0}},
+        .category = QStringLiteral("layoutEngine"),
+        .displayOrder = 4,
+        .tags = {QString(Tag::LayoutEngine)},
     });
 
     // ── manage slot — terminal. Exclude is intentionally free-form: an empty
@@ -401,6 +433,8 @@ void ActionRegistry::registerBuiltins()
         .terminal = true,
         .allowedKeys = {},
         .domain = ActionDomain::Window,
+        .category = QStringLiteral("windowManagement"),
+        .displayOrder = 0,
     });
 
     // ── float slot — intentionally free-form (future float-geometry hints);
@@ -412,6 +446,8 @@ void ActionRegistry::registerBuiltins()
         .terminal = false,
         .allowedKeys = {},
         .domain = ActionDomain::Window,
+        .category = QStringLiteral("windowManagement"),
+        .displayOrder = 1,
     });
 
     // ── animation slots — event-scoped: "anim-shader:<event>" ──
@@ -431,12 +467,11 @@ void ActionRegistry::registerBuiltins()
         .terminal = false,
         .allowedKeys = {QString(ActionParam::Event), QString(ActionParam::EffectId), QString(ActionParam::Params)},
         .domain = ActionDomain::Window,
-        // `params` is a free-form shader-uniform object — not authorable
-        // through a flat key/kind descriptor, so it is intentionally omitted
-        // from the structural schema; a shader-uniform editor would graduate
-        // the rule to Advanced.
         .params = {P{.key = QString(ActionParam::Event), .kind = QStringLiteral("animationEvent")},
                    P{.key = QString(ActionParam::EffectId), .kind = QStringLiteral("shaderEffect")}},
+        .category = QStringLiteral("animation"),
+        .displayOrder = 0,
+        .tags = {QString(Tag::Animation), QString(Tag::Effect)},
     });
     registerAction(ActionDescriptor{
         .type = QString(ActionType::OverrideAnimationTiming),
@@ -452,18 +487,15 @@ void ActionRegistry::registerBuiltins()
                 return hasNonEmptyString(p, ActionParam::Event);
             },
         .terminal = false,
-        // The descriptor still allows `curve` for back-compat with legacy
-        // rules; the editor does not expose it on this action — curve lives
-        // in `OverrideAnimationCurve` (separate slot) so the user can
-        // override curve and duration independently per event.
         .allowedKeys = {QString(ActionParam::Event), QString(ActionParam::Curve), QString(ActionParam::DurationMs)},
         .domain = ActionDomain::Window,
         .params =
             {P{.key = QString(ActionParam::Event), .kind = QStringLiteral("animationEvent")},
              P{.key = QString(ActionParam::DurationMs), .kind = QStringLiteral("number"), .min = 0.0, .max = 60000.0}},
+        .category = QStringLiteral("animation"),
+        .displayOrder = 1,
+        .tags = {QString(Tag::Animation), QString(Tag::Effect)},
     });
-    // Curve override — own slot so it can be combined with a Timing-slot
-    // duration override on the same event without one shadowing the other.
     registerAction(ActionDescriptor{
         .type = QString(ActionType::OverrideAnimationCurve),
         .slotFor = [](const QJsonObject& p) -> QString {
@@ -482,6 +514,9 @@ void ActionRegistry::registerBuiltins()
         .domain = ActionDomain::Window,
         .params = {P{.key = QString(ActionParam::Event), .kind = QStringLiteral("animationEvent")},
                    P{.key = QString(ActionParam::Curve), .kind = QStringLiteral("curveEditor")}},
+        .category = QStringLiteral("animation"),
+        .displayOrder = 2,
+        .tags = {QString(Tag::Animation), QString(Tag::Effect)},
     });
 
     // ── anim-exclude slot — terminal within the animation pipeline ──
@@ -501,11 +536,12 @@ void ActionRegistry::registerBuiltins()
         .terminal = true,
         .allowedKeys = {},
         .domain = ActionDomain::Window,
+        .category = QStringLiteral("animation"),
+        .displayOrder = 3,
+        .tags = {QString(Tag::Animation)},
     });
 
     // ── opacity slot ──
-    // The wire value is a 0.0–1.0 fraction; the editor renders a 0–100
-    // percentage, so the stored value is `display * scale`.
     registerAction(ActionDescriptor{
         .type = QString(ActionType::SetOpacity),
         .slotFor = constantSlot(ActionSlot::Opacity),
@@ -526,12 +562,10 @@ void ActionRegistry::registerBuiltins()
                      .min = 0.0,
                      .max = 100.0,
                      .scale = 0.01,
-                     // Seed at 100% so a fresh SetOpacity rule lands at "no
-                     // visible change". `min = 0` is a valid wire value
-                     // (fully transparent) but a seeded-zero rule would save
-                     // immediately and dim the matched window to invisibility
-                     // before the user adjusted the slider.
                      .defaultDisplay = 100.0}},
+        .category = QStringLiteral("appearance"),
+        .displayOrder = 0,
+        .tags = {QString(Tag::Effect)},
     });
 
     // RestorePosition is window-domain but NOT a border/appearance slot — it is
@@ -551,6 +585,8 @@ void ActionRegistry::registerBuiltins()
         .allowedKeys = {QString(ActionParam::Value)},
         .domain = ActionDomain::Window,
         .params = {P{.key = QString(ActionParam::Value), .kind = QStringLiteral("bool"), .defaultDisplay = 0.0}},
+        .category = QStringLiteral("windowManagement"),
+        .displayOrder = 2,
     });
 
     // ── per-window border / title-bar appearance slots (domain Window) ──
@@ -570,6 +606,9 @@ void ActionRegistry::registerBuiltins()
         .allowedKeys = {QString(ActionParam::Value)},
         .domain = ActionDomain::Window,
         .params = {P{.key = QString(ActionParam::Value), .kind = QStringLiteral("bool"), .defaultDisplay = 1.0}},
+        .category = QStringLiteral("borderAppearance"),
+        .displayOrder = 0,
+        .tags = {QString(Tag::Border), QString(Tag::Effect)},
     });
     registerAction(ActionDescriptor{
         .type = QString(ActionType::SetBorderVisible),
@@ -582,6 +621,9 @@ void ActionRegistry::registerBuiltins()
         .allowedKeys = {QString(ActionParam::Value)},
         .domain = ActionDomain::Window,
         .params = {P{.key = QString(ActionParam::Value), .kind = QStringLiteral("bool"), .defaultDisplay = 1.0}},
+        .category = QStringLiteral("borderAppearance"),
+        .displayOrder = 1,
+        .tags = {QString(Tag::Border), QString(Tag::Effect)},
     });
     registerAction(ActionDescriptor{
         .type = QString(ActionType::SetBorderWidth),
@@ -598,6 +640,9 @@ void ActionRegistry::registerBuiltins()
                      .min = 0.0,
                      .max = kMaxBorderWidth,
                      .defaultDisplay = 2.0}},
+        .category = QStringLiteral("borderAppearance"),
+        .displayOrder = 2,
+        .tags = {QString(Tag::Border), QString(Tag::Effect)},
     });
     registerAction(ActionDescriptor{
         .type = QString(ActionType::SetBorderRadius),
@@ -614,6 +659,9 @@ void ActionRegistry::registerBuiltins()
                      .min = 0.0,
                      .max = kMaxBorderRadius,
                      .defaultDisplay = 8.0}},
+        .category = QStringLiteral("borderAppearance"),
+        .displayOrder = 3,
+        .tags = {QString(Tag::Border), QString(Tag::Effect)},
     });
     registerAction(ActionDescriptor{
         .type = QString(ActionType::SetBorderColor),
@@ -625,9 +673,10 @@ void ActionRegistry::registerBuiltins()
         .terminal = false,
         .allowedKeys = {QString(ActionParam::Value)},
         .domain = ActionDomain::Window,
-        // Colour seed (#AARRGGBB) is a string, so it is set by the editor's
-        // defaultPayloadFor "color" branch, not via defaultDisplay (double).
         .params = {P{.key = QString(ActionParam::Value), .kind = QStringLiteral("color")}},
+        .category = QStringLiteral("borderAppearance"),
+        .displayOrder = 4,
+        .tags = {QString(Tag::Border), QString(Tag::Effect)},
     });
 
     // ── per-context gap slots (domain Context) ──
@@ -650,6 +699,9 @@ void ActionRegistry::registerBuiltins()
                      .min = 0.0,
                      .max = kMaxGap,
                      .defaultDisplay = 8.0}},
+        .category = QStringLiteral("gap"),
+        .displayOrder = 0,
+        .tags = {QString(Tag::Gap)},
     });
     registerAction(ActionDescriptor{
         .type = QString(ActionType::SetOuterGap),
@@ -666,6 +718,9 @@ void ActionRegistry::registerBuiltins()
                      .min = 0.0,
                      .max = kMaxGap,
                      .defaultDisplay = 8.0}},
+        .category = QStringLiteral("gap"),
+        .displayOrder = 1,
+        .tags = {QString(Tag::Gap)},
     });
     registerAction(ActionDescriptor{
         .type = QString(ActionType::SetUsePerSideOuterGap),
@@ -678,6 +733,9 @@ void ActionRegistry::registerBuiltins()
         .allowedKeys = {QString(ActionParam::Value)},
         .domain = ActionDomain::Context,
         .params = {P{.key = QString(ActionParam::Value), .kind = QStringLiteral("bool"), .defaultDisplay = 0.0}},
+        .category = QStringLiteral("gap"),
+        .displayOrder = 2,
+        .tags = {QString(Tag::Gap)},
     });
     // Each per-side gap maps to its own slot. The {type, slot} pairs live in a
     // single table so type and slot stay in lockstep per row — adding a side is
@@ -687,12 +745,13 @@ void ActionRegistry::registerBuiltins()
     {
         QLatin1StringView type;
         QLatin1StringView slot;
+        int order;
     };
     for (const PerSideGap& perSide : {
-             PerSideGap{ActionType::SetOuterGapTop, ActionSlot::OuterGapTop},
-             PerSideGap{ActionType::SetOuterGapBottom, ActionSlot::OuterGapBottom},
-             PerSideGap{ActionType::SetOuterGapLeft, ActionSlot::OuterGapLeft},
-             PerSideGap{ActionType::SetOuterGapRight, ActionSlot::OuterGapRight},
+             PerSideGap{ActionType::SetOuterGapTop, ActionSlot::OuterGapTop, 3},
+             PerSideGap{ActionType::SetOuterGapBottom, ActionSlot::OuterGapBottom, 4},
+             PerSideGap{ActionType::SetOuterGapLeft, ActionSlot::OuterGapLeft, 5},
+             PerSideGap{ActionType::SetOuterGapRight, ActionSlot::OuterGapRight, 6},
          }) {
         const QString slot = QString(perSide.slot);
         registerAction(ActionDescriptor{
@@ -713,6 +772,9 @@ void ActionRegistry::registerBuiltins()
                          .min = 0.0,
                          .max = kMaxGap,
                          .defaultDisplay = 8.0}},
+            .category = QStringLiteral("gap"),
+            .displayOrder = perSide.order,
+            .tags = {QString(Tag::Gap)},
         });
     }
 }
