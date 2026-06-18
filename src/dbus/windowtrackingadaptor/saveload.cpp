@@ -22,9 +22,13 @@
 #include <QTimer>
 #include <PhosphorScreens/ScreenIdentity.h>
 #include <PhosphorIdentity/WindowId.h>
+#include <PhosphorEngine/EngineTypes.h>
 
 namespace PlasmaZones {
 using namespace WindowTrackingInternal;
+// PendingRestore is used unqualified throughout this file; Qt 6.10 stopped
+// pulling it in transitively, so bring the PhosphorEngine type into scope.
+using PhosphorEngine::PendingRestore;
 
 static QHash<QString, QStringList> parseZoneListMap(const QString& json)
 {

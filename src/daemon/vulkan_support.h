@@ -4,6 +4,7 @@
 #pragma once
 
 #include <QtCore/qglobal.h> // Ensure QT_CONFIG is defined regardless of include order
+#include <QtGui/qtguiglobal.h> // Defines QT_FEATURE_vulkan (Qt 6.10 no longer pulls it in via qglobal.h)
 
 #include <QVersionNumber>
 

@@ -11,6 +11,7 @@
 #include <PhosphorZones/LayoutUtils.h>
 #include <PhosphorSnapEngine/SnapState.h>
 #include <PhosphorScreens/Manager.h>
+#include <PhosphorWorkspaces/VirtualDesktopManager.h>
 #include <PhosphorZones/Zone.h>
 #include <PhosphorZones/LayoutRegistry.h>
 #include <PhosphorIdentity/WindowId.h>

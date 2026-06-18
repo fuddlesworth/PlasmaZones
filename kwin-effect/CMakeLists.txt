@@ -1,7 +1,7 @@
 # SPDX-FileCopyrightText: 2026 fuddlesworth
 # SPDX-License-Identifier: GPL-3.0-or-later
 #
-# PlasmaZones KWin Effect (C++ Plugin) — requires KWin from Plasma 6.6+
+# PlasmaZones KWin Effect (C++ Plugin) — requires KWin from Plasma 6.7+
 # (prePaintWindow(RenderView*,...), paintWindow(Region), no postPaintWindow).
 #
 # Only included via add_subdirectory() from the top-level project; the
@@ -13,11 +13,11 @@ set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 # Widgets dropped — no QWidget / QtWidgets usage in kwin-effect/.
-find_package(Qt6 6.6 REQUIRED COMPONENTS Core Gui DBus Qml Quick Svg)
+find_package(Qt6 6.10 REQUIRED COMPONENTS Core Gui DBus Qml Quick Svg)
 set(QT_DEFAULT_MAJOR_VERSION 6)
 
 # Find KWin for effect development
-find_package(KWin 6.6 REQUIRED)
+find_package(KWin 6.7 REQUIRED)
 
 # KWin effect plugins link against libkwin. Log the build-time version so
 # packagers can verify compatibility (patch releases are ABI-compatible).
@@ -65,7 +65,6 @@ set(plasmazones_effect_SRCS
     snapassisthandler.h
     snapassistthumbnailcapture.cpp
     snapassistthumbnailcapture.h
-    SnapAssistThumb.qrc
     windowanimator.cpp
     windowanimator.h
     compositorclock.cpp

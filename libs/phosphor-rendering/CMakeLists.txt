@@ -26,7 +26,7 @@ include(GenerateExportHeader)
 # Dependencies
 # ═══════════════════════════════════════════════════════════════════════════════
 
-find_package(Qt6 6.6 REQUIRED COMPONENTS Core Gui Quick Svg)
+find_package(Qt6 6.10 REQUIRED COMPONENTS Core Gui Quick Svg)
 if(NOT TARGET Qt6::GuiPrivate)
     find_package(Qt6GuiPrivate CONFIG REQUIRED)
 endif()

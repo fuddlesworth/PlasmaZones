@@ -32,7 +32,7 @@ include(GenerateExportHeader)
 # Dependencies
 # ═══════════════════════════════════════════════════════════════════════════════
 
-find_package(Qt6 6.6 REQUIRED COMPONENTS Core DBus)
+find_package(Qt6 6.10 REQUIRED COMPONENTS Core DBus)
 
 # PhosphorDBus provides the generic D-Bus client / streaming utilities the
 # marshalling + client-helper layer is built on. Available as an in-tree

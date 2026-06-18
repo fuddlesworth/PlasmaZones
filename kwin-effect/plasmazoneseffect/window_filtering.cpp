@@ -45,7 +45,7 @@ void PlasmaZonesEffect::ensurePreSnapGeometryStored(KWin::EffectWindow* w, const
     }
 
     // Use pre-captured geometry if provided, otherwise read from window.
-    QRectF geom = preCapturedGeometry.isValid() ? preCapturedGeometry : w->frameGeometry();
+    QRectF geom = preCapturedGeometry.isValid() ? preCapturedGeometry : QRectF(w->frameGeometry());
     if (geom.width() <= 0 || geom.height() <= 0) {
         return;
     }

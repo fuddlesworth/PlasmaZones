@@ -35,7 +35,7 @@ include(GenerateExportHeader)
 # Dependencies
 # ═══════════════════════════════════════════════════════════════════════════════
 
-find_package(Qt6 6.6 REQUIRED COMPONENTS Core Gui DBus)
+find_package(Qt6 6.10 REQUIRED COMPONENTS Core Gui DBus)
 
 # PhosphorIdentity ships VirtualScreenId — the cross-process ID format
 # helpers that VirtualScreen.h consumes. INTERFACE-only dependency, so

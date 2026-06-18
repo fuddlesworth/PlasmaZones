@@ -17,7 +17,7 @@
 class QImage;
 
 namespace KWin {
-class OffscreenQuickScene;
+class EffectWindow;
 }
 
 namespace PlasmaZones {
@@ -25,16 +25,22 @@ namespace PlasmaZones {
 /**
  * @brief Captures snap-assist window thumbnails inside the KWin process.
  *
- * Uses @c KWin::OffscreenQuickScene plus the @c WindowThumbnail QML element
- * from @c org.kde.kwin to render each candidate window through the live
- * compositor texture and grab the result as a QImage. No ScreenShot2 D-Bus
- * round-trip, no daemon-side @c X-KDE-DBUS-Restricted-Interfaces gate, no
- * second render of the window — KWin reuses the texture it already has.
+ * Renders each candidate @c KWin::EffectWindow into an offscreen
+ * @c GLFramebuffer (via @c effects->drawWindow) and reads it back with
+ * @c GLTexture::toImage(). This reuses the live compositor texture KWin
+ * already holds for the window — no ScreenShot2 D-Bus round-trip, no
+ * daemon-side @c X-KDE-DBUS-Restricted-Interfaces gate, no second scene-graph
+ * pass over the window.
  *
- * Captures run sequentially through one shared scene so at most one
- * QSGRenderContext + grab pass is in flight, mirroring the throttling the
- * daemon's previous ScreenShot2 path needed (concurrent CaptureWindow calls
- * could starve KWin's screenshot queue). Each completed image is posted
+ * KWin 6.7 removed the public offscreen-QML readback (@c OffscreenQuickView
+ * lost @c bufferAsImage() and @c update() now requires an @c OutputFrame), so
+ * the earlier @c OffscreenQuickScene + @c WindowThumbnail QML approach is no
+ * longer available; the direct GLFramebuffer render is its replacement.
+ *
+ * Captures run sequentially, one render+readback at a time, mirroring the
+ * throttling the daemon's previous ScreenShot2 path needed (concurrent
+ * CaptureWindow calls could starve KWin's screenshot queue). Each completed
+ * image is posted
  * back to the daemon via @c org.plasmazones.Overlay.setSnapAssistThumbnail
  * as raw ARGB32 (non-premultiplied) bytes plus dimensions — no PNG encode,
  * no base64. The daemon validates the buffer shape and copies the bytes
@@ -94,16 +100,14 @@ private Q_SLOTS:
     void processNext();
 
 private:
-    void ensureScene();
+    /// Render @p w into an offscreen GLFramebuffer fit within @p box (aspect
+    /// ratio preserved) and read it back as a straight-alpha ARGB32 QImage.
+    /// Returns a null image if the window can't be found/rendered. MUST run on
+    /// the compositor thread; it makes the GL context current itself, so it is
+    /// safe to call outside a paint pass (KWin 6.7's drawWindow/GLFramebuffer
+    /// path needs no OutputFrame).
+    QImage grabWindowImage(KWin::EffectWindow* w, QSize box) const;
     void postThumbnail(const QUuid& internalId, const QImage& image);
-
-    /// Common cleanup for early-bail paths in @ref processNext and the
-    /// @ref attemptCapture timer lambda: drop the in-flight queue and
-    /// release @c m_busy so a subsequent @ref captureCandidates can
-    /// dispatch fresh work. Leaving @c m_busy=true without a follow-up
-    /// dispatch would silently wedge the queue forever, so every error
-    /// exit must route through here (or set both fields inline).
-    void dropQueueAndIdle();
 
     struct Pending
     {
@@ -169,7 +173,6 @@ private:
                   "RecentPostedCapacity must be positive — the eviction loop in markRecentlyPosted "
                   "assumes the just-inserted handle survives the capacity check.");
 
-    std::unique_ptr<KWin::OffscreenQuickScene> m_scene;
     QQueue<Pending> m_queue;
     /// Bookkeeping for @ref wasRecentlyPosted: O(1) membership via the set,
     /// O(1) oldest-first eviction via the queue. Kept strictly in sync.

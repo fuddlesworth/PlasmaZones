@@ -479,7 +479,7 @@ void WindowAnimator::onAnimationReplaced(KWin::EffectWindow* window,
     if (window && !window->isDeleted()) {
         const QRectF bounds = displaced.value();
         if (bounds.isValid()) {
-            KWin::effects->addRepaint(bounds.toAlignedRect());
+            KWin::effects->addRepaint(KWin::Rect(bounds.toAlignedRect()));
         }
     }
     qCDebug(lcEffect) << "Window snap animation replaced:" << static_cast<const void*>(window)
@@ -509,7 +509,7 @@ void WindowAnimator::onAnimationAbandoned(KWin::EffectWindow* window,
 void WindowAnimator::onRepaintNeeded(KWin::EffectWindow*, const QRectF& bounds) const
 {
     if (bounds.isValid()) {
-        KWin::effects->addRepaint(bounds.toAlignedRect());
+        KWin::effects->addRepaint(KWin::Rect(bounds.toAlignedRect()));
     }
 }
 

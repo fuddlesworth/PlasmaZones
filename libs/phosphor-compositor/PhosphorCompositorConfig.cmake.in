@@ -5,7 +5,7 @@
 
 include(CMakeFindDependencyMacro)
 
-find_dependency(Qt6 6.6 COMPONENTS Core Gui DBus)
+find_dependency(Qt6 6.10 COMPONENTS Core Gui DBus)
 find_dependency(PhosphorProtocol)
 find_dependency(PhosphorIdentity)
 find_dependency(PhosphorAnimation)

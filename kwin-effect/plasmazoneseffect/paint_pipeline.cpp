@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 #include "../plasmazoneseffect.h"
+#include "../compositorclock.h"
 #include "shader_internal.h"
 
 #include <effect/effecthandler.h>
@@ -24,8 +25,15 @@ namespace PlasmaZones {
 
 using ShaderInternal::shaderClockNowMs;
 
-void PlasmaZonesEffect::prePaintScreen(KWin::ScreenPrePaintData& data, std::chrono::milliseconds presentTime)
+void PlasmaZonesEffect::prePaintScreen(KWin::ScreenPrePaintData& data)
 {
+    // KWin 6.7 no longer passes a presentTime; sample the steady clock
+    // ourselves. CompositorClock's epoch is steady_clock by contract, so a
+    // current-time sample is the correct (and only available) source — KWin's
+    // own effects likewise read "now" rather than the target present time.
+    const auto presentTime = std::chrono::duration_cast<std::chrono::milliseconds>(
+        std::chrono::steady_clock::now().time_since_epoch());
+
     // Feed presentTime to the clock for THIS output so animations
     // bound to other outputs' clocks read stale `now` on their
     // AnimatedValue::advance() calls this tick and step with dt=0
@@ -110,7 +118,7 @@ void PlasmaZonesEffect::prePaintScreen(KWin::ScreenPrePaintData& data, std::chro
     const qint64 frameClockMs = ShaderInternal::shaderClockNowMs();
     m_shaderManager.setCurrentFrameClockMs(frameClockMs);
 
-    KWin::effects->prePaintScreen(data, presentTime);
+    KWin::effects->prePaintScreen(data);
 }
 
 void PlasmaZonesEffect::postPaintScreen()
@@ -211,8 +219,7 @@ void PlasmaZonesEffect::postPaintScreen()
     KWin::effects->postPaintScreen();
 }
 
-void PlasmaZonesEffect::prePaintWindow(KWin::RenderView* view, KWin::EffectWindow* w, KWin::WindowPrePaintData& data,
-                                       std::chrono::milliseconds presentTime)
+void PlasmaZonesEffect::prePaintWindow(KWin::RenderView* view, KWin::EffectWindow* w, KWin::WindowPrePaintData& data)
 {
     if (w
         && (m_windowAnimator->hasAnimation(w)
@@ -245,7 +252,7 @@ void PlasmaZonesEffect::prePaintWindow(KWin::RenderView* view, KWin::EffectWindo
         data.setTranslucent();
     }
 
-    OffscreenEffect::prePaintWindow(view, w, data, presentTime);
+    OffscreenEffect::prePaintWindow(view, w, data);
 }
 
 void PlasmaZonesEffect::paintWindow(const KWin::RenderTarget& renderTarget, const KWin::RenderViewport& viewport,

@@ -1,9 +1,0 @@
-<!--
-    SPDX-FileCopyrightText: 2026 fuddlesworth
-    SPDX-License-Identifier: GPL-3.0-or-later
--->
-<RCC>
-    <qresource prefix="/plasmazones-effect">
-        <file>qml/SnapAssistThumb.qml</file>
-    </qresource>
-</RCC>

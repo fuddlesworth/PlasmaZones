@@ -1,7 +1,7 @@
 # SPDX-FileCopyrightText: 2026 fuddlesworth
 # SPDX-License-Identifier: LGPL-2.1-or-later
 
-find_package(Qt6 6.6 REQUIRED COMPONENTS Test)
+find_package(Qt6 6.10 REQUIRED COMPONENTS Test)
 
 # Helper — every PhosphorServices test runs with the same offscreen
 # QPA + label so ctest filtering / the support-report bundle picks

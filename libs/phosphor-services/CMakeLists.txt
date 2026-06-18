@@ -23,7 +23,7 @@ include(GenerateExportHeader)
 # Dependencies
 # ═══════════════════════════════════════════════════════════════════════════════
 
-find_package(Qt6 6.6 REQUIRED COMPONENTS Core Gui Qml Quick DBus)
+find_package(Qt6 6.10 REQUIRED COMPONENTS Core Gui Qml Quick DBus)
 
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 

@@ -5,7 +5,14 @@
 
 #include <PhosphorProtocol/ServiceConstants.h>
 
-#include <effect/offscreenquickview.h>
+#include <core/region.h>
+#include <core/rendertarget.h>
+#include <core/renderviewport.h>
+#include <effect/effect.h>
+#include <effect/effecthandler.h>
+#include <effect/effectwindow.h>
+#include <opengl/glframebuffer.h>
+#include <opengl/gltexture.h>
 
 #include <cstring>
 
@@ -17,10 +24,8 @@
 #include <QDBusPendingReply>
 #include <QImage>
 #include <QLoggingCategory>
-#include <QQuickItem>
-#include <QSizeF>
+#include <QPoint>
 #include <QTimer>
-#include <QUrl>
 #include <QVariant>
 
 Q_LOGGING_CATEGORY(lcSnapAssistCapture, "kwin.effect.plasmazones.snapassist.capture", QtWarningMsg)
@@ -41,11 +46,6 @@ constexpr int RENDER_SETTLE_MS = 16;
 /// short enough that the user still sees the thumbnail before the eye
 /// notices the fallback icon.
 constexpr int RENDER_RETRY_MS = 64;
-
-QUrl thumbnailQmlUrl()
-{
-    return QUrl(QStringLiteral("qrc:/plasmazones-effect/qml/SnapAssistThumb.qml"));
-}
 } // namespace
 
 SnapAssistThumbnailCapture::SnapAssistThumbnailCapture(QObject* parent)
@@ -157,36 +157,65 @@ void SnapAssistThumbnailCapture::bumpRecency(const QUuid& handle)
     }
 }
 
-void SnapAssistThumbnailCapture::dropQueueAndIdle()
+QImage SnapAssistThumbnailCapture::grabWindowImage(KWin::EffectWindow* w, QSize box) const
 {
-    m_queue.clear();
-    m_busy = false;
-}
+    if (!w || box.isEmpty() || !KWin::effects) {
+        return {};
+    }
+    // KWin 6.7: frameGeometry() is a KWin::RectF.
+    const KWin::RectF wg = w->frameGeometry();
+    if (wg.width() <= 0 || wg.height() <= 0) {
+        return {};
+    }
+    // Fit the window into the bounding box, preserving aspect ratio. The FBO is
+    // sized to the fitted content (not the full box) so the readback carries no
+    // letterbox padding — the daemon stores the image at whatever size we ship.
+    const qreal scale = qMin(qreal(box.width()) / wg.width(), qreal(box.height()) / wg.height());
+    const QSize fbSize(qMax(1, qRound(wg.width() * scale)), qMax(1, qRound(wg.height() * scale)));
 
-void SnapAssistThumbnailCapture::ensureScene()
-{
-    if (m_scene) {
-        return;
+    // drawWindow() and the GLFramebuffer path issue raw GL, so the compositor
+    // EGL context must be current. We run timer-driven, outside a paint pass, so
+    // make it current ourselves (KWin 6.7's manual-FBO render needs no
+    // OutputFrame). Non-OpenGL backends (software/QPainter compositing) return
+    // false — snap-assist then falls back to icons.
+    if (!KWin::effects->makeOpenGLContextCurrent()) {
+        return {};
     }
-    // ExportMode::Image: bufferAsImage() returns a usable QImage after
-    // each render. Leave visibility at its default (true) — OffscreenQuickView's
-    // setVisible(false) calls releaseResources() on the underlying QQuickWindow,
-    // which tears down the scene graph and stops rendering. With visible=false
-    // m_scene->update() would no-op and bufferAsImage() returns null, so every
-    // candidate would post-empty and snap-assist would strand on icons. The
-    // window is offscreen by construction — there's no wl_surface mapping to
-    // worry about — so visible=true here just keeps the QSGRenderContext live
-    // for the WindowThumbnail QSGTextureNode to render against.
-    //
-    // Disable automatic repaint — we drive update() explicitly once per
-    // capture so we know exactly which frame we're reading back.
-    m_scene = std::make_unique<KWin::OffscreenQuickScene>(KWin::OffscreenQuickView::ExportMode::Image);
-    m_scene->setAutomaticRepaint(false);
-    const QUrl url = thumbnailQmlUrl();
-    m_scene->setSource(url);
-    if (!m_scene->rootItem()) {
-        qCWarning(lcSnapAssistCapture) << "Failed to load thumbnail QML scene from" << url.toString();
+
+    QImage result;
+    auto texture = KWin::GLTexture::allocate(GL_RGBA8, fbSize);
+    if (texture) {
+        KWin::GLFramebuffer fbo(texture.get());
+        KWin::RenderTarget renderTarget(&fbo);
+        // renderRect = the window's logical geometry; scale maps it onto the
+        // fbSize device target so the window fills the FBO at thumbnail size.
+        KWin::RenderViewport viewport(wg, scale, renderTarget, QPoint());
+
+        KWin::GLFramebuffer::pushFramebuffer(&fbo);
+        glClearColor(0.0f, 0.0f, 0.0f, 0.0f);
+        glClear(GL_COLOR_BUFFER_BIT);
+
+        KWin::WindowPaintData data;
+        // Route through effects->drawWindow (the same entry the effect's own
+        // paintWindow uses) so the full draw chain renders the window's live
+        // texture into our bound FBO. infinite() repaints the whole target.
+        KWin::effects->drawWindow(renderTarget, viewport, w, KWin::Effect::PAINT_WINDOW_TRANSFORMED,
+                                  KWin::Region::infinite(), data);
+        KWin::GLFramebuffer::popFramebuffer();
+
+        // toImage() yields Format_RGBA8888_Premultiplied; GL's framebuffer
+        // origin is bottom-left, so flip to a top-down QImage.
+        result = texture->toImage().flipped(Qt::Vertical);
     }
+    KWin::effects->doneOpenGLContextCurrent();
+
+    if (result.isNull()) {
+        return {};
+    }
+    // Ship plain (straight-alpha) ARGB32 so the raw bytes match the daemon's
+    // storage format and semi-transparent edges aren't darkened by an
+    // unintended premultiplied composite at the image-provider boundary.
+    return result.convertToFormat(QImage::Format_ARGB32);
 }
 
 void SnapAssistThumbnailCapture::processNext()
@@ -195,69 +224,27 @@ void SnapAssistThumbnailCapture::processNext()
         m_busy = false;
         return;
     }
-    ensureScene();
-    if (!m_scene || !m_scene->rootItem()) {
-        // Scene didn't load — abort the rest of the queue rather than spin
-        // forever on a broken QML resource. Snap-assist falls back to icons.
-        // Validate before dequeue so a still-queued handle isn't silently
-        // dropped past the @ref qCWarning that names the failing resource.
-        qCWarning(lcSnapAssistCapture) << "processNext: scene unavailable — dropping" << m_queue.size()
-                                       << "queued capture(s); snap-assist will fall back to icons.";
-        dropQueueAndIdle();
-        return;
-    }
     m_busy = true;
     Pending p = m_queue.dequeue();
-
-    QQuickItem* root = m_scene->rootItem();
-    // WindowThumbnail's @c wId is declared @c QUuid; we pass the unbraced
-    // string form so the QML side accepts a typed @c property string and
-    // the Qt property bridge converts to QUuid once at the kwin boundary.
-    root->setProperty("wId", p.internalId.toString(QUuid::WithoutBraces));
-    root->setProperty("boxSize", QVariant::fromValue(QSizeF(p.maxSize)));
-    m_scene->setGeometry(QRect(QPoint(0, 0), p.maxSize));
-
     attemptCapture(p, RENDER_SETTLE_MS, /*retriesLeft=*/1);
 }
 
 void SnapAssistThumbnailCapture::attemptCapture(Pending p, int delayMs, int retriesLeft)
 {
     QTimer::singleShot(delayMs, this, [this, p, retriesLeft]() {
-        // Bail out if the scene was torn down between schedule and fire (Qt
-        // resource teardown during shutdown), or if it lost its root item
-        // (the QML scene failed to reload after a hot-resource update).
-        // Either way, drop @c m_busy and re-enter the queue loop so a future
-        // captureCandidates() can dispatch fresh work — leaving m_busy=true
-        // would silently wedge the queue forever.
-        if (!m_scene || !m_scene->rootItem()) {
-            qCDebug(lcSnapAssistCapture) << "attemptCapture: scene torn down — aborting" << p.internalId.toString();
-            dropQueueAndIdle();
-            // No follow-up @c processNext kick: @c dropQueueAndIdle has
-            // already cleared the queue, so re-entering would be a no-op
-            // on an empty queue. The next @ref captureCandidates call
-            // will re-dispatch from scratch (and will hit the same
-            // scene-torn-down path inside @ref processNext if the scene
-            // never recovers, which logs at warning and discards cleanly).
-            return;
-        }
-        m_scene->update();
-        QImage image = m_scene->bufferAsImage();
+        // Resolve the EffectWindow fresh each attempt: the candidate may have
+        // closed between queueing and firing, in which case findWindow returns
+        // null and grabWindowImage yields a null image (handled below).
+        KWin::EffectWindow* w = KWin::effects ? KWin::effects->findWindow(p.internalId) : nullptr;
+        QImage image = grabWindowImage(w, p.maxSize);
         if (image.isNull() && retriesLeft > 0) {
-            // Compositor occasionally drops the first frame after wId is
-            // bound. Wait one more frame interval — same Pending, no queue
-            // shuffle — before giving up.
+            // The window's first compositor frame after mapping is occasionally
+            // not yet renderable. Wait one more frame interval — same Pending,
+            // no queue shuffle — before giving up.
             attemptCapture(p, RENDER_RETRY_MS, retriesLeft - 1);
             return;
         }
         if (!image.isNull()) {
-            // bufferAsImage commonly returns Format_ARGB32_Premultiplied
-            // (matches the FBO layout). Convert to plain ARGB32 so the
-            // raw bytes we ship match the daemon's storage format and
-            // semi-transparent edges aren't darkened by an unintended
-            // premultiplied composite at the QML provider boundary.
-            if (image.format() != QImage::Format_ARGB32) {
-                image = image.convertToFormat(QImage::Format_ARGB32);
-            }
             // Mark-recently-posted is deferred into the D-Bus success
             // callback inside @ref postThumbnail — see that function for
             // why "we sent it" isn't strong enough to claim the daemon
