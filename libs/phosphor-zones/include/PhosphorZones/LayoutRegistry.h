@@ -7,8 +7,8 @@
 #include <PhosphorZones/IZoneLayoutRegistry.h>
 #include <PhosphorZones/Layout.h>
 
-#include <PhosphorWindowRule/RuleEvaluator.h>
-#include <PhosphorWindowRule/WindowRuleStore.h>
+#include <PhosphorWindowRules/RuleEvaluator.h>
+#include <PhosphorWindowRules/WindowRuleStore.h>
 
 #include <QHash>
 #include <QPair>
@@ -64,7 +64,7 @@ inline size_t qHash(const CombinedAssignmentKey& key, size_t seed = 0) noexcept
  *     (screenId, virtualDesktop, activity), with cascading fallback
  *     (narrower keys beat wider keys; base screen is the widest). The
  *     assignment authority is the injected
- *     @ref PhosphorWindowRule::WindowRuleStore — each per-context
+ *     @ref PhosphorWindowRules::WindowRuleStore — each per-context
  *     assignment is a context-only @c WindowRule and the cascade is the
  *     evaluator's descending-priority walk.
  *   - Numbered quick-layout shortcut slots (1..9), persisted to a
@@ -84,13 +84,13 @@ class PHOSPHORZONES_EXPORT LayoutRegistry : public IZoneLayoutRegistry
 public:
     /**
      * @param ruleStore Borrowed unified WindowRule store. Required - asserted
-     *                non-null. The store's @ref PhosphorWindowRule::WindowRuleSet
+     *                non-null. The store's @ref PhosphorWindowRules::WindowRuleSet
      *                is the single source of truth for every per-context
      *                assignment; the registry resolves @ref layoutForScreen /
      *                @ref assignmentEntryForScreen and the per-mode/snapping/
      *                tiling derivatives by building a windowless
-     *                @ref PhosphorWindowRule::WindowQuery and evaluating it
-     *                through @ref PhosphorWindowRule::RuleEvaluator. Mutators
+     *                @ref PhosphorWindowRules::WindowQuery and evaluating it
+     *                through @ref PhosphorWindowRules::RuleEvaluator. Mutators
      *                (@ref assignLayout etc.) translate to context-rule upserts
      *                via @c ContextRuleBridge and persist through the store.
      *                The caller owns the store and must outlive the registry.
@@ -121,7 +121,7 @@ public:
      *       roots, which drive quick slots over D-Bus rather than locally,
      *       deliberately skip it.
      */
-    LayoutRegistry(PhosphorWindowRule::WindowRuleStore* ruleStore, QString layoutSubdirectory,
+    LayoutRegistry(PhosphorWindowRules::WindowRuleStore* ruleStore, QString layoutSubdirectory,
                    QObject* parent = nullptr);
     ~LayoutRegistry() override;
 
@@ -566,7 +566,7 @@ private:
     /// disabled rule in place rather than appending a duplicate) but rejects
     /// any match carrying a window-property leaf — only a pure context-only
     /// match is an exact context rule.
-    const PhosphorWindowRule::WindowRule* findExactContextRule(const QString& screenId, int virtualDesktop,
+    const PhosphorWindowRules::WindowRule* findExactContextRule(const QString& screenId, int virtualDesktop,
                                                                const QString& activity) const;
 
     /// Find the id of the exact-shape context rule for a (screen, desktop,
@@ -722,9 +722,9 @@ private:
     /// Borrowed unified rule store — the single assignment authority. The
     /// caller owns the store and must outlive the registry; always non-null
     /// (the ctor asserts it).
-    PhosphorWindowRule::WindowRuleStore* m_ruleStore = nullptr;
+    PhosphorWindowRules::WindowRuleStore* m_ruleStore = nullptr;
     /// Evaluator bound to m_ruleStore->ruleSet(); the one resolution model.
-    std::unique_ptr<PhosphorWindowRule::RuleEvaluator> m_evaluator;
+    std::unique_ptr<PhosphorWindowRules::RuleEvaluator> m_evaluator;
     QString m_layoutSubdirectory; ///< XDG-relative (e.g. "plasmazones/layouts") - drives locateAll discovery
     QString m_layoutDirectory; ///< Absolute user-writable path derived from m_layoutSubdirectory
     QVector<Layout*> m_layouts;

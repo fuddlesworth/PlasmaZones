@@ -11,8 +11,8 @@
 
 #include <PhosphorProtocol/ClientHelpers.h>
 #include <PhosphorProtocol/ServiceConstants.h>
-#include <PhosphorWindowRule/MatchTypes.h>
-#include <PhosphorWindowRule/WindowRuleSet.h>
+#include <PhosphorWindowRules/MatchTypes.h>
+#include <PhosphorWindowRules/WindowRuleSet.h>
 
 #include <QDBusConnection>
 #include <QDBusPendingCallWatcher>
@@ -27,8 +27,8 @@ namespace PlasmaZones {
 
 namespace {
 
-using PhosphorWindowRule::WindowRule;
-using PhosphorWindowRule::WindowRuleSet;
+using PhosphorWindowRules::WindowRule;
+using PhosphorWindowRules::WindowRuleSet;
 
 // Priority bands live next to the seeded templates (windowruletemplates.h) so
 // the renormalize logic here shares the exact bands the templates /

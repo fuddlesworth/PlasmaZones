@@ -39,8 +39,8 @@
 // std::make_unique<WindowRuleStore> in the ctor needs the complete
 // type. The header forward-declares it to avoid pulling the
 // dependency graph into every consumer of SettingsController.
-#include <PhosphorWindowRule/WindowRuleStore.h>
-#include <PhosphorWindowRule/WindowRuleStoreWatcher.h>
+#include <PhosphorWindowRules/WindowRuleStore.h>
+#include <PhosphorWindowRules/WindowRuleStoreWatcher.h>
 
 #include "../core/shaderregistry.h"
 #include "snappingshaderspagecontroller.h"
@@ -139,8 +139,8 @@ SettingsController::SettingsController(QObject* parent)
     // m_localRuleStore is constructed first (declared before m_settings) so the
     // single shared store exists before m_settings borrows it. Parent stays
     // null on m_settings — it is a value member, not a QObject child of `this`.
-    , m_localRuleStore(std::make_unique<PhosphorWindowRule::WindowRuleStore>(ConfigDefaults::windowRulesFilePath()))
-    , m_localRuleStoreWatcher(std::make_unique<PhosphorWindowRule::WindowRuleStoreWatcher>(*m_localRuleStore))
+    , m_localRuleStore(std::make_unique<PhosphorWindowRules::WindowRuleStore>(ConfigDefaults::windowRulesFilePath()))
+    , m_localRuleStoreWatcher(std::make_unique<PhosphorWindowRules::WindowRuleStoreWatcher>(*m_localRuleStore))
     // Comma-expression: install the library-level screen-id resolver, then store
     // `true`. Runs BEFORE m_settings (next) whose constructor load()s and
     // migrates per-screen override keys via idForName — so the very first load

@@ -5,9 +5,9 @@
 
 #include "../phosphor_i18n.h"
 
-#include <PhosphorWindowRule/ContextRuleBridge.h>
-#include <PhosphorWindowRule/MatchTypes.h>
-#include <PhosphorWindowRule/RuleAction.h>
+#include <PhosphorWindowRules/ContextRuleBridge.h>
+#include <PhosphorWindowRules/MatchTypes.h>
+#include <PhosphorWindowRules/RuleAction.h>
 
 #include <PhosphorZones/AssignmentEntry.h>
 
@@ -19,18 +19,18 @@ namespace PlasmaZones {
 
 namespace {
 
-namespace ActionType = PhosphorWindowRule::ActionType;
-namespace Tag = PhosphorWindowRule::Tag;
-using PhosphorWindowRule::Field;
-using PhosphorWindowRule::MatchExpression;
-using PhosphorWindowRule::Operator;
-using PhosphorWindowRule::RuleAction;
-using PhosphorWindowRule::WindowRule;
+namespace ActionType = PhosphorWindowRules::ActionType;
+namespace Tag = PhosphorWindowRules::Tag;
+using PhosphorWindowRules::Field;
+using PhosphorWindowRules::MatchExpression;
+using PhosphorWindowRules::Operator;
+using PhosphorWindowRules::RuleAction;
+using PhosphorWindowRules::WindowRule;
 
 /// True if @p actions carry an OverrideAnimation* action (Animation ∩ Effect).
 bool hasAnimationAction(const QList<RuleAction>& actions)
 {
-    const auto& registry = PhosphorWindowRule::ActionRegistry::instance();
+    const auto& registry = PhosphorWindowRules::ActionRegistry::instance();
     for (const RuleAction& a : actions) {
         if (registry.hasTag(a.type, Tag::Animation) && registry.hasTag(a.type, Tag::Effect)) {
             return true;
@@ -43,7 +43,7 @@ bool hasAnimationAction(const QList<RuleAction>& actions)
 /// disable / lock) — the kind a Monitor & Layout rule produces.
 bool hasContextAction(const QList<RuleAction>& actions)
 {
-    const auto& registry = PhosphorWindowRule::ActionRegistry::instance();
+    const auto& registry = PhosphorWindowRules::ActionRegistry::instance();
     for (const RuleAction& a : actions) {
         if (registry.hasTag(a.type, Tag::LayoutEngine)) {
             return true;
@@ -235,17 +235,17 @@ QString actionLabel(const RuleAction& action, const WindowRuleModel::LabelLookup
     };
 
     if (action.type == ActionType::SetEngineMode) {
-        const QString mode = action.params.value(PhosphorWindowRule::ActionParam::Mode).toString();
+        const QString mode = action.params.value(PhosphorWindowRules::ActionParam::Mode).toString();
         const QString label = engineModeDisplayLabel(mode);
         return PhosphorI18n::tr("Engine: %1").arg(label.isEmpty() ? mode : label);
     }
     if (action.type == ActionType::SetSnappingLayout) {
-        const QString layoutId = action.params.value(PhosphorWindowRule::ActionParam::LayoutId).toString();
+        const QString layoutId = action.params.value(PhosphorWindowRules::ActionParam::LayoutId).toString();
         return layoutId.isEmpty() ? PhosphorI18n::tr("Snapping layout")
                                   : PhosphorI18n::tr("Snapping: %1").arg(resolveWith(layoutId, snappingLayoutLookup));
     }
     if (action.type == ActionType::SetTilingAlgorithm) {
-        const QString algo = action.params.value(PhosphorWindowRule::ActionParam::Algorithm).toString();
+        const QString algo = action.params.value(PhosphorWindowRules::ActionParam::Algorithm).toString();
         // Algorithms are wire tokens (`bsp`, `grid`, …). The dedicated
         // tilingAlgorithm lookup knows about autotile entries — the
         // WindowRuleController wires it from settingsController.layouts,
@@ -258,7 +258,7 @@ QString actionLabel(const RuleAction& action, const WindowRuleModel::LabelLookup
         // as two identical "Disabled" rows. Empty mode → fall back to
         // the generic "Disabled" label so a malformed rule still reads
         // sensibly.
-        const QString mode = action.params.value(PhosphorWindowRule::ActionParam::Mode).toString();
+        const QString mode = action.params.value(PhosphorWindowRules::ActionParam::Mode).toString();
         const QString label = engineModeDisplayLabel(mode);
         if (label.isEmpty()) {
             return PhosphorI18n::tr("Disabled");
@@ -276,7 +276,7 @@ QString actionLabel(const RuleAction& action, const WindowRuleModel::LabelLookup
         // resolveWindowOpacity) so the label never claims a behaviour
         // the runtime won't honour: null/undefined → label-only,
         // bool payload → "Opacity (invalid)", out-of-range value → same.
-        const QJsonValue raw = action.params.value(PhosphorWindowRule::ActionParam::Value);
+        const QJsonValue raw = action.params.value(PhosphorWindowRules::ActionParam::Value);
         if (raw.isNull() || raw.isUndefined()) {
             return PhosphorI18n::tr("Opacity");
         }
@@ -292,23 +292,23 @@ QString actionLabel(const RuleAction& action, const WindowRuleModel::LabelLookup
         return PhosphorI18n::tr("Opacity: %1%").arg(static_cast<int>(v * 100.0 + 0.5));
     }
     if (action.type == ActionType::OverrideAnimationShader) {
-        const QString id = action.params.value(PhosphorWindowRule::ActionParam::EffectId).toString();
+        const QString id = action.params.value(PhosphorWindowRules::ActionParam::EffectId).toString();
         return id.isEmpty() ? PhosphorI18n::tr("Block animation shader")
                             : PhosphorI18n::tr("Shader: %1").arg(resolveWith(id, shaderEffectLookup));
     }
     if (action.type == ActionType::OverrideAnimationTiming) {
-        const int ms = action.params.value(PhosphorWindowRule::ActionParam::DurationMs).toInt();
+        const int ms = action.params.value(PhosphorWindowRules::ActionParam::DurationMs).toInt();
         return ms > 0 ? PhosphorI18n::tr("Duration: %1 ms").arg(ms) : PhosphorI18n::tr("Animation duration");
     }
     if (action.type == ActionType::OverrideAnimationCurve) {
-        const QString curve = action.params.value(PhosphorWindowRule::ActionParam::Curve).toString();
+        const QString curve = action.params.value(PhosphorWindowRules::ActionParam::Curve).toString();
         return curve.isEmpty() ? PhosphorI18n::tr("Animation curve")
                                : PhosphorI18n::tr("Curve: %1").arg(resolveWith(curve, curveLookup));
     }
     // ── single-value actions keyed on ActionParam::Value (restore-position,
     //    border / title-bar overrides, per-context gap overrides) ──
     {
-        const QJsonValue raw = action.params.value(PhosphorWindowRule::ActionParam::Value);
+        const QJsonValue raw = action.params.value(PhosphorWindowRules::ActionParam::Value);
         if (action.type == ActionType::RestorePosition) {
             return raw.toBool() ? PhosphorI18n::tr("Restore position on login")
                                 : PhosphorI18n::tr("Don't restore position on login");
@@ -813,7 +813,7 @@ void WindowRuleModel::refreshLabels()
     Q_EMIT dataChanged(top, bottom, {NameRole, MatchSummaryRole, ActionSummaryRole});
 }
 
-QString WindowRuleModel::displayName(const PhosphorWindowRule::WindowRule& rule) const
+QString WindowRuleModel::displayName(const PhosphorWindowRules::WindowRule& rule) const
 {
     // A rule whose stored name matches the auto-stamped form is treated as
     // "no name" so the row's title falls back to the (lookup-resolved) match
@@ -825,8 +825,8 @@ QString WindowRuleModel::displayName(const PhosphorWindowRule::WindowRule& rule)
     QString screenId;
     int virtualDesktop = 0;
     QString activity;
-    PhosphorWindowRule::ContextRuleBridge::contextDimsOf(rule.match, screenId, virtualDesktop, activity);
-    if (rule.name == PhosphorWindowRule::ContextRuleBridge::contextRuleName(screenId, virtualDesktop, activity)) {
+    PhosphorWindowRules::ContextRuleBridge::contextDimsOf(rule.match, screenId, virtualDesktop, activity);
+    if (rule.name == PhosphorWindowRules::ContextRuleBridge::contextRuleName(screenId, virtualDesktop, activity)) {
         return QString();
     }
     return rule.name;

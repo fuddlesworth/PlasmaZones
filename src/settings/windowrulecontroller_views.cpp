@@ -16,9 +16,9 @@
 #include "windowrulecontroller.h"
 #include "windowruleauthoring.h"
 
-#include <PhosphorWindowRule/MatchExpression.h>
-#include <PhosphorWindowRule/RuleAction.h>
-#include <PhosphorWindowRule/WindowRule.h>
+#include <PhosphorWindowRules/MatchExpression.h>
+#include <PhosphorWindowRules/RuleAction.h>
+#include <PhosphorWindowRules/WindowRule.h>
 #include <PhosphorZones/AssignmentEntry.h>
 
 #include <QHash>
@@ -31,10 +31,10 @@ namespace PlasmaZones {
 
 namespace {
 
-namespace ActionType = PhosphorWindowRule::ActionType;
-using PhosphorWindowRule::MatchExpression;
-using PhosphorWindowRule::RuleAction;
-using PhosphorWindowRule::WindowRule;
+namespace ActionType = PhosphorWindowRules::ActionType;
+using PhosphorWindowRules::MatchExpression;
+using PhosphorWindowRules::RuleAction;
+using PhosphorWindowRules::WindowRule;
 
 } // namespace
 
@@ -192,14 +192,14 @@ QVariantList WindowRuleController::monitorOverview(const QVariantList& screens) 
             bool ruleHasEngineMode = false;
             for (const RuleAction& a : rule.actions) {
                 if (a.type == ActionType::DisableEngine && s.disabledEngineMode.isEmpty())
-                    s.disabledEngineMode = a.params.value(PhosphorWindowRule::ActionParam::Mode).toString();
+                    s.disabledEngineMode = a.params.value(PhosphorWindowRules::ActionParam::Mode).toString();
                 else if (a.type == ActionType::SetEngineMode)
                     ruleHasEngineMode = true;
                 else if (a.type == ActionType::LockContext && !s.lockResolved) {
                     // First-wins on the single Locked slot (priority-DESC): the
                     // highest-priority LockContext rule decides, value and all.
                     s.lockResolved = true;
-                    s.locked = a.params.value(PhosphorWindowRule::ActionParam::Value).toBool();
+                    s.locked = a.params.value(PhosphorWindowRules::ActionParam::Value).toBool();
                 }
             }
             // Engine/layout: capture from the FIRST rule (highest priority) that
@@ -211,11 +211,11 @@ QVariantList WindowRuleController::monitorOverview(const QVariantList& screens) 
                 s.assignmentResolved = true;
                 for (const RuleAction& a : rule.actions) {
                     if (a.type == ActionType::SetEngineMode)
-                        s.engineMode = a.params.value(PhosphorWindowRule::ActionParam::Mode).toString();
+                        s.engineMode = a.params.value(PhosphorWindowRules::ActionParam::Mode).toString();
                     else if (a.type == ActionType::SetSnappingLayout)
-                        s.snappingLayout = a.params.value(PhosphorWindowRule::ActionParam::LayoutId).toString();
+                        s.snappingLayout = a.params.value(PhosphorWindowRules::ActionParam::LayoutId).toString();
                     else if (a.type == ActionType::SetTilingAlgorithm)
-                        s.tilingAlgorithm = a.params.value(PhosphorWindowRule::ActionParam::Algorithm).toString();
+                        s.tilingAlgorithm = a.params.value(PhosphorWindowRules::ActionParam::Algorithm).toString();
                 }
             }
         }
@@ -375,7 +375,7 @@ QVariantList WindowRuleController::validationIssuesForJson(const QVariantMap& ru
     }
 
     QVariantList out;
-    for (const PhosphorWindowRule::ValidationIssue& issue : probe.validationIssues()) {
+    for (const PhosphorWindowRules::ValidationIssue& issue : probe.validationIssues()) {
         QVariantMap m;
         m[QStringLiteral("code")] = static_cast<int>(issue.code);
         m[QStringLiteral("actionIndex")] = issue.actionIndex;

@@ -12,7 +12,7 @@
 #include <PhosphorLayoutApi/EdgeGaps.h>
 #include <PhosphorProtocol/NavigationTypes.h>
 #include <PhosphorProtocol/WindowTypes.h>
-#include <PhosphorWindowRule/RuleEvaluator.h>
+#include <PhosphorWindowRules/RuleEvaluator.h>
 #include <QObject>
 #include <QPointer>
 #include <QRect>
@@ -27,7 +27,7 @@ class IZoneDetector;
 class LayoutRegistry;
 }
 
-// PhosphorWindowRule::RuleEvaluator is included as a member type of
+// PhosphorWindowRules::RuleEvaluator is included as a member type of
 // std::optional below (needs a complete type at declaration); WindowRuleSet
 // is referenced only by pointer / reference, so a forward declaration would
 // suffice — but including RuleEvaluator.h pulls in WindowRuleSet.h
@@ -597,7 +597,7 @@ public:
     /// declaration in `Q_SIGNALS:` as a signal and generates a stub body
     /// for it, so placing this setter inside that section makes the
     /// translation unit redefine the function and the link fails.
-    void setExcludeRuleSet(const PhosphorWindowRule::WindowRuleSet* ruleSet);
+    void setExcludeRuleSet(const PhosphorWindowRules::WindowRuleSet* ruleSet);
 
     /// True if @p appId matches an enabled `Exclude`-action WindowRule
     /// whose match leaf targets the `AppId` field. Public so the unit-
@@ -767,7 +767,7 @@ private:
     /// must be externally serialised (see RuleEvaluator.h's thread-
     /// safety note). Do not access from another thread without adding
     /// locking.
-    const PhosphorWindowRule::WindowRuleSet* m_excludeRuleSet = nullptr;
+    const PhosphorWindowRules::WindowRuleSet* m_excludeRuleSet = nullptr;
     /// Lazily constructed evaluator bound to @ref m_excludeRuleSet. Reset
     /// in `setExcludeRuleSet` when the pointer changes; the evaluator's
     /// internal prio-sort index and resolve cache key off the bound rule
@@ -776,7 +776,7 @@ private:
     /// a different rule-set pointer needs the explicit reset.
     ///
     /// @note Same daemon-main-thread-only contract as @ref m_excludeRuleSet.
-    mutable std::optional<PhosphorWindowRule::RuleEvaluator> m_excludeEvaluator;
+    mutable std::optional<PhosphorWindowRules::RuleEvaluator> m_excludeEvaluator;
 
     // Persistence delegates (KConfig stays in adaptor layer)
     std::function<void()> m_saveFn;

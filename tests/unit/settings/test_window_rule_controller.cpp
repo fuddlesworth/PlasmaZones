@@ -29,12 +29,12 @@
 #include "settings/windowrulecontroller.h"
 #include "settings/windowrulemodel.h"
 
-#include <PhosphorWindowRule/MatchExpression.h>
-#include <PhosphorWindowRule/RuleAction.h>
-#include <PhosphorWindowRule/WindowRule.h>
+#include <PhosphorWindowRules/MatchExpression.h>
+#include <PhosphorWindowRules/RuleAction.h>
+#include <PhosphorWindowRules/WindowRule.h>
 
 using namespace PlasmaZones;
-using namespace PhosphorWindowRule;
+using namespace PhosphorWindowRules;
 
 class TestWindowRuleController : public QObject
 {
@@ -635,9 +635,9 @@ void TestWindowRuleController::userAuthorableFilterHidesInternalActions()
     // Register a sentinel descriptor flagged as non-authorable, walk the
     // picker, then restore the descriptor to its prior state so the rest
     // of the test suite isn't disturbed.
-    using PhosphorWindowRule::ActionDescriptor;
-    using PhosphorWindowRule::ActionDomain;
-    using PhosphorWindowRule::ActionRegistry;
+    using PhosphorWindowRules::ActionDescriptor;
+    using PhosphorWindowRules::ActionDomain;
+    using PhosphorWindowRules::ActionRegistry;
 
     static const QString kSentinelType = QStringLiteral("test-sentinel-internal-action");
     auto& registry = ActionRegistry::instance();

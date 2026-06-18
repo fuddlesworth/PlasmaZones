@@ -33,12 +33,12 @@
 #include <PhosphorPlacement/WindowTrackingService.h>
 #include <PhosphorSnapEngine/SnapEngine.h>
 #include <PhosphorSnapEngine/SnapState.h>
-#include <PhosphorWindowRule/MatchExpression.h>
-#include <PhosphorWindowRule/MatchTypes.h>
-#include <PhosphorWindowRule/RuleAction.h>
-#include <PhosphorWindowRule/WindowRule.h>
+#include <PhosphorWindowRules/MatchExpression.h>
+#include <PhosphorWindowRules/MatchTypes.h>
+#include <PhosphorWindowRules/RuleAction.h>
+#include <PhosphorWindowRules/WindowRule.h>
 #include <PhosphorIdentity/WindowId.h>
-#include <PhosphorWindowRule/WindowRuleStore.h>
+#include <PhosphorWindowRules/WindowRuleStore.h>
 #include <PhosphorProtocol/ServiceConstants.h>
 #include <PhosphorProtocol/WindowTypeEnum.h>
 #include <PhosphorZones/Zone.h>
@@ -296,18 +296,18 @@ private Q_SLOTS:
     {
         QTemporaryDir dir;
         QVERIFY(dir.isValid());
-        PhosphorWindowRule::WindowRuleStore store(dir.filePath(QStringLiteral("windowrules.json")));
+        PhosphorWindowRules::WindowRuleStore store(dir.filePath(QStringLiteral("windowrules.json")));
 
-        PhosphorWindowRule::WindowRule rule;
+        PhosphorWindowRules::WindowRule rule;
         rule.id = QUuid::createUuid();
         rule.name = QStringLiteral("no-restore-dolphin");
         rule.enabled = true;
         rule.priority = 100;
-        rule.match = PhosphorWindowRule::MatchExpression::makeLeaf(
-            PhosphorWindowRule::Field::AppId, PhosphorWindowRule::Operator::Equals, QStringLiteral("org.kde.dolphin"));
-        PhosphorWindowRule::RuleAction action;
-        action.type = QString(PhosphorWindowRule::ActionType::RestorePosition);
-        action.params.insert(QString(PhosphorWindowRule::ActionParam::Value), false);
+        rule.match = PhosphorWindowRules::MatchExpression::makeLeaf(
+            PhosphorWindowRules::Field::AppId, PhosphorWindowRules::Operator::Equals, QStringLiteral("org.kde.dolphin"));
+        PhosphorWindowRules::RuleAction action;
+        action.type = QString(PhosphorWindowRules::ActionType::RestorePosition);
+        action.params.insert(QString(PhosphorWindowRules::ActionParam::Value), false);
         rule.actions.append(action);
         QVERIFY(store.addRule(rule));
 
@@ -359,17 +359,17 @@ private Q_SLOTS:
     {
         QTemporaryDir dir;
         QVERIFY(dir.isValid());
-        PhosphorWindowRule::WindowRuleStore store(dir.filePath(QStringLiteral("windowrules.json")));
+        PhosphorWindowRules::WindowRuleStore store(dir.filePath(QStringLiteral("windowrules.json")));
 
-        PhosphorWindowRule::WindowRule rule;
+        PhosphorWindowRules::WindowRule rule;
         rule.id = QUuid::createUuid();
         rule.name = QStringLiteral("float-dolphin");
         rule.enabled = true;
         rule.priority = 100;
-        rule.match = PhosphorWindowRule::MatchExpression::makeLeaf(
-            PhosphorWindowRule::Field::AppId, PhosphorWindowRule::Operator::Equals, QStringLiteral("org.kde.dolphin"));
-        PhosphorWindowRule::RuleAction action;
-        action.type = QString(PhosphorWindowRule::ActionType::Float);
+        rule.match = PhosphorWindowRules::MatchExpression::makeLeaf(
+            PhosphorWindowRules::Field::AppId, PhosphorWindowRules::Operator::Equals, QStringLiteral("org.kde.dolphin"));
+        PhosphorWindowRules::RuleAction action;
+        action.type = QString(PhosphorWindowRules::ActionType::Float);
         rule.actions.append(action);
         QVERIFY(store.addRule(rule));
 
@@ -419,22 +419,22 @@ private Q_SLOTS:
     {
         QTemporaryDir dir;
         QVERIFY(dir.isValid());
-        PhosphorWindowRule::WindowRuleStore store(dir.filePath(QStringLiteral("windowrules.json")));
+        PhosphorWindowRules::WindowRuleStore store(dir.filePath(QStringLiteral("windowrules.json")));
 
         // "Float any modal dialog narrower than 500px" — a bool field AND an int
         // field, both carried only via the extended a{sv}, combined under All.
-        PhosphorWindowRule::WindowRule rule;
+        PhosphorWindowRules::WindowRule rule;
         rule.id = QUuid::createUuid();
         rule.name = QStringLiteral("float-narrow-modal");
         rule.enabled = true;
         rule.priority = 100;
-        rule.match = PhosphorWindowRule::MatchExpression::makeAll(
-            {PhosphorWindowRule::MatchExpression::makeLeaf(PhosphorWindowRule::Field::IsModal,
-                                                           PhosphorWindowRule::Operator::Equals, true),
-             PhosphorWindowRule::MatchExpression::makeLeaf(PhosphorWindowRule::Field::Width,
-                                                           PhosphorWindowRule::Operator::LessThan, 500)});
-        PhosphorWindowRule::RuleAction action;
-        action.type = QString(PhosphorWindowRule::ActionType::Float);
+        rule.match = PhosphorWindowRules::MatchExpression::makeAll(
+            {PhosphorWindowRules::MatchExpression::makeLeaf(PhosphorWindowRules::Field::IsModal,
+                                                           PhosphorWindowRules::Operator::Equals, true),
+             PhosphorWindowRules::MatchExpression::makeLeaf(PhosphorWindowRules::Field::Width,
+                                                           PhosphorWindowRules::Operator::LessThan, 500)});
+        PhosphorWindowRules::RuleAction action;
+        action.type = QString(PhosphorWindowRules::ActionType::Float);
         rule.actions.append(action);
         QVERIFY(store.addRule(rule));
 
@@ -490,17 +490,17 @@ private Q_SLOTS:
     {
         QTemporaryDir dir;
         QVERIFY(dir.isValid());
-        PhosphorWindowRule::WindowRuleStore store(dir.filePath(QStringLiteral("windowrules.json")));
+        PhosphorWindowRules::WindowRuleStore store(dir.filePath(QStringLiteral("windowrules.json")));
 
-        PhosphorWindowRule::WindowRule rule;
+        PhosphorWindowRules::WindowRule rule;
         rule.id = QUuid::createUuid();
         rule.name = QStringLiteral("float-modal");
         rule.enabled = true;
         rule.priority = 100;
-        rule.match = PhosphorWindowRule::MatchExpression::makeLeaf(PhosphorWindowRule::Field::IsModal,
-                                                                   PhosphorWindowRule::Operator::Equals, true);
-        PhosphorWindowRule::RuleAction action;
-        action.type = QString(PhosphorWindowRule::ActionType::Float);
+        rule.match = PhosphorWindowRules::MatchExpression::makeLeaf(PhosphorWindowRules::Field::IsModal,
+                                                                   PhosphorWindowRules::Operator::Equals, true);
+        PhosphorWindowRules::RuleAction action;
+        action.type = QString(PhosphorWindowRules::ActionType::Float);
         rule.actions.append(action);
         QVERIFY(store.addRule(rule));
 
@@ -571,7 +571,7 @@ private Q_SLOTS:
         // still the global setting (no rule can match a window with no query).
         QTemporaryDir dir;
         QVERIFY(dir.isValid());
-        PhosphorWindowRule::WindowRuleStore store(dir.filePath(QStringLiteral("windowrules.json")));
+        PhosphorWindowRules::WindowRuleStore store(dir.filePath(QStringLiteral("windowrules.json")));
         m_wta->setWindowRuleStore(&store);
         const auto detach = qScopeGuard([this] {
             m_wta->setWindowRuleStore(nullptr);

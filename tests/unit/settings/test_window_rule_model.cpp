@@ -17,14 +17,14 @@
 #include <QSignalSpy>
 #include <QTest>
 
-#include <PhosphorWindowRule/MatchExpression.h>
-#include <PhosphorWindowRule/RuleAction.h>
-#include <PhosphorWindowRule/WindowRule.h>
+#include <PhosphorWindowRules/MatchExpression.h>
+#include <PhosphorWindowRules/RuleAction.h>
+#include <PhosphorWindowRules/WindowRule.h>
 
 #include "settings/windowrulemodel.h"
 
 using namespace PlasmaZones;
-using namespace PhosphorWindowRule;
+using namespace PhosphorWindowRules;
 
 namespace {
 

@@ -5,10 +5,10 @@
 
 #include "../phosphor_i18n.h"
 
-#include <PhosphorWindowRule/MatchExpression.h>
-#include <PhosphorWindowRule/MatchTypes.h>
-#include <PhosphorWindowRule/RuleAction.h>
-#include <PhosphorWindowRule/WindowRule.h>
+#include <PhosphorWindowRules/MatchExpression.h>
+#include <PhosphorWindowRules/MatchTypes.h>
+#include <PhosphorWindowRules/RuleAction.h>
+#include <PhosphorWindowRules/WindowRule.h>
 
 #include <PhosphorZones/AssignmentEntry.h>
 
@@ -19,13 +19,13 @@ namespace PlasmaZones::WindowRuleTemplates {
 
 namespace {
 
-namespace ActionType = PhosphorWindowRule::ActionType;
-namespace ActionParam = PhosphorWindowRule::ActionParam;
-using PhosphorWindowRule::Field;
-using PhosphorWindowRule::MatchExpression;
-using PhosphorWindowRule::Operator;
-using PhosphorWindowRule::RuleAction;
-using PhosphorWindowRule::WindowRule;
+namespace ActionType = PhosphorWindowRules::ActionType;
+namespace ActionParam = PhosphorWindowRules::ActionParam;
+using PhosphorWindowRules::Field;
+using PhosphorWindowRules::MatchExpression;
+using PhosphorWindowRules::Operator;
+using PhosphorWindowRules::RuleAction;
+using PhosphorWindowRules::WindowRule;
 
 } // namespace
 

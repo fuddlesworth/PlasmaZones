@@ -30,9 +30,9 @@
 #include <QUuid>
 #include <memory>
 
-#include <PhosphorWindowRule/ContextRuleBridge.h>
-#include <PhosphorWindowRule/WindowRule.h>
-#include <PhosphorWindowRule/WindowRuleStore.h>
+#include <PhosphorWindowRules/ContextRuleBridge.h>
+#include <PhosphorWindowRules/WindowRule.h>
+#include <PhosphorWindowRules/WindowRuleStore.h>
 
 #include "../../../src/config/configbackends.h"
 #include "../../../src/config/configdefaults.h"
@@ -51,9 +51,9 @@ namespace {
 /// layout choice. The exact action shape doesn't matter for the race test;
 /// what matters is that this rule exists in the in-memory set BEFORE the
 /// Settings-side disable write runs.
-PhosphorWindowRule::WindowRule makeTestAssignmentRule()
+PhosphorWindowRules::WindowRule makeTestAssignmentRule()
 {
-    return PhosphorWindowRule::ContextRuleBridge::makeAssignmentRule(
+    return PhosphorWindowRules::ContextRuleBridge::makeAssignmentRule(
         QStringLiteral("Test assignment rule"), QStringLiteral("DP-1"), 0, QString(), QStringLiteral("snapping"),
         QUuid::createUuid().toString(), QString());
 }
@@ -61,10 +61,10 @@ PhosphorWindowRule::WindowRule makeTestAssignmentRule()
 /// True iff @p store contains a rule with the assignment-action shape — i.e.,
 /// not a per-mode disable rule. Used as the "the assignment write survived"
 /// predicate without coupling the test to the rule's exact id.
-bool hasAssignmentRule(const PhosphorWindowRule::WindowRuleStore& store)
+bool hasAssignmentRule(const PhosphorWindowRules::WindowRuleStore& store)
 {
-    for (const PhosphorWindowRule::WindowRule& rule : store.ruleSet().rules()) {
-        if (!PhosphorWindowRule::ContextRuleBridge::disableRuleMode(rule)) {
+    for (const PhosphorWindowRules::WindowRule& rule : store.ruleSet().rules()) {
+        if (!PhosphorWindowRules::ContextRuleBridge::disableRuleMode(rule)) {
             return true;
         }
     }
@@ -91,7 +91,7 @@ private Q_SLOTS:
         // The daemon's composition root: one backend, one WindowRuleStore.
         auto backend = createDefaultConfigBackend();
         auto daemonStore =
-            std::make_unique<PhosphorWindowRule::WindowRuleStore>(ConfigDefaults::windowRulesFilePath(), nullptr);
+            std::make_unique<PhosphorWindowRules::WindowRuleStore>(ConfigDefaults::windowRulesFilePath(), nullptr);
         daemonStore->load();
 
         // Settings shares the daemon's store via the borrow ctor. Mirrors
@@ -104,7 +104,7 @@ private Q_SLOTS:
         // (1) Daemon-side writer adds an assignment rule. This is the
         // canonical KCM-saves-an-assignment path: LayoutRegistry /
         // WindowRuleAdaptor mutate the daemon's store directly.
-        const PhosphorWindowRule::WindowRule assignment = makeTestAssignmentRule();
+        const PhosphorWindowRules::WindowRule assignment = makeTestAssignmentRule();
         QVERIFY(daemonStore->addRule(assignment));
         QCOMPARE(daemonStore->count(), 1);
         QVERIFY(hasAssignmentRule(*daemonStore));
@@ -130,7 +130,7 @@ private Q_SLOTS:
         // Pre-fix Settings's setAllRules wrote `{disableRule}` only, so
         // this reload would see one rule and hasAssignmentRule() would be
         // false. With the fix, the on-disk file holds both rules.
-        PhosphorWindowRule::WindowRuleStore reloaded(ConfigDefaults::windowRulesFilePath(), nullptr);
+        PhosphorWindowRules::WindowRuleStore reloaded(ConfigDefaults::windowRulesFilePath(), nullptr);
         reloaded.load();
         QCOMPARE(reloaded.count(), 2);
         QVERIFY2(hasAssignmentRule(reloaded),
@@ -149,7 +149,7 @@ private Q_SLOTS:
 
         auto backend = createDefaultConfigBackend();
         auto daemonStore =
-            std::make_unique<PhosphorWindowRule::WindowRuleStore>(ConfigDefaults::windowRulesFilePath(), nullptr);
+            std::make_unique<PhosphorWindowRules::WindowRuleStore>(ConfigDefaults::windowRulesFilePath(), nullptr);
         daemonStore->load();
         Settings settings(backend.get(), /*curveRegistry=*/nullptr, daemonStore.get(), nullptr);
 
@@ -167,7 +167,7 @@ private Q_SLOTS:
         QCOMPARE(daemonStore->count(), 2);
 
         // On-disk round-trip.
-        PhosphorWindowRule::WindowRuleStore reloaded(ConfigDefaults::windowRulesFilePath(), nullptr);
+        PhosphorWindowRules::WindowRuleStore reloaded(ConfigDefaults::windowRulesFilePath(), nullptr);
         reloaded.load();
         QCOMPARE(reloaded.count(), 2);
         QVERIFY(hasAssignmentRule(reloaded));
@@ -185,14 +185,14 @@ private Q_SLOTS:
 
         auto backend = createDefaultConfigBackend();
         auto daemonStore =
-            std::make_unique<PhosphorWindowRule::WindowRuleStore>(ConfigDefaults::windowRulesFilePath(), nullptr);
+            std::make_unique<PhosphorWindowRules::WindowRuleStore>(ConfigDefaults::windowRulesFilePath(), nullptr);
         daemonStore->load();
         Settings settings(backend.get(), nullptr, daemonStore.get(), nullptr);
 
         // Inject a disable rule directly through the daemon-owned store
         // (the path WindowRuleAdaptor takes when KCM edits a rule by id).
         const QString disabledScreen = QStringLiteral("eDP-1");
-        const auto rule = PhosphorWindowRule::ContextRuleBridge::makeDisableRule(
+        const auto rule = PhosphorWindowRules::ContextRuleBridge::makeDisableRule(
             QStringLiteral("Snapping off · eDP-1"), disabledScreen, 0, QString(), QStringLiteral("snapping"));
         QVERIFY(daemonStore->addRule(rule));
 

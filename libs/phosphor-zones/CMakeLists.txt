@@ -162,7 +162,7 @@ target_link_libraries(PhosphorZones
         # LayoutRegistry resolves the assignment cascade through a
         # WindowRuleStore + RuleEvaluator; the store type is referenced in
         # the public LayoutRegistry.h ctor signature so the dep is PUBLIC.
-        PhosphorWindowRule::PhosphorWindowRule
+        PhosphorWindowRules::PhosphorWindowRule
     PRIVATE
         # Layout::matchAppRule uses PhosphorIdentity::WindowId for
         # composite window-id parsing; PRIVATE because the dep doesn't

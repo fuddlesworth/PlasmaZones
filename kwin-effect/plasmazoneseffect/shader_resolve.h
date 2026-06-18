@@ -6,7 +6,7 @@
 #include <PhosphorAnimation/Profile.h>
 #include <PhosphorAnimation/ShaderProfile.h>
 #include <PhosphorAnimation/ShaderProfileTree.h>
-#include <PhosphorWindowRule/WindowQuery.h>
+#include <PhosphorWindowRules/WindowQuery.h>
 
 #include <QColor>
 #include <QString>
@@ -17,7 +17,7 @@ namespace PhosphorAnimation {
 class CurveRegistry;
 }
 
-namespace PhosphorWindowRule {
+namespace PhosphorWindowRules {
 class RuleEvaluator;
 class ResolvedActions;
 }
@@ -27,7 +27,7 @@ namespace PlasmaZones {
 /**
  * @file shader_resolve.h
  * @brief Effect-local per-window animation cascade shims, built on
- *        PhosphorWindowRule::RuleEvaluator.
+ *        PhosphorWindowRules::RuleEvaluator.
  *
  * These walk the event-scoped action slots (`anim-shader:<event>`,
  * `anim-timing:<event>`, `anim-curve:<event>`) populated by `WindowRule`s
@@ -37,7 +37,7 @@ namespace PlasmaZones {
  * engaged-empty `effectId` sentinel, and the empty-input short-circuits all
  * live in these shims — the evaluator stays generic.
  *
- * Every resolver takes a `PhosphorWindowRule::WindowQuery` carrying the FULL
+ * Every resolver takes a `PhosphorWindowRules::WindowQuery` carrying the FULL
  * window context (AppId / WindowClass / Title / WindowRole / DesktopFile /
  * WindowType / Pid / state flags / placement state), built once per window by
  * the GPL-side caller via `PlasmaZonesEffect::windowRuleQuery(w)`, which threads
@@ -85,10 +85,10 @@ struct ResolvedShaderAndDuration
     /// opt-out, so the default only applies when no rule matched.
     bool shaderSlotFromRule = false;
 };
-ResolvedShaderAndDuration resolveAnimationShaderAndDuration(const PhosphorWindowRule::RuleEvaluator& evaluator,
+ResolvedShaderAndDuration resolveAnimationShaderAndDuration(const PhosphorWindowRules::RuleEvaluator& evaluator,
                                                             const PhosphorAnimationShaders::ShaderProfileTree& tree,
                                                             const QString& windowId,
-                                                            const PhosphorWindowRule::WindowQuery& query,
+                                                            const PhosphorWindowRules::WindowQuery& query,
                                                             const QString& eventPath, int defaultDurationMs);
 
 /**
@@ -108,9 +108,9 @@ ResolvedShaderAndDuration resolveAnimationShaderAndDuration(const PhosphorWindow
  * tree (no rules, no profile overrides) the result is the unchanged
  * base profile and the cache reads are O(1).
  */
-PhosphorAnimation::Profile resolveAnimationMotionProfile(const PhosphorWindowRule::RuleEvaluator& evaluator,
+PhosphorAnimation::Profile resolveAnimationMotionProfile(const PhosphorWindowRules::RuleEvaluator& evaluator,
                                                          const PhosphorAnimation::Profile& base,
-                                                         const PhosphorWindowRule::WindowQuery& query,
+                                                         const PhosphorWindowRules::WindowQuery& query,
                                                          const QString& eventPath, const QString& windowId,
                                                          const PhosphorAnimation::CurveRegistry& curveRegistry);
 
@@ -132,7 +132,7 @@ PhosphorAnimation::Profile resolveAnimationMotionProfile(const PhosphorWindowRul
  * empty `resolved` (windowless / unmatched window) simply has no opacity slot →
  * `nullopt`.
  */
-std::optional<qreal> resolveWindowOpacity(const PhosphorWindowRule::ResolvedActions& resolved);
+std::optional<qreal> resolveWindowOpacity(const PhosphorWindowRules::ResolvedActions& resolved);
 
 /**
  * @brief Per-window border / title-bar appearance override — the runtime
@@ -172,6 +172,6 @@ struct ResolvedWindowAppearance
     }
 };
 
-std::optional<ResolvedWindowAppearance> resolveWindowAppearance(const PhosphorWindowRule::ResolvedActions& resolved);
+std::optional<ResolvedWindowAppearance> resolveWindowAppearance(const PhosphorWindowRules::ResolvedActions& resolved);
 
 } // namespace PlasmaZones
