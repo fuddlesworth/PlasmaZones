@@ -26,25 +26,25 @@ function(pwr_add_test _name)
     add_test(NAME ${_name} COMMAND ${_name})
     set_tests_properties(${_name} PROPERTIES
         ENVIRONMENT "QT_LOGGING_RULES=org.phosphor.windowrule.*=false"
-        LABELS "phosphorwindowrule"
+        LABELS "phosphorwindowrules"
     )
 endfunction()
 
-pwr_add_test(phosphorwindowrule_test_matchtypes test_matchtypes.cpp)
-pwr_add_test(phosphorwindowrule_test_windowquery test_windowquery.cpp)
-pwr_add_test(phosphorwindowrule_test_matchexpression test_matchexpression.cpp)
-pwr_add_test(phosphorwindowrule_test_ruleaction test_ruleaction.cpp)
-pwr_add_test(phosphorwindowrule_test_actionregistry test_actionregistry.cpp)
-pwr_add_test(phosphorwindowrule_test_windowrule test_windowrule.cpp)
-pwr_add_test(phosphorwindowrule_test_windowruleset test_windowruleset.cpp)
-pwr_add_test(phosphorwindowrule_test_windowrulestore test_windowrulestore.cpp)
-pwr_add_test(phosphorwindowrule_test_windowrulestorewatcher test_windowrulestorewatcher.cpp)
-pwr_add_test(phosphorwindowrule_test_ruleevaluator test_ruleevaluator.cpp)
-pwr_add_test(phosphorwindowrule_test_ruleevaluator_cascade test_ruleevaluator_cascade.cpp)
-pwr_add_test(phosphorwindowrule_test_ruleevaluator_benchmark test_ruleevaluator_benchmark.cpp)
+pwr_add_test(phosphorwindowrules_test_matchtypes test_matchtypes.cpp)
+pwr_add_test(phosphorwindowrules_test_windowquery test_windowquery.cpp)
+pwr_add_test(phosphorwindowrules_test_matchexpression test_matchexpression.cpp)
+pwr_add_test(phosphorwindowrules_test_ruleaction test_ruleaction.cpp)
+pwr_add_test(phosphorwindowrules_test_actionregistry test_actionregistry.cpp)
+pwr_add_test(phosphorwindowrules_test_windowrule test_windowrule.cpp)
+pwr_add_test(phosphorwindowrules_test_windowruleset test_windowruleset.cpp)
+pwr_add_test(phosphorwindowrules_test_windowrulestore test_windowrulestore.cpp)
+pwr_add_test(phosphorwindowrules_test_windowrulestorewatcher test_windowrulestorewatcher.cpp)
+pwr_add_test(phosphorwindowrules_test_ruleevaluator test_ruleevaluator.cpp)
+pwr_add_test(phosphorwindowrules_test_ruleevaluator_cascade test_ruleevaluator_cascade.cpp)
+pwr_add_test(phosphorwindowrules_test_ruleevaluator_benchmark test_ruleevaluator_benchmark.cpp)
 
 # Phase 2 in-memory bridges.
-pwr_add_test(phosphorwindowrule_test_contextrulebridge test_contextrulebridge.cpp)
+pwr_add_test(phosphorwindowrules_test_contextrulebridge test_contextrulebridge.cpp)
 # Slicers for the `Exclude` / `ExcludeAnimations` rule subsets that the
 # snap-engine, the KWin effect's drag gate, and the effect's
 # `shouldAnimateWindow` gate bind to their evaluators. Covers the disabled-
@@ -54,4 +54,4 @@ pwr_add_test(phosphorwindowrule_test_contextrulebridge test_contextrulebridge.cp
 # AppIdMatches + non-empty pattern, with disabled / non-leaf / non-AppId
 # rules dropped). The v3→v4 migration tests exercise the END-TO-END id
 # derivation; this file covers the helpers in isolation.
-pwr_add_test(phosphorwindowrule_test_exclusionrules test_exclusionrules.cpp)
+pwr_add_test(phosphorwindowrules_test_exclusionrules test_exclusionrules.cpp)

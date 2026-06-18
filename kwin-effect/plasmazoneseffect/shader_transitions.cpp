@@ -31,7 +31,6 @@
 #include <QDBusPendingCall>
 #include <QDBusPendingCallWatcher>
 #include <QDBusPendingReply>
-#include <QJsonDocument>
 
 #include <effect/effecthandler.h>
 #include <opengl/glshader.h>
