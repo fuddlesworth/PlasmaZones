@@ -415,10 +415,10 @@ inline constexpr QLatin1StringView Algorithm{"algorithm"};
 
 /// Wire tokens for OverrideOverlayStyle's `value` param — the closed vocabulary
 /// the descriptor's validator + `enumWireValues`, the daemon consumer
-/// (`LayoutRegistry::resolveContextOverlay`), and the settings authoring layer
-/// (`enumOptionLabel`) all read from this single source, so a future rename can
-/// never desync the four sites. Mirrors how `engineModeOptions()` centralizes
-/// the engine-mode vocabulary.
+/// (`LayoutRegistry::resolveContextOverlay`), and the settings label layers
+/// (`enumOptionLabel` + the rule-list summary) all read from this single source,
+/// so a future rename can never desync the consumers. Mirrors how
+/// `engineModeOptions()` centralizes the engine-mode vocabulary.
 namespace OverlayStyleToken {
 inline constexpr QLatin1StringView Rectangles{"rectangles"}; ///< OverlayDisplayMode::ZoneRectangles (0)
 inline constexpr QLatin1StringView Preview{"preview"}; ///< OverlayDisplayMode::LayoutPreview (1)

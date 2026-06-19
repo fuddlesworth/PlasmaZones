@@ -715,8 +715,8 @@ private Q_SLOTS:
         // overlay style. Different slots → both compose (no shadowing).
         const PWR::WindowRule sh = overlayRule(QStringLiteral("sh"), 400, QStringLiteral("DP-1"),
                                                {shaderAction(QStringLiteral("plasma-glow"))});
-        const PWR::WindowRule st =
-            overlayRule(QStringLiteral("st"), 300, QStringLiteral("DP-1"), {styleAction(QStringLiteral("preview"))});
+        const PWR::WindowRule st = overlayRule(QStringLiteral("st"), 300, QStringLiteral("DP-1"),
+                                               {styleAction(QString(PWR::OverlayStyleToken::Preview))});
         QVERIFY(f.store->setAllRules({sh, st}));
 
         const PhosphorZones::ContextOverlayOverride resolved =
@@ -731,7 +731,7 @@ private Q_SLOTS:
 
         // The "rectangles" token maps to OverlayDisplayMode::ZoneRectangles (0).
         const PWR::WindowRule rect = overlayRule(QStringLiteral("rect"), 500, QStringLiteral("HDMI-1"),
-                                                 {styleAction(QStringLiteral("rectangles"))});
+                                                 {styleAction(QString(PWR::OverlayStyleToken::Rectangles))});
         QVERIFY(f.store->setAllRules({rect}));
         const PhosphorZones::ContextOverlayOverride r2 =
             f.registry->resolveContextOverlay(QStringLiteral("HDMI-1"), 0, QString());
