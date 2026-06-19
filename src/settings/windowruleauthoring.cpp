@@ -702,7 +702,7 @@ QString matchValueHint(const QString& op)
         return PhosphorI18n::tr("Regular expression, e.g. ^(firefox|chromium)$");
     }
     if (op == PhosphorWindowRules::operatorToString(Operator::AppIdMatches)) {
-        return PhosphorI18n::tr("Matches by reverse-DNS segments — “firefox” also matches “org.mozilla.firefox”.");
+        return PhosphorI18n::tr("Matches by reverse-DNS segments, so “firefox” also matches “org.mozilla.firefox”.");
     }
     return {};
 }
