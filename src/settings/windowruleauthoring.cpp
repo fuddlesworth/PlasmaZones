@@ -324,10 +324,10 @@ QString enumOptionLabel(const QString& type, const QString& key, const QString& 
         }
     }
     if (type == ActionType::OverrideOverlayStyle && key == ActionParam::Value) {
-        if (wireValue == QLatin1String("rectangles")) {
+        if (wireValue == PhosphorWindowRules::OverlayStyleToken::Rectangles) {
             return PhosphorI18n::tr("Zone rectangles");
         }
-        if (wireValue == QLatin1String("preview")) {
+        if (wireValue == PhosphorWindowRules::OverlayStyleToken::Preview) {
             return PhosphorI18n::tr("Layout preview");
         }
     }

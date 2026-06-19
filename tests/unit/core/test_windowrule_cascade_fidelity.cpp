@@ -738,6 +738,28 @@ private Q_SLOTS:
         QVERIFY(r2.style.has_value());
         QCOMPARE(*r2.style, 0);
         QVERIFY(!r2.shaderId.has_value());
+
+        // shaderParams round-trip: a shader override carrying a params object
+        // resolves it into ContextOverlayOverride::shaderParams (the headline
+        // shader-uniform-override feature). The nested object is stored as JSON
+        // and decoded via toObject().toVariantMap().
+        const auto shaderWithParams = [](const QString& id, const QJsonObject& params) {
+            PWR::RuleAction a;
+            a.type = QString(PWR::ActionType::OverrideOverlayShader);
+            a.params.insert(QString(PWR::ActionParam::EffectId), id);
+            a.params.insert(QString(PWR::ActionParam::Params), params);
+            return a;
+        };
+        QJsonObject uniforms;
+        uniforms.insert(QStringLiteral("intensity"), 0.5);
+        const PWR::WindowRule shp = overlayRule(QStringLiteral("shp"), 600, QStringLiteral("DVI-1"),
+                                                {shaderWithParams(QStringLiteral("plasma-glow"), uniforms)});
+        QVERIFY(f.store->setAllRules({shp}));
+        const PhosphorZones::ContextOverlayOverride r3 =
+            f.registry->resolveContextOverlay(QStringLiteral("DVI-1"), 0, QString());
+        QVERIFY(r3.shaderId.has_value());
+        QCOMPARE(*r3.shaderId, QStringLiteral("plasma-glow"));
+        QCOMPARE(r3.shaderParams.value(QStringLiteral("intensity")).toDouble(), 0.5);
     }
 
     // ─── Context lock resolution (ActionSlot::Locked) ─────────────────────

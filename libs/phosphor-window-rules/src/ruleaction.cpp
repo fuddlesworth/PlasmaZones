@@ -569,7 +569,7 @@ void ActionRegistry::registerBuiltins()
     });
 
     // ── overlay-property slots — context-domain overrides of the active
-    //    layout's zone-overlay shader / style / layer. Daemon-side only
+    //    layout's zone-overlay shader / style. Daemon-side only
     //    (LayoutRegistry::resolveContextOverlay → OverlayService); no Tag::Effect.
     //    Shader-id vocabulary validation lives at the consumer (the overlay
     //    service falls back to the layout default for an unknown id), mirroring
@@ -597,14 +597,14 @@ void ActionRegistry::registerBuiltins()
         .validate =
             [](const QJsonObject& p) {
                 const QString v = p.value(ActionParam::Value).toString();
-                return v == QLatin1String("rectangles") || v == QLatin1String("preview");
+                return v == OverlayStyleToken::Rectangles || v == OverlayStyleToken::Preview;
             },
         .terminal = false,
         .allowedKeys = {QString(ActionParam::Value)},
         .domain = ActionDomain::Context,
         .params = {P{.key = QString(ActionParam::Value),
                      .kind = QStringLiteral("enum"),
-                     .enumWireValues = {QStringLiteral("rectangles"), QStringLiteral("preview")}}},
+                     .enumWireValues = {QString(OverlayStyleToken::Rectangles), QString(OverlayStyleToken::Preview)}}},
         .category = QStringLiteral("overlay"),
         .displayOrder = 1,
         .tags = {QString(Tag::Overlay)},

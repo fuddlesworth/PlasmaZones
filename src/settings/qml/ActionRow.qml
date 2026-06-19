@@ -411,11 +411,12 @@ ColumnLayout {
         }
     }
 
-    // ── Bottom: shader-parameter editor for OverrideAnimationShader ──────
-    // Surfaces when the action type is `overrideAnimationShader`, the user
-    // has picked an effect, and that effect declares parameters. Matches the
-    // per-event editor on the animation settings page so users can tweak
-    // uniforms without leaving the rule editor.
+    // ── Bottom: shader-parameter editor for the shader-override actions ──────
+    // Surfaces when the action type is `overrideAnimationShader` or
+    // `overrideOverlayShader`, the user has picked an effect, and that effect
+    // declares parameters (`_activeShaderParamSchema` resolves the right
+    // registry's schema). Matches the per-event editor on the animation settings
+    // page so users can tweak uniforms without leaving the rule editor.
     Loader {
         Layout.fillWidth: true
         Layout.leftMargin: Kirigami.Units.iconSizes.small + Kirigami.Units.smallSpacing

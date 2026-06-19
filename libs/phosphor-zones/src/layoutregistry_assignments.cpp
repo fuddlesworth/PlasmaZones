@@ -183,9 +183,9 @@ ContextOverlayOverride LayoutRegistry::resolveContextOverlay(const QString& scre
                 // the same enum Layout::overlayDisplayMode() exposes (0 =
                 // ZoneRectangles, 1 = LayoutPreview).
                 const QString token = action->params.value(PWR::ActionParam::Value).toString();
-                if (token == QLatin1String("rectangles")) {
+                if (token == PWR::OverlayStyleToken::Rectangles) {
                     overlay.style = 0;
-                } else if (token == QLatin1String("preview")) {
+                } else if (token == PWR::OverlayStyleToken::Preview) {
                     overlay.style = 1;
                 }
             }

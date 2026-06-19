@@ -313,10 +313,10 @@ QString actionLabel(const RuleAction& action, const WindowRuleModel::LabelLookup
     }
     if (action.type == ActionType::OverrideOverlayStyle) {
         const QString v = action.params.value(PhosphorWindowRules::ActionParam::Value).toString();
-        if (v == QLatin1String("rectangles")) {
+        if (v == PhosphorWindowRules::OverlayStyleToken::Rectangles) {
             return PhosphorI18n::tr("Overlay style: Zone rectangles");
         }
-        if (v == QLatin1String("preview")) {
+        if (v == PhosphorWindowRules::OverlayStyleToken::Preview) {
             return PhosphorI18n::tr("Overlay style: Layout preview");
         }
         return PhosphorI18n::tr("Overlay style");

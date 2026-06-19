@@ -624,7 +624,10 @@ SettingsController::SettingsController(QObject* parent)
     // the friendly name via the overlay shader registry (the same source the
     // rule editor's overlay-shader picker reads), so the list shows
     // "Overlay shader: <name>" rather than the raw id. Unknown ids round-trip
-    // verbatim (registry miss → empty name → raw id).
+    // verbatim (registry miss → empty name → raw id). m_overlayShaderRegistry is
+    // constructed later in this ctor; the `!m_overlayShaderRegistry` guard below
+    // covers that window — the lambda captures `this` and is invoked only lazily
+    // (on the model's first label render, after construction completes).
     auto resolveOverlayShaderLookup = [this](const QString& effectId) -> QString {
         if (effectId.isEmpty() || !m_overlayShaderRegistry) {
             return effectId;

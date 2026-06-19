@@ -85,7 +85,7 @@ struct PHOSPHORWINDOWRULES_EXPORT RuleAction
  * switch. `kind` is a UI-side hint string (the canonical kinds are
  * `string`, `number`, `percent`, `enum`, `bool`, `color`, plus the
  * picker-aware kinds `snappingLayout`, `tilingAlgorithm`, `animationEvent`,
- * `shaderEffect`, `curveEditor`); QML loaders dispatch on it. Labels stay in
+ * `shaderEffect`, `overlayShader`, `curveEditor`); QML loaders dispatch on it. Labels stay in
  * the GPL settings layer because they need translation through PhosphorI18n::tr —
  * the lib only owns the structural part of the schema.
  *
@@ -135,7 +135,7 @@ inline constexpr QLatin1StringView Border{"border"};
 inline constexpr QLatin1StringView Animation{"animation"};
 inline constexpr QLatin1StringView LayoutEngine{"layoutEngine"};
 inline constexpr QLatin1StringView Gap{"gap"};
-/// Context-domain overlay-property overrides (overlay shader / style / layer).
+/// Context-domain overlay-property overrides (overlay shader / style).
 /// Consumed daemon-side by the overlay service via
 /// `LayoutRegistry::resolveContextOverlay` — NOT by the KWin effect, so these
 /// actions deliberately omit `Tag::Effect`.
@@ -412,6 +412,17 @@ inline constexpr QLatin1StringView LayoutId{"layoutId"};
 // SetTilingAlgorithm algorithm-token key — wire is the algorithm registry id.
 inline constexpr QLatin1StringView Algorithm{"algorithm"};
 } // namespace ActionParam
+
+/// Wire tokens for OverrideOverlayStyle's `value` param — the closed vocabulary
+/// the descriptor's validator + `enumWireValues`, the daemon consumer
+/// (`LayoutRegistry::resolveContextOverlay`), and the settings authoring layer
+/// (`enumOptionLabel`) all read from this single source, so a future rename can
+/// never desync the four sites. Mirrors how `engineModeOptions()` centralizes
+/// the engine-mode vocabulary.
+namespace OverlayStyleToken {
+inline constexpr QLatin1StringView Rectangles{"rectangles"}; ///< OverlayDisplayMode::ZoneRectangles (0)
+inline constexpr QLatin1StringView Preview{"preview"}; ///< OverlayDisplayMode::LayoutPreview (1)
+} // namespace OverlayStyleToken
 
 // ── Built-in slot ids ──
 namespace ActionSlot {
