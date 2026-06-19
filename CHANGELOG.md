@@ -7,6 +7,12 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [3.0.17] - 2026-06-18
+
+### Fixed
+
+- **PlasmaZones held back KWin upgrades, stranding Plasma in a half-upgraded state**: the native packages pinned KWin to the *exact* version PlasmaZones was built against (to guarantee the KWin effect plugin's IID matched the running KWin). On distros that ship KWin and PlasmaZones from separate repos (e.g. Fedora KWin from the distro, PlasmaZones from COPR), a newer KWin landing before a matching PlasmaZones rebuild could not satisfy the exact pin, so the package manager held KWin back. That left KWin out of sync with the rest of Plasma, which surfaced as "No KScreen backend found" and, at worst, a black screen at login (reported on Fedora 44 / Plasma 6.7). The runtime dependency is now a minimum (`kwin >= 6.7.0`) across the RPM, Debian, and Arch (source/bin/git) packages instead of an exact pin, so a newer KWin no longer blocks the upgrade. A mismatched effect is harmless — KWin reads the IID from plugin metadata and never loads a non-matching effect, so the plugin stays inert and only the drag overlay is missing until PlasmaZones is rebuilt; core tiling (daemon + layer-shell QPA plugin) is unaffected. Nix is unchanged: it has no install-time pin and rebuilds the whole system, so it cannot strand the desktop.
+
 ## [3.0.16] - 2026-06-18
 
 ### Changed
@@ -1451,7 +1457,8 @@ Initial packaged release. Wayland-only (X11 support removed). Requires KDE Plasm
 - Session restoration and rotation after login ([#66])
 - Window tracking: snap/restore behavior, zone clearing, startup timing, rotation zone ID matching, floating window exclusion ([#67])
 
-[Unreleased]: https://github.com/fuddlesworth/PlasmaZones/compare/v3.0.16...HEAD
+[Unreleased]: https://github.com/fuddlesworth/PlasmaZones/compare/v3.0.17...HEAD
+[3.0.17]: https://github.com/fuddlesworth/PlasmaZones/compare/v3.0.16...v3.0.17
 [3.0.16]: https://github.com/fuddlesworth/PlasmaZones/compare/v3.0.15...v3.0.16
 [3.0.15]: https://github.com/fuddlesworth/PlasmaZones/compare/v3.0.14...v3.0.15
 [3.0.14]: https://github.com/fuddlesworth/PlasmaZones/compare/v3.0.13...v3.0.14
