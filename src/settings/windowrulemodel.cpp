@@ -224,6 +224,7 @@ QString engineModeDisplayLabel(const QString& wire)
 QString actionLabel(const RuleAction& action, const WindowRuleModel::LabelLookup& snappingLayoutLookup,
                     const WindowRuleModel::LabelLookup& tilingAlgorithmLookup,
                     const WindowRuleModel::LabelLookup& shaderEffectLookup,
+                    const WindowRuleModel::LabelLookup& overlayShaderLookup,
                     const WindowRuleModel::LabelLookup& curveLookup)
 {
     auto resolveWith = [](const QString& wire, const WindowRuleModel::LabelLookup& lookup) {
@@ -306,11 +307,9 @@ QString actionLabel(const RuleAction& action, const WindowRuleModel::LabelLookup
                                : PhosphorI18n::tr("Curve: %1").arg(resolveWith(curve, curveLookup));
     }
     if (action.type == ActionType::OverrideOverlayShader) {
-        // One-line summary uses the raw shader id (a short readable token);
-        // the detailed THEN chip (ActionListView) resolves the friendly name
-        // via the snapping-shader registry.
         const QString id = action.params.value(PhosphorWindowRules::ActionParam::EffectId).toString();
-        return id.isEmpty() ? PhosphorI18n::tr("Overlay shader") : PhosphorI18n::tr("Overlay shader: %1").arg(id);
+        return id.isEmpty() ? PhosphorI18n::tr("Overlay shader")
+                            : PhosphorI18n::tr("Overlay shader: %1").arg(resolveWith(id, overlayShaderLookup));
     }
     if (action.type == ActionType::OverrideOverlayStyle) {
         const QString v = action.params.value(PhosphorWindowRules::ActionParam::Value).toString();
@@ -748,8 +747,8 @@ QString WindowRuleModel::actionSummary(const QList<RuleAction>& actions) const
     }
     QStringList parts;
     for (const RuleAction& a : actions) {
-        parts.append(
-            actionLabel(a, m_snappingLayoutLookup, m_tilingAlgorithmLookup, m_shaderEffectLookup, m_curveLookup));
+        parts.append(actionLabel(a, m_snappingLayoutLookup, m_tilingAlgorithmLookup, m_shaderEffectLookup,
+                                 m_overlayShaderLookup, m_curveLookup));
     }
     return parts.join(QStringLiteral(" · "));
 }
@@ -810,6 +809,11 @@ void WindowRuleModel::setTilingAlgorithmLabelLookup(LabelLookup fn)
 void WindowRuleModel::setShaderEffectLabelLookup(LabelLookup fn)
 {
     m_shaderEffectLookup = std::move(fn);
+}
+
+void WindowRuleModel::setOverlayShaderLabelLookup(LabelLookup fn)
+{
+    m_overlayShaderLookup = std::move(fn);
 }
 
 void WindowRuleModel::setCurveLabelLookup(LabelLookup fn)

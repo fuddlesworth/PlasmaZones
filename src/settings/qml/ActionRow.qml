@@ -18,9 +18,11 @@ import org.plasmazones.common as PZCommon
  * there is no per-type `if (t === "...")` ladder here. Two-way: edits emit
  * `actionEdited(updatedAction)`; the parent owns the list.
  *
- * For `overrideAnimationShader`, a `ShaderParameterEditor` surfaces below the
- * row when an effect is selected so shader uniforms can be edited in place —
- * matching the animation-settings page's per-event editor.
+ * For `overrideAnimationShader` and `overrideOverlayShader`, a
+ * `ShaderParameterEditor` surfaces below the row when an effect is selected so
+ * shader uniforms can be edited in place — matching the animation-settings
+ * page's per-event editor. Each shader-override type sources its uniform schema
+ * from its own registry (animation vs overlay/snapping).
  */
 ColumnLayout {
     id: row
@@ -75,6 +77,38 @@ ColumnLayout {
 
         var controller = row.appSettings ? row.appSettings.animationsController : null;
         return controller ? controller.shaderParameters(effectId) : [];
+    }
+    /// Shader-uniform schema for OverrideOverlayShader — same shape as
+    /// `_shaderParamSchema` but sourced from the overlay/snapping shader
+    /// registry (the catalog entry's `parameters`), not the animation one.
+    readonly property var _overlayShaderParamSchema: {
+        if (row.action.type !== "overrideOverlayShader")
+            return [];
+
+        var effectId = row.action.effectId || "";
+        if (effectId.length === 0)
+            return [];
+
+        var controller = row.appSettings ? row.appSettings.snappingShadersPage : null;
+        if (!controller)
+            return [];
+
+        var effects = controller.availableShaderEffects() || [];
+        for (var i = 0; i < effects.length; ++i) {
+            if (effects[i].id === effectId)
+                return effects[i].parameters || [];
+        }
+        return [];
+    }
+    /// The active shader-uniform schema for whichever shader-override action is
+    /// being edited (animation or overlay) — drives the inline
+    /// ShaderParameterEditor below the row.
+    readonly property var _activeShaderParamSchema: {
+        if (row.action.type === "overrideAnimationShader")
+            return row._shaderParamSchema;
+        if (row.action.type === "overrideOverlayShader")
+            return row._overlayShaderParamSchema;
+        return [];
     }
     /// Working-state lock map for the shader-params editor — mirrors the
     /// per-event animation editor's behaviour. Locks influence randomize
@@ -222,7 +256,7 @@ ColumnLayout {
         function onActionEdited(updated) {
             // Compare against the action BEFORE the edit lands — `row.action`
             // is still the previous state until the parent re-feeds us.
-            if (row.action.type === "overrideAnimationShader" && updated && updated.effectId !== row.action.effectId)
+            if ((row.action.type === "overrideAnimationShader" || row.action.type === "overrideOverlayShader") && updated && updated.effectId !== row.action.effectId)
                 row._shaderParamLocks = ({});
         }
 
@@ -382,7 +416,7 @@ ColumnLayout {
     Loader {
         Layout.fillWidth: true
         Layout.leftMargin: Kirigami.Units.iconSizes.small + Kirigami.Units.smallSpacing
-        active: row.action.type === "overrideAnimationShader" && row._shaderParamSchema.length > 0
+        active: row._activeShaderParamSchema.length > 0
         visible: active
         sourceComponent: row._shaderParamsEditor
     }
@@ -732,7 +766,7 @@ ColumnLayout {
         PZCommon.ShaderParameterEditor {
             id: paramEditor
 
-            parameters: row._shaderParamSchema
+            parameters: row._activeShaderParamSchema
             currentValues: row.action.params || row._emptyShaderParams
             lockedParams: row._shaderParamLocks
             enableLocking: true

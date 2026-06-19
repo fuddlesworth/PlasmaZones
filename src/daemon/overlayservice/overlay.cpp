@@ -515,7 +515,8 @@ void OverlayService::createOverlayWindow(const QString& screenId, QScreen* physS
             const PhosphorZones::ContextOverlayOverride overlayOverride =
                 overlayOverrideForScreen(m_layoutManager, screenId);
             const QString shaderId = overlayOverride.shaderId.value_or(screenLayout->shaderId());
-            const QVariantMap rawParams = overlayOverride.shaderId ? QVariantMap{} : screenLayout->shaderParams();
+            const QVariantMap rawParams =
+                overlayOverride.shaderId ? overlayOverride.shaderParams : screenLayout->shaderParams();
             const ShaderRegistry::ShaderInfo info = registry->shader(shaderId);
             qCDebug(lcOverlay) << "Overlay shader=" << shaderId << "multipass=" << info.isMultipass
                                << "bufferPaths=" << info.bufferShaderPaths.size();
@@ -740,7 +741,8 @@ void OverlayService::updateOverlayWindow(const QString& screenId, QScreen* physS
             const PhosphorZones::ContextOverlayOverride overlayOverride =
                 overlayOverrideForScreen(m_layoutManager, screenId);
             const QString shaderId = overlayOverride.shaderId.value_or(screenLayout->shaderId());
-            const QVariantMap rawParams = overlayOverride.shaderId ? QVariantMap{} : screenLayout->shaderParams();
+            const QVariantMap rawParams =
+                overlayOverride.shaderId ? overlayOverride.shaderParams : screenLayout->shaderParams();
             const ShaderRegistry::ShaderInfo info = registry->shader(shaderId);
             QVariantMap translatedParams = registry->translateParamsToUniforms(shaderId, rawParams);
             const QRect vsGeom = resolveScreenGeometry(m_screenManager, screenId);

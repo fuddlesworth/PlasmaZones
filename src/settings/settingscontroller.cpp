@@ -124,6 +124,9 @@ SettingsController::~SettingsController()
         // The shader resolver captures `this` and reaches m_animationShaderRegistry;
         // clear it too so the cleared set stays symmetric with what's installed.
         m_windowRulesPage->setShaderEffectLookup({});
+        // The overlay-shader resolver reaches m_overlayShaderRegistry — clear it
+        // too for the same symmetry.
+        m_windowRulesPage->setOverlayShaderLookup({});
         // Drain any in-flight `dataChanged` emissions queued against
         // the cleared lookups before the model captures the now-
         // empty resolvers. refreshLabels walks every row once and
@@ -617,6 +620,19 @@ SettingsController::SettingsController(QObject* parent)
         return name.isEmpty() ? effectId : name;
     };
     m_windowRulesPage->setShaderEffectLookup(resolveShaderEffectLookup);
+    // OverrideOverlayShader stores an overlay/snapping shader id; resolve it to
+    // the friendly name via the overlay shader registry (the same source the
+    // rule editor's overlay-shader picker reads), so the list shows
+    // "Overlay shader: <name>" rather than the raw id. Unknown ids round-trip
+    // verbatim (registry miss → empty name → raw id).
+    auto resolveOverlayShaderLookup = [this](const QString& effectId) -> QString {
+        if (effectId.isEmpty() || !m_overlayShaderRegistry) {
+            return effectId;
+        }
+        const QString name = m_overlayShaderRegistry->shader(effectId).name;
+        return name.isEmpty() ? effectId : name;
+    };
+    m_windowRulesPage->setOverlayShaderLookup(resolveOverlayShaderLookup);
     auto refreshRuleLabels = [this]() {
         if (m_windowRulesPage && m_windowRulesPage->model()) {
             m_windowRulesPage->model()->refreshLabels();

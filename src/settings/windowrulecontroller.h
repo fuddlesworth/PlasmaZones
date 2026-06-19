@@ -98,6 +98,11 @@ public:
     /// animation shader registry (the same source the rule editor's shader
     /// picker uses), so the list renders "Dissolve" rather than the raw id.
     void setShaderEffectLookup(WindowRuleModel::LabelLookup fn);
+    /// Overlay shader id → display name resolver for OverrideOverlayShader
+    /// actions. SettingsController wires this from the overlay/snapping shader
+    /// registry (the source the rule editor's overlay-shader picker uses), so
+    /// the list renders the friendly name rather than the raw id.
+    void setOverlayShaderLookup(WindowRuleModel::LabelLookup fn);
     /// Curve wire-string → display name resolver for OverrideAnimationCurve
     /// actions. Q_INVOKABLE and QJSValue-typed because the canonical curve
     /// naming (easing-preset matching + spring formatting + i18n labels) lives
