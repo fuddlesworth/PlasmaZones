@@ -121,6 +121,10 @@ ColumnLayout {
     // ones incompatible with the action's target event render dimmed. Wire
     // value is the effect id.
     property Component _shaderEffectEditor
+    // Overlay-shader picker for OverrideOverlayShader actions — the overlay/
+    // snapping shader registry (Snapping → Shaders page), distinct from the
+    // animation shaders above. Wire value is the shader id.
+    property Component _overlayShaderEditor
     // Inline shader-uniform editor for OverrideAnimationShader actions. The
     // action stores a nested `params` object (the shader uniform values);
     // changing any value rewrites the whole object. Locks live on the row
@@ -342,6 +346,9 @@ ColumnLayout {
 
                     if (modelData.kind === "shaderEffect")
                         return row._shaderEffectEditor;
+
+                    if (modelData.kind === "overlayShader")
+                        return row._overlayShaderEditor;
 
                     if (modelData.kind === "curveEditor")
                         return row._curveEditorEditor;
@@ -692,6 +699,28 @@ ColumnLayout {
             // stale / uninstalled shader id, so the placeholder is only seen
             // when nothing is selected.
             placeholderText: i18n("Choose a shader…")
+            Accessible.description: _param.label
+            onSelected: function (id) {
+                row.actionEdited(row._withParam(_param.key, id));
+            }
+        }
+    }
+
+    _overlayShaderEditor: Component {
+        // Cascading category menu of the overlay/snapping shaders — the same
+        // registry the "Snapping → Shaders" page edits and that Layout::shaderId
+        // stores — grouped by category. Distinct from _shaderEffectEditor, which
+        // lists the ANIMATION shaders. Wire value is the shader id; an
+        // unknown/uninstalled id renders as "(missing: <id>)".
+        PZCommon.CategoryMenuButton {
+            readonly property var _param: parent.modelData
+
+            items: {
+                var controller = row.appSettings ? row.appSettings.snappingShadersPage : null;
+                return controller ? controller.availableShaderEffects() : [];
+            }
+            currentId: row.action[_param.key] || ""
+            placeholderText: i18n("Choose an overlay shader…")
             Accessible.description: _param.label
             onSelected: function (id) {
                 row.actionEdited(row._withParam(_param.key, id));

@@ -305,6 +305,23 @@ QString actionLabel(const RuleAction& action, const WindowRuleModel::LabelLookup
         return curve.isEmpty() ? PhosphorI18n::tr("Animation curve")
                                : PhosphorI18n::tr("Curve: %1").arg(resolveWith(curve, curveLookup));
     }
+    if (action.type == ActionType::OverrideOverlayShader) {
+        // One-line summary uses the raw shader id (a short readable token);
+        // the detailed THEN chip (ActionListView) resolves the friendly name
+        // via the snapping-shader registry.
+        const QString id = action.params.value(PhosphorWindowRules::ActionParam::EffectId).toString();
+        return id.isEmpty() ? PhosphorI18n::tr("Overlay shader") : PhosphorI18n::tr("Overlay shader: %1").arg(id);
+    }
+    if (action.type == ActionType::OverrideOverlayStyle) {
+        const QString v = action.params.value(PhosphorWindowRules::ActionParam::Value).toString();
+        if (v == QLatin1String("rectangles")) {
+            return PhosphorI18n::tr("Overlay style: Zone rectangles");
+        }
+        if (v == QLatin1String("preview")) {
+            return PhosphorI18n::tr("Overlay style: Layout preview");
+        }
+        return PhosphorI18n::tr("Overlay style");
+    }
     // ── single-value actions keyed on ActionParam::Value (restore-position,
     //    border / title-bar overrides, per-context gap overrides) ──
     {
