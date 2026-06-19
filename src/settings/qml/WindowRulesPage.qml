@@ -80,6 +80,10 @@ SettingsFlickable {
         // `availableShaderEffects()` for the animationEvent / shaderEffect
         // picker editors in ActionRow.
         readonly property var animationsController: settingsController.animationsPage
+        // `SnappingShadersPageController` — exposes `availableShaderEffects()`
+        // (the overlay/snapping shader catalog) for the overlayShader picker
+        // editor (OverrideOverlayShader) and its read-only name resolution.
+        readonly property var snappingShadersPage: settingsController.snappingShadersPage
         // Reference to the page-level WindowPickerDialog — exposed via the
         // bridge so MatchLeafEditor can open the picker without having to
         // own its own instance. Hosting the picker inside the OverlaySheet
