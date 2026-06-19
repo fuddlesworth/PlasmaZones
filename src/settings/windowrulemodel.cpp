@@ -224,6 +224,7 @@ QString engineModeDisplayLabel(const QString& wire)
 QString actionLabel(const RuleAction& action, const WindowRuleModel::LabelLookup& snappingLayoutLookup,
                     const WindowRuleModel::LabelLookup& tilingAlgorithmLookup,
                     const WindowRuleModel::LabelLookup& shaderEffectLookup,
+                    const WindowRuleModel::LabelLookup& overlayShaderLookup,
                     const WindowRuleModel::LabelLookup& curveLookup)
 {
     auto resolveWith = [](const QString& wire, const WindowRuleModel::LabelLookup& lookup) {
@@ -304,6 +305,21 @@ QString actionLabel(const RuleAction& action, const WindowRuleModel::LabelLookup
         const QString curve = action.params.value(PhosphorWindowRules::ActionParam::Curve).toString();
         return curve.isEmpty() ? PhosphorI18n::tr("Animation curve")
                                : PhosphorI18n::tr("Curve: %1").arg(resolveWith(curve, curveLookup));
+    }
+    if (action.type == ActionType::OverrideOverlayShader) {
+        const QString id = action.params.value(PhosphorWindowRules::ActionParam::EffectId).toString();
+        return id.isEmpty() ? PhosphorI18n::tr("Overlay shader")
+                            : PhosphorI18n::tr("Overlay shader: %1").arg(resolveWith(id, overlayShaderLookup));
+    }
+    if (action.type == ActionType::OverrideOverlayStyle) {
+        const QString v = action.params.value(PhosphorWindowRules::ActionParam::Value).toString();
+        if (v == PhosphorWindowRules::OverlayStyleToken::Rectangles) {
+            return PhosphorI18n::tr("Overlay style: Zone rectangles");
+        }
+        if (v == PhosphorWindowRules::OverlayStyleToken::Preview) {
+            return PhosphorI18n::tr("Overlay style: Layout preview");
+        }
+        return PhosphorI18n::tr("Overlay style");
     }
     // ── single-value actions keyed on ActionParam::Value (restore-position,
     //    border / title-bar overrides, per-context gap overrides) ──
@@ -731,8 +747,8 @@ QString WindowRuleModel::actionSummary(const QList<RuleAction>& actions) const
     }
     QStringList parts;
     for (const RuleAction& a : actions) {
-        parts.append(
-            actionLabel(a, m_snappingLayoutLookup, m_tilingAlgorithmLookup, m_shaderEffectLookup, m_curveLookup));
+        parts.append(actionLabel(a, m_snappingLayoutLookup, m_tilingAlgorithmLookup, m_shaderEffectLookup,
+                                 m_overlayShaderLookup, m_curveLookup));
     }
     return parts.join(QStringLiteral(" · "));
 }
@@ -793,6 +809,11 @@ void WindowRuleModel::setTilingAlgorithmLabelLookup(LabelLookup fn)
 void WindowRuleModel::setShaderEffectLabelLookup(LabelLookup fn)
 {
     m_shaderEffectLookup = std::move(fn);
+}
+
+void WindowRuleModel::setOverlayShaderLabelLookup(LabelLookup fn)
+{
+    m_overlayShaderLookup = std::move(fn);
 }
 
 void WindowRuleModel::setCurveLabelLookup(LabelLookup fn)

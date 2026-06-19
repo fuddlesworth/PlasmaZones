@@ -200,6 +200,9 @@ PickerCategory actionCategory(const QString& type)
     if (cat == QLatin1String("animation")) {
         return {PhosphorI18n::tr("Animation"), 4};
     }
+    if (cat == QLatin1String("overlay")) {
+        return {PhosphorI18n::tr("Overlay"), 5};
+    }
     return {PhosphorI18n::tr("Other"), 99};
 }
 
@@ -280,6 +283,14 @@ QString paramLabel(const QString& type, const QString& key)
     if (type == ActionType::SetOuterGapRight && key == ActionParam::Value) {
         return PhosphorI18n::tr("Right gap (px)");
     }
+    // Context overlay-property overrides. These come BEFORE the generic
+    // EffectId / Value fallbacks so they win for the overlay actions.
+    if (type == ActionType::OverrideOverlayShader && key == ActionParam::EffectId) {
+        return PhosphorI18n::tr("Overlay shader");
+    }
+    if (type == ActionType::OverrideOverlayStyle && key == ActionParam::Value) {
+        return PhosphorI18n::tr("Overlay style");
+    }
     if (key == ActionParam::Event) {
         return PhosphorI18n::tr("Event");
     }
@@ -310,6 +321,14 @@ QString enumOptionLabel(const QString& type, const QString& key, const QString& 
         }
         if (wireValue == QLatin1String("scrolling")) {
             return PhosphorI18n::tr("Scrolling");
+        }
+    }
+    if (type == ActionType::OverrideOverlayStyle && key == ActionParam::Value) {
+        if (wireValue == PhosphorWindowRules::OverlayStyleToken::Rectangles) {
+            return PhosphorI18n::tr("Zone rectangles");
+        }
+        if (wireValue == PhosphorWindowRules::OverlayStyleToken::Preview) {
+            return PhosphorI18n::tr("Layout preview");
         }
     }
     return wireValue;
@@ -404,6 +423,12 @@ QString actionTypeLabelImpl(const QString& type)
     }
     if (type == ActionType::SetOpacity) {
         return PhosphorI18n::tr("Set opacity");
+    }
+    if (type == ActionType::OverrideOverlayShader) {
+        return PhosphorI18n::tr("Set overlay shader");
+    }
+    if (type == ActionType::OverrideOverlayStyle) {
+        return PhosphorI18n::tr("Set overlay style");
     }
     if (type == ActionType::ExcludeAnimations) {
         return PhosphorI18n::tr("Exclude from animations");

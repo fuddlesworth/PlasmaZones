@@ -272,11 +272,16 @@ QVariantMap OverlayService::zoneToVariantMap(PhosphorZones::Zone* zone, const QS
     map[::PhosphorZones::ZoneJsonKeys::BorderRadius] = zone->borderRadius();
 
     // ═══════════════════════════════════════════════════════════════════════════════
-    // Overlay display mode cascade: zone → layout → global
+    // Overlay display mode cascade: zone → context rule → layout → global
     // ═══════════════════════════════════════════════════════════════════════════════
+    // A context overlay-style rule slots between the per-zone override and the
+    // layout value, mirroring the precedence useShaderForScreen applies.
+    const PhosphorZones::ContextOverlayOverride overlayOverride = overlayOverrideForScreen(m_layoutManager, screenId);
     int resolvedDisplayMode = 0; // default: ZoneRectangles
     if (zone->overlayDisplayMode() >= 0) {
         resolvedDisplayMode = zone->overlayDisplayMode();
+    } else if (overlayOverride.style) {
+        resolvedDisplayMode = *overlayOverride.style;
     } else if (layout && layout->overlayDisplayMode() >= 0) {
         resolvedDisplayMode = layout->overlayDisplayMode();
     } else if (m_settings) {

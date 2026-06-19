@@ -8,6 +8,7 @@
 #include <QHash>
 #include <QList>
 #include <QString>
+#include <QVariantMap>
 #include <QtGlobal>
 
 #include <optional>
@@ -197,6 +198,33 @@ struct ContextGapOverride
     {
         return !zonePadding && !outerGap && !usePerSideOuterGap && !outerGapTop && !outerGapBottom && !outerGapLeft
             && !outerGapRight;
+    }
+};
+
+/**
+ * @brief Per-context overlay-property overrides resolved from window-rule actions.
+ *
+ * Each field is set only when a matching context rule fills the corresponding
+ * overlay slot (OverrideOverlayShader / OverrideOverlayStyle); an unset field falls through to
+ * the active layout's own value. Consumed daemon-side by the overlay service —
+ * see @c LayoutRegistry::resolveContextOverlay.
+ *
+ * @c style is the @c OverlayDisplayMode int (0 = ZoneRectangles, 1 =
+ * LayoutPreview); the resolver maps the wire token ("rectangles" / "preview")
+ * to the int so consumers compare against the same enum the layout exposes.
+ * @c shaderParams holds the overridden shader's uniform values (translated by
+ * the overlay service); it is only meaningful when @c shaderId is set and is
+ * empty when the rule overrides only the shader id (shader defaults apply).
+ */
+struct ContextOverlayOverride
+{
+    std::optional<QString> shaderId;
+    QVariantMap shaderParams;
+    std::optional<int> style;
+
+    bool isEmpty() const
+    {
+        return !shaderId && !style;
     }
 };
 

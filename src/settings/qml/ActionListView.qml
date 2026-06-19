@@ -152,6 +152,20 @@ ColumnLayout {
             }
             return rawStr;
         }
+        if (kind === "overlayShader") {
+            // Overlay shaders come from the snapping-shaders registry, not the
+            // animation one (mirrors ActionRow's _overlayShaderEditor source).
+            var ssCtl = root.appSettings ? root.appSettings.snappingShadersPage : null;
+            if (!ssCtl)
+                return rawStr;
+
+            var overlayEffects = ssCtl.availableShaderEffects() || [];
+            for (var oe = 0; oe < overlayEffects.length; ++oe) {
+                if (overlayEffects[oe].id === raw)
+                    return overlayEffects[oe].name;
+            }
+            return rawStr;
+        }
         if (kind === "curveEditor") {
             // CurvePresets.curveLabel is the single source of truth for the
             // spring (`spring:omega,zeta`) + easing display name, shared with

@@ -46,6 +46,13 @@ void WindowRuleController::setShaderEffectLookup(WindowRuleModel::LabelLookup fn
     m_model.setShaderEffectLabelLookup(std::move(fn));
 }
 
+void WindowRuleController::setOverlayShaderLookup(WindowRuleModel::LabelLookup fn)
+{
+    // Same separate-wiring rationale as setShaderEffectLookup above; the overlay
+    // shader registry is distinct from the animation one.
+    m_model.setOverlayShaderLabelLookup(std::move(fn));
+}
+
 void WindowRuleController::setCurveLabelResolver(const QJSValue& resolver)
 {
     m_curveResolver = resolver;

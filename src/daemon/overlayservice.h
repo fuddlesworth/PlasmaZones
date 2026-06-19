@@ -401,6 +401,18 @@ public:
     /// this only keeps the visual in sync.
     void refreshContextLockState();
 
+    /// Re-apply the (possibly rule-overridden) overlay shader / style to a
+    /// currently-displaying overlay after a window-rule change. A rule edit bumps
+    /// the rule-set revision (so the next `LayoutRegistry::resolveContextOverlay`
+    /// read drops its now-stale cache) but does not itself re-query it for the
+    /// live main overlay; this flips any
+    /// shader↔non-shader slot whose type the new style override changed, then
+    /// re-pushes each window's shader id/params. A no-op when the overlay is
+    /// hidden — the next `show()` re-resolves via `initializeOverlay`. Mirrors
+    /// the `overlayDisplayModeChanged` / `enableShaderEffectsChanged` wiring for
+    /// the equivalent global settings.
+    void refreshOverlayPropertiesIfShown();
+
 public Q_SLOTS:
     // hideLayoutOsd / hideNavigationOsd intentionally absent. Phase-5
     // dismiss path: QML auto-dismiss timer → loaded content's

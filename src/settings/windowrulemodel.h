@@ -231,6 +231,10 @@ public:
     /// Resolver for `OverrideAnimationShader` action params (effect ids like
     /// "dissolve") so the summary renders "Dissolve" rather than the raw id.
     void setShaderEffectLabelLookup(LabelLookup fn);
+    /// Resolver for `OverrideOverlayShader` action params (overlay shader ids)
+    /// so the summary renders the friendly name rather than the raw id. Sourced
+    /// from the overlay/snapping shader registry, NOT the animation one.
+    void setOverlayShaderLabelLookup(LabelLookup fn);
     /// Resolver for `OverrideAnimationCurve` action params (curve wire strings
     /// like "0.33,1.00,0.68,1.00" / "spring:12,1") so the summary renders the
     /// friendly preset name ("Standard (Cubic)", "Spring (12, 1)", "Custom")
@@ -283,6 +287,7 @@ private:
     LabelLookup m_snappingLayoutLookup;
     LabelLookup m_tilingAlgorithmLookup;
     LabelLookup m_shaderEffectLookup;
+    LabelLookup m_overlayShaderLookup;
     LabelLookup m_curveLookup;
 };
 

@@ -85,7 +85,7 @@ struct PHOSPHORWINDOWRULES_EXPORT RuleAction
  * switch. `kind` is a UI-side hint string (the canonical kinds are
  * `string`, `number`, `percent`, `enum`, `bool`, `color`, plus the
  * picker-aware kinds `snappingLayout`, `tilingAlgorithm`, `animationEvent`,
- * `shaderEffect`, `curveEditor`); QML loaders dispatch on it. Labels stay in
+ * `shaderEffect`, `overlayShader`, `curveEditor`); QML loaders dispatch on it. Labels stay in
  * the GPL settings layer because they need translation through PhosphorI18n::tr —
  * the lib only owns the structural part of the schema.
  *
@@ -135,6 +135,11 @@ inline constexpr QLatin1StringView Border{"border"};
 inline constexpr QLatin1StringView Animation{"animation"};
 inline constexpr QLatin1StringView LayoutEngine{"layoutEngine"};
 inline constexpr QLatin1StringView Gap{"gap"};
+/// Context-domain overlay-property overrides (overlay shader / style).
+/// Consumed daemon-side by the overlay service via
+/// `LayoutRegistry::resolveContextOverlay` — NOT by the KWin effect, so these
+/// actions deliberately omit `Tag::Effect`.
+inline constexpr QLatin1StringView Overlay{"overlay"};
 } // namespace Tag
 
 /**
@@ -294,6 +299,12 @@ inline constexpr QLatin1StringView OverrideAnimationTiming{"overrideAnimationTim
 /// checks the curve slot first.
 inline constexpr QLatin1StringView OverrideAnimationCurve{"overrideAnimationCurve"};
 inline constexpr QLatin1StringView SetOpacity{"setOpacity"};
+/// Context-domain overlay-property overrides. A matched context rule
+/// (screen / desktop / activity) overrides the active layout's overlay shader
+/// or style (display mode: zone rectangles vs layout preview) for that context's
+/// zone overlay. Resolved daemon-side via `LayoutRegistry::resolveContextOverlay`.
+inline constexpr QLatin1StringView OverrideOverlayShader{"overrideOverlayShader"};
+inline constexpr QLatin1StringView OverrideOverlayStyle{"overrideOverlayStyle"};
 /// Disable every animation override on a matched window. The opposite of
 /// the OverrideAnimation* family — the effect's shouldAnimateWindow gate
 /// surfaces this as "no animation for this window, regardless of other
@@ -402,6 +413,17 @@ inline constexpr QLatin1StringView LayoutId{"layoutId"};
 inline constexpr QLatin1StringView Algorithm{"algorithm"};
 } // namespace ActionParam
 
+/// Wire tokens for OverrideOverlayStyle's `value` param — the closed vocabulary
+/// the descriptor's validator + `enumWireValues`, the daemon consumer
+/// (`LayoutRegistry::resolveContextOverlay`), and the settings label layers
+/// (`enumOptionLabel` + the rule-list summary) all read from this single source,
+/// so a future rename can never desync the consumers. Mirrors how
+/// `engineModeOptions()` centralizes the engine-mode vocabulary.
+namespace OverlayStyleToken {
+inline constexpr QLatin1StringView Rectangles{"rectangles"}; ///< OverlayDisplayMode::ZoneRectangles (0)
+inline constexpr QLatin1StringView Preview{"preview"}; ///< OverlayDisplayMode::LayoutPreview (1)
+} // namespace OverlayStyleToken
+
 // ── Built-in slot ids ──
 namespace ActionSlot {
 inline constexpr QLatin1StringView EngineMode{"engine-mode"};
@@ -429,6 +451,13 @@ inline constexpr QLatin1StringView OuterGapTop{"outer-gap-top"};
 inline constexpr QLatin1StringView OuterGapBottom{"outer-gap-bottom"};
 inline constexpr QLatin1StringView OuterGapLeft{"outer-gap-left"};
 inline constexpr QLatin1StringView OuterGapRight{"outer-gap-right"};
+// Per-context overlay-property slots (one per property so independent rules
+// cascade per-property). Filled by the OverrideOverlay* context actions, read
+// by `LayoutRegistry::resolveContextOverlay`. OverlayShader carries the shader
+// effect id (ActionParam::EffectId); OverlayStyle carries a wire token
+// (ActionParam::Value).
+inline constexpr QLatin1StringView OverlayShader{"overlay-shader"};
+inline constexpr QLatin1StringView OverlayStyle{"overlay-style"};
 // Animation slots are event-scoped: "anim-shader:<event>" / "anim-timing:<event>"
 // / "anim-curve:<event>". Curve and timing are split so they can be overridden
 // independently per event — `resolveAnimationMotionProfile` reads the curve

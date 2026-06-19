@@ -42,6 +42,11 @@ const QList<QLatin1StringView> kContextDomainTypes = {
     ActionType::SetOuterGapBottom,
     ActionType::SetOuterGapLeft,
     ActionType::SetOuterGapRight,
+    // Overlay-property overrides are context-domain — resolved during the
+    // screen/desktop/activity pass (LayoutRegistry::resolveContextOverlay),
+    // never per-window.
+    ActionType::OverrideOverlayShader,
+    ActionType::OverrideOverlayStyle,
 };
 const QList<QLatin1StringView> kWindowDomainTypes = {
     ActionType::Exclude,
@@ -419,6 +424,60 @@ private Q_SLOTS:
         rejectsStray(ActionType::SetOuterGapTop, QJsonValue(8));
         rejectsStray(ActionType::SetUsePerSideOuterGap, QJsonValue(true));
         rejectsStray(ActionType::LockContext, QJsonValue(true));
+        // OverrideOverlayStyle also declares allowedKeys = {Value}.
+        rejectsStray(ActionType::OverrideOverlayStyle, QJsonValue(QString(OverlayStyleToken::Preview)));
+    }
+
+    void testOverrideOverlay_fromJson()
+    {
+        // The two context-domain overlay actions validate through the public
+        // fromJson boundary. OverrideOverlayShader requires a non-empty effectId
+        // (open shader-id vocabulary, like OverrideAnimationShader);
+        // OverrideOverlayStyle is a CLOSED enum — only the OverlayStyleToken
+        // vocabulary survives load, so a hand-edited windowrules.json naming an
+        // unknown style is dropped. Pins both validators against a widening
+        // regression in registerBuiltins (which the resolution-layer tests in
+        // test_windowrule_cascade_fidelity.cpp would not catch).
+
+        // ── OverrideOverlayShader ──
+        QJsonObject missingId;
+        missingId.insert(QStringLiteral("type"), QString(ActionType::OverrideOverlayShader));
+        QVERIFY(!RuleAction::fromJson(missingId).has_value()); // no effectId
+
+        QJsonObject emptyId;
+        emptyId.insert(QStringLiteral("type"), QString(ActionType::OverrideOverlayShader));
+        emptyId.insert(QStringLiteral("effectId"), QString());
+        QVERIFY(!RuleAction::fromJson(emptyId).has_value()); // empty effectId rejected
+
+        QJsonObject shader;
+        shader.insert(QStringLiteral("type"), QString(ActionType::OverrideOverlayShader));
+        shader.insert(QStringLiteral("effectId"), QStringLiteral("plasma-glow"));
+        QVERIFY(RuleAction::fromJson(shader).has_value());
+
+        // The optional params object is in allowedKeys; a populated one validates.
+        QJsonObject shaderParams = shader;
+        QJsonObject params;
+        params.insert(QStringLiteral("intensity"), 0.5);
+        shaderParams.insert(QString(ActionParam::Params), params);
+        QVERIFY(RuleAction::fromJson(shaderParams).has_value());
+
+        // A key outside allowedKeys ({effectId, params}) is rejected.
+        QJsonObject shaderStray = shader;
+        shaderStray.insert(QStringLiteral("mode"), QStringLiteral("snapping"));
+        QVERIFY(!RuleAction::fromJson(shaderStray).has_value());
+
+        // ── OverrideOverlayStyle ──
+        QJsonObject unknownStyle;
+        unknownStyle.insert(QStringLiteral("type"), QString(ActionType::OverrideOverlayStyle));
+        unknownStyle.insert(QStringLiteral("value"), QLatin1String("grid"));
+        QVERIFY(!RuleAction::fromJson(unknownStyle).has_value()); // not in vocabulary
+
+        for (const QLatin1StringView token : {OverlayStyleToken::Rectangles, OverlayStyleToken::Preview}) {
+            QJsonObject ok;
+            ok.insert(QStringLiteral("type"), QString(ActionType::OverrideOverlayStyle));
+            ok.insert(QStringLiteral("value"), QString(token));
+            QVERIFY2(RuleAction::fromJson(ok).has_value(), token.data());
+        }
     }
 
     void testLockContext_fromJsonRoundTrip()

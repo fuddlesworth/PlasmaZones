@@ -322,6 +322,16 @@ public:
     /// `value` is true. Same owner-thread affinity as the rest of the registry.
     bool resolveContextLocked(const QString& screenId, int virtualDesktop, const QString& activity) const override;
 
+    /// Resolve the per-context overlay-property override (shader / style)
+    /// for (screen, desktop, activity) by evaluating a windowless WindowQuery and
+    /// reading the OverlayShader / OverlayStyle slots. Per-slot
+    /// read (mirrors @ref resolveContextGaps), so independent overlay rules
+    /// compose; returns an all-unset @ref ContextOverlayOverride when no matching
+    /// rule fills an overlay slot. Same owner-thread affinity as the rest of the
+    /// registry.
+    ContextOverlayOverride resolveContextOverlay(const QString& screenId, int virtualDesktop,
+                                                 const QString& activity) const override;
+
     Q_INVOKABLE void clearAssignment(const QString& screenId, int virtualDesktop = 0,
                                      const QString& activity = QString());
     /// True iff a context-assignment rule whose match is exactly this
@@ -706,6 +716,14 @@ private:
     /// walk collapses repeats to one walk per rule-set revision.
     mutable QHash<ContextResolveKey, bool> m_contextLockCache;
     mutable quint64 m_contextLockCacheRevision = 0;
+
+    /// Hot-path cache for @ref resolveContextOverlay, keyed and
+    /// revision-invalidated exactly like @c m_contextGapCache. The overlay
+    /// build path resolves the same (screen, desktop, activity) tuple on every
+    /// overlay show / screen-change, so memoizing the per-slot walk collapses
+    /// repeats to one walk per rule-set revision.
+    mutable QHash<ContextResolveKey, ContextOverlayOverride> m_contextOverlayCache;
+    mutable quint64 m_contextOverlayCacheRevision = 0;
 
     std::function<QString()> m_defaultLayoutIdProvider; ///< Empty = provider disabled; falls back to first layout
     /// Empty = provider disabled. Returns the user's default autotile
