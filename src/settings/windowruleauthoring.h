@@ -27,6 +27,13 @@ QVariantList operatorsForField(int fieldValue);
 /// operator subset — changes.
 QVariantList allOperators();
 
+/// Optional translated input hint for a match condition's value editor, keyed on
+/// the operator wire token @p op (the leaf's `node.op`). Non-empty only for
+/// operators whose value editor is a free-text box and whose syntax / matching
+/// semantics aren't obvious (regex, app-id match); empty otherwise. The
+/// match-side counterpart to the action-param hints.
+QString matchValueHint(const QString& op);
+
 /// Registered action types for the action-editor dropdown. Each entry:
 /// `{ value: QString (action type id), label, params: [ ... ],
 ///    domain: "context"|"window" }`. See `WindowRuleController::actionTypes`
