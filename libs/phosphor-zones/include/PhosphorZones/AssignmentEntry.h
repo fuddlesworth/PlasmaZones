@@ -205,7 +205,7 @@ struct ContextGapOverride
  * @brief Per-context overlay-property overrides resolved from window-rule actions.
  *
  * Each field is set only when a matching context rule fills the corresponding
- * overlay slot (OverrideOverlay{Shader,Style}); an unset field falls through to
+ * overlay slot (OverrideOverlayShader / OverrideOverlayStyle); an unset field falls through to
  * the active layout's own value. Consumed daemon-side by the overlay service —
  * see @c LayoutRegistry::resolveContextOverlay.
  *

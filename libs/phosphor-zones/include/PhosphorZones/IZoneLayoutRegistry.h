@@ -161,7 +161,7 @@ public:
     /// Resolve the per-context overlay-property override for the
     /// (@p screenId, @p virtualDesktop, @p activity) context — a per-slot read
     /// across all matching context rules (mirrors @ref resolveContextGaps), so
-    /// independent shader / style / layer rules compose. The overlay service
+    /// independent shader / style rules compose. The overlay service
     /// applies a populated field over the active layout's own value. The default
     /// returns an empty override (no rule overlay overrides); a registry that
     /// does not model context rules — e.g. a fixture stub — keeps the layout's

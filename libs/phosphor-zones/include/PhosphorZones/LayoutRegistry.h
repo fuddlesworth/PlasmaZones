@@ -322,9 +322,9 @@ public:
     /// `value` is true. Same owner-thread affinity as the rest of the registry.
     bool resolveContextLocked(const QString& screenId, int virtualDesktop, const QString& activity) const override;
 
-    /// Resolve the per-context overlay-property override (shader / style / layer)
+    /// Resolve the per-context overlay-property override (shader / style)
     /// for (screen, desktop, activity) by evaluating a windowless WindowQuery and
-    /// reading the OverlayShader / OverlayStyle / OverlayLayer slots. Per-slot
+    /// reading the OverlayShader / OverlayStyle slots. Per-slot
     /// read (mirrors @ref resolveContextGaps), so independent overlay rules
     /// compose; returns an all-unset @ref ContextOverlayOverride when no matching
     /// rule fills an overlay slot. Same owner-thread affinity as the rest of the

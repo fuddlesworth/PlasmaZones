@@ -159,8 +159,11 @@ ColumnLayout {
     // snapping shader registry (Snapping → Shaders page), distinct from the
     // animation shaders above. Wire value is the shader id.
     property Component _overlayShaderEditor
-    // Inline shader-uniform editor for OverrideAnimationShader actions. The
-    // action stores a nested `params` object (the shader uniform values);
+    // Inline shader-uniform editor shared by both shader-override actions
+    // (OverrideAnimationShader and OverrideOverlayShader) — bound to
+    // `_activeShaderParamSchema`, which selects the matching registry's schema
+    // per action type. The action stores a nested `params` object (the shader
+    // uniform values);
     // changing any value rewrites the whole object. Locks live on the row
     // as working state (not persisted) — exactly like the per-event card on
     // the animations page. Randomize rolls a new map respecting locks and
@@ -744,8 +747,10 @@ ColumnLayout {
         // Cascading category menu of the overlay/snapping shaders — the same
         // registry the "Snapping → Shaders" page edits and that Layout::shaderId
         // stores — grouped by category. Distinct from _shaderEffectEditor, which
-        // lists the ANIMATION shaders. Wire value is the shader id; an
-        // unknown/uninstalled id renders as "(missing: <id>)".
+        // lists the ANIMATION shaders. No path-aware dim/incompatible state here
+        // (overlay shaders are event-agnostic, unlike the per-event animation
+        // shaders). Wire value is the shader id; an unknown/uninstalled id
+        // renders as "(missing: <id>)".
         PZCommon.CategoryMenuButton {
             readonly property var _param: parent.modelData
 

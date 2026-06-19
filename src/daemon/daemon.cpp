@@ -1230,6 +1230,10 @@ bool Daemon::init()
             [overlay = QPointer(m_overlayService.get())](bool /*persisted*/) {
                 if (overlay) {
                     overlay->refreshContextLockState();
+                    // A rule change can also alter the resolved overlay shader /
+                    // style for the active context; re-apply it live if the
+                    // overlay is currently shown (no-op otherwise).
+                    overlay->refreshOverlayPropertiesIfShown();
                 }
             });
 

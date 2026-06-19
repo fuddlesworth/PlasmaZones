@@ -155,7 +155,7 @@ ContextOverlayOverride LayoutRegistry::resolveContextOverlay(const QString& scre
                                                              const QString& activity) const
 {
     // Per-slot read across all matching context rules (mirrors resolveContextGaps):
-    // independent overlay-shader / overlay-style / overlay-layer rules compose, and
+    // independent overlay-shader / overlay-style rules compose, and
     // each populated field overrides the active layout's own value at the overlay
     // build site. No engine-mode gate — an overlay-only context rule is first-class.
     if (!m_evaluator) {
