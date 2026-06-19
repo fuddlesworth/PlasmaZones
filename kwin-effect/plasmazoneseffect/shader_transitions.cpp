@@ -123,8 +123,26 @@ inline QByteArray injectKwinDefineAfterVersion(const QString& source)
     // produces visually inconsistent diffs and trips lints. If any
     // CRLF appears in the source, emit "\r\n"; otherwise plain "\n".
     const bool useCrlf = working.contains(QStringLiteral("\r\n"));
-    const QString defineLine =
-        useCrlf ? QStringLiteral("#define PLASMAZONES_KWIN\r\n") : QStringLiteral("#define PLASMAZONES_KWIN\n");
+    const QString eol = useCrlf ? QStringLiteral("\r\n") : QStringLiteral("\n");
+    // KWin 6.7's generateCustomShader compiles custom effect shaders at GLSL
+    // #version 140 (it rewrites our #version 450 down to the GL context's core
+    // version). At 140 the `layout(location = N)` qualifiers our vertex stages
+    // declare on in/out attributes are illegal without these ARB extensions, so
+    // the vertex shader fails to compile (NVIDIA error C7548). Failed compiles
+    // are NOT cached (the compile path returns false without inserting into
+    // m_shaderCache), so every transition then re-runs the whole
+    // assemble+compile on the compositor thread — the cause of the severe
+    // per-command window-movement / mode-change lag. The daemon's Qt-RHI/SPIR-V
+    // path (no PLASMAZONES_KWIN) needs the explicit locations for SPIR-V, so we
+    // enable the extensions on the KWin path rather than stripping the
+    // qualifiers. `: enable` is a harmless no-op on the fragment stage and on
+    // drivers that already expose explicit locations in core 140. The
+    // directives precede every declaration (only KWin's #defines and the
+    // source's leading comments come before them), which is all NVIDIA's
+    // compiler requires.
+    const QString defineLine = QStringLiteral("#extension GL_ARB_explicit_attrib_location : enable") + eol
+        + QStringLiteral("#extension GL_ARB_separate_shader_objects : enable") + eol
+        + QStringLiteral("#define PLASMAZONES_KWIN") + eol;
 
     // Walk the source line-by-line and find the FIRST line whose
     // non-whitespace prefix is `#version`. A naive
@@ -204,8 +222,7 @@ inline QByteArray injectKwinDefineAfterVersion(const QString& source)
         qCWarning(lcEffect) << "Animation shader source has no #version directive — synthesizing `#version 450`. "
                                "Animation shaders MUST declare `#version 450` (the canonical contract); the bake "
                                "test on the daemon side enforces this.";
-        const QString header = useCrlf ? QStringLiteral("#version 450\r\n#define PLASMAZONES_KWIN\r\n")
-                                       : QStringLiteral("#version 450\n#define PLASMAZONES_KWIN\n");
+        const QString header = QStringLiteral("#version 450") + eol + defineLine;
         return (header + working).toUtf8();
     }
     if (realVersionEnd < 0) {
@@ -714,7 +731,11 @@ bool PlasmaZonesEffect::beginShaderTransition(KWin::EffectWindow* window,
         // the source.
         const QByteArray fragWithKwinDefine = injectKwinDefineAfterVersion(expanded);
 
-        QByteArray vertWithKwinDefine = kKwinDefaultVertexSource;
+        // Route the built-in default vertex source through the same injection
+        // as custom vertex stages so it gets the layout(location) extension
+        // enables (it uses explicit locations too, and KWin compiles it at
+        // #version 140 — see injectKwinDefineAfterVersion).
+        QByteArray vertWithKwinDefine = injectKwinDefineAfterVersion(QString::fromUtf8(kKwinDefaultVertexSource));
         if (!eff.vertexShaderPath.isEmpty()) {
             QFile vertFile(eff.vertexShaderPath);
             if (!vertFile.open(QIODevice::ReadOnly)) {
