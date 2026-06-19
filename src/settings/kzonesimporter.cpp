@@ -6,11 +6,17 @@
 #include "dbusutils.h"
 #include "../phosphor_i18n.h"
 
+#include <PhosphorWindowRules/MatchExpression.h>
+#include <PhosphorWindowRules/MatchTypes.h>
+#include <PhosphorWindowRules/RuleAction.h>
+#include <PhosphorWindowRules/WindowRule.h>
 #include <PhosphorZones/ZoneJsonKeys.h>
 
 #include <QDBusMessage>
 #include <QFile>
+#include <QHash>
 #include <QIODevice>
+#include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QJsonParseError>
@@ -146,7 +152,10 @@ ImportResult importLayouts(const QJsonArray& kzonesArray)
         }
 
         QJsonArray pZones;
-        QJsonArray appRules;
+        // app class → 1-based zone number. The per-layout appRules concept was
+        // retired; these become SnapToZone window rules after the layout is
+        // created. First zone wins per app within this layout.
+        QHash<QString, int> appToZone;
 
         for (int i = 0; i < kzZones.size(); ++i) {
             const QJsonObject kzZone = kzZones[i].toObject();
@@ -179,24 +188,17 @@ ImportResult importLayouts(const QJsonArray& kzonesArray)
 
             pZones.append(pZone);
 
-            // Collect per-zone applications into layout-level appRules.
+            // Collect per-zone applications as app→zone pairs.
             const QJsonArray apps = kzZone[QStringLiteral("applications")].toArray();
             for (const QJsonValue& appVal : apps) {
                 const QString appClass = appVal.toString().trimmed();
-                if (appClass.isEmpty()) {
-                    continue;
+                if (!appClass.isEmpty() && !appToZone.contains(appClass)) {
+                    appToZone.insert(appClass, zoneNum);
                 }
-                QJsonObject rule;
-                rule[QLatin1String(::PhosphorZones::ZoneJsonKeys::Pattern)] = appClass;
-                rule[QLatin1String(::PhosphorZones::ZoneJsonKeys::ZoneNumber)] = zoneNum;
-                appRules.append(rule);
             }
         }
 
         pLayout[QLatin1String(::PhosphorZones::ZoneJsonKeys::Zones)] = pZones;
-        if (!appRules.isEmpty()) {
-            pLayout[QLatin1String(::PhosphorZones::ZoneJsonKeys::AppRules)] = appRules;
-        }
 
         // Send to daemon via createLayoutFromJson D-Bus method.
         const QString layoutJson = QString::fromUtf8(QJsonDocument(pLayout).toJson(QJsonDocument::Compact));
@@ -209,6 +211,29 @@ ImportResult importLayouts(const QJsonArray& kzonesArray)
                 ++result.imported;
                 if (result.pendingSelectLayoutId.isEmpty()) {
                     result.pendingSelectLayoutId = newId;
+                }
+
+                // The KZones per-zone app assignments become SnapToZone window
+                // rules (the per-layout appRules concept was retired): one rule
+                // per app, `WindowClass contains <appClass> → SnapToZone [zone]`.
+                namespace PWR = PhosphorWindowRules;
+                for (auto it = appToZone.constBegin(); it != appToZone.constEnd(); ++it) {
+                    PWR::WindowRule rule;
+                    rule.id = QUuid::createUuid();
+                    rule.enabled = true;
+                    rule.priority = 0;
+                    rule.match =
+                        PWR::MatchExpression::makeLeaf(PWR::Field::WindowClass, PWR::Operator::Contains, it.key());
+                    PWR::RuleAction action;
+                    action.type = QString(PWR::ActionType::SnapToZone);
+                    QJsonObject params;
+                    params.insert(QString(PWR::ActionParam::Zones), QJsonArray{it.value()});
+                    action.params = params;
+                    rule.actions.append(action);
+                    const QString ruleJson =
+                        QString::fromUtf8(QJsonDocument(rule.toJson()).toJson(QJsonDocument::Compact));
+                    DaemonDBus::callDaemon(QString(PhosphorProtocol::Service::Interface::WindowRules),
+                                           QStringLiteral("addRule"), {ruleJson});
                 }
             }
         }

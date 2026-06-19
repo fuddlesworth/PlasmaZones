@@ -224,12 +224,6 @@ bool LayoutAdaptor::updateLayout(const QString& layoutJson)
         layout->setAllowedActivities(activities);
     }
 
-    // Update app-to-zone rules
-    if (obj.contains(::PhosphorZones::ZoneJsonKeys::AppRules)) {
-        layout->setAppRules(
-            PhosphorZones::AppRule::fromJsonArray(obj[::PhosphorZones::ZoneJsonKeys::AppRules].toArray()));
-    }
-
     // Clear existing zones and add new ones
     layout->clearZones();
 

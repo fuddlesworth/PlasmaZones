@@ -32,7 +32,7 @@ class ISettings;
  * Provides D-Bus interface: org.plasmazones.Snap
  *
  * Owns the snap-specific D-Bus surface: commit/uncommit, snap-restore
- * (appRule / emptyZone / lastZone / resolveWindowRestore),
+ * (placement rule / emptyZone / lastZone / resolveWindowRestore),
  * resnap, calculateSnapAllWindows, windowsSnappedBatch, snap-mode navigation
  * (move/focus/swap/push/snap-by-number/rotate/cycle/restore),
  * snap-mode convenience (moveWindowToZone, swapWindowsById), and

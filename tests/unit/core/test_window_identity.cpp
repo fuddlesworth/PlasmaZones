@@ -327,7 +327,7 @@ private Q_SLOTS:
     }
 
     // =====================================================================
-    // appIdMatches — segment-aware pattern matching used by Layout::matchAppRule
+    // appIdMatches — segment-aware pattern matching for app/window-class patterns
     //
     // The semantics here are subtle enough that the inline header comment
     // is the spec; these tests pin it so future refactors can't quietly

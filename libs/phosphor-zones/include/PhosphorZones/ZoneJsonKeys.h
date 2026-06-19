@@ -86,11 +86,6 @@ inline constexpr QLatin1String AspectRatioClassKey{"aspectRatioClass"};
 inline constexpr QLatin1String MinAspectRatio{"minAspectRatio"};
 inline constexpr QLatin1String MaxAspectRatio{"maxAspectRatio"};
 
-// App-rule (auto-assign) keys.
-inline constexpr QLatin1String AppRules{"appRules"};
-inline constexpr QLatin1String Pattern{"pattern"};
-// `ZoneNumber` (above) is reused for the rule target.
-inline constexpr QLatin1String TargetScreen{"targetScreen"};
 inline constexpr QLatin1String AutoAssign{"autoAssign"};
 
 // Geometry-mode keys.
