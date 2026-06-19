@@ -144,23 +144,30 @@ bool OverlayService::useShaderForScreen(const QString& screenId) const
     if (!screenLayout) {
         return false;
     }
-    if (ShaderRegistry::isNoneShader(screenLayout->shaderId())) {
+    // A context overlay rule may override the layout's own shader / style for
+    // this (screen, desktop, activity). Resolve once and apply over the layout.
+    const PhosphorZones::ContextOverlayOverride overlayOverride = overlayOverrideForScreen(m_layoutManager, screenId);
+    const QString effectiveShaderId = overlayOverride.shaderId.value_or(screenLayout->shaderId());
+    if (ShaderRegistry::isNoneShader(effectiveShaderId)) {
         return false;
     }
 
     // LayoutPreview mode requires standard QML overlay (ZonePreview can't be rendered in GLSL).
     // If any zone resolves to LayoutPreview mode, fall back to standard overlay for this screen.
+    // A context rule's style override slots between the per-zone override and the
+    // layout value: zone > rule > layout > global.
     int globalMode = m_settings ? static_cast<int>(m_settings->overlayDisplayMode()) : 0;
     int layoutMode = screenLayout->overlayDisplayMode();
     for (const auto* zone : screenLayout->zones()) {
-        int resolved =
-            zone->overlayDisplayMode() >= 0 ? zone->overlayDisplayMode() : (layoutMode >= 0 ? layoutMode : globalMode);
+        int resolved = zone->overlayDisplayMode() >= 0 ? zone->overlayDisplayMode()
+            : overlayOverride.style                    ? *overlayOverride.style
+                                                       : (layoutMode >= 0 ? layoutMode : globalMode);
         if (resolved == 1) { // OverlayDisplayMode::LayoutPreview
             return false;
         }
     }
 
-    return m_shaderRegistry && m_shaderRegistry->shader(screenLayout->shaderId()).isValid();
+    return m_shaderRegistry && m_shaderRegistry->shader(effectiveShaderId).isValid();
 }
 
 void OverlayService::startShaderAnimation()

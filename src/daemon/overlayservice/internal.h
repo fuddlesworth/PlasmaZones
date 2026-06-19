@@ -282,6 +282,22 @@ inline bool isAnyModeLocked(ISettings* settings, PhosphorZones::IZoneLayoutRegis
         || settings->isContextLocked(Utils::contextLockKey(1, screenId), desktop, activity);
 }
 
+/// Resolve the per-context overlay-property override (shader / style / layer)
+/// for @p screenId at the current virtual desktop + activity. A thin wrapper
+/// over IZoneLayoutRegistry::resolveContextOverlay that supplies the live
+/// context, mirroring how @ref isAnyModeLocked routes the lock check. Returns an
+/// empty override when there is no registry or no matching overlay rule, so the
+/// overlay falls through to the active layout's own shader / display-mode / layer.
+inline PhosphorZones::ContextOverlayOverride
+overlayOverrideForScreen(PhosphorZones::IZoneLayoutRegistry* layoutRegistry, const QString& screenId)
+{
+    if (!layoutRegistry) {
+        return {};
+    }
+    return layoutRegistry->resolveContextOverlay(screenId, layoutRegistry->currentVirtualDesktop(),
+                                                 layoutRegistry->currentActivity());
+}
+
 // ═══════════════════════════════════════════════════════════════════════════════
 // PhosphorZones::Zone selector helpers shared across overlayservice_selector*.cpp TUs
 // ═══════════════════════════════════════════════════════════════════════════════
