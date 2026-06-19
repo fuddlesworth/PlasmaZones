@@ -75,7 +75,7 @@ QString resolveNavScreen(INavigationStateProvider* navState, const QString& wind
     if (service && !windowId.isEmpty()) {
         const QString zoneId = service->zoneForWindow(windowId);
         if (!zoneId.isEmpty()) {
-            const QString storedScreen = service->screenAssignments().value(windowId);
+            const QString storedScreen = service->screenForWindow(windowId);
             if (!storedScreen.isEmpty()) {
                 if (PhosphorIdentity::VirtualScreenId::isVirtual(storedScreen)) {
                     const QString physId = PhosphorIdentity::VirtualScreenId::extractPhysicalId(storedScreen);
@@ -461,7 +461,7 @@ void SnapEngine::swapFocusedInDirection(const QString& direction, const Navigati
         // to its current assignment (then window1's screen) as before.
         QString screen2 = result.screenName2;
         if (screen2.isEmpty()) {
-            screen2 = m_snapState->screenAssignments().value(result.windowId2);
+            screen2 = m_snapState->screenForWindow(result.windowId2);
         }
         if (screen2.isEmpty()) {
             screen2 = result.screenName;

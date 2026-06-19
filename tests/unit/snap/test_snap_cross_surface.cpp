@@ -47,6 +47,15 @@ public:
     {
         return zoneOfWindow.value(w);
     }
+    QString screenForWindow(const QString& w) const override
+    {
+        return screenOfWindow.value(w);
+    }
+    QString screenForWindow(const QString& w, const QString& def) const override
+    {
+        const QString s = screenOfWindow.value(w);
+        return s.isEmpty() ? def : s;
+    }
     QStringList windowsInZone(const QString& z) const override
     {
         return windowsByZone.value(z);

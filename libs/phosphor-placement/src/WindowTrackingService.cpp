@@ -194,6 +194,24 @@ QStringList WindowTrackingService::zonesForWindow(const QString& windowId) const
     return m_snapState->zonesForWindow(windowId);
 }
 
+QString WindowTrackingService::screenForWindow(const QString& windowId) const
+{
+    // Delegates to SnapState, which canonicalizes the id — the canonicalizing
+    // point accessor external callers use instead of screenAssignments().value().
+    return m_snapState ? m_snapState->screenForWindow(windowId) : QString();
+}
+
+QString WindowTrackingService::screenForWindow(const QString& windowId, const QString& defaultScreen) const
+{
+    if (!m_snapState) {
+        return defaultScreen;
+    }
+    // A screen assignment is never the empty string, so "empty" means "no
+    // assignment" — equivalent to the absent-key branch of value(key, default).
+    const QString screen = m_snapState->screenForWindow(windowId);
+    return screen.isEmpty() ? defaultScreen : screen;
+}
+
 QStringList WindowTrackingService::windowsInZone(const QString& zoneId) const
 {
     Q_ASSERT(m_snapState);
@@ -210,11 +228,22 @@ QStringList WindowTrackingService::snappedWindows() const
     return m_snapState->snappedWindows();
 }
 
-int WindowTrackingService::pruneStaleAssignments(const QSet<QString>& aliveWindowIds)
+int WindowTrackingService::pruneStaleAssignments(const QSet<QString>& rawAliveWindowIds)
 {
     Q_ASSERT(m_snapState);
     if (!m_snapState)
         return 0;
+    // Canonicalize the alive set so it compares like-for-like against the
+    // canonical-keyed stores (the WTS-owned sticky / legacy-float sets below, and
+    // SnapState's maps). Otherwise a window still alive under a mutated-class
+    // composite would be pruned because its stored key is the first-seen one
+    // (issue #628). SnapState::pruneStaleAssignments re-canonicalizes defensively,
+    // so passing the canonical set there is correct too.
+    QSet<QString> aliveWindowIds;
+    aliveWindowIds.reserve(rawAliveWindowIds.size());
+    for (const QString& id : rawAliveWindowIds) {
+        aliveWindowIds.insert(canonicalizeForLookup(id));
+    }
     int pruned = m_snapState->pruneStaleAssignments(aliveWindowIds);
 
     int wtsCleaned = 0;
@@ -672,14 +701,18 @@ bool WindowTrackingService::clearFloatingForSnap(const QString& windowId)
 // Sticky Window Handling
 // ═══════════════════════════════════════════════════════════════════════════════
 
-void WindowTrackingService::setWindowSticky(const QString& windowId, bool sticky)
+void WindowTrackingService::setWindowSticky(const QString& rawWindowId, bool sticky)
 {
-    m_windowStickyStates[windowId] = sticky;
+    // Canonicalize so sticky state survives the effect-restart-after-class-mutation
+    // re-identification skew (issue #628). The daemon seeds the canonical mapping
+    // in setWindowMetadata, so canonicalizeForLookup resolves to the first-seen
+    // composite without seeding here.
+    m_windowStickyStates[canonicalizeForLookup(rawWindowId)] = sticky;
 }
 
-bool WindowTrackingService::isWindowSticky(const QString& windowId) const
+bool WindowTrackingService::isWindowSticky(const QString& rawWindowId) const
 {
-    return m_windowStickyStates.value(windowId, false);
+    return m_windowStickyStates.value(canonicalizeForLookup(rawWindowId), false);
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════

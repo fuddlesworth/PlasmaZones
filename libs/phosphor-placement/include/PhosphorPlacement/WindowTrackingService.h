@@ -310,6 +310,18 @@ public:
      */
     QStringList zonesForWindow(const QString& windowId) const override;
 
+    /// The screen a window is assigned to, or empty when it has none. Point
+    /// accessor over the screen-assignment map that canonicalizes @p windowId to
+    /// the first-seen composite (via SnapState), so external callers resolve a
+    /// window even after the effect-restart-after-class-mutation skew rather than
+    /// reading the raw whole-map getter with a stale composite (issue #628).
+    QString screenForWindow(const QString& windowId) const override;
+
+    /// Same, but returns @p defaultScreen when the window has no screen
+    /// assignment — the canonicalizing replacement for
+    /// `screenAssignments().value(windowId, defaultScreen)`.
+    QString screenForWindow(const QString& windowId, const QString& defaultScreen) const override;
+
     /**
      * @brief Get all windows in a specific zone
      * @param zoneId PhosphorZones::Zone UUID string

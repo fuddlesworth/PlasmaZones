@@ -47,7 +47,7 @@ bool WindowTrackingAdaptor::hasPreTileGeometry(const QString& windowId)
     if (windowId.isEmpty() || !m_service) {
         return false;
     }
-    const QString screenId = m_service->screenAssignments().value(windowId);
+    const QString screenId = m_service->screenForWindow(windowId);
     return m_service->validatedUnmanagedGeometry(windowId, screenId).has_value();
 }
 
@@ -112,7 +112,7 @@ bool WindowTrackingAdaptor::getValidatedPreTileGeometry(const QString& windowId,
     // m_service is non-null by constructor invariant (the ctor qFatals on
     // null), so no guard is needed; the half-guard this replaced checked
     // one deref and missed the next.
-    const QString screenId = m_service->screenAssignments().value(windowId);
+    const QString screenId = m_service->screenForWindow(windowId);
 
     auto geo = m_service->validatedUnmanagedGeometry(windowId, screenId);
     if (!geo) {

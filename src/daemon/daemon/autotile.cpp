@@ -425,7 +425,7 @@ void Daemon::presaveSnapFloats(const QString& screenId)
         // When scoped to a screen, only snapshot windows on that screen.
         // Windows floating on other screens are not entering autotile.
         if (!screenId.isEmpty()) {
-            const QString windowScreen = wts->screenAssignments().value(fid);
+            const QString windowScreen = wts->screenForWindow(fid);
             if (!windowScreen.isEmpty() && windowScreen != screenId) {
                 continue;
             }

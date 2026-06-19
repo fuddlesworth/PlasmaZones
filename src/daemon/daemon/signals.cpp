@@ -118,7 +118,7 @@ void Daemon::initializeAutotile()
                             // screen (e.g., dragged from autotile VS to snap VS and resnapped)
                             // is no longer on the releasing screen — its state on the current
                             // screen must not be disturbed.
-                            const QString windowScreen = wts->screenAssignments().value(windowId);
+                            const QString windowScreen = wts->screenForWindow(windowId);
                             if (!windowScreen.isEmpty() && !releasedScreenIds.contains(windowScreen)) {
                                 // Window is on a different screen — do NOT touch its state.
                                 // It may be on another autotile screen (flag still valid) or
@@ -159,7 +159,7 @@ void Daemon::initializeAutotile()
                             if (snapFloat) {
                                 qCInfo(lcDaemon) << "windowsReleased: restoring snap-float for" << windowId;
                                 m_windowTrackingAdaptor->setWindowFloating(windowId, true);
-                                const QString screen = wts->screenAssignments().value(windowId);
+                                const QString screen = wts->screenForWindow(windowId);
                                 QRect g = rec->freeGeometryFor(screen.isEmpty() ? rec->screenId : screen);
                                 if (!g.isValid()) {
                                     g = rec->anyFreeGeometry();
@@ -172,7 +172,7 @@ void Daemon::initializeAutotile()
                                     m_pendingSnapFloatRestores.append(entry);
                                 }
                             } else if (snapSnapped) {
-                                const QString screen = wts->screenAssignments().value(windowId);
+                                const QString screen = wts->screenForWindow(windowId);
                                 const QString restoreScreen = screen.isEmpty() ? rec->screenId : screen;
                                 const QRect geo = wts->resolveZoneGeometry(snapSlot.zoneIds, restoreScreen);
                                 if (geo.isValid()) {
@@ -703,7 +703,7 @@ void Daemon::connectOverlaySignals()
             // autotile, notify the engine so it removes the window from the source
             // screen's tiling tree and retiles the remaining windows.
             if (m_autotileEngine && m_windowTrackingAdaptor && m_windowTrackingAdaptor->service()) {
-                const QString sourceScreen = m_windowTrackingAdaptor->service()->screenAssignments().value(windowId);
+                const QString sourceScreen = m_windowTrackingAdaptor->service()->screenForWindow(windowId);
                 if (!sourceScreen.isEmpty() && sourceScreen != effectiveScreenId && isAutotileScreen(sourceScreen)) {
                     m_autotileEngine->windowClosed(windowId);
                     // Clear autotile-floated marker immediately — windowClosed removes

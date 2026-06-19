@@ -5,6 +5,7 @@
 
 #include <phosphorsnapengine_export.h>
 #include <PhosphorEngine/IPlacementState.h>
+#include <PhosphorEngine/IWindowRegistry.h>
 
 #include <QHash>
 #include <QJsonObject>
@@ -38,6 +39,19 @@ public:
 
     SnapState(const SnapState&) = delete;
     SnapState& operator=(const SnapState&) = delete;
+
+    /// Attach the daemon's shared window registry so every windowId-keyed
+    /// accessor can canonicalize the incoming id to the stable first-seen
+    /// composite (instanceId → first observed `appId|instanceId`). This makes
+    /// the snap stores immune to the cross-process re-identification skew where
+    /// the KWin effect restarts after a window's WM_CLASS mutated and re-derives
+    /// a different composite for the same window (issue #628). Borrowed pointer,
+    /// not owned (the daemon owns the registry); null in unit tests, in which
+    /// case the accessors key on the raw id verbatim (today's behaviour).
+    void setWindowRegistry(PhosphorEngine::IWindowRegistry* registry)
+    {
+        m_windowRegistry = registry;
+    }
 
     // ═══════════════════════════════════════════════════════════════════════════
     // IPlacementState
@@ -289,6 +303,14 @@ Q_SIGNALS:
     void stateChanged();
 
 private:
+    /// Resolve a raw windowId to its canonical (first-seen) composite for the
+    /// stable instance id, WITHOUT seeding — the daemon seeds once per window in
+    /// setWindowMetadata, so every snap accessor here only looks up. Returns the
+    /// input verbatim when the instance has no canonical entry (or no registry is
+    /// attached, e.g. unit tests), which also makes the bare-appId alias writes
+    /// (addPreFloat*/clearPreFloatZone) safe. See the .cpp header comment.
+    QString canonicalizeForLookup(const QString& rawWindowId) const;
+
     bool removeWindowData(const QString& windowId);
 
     /// Shared body of unassignWindow / unsnapForFloat. Removes the window's
@@ -313,6 +335,9 @@ private:
     }
 
     QString m_screenId;
+
+    /// Borrowed; not owned. See setWindowRegistry. Null in unit tests.
+    PhosphorEngine::IWindowRegistry* m_windowRegistry = nullptr;
 
     QHash<QString, QStringList> m_windowZoneAssignments;
     QHash<QString, QString> m_windowScreenAssignments;

@@ -291,7 +291,7 @@ PhosphorProtocol::MoveTargetResult SnapNavigationTargetResolver::getMoveTargetFo
     // at the dead output.
     QString effectiveScreenId = screenId;
     if (!currentZoneId.isEmpty()) {
-        QString storedScreen = m_service->screenAssignments().value(windowId);
+        QString storedScreen = m_service->screenForWindow(windowId);
         if (isStoredScreenValid(m_service->screenManager(), storedScreen)) {
             effectiveScreenId = storedScreen;
         }
@@ -371,7 +371,7 @@ PhosphorProtocol::FocusTargetResult SnapNavigationTargetResolver::getFocusTarget
     // Trust stored screen for snapped windows — see getMoveTargetForWindow comment
     QString effectiveScreenId = screenId;
     {
-        QString storedScreen = m_service->screenAssignments().value(windowId);
+        QString storedScreen = m_service->screenForWindow(windowId);
         if (isStoredScreenValid(m_service->screenManager(), storedScreen)) {
             effectiveScreenId = storedScreen;
         }
@@ -486,7 +486,7 @@ SnapNavigationTargetResolver::getCycleTargetForWindow(const QString& windowId, b
     // multi-monitor setups), then pin the ring to it.
     QString effectiveScreenId = screenId;
     {
-        const QString storedScreen = m_service->screenAssignments().value(windowId);
+        const QString storedScreen = m_service->screenForWindow(windowId);
         if (isStoredScreenValid(m_service->screenManager(), storedScreen)) {
             effectiveScreenId = storedScreen;
         }
@@ -566,7 +566,7 @@ PhosphorProtocol::SwapTargetResult SnapNavigationTargetResolver::getSwapTargetFo
     // Trust stored screen for snapped windows — see getMoveTargetForWindow comment
     QString effectiveScreenId = screenId;
     {
-        QString storedScreen = m_service->screenAssignments().value(windowId);
+        QString storedScreen = m_service->screenForWindow(windowId);
         if (isStoredScreenValid(m_service->screenManager(), storedScreen)) {
             effectiveScreenId = storedScreen;
         }

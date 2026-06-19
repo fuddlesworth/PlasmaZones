@@ -613,7 +613,7 @@ std::optional<PhosphorEngine::WindowPlacement> SnapEngine::capturePlacement(cons
     } else if (m_snapState->isWindowSnapped(windowId)) {
         slot.state = WindowPlacement::stateSnapped();
         slot.zoneIds = m_snapState->zonesForWindow(windowId);
-        p.screenId = m_snapState->screenAssignments().value(windowId);
+        p.screenId = m_snapState->screenForWindow(windowId);
     } else {
         // Snapping has only two states — snapped (above) or floated. An unmanaged
         // window on a snap-mode screen is FLOATED (the retired `free` state). The

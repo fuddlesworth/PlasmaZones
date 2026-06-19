@@ -675,8 +675,10 @@ void WindowTrackingService::windowClosed(const QString& windowId, PhosphorEngine
     if (appId != windowId) {
         m_snapState->clearPreFloatZone(appId);
     }
-    // Remove sticky-window tracking outright — do NOT migrate to appId.
-    m_windowStickyStates.remove(windowId);
+    // Remove sticky-window tracking outright — do NOT migrate to appId. The
+    // sticky map is keyed on the canonical (first-seen) composite, so remove
+    // under it (issue #628).
+    m_windowStickyStates.remove(canonicalizeForLookup(windowId));
 
     scheduleSaveState();
 }

@@ -574,7 +574,7 @@ void WindowTrackingAdaptor::windowScreenChanged(const QString& windowId, const Q
     // If they match (format-agnostic), the window was moved programmatically
     // to its assigned zone's screen (restore, resnap, snap assist) — keep snapped.
     // If they differ, the user moved the window away — unsnap it.
-    QString storedScreen = m_service->screenAssignments().value(windowId);
+    QString storedScreen = m_service->screenForWindow(windowId);
 
     // KWin reports physical screen names in outputChanged. When the stored screen
     // is a virtual screen (e.g. "HDMI-1/vs:0"), comparing against the physical name
@@ -856,6 +856,17 @@ void WindowTrackingAdaptor::setWindowMetadata(const QString& instanceId, const Q
         meta.captionNormal = optString(Key::CaptionNormal);
     }
 
+    // Universal canonical seed. setWindowMetadata is the per-window choke point —
+    // the effect pushes it (unconditionally, before any other notification) for
+    // every window it observes, snap-mode included. Freezing the first-seen
+    // composite (appId|instanceId) here gives EVERY window a canonical entry from
+    // first contact, so the snap stores (which canonicalize their keys) resolve a
+    // window even after the effect restarts and re-derives a mutated-class
+    // composite for it. Idempotent: the instance id is stable, so a later push
+    // carrying a mutated appId returns the original composite rather than
+    // re-seeding (issue #628). Cleaned up by releaseCanonical on windowClosed.
+    m_windowRegistry->canonicalizeWindowId(PhosphorIdentity::WindowId::buildCompositeId(appId, instanceId));
+
     m_windowRegistry->upsert(instanceId, meta);
 }
 
@@ -874,7 +885,7 @@ void WindowTrackingAdaptor::cursorScreenChanged(const QString& screenId)
         if (mgr && mgr->hasVirtualScreens(screenId)) {
             // Use focused window's tracked screen as hint
             if (m_service && !m_lastActiveWindowId.isEmpty()) {
-                const QString trackedScreen = m_service->screenAssignments().value(m_lastActiveWindowId);
+                const QString trackedScreen = m_service->screenForWindow(m_lastActiveWindowId);
                 if (PhosphorIdentity::VirtualScreenId::isVirtual(trackedScreen)
                     && PhosphorIdentity::VirtualScreenId::extractPhysicalId(trackedScreen) == screenId) {
                     resolvedId = trackedScreen;
@@ -958,7 +969,7 @@ void WindowTrackingAdaptor::windowActivated(const QString& windowId, const QStri
     QString resolvedScreen = screenId;
     if (!screenId.isEmpty()) {
         if (!PhosphorIdentity::VirtualScreenId::isVirtual(screenId) && m_service) {
-            const QString trackedScreen = m_service->screenAssignments().value(windowId);
+            const QString trackedScreen = m_service->screenForWindow(windowId);
             if (PhosphorIdentity::VirtualScreenId::isVirtual(trackedScreen)
                 && PhosphorIdentity::VirtualScreenId::extractPhysicalId(trackedScreen)
                     == PhosphorIdentity::VirtualScreenId::extractPhysicalId(screenId)) {

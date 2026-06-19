@@ -1139,6 +1139,12 @@ bool Daemon::init()
     // AutotileEngine/TilingState). WTS references it for zone queries.
     m_windowTrackingAdaptor->service()->setSnapState(snapEngine->snapState());
     m_windowTrackingAdaptor->service()->setSnapEngine(snapEngine);
+    // Inject the shared window registry so SnapState canonicalizes its
+    // windowId-keyed stores to the stable first-seen composite (instanceId →
+    // first observed appId|instanceId). This makes snap float/zone/screen state
+    // immune to the effect-restart-after-WM_CLASS-mutation re-identification
+    // skew, mirroring how AutotileEngine canonicalizes tiling state (issue #628).
+    snapEngine->snapState()->setWindowRegistry(m_windowRegistry.get());
 
     // Filter the unified rule store down to its Exclude-shaped slice and
     // hand the address to SnapEngine for its isAppIdExcluded probe. The
@@ -1271,7 +1277,7 @@ bool Daemon::init()
                                        const QString& windowId) -> PhosphorZones::AssignmentEntry::Mode {
             QString screenId;
             if (m_windowTrackingAdaptor && m_windowTrackingAdaptor->service()) {
-                screenId = m_windowTrackingAdaptor->service()->screenAssignments().value(windowId);
+                screenId = m_windowTrackingAdaptor->service()->screenForWindow(windowId);
             }
             if (!screenId.isEmpty() && m_layoutManager) {
                 return m_layoutManager->modeForScreen(screenId, currentDesktop(), currentActivity());

@@ -69,6 +69,12 @@ public:
     virtual const QHash<QString, QString>& screenAssignments() const = 0;
     virtual QString zoneForWindow(const QString& windowId) const = 0;
     virtual QStringList zonesForWindow(const QString& windowId) const = 0;
+    /// The screen a window is assigned to (empty when none), canonicalizing the
+    /// id — the point accessor callers use instead of screenAssignments().value()
+    /// so a window resolves across the effect-restart re-identification skew (#628).
+    virtual QString screenForWindow(const QString& windowId) const = 0;
+    /// Same, returning @p defaultScreen when the window has no assignment.
+    virtual QString screenForWindow(const QString& windowId, const QString& defaultScreen) const = 0;
     virtual QStringList windowsInZone(const QString& zoneId) const = 0;
     virtual bool isWindowSnapped(const QString& windowId) const = 0;
     virtual QString findEmptyZone(const QString& screenId = QString()) const = 0;
