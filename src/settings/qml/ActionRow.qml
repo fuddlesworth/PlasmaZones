@@ -63,6 +63,21 @@ ColumnLayout {
     readonly property var _typeEntry: row._entryForType(row.action.type)
     /// Parameter descriptors for the current type (empty when none / unknown).
     readonly property var _params: row._typeEntry !== undefined ? row._typeEntry.params : []
+    /// Combined input-format hint(s) for the current params — the optional
+    /// `param.hint` strings from the action metadata (windowruleauthoring's
+    /// paramHint), joined one per line. Empty when no param carries a hint.
+    /// Surfaces the accepted syntax (e.g. zone-number lists / ranges) that a
+    /// placeholder can't show once the field holds a value; there is no
+    /// per-type ladder here — a param gets a hint only if its descriptor does.
+    readonly property string _paramHint: {
+        var parts = [];
+        for (var i = 0; i < row._params.length; i++) {
+            var h = row._params[i].hint;
+            if (h !== undefined && h.length > 0)
+                parts.push(h);
+        }
+        return parts.join("\n");
+    }
     /// Shader-uniform schema for the action's currently-selected effect. Empty
     /// when the action is not a shader-override, no effect is set, or the
     /// effect declares no parameters. Drives the inline shader editor below
@@ -416,6 +431,23 @@ ColumnLayout {
             Accessible.name: i18n("Remove this action")
             onClicked: row.removeRequested()
         }
+    }
+
+    // ── Input-format hint for the current params ─────────────────────────────
+    // A muted helper line under the editor row, shown only when a param carries
+    // a `hint` (e.g. SnapToZone's zone-ordinal syntax). Indented to align under
+    // the editors, mirroring the shader-parameter editor's left margin. Plain
+    // text, word-wrapped; never interactive.
+    Label {
+        Layout.fillWidth: true
+        Layout.leftMargin: Kirigami.Units.iconSizes.small + Kirigami.Units.smallSpacing
+        visible: row._paramHint.length > 0
+        text: row._paramHint
+        font: Kirigami.Theme.smallFont
+        color: Kirigami.Theme.disabledTextColor
+        wrapMode: Text.WordWrap
+        textFormat: Text.PlainText
+        Accessible.ignored: true
     }
 
     // ── Bottom: shader-parameter editor for the shader-override actions ──────

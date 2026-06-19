@@ -318,6 +318,11 @@ QVariantList WindowRuleController::allOperators() const
     return WindowRuleAuthoring::allOperators();
 }
 
+QString WindowRuleController::matchValueHint(const QString& op) const
+{
+    return WindowRuleAuthoring::matchValueHint(op);
+}
+
 QVariantList WindowRuleController::actionTypes() const
 {
     return WindowRuleAuthoring::actionTypes();

@@ -284,6 +284,13 @@ public:
     /// Same entry shape as operatorsForField.
     Q_INVOKABLE QVariantList allOperators() const;
 
+    /// Optional input hint for a match condition's value editor, keyed on the
+    /// operator wire token @p op (the leaf's `node.op`) — empty when the operator
+    /// needs none. Shown beneath the value field for operators whose syntax or
+    /// matching semantics aren't obvious from a plain text box (regex, app-id
+    /// match). The match-side counterpart to the per-param action hints.
+    Q_INVOKABLE QString matchValueHint(const QString& op) const;
+
     /// Registered action types for the action-editor dropdown. Each entry:
     /// `{ value: QString (action type id), label, params: [ ... ],
     ///   domain: "context"|"window" }` where each param descriptor is

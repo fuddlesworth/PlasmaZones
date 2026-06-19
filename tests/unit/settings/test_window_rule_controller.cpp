@@ -57,6 +57,7 @@ private Q_SLOTS:
     void userAuthorableFilterHidesInternalActions();
     void moveRuleReorders();
     void authoringMetadata();
+    void inputHints();
     void templatesProduceSeededRules();
     void actionTypesCarryDomain();
     void matchIsContextOnlyClassifies();
@@ -897,6 +898,49 @@ void TestWindowRuleController::authoringMetadata()
     QCOMPARE(actionCategoryOrder.value(QStringLiteral("exclude")), 2); // Window
     QCOMPARE(actionCategoryOrder.value(QStringLiteral("setOpacity")), 3); // Appearance
     QCOMPARE(actionCategoryOrder.value(QStringLiteral("excludeAnimations")), 4); // Animation
+}
+
+void TestWindowRuleController::inputHints()
+{
+    WindowRuleController controller;
+
+    // Match-condition value hints are keyed on the operator wire token: the
+    // operators whose value editor is a plain text box AND whose syntax /
+    // matching semantics aren't obvious carry a hint; the self-explanatory ones
+    // (and the picker / spin-box operators) carry none. Pins the QML contract —
+    // MatchLeafEditor calls matchValueHint(node.op) and shows the result beneath
+    // the value field — so a regression that drops or widens it is caught.
+    QVERIFY2(!controller.matchValueHint(QStringLiteral("regex")).isEmpty(),
+             "the regex operator must carry an input hint");
+    QVERIFY2(!controller.matchValueHint(QStringLiteral("appIdMatches")).isEmpty(),
+             "the app-id-match operator must carry an input hint");
+    QVERIFY2(controller.matchValueHint(QStringLiteral("equals")).isEmpty(),
+             "equals is self-explanatory and must carry no hint");
+    QVERIFY2(controller.matchValueHint(QStringLiteral("contains")).isEmpty(),
+             "contains is self-explanatory and must carry no hint");
+    QVERIFY2(controller.matchValueHint(QString()).isEmpty(), "an empty operator token yields no hint");
+
+    // The SnapToZone action's `zones` param carries an input hint (its free-text
+    // ordinal-list syntax isn't discoverable from the field). The hint rides on
+    // the param descriptor in actionTypes() — ActionRow reads `param.hint`.
+    const QVariantList actions = controller.actionTypes();
+    bool sawSnapToZoneZones = false;
+    for (const QVariant& a : actions) {
+        const QVariantMap action = a.toMap();
+        if (action.value(QStringLiteral("value")).toString() != QLatin1String("snapToZone")) {
+            continue;
+        }
+        for (const QVariant& p : action.value(QStringLiteral("params")).toList()) {
+            const QVariantMap param = p.toMap();
+            if (param.value(QStringLiteral("key")).toString() != QLatin1String("zones")) {
+                continue;
+            }
+            sawSnapToZoneZones = true;
+            QVERIFY2(!param.value(QStringLiteral("hint")).toString().isEmpty(),
+                     "SnapToZone's zones param must carry an input hint");
+        }
+    }
+    QVERIFY2(sawSnapToZoneZones, "actionTypes() must expose the SnapToZone zones param");
 }
 
 void TestWindowRuleController::templatesProduceSeededRules()

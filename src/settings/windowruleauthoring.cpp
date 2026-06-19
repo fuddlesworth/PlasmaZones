@@ -309,6 +309,23 @@ QString paramLabel(const QString& type, const QString& key)
     return key;
 }
 
+/// Optional translated input hint for action @p type, param @p key — a short line
+/// of guidance shown beneath the editor for params whose accepted input format is
+/// not obvious from the control itself (e.g. the free-text zone-ordinal list).
+/// Returns an empty string for params that need no hint (pickers, spin boxes,
+/// toggles, colour swatches are self-explanatory). Mirrors paramLabel — keyed on
+/// `(type, key)` so the hint stays next to the label it explains.
+QString paramHint(const QString& type, const QString& key)
+{
+    namespace ActionParam = PhosphorWindowRules::ActionParam;
+    if (type == ActionType::SnapToZone && key == ActionParam::Zones) {
+        return PhosphorI18n::tr(
+            "Zone numbers like “1, 2”, or a range like “1-3”. "
+            "Multiple zones snap the window to their combined area.");
+    }
+    return {};
+}
+
 /// Translated label for one enum wire value on action @p type, param @p key.
 /// Mirrors paramLabel — structural enum membership lives on the descriptor;
 /// the human-facing label is per `(type, key, wireValue)`.
@@ -361,6 +378,9 @@ QVariantList paramsForActionTypeImpl(const QString& type)
         p[QStringLiteral("key")] = schema.key;
         p[QStringLiteral("kind")] = schema.kind;
         p[QStringLiteral("label")] = paramLabel(type, schema.key);
+        if (const QString hint = paramHint(type, schema.key); !hint.isEmpty()) {
+            p[QStringLiteral("hint")] = hint;
+        }
         if (schema.min.has_value()) {
             p[QStringLiteral("min")] = *schema.min;
         }
@@ -669,6 +689,22 @@ QVariantList allOperators()
         out.append(entry);
     }
     return out;
+}
+
+QString matchValueHint(const QString& op)
+{
+    // Keyed on the operator wire token: only the operators whose value editor is
+    // a plain text box AND whose accepted syntax / matching semantics aren't
+    // obvious get a hint. equals / contains / starts-with / ends-with are
+    // self-explanatory; the picker / spin-box operators have no free-text field
+    // to annotate. The match-side counterpart to the action-side paramHint.
+    if (op == PhosphorWindowRules::operatorToString(Operator::Regex)) {
+        return PhosphorI18n::tr("Regular expression, e.g. ^(firefox|chromium)$");
+    }
+    if (op == PhosphorWindowRules::operatorToString(Operator::AppIdMatches)) {
+        return PhosphorI18n::tr("Matches by reverse-DNS segments, so “firefox” also matches “org.mozilla.firefox”.");
+    }
+    return {};
 }
 
 QVariantList actionTypes()

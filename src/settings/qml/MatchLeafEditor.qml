@@ -299,31 +299,57 @@ RowLayout {
     Component {
         id: stringValueEditor
 
-        // RowLayout root so the Loader sizes the editor to the available
-        // width and the "pick from running windows" button can sit next to
-        // the freeform field. The button only appears for fields where a
-        // live-window lookup makes sense — typing an AppId / windowClass
-        // from memory is the friction the picker existed to solve.
-        RowLayout {
-            spacing: Kirigami.Units.smallSpacing
+        // ColumnLayout root so an operator-specific input hint (regex syntax /
+        // app-id-match semantics) can sit beneath the freeform field. The inner
+        // RowLayout keeps the "pick from running windows" button next to the
+        // field — that button only appears for fields where a live-window lookup
+        // makes sense (typing an AppId / windowClass from memory is the friction
+        // the picker existed to solve).
+        ColumnLayout {
+            id: stringEditorRoot
 
-            TextField {
-                Accessible.name: i18n("Match value")
+            spacing: Kirigami.Units.smallSpacing / 2
+
+            // Operator-keyed input hint (regex / app-id match); empty for
+            // operators that need none. Re-reads when the operator changes.
+            readonly property string _valueHint: leaf.controller ? leaf.controller.matchValueHint(leaf.node.op) : ""
+
+            RowLayout {
                 Layout.fillWidth: true
-                placeholderText: i18n("Value")
-                text: leaf.node.value !== undefined ? String(leaf.node.value) : ""
-                onEditingFinished: leaf._emit(leaf.node.field, leaf.node.op, text)
+                spacing: Kirigami.Units.smallSpacing
+
+                TextField {
+                    Accessible.name: i18n("Match value")
+                    Layout.fillWidth: true
+                    placeholderText: i18n("Value")
+                    text: leaf.node.value !== undefined ? String(leaf.node.value) : ""
+                    onEditingFinished: leaf._emit(leaf.node.field, leaf.node.op, text)
+                }
+
+                ToolButton {
+                    Accessible.name: leaf._pickTooltip(leaf.node.field)
+                    Layout.alignment: Qt.AlignVCenter
+                    ToolTip.delay: 500
+                    ToolTip.text: leaf._pickTooltip(leaf.node.field)
+                    ToolTip.visible: hovered
+                    icon.name: "window-duplicate"
+                    visible: leaf._fieldIsPickable(leaf.node.field)
+                    onClicked: leaf._openWindowPicker()
+                }
             }
 
-            ToolButton {
-                Accessible.name: leaf._pickTooltip(leaf.node.field)
-                Layout.alignment: Qt.AlignVCenter
-                ToolTip.delay: 500
-                ToolTip.text: leaf._pickTooltip(leaf.node.field)
-                ToolTip.visible: hovered
-                icon.name: "window-duplicate"
-                visible: leaf._fieldIsPickable(leaf.node.field)
-                onClicked: leaf._openWindowPicker()
+            // Muted helper line under the value field; only present when the
+            // current operator carries a hint. Plain text, word-wrapped, never
+            // interactive. Mirrors the action-param hint in ActionRow.
+            Label {
+                Layout.fillWidth: true
+                visible: stringEditorRoot._valueHint.length > 0
+                text: stringEditorRoot._valueHint
+                font: Kirigami.Theme.smallFont
+                color: Kirigami.Theme.disabledTextColor
+                wrapMode: Text.WordWrap
+                textFormat: Text.PlainText
+                Accessible.ignored: true
             }
         }
     }
