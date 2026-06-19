@@ -88,9 +88,9 @@ BuildRequires:  kf6-kirigami-devel >= 6.26.0
 # The KWin effect plugin's IID embeds KWin's exact upstream version
 # (KWIN_PLUGIN_VERSION_STRING in /usr/include/kwin/config-kwin.h). KWin refuses
 # to load any effect whose IID doesn't match its own version string — even
-# across patch releases (e.g. 6.7.0 → 6.7.1). We capture the build-time KWin
-# version below and emit an exact Requires so this package fails to install on
-# systems with a mismatched KWin instead of installing silently broken.
+# across patch releases (e.g. 6.7.0 → 6.7.1). The runtime Requires below is a
+# minimum (>=), NOT an exact (=) pin: see the note above the runtime Requires
+# block for why an exact pin breaks whole-desktop upgrades.
 %if 0%{?suse_version}
 BuildRequires:  kwin6-devel
 # find_package(KWin) (kwin-effect/CMakeLists.txt:20) pulls in KWinConfig.cmake,
@@ -130,20 +130,6 @@ BuildRequires:  systemd-rpm-macros
 %endif
 %{?systemd_requires}
 
-# Build-time KWin upstream version (Fedora). kwin-devel is BuildRequired above,
-# so it is installed when this spec is parsed in the rpmbuild chroot. The query
-# falls back to a permissive minimum when kwin-devel is absent — notably the
-# minimal COPR SRPM-build chroot, where the spec only has to parse.
-#
-# `rpm -q` prints "package kwin-devel is not installed" to STDOUT (not stderr)
-# and exits non-zero when the package is missing, so a bare
-# `rpm -q ... || echo 6.7.0` leaves that message in the macro and `echo` adds
-# a SECOND line. A multi-line macro then injects a newline into every
-# `Requires: kwin = %%{kwin_version}` use, and rpm parses the stray `6.7.0` as
-# its own tag ("Unknown tag: 6.7.0"). Capture stdout first and only emit it on
-# success so the macro is always a single clean token.
-%global kwin_version %(out=$(rpm -q --qf '%%{VERSION}' kwin-devel 2>/dev/null) && echo "$out" || echo 6.7.0)
-
 # Runtime dependencies — RPM auto-generates most from sonames;
 # explicit Requires ensure minimum versions on Fedora.
 %if !0%{?suse_version}
@@ -153,8 +139,24 @@ Requires:       qt6-qtshadertools
 Requires:       kf6-kirigami >= 6.26.0
 Requires:       kf6-kcmutils >= 6.26.0
 Requires:       qt6-qtwayland >= 6.10.0
-# Exact KWin patch pin — see note above the BuildRequires block.
-Requires:       kwin = %{kwin_version}
+# KWin: minimum version, NOT an exact patch pin.
+#
+# An exact `kwin = <built-version>` pin holds the ENTIRE desktop hostage on
+# distros that ship KWin and PlasmaZones from separate repos (Fedora KWin from
+# the distro, PlasmaZones from COPR). When the distro ships a newer KWin before
+# a matching PlasmaZones rebuild lands, dnf cannot satisfy the exact pin, so it
+# holds KWin back. That leaves a half-upgraded Plasma — KWin out of sync with
+# the rest — which manifests as "No KScreen backend found" and, at worst, a
+# black screen at login. (Reported: Fedora 44 / Plasma 6.7.)
+#
+# The effect plugin's IID still must match the running KWin, but a mismatch is
+# harmless: KWin reads the IID from plugin metadata and never dlopen's an
+# effect whose IID differs, so the .so sits inert. The only consequence is the
+# drag-overlay effect not loading until PlasmaZones is rebuilt against the new
+# KWin — a cosmetic, self-healing degradation, not a desktop-wide failure.
+# CI rebuilds keep that window short. Core tiling runs in the daemon +
+# layer-shell QPA plugin and does not depend on the effect.
+Requires:       kwin >= 6.7.0
 %endif
 Requires:       hicolor-icon-theme
 

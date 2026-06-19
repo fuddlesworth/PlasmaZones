@@ -445,7 +445,7 @@ jobs:
               'qt6-base' 'qt6-declarative' 'qt6-shadertools' 'qt6-svg'
               'kconfig' 'kconfigwidgets' 'kirigami'
               'kcmutils' 'kglobalaccel' 'qt6-wayland'
-              "kwin=__KWIN_VER__"
+              'kwin>=6.7.0'
           )
           makedepends=('cmake' 'extra-cmake-modules' 'qt6-tools' 'ninja')
           optdepends=('plasma-activities: activity-based layouts')
@@ -485,7 +485,6 @@ jobs:
               -e "s|__PR_NUMBER__|${{ steps.meta.outputs.pr_number }}|" \
               -e "s|__BRANCH__|${{ steps.meta.outputs.branch_ref }}|" \
               -e "s|__SHORT_SHA__|${{ steps.meta.outputs.short_sha }}|" \
-              -e "s|__KWIN_VER__|${{ steps.meta.outputs.kwin_ver }}|" \
               ci-pkgbuild/PKGBUILD
 
           # The pacman install hook is reused verbatim from the stable
@@ -537,12 +536,11 @@ jobs:
           arch=('x86_64')
           url="https://github.com/fuddlesworth/PlasmaZones"
           license=('GPL-3.0-or-later' 'LGPL-2.1-or-later')
-          _kwin_ver=\$(pacman -Q kwin 2>/dev/null | awk '{print \$2}' | cut -d- -f1)
           depends=(
               'qt6-base' 'qt6-declarative' 'qt6-shadertools' 'qt6-svg'
               'kconfig' 'kconfigwidgets' 'kirigami'
               'kcmutils' 'kglobalaccel' 'qt6-wayland'
-              "kwin\${_kwin_ver:+=}\${_kwin_ver}"
+              'kwin>=6.7.0'
           )
           makedepends=('git' 'cmake' 'extra-cmake-modules' 'qt6-tools' 'ninja' 'kwin' 'wayland')
           optdepends=('plasma-activities: activity-based layouts')
@@ -620,9 +618,9 @@ jobs:
 
             ---
 
-            #### Option A — prebuilt binary (KWin `${{ steps.meta.outputs.kwin_ver }}` only)
+            #### Option A — prebuilt binary (effect needs KWin `${{ steps.meta.outputs.kwin_ver }}`)
 
-            The kwin-effect plugin's IID embeds KWin's upstream version, so this prebuilt only loads on systems with **`kwin=${{ steps.meta.outputs.kwin_ver }}`**.
+            The package installs on any **`kwin>=6.7.0`**, but the kwin-effect plugin's IID embeds KWin's upstream version, so the bundled effect only *loads* on systems running **`kwin=${{ steps.meta.outputs.kwin_ver }}`**. On any other 6.7+ KWin, core tiling still works — KWin just skips the mismatched effect (no drag overlay) until a matching rebuild.
 
             **Anonymous download (no GitHub account needed)** via [nightly.link](https://nightly.link/), which proxies the workflow artifact:
 
