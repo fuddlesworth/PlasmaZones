@@ -446,7 +446,7 @@ ColumnLayout {
     _zoneOrdinalsEditor: Component {
         TextField {
             readonly property var _param: parent.modelData
-            readonly property var _zones: row.action[_param.key] !== undefined ? row.action[_param.key] : []
+            readonly property var _zones: Array.isArray(row.action[_param.key]) ? row.action[_param.key] : []
 
             // Normalised display (sorted, deduped) re-binds after each edit.
             text: _zones.join(", ")

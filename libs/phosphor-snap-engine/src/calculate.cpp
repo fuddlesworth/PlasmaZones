@@ -74,11 +74,10 @@ SnapResult SnapEngine::calculateSnapToPlacementRule(const QString& windowId, con
         return SnapResult::noSnap();
     }
 
-    // Resolve each ordinal to its zone geometry and union them (zone span). An
-    // ordinal naming a zone the active layout lacks is skipped — a span rule is
-    // layout-agnostic and may reference a zone count this layout does not have.
+    // Resolve each ordinal to its zone id (an ordinal naming a zone the active
+    // layout lacks is skipped — a span rule is layout-agnostic and may reference
+    // a zone count this layout does not have).
     QStringList zoneIds;
-    QRect unionGeo;
     for (const int ordinal : ordinals) {
         PhosphorZones::Zone* zone = layout->zoneByNumber(ordinal);
         if (!zone) {
@@ -86,17 +85,19 @@ SnapResult SnapEngine::calculateSnapToPlacementRule(const QString& windowId, con
                 << "calculateSnapToPlacementRule: zone ordinal" << ordinal << "absent in layout" << layout->name();
             continue;
         }
-        const QString zoneId = zone->id().toString();
-        const QRect geo = m_windowTracker->zoneGeometry(zoneId, windowScreenName);
-        if (!geo.isValid()) {
-            continue;
-        }
-        zoneIds.append(zoneId);
-        // Default QRect is empty, so the first united() returns geo unchanged.
-        unionGeo = unionGeo.united(geo);
+        zoneIds.append(zone->id().toString());
+    }
+    if (zoneIds.isEmpty()) {
+        return SnapResult::noSnap();
     }
 
-    if (zoneIds.isEmpty() || !unionGeo.isValid()) {
+    // Union via resolveZoneGeometry so the span uses the SAME QRectF-union-then-
+    // align rounding the float-back poison guard uses (WTA::captureWindowPlacement
+    // → resolveZoneGeometry). A per-QRect union here would diverge by a pixel at
+    // fractional scaling, so a window floated off the span without moving would
+    // leak the snap rect into its float-back geometry.
+    const QRect unionGeo = m_windowTracker->resolveZoneGeometry(zoneIds, windowScreenName);
+    if (!unionGeo.isValid()) {
         return SnapResult::noSnap();
     }
 

@@ -328,12 +328,14 @@ public:
     /**
      * @brief Resolve auto-snap for a newly opened window
      *
-     * First consults the unified WindowPlacementStore: a snapped or floated
-     * record reopens the window from its stored placement (cross-screen where the
-     * predicates allow). If no stored record applies, runs the fallback chain:
-     *   1. App rules (highest priority)
-     *   2. Auto-assign to empty zone
-     *   3. Snap to last zone (final fallback)
+     * A matched SnapToZone placement rule has highest priority and overrides any
+     * stored placement (the store still re-binds the record first, so the window's
+     * float-back geometry survives the override). Otherwise the unified
+     * WindowPlacementStore reopens the window from its snapped or floated record
+     * (cross-screen where the predicates allow). With neither, the fallback chain
+     * runs:
+     *   1. Auto-assign to empty zone
+     *   2. Snap to last zone (final fallback)
      *
      * Returns a PhosphorEngine::SnapResult so the D-Bus adaptor can unpack geometry for the
      * KWin effect. Also handles floating windows (skips snap, emits feedback).

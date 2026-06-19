@@ -13,9 +13,9 @@
 # autotile algorithms (phosphor-tile-algo, future work).
 #
 # Self-contained: depends only on Qt6 + PhosphorLayoutApi (PUBLIC) and
-# PhosphorIdentity (PRIVATE — used by Layout::matchAppRule for
-# composite window-id parsing; the dep doesn't leak through any public
-# PhosphorZones header).
+# PhosphorIdentity (PRIVATE — used for virtual-screen id parsing
+# (VirtualScreenId) in geometryutils / layoutregistry_assignments; the dep
+# doesn't leak through any public PhosphorZones header).
 
 cmake_minimum_required(VERSION 3.16)
 
@@ -164,9 +164,9 @@ target_link_libraries(PhosphorZones
         # the public LayoutRegistry.h ctor signature so the dep is PUBLIC.
         PhosphorWindowRules::PhosphorWindowRules
     PRIVATE
-        # Layout::matchAppRule uses PhosphorIdentity::WindowId for
-        # composite window-id parsing; PRIVATE because the dep doesn't
-        # leak through any public PhosphorZones header.
+        # Uses PhosphorIdentity::VirtualScreenId for virtual-screen id parsing
+        # (geometryutils / layoutregistry_assignments); PRIVATE because the dep
+        # doesn't leak through any public PhosphorZones header.
         PhosphorIdentity::PhosphorIdentity
         # GeometryUtils calls ScreenManager geometry queries, and LayoutRegistry
         # uses ScreenIdentity / VirtualScreen for assignment-cascade screen-id

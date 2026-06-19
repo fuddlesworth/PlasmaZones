@@ -134,7 +134,7 @@ public Q_SLOTS:
                         int& snapWidth, int& snapHeight, bool& shouldSnap);
 
     /**
-     * @brief Snap a window to its app-rule-defined zone
+     * @brief Snap a window to its SnapToZone-rule-defined zone(s)
      */
     void snapToAppRule(const QString& windowId, const QString& windowScreenName, bool sticky, int& snapX, int& snapY,
                        int& snapWidth, int& snapHeight, bool& shouldSnap);
@@ -147,7 +147,7 @@ public Q_SLOTS:
 
     /**
      * @brief Run the full snap-restore resolution (WindowPlacementStore restore +
-     *        app-rule / empty-zone / last-zone fallback chain) in one call
+     *        placement-rule / empty-zone / last-zone fallback chain) in one call
      * @param windowKind Structural kind of the opening window (0=Unknown, 1=Normal, 2=Transient).
      *                   Forwarded to SnapEngine for protocol compatibility; the unified
      *                   placement record now carries the kind, so it no longer gates restore.

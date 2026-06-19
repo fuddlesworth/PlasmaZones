@@ -2363,7 +2363,7 @@ void appendLayoutAppRulesAsSnapToZone(QList<PhosphorWindowRules::WindowRule>& ru
             const QJsonObject ar = entry.toObject();
             const QString pattern = ar.value(kLayoutAppRulePattern).toString().trimmed();
             const int zoneNumber = ar.value(kLayoutAppRuleZoneNumber).toInt(0);
-            const QString targetScreen = ar.value(kLayoutAppRuleTargetScreen).toString();
+            const QString targetScreen = ar.value(kLayoutAppRuleTargetScreen).toString().trimmed();
             if (pattern.isEmpty() || zoneNumber < 1) {
                 continue;
             }

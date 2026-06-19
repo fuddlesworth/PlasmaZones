@@ -11,7 +11,7 @@
 #   • The KWin effect (separate process) constructs ids from
 #     KWin::Window::internalId() + desktopFileName() / windowClass().
 #   • The daemon parses them in WindowTrackingService.
-#   • PhosphorZones uses them in app-rule matching (Layout::matchAppRule).
+#   • PhosphorZones uses VirtualScreenId for virtual-screen id parsing.
 #   • Future PhosphorTiles runtime engine will hold them per-tiled-window.
 #
 # This library carries no Qt-Widgets / Wayland / KWin / Gui dependencies —

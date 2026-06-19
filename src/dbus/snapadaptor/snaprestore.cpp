@@ -115,7 +115,7 @@ void SnapAdaptor::snapToAppRule(const QString& windowId, const QString& windowSc
     if (!applySnapResult(result, windowId, snapX, snapY, snapWidth, snapHeight, shouldSnap)) {
         return;
     }
-    qCInfo(lcDbusWindow) << "App rule snapping window" << windowId << "to zone" << result.zoneId;
+    qCInfo(lcDbusWindow) << "Placement rule snapping window" << windowId << "to zone" << result.zoneId;
 }
 
 void SnapAdaptor::snapToEmptyZone(const QString& windowId, const QString& windowScreenId, bool sticky, int& snapX,
@@ -222,7 +222,7 @@ bool SnapAdaptor::applySnapResult(const SnapResult& result, const QString& windo
     // entry points in one place.
     if (m_settings && !result.screenId.isEmpty()) {
         // Gate against the DESTINATION screen's actual mode. A restore result
-        // can cross-screen-migrate (app rule / session restore) onto a screen
+        // can cross-screen-migrate (placement rule / session restore) onto a screen
         // whose mode differs from the caller's, so the disable list to consult
         // is the one for result.screenId's mode — not a hard-coded Snapping.
         //

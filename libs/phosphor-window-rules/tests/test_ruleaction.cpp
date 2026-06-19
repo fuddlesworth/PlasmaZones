@@ -506,10 +506,15 @@ private Q_SLOTS:
         QVERIFY(!RuleAction::fromJson(withZones(QJsonArray{-1})).has_value()); // negative
         QVERIFY(!RuleAction::fromJson(withZones(QJsonArray{1.5})).has_value()); // non-integral
         QVERIFY(!RuleAction::fromJson(withZones(QJsonArray{QStringLiteral("1")})).has_value()); // string
+        QVERIFY(!RuleAction::fromJson(withZones(QJsonArray{65})).has_value()); // above the ordinal cap (64)
+        // A double far beyond int range must be rejected by the bound BEFORE any
+        // narrowing cast (an out-of-range float-to-int cast is UB) — must not crash.
+        QVERIFY(!RuleAction::fromJson(withZones(QJsonArray{1e18})).has_value());
 
-        // Single zone + span both accepted.
+        // Single zone, span, and the inclusive cap boundary are all accepted.
         QVERIFY(RuleAction::fromJson(withZones(QJsonArray{1})).has_value());
         QVERIFY(RuleAction::fromJson(withZones(QJsonArray{1, 2})).has_value());
+        QVERIFY(RuleAction::fromJson(withZones(QJsonArray{64})).has_value());
 
         // A key outside allowedKeys ({zones}) is rejected.
         QJsonObject stray = withZones(QJsonArray{1});

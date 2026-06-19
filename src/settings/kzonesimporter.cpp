@@ -232,8 +232,20 @@ ImportResult importLayouts(const QJsonArray& kzonesArray)
                     rule.actions.append(action);
                     const QString ruleJson =
                         QString::fromUtf8(QJsonDocument(rule.toJson()).toJson(QJsonDocument::Compact));
-                    DaemonDBus::callDaemon(QString(PhosphorProtocol::Service::Interface::WindowRules),
-                                           QStringLiteral("addRule"), {ruleJson});
+                    const QDBusMessage ruleReply =
+                        DaemonDBus::callDaemon(QString(PhosphorProtocol::Service::Interface::WindowRules),
+                                               QStringLiteral("addRule"), {ruleJson});
+                    // addRule returns false on daemon-side validation/persistence
+                    // failure. Surface a dropped app→zone rule rather than reporting
+                    // the import as fully successful (the layout still imported).
+                    const bool ruleAdded = ruleReply.type() == QDBusMessage::ReplyMessage
+                        && !ruleReply.arguments().isEmpty() && ruleReply.arguments().first().toBool();
+                    if (!ruleAdded) {
+                        qWarning(
+                            "KZonesImporter: failed to add SnapToZone rule for app '%s' (zone %d) — the layout "
+                            "imported but this app-to-zone assignment was dropped.",
+                            qPrintable(it.key()), it.value());
+                    }
                 }
             }
         }

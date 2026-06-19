@@ -85,6 +85,11 @@ bool hasHexColor(const QJsonObject& params, QLatin1StringView key)
 constexpr double kMaxBorderWidth = 10.0;
 constexpr double kMaxBorderRadius = 20.0;
 constexpr double kMaxGap = 500.0;
+// Upper bound for a SnapToZone ordinal. No real layout has anywhere near this
+// many zones (the snapToZone1..9 shortcuts only reach 9); the cap exists purely
+// to reject a grossly malformed hand-edited payload AND to keep the integrality
+// check from narrowing an out-of-range double to int (which is UB).
+constexpr double kMaxZoneOrdinal = 64.0;
 
 } // namespace
 
@@ -470,10 +475,15 @@ void ActionRegistry::registerBuiltins()
                         return false;
                     }
                     const double d = e.toDouble();
-                    const int n = static_cast<int>(d);
-                    // Reject non-integral and < 1 (ordinals are 1-based).
-                    if (n < 1 || static_cast<double>(n) != d) {
+                    // Bound on the DOUBLE before narrowing — a float-to-int cast
+                    // out of int's range is undefined behaviour. Reject < 1
+                    // (ordinals are 1-based) and an absurd upper value first; only
+                    // then is the cast for the integrality check well-defined.
+                    if (d < 1.0 || d > kMaxZoneOrdinal) {
                         return false;
+                    }
+                    if (static_cast<double>(static_cast<int>(d)) != d) {
+                        return false; // non-integral
                     }
                 }
                 return true;
@@ -482,6 +492,8 @@ void ActionRegistry::registerBuiltins()
         .allowedKeys = {QString(ActionParam::Zones)},
         .domain = ActionDomain::Window,
         .params = {P{.key = QString(ActionParam::Zones), .kind = QStringLiteral("zoneOrdinals")}},
+        // No tags: SnapToZone is daemon-placement only (consumed by the SnapEngine
+        // open path), not an Effect / Border / Animation / Overlay action.
         .category = QStringLiteral("windowManagement"),
         .displayOrder = 0,
     });
