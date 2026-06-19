@@ -351,8 +351,21 @@ void WindowTrackingAdaptor::captureWindowPlacement(const QString& windowId, cons
                         screenKey = Utils::effectiveScreenIdAt(m_service->screenManager(), frame.center());
                     }
                     if (!screenKey.isEmpty()) {
-                        p->screenId = screenKey;
-                        p->freeGeometryByScreen.insert(screenKey, frame);
+                        // Float-back poison guard. A window floated FROM a snap (its slot
+                        // carries the pre-float zones) that has NOT yet moved is still
+                        // sitting on its snap rect — recording that as the free/float
+                        // geometry would make a later float return to the zone, not a
+                        // genuine free position. This bites windows that opened directly
+                        // snapped (e.g. a SnapToZone rule) and were then floated without
+                        // ever being moved: the live frame is still the zone rect. Skip
+                        // until the frame differs from the pre-float zones' geometry — the
+                        // user's next move while floating captures the real free spot.
+                        const bool stillOnSnapRect =
+                            !slot.zoneIds.isEmpty() && m_service->resolveZoneGeometry(slot.zoneIds, screenKey) == frame;
+                        if (!stillOnSnapRect) {
+                            p->screenId = screenKey;
+                            p->freeGeometryByScreen.insert(screenKey, frame);
+                        }
                     }
                 }
             }
