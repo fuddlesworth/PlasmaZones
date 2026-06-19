@@ -81,11 +81,12 @@ void SnapEngine::windowOpened(const QString& windowId, const QString& screenId, 
 // ═══════════════════════════════════════════════════════════════════════════════
 // resolveWindowRestore — WindowPlacementStore restore + auto-snap fallback chain
 //
-// Consults the unified WindowPlacementStore first (snapped or floated record —
-// snapping's two states); if none applies, runs the fallback chain (1. SnapToZone
-// placement rules, 2. empty zone, 3. last zone), and a no-match window defaults to
-// floated. Persisted session restore is now served by the store block above, not a
-// chain level.
+// A matched SnapToZone placement rule wins first (highest priority — it overrides
+// any remembered placement). Otherwise consults the unified WindowPlacementStore
+// (snapped or floated record — snapping's two states); if neither applies, runs the
+// fallback chain (1. empty zone, 2. last zone), and a no-match window defaults to
+// floated. Persisted session restore is served by the store block, not a chain
+// level.
 //
 // Mostly decision logic: returns a SnapResult for the caller to apply geometry.
 // Side effects: consumePendingAssignment; marks floated windows floating
@@ -187,9 +188,35 @@ SnapResult SnapEngine::resolveWindowRestore(const QString& windowId, const QStri
             << "but carries a cross-screen snap restore — not deferring";
     }
 
+    // Highest-priority restore: a matched SnapToZone placement rule. An explicit
+    // "this app snaps to these zones" directive outranks ANY remembered placement
+    // — a floated position or a prior snap to a different zone — so the rule wins
+    // on every open. Runs AFTER the autotile screen-mode gate (autotile screens
+    // still own their own windows) but BEFORE the placement store, so a stale
+    // record can never shadow the rule. The disabled-context gate is load-bearing
+    // here: the chain's own gate runs only after the store block, which this path
+    // skips. The rule's snap re-captures the window's placement record, replacing
+    // the now-stale floated/snapped one on the next save.
+    {
+        SnapResult ruleResult = calculateSnapToPlacementRule(windowId, screenId, sticky);
+        if (ruleResult.shouldSnap) {
+            if (m_shouldRestorePredicate && !m_shouldRestorePredicate(ruleResult.screenId)) {
+                qCDebug(PhosphorSnapEngine::lcSnapEngine)
+                    << "resolveWindowRestore:" << windowId << "placement-rule target" << ruleResult.screenId
+                    << "rejected by disabled-context gate";
+                return SnapResult::noSnap();
+            }
+            qCInfo(PhosphorSnapEngine::lcSnapEngine)
+                << "resolveWindowRestore: placement rule matched (highest priority) for" << windowId
+                << "zones=" << ruleResult.zoneIds;
+            return ruleResult;
+        }
+    }
+
     // Unified placement store — the single authoritative restore record for this
-    // window. Consulted FIRST, before the legacy "already has assignment" skip and
-    // the snap/float chains. This ordering is load-bearing: on a daemon-only
+    // window. Consulted before the legacy "already has assignment" skip and the
+    // snap/float chains (but after a matched SnapToZone rule, above). This
+    // ordering is load-bearing: on a daemon-only
     // restart the old WindowZoneAssignmentsFull is still loaded, so a window that
     // was FLOATED (floating keeps its zone assignment) comes back isWindowSnapped()
     // == true and would hit the legacy skip below — never floating. Consulting the
@@ -446,27 +473,9 @@ SnapResult SnapEngine::resolveWindowRestore(const QString& windowId, const QStri
         return SnapResult::noSnap();
     }
 
-    // 1. SnapToZone window rules (highest priority).
-    {
-        SnapResult result = calculateSnapToPlacementRule(windowId, screenId, sticky);
-        if (result.shouldSnap) {
-            // The result always targets the caller's own screen (SnapToZone
-            // ordinals resolve on the window's current screen). The disabled-
-            // context gate above already validated that screenId, so this
-            // re-check is a defensive no-op kept symmetric with the other
-            // chain levels — a placement rule must not route a window onto a
-            // context the user disabled.
-            if (m_shouldRestorePredicate && !m_shouldRestorePredicate(result.screenId)) {
-                qCDebug(PhosphorSnapEngine::lcSnapEngine)
-                    << "resolveWindowRestore:" << windowId << "placement-rule target" << result.screenId
-                    << "rejected by disabled-context gate";
-                return SnapResult::noSnap();
-            }
-            qCInfo(PhosphorSnapEngine::lcSnapEngine)
-                << "resolveWindowRestore: placement rule matched for" << windowId << "zone=" << result.zoneId;
-            return result;
-        }
-    }
+    // (SnapToZone placement rules are resolved BEFORE the placement store, near
+    // the top of this function — an explicit rule outranks any remembered
+    // placement. See the "highest-priority restore" block above.)
 
     // (Persisted session restore is now served entirely by the unified
     // WindowPlacementStore block at the top of this function — a snapped window

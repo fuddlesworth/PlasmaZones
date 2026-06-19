@@ -32,10 +32,12 @@ using PhosphorEngine::StickyWindowHandling;
 SnapResult SnapEngine::calculateSnapToPlacementRule(const QString& windowId, const QString& windowScreenName,
                                                     bool isSticky) const
 {
-    // Check if window was floating - floating windows should NOT be auto-snapped
-    if (m_windowTracker->isWindowFloating(windowId)) {
-        return SnapResult::noSnap();
-    }
+    // NOTE: deliberately NO isWindowFloating() guard here. A SnapToZone rule is an
+    // explicit "this app belongs in these zones" directive that outranks float
+    // state — both on open (it overrides a remembered floated position) and on a
+    // Meta+F un-float (the rule is the authoritative un-float target). The old
+    // per-layout app-rule path skipped floating windows; the rule-driven path
+    // intentionally does not.
 
     // Check sticky window handling
     if (auto* s = snapSettings(); isSticky && s) {

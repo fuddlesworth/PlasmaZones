@@ -84,6 +84,28 @@ void SnapEngine::setWindowFloat(const QString& windowId, bool shouldFloat)
 
 bool SnapEngine::unfloatToZone(const QString& windowId, const QString& screenId)
 {
+    // Highest-priority un-float target: a matched SnapToZone rule. Toggling a
+    // window out of float lands it in the rule's zones, not a stale pre-float
+    // zone, so the rule stays authoritative for both open and Meta+F. Falls
+    // through to the pre-float / fallback zone when no rule matches.
+    {
+        const PhosphorEngine::SnapResult ruleSnap =
+            calculateSnapToPlacementRule(windowId, screenId, /*isSticky=*/false);
+        if (ruleSnap.shouldSnap && !ruleSnap.zoneIds.isEmpty()) {
+            if (ruleSnap.zoneIds.size() > 1) {
+                commitMultiZoneSnap(windowId, ruleSnap.zoneIds, ruleSnap.screenId, SnapIntent::UserInitiated);
+            } else {
+                commitSnap(windowId, ruleSnap.zoneIds.first(), ruleSnap.screenId, SnapIntent::UserInitiated);
+            }
+            // Non-empty zoneId so the effect treats this as a snap commit (re-applies
+            // snap chrome), mirroring the pre-float-zone path below.
+            Q_EMIT applyGeometryRequested(windowId, ruleSnap.geometry.x(), ruleSnap.geometry.y(),
+                                          ruleSnap.geometry.width(), ruleSnap.geometry.height(),
+                                          ruleSnap.zoneIds.first(), ruleSnap.screenId, false);
+            return true;
+        }
+    }
+
     UnfloatResult unfloat = resolveUnfloatGeometry(windowId, screenId);
     if (!unfloat.found) {
         // No pre-float zone (a never-snapped window that defaulted to floating).
