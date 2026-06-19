@@ -65,8 +65,9 @@ SnapResult SnapEngine::calculateSnapToPlacementRule(const QString& windowId, con
 
     // Ordinals are layout-agnostic: resolve them against whatever layout is active
     // on the window's CURRENT screen. Legacy per-layout app rules could target a
-    // different screen; that is now expressed as a ScreenId match on the rule
-    // itself (set during v3→v4 migration), so there is no cross-screen scan here.
+    // different screen; that cross-screen routing is retired — a SnapToZone rule
+    // resolves on the window's current screen, and a user can scope it to a screen
+    // with a ScreenId match leaf, so there is no cross-screen scan here.
     PhosphorZones::Layout* layout = m_layoutManager->resolveLayoutForScreen(windowScreenName);
     if (!layout) {
         qCDebug(PhosphorSnapEngine::lcSnapEngine)

@@ -32,7 +32,7 @@ public:
     virtual bool restoreWindowsToZonesOnLogin() const = 0;
 
     // When true, a window that is auto-placed into a zone on open (session
-    // restore, app rule, empty-zone auto-assign, last-used-zone) is given focus.
+    // restore, placement rule, empty-zone auto-assign, last-used-zone) is given focus.
     // Read only on the AutoRestored commit path in SnapEngine::commitSnapImpl, so
     // it never affects manual drag or keyboard snaps (those use UserInitiated).
     // Mirrors AutotileConfig::focusNewWindows. Default false.
