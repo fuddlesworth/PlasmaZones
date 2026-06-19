@@ -433,7 +433,7 @@ private Q_SLOTS:
     void testLayoutAppRules_idempotentRuleIds()
     {
         // The SnapToZone migration's rule id is derived from
-        // (pattern, zoneNumber, targetScreen) via a fixed v5-UUID namespace, so a
+        // (pattern, zoneNumber) via a fixed v5-UUID namespace, so a
         // crash-and-retry conversion yields byte-identical rules. This mirrors the
         // sibling exclusion / animation folds' idempotency tests and pins the
         // namespace UUID + segment encoding so a future drift in either forces a
