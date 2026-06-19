@@ -21,11 +21,11 @@
 #include <PhosphorZones/AssignmentEntry.h>
 #include <PhosphorZones/LayoutRegistry.h>
 #include <PhosphorWindowRules/RuleAction.h>
-
-#include <QJsonArray>
 #include <PhosphorWindowRules/RuleEvaluator.h>
 #include <PhosphorWindowRules/WindowQuery.h>
 #include <PhosphorWindowRules/WindowRuleStore.h>
+
+#include <QJsonArray>
 
 namespace PlasmaZones {
 
@@ -480,11 +480,19 @@ QList<int> WindowTrackingAdaptor::placementZonesByRule(const QString& windowId, 
     if (!query) {
         return {};
     }
-    // Pin the query to the window's opening screen so a SnapToZone rule carrying a
-    // ScreenId constraint (migrated from a v3 targetScreen) resolves against the
-    // screen the window is actually opening on. buildRuleQueryForWindow leaves
-    // screenId empty (a generic window-domain rule does not pin a screen) — the
-    // placement path is the one consumer that does.
+    // Pin the query to the window's opening screen so a user-authored SnapToZone
+    // rule carrying a `ScreenId` match (the settings screen-picker stores the
+    // canonical id form the runtime reports) resolves against the screen the
+    // window is actually opening on. buildRuleQueryForWindow leaves screenId empty
+    // (the sibling Float / RestorePosition resolvers do not have the screen), so
+    // the placement path is the one consumer that pins it.
+    //
+    // The shared evaluator cache is keyed on windowId only, so the FIRST resolver
+    // to touch a window seeds the verdict the others reuse. On the open path that
+    // is this placement resolve: SnapEngine::resolveWindowRestore calls
+    // calculateSnapToPlacementRule up front, before it consults the float /
+    // restore predicates — so the screen-pinned query populates the cache first
+    // and a screen-constrained rule resolves correctly.
     query->screenId = screenId;
 
     if (!m_windowRuleEvaluator) {

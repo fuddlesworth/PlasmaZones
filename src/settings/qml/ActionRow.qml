@@ -500,9 +500,13 @@ ColumnLayout {
                 // or typed only invalid tokens, keep the last valid value rather
                 // than committing an empty list — that would produce an action the
                 // validator drops on save, silently losing the rule with the Save
-                // button still enabled.
+                // button still enabled. Restore via Qt.binding (not a bare
+                // `text = ...`) so the declarative `text: _zones.join(", ")`
+                // binding survives and keeps normalising on later edits.
                 if (parsed.length === 0) {
-                    text = _zones.join(", ");
+                    text = Qt.binding(function () {
+                        return _zones.join(", ");
+                    });
                     return;
                 }
                 row.actionEdited(row._withParam(_param.key, parsed));

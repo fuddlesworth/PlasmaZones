@@ -2322,23 +2322,33 @@ inline const QUuid& snapToZoneMigrationNamespace()
 constexpr QLatin1String kLayoutAppRulesKey{"appRules"};
 constexpr QLatin1String kLayoutAppRulePattern{"pattern"};
 constexpr QLatin1String kLayoutAppRuleZoneNumber{"zoneNumber"};
-constexpr QLatin1String kLayoutAppRuleTargetScreen{"targetScreen"};
 
 /// Convert each layout file's legacy per-layout `appRules` into first-class
 /// SnapToZone WindowRules. v3 stored app→zone assignments on the Layout
 /// (`Layout::appRules`: a `{pattern, zoneNumber, targetScreen}` triple, single
 /// zone); v4 unifies them into the window-rule store. Each becomes
-/// `AppId AppIdMatches <pattern> → SnapToZone [zoneNumber]`, plus a
-/// `ScreenId Equals <targetScreen>` leaf when the legacy rule pinned a screen
-/// (replacing v3's cross-screen targeting with a match constraint). AppId /
-/// AppIdMatches mirrors the retired `Layout::matchAppRule` (which matched the
-/// pattern against the window's appId via segment-aware `appIdMatches`) and the
-/// daemon placement path, which resolves the query on appId — WindowClass is not
-/// tracked daemon-side, so a WindowClass leaf would never match. Patterns are
-/// deduped across layouts — a SnapToZone ordinal rule fires regardless of which
-/// layout is active, so one pattern can map to only one placement; on a
-/// same-pattern / different-zone conflict the first wins and the rest are
-/// logged. Layout files are visited in name order for deterministic "first wins".
+/// `AppId AppIdMatches <pattern> → SnapToZone [zoneNumber]`. AppId / AppIdMatches
+/// mirrors the retired `Layout::matchAppRule` (which matched the pattern against
+/// the window's appId via segment-aware `appIdMatches`) and the daemon placement
+/// path, which resolves the query on appId — WindowClass is not tracked daemon-
+/// side, so a WindowClass leaf would never match.
+///
+/// The legacy `targetScreen` (a connector name like "DP-1") is intentionally NOT
+/// carried over as a `ScreenId` constraint. v4 resolves a SnapToZone rule on the
+/// window's CURRENT screen, and a `ScreenId Equals` leaf would have to match the
+/// canonical screen-id form the daemon reports at runtime (EDID-form
+/// "Manuf:Model:Serial", what the settings screen-picker also stores), not a
+/// connector name. Translating connector→canonical here would couple this pure
+/// JSON transform to live screen state and make the deterministic rule id depend
+/// on which monitors are connected. So a migrated app snaps to its zone on
+/// whatever screen it opens on (per-monitor pinning is dropped; v3's cross-screen
+/// routing was already retired by this PR).
+///
+/// Patterns are deduped across layouts — a SnapToZone ordinal rule fires
+/// regardless of which layout is active, so one pattern can map to only one
+/// placement; on a same-pattern / different-zone conflict the first wins and the
+/// rest are logged. Layout files are visited in name order for deterministic
+/// "first wins".
 void appendLayoutAppRulesAsSnapToZone(QList<PhosphorWindowRules::WindowRule>& rules, const QString& layoutsDir)
 {
     using namespace PhosphorWindowRules;
@@ -2367,7 +2377,6 @@ void appendLayoutAppRulesAsSnapToZone(QList<PhosphorWindowRules::WindowRule>& ru
             const QJsonObject ar = entry.toObject();
             const QString pattern = ar.value(kLayoutAppRulePattern).toString().trimmed();
             const int zoneNumber = ar.value(kLayoutAppRuleZoneNumber).toInt(0);
-            const QString targetScreen = ar.value(kLayoutAppRuleTargetScreen).toString().trimmed();
             if (pattern.isEmpty() || zoneNumber < 1) {
                 continue;
             }
@@ -2394,23 +2403,16 @@ void appendLayoutAppRulesAsSnapToZone(QList<PhosphorWindowRules::WindowRule>& ru
             seenPatterns.insert(patternKey);
 
             WindowRule rule;
-            // Deterministic id from (pattern, zone, screen) so a crash-and-retry
+            // Deterministic id from (pattern, zone) so a crash-and-retry
             // conversion yields byte-identical rules.
-            rule.id =
-                QUuid::createUuidV5(snapToZoneMigrationNamespace(),
-                                    Detail::encodeSegment(pattern) + Detail::encodeSegment(QString::number(zoneNumber))
-                                        + Detail::encodeSegment(targetScreen));
+            rule.id = QUuid::createUuidV5(snapToZoneMigrationNamespace(),
+                                          Detail::encodeSegment(pattern)
+                                              + Detail::encodeSegment(QString::number(zoneNumber)));
             rule.enabled = true;
             // priority 0 mirrors the other migrated rules; the controller
             // renormalizes display order on load and the user can reorder.
             rule.priority = 0;
-            if (targetScreen.isEmpty()) {
-                rule.match = MatchExpression::makeLeaf(Field::AppId, Operator::AppIdMatches, pattern);
-            } else {
-                rule.match = MatchExpression::makeAll(
-                    {MatchExpression::makeLeaf(Field::AppId, Operator::AppIdMatches, pattern),
-                     MatchExpression::makeLeaf(Field::ScreenId, Operator::Equals, targetScreen)});
-            }
+            rule.match = MatchExpression::makeLeaf(Field::AppId, Operator::AppIdMatches, pattern);
             RuleAction action;
             action.type = QString(ActionType::SnapToZone);
             QJsonObject params;

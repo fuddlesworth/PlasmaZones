@@ -325,9 +325,10 @@ private Q_SLOTS:
         writeJson(ConfigDefaults::configFilePath(), makeV3Config());
         writeJson(assignmentsPath(), makeAssignments());
 
-        // A v3 layout file carrying two legacy app→zone rules: one current-
-        // screen (firefox → zone 2), one screen-pinned (konsole → zone 3 on
-        // DP-1). They live in the user data dir the migration scans.
+        // A v3 layout file carrying two legacy app→zone rules: firefox → zone 2
+        // (no screen), and konsole → zone 3 with a legacy targetScreen "DP-1"
+        // (which v4 intentionally drops — see below). They live in the user data
+        // dir the migration scans.
         const QString layoutsDir = QStandardPaths::writableLocation(QStandardPaths::GenericDataLocation)
             + QLatin1Char('/') + ConfigDefaults::layoutsSubdir();
         QJsonArray appRules;
@@ -376,12 +377,13 @@ private Q_SLOTS:
         QCOMPARE(snapZones(firefoxRule), (QList<int>{2}));
         QCOMPARE(matchLeaves(firefoxRule).size(), 1);
 
-        // konsole → SnapToZone [3]; screen-pinned, so an All{} of AppId-
-        // appIdMatches AND ScreenId-equals DP-1 (v3 targetScreen → match constraint).
+        // konsole → SnapToZone [3]; the legacy targetScreen "DP-1" is dropped, so
+        // it is a single AppId-appIdMatches leaf with NO ScreenId constraint (a
+        // migrated app snaps on whatever screen it opens on).
         QVERIFY(!konsoleRule.isEmpty());
         QCOMPARE(snapZones(konsoleRule), (QList<int>{3}));
-        QCOMPARE(matchLeafValueByOp(konsoleRule, QStringLiteral("screenId"), QStringLiteral("equals")),
-                 QStringLiteral("DP-1"));
+        QCOMPARE(matchLeaves(konsoleRule).size(), 1);
+        QVERIFY(matchLeafValueByOp(konsoleRule, QStringLiteral("screenId"), QStringLiteral("equals")).isEmpty());
     }
 
     void testLayoutAppRules_dedupePatternAcrossLayouts()
@@ -466,12 +468,13 @@ private Q_SLOTS:
         QVERIFY(!firstId.isEmpty());
 
         // Golden assertion against the SPEC: namespace UUID + length-prefixed
-        // segment encoding ("<size>:<bytes>" per segment, no separator).
-        //   segment 1 → pattern      "firefox" → "7:firefox"
-        //   segment 2 → zoneNumber   "2"       → "1:2"
-        //   segment 3 → targetScreen ""        → "0:"
+        // segment encoding ("<size>:<bytes>" per segment, no separator). The id is
+        // derived from (pattern, zoneNumber) only — targetScreen is not carried
+        // into the rule, so it is not part of the identity.
+        //   segment 1 → pattern    "firefox" → "7:firefox"
+        //   segment 2 → zoneNumber "2"       → "1:2"
         const QUuid kExpectedNamespace(QStringLiteral("{6f1c8e44-2a7b-5d93-8e10-4b2c9a7f1d35}"));
-        const QString kExpectedKey = QStringLiteral("7:firefox") + QStringLiteral("1:2") + QStringLiteral("0:");
+        const QString kExpectedKey = QStringLiteral("7:firefox") + QStringLiteral("1:2");
         QCOMPARE(firstId, QUuid::createUuidV5(kExpectedNamespace, kExpectedKey).toString());
 
         // Force the rebuild path again and re-stage the same v3 inputs.
