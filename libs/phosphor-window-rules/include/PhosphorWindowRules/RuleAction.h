@@ -424,6 +424,14 @@ inline constexpr QLatin1StringView Algorithm{"algorithm"};
 inline constexpr QLatin1StringView Zones{"zones"};
 } // namespace ActionParam
 
+/// Upper bound for a `SnapToZone` zone ordinal (each `ActionParam::Zones` entry).
+/// No real layout has anywhere near this many zones (the snapToZone1..9 shortcuts
+/// only reach 9); the cap exists purely to reject a grossly malformed hand-edited
+/// payload AND to keep the load-time validator's integrality check from narrowing
+/// an out-of-range double to int (which is UB). Shared by the descriptor validator
+/// (ruleaction.cpp) and the v3→v4 migration so the two stay in lockstep.
+inline constexpr int MaxZoneOrdinal = 64;
+
 /// Wire tokens for OverrideOverlayStyle's `value` param — the closed vocabulary
 /// the descriptor's validator + `enumWireValues`, the daemon consumer
 /// (`LayoutRegistry::resolveContextOverlay`), and the settings label layers

@@ -25,11 +25,11 @@
 #include <QFileInfo>
 #include <QJsonArray>
 #include <QJsonDocument>
-#include <QStandardPaths>
 #include <QJsonObject>
 #include <QLatin1String>
 #include <QLockFile>
 #include <QSet>
+#include <QStandardPaths>
 #include <QUuid>
 #include <array>
 #include <atomic>
@@ -2328,9 +2328,13 @@ constexpr QLatin1String kLayoutAppRuleTargetScreen{"targetScreen"};
 /// SnapToZone WindowRules. v3 stored app→zone assignments on the Layout
 /// (`Layout::appRules`: a `{pattern, zoneNumber, targetScreen}` triple, single
 /// zone); v4 unifies them into the window-rule store. Each becomes
-/// `WindowClass Contains <pattern> → SnapToZone [zoneNumber]`, plus a
+/// `AppId AppIdMatches <pattern> → SnapToZone [zoneNumber]`, plus a
 /// `ScreenId Equals <targetScreen>` leaf when the legacy rule pinned a screen
-/// (replacing v3's cross-screen targeting with a match constraint). Patterns are
+/// (replacing v3's cross-screen targeting with a match constraint). AppId /
+/// AppIdMatches mirrors the retired `Layout::matchAppRule` (which matched the
+/// pattern against the window's appId via segment-aware `appIdMatches`) and the
+/// daemon placement path, which resolves the query on appId — WindowClass is not
+/// tracked daemon-side, so a WindowClass leaf would never match. Patterns are
 /// deduped across layouts — a SnapToZone ordinal rule fires regardless of which
 /// layout is active, so one pattern can map to only one placement; on a
 /// same-pattern / different-zone conflict the first wins and the rest are
@@ -2367,6 +2371,17 @@ void appendLayoutAppRulesAsSnapToZone(QList<PhosphorWindowRules::WindowRule>& ru
             if (pattern.isEmpty() || zoneNumber < 1) {
                 continue;
             }
+            // The SnapToZone action validator caps ordinals at MaxZoneOrdinal, so a
+            // legacy zoneNumber beyond it would be silently dropped by the loader's
+            // validator. Skip it here with a visible warning instead of emitting a
+            // rule that vanishes on the next load.
+            if (zoneNumber > MaxZoneOrdinal) {
+                qWarning(
+                    "ConfigMigration: app->zone pattern '%s' targets zone %d beyond the max ordinal (%d) — "
+                    "dropping the assignment.",
+                    qPrintable(pattern), zoneNumber, MaxZoneOrdinal);
+                continue;
+            }
             const QString patternKey = pattern.toLower();
             if (seenPatterns.contains(patternKey)) {
                 qWarning(
@@ -2390,10 +2405,10 @@ void appendLayoutAppRulesAsSnapToZone(QList<PhosphorWindowRules::WindowRule>& ru
             // renormalizes display order on load and the user can reorder.
             rule.priority = 0;
             if (targetScreen.isEmpty()) {
-                rule.match = MatchExpression::makeLeaf(Field::WindowClass, Operator::Contains, pattern);
+                rule.match = MatchExpression::makeLeaf(Field::AppId, Operator::AppIdMatches, pattern);
             } else {
                 rule.match = MatchExpression::makeAll(
-                    {MatchExpression::makeLeaf(Field::WindowClass, Operator::Contains, pattern),
+                    {MatchExpression::makeLeaf(Field::AppId, Operator::AppIdMatches, pattern),
                      MatchExpression::makeLeaf(Field::ScreenId, Operator::Equals, targetScreen)});
             }
             RuleAction action;

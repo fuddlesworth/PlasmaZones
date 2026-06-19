@@ -244,7 +244,7 @@ private Q_SLOTS:
         m_wts->setSnapState(engine.snapState());
 
         installLayout(3);
-        engine.setPlacementZonesResolver([](const QString&) {
+        engine.setPlacementZonesResolver([](const QString&, const QString&) {
             return QList<int>{2, 3};
         });
 
@@ -288,7 +288,7 @@ private Q_SLOTS:
         m_wts->setSnapState(engine.snapState());
 
         installLayout(3);
-        engine.setPlacementZonesResolver([](const QString&) {
+        engine.setPlacementZonesResolver([](const QString&, const QString&) {
             return QList<int>{1};
         });
 
@@ -309,7 +309,7 @@ private Q_SLOTS:
         m_wts->setSnapState(engine.snapState());
 
         installLayout(3);
-        engine.setPlacementZonesResolver([](const QString&) {
+        engine.setPlacementZonesResolver([](const QString&, const QString&) {
             return QList<int>{};
         });
 

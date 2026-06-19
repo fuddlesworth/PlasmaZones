@@ -657,9 +657,10 @@ public:
     /// resolver the daemon injects into the SnapEngine (in-process, not via
     /// D-Bus). Returns an empty list when no SnapToZone rule matches; multiple
     /// ordinals request a zone span. Builds a WindowQuery from the window
-    /// registry metadata and reads the `Placement` slot — mirrors
-    /// shouldFloatByRule.
-    QList<int> placementZonesByRule(const QString& windowId);
+    /// registry metadata, pins it to @p screenId (the screen the window is
+    /// opening on) so a `ScreenId`-constrained rule resolves, and reads the
+    /// `Placement` slot — mirrors shouldFloatByRule.
+    QList<int> placementZonesByRule(const QString& windowId, const QString& screenId);
     /**
      * @brief Drop unified WindowPlacement records for excluded appIds.
      *

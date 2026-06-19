@@ -215,7 +215,11 @@ ImportResult importLayouts(const QJsonArray& kzonesArray)
 
                 // The KZones per-zone app assignments become SnapToZone window
                 // rules (the per-layout appRules concept was retired): one rule
-                // per app, `WindowClass contains <appClass> → SnapToZone [zone]`.
+                // per app, `AppId appIdMatches <appClass> → SnapToZone [zone]`.
+                // AppId / AppIdMatches matches the daemon placement path (which
+                // resolves on appId — windowClass is not tracked daemon-side, so a
+                // WindowClass leaf would never fire) and the retired matchAppRule's
+                // segment-aware semantics.
                 namespace PWR = PhosphorWindowRules;
                 for (auto it = appToZone.constBegin(); it != appToZone.constEnd(); ++it) {
                     PWR::WindowRule rule;
@@ -223,7 +227,7 @@ ImportResult importLayouts(const QJsonArray& kzonesArray)
                     rule.enabled = true;
                     rule.priority = 0;
                     rule.match =
-                        PWR::MatchExpression::makeLeaf(PWR::Field::WindowClass, PWR::Operator::Contains, it.key());
+                        PWR::MatchExpression::makeLeaf(PWR::Field::AppId, PWR::Operator::AppIdMatches, it.key());
                     PWR::RuleAction action;
                     action.type = QString(PWR::ActionType::SnapToZone);
                     QJsonObject params;

@@ -363,7 +363,7 @@ private Q_SLOTS:
             if (!actionTypes(r).contains(QLatin1String("snapToZone"))) {
                 continue;
             }
-            const QString cls = matchLeafValueByOp(r, QStringLiteral("windowClass"), QStringLiteral("contains"));
+            const QString cls = matchLeafValueByOp(r, QStringLiteral("appId"), QStringLiteral("appIdMatches"));
             if (cls == QLatin1String("firefox")) {
                 firefoxRule = r;
             } else if (cls == QLatin1String("konsole")) {
@@ -371,13 +371,13 @@ private Q_SLOTS:
             }
         }
 
-        // firefox → SnapToZone [2]; a single WindowClass-contains leaf (no screen).
+        // firefox → SnapToZone [2]; a single AppId-appIdMatches leaf (no screen).
         QVERIFY(!firefoxRule.isEmpty());
         QCOMPARE(snapZones(firefoxRule), (QList<int>{2}));
         QCOMPARE(matchLeaves(firefoxRule).size(), 1);
 
-        // konsole → SnapToZone [3]; screen-pinned, so an All{} of WindowClass-
-        // contains AND ScreenId-equals DP-1 (v3 targetScreen → match constraint).
+        // konsole → SnapToZone [3]; screen-pinned, so an All{} of AppId-
+        // appIdMatches AND ScreenId-equals DP-1 (v3 targetScreen → match constraint).
         QVERIFY(!konsoleRule.isEmpty());
         QCOMPARE(snapZones(konsoleRule), (QList<int>{3}));
         QCOMPARE(matchLeafValueByOp(konsoleRule, QStringLiteral("screenId"), QStringLiteral("equals")),
@@ -410,7 +410,7 @@ private Q_SLOTS:
         QList<int> winningZones;
         for (const QJsonValue& v : rulesFromWindowRules()) {
             const QJsonObject r = v.toObject();
-            if (matchLeafValueByOp(r, QStringLiteral("windowClass"), QStringLiteral("contains"))
+            if (matchLeafValueByOp(r, QStringLiteral("appId"), QStringLiteral("appIdMatches"))
                 != QLatin1String("mpv")) {
                 continue;
             }
@@ -426,6 +426,65 @@ private Q_SLOTS:
         }
         QCOMPARE(mpvRuleCount, 1);
         QCOMPARE(winningZones, (QList<int>{1})); // a-layout.json wins on name order
+    }
+
+    void testLayoutAppRules_idempotentRuleIds()
+    {
+        // The SnapToZone migration's rule id is derived from
+        // (pattern, zoneNumber, targetScreen) via a fixed v5-UUID namespace, so a
+        // crash-and-retry conversion yields byte-identical rules. This mirrors the
+        // sibling exclusion / animation folds' idempotency tests and pins the
+        // namespace UUID + segment encoding so a future drift in either forces a
+        // deliberate update here (the migration owns both ends of the derivation,
+        // so a same-inputs→same-id check alone cannot catch a namespace change).
+        IsolatedConfigGuard guard;
+        writeJson(ConfigDefaults::configFilePath(), makeV3Config());
+        writeJson(assignmentsPath(), makeAssignments());
+
+        const QString layoutsDir = QStandardPaths::writableLocation(QStandardPaths::GenericDataLocation)
+            + QLatin1Char('/') + ConfigDefaults::layoutsSubdir();
+        writeJson(layoutsDir + QStringLiteral("/layout1.json"),
+                  QJsonObject{{QStringLiteral("appRules"),
+                               QJsonArray{QJsonObject{{QStringLiteral("pattern"), QStringLiteral("firefox")},
+                                                      {QStringLiteral("zoneNumber"), 2}}}}});
+
+        // Finds the id of the SnapToZone rule whose AppId-appIdMatches leaf is the
+        // given pattern.
+        const auto snapRuleIdFor = [this](const QString& pattern) -> QString {
+            for (const QJsonValue& v : rulesFromWindowRules()) {
+                const QJsonObject r = v.toObject();
+                if (actionTypes(r).contains(QLatin1String("snapToZone"))
+                    && matchLeafValueByOp(r, QStringLiteral("appId"), QStringLiteral("appIdMatches")) == pattern) {
+                    return r.value(QStringLiteral("id")).toString();
+                }
+            }
+            return {};
+        };
+
+        QVERIFY(ConfigMigration::ensureJsonConfig());
+        const QString firstId = snapRuleIdFor(QStringLiteral("firefox"));
+        QVERIFY(!firstId.isEmpty());
+
+        // Golden assertion against the SPEC: namespace UUID + length-prefixed
+        // segment encoding ("<size>:<bytes>" per segment, no separator).
+        //   segment 1 → pattern      "firefox" → "7:firefox"
+        //   segment 2 → zoneNumber   "2"       → "1:2"
+        //   segment 3 → targetScreen ""        → "0:"
+        const QUuid kExpectedNamespace(QStringLiteral("{6f1c8e44-2a7b-5d93-8e10-4b2c9a7f1d35}"));
+        const QString kExpectedKey = QStringLiteral("7:firefox") + QStringLiteral("1:2") + QStringLiteral("0:");
+        QCOMPARE(firstId, QUuid::createUuidV5(kExpectedNamespace, kExpectedKey).toString());
+
+        // Force the rebuild path again and re-stage the same v3 inputs.
+        QFile::remove(ConfigDefaults::windowRulesFilePath());
+        writeJson(ConfigDefaults::configFilePath(), makeV3Config());
+        writeJson(layoutsDir + QStringLiteral("/layout1.json"),
+                  QJsonObject{{QStringLiteral("appRules"),
+                               QJsonArray{QJsonObject{{QStringLiteral("pattern"), QStringLiteral("firefox")},
+                                                      {QStringLiteral("zoneNumber"), 2}}}}});
+        ConfigMigration::resetMigrationGuardForTesting();
+        QVERIFY(ConfigMigration::ensureJsonConfig());
+
+        QCOMPARE(snapRuleIdFor(QStringLiteral("firefox")), firstId);
     }
 
     // ─── Exact cascade priorities ─────────────────────────────────────────

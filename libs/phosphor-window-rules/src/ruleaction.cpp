@@ -85,11 +85,6 @@ bool hasHexColor(const QJsonObject& params, QLatin1StringView key)
 constexpr double kMaxBorderWidth = 10.0;
 constexpr double kMaxBorderRadius = 20.0;
 constexpr double kMaxGap = 500.0;
-// Upper bound for a SnapToZone ordinal. No real layout has anywhere near this
-// many zones (the snapToZone1..9 shortcuts only reach 9); the cap exists purely
-// to reject a grossly malformed hand-edited payload AND to keep the integrality
-// check from narrowing an out-of-range double to int (which is UB).
-constexpr double kMaxZoneOrdinal = 64.0;
 
 } // namespace
 
@@ -479,7 +474,7 @@ void ActionRegistry::registerBuiltins()
                     // out of int's range is undefined behaviour. Reject < 1
                     // (ordinals are 1-based) and an absurd upper value first; only
                     // then is the cast for the integrality check well-defined.
-                    if (d < 1.0 || d > kMaxZoneOrdinal) {
+                    if (d < 1.0 || d > MaxZoneOrdinal) {
                         return false;
                     }
                     if (static_cast<double>(static_cast<int>(d)) != d) {

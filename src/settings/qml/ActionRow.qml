@@ -467,6 +467,13 @@ ColumnLayout {
                     if (range) {
                         var lo = parseInt(range[1], 10);
                         var hi = parseInt(range[2], 10);
+                        // Clamp the upper bound to the SnapToZone ordinal cap
+                        // (MaxZoneOrdinal = 64 in RuleAction.h). An unbounded
+                        // expansion (e.g. "1-100000") would build a huge array on
+                        // the UI thread and freeze it; ordinals past the cap are
+                        // rejected by the validator anyway.
+                        if (hi > 64)
+                            hi = 64;
                         if (lo >= 1 && hi >= lo) {
                             for (var z = lo; z <= hi; z++) {
                                 if (!seen[z]) {
@@ -488,6 +495,16 @@ ColumnLayout {
                 parsed.sort(function (a, b) {
                     return a - b;
                 });
+                // A SnapToZone action requires a non-empty ordinal list (the
+                // descriptor validator rejects []). If the user cleared the field
+                // or typed only invalid tokens, keep the last valid value rather
+                // than committing an empty list — that would produce an action the
+                // validator drops on save, silently losing the rule with the Save
+                // button still enabled.
+                if (parsed.length === 0) {
+                    text = _zones.join(", ");
+                    return;
+                }
                 row.actionEdited(row._withParam(_param.key, parsed));
             }
         }

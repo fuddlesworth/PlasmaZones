@@ -58,7 +58,7 @@ SnapResult SnapEngine::calculateSnapToPlacementRule(const QString& windowId, con
     if (!m_placementZonesResolver) {
         return SnapResult::noSnap();
     }
-    const QList<int> ordinals = m_placementZonesResolver(windowId);
+    const QList<int> ordinals = m_placementZonesResolver(windowId, windowScreenName);
     if (ordinals.isEmpty()) {
         return SnapResult::noSnap();
     }
