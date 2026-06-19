@@ -767,7 +767,20 @@ bool PlasmaZonesEffect::beginShaderTransition(KWin::EffectWindow* window,
         // nullptr when compilation or linking fails, so a null check is the
         // validity test.
         if (!shader) {
-            qCWarning(lcEffect) << "Failed to compile shader transition" << effectId;
+            qCWarning(lcEffect) << "Failed to compile shader transition" << effectId
+                                << "— caching the failure so subsequent transitions skip the recompile "
+                                   "until the next shader hot-reload.";
+            // Cache a null-shader sentinel. A failed compile must NOT be
+            // retried on every transition: without this the cache miss recurs
+            // each time and the full read+assemble+expand+compile re-runs on
+            // the compositor thread — a per-command stall (the same failure
+            // mode the GLSL #extension fix addressed for the morph shader).
+            // The sentinel is distinguishable from a live entry because a
+            // successful compile always emplaces a non-null shader. It is
+            // cleared by the effectsChanged handler's m_shaderCache.clear()
+            // (shader hot-reload / settings change), so a corrected shader
+            // recompiles on the next reload.
+            m_shaderManager.m_shaderCache.emplace(effectId, CachedShader{});
             return false;
         }
 
@@ -841,6 +854,16 @@ bool PlasmaZonesEffect::beginShaderTransition(KWin::EffectWindow* window,
         }
         cached.shader = std::move(shader);
         cacheIt = m_shaderManager.m_shaderCache.emplace(effectId, std::move(cached)).first;
+    }
+
+    // A cached null-shader sentinel marks a prior compile failure (see the
+    // "Failed to compile" branch above). Skip the transition without
+    // re-attempting the expensive compile on every trigger; the effectsChanged
+    // handler clears m_shaderCache on hot-reload, so a corrected shader
+    // recompiles then. A successfully compiled entry always holds a non-null
+    // shader, so this never false-positives on a live transition.
+    if (!cacheIt->second.shader) {
+        return false;
     }
 
     // Detect supersession before the teardown so we can skip the
