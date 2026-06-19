@@ -553,9 +553,21 @@ ColumnLayout {
     }
 
     _animationEventEditor: Component {
-        WideComboBox {
+        // Categorized event picker — the shared cascading category-menu button
+        // (PZCommon.CategoryMenuButton), grouping the events by their section
+        // (Window / Editor / Overlays / …) into submenus instead of the long
+        // flat "Section · Event" combo. The read-only rule row still renders the
+        // full "Section · Event" label (see ActionListView._resolveParamValue).
+        PZCommon.CategoryMenuButton {
             readonly property var _param: parent.modelData
-            readonly property var _events: {
+
+            // Map eventSections() into the picker's `{ id, name, category,
+            // categoryOrder }` shape: one item per leaf event, grouped under its
+            // section. `categoryOrder` preserves the section order (Window,
+            // Editor, Overlays, …); within a section the component sorts events
+            // by name. An unknown/custom stored path renders as "(missing: …)"
+            // rather than collapsing the picker, mirroring the prior fallback.
+            items: {
                 var controller = row.appSettings ? row.appSettings.animationsController : null;
                 if (!controller)
                     return [];
@@ -573,31 +585,20 @@ ColumnLayout {
                             continue;
 
                         out.push({
-                            "value": entry.path,
-                            "label": section.label + " · " + entry.label
+                            "id": entry.path,
+                            "name": entry.label,
+                            "category": section.label,
+                            "categoryOrder": s
                         });
                     }
                 }
                 return out;
             }
-
-            model: _events
-            textRole: "label"
-            valueRole: "value"
-            currentIndex: {
-                var target = row.action[_param.key];
-                for (var i = 0; i < _events.length; ++i) {
-                    if (_events[i].value === target)
-                        return i;
-                }
-                return -1;
-            }
-            // Fall back to the raw event path so a custom (non-built-in) path
-            // stays visible rather than collapsing the picker to a blank.
-            displayText: currentIndex >= 0 ? currentText : (row.action[_param.key] || i18n("Choose an event…"))
-            Accessible.name: _param.label
-            onActivated: function (index) {
-                row.actionEdited(row._withParam(_param.key, currentValue));
+            currentId: row.action[_param.key] || ""
+            placeholderText: i18n("Choose an event…")
+            Accessible.description: _param.label
+            onSelected: function (value) {
+                row.actionEdited(row._withParam(_param.key, value));
             }
         }
     }
