@@ -15,6 +15,7 @@
 #include <PhosphorWorkspaces/ActivityManager.h>
 #include "../../core/logging.h"
 #include "../../core/constants.h"
+#include "../../core/screenmoderouter.h"
 #include "../../core/utils.h"
 #include <PhosphorPlacement/WindowTrackingService.h>
 #include "../../dbus/layoutadaptor.h"

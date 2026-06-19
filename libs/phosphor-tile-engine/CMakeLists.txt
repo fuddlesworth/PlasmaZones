@@ -70,6 +70,10 @@ target_link_libraries(PhosphorTileEngine
         Qt6::Core
         PhosphorEngine::PhosphorEngine
         PhosphorTiles::PhosphorTiles
+        # PUBLIC: PerScreenConfigResolver.h (a public header) includes
+        # <PhosphorLayoutApi/EdgeGaps.h> and exposes ::PhosphorLayout::EdgeGaps
+        # in its API, so downstream consumers need this on their include path.
+        PhosphorLayoutApi::PhosphorLayoutApi
     PRIVATE
         PhosphorScreens::Runtime  # AutotileEngine queries screen geometry via ScreenManager
         PhosphorIdentity::PhosphorIdentity

@@ -9,12 +9,12 @@
 #   docker run --rm -v "$PWD":/src plasmazones-build
 #   docker run --rm -v "$PWD":/src plasmazones-build ctest --output-on-failure
 
-FROM fedora:42
+FROM fedora:44
 
 # --- Build tools (spec: Build tools section) ---
 # --- Qt6 (spec: Fedora path) ---
 # --- KDE Frameworks 6 (spec: Fedora path) ---
-# --- Plasma 6.6 / KWin 6.6 (spec: Fedora path) ---
+# --- Plasma 6.7 / KWin 6.7 (spec: Fedora path) ---
 # Plus ccache for faster rebuilds
 RUN dnf install -y --setopt=install_weak_deps=False \
         /usr/bin/wayland-scanner \

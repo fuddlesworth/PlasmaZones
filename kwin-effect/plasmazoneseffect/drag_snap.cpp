@@ -5,6 +5,7 @@
 
 #include "../autotilehandler.h"
 #include "../dragtracker.h"
+#include "../navigationhandler.h"
 #include "../snaphandler.h"
 #include "../windowanimator.h"
 #include "shader_resolve.h"
@@ -75,7 +76,7 @@ void PlasmaZonesEffect::tryAsyncSnapCall(const QString& interface, const QString
                         // `window` is non-null inside this branch (guarded by the
                         // `reply.argumentAt<4>() && window` check above), so the
                         // ternary fall-through to QRectF() is unreachable.
-                        m_snapHandler->ensurePreSnapGeometryStored(window, windowId, window->frameGeometry());
+                        m_snapHandler->ensurePreSnapGeometryStored(window, windowId, QRectF(window->frameGeometry()));
                     applyWindowGeometry(window, geo, false, skipAnimation);
                     // Async snap (keyboard / empty-zone / last-zone / auto-fill)
                     // committed — record in snapping's border set, but only for
@@ -105,6 +106,7 @@ void PlasmaZonesEffect::tryAsyncSnapCall(const QString& interface, const QString
                     fallback();
                 if (onComplete)
                     onComplete();
+                return;
             });
 }
 
@@ -119,9 +121,9 @@ void PlasmaZonesEffect::repaintSnapRegions(KWin::EffectWindow* window, const QRe
     // QPointer-checked reference at the call site).
     if (KWin::effects) {
         if (oldFrame.isValid()) {
-            KWin::effects->addRepaint(oldFrame.toAlignedRect());
+            KWin::effects->addRepaint(KWin::Rect(oldFrame.toAlignedRect()));
         }
-        KWin::effects->addRepaint(newGeo);
+        KWin::effects->addRepaint(KWin::Rect(newGeo));
     }
 }
 

@@ -23,6 +23,7 @@
 #include <QTimer>
 #include <PhosphorScreens/ScreenIdentity.h>
 #include <PhosphorIdentity/WindowId.h>
+#include <PhosphorEngine/EngineTypes.h>
 
 namespace PlasmaZones {
 using namespace WindowTrackingInternal;

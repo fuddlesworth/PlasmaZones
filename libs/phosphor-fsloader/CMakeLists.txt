@@ -35,7 +35,7 @@ endif()
 
 include(GenerateExportHeader)
 
-find_package(Qt6 6.6 REQUIRED COMPONENTS Core)
+find_package(Qt6 6.10 REQUIRED COMPONENTS Core)
 
 set(phosphorfsloader_SRCS
     src/directoryloader.cpp

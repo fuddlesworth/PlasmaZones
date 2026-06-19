@@ -87,7 +87,9 @@ QString KWinCompositorBridge::windowScreenId(WindowHandle w) const
 QRectF KWinCompositorBridge::frameGeometry(WindowHandle w) const
 {
     auto* ew = toEffectWindow(w);
-    return ew ? ew->frameGeometry() : QRectF();
+    // KWin 6.7: EffectWindow::frameGeometry() returns KWin::RectF; convert so
+    // both ternary branches share the QRectF type this bridge exposes.
+    return ew ? QRectF(ew->frameGeometry()) : QRectF();
 }
 
 QSizeF KWinCompositorBridge::minSize(WindowHandle w) const

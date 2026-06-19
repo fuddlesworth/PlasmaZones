@@ -8,6 +8,7 @@
 // included directly so it doesn't depend on jumbo-grouping order.
 #include <PhosphorScreens/Manager.h>
 #include <PhosphorEngine/PlacementEngineBase.h>
+#include <PhosphorScreens/Manager.h>
 #include "../config/settings.h"
 #include "../core/constants.h"
 #include <PhosphorZones/LayoutRegistry.h>

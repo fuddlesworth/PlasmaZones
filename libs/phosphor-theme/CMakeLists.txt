@@ -184,6 +184,11 @@ target_include_directories(PhosphorThemeQml
         $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
         $<BUILD_INTERFACE:${CMAKE_CURRENT_BINARY_DIR}>
         $<INSTALL_INTERFACE:${KDE_INSTALL_INCLUDEDIR}>
+    PRIVATE
+        # Qt 6.10+ qmltyperegistrar emits the generated *_qmltyperegistrations.cpp
+        # #includes by header basename, so the header subdirectory must be on the
+        # path for those includes to resolve.
+        $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include/PhosphorTheme>
 )
 
 target_compile_features(PhosphorThemeQml PUBLIC cxx_std_20)
@@ -228,6 +233,10 @@ if(PHOSPHOR_THEME_QML_INSTALL)
             $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
             $<BUILD_INTERFACE:${CMAKE_CURRENT_BINARY_DIR}>
             $<INSTALL_INTERFACE:${KDE_INSTALL_INCLUDEDIR}>
+        PRIVATE
+            # Qt 6.10+ qmltyperegistrar emits basename #includes in the generated
+            # *_qmltyperegistrations.cpp; the header subdirectory must be on the path.
+            $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include/PhosphorTheme>
     )
 
     # Visibility-define parity with the STATIC build so

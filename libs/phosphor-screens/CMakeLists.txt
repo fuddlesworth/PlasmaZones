@@ -62,8 +62,8 @@ include(GenerateExportHeader)
 # libs; existing libs were flattened during the phosphor-control
 # scaffolding pass. See libs/phosphor-screens/CHANGES.md for the rename
 # history.
-find_package(Qt6 6.6 REQUIRED COMPONENTS Core Gui)
-find_package(Qt6 6.6 REQUIRED COMPONENTS DBus)
+find_package(Qt6 6.10 REQUIRED COMPONENTS Core Gui)
+find_package(Qt6 6.10 REQUIRED COMPONENTS DBus)
 
 # PhosphorIdentity ships VirtualScreenId — the cross-process ID format
 # helpers that VirtualScreen.h consumes. INTERFACE-only dependency, so

@@ -179,6 +179,10 @@ target_include_directories(PhosphorPopoutQml
         $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
         $<BUILD_INTERFACE:${CMAKE_CURRENT_BINARY_DIR}>
         $<INSTALL_INTERFACE:${KDE_INSTALL_INCLUDEDIR}>
+    PRIVATE
+        # Qt 6.10+ qmltyperegistrar emits basename #includes in the generated
+        # *_qmltyperegistrations.cpp; the header subdirectory must be on the path.
+        $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include/PhosphorPopout>
 )
 
 target_compile_features(PhosphorPopoutQml PUBLIC cxx_std_20)

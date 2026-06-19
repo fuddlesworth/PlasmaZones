@@ -327,17 +327,16 @@ void ScreenChangeHandler::reportClientArea()
 
     // clientArea(MaximizeArea) is the exact panel-excluded work area KWin
     // reserves for maximized windows: correct per-edge strut attribution,
-    // and auto-hide panels (no strut) correctly excluded. The desktop
-    // argument is required by the API — we pass the current desktop, and a
-    // desktopChanged signal re-schedules a report so per-desktop panels stay
-    // tracked.
-    KWin::VirtualDesktop* desktop = KWin::effects->currentDesktop();
+    // and auto-hide panels (no strut) correctly excluded. KWin 6.7 dropped the
+    // per-desktop overload (clientArea is now resolved against the current
+    // desktop internally); a desktopChanged signal still re-schedules a report
+    // so per-desktop panels stay tracked.
     const auto outputs = KWin::effects->screens();
     for (KWin::LogicalOutput* output : outputs) {
         if (!output) {
             continue;
         }
-        const QRect work = KWin::effects->clientArea(KWin::MaximizeArea, output, desktop).toRect();
+        const QRect work = KWin::effects->clientArea(KWin::MaximizeArea, output).toRect();
         // isValid() is the exact negation of isEmpty() for QRect — a degenerate
         // (zero/negative-size) work area is skipped by this single check.
         if (!work.isValid()) {

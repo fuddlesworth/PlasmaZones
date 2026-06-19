@@ -2,7 +2,7 @@
 # Window tiling and autotiling for KDE Plasma
 # SPDX-License-Identifier: GPL-3.0-or-later
 #
-# Requires Plasma 6.6+ (KF6 6.6, Qt 6.6, KWin 6.6+).
+# Requires Plasma 6.7+ (KF6 6.26, Qt 6.10, KWin 6.7+).
 #
 # Build: rpmbuild -ba plasmazones.spec
 # Clean build: mock -r fedora-43-x86_64 plasmazones-1.2.0-1.fc43.src.rpm
@@ -43,7 +43,7 @@ ExclusiveArch:  x86_64 aarch64
 # the pkgconfig capability resolves everywhere and pulls in the executable.
 BuildRequires:  pkgconfig(wayland-scanner)
 BuildRequires:  cmake >= 3.16
-BuildRequires:  extra-cmake-modules >= 6.6.0
+BuildRequires:  extra-cmake-modules >= 6.26.0
 BuildRequires:  gcc-c++
 %if 0%{?suse_version}
 BuildRequires:  ninja
@@ -53,7 +53,7 @@ BuildRequires:  ninja-build
 
 # Qt6
 %if 0%{?suse_version}
-BuildRequires:  cmake(Qt6Core) >= 6.6.0
+BuildRequires:  cmake(Qt6Core) >= 6.10.0
 BuildRequires:  cmake(Qt6DBus)
 BuildRequires:  cmake(Qt6Gui)
 BuildRequires:  cmake(Qt6Qml)
@@ -72,7 +72,7 @@ BuildRequires:  qt6-gui-private-devel
 BuildRequires:  qt6-quick-private-devel
 BuildRequires:  vulkan-devel
 %else
-BuildRequires:  qt6-qtbase-devel >= 6.6.0
+BuildRequires:  qt6-qtbase-devel >= 6.10.0
 BuildRequires:  qt6-qtbase-private-devel
 BuildRequires:  qt6-qtdeclarative-devel
 BuildRequires:  qt6-qttools-devel
@@ -80,29 +80,29 @@ BuildRequires:  qt6-qtshadertools-devel
 BuildRequires:  qt6-qtsvg-devel
 %endif
 
-# KDE Frameworks 6 (6.6+ for Plasma 6.6 API)
+# KDE Frameworks 6 (6.26+ for Plasma 6.7 API)
 %if 0%{?suse_version}
 BuildRequires:  cmake(KF6KCMUtils)
 BuildRequires:  cmake(KF6GlobalAccel)
 BuildRequires:  cmake(KF6Kirigami)
 %else
-BuildRequires:  kf6-kcmutils-devel >= 6.6.0
-BuildRequires:  kf6-kglobalaccel-devel >= 6.6.0
-BuildRequires:  kf6-kirigami-devel >= 6.6.0
+BuildRequires:  kf6-kcmutils-devel >= 6.26.0
+BuildRequires:  kf6-kglobalaccel-devel >= 6.26.0
+BuildRequires:  kf6-kirigami-devel >= 6.26.0
 %endif
 
-# Plasma 6.6 / KWin 6.6 (effect API)
+# Plasma 6.7 / KWin 6.7 (effect API)
 # The KWin effect plugin's IID embeds KWin's exact upstream version
 # (KWIN_PLUGIN_VERSION_STRING in /usr/include/kwin/config-kwin.h). KWin refuses
 # to load any effect whose IID doesn't match its own version string — even
-# across patch releases (e.g. 6.6.4 → 6.6.5). We capture the build-time KWin
+# across patch releases (e.g. 6.7.0 → 6.7.1). We capture the build-time KWin
 # version below and emit an exact Requires so this package fails to install on
 # systems with a mismatched KWin instead of installing silently broken.
 %if 0%{?suse_version}
 BuildRequires:  kwin6-devel
 # find_package(KWin) (kwin-effect/CMakeLists.txt:20) pulls in KWinConfig.cmake,
 # which find_dependency()s the targets below (see KWinConfig.cmake.in, Plasma
-# 6.6). openSUSE's kwin6-devel does not drag these into the build root itself,
+# 6.7). openSUSE's kwin6-devel does not drag these into the build root itself,
 # so the KWin effect's CMake configure step fails without them. KF6Config /
 # KF6CoreAddons currently arrive transitively, but are listed explicitly so the
 # dependency is not silently load-bearing on another package.
@@ -124,7 +124,7 @@ BuildRequires:  pkgconfig(systemd)
 # lands in the preamble as an "Unknown tag" error.
 BuildRequires:  systemd-rpm-macros
 %else
-BuildRequires:  kwin-devel >= 6.6.0
+BuildRequires:  kwin-devel >= 6.7.0
 BuildRequires:  qt6-qtwayland-devel
 BuildRequires:  libepoxy-devel
 BuildRequires:  wayland-devel
@@ -144,22 +144,22 @@ BuildRequires:  systemd-rpm-macros
 #
 # `rpm -q` prints "package kwin-devel is not installed" to STDOUT (not stderr)
 # and exits non-zero when the package is missing, so a bare
-# `rpm -q ... || echo 6.6.0` leaves that message in the macro and `echo` adds
+# `rpm -q ... || echo 6.7.0` leaves that message in the macro and `echo` adds
 # a SECOND line. A multi-line macro then injects a newline into every
-# `Requires: kwin = %%{kwin_version}` use, and rpm parses the stray `6.6.0` as
-# its own tag ("Unknown tag: 6.6.0"). Capture stdout first and only emit it on
+# `Requires: kwin = %%{kwin_version}` use, and rpm parses the stray `6.7.0` as
+# its own tag ("Unknown tag: 6.7.0"). Capture stdout first and only emit it on
 # success so the macro is always a single clean token.
-%global kwin_version %(out=$(rpm -q --qf '%%{VERSION}' kwin-devel 2>/dev/null) && echo "$out" || echo 6.6.0)
+%global kwin_version %(out=$(rpm -q --qf '%%{VERSION}' kwin-devel 2>/dev/null) && echo "$out" || echo 6.7.0)
 
 # Runtime dependencies — RPM auto-generates most from sonames;
 # explicit Requires ensure minimum versions on Fedora.
 %if !0%{?suse_version}
-Requires:       qt6-qtbase >= 6.6.0
+Requires:       qt6-qtbase >= 6.10.0
 Requires:       qt6-qtdeclarative
 Requires:       qt6-qtshadertools
-Requires:       kf6-kirigami >= 6.6.0
-Requires:       kf6-kcmutils >= 6.6.0
-Requires:       qt6-qtwayland >= 6.6.0
+Requires:       kf6-kirigami >= 6.26.0
+Requires:       kf6-kcmutils >= 6.26.0
+Requires:       qt6-qtwayland >= 6.10.0
 # Exact KWin patch pin — see note above the BuildRequires block.
 Requires:       kwin = %{kwin_version}
 %endif

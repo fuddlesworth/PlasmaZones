@@ -1,7 +1,7 @@
 # SPDX-FileCopyrightText: 2026 fuddlesworth
 # SPDX-License-Identifier: LGPL-2.1-or-later
 
-find_package(Qt6 6.6 REQUIRED COMPONENTS Test Qml Quick)
+find_package(Qt6 6.10 REQUIRED COMPONENTS Test Qml Quick)
 
 # Smoke test for the security boundary in ShellLoader (path-traversal /
 # absolute-path / dotfile rejection). Adding more PhosphorShell tests

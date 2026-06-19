@@ -9,7 +9,7 @@ include(CMakeFindDependencyMacro)
 # minimum; without the version guard a consumer on Qt 6.5 resolves
 # find_package(PhosphorAnimation) cleanly and then fails later with a
 # cryptic missing-symbol at link time.
-find_dependency(Qt6 6.6 COMPONENTS Core Gui)
+find_dependency(Qt6 6.10 COMPONENTS Core Gui)
 
 # PhosphorRegistry is a PUBLIC link dependency — AnimationShaderRegistry's public
 # header exposes Registry<AnimationPack> + MetadataPackLoader<AnimationPack>, and

@@ -33,12 +33,12 @@ include(GenerateExportHeader)
 # ═══════════════════════════════════════════════════════════════════════════════
 
 # These are likely already found by the parent project when built in-tree.
-find_package(Qt6 6.6 REQUIRED COMPONENTS Core Gui)
+find_package(Qt6 6.10 REQUIRED COMPONENTS Core Gui)
 
 if(NOT TARGET Qt6::GuiPrivate)
     find_package(Qt6GuiPrivate CONFIG REQUIRED)
 endif()
-find_package(Qt6 6.6 REQUIRED COMPONENTS WaylandClient)
+find_package(Qt6 6.10 REQUIRED COMPONENTS WaylandClient)
 if(NOT TARGET Qt6::WaylandClientPrivate)
     find_package(Qt6WaylandClientPrivate REQUIRED)
 endif()
@@ -338,7 +338,7 @@ include(CMakePackageConfigHelpers)
 file(WRITE "${CMAKE_CURRENT_BINARY_DIR}/PhosphorWaylandConfig.cmake.in"
 "@PACKAGE_INIT@\n"
 "include(CMakeFindDependencyMacro)\n"
-"find_dependency(Qt6 6.6 COMPONENTS Core Gui)\n"
+"find_dependency(Qt6 6.10 COMPONENTS Core Gui)\n"
 "include(\"\${CMAKE_CURRENT_LIST_DIR}/PhosphorWaylandTargets.cmake\")\n"
 "check_required_components(PhosphorWayland)\n"
 )

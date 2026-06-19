@@ -85,7 +85,7 @@ jobs:
           echo "Version: $VERSION (prerelease=$IS_PRE)"
 
   # ═══════════════════════════════════════════════════════════════════════════
-  # Build Debian Package (KDE Neon - ships Plasma/KF6 6.6+)
+  # Build Debian Package (KDE Neon - ships Plasma/KF6 6.7+)
   # ═══════════════════════════════════════════════════════════════════════════
   build-deb:
     name: Build .deb (KDE Neon)
@@ -164,7 +164,9 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        fedora: [43, 44]
+        # Fedora 44 is the earliest release whose repos carry Plasma 6.7
+        # (KF 6.26 / Qt 6.10 / KWin 6.7), the PlasmaZones build baseline.
+        fedora: [44]
     container:
       image: fedora:${{ matrix.fedora }}
 
@@ -240,6 +242,10 @@ jobs:
   # ═══════════════════════════════════════════════════════════════════════════
   build-rpm-opensuse:
     name: Build .rpm (openSUSE Tumbleweed)
+    # Disabled: openSUSE Tumbleweed still ships KWin 6.6.5, so the kwin-effect's
+    # find_package(KWin 6.7) fails to configure. Re-enable (and add back to the
+    # `release` job's `needs`) once Tumbleweed ships Plasma/KWin 6.7.
+    if: ${{ false }}
     needs: version
     runs-on: ubuntu-latest
     container:
@@ -585,7 +591,10 @@ jobs:
           github_access_token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Build via flake
-        run: nix build -L .#default
+        # --fallback: build from source if a binary substitute fails, so
+        # transient cache.nixos.org corruption (e.g. a hash mismatch on a
+        # transitive dep's NAR) can't red a release. Mirrors ci.yml.
+        run: nix build -L --fallback .#default
 
       - name: Verify package version
         run: |
@@ -598,7 +607,9 @@ jobs:
   # ═══════════════════════════════════════════════════════════════════════════
   release:
     name: Create GitHub Release
-    needs: [version, build-deb, build-rpm, build-rpm-opensuse, build-arch, build-generic, build-nix]
+    # build-rpm-opensuse is intentionally absent: it is disabled until openSUSE
+    # Tumbleweed ships KWin 6.7 (see that job). Re-add it here when re-enabled.
+    needs: [version, build-deb, build-rpm, build-arch, build-generic, build-nix]
     runs-on: ubuntu-latest
     # No `if:` — the implicit success() gate is intentional. If any
     # package build fails, the release is NOT cut: we don't ship a
@@ -655,15 +666,8 @@ jobs:
             echo ""
             echo "**Fedora (manual RPM):**"
             echo '```bash'
-            echo "# Fedora 43"
-            echo "sudo dnf install plasmazones-${VERSION}-*.fc43.x86_64.rpm"
             echo "# Fedora 44"
             echo "sudo dnf install plasmazones-${VERSION}-*.fc44.x86_64.rpm"
-            echo '```'
-            echo ""
-            echo "**openSUSE Tumbleweed (manual RPM):**"
-            echo '```bash'
-            echo "sudo zypper install plasmazones-${VERSION}-*.x86_64.rpm"
             echo '```'
             echo ""
             echo "**openSUSE Tumbleweed (OBS):**"
@@ -977,7 +981,7 @@ jobs:
   #      (Home Project -> Create Package), or via osc:
   #        osc meta pkg -e home:fuddlesworth plasmazones
   #   3. In the project's "Repositories" tab add openSUSE_Tumbleweed for
-  #      x86_64 and aarch64. PlasmaZones needs Plasma/KF6/Qt 6.6+, so Leap
+  #      x86_64 and aarch64. PlasmaZones needs Plasma/KF6/Qt 6.7+, so Leap
   #      is not a viable target — Tumbleweed (and optionally Slowroll) only.
   #   4. Add two GitHub Actions secrets (Settings -> Secrets and variables
   #      -> Actions):
@@ -987,9 +991,10 @@ jobs:
   #      users are not split across two repositories.
   publish-obs:
     name: Publish to openSUSE OBS
-    # `release` already transitively requires build-rpm-opensuse + every
-    # other distro build, so gating here on `release` keeps the smoke-test
-    # gate while also blocking publish if the GitHub release itself fails.
+    # Gating on `release` blocks publish if the GitHub release itself fails.
+    # (The in-CI build-rpm-opensuse smoke build is currently disabled until
+    # Tumbleweed ships KWin 6.7, so it no longer pre-gates this; OBS still
+    # rebuilds the submitted spec automatically once Tumbleweed has 6.7.)
     # Same shape as publish-aur so the two run as parallel siblings.
     needs: [version, release]
     runs-on: ubuntu-latest

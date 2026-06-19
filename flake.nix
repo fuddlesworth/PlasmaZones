@@ -17,11 +17,18 @@
 #   formatter.default              — `nix fmt` (Nix + C++ + QML).
 #   checks.package                 — `nix flake check`.
 {
-  description = "FancyZones-style window tiling and autotiling for KDE Plasma 6.6+";
+  description = "FancyZones-style window tiling and autotiling for KDE Plasma 6.7+";
 
   inputs = {
-    # Track nixos-unstable for the most current KDE Frameworks and KWin.
-    nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
+    # Normally tracks nixos-unstable for the most current KDE Frameworks and
+    # KWin packages. Temporarily pinned to the nixpkgs master commit that landed
+    # Plasma 6.7 / KWin 6.7 (NixOS/nixpkgs#520160) because the nixos-unstable
+    # channel still ships KWin 6.6.5 and our kwin-effect requires the 6.7 effect
+    # API. Revert to "github:NixOS/nixpkgs/nixos-unstable" once the channel has
+    # advanced past Plasma 6.7 (the weekly update-flake-lock job will do this).
+    # If you need a stable channel, use nixos-24.11 or later, but be aware that
+    # stable channels may lag behind upstream KDE releases.
+    nixpkgs.url = "github:NixOS/nixpkgs/c190319055bb5c31acfd7bb8356ce9ab05cb2b36";
   };
 
   outputs =

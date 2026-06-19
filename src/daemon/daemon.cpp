@@ -39,6 +39,7 @@
 #include "overlayservice.h"
 #include "unifiedlayoutcontroller.h"
 #include "modetracker.h"
+#include "unifiedlayoutcontroller.h"
 #include "shortcutmanager.h"
 #include "rendering/zoneentryscaffold.h"
 #include "rendering/zoneshadernoderhi.h"
@@ -57,6 +58,7 @@
 #include <PhosphorWorkspaces/VirtualDesktopManager.h>
 #include <PhosphorWorkspaces/ActivityManager.h>
 #include "../core/constants.h"
+#include "../core/crosssurfaceresolver.h"
 #include "../core/geometryutils.h"
 #include <PhosphorProtocol/ServiceConstants.h>
 #include "../core/logging.h"

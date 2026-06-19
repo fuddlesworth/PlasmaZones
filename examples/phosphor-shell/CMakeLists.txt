@@ -20,7 +20,7 @@
 
 cmake_minimum_required(VERSION 3.16)
 
-find_package(Qt6 6.6 REQUIRED COMPONENTS Quick Qml)
+find_package(Qt6 6.10 REQUIRED COMPONENTS Quick Qml)
 
 if(COMMAND qt_policy)
     qt_policy(SET QTP0001 NEW)

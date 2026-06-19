@@ -5,6 +5,9 @@
 #include <PhosphorAnimation/Easing.h>
 #include <PhosphorAnimation/Spring.h>
 
+#include <PhosphorRegistry/IFactoryBase.h>
+#include <PhosphorRegistry/Registry.h>
+
 #include <QJsonObject>
 #include <QJsonValue>
 #include <QLoggingCategory>

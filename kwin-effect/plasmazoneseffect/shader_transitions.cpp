@@ -742,7 +742,10 @@ bool PlasmaZonesEffect::beginShaderTransition(KWin::EffectWindow* window,
 
         auto shader = KWin::ShaderManager::instance()->generateCustomShader(KWin::ShaderTrait::MapTexture,
                                                                             vertWithKwinDefine, fragWithKwinDefine);
-        if (!shader || !shader->isValid()) {
+        // KWin 6.7 removed GLShader::isValid(); generateCustomShader now returns
+        // nullptr when compilation or linking fails, so a null check is the
+        // validity test.
+        if (!shader) {
             qCWarning(lcEffect) << "Failed to compile shader transition" << effectId;
             return false;
         }
@@ -1337,7 +1340,7 @@ void PlasmaZonesEffect::endShaderTransition(KWin::EffectWindow* window)
     st = nullptr;
     m_shaderManager.eraseTransition(window);
     if (!surfaceExtentRepaint.isEmpty() && KWin::effects) {
-        KWin::effects->addRepaint(surfaceExtentRepaint);
+        KWin::effects->addRepaint(KWin::Rect(surfaceExtentRepaint));
     }
     if (releaseAddedGrab && !window->isDeleted()) {
         // Clear WindowAddedGrabRole now that the open transition is

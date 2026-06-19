@@ -5,7 +5,7 @@
 
 cmake_minimum_required(VERSION 3.16)
 
-project(PlasmaZones VERSION 3.0.15 LANGUAGES C CXX)
+project(PlasmaZones VERSION 3.0.16 LANGUAGES C CXX)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -69,9 +69,9 @@ set(QT_QML_GENERATE_QMLLS_INI ON CACHE BOOL "Generate QML language server config
 # would wipe again), the suppression is scoped to src/shared/CMakeLists.txt
 # where the affected QML-module targets live - see that file for details.
 
-# KDE/Qt requirements (Plasma 6.6 target: KF 6.6, Qt 6.6, KWin 6.6)
-set(QT_MIN_VERSION "6.6.0")
-set(KF_MIN_VERSION "6.6.0")
+# KDE/Qt requirements (Plasma 6.7 target: KF 6.26, Qt 6.10, KWin 6.7)
+set(QT_MIN_VERSION "6.10.0")
+set(KF_MIN_VERSION "6.26.0")
 
 find_package(ECM ${KF_MIN_VERSION} REQUIRED NO_MODULE)
 set(CMAKE_MODULE_PATH ${ECM_MODULE_PATH})
@@ -195,7 +195,7 @@ endif()
 # dependency). PlasmaZones is Wayland-only, Plasma 6 dropped X11 as a
 # session target, and the layer-shell overlays we use have no X equivalent.
 find_package(Wayland 1.21 REQUIRED COMPONENTS Client)
-find_package(Qt6 6.6 REQUIRED COMPONENTS WaylandClient)
+find_package(Qt6 6.10 REQUIRED COMPONENTS WaylandClient)
 if(NOT TARGET Qt6::WaylandClientPrivate)
     find_package(Qt6WaylandClientPrivate REQUIRED)
 endif()
@@ -489,7 +489,7 @@ if(BUILD_TOOLS)
     add_subdirectory(tools)
 endif()
 
-option(BUILD_KWIN_EFFECT "Build KWin C++ effect plugin (needs KWin 6.6+)" ON)
+option(BUILD_KWIN_EFFECT "Build KWin C++ effect plugin (needs KWin 6.7+)" ON)
 if(USE_KDE_FRAMEWORKS)
     if(BUILD_KWIN_EFFECT)
         add_subdirectory(kwin-effect)  # KWin C++ Effect (KDE-only)

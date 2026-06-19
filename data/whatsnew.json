@@ -19,6 +19,14 @@
             ]
         },
         {
+            "version": "3.0.16",
+            "date": "2026-06-18",
+            "highlights": [
+                "Now supports KDE Plasma 6.7 (KDE Frameworks 6.26, Qt 6.10, KWin 6.7) — the KWin effect is ported to the 6.7 effect API. Plasma 6.6 is no longer supported (#638)",
+                "Reworked in-process snap-assist thumbnail capture for KWin 6.7, which removed the offscreen-QML readback the old path used — thumbnails now render via an offscreen GLFramebuffer (#638)"
+            ]
+        },
+        {
             "version": "3.0.15",
             "date": "2026-05-28",
             "highlights": [

@@ -41,7 +41,7 @@ include(GenerateExportHeader)
 # ===============================================================================
 
 # Pin to 6.6 to match sibling phosphor-* libraries.
-find_package(Qt6 6.6 REQUIRED COMPONENTS Core Gui Quick Qml)
+find_package(Qt6 6.10 REQUIRED COMPONENTS Core Gui Quick Qml)
 
 # PhosphorMotionAnimation inherits QQuickPropertyAnimation which lives
 # in a private Qt Quick header (<QtQuick/private/qquickanimation_p.h>).

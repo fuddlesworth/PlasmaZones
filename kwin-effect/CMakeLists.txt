@@ -1,7 +1,7 @@
 # SPDX-FileCopyrightText: 2026 fuddlesworth
 # SPDX-License-Identifier: GPL-3.0-or-later
 #
-# PlasmaZones KWin Effect (C++ Plugin) — requires KWin from Plasma 6.6+
+# PlasmaZones KWin Effect (C++ Plugin) — requires KWin from Plasma 6.7+
 # (prePaintWindow(RenderView*,...), paintWindow(Region), no postPaintWindow).
 #
 # Only included via add_subdirectory() from the top-level project; the
@@ -13,11 +13,13 @@ set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 # Widgets dropped — no QWidget / QtWidgets usage in kwin-effect/.
-find_package(Qt6 6.6 REQUIRED COMPONENTS Core Gui DBus Qml Quick Svg)
+# Qml/Quick dropped — snap-assist capture renders windows into a GLFramebuffer
+# directly (KWin 6.7 removed the OffscreenQuickScene readback that needed them).
+find_package(Qt6 6.10 REQUIRED COMPONENTS Core Gui DBus Svg)
 set(QT_DEFAULT_MAJOR_VERSION 6)
 
 # Find KWin for effect development
-find_package(KWin 6.6 REQUIRED)
+find_package(KWin 6.7 REQUIRED)
 
 # libepoxy: snap-assist thumbnail dma-buf export (Phase-0 spike) uses
 # EGL_MESA_image_dma_buf_export to hand the rendered OffscreenQuickScene
@@ -81,7 +83,6 @@ set(plasmazones_effect_SRCS
     snapassisthandler.h
     snapassistthumbnailcapture.cpp
     snapassistthumbnailcapture.h
-    SnapAssistThumb.qrc
     windowanimator.cpp
     windowanimator.h
     compositorclock.cpp
@@ -115,11 +116,6 @@ target_link_libraries(kwin_effect_plasmazones PRIVATE
     Qt6::Core
     Qt6::Gui
     Qt6::DBus
-    # Snap-assist thumbnail capture: OffscreenQuickScene loads a tiny QML
-    # scene that hosts org.kde.kwin's WindowThumbnail. Both Qml (engine,
-    # setProperty) and Quick (QQuickItem* root) are needed.
-    Qt6::Qml
-    Qt6::Quick
     Qt6::Svg
     PhosphorCompositor::PhosphorCompositor
     # `plasmazoneseffect.h` directly includes `<PhosphorEngine/EngineTypes.h>`
