@@ -213,6 +213,26 @@ public:
         m_floatPredicate = std::move(predicate);
     }
 
+    /**
+     * @brief Resolver yielding the 1-based zone ordinals an opening window should
+     *        snap into because a `SnapToZone` window rule matched it. Daemon-
+     *        injected, keyed by the live windowId, evaluated on the window-open
+     *        path (`calculateSnapToPlacementRule`, the highest-priority restore
+     *        chain level). Returns an empty list when no rule matches. Multiple
+     *        ordinals request a zone span (their unioned bounding rect). The
+     *        engine stays settings/rule-store-agnostic (LGPL boundary) — it only
+     *        asks. When UNSET (default) no window is rule-snapped and the engine
+     *        keeps its historical open behaviour (path unit tests rely on this).
+     *        Same lifetime contract as setFloatPredicate — clear with `{}` before
+     *        destroying any captured state.
+     */
+    using PlacementZonesResolver = std::function<QList<int>(const QString& windowId)>;
+
+    void setPlacementZonesResolver(PlacementZonesResolver resolver)
+    {
+        m_placementZonesResolver = std::move(resolver);
+    }
+
     void windowClosed(const QString& windowId) override;
     void windowFocused(const QString& windowId, const QString& screenId) override;
     void toggleWindowFloat(const QString& windowId, const QString& screenId) override;
@@ -491,8 +511,8 @@ public:
     // Auto-snap calculations (moved from WTS)
     // ═══════════════════════════════════════════════════════════════════════════
 
-    PhosphorEngine::SnapResult calculateSnapToAppRule(const QString& windowId, const QString& windowScreenName,
-                                                      bool isSticky) const;
+    PhosphorEngine::SnapResult calculateSnapToPlacementRule(const QString& windowId, const QString& windowScreenName,
+                                                            bool isSticky) const;
     PhosphorEngine::SnapResult calculateSnapToLastZone(const QString& windowId, const QString& windowScreenId,
                                                        bool isSticky) const;
     PhosphorEngine::SnapResult calculateSnapToEmptyZone(const QString& windowId, const QString& windowScreenId,
@@ -803,6 +823,11 @@ private:
     // Rule-driven open-floating gate. Empty until the daemon wires it; while
     // empty no window is rule-floated. See FloatPredicate doc above.
     FloatPredicate m_floatPredicate{};
+
+    // Rule-driven open-placement resolver (SnapToZone). Empty until the daemon
+    // wires it; while empty no window is rule-snapped. See PlacementZonesResolver
+    // doc above.
+    PlacementZonesResolver m_placementZonesResolver{};
 };
 
 } // namespace PhosphorSnapEngine

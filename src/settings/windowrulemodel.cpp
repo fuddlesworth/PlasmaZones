@@ -11,6 +11,7 @@
 
 #include <PhosphorZones/AssignmentEntry.h>
 
+#include <QJsonArray>
 #include <QStringList>
 
 #include <algorithm>
@@ -271,6 +272,21 @@ QString actionLabel(const RuleAction& action, const WindowRuleModel::LabelLookup
     }
     if (action.type == ActionType::Float) {
         return PhosphorI18n::tr("Float");
+    }
+    if (action.type == ActionType::SnapToZone) {
+        const QJsonArray zones = action.params.value(PhosphorWindowRules::ActionParam::Zones).toArray();
+        QStringList nums;
+        nums.reserve(zones.size());
+        for (const QJsonValue& z : zones) {
+            nums.append(QString::number(z.toInt()));
+        }
+        if (nums.isEmpty()) {
+            return PhosphorI18n::tr("Snap to zone");
+        }
+        if (nums.size() == 1) {
+            return PhosphorI18n::tr("Snap to zone %1").arg(nums.first());
+        }
+        return PhosphorI18n::tr("Snap to zones %1").arg(nums.join(QStringLiteral(", ")));
     }
     if (action.type == ActionType::SetOpacity) {
         // Mirror EVERY resolver reject path (shader_resolve.cpp's

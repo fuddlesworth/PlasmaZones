@@ -231,6 +231,9 @@ QString paramLabel(const QString& type, const QString& key)
     if (type == ActionType::SetOpacity && key == ActionParam::Value) {
         return PhosphorI18n::tr("Opacity (%)");
     }
+    if (type == ActionType::SnapToZone && key == ActionParam::Zones) {
+        return PhosphorI18n::tr("Zones");
+    }
     // Unsnapped-position restore override (window-domain, single bool value).
     if (type == ActionType::RestorePosition && key == ActionParam::Value) {
         return PhosphorI18n::tr("Restore position on login");
@@ -408,6 +411,9 @@ QString actionTypeLabelImpl(const QString& type)
     }
     if (type == ActionType::Float) {
         return PhosphorI18n::tr("Float window");
+    }
+    if (type == ActionType::SnapToZone) {
+        return PhosphorI18n::tr("Snap to zone(s)");
     }
     if (type == ActionType::RestorePosition) {
         return PhosphorI18n::tr("Restore position on login");
@@ -792,6 +798,11 @@ QVariantMap defaultPayloadFor(const QString& typeWire)
             // SetBorderColor validator before the user opens the picker.
             // Neutral KDE accent blue, fully opaque.
             payload[key] = QStringLiteral("#FF3DAEE9");
+        } else if (kind == QLatin1String("zoneOrdinals")) {
+            // Seed a valid single-zone default ([1]) so a fresh SnapToZone rule
+            // passes the validator (non-empty array of positive ordinals) before
+            // the user edits the zone list.
+            payload[key] = QVariantList{1};
         } else {
             // Picker kinds (snappingLayout, tilingAlgorithm, animationEvent,
             // shaderEffect, curveEditor) and plain strings all start empty —

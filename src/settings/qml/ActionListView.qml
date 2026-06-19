@@ -181,6 +181,12 @@ ColumnLayout {
             }
             return rawStr;
         }
+        if (kind === "zoneOrdinals") {
+            // `raw` is a JS array of 1-based zone ordinals; render "1, 2".
+            if (Array.isArray(raw))
+                return raw.join(", ");
+            return rawStr;
+        }
         return rawStr;
     }
 

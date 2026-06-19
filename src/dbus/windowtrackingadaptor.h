@@ -651,6 +651,15 @@ public:
     /// so the answer is false unless a Float rule matches. The Float action's
     /// params are free-form, so the verdict is the presence of the filled slot.
     bool shouldFloatByRule(const QString& windowId);
+
+    /// Resolve the 1-based zone ordinals an opening window should snap into
+    /// because a `SnapToZone` window rule matched it. Consulted by the placement
+    /// resolver the daemon injects into the SnapEngine (in-process, not via
+    /// D-Bus). Returns an empty list when no SnapToZone rule matches; multiple
+    /// ordinals request a zone span. Builds a WindowQuery from the window
+    /// registry metadata and reads the `Placement` slot — mirrors
+    /// shouldFloatByRule.
+    QList<int> placementZonesByRule(const QString& windowId);
     /**
      * @brief Drop unified WindowPlacement records for excluded appIds.
      *

@@ -445,15 +445,16 @@ SnapResult SnapEngine::resolveWindowRestore(const QString& windowId, const QStri
         return SnapResult::noSnap();
     }
 
-    // 1. App rules (highest priority). May cross-screen migrate.
+    // 1. SnapToZone window rules (highest priority).
     {
-        SnapResult result = calculateSnapToAppRule(windowId, screenId, sticky);
+        SnapResult result = calculateSnapToPlacementRule(windowId, screenId, sticky);
         if (result.shouldSnap) {
-            // An app rule may target a screen other than the caller's. The
-            // disabled-context gate above validated only the caller's screenId,
-            // so re-check the predicate against the result's destination
-            // screen. An app rule must not route a window onto a context the
-            // user disabled.
+            // The result always targets the caller's own screen (SnapToZone
+            // ordinals resolve on the window's current screen). The disabled-
+            // context gate above already validated that screenId, so this
+            // re-check is a defensive no-op kept symmetric with the other
+            // chain levels — a placement rule must not route a window onto a
+            // context the user disabled.
             if (m_shouldRestorePredicate && !m_shouldRestorePredicate(result.screenId)) {
                 qCDebug(PhosphorSnapEngine::lcSnapEngine) << "resolveWindowRestore:" << windowId << "appRule target"
                                                           << result.screenId << "rejected by disabled-context gate";

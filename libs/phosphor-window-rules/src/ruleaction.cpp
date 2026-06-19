@@ -3,6 +3,7 @@
 
 #include <PhosphorWindowRules/RuleAction.h>
 
+#include <QJsonArray>
 #include <QJsonValue>
 
 #include "windowrulelogging.h"
@@ -448,6 +449,41 @@ void ActionRegistry::registerBuiltins()
         .domain = ActionDomain::Window,
         .category = QStringLiteral("windowManagement"),
         .displayOrder = 1,
+    });
+
+    registerAction(ActionDescriptor{
+        .type = QString(ActionType::SnapToZone),
+        .slotFor = constantSlot(ActionSlot::Placement),
+        .validate =
+            [](const QJsonObject& p) {
+                // A non-empty array of positive integer (1-based) zone ordinals.
+                const QJsonValue v = p.value(ActionParam::Zones);
+                if (!v.isArray()) {
+                    return false;
+                }
+                const QJsonArray arr = v.toArray();
+                if (arr.isEmpty()) {
+                    return false;
+                }
+                for (const QJsonValue& e : arr) {
+                    if (!e.isDouble()) {
+                        return false;
+                    }
+                    const double d = e.toDouble();
+                    const int n = static_cast<int>(d);
+                    // Reject non-integral and < 1 (ordinals are 1-based).
+                    if (n < 1 || static_cast<double>(n) != d) {
+                        return false;
+                    }
+                }
+                return true;
+            },
+        .terminal = false,
+        .allowedKeys = {QString(ActionParam::Zones)},
+        .domain = ActionDomain::Window,
+        .params = {P{.key = QString(ActionParam::Zones), .kind = QStringLiteral("zoneOrdinals")}},
+        .category = QStringLiteral("windowManagement"),
+        .displayOrder = 0,
     });
 
     // ── animation slots — event-scoped: "anim-shader:<event>" ──

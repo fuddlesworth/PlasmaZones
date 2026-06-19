@@ -5,6 +5,7 @@
 
 #include <PhosphorWindowRules/RuleAction.h>
 
+#include <QJsonArray>
 #include <QJsonObject>
 #include <QJsonValue>
 #include <QSet>
@@ -51,6 +52,7 @@ const QList<QLatin1StringView> kContextDomainTypes = {
 const QList<QLatin1StringView> kWindowDomainTypes = {
     ActionType::Exclude,
     ActionType::Float,
+    ActionType::SnapToZone,
     ActionType::OverrideAnimationShader,
     ActionType::OverrideAnimationTiming,
     ActionType::OverrideAnimationCurve,
@@ -478,6 +480,41 @@ private Q_SLOTS:
             ok.insert(QStringLiteral("value"), QString(token));
             QVERIFY2(RuleAction::fromJson(ok).has_value(), token.data());
         }
+    }
+
+    void testSnapToZone_fromJson()
+    {
+        // SnapToZone is a window-domain placement action whose `zones` param is a
+        // non-empty JSON array of 1-based integer ordinals. Pin the validator at
+        // the public fromJson boundary: it is the single line of defence against
+        // a hand-edited windowrules.json carrying a malformed ordinal list, and a
+        // widening regression in registerBuiltins would otherwise slip past.
+        const auto withZones = [](const QJsonValue& zones) {
+            QJsonObject o;
+            o.insert(QStringLiteral("type"), QString(ActionType::SnapToZone));
+            o.insert(QString(ActionParam::Zones), zones);
+            return o;
+        };
+
+        // Missing / wrong-typed / empty → rejected.
+        QJsonObject missing;
+        missing.insert(QStringLiteral("type"), QString(ActionType::SnapToZone));
+        QVERIFY(!RuleAction::fromJson(missing).has_value());
+        QVERIFY(!RuleAction::fromJson(withZones(QJsonValue(2))).has_value()); // not an array
+        QVERIFY(!RuleAction::fromJson(withZones(QJsonArray{})).has_value()); // empty
+        QVERIFY(!RuleAction::fromJson(withZones(QJsonArray{0})).has_value()); // 0 not 1-based
+        QVERIFY(!RuleAction::fromJson(withZones(QJsonArray{-1})).has_value()); // negative
+        QVERIFY(!RuleAction::fromJson(withZones(QJsonArray{1.5})).has_value()); // non-integral
+        QVERIFY(!RuleAction::fromJson(withZones(QJsonArray{QStringLiteral("1")})).has_value()); // string
+
+        // Single zone + span both accepted.
+        QVERIFY(RuleAction::fromJson(withZones(QJsonArray{1})).has_value());
+        QVERIFY(RuleAction::fromJson(withZones(QJsonArray{1, 2})).has_value());
+
+        // A key outside allowedKeys ({zones}) is rejected.
+        QJsonObject stray = withZones(QJsonArray{1});
+        stray.insert(QStringLiteral("value"), 3);
+        QVERIFY(!RuleAction::fromJson(stray).has_value());
     }
 
     void testLockContext_fromJsonRoundTrip()

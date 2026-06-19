@@ -40,6 +40,7 @@
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
+#include <QStandardPaths>
 #include <QTest>
 
 #include <algorithm>
@@ -316,6 +317,115 @@ private Q_SLOTS:
         QVERIFY(!cfg.contains(QStringLiteral("_v4AnimationRulesStash")));
         QVERIFY(!cfg.contains(QStringLiteral("_v4ExclusionStash")));
         QVERIFY(!cfg.contains(QStringLiteral("_v4AnimationExclusionStash")));
+    }
+
+    void testLayoutAppRules_becomeSnapToZoneRules()
+    {
+        IsolatedConfigGuard guard;
+        writeJson(ConfigDefaults::configFilePath(), makeV3Config());
+        writeJson(assignmentsPath(), makeAssignments());
+
+        // A v3 layout file carrying two legacy app→zone rules: one current-
+        // screen (firefox → zone 2), one screen-pinned (konsole → zone 3 on
+        // DP-1). They live in the user data dir the migration scans.
+        const QString layoutsDir = QStandardPaths::writableLocation(QStandardPaths::GenericDataLocation)
+            + QLatin1Char('/') + ConfigDefaults::layoutsSubdir();
+        QJsonArray appRules;
+        appRules.append(
+            QJsonObject{{QStringLiteral("pattern"), QStringLiteral("firefox")}, {QStringLiteral("zoneNumber"), 2}});
+        appRules.append(QJsonObject{{QStringLiteral("pattern"), QStringLiteral("konsole")},
+                                    {QStringLiteral("zoneNumber"), 3},
+                                    {QStringLiteral("targetScreen"), QStringLiteral("DP-1")}});
+        writeJson(layoutsDir + QStringLiteral("/layout1.json"), QJsonObject{{QStringLiteral("appRules"), appRules}});
+
+        QVERIFY(ConfigMigration::ensureJsonConfig());
+
+        const QJsonArray rules = rulesFromWindowRules();
+
+        // The 1-based zone ordinals carried by a rule's SnapToZone action.
+        const auto snapZones = [](const QJsonObject& rule) -> QList<int> {
+            QList<int> out;
+            for (const QJsonValue& v : rule.value(QStringLiteral("actions")).toArray()) {
+                const QJsonObject a = v.toObject();
+                if (a.value(QStringLiteral("type")).toString() == QLatin1String("snapToZone")) {
+                    for (const QJsonValue& z : a.value(QStringLiteral("zones")).toArray()) {
+                        out.append(z.toInt());
+                    }
+                }
+            }
+            return out;
+        };
+
+        QJsonObject firefoxRule;
+        QJsonObject konsoleRule;
+        for (const QJsonValue& v : rules) {
+            const QJsonObject r = v.toObject();
+            if (!actionTypes(r).contains(QLatin1String("snapToZone"))) {
+                continue;
+            }
+            const QString cls = matchLeafValueByOp(r, QStringLiteral("windowClass"), QStringLiteral("contains"));
+            if (cls == QLatin1String("firefox")) {
+                firefoxRule = r;
+            } else if (cls == QLatin1String("konsole")) {
+                konsoleRule = r;
+            }
+        }
+
+        // firefox → SnapToZone [2]; a single WindowClass-contains leaf (no screen).
+        QVERIFY(!firefoxRule.isEmpty());
+        QCOMPARE(snapZones(firefoxRule), (QList<int>{2}));
+        QCOMPARE(matchLeaves(firefoxRule).size(), 1);
+
+        // konsole → SnapToZone [3]; screen-pinned, so an All{} of WindowClass-
+        // contains AND ScreenId-equals DP-1 (v3 targetScreen → match constraint).
+        QVERIFY(!konsoleRule.isEmpty());
+        QCOMPARE(snapZones(konsoleRule), (QList<int>{3}));
+        QCOMPARE(matchLeafValueByOp(konsoleRule, QStringLiteral("screenId"), QStringLiteral("equals")),
+                 QStringLiteral("DP-1"));
+    }
+
+    void testLayoutAppRules_dedupePatternAcrossLayouts()
+    {
+        IsolatedConfigGuard guard;
+        writeJson(ConfigDefaults::configFilePath(), makeV3Config());
+        writeJson(assignmentsPath(), makeAssignments());
+
+        // Same pattern in two layout files mapping to DIFFERENT zones. A global
+        // ordinal SnapToZone rule fires regardless of the active layout, so only
+        // the first (name-order) wins; the second is dropped.
+        const QString layoutsDir = QStandardPaths::writableLocation(QStandardPaths::GenericDataLocation)
+            + QLatin1Char('/') + ConfigDefaults::layoutsSubdir();
+        writeJson(layoutsDir + QStringLiteral("/a-layout.json"),
+                  QJsonObject{{QStringLiteral("appRules"),
+                               QJsonArray{QJsonObject{{QStringLiteral("pattern"), QStringLiteral("mpv")},
+                                                      {QStringLiteral("zoneNumber"), 1}}}}});
+        writeJson(layoutsDir + QStringLiteral("/b-layout.json"),
+                  QJsonObject{{QStringLiteral("appRules"),
+                               QJsonArray{QJsonObject{{QStringLiteral("pattern"), QStringLiteral("mpv")},
+                                                      {QStringLiteral("zoneNumber"), 4}}}}});
+
+        QVERIFY(ConfigMigration::ensureJsonConfig());
+
+        int mpvRuleCount = 0;
+        QList<int> winningZones;
+        for (const QJsonValue& v : rulesFromWindowRules()) {
+            const QJsonObject r = v.toObject();
+            if (matchLeafValueByOp(r, QStringLiteral("windowClass"), QStringLiteral("contains"))
+                != QLatin1String("mpv")) {
+                continue;
+            }
+            ++mpvRuleCount;
+            for (const QJsonValue& av : r.value(QStringLiteral("actions")).toArray()) {
+                const QJsonObject a = av.toObject();
+                if (a.value(QStringLiteral("type")).toString() == QLatin1String("snapToZone")) {
+                    for (const QJsonValue& z : a.value(QStringLiteral("zones")).toArray()) {
+                        winningZones.append(z.toInt());
+                    }
+                }
+            }
+        }
+        QCOMPARE(mpvRuleCount, 1);
+        QCOMPARE(winningZones, (QList<int>{1})); // a-layout.json wins on name order
     }
 
     // ─── Exact cascade priorities ─────────────────────────────────────────
