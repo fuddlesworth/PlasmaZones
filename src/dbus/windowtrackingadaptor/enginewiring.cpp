@@ -25,6 +25,8 @@
 #include <PhosphorWindowRules/WindowQuery.h>
 #include <PhosphorWindowRules/WindowRuleStore.h>
 
+#include <QJsonArray>
+
 namespace PlasmaZones {
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -92,6 +94,7 @@ void WindowTrackingAdaptor::setEngines(PhosphorEngine::PlacementEngineBase* snap
         m_cachedSnapEngine->setShouldRestorePredicate({});
         m_cachedSnapEngine->setRestorePositionPredicate({});
         m_cachedSnapEngine->setFloatPredicate({});
+        m_cachedSnapEngine->setPlacementZonesResolver({});
     }
     if (m_cachedAutotileEngine) {
         m_cachedAutotileEngine->setRestorePositionPredicate({});
@@ -160,6 +163,15 @@ void WindowTrackingAdaptor::setEngines(PhosphorEngine::PlacementEngineBase* snap
         // global default), so the same resolver serves both engines.
         snap->setFloatPredicate([this](const QString& windowId) -> bool {
             return shouldFloatByRule(windowId);
+        });
+
+        // Open-placement resolver (snap). A matched "Snap this app to zone(s)"
+        // rule snaps the opening window into the resolved zone ordinals (the
+        // highest-priority restore-chain level), superseding the retired
+        // per-layout Layout::appRules. Snap-only — autotile owns placement on
+        // its screens, so no resolver is wired into the autotile engine.
+        snap->setPlacementZonesResolver([this](const QString& windowId, const QString& screenId) -> QList<int> {
+            return placementZonesByRule(windowId, screenId);
         });
 
         // Snap-specific signal: carries PhosphorProtocol::WindowStateEntry which is snap-mode-only.
@@ -455,6 +467,61 @@ bool WindowTrackingAdaptor::shouldFloatByRule(const QString& windowId)
     // The Float action carries free-form params (no Value key), so the verdict is
     // the PRESENCE of the filled slot, not a bool payload.
     return resolved.slot(QString(PhosphorWindowRules::ActionSlot::Float)).has_value();
+}
+
+QList<int> WindowTrackingAdaptor::placementZonesByRule(const QString& windowId, const QString& screenId)
+{
+    // Placement is purely rule-driven: absent a matching SnapToZone rule there is
+    // nothing to snap, so the answer is an empty list.
+    if (!m_windowRuleStore) {
+        return {};
+    }
+    std::optional<PhosphorWindowRules::WindowQuery> query = buildRuleQueryForWindow(m_windowRegistry, windowId);
+    if (!query) {
+        return {};
+    }
+    // Pin the query to the window's opening screen so a user-authored SnapToZone
+    // rule carrying a `ScreenId` match (the settings screen-picker stores the
+    // canonical id form the runtime reports) resolves against the screen the
+    // window is actually opening on. buildRuleQueryForWindow leaves screenId empty
+    // (the sibling Float / RestorePosition resolvers do not have the screen), so
+    // the placement path is the one consumer that pins it.
+    //
+    // The shared evaluator cache is keyed on windowId only, so the FIRST resolver
+    // to touch a window seeds the verdict the others reuse. On the open path that
+    // is this placement resolve: SnapEngine::resolveWindowRestore calls
+    // calculateSnapToPlacementRule up front, before it consults the float /
+    // restore predicates — so the screen-pinned query populates the cache first
+    // and a screen-constrained rule resolves correctly.
+    query->screenId = screenId;
+
+    if (!m_windowRuleEvaluator) {
+        m_windowRuleEvaluator = std::make_unique<PhosphorWindowRules::RuleEvaluator>(m_windowRuleStore->ruleSet());
+    }
+    // Shares m_windowRuleEvaluator with shouldFloatByRule / shouldRestoreFloatedPosition;
+    // resolveCached is keyed on (windowId, ruleSet revision) and returns every matched
+    // slot, so reading the Placement slot off the same verdict is free. Same open-path
+    // lifetime guarantee (resolved once per window lifetime) as the sibling predicates.
+    const PhosphorWindowRules::ResolvedActions resolved = m_windowRuleEvaluator->resolveCached(windowId, *query);
+    const std::optional<PhosphorWindowRules::RuleAction> action =
+        resolved.slot(QString(PhosphorWindowRules::ActionSlot::Placement));
+    if (!action) {
+        return {};
+    }
+    // The descriptor validator already guaranteed a non-empty array of in-range
+    // 1-based ordinals at load; re-validate defensively against the SAME bound
+    // (1..MaxZoneOrdinal) so a future loader change can never feed a bad ordinal
+    // into zone resolution.
+    const QJsonArray arr = action->params.value(QString(PhosphorWindowRules::ActionParam::Zones)).toArray();
+    QList<int> ordinals;
+    ordinals.reserve(arr.size());
+    for (const QJsonValue& v : arr) {
+        const int n = v.toInt(0);
+        if (n >= 1 && n <= PhosphorWindowRules::MaxZoneOrdinal) {
+            ordinals.append(n);
+        }
+    }
+    return ordinals;
 }
 
 void WindowTrackingAdaptor::handleCrossModeMove(const QString& windowId, const QString& targetScreenId,

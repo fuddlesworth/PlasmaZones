@@ -37,7 +37,7 @@ SPDX-License-Identifier: GPL-3.0-or-later
             </arg>
         </method>
         <method name="recordSnapIntent">
-            <annotation name="org.gtk.GDBus.DocString" value="Record that a window class was USER-snapped (not auto-snapped) — feeds the app-rule learning."/>
+            <annotation name="org.gtk.GDBus.DocString" value="Record that a window class was USER-snapped (not auto-snapped) — feeds the snap-intent (user-snapped-class) learning."/>
             <arg name="windowId" type="s" direction="in"/>
             <arg name="wasUserInitiated" type="b" direction="in"/>
         </method>
@@ -58,7 +58,7 @@ SPDX-License-Identifier: GPL-3.0-or-later
             <arg name="shouldSnap" type="b" direction="out"/>
         </method>
         <method name="snapToAppRule">
-            <annotation name="org.gtk.GDBus.DocString" value="Resolve a snap into the window's app-rule-defined zone."/>
+            <annotation name="org.gtk.GDBus.DocString" value="Resolve a snap into the window's SnapToZone-rule-defined zone(s)."/>
             <arg name="windowId" type="s" direction="in"/>
             <arg name="windowScreenName" type="s" direction="in"/>
             <arg name="sticky" type="b" direction="in"/>
@@ -80,7 +80,7 @@ SPDX-License-Identifier: GPL-3.0-or-later
             <arg name="shouldSnap" type="b" direction="out"/>
         </method>
         <method name="resolveWindowRestore">
-            <annotation name="org.gtk.GDBus.DocString" value="Run the full snap-restore resolution (placement-store restore + app-rule / empty-zone / last-zone fallback chain) in one call."/>
+            <annotation name="org.gtk.GDBus.DocString" value="Run the full snap-restore resolution (placement-store restore + placement-rule / empty-zone / last-zone fallback chain) in one call."/>
             <arg name="windowId" type="s" direction="in"/>
             <arg name="screenId" type="s" direction="in"/>
             <arg name="sticky" type="b" direction="in"/>

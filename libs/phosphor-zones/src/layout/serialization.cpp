@@ -16,63 +16,6 @@
 
 namespace PhosphorZones {
 
-// JSON is the canonical shape for AppRule (disk persistence, import/export,
-// wire format). The QVariantList accessors below exist only to satisfy the
-// Qt property / QML binding path — they route through the JSON form so there
-// is a single source of truth for keys, defaults, and validation rules.
-
-QJsonObject AppRule::toJson() const
-{
-    QJsonObject obj;
-    obj[::PhosphorZones::ZoneJsonKeys::Pattern] = pattern;
-    obj[::PhosphorZones::ZoneJsonKeys::ZoneNumber] = zoneNumber;
-    if (!targetScreen.isEmpty()) {
-        obj[::PhosphorZones::ZoneJsonKeys::TargetScreen] = targetScreen;
-    }
-    return obj;
-}
-
-AppRule AppRule::fromJson(const QJsonObject& obj)
-{
-    AppRule rule;
-    rule.pattern = obj[::PhosphorZones::ZoneJsonKeys::Pattern].toString();
-    rule.zoneNumber = obj[::PhosphorZones::ZoneJsonKeys::ZoneNumber].toInt();
-    rule.targetScreen = obj[::PhosphorZones::ZoneJsonKeys::TargetScreen].toString();
-    return rule;
-}
-
-QVector<AppRule> AppRule::fromJsonArray(const QJsonArray& array)
-{
-    QVector<AppRule> rules;
-    rules.reserve(array.size());
-    for (const auto& value : array) {
-        AppRule rule = AppRule::fromJson(value.toObject());
-        if (!rule.pattern.isEmpty() && rule.zoneNumber > 0) {
-            rules.append(rule);
-        }
-    }
-    return rules;
-}
-
-QVariantList Layout::appRulesVariant() const
-{
-    QVariantList result;
-    result.reserve(m_appRules.size());
-    for (const auto& rule : m_appRules) {
-        result.append(rule.toJson().toVariantMap());
-    }
-    return result;
-}
-
-void Layout::setAppRulesVariant(const QVariantList& rules)
-{
-    QJsonArray array;
-    for (const auto& item : rules) {
-        array.append(QJsonObject::fromVariantMap(item.toMap()));
-    }
-    setAppRules(AppRule::fromJsonArray(array));
-}
-
 QJsonObject Layout::toJson() const
 {
     QJsonObject json;
@@ -131,15 +74,6 @@ QJsonObject Layout::toJson() const
     // shaderId are meaningless to consumers and just bloat the file.
     if (!m_shaderId.isEmpty() && !m_shaderParams.isEmpty()) {
         json[::PhosphorZones::ZoneJsonKeys::ShaderParams] = QJsonObject::fromVariantMap(m_shaderParams);
-    }
-
-    // App-to-zone rules - only serialize if non-empty
-    if (!m_appRules.isEmpty()) {
-        QJsonArray rulesArray;
-        for (const auto& rule : m_appRules) {
-            rulesArray.append(rule.toJson());
-        }
-        json[::PhosphorZones::ZoneJsonKeys::AppRules] = rulesArray;
     }
 
     // Auto-assign - only serialize if true
@@ -283,11 +217,6 @@ void Layout::initFromJson(const QJsonObject& json)
     m_shaderId = json[::PhosphorZones::ZoneJsonKeys::ShaderId].toString();
     if (json.contains(::PhosphorZones::ZoneJsonKeys::ShaderParams)) {
         m_shaderParams = json[::PhosphorZones::ZoneJsonKeys::ShaderParams].toObject().toVariantMap();
-    }
-
-    // App-to-zone rules
-    if (json.contains(::PhosphorZones::ZoneJsonKeys::AppRules)) {
-        m_appRules = AppRule::fromJsonArray(json[::PhosphorZones::ZoneJsonKeys::AppRules].toArray());
     }
 
     // Auto-assign

@@ -29,13 +29,15 @@ using PhosphorEngine::StickyWindowHandling;
 // Auto-Snap Logic
 // ═══════════════════════════════════════════════════════════════════════════════
 
-SnapResult SnapEngine::calculateSnapToAppRule(const QString& windowId, const QString& windowScreenName,
-                                              bool isSticky) const
+SnapResult SnapEngine::calculateSnapToPlacementRule(const QString& windowId, const QString& windowScreenName,
+                                                    bool isSticky) const
 {
-    // Check if window was floating - floating windows should NOT be auto-snapped
-    if (m_windowTracker->isWindowFloating(windowId)) {
-        return SnapResult::noSnap();
-    }
+    // NOTE: deliberately NO isWindowFloating() guard here. A SnapToZone rule is an
+    // explicit "this app belongs in these zones" directive that outranks float
+    // state — both on open (it overrides a remembered floated position) and on a
+    // Meta+F un-float (the rule is the authoritative un-float target). The old
+    // per-layout app-rule path skipped floating windows; the rule-driven path
+    // intentionally does not.
 
     // Check sticky window handling
     if (auto* s = snapSettings(); isSticky && s) {
@@ -49,119 +51,67 @@ SnapResult SnapEngine::calculateSnapToAppRule(const QString& windowId, const QSt
         return SnapResult::noSnap();
     }
 
-    QString windowClass = m_windowTracker->currentAppIdFor(windowId);
-    if (windowClass.isEmpty()) {
+    // The placement resolver is the daemon's SnapToZone window-rule evaluation —
+    // the engine never reads the rule store directly (LGPL boundary). It returns
+    // the 1-based zone ordinals to snap into, or an empty list when no SnapToZone
+    // rule matched this window. Unset resolver (unit tests) ⇒ no rule snapping.
+    if (!m_placementZonesResolver) {
+        return SnapResult::noSnap();
+    }
+    const QList<int> ordinals = m_placementZonesResolver(windowId, windowScreenName);
+    if (ordinals.isEmpty()) {
         return SnapResult::noSnap();
     }
 
-    auto* screenManager = m_windowTracker->screenManager();
+    // Ordinals are layout-agnostic: resolve them against whatever layout is active
+    // on the window's CURRENT screen. Legacy per-layout app rules could target a
+    // different screen; that cross-screen routing is retired — a SnapToZone rule
+    // resolves on the window's current screen, and a user can scope it to a screen
+    // with a ScreenId match leaf, so there is no cross-screen scan here.
+    PhosphorZones::Layout* layout = m_layoutManager->resolveLayoutForScreen(windowScreenName);
+    if (!layout) {
+        qCDebug(PhosphorSnapEngine::lcSnapEngine)
+            << "calculateSnapToPlacementRule: no layout for screen" << windowScreenName;
+        return SnapResult::noSnap();
+    }
 
-    // Helper: given a match and a resolved screen name, build the SnapResult
-    auto buildResult = [&](const PhosphorZones::AppRuleMatch& match, const QString& resolvedScreen) -> SnapResult {
-        // Determine which screen to resolve the zone on
-        QString effectiveScreen = match.targetScreen.isEmpty() ? resolvedScreen : match.targetScreen;
-
-        if (!screenManager) {
-            qCWarning(PhosphorSnapEngine::lcSnapEngine)
-                << "App rule: no screen manager, falling back to primary screen for" << windowClass;
-        }
-        const bool screenFound = screenManager ? screenManager->physicalScreenFor(effectiveScreen).isValid()
-                                               : (QGuiApplication::primaryScreen() != nullptr);
-        if (!screenFound) {
-            qCInfo(PhosphorSnapEngine::lcSnapEngine)
-                << "App rule: screen" << effectiveScreen << "not found for" << windowClass
-                << (match.targetScreen.isEmpty() ? "(current screen)" : "(target screen)") << ", skipping";
-            return SnapResult::noSnap();
-        }
-
-        // Get the layout for the effective screen to find the zone
-        PhosphorZones::Layout* targetLayout = m_layoutManager->resolveLayoutForScreen(effectiveScreen);
-        if (!targetLayout) {
-            return SnapResult::noSnap();
-        }
-
-        PhosphorZones::Zone* zone = targetLayout->zoneByNumber(match.zoneNumber);
+    // Resolve each ordinal to its zone id (an ordinal naming a zone the active
+    // layout lacks is skipped — a span rule is layout-agnostic and may reference
+    // a zone count this layout does not have).
+    QStringList zoneIds;
+    for (const int ordinal : ordinals) {
+        PhosphorZones::Zone* zone = layout->zoneByNumber(ordinal);
         if (!zone) {
-            return SnapResult::noSnap();
-        }
-
-        QString zoneId = zone->id().toString();
-        QRect geo = m_windowTracker->zoneGeometry(zoneId, effectiveScreen);
-        if (!geo.isValid()) {
-            return SnapResult::noSnap();
-        }
-
-        qCInfo(PhosphorSnapEngine::lcSnapEngine) << "App rule matched:" << windowClass << "-> zone" << match.zoneNumber
-                                                 << "on screen" << effectiveScreen << "(" << zoneId << ")";
-
-        SnapResult result;
-        result.shouldSnap = true;
-        result.geometry = geo;
-        result.zoneId = zoneId;
-        result.zoneIds = QStringList{zoneId};
-        result.screenId = effectiveScreen;
-        return result;
-    };
-
-    // Phase 1: Check the current screen's layout first (preserves existing behavior)
-    PhosphorZones::Layout* currentLayout = m_layoutManager->resolveLayoutForScreen(windowScreenName);
-    if (currentLayout) {
-        PhosphorZones::AppRuleMatch match = currentLayout->matchAppRule(windowClass);
-        if (match.matched()) {
-            SnapResult result = buildResult(match, windowScreenName);
-            if (result.isValid()) {
-                return result;
-            }
-        } else {
             qCDebug(PhosphorSnapEngine::lcSnapEngine)
-                << "calculateSnapToAppRule:" << windowClass << "no match in layout" << currentLayout->name() << "("
-                << currentLayout->appRules().size() << "rules)";
-        }
-    } else {
-        qCDebug(PhosphorSnapEngine::lcSnapEngine) << "calculateSnapToAppRule: no layout for screen" << windowScreenName;
-    }
-
-    // Phase 2: Scan other screens' layouts for cross-screen rules
-    // Only accept matches that have targetScreen set (rules without targetScreen
-    // are local to their layout's screen and shouldn't fire from other screens)
-    QSet<QUuid> checkedLayouts;
-    if (currentLayout) {
-        checkedLayouts.insert(currentLayout->id());
-    }
-
-    // Build a unified list of screen IDs from either effective screens (includes
-    // virtual screens) or physical screens as fallback, then use a single loop.
-    QStringList screenIds;
-    if (screenManager) {
-        screenIds = screenManager->effectiveScreenIds();
-    } else {
-        const auto screens = QGuiApplication::screens();
-        for (auto* s : screens) {
-            screenIds.append(PhosphorScreens::ScreenIdentity::identifierFor(s));
-        }
-    }
-
-    for (const QString& screenId : std::as_const(screenIds)) {
-        if (PhosphorScreens::ScreenIdentity::screensMatch(screenId, windowScreenName)) {
+                << "calculateSnapToPlacementRule: zone ordinal" << ordinal << "absent in layout" << layout->name();
             continue;
         }
-
-        PhosphorZones::Layout* layout = m_layoutManager->resolveLayoutForScreen(screenId);
-        if (!layout || checkedLayouts.contains(layout->id())) {
-            continue;
-        }
-        checkedLayouts.insert(layout->id());
-
-        PhosphorZones::AppRuleMatch match = layout->matchAppRule(windowClass);
-        if (match.matched() && !match.targetScreen.isEmpty()) {
-            SnapResult result = buildResult(match, screenId);
-            if (result.isValid()) {
-                return result;
-            }
-        }
+        zoneIds.append(zone->id().toString());
+    }
+    if (zoneIds.isEmpty()) {
+        return SnapResult::noSnap();
     }
 
-    return SnapResult::noSnap();
+    // Union via resolveZoneGeometry so the span uses the SAME QRectF-union-then-
+    // align rounding the float-back poison guard uses (WTA::captureWindowPlacement
+    // → resolveZoneGeometry). A per-QRect union here would diverge by a pixel at
+    // fractional scaling, so a window floated off the span without moving would
+    // leak the snap rect into its float-back geometry.
+    const QRect unionGeo = m_windowTracker->resolveZoneGeometry(zoneIds, windowScreenName);
+    if (!unionGeo.isValid()) {
+        return SnapResult::noSnap();
+    }
+
+    qCInfo(PhosphorSnapEngine::lcSnapEngine) << "calculateSnapToPlacementRule: snapping" << windowId << "to zones"
+                                             << ordinals << "on screen" << windowScreenName;
+
+    SnapResult result;
+    result.shouldSnap = true;
+    result.geometry = unionGeo;
+    result.zoneId = zoneIds.first();
+    result.zoneIds = zoneIds;
+    result.screenId = windowScreenName;
+    return result;
 }
 
 SnapResult SnapEngine::calculateSnapToLastZone(const QString& windowId, const QString& windowScreenId,

@@ -85,7 +85,7 @@ struct PHOSPHORWINDOWRULES_EXPORT RuleAction
  * switch. `kind` is a UI-side hint string (the canonical kinds are
  * `string`, `number`, `percent`, `enum`, `bool`, `color`, plus the
  * picker-aware kinds `snappingLayout`, `tilingAlgorithm`, `animationEvent`,
- * `shaderEffect`, `overlayShader`, `curveEditor`); QML loaders dispatch on it. Labels stay in
+ * `shaderEffect`, `overlayShader`, `zoneOrdinals`, `curveEditor`); QML loaders dispatch on it. Labels stay in
  * the GPL settings layer because they need translation through PhosphorI18n::tr —
  * the lib only owns the structural part of the schema.
  *
@@ -290,6 +290,14 @@ inline constexpr QLatin1StringView DisableEngine{"disableEngine"};
 inline constexpr QLatin1StringView LockContext{"lockContext"};
 inline constexpr QLatin1StringView Exclude{"exclude"};
 inline constexpr QLatin1StringView Float{"float"};
+/// Snap a matched window into one or more zones on open. Carries a non-empty
+/// list of 1-based zone ordinals (`ActionParam::Zones`); a single ordinal snaps
+/// to that zone, multiple ordinals snap to their unioned bounding rect (zone
+/// spanning). Ordinals are layout-agnostic — they address "zone N of whatever
+/// layout is active on the window's screen", matching the snapToZone1..9
+/// shortcuts. Daemon-consumed (placement) on the SnapEngine open path; supersedes
+/// the retired per-layout `Layout::appRules`. Domain Window.
+inline constexpr QLatin1StringView SnapToZone{"snapToZone"};
 inline constexpr QLatin1StringView OverrideAnimationShader{"overrideAnimationShader"};
 inline constexpr QLatin1StringView OverrideAnimationTiming{"overrideAnimationTiming"};
 /// Curve-only animation override — separate slot from timing so a user can
@@ -411,7 +419,18 @@ inline constexpr QLatin1StringView Mode{"mode"};
 inline constexpr QLatin1StringView LayoutId{"layoutId"};
 // SetTilingAlgorithm algorithm-token key — wire is the algorithm registry id.
 inline constexpr QLatin1StringView Algorithm{"algorithm"};
+// SnapToZone target-zone key — wire is a non-empty JSON array of 1-based zone
+// ordinals (e.g. `[1]` or `[1, 2]`); multiple entries snap to their union.
+inline constexpr QLatin1StringView Zones{"zones"};
 } // namespace ActionParam
+
+/// Upper bound for a `SnapToZone` zone ordinal (each `ActionParam::Zones` entry).
+/// No real layout has anywhere near this many zones (the snapToZone1..9 shortcuts
+/// only reach 9); the cap exists purely to reject a grossly malformed hand-edited
+/// payload AND to keep the load-time validator's integrality check from narrowing
+/// an out-of-range double to int (which is UB). Shared by the descriptor validator
+/// (ruleaction.cpp) and the v3→v4 migration so the two stay in lockstep.
+inline constexpr int MaxZoneOrdinal = 64;
 
 /// Wire tokens for OverrideOverlayStyle's `value` param — the closed vocabulary
 /// the descriptor's validator + `enumWireValues`, the daemon consumer
@@ -434,6 +453,11 @@ inline constexpr QLatin1StringView EngineEnable{"engine-enable"};
 inline constexpr QLatin1StringView Locked{"locked"};
 inline constexpr QLatin1StringView Manage{"manage"};
 inline constexpr QLatin1StringView Float{"float"};
+/// Window-scoped open-placement slot — filled by `ActionType::SnapToZone`. A
+/// single slot (first-matching-rule-wins), carrying the zone-ordinal list
+/// (`ActionParam::Zones`) the daemon snaps the opening window into. Mutually
+/// resolved against `Float` on the open path (a float rule opts out of snapping).
+inline constexpr QLatin1StringView Placement{"placement"};
 inline constexpr QLatin1StringView Opacity{"opacity"};
 inline constexpr QLatin1StringView RestorePosition{"restore-position"};
 // Per-window border / title-bar appearance slots (one per property so

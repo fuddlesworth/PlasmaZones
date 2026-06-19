@@ -3,6 +3,7 @@
 
 #include <PhosphorWindowRules/RuleAction.h>
 
+#include <QJsonArray>
 #include <QJsonValue>
 
 #include "windowrulelogging.h"
@@ -448,6 +449,48 @@ void ActionRegistry::registerBuiltins()
         .domain = ActionDomain::Window,
         .category = QStringLiteral("windowManagement"),
         .displayOrder = 1,
+    });
+
+    registerAction(ActionDescriptor{
+        .type = QString(ActionType::SnapToZone),
+        .slotFor = constantSlot(ActionSlot::Placement),
+        .validate =
+            [](const QJsonObject& p) {
+                // A non-empty array of positive integer (1-based) zone ordinals.
+                const QJsonValue v = p.value(ActionParam::Zones);
+                if (!v.isArray()) {
+                    return false;
+                }
+                const QJsonArray arr = v.toArray();
+                if (arr.isEmpty()) {
+                    return false;
+                }
+                for (const QJsonValue& e : arr) {
+                    if (!e.isDouble()) {
+                        return false;
+                    }
+                    const double d = e.toDouble();
+                    // Bound on the DOUBLE before narrowing — a float-to-int cast
+                    // out of int's range is undefined behaviour. Reject < 1
+                    // (ordinals are 1-based) and an absurd upper value first; only
+                    // then is the cast for the integrality check well-defined.
+                    if (d < 1.0 || d > MaxZoneOrdinal) {
+                        return false;
+                    }
+                    if (static_cast<double>(static_cast<int>(d)) != d) {
+                        return false; // non-integral
+                    }
+                }
+                return true;
+            },
+        .terminal = false,
+        .allowedKeys = {QString(ActionParam::Zones)},
+        .domain = ActionDomain::Window,
+        .params = {P{.key = QString(ActionParam::Zones), .kind = QStringLiteral("zoneOrdinals")}},
+        // No tags: SnapToZone is daemon-placement only (consumed by the SnapEngine
+        // open path), not an Effect / Border / Animation / Overlay action.
+        .category = QStringLiteral("windowManagement"),
+        .displayOrder = 0,
     });
 
     // ── animation slots — event-scoped: "anim-shader:<event>" ──

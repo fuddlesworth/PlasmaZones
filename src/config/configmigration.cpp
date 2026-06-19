@@ -29,6 +29,7 @@
 #include <QLatin1String>
 #include <QLockFile>
 #include <QSet>
+#include <QStandardPaths>
 #include <QUuid>
 #include <array>
 #include <atomic>
@@ -2306,6 +2307,123 @@ void appendAnimationExclusionRulesFromStash(QList<PhosphorWindowRules::WindowRul
     appendOne(stash.value(ConfigKeys::Legacy::v3ExcludedWindowClassesKey()).toString(), Field::WindowClass);
 }
 
+/// Fixed v5-UUID namespace for migrated SnapToZone-rule identities — distinct
+/// from the exclusion namespace so the two folds can never collide on id.
+inline const QUuid& snapToZoneMigrationNamespace()
+{
+    static const QUuid ns(QStringLiteral("{6f1c8e44-2a7b-5d93-8e10-4b2c9a7f1d35}"));
+    return ns;
+}
+
+// Frozen on-disk keys for the legacy per-layout `appRules` array — the dead v3
+// zone app-assignment format this fold is the last reader of. Local literals
+// (NOT the live `ZoneJsonKeys::` accessors) so a future rename of those live
+// keys can never retarget this migration away from what v3 wrote to disk.
+constexpr QLatin1String kLayoutAppRulesKey{"appRules"};
+constexpr QLatin1String kLayoutAppRulePattern{"pattern"};
+constexpr QLatin1String kLayoutAppRuleZoneNumber{"zoneNumber"};
+
+/// Convert each layout file's legacy per-layout `appRules` into first-class
+/// SnapToZone WindowRules. v3 stored app→zone assignments on the Layout
+/// (`Layout::appRules`: a `{pattern, zoneNumber, targetScreen}` triple, single
+/// zone); v4 unifies them into the window-rule store. Each becomes
+/// `AppId AppIdMatches <pattern> → SnapToZone [zoneNumber]`. AppId / AppIdMatches
+/// mirrors the retired `Layout::matchAppRule` (which matched the pattern against
+/// the window's appId via segment-aware `appIdMatches`) and the daemon placement
+/// path, which resolves the query on appId — WindowClass is not tracked daemon-
+/// side, so a WindowClass leaf would never match.
+///
+/// The legacy `targetScreen` (a connector name like "DP-1") is intentionally NOT
+/// carried over as a `ScreenId` constraint. v4 resolves a SnapToZone rule on the
+/// window's CURRENT screen, and a `ScreenId Equals` leaf would have to match the
+/// canonical screen-id form the daemon reports at runtime (EDID-form
+/// "Manuf:Model:Serial", what the settings screen-picker also stores), not a
+/// connector name. Translating connector→canonical here would couple this pure
+/// JSON transform to live screen state and make the deterministic rule id depend
+/// on which monitors are connected. So a migrated app snaps to its zone on
+/// whatever screen it opens on (per-monitor pinning is dropped; v3's cross-screen
+/// routing was already retired by this PR).
+///
+/// Patterns are deduped across layouts — a SnapToZone ordinal rule fires
+/// regardless of which layout is active, so one pattern can map to only one
+/// placement; on a same-pattern / different-zone conflict the first wins and the
+/// rest are logged. Layout files are visited in name order for deterministic
+/// "first wins".
+void appendLayoutAppRulesAsSnapToZone(QList<PhosphorWindowRules::WindowRule>& rules, const QString& layoutsDir)
+{
+    using namespace PhosphorWindowRules;
+    QDir dir(layoutsDir);
+    if (!dir.exists()) {
+        return;
+    }
+    const QStringList files = dir.entryList({QStringLiteral("*.json")}, QDir::Files, QDir::Name);
+    QSet<QString> seenPatterns;
+    for (const QString& fileName : files) {
+        QFile f(dir.filePath(fileName));
+        if (!f.open(QIODevice::ReadOnly)) {
+            continue;
+        }
+        QJsonParseError err;
+        const QJsonDocument doc = QJsonDocument::fromJson(f.readAll(), &err);
+        f.close();
+        if (err.error != QJsonParseError::NoError || !doc.isObject()) {
+            continue;
+        }
+        const QJsonArray appRules = doc.object().value(kLayoutAppRulesKey).toArray();
+        for (const QJsonValue& entry : appRules) {
+            if (!entry.isObject()) {
+                continue;
+            }
+            const QJsonObject ar = entry.toObject();
+            const QString pattern = ar.value(kLayoutAppRulePattern).toString().trimmed();
+            const int zoneNumber = ar.value(kLayoutAppRuleZoneNumber).toInt(0);
+            if (pattern.isEmpty() || zoneNumber < 1) {
+                continue;
+            }
+            // The SnapToZone action validator caps ordinals at MaxZoneOrdinal, so a
+            // legacy zoneNumber beyond it would be silently dropped by the loader's
+            // validator. Skip it here with a visible warning instead of emitting a
+            // rule that vanishes on the next load.
+            if (zoneNumber > MaxZoneOrdinal) {
+                qWarning(
+                    "ConfigMigration: app->zone pattern '%s' targets zone %d beyond the max ordinal (%d) — "
+                    "dropping the assignment.",
+                    qPrintable(pattern), zoneNumber, MaxZoneOrdinal);
+                continue;
+            }
+            const QString patternKey = pattern.toLower();
+            if (seenPatterns.contains(patternKey)) {
+                qWarning(
+                    "ConfigMigration: duplicate app->zone pattern '%s' across layouts — keeping the first, "
+                    "dropping zone %d (a SnapToZone ordinal rule fires regardless of the active layout, so a "
+                    "pattern can map to only one placement).",
+                    qPrintable(pattern), zoneNumber);
+                continue;
+            }
+            seenPatterns.insert(patternKey);
+
+            WindowRule rule;
+            // Deterministic id from (pattern, zone) so a crash-and-retry
+            // conversion yields byte-identical rules.
+            rule.id = QUuid::createUuidV5(snapToZoneMigrationNamespace(),
+                                          Detail::encodeSegment(pattern)
+                                              + Detail::encodeSegment(QString::number(zoneNumber)));
+            rule.enabled = true;
+            // priority 0 mirrors the other migrated rules; the controller
+            // renormalizes display order on load and the user can reorder.
+            rule.priority = 0;
+            rule.match = MatchExpression::makeLeaf(Field::AppId, Operator::AppIdMatches, pattern);
+            RuleAction action;
+            action.type = QString(ActionType::SnapToZone);
+            QJsonObject params;
+            params.insert(QString(ActionParam::Zones), QJsonArray{zoneNumber});
+            action.params = params;
+            rule.actions.append(action);
+            rules.append(rule);
+        }
+    }
+}
+
 } // namespace
 
 bool ConfigMigration::finalizeV4Conversion(const QString& jsonPath)
@@ -2696,6 +2814,21 @@ bool ConfigMigration::finalizeV4Conversion(const QString& jsonPath)
     // it) on any later run. See `appendSteamDefaultRule` for the match/enforcement
     // rationale.
     appendSteamDefaultRule(rules);
+
+    // ── Per-layout app rules → SnapToZone WindowRules ──────────────────────
+    // v3 stored app→zone assignments on each Layout (`Layout::appRules`); v4
+    // unifies them into the window-rule store. Read every layout file's legacy
+    // `appRules` array and emit one SnapToZone rule per assignment, so an
+    // upgrading user's pinned apps keep snapping to their zone(s) through the
+    // new single system. Layouts live in the user-writable data dir (separate
+    // from config.json / windowrules.json), so resolve that path directly. This
+    // runs only on the first conversion (the `windowRulesAlreadyConverted` gate
+    // above), which every real v3→v4 upgrade hits exactly once.
+    {
+        const QString layoutsDir = QStandardPaths::writableLocation(QStandardPaths::GenericDataLocation)
+            + QLatin1Char('/') + ConfigDefaults::layoutsSubdir();
+        appendLayoutAppRulesAsSnapToZone(rules, layoutsDir);
+    }
 
     // ── Relocate QuickLayouts to the quicklayouts.json sidecar (FIRST) ─────
     // Quick-layout slots are NOT window rules — they belong in the sibling

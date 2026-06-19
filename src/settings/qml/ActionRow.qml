@@ -180,6 +180,10 @@ ColumnLayout {
     // The validator accepts the `#AARRGGBB` shape and the effect-side consumer
     // parses it via `QColor(QString)` (which reads 9-digit hex alpha-first).
     property Component _colorParamEditor
+    // Comma/space/range-separated zone-number input for `kind == "zoneOrdinals"`
+    // (SnapToZone). Stores a JSON array of 1-based ordinals; multiple ordinals
+    // span their combined area. Accepts "1, 2", "1;2", "1 2", and ranges "1-3".
+    property Component _zoneOrdinalsEditor
 
     /// Encode a QML color to a `#AARRGGBB` wire string (alpha-first) — the form
     /// the SetBorderColor validator accepts and the consumer parses back via
@@ -396,6 +400,9 @@ ColumnLayout {
                     if (modelData.kind === "color")
                         return row._colorParamEditor;
 
+                    if (modelData.kind === "zoneOrdinals")
+                        return row._zoneOrdinalsEditor;
+
                     return row._stringParamEditor;
                 }
             }
@@ -433,6 +440,77 @@ ColumnLayout {
             placeholderText: _param.label
             Accessible.name: _param.label
             onEditingFinished: row.actionEdited(row._withParam(_param.key, text))
+        }
+    }
+
+    _zoneOrdinalsEditor: Component {
+        TextField {
+            readonly property var _param: parent.modelData
+            readonly property var _zones: Array.isArray(row.action[_param.key]) ? row.action[_param.key] : []
+
+            // Normalised display (sorted, deduped) re-binds after each edit.
+            text: _zones.join(", ")
+            placeholderText: i18nc("@info:placeholder zone numbers for a snap-to-zone rule", "e.g. 1, 2 or 1-2")
+            Accessible.name: _param.label
+            Accessible.description: i18nc("@info:whatsthis", "One or more 1-based zone numbers to snap matched windows to. Multiple zones span their combined area.")
+            onEditingFinished: {
+                // Parse comma/semicolon/space-separated ordinals and "lo-hi"
+                // ranges into a deduped, ascending array of 1-based integers.
+                var seen = ({});
+                var parsed = [];
+                var tokens = text.split(/[,;\s]+/);
+                for (var i = 0; i < tokens.length; i++) {
+                    var t = tokens[i].trim();
+                    if (t.length === 0)
+                        continue;
+                    var range = t.match(/^(\d+)-(\d+)$/);
+                    if (range) {
+                        var lo = parseInt(range[1], 10);
+                        var hi = parseInt(range[2], 10);
+                        // Clamp the upper bound to the SnapToZone ordinal cap
+                        // (MaxZoneOrdinal = 64 in RuleAction.h). An unbounded
+                        // expansion (e.g. "1-100000") would build a huge array on
+                        // the UI thread and freeze it; ordinals past the cap are
+                        // rejected by the validator anyway.
+                        if (hi > 64)
+                            hi = 64;
+                        if (lo >= 1 && hi >= lo) {
+                            for (var z = lo; z <= hi; z++) {
+                                if (!seen[z]) {
+                                    seen[z] = true;
+                                    parsed.push(z);
+                                }
+                            }
+                        }
+                        continue;
+                    }
+                    if (/^\d+$/.test(t)) {
+                        var n = parseInt(t, 10);
+                        if (n >= 1 && !seen[n]) {
+                            seen[n] = true;
+                            parsed.push(n);
+                        }
+                    }
+                }
+                parsed.sort(function (a, b) {
+                    return a - b;
+                });
+                // A SnapToZone action requires a non-empty ordinal list (the
+                // descriptor validator rejects []). If the user cleared the field
+                // or typed only invalid tokens, keep the last valid value rather
+                // than committing an empty list — that would produce an action the
+                // validator drops on save, silently losing the rule with the Save
+                // button still enabled. Restore via Qt.binding (not a bare
+                // `text = ...`) so the declarative `text: _zones.join(", ")`
+                // binding survives and keeps normalising on later edits.
+                if (parsed.length === 0) {
+                    text = Qt.binding(function () {
+                        return _zones.join(", ");
+                    });
+                    return;
+                }
+                row.actionEdited(row._withParam(_param.key, parsed));
+            }
         }
     }
 

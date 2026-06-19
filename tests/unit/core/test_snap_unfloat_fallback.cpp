@@ -229,6 +229,96 @@ private Q_SLOTS:
                  "off → not-found even though zoneGeometry is valid in this GUI fixture");
         m_wts->setSnapState(nullptr);
     }
+
+    // ── SnapToZone placement-rule precedence ────────────────────────────────
+    // A matched SnapToZone rule (the daemon-injected placement-zones resolver) is
+    // the highest-priority restore: it overrides a remembered placement record on
+    // open. The store still re-binds the record FIRST, so the window's float-back
+    // geometry survives the override (a later Meta+F floats it to its remembered
+    // free position, not the zone rect). Lives in this GUI fixture because the
+    // rule's snap only resolves with valid zone geometry.
+    void testResolveWindowRestore_placementRule_beatsFloatedRecord_preservesFreeGeo()
+    {
+        SnapEngine engine(m_layoutManager, m_wts, nullptr, nullptr, nullptr);
+        engine.setEngineSettings(m_settings);
+        m_wts->setSnapState(engine.snapState());
+
+        installLayout(3);
+        engine.setPlacementZonesResolver([](const QString&, const QString&) {
+            return QList<int>{2, 3};
+        });
+
+        // A remembered FLOATED record on DP-1 carrying the window's free position.
+        const QRect floatGeo(120, 80, 800, 600);
+        PhosphorEngine::WindowPlacement rec;
+        rec.windowId = QStringLiteral("app|orig");
+        rec.appId = QStringLiteral("app");
+        rec.screenId = QStringLiteral("DP-1");
+        PhosphorEngine::EngineSlot slot;
+        slot.state = PhosphorEngine::WindowPlacement::stateFloating();
+        rec.engines.insert(PhosphorEngine::WindowPlacement::snapEngineId(), slot);
+        rec.freeGeometryByScreen.insert(QStringLiteral("DP-1"), floatGeo);
+        m_wts->placementStore().record(rec);
+
+        // KWin reopens the window with a new uuid on the same screen.
+        const PhosphorEngine::SnapResult result =
+            engine.resolveWindowRestore(QStringLiteral("app|new"), QStringLiteral("DP-1"), /*sticky*/ false);
+
+        // The rule wins over the stored floated record: snap to the two rule zones.
+        QVERIFY2(result.shouldSnap, "a SnapToZone rule must override a remembered floated record");
+        QCOMPARE(result.zoneIds.size(), 2);
+
+        // The record was re-bound to the live id with its float-back geometry
+        // intact, so a later float returns to the remembered free position — NOT
+        // the zone rect the rule just snapped to.
+        QVERIFY2(m_wts->placementStore().contains(QStringLiteral("app|new"), QStringLiteral("app")),
+                 "the placement record must be re-bound to the live window id");
+        const auto rebound = m_wts->placementStore().peek(QStringLiteral("app|new"), QStringLiteral("app"));
+        QVERIFY(rebound.has_value());
+        QCOMPARE(rebound->freeGeometryFor(QStringLiteral("DP-1")), floatGeo);
+        m_wts->setSnapState(nullptr);
+    }
+
+    // A SnapToZone rule snaps a fresh window that has no stored record at all
+    // (nothing to inherit, so no float-back to preserve).
+    void testResolveWindowRestore_placementRule_noRecord_snaps()
+    {
+        SnapEngine engine(m_layoutManager, m_wts, nullptr, nullptr, nullptr);
+        engine.setEngineSettings(m_settings);
+        m_wts->setSnapState(engine.snapState());
+
+        installLayout(3);
+        engine.setPlacementZonesResolver([](const QString&, const QString&) {
+            return QList<int>{1};
+        });
+
+        const PhosphorEngine::SnapResult result =
+            engine.resolveWindowRestore(QStringLiteral("fresh|win"), QStringLiteral("DP-1"), /*sticky*/ false);
+
+        QVERIFY2(result.shouldSnap, "a SnapToZone rule must snap a fresh window with no stored record");
+        QCOMPARE(result.zoneIds.size(), 1);
+        m_wts->setSnapState(nullptr);
+    }
+
+    // An empty resolver result (no matching rule) must NOT snap — the window
+    // falls through to the normal restore/float path.
+    void testResolveWindowRestore_placementRule_emptyResolver_doesNotSnap()
+    {
+        SnapEngine engine(m_layoutManager, m_wts, nullptr, nullptr, nullptr);
+        engine.setEngineSettings(m_settings);
+        m_wts->setSnapState(engine.snapState());
+
+        installLayout(3);
+        engine.setPlacementZonesResolver([](const QString&, const QString&) {
+            return QList<int>{};
+        });
+
+        const PhosphorEngine::SnapResult result =
+            engine.resolveWindowRestore(QStringLiteral("nomatch|win"), QStringLiteral("DP-1"), /*sticky*/ false);
+
+        QVERIFY2(!result.shouldSnap, "no matching rule → the placement rule must not snap the window");
+        m_wts->setSnapState(nullptr);
+    }
 };
 
 QTEST_MAIN(TestSnapUnfloatFallback)
