@@ -568,6 +568,46 @@ void ActionRegistry::registerBuiltins()
         .tags = {QString(Tag::Effect)},
     });
 
+    // ── overlay-property slots — context-domain overrides of the active
+    //    layout's zone-overlay shader / style / layer. Daemon-side only
+    //    (LayoutRegistry::resolveContextOverlay → OverlayService); no Tag::Effect.
+    //    Shader-id vocabulary validation lives at the consumer (the overlay
+    //    service falls back to the layout default for an unknown id), mirroring
+    //    SetEngineMode's open-vocabulary rationale above.
+    registerAction(ActionDescriptor{
+        .type = QString(ActionType::OverrideOverlayShader),
+        .slotFor = constantSlot(ActionSlot::OverlayShader),
+        .validate =
+            [](const QJsonObject& p) {
+                return hasNonEmptyString(p, ActionParam::EffectId);
+            },
+        .terminal = false,
+        .allowedKeys = {QString(ActionParam::EffectId)},
+        .domain = ActionDomain::Context,
+        .params = {P{.key = QString(ActionParam::EffectId), .kind = QStringLiteral("overlayShader")}},
+        .category = QStringLiteral("overlay"),
+        .displayOrder = 0,
+        .tags = {QString(Tag::Overlay)},
+    });
+    registerAction(ActionDescriptor{
+        .type = QString(ActionType::OverrideOverlayStyle),
+        .slotFor = constantSlot(ActionSlot::OverlayStyle),
+        .validate =
+            [](const QJsonObject& p) {
+                const QString v = p.value(ActionParam::Value).toString();
+                return v == QLatin1String("rectangles") || v == QLatin1String("preview");
+            },
+        .terminal = false,
+        .allowedKeys = {QString(ActionParam::Value)},
+        .domain = ActionDomain::Context,
+        .params = {P{.key = QString(ActionParam::Value),
+                     .kind = QStringLiteral("enum"),
+                     .enumWireValues = {QStringLiteral("rectangles"), QStringLiteral("preview")}}},
+        .category = QStringLiteral("overlay"),
+        .displayOrder = 1,
+        .tags = {QString(Tag::Overlay)},
+    });
+
     // RestorePosition is window-domain but NOT a border/appearance slot — it is
     // consumed daemon-side (both engines' restore-position predicate), not by the
     // effect. Unlike the border bools below it seeds FALSE: the per-engine

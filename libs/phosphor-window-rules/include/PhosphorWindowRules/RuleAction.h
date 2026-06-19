@@ -135,6 +135,11 @@ inline constexpr QLatin1StringView Border{"border"};
 inline constexpr QLatin1StringView Animation{"animation"};
 inline constexpr QLatin1StringView LayoutEngine{"layoutEngine"};
 inline constexpr QLatin1StringView Gap{"gap"};
+/// Context-domain overlay-property overrides (overlay shader / style / layer).
+/// Consumed daemon-side by the overlay service via
+/// `LayoutRegistry::resolveContextOverlay` — NOT by the KWin effect, so these
+/// actions deliberately omit `Tag::Effect`.
+inline constexpr QLatin1StringView Overlay{"overlay"};
 } // namespace Tag
 
 /**
@@ -294,6 +299,12 @@ inline constexpr QLatin1StringView OverrideAnimationTiming{"overrideAnimationTim
 /// checks the curve slot first.
 inline constexpr QLatin1StringView OverrideAnimationCurve{"overrideAnimationCurve"};
 inline constexpr QLatin1StringView SetOpacity{"setOpacity"};
+/// Context-domain overlay-property overrides. A matched context rule
+/// (screen / desktop / activity) overrides the active layout's overlay shader
+/// or style (display mode: zone rectangles vs layout preview) for that context's
+/// zone overlay. Resolved daemon-side via `LayoutRegistry::resolveContextOverlay`.
+inline constexpr QLatin1StringView OverrideOverlayShader{"overrideOverlayShader"};
+inline constexpr QLatin1StringView OverrideOverlayStyle{"overrideOverlayStyle"};
 /// Disable every animation override on a matched window. The opposite of
 /// the OverrideAnimation* family — the effect's shouldAnimateWindow gate
 /// surfaces this as "no animation for this window, regardless of other
@@ -429,6 +440,13 @@ inline constexpr QLatin1StringView OuterGapTop{"outer-gap-top"};
 inline constexpr QLatin1StringView OuterGapBottom{"outer-gap-bottom"};
 inline constexpr QLatin1StringView OuterGapLeft{"outer-gap-left"};
 inline constexpr QLatin1StringView OuterGapRight{"outer-gap-right"};
+// Per-context overlay-property slots (one per property so independent rules
+// cascade per-property). Filled by the OverrideOverlay* context actions, read
+// by `LayoutRegistry::resolveContextOverlay`. OverlayShader carries the shader
+// effect id (ActionParam::EffectId); OverlayStyle carries a wire token
+// (ActionParam::Value).
+inline constexpr QLatin1StringView OverlayShader{"overlay-shader"};
+inline constexpr QLatin1StringView OverlayStyle{"overlay-style"};
 // Animation slots are event-scoped: "anim-shader:<event>" / "anim-timing:<event>"
 // / "anim-curve:<event>". Curve and timing are split so they can be overridden
 // independently per event — `resolveAnimationMotionProfile` reads the curve

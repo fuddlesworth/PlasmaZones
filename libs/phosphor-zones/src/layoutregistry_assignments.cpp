@@ -151,6 +151,44 @@ bool LayoutRegistry::resolveContextLocked(const QString& screenId, int virtualDe
                                 });
 }
 
+ContextOverlayOverride LayoutRegistry::resolveContextOverlay(const QString& screenId, int virtualDesktop,
+                                                             const QString& activity) const
+{
+    // Per-slot read across all matching context rules (mirrors resolveContextGaps):
+    // independent overlay-shader / overlay-style / overlay-layer rules compose, and
+    // each populated field overrides the active layout's own value at the overlay
+    // build site. No engine-mode gate — an overlay-only context rule is first-class.
+    if (!m_evaluator) {
+        return ContextOverlayOverride{};
+    }
+
+    return resolveCachedContext(m_contextOverlayCache, m_contextOverlayCacheRevision, screenId, virtualDesktop,
+                                activity, [&]() -> ContextOverlayOverride {
+                                    ContextOverlayOverride overlay;
+                                    const PWR::WindowQuery query = makeContextQuery(screenId, virtualDesktop, activity);
+                                    const PWR::ResolvedActions resolved = m_evaluator->resolve(query);
+
+                                    if (const auto action = resolved.slot(QString(PWR::ActionSlot::OverlayShader))) {
+                                        const QString id = action->params.value(PWR::ActionParam::EffectId).toString();
+                                        if (!id.isEmpty()) {
+                                            overlay.shaderId = id;
+                                        }
+                                    }
+                                    if (const auto action = resolved.slot(QString(PWR::ActionSlot::OverlayStyle))) {
+                                        // Wire token → OverlayDisplayMode int so consumers compare against
+                                        // the same enum Layout::overlayDisplayMode() exposes (0 =
+                                        // ZoneRectangles, 1 = LayoutPreview).
+                                        const QString token = action->params.value(PWR::ActionParam::Value).toString();
+                                        if (token == QLatin1String("rectangles")) {
+                                            overlay.style = 0;
+                                        } else if (token == QLatin1String("preview")) {
+                                            overlay.style = 1;
+                                        }
+                                    }
+                                    return overlay;
+                                });
+}
+
 bool LayoutRegistry::hasExactContextRule(const QString& screenId, int virtualDesktop, const QString& activity) const
 {
     return findExactContextRule(screenId, virtualDesktop, activity) != nullptr;

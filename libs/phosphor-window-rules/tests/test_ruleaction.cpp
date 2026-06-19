@@ -42,6 +42,11 @@ const QList<QLatin1StringView> kContextDomainTypes = {
     ActionType::SetOuterGapBottom,
     ActionType::SetOuterGapLeft,
     ActionType::SetOuterGapRight,
+    // Overlay-property overrides are context-domain — resolved during the
+    // screen/desktop/activity pass (LayoutRegistry::resolveContextOverlay),
+    // never per-window.
+    ActionType::OverrideOverlayShader,
+    ActionType::OverrideOverlayStyle,
 };
 const QList<QLatin1StringView> kWindowDomainTypes = {
     ActionType::Exclude,

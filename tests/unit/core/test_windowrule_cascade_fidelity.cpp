@@ -679,6 +679,67 @@ private Q_SLOTS:
         QVERIFY(f.registry->resolveContextGaps(QStringLiteral("DP-2"), 0, QString()).isEmpty());
     }
 
+    // ─── Context overlay-property resolution (OverlayShader / OverlayStyle) ──
+    // resolveContextOverlay is a per-slot read across all matching context
+    // rules (mirrors resolveContextGaps): independent shader / style rules
+    // compose, and the style wire token maps to the OverlayDisplayMode int.
+
+    void testContextOverlay_perSlotComposition()
+    {
+        const auto overlayRule = [](const QString& name, int priority, const QString& screenId,
+                                    const QList<PWR::RuleAction>& actions) {
+            PWR::WindowRule r;
+            r.id = QUuid::createUuid();
+            r.name = name;
+            r.enabled = true;
+            r.priority = priority;
+            r.match = PWR::MatchExpression::makeLeaf(PWR::Field::ScreenId, PWR::Operator::Equals, screenId);
+            r.actions = actions;
+            return r;
+        };
+        const auto shaderAction = [](const QString& id) {
+            PWR::RuleAction a;
+            a.type = QString(PWR::ActionType::OverrideOverlayShader);
+            a.params.insert(QString(PWR::ActionParam::EffectId), id);
+            return a;
+        };
+        const auto styleAction = [](const QString& token) {
+            PWR::RuleAction a;
+            a.type = QString(PWR::ActionType::OverrideOverlayStyle);
+            a.params.insert(QString(PWR::ActionParam::Value), token);
+            return a;
+        };
+
+        RegistryFixture f = makeRegistryFixture();
+        // One rule sets ONLY the overlay shader; a separate rule sets ONLY the
+        // overlay style. Different slots → both compose (no shadowing).
+        const PWR::WindowRule sh = overlayRule(QStringLiteral("sh"), 400, QStringLiteral("DP-1"),
+                                               {shaderAction(QStringLiteral("plasma-glow"))});
+        const PWR::WindowRule st =
+            overlayRule(QStringLiteral("st"), 300, QStringLiteral("DP-1"), {styleAction(QStringLiteral("preview"))});
+        QVERIFY(f.store->setAllRules({sh, st}));
+
+        const PhosphorZones::ContextOverlayOverride resolved =
+            f.registry->resolveContextOverlay(QStringLiteral("DP-1"), 0, QString());
+        QVERIFY(resolved.shaderId.has_value());
+        QCOMPARE(*resolved.shaderId, QStringLiteral("plasma-glow"));
+        QVERIFY(resolved.style.has_value());
+        QCOMPARE(*resolved.style, 1); // "preview" → OverlayDisplayMode::LayoutPreview
+
+        // A context the rules do not pin → no override (falls through to layout).
+        QVERIFY(f.registry->resolveContextOverlay(QStringLiteral("DP-2"), 0, QString()).isEmpty());
+
+        // The "rectangles" token maps to OverlayDisplayMode::ZoneRectangles (0).
+        const PWR::WindowRule rect = overlayRule(QStringLiteral("rect"), 500, QStringLiteral("HDMI-1"),
+                                                 {styleAction(QStringLiteral("rectangles"))});
+        QVERIFY(f.store->setAllRules({rect}));
+        const PhosphorZones::ContextOverlayOverride r2 =
+            f.registry->resolveContextOverlay(QStringLiteral("HDMI-1"), 0, QString());
+        QVERIFY(r2.style.has_value());
+        QCOMPARE(*r2.style, 0);
+        QVERIFY(!r2.shaderId.has_value());
+    }
+
     // ─── Context lock resolution (ActionSlot::Locked) ─────────────────────
     // resolveContextLocked reads the boolean Locked slot off a matching
     // context rule. Mode-agnostic, never persisted — the daemon's
