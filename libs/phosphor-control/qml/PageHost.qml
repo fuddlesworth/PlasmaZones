@@ -97,6 +97,19 @@ Item {
             readonly property string pageId: pageLoader.modelData
             readonly property bool isCurrent: root.controller.currentPageId === pageLoader.pageId
 
+            // Deep-link reveal latch: when this page is built + current,
+            // consume any pending anchor targeting it and invoke the page's
+            // duck-typed revealAnchor() contract. Covers first build
+            // (onLoaded), cached re-show (onIsCurrentChanged), and same-page
+            // deep links (the pendingAnchorChanged Connections below).
+            function _maybeReveal() {
+                if (!pageLoader.item || !pageLoader.isCurrent || pageLoader.status !== Loader.Ready)
+                    return;
+                const anchor = root.controller.takePendingAnchor(pageLoader.pageId);
+                if (anchor.length > 0 && typeof pageLoader.item.revealAnchor === "function")
+                    pageLoader.item.revealAnchor(anchor);
+            }
+
             anchors.fill: parent
             anchors.margins: root.contentMargins
             // Built once when this page first becomes current; the compiled
@@ -127,8 +140,10 @@ Item {
             opacity: 0
             onIsCurrentChanged: {
                 if (pageLoader.isCurrent) {
-                    if (pageLoader.status === Loader.Ready)
+                    if (pageLoader.status === Loader.Ready) {
                         pageFadeIn.restart();
+                        pageLoader._maybeReveal();
+                    }
                 } else {
                     pageFadeIn.stop();
                     pageLoader.opacity = 0;
@@ -161,8 +176,21 @@ Item {
 
                 // Fade in if this page is the one being shown (covers the
                 // common first-visit case: built async while current).
-                if (pageLoader.isCurrent)
+                if (pageLoader.isCurrent) {
                     pageFadeIn.restart();
+                    pageLoader._maybeReveal();
+                }
+            }
+
+            Connections {
+                // Same-page deep link: the page is already built + current, so
+                // neither onLoaded nor onIsCurrentChanged fires — react to the
+                // pending-anchor signal directly.
+                function onPendingAnchorChanged() {
+                    pageLoader._maybeReveal();
+                }
+
+                target: root.controller
             }
         }
     }

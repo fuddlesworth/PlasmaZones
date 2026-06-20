@@ -45,6 +45,7 @@ SettingsFlickable {
         SettingsCard {
             headerText: i18n("Rendering")
             collapsible: true
+            searchAnchor: "rendering"
 
             contentItem: ColumnLayout {
                 spacing: Kirigami.Units.smallSpacing
@@ -52,6 +53,7 @@ SettingsFlickable {
                 SettingsRow {
                     title: i18n("Rendering backend")
                     description: i18n("Graphics API used for overlay rendering")
+                    searchAnchor: "renderingBackend"
 
                     ComboBox {
                         id: renderingBackendCombo
@@ -105,6 +107,7 @@ SettingsFlickable {
         SettingsCard {
             headerText: i18n("Window filtering")
             collapsible: true
+            searchAnchor: "windowFiltering"
 
             contentItem: ColumnLayout {
                 spacing: Kirigami.Units.smallSpacing
@@ -112,6 +115,7 @@ SettingsFlickable {
                 SettingsRow {
                     title: i18n("Exclude transient windows")
                     description: i18n("Skip dialogs, popups, and toolbars for snapping and tiling")
+                    searchAnchor: "excludeTransient"
 
                     SettingsSwitch {
                         checked: appSettings.excludeTransientWindows
@@ -214,6 +218,7 @@ SettingsFlickable {
                 SettingsRow {
                     title: i18n("Reset")
                     description: i18n("Restore every setting on every page to its default value")
+                    searchAnchor: "resetDefaults"
 
                     Button {
                         text: i18n("Reset to Defaults")

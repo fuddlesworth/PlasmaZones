@@ -37,7 +37,11 @@ bool SettingsLaunchController::registerDBusService()
 
 void SettingsLaunchController::handleSetActivePage(const QString& page)
 {
-    m_controller->setActivePage(page);
+    // `page` is an address that MAY carry a "#anchor" deep-link fragment
+    // (the D-Bus method name is unchanged for compatibility). Route through
+    // navigateTo so a forwarded `--setting` reveals the target; a
+    // fragment-free string behaves exactly like setActivePage.
+    m_controller->navigateTo(page);
 }
 
 } // namespace PlasmaZones

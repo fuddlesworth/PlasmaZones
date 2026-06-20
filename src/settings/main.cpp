@@ -46,13 +46,16 @@ constexpr PlasmaZones::SingleInstanceIds kSettingsIds{PhosphorProtocol::Service:
 /// No Wayland workaround reliably convinces KWin to bring an already-mapped
 /// xdg_toplevel to the front from a programmatic caller, so the user has to
 /// focus the existing window themselves.
-bool activateRunningInstance(const QString& page)
+bool activateRunningInstance(const QString& address)
 {
     if (!PlasmaZones::SingleInstanceService::isRunning(kSettingsIds))
         return false;
 
-    if (!page.isEmpty()) {
-        PlasmaZones::SingleInstanceService::forward(kSettingsIds, QStringLiteral("setActivePage"), {page});
+    if (!address.isEmpty()) {
+        // The D-Bus method is still "setActivePage" (signature unchanged); the
+        // running instance routes it through navigateTo(), so an address with a
+        // trailing "#anchor" fragment deep-links to a specific setting.
+        PlasmaZones::SingleInstanceService::forward(kSettingsIds, QStringLiteral("setActivePage"), {address});
     }
     return true;
 }
@@ -97,12 +100,29 @@ int main(int argc, char* argv[])
     QCommandLineOption pageOption(QStringList{QStringLiteral("p"), QStringLiteral("page")},
                                   PhosphorI18n::tr("Open a specific settings page"), QStringLiteral("name"));
     parser.addOption(pageOption);
+    QCommandLineOption settingOption(QStringList{QStringLiteral("s"), QStringLiteral("setting")},
+                                     PhosphorI18n::tr("Reveal a specific setting on the page (deep link)"),
+                                     QStringLiteral("anchor"));
+    parser.addOption(settingOption);
+    QCommandLineOption sectionOption(QStringLiteral("section"),
+                                     PhosphorI18n::tr("Reveal a specific section on the page (deep link)"),
+                                     QStringLiteral("anchor"));
+    parser.addOption(sectionOption);
     parser.process(app);
 
     const QString requestedPage = parser.isSet(pageOption) ? parser.value(pageOption) : QString();
+    // --setting takes precedence over --section; either composes a
+    // "pageId#anchor" address consumed by navigateTo(). An anchor is
+    // meaningless without a page, so it's only appended when both are present.
+    const QString requestedAnchor = parser.isSet(settingOption)
+        ? parser.value(settingOption)
+        : (parser.isSet(sectionOption) ? parser.value(sectionOption) : QString());
+    const QString requestedAddress = (!requestedPage.isEmpty() && !requestedAnchor.isEmpty())
+        ? (requestedPage + QLatin1Char('#') + requestedAnchor)
+        : requestedPage;
 
-    // Single-instance: if another instance is running, forward the page request and exit
-    if (activateRunningInstance(requestedPage)) {
+    // Single-instance: if another instance is running, forward the request and exit
+    if (activateRunningInstance(requestedAddress)) {
         return 0;
     }
 
@@ -157,7 +177,7 @@ int main(int argc, char* argv[])
     // activateRunningInstance() check and now — retry forwarding and exit.
     if (!launcher.registerDBusService()) {
         qCWarning(PlasmaZones::lcCore) << "D-Bus service already owned; forwarding to running instance";
-        if (activateRunningInstance(requestedPage)) {
+        if (activateRunningInstance(requestedAddress)) {
             return 0;
         }
         // D-Bus name is taken but we can't reach the owner — bail out
@@ -178,8 +198,8 @@ int main(int argc, char* argv[])
     engine.rootContext()->setContextProperty(QStringLiteral("settingsController"), &controller);
     engine.rootContext()->setContextProperty(QStringLiteral("appSettings"), controller.settings());
 
-    if (!requestedPage.isEmpty()) {
-        controller.setActivePage(requestedPage);
+    if (!requestedAddress.isEmpty()) {
+        controller.navigateTo(requestedAddress);
     }
 
     engine.loadFromModule("org.plasmazones.settings", "Main");

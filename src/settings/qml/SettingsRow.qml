@@ -24,6 +24,9 @@ Item {
     // ── Public API ──────────────────────────────────────────────────────
     property string title: ""
     property string description: ""
+    /// Deep-link reveal anchor id for this row. Empty = not addressable.
+    /// See SettingsFlickable.revealAnchor.
+    property string searchAnchor: ""
     default property alias content: controlContainer.data
 
     Layout.fillWidth: true
@@ -32,6 +35,50 @@ Item {
     Accessible.name: root.title
     Accessible.description: root.description
     Accessible.role: Accessible.Row
+
+    Component.onCompleted: {
+        if (root.searchAnchor.length > 0)
+            Qt.callLater(root._registerSearchAnchor);
+    }
+    Component.onDestruction: {
+        if (root.searchAnchor.length > 0)
+            root._unregisterSearchAnchor();
+    }
+
+    // Resolve the hosting page (SettingsFlickable) and the collapsible card
+    // this row lives in (so reveal can expand the card first). Deferred via
+    // callLater because SettingsCard reparents its contentItem — the parent
+    // chain to the page is only complete after construction settles.
+    function _searchPage() {
+        var p = root.parent;
+        while (p) {
+            if (typeof p.registerSearchAnchor === "function")
+                return p;
+
+            p = p.parent;
+        }
+        return null;
+    }
+    function _searchCard() {
+        var p = root.parent;
+        while (p) {
+            if (p.expandFinished !== undefined)
+                return p;
+
+            p = p.parent;
+        }
+        return null;
+    }
+    function _registerSearchAnchor() {
+        var pg = root._searchPage();
+        if (pg)
+            pg.registerSearchAnchor(root.searchAnchor, root, root._searchCard());
+    }
+    function _unregisterSearchAnchor() {
+        var pg = root._searchPage();
+        if (pg)
+            pg.unregisterSearchAnchor(root.searchAnchor);
+    }
 
     RowLayout {
         id: rowLayout
@@ -64,7 +111,6 @@ Item {
                 maximumLineCount: 3
                 elide: Text.ElideRight
             }
-
         }
 
         // Right side: control widget (default children)
@@ -75,7 +121,5 @@ Item {
             Layout.maximumWidth: rowLayout.width * 0.45
             spacing: Kirigami.Units.smallSpacing
         }
-
     }
-
 }

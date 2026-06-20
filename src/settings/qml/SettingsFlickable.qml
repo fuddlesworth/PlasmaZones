@@ -81,6 +81,117 @@ Flickable {
     /// top border never fully shows on hover.
     topMargin: Kirigami.Units.smallSpacing
 
+    // ── Deep-link reveal (global search / `--setting`) ───────────────────
+    // Rows and cards self-register here by anchor id (see SettingsRow /
+    // SettingsCard `searchAnchor`). PageHost duck-calls `revealAnchor()` once
+    // this page is built + current for a pending deep link: it expands the
+    // containing card if collapsed, smooth-scrolls the target into view, then
+    // pulses a highlight. Registration via the page is generic — any page
+    // rooted on SettingsFlickable inherits the whole reveal contract.
+    property var _searchAnchors: ({})
+
+    function registerSearchAnchor(anchorId, item, card) {
+        if (!anchorId || anchorId.length === 0 || !item)
+            return;
+
+        settingsFlickable._searchAnchors[anchorId] = {
+            "item": item,
+            "card": card || null
+        };
+    }
+
+    function unregisterSearchAnchor(anchorId) {
+        if (anchorId && settingsFlickable._searchAnchors[anchorId])
+            delete settingsFlickable._searchAnchors[anchorId];
+    }
+
+    function revealAnchor(anchorId) {
+        var entry = settingsFlickable._searchAnchors[anchorId];
+        if (!entry || !entry.item)
+            return;
+
+        var card = entry.card;
+        if (card && card.collapsible === true && card.collapsed === true) {
+            // Expand first; measure + scroll only after the expand animation
+            // settles, else the target's geometry is still mid-collapse.
+            var onExpanded = function () {
+                card.expandFinished.disconnect(onExpanded);
+                settingsFlickable._scrollToReveal(entry.item);
+            };
+            card.expandFinished.connect(onExpanded);
+            card.collapsed = false;
+        } else {
+            settingsFlickable._scrollToReveal(entry.item);
+        }
+    }
+
+    function _scrollToReveal(item) {
+        // Defer one tick so a freshly-built / just-expanded layout settles
+        // before we measure the target's mapped position.
+        Qt.callLater(function () {
+            if (!item)
+                return;
+
+            var pt = item.mapToItem(settingsFlickable.contentItem, 0, 0);
+            var headroom = Kirigami.Units.gridUnit;
+            var maxY = Math.max(0, settingsFlickable.contentHeight - settingsFlickable.height);
+            revealScrollAnim.to = Math.max(0, Math.min(pt.y - headroom, maxY));
+            revealScrollAnim.restart();
+
+            revealHighlight.x = pt.x;
+            revealHighlight.y = pt.y;
+            revealHighlight.width = item.width;
+            revealHighlight.height = item.height;
+            revealPulse.restart();
+        });
+    }
+
+    NumberAnimation {
+        id: revealScrollAnim
+
+        target: settingsFlickable
+        properties: "contentY"
+        duration: Kirigami.Units.longDuration
+        easing.type: Easing.OutCubic
+    }
+
+    // Declared as a child → lives in the Flickable's contentItem, so its
+    // content-space x/y track the revealed item while the page scrolls.
+    Rectangle {
+        id: revealHighlight
+
+        z: 100
+        radius: Kirigami.Units.smallSpacing
+        color: "transparent"
+        border.width: 2
+        border.color: Kirigami.Theme.highlightColor
+        opacity: 0
+        visible: opacity > 0
+
+        SequentialAnimation {
+            id: revealPulse
+
+            NumberAnimation {
+                target: revealHighlight
+                properties: "opacity"
+                from: 0
+                to: 1
+                duration: Kirigami.Units.shortDuration
+            }
+
+            PauseAnimation {
+                duration: 700
+            }
+
+            NumberAnimation {
+                target: revealHighlight
+                properties: "opacity"
+                to: 0
+                duration: Kirigami.Units.longDuration
+            }
+        }
+    }
+
     Kirigami.WheelHandler {
         // Leave `filterMouseEvents` at its default of `false` — that
         // flag is for nested-Flickable scenarios where you want the

@@ -55,7 +55,37 @@ void ApplicationController::setCurrentPageId(const QString& id)
         return;
     }
     m_currentPageId = id;
+    // Discard a stale deep-link reveal anchor when navigation moves to a
+    // different page than the one it targeted (discard-on-navigate-away).
+    if (!m_pendingAnchor.isEmpty() && m_pendingAnchorPage != m_currentPageId) {
+        m_pendingAnchor.clear();
+        m_pendingAnchorPage.clear();
+        Q_EMIT pendingAnchorChanged();
+    }
     Q_EMIT currentPageIdChanged();
+}
+
+void ApplicationController::setPendingAnchor(const QString& pageId, const QString& anchor)
+{
+    if (pageId.isEmpty() || anchor.isEmpty()) {
+        return;
+    }
+    m_pendingAnchorPage = pageId;
+    m_pendingAnchor = anchor;
+    Q_EMIT pendingAnchorChanged();
+}
+
+QString ApplicationController::takePendingAnchor(const QString& pageId)
+{
+    if (m_pendingAnchor.isEmpty() || m_pendingAnchorPage != pageId) {
+        return QString();
+    }
+    const QString anchor = m_pendingAnchor;
+    m_pendingAnchor.clear();
+    m_pendingAnchorPage.clear();
+    // No pendingAnchorChanged emit: the caller has the value and is acting on
+    // it; re-emitting would only trigger further no-op takes.
+    return anchor;
 }
 
 void ApplicationController::registerPage(PageController* page, const QString& parentId, const QString& title,

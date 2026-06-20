@@ -50,6 +50,9 @@ Item {
     // Header enable toggle
     property bool showToggle: false
     property bool toggleChecked: false
+    /// Deep-link reveal anchor id for this card (section-level target). Empty
+    /// = not addressable. See SettingsFlickable.revealAnchor.
+    property string searchAnchor: ""
 
     // Per-monitor scope chip (optional). When scopeEnabled, the header shows a
     // monitor scope chip right after the title, collapsed to "All Monitors",
@@ -62,6 +65,10 @@ Item {
     property string scopeClearerMethod: ""
 
     signal toggleClicked(bool checked)
+    /// Emitted when the expand animation completes. SettingsFlickable's
+    /// revealAnchor waits on this before measuring a target inside a card it
+    /// just expanded (geometry is mid-animation until then).
+    signal expandFinished
 
     onCollapsedChanged: {
         if (collapsed) {
@@ -83,6 +90,36 @@ Item {
             contentClip.height = 0;
             contentClip.opacity = 0;
         }
+        if (root.searchAnchor.length > 0)
+            Qt.callLater(root._registerSearchAnchor);
+    }
+    Component.onDestruction: {
+        if (root.searchAnchor.length > 0)
+            root._unregisterSearchAnchor();
+    }
+
+    // Register this card as a section-level reveal target (card == self).
+    // Deferred via callLater so the subtree is attached to the page before we
+    // walk the parent chain to find the hosting SettingsFlickable.
+    function _searchPage() {
+        var p = root.parent;
+        while (p) {
+            if (typeof p.registerSearchAnchor === "function")
+                return p;
+
+            p = p.parent;
+        }
+        return null;
+    }
+    function _registerSearchAnchor() {
+        var pg = root._searchPage();
+        if (pg)
+            pg.registerSearchAnchor(root.searchAnchor, root, root);
+    }
+    function _unregisterSearchAnchor() {
+        var pg = root._searchPage();
+        if (pg)
+            pg.unregisterSearchAnchor(root.searchAnchor);
     }
     Layout.fillWidth: true
     implicitHeight: cardBg.height
@@ -302,6 +339,10 @@ Item {
 
             SequentialAnimation {
                 id: expandAnim
+
+                // Fires only on natural completion (not when collapseAnim
+                // stops it), so revealAnchor measures geometry once it's final.
+                onFinished: root.expandFinished()
 
                 PhosphorMotionAnimation {
                     target: contentClip

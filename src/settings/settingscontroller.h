@@ -158,6 +158,15 @@ public:
     /// user focus the existing window themselves.
     void setActivePage(const QString& page);
 
+    /// Navigate to an addressable target `pageId#anchor`. The page part is
+    /// resolved + switched via setActivePage (parent→leaf redirect, dirty
+    /// handling — identical to a sidebar click); the optional `#anchor`
+    /// fragment is stashed as a deep-link reveal request keyed to the
+    /// RESOLVED leaf page, so PageHost reveals it once the page is built.
+    /// A fragment-free address behaves byte-for-byte like setActivePage.
+    /// Entry point for `--page`/`--setting` CLI args and the D-Bus forward.
+    Q_INVOKABLE void navigateTo(const QString& address);
+
     static const QSet<QString>& validPageNames();
     static const QHash<QString, QString>& parentPageRedirects();
     /// Parent name → set of leaf child page names. Covers top-level sidebar
