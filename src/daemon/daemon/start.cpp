@@ -126,9 +126,10 @@ void Daemon::connectScreenSignals()
                 // refreshVirtualConfigs() in response to its own change signal.
                 const QString physId = screen.identifier;
                 const QStringList vsIds = m_screenManager->virtualScreenIdsFor(physId);
-                const int desktop = currentDesktop();
                 const QString activity = currentActivity();
                 for (const QString& sid : vsIds) {
+                    // Per-output virtual desktops (#648): each screen its own desktop.
+                    const int desktop = currentDesktopForScreen(sid);
                     PhosphorZones::Layout* screenLayout = m_layoutManager->layoutForScreen(sid, desktop, activity);
                     if (screenLayout) {
                         PhosphorZones::LayoutComputeService::recalculateSync(
@@ -823,12 +824,13 @@ void Daemon::onVirtualScreensReconfigured(const QString& physicalScreenId)
     // that any PhosphorTiles::TilingState created by the upcoming updateAutotileScreens
     // call (and the resnap below) reads fresh zone bounds. The screenAdded
     // handler does the same inline recalc for newly-added physical screens.
-    const int desktop = currentDesktop();
     const QString activity = currentActivity();
     const QStringList affectedScreenIds = config.hasSubdivisions()
         ? m_screenManager->virtualScreenIdsFor(physicalScreenId)
         : QStringList{physicalScreenId};
     for (const QString& sid : affectedScreenIds) {
+        // Per-output virtual desktops (#648): each screen its own desktop.
+        const int desktop = currentDesktopForScreen(sid);
         PhosphorZones::Layout* screenLayout = m_layoutManager->layoutForScreen(sid, desktop, activity);
         if (screenLayout) {
             PhosphorZones::LayoutComputeService::recalculateSync(
@@ -906,10 +908,11 @@ void Daemon::onVirtualScreenRegionsChanged(const QString& physicalScreenId)
     // pass on top of the engine's own, producing the visible "move then
     // retile" double-movement reported on VS swap/rotate.
 
-    const int desktop = currentDesktop();
     const QString activity = currentActivity();
     const QStringList affectedScreenIds = m_screenManager->virtualScreenIdsFor(physicalScreenId);
     for (const QString& sid : affectedScreenIds) {
+        // Per-output virtual desktops (#648): each screen its own desktop.
+        const int desktop = currentDesktopForScreen(sid);
         PhosphorZones::Layout* screenLayout = m_layoutManager->layoutForScreen(sid, desktop, activity);
         if (screenLayout) {
             PhosphorZones::LayoutComputeService::recalculateSync(

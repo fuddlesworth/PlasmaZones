@@ -253,6 +253,13 @@ int WindowTrackingAdaptor::currentDesktop() const
     return m_virtualDesktopManager ? m_virtualDesktopManager->currentDesktop() : 0;
 }
 
+int WindowTrackingAdaptor::currentDesktopForScreen(const QString& screenId) const
+{
+    // Per-output virtual desktops (#648): this screen's current desktop, falling
+    // back to the global current when no per-output value is on record.
+    return m_virtualDesktopManager ? m_virtualDesktopManager->currentDesktopForScreen(screenId) : 0;
+}
+
 void WindowTrackingAdaptor::setScreenModeRouter(ScreenModeRouter* router)
 {
     m_screenModeRouter = router;
@@ -998,7 +1005,7 @@ void WindowTrackingAdaptor::windowActivated(const QString& windowId, const QStri
     if (!zoneId.isEmpty() && m_settings && m_settings->moveNewWindowsToLastZone()
         && !m_service->isAutoSnapped(windowId)) {
         QString windowClass = m_service->currentAppIdFor(windowId);
-        m_service->updateLastUsedZone(zoneId, resolvedScreen, windowClass, currentDesktop());
+        m_service->updateLastUsedZone(zoneId, resolvedScreen, windowClass, currentDesktopForScreen(resolvedScreen));
     }
 }
 
