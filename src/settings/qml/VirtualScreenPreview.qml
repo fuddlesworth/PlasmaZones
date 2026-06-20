@@ -188,6 +188,10 @@ Rectangle {
                 anchors.margins: -4
                 cursorShape: Qt.SplitHCursor
                 hoverEnabled: true
+                // Keep the drag from being stolen by the enclosing
+                // SettingsFlickable — without this, dragging a divider also
+                // flicks/scrolls the whole settings page.
+                preventStealing: true
                 onPressed: function (mouse) {
                     dragStartX = mouse.x + colDividerHandle.x;
                     dragStartFraction = colDividerHandle.dividerX / previewRoot.width;
@@ -293,6 +297,10 @@ Rectangle {
                 anchors.margins: -4
                 cursorShape: Qt.SplitVCursor
                 hoverEnabled: true
+                // Keep the drag from being stolen by the enclosing
+                // SettingsFlickable — without this, dragging a divider also
+                // flicks/scrolls the whole settings page.
+                preventStealing: true
                 onPressed: function (mouse) {
                     dragStartY = mouse.y + rowDividerHandle.y;
                     dragStartFraction = rowDividerHandle.dividerY / previewRoot.height;
