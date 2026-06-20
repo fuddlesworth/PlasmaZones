@@ -108,6 +108,8 @@ SettingsFlickable {
                         id: saveStatus
 
                         Layout.fillWidth: true
+                        Layout.leftMargin: Kirigami.Units.largeSpacing
+                        Layout.rightMargin: Kirigami.Units.largeSpacing
                         type: Kirigami.MessageType.Error
                         showCloseButton: true
                     }

@@ -426,6 +426,8 @@ Item {
             // ── Inheritance info ──────────────────────────────────────
             Kirigami.InlineMessage {
                 Layout.fillWidth: true
+                Layout.leftMargin: Kirigami.Units.largeSpacing
+                Layout.rightMargin: Kirigami.Units.largeSpacing
                 type: Kirigami.MessageType.Information
                 visible: !root.alwaysEnabled && (root.isParentNode ? root.overrideEnabled : !root.overrideEnabled)
                 text: {
@@ -453,6 +455,8 @@ Item {
             // each shadowing leaf manually and clear its override.
             Kirigami.InlineMessage {
                 Layout.fillWidth: true
+                Layout.leftMargin: Kirigami.Units.largeSpacing
+                Layout.rightMargin: Kirigami.Units.largeSpacing
                 type: Kirigami.MessageType.Warning
                 visible: root.isParentNode && root._shadowingChildrenCount > 0
                 text: i18np("%n descendant event has a shader override that shadows this parent.", "%n descendant events have shader overrides that shadow this parent.", root._shadowingChildrenCount)

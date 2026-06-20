@@ -81,6 +81,11 @@ SettingsFlickable {
 
                 Kirigami.InlineMessage {
                     Layout.fillWidth: true
+                    // Match SettingsRow's horizontal inset so the banner lines
+                    // up with the rows above it instead of running edge-to-edge
+                    // to the card border.
+                    Layout.leftMargin: Kirigami.Units.largeSpacing
+                    Layout.rightMargin: Kirigami.Units.largeSpacing
                     type: Kirigami.MessageType.Information
                     text: settingsController.daemonRunning ? i18n("Stop the daemon to change the rendering backend.") : i18n("Rendering backend changes take effect after restarting the daemon.")
                     visible: settingsController.daemonRunning || appSettings.renderingBackend !== settingsController.generalPage.startupRenderingBackend

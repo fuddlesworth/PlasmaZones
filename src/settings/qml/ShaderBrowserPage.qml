@@ -299,6 +299,8 @@ SettingsFlickable {
                     }
 
                     Layout.fillWidth: true
+                    Layout.leftMargin: Kirigami.Units.largeSpacing
+                    Layout.rightMargin: Kirigami.Units.largeSpacing
                     visible: false
                     showCloseButton: true
 
