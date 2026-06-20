@@ -77,19 +77,12 @@ void PlasmaZonesEffect::slotWindowAdded(KWin::EffectWindow* w)
     setupWindowConnections(w);
     updateWindowStickyState(w);
 
-    // window.open shader transition: fires once for every newly-mapped
-    // normal top-level window we handle. Gate so the shader DOESN'T fire
-    // on the child surfaces an app spawns alongside its main window (popup
-    // menus, dropdowns, tooltips, dialogs, transient utility windows).
-    // Without this gate, a single app open like Discord triggers a
-    // fly-in on every sub-surface — main window sliding in slowly while
-    // sidebar / popup surfaces slide in moments behind it from t=0,
-    // producing the "main slow + copies fast" visual artifact users
-    // describe as "multiple ghosted copies of the animation". KWin's
-    // stock fade-in still handles the cosmetic motion for the filtered-
-    // out surfaces; we just skip the user's surface-extent shader leg.
-    // Same predicate gates both the user-assigned open shader and the
-    // first-frame suppression decision below. Compute once.
+    // Tileable-app predicate: a normal top-level window we both handle and can
+    // tile, that didn't open minimized. Drives the snap-restore candidacy and
+    // the first-frame suppression decision below. It does NOT gate the open
+    // shader — that gates on the animation filter (see the window.open block),
+    // so the user's "exclude transient windows" animation setting stays
+    // authoritative for which windows animate on open.
     const bool tileableAppWindow = shouldHandleWindow(w) && isTileableWindow(w) && !w->isMinimized();
 
     // Whether this window is a snap-restore candidate — it may be
@@ -97,13 +90,26 @@ void PlasmaZonesEffect::slotWindowAdded(KWin::EffectWindow* w)
     // cache, or after an async daemon resolve). Stricter than
     // tileableAppWindow: also excludes multi-instance siblings.
     const bool canSnapRestore = tileableAppWindow && !hasOtherWindowOfClassWithDifferentPid(w);
-    if (tileableAppWindow) {
-        // holdAddedGrab=true: take KWin::WindowAddedGrabRole so KWin's
-        // stock window-open built-ins (fade / scale / slide / glide)
-        // skip this window. Without it, KWin's stock fade-in renders
-        // the window at its natural position concurrently with our
-        // shader's UV-shifted animation, producing the visible
-        // multi-copy ghost trail.
+    // window.open shader transition. Gate on the animation filter
+    // (shouldAnimateWindow, enforced inside tryBeginShaderForEvent) — NOT on
+    // tiling eligibility. isTileableWindow() rejects every transient / dialog /
+    // popup / menu, so gating the open shader on tileableAppWindow suppressed it
+    // for those windows regardless of the user's "exclude transient windows"
+    // animation setting, while slotWindowClosed (window.close) gates only on
+    // shouldAnimateWindow. That asymmetry made transients animate on close but
+    // never on open. Mirroring the close path makes the setting authoritative
+    // for both: with exclude-transients off (the default) a transient gets its
+    // open shader; with it on, shouldAnimateWindow drops the child surfaces,
+    // preserving the ghost-trail suppression the old tiling gate provided for
+    // apps that spawn popups/dropdowns alongside their main window.
+    //
+    // holdAddedGrab=true: take KWin::WindowAddedGrabRole so KWin's stock
+    // window-open built-ins (fade / scale / slide / glide) skip this window;
+    // without it KWin's stock fade-in renders concurrently with our shader,
+    // producing the visible multi-copy ghost trail. tryBeginShaderForEvent
+    // takes the grab only after shouldAnimateWindow passes, so it is never held
+    // for a window we don't animate.
+    if (!w->isMinimized()) {
         tryBeginShaderForEvent(w, PhosphorAnimation::ProfilePaths::WindowOpen, animationDurationMs(),
                                /*reverse=*/false, /*holdCloseGrab=*/false, /*holdAddedGrab=*/true);
     }
