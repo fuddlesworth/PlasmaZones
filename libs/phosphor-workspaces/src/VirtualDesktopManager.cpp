@@ -215,6 +215,7 @@ void VirtualDesktopManager::onKWinDesktopCreated()
 void VirtualDesktopManager::onKWinDesktopRemoved()
 {
     refreshFromKWin();
+    clampScreenDesktopsToCount();
     Q_EMIT desktopCountChanged(m_desktopCount);
 }
 
@@ -246,6 +247,55 @@ void VirtualDesktopManager::stop()
 int VirtualDesktopManager::currentDesktop() const
 {
     return m_useKWinDBus ? m_currentDesktop : 1;
+}
+
+int VirtualDesktopManager::currentDesktopForScreen(const QString& screenId) const
+{
+    const auto it = m_screenDesktops.constFind(screenId);
+    return it != m_screenDesktops.constEnd() ? it.value() : currentDesktop();
+}
+
+bool VirtualDesktopManager::perScreenModeActive() const
+{
+    if (m_screenDesktops.size() < 2) {
+        return false;
+    }
+    auto it = m_screenDesktops.constBegin();
+    const int first = it.value();
+    for (++it; it != m_screenDesktops.constEnd(); ++it) {
+        if (it.value() != first) {
+            return true;
+        }
+    }
+    return false;
+}
+
+void VirtualDesktopManager::updateScreenDesktop(const QString& screenId, int desktop)
+{
+    if (screenId.isEmpty() || desktop < 1) {
+        return;
+    }
+    if (m_screenDesktops.value(screenId, -1) == desktop) {
+        return;
+    }
+    m_screenDesktops.insert(screenId, desktop);
+    Q_EMIT screenDesktopChanged(screenId, desktop);
+}
+
+void VirtualDesktopManager::clampScreenDesktopsToCount()
+{
+    // Mutate first, then emit — emitting mid-iteration could re-enter
+    // updateScreenDesktop and invalidate the hash iterator.
+    QStringList clamped;
+    for (auto it = m_screenDesktops.begin(); it != m_screenDesktops.end(); ++it) {
+        if (it.value() > m_desktopCount) {
+            it.value() = m_desktopCount;
+            clamped.append(it.key());
+        }
+    }
+    for (const QString& screenId : clamped) {
+        Q_EMIT screenDesktopChanged(screenId, m_screenDesktops.value(screenId));
+    }
 }
 
 void VirtualDesktopManager::setCurrentDesktop(int desktop)
@@ -281,6 +331,8 @@ void VirtualDesktopManager::onNumberOfDesktopsChanged(int count)
         m_currentDesktop = m_desktopCount;
         Q_EMIT currentDesktopChanged(m_currentDesktop);
     }
+
+    clampScreenDesktopsToCount();
 
     Q_EMIT desktopCountChanged(count);
 }

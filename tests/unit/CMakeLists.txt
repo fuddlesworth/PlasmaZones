@@ -25,6 +25,7 @@ endmacro()
 # ═══════════════════════════════════════════════════════════════════════════════
 p_add_test(test_window_identity core/test_window_identity.cpp)
 p_add_test(test_window_registry core/test_window_registry.cpp)
+p_add_test(test_virtual_desktop_per_screen core/test_virtual_desktop_per_screen.cpp)
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # core/ - Window Tracking Tests (snap/unsnap, floating)
