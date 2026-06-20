@@ -1506,7 +1506,8 @@ bool Daemon::init()
                         // Resolve the algorithm's human-readable display
                         // name via the registry instead of surfacing the
                         // wire-format id (e.g. "bsp" → "Binary Split").
-                        // Mirrors osd.cpp:548-551.
+                        // Mirrors the algorithm display-name resolution in the
+                        // per-screen OSD path (showOsdForScreens, osd.cpp).
                         const auto* algo = m_algorithmRegistry ? m_algorithmRegistry->algorithm(osd.algoId) : nullptr;
                         const QString displayName = algo ? algo->name() : osd.algoId;
                         showLayoutOsdForAlgorithm(osd.algoId, displayName, osd.screenId);

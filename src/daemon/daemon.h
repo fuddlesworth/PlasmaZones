@@ -468,7 +468,8 @@ private:
      * Iterates effectiveScreenIds, resolves assignment (autotile vs snapping),
      * and calls showLayoutOsdForAlgorithm or showLayoutOsd per screen inside
      * a single deferred event-loop pass so all surfaces show simultaneously.
-     * DRY helper shared by showDesktopSwitchOsd and settingsChanged handler.
+     * DRY helper shared by showDesktopSwitchOsd and the startup OSD path
+     * (finalizeStartup).
      */
     void showOsdForAllScreens(const QString& activity);
 
