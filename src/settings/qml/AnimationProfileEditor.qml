@@ -215,6 +215,10 @@ ColumnLayout {
         // override toggle gates the whole timing section).
         CheckBox {
             Layout.fillWidth: true
+            // Inset to match the SettingsRows below (which self-inset by
+            // largeSpacing); without it this custom row runs edge-to-edge.
+            Layout.leftMargin: Kirigami.Units.largeSpacing
+            Layout.rightMargin: Kirigami.Units.largeSpacing
             visible: root.showOverrideCheckboxes
             text: i18n("Override curve")
             checked: root.overrideCurve
@@ -232,6 +236,12 @@ ColumnLayout {
         // weight with the active controls.
         RowLayout {
             Layout.fillWidth: true
+            // Inset the curve-summary row (thumbnail + description + Customize…)
+            // to match the SettingsRows below, which self-inset by largeSpacing.
+            // Without it the thumbnail hugs the left edge and the Customize button
+            // the right edge of the card.
+            Layout.leftMargin: Kirigami.Units.largeSpacing
+            Layout.rightMargin: Kirigami.Units.largeSpacing
             spacing: Kirigami.Units.largeSpacing
             opacity: (!root.showOverrideCheckboxes || root.overrideCurve) ? 1 : 0.5
             enabled: !root.showOverrideCheckboxes || root.overrideCurve
