@@ -75,6 +75,12 @@ Flickable {
     /// produces visibly jittery wheel-during-decay frames.
     boundsBehavior: Flickable.StopAtBounds
 
+    /// Top breathing room so the first card's hover lift (-1px) and its
+    /// highlighted top border aren't clipped against the page's top edge
+    /// (every settings page sets `clip: true`). Without it the topmost card's
+    /// top border never fully shows on hover.
+    topMargin: Kirigami.Units.smallSpacing
+
     Kirigami.WheelHandler {
         // Leave `filterMouseEvents` at its default of `false` — that
         // flag is for nested-Flickable scenarios where you want the
@@ -97,5 +103,4 @@ Flickable {
         // but is fragile under any future Loader / Component wrapping.
         target: settingsFlickable
     }
-
 }
