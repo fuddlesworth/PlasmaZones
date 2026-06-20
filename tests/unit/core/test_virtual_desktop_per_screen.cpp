@@ -14,7 +14,9 @@
  * connection (m_useKWinDBus stays false, currentDesktop() == 1) and exercise the
  * per-screen model directly through its public API.
  *
- * This phase is behaviour-preserving: nothing consumes screenDesktopChanged yet.
+ * These tests exercise the VirtualDesktopManager model in isolation; the daemon
+ * wires screenDesktopChanged into its per-screen context and OSD handling
+ * downstream (see Daemon::screenDesktopChanged).
  */
 
 #include <QSignalSpy>
