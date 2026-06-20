@@ -142,6 +142,8 @@ SettingsFlickable {
                         id: colorImportMessage
 
                         Layout.fillWidth: true
+                        Layout.leftMargin: Kirigami.Units.largeSpacing
+                        Layout.rightMargin: Kirigami.Units.largeSpacing
                         visible: false
                         type: Kirigami.MessageType.Positive
                         Accessible.name: text
@@ -472,6 +474,8 @@ SettingsFlickable {
 
                     Kirigami.InlineMessage {
                         Layout.fillWidth: true
+                        Layout.leftMargin: Kirigami.Units.largeSpacing
+                        Layout.rightMargin: Kirigami.Units.largeSpacing
                         type: Kirigami.MessageType.Warning
                         text: i18n("CAVA is not installed. Install the <b>cava</b> package to enable audio-reactive shader effects.")
                         visible: !root.effectsBridge.cavaAvailable && shaderCard.toggleChecked

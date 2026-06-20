@@ -132,21 +132,25 @@ Item {
         }
 
         // ── Header ─────────────────────────────────────────────────────
-        Rectangle {
+        Kirigami.ShadowedRectangle {
             id: headerArea
 
             width: parent.width
             height: headerLoader.height
             visible: root.headerText.length > 0 || root.header !== null
+            // Single uniform header fill: the whole header row is one proper
+            // header color, distinct from the content rows below. Only the TOP
+            // corners are rounded (to match the card); the bottom stays square so
+            // the header sits flush against the content. Using per-corner radius
+            // on one fill — instead of a rounded rect plus a semi-transparent
+            // corner overlay — avoids doubling the alpha into a darker band along
+            // the bottom of the header. Tune the alpha to taste.
             color: Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.03)
-            radius: cardBg.radius
-
-            // Square off the bottom corners since content is below
-            Rectangle {
-                anchors.bottom: parent.bottom
-                width: parent.width
-                height: parent.radius
-                color: parent.color
+            corners {
+                topLeftRadius: cardBg.radius
+                topRightRadius: cardBg.radius
+                bottomLeftRadius: 0
+                bottomRightRadius: 0
             }
 
             // Click to collapse/expand
@@ -177,7 +181,12 @@ Item {
                         text: root.headerText
                         level: 3
                         padding: Kirigami.Units.smallSpacing
-                        leftPadding: Kirigami.Units.smallSpacing
+                        // Align the title's left edge with the card's content
+                        // rows (SettingsRow insets by largeSpacing) and the
+                        // trailing chevron (also largeSpacing), so the header is
+                        // uniformly inset rather than hugging the left while the
+                        // right controls sit further in.
+                        leftPadding: Kirigami.Units.largeSpacing
                     }
 
                     // Per-monitor scope chip, title-adjacent. Kept clear of the
@@ -217,12 +226,16 @@ Item {
                         Layout.alignment: Qt.AlignVCenter
                     }
 
-                    // Header enable toggle
+                    // Header enable toggle. When a collapse chevron follows, the
+                    // margin is just the inter-control gap (smallSpacing); when
+                    // the toggle is the trailing control, it takes the full
+                    // largeSpacing edge inset so it lines up with the content
+                    // rows and chevron-terminated cards.
                     SettingsSwitch {
                         visible: root.showToggle
                         checked: root.toggleChecked
                         accessibleName: root.headerText
-                        Layout.rightMargin: Kirigami.Units.smallSpacing
+                        Layout.rightMargin: root.collapsible ? Kirigami.Units.smallSpacing : Kirigami.Units.largeSpacing
                         onToggled: function (newValue) {
                             root.toggleClicked(newValue);
                         }
@@ -249,25 +262,11 @@ Item {
             }
         }
 
-        // ── Separator ──────────────────────────────────────────────────
-        Rectangle {
-            id: headerSep
-
-            anchors.top: headerArea.bottom
-            width: parent.width
-            // HiDPI: scale the 1px hairline by devicePixelRatio so it
-            // remains a single physical pixel on high-DPI displays
-            // instead of collapsing to ~0.5px (browser-style anti-alias
-            // blur) or disappearing on integer fractional scales.
-            height: headerArea.visible ? Math.round(Screen.devicePixelRatio) : 0
-            color: Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.08)
-        }
-
         // ── Content (clipped for collapse animation) ───────────────────
         Item {
             id: contentClip
 
-            anchors.top: headerSep.bottom
+            anchors.top: headerArea.bottom
             width: parent.width
             height: contentColumn.implicitHeight
             clip: true
