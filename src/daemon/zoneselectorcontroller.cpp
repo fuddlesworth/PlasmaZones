@@ -403,7 +403,7 @@ void ZoneSelectorController::selectLayout(const QString& layoutId)
 bool ZoneSelectorController::isScreenLocked() const
 {
     if (m_layoutManager && m_settings && m_screen) {
-        const int desktop = m_layoutManager->currentVirtualDesktop();
+        const int desktop = m_layoutManager->currentVirtualDesktopForScreen(m_screenId);
         const QString activity = m_layoutManager->currentActivity();
         // Match OverlayService behavior: a rule-driven LockContext lock is checked first,
         // then both manual modes (0 = manual, 1 = autotile). A lock from any of these

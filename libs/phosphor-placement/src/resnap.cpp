@@ -158,7 +158,7 @@ QStringList WindowTrackingService::buildZoneOrderedWindowList(const QString& scr
     // desktop's window positions). Scope to the current desktop; desktop==0
     // (sticky / unknown) stays desktop-agnostic and is kept. Mirrors the
     // desktopFilter guard in populateResnapBufferForAllScreens (addCandidate).
-    const int currentDesktop = m_virtualDesktopManager ? m_virtualDesktopManager->currentDesktop() : 0;
+    const int currentDesktop = m_virtualDesktopManager ? m_virtualDesktopManager->currentDesktopForScreen(screenId) : 0;
 
     int insertionIdx = 0;
     QVector<std::tuple<int, int, QString>> windowsByZone; // (zoneNum, insertionIdx, windowId)
@@ -245,7 +245,6 @@ QHash<QString, QRect> WindowTrackingService::updatedWindowGeometries() const
 QHash<QString, WindowTrackingService::PendingRestoreTarget> WindowTrackingService::pendingRestoreGeometries() const
 {
     QHash<QString, PendingRestoreTarget> result;
-    int currentDesktop = m_virtualDesktopManager ? m_virtualDesktopManager->currentDesktop() : 0;
 
     // Source the effect's instant-restore cache from the unified placement store:
     // one snapped WindowPlacement per appId-keyed window, resolved to its zone
@@ -268,6 +267,10 @@ QHash<QString, WindowTrackingService::PendingRestoreTarget> WindowTrackingServic
         }
 
         const QString screenId = resolveEffectiveScreenId(p.screenId);
+        // Per-output virtual desktops (#648): validate the record against ITS
+        // screen's current desktop, not the global current.
+        const int currentDesktop =
+            m_virtualDesktopManager ? m_virtualDesktopManager->currentDesktopForScreen(screenId) : 0;
 
         // Skip screens currently in autotile mode — autotile owns placement there
         // and would otherwise fight a stale snap teleport. Both context

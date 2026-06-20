@@ -44,7 +44,7 @@ ContextHandle ContextResolver::handleFor(const QString& screenId) const
     // GUI thread can only process between event-loop ticks).
     ContextHandle handle;
     handle.screenId = screenId;
-    handle.virtualDesktop = m_workspaceState->currentVirtualDesktop();
+    handle.virtualDesktop = m_workspaceState->currentVirtualDesktopForScreen(screenId);
     handle.activity = m_workspaceState->currentActivity();
     handle.mode = m_modeProvider->modeFor(screenId);
     return handle;
@@ -76,7 +76,7 @@ ContextHandle ContextResolver::handleForMode(const QString& screenId, PhosphorZo
     // overload) but otherwise mirrors handleFor's snapshot semantics.
     ContextHandle handle;
     handle.screenId = screenId;
-    handle.virtualDesktop = m_workspaceState->currentVirtualDesktop();
+    handle.virtualDesktop = m_workspaceState->currentVirtualDesktopForScreen(screenId);
     handle.activity = m_workspaceState->currentActivity();
     handle.mode = mode;
     return handle;

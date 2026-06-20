@@ -102,7 +102,7 @@ QVariantMap currentContextGapOverride(PhosphorZones::IZoneLayoutRegistry* reg, c
         return {};
     }
     return contextGapOverrideMap(
-        reg->resolveContextGaps(screenId, reg->currentVirtualDesktop(), reg->currentActivity()));
+        reg->resolveContextGaps(screenId, reg->currentVirtualDesktopForScreen(screenId), reg->currentActivity()));
 }
 } // anonymous namespace
 

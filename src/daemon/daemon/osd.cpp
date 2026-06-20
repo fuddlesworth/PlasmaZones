@@ -413,7 +413,6 @@ void Daemon::syncModeFromAssignments()
         return;
     }
 
-    const int desktop = currentDesktop();
     const QString activity = currentActivity();
 
     // Sync UnifiedLayoutController's current layout ID to match this desktop.
@@ -433,6 +432,8 @@ void Daemon::syncModeFromAssignments()
                 }
             }
         }
+        // Per-output virtual desktops (#648): each screen resolves its own desktop.
+        const int desktop = currentDesktopForScreen(focusedScreenId);
         if (!focusedScreenId.isEmpty()) {
             const QString focusedAssignmentId =
                 m_layoutManager->assignmentIdForScreen(focusedScreenId, desktop, activity);

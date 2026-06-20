@@ -74,8 +74,8 @@ WindowTrackingAdaptor::WindowTrackingAdaptor(PhosphorZones::LayoutRegistry* layo
     // current-desktop occupancy filter used in buildEmptyZoneList.
     m_geometryResolver = std::make_unique<PlasmaZones::DaemonGeometryResolver>(
         settings, layoutManager,
-        [vdm = m_virtualDesktopManager]() -> int {
-            return vdm ? vdm->currentDesktop() : 0;
+        [vdm = m_virtualDesktopManager](const QString& screenId) -> int {
+            return vdm ? vdm->currentDesktopForScreen(screenId) : 0;
         },
         [am = m_activityManager]() -> QString {
             return PhosphorWorkspaces::ActivityManager::currentActivityOrEmpty(am);

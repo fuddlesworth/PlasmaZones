@@ -38,7 +38,7 @@ PhosphorZones::AssignmentEntry::Mode ScreenModeRouter::modeFor(const QString& sc
     if (m_autotileEngine->isActiveOnScreen(screenId)) {
         return PhosphorZones::AssignmentEntry::Autotile;
     }
-    const int desktop = m_layoutManager->currentVirtualDesktop();
+    const int desktop = m_layoutManager->currentVirtualDesktopForScreen(screenId);
     const QString activity = m_layoutManager->currentActivity();
     const auto mode = m_layoutManager->modeForScreen(screenId, desktop, activity);
     // Engine already confirmed "not autotile" at the top of this function,

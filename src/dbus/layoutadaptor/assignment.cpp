@@ -290,7 +290,6 @@ QString LayoutAdaptor::getScreenStates()
 
     QJsonArray result;
 
-    const int desktop = m_layoutManager->currentVirtualDesktop();
     const QString activity = m_layoutManager->currentActivity();
 
     // Use effective screen IDs (includes virtual screens when configured)
@@ -298,6 +297,8 @@ QString LayoutAdaptor::getScreenStates()
     const QStringList screenIds = (m_screenManager ? m_screenManager->effectiveScreenIds() : QStringList());
 
     for (const QString& screenId : std::as_const(screenIds)) {
+        // Per-output virtual desktops (#648): each screen resolves its own desktop.
+        const int desktop = m_layoutManager->currentVirtualDesktopForScreen(screenId);
         const auto entry = m_layoutManager->assignmentEntryForScreen(screenId, desktop, activity);
 
         QJsonObject obj;

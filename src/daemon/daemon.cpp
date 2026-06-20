@@ -1446,7 +1446,6 @@ bool Daemon::init()
             if (!m_snapEngine || !m_windowTrackingAdaptor || !m_screenManager || !m_layoutManager)
                 return;
 
-            const int desktop = currentDesktop();
             const QString activity = currentActivity();
 
             // Collect autotile screens and per-screen OSD data in one pass
@@ -1460,6 +1459,8 @@ bool Daemon::init()
             QVector<ScreenOsd> osdEntries;
             const QStringList effectiveIds = m_screenManager->effectiveScreenIds();
             for (const QString& screenId : effectiveIds) {
+                // Per-output virtual desktops (#648): each screen resolves its own desktop.
+                const int desktop = currentDesktopForScreen(screenId);
                 const QString assignmentId = m_layoutManager->assignmentIdForScreen(screenId, desktop, activity);
                 if (PhosphorLayout::LayoutId::isAutotile(assignmentId)) {
                     autotileScreens.insert(screenId);
@@ -1511,6 +1512,8 @@ bool Daemon::init()
                         showLayoutOsdForAlgorithm(osd.algoId, displayName, osd.screenId);
                     }
                 } else {
+                    // Per-output virtual desktops (#648): each screen resolves its own desktop.
+                    const int desktop = currentDesktopForScreen(osd.screenId);
                     PhosphorZones::Layout* layout = m_layoutManager->layoutForScreen(osd.screenId, desktop, activity);
                     if (layout)
                         showLayoutOsd(layout, osd.screenId);

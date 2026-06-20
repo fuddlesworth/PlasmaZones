@@ -364,7 +364,7 @@ void OverlayService::updateSelectorPosition(int cursorX, int cursorY)
                 // Skip non-active layouts when screen is locked — a LockContext
                 // rule (checked first) or a manual lock on either mode.
                 if (m_settings && m_layoutManager) {
-                    int curDesktop = m_layoutManager->currentVirtualDesktop();
+                    int curDesktop = currentVirtualDesktopForScreen(cursorScreenId);
                     QString curActivity = m_layoutManager->currentActivity();
                     bool locked = isAnyModeLocked(m_settings, m_layoutManager, cursorScreenId, curDesktop, curActivity);
                     if (locked) {

@@ -29,7 +29,7 @@ class DaemonGeometryResolver : public PhosphorPlacement::IGeometryResolver
 {
 public:
     explicit DaemonGeometryResolver(ISettings* settings, PhosphorZones::LayoutRegistry* layoutRegistry = nullptr,
-                                    std::function<int()> currentVirtualDesktop = {},
+                                    std::function<int(const QString&)> currentVirtualDesktop = {},
                                     std::function<QString()> currentActivity = {})
         : m_settings(settings)
         , m_layoutRegistry(layoutRegistry)
@@ -51,7 +51,7 @@ private:
 
     ISettings* m_settings;
     PhosphorZones::LayoutRegistry* m_layoutRegistry;
-    std::function<int()> m_currentVirtualDesktop;
+    std::function<int(const QString&)> m_currentVirtualDesktop;
     std::function<QString()> m_currentActivity;
 };
 

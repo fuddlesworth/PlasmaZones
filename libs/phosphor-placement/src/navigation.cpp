@@ -96,7 +96,7 @@ QString WindowTrackingService::findEmptyZoneInLayout(PhosphorZones::Layout* layo
 QString WindowTrackingService::findEmptyZone(const QString& screenId) const
 {
     PhosphorZones::Layout* layout = m_layoutManager->resolveLayoutForScreen(screenId);
-    const int desktopFilter = m_virtualDesktopManager ? m_virtualDesktopManager->currentDesktop() : 0;
+    const int desktopFilter = m_virtualDesktopManager ? m_virtualDesktopManager->currentDesktopForScreen(screenId) : 0;
     return findEmptyZoneInLayout(layout, screenId, desktopFilter);
 }
 
@@ -155,7 +155,7 @@ PhosphorProtocol::EmptyZoneList WindowTrackingService::getEmptyZones(const QStri
     // same layout (same zone IDs). Without the desktop filter, windows parked on
     // other virtual desktops keep their zone occupied on the current desktop,
     // blocking snap assist (discussion #323).
-    const int desktopFilter = m_virtualDesktopManager ? m_virtualDesktopManager->currentDesktop() : 0;
+    const int desktopFilter = m_virtualDesktopManager ? m_virtualDesktopManager->currentDesktopForScreen(screenId) : 0;
     QSet<QUuid> occupied = buildOccupiedZoneSet(screenId, desktopFilter);
     int zp = m_geometryResolver ? m_geometryResolver->resolveZonePadding(layout, screenId)
                                 : PhosphorEngine::GeometryDefaults::ZonePadding;

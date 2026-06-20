@@ -462,7 +462,7 @@ public:
     }
     /// This screen's current virtual desktop, falling back to the global
     /// m_currentVirtualDesktop when no per-output value is set (#648).
-    int currentVirtualDesktopForScreen(const QString& screenId) const
+    int currentVirtualDesktopForScreen(const QString& screenId) const override
     {
         const auto it = m_screenVirtualDesktop.constFind(screenId);
         return it != m_screenVirtualDesktop.constEnd() ? it.value() : m_currentVirtualDesktop;

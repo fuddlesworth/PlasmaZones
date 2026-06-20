@@ -16,7 +16,7 @@ QVariantMap DaemonGeometryResolver::contextGapOverrideFor(const QString& screenI
     if (!m_layoutRegistry || screenId.isEmpty()) {
         return {};
     }
-    const int virtualDesktop = m_currentVirtualDesktop ? m_currentVirtualDesktop() : 0;
+    const int virtualDesktop = m_currentVirtualDesktop ? m_currentVirtualDesktop(screenId) : 0;
     const QString activity = m_currentActivity ? m_currentActivity() : QString();
     // Translation to the PerScreenSnappingKey-shaped map is shared with the
     // preview/query geometry helpers via GeometryUtils::contextGapOverrideMap.
