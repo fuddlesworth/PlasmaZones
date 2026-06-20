@@ -433,6 +433,14 @@ void PlasmaZonesEffect::onScreenRemoved(KWin::LogicalOutput* output)
     if (!output) {
         return;
     }
+
+    // Drop this output's per-screen desktop dedup entry, symmetric with the
+    // daemon's VirtualDesktopManager::removeScreenDesktop (#648): otherwise
+    // reportScreenDesktop's m_lastScreenDesktop cache retains a stale value for
+    // a disconnected connector. Runs before the motion-clock early-return below
+    // so it fires even for an output that never had an animation clock.
+    m_lastScreenDesktop.remove(outputScreenId(output));
+
     // Any in-flight AnimatedValue whose MotionSpec captured this clock's
     // pointer would UAF on its next advance() if we just dropped the
     // unique_ptr. Reap only the animations bound to THIS output's clock
