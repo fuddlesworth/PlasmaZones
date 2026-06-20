@@ -514,10 +514,10 @@ SettingsFlickable {
             contentItem: ColumnLayout {
                 spacing: Kirigami.Units.largeSpacing
 
-                // Preset card grid. Each card shows a mini split diagram + label
+                // Preset card grid. Each card shows a ZonePreview thumbnail + label
                 // and applies the split via _loadPreset(); the active preset is
                 // highlighted via _matchesPreset(). One flat, data-driven grid
-                // replaces the old two groups of plain text buttons (#UX). The
+                // replaces the old two groups of plain text buttons. The
                 // builders (_horizontalRegions / _gridRegions) and matcher are
                 // reused unchanged — this is purely the presentation.
                 GridLayout {
