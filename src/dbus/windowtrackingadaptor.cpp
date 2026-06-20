@@ -905,6 +905,17 @@ void WindowTrackingAdaptor::cursorScreenChanged(const QString& screenId)
     qCDebug(lcDbusWindow) << "Cursor screen changed to" << resolvedId;
 }
 
+void WindowTrackingAdaptor::screenDesktopChanged(const QString& screenId, int desktop)
+{
+    if (screenId.isEmpty() || desktop < 1 || !m_virtualDesktopManager) {
+        return;
+    }
+    // The effect reports the PHYSICAL screen id; VirtualDesktopManager keys its
+    // per-screen map on the same id the daemon uses everywhere. updateScreenDesktop
+    // emits screenDesktopChanged only on a real change (emit-on-change).
+    m_virtualDesktopManager->updateScreenDesktop(screenId, desktop);
+}
+
 void WindowTrackingAdaptor::setFrameGeometry(const QString& windowId, int x, int y, int width, int height)
 {
     if (windowId.isEmpty() || width <= 0 || height <= 0) {

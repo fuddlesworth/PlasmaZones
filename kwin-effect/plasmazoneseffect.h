@@ -513,6 +513,10 @@ private:
      * when EDID fields are empty.
      */
     QString outputScreenId(const KWin::LogicalOutput* output) const;
+    /// Report a screen's current virtual desktop to the daemon (Plasma 6.7
+    /// per-output virtual desktops). Deduplicates against m_lastScreenDesktop and
+    /// only fires when the daemon service is registered.
+    void reportScreenDesktop(const QString& screenId, int desktop);
     QString getWindowScreenId(KWin::EffectWindow* w) const;
     AutotileHandler* autotileHandler() const
     {
@@ -1071,6 +1075,9 @@ private:
     // Stores the connector name of the last output the cursor was on.
     // Used for deduplication only — the actual D-Bus call sends the EDID screen ID.
     QString m_lastCursorOutput;
+    // Per-screen current virtual desktop last reported to the daemon (physical
+    // screenId → 1-based desktop), for dedup of KWin's per-output desktopChanged.
+    QHash<QString, int> m_lastScreenDesktop;
 
     // Last effective screen ID reported to daemon (physical or virtual).
     // Used for deduplication of cursorScreenChanged D-Bus calls when virtual

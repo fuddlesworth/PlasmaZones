@@ -84,6 +84,26 @@ QString PlasmaZonesEffect::outputScreenId(const KWin::LogicalOutput* output) con
     return result;
 }
 
+void PlasmaZonesEffect::reportScreenDesktop(const QString& screenId, int desktop)
+{
+    if (screenId.isEmpty() || desktop < 1) {
+        return;
+    }
+    // Dedup KWin's per-output desktopChanged — only forward a genuine change.
+    // m_lastScreenDesktop is updated even when the daemon service isn't
+    // registered yet; the bringup re-sync (daemon_bringup.cpp) re-pushes every
+    // screen's authoritative desktop after (re)registration, so a missed live
+    // report here is recovered there.
+    if (m_lastScreenDesktop.value(screenId, -1) == desktop) {
+        return;
+    }
+    m_lastScreenDesktop.insert(screenId, desktop);
+    if (m_daemonServiceRegistered) {
+        PhosphorProtocol::ClientHelpers::fireAndForget(this, PhosphorProtocol::Service::Interface::WindowTracking,
+                                                       QStringLiteral("screenDesktopChanged"), {screenId, desktop});
+    }
+}
+
 QString PlasmaZonesEffect::getWindowScreenId(KWin::EffectWindow* w) const
 {
     if (!w) {
