@@ -95,7 +95,7 @@ Item {
     /// The unified NotificationOverlay host re-emits this as its own
     /// `dismissRequested` so OverlayService::createWarmedOsdSurface's
     /// connect to Surface::hide() drives the library animator's beginHide.
-    signal dismissRequested()
+    signal dismissRequested
 
     /// Restart the auto-dismiss timer from C++ on every show. Forwards to
     /// the shared OsdDismissable helper so the latch reset is driven off
@@ -125,7 +125,11 @@ Item {
         id: container
 
         anchors.centerIn: parent
-        width: previewContainer.width + Kirigami.Units.gridUnit * 3
+        // Grow to fit whichever is wider — the preview or the name row — so a
+        // long layout name (e.g. "Portrait Master + Stack") doesn't overflow the
+        // frame. The name label is capped + elided below, so the OSD widens only
+        // up to that cap rather than without bound.
+        width: Math.max(previewContainer.width, nameLabelRow.width) + Kirigami.Units.gridUnit * 3
         height: previewContainer.height + nameLabelRow.height + Kirigami.Units.gridUnit * 3
         backgroundColor: root.backgroundColor
         textColor: root.textColor
@@ -175,7 +179,6 @@ Item {
                 fontStrikeout: root.fontStrikeout
                 animationDuration: Kirigami.Units.shortDuration
             }
-
         }
 
         // Lock overlay (shown on top of preview when locked — mutually exclusive with disabled)
@@ -192,7 +195,6 @@ Item {
                 height: Kirigami.Units.iconSizes.large
                 color: Kirigami.Theme.highlightedTextColor
             }
-
         }
 
         // Disabled overlay (shown when context is disabled for this desktop/screen)
@@ -209,7 +211,6 @@ Item {
                 height: Kirigami.Units.iconSizes.large
                 color: Kirigami.Theme.neutralTextColor
             }
-
         }
 
         // Layout name with category badge
@@ -236,16 +237,21 @@ Item {
             Label {
                 id: nameLabel
 
+                // Cap the name width so a long layout name widens the OSD only up
+                // to this bound, then elides with "…" instead of spilling past the
+                // frame. Short names use their natural width (full text shown).
+                readonly property int maxWidth: Kirigami.Units.gridUnit * 16
+
                 anchors.verticalCenter: parent.verticalCenter
                 text: root.disabled ? root.disabledReason : (root.locked ? i18n("%1 (Locked)", root.layoutName) : root.layoutName)
                 font.pixelSize: Kirigami.Theme.defaultFont.pixelSize * 1.2
                 font.weight: Font.Medium
                 color: root.textColor
                 horizontalAlignment: Text.AlignHCenter
+                elide: Text.ElideRight
+                width: Math.min(implicitWidth, maxWidth)
             }
-
         }
-
     }
 
     // Click to dismiss. dismiss.fire() collapses timer-fire + click into
@@ -255,5 +261,4 @@ Item {
         onClicked: dismiss.fire()
         Accessible.name: i18n("Dismiss notification")
     }
-
 }
