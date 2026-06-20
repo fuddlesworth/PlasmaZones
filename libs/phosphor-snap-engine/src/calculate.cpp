@@ -165,7 +165,7 @@ SnapResult SnapEngine::calculateSnapToLastZone(const QString& windowId, const QS
     // Check virtual desktop match (unless sticky or desktop 0 = all)
     const int lastUsedDesktop = m_snapState->lastUsedDesktop();
     if (!isSticky && m_virtualDesktopManager && lastUsedDesktop > 0) {
-        int currentDesktop = m_virtualDesktopManager->currentDesktop();
+        int currentDesktop = currentVirtualDesktopForScreen(windowScreenId);
         if (currentDesktop != lastUsedDesktop) {
             return SnapResult::noSnap();
         }
@@ -228,7 +228,7 @@ SnapResult SnapEngine::calculateSnapToEmptyZone(const QString& windowId, const Q
     // Reuse findEmptyZoneInLayout() with already-resolved layout to avoid double resolution.
     // Filter occupancy by the current virtual desktop so windows parked on other desktops
     // don't prevent auto-snap placement on the current desktop.
-    const int desktopFilter = m_virtualDesktopManager ? m_virtualDesktopManager->currentDesktop() : 0;
+    const int desktopFilter = currentVirtualDesktopForScreen(windowScreenId);
     QString emptyZoneId = m_windowTracker->findEmptyZoneInLayout(layout, windowScreenId, desktopFilter);
     if (emptyZoneId.isEmpty()) {
         qCDebug(PhosphorSnapEngine::lcSnapEngine) << "snapToEmptyZone: no empty zone on" << windowScreenId;

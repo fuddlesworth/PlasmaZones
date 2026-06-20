@@ -231,7 +231,8 @@ bool SnapEngine::tryCrossDesktopFocus(const QString& focusedWindowId, const QStr
     if (!m_crossSurfaceResolver || !m_snapState) {
         return false;
     }
-    const int targetDesktop = m_crossSurfaceResolver->neighborDesktopInDirection(currentVirtualDesktop(), direction);
+    const int targetDesktop =
+        m_crossSurfaceResolver->neighborDesktopInDirection(currentVirtualDesktopForScreen(screenId), direction);
     if (targetDesktop <= 0) {
         return false;
     }
@@ -317,7 +318,8 @@ bool SnapEngine::tryCrossDesktopMove(const QString& windowId, const QString& dir
     if (!m_crossSurfaceResolver || !m_snapState) {
         return false;
     }
-    const int targetDesktop = m_crossSurfaceResolver->neighborDesktopInDirection(currentVirtualDesktop(), direction);
+    const int targetDesktop =
+        m_crossSurfaceResolver->neighborDesktopInDirection(currentVirtualDesktopForScreen(screenId), direction);
     if (targetDesktop <= 0) {
         return false;
     }

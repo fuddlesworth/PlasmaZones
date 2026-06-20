@@ -302,7 +302,7 @@ UnfloatResult SnapEngine::resolveFallbackUnfloatGeometry(const QString& windowId
         }
     }
     if (zoneId.isEmpty()) {
-        const int desktopFilter = m_virtualDesktopManager ? m_virtualDesktopManager->currentDesktop() : 0;
+        const int desktopFilter = currentVirtualDesktopForScreen(fallbackScreen);
         zoneId = m_windowTracker->findEmptyZoneInLayout(layout, screen, desktopFilter);
     }
     if (zoneId.isEmpty()) {
@@ -346,7 +346,7 @@ void SnapEngine::handoffReceive(const HandoffContext& ctx)
     if (!ctx.sourceZoneIds.isEmpty()) {
         QRect zoneGeo = m_windowTracker->resolveZoneGeometry(ctx.sourceZoneIds, ctx.toScreenId);
         if (zoneGeo.isValid()) {
-            const int curDesktop = currentVirtualDesktop();
+            const int curDesktop = currentVirtualDesktopForScreen(ctx.toScreenId);
             if (ctx.toDesktop > 0 && ctx.toDesktop != curDesktop) {
                 // Cross-DESKTOP handoff: the target desktop isn't the visible one,
                 // so assign the snap slot directly on SnapState for that desktop
@@ -390,7 +390,7 @@ void SnapEngine::handoffReceive(const HandoffContext& ctx)
         }
     }
 
-    const int currentDesktop = m_virtualDesktopManager ? m_virtualDesktopManager->currentDesktop() : 0;
+    const int currentDesktop = ctx.toDesktop > 0 ? ctx.toDesktop : currentVirtualDesktopForScreen(ctx.toScreenId);
     m_snapState->setFloatingOnScreen(ctx.windowId, ctx.toScreenId, currentDesktop);
     m_windowTracker->setWindowFloating(ctx.windowId, true);
     Q_EMIT windowFloatingChanged(ctx.windowId, true, ctx.toScreenId);

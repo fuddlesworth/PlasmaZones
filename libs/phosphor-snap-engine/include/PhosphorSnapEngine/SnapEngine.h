@@ -77,6 +77,9 @@ public:
     /// wants the engine's own view (e.g. for a per-engine OSD) doesn't
     /// have to wire its own VDM.
     int currentVirtualDesktop() const;
+    /// This screen's current virtual desktop (Plasma 6.7 per-output virtual
+    /// desktops, #648), falling back to the global currentVirtualDesktop().
+    int currentVirtualDesktopForScreen(const QString& screenId) const;
     QString currentActivity() const;
 
     /// Resolve the zone on @p screenId's @p targetDesktop layout that is

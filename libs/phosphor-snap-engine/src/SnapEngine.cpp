@@ -159,7 +159,7 @@ SnapNavigationTargetResolver* SnapEngine::ensureTargetResolver(const QString& ac
     // autotile neighbour to the cross-mode handoff instead of snapping onto it.
     m_targetResolver->setNeighbourAutotileProvider([this](const QString& screenId) {
         return m_layoutManager
-            && m_layoutManager->modeForScreen(screenId, currentVirtualDesktop(), currentActivity())
+            && m_layoutManager->modeForScreen(screenId, currentVirtualDesktopForScreen(screenId), currentActivity())
             == PhosphorZones::AssignmentEntry::Autotile;
     });
     return m_targetResolver.get();
