@@ -193,6 +193,7 @@ target_link_libraries(test_autotile_tile_request_validation PRIVATE PhosphorComp
 # autotile/ - Autotile + Virtual Screen Integration Tests
 # ═══════════════════════════════════════════════════════════════════════════════
 p_add_test(test_autotile_virtual autotile/test_autotile_virtual.cpp)
+p_add_test(test_autotile_per_screen_desktop autotile/test_autotile_per_screen_desktop.cpp)
 target_compile_definitions(test_autotile_virtual PRIVATE "P_SOURCE_DIR=\"${PROJECT_SOURCE_DIR}\"")
 
 # ═══════════════════════════════════════════════════════════════════════════════

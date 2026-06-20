@@ -280,6 +280,21 @@ public:
      */
     void setCurrentDesktop(int desktop) override;
 
+    /**
+     * @brief Set a single screen's current virtual desktop (Plasma 6.7 per-output
+     *        virtual desktops, #648)
+     *
+     * Pure context swap: records the screen's desktop in m_screenCurrentDesktop so
+     * currentKeyForScreen() resolves that screen's per-(screen, desktop) state. Does
+     * NOT migrate windows between states — the other desktop's state stays put so it
+     * reappears when the screen returns. Like setCurrentDesktop(), call BEFORE
+     * updateAutotileScreens() so the new key resolves.
+     */
+    void setCurrentDesktopForScreen(const QString& screenId, int desktop) override;
+
+    /// Drop a screen's per-output desktop, reverting it to the global m_currentDesktop.
+    void clearCurrentDesktopForScreen(const QString& screenId) override;
+
     /// Inject the cross-surface resolver (neighbouring output / desktop lookup)
     /// used by directional navigation when it reaches a layout boundary.
     void setCrossSurfaceResolver(PhosphorEngine::ICrossSurfaceResolver* resolver) override
@@ -1155,8 +1170,20 @@ private:
      */
     PhosphorEngine::TilingStateKey currentKeyForScreen(const QString& screenId) const
     {
-        auto it = m_screenDesktopOverride.constFind(screenId);
-        int desktop = (it != m_screenDesktopOverride.constEnd()) ? it.value() : m_currentDesktop;
+        // Precedence (highest first):
+        //   1. sticky-pin override (m_screenDesktopOverride) — a CORRECTNESS
+        //      constraint: sticky on-all-desktops windows must keep their state on
+        //      the desktop where they live, so the pin must win;
+        //   2. per-output virtual desktop (m_screenCurrentDesktop, Plasma 6.7) —
+        //      the normal per-screen input;
+        //   3. the global current desktop (m_currentDesktop) — fallback.
+        int desktop = m_currentDesktop;
+        if (auto perOut = m_screenCurrentDesktop.constFind(screenId); perOut != m_screenCurrentDesktop.constEnd()) {
+            desktop = perOut.value();
+        }
+        if (auto pin = m_screenDesktopOverride.constFind(screenId); pin != m_screenDesktopOverride.constEnd()) {
+            desktop = pin.value();
+        }
         return PhosphorEngine::TilingStateKey{screenId, desktop, m_currentActivity};
     }
 
@@ -1408,6 +1435,15 @@ private:
     // currentKeyForScreen() returns the key of the existing PhosphorTiles::TilingState rather
     // than a new (empty) key after a desktop switch.
     QHash<QString, int> m_screenDesktopOverride;
+
+    // Per-screen current virtual desktop under Plasma 6.7 "switch desktops
+    // independently for each screen" (#648). Fed by setCurrentDesktopForScreen
+    // from the daemon's per-output desktop reports. Distinct from
+    // m_screenDesktopOverride (the sticky-pin map): the sticky pin is a
+    // correctness constraint and wins in currentKeyForScreen; this is the normal
+    // per-screen input. Empty when per-output desktops aren't in use, so every
+    // screen falls back to m_currentDesktop.
+    QHash<QString, int> m_screenCurrentDesktop;
 
     // Pre-seeded window order for snapping → autotile transitions.
     // Keyed by stable EDID-based screen ID (PhosphorScreens::ScreenIdentity::identifierFor).
