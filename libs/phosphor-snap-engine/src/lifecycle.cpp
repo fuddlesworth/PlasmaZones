@@ -590,8 +590,10 @@ std::optional<PhosphorEngine::WindowPlacement> SnapEngine::capturePlacement(cons
     // engine remembers
     // the window's state in its OWN mode; returning nullopt leaves the snap record
     // untouched.
+    // Resolve the window's own screen once: the mode gate below and the
+    // captured per-output desktop (#648) both key on it.
+    const QString effScreen = screenForTrackedWindow(windowId);
     if (m_layoutManager) {
-        const QString effScreen = screenForTrackedWindow(windowId);
         if (!effScreen.isEmpty()
             && m_layoutManager->modeForScreen(effScreen, currentVirtualDesktopForScreen(effScreen), currentActivity())
                 != PhosphorZones::AssignmentEntry::Mode::Snapping) {
@@ -605,7 +607,7 @@ std::optional<PhosphorEngine::WindowPlacement> SnapEngine::capturePlacement(cons
     // Bind the captured desktop to the window's OWN screen, not the global current
     // (Plasma 6.7 per-output virtual desktops, #648), so a float-back restores to
     // the right desktop on a screen that isn't the active one.
-    p.virtualDesktop = currentVirtualDesktopForScreen(screenForTrackedWindow(windowId));
+    p.virtualDesktop = currentVirtualDesktopForScreen(effScreen);
     p.activity = currentActivity();
 
     // The slot carries only the snap engine's STATE + slot reference (zone IDs) —

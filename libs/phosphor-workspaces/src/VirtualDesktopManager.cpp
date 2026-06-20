@@ -12,6 +12,8 @@
 #include <QDBusPendingCall>
 #include <QDBusPendingCallWatcher>
 
+#include <utility>
+
 namespace PhosphorWorkspaces {
 
 VirtualDesktopManager::VirtualDesktopManager(QObject* parent)
@@ -282,19 +284,31 @@ void VirtualDesktopManager::updateScreenDesktop(const QString& screenId, int des
     Q_EMIT screenDesktopChanged(screenId, desktop);
 }
 
+void VirtualDesktopManager::removeScreenDesktop(const QString& screenId)
+{
+    m_screenDesktops.remove(screenId);
+}
+
 void VirtualDesktopManager::clampScreenDesktopsToCount()
 {
-    // Mutate first, then emit — emitting mid-iteration could re-enter
-    // updateScreenDesktop and invalidate the hash iterator.
-    QStringList clamped;
+    // Clamp only entries above the live count: KWin renumbers on desktop
+    // removal, so a screen pinned past the new count is pulled down to it here.
+    // This does NOT re-identify a surviving entry whose desktop was renumbered
+    // by a mid-list removal — the effect re-reports each output's true desktop
+    // shortly after via updateScreenDesktop, which is authoritative for that.
+    //
+    // Mutate first, then emit the captured value — emitting mid-iteration could
+    // re-enter updateScreenDesktop and invalidate the hash iterator, and a
+    // re-entrant write must not change the value we report for this clamp.
+    QList<std::pair<QString, int>> clamped;
     for (auto it = m_screenDesktops.begin(); it != m_screenDesktops.end(); ++it) {
         if (it.value() > m_desktopCount) {
             it.value() = m_desktopCount;
-            clamped.append(it.key());
+            clamped.append({it.key(), m_desktopCount});
         }
     }
-    for (const QString& screenId : clamped) {
-        Q_EMIT screenDesktopChanged(screenId, m_screenDesktops.value(screenId));
+    for (const auto& [screenId, desktop] : clamped) {
+        Q_EMIT screenDesktopChanged(screenId, desktop);
     }
 }
 

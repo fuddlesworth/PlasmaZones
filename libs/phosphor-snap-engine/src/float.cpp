@@ -302,7 +302,7 @@ UnfloatResult SnapEngine::resolveFallbackUnfloatGeometry(const QString& windowId
         }
     }
     if (zoneId.isEmpty()) {
-        const int desktopFilter = currentVirtualDesktopForScreen(fallbackScreen);
+        const int desktopFilter = currentVirtualDesktopForScreen(screen);
         zoneId = m_windowTracker->findEmptyZoneInLayout(layout, screen, desktopFilter);
     }
     if (zoneId.isEmpty()) {

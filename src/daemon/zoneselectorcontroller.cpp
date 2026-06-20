@@ -98,10 +98,11 @@ QVariantList ZoneSelectorController::layouts() const
         screenId = m_screenId;
         aspectRatio = Utils::screenAspectRatio(m_screen);
     }
+    const int desktop =
+        m_layoutManager ? m_layoutManager->currentVirtualDesktopForScreen(screenId) : m_currentVirtualDesktop;
     const auto entries = PhosphorZones::LayoutUtils::buildUnifiedLayoutList(
-        m_layoutManager, m_algorithmRegistry, screenId, m_currentVirtualDesktop, m_currentActivity,
-        m_includeManualLayouts, m_includeAutotileLayouts, aspectRatio,
-        m_settings && m_settings->filterLayoutsByAspectRatio(),
+        m_layoutManager, m_algorithmRegistry, screenId, desktop, m_currentActivity, m_includeManualLayouts,
+        m_includeAutotileLayouts, aspectRatio, m_settings && m_settings->filterLayoutsByAspectRatio(),
         PhosphorZones::LayoutUtils::buildCustomOrder(m_settings, m_includeManualLayouts, m_includeAutotileLayouts),
         m_autotileLayoutSource);
     return PlasmaZones::toVariantList(entries);
@@ -201,8 +202,8 @@ void ZoneSelectorController::setLayoutManager(PhosphorZones::LayoutRegistry* lay
                     // Pass current virtual desktop for per-desktop layout lookup
                     PhosphorZones::Layout* effectiveLayout = nullptr;
                     if (m_screen) {
-                        effectiveLayout =
-                            m_layoutManager->layoutForScreen(m_screenId, m_currentVirtualDesktop, m_currentActivity);
+                        effectiveLayout = m_layoutManager->layoutForScreen(
+                            m_screenId, m_layoutManager->currentVirtualDesktopForScreen(m_screenId), m_currentActivity);
                     }
                     if (!effectiveLayout) {
                         effectiveLayout = layout;
@@ -245,8 +246,8 @@ void ZoneSelectorController::setScreen(QScreen* screen)
 
     // Update active layout ID for this screen and current desktop
     if (m_screen && m_layoutManager) {
-        PhosphorZones::Layout* screenLayout =
-            m_layoutManager->layoutForScreen(m_screenId, m_currentVirtualDesktop, m_currentActivity);
+        PhosphorZones::Layout* screenLayout = m_layoutManager->layoutForScreen(
+            m_screenId, m_layoutManager->currentVirtualDesktopForScreen(m_screenId), m_currentActivity);
         if (screenLayout) {
             setActiveLayoutId(screenLayout->id().toString());
         } else if (auto* def = m_layoutManager->defaultLayout()) {
@@ -262,8 +263,8 @@ void ZoneSelectorController::setCurrentVirtualDesktop(int desktop)
         m_currentVirtualDesktop = desktop;
         // Update active layout ID when desktop changes
         if (m_screen && m_layoutManager) {
-            PhosphorZones::Layout* screenLayout =
-                m_layoutManager->layoutForScreen(m_screenId, m_currentVirtualDesktop, m_currentActivity);
+            PhosphorZones::Layout* screenLayout = m_layoutManager->layoutForScreen(
+                m_screenId, m_layoutManager->currentVirtualDesktopForScreen(m_screenId), m_currentActivity);
             if (screenLayout) {
                 setActiveLayoutId(screenLayout->id().toString());
             }

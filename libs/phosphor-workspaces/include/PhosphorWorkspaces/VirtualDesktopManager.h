@@ -38,6 +38,12 @@ public:
     /// Emits screenDesktopChanged only when the value actually changes.
     void updateScreenDesktop(const QString& screenId, int desktop);
 
+    /// Drop a screen's recorded per-output desktop when the output is removed,
+    /// so the map doesn't retain stale entries (and perScreenModeActive() doesn't
+    /// keep counting a gone screen) across monitor hot-plug. Driven by the
+    /// daemon's screenRemoved handler.
+    void removeScreenDesktop(const QString& screenId);
+
     void setCurrentDesktop(int desktop);
     int desktopCount() const;
     /// Number of rows in KWin's virtual-desktop grid (>= 1). With the count,

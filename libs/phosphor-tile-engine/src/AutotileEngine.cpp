@@ -324,18 +324,29 @@ void AutotileEngine::connectSignals()
                         Q_EMIT settingsPersistRequested();
                     }
 
-                    // Clean up desktop overrides for removed virtual screens on this physical screen.
-                    // Use newVsSet (freshly-computed from PhosphorScreens::ScreenManager) rather than
-                    // m_autotileScreens which reflects mode assignments and may not yet be updated for the new config.
+                    // Clean up per-screen desktop maps for removed virtual screens on this
+                    // physical screen — BOTH the sticky-pin override and the per-output-VD
+                    // map (#648). Use newVsSet (freshly-computed from
+                    // PhosphorScreens::ScreenManager) rather than m_autotileScreens which
+                    // reflects mode assignments and may not yet be updated for the new config.
+                    const auto isOrphanedVsOfThisPhysical = [&](const QString& key) {
+                        return PhosphorIdentity::VirtualScreenId::isVirtual(key)
+                            && PhosphorIdentity::VirtualScreenId::extractPhysicalId(key) == physicalScreenId
+                            && !newVsSet.contains(key);
+                    };
                     auto overrideIt = m_screenDesktopOverride.begin();
                     while (overrideIt != m_screenDesktopOverride.end()) {
-                        if (PhosphorIdentity::VirtualScreenId::isVirtual(overrideIt.key())
-                            && PhosphorIdentity::VirtualScreenId::extractPhysicalId(overrideIt.key())
-                                == physicalScreenId
-                            && !newVsSet.contains(overrideIt.key()))
+                        if (isOrphanedVsOfThisPhysical(overrideIt.key()))
                             overrideIt = m_screenDesktopOverride.erase(overrideIt);
                         else
                             ++overrideIt;
+                    }
+                    auto perOutputIt = m_screenCurrentDesktop.begin();
+                    while (perOutputIt != m_screenCurrentDesktop.end()) {
+                        if (isOrphanedVsOfThisPhysical(perOutputIt.key()))
+                            perOutputIt = m_screenCurrentDesktop.erase(perOutputIt);
+                        else
+                            ++perOutputIt;
                     }
 
                     // Retile the new virtual screens
@@ -806,9 +817,11 @@ void AutotileEngine::setAutotileScreens(const QSet<QString>& screens)
     // toggle-off while another context holds overflow on the same screen.
     m_overflow.clearForRemovedScreens(m_autotileScreens);
 
-    // Clear desktop overrides for removed screens
+    // Clear per-screen desktop maps for removed screens — both the sticky-pin
+    // override and the per-output-VD map (#648).
     for (const QString& screenId : removed) {
         m_screenDesktopOverride.remove(screenId);
+        m_screenCurrentDesktop.remove(screenId);
     }
 
     // Clear any pending deferred retiles and retry state for removed screens
