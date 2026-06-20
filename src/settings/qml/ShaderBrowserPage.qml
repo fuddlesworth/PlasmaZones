@@ -33,11 +33,11 @@ import org.kde.kirigami as Kirigami
  *   • Optional info banner (`infoBannerText`).
  *   • User shaders card — drop zone for installing user shader packs +
  *     "Open Folder" button.
- *   • Filter bar — text search + per-category multi-select pills +
- *     built-in / user toggles.
- *   • Installed shaders card — packs grouped by category as a card grid;
- *     each section headed with the category name and the count.
- *     Card click opens ShaderBrowserDetailDialog.
+ *   • Search row — text search + built-in / user source filter + reset.
+ *   • Filter chips — an "All" chip plus one single-select chip per category.
+ *   • Per-category sections — each category renders as a collapsible card of
+ *     shader thumbnails (count shown in the header). Card click opens
+ *     ShaderBrowserDetailDialog.
  */
 SettingsFlickable {
     id: root
@@ -347,8 +347,6 @@ SettingsFlickable {
             }
 
             ToolButton {
-                id: sourceFilterButton
-
                 icon.name: "view-filter"
                 checkable: false
                 checked: !root.showBuiltIn || !root.showUser
