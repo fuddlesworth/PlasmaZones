@@ -449,7 +449,6 @@ private:
      * the appropriate OSD (layout or algorithm). DRY helper for both
      * currentDesktopChanged and currentActivityChanged handlers.
      *
-     * @param desktop Current virtual desktop number
      * @param activity Current activity ID
      */
     void showDesktopSwitchOsd(const QString& activity);
