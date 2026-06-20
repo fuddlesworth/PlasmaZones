@@ -270,7 +270,7 @@ void SnapEngine::reapplyManagedWindowAppearance()
         if (zoneIds.isEmpty()) {
             continue;
         }
-        const QString screenId = m_snapState->screenAssignments().value(windowId);
+        const QString screenId = m_snapState->screenForWindow(windowId);
         if (screenId.isEmpty()) {
             continue;
         }

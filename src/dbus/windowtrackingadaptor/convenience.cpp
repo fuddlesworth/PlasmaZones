@@ -23,7 +23,7 @@ PhosphorProtocol::WindowStateEntry WindowTrackingAdaptor::getWindowState(const Q
     return PhosphorProtocol::WindowStateEntry{
         windowId,
         m_service->zoneForWindow(windowId),
-        m_service->screenAssignments().value(windowId),
+        m_service->screenForWindow(windowId),
         m_service->isWindowFloating(windowId),
         QString(), // changeType: empty for query (not a state change event)
         m_service->zonesForWindow(windowId),
@@ -55,7 +55,7 @@ PhosphorProtocol::WindowStateList WindowTrackingAdaptor::getAllWindowStates()
         result.append(PhosphorProtocol::WindowStateEntry{
             windowId,
             m_service->zoneForWindow(windowId),
-            m_service->screenAssignments().value(windowId),
+            m_service->screenForWindow(windowId),
             m_service->isWindowFloating(windowId),
             QString(), // changeType: empty for query
             m_service->zonesForWindow(windowId),

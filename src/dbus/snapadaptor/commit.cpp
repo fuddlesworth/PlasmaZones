@@ -170,8 +170,8 @@ void SnapAdaptor::swapWindowsById(const QString& windowId1, const QString& windo
     }
 
     // Get screens for each window
-    QString screen1 = svc->screenAssignments().value(windowId1);
-    QString screen2 = svc->screenAssignments().value(windowId2);
+    QString screen1 = svc->screenForWindow(windowId1);
+    QString screen2 = svc->screenForWindow(windowId2);
 
     // Get the OTHER window's zone geometry (for the swap)
     QRect geo1 = svc->zoneGeometry(zoneId2, screen2); // window1 moves to zone2

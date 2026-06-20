@@ -43,7 +43,7 @@ inline QString resolveVirtualScreenId(PhosphorScreens::ScreenManager* mgr, const
     if (trackingAdaptor && trackingAdaptor->service()) {
         const QString activeWindowId = trackingAdaptor->lastActiveWindowId();
         if (!activeWindowId.isEmpty()) {
-            const QString trackedScreen = trackingAdaptor->service()->screenAssignments().value(activeWindowId);
+            const QString trackedScreen = trackingAdaptor->service()->screenForWindow(activeWindowId);
             if (PhosphorIdentity::VirtualScreenId::isVirtual(trackedScreen)
                 && PhosphorIdentity::VirtualScreenId::extractPhysicalId(trackedScreen) == physicalId) {
                 return trackedScreen;

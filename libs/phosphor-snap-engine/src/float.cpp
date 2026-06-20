@@ -53,7 +53,7 @@ void SnapEngine::setWindowFloat(const QString& windowId, bool shouldFloat)
     // 1. Try the window's tracked screen from WTS (most accurate)
     // 2. Fall back to m_lastActiveScreenId (from last windowFocused)
     // 3. Fall back to empty (unfloatToZone/applyGeometryForFloat handle gracefully)
-    QString screenId = m_snapState->screenAssignments().value(windowId);
+    QString screenId = m_snapState->screenForWindow(windowId);
     if (screenId.isEmpty()) {
         screenId = m_lastActiveScreenId;
     }
@@ -275,7 +275,7 @@ UnfloatResult SnapEngine::resolveFallbackUnfloatGeometry(const QString& windowId
     // caller's fallback. A tracked screen that no longer exists (output unplugged)
     // is discarded in favour of the caller's fallback. Zone geometry is resolved on
     // the resulting screen so the fallback lands where the window currently is.
-    const QString screen = resolveUnfloatScreen(m_snapState->screenAssignments().value(windowId), fallbackScreen);
+    const QString screen = resolveUnfloatScreen(m_snapState->screenForWindow(windowId), fallbackScreen);
     if (screen.isEmpty() || !m_layoutManager) {
         return result;
     }
@@ -413,13 +413,18 @@ void SnapEngine::handoffRelease(const QString& windowId)
 
 QString SnapEngine::screenForTrackedWindow(const QString& windowId) const
 {
-    return m_snapState->screenAssignments().value(windowId);
+    return m_snapState->screenForWindow(windowId);
 }
 
 bool SnapEngine::isWindowTracked(const QString& windowId) const
 {
+    // All three arms must resolve a class-mutated window (issue #628).
+    // isWindowSnapped/isFloating canonicalize the id internally; the screen arm
+    // goes through screenForWindow (which canonicalizes) instead of a raw
+    // screenAssignments().contains() on the canonical-keyed map. A screen
+    // assignment is never empty, so a non-empty result means "present".
     return m_snapState->isWindowSnapped(windowId) || m_snapState->isFloating(windowId)
-        || m_snapState->screenAssignments().contains(windowId);
+        || !m_snapState->screenForWindow(windowId).isEmpty();
 }
 
 } // namespace PhosphorSnapEngine

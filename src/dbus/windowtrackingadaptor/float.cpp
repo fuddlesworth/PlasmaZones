@@ -30,7 +30,7 @@ void WindowTrackingAdaptor::notifyDragOutUnsnap(const QString& windowId)
         return;
     }
 
-    QString screenId = m_service->screenAssignments().value(windowId, m_lastActiveScreenId);
+    QString screenId = m_service->screenForWindow(windowId, m_lastActiveScreenId);
     qCInfo(lcDbusWindow) << "Drag-out unsnap (no activation trigger) for" << windowId << "screen:" << screenId;
 
     // Delegate unsnap-for-float to the service directly (the SnapAdaptor
@@ -118,7 +118,7 @@ void WindowTrackingAdaptor::setWindowFloating(const QString& windowId, bool floa
     qCInfo(lcDbusWindow) << "Window" << windowId << "is now" << (floating ? "floating" : "not floating");
     // Notify effect so it can update its local cache (use full windowId for per-instance tracking).
     // Use the window's tracked screen if available, otherwise fall back to last active screen.
-    QString screen = m_service->screenAssignments().value(windowId, m_lastActiveScreenId);
+    QString screen = m_service->screenForWindow(windowId, m_lastActiveScreenId);
     Q_EMIT windowFloatingChanged(windowId, floating, screen);
 
     // Emit unified state change
