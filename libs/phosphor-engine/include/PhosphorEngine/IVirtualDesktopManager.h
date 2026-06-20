@@ -24,7 +24,7 @@ public:
     /// setups and for screens with no per-output desktop on record.
     virtual int currentDesktopForScreen(const QString& screenId) const
     {
-        Q_UNUSED(screenId);
+        Q_UNUSED(screenId)
         return currentDesktop();
     }
 

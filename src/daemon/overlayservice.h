@@ -222,14 +222,11 @@ public:
         return m_screenManager;
     }
     void setCurrentVirtualDesktop(int desktop);
-    /// Record a single screen's current virtual desktop (Plasma 6.7 per-output
-    /// virtual desktops, #648). Pushed by the daemon's per-screen desktop handler
-    /// alongside the LayoutRegistry, so overlay resolution matches layout resolution.
-    void setCurrentVirtualDesktopForScreen(const QString& screenId, int desktop);
-    /// Drop a screen's per-output desktop, reverting it to the global value.
-    void clearCurrentVirtualDesktopForScreen(const QString& screenId);
-    /// This screen's current virtual desktop, falling back to the global
-    /// m_currentVirtualDesktop when no per-output value is set.
+    /// This screen's current virtual desktop under Plasma 6.7 per-output virtual
+    /// desktops (#648). Delegates to the layout registry — the single source of
+    /// truth for the per-output desktop map — so overlay resolution matches
+    /// layout resolution; falls back to the global desktop when no registry is
+    /// wired.
     int currentVirtualDesktopForScreen(const QString& screenId) const;
     void setCurrentActivity(const QString& activityId);
 
@@ -645,11 +642,9 @@ private:
     // fire starts a timer; subsequent fires before the timer elapses do
     // nothing; the timer callback runs refreshVisibleWindows once.
     bool m_refreshCoalescePending = false;
-    int m_currentVirtualDesktop = 1; // Current virtual desktop (1-based)
-    // Per-screen current virtual desktop (screenId → 1-based) under Plasma 6.7
-    // per-output virtual desktops (#648). Empty unless the daemon pushes
-    // per-screen values, so every read falls back to m_currentVirtualDesktop.
-    QHash<QString, int> m_screenVirtualDesktop;
+    int m_currentVirtualDesktop = 1; // Current virtual desktop (1-based); global
+                                     // fallback for currentVirtualDesktopForScreen
+                                     // when no layout registry is wired (#648).
     QString m_currentActivity; // Current KDE activity (empty = all activities)
     bool m_visible = false;
     bool m_zoneSelectorVisible = false;

@@ -152,16 +152,16 @@ void Daemon::connectScreenSignals()
 
                 // Drop the removed output's per-output virtual-desktop entries (#648)
                 // so the maps don't retain stale desktops across monitor hot-plug.
-                // The autotile engine self-prunes via updateAutotileScreens; the VDM,
-                // layout registry and overlay service are physical-id keyed (the
-                // effect reports physical output ids), matching removedScreenId.
+                // The autotile engine self-prunes via updateAutotileScreens; the VDM
+                // and layout registry are physical-id keyed (the effect reports
+                // physical output ids), matching removedScreenId. The overlay service
+                // delegates to the layout registry, so clearing it there suffices.
                 if (m_virtualDesktopManager) {
                     m_virtualDesktopManager->removeScreenDesktop(removedScreenId);
                 }
                 if (m_layoutManager) {
                     m_layoutManager->clearCurrentVirtualDesktopForScreen(removedScreenId);
                 }
-                m_overlayService->clearCurrentVirtualDesktopForScreen(removedScreenId);
 
                 // Invalidate cached EDID serial so a different monitor on this connector is detected
                 PhosphorScreens::ScreenIdentity::invalidateEdidCache(removedName);
@@ -253,9 +253,10 @@ void Daemon::connectDesktopActivity()
                 if (m_autotileEngine) {
                     m_autotileEngine->setCurrentDesktopForScreen(screenId, desktop);
                 }
-                // [SEQ D] Per-screen layout/overlay resolution context.
+                // [SEQ D] Per-screen layout/overlay resolution context. The
+                // overlay service delegates to the layout registry for per-output
+                // desktop resolution, so this one push drives both (#648).
                 m_layoutManager->setCurrentVirtualDesktopForScreen(screenId, desktop);
-                m_overlayService->setCurrentVirtualDesktopForScreen(screenId, desktop);
                 // [SEQ E] Per-desktop assignments may differ — recompute autotile
                 // screens, re-sync mode/filter, then refresh overlay geometry.
                 updateAutotileScreens();

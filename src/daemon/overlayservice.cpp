@@ -626,23 +626,11 @@ void OverlayService::setCurrentVirtualDesktop(int desktop)
 
 int OverlayService::currentVirtualDesktopForScreen(const QString& screenId) const
 {
-    const auto it = m_screenVirtualDesktop.constFind(screenId);
-    return it != m_screenVirtualDesktop.constEnd() ? it.value() : m_currentVirtualDesktop;
-}
-
-void OverlayService::setCurrentVirtualDesktopForScreen(const QString& screenId, int desktop)
-{
-    if (screenId.isEmpty() || desktop < 1 || m_screenVirtualDesktop.value(screenId, -1) == desktop) {
-        return;
-    }
-    m_screenVirtualDesktop.insert(screenId, desktop);
-    // The daemon's per-screen handler drives the geometry/visibility refresh
-    // after pushing all sinks, so this setter only records the value.
-}
-
-void OverlayService::clearCurrentVirtualDesktopForScreen(const QString& screenId)
-{
-    m_screenVirtualDesktop.remove(screenId);
+    // Single source of truth: the layout registry owns the per-output desktop
+    // map (#648); OverlayService delegates rather than mirroring it, so overlay
+    // resolution can never drift from layout resolution. Falls back to the
+    // global desktop when no registry is wired.
+    return m_layoutManager ? m_layoutManager->currentVirtualDesktopForScreen(screenId) : m_currentVirtualDesktop;
 }
 
 void OverlayService::setCurrentActivity(const QString& activityId)
