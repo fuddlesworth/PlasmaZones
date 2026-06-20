@@ -470,7 +470,7 @@ void Daemon::syncModeFromAssignments()
     updateLayoutFilter();
 }
 
-void Daemon::showDesktopSwitchOsd(int desktop, const QString& activity)
+void Daemon::showDesktopSwitchOsd(const QString& activity)
 {
     // Skip during startup — the initial activity/desktop detection fires
     // before start() completes and should not produce an OSD flash.
@@ -484,10 +484,35 @@ void Daemon::showDesktopSwitchOsd(int desktop, const QString& activity)
         || !m_screenManager) {
         return;
     }
-    showOsdForAllScreens(desktop, activity);
+    showOsdForAllScreens(activity);
 }
 
-void Daemon::showOsdForAllScreens(int desktop, const QString& activity)
+void Daemon::showDesktopSwitchOsdForScreen(const QString& screenId, const QString& activity)
+{
+    // Per-output virtual desktops (#648): only the screen that actually switched
+    // shows the OSD, not every monitor. Same gating as the all-screens variant.
+    if (!m_running) {
+        return;
+    }
+    if (shouldSuppressOsd()) {
+        return;
+    }
+    if (!m_settings || !m_settings->showOsdOnDesktopSwitch() || !m_overlayService || !m_layoutManager
+        || !m_screenManager) {
+        return;
+    }
+    showOsdForScreens({screenId}, activity);
+}
+
+void Daemon::showOsdForAllScreens(const QString& activity)
+{
+    if (!m_screenManager) {
+        return;
+    }
+    showOsdForScreens(m_screenManager->effectiveScreenIds(), activity);
+}
+
+void Daemon::showOsdForScreens(const QStringList& screenIds, const QString& activity)
 {
     if (!m_layoutManager || !m_screenManager) {
         return;
@@ -498,15 +523,18 @@ void Daemon::showOsdForAllScreens(int desktop, const QString& activity)
     // Batch all per-screen OSD shows into one deferred call so every
     // screen's surface->show() fires in the same event loop pass and the
     // compositor renders them simultaneously.
-    QTimer::singleShot(0, this, [this, desktop, activity]() {
+    QTimer::singleShot(0, this, [this, screenIds, activity]() {
         if (!m_layoutManager || !m_screenManager) {
             return;
         }
         if (shouldSuppressOsd()) {
             return;
         }
-        const QStringList effectiveIds = m_screenManager->effectiveScreenIds();
-        for (const QString& screenId : effectiveIds) {
+        for (const QString& screenId : screenIds) {
+            // Each screen reports against its OWN current virtual desktop
+            // (Plasma 6.7 per-output virtual desktops, #648).
+            const int desktop =
+                m_virtualDesktopManager ? m_virtualDesktopManager->currentDesktopForScreen(screenId) : currentDesktop();
             // Route the disabled-context probe through the resolver so this
             // OSD pass uses the same single snapshot façade as every other
             // call site — the prior hand-stitched (modeFor → settings →

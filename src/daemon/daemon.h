@@ -452,7 +452,16 @@ private:
      * @param desktop Current virtual desktop number
      * @param activity Current activity ID
      */
-    void showDesktopSwitchOsd(int desktop, const QString& activity);
+    void showDesktopSwitchOsd(const QString& activity);
+
+    /**
+     * @brief Per-screen desktop-switch OSD (Plasma 6.7 per-output virtual desktops)
+     *
+     * Shows the desktop-switch OSD only on @p screenId, using that screen's own
+     * current virtual desktop. Driven by the per-screen screenDesktopChanged
+     * handler so a single screen's switch doesn't flash every monitor (#648).
+     */
+    void showDesktopSwitchOsdForScreen(const QString& screenId, const QString& activity);
 
     /**
      * @brief Show per-screen OSD for all effective screens
@@ -462,7 +471,16 @@ private:
      * a single deferred event-loop pass so all surfaces show simultaneously.
      * DRY helper shared by showDesktopSwitchOsd and settingsChanged handler.
      */
-    void showOsdForAllScreens(int desktop, const QString& activity);
+    void showOsdForAllScreens(const QString& activity);
+
+    /**
+     * @brief Per-screen OSD for an explicit screen set
+     *
+     * Like showOsdForAllScreens but for the given @p screenIds; each screen uses
+     * its OWN current virtual desktop (per-output virtual desktops). Backs both
+     * showOsdForAllScreens and showDesktopSwitchOsdForScreen.
+     */
+    void showOsdForScreens(const QStringList& screenIds, const QString& activity);
 
     /**
      * @brief Recompute which screens use autotile from layout assignments
