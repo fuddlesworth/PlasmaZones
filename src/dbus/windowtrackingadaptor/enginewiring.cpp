@@ -144,7 +144,7 @@ void WindowTrackingAdaptor::setEngines(PhosphorEngine::PlacementEngineBase* snap
         // restore onto a desktop other than the current one is therefore gated
         // by the current desktop's disable state rather than the target's.
         snap->setShouldRestorePredicate([this](const QString& screenId) -> bool {
-            return !isPersistedContextDisabled(screenId, currentDesktop());
+            return !isPersistedContextDisabled(screenId, currentDesktopForScreen(screenId));
         });
 
         // Floated-position restore gate (snap-floated windows). On open the engine
@@ -536,7 +536,7 @@ void WindowTrackingAdaptor::handleCrossModeMove(const QString& windowId, const Q
     // (possibly different) mode on the same screen's target desktop; a monitor
     // crossing targets the neighbour screen on the current desktop (targetDesktop
     // == 0).
-    const int effectiveDesktop = targetDesktop > 0 ? targetDesktop : currentDesktop();
+    const int effectiveDesktop = targetDesktop > 0 ? targetDesktop : currentDesktopForScreen(targetScreenId);
     const QString activity = m_layoutManager->currentActivity();
     const bool targetIsAutotile = m_layoutManager->modeForScreen(targetScreenId, effectiveDesktop, activity)
         == PhosphorZones::AssignmentEntry::Autotile;
@@ -641,7 +641,8 @@ void WindowTrackingAdaptor::handleCrossModeSwap(const QString& windowId, const Q
     }
 
     const QString activity = m_layoutManager->currentActivity();
-    const bool targetIsAutotile = m_layoutManager->modeForScreen(targetScreenId, currentDesktop(), activity)
+    const bool targetIsAutotile =
+        m_layoutManager->modeForScreen(targetScreenId, currentDesktopForScreen(targetScreenId), activity)
         == PhosphorZones::AssignmentEntry::Autotile;
     PhosphorEngine::PlacementEngineBase* targetEngine =
         targetIsAutotile ? m_autotileEngine.data() : m_snapEngine.data();

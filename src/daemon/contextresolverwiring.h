@@ -57,6 +57,7 @@ public:
     ~DaemonWorkspaceStateAdapter() override = default;
 
     int currentVirtualDesktop() const override;
+    int currentVirtualDesktopForScreen(const QString& screenId) const override;
     QString currentActivity() const override;
 
 private:

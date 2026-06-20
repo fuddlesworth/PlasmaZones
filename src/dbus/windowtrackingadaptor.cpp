@@ -74,8 +74,8 @@ WindowTrackingAdaptor::WindowTrackingAdaptor(PhosphorZones::LayoutRegistry* layo
     // current-desktop occupancy filter used in buildEmptyZoneList.
     m_geometryResolver = std::make_unique<PlasmaZones::DaemonGeometryResolver>(
         settings, layoutManager,
-        [vdm = m_virtualDesktopManager]() -> int {
-            return vdm ? vdm->currentDesktop() : 0;
+        [vdm = m_virtualDesktopManager](const QString& screenId) -> int {
+            return vdm ? vdm->currentDesktopForScreen(screenId) : 0;
         },
         [am = m_activityManager]() -> QString {
             return PhosphorWorkspaces::ActivityManager::currentActivityOrEmpty(am);
@@ -251,6 +251,13 @@ PhosphorSnapEngine::SnapEngine* WindowTrackingAdaptor::snapEngine() const
 int WindowTrackingAdaptor::currentDesktop() const
 {
     return m_virtualDesktopManager ? m_virtualDesktopManager->currentDesktop() : 0;
+}
+
+int WindowTrackingAdaptor::currentDesktopForScreen(const QString& screenId) const
+{
+    // Per-output virtual desktops (#648): this screen's current desktop, falling
+    // back to the global current when no per-output value is on record.
+    return m_virtualDesktopManager ? m_virtualDesktopManager->currentDesktopForScreen(screenId) : 0;
 }
 
 void WindowTrackingAdaptor::setScreenModeRouter(ScreenModeRouter* router)
@@ -905,6 +912,17 @@ void WindowTrackingAdaptor::cursorScreenChanged(const QString& screenId)
     qCDebug(lcDbusWindow) << "Cursor screen changed to" << resolvedId;
 }
 
+void WindowTrackingAdaptor::screenDesktopChanged(const QString& screenId, int desktop)
+{
+    if (screenId.isEmpty() || desktop < 1 || !m_virtualDesktopManager) {
+        return;
+    }
+    // The effect reports the PHYSICAL screen id; VirtualDesktopManager keys its
+    // per-screen map on the same id the daemon uses everywhere. updateScreenDesktop
+    // emits screenDesktopChanged only on a real change (emit-on-change).
+    m_virtualDesktopManager->updateScreenDesktop(screenId, desktop);
+}
+
 void WindowTrackingAdaptor::setFrameGeometry(const QString& windowId, int x, int y, int width, int height)
 {
     if (windowId.isEmpty() || width <= 0 || height <= 0) {
@@ -987,7 +1005,7 @@ void WindowTrackingAdaptor::windowActivated(const QString& windowId, const QStri
     if (!zoneId.isEmpty() && m_settings && m_settings->moveNewWindowsToLastZone()
         && !m_service->isAutoSnapped(windowId)) {
         QString windowClass = m_service->currentAppIdFor(windowId);
-        m_service->updateLastUsedZone(zoneId, resolvedScreen, windowClass, currentDesktop());
+        m_service->updateLastUsedZone(zoneId, resolvedScreen, windowClass, currentDesktopForScreen(resolvedScreen));
     }
 }
 

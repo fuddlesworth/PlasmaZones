@@ -126,9 +126,10 @@ void Daemon::connectScreenSignals()
                 // refreshVirtualConfigs() in response to its own change signal.
                 const QString physId = screen.identifier;
                 const QStringList vsIds = m_screenManager->virtualScreenIdsFor(physId);
-                const int desktop = currentDesktop();
                 const QString activity = currentActivity();
                 for (const QString& sid : vsIds) {
+                    // Per-output virtual desktops (#648): each screen its own desktop.
+                    const int desktop = currentDesktopForScreen(sid);
                     PhosphorZones::Layout* screenLayout = m_layoutManager->layoutForScreen(sid, desktop, activity);
                     if (screenLayout) {
                         PhosphorZones::LayoutComputeService::recalculateSync(
@@ -148,6 +149,19 @@ void Daemon::connectScreenSignals()
                 // Capture screen ID BEFORE invalidating cache (screenIdentifier reads cached EDID)
                 const QString removedName = screen.name;
                 const QString removedScreenId = screen.identifier;
+
+                // Drop the removed output's per-output virtual-desktop entries (#648)
+                // so the maps don't retain stale desktops across monitor hot-plug.
+                // The autotile engine self-prunes via updateAutotileScreens; the VDM
+                // and layout registry are physical-id keyed (the effect reports
+                // physical output ids), matching removedScreenId. The overlay service
+                // delegates to the layout registry, so clearing it there suffices.
+                if (m_virtualDesktopManager) {
+                    m_virtualDesktopManager->removeScreenDesktop(removedScreenId);
+                }
+                if (m_layoutManager) {
+                    m_layoutManager->clearCurrentVirtualDesktopForScreen(removedScreenId);
+                }
 
                 // Invalidate cached EDID serial so a different monitor on this connector is detected
                 PhosphorScreens::ScreenIdentity::invalidateEdidCache(removedName);
@@ -193,50 +207,65 @@ void Daemon::connectDesktopActivity()
     m_virtualDesktopManager->init();
     m_virtualDesktopManager->start();
 
-    // Connect virtual desktop changes to layout switching
+    // Virtual desktop changes are handled on TWO distinct paths (#648):
+    //
+    // 1) currentDesktopChanged — KWin's GLOBAL current desktop. Under Plasma 6.7
+    //    "switch desktops independently for each screen", this flips merely on
+    //    cursor movement between monitors on different desktops, so reacting to it
+    //    with OSD / autotile recompute is the bug. Here it ONLY keeps the global
+    //    desktop caches coherent with the active screen's desktop, for the
+    //    currentVirtualDesktop() consumers (and the per-screen-map fallback). These
+    //    are cheap value-sets that already fired on cursor-follow before the fix,
+    //    so this is not a regression. NO OSD, NO autotile recompute here.
     connect(m_virtualDesktopManager.get(), &PhosphorWorkspaces::VirtualDesktopManager::currentDesktopChanged, this,
             [this](int desktop) {
-                // Update all components with current desktop for per-desktop layout lookup
-                // NOTE: PhosphorZones::LayoutRegistry is the single source of truth for desktop/activity.
-                // WindowDragAdaptor reads from PhosphorZones::LayoutRegistry directly via resolveLayoutForScreen().
-                m_overlayService->setCurrentVirtualDesktop(desktop);
                 m_layoutManager->setCurrentVirtualDesktop(desktop);
                 if (m_unifiedLayoutController) {
                     m_unifiedLayoutController->setCurrentVirtualDesktop(desktop);
                 }
-                // Desktop switch invalidates the TilingStateKey context — cancel any
-                // active drag-insert preview before the engine's desktop changes,
-                // otherwise cancel/commit would operate on the wrong PhosphorTiles::TilingState.
+            });
+
+    // 2) screenDesktopChanged — the KWin effect's PER-OUTPUT desktopChanged report
+    //    (via VirtualDesktopManager). The authoritative per-screen switch; drives
+    //    all context + OSD work scoped to the ONE screen that switched. The effect
+    //    does NOT report this on cursor movement, so the per-desktop context thrash
+    //    and the spurious all-screens OSD of #648 are gone. In single-desktop mode
+    //    the effect fans this out to every screen, so behaviour is unchanged.
+    connect(m_virtualDesktopManager.get(), &PhosphorWorkspaces::VirtualDesktopManager::screenDesktopChanged, this,
+            [this](const QString& screenId, int desktop) {
+                // [SEQ A] Cancel any active drag-insert preview before the engine's
+                // desktop changes, else cancel/commit would hit the wrong TilingState.
                 if (m_autotileEngine && m_autotileEngine->hasDragInsertPreview()) {
                     m_autotileEngine->cancelDragInsertPreview();
                 }
-                // Pin screens where all autotiled windows are sticky (on all desktops)
-                // BEFORE changing the desktop context. This ensures currentKeyForScreen()
-                // continues to resolve existing TilingStates for screens managed by the
-                // KWin "virtualdesktopsonlyonprimary" script.
+                // [SEQ B] Pin screens where all autotiled windows are sticky BEFORE
+                // changing the desktop context, so currentKeyForScreen() still
+                // resolves existing TilingStates ("virtualdesktopsonlyonprimary").
                 if (m_autotileEngine && m_windowTrackingAdaptor) {
                     auto* service = m_windowTrackingAdaptor->service();
                     m_autotileEngine->updateStickyScreenPins([service](const QString& windowId) {
                         return service->isWindowSticky(windowId);
                     });
                 }
-                // Set engine's desktop context BEFORE updateAutotileScreens() so it
-                // resolves TilingStates for the correct desktop. Without this, the
-                // engine would look up/create states under the OLD desktop's key.
+                // [SEQ C] Set THIS screen's engine desktop context (pure per-screen
+                // swap, no state migration) BEFORE updateAutotileScreens() so the
+                // engine resolves TilingStates under the new (screen, desktop) key.
                 if (m_autotileEngine) {
-                    m_autotileEngine->setCurrentDesktop(desktop);
+                    m_autotileEngine->setCurrentDesktopForScreen(screenId, desktop);
                 }
-                // Per-desktop assignments may differ — recompute autotile screens
+                // [SEQ D] Per-screen layout/overlay resolution context. The
+                // overlay service delegates to the layout registry for per-output
+                // desktop resolution, so this one push drives both (#648).
+                m_layoutManager->setCurrentVirtualDesktopForScreen(screenId, desktop);
+                // [SEQ E] Per-desktop assignments may differ — recompute autotile
+                // screens, re-sync mode/filter, then refresh overlay geometry.
                 updateAutotileScreens();
-                // Sync mode, layout filter, and controller state from per-desktop assignments.
-                // This ensures ModeTracker, layout filter, and cycling index reflect the
-                // new desktop — not the old one's global state.
                 syncModeFromAssignments();
                 if (m_overlayService->isVisible()) {
                     m_overlayService->updateGeometries();
                 }
-
-                showDesktopSwitchOsd(desktop, currentActivity());
+                // OSD on the ONE screen that switched (#648).
+                showDesktopSwitchOsdForScreen(screenId, currentActivity());
             });
 
     // Prune stale PhosphorTiles::TilingState entries and disabled-desktop numbers when desktops are removed
@@ -365,7 +394,7 @@ void Daemon::connectDesktopActivity()
                         m_overlayService->updateGeometries();
                     }
 
-                    showDesktopSwitchOsd(currentDesktop(), activityId);
+                    showDesktopSwitchOsd(activityId);
                 });
     }
 }
@@ -809,12 +838,13 @@ void Daemon::onVirtualScreensReconfigured(const QString& physicalScreenId)
     // that any PhosphorTiles::TilingState created by the upcoming updateAutotileScreens
     // call (and the resnap below) reads fresh zone bounds. The screenAdded
     // handler does the same inline recalc for newly-added physical screens.
-    const int desktop = currentDesktop();
     const QString activity = currentActivity();
     const QStringList affectedScreenIds = config.hasSubdivisions()
         ? m_screenManager->virtualScreenIdsFor(physicalScreenId)
         : QStringList{physicalScreenId};
     for (const QString& sid : affectedScreenIds) {
+        // Per-output virtual desktops (#648): each screen its own desktop.
+        const int desktop = currentDesktopForScreen(sid);
         PhosphorZones::Layout* screenLayout = m_layoutManager->layoutForScreen(sid, desktop, activity);
         if (screenLayout) {
             PhosphorZones::LayoutComputeService::recalculateSync(
@@ -892,10 +922,11 @@ void Daemon::onVirtualScreenRegionsChanged(const QString& physicalScreenId)
     // pass on top of the engine's own, producing the visible "move then
     // retile" double-movement reported on VS swap/rotate.
 
-    const int desktop = currentDesktop();
     const QString activity = currentActivity();
     const QStringList affectedScreenIds = m_screenManager->virtualScreenIdsFor(physicalScreenId);
     for (const QString& sid : affectedScreenIds) {
+        // Per-output virtual desktops (#648): each screen its own desktop.
+        const int desktop = currentDesktopForScreen(sid);
         PhosphorZones::Layout* screenLayout = m_layoutManager->layoutForScreen(sid, desktop, activity);
         if (screenLayout) {
             PhosphorZones::LayoutComputeService::recalculateSync(

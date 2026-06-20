@@ -122,6 +122,14 @@ public:
     // activity change) read it through the interface.
 
     virtual int currentVirtualDesktop() const = 0;
+    /// This screen's current virtual desktop (Plasma 6.7 per-output virtual
+    /// desktops, #648). Default ignores the screen and returns the global
+    /// currentVirtualDesktop(), so non-per-output implementers are unaffected.
+    virtual int currentVirtualDesktopForScreen(const QString& screenId) const
+    {
+        Q_UNUSED(screenId)
+        return currentVirtualDesktop();
+    }
     virtual QString currentActivity() const = 0;
 
     /// Resolve the per-context gap override (zone padding + outer gaps) that

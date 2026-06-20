@@ -449,10 +449,18 @@ private:
      * the appropriate OSD (layout or algorithm). DRY helper for both
      * currentDesktopChanged and currentActivityChanged handlers.
      *
-     * @param desktop Current virtual desktop number
      * @param activity Current activity ID
      */
-    void showDesktopSwitchOsd(int desktop, const QString& activity);
+    void showDesktopSwitchOsd(const QString& activity);
+
+    /**
+     * @brief Per-screen desktop-switch OSD (Plasma 6.7 per-output virtual desktops)
+     *
+     * Shows the desktop-switch OSD only on @p screenId, using that screen's own
+     * current virtual desktop. Driven by the per-screen screenDesktopChanged
+     * handler so a single screen's switch doesn't flash every monitor (#648).
+     */
+    void showDesktopSwitchOsdForScreen(const QString& screenId, const QString& activity);
 
     /**
      * @brief Show per-screen OSD for all effective screens
@@ -460,9 +468,19 @@ private:
      * Iterates effectiveScreenIds, resolves assignment (autotile vs snapping),
      * and calls showLayoutOsdForAlgorithm or showLayoutOsd per screen inside
      * a single deferred event-loop pass so all surfaces show simultaneously.
-     * DRY helper shared by showDesktopSwitchOsd and settingsChanged handler.
+     * DRY helper shared by showDesktopSwitchOsd and the startup OSD path
+     * (finalizeStartup).
      */
-    void showOsdForAllScreens(int desktop, const QString& activity);
+    void showOsdForAllScreens(const QString& activity);
+
+    /**
+     * @brief Per-screen OSD for an explicit screen set
+     *
+     * Like showOsdForAllScreens but for the given @p screenIds; each screen uses
+     * its OWN current virtual desktop (per-output virtual desktops). Backs both
+     * showOsdForAllScreens and showDesktopSwitchOsdForScreen.
+     */
+    void showOsdForScreens(const QStringList& screenIds, const QString& activity);
 
     /**
      * @brief Recompute which screens use autotile from layout assignments
@@ -776,6 +794,9 @@ private:
 
     // Desktop/activity resolution helpers (DRY — used by multiple handlers)
     int currentDesktop() const;
+    /// This screen's current virtual desktop (Plasma 6.7 per-output virtual
+    /// desktops, #648), falling back to the global currentDesktop().
+    int currentDesktopForScreen(const QString& screenId) const;
     QString currentActivity() const;
     bool isCurrentContextLockedForMode(const QString& screenId, PhosphorZones::AssignmentEntry::Mode mode) const;
 

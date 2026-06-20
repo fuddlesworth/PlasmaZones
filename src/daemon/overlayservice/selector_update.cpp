@@ -180,7 +180,7 @@ void OverlayService::updateZoneSelectorWindow(const QString& screenId)
     // the zone selector appears during drag for the current mode.
     bool locked = false;
     if (m_settings && m_layoutManager) {
-        int curDesktop = m_layoutManager->currentVirtualDesktop();
+        int curDesktop = currentVirtualDesktopForScreen(screenId);
         QString curActivity = m_layoutManager->currentActivity();
         locked = isAnyModeLocked(m_settings, m_layoutManager, screenId, curDesktop, curActivity);
     }
@@ -240,7 +240,6 @@ void OverlayService::refreshContextLockState()
     if (!m_settings || !m_layoutManager) {
         return;
     }
-    const int curDesktop = m_layoutManager->currentVirtualDesktop();
     const QString curActivity = m_layoutManager->currentActivity();
 
     // Open zone selectors: one entry per screen with a live slot.
@@ -249,6 +248,8 @@ void OverlayService::refreshContextLockState()
         if (!window) {
             continue;
         }
+        // Per-output virtual desktops (#648): each screen resolves its own desktop.
+        const int curDesktop = currentVirtualDesktopForScreen(it.key());
         const bool locked = isAnyModeLocked(m_settings, m_layoutManager, it.key(), curDesktop, curActivity);
         writeQmlProperty(window, QStringLiteral("locked"), locked);
     }
@@ -257,6 +258,8 @@ void OverlayService::refreshContextLockState()
     // it, so push just the lock state to the live slot).
     if (m_layoutPickerVisible && !m_layoutPickerScreenId.isEmpty()) {
         if (auto* slot = m_screenStates.value(m_layoutPickerScreenId).layoutPickerSlot()) {
+            // Per-output virtual desktops (#648): each screen resolves its own desktop.
+            const int curDesktop = currentVirtualDesktopForScreen(m_layoutPickerScreenId);
             const bool locked =
                 isAnyModeLocked(m_settings, m_layoutManager, m_layoutPickerScreenId, curDesktop, curActivity);
             writeQmlProperty(slot, QStringLiteral("locked"), locked);

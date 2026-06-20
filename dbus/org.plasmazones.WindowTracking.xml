@@ -345,6 +345,15 @@ SPDX-License-Identifier: GPL-3.0-or-later
                 <annotation name="org.gtk.GDBus.DocString" value="Screen identifier the cursor is now on (e.g. Dell:U2722D:115107 or Dell:U2722D:115107/vs:0)."/>
             </arg>
         </method>
+        <method name="screenDesktopChanged">
+            <annotation name="org.gtk.GDBus.DocString" value="Report a screen's current virtual desktop (Plasma 6.7 per-output virtual desktops). Called by the KWin effect on KWin::EffectsHandler::desktopChanged with the per-output desktop. KWin's own D-Bus interface only exposes the global current desktop, so per-screen data arrives this way."/>
+            <arg name="screenId" type="s" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="Physical screen identifier whose desktop changed (NOT virtual-screen-suffixed; per-output desktops belong to the physical output)."/>
+            </arg>
+            <arg name="desktop" type="i" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="The screen's current virtual desktop, 1-based (x11DesktopNumber)."/>
+            </arg>
+        </method>
         <method name="setWindowMetadata">
             <annotation name="org.gtk.GDBus.DocString" value="Register or update metadata for a live window. Called by the compositor bridge on window-added and on every mutation of the window's app class, desktop file, caption, virtual desktop, activity, or role. Idempotent — safe to call on every observation; a no-op if metadata is unchanged."/>
             <arg name="instanceId" type="s" direction="in">

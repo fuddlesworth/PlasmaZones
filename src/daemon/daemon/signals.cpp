@@ -224,7 +224,7 @@ void Daemon::initializeAutotile()
                 qCWarning(lcDaemon) << "Mode toggle: empty screenId from resolveCursorScreenId";
                 return;
             }
-            int desktop = currentDesktop();
+            int desktop = currentDesktopForScreen(screenId);
             QString activity = currentActivity();
             qCInfo(lcDaemon) << "Mode toggle: screenId=" << screenId << "desktop=" << desktop
                              << "activity=" << activity;
@@ -572,7 +572,7 @@ void Daemon::connectLayoutSignals()
                 updateLayoutFilter();
 
                 // Sync unified controller cycling index when assignment affects current desktop.
-                const int curDesktop = currentDesktop();
+                const int curDesktop = currentDesktopForScreen(screenId);
                 if (virtualDesktop != 0 && virtualDesktop != curDesktop) {
                     return;
                 }
@@ -836,7 +836,7 @@ void Daemon::finalizeStartup()
         // KActivities is unavailable on this system (no point waiting).
         const bool activityReady = !activity.isEmpty() || !PhosphorWorkspaces::ActivityManager::isAvailable();
         if (activityReady) {
-            showOsdForAllScreens(currentDesktop(), activity);
+            showOsdForAllScreens(activity);
         } else if (m_activityManager) {
             // Defer the welcome OSD until the activity arrives from
             // KActivities, otherwise the cascade walks with empty
@@ -867,7 +867,7 @@ void Daemon::finalizeStartup()
                                 }
                                 *fired = true;
                                 QObject::disconnect(*conn);
-                                showOsdForAllScreens(currentDesktop(), a);
+                                showOsdForAllScreens(a);
                             });
             QTimer::singleShot(5000, this, [this, conn, fired]() {
                 if (*fired) {
@@ -888,7 +888,7 @@ void Daemon::finalizeStartup()
                 if (activity.isEmpty() && PhosphorWorkspaces::ActivityManager::isAvailable()) {
                     return;
                 }
-                showOsdForAllScreens(currentDesktop(), activity);
+                showOsdForAllScreens(activity);
             });
         }
     }

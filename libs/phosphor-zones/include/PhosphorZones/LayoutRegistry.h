@@ -299,7 +299,11 @@ public:
     /// so this helper is a thin context-filling forwarder.
     Q_INVOKABLE Layout* resolveLayoutForScreen(const QString& screenId) const override
     {
-        return layoutForScreen(screenId, m_currentVirtualDesktop, m_currentActivity);
+        // Resolve against THIS screen's current virtual desktop (Plasma 6.7
+        // per-output virtual desktops, #648). Falls back to the global desktop
+        // when the screen has no per-output value, so every caller (all of which
+        // already pass a screenId) gets per-screen resolution with no edits.
+        return layoutForScreen(screenId, currentVirtualDesktopForScreen(screenId), m_currentActivity);
     }
 
     /// Resolve the per-context gap override for (screen, desktop, activity) by
@@ -455,6 +459,26 @@ public:
     void setCurrentVirtualDesktop(int desktop)
     {
         m_currentVirtualDesktop = desktop;
+    }
+    /// This screen's current virtual desktop, falling back to the global
+    /// m_currentVirtualDesktop when no per-output value is set (#648).
+    int currentVirtualDesktopForScreen(const QString& screenId) const override
+    {
+        const auto it = m_screenVirtualDesktop.constFind(screenId);
+        return it != m_screenVirtualDesktop.constEnd() ? it.value() : m_currentVirtualDesktop;
+    }
+    /// Record a single screen's current virtual desktop (per-output virtual
+    /// desktops). Pushed by the daemon's per-screen desktop handler.
+    void setCurrentVirtualDesktopForScreen(const QString& screenId, int desktop)
+    {
+        if (!screenId.isEmpty() && desktop >= 1) {
+            m_screenVirtualDesktop.insert(screenId, desktop);
+        }
+    }
+    /// Drop a screen's per-output desktop, reverting it to the global value.
+    void clearCurrentVirtualDesktopForScreen(const QString& screenId)
+    {
+        m_screenVirtualDesktop.remove(screenId);
     }
     void setCurrentActivity(const QString& activity)
     {
@@ -750,6 +774,10 @@ private:
     Layout* m_previousLayout = nullptr; ///< Active layout before last setActiveLayout (for resnap)
     QHash<int, QString> m_quickLayoutShortcuts; ///< slot number (1..9) → layout ID
     int m_currentVirtualDesktop = 1;
+    /// Per-screen current virtual desktop (screenId → 1-based) under Plasma 6.7
+    /// per-output virtual desktops (#648). Empty unless the daemon pushes
+    /// per-screen values, so resolveLayoutForScreen falls back to the global.
+    QHash<QString, int> m_screenVirtualDesktop;
     QString m_currentActivity;
 };
 

@@ -476,6 +476,22 @@ public:
     {
         Q_UNUSED(desktop)
     }
+    /// Set a single screen's current virtual desktop (Plasma 6.7 "switch desktops
+    /// independently for each screen"). A PURE context swap — it selects which
+    /// per-(screen, desktop) tiling state is current for this screen; it does NOT
+    /// migrate windows between desktop states (the other desktop's state must stay
+    /// put so it reappears when that screen returns). Default no-op for engines
+    /// that are not per-screen-desktop-aware.
+    virtual void setCurrentDesktopForScreen(const QString& screenId, int desktop)
+    {
+        Q_UNUSED(screenId)
+        Q_UNUSED(desktop)
+    }
+    /// Drop a screen's per-output desktop, reverting it to the global current.
+    virtual void clearCurrentDesktopForScreen(const QString& screenId)
+    {
+        Q_UNUSED(screenId)
+    }
     virtual void setCurrentActivity(const QString& activity)
     {
         Q_UNUSED(activity)

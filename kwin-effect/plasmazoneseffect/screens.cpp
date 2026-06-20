@@ -84,6 +84,26 @@ QString PlasmaZonesEffect::outputScreenId(const KWin::LogicalOutput* output) con
     return result;
 }
 
+void PlasmaZonesEffect::reportScreenDesktop(const QString& screenId, int desktop)
+{
+    if (screenId.isEmpty() || desktop < 1) {
+        return;
+    }
+    // Dedup KWin's per-output desktopChanged — only forward a genuine change.
+    // m_lastScreenDesktop is updated even when the daemon service isn't
+    // registered yet; the bringup re-sync (daemon_bringup.cpp) re-pushes every
+    // screen's authoritative desktop after (re)registration, so a missed live
+    // report here is recovered there.
+    if (m_lastScreenDesktop.value(screenId, -1) == desktop) {
+        return;
+    }
+    m_lastScreenDesktop.insert(screenId, desktop);
+    if (m_daemonServiceRegistered) {
+        PhosphorProtocol::ClientHelpers::fireAndForget(this, PhosphorProtocol::Service::Interface::WindowTracking,
+                                                       QStringLiteral("screenDesktopChanged"), {screenId, desktop});
+    }
+}
+
 QString PlasmaZonesEffect::getWindowScreenId(KWin::EffectWindow* w) const
 {
     if (!w) {
@@ -413,6 +433,14 @@ void PlasmaZonesEffect::onScreenRemoved(KWin::LogicalOutput* output)
     if (!output) {
         return;
     }
+
+    // Drop this output's per-screen desktop dedup entry, symmetric with the
+    // daemon's VirtualDesktopManager::removeScreenDesktop (#648): otherwise
+    // reportScreenDesktop's m_lastScreenDesktop cache retains a stale value for
+    // a disconnected connector. Runs before the motion-clock early-return below
+    // so it fires even for an output that never had an animation clock.
+    m_lastScreenDesktop.remove(outputScreenId(output));
+
     // Any in-flight AnimatedValue whose MotionSpec captured this clock's
     // pointer would UAF on its next advance() if we just dropped the
     // unique_ptr. Reap only the animations bound to THIS output's clock

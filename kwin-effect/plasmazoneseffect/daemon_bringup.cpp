@@ -21,6 +21,7 @@
 
 #include <effect/effecthandler.h>
 #include <core/output.h>
+#include <virtualdesktops.h>
 #include <window.h>
 #include <workspace.h>
 
@@ -210,6 +211,23 @@ void PlasmaZonesEffect::continueDaemonReadySetup()
                                                        QStringLiteral("cursorScreenChanged"), {cursorScreenId},
                                                        QStringLiteral("cursorScreenChanged"));
         qCDebug(lcEffect) << "Re-sent cursor screen (physical fallback):" << cursorScreenId;
+    }
+
+    // Re-sync each output's current virtual desktop (Plasma 6.7 per-output virtual
+    // desktops, #648). The daemon may have just (re)registered with an empty
+    // per-screen map, so push the authoritative value for every screen — bypassing
+    // reportScreenDesktop's dedup — and refresh the dedup cache to match.
+    for (auto* output : KWin::effects->screens()) {
+        auto* vd = KWin::effects->currentDesktop(output);
+        if (!vd) {
+            continue;
+        }
+        const QString screenId = outputScreenId(output);
+        const int desktop = static_cast<int>(vd->x11DesktopNumber());
+        m_lastScreenDesktop.insert(screenId, desktop);
+        PhosphorProtocol::ClientHelpers::fireAndForget(this, PhosphorProtocol::Service::Interface::WindowTracking,
+                                                       QStringLiteral("screenDesktopChanged"), {screenId, desktop});
+        qCDebug(lcEffect) << "Re-sent screen desktop:" << screenId << "->" << desktop;
     }
 
     // Re-notify active window (gives daemon lastActiveScreenName).

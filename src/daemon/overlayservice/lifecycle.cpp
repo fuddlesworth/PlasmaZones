@@ -53,7 +53,7 @@ void OverlayService::show()
         if (cursorScreen && m_settings) {
             QString effectiveId = Utils::effectiveScreenIdAt(m_screenManager, QCursor::pos(), cursorScreen);
             if (isContextDisabled(m_settings, PhosphorZones::AssignmentEntry::Snapping, effectiveId,
-                                  m_currentVirtualDesktop, m_currentActivity)) {
+                                  currentVirtualDesktopForScreen(effectiveId), m_currentActivity)) {
                 return;
             }
         }
@@ -82,7 +82,7 @@ void OverlayService::showAtPosition(int cursorX, int cursorY)
         if (cursorScreen && m_settings) {
             QString effectiveId = Utils::effectiveScreenIdAt(m_screenManager, QPoint(cursorX, cursorY), cursorScreen);
             if (isContextDisabled(m_settings, PhosphorZones::AssignmentEntry::Snapping, effectiveId,
-                                  m_currentVirtualDesktop, m_currentActivity)) {
+                                  currentVirtualDesktopForScreen(effectiveId), m_currentActivity)) {
                 return;
             }
         }

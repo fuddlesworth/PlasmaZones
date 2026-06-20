@@ -101,7 +101,9 @@ struct BatchContext
 // entry a non-empty activity, else a wrong-family base rule is built);
 // @p familyMatches selects which existing rules to drop; @p emitDesktop /
 // @p emitActivity are the context the closing layoutAssigned is computed
-// under; @p label names the family in log output.
+// under (@p emitDesktop < 0 is the per-output-virtual-desktops sentinel, #648:
+// each screen's own current desktop is resolved at emit time; 0 = base/any);
+// @p label names the family in log output.
 template<typename KeyT, typename DecodeFn, typename ValidFn, typename FamilyFn>
 void LayoutRegistry::applyBatchAssignments(const QHash<KeyT, QString>& assignments, DecodeFn decode, ValidFn valid,
                                            FamilyFn familyMatches, int emitDesktop, const QString& emitActivity,
@@ -172,7 +174,12 @@ void LayoutRegistry::applyBatchAssignments(const QHash<KeyT, QString>& assignmen
     // Step 4 — one commit, then signal per stored screen.
     m_ruleStore->setAllRules(kept);
     for (const QString& screenId : storedScreens) {
-        emitLayoutAssigned(screenId, emitDesktop, assignmentIdForScreen(screenId, emitDesktop, emitActivity));
+        // Per-output virtual desktops (#648): a desktop-family batch passes
+        // emitDesktop < 0 so each screen refreshes against the desktop it is
+        // actually showing, not a single global one. A concrete emitDesktop
+        // (including 0 = base/any) is used verbatim.
+        const int ed = emitDesktop < 0 ? currentVirtualDesktopForScreen(screenId) : emitDesktop;
+        emitLayoutAssigned(screenId, ed, assignmentIdForScreen(screenId, ed, emitActivity));
     }
     qCInfo(lcZonesLib) << "Batch set" << count << label << "assignments";
 }
@@ -201,7 +208,7 @@ void LayoutRegistry::setAllDesktopAssignments(const QHash<QPair<QString, int>, Q
         [](const BatchContext& ctx) {
             return !ctx.screenId.isEmpty() && ctx.virtualDesktop >= 1;
         },
-        matchIsExactContextDesktop, m_currentVirtualDesktop, m_currentActivity, "desktop");
+        matchIsExactContextDesktop, /*emitDesktop=*/-1, m_currentActivity, "desktop");
 }
 
 void LayoutRegistry::setAllActivityAssignments(const QHash<QPair<QString, QString>, QString>& assignments)

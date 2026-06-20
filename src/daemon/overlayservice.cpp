@@ -566,7 +566,8 @@ PhosphorZones::Layout* OverlayService::resolveScreenLayout(const QString& screen
 {
     PhosphorZones::Layout* screenLayout = nullptr;
     if (m_layoutManager && !screenId.isEmpty()) {
-        screenLayout = m_layoutManager->layoutForScreen(screenId, m_currentVirtualDesktop, m_currentActivity);
+        screenLayout =
+            m_layoutManager->layoutForScreen(screenId, currentVirtualDesktopForScreen(screenId), m_currentActivity);
         if (!screenLayout) {
             screenLayout = m_layoutManager->defaultLayout();
         }
@@ -589,7 +590,7 @@ void OverlayService::hideDisabledAndRefresh()
         const QStringList screenIds = m_screenStates.keys();
         for (const QString& screenId : screenIds) {
             if (isContextDisabled(m_settings, PhosphorZones::AssignmentEntry::Snapping, screenId,
-                                  m_currentVirtualDesktop, m_currentActivity)) {
+                                  currentVirtualDesktopForScreen(screenId), m_currentActivity)) {
                 destroyZoneSelectorWindow(screenId);
                 if (m_visible) {
                     dismissOverlayWindow(screenId);
@@ -601,8 +602,8 @@ void OverlayService::hideDisabledAndRefresh()
     // Update remaining (non-disabled) zone selector and overlay windows
     for (auto it = m_screenStates.constBegin(); it != m_screenStates.constEnd(); ++it) {
         const QString& screenId = it.key();
-        if (isContextDisabled(m_settings, PhosphorZones::AssignmentEntry::Snapping, screenId, m_currentVirtualDesktop,
-                              m_currentActivity)) {
+        if (isContextDisabled(m_settings, PhosphorZones::AssignmentEntry::Snapping, screenId,
+                              currentVirtualDesktopForScreen(screenId), m_currentActivity)) {
             continue;
         }
         if (it.value().zoneSelectorSlot()) {
@@ -621,6 +622,15 @@ void OverlayService::setCurrentVirtualDesktop(int desktop)
         qCInfo(lcOverlay) << "Virtual desktop changed to" << desktop;
         hideDisabledAndRefresh();
     }
+}
+
+int OverlayService::currentVirtualDesktopForScreen(const QString& screenId) const
+{
+    // Single source of truth: the layout registry owns the per-output desktop
+    // map (#648); OverlayService delegates rather than mirroring it, so overlay
+    // resolution can never drift from layout resolution. Falls back to the
+    // global desktop when no registry is wired.
+    return m_layoutManager ? m_layoutManager->currentVirtualDesktopForScreen(screenId) : m_currentVirtualDesktop;
 }
 
 void OverlayService::setCurrentActivity(const QString& activityId)
@@ -655,8 +665,8 @@ OverlayService::LayoutIncludeFlags OverlayService::resolvePerScreenLayoutInclude
     if (resolvedId.isEmpty()) {
         return flags;
     }
-    const QString assignmentId =
-        m_layoutManager->assignmentIdForScreen(resolvedId, m_currentVirtualDesktop, m_currentActivity);
+    const QString assignmentId = m_layoutManager->assignmentIdForScreen(
+        resolvedId, currentVirtualDesktopForScreen(resolvedId), m_currentActivity);
     if (PhosphorLayout::LayoutId::isAutotile(assignmentId)) {
         flags.manual = false;
         flags.autotile = true;
@@ -671,8 +681,8 @@ QVariantList OverlayService::buildLayoutsList(const QString& screenId, QSize aut
 {
     const auto inc = resolvePerScreenLayoutInclude(screenId);
     const auto entries = PhosphorZones::LayoutUtils::buildUnifiedLayoutList(
-        m_layoutManager, m_algorithmRegistry, screenId, m_currentVirtualDesktop, m_currentActivity, inc.manual,
-        inc.autotile, Utils::screenAspectRatio(m_screenManager, screenId),
+        m_layoutManager, m_algorithmRegistry, screenId, currentVirtualDesktopForScreen(screenId), m_currentActivity,
+        inc.manual, inc.autotile, Utils::screenAspectRatio(m_screenManager, screenId),
         m_settings && m_settings->filterLayoutsByAspectRatio(),
         PhosphorZones::LayoutUtils::buildCustomOrder(m_settings, inc.manual, inc.autotile), m_autotileLayoutSource,
         autotilePreviewCanvas);
@@ -707,8 +717,8 @@ int OverlayService::visibleLayoutCount(const QString& screenId) const
     const auto inc = resolvePerScreenLayoutInclude(screenId);
     // Ordering doesn't affect count - skip custom order for performance.
     const auto entries = PhosphorZones::LayoutUtils::buildUnifiedLayoutList(
-        m_layoutManager, m_algorithmRegistry, screenId, m_currentVirtualDesktop, m_currentActivity, inc.manual,
-        inc.autotile, Utils::screenAspectRatio(m_screenManager, screenId),
+        m_layoutManager, m_algorithmRegistry, screenId, currentVirtualDesktopForScreen(screenId), m_currentActivity,
+        inc.manual, inc.autotile, Utils::screenAspectRatio(m_screenManager, screenId),
         m_settings && m_settings->filterLayoutsByAspectRatio(),
         /*customOrder=*/{}, m_autotileLayoutSource);
     return entries.size();

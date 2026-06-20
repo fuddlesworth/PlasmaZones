@@ -367,7 +367,7 @@ void Daemon::updateLayoutFilterForScreen(const QString& focusedScreenId)
     bool manualActive = false;
 
     if (m_settings->autotileEnabled() && m_layoutManager && m_screenManager) {
-        const int desktop = currentDesktop();
+        const int desktop = currentDesktopForScreen(focusedScreenId);
         const QString activity = currentActivity();
 
         if (!focusedScreenId.isEmpty()) {
@@ -413,7 +413,6 @@ void Daemon::syncModeFromAssignments()
         return;
     }
 
-    const int desktop = currentDesktop();
     const QString activity = currentActivity();
 
     // Sync UnifiedLayoutController's current layout ID to match this desktop.
@@ -433,6 +432,8 @@ void Daemon::syncModeFromAssignments()
                 }
             }
         }
+        // Per-output virtual desktops (#648): each screen resolves its own desktop.
+        const int desktop = currentDesktopForScreen(focusedScreenId);
         if (!focusedScreenId.isEmpty()) {
             const QString focusedAssignmentId =
                 m_layoutManager->assignmentIdForScreen(focusedScreenId, desktop, activity);
@@ -470,7 +471,7 @@ void Daemon::syncModeFromAssignments()
     updateLayoutFilter();
 }
 
-void Daemon::showDesktopSwitchOsd(int desktop, const QString& activity)
+void Daemon::showDesktopSwitchOsd(const QString& activity)
 {
     // Skip during startup — the initial activity/desktop detection fires
     // before start() completes and should not produce an OSD flash.
@@ -484,10 +485,35 @@ void Daemon::showDesktopSwitchOsd(int desktop, const QString& activity)
         || !m_screenManager) {
         return;
     }
-    showOsdForAllScreens(desktop, activity);
+    showOsdForAllScreens(activity);
 }
 
-void Daemon::showOsdForAllScreens(int desktop, const QString& activity)
+void Daemon::showDesktopSwitchOsdForScreen(const QString& screenId, const QString& activity)
+{
+    // Per-output virtual desktops (#648): only the screen that actually switched
+    // shows the OSD, not every monitor. Same gating as the all-screens variant.
+    if (!m_running) {
+        return;
+    }
+    if (shouldSuppressOsd()) {
+        return;
+    }
+    if (!m_settings || !m_settings->showOsdOnDesktopSwitch() || !m_overlayService || !m_layoutManager
+        || !m_screenManager) {
+        return;
+    }
+    showOsdForScreens({screenId}, activity);
+}
+
+void Daemon::showOsdForAllScreens(const QString& activity)
+{
+    if (!m_screenManager) {
+        return;
+    }
+    showOsdForScreens(m_screenManager->effectiveScreenIds(), activity);
+}
+
+void Daemon::showOsdForScreens(const QStringList& screenIds, const QString& activity)
 {
     if (!m_layoutManager || !m_screenManager) {
         return;
@@ -498,15 +524,18 @@ void Daemon::showOsdForAllScreens(int desktop, const QString& activity)
     // Batch all per-screen OSD shows into one deferred call so every
     // screen's surface->show() fires in the same event loop pass and the
     // compositor renders them simultaneously.
-    QTimer::singleShot(0, this, [this, desktop, activity]() {
+    QTimer::singleShot(0, this, [this, screenIds, activity]() {
         if (!m_layoutManager || !m_screenManager) {
             return;
         }
         if (shouldSuppressOsd()) {
             return;
         }
-        const QStringList effectiveIds = m_screenManager->effectiveScreenIds();
-        for (const QString& screenId : effectiveIds) {
+        for (const QString& screenId : screenIds) {
+            // Each screen reports against its OWN current virtual desktop
+            // (Plasma 6.7 per-output virtual desktops, #648).
+            const int desktop =
+                m_virtualDesktopManager ? m_virtualDesktopManager->currentDesktopForScreen(screenId) : currentDesktop();
             // Route the disabled-context probe through the resolver so this
             // OSD pass uses the same single snapshot façade as every other
             // call site — the prior hand-stitched (modeFor → settings →
@@ -563,6 +592,13 @@ void Daemon::showOsdForAllScreens(int desktop, const QString& activity)
 int Daemon::currentDesktop() const
 {
     return m_virtualDesktopManager ? m_virtualDesktopManager->currentDesktop() : 0;
+}
+
+int Daemon::currentDesktopForScreen(const QString& screenId) const
+{
+    // Per-output virtual desktops (#648): resolve THIS screen's current desktop,
+    // falling back to the global current when no per-output value is on record.
+    return m_virtualDesktopManager ? m_virtualDesktopManager->currentDesktopForScreen(screenId) : 0;
 }
 
 QString Daemon::currentActivity() const

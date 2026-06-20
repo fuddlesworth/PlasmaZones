@@ -96,8 +96,8 @@ void OverlayService::handleScreenAdded(QScreen* screen)
     if (mgr && mgr->hasVirtualScreens(physScreenId)) {
         // Create overlays for each virtual screen on this physical screen
         for (const QString& vsId : mgr->virtualScreenIdsFor(physScreenId)) {
-            if (isContextDisabled(m_settings, PhosphorZones::AssignmentEntry::Snapping, vsId, m_currentVirtualDesktop,
-                                  m_currentActivity)) {
+            if (isContextDisabled(m_settings, PhosphorZones::AssignmentEntry::Snapping, vsId,
+                                  currentVirtualDesktopForScreen(vsId), m_currentActivity)) {
                 continue;
             }
             QRect vsGeom = mgr->screenGeometry(vsId);

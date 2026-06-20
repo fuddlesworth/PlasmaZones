@@ -44,9 +44,12 @@ int LayoutAdaptor::getCurrentVirtualDesktop()
 // clearAssignment(), setAssignmentEntryDirect(), and the batch setAll*() methods.
 QString LayoutAdaptor::getLayoutForScreen(const QString& screenId)
 {
-    int desktop = m_virtualDesktopManager ? m_virtualDesktopManager->currentDesktop() : 0;
-    QString activity = m_activityManager ? m_activityManager->currentActivity() : QString();
     QString resolvedId = PhosphorScreens::ScreenIdentity::idForName(screenId);
+    // Per-output virtual desktops (#648): resolve the queried screen's own
+    // desktop, not the active monitor's, so getLayoutForScreen(screenA) issued
+    // while screenB is focused still returns screenA's layout.
+    int desktop = m_virtualDesktopManager ? m_virtualDesktopManager->currentDesktopForScreen(resolvedId) : 0;
+    QString activity = m_activityManager ? m_activityManager->currentActivity() : QString();
 
     // Check for autotile assignment first (layoutForScreen returns nullptr for autotile)
     QString assignmentId = m_layoutManager->assignmentIdForScreen(resolvedId, desktop, activity);
@@ -290,7 +293,6 @@ QString LayoutAdaptor::getScreenStates()
 
     QJsonArray result;
 
-    const int desktop = m_layoutManager->currentVirtualDesktop();
     const QString activity = m_layoutManager->currentActivity();
 
     // Use effective screen IDs (includes virtual screens when configured)
@@ -298,6 +300,8 @@ QString LayoutAdaptor::getScreenStates()
     const QStringList screenIds = (m_screenManager ? m_screenManager->effectiveScreenIds() : QStringList());
 
     for (const QString& screenId : std::as_const(screenIds)) {
+        // Per-output virtual desktops (#648): each screen resolves its own desktop.
+        const int desktop = m_layoutManager->currentVirtualDesktopForScreen(screenId);
         const auto entry = m_layoutManager->assignmentEntryForScreen(screenId, desktop, activity);
 
         QJsonObject obj;

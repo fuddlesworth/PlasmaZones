@@ -1280,7 +1280,7 @@ bool Daemon::init()
                 screenId = m_windowTrackingAdaptor->service()->screenForWindow(windowId);
             }
             if (!screenId.isEmpty() && m_layoutManager) {
-                return m_layoutManager->modeForScreen(screenId, currentDesktop(), currentActivity());
+                return m_layoutManager->modeForScreen(screenId, currentDesktopForScreen(screenId), currentActivity());
             }
             // No tracked screen in WTS (e.g. a window snap never saw): if the
             // autotile engine tracks it, its current mode is Autotile. Otherwise
@@ -1446,7 +1446,6 @@ bool Daemon::init()
             if (!m_snapEngine || !m_windowTrackingAdaptor || !m_screenManager || !m_layoutManager)
                 return;
 
-            const int desktop = currentDesktop();
             const QString activity = currentActivity();
 
             // Collect autotile screens and per-screen OSD data in one pass
@@ -1460,6 +1459,8 @@ bool Daemon::init()
             QVector<ScreenOsd> osdEntries;
             const QStringList effectiveIds = m_screenManager->effectiveScreenIds();
             for (const QString& screenId : effectiveIds) {
+                // Per-output virtual desktops (#648): each screen resolves its own desktop.
+                const int desktop = currentDesktopForScreen(screenId);
                 const QString assignmentId = m_layoutManager->assignmentIdForScreen(screenId, desktop, activity);
                 if (PhosphorLayout::LayoutId::isAutotile(assignmentId)) {
                     autotileScreens.insert(screenId);
@@ -1505,12 +1506,15 @@ bool Daemon::init()
                         // Resolve the algorithm's human-readable display
                         // name via the registry instead of surfacing the
                         // wire-format id (e.g. "bsp" → "Binary Split").
-                        // Mirrors osd.cpp:548-551.
+                        // Mirrors the algorithm display-name resolution in the
+                        // per-screen OSD path (showOsdForScreens, osd.cpp).
                         const auto* algo = m_algorithmRegistry ? m_algorithmRegistry->algorithm(osd.algoId) : nullptr;
                         const QString displayName = algo ? algo->name() : osd.algoId;
                         showLayoutOsdForAlgorithm(osd.algoId, displayName, osd.screenId);
                     }
                 } else {
+                    // Per-output virtual desktops (#648): each screen resolves its own desktop.
+                    const int desktop = currentDesktopForScreen(osd.screenId);
                     PhosphorZones::Layout* layout = m_layoutManager->layoutForScreen(osd.screenId, desktop, activity);
                     if (layout)
                         showLayoutOsd(layout, osd.screenId);

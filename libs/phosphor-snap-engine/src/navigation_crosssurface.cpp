@@ -70,7 +70,7 @@ bool SnapEngine::tryCrossModeOutput(const QString& windowId, const QString& dire
     // cross-mode handoff; a snap neighbour with no entry zone is a genuine
     // boundary — leave it. A move inserts the window into the neighbour's stack;
     // a swap trades it with the neighbour's entry-edge tile.
-    if (m_layoutManager->modeForScreen(neighbour, currentVirtualDesktop(), currentActivity())
+    if (m_layoutManager->modeForScreen(neighbour, currentVirtualDesktopForScreen(neighbour), currentActivity())
         != PhosphorZones::AssignmentEntry::Autotile) {
         return false;
     }

@@ -171,7 +171,7 @@ SnapResult SnapEngine::resolveWindowRestore(const QString& windowId, const QStri
     // record (recorded screen == this autotile screen) is NOT snapping, so the peek
     // misses and we correctly defer, leaving the record for autotile.
     if (m_layoutManager
-        && m_layoutManager->modeForScreen(screenId, currentVirtualDesktop(), currentActivity())
+        && m_layoutManager->modeForScreen(screenId, currentVirtualDesktopForScreen(screenId), currentActivity())
             != PhosphorZones::AssignmentEntry::Mode::Snapping) {
         bool crossScreenSnapRestorePending = false;
         if (m_windowTracker) {
@@ -372,7 +372,8 @@ SnapResult SnapEngine::resolveWindowRestore(const QString& windowId, const QStri
                 // That gate refuses to auto-SNAP a window onto a context the user
                 // disabled snapping for; a floated window is not being snapped into a
                 // zone, so restoring its floating state is correct regardless.
-                m_snapState->setFloatingOnScreen(windowId, restoreScreen, currentVirtualDesktop());
+                m_snapState->setFloatingOnScreen(windowId, restoreScreen,
+                                                 currentVirtualDesktopForScreen(restoreScreen));
                 if (!slot.zoneIds.isEmpty()) {
                     // A window floated FROM a snapped state carries its pre-float zones
                     // for the resnap path; a never-snapped floated window has none.
@@ -477,7 +478,7 @@ SnapResult SnapEngine::resolveWindowRestore(const QString& windowId, const QStri
     // so a rule-floated window never auto-snaps to a zone.
     // Mirrors the no-match default-float terminal at the end of this function.
     if (m_floatPredicate && m_floatPredicate(windowId)) {
-        m_snapState->setFloatingOnScreen(windowId, screenId, currentVirtualDesktop());
+        m_snapState->setFloatingOnScreen(windowId, screenId, currentVirtualDesktopForScreen(screenId));
         Q_EMIT windowFloatingChanged(windowId, true, screenId);
         qCInfo(PhosphorSnapEngine::lcSnapEngine) << "resolveWindowRestore:" << windowId << "floated by rule";
         return SnapResult::noSnap();
@@ -498,7 +499,7 @@ SnapResult SnapEngine::resolveWindowRestore(const QString& windowId, const QStri
     // on an autotile screen must not be auto-assigned, autotile owns
     // placement there.
     if (m_layoutManager) {
-        const int dt = currentVirtualDesktop();
+        const int dt = currentVirtualDesktopForScreen(screenId);
         if (m_layoutManager->modeForScreen(screenId, dt, currentActivity())
             != PhosphorZones::AssignmentEntry::Mode::Snapping) {
             qCDebug(PhosphorSnapEngine::lcSnapEngine) << "resolveWindowRestore:" << windowId << "caller screen"
@@ -535,7 +536,7 @@ SnapResult SnapEngine::resolveWindowRestore(const QString& windowId, const QStri
     // already-snapped guards above all return earlier, and the autotile-caller
     // short-circuit returns before the empty/last-zone chain — so this is always a
     // genuine snap-mode window with no zone match.
-    m_snapState->setFloatingOnScreen(windowId, screenId, currentVirtualDesktop());
+    m_snapState->setFloatingOnScreen(windowId, screenId, currentVirtualDesktopForScreen(screenId));
     Q_EMIT windowFloatingChanged(windowId, true, screenId);
     qCInfo(PhosphorSnapEngine::lcSnapEngine)
         << "resolveWindowRestore:" << windowId << "no snap match — defaulting to floated on" << screenId;
@@ -545,6 +546,13 @@ SnapResult SnapEngine::resolveWindowRestore(const QString& windowId, const QStri
 int SnapEngine::currentVirtualDesktop() const
 {
     return m_virtualDesktopManager ? m_virtualDesktopManager->currentDesktop() : 0;
+}
+
+int SnapEngine::currentVirtualDesktopForScreen(const QString& screenId) const
+{
+    // Per-output virtual desktops (#648): a snapped window's context binds to the
+    // desktop of the screen it lives on, not the global current desktop.
+    return m_virtualDesktopManager ? m_virtualDesktopManager->currentDesktopForScreen(screenId) : 0;
 }
 
 QString SnapEngine::currentActivity() const
@@ -582,10 +590,12 @@ std::optional<PhosphorEngine::WindowPlacement> SnapEngine::capturePlacement(cons
     // engine remembers
     // the window's state in its OWN mode; returning nullopt leaves the snap record
     // untouched.
+    // Resolve the window's own screen once: the mode gate below and the
+    // captured per-output desktop (#648) both key on it.
+    const QString effScreen = screenForTrackedWindow(windowId);
     if (m_layoutManager) {
-        const QString effScreen = screenForTrackedWindow(windowId);
         if (!effScreen.isEmpty()
-            && m_layoutManager->modeForScreen(effScreen, currentVirtualDesktop(), currentActivity())
+            && m_layoutManager->modeForScreen(effScreen, currentVirtualDesktopForScreen(effScreen), currentActivity())
                 != PhosphorZones::AssignmentEntry::Mode::Snapping) {
             return std::nullopt;
         }
@@ -594,7 +604,10 @@ std::optional<PhosphorEngine::WindowPlacement> SnapEngine::capturePlacement(cons
     WindowPlacement p;
     p.windowId = windowId;
     p.appId = m_windowTracker ? m_windowTracker->currentAppIdFor(windowId) : QString();
-    p.virtualDesktop = currentVirtualDesktop();
+    // Bind the captured desktop to the window's OWN screen, not the global current
+    // (Plasma 6.7 per-output virtual desktops, #648), so a float-back restores to
+    // the right desktop on a screen that isn't the active one.
+    p.virtualDesktop = currentVirtualDesktopForScreen(effScreen);
     p.activity = currentActivity();
 
     // The slot carries only the snap engine's STATE + slot reference (zone IDs) —

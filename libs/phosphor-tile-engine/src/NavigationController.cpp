@@ -878,10 +878,12 @@ void NavigationController::applyToAllStates(const std::function<void(PhosphorTil
         return; // No states to modify
     }
 
-    // Only apply to states for the current desktop/activity
+    // Only apply to states for each screen's current desktop/activity. Under
+    // per-output virtual desktops (#648) the desktop is resolved per-screen,
+    // matching propagateGlobalSplitRatio/propagateGlobalMasterCount.
     for (auto it = m_engine->m_screenStates.begin(); it != m_engine->m_screenStates.end(); ++it) {
-        if (it.key().desktop == m_engine->m_currentDesktop && it.key().activity == m_engine->m_currentActivity
-            && it.value()) {
+        if (it.key().desktop == m_engine->currentKeyForScreen(it.key().screenId).desktop
+            && it.key().activity == m_engine->m_currentActivity && it.value()) {
             operation(it.value());
         }
     }

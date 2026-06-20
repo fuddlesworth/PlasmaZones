@@ -390,6 +390,16 @@ public Q_SLOTS:
     void cursorScreenChanged(const QString& screenId);
 
     /**
+     * Record a screen's current virtual desktop (Plasma 6.7 per-output virtual
+     * desktops). Called by the KWin effect on KWin::EffectsHandler::desktopChanged.
+     * Forwarded to VirtualDesktopManager::updateScreenDesktop — KWin's own D-Bus
+     * VirtualDesktopManager interface only exposes the global current desktop.
+     * @param screenId Physical screen whose desktop changed
+     * @param desktop  The screen's current virtual desktop, 1-based
+     */
+    void screenDesktopChanged(const QString& screenId, int desktop);
+
+    /**
      * Report navigation feedback from KWin effect (D-Bus method)
      * @param success Whether the navigation succeeded
      * @param action Action attempted (e.g., "move", "focus", "swap")
@@ -995,6 +1005,9 @@ private:
      *        disabled-context gates and last-used-zone tracking.
      */
     int currentDesktop() const;
+    /// This screen's current virtual desktop (Plasma 6.7 per-output virtual
+    /// desktops, #648), falling back to the global currentDesktop().
+    int currentDesktopForScreen(const QString& screenId) const;
 
     // clearFloatingStateForSnap was removed — PhosphorSnapEngine::SnapEngine::commitSnap
     // now handles floating-state clearing internally (and emits

@@ -41,7 +41,7 @@ void SnapEngine::commitSnapImpl(const QString& windowId, const QStringList& zone
         }
     }
 
-    const int currentDesktop = m_virtualDesktopManager ? m_virtualDesktopManager->currentDesktop() : 0;
+    const int currentDesktop = currentVirtualDesktopForScreen(screenId);
     if (zoneIds.size() > 1) {
         m_windowTracker->assignWindowToZones(windowId, zoneIds, screenId, currentDesktop);
     } else {

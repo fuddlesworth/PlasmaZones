@@ -10,6 +10,7 @@
 
 #include <effect/effecthandler.h>
 #include <core/output.h>
+#include <virtualdesktops.h>
 #include <workspace.h>
 
 #include <QCoreApplication>
@@ -495,6 +496,31 @@ PlasmaZonesEffect::PlasmaZonesEffect()
     connect(KWin::effects, &KWin::EffectsHandler::desktopChanged, this, [this]() {
         updateAllBorders();
     });
+
+    // Per-output virtual desktops (Plasma 6.7 "switch desktops independently for
+    // each screen"): report each output's current desktop so the daemon keys its
+    // per-screen desktop map off real per-output switches instead of KWin's global
+    // current — which flips merely on cursor movement between monitors on
+    // different desktops (#648). This signal does NOT fire on cursor movement,
+    // only on an actual desktop change for an output, so it is the deterministic
+    // source. `output == nullptr` is a global all-output switch (per-output mode
+    // off); fan out to every screen so the daemon has one code path.
+    connect(KWin::effects, &KWin::EffectsHandler::desktopChanged, this,
+            [this](KWin::VirtualDesktop*, KWin::VirtualDesktop* newDesktop, KWin::EffectWindow*,
+                   KWin::LogicalOutput* output) {
+                if (!newDesktop) {
+                    return;
+                }
+                if (output) {
+                    reportScreenDesktop(outputScreenId(output), static_cast<int>(newDesktop->x11DesktopNumber()));
+                    return;
+                }
+                for (auto* out : KWin::effects->screens()) {
+                    if (auto* vd = KWin::effects->currentDesktop(out)) {
+                        reportScreenDesktop(outputScreenId(out), static_cast<int>(vd->x11DesktopNumber()));
+                    }
+                }
+            });
 
     // Belt-and-suspenders: windowClosed removes animations, but if a deferred
     // timer re-adds one between windowClosed and windowDeleted, the Item tree

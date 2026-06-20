@@ -133,7 +133,7 @@ void OverlayService::initializeOverlay(QScreen* cursorScreen, const QPoint& curs
                 continue;
             }
             if (isContextDisabled(m_settings, PhosphorZones::AssignmentEntry::Snapping, screenId,
-                                  m_currentVirtualDesktop, m_currentActivity)) {
+                                  currentVirtualDesktopForScreen(screenId), m_currentActivity)) {
                 continue;
             }
             if (m_excludedScreens.contains(screenId)) {
@@ -147,7 +147,7 @@ void OverlayService::initializeOverlay(QScreen* cursorScreen, const QPoint& curs
         for (auto* screen : Utils::allScreens()) {
             const QString screenId = PhosphorScreens::ScreenIdentity::identifierFor(screen);
             if (isContextDisabled(m_settings, PhosphorZones::AssignmentEntry::Snapping, screenId,
-                                  m_currentVirtualDesktop, m_currentActivity)) {
+                                  currentVirtualDesktopForScreen(screenId), m_currentActivity)) {
                 continue;
             }
             if (m_excludedScreens.contains(screenId)) {
@@ -575,8 +575,8 @@ void OverlayService::recreateOverlayWindowsOnTypeMismatch()
         stopShaderAnimation();
 
     for (const QString& screenId : screensToFlip) {
-        if (isContextDisabled(m_settings, PhosphorZones::AssignmentEntry::Snapping, screenId, m_currentVirtualDesktop,
-                              m_currentActivity)) {
+        if (isContextDisabled(m_settings, PhosphorZones::AssignmentEntry::Snapping, screenId,
+                              currentVirtualDesktopForScreen(screenId), m_currentActivity)) {
             continue;
         }
         QScreen* physScreen = m_screenStates.value(screenId).overlayPhysScreen;

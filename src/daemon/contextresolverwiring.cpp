@@ -34,6 +34,14 @@ int DaemonWorkspaceStateAdapter::currentVirtualDesktop() const
     return m_virtualDesktopManager ? m_virtualDesktopManager->currentDesktop() : 0;
 }
 
+int DaemonWorkspaceStateAdapter::currentVirtualDesktopForScreen(const QString& screenId) const
+{
+    // Per-output virtual desktops (#648): the disabled-context cascade must
+    // resolve against the desktop of the screen being checked, not the global
+    // current. Falls back to the global when no per-output value is on record.
+    return m_virtualDesktopManager ? m_virtualDesktopManager->currentDesktopForScreen(screenId) : 0;
+}
+
 QString DaemonWorkspaceStateAdapter::currentActivity() const
 {
     // Guard on both the manager pointer AND `ActivityManager::isAvailable()`

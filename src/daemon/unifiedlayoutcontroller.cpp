@@ -115,8 +115,12 @@ QVector<PhosphorLayout::LayoutPreview> UnifiedLayoutController::layouts() const
         // and mode-based filtering (manual-only vs autotile-only).
         // Registry comes directly from our injected pointer rather than the
         // Law-of-Demeter reach-through engine->algorithmRegistry().
+        // Per-output virtual desktops (#648): resolve the current screen's own
+        // desktop, not the global active one.
+        const int desktop = m_layoutManager ? m_layoutManager->currentVirtualDesktopForScreen(m_currentScreenName)
+                                            : m_currentVirtualDesktop;
         m_cachedLayouts = PhosphorZones::LayoutUtils::buildUnifiedLayoutList(
-            m_layoutManager, m_algorithmRegistry, m_currentScreenName, m_currentVirtualDesktop, m_currentActivity,
+            m_layoutManager, m_algorithmRegistry, m_currentScreenName, desktop, m_currentActivity,
             m_includeManualLayouts, m_includeAutotileLayouts,
             Utils::screenAspectRatio(m_screenManager, m_currentScreenName),
             m_settings && m_settings->filterLayoutsByAspectRatio(),
@@ -219,8 +223,10 @@ void UnifiedLayoutController::setCurrentScreenName(const QString& screenId)
         // Sync current layout ID to what's actually assigned to this screen
         // (not the global active layout, which may belong to a different screen)
         if (m_layoutManager && !screenId.isEmpty()) {
+            // Per-output virtual desktops (#648): this screen's own desktop.
+            const int desktop = m_layoutManager->currentVirtualDesktopForScreen(screenId);
             PhosphorZones::Layout* screenLayout =
-                m_layoutManager->layoutForScreen(screenId, m_currentVirtualDesktop, m_currentActivity);
+                m_layoutManager->layoutForScreen(screenId, desktop, m_currentActivity);
             if (screenLayout) {
                 m_currentLayoutId = screenLayout->id().toString();
             }
@@ -271,8 +277,9 @@ bool UnifiedLayoutController::applyEntry(const PhosphorLayout::LayoutPreview& pr
                 // Most specific context wins — an activity-keyed entry takes
                 // priority over a desktop-only entry in the cascade, and a
                 // different activity falls through to the broader entry.
-                m_layoutManager->assignLayoutById(m_currentScreenName, m_currentVirtualDesktop, m_currentActivity,
-                                                  preview.id);
+                m_layoutManager->assignLayoutById(m_currentScreenName,
+                                                  m_layoutManager->currentVirtualDesktopForScreen(m_currentScreenName),
+                                                  m_currentActivity, preview.id);
             }
             m_autotileEngine->setAlgorithm(algoId);
             setCurrentLayoutId(preview.id);
@@ -296,7 +303,9 @@ bool UnifiedLayoutController::applyEntry(const PhosphorLayout::LayoutPreview& pr
                 // Only the per-context assignment is stored — the global
                 // activeLayout pointer is NOT updated so that other screens
                 // and contexts keep their existing fallback layout.
-                m_layoutManager->assignLayout(m_currentScreenName, m_currentVirtualDesktop, m_currentActivity, layout);
+                m_layoutManager->assignLayout(m_currentScreenName,
+                                              m_layoutManager->currentVirtualDesktopForScreen(m_currentScreenName),
+                                              m_currentActivity, layout);
             }
             setCurrentLayoutId(preview.id);
             qCInfo(lcDaemon) << "Applied unified layout=" << preview.displayName << "screen=" << m_currentScreenName;

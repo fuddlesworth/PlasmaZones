@@ -53,6 +53,16 @@ public:
     /// when no VirtualDesktopManager is wired.
     virtual int currentVirtualDesktop() const = 0;
 
+    /// 1-based desktop index for a specific screen (Plasma 6.7 "switch desktops
+    /// independently for each screen", #648). The default ignores the screen and
+    /// returns the global currentVirtualDesktop(), so single-desktop setups and
+    /// non-per-output implementers are unaffected.
+    virtual int currentVirtualDesktopForScreen(const QString& screenId) const
+    {
+        Q_UNUSED(screenId)
+        return currentVirtualDesktop();
+    }
+
     /// Current activity uuid. Empty when no ActivityManager is wired or
     /// no activity is currently active.
     virtual QString currentActivity() const = 0;

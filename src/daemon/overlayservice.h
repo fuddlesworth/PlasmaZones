@@ -222,6 +222,12 @@ public:
         return m_screenManager;
     }
     void setCurrentVirtualDesktop(int desktop);
+    /// This screen's current virtual desktop under Plasma 6.7 per-output virtual
+    /// desktops (#648). Delegates to the layout registry — the single source of
+    /// truth for the per-output desktop map — so overlay resolution matches
+    /// layout resolution; falls back to the global desktop when no registry is
+    /// wired.
+    int currentVirtualDesktopForScreen(const QString& screenId) const;
     void setCurrentActivity(const QString& activityId);
 
     /**
@@ -636,7 +642,9 @@ private:
     // fire starts a timer; subsequent fires before the timer elapses do
     // nothing; the timer callback runs refreshVisibleWindows once.
     bool m_refreshCoalescePending = false;
-    int m_currentVirtualDesktop = 1; // Current virtual desktop (1-based)
+    int m_currentVirtualDesktop = 1; // Current virtual desktop (1-based); global
+                                     // fallback for currentVirtualDesktopForScreen
+                                     // when no layout registry is wired (#648).
     QString m_currentActivity; // Current KDE activity (empty = all activities)
     bool m_visible = false;
     bool m_zoneSelectorVisible = false;
