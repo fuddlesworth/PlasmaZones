@@ -472,6 +472,11 @@ Item {
             }
 
             Label {
+                Layout.fillWidth: true
+                // Inset to match the rows / banners in this card instead of
+                // hugging the left edge.
+                Layout.leftMargin: Kirigami.Units.largeSpacing
+                Layout.rightMargin: Kirigami.Units.largeSpacing
                 visible: !root.alwaysEnabled && !root.overrideEnabled
                 text: i18n("Current: %1", root.inheritSummaryText())
                 font.italic: true
