@@ -227,6 +227,14 @@ PhosphorZones::Layout* LayoutRegistry::cycleLayoutImpl(const QString& screenId, 
             : screenId;
     }
 
+    // Per-output virtual desktops (#648): cycle relative to the target screen's
+    // OWN desktop, not the global active one, so the visibility filter and the
+    // reference-layout lookup below resolve against the same desktop the screen
+    // is actually showing. Falls back to the global desktop when no screen is
+    // known (empty screenId) or no per-output value is on record.
+    const int desktop =
+        resolvedScreenId.isEmpty() ? m_currentVirtualDesktop : currentVirtualDesktopForScreen(resolvedScreenId);
+
     // Build filtered list of visible layouts for current context
     QVector<PhosphorZones::Layout*> visible;
     for (PhosphorZones::Layout* l : m_layouts) {
@@ -238,8 +246,8 @@ PhosphorZones::Layout* LayoutRegistry::cycleLayoutImpl(const QString& screenId, 
                 continue;
             }
         }
-        if (m_currentVirtualDesktop > 0 && !l->allowedDesktops().isEmpty()) {
-            if (!l->allowedDesktops().contains(m_currentVirtualDesktop)) {
+        if (desktop > 0 && !l->allowedDesktops().isEmpty()) {
+            if (!l->allowedDesktops().contains(desktop)) {
                 continue;
             }
         }
@@ -258,7 +266,7 @@ PhosphorZones::Layout* LayoutRegistry::cycleLayoutImpl(const QString& screenId, 
     // Use per-screen layout as reference for cycling so each screen cycles independently
     PhosphorZones::Layout* currentLayout = nullptr;
     if (!resolvedScreenId.isEmpty()) {
-        currentLayout = layoutForScreen(resolvedScreenId, m_currentVirtualDesktop, m_currentActivity);
+        currentLayout = layoutForScreen(resolvedScreenId, desktop, m_currentActivity);
     }
     if (!currentLayout) {
         currentLayout = defaultLayout();
@@ -292,14 +300,19 @@ void LayoutRegistry::applyLayoutToScreen(const QString& screenId, PhosphorZones:
     // Per-screen assignment: write per-desktop assignment first so the
     // layoutAssigned handler recalculates zone geometry for this screen.
     if (!screenId.isEmpty()) {
+        // Per-output virtual desktops (#648): write to the screen's OWN desktop,
+        // not the global active one. Both callers (cycleLayoutImpl and the D-Bus
+        // applyQuickLayout via LayoutAdaptor) pass an already idForName-resolved
+        // screenId, matching the per-output map's key.
+        const int desktop = currentVirtualDesktopForScreen(screenId);
         // Write per-desktop assignment with empty activity so it applies
         // regardless of which activity is active. Activity-specific
         // overrides are a separate KCM-only feature. Clear any stale
         // activity-keyed entry that would shadow this one in the cascade.
         if (!m_currentActivity.isEmpty()) {
-            clearAssignment(screenId, m_currentVirtualDesktop, m_currentActivity);
+            clearAssignment(screenId, desktop, m_currentActivity);
         }
-        assignLayout(screenId, m_currentVirtualDesktop, QString(), layout);
+        assignLayout(screenId, desktop, QString(), layout);
     }
     // Update the global active layout pointer (for overlay/zone detector
     // queries) but suppress activeLayoutChanged to prevent resnap buffer
