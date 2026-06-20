@@ -224,7 +224,7 @@ void Daemon::initializeAutotile()
                 qCWarning(lcDaemon) << "Mode toggle: empty screenId from resolveCursorScreenId";
                 return;
             }
-            int desktop = currentDesktop();
+            int desktop = currentDesktopForScreen(screenId);
             QString activity = currentActivity();
             qCInfo(lcDaemon) << "Mode toggle: screenId=" << screenId << "desktop=" << desktop
                              << "activity=" << activity;
@@ -572,7 +572,7 @@ void Daemon::connectLayoutSignals()
                 updateLayoutFilter();
 
                 // Sync unified controller cycling index when assignment affects current desktop.
-                const int curDesktop = currentDesktop();
+                const int curDesktop = currentDesktopForScreen(screenId);
                 if (virtualDesktop != 0 && virtualDesktop != curDesktop) {
                     return;
                 }

@@ -444,7 +444,7 @@ void Daemon::seedAutotileOrderForScreen(const QString& screenId)
     // Prefer saved autotile order from last mode toggle (deterministic re-entry).
     // Falls back to zone-ordered window list when no saved order exists (first
     // activation, or windows changed between toggles).
-    TilingStateKey orderKey{screenId, currentDesktop(), currentActivity()};
+    TilingStateKey orderKey{screenId, currentDesktopForScreen(screenId), currentActivity()};
     QStringList order = m_lastAutotileOrders.value(orderKey);
     if (order.isEmpty()) {
         PhosphorPlacement::WindowTrackingService* wts = m_windowTrackingAdaptor->service();

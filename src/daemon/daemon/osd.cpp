@@ -367,7 +367,7 @@ void Daemon::updateLayoutFilterForScreen(const QString& focusedScreenId)
     bool manualActive = false;
 
     if (m_settings->autotileEnabled() && m_layoutManager && m_screenManager) {
-        const int desktop = currentDesktop();
+        const int desktop = currentDesktopForScreen(focusedScreenId);
         const QString activity = currentActivity();
 
         if (!focusedScreenId.isEmpty()) {
@@ -591,6 +591,13 @@ void Daemon::showOsdForScreens(const QStringList& screenIds, const QString& acti
 int Daemon::currentDesktop() const
 {
     return m_virtualDesktopManager ? m_virtualDesktopManager->currentDesktop() : 0;
+}
+
+int Daemon::currentDesktopForScreen(const QString& screenId) const
+{
+    // Per-output virtual desktops (#648): resolve THIS screen's current desktop,
+    // falling back to the global current when no per-output value is on record.
+    return m_virtualDesktopManager ? m_virtualDesktopManager->currentDesktopForScreen(screenId) : 0;
 }
 
 QString Daemon::currentActivity() const

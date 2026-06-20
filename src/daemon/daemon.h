@@ -794,6 +794,9 @@ private:
 
     // Desktop/activity resolution helpers (DRY — used by multiple handlers)
     int currentDesktop() const;
+    /// This screen's current virtual desktop (Plasma 6.7 per-output virtual
+    /// desktops, #648), falling back to the global currentDesktop().
+    int currentDesktopForScreen(const QString& screenId) const;
     QString currentActivity() const;
     bool isCurrentContextLockedForMode(const QString& screenId, PhosphorZones::AssignmentEntry::Mode mode) const;
 

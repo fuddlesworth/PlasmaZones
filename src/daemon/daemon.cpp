@@ -1280,7 +1280,7 @@ bool Daemon::init()
                 screenId = m_windowTrackingAdaptor->service()->screenForWindow(windowId);
             }
             if (!screenId.isEmpty() && m_layoutManager) {
-                return m_layoutManager->modeForScreen(screenId, currentDesktop(), currentActivity());
+                return m_layoutManager->modeForScreen(screenId, currentDesktopForScreen(screenId), currentActivity());
             }
             // No tracked screen in WTS (e.g. a window snap never saw): if the
             // autotile engine tracks it, its current mode is Autotile. Otherwise
