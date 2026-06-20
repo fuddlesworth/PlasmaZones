@@ -206,8 +206,10 @@ QString WindowTrackingService::screenForWindow(const QString& windowId, const QS
     if (!m_snapState) {
         return defaultScreen;
     }
-    // A screen assignment is never the empty string, so "empty" means "no
-    // assignment" — equivalent to the absent-key branch of value(key, default).
+    // Return defaultScreen when the window has no usable (non-empty) screen
+    // assignment. Callers (snap commit / unfloat) always record a real screen, so
+    // in practice this matches the old screenAssignments().value(windowId,
+    // defaultScreen) idiom while also canonicalizing the id (issue #628).
     const QString screen = m_snapState->screenForWindow(windowId);
     return screen.isEmpty() ? defaultScreen : screen;
 }
@@ -705,8 +707,8 @@ void WindowTrackingService::setWindowSticky(const QString& rawWindowId, bool sti
 {
     // Canonicalize so sticky state survives the effect-restart-after-class-mutation
     // re-identification skew (issue #628). The daemon seeds the canonical mapping
-    // in setWindowMetadata, so canonicalizeForLookup resolves to the first-seen
-    // composite without seeding here.
+    // in WindowTrackingAdaptor::setWindowMetadata, so canonicalizeForLookup
+    // resolves to the first-seen composite without seeding here.
     m_windowStickyStates[canonicalizeForLookup(rawWindowId)] = sticky;
 }
 
@@ -735,8 +737,10 @@ const QHash<QString, QStringList>& WindowTrackingService::zoneAssignments() cons
 QStringList WindowTrackingService::recordedSnapZones(const QString& windowId) const
 {
     // Prefer the live, runtime assignment — it reflects this session's snaps.
+    // Go through the canonicalizing point accessor (not the raw whole-map getter)
+    // so a class-mutated window still resolves its live zones (issue #628).
     if (m_snapState) {
-        const QStringList live = m_snapState->zoneAssignments().value(windowId);
+        const QStringList live = m_snapState->zonesForWindow(windowId);
         if (!live.isEmpty()) {
             return live;
         }

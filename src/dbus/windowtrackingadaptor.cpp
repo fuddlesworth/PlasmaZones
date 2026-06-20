@@ -857,8 +857,8 @@ void WindowTrackingAdaptor::setWindowMetadata(const QString& instanceId, const Q
     }
 
     // Universal canonical seed. setWindowMetadata is the per-window choke point —
-    // the effect pushes it (unconditionally, before any other notification) for
-    // every window it observes, snap-mode included. Freezing the first-seen
+    // the effect pushes it for every window it tracks, ahead of the other
+    // per-window notifications, snap-mode included. Freezing the first-seen
     // composite (appId|instanceId) here gives EVERY window a canonical entry from
     // first contact, so the snap stores (which canonicalize their keys) resolve a
     // window even after the effect restarts and re-derives a mutated-class

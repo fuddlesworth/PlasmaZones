@@ -305,10 +305,11 @@ Q_SIGNALS:
 private:
     /// Resolve a raw windowId to its canonical (first-seen) composite for the
     /// stable instance id, WITHOUT seeding — the daemon seeds once per window in
-    /// setWindowMetadata, so every snap accessor here only looks up. Returns the
-    /// input verbatim when the instance has no canonical entry (or no registry is
-    /// attached, e.g. unit tests), which also makes the bare-appId alias writes
-    /// (addPreFloat*/clearPreFloatZone) safe. See the .cpp header comment.
+    /// WindowTrackingAdaptor::setWindowMetadata, so every snap accessor here only
+    /// looks up. Returns the input verbatim when the instance has no canonical
+    /// entry (or no registry is attached, e.g. unit tests), which also makes the
+    /// bare-appId alias writes (addPreFloat*/clearPreFloatZone) safe. See the
+    /// .cpp header comment.
     QString canonicalizeForLookup(const QString& rawWindowId) const;
 
     bool removeWindowData(const QString& windowId);

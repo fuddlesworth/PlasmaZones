@@ -12,8 +12,8 @@
  * The fix canonicalizes every windowId-keyed SnapState accessor through the
  * shared WindowRegistry (instanceId → first-seen composite), mirroring what the
  * AutotileEngine already does for tiling state (test_autotile_engine_class_mutation).
- * Seeding is centralized in the daemon's setWindowMetadata; here we seed the
- * registry directly to stand in for that one call.
+ * Seeding is centralized in the daemon's WindowTrackingAdaptor::setWindowMetadata;
+ * here we seed the registry directly to stand in for that one call.
  *
  * These tests exercise SnapState directly — no KWin effect, no D-Bus — with a
  * real WindowRegistry wired in, which is exactly the production configuration.
@@ -72,8 +72,10 @@ private Q_SLOTS:
         // window (same instance id). Every windowId-keyed read must resolve it
         // back to the first-seen entry — no orphaning.
         QVERIFY2(state.isWindowSnapped(kAfterRename), "snapped state must resolve across the class mutation");
+        QVERIFY(state.containsWindow(kAfterRename));
         QCOMPARE(state.zoneForWindow(kAfterRename), kZone);
         QCOMPARE(state.zonesForWindow(kAfterRename), QStringList{kZone});
+        QCOMPARE(state.placementIdForWindow(kAfterRename), kZone);
         QCOMPARE(state.screenForWindow(kAfterRename), kScreen);
         QCOMPARE(state.desktopForWindow(kAfterRename), 1);
         QVERIFY(!state.isFloating(kAfterRename));
