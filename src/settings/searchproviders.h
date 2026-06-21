@@ -37,7 +37,8 @@ private:
  * @brief ISearchProvider feeding window rules into the global search index.
  *
  * Snapshots the WindowRuleModel (name + match summary); results navigate to the
- * Window Rules page. Re-snapshot is driven by the model's `countChanged`.
+ * Window Rules page. Re-snapshot is driven by the model's `countChanged` (add /
+ * remove) and `dataChanged` (in-place edits like a rename or summary change).
  */
 class WindowRulesSearchProvider : public PhosphorControl::ISearchProvider
 {

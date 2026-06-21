@@ -12,7 +12,12 @@ namespace PhosphorControl {
 
 namespace {
 
-constexpr QLatin1String kBreadcrumbSeparator(" › ");
+// U+203A (›) — QStringLiteral, not QLatin1String: the separator is multibyte
+// UTF-8, which QLatin1String would reinterpret byte-per-char into mojibake.
+QString breadcrumbSeparator()
+{
+    return QStringLiteral(" › ");
+}
 
 QVariantMap toVariant(const SearchEntry& e)
 {
@@ -153,7 +158,7 @@ QVector<SearchEntry> SearchController::buildIndex() const
                 crumbs << t;
             }
         }
-        se.subtitle = crumbs.join(kBreadcrumbSeparator);
+        se.subtitle = crumbs.join(breadcrumbSeparator());
 
         entries.push_back(se);
     }

@@ -83,6 +83,10 @@ private Q_SLOTS:
                             QUrl(QStringLiteral("qrc:/General.qml")));
         m_app->registerPage(new StubPage(QStringLiteral("snapping-appearance")), QStringLiteral("snapping"),
                             QStringLiteral("Appearance"), QUrl(QStringLiteral("qrc:/Appearance.qml")));
+        // Two-deep leaf so the breadcrumb actually joins multiple ancestors.
+        m_app->registerPage(new StubPage(QStringLiteral("snapping-appearance-colors")),
+                            QStringLiteral("snapping-appearance"), QStringLiteral("Colors"),
+                            QUrl(QStringLiteral("qrc:/Colors.qml")));
     }
 
     void cleanup()
@@ -116,6 +120,18 @@ private Q_SLOTS:
         const QVariantList r = sc.results();
         QVERIFY(!r.isEmpty());
         QCOMPARE(r.first().toMap().value(QStringLiteral("subtitle")).toString(), QStringLiteral("Snapping"));
+    }
+
+    void breadcrumbJoinsAncestorsWithSeparator()
+    {
+        SearchController sc(m_app);
+        sc.setQuery(QStringLiteral("colors"));
+        const QVariantList r = sc.results();
+        QVERIFY(!r.isEmpty());
+        // Two ancestors joined by U+203A — guards against a QLatin1String
+        // separator mangling the multibyte char into mojibake.
+        QCOMPARE(r.first().toMap().value(QStringLiteral("subtitle")).toString(),
+                 QStringLiteral("Snapping › Appearance"));
     }
 
     void keywordEnablesSynonymSearch()

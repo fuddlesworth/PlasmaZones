@@ -215,8 +215,9 @@ int main(int argc, char* argv[])
     QObject::connect(&controller, &PlasmaZones::SettingsController::layoutsChanged, searchController,
                      &PhosphorControl::SearchController::invalidate);
     if (controller.windowRulesPage() != nullptr && controller.windowRulesPage()->model() != nullptr) {
-        // Both add/remove (countChanged) and in-place edits like a rule rename or
-        // match-summary change (dataChanged) must refresh the index.
+        // Both add/remove (countChanged) and any in-place edit (rename,
+        // match-summary, … via dataChanged) must refresh the index. invalidate()
+        // is lazy, so over-firing on unrelated role changes is cheap.
         QObject::connect(controller.windowRulesPage()->model(), &PlasmaZones::WindowRuleModel::countChanged,
                          searchController, &PhosphorControl::SearchController::invalidate);
         QObject::connect(controller.windowRulesPage()->model(), &PlasmaZones::WindowRuleModel::dataChanged,
