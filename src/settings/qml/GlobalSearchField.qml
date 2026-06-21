@@ -54,6 +54,20 @@ Item {
         // user types. Disable it so accepted() means "the user pressed Enter".
         autoAccept: false
         onTextChanged: searchDebounce.restart()
+        // Tab completes the query to the top result's title (accept-best-match),
+        // keeping focus in the field to refine. A second Tab (already at the top
+        // title) falls through to normal focus traversal.
+        Keys.onTabPressed: function (event) {
+            const list = searchController.results;
+            const top = list.length > 0 ? list[0].title : "";
+            if (top.length > 0 && top !== field.text) {
+                field.text = top;
+                field.cursorPosition = field.text.length;
+                event.accepted = true;
+            } else {
+                event.accepted = false;
+            }
+        }
         Keys.onDownPressed: function (event) {
             if (resultsPopup.visible && resultsList.count > 0) {
                 resultsList.currentIndex = 0;
