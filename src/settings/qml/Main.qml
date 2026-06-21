@@ -110,7 +110,21 @@ PhosphorUi.SettingsAppWindow {
     // — same UX as the legacy hand-rolled unsavedChangesDialog, but
     // the framework owns the dialog and the close orchestration.
     closePromptShowsApply: true
+
+    // Global search in the header toolbar (headerExtras slot). It supersedes the
+    // in-sidebar page-tree filter, which is disabled in Component.onCompleted.
+    headerExtras: Component {
+        GlobalSearchField {
+            // Declared inline in Main.qml, so it can reach `window` to feed the
+            // page-step shortcut guard while the results dropdown is open.
+            onSearchOpenChanged: window._searchOpen = searchOpen
+        }
+    }
+
     Component.onCompleted: {
+        // The header search supersedes the sidebar's page-tree search.
+        window.sidebar.searchEnabled = false;
+
         var geo = settingsController.loadWindowGeometry();
         if (geo.width > 0 && geo.height > 0) {
             window.width = geo.width;
@@ -286,10 +300,13 @@ PhosphorUi.SettingsAppWindow {
     /// Declared BEFORE `_navShortcutsEnabled` so a top-down reader
     /// sees the property's purpose before the guard that consumes it.
     property bool _pageOwnedModalOpen: false
+    /// True while the global search dropdown is open — suppresses page-step
+    /// shortcuts so ↑/↓/Enter drive the results list, not page navigation.
+    property bool _searchOpen: false
     // Shared enable-guard for page-navigation shortcuts. Hoisted from
     // the two identical inline expressions so a future dialog addition
     // doesn't drift between Ctrl+PgUp / Ctrl+PgDown.
-    readonly property bool _navShortcutsEnabled: window.active && !whatsNewDialog.visible && !resetConfirmDialog.visible && !defaultsConfirmDialog.visible && !sectionToggleDiscardConfirm.visible && !window._showShortcuts && !window._pageOwnedModalOpen
+    readonly property bool _navShortcutsEnabled: window.active && !whatsNewDialog.visible && !resetConfirmDialog.visible && !defaultsConfirmDialog.visible && !sectionToggleDiscardConfirm.visible && !window._showShortcuts && !window._pageOwnedModalOpen && !window._searchOpen
 
     Shortcut {
         sequence: "Ctrl+PgUp"

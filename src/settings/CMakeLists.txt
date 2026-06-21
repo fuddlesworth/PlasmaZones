@@ -18,6 +18,8 @@ set_property(DIRECTORY APPEND PROPERTY COMPILE_OPTIONS "-Wno-missing-include-dir
 
 set(plasmazones_settings_SRCS
     main.cpp
+    searchcatalog.h
+    searchcatalog.cpp
     settingscontroller.h
     settingscontroller.cpp
     # SettingsController is large enough to violate the 800-line cap
@@ -222,6 +224,7 @@ qt_add_qml_module(plasmazones-settings
         qml/Main.qml
         qml/Toast.qml
         qml/KeyboardShortcutOverlay.qml
+        qml/GlobalSearchField.qml
         qml/GeneralPage.qml
         # Snapping, organised by subject (Overlay / Zone Selector / Window),
         # each with a Behavior + Appearance page. Window Appearance also hosts

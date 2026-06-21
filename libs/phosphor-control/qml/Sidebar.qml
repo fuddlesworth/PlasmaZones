@@ -72,6 +72,11 @@ ColumnLayout {
     property var expandedCategories: Object.create(null)
     //* Search text. Empty disables filtering.
     property alias searchText: searchField.text
+    /** When false, the sticky in-sidebar search field is hidden (and its
+     *  filter cleared). Lets a consumer that provides its own global search
+     *  (e.g. a header command field) suppress the redundant sidebar search
+     *  without losing the capability for other apps. */
+    property bool searchEnabled: true
     /** Optional Component instantiated next to each row's title. The
      *  loader exposes the row's entry as `modelData`. */
     property Component trailingDelegate: null
@@ -512,7 +517,7 @@ ColumnLayout {
         // (root.searchText = "") instead of directly on `text` makes
         // the side effect visible to external consumers that might be
         // tracking the aliased property.
-        visible: !root.compact
+        visible: !root.compact && root.searchEnabled
         onVisibleChanged: {
             if (!visible)
                 root.searchText = "";

@@ -11,6 +11,9 @@
 #include "version.h"
 #include "phosphor_i18n.h"
 #include "phosphor_qml_i18n.h"
+#include "searchcatalog.h"
+
+#include <PhosphorControl/SearchController.h>
 
 #include "../core/constants.h"
 #include "../daemon/rendering/zoneshaderitem.h"
@@ -197,6 +200,13 @@ int main(int argc, char* argv[])
 
     engine.rootContext()->setContextProperty(QStringLiteral("settingsController"), &controller);
     engine.rootContext()->setContextProperty(QStringLiteral("appSettings"), controller.settings());
+
+    // Global settings search. Page entries are derived from the page registry;
+    // seedSearchCatalog adds per-page synonyms + addressable setting anchors.
+    // Parented to `controller` (declared before the engine, destroyed after).
+    auto* searchController = new PhosphorControl::SearchController(controller.app(), &controller);
+    PlasmaZones::seedSearchCatalog(searchController);
+    engine.rootContext()->setContextProperty(QStringLiteral("searchController"), searchController);
 
     if (!requestedAddress.isEmpty()) {
         controller.navigateTo(requestedAddress);
