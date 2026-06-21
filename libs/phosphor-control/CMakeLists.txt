@@ -103,6 +103,8 @@ set(phosphorcontrol_public_HDRS
     include/PhosphorControl/ApplicationController.h
     include/PhosphorControl/LocalizedContext.h
     include/PhosphorControl/DBusBridge.h
+    include/PhosphorControl/SearchEntry.h
+    include/PhosphorControl/SearchRanker.h
 )
 
 set(phosphorcontrol_SRCS
@@ -117,6 +119,7 @@ set(phosphorcontrol_SRCS
     src/applicationcontroller_async.cpp
     src/localizedcontext.cpp
     src/dbusbridge.cpp
+    src/searchranker.cpp
 )
 
 # NOTE: three near-identical targets (PhosphorControl C++ lib +
