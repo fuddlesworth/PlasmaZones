@@ -499,6 +499,26 @@ public:
         return it == m_windowToStateKey.constEnd() ? QString() : it.value().screenId;
     }
 
+    /**
+     * @brief Reflow neighbors after a window was interactively resized.
+     *
+     * Entry point for the "drag an edge, neighbors fill the gap" behaviour
+     * (GitHub #652). Called by the daemon's WindowTracking adaptor when the
+     * compositor reports an interactive resize of a tiled window has finished.
+     *
+     * For tree/memory algorithms the moved edge(s) are mapped to the owning
+     * @ref PhosphorTiles::SplitTree split(s), whose ratio is adjusted so the
+     * neighbour subtree absorbs the change, then the screen is retiled
+     * gap-free. Floating windows, single-window screens, cross-output drags,
+     * and algorithms without a reflow model are no-ops.
+     *
+     * @param windowId The interactively-resized window
+     * @param oldFrame The window's frame geometry before the resize (drag baseline)
+     * @param newFrame The window's frame geometry after the resize
+     * @param screenId Screen the daemon resolved the window to (authoritative)
+     */
+    void onWindowResized(const QString& windowId, const QRect& oldFrame, const QRect& newFrame,
+                         const QString& screenId) override;
     // ═══════════════════════════════════════════════════════════════════════════
     // Settings synchronization
     // ═══════════════════════════════════════════════════════════════════════════
@@ -1106,6 +1126,18 @@ private:
     bool storeWindowMinSize(const QString& windowId, int minWidth, int minHeight);
     bool recalculateLayout(const QString& screenId);
     void applyTiling(const QString& screenId);
+
+    /**
+     * @brief Tier-A interactive-resize reflow for tree/memory algorithms.
+     *
+     * Maps the moved edge(s) of @p windowId to the owning SplitTree split(s)
+     * and adjusts their ratios so neighbours absorb the resize. Returns true if
+     * at least one split ratio actually changed (caller should retile). The
+     * split's extent is read from the currently rendered zones so the math
+     * stays in the same coordinate space as @p newFrame.
+     */
+    bool applyTreeResizeReflow(PhosphorTiles::TilingState* state, const QString& windowId, const QRect& oldFrame,
+                               const QRect& newFrame, const QString& screenId);
     bool shouldTileWindow(const QString& windowId) const;
     QString screenForWindow(const QString& windowId) const;
     QRect screenGeometry(const QString& screenId) const;

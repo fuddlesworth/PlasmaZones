@@ -361,7 +361,52 @@ void SplitTree::resizeSplit(const QString& windowId, qreal newRatio)
         return;
     }
 
-    leaf->parent->splitRatio = std::clamp(newRatio, MinSplitRatio, MaxSplitRatio);
+    resizeSplitNode(leaf->parent, newRatio);
+}
+
+void SplitTree::resizeSplitNode(SplitNode* node, qreal newRatio)
+{
+    if (!node || node->isLeaf()) {
+        qCDebug(PhosphorTiles::lcTilesLib) << "resizeSplitNode: null or leaf node, ignoring";
+        return;
+    }
+
+    node->splitRatio = std::clamp(newRatio, MinSplitRatio, MaxSplitRatio);
+}
+
+const SplitNode* SplitTree::splitOwningEdge(const QString& windowId, Edge edge) const
+{
+    const SplitNode* child = findLeaf(m_root.get(), windowId);
+    if (!child) {
+        return nullptr;
+    }
+
+    // The edge's axis: Top/Bottom move along a horizontal split line; Left/Right
+    // along a vertical one. The side: Right/Bottom touch the boundary when the
+    // subtree is the `first` child; Left/Top when it is the `second` child.
+    const bool wantHorizontal = (edge == Edge::Top || edge == Edge::Bottom);
+    const bool wantFirst = (edge == Edge::Right || edge == Edge::Bottom);
+
+    const SplitNode* parent = child->parent;
+    int depth = 0;
+    while (parent && depth <= MaxRuntimeTreeDepth) {
+        if (parent->splitHorizontal == wantHorizontal) {
+            const bool childIsFirst = (parent->first.get() == child);
+            if (childIsFirst == wantFirst) {
+                return parent;
+            }
+        }
+        child = parent;
+        parent = parent->parent;
+        ++depth;
+    }
+    // Reached the root without a matching split: the edge is a screen boundary.
+    return nullptr;
+}
+
+SplitNode* SplitTree::splitOwningEdge(const QString& windowId, Edge edge)
+{
+    return const_cast<SplitNode*>(std::as_const(*this).splitOwningEdge(windowId, edge));
 }
 
 // =============================================================================

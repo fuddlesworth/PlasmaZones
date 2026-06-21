@@ -3,6 +3,7 @@
 
 // Qt headers
 #include <algorithm>
+#include <cmath>
 #include <QDebug>
 #include <QJsonArray>
 #include <QJsonDocument>
@@ -10,6 +11,7 @@
 #include <QScopeGuard>
 #include <QScreen>
 #include <QTimer>
+#include <QVarLengthArray>
 
 // Project headers
 #include <PhosphorTileEngine/AutotileEngine.h>
@@ -23,6 +25,7 @@
 #include <PhosphorTiles/TilingAlgorithm.h>
 // DwindleMemoryAlgorithm.h no longer needed — prepareTilingState() is virtual on PhosphorTiles::TilingAlgorithm
 #include <PhosphorTiles/TilingState.h>
+#include <PhosphorTiles/SplitTree.h>
 #include <PhosphorEngine/PerScreenKeys.h>
 #include <PhosphorTiles/AutotileConstants.h>
 #include <PhosphorZones/Layout.h>
@@ -56,6 +59,38 @@ T* checkedCast(QObject* obj, const char* context)
         qCWarning(PhosphorTileEngine::lcTileEngine) << context << ": QObject is not the expected type — skipping";
     }
     return concrete;
+}
+
+// Union the rendered zones of every leaf under @p node into @p bbox. Leaves are
+// matched to zones by looking their window id up in @p tiled (parallel to
+// @p zones), so this makes no assumption about leaf/zone ordering. Depth-guarded
+// like the rest of the SplitTree recursion.
+void unionSubtreeZones(const PhosphorTiles::SplitNode* node, const QStringList& tiled, const QVector<QRect>& zones,
+                       QRect& bbox, int depth = 0)
+{
+    if (!node || depth > PhosphorTiles::AutotileDefaults::MaxRuntimeTreeDepth) {
+        return;
+    }
+    if (node->isLeaf()) {
+        const int idx = tiled.indexOf(node->windowId);
+        if (idx >= 0 && idx < zones.size()) {
+            bbox = bbox.united(zones[idx]);
+        }
+        return;
+    }
+    unionSubtreeZones(node->first.get(), tiled, zones, bbox, depth + 1);
+    unionSubtreeZones(node->second.get(), tiled, zones, bbox, depth + 1);
+}
+
+// The rendered extent of a split = bounding box of its subtree's zones. Read
+// from the currently rendered zones (not recomputed from the tree) so the
+// interactive-resize edge→ratio math stays in the same coordinate space as the
+// compositor-reported window frame.
+QRect subtreeBoundingRect(const PhosphorTiles::SplitNode* split, const QStringList& tiled, const QVector<QRect>& zones)
+{
+    QRect bbox;
+    unionSubtreeZones(split, tiled, zones, bbox);
+    return bbox;
 }
 
 } // namespace
@@ -2653,6 +2688,154 @@ void AutotileEngine::onWindowFocused(const QString& windowId)
     m_activeScreen = m_windowToStateKey.value(windowId).screenId;
 
     state->setFocusedWindow(windowId);
+}
+
+void AutotileEngine::onWindowResized(const QString& windowId, const QRect& oldFrame, const QRect& newFrame,
+                                     const QString& screenId)
+{
+    if (windowId.isEmpty() || !newFrame.isValid()) {
+        return;
+    }
+
+    // Resolve the owning state. Trust the daemon-supplied screen (it resolved the
+    // window authoritatively via screenForTrackedWindow); fall back to a lookup
+    // only if it was empty or no longer an autotile screen.
+    QString resolvedScreen = screenId;
+    PhosphorTiles::TilingState* state = nullptr;
+    if (!resolvedScreen.isEmpty() && isAutotileScreen(resolvedScreen)) {
+        state = tilingStateForScreen(resolvedScreen);
+    }
+    if (!state) {
+        state = stateForWindow(windowId, &resolvedScreen);
+    }
+    if (!state || resolvedScreen.isEmpty() || !isAutotileScreen(resolvedScreen)) {
+        return;
+    }
+
+    // Floating windows are not part of the tiling — they never reflow neighbours.
+    if (state->isFloating(windowId)) {
+        return;
+    }
+
+    // Need at least two tiled windows for a neighbour to absorb the resize.
+    if (state->tiledWindowCount() < 2) {
+        return;
+    }
+
+    // Cross-output guard: if the resize carried the window's centre off its
+    // screen, this is a monitor handoff — let windowScreenChanged own the
+    // reassignment rather than reflowing a layout the window is leaving.
+    const QRect screen = screenGeometry(resolvedScreen);
+    if (screen.isValid() && !screen.contains(newFrame.center())) {
+        return;
+    }
+
+    PhosphorTiles::TilingAlgorithm* algo = effectiveAlgorithm(resolvedScreen);
+    if (!algo) {
+        return;
+    }
+
+    // Tier A — tree/memory algorithms reflow gap-free by adjusting the split
+    // ratio of the ancestor split that owns each moved edge.
+    if (algo->supportsMemory()) {
+        if (applyTreeResizeReflow(state, windowId, oldFrame, newFrame, resolvedScreen)) {
+            retileAfterOperation(resolvedScreen, true);
+        }
+        return;
+    }
+
+    // Non-tree algorithms have no gap-free reflow model of their own; without an
+    // algorithm-level resize hook the user's manual geometry is left untouched.
+}
+
+bool AutotileEngine::applyTreeResizeReflow(PhosphorTiles::TilingState* state, const QString& windowId,
+                                           const QRect& oldFrame, const QRect& newFrame, const QString& screenId)
+{
+    using Edge = PhosphorTiles::SplitTree::Edge;
+
+    PhosphorTiles::SplitTree* tree = state->splitTree();
+    if (!tree || tree->leafCount() < 2 || !tree->leafForWindow(windowId)) {
+        return false;
+    }
+
+    const QStringList tiled = state->tiledWindows();
+    const QVector<QRect> zones = state->calculatedZones();
+    // The reflow reads split extents from the rendered zones, so they must be in
+    // lockstep with the tiled-window list (they are, except transiently before a
+    // retile completes — bail rather than read a stale/short vector).
+    if (zones.isEmpty() || zones.size() != tiled.size()) {
+        return false;
+    }
+
+    const int innerGap = effectiveInnerGap(screenId);
+    const int threshold = PhosphorTiles::AutotileDefaults::ResizeEdgeMoveThresholdPx;
+
+    // Identify which edge(s) moved. A resize moves at most one edge per axis; a
+    // corner moves one on each axis. If both edges of an axis shifted together
+    // that axis describes a translation (move), not a resize — skip it.
+    struct EdgeMove
+    {
+        Edge edge;
+        int newPos;
+    };
+    QVarLengthArray<EdgeMove, 2> moves;
+    const int oldL = oldFrame.x();
+    const int newL = newFrame.x();
+    const int oldR = oldFrame.x() + oldFrame.width();
+    const int newR = newFrame.x() + newFrame.width();
+    const int oldT = oldFrame.y();
+    const int newT = newFrame.y();
+    const int oldB = oldFrame.y() + oldFrame.height();
+    const int newB = newFrame.y() + newFrame.height();
+    const bool leftMoved = std::abs(newL - oldL) > threshold;
+    const bool rightMoved = std::abs(newR - oldR) > threshold;
+    const bool topMoved = std::abs(newT - oldT) > threshold;
+    const bool bottomMoved = std::abs(newB - oldB) > threshold;
+    if (leftMoved != rightMoved) {
+        moves.push_back(rightMoved ? EdgeMove{Edge::Right, newR} : EdgeMove{Edge::Left, newL});
+    }
+    if (topMoved != bottomMoved) {
+        moves.push_back(bottomMoved ? EdgeMove{Edge::Bottom, newB} : EdgeMove{Edge::Top, newT});
+    }
+    if (moves.isEmpty()) {
+        return false;
+    }
+
+    bool changed = false;
+    for (const EdgeMove& move : moves) {
+        PhosphorTiles::SplitNode* split = tree->splitOwningEdge(windowId, move.edge);
+        if (!split) {
+            continue; // edge coincides with a screen boundary — nothing to resize
+        }
+
+        const QRect splitRect = subtreeBoundingRect(split, tiled, zones);
+        if (!splitRect.isValid()) {
+            continue;
+        }
+
+        const bool horizontal = (move.edge == Edge::Top || move.edge == Edge::Bottom);
+        const int axisStart = horizontal ? splitRect.y() : splitRect.x();
+        const int content = (horizontal ? splitRect.height() : splitRect.width()) - innerGap;
+        if (content <= 0) {
+            continue;
+        }
+
+        // firstSize is the first child's extent up to the moved boundary. A
+        // Right/Bottom edge belongs to a first-child window and sits on the
+        // split line (firstSize = pos - start). A Left/Top edge belongs to a
+        // second-child window and sits one gap past it (firstSize = pos - start - gap).
+        const bool secondSide = (move.edge == Edge::Left || move.edge == Edge::Top);
+        const int firstSize = secondSide ? (move.newPos - axisStart - innerGap) : (move.newPos - axisStart);
+        const qreal ratio = static_cast<qreal>(firstSize) / static_cast<qreal>(content);
+
+        const qreal before = split->splitRatio;
+        tree->resizeSplitNode(split, ratio); // clamps to [MinSplitRatio, MaxSplitRatio]
+        if (!qFuzzyCompare(before, split->splitRatio)) {
+            changed = true;
+        }
+    }
+
+    return changed;
 }
 
 void AutotileEngine::onScreenGeometryChanged(const QString& screenId)

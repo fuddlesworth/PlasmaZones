@@ -931,6 +931,34 @@ void WindowTrackingAdaptor::setFrameGeometry(const QString& windowId, int x, int
     m_frameGeometry[windowId] = QRect(x, y, width, height);
 }
 
+void WindowTrackingAdaptor::notifyWindowResized(const QString& windowId, int oldX, int oldY, int oldWidth,
+                                                int oldHeight, int newX, int newY, int newWidth, int newHeight)
+{
+    if (!validateWindowId(windowId, QStringLiteral("reflow after interactive resize"))) {
+        return;
+    }
+    if (newWidth <= 0 || newHeight <= 0) {
+        return;
+    }
+
+    const QRect newFrame(newX, newY, newWidth, newHeight);
+    // Keep the frame shadow in sync with the committed geometry.
+    m_frameGeometry[windowId] = newFrame;
+
+    if (!m_autotileEngine) {
+        return;
+    }
+    // Empty screen ⇒ the window isn't autotile-tracked (floating, snap-mode, or
+    // unmanaged) — nothing to reflow. The engine re-validates regardless.
+    const QString screenId = m_autotileEngine->screenForTrackedWindow(windowId);
+    if (screenId.isEmpty()) {
+        return;
+    }
+
+    const QRect oldFrame(oldX, oldY, oldWidth, oldHeight);
+    m_autotileEngine->onWindowResized(windowId, oldFrame, newFrame, screenId);
+}
+
 QRect WindowTrackingAdaptor::frameGeometry(const QString& windowId) const
 {
     return m_frameGeometry.value(windowId);

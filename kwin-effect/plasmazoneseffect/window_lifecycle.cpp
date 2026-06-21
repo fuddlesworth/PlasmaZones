@@ -684,6 +684,13 @@ void PlasmaZonesEffect::setupWindowConnections(KWin::EffectWindow* w)
                                    window->isUserResize() ? PhosphorAnimation::ProfilePaths::WindowResize
                                                           : PhosphorAnimation::ProfilePaths::WindowMove,
                                    animationDurationMs());
+            // Latch interactive resizes (the drag tracker only handles moves):
+            // capture the pre-resize frame so the finish handler can report the
+            // before/after geometry for neighbour reflow (GitHub #652).
+            if (window->isUserResize() && shouldHandleWindow(window)) {
+                m_resizeStartWindow = window;
+                m_resizeStartGeometry = window->frameGeometry().toRect();
+            }
         }
     });
     connect(w, &KWin::EffectWindow::windowFinishUserMovedResized, this, [this](KWin::EffectWindow* window) {
@@ -716,6 +723,13 @@ void PlasmaZonesEffect::setupWindowConnections(KWin::EffectWindow* w)
             }
         }
         m_dragTracker->handleWindowFinishMoveResize(window);
+        // If this interaction was the latched interactive resize, report the
+        // committed geometry to the daemon so it can reflow neighbours.
+        if (window && window == m_resizeStartWindow) {
+            notifyWindowResized(window, m_resizeStartGeometry);
+        }
+        m_resizeStartWindow = nullptr;
+        m_resizeStartGeometry = QRect();
     });
 
     // Track when user manually unmaximizes a monocle-maximized window
@@ -856,6 +870,36 @@ void PlasmaZonesEffect::notifyWindowClosed(KWin::EffectWindow* w)
                      << "screen=" << closeScreenId;
     PhosphorProtocol::ClientHelpers::fireAndForget(this, PhosphorProtocol::Service::Interface::WindowTracking,
                                                    QStringLiteral("windowClosed"), {windowId, kindInt, closeScreenId});
+}
+
+void PlasmaZonesEffect::notifyWindowResized(KWin::EffectWindow* w, const QRect& oldGeometry)
+{
+    if (!w) {
+        return;
+    }
+    if (!isDaemonReady("notify windowResized")) {
+        return;
+    }
+
+    const QString windowId = getWindowId(w);
+    if (windowId.isEmpty()) {
+        return;
+    }
+
+    const QRect newGeometry = w->frameGeometry().toRect();
+    if (!oldGeometry.isValid() || newGeometry.width() <= 0 || newGeometry.height() <= 0) {
+        return;
+    }
+    // Cancelled / no-op resize (Escape, or a same-size finish): nothing moved.
+    if (newGeometry == oldGeometry) {
+        return;
+    }
+
+    qCInfo(lcEffect) << "Notifying daemon: windowResized" << windowId << oldGeometry << "->" << newGeometry;
+    PhosphorProtocol::ClientHelpers::fireAndForget(
+        this, PhosphorProtocol::Service::Interface::WindowTracking, QStringLiteral("notifyWindowResized"),
+        {windowId, oldGeometry.x(), oldGeometry.y(), oldGeometry.width(), oldGeometry.height(), newGeometry.x(),
+         newGeometry.y(), newGeometry.width(), newGeometry.height()});
 }
 
 void PlasmaZonesEffect::notifyWindowActivated(KWin::EffectWindow* w)

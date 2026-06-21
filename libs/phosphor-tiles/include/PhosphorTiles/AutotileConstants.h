@@ -56,6 +56,11 @@ constexpr int MinGap = 0;
 constexpr int MaxGap = 50;
 constexpr int MinRectSizePx = 50;
 constexpr int GapEdgeThresholdPx = 5;
+/// Minimum pixel movement of a window edge during an interactive resize before
+/// it is treated as an intentional resize (vs. fractional-scale rounding residue
+/// or sub-pixel jitter). Deliberately distinct from GapEdgeThresholdPx so it can
+/// be tuned for 1.5×/1.75× fractional scaling without perturbing gap snapping.
+constexpr int ResizeEdgeMoveThresholdPx = 5;
 constexpr int MinMaxWindows = 1;
 constexpr int MaxMaxWindows = 12;
 // Sentinel returned by PerScreenConfigResolver::effectiveMaxWindows() when the
