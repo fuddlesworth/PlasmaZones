@@ -261,14 +261,6 @@ QVariant readPerScreenAutotileEntry(PhosphorConfig::IGroup& group, const QString
 
 const QLatin1String kPerScreenSnappingKeys[] = {
     PerScreenSnappingKey::SnapAssistEnabled,
-    PerScreenSnappingKey::ZoneSelectorEnabled,
-    PerScreenSnappingKey::ZoneSelectorTriggerDistance,
-    PerScreenSnappingKey::ZoneSelectorPosition,
-    PerScreenSnappingKey::ZoneSelectorLayoutMode,
-    PerScreenSnappingKey::ZoneSelectorSizeMode,
-    PerScreenSnappingKey::ZoneSelectorMaxRows,
-    PerScreenSnappingKey::ZoneSelectorPreviewWidth,
-    PerScreenSnappingKey::ZoneSelectorPreviewHeight,
     // Snapping gaps (per-screen) — without these the Gaps card's overrides would
     // not be re-loaded on next launch even after the validator accepts the write.
     PerScreenSnappingKey::ZonePadding,
@@ -308,25 +300,8 @@ bool isPerScreenSnappingGapsKey(const QString& key)
 QVariant validatePerScreenSnappingValue(const QString& key, const QVariant& value)
 {
     namespace K = PerScreenSnappingKey;
-    if (key == K::SnapAssistEnabled || key == K::ZoneSelectorEnabled)
+    if (key == K::SnapAssistEnabled)
         return QVariant(value.toBool());
-    if (key == K::ZoneSelectorTriggerDistance)
-        return boundedInt(value, ConfigDefaults::triggerDistanceMin(), ConfigDefaults::triggerDistanceMax());
-    if (key == K::ZoneSelectorPosition) {
-        return enumInRange(value, static_cast<int>(ZoneSelectorPosition::BottomRight));
-    }
-    if (key == K::ZoneSelectorLayoutMode) {
-        return enumInRange(value, static_cast<int>(ZoneSelectorLayoutMode::Vertical));
-    }
-    if (key == K::ZoneSelectorSizeMode) {
-        return enumInRange(value, static_cast<int>(ZoneSelectorSizeMode::Manual));
-    }
-    if (key == K::ZoneSelectorMaxRows)
-        return boundedInt(value, ConfigDefaults::maxRowsMin(), ConfigDefaults::maxRowsMax());
-    if (key == K::ZoneSelectorPreviewWidth)
-        return boundedInt(value, ConfigDefaults::previewWidthMin(), ConfigDefaults::previewWidthMax());
-    if (key == K::ZoneSelectorPreviewHeight)
-        return boundedInt(value, ConfigDefaults::previewHeightMin(), ConfigDefaults::previewHeightMax());
     // Per-screen snapping gaps (the Gaps card on Snapping → Window → Appearance).
     // Each key clamps against its own ConfigDefaults bounds — mirroring the
     // per-side handling in the autotile validator above; a uniform startsWith
@@ -354,8 +329,6 @@ QVariant readPerScreenSnappingEntry(PhosphorConfig::IGroup& group, const QString
     namespace K = PerScreenSnappingKey;
     if (key == K::SnapAssistEnabled)
         return QVariant(group.readBool(key, ConfigDefaults::snapAssistEnabled()));
-    if (key == K::ZoneSelectorEnabled)
-        return QVariant(group.readBool(key, ConfigDefaults::zoneSelectorEnabled()));
     // UsePerSideOuterGap is a bool; the int gap keys (ZonePadding/OuterGap/per-side)
     // fall through to readInt below, which is the correct type for them.
     if (key == K::UsePerSideOuterGap)
@@ -513,6 +486,10 @@ void Settings::loadPerScreenOverrides(PhosphorConfig::IBackend* backend)
     loadPerScreenGroup(backend, allGroups, ConfigDefaults::snappingScreenGroupPrefix(), kPerScreenSnappingKeys,
                        std::size(kPerScreenSnappingKeys), readPerScreenSnappingEntry, validatePerScreenSnappingValue,
                        m_perScreenSnappingSettings);
+    // Per-screen change signals are emitted by the caller (Settings::load()),
+    // gated on a before/after comparison of each map — so they fire only when a
+    // reload actually changed something, which the daemon relies on to avoid
+    // resnapping on unrelated saves.
 }
 
 /**
@@ -720,6 +697,15 @@ ZoneSelectorConfig Settings::resolvedZoneSelectorConfig(const QString& screenIdO
                                  zoneSelectorTriggerDistance()};
 
     auto it = findPerScreenEntry(m_perScreenZoneSelectorSettings, screenIdOrName);
+    // Virtual-screen fallback: an override stored on the physical monitor must
+    // still apply when the selector runs on one of its virtual sub-screens.
+    // Mirrors getPerScreenSnappingWithFallback() in geometryutils.cpp so the
+    // selector resolver and the snapping geometry path resolve ids alike.
+    if (it == m_perScreenZoneSelectorSettings.constEnd()
+        && PhosphorIdentity::VirtualScreenId::isVirtual(screenIdOrName)) {
+        it = findPerScreenEntry(m_perScreenZoneSelectorSettings,
+                                PhosphorIdentity::VirtualScreenId::extractPhysicalId(screenIdOrName));
+    }
     if (it == m_perScreenZoneSelectorSettings.constEnd()) {
         return config;
     }

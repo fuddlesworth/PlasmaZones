@@ -951,6 +951,35 @@ bool Daemon::init()
         syncModeFromAssignments();
     });
 
+    // Resnap currently-snapped windows when a snapping gap/padding setting
+    // changes (global or per-screen) so the new spacing is visible immediately
+    // instead of requiring a manual re-snap of each window (discussion #661).
+    // The signals below are re-emitted by Settings::load() only when the value
+    // actually changed, so this never fires on unrelated saves (colours,
+    // shortcuts). Autotile windows are already retiled by the settingsChanged
+    // handler above; this covers manually-snapped windows. Debounced so a batch
+    // of per-side gap edits in one save collapses into a single resnap pass.
+    m_gapResnapTimer.setSingleShot(true);
+    m_gapResnapTimer.setInterval(100);
+    connect(&m_gapResnapTimer, &QTimer::timeout, this, [this]() {
+        if (!m_snapAdaptor) {
+            return;
+        }
+        m_suppressResnapOsd = 1; // settings-driven reflow, not user navigation
+        m_snapAdaptor->resnapCurrentAssignments();
+    });
+    const auto scheduleGapResnap = [this]() {
+        m_gapResnapTimer.start();
+    };
+    connect(m_settings.get(), &Settings::zonePaddingChanged, this, scheduleGapResnap);
+    connect(m_settings.get(), &Settings::outerGapChanged, this, scheduleGapResnap);
+    connect(m_settings.get(), &Settings::usePerSideOuterGapChanged, this, scheduleGapResnap);
+    connect(m_settings.get(), &Settings::outerGapTopChanged, this, scheduleGapResnap);
+    connect(m_settings.get(), &Settings::outerGapBottomChanged, this, scheduleGapResnap);
+    connect(m_settings.get(), &Settings::outerGapLeftChanged, this, scheduleGapResnap);
+    connect(m_settings.get(), &Settings::outerGapRightChanged, this, scheduleGapResnap);
+    connect(m_settings.get(), &Settings::perScreenSnappingSettingsChanged, this, scheduleGapResnap);
+
     // Initialize domain-specific D-Bus adaptors
     // Each adaptor has its own D-Bus interface
     // D-Bus adaptors use raw new; Qt parent-child manages their lifetime.

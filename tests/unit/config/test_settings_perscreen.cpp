@@ -23,6 +23,7 @@
 #include "../../../src/core/constants.h"
 #include "../../../src/core/settings_interfaces.h"
 #include "../helpers/IsolatedConfigGuard.h"
+#include <PhosphorIdentity/VirtualScreenId.h>
 
 using namespace PlasmaZones;
 using PlasmaZones::TestHelpers::IsolatedConfigGuard;
@@ -59,6 +60,38 @@ private Q_SLOTS:
         // Clear and verify
         settings.clearPerScreenZoneSelectorSettings(screen);
         QVERIFY(!settings.hasPerScreenZoneSelectorSettings(screen));
+    }
+
+    /**
+     * Per-screen zone selector resolver: an override stored on the physical
+     * monitor must still resolve when queried with one of its virtual
+     * sub-screen ids ("<physical>/vs:N"). Mirrors the snapping geometry path's
+     * getPerScreenSnappingWithFallback() so the selector honors per-monitor
+     * overrides on virtual screens (regression for discussion #661).
+     */
+    void testPerScreenZoneSelector_virtualScreenFallsBackToPhysical()
+    {
+        IsolatedConfigGuard guard;
+
+        Settings settings;
+
+        const QString physical = QStringLiteral("test-screen-1");
+        const QString virtualId = PhosphorIdentity::VirtualScreenId::make(physical, 0);
+
+        // Baseline: with no override, the virtual screen resolves to the global
+        // default position (and that default is not the value we will set).
+        const int defaultPosition = settings.resolvedZoneSelectorConfig(virtualId).position;
+        QVERIFY(defaultPosition != 3);
+
+        // Store the override on the PHYSICAL id (as the settings UI does).
+        settings.setPerScreenZoneSelectorSetting(physical, QStringLiteral("Position"), 3);
+
+        // Querying the VIRTUAL sub-screen must fall back to the physical entry.
+        QCOMPARE(settings.resolvedZoneSelectorConfig(virtualId).position, 3);
+
+        // An unrelated screen still resolves to the default (no spurious match).
+        const QString otherVirtual = PhosphorIdentity::VirtualScreenId::make(QStringLiteral("other-screen"), 0);
+        QCOMPARE(settings.resolvedZoneSelectorConfig(otherVirtual).position, defaultPosition);
     }
 
     /**
