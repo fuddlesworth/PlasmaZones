@@ -49,6 +49,10 @@ Item {
         anchors.fill: parent
         placeholderText: i18nc("@info:placeholder global settings search", "Search settings…")
         Accessible.name: i18n("Search settings")
+        // Kirigami.SearchField auto-fires accepted() shortly after the text
+        // changes by default — which would navigate to the top result as the
+        // user types. Disable it so accepted() means "the user pressed Enter".
+        autoAccept: false
         onTextChanged: searchDebounce.restart()
         Keys.onDownPressed: function (event) {
             if (resultsPopup.visible && resultsList.count > 0) {
