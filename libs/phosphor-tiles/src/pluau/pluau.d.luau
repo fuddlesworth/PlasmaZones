@@ -23,8 +23,16 @@ export type Rect = {
 export type Zone = { x: number, y: number, width: number, height: number }
 
 export type MinSize = { w: number, h: number }
-export type WindowInfo = { appId: string, focused: boolean }
+export type WindowInfo = { appId: string, focused: boolean, windowId: string }
 export type ScreenInfo = { id: string, portrait: boolean, aspectRatio: number }
+-- Which edges of a window moved during an interactive resize, plus the before/
+-- after frames. Delivered to the onWindowResized hook (not via Context).
+export type ResizeEvent = {
+    index: number, -- tiled index of the resized window
+    oldRect: Zone,
+    newRect: Zone,
+    edges: { left: boolean, right: boolean, top: boolean, bottom: boolean },
+}
 export type SplitNode = {
     splitRatio: number,
     splitHorizontal: boolean,
@@ -52,6 +60,8 @@ export type Context = {
     screen: ScreenInfo?,
     tree: SplitNode?, -- present for memory-aware algorithms
     custom: { [string]: any }?,
+    currentGeometries: { Zone }?, -- last applied zones (advisory; post-enforcement)
+    state: { [string]: any }?, -- persistent script-state bag (see supportsScriptState)
 }
 
 export type Metadata = {
@@ -61,6 +71,7 @@ export type Metadata = {
     supportsMasterCount: boolean?,
     supportsSplitRatio: boolean?,
     supportsMemory: boolean?,
+    supportsScriptState: boolean?, -- persists ctx.state across retiles (non-tree memory)
     supportsMinSizes: boolean?,
     producesOverlappingZones: boolean?,
     centerLayout: boolean?,
@@ -77,6 +88,9 @@ export type Algorithm = {
     tile: (ctx: Context) -> { Zone },
     onWindowAdded: ((state: any, index: number) -> ())?,
     onWindowRemoved: ((state: any, index: number) -> ())?,
+    -- Called after an interactive resize. Return the new ctx.state bag (or nil to
+    -- leave it unchanged). Requires metadata.supportsScriptState for the bag to persist.
+    onWindowResized: ((state: any, resize: ResizeEvent) -> { [string]: any }?)?,
 }
 
 export type Pluau = {
