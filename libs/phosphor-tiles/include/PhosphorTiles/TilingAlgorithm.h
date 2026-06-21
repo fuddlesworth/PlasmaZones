@@ -348,6 +348,30 @@ public:
      */
     virtual void onWindowRemoved(TilingState* state, int windowIndex);
 
+    /**
+     * @brief Whether this algorithm reacts to interactive window resizes.
+     *
+     * When true, the engine calls @ref onWindowResized for a non-tree algorithm
+     * after the user finishes resizing a tiled window, letting the algorithm
+     * record the adjustment (typically into TilingState::scriptState) before the
+     * follow-up retile. Tree/memory algorithms do not use this — the engine
+     * reflows their SplitTree directly. Default false.
+     */
+    virtual bool supportsResizeHook() const noexcept;
+
+    /**
+     * @brief Called when a tiled window finished an interactive resize.
+     *
+     * Only invoked for non-memory algorithms that return true from
+     * @ref supportsResizeHook. The algorithm may mutate @p state (e.g. write
+     * TilingState::scriptState) so the immediately-following retile lays the
+     * windows out to honour the resize. Default no-op.
+     *
+     * @param state  Mutable tiling state (window list unchanged by the resize)
+     * @param resize Which window/edges moved, with old/new frames
+     */
+    virtual void onWindowResized(TilingState* state, const ResizeEvent& resize);
+
     // ── Custom Parameters (optional, v2) ──────────────────────────────────
 
     /**

@@ -6,12 +6,83 @@
 #include <PhosphorTiles/SplitTree.h>
 #include "tileslogging.h"
 #include <QJsonArray>
+#include <QJsonDocument>
+#include <QJsonValue>
+
+#include <cmath>
 
 namespace PhosphorTiles {
 
 // Use shared JSON keys from constants.h
 using namespace AutotileJsonKeys;
 using namespace AutotileDefaults;
+
+namespace {
+// Recursively walk a script-state value, rejecting non-finite numbers and
+// over-deep nesting, and counting object keys. Returns false if the value must
+// be dropped (too deep). Mutates @p value in place to strip bad leaves.
+bool sanitizeScriptValue(QJsonValue& value, int depth, int& keyCount)
+{
+    if (depth > AutotileDefaults::ScriptStateMaxDepth) {
+        return false;
+    }
+    if (value.isObject()) {
+        QJsonObject obj = value.toObject();
+        QJsonObject cleaned;
+        for (auto it = obj.constBegin(); it != obj.constEnd(); ++it) {
+            if (++keyCount > AutotileDefaults::ScriptStateMaxKeys) {
+                break;
+            }
+            QJsonValue child = it.value();
+            if (sanitizeScriptValue(child, depth + 1, keyCount)) {
+                cleaned.insert(it.key(), child);
+            }
+        }
+        value = cleaned;
+        return true;
+    }
+    if (value.isArray()) {
+        QJsonArray arr = value.toArray();
+        QJsonArray cleaned;
+        for (QJsonValue child : arr) {
+            if (sanitizeScriptValue(child, depth + 1, keyCount)) {
+                cleaned.append(child);
+            }
+        }
+        value = cleaned;
+        return true;
+    }
+    if (value.isDouble()) {
+        const double d = value.toDouble();
+        if (!std::isfinite(d)) {
+            return false; // drop NaN / ±Inf leaves
+        }
+    }
+    return true;
+}
+} // namespace
+
+QJsonObject TilingState::sanitizeScriptState(const QJsonObject& state)
+{
+    if (state.isEmpty()) {
+        return {};
+    }
+    QJsonValue root(state);
+    int keyCount = 0;
+    if (!sanitizeScriptValue(root, 0, keyCount)) {
+        return {};
+    }
+    QJsonObject cleaned = root.toObject();
+    // Byte cap is checked on the post-strip object so a bag that only exceeds
+    // it via dropped NaN/garbage can still squeak under.
+    const int bytes = QJsonDocument(cleaned).toJson(QJsonDocument::Compact).size();
+    if (bytes > AutotileDefaults::ScriptStateMaxBytes) {
+        qCWarning(PhosphorTiles::lcTilesLib) << "scriptState exceeds" << AutotileDefaults::ScriptStateMaxBytes
+                                             << "bytes (" << bytes << ") — dropping bag";
+        return {};
+    }
+    return cleaned;
+}
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // Clamping Helpers (DRY: shared by setters and fromJson)
@@ -43,6 +114,12 @@ QJsonObject TilingState::toJson() const
 
     if (m_splitTree && !m_splitTree->isEmpty()) {
         json[AutotileJsonKeys::SplitTreeKey] = m_splitTree->toJson();
+    }
+
+    // Opaque scripted-algorithm bag — only written when non-empty so old
+    // sessions and non-scripted states don't carry a dead key.
+    if (!m_scriptState.isEmpty()) {
+        json[AutotileJsonKeys::ScriptStateKey] = m_scriptState;
     }
 
     return json;
@@ -125,6 +202,12 @@ TilingState* TilingState::fromJson(const QJsonObject& json, QObject* parent)
         }
     }
 
+    // Scripted-algorithm bag — sanitize on load so a hand-edited or corrupt
+    // config can't feed an oversized/garbage object back into a script.
+    if (json.contains(AutotileJsonKeys::ScriptStateKey)) {
+        state->m_scriptState = sanitizeScriptState(json[AutotileJsonKeys::ScriptStateKey].toObject());
+    }
+
     return state;
 }
 
@@ -193,6 +276,19 @@ SplitTree* TilingState::splitTree() const
 void TilingState::setSplitTree(std::unique_ptr<SplitTree> tree)
 {
     m_splitTree = std::move(tree);
+}
+
+QJsonObject TilingState::scriptState() const
+{
+    return m_scriptState;
+}
+
+void TilingState::setScriptState(const QJsonObject& state)
+{
+    // No NOTIFY / notifyStateChanged: persistence only. Emitting a change here
+    // could trigger a retile, and the scripted write-back path runs from inside
+    // a resize retile — re-entering would risk a resize→retile→resize loop.
+    m_scriptState = state;
 }
 
 void TilingState::clearSplitTree()

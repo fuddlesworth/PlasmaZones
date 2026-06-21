@@ -36,6 +36,25 @@ struct WindowInfo
 {
     QString appId; ///< Application identifier (e.g., "firefox", "org.kde.dolphin")
     bool focused = false; ///< Whether this window currently has focus
+    QString windowId; ///< Opaque instance id (stable across retiles; lets scripts key persistent state)
+};
+
+/**
+ * @brief Describes an interactive resize that triggered a retile.
+ *
+ * Set on @ref TilingParams::resize (and delivered to the optional
+ * @c onWindowResized algorithm hook) so resize-aware algorithms can react to
+ * "the user dragged window N's right edge". Absent on every non-resize retile.
+ */
+struct ResizeEvent
+{
+    int index = -1; ///< Tiled index of the resized window (parallel to windowInfos)
+    QRect oldRect; ///< Window frame before the resize (drag baseline)
+    QRect newRect; ///< Window frame after the resize
+    bool left = false; ///< Left edge moved beyond the threshold
+    bool right = false; ///< Right edge moved
+    bool top = false; ///< Top edge moved
+    bool bottom = false; ///< Bottom edge moved
 };
 
 /**
@@ -74,6 +93,13 @@ struct TilingParams
     int focusedIndex = -1; ///< Index of focused window in tiled list (-1 = unknown)
     TilingScreenInfo screenInfo; ///< Physical screen metadata
     QVariantMap customParams; ///< Algorithm-declared custom parameters
+
+    /// Last applied zones (parallel to the window list), exposed to scripts as
+    /// ctx.currentGeometries. Advisory: it is the post-enforcement rendered
+    /// layout, not the algorithm's last raw output. Empty on a normal retile.
+    /// (The resize descriptor is delivered to the onWindowResized hook as an
+    /// argument, not via ctx, so there is no resize field here.)
+    QVector<QRect> currentGeometries;
 
     /// Create minimal params for preview rendering (no per-window/screen context)
     static TilingParams forPreview(int count, const QRect& rect, const TilingState* state)

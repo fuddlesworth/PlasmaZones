@@ -112,6 +112,11 @@ public:
     void onWindowAdded(TilingState* state, int windowIndex) override;
     void onWindowRemoved(TilingState* state, int windowIndex) override;
 
+    // Interactive-resize hook (v2) — for non-tree algorithms that persist their
+    // own ctx.state (e.g. an aligned grid remembering column widths).
+    bool supportsResizeHook() const noexcept override;
+    void onWindowResized(TilingState* state, const ResizeEvent& resize) override;
+
     // Custom parameters (v2)
     bool supportsCustomParams() const noexcept override;
     QVariantList customParamDefList() const override;
@@ -143,6 +148,7 @@ private:
     bool m_isUserScript = false;
     bool m_hasOnWindowAdded = false;
     bool m_hasOnWindowRemoved = false;
+    bool m_hasOnWindowResized = false;
 
     ScriptedHelpers::ScriptMetadata m_metadata;
 

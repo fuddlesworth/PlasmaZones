@@ -2744,8 +2744,25 @@ void AutotileEngine::onWindowResized(const QString& windowId, const QRect& oldFr
         return;
     }
 
-    // Non-tree algorithms have no gap-free reflow model of their own; without an
-    // algorithm-level resize hook the user's manual geometry is left untouched.
+    // Tier B — a non-tree algorithm that opts into the resize hook records the
+    // adjustment (typically into TilingState::scriptState) before we retile; the
+    // follow-up retile then lays the windows out honouring it. Algorithms without
+    // the hook have no reflow model and leave the user's manual geometry as-is.
+    if (algo->supportsResizeHook()) {
+        const int threshold = PhosphorTiles::AutotileDefaults::ResizeEdgeMoveThresholdPx;
+        PhosphorTiles::ResizeEvent ev;
+        ev.index = state->tiledWindows().indexOf(windowId);
+        ev.oldRect = oldFrame;
+        ev.newRect = newFrame;
+        ev.left = std::abs(newFrame.x() - oldFrame.x()) > threshold;
+        ev.right = std::abs((newFrame.x() + newFrame.width()) - (oldFrame.x() + oldFrame.width())) > threshold;
+        ev.top = std::abs(newFrame.y() - oldFrame.y()) > threshold;
+        ev.bottom = std::abs((newFrame.y() + newFrame.height()) - (oldFrame.y() + oldFrame.height())) > threshold;
+        if (ev.left || ev.right || ev.top || ev.bottom) {
+            algo->onWindowResized(state, ev);
+            retileAfterOperation(resolvedScreen, true);
+        }
+    }
 }
 
 bool AutotileEngine::applyTreeResizeReflow(PhosphorTiles::TilingState* state, const QString& windowId,
@@ -3300,6 +3317,10 @@ bool AutotileEngine::recalculateLayout(const QString& screenId)
     tilingParams.focusedIndex = focusedIndex;
     tilingParams.screenInfo = screenInfo;
     tilingParams.customParams = customParams;
+    // Previous applied zones, exposed to scripts as ctx.currentGeometries.
+    // Captured before the algorithm runs (state->calculatedZones() is not
+    // overwritten until setCalculatedZones below), so it is the prior layout.
+    tilingParams.currentGeometries = state->calculatedZones();
     QVector<QRect> zones = algo->calculateZones(tilingParams);
 
     qCInfo(PhosphorTileEngine::lcTileEngine)

@@ -71,6 +71,7 @@ ScriptedHelpers::ScriptMetadata parseMetadata(const QVariantMap& m)
     md.supportsMasterCount = m.value(QStringLiteral("supportsMasterCount")).toBool();
     md.supportsSplitRatio = m.value(QStringLiteral("supportsSplitRatio")).toBool();
     md.supportsMemory = m.value(QStringLiteral("supportsMemory")).toBool();
+    md.supportsScriptState = m.value(QStringLiteral("supportsScriptState")).toBool();
     md.producesOverlappingZones = m.value(QStringLiteral("producesOverlappingZones")).toBool();
     md.centerLayout = m.value(QStringLiteral("centerLayout")).toBool();
     if (m.contains(QStringLiteral("supportsMinSizes"))) {
@@ -144,6 +145,33 @@ QVariantMap splitNodeToVariant(const SplitNode* node, int depth)
     if (node->second) {
         m[QStringLiteral("second")] = splitNodeToVariant(node->second.get(), depth + 1);
     }
+    return m;
+}
+
+QVariantMap rectToVariant(const QRect& r)
+{
+    QVariantMap m;
+    m[QStringLiteral("x")] = r.x();
+    m[QStringLiteral("y")] = r.y();
+    m[QStringLiteral("width")] = r.width();
+    m[QStringLiteral("height")] = r.height();
+    return m;
+}
+
+// Build the ctx.resize descriptor delivered to tile()/onWindowResized on a
+// resize-driven retile: { index, oldRect, newRect, edges = {left,right,top,bottom} }.
+QVariantMap resizeToVariant(const ResizeEvent& ev)
+{
+    QVariantMap m;
+    m[QStringLiteral("index")] = ev.index;
+    m[QStringLiteral("oldRect")] = rectToVariant(ev.oldRect);
+    m[QStringLiteral("newRect")] = rectToVariant(ev.newRect);
+    QVariantMap edges;
+    edges[QStringLiteral("left")] = ev.left;
+    edges[QStringLiteral("right")] = ev.right;
+    edges[QStringLiteral("top")] = ev.top;
+    edges[QStringLiteral("bottom")] = ev.bottom;
+    m[QStringLiteral("edges")] = edges;
     return m;
 }
 
@@ -369,6 +397,7 @@ void LuauTileAlgorithm::cacheMetadataAndOverrides()
 
     m_hasOnWindowAdded = m_engine->hasFunction(m_module, QStringLiteral("onWindowAdded"));
     m_hasOnWindowRemoved = m_engine->hasFunction(m_module, QStringLiteral("onWindowRemoved"));
+    m_hasOnWindowResized = m_engine->hasFunction(m_module, QStringLiteral("onWindowResized"));
 }
 
 QString LuauTileAlgorithm::name() const
@@ -509,11 +538,28 @@ QVariantMap LuauTileAlgorithm::buildContext(const TilingParams& params, const QR
             QVariantMap w;
             w[QStringLiteral("appId")] = params.windowInfos[i].appId;
             w[QStringLiteral("focused")] = params.windowInfos[i].focused;
+            w[QStringLiteral("windowId")] = params.windowInfos[i].windowId;
             windows.append(w);
         }
         ctx[QStringLiteral("windows")] = windows;
     }
     ctx[QStringLiteral("focusedIndex")] = params.focusedIndex;
+
+    // Last applied zones (advisory) — lets scripts read neighbour positions.
+    if (!params.currentGeometries.isEmpty()) {
+        QVariantList geoms;
+        const int gcap = std::min<int>(static_cast<int>(params.currentGeometries.size()), MaxZones);
+        for (int i = 0; i < gcap; ++i) {
+            const QRect& r = params.currentGeometries[i];
+            QVariantMap g;
+            g[QStringLiteral("x")] = r.x();
+            g[QStringLiteral("y")] = r.y();
+            g[QStringLiteral("width")] = r.width();
+            g[QStringLiteral("height")] = r.height();
+            geoms.append(g);
+        }
+        ctx[QStringLiteral("currentGeometries")] = geoms;
+    }
 
     if (!params.screenInfo.id.isEmpty()) {
         QVariantMap screen;
@@ -525,6 +571,15 @@ QVariantMap LuauTileAlgorithm::buildContext(const TilingParams& params, const QR
 
     if (!params.customParams.isEmpty()) {
         ctx[QStringLiteral("custom")] = params.customParams;
+    }
+
+    // Persistent per-algorithm bag (ctx.state) — read view of the script's own
+    // stored state. Scripts write it back via the onWindowResized hook return.
+    if (params.state) {
+        const QJsonObject bag = params.state->scriptState();
+        if (!bag.isEmpty()) {
+            ctx[QStringLiteral("state")] = bag.toVariantMap();
+        }
     }
     return ctx;
 }
@@ -612,10 +667,18 @@ QVariantMap LuauTileAlgorithm::buildStateMap(const TilingState* state, bool incl
         QVariantMap w;
         w[QStringLiteral("appId")] = info.appId;
         w[QStringLiteral("focused")] = info.focused;
+        w[QStringLiteral("windowId")] = info.windowId;
         windows.append(w);
     }
     st[QStringLiteral("windows")] = windows;
     st[QStringLiteral("focusedIndex")] = focusedIndex;
+
+    // Persistent bag, so a hook can read its own prior state (e.g. column widths)
+    // before computing the update it returns.
+    const QJsonObject bag = state->scriptState();
+    if (!bag.isEmpty()) {
+        st[QStringLiteral("scriptState")] = bag.toVariantMap();
+    }
 
     if (includeCountAfterRemoval) {
         st[QStringLiteral("countAfterRemoval")] = qMax(0, state->tiledWindowCount() - 1);
@@ -644,6 +707,34 @@ void LuauTileAlgorithm::onWindowRemoved(TilingState* state, int windowIndex)
     }
     const QVariantMap st = buildStateMap(state, true);
     m_engine->callModule(m_module, QStringLiteral("onWindowRemoved"), {st, windowIndex}, ScriptWatchdogTimeoutMs);
+}
+
+bool LuauTileAlgorithm::supportsResizeHook() const noexcept
+{
+    return m_hasOnWindowResized;
+}
+
+void LuauTileAlgorithm::onWindowResized(TilingState* state, const ResizeEvent& resize)
+{
+    if (!m_hasOnWindowResized || !state) {
+        return;
+    }
+    const QVariantMap st = buildStateMap(state, false);
+    const QVariantMap resizeMap = resizeToVariant(resize);
+    const auto out =
+        m_engine->callModule(m_module, QStringLiteral("onWindowResized"), {st, resizeMap}, ScriptWatchdogTimeoutMs);
+    if (out.status != LuauEngine::CallStatus::Ok) {
+        qCWarning(PhosphorTiles::lcTilesLib)
+            << "LuauTileAlgorithm: onWindowResized() failed script=" << m_scriptId << ":" << out.message;
+        return;
+    }
+    // The hook returns the new persistent state bag (or nothing to leave it
+    // unchanged). Sanitize at this trust boundary, then store so the retile the
+    // engine runs next lays the windows out from the updated state.
+    if (out.result.typeId() == QMetaType::QVariantMap) {
+        const QJsonObject sanitized = TilingState::sanitizeScriptState(QJsonObject::fromVariantMap(out.result.toMap()));
+        state->setScriptState(sanitized);
+    }
 }
 
 bool LuauTileAlgorithm::supportsCustomParams() const noexcept
