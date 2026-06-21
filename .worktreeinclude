@@ -1,0 +1,28 @@
+# Claude Code worktree includes
+# ------------------------------------------------------------------------------
+# Files matched here are copied into each new git worktree that Claude Code
+# creates (`claude --worktree`, subagent worktrees, desktop parallel sessions).
+#
+# Syntax is .gitignore syntax. A file is copied ONLY if it both matches a
+# pattern below AND is gitignored — tracked files are never duplicated.
+#
+# Why this file exists: this repo gitignores the entire .claude/ directory, so a
+# fresh worktree checkout would otherwise have no hooks, helpers, skills, agents,
+# or MCP config, and the claude-flow integration would not run in worktrees.
+
+# MCP server config (claude-flow). No secrets — safe to duplicate.
+.mcp.json
+
+# Project-level Claude Code config: settings, hooks/helpers, and the
+# agents/commands/skills the integration depends on.
+.claude/settings.json
+.claude/settings.local.json
+.claude/helpers/
+.claude/agents/
+.claude/commands/
+.claude/skills/
+
+# Deliberately NOT copied:
+#   .claude/worktrees/  — copying worktrees into worktrees would recurse
+#   .swarm/ .hive-mind/ .claude-flow/ memory/ — per-session runtime state, not
+#     config; copying would carry stale state into the new worktree
