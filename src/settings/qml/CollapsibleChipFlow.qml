@@ -4,6 +4,7 @@
 import QtQuick
 import QtQuick.Layouts
 import org.kde.kirigami as Kirigami
+import org.phosphor.animation
 
 /**
  * @brief A wrapping chip row that slides + fades open/closed.
@@ -22,7 +23,8 @@ Flow {
     /// Show (true) or hide (false) the chips.
     property bool open: false
     // Animated 0…1 reveal. A plain property (Behavior on attached Layout
-    // properties is unreliable) that scales the clipped height + opacity.
+    // properties is unreliable) that scales the clipped height + opacity, driven
+    // through the shared motion system rather than a hand-rolled easing.
     property real revealFraction: open ? 1 : 0
 
     Layout.fillWidth: true
@@ -39,9 +41,11 @@ Flow {
     visible: open || revealFraction > 0
 
     Behavior on revealFraction {
-        NumberAnimation {
-            duration: Kirigami.Units.shortDuration
-            easing.type: Easing.InOutCubic
+        // Directional accordion profiles, mirroring SettingsCard's collapse.
+        // `open` is already settled when revealFraction re-binds, so it picks
+        // the correct leg (same idiom as the sidebar's slideIn/slideOut).
+        PhosphorMotionAnimation {
+            profile: root.open ? "widget.accordionExpand" : "widget.accordionCollapse"
         }
     }
 }
