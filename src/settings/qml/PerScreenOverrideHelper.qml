@@ -38,7 +38,14 @@ QtObject {
     property var perScreenOverrides: ({})
 
     function reload() {
-        if (isPerScreen && selectedScreenName !== "")
+        // Gate on selectedScreenName directly, NOT the derived isPerScreen
+        // property. reload() runs from onSelectedScreenNameChanged, and on the
+        // ""→screen transition the isPerScreen binding has not necessarily
+        // recomputed yet when this handler fires. Reading a stale isPerScreen
+        // (false) would take the else branch and wipe the freshly-scoped
+        // overrides to {}, leaving the control stuck on the global value when
+        // switching from "All Monitors" to a specific monitor (discussion #661).
+        if (selectedScreenName !== "")
             perScreenOverrides = appSettings[getterMethod](selectedScreenName);
         else
             perScreenOverrides = {};

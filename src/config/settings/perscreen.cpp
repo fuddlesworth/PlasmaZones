@@ -260,73 +260,19 @@ QVariant readPerScreenAutotileEntry(PhosphorConfig::IGroup& group, const QString
 }
 
 const QLatin1String kPerScreenSnappingKeys[] = {
-    PerScreenSnappingKey::SnapAssistEnabled,
-    PerScreenSnappingKey::ZoneSelectorEnabled,
-    PerScreenSnappingKey::ZoneSelectorTriggerDistance,
-    PerScreenSnappingKey::ZoneSelectorPosition,
-    PerScreenSnappingKey::ZoneSelectorLayoutMode,
-    PerScreenSnappingKey::ZoneSelectorSizeMode,
-    PerScreenSnappingKey::ZoneSelectorMaxRows,
-    PerScreenSnappingKey::ZoneSelectorPreviewWidth,
-    PerScreenSnappingKey::ZoneSelectorPreviewHeight,
-    // Snapping gaps (per-screen) — without these the Gaps card's overrides would
-    // not be re-loaded on next launch even after the validator accepts the write.
-    PerScreenSnappingKey::ZonePadding,
-    PerScreenSnappingKey::OuterGap,
-    PerScreenSnappingKey::UsePerSideOuterGap,
-    PerScreenSnappingKey::OuterGapTop,
-    PerScreenSnappingKey::OuterGapBottom,
-    PerScreenSnappingKey::OuterGapLeft,
-    PerScreenSnappingKey::OuterGapRight,
-};
-
-// Gaps sub-domain of the per-screen snapping keys — the keys the Snapping →
-// Window → Appearance "Gaps" card writes. The rest of kPerScreenSnappingKeys
-// (SnapAssist / ZoneSelector) is a different concern; the card reports its
-// override dot and clears its reset against ONLY these gap keys so a shared
-// whole-domain clear can't wipe the map's other overrides (data loss on reset).
-const QLatin1String kPerScreenSnappingGapsKeys[] = {
+    // Snapping gaps (per-screen) — the Snapping → Window → Appearance "Gaps"
+    // card. These are the ONLY per-screen snapping keys: snap-assist is global
+    // and the zone-selector keys live in their own per-screen map. Without these
+    // the Gaps card's overrides would not be re-loaded on next launch even after
+    // the validator accepts the write.
     PerScreenSnappingKey::ZonePadding,   PerScreenSnappingKey::OuterGap,       PerScreenSnappingKey::UsePerSideOuterGap,
     PerScreenSnappingKey::OuterGapTop,   PerScreenSnappingKey::OuterGapBottom, PerScreenSnappingKey::OuterGapLeft,
     PerScreenSnappingKey::OuterGapRight,
 };
 
-bool isPerScreenSnappingGapsKey(const QString& key)
-{
-    // Snapping per-screen keys are stored unprefixed, so this is a direct
-    // membership test against the gaps-key set (derived once into a static set,
-    // mirroring isPerScreenAutotileGapsKey).
-    static const QSet<QString> gapsKeys = []() {
-        QSet<QString> keys;
-        for (const QLatin1String& k : kPerScreenSnappingGapsKeys)
-            keys.insert(QString(k));
-        return keys;
-    }();
-    return gapsKeys.contains(key);
-}
-
 QVariant validatePerScreenSnappingValue(const QString& key, const QVariant& value)
 {
     namespace K = PerScreenSnappingKey;
-    if (key == K::SnapAssistEnabled || key == K::ZoneSelectorEnabled)
-        return QVariant(value.toBool());
-    if (key == K::ZoneSelectorTriggerDistance)
-        return boundedInt(value, ConfigDefaults::triggerDistanceMin(), ConfigDefaults::triggerDistanceMax());
-    if (key == K::ZoneSelectorPosition) {
-        return enumInRange(value, static_cast<int>(ZoneSelectorPosition::BottomRight));
-    }
-    if (key == K::ZoneSelectorLayoutMode) {
-        return enumInRange(value, static_cast<int>(ZoneSelectorLayoutMode::Vertical));
-    }
-    if (key == K::ZoneSelectorSizeMode) {
-        return enumInRange(value, static_cast<int>(ZoneSelectorSizeMode::Manual));
-    }
-    if (key == K::ZoneSelectorMaxRows)
-        return boundedInt(value, ConfigDefaults::maxRowsMin(), ConfigDefaults::maxRowsMax());
-    if (key == K::ZoneSelectorPreviewWidth)
-        return boundedInt(value, ConfigDefaults::previewWidthMin(), ConfigDefaults::previewWidthMax());
-    if (key == K::ZoneSelectorPreviewHeight)
-        return boundedInt(value, ConfigDefaults::previewHeightMin(), ConfigDefaults::previewHeightMax());
     // Per-screen snapping gaps (the Gaps card on Snapping → Window → Appearance).
     // Each key clamps against its own ConfigDefaults bounds — mirroring the
     // per-side handling in the autotile validator above; a uniform startsWith
@@ -352,10 +298,6 @@ QVariant validatePerScreenSnappingValue(const QString& key, const QVariant& valu
 QVariant readPerScreenSnappingEntry(PhosphorConfig::IGroup& group, const QString& key)
 {
     namespace K = PerScreenSnappingKey;
-    if (key == K::SnapAssistEnabled)
-        return QVariant(group.readBool(key, ConfigDefaults::snapAssistEnabled()));
-    if (key == K::ZoneSelectorEnabled)
-        return QVariant(group.readBool(key, ConfigDefaults::zoneSelectorEnabled()));
     // UsePerSideOuterGap is a bool; the int gap keys (ZonePadding/OuterGap/per-side)
     // fall through to readInt below, which is the correct type for them.
     if (key == K::UsePerSideOuterGap)
@@ -513,6 +455,10 @@ void Settings::loadPerScreenOverrides(PhosphorConfig::IBackend* backend)
     loadPerScreenGroup(backend, allGroups, ConfigDefaults::snappingScreenGroupPrefix(), kPerScreenSnappingKeys,
                        std::size(kPerScreenSnappingKeys), readPerScreenSnappingEntry, validatePerScreenSnappingValue,
                        m_perScreenSnappingSettings);
+    // Per-screen change signals are emitted by the caller (Settings::load()),
+    // gated on a before/after comparison of each map — so they fire only when a
+    // reload actually changed something, which the daemon relies on to avoid
+    // resnapping on unrelated saves.
 }
 
 /**
@@ -720,6 +666,15 @@ ZoneSelectorConfig Settings::resolvedZoneSelectorConfig(const QString& screenIdO
                                  zoneSelectorTriggerDistance()};
 
     auto it = findPerScreenEntry(m_perScreenZoneSelectorSettings, screenIdOrName);
+    // Virtual-screen fallback: an override stored on the physical monitor must
+    // still apply when the selector runs on one of its virtual sub-screens.
+    // Mirrors getPerScreenSnappingWithFallback() in geometryutils.cpp so the
+    // selector resolver and the snapping geometry path resolve ids alike.
+    if (it == m_perScreenZoneSelectorSettings.constEnd()
+        && PhosphorIdentity::VirtualScreenId::isVirtual(screenIdOrName)) {
+        it = findPerScreenEntry(m_perScreenZoneSelectorSettings,
+                                PhosphorIdentity::VirtualScreenId::extractPhysicalId(screenIdOrName));
+    }
     if (it == m_perScreenZoneSelectorSettings.constEnd()) {
         return config;
     }
@@ -880,25 +835,6 @@ void Settings::clearPerScreenSnappingSettings(const QString& screenIdOrName)
 bool Settings::hasPerScreenSnappingSettings(const QString& screenIdOrName) const
 {
     return findPerScreenEntry(m_perScreenSnappingSettings, screenIdOrName) != m_perScreenSnappingSettings.constEnd();
-}
-
-// Gaps sub-domain accessors: the Gaps card reports/clears only the snapping
-// gap keys, leaving the map's other (SnapAssist / ZoneSelector) overrides
-// untouched — mirrors the autotile Gaps/Algorithm split.
-
-bool Settings::hasPerScreenSnappingGapsSettings(const QString& screenIdOrName) const
-{
-    return hasPerScreenKeySubset(m_perScreenSnappingSettings, screenIdOrName, isPerScreenSnappingGapsKey,
-                                 /*wantGaps=*/true);
-}
-
-void Settings::clearPerScreenSnappingGapsSettings(const QString& screenIdOrName)
-{
-    if (clearPerScreenKeySubset(m_perScreenSnappingSettings, screenIdOrName, isPerScreenSnappingGapsKey,
-                                /*clearGaps=*/true)) {
-        Q_EMIT perScreenSnappingSettingsChanged();
-        Q_EMIT settingsChanged();
-    }
 }
 
 } // namespace PlasmaZones

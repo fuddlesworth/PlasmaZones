@@ -776,13 +776,6 @@ public:
     Q_INVOKABLE void clearPerScreenSnappingSettings(const QString& screenIdOrName) override;
     Q_INVOKABLE bool hasPerScreenSnappingSettings(const QString& screenIdOrName) const override;
 
-    // Gaps sub-domain of the per-screen snapping map (the Snapping → Window →
-    // Appearance "Gaps" card). Report/clear only the gap keys so the card's
-    // reset never wipes the map's other (SnapAssist / ZoneSelector) overrides
-    // — mirrors the autotile Gaps/Algorithm split above.
-    bool hasPerScreenSnappingGapsSettings(const QString& screenIdOrName) const;
-    void clearPerScreenSnappingGapsSettings(const QString& screenIdOrName);
-
     // ═══════════════════════════════════════════════════════════════════════════
     // Autotiling Settings (ISettings interface)
     // ═══════════════════════════════════════════════════════════════════════════

@@ -55,7 +55,14 @@ Item {
     }
 
     function _refresh() {
-        _hasOverride = isPerScreen && hasOverridesMethod !== "" && appSettings[hasOverridesMethod](scope) === true;
+        // Gate on `scope` directly, NOT the derived isPerScreen property:
+        // _refresh() runs from onScopeChanged, and on the ""→monitor transition
+        // the isPerScreen binding has not necessarily recomputed yet when this
+        // handler fires. Reading a stale isPerScreen (false) would leave
+        // _hasOverride false — hiding the override dot and the "Reset this
+        // monitor" action when switching from "All Monitors" to a scoped monitor
+        // that has overrides (discussion #661).
+        _hasOverride = scope !== "" && hasOverridesMethod !== "" && appSettings[hasOverridesMethod](scope) === true;
     }
     onScopeChanged: _refresh()
     onHasOverridesMethodChanged: _refresh()

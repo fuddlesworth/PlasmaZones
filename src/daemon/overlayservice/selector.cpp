@@ -474,7 +474,10 @@ void OverlayService::createZoneSelectorWindow(const QString& screenId, QScreen* 
     writeQmlProperty(slot, QStringLiteral("screenAspectRatio"), aspectRatio);
     writeQmlProperty(slot, QStringLiteral("screenWidth"), screenGeom.width());
     if (m_settings) {
-        writeQmlProperty(slot, QStringLiteral("zonePadding"), m_settings->zonePadding());
+        // Zone padding honors per-screen overrides (per-screen → global →
+        // default); border width/radius are global-only (no per-screen key).
+        writeQmlProperty(slot, QStringLiteral("zonePadding"),
+                         GeometryUtils::getEffectiveZonePadding(nullptr, m_settings, screenId));
         writeQmlProperty(slot, QStringLiteral("zoneBorderWidth"), m_settings->borderWidth());
         writeQmlProperty(slot, QStringLiteral("zoneBorderRadius"), m_settings->borderRadius());
     }

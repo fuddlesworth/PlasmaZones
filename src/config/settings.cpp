@@ -220,8 +220,23 @@ void Settings::load()
     // Rendering, Performance, ZoneGeometry, Shortcuts, Editor, Exclusions,
     // Display, ZoneSelector, Activation, Behavior, Autotiling) don't need
     // explicit load calls — their getters read through m_store on demand.
+    // Per-screen override maps are not Q_PROPERTYs, so the snapshot loop above
+    // doesn't cover them. Capture them around the reload so settingsChanged()
+    // can fire when a reload (e.g. the daemon's reloadSettings after a Save)
+    // brings in new per-screen gap / selector overrides. Without this the
+    // daemon reloads the maps but its settingsChanged-driven retile never runs,
+    // so per-monitor gaps never take effect on save (discussion #661).
+    const QHash<QString, QVariantMap> perScreenZoneSelectorBefore = m_perScreenZoneSelectorSettings;
+    const QHash<QString, QVariantMap> perScreenAutotileBefore = m_perScreenAutotileSettings;
+    const QHash<QString, QVariantMap> perScreenSnappingBefore = m_perScreenSnappingSettings;
+
     loadPerScreenOverrides(m_configBackend);
     loadVirtualScreenConfigs(m_configBackend);
+
+    const bool perScreenZoneSelectorChanged = perScreenZoneSelectorBefore != m_perScreenZoneSelectorSettings;
+    const bool perScreenAutotileChanged = perScreenAutotileBefore != m_perScreenAutotileSettings;
+    const bool perScreenSnappingChanged = perScreenSnappingBefore != m_perScreenSnappingSettings;
+    const bool perScreenChanged = perScreenZoneSelectorChanged || perScreenAutotileChanged || perScreenSnappingChanged;
 
     if (useSystemColors()) {
         applySystemColorScheme();
@@ -278,7 +293,19 @@ void Settings::load()
     // signals but NOT the aggregate — inconsistent with the direct
     // setter path (`writeDisableEntries` emits `settingsChanged()`
     // whenever persistence succeeds).
-    if (anyChanged || anyDisableChanged)
+    // Per-screen override maps are not Q_PROPERTYs, so the NOTIFY loop above
+    // doesn't cover them. Emit their change signals here, gated on the
+    // before/after comparison, so QML per-screen helpers refresh on Discard /
+    // Reset and the daemon resnaps on a per-screen gap change — without firing
+    // on reloads that left the maps untouched.
+    if (perScreenZoneSelectorChanged)
+        Q_EMIT perScreenZoneSelectorSettingsChanged();
+    if (perScreenAutotileChanged)
+        Q_EMIT perScreenAutotileSettingsChanged();
+    if (perScreenSnappingChanged)
+        Q_EMIT perScreenSnappingSettingsChanged();
+
+    if (anyChanged || anyDisableChanged || perScreenChanged)
         Q_EMIT settingsChanged();
 }
 
