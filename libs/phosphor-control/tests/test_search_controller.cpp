@@ -82,6 +82,19 @@ QStringList resultPageIds(const SearchController& sc)
     return ids;
 }
 
+// Subtitle of the result whose title matches, or empty if no such result —
+// robust against ordering (don't assume the match ranks first).
+QString subtitleForTitle(const SearchController& sc, const QString& title)
+{
+    for (const QVariant& v : sc.results()) {
+        const QVariantMap m = v.toMap();
+        if (m.value(QStringLiteral("title")).toString() == title) {
+            return m.value(QStringLiteral("subtitle")).toString();
+        }
+    }
+    return QString();
+}
+
 } // namespace
 
 class TestSearchController : public QObject
@@ -226,10 +239,7 @@ private Q_SLOTS:
         StubProviderNoSubtitle provider;
         sc.registerProvider(&provider);
         sc.setQuery(QStringLiteral("floaty"));
-        const QVariantList r = sc.results();
-        QVERIFY(!r.isEmpty());
-        QCOMPARE(r.first().toMap().value(QStringLiteral("subtitle")).toString(),
-                 QStringLiteral("Snapping › Appearance › Colors"));
+        QCOMPARE(subtitleForTitle(sc, QStringLiteral("Floaty")), QStringLiteral("Snapping › Appearance › Colors"));
     }
 
     void providerSubtitleRespectedWhenSet()
@@ -240,9 +250,38 @@ private Q_SLOTS:
         StubProvider provider;
         sc.registerProvider(&provider);
         sc.setQuery(QStringLiteral("steam"));
-        const QVariantList r = sc.results();
-        QVERIFY(!r.isEmpty());
-        QCOMPARE(r.first().toMap().value(QStringLiteral("subtitle")).toString(), QStringLiteral("Window Rules"));
+        QCOMPARE(subtitleForTitle(sc, QStringLiteral("Steam")), QStringLiteral("Window Rules"));
+    }
+
+    void registerProviderDedupes()
+    {
+        // Registering the same provider twice must not double its entries.
+        SearchController sc(m_app);
+        StubProvider provider;
+        sc.registerProvider(&provider);
+        sc.registerProvider(&provider);
+        sc.setQuery(QStringLiteral("steam"));
+        int count = 0;
+        for (const QVariant& v : sc.results()) {
+            if (v.toMap().value(QStringLiteral("address")).toString() == QStringLiteral("window-rules#rule:abc")) {
+                ++count;
+            }
+        }
+        QCOMPARE(count, 1);
+    }
+
+    void pageKindEntryKeepsEmptySubtitle()
+    {
+        // The auto-derive is gated on kind != Page: a Page-kind static entry
+        // with no subtitle is left as-is (not given a self-including path).
+        SearchController sc(m_app);
+        SearchEntry e;
+        e.kind = SearchEntry::Kind::Page;
+        e.pageId = QStringLiteral("snapping-appearance-colors");
+        e.title = QStringLiteral("Custom Page Entry");
+        sc.addEntry(e);
+        sc.setQuery(QStringLiteral("custom page entry"));
+        QCOMPARE(subtitleForTitle(sc, QStringLiteral("Custom Page Entry")), QString());
     }
 
     void limitCapsResultCount()

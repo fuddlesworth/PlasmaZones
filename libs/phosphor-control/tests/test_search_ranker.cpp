@@ -119,7 +119,7 @@ private Q_SLOTS:
     {
         QCOMPARE(SearchRanker::editDistance(QStringLiteral("git"), QStringLiteral("git")), 0);
         QCOMPARE(SearchRanker::editDistance(QStringLiteral("gti"), QStringLiteral("git")),
-                 2); // transposition = 2 edits
+                 2); // adjacent swap = 2 substitutions (classic Levenshtein, no transposition op)
         QCOMPARE(SearchRanker::editDistance(QStringLiteral("kitten"), QStringLiteral("sitting")), 3);
         QCOMPARE(SearchRanker::editDistance(QString(), QStringLiteral("abc")), 3);
     }
