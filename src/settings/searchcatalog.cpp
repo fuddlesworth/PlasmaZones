@@ -451,6 +451,145 @@ void seedSearchCatalog(PhosphorControl::SearchController* search)
     addSetting(search, QStringLiteral("animations-general"), QStringLiteral("minimumWindowHeight"),
                PhosphorI18n::tr("Minimum window height"),
                {PhosphorI18n::tr("threshold"), PhosphorI18n::tr("short"), PhosphorI18n::tr("size")});
+
+    // ── List / browser page anchors ──────────────────────────────────────
+    // General › Configuration (backup / restore / data)
+    addSection(search, QStringLiteral("general"), QStringLiteral("configuration"), PhosphorI18n::tr("Configuration"));
+    addSetting(search, QStringLiteral("general"), QStringLiteral("backup"), PhosphorI18n::tr("Backup"),
+               {PhosphorI18n::tr("export"), PhosphorI18n::tr("save"), PhosphorI18n::tr("data")});
+    addSetting(search, QStringLiteral("general"), QStringLiteral("restore"), PhosphorI18n::tr("Restore"),
+               {PhosphorI18n::tr("import"), PhosphorI18n::tr("load"), PhosphorI18n::tr("data")});
+
+    // Snapping › Zone Selector
+    addSetting(search, QStringLiteral("snapping-zoneselector"), QStringLiteral("zoneSelectorEnabled"),
+               PhosphorI18n::tr("Zone selector popup"),
+               {PhosphorI18n::tr("enable"), PhosphorI18n::tr("toggle"), PhosphorI18n::tr("picker")});
+    addSection(search, QStringLiteral("snapping-zoneselector"), QStringLiteral("positionTrigger"),
+               PhosphorI18n::tr("Position & Trigger"));
+    addSetting(search, QStringLiteral("snapping-zoneselector"), QStringLiteral("triggerDistance"),
+               PhosphorI18n::tr("Trigger distance"),
+               {PhosphorI18n::tr("edge"), PhosphorI18n::tr("distance"), PhosphorI18n::tr("proximity")});
+    addSection(search, QStringLiteral("snapping-zoneselector"), QStringLiteral("layoutArrangement"),
+               PhosphorI18n::tr("Layout Arrangement"));
+    addSetting(search, QStringLiteral("snapping-zoneselector"), QStringLiteral("arrangement"),
+               PhosphorI18n::tr("Arrangement"),
+               {PhosphorI18n::tr("grid"), PhosphorI18n::tr("horizontal"), PhosphorI18n::tr("vertical")});
+    addSetting(search, QStringLiteral("snapping-zoneselector"), QStringLiteral("gridColumns"),
+               PhosphorI18n::tr("Grid columns"),
+               {PhosphorI18n::tr("columns"), PhosphorI18n::tr("per row"), PhosphorI18n::tr("count")});
+    addSetting(search, QStringLiteral("snapping-zoneselector"), QStringLiteral("maxVisibleRows"),
+               PhosphorI18n::tr("Max visible rows"),
+               {PhosphorI18n::tr("rows"), PhosphorI18n::tr("scroll"), PhosphorI18n::tr("visible")});
+    addSection(search, QStringLiteral("snapping-zoneselector"), QStringLiteral("previewSize"),
+               PhosphorI18n::tr("Preview Size"));
+
+    // Ordering (shared OrderingPage) + Quick shortcuts (shared QuickLayoutSlotsCard)
+    addSection(search, QStringLiteral("snapping-ordering"), QStringLiteral("ordering"),
+               PhosphorI18n::tr("Snapping Layout Priority"));
+    addSection(search, QStringLiteral("tiling-ordering"), QStringLiteral("ordering"),
+               PhosphorI18n::tr("Tiling Algorithm Priority"));
+    addSection(search, QStringLiteral("snapping-shortcuts"), QStringLiteral("quickShortcuts"),
+               PhosphorI18n::tr("Snapping Quick Shortcuts"));
+    addSection(search, QStringLiteral("tiling-shortcuts"), QStringLiteral("quickShortcuts"),
+               PhosphorI18n::tr("Tiling Quick Shortcuts"));
+
+    // Shaders (shared ShaderBrowserPage) + animation presets / motion sets
+    addSection(search, QStringLiteral("snapping-shaders"), QStringLiteral("userShaders"),
+               PhosphorI18n::tr("User shaders"));
+    addSection(search, QStringLiteral("animations-shaders"), QStringLiteral("userShaders"),
+               PhosphorI18n::tr("User shaders"));
+    addSection(search, QStringLiteral("animations-presets"), QStringLiteral("easingPresets"),
+               PhosphorI18n::tr("Easing Presets"));
+    addSection(search, QStringLiteral("animations-presets"), QStringLiteral("springPresets"),
+               PhosphorI18n::tr("Spring Presets"));
+    addSection(search, QStringLiteral("animations-motionsets"), QStringLiteral("saveMotionSet"),
+               PhosphorI18n::tr("Save current state"));
+    addSection(search, QStringLiteral("animations-motionsets"), QStringLiteral("savedMotionSets"),
+               PhosphorI18n::tr("Saved sets"));
+
+    // Animation events (reveal-tagged on the event list's outer delegates)
+    addSetting(search, QStringLiteral("animations-windows"), QStringLiteral("window.open"), PhosphorI18n::tr("Open"));
+    addSetting(search, QStringLiteral("animations-windows"), QStringLiteral("window.close"), PhosphorI18n::tr("Close"));
+    addSetting(search, QStringLiteral("animations-windows"), QStringLiteral("window.minimize"),
+               PhosphorI18n::tr("Minimize"));
+    addSetting(search, QStringLiteral("animations-windows"), QStringLiteral("window.maximize"),
+               PhosphorI18n::tr("Maximize"));
+    addSetting(search, QStringLiteral("animations-windows"), QStringLiteral("window.move"), PhosphorI18n::tr("Move"));
+    addSetting(search, QStringLiteral("animations-windows"), QStringLiteral("window.resize"),
+               PhosphorI18n::tr("Resize"));
+    addSetting(search, QStringLiteral("animations-windows"), QStringLiteral("window.focus"), PhosphorI18n::tr("Focus"));
+    addSetting(search, QStringLiteral("animations-windows"), QStringLiteral("window.snapIn"),
+               PhosphorI18n::tr("Snap Into Zone"));
+    addSetting(search, QStringLiteral("animations-windows"), QStringLiteral("window.snapOut"),
+               PhosphorI18n::tr("Snap Out of Zone"));
+    addSetting(search, QStringLiteral("animations-windows"), QStringLiteral("window.layoutSwitch"),
+               PhosphorI18n::tr("Layout Switch"));
+    addSetting(search, QStringLiteral("animations-osds"), QStringLiteral("osd.show"), PhosphorI18n::tr("Show"));
+    addSetting(search, QStringLiteral("animations-osds"), QStringLiteral("osd.hide"), PhosphorI18n::tr("Hide"));
+    addSetting(search, QStringLiteral("animations-overlays"), QStringLiteral("popup.zoneSelector.show"),
+               PhosphorI18n::tr("Zone Selector: Show"));
+    addSetting(search, QStringLiteral("animations-overlays"), QStringLiteral("popup.zoneSelector.hide"),
+               PhosphorI18n::tr("Zone Selector: Hide"));
+    addSetting(search, QStringLiteral("animations-overlays"), QStringLiteral("popup.layoutPicker.show"),
+               PhosphorI18n::tr("Layout Picker: Show"));
+    addSetting(search, QStringLiteral("animations-overlays"), QStringLiteral("popup.layoutPicker.hide"),
+               PhosphorI18n::tr("Layout Picker: Hide"));
+    addSetting(search, QStringLiteral("animations-overlays"), QStringLiteral("popup.snapAssist.show"),
+               PhosphorI18n::tr("Snap Assist: Show"));
+    addSetting(search, QStringLiteral("animations-overlays"), QStringLiteral("popup.snapAssist.hide"),
+               PhosphorI18n::tr("Snap Assist: Hide"));
+    addSetting(search, QStringLiteral("animations-side-panels"), QStringLiteral("panel.slideIn"),
+               PhosphorI18n::tr("Slide In"));
+    addSetting(search, QStringLiteral("animations-side-panels"), QStringLiteral("panel.slideOut"),
+               PhosphorI18n::tr("Slide Out"));
+    addSetting(search, QStringLiteral("animations-side-panels"), QStringLiteral("panel.fadeIn"),
+               PhosphorI18n::tr("Fade In"));
+    addSetting(search, QStringLiteral("animations-side-panels"), QStringLiteral("panel.fadeOut"),
+               PhosphorI18n::tr("Fade Out"));
+    addSetting(search, QStringLiteral("animations-widgets"), QStringLiteral("widget.hover"), PhosphorI18n::tr("Hover"));
+    addSetting(search, QStringLiteral("animations-widgets"), QStringLiteral("widget.press"), PhosphorI18n::tr("Press"));
+    addSetting(search, QStringLiteral("animations-widgets"), QStringLiteral("widget.toggleOn"),
+               PhosphorI18n::tr("Toggle On"));
+    addSetting(search, QStringLiteral("animations-widgets"), QStringLiteral("widget.toggleOff"),
+               PhosphorI18n::tr("Toggle Off"));
+    addSetting(search, QStringLiteral("animations-widgets"), QStringLiteral("widget.badgeShow"),
+               PhosphorI18n::tr("Show (badge)"));
+    addSetting(search, QStringLiteral("animations-widgets"), QStringLiteral("widget.badgeHide"),
+               PhosphorI18n::tr("Hide (badge)"));
+    addSetting(search, QStringLiteral("animations-widgets"), QStringLiteral("widget.badgePulse"),
+               PhosphorI18n::tr("Pulse (badge)"));
+    addSetting(search, QStringLiteral("animations-widgets"), QStringLiteral("widget.tint"), PhosphorI18n::tr("Tint"));
+    addSetting(search, QStringLiteral("animations-widgets"), QStringLiteral("widget.dim"), PhosphorI18n::tr("Dim"));
+    addSetting(search, QStringLiteral("animations-widgets"), QStringLiteral("widget.fadeIn"),
+               PhosphorI18n::tr("Fade In"));
+    addSetting(search, QStringLiteral("animations-widgets"), QStringLiteral("widget.fadeOut"),
+               PhosphorI18n::tr("Fade Out"));
+    addSetting(search, QStringLiteral("animations-widgets"), QStringLiteral("widget.reorder"),
+               PhosphorI18n::tr("Reorder"));
+    addSetting(search, QStringLiteral("animations-widgets"), QStringLiteral("widget.accordionExpand"),
+               PhosphorI18n::tr("Expand (accordion)"));
+    addSetting(search, QStringLiteral("animations-widgets"), QStringLiteral("widget.accordionCollapse"),
+               PhosphorI18n::tr("Collapse (accordion)"));
+    addSetting(search, QStringLiteral("animations-widgets"), QStringLiteral("widget.progress"),
+               PhosphorI18n::tr("Progress"));
+    addSetting(search, QStringLiteral("animations-widgets"), QStringLiteral("widget.zoneHighlight"),
+               PhosphorI18n::tr("Zone Highlight"));
+    addSetting(search, QStringLiteral("animations-widgets"), QStringLiteral("widget.zoneHighlight.pop"),
+               PhosphorI18n::tr("Zone Highlight: Pop"));
+    addSetting(search, QStringLiteral("animations-widgets"), QStringLiteral("widget.zoneHighlight.border"),
+               PhosphorI18n::tr("Zone Highlight: Border"));
+    addSetting(search, QStringLiteral("animations-widgets"), QStringLiteral("widget.zoneOverlayFlash"),
+               PhosphorI18n::tr("Zone Overlay: Layout-Switch Flash"));
+    addSetting(search, QStringLiteral("animations-widgets"), QStringLiteral("cursor.hover"),
+               PhosphorI18n::tr("Cursor Hover"));
+    addSetting(search, QStringLiteral("animations-widgets"), QStringLiteral("cursor.click"),
+               PhosphorI18n::tr("Cursor Click"));
+    addSetting(search, QStringLiteral("animations-editor"), QStringLiteral("editor.snapIn"),
+               PhosphorI18n::tr("Snap Into Zone (Fill Preview)"));
+    addSetting(search, QStringLiteral("animations-editor"), QStringLiteral("editor.snapOut"),
+               PhosphorI18n::tr("Snap Out of Zone"));
+    addSetting(search, QStringLiteral("animations-editor"), QStringLiteral("editor.snapResize"),
+               PhosphorI18n::tr("Snap Resize (Drag Preview)"));
 }
 
 } // namespace PlasmaZones

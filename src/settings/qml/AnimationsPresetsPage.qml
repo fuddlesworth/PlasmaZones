@@ -110,6 +110,7 @@ SettingsFlickable {
         SettingsCard {
             Layout.fillWidth: true
             headerText: i18n("Easing Presets")
+            searchAnchor: "easingPresets"
             collapsible: true
 
             contentItem: ColumnLayout {
@@ -239,6 +240,7 @@ SettingsFlickable {
         SettingsCard {
             Layout.fillWidth: true
             headerText: i18n("Spring Presets")
+            searchAnchor: "springPresets"
             collapsible: true
 
             contentItem: ColumnLayout {

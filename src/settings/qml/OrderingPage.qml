@@ -86,6 +86,7 @@ SettingsFlickable {
 
         SettingsCard {
             headerText: root.headerText
+            searchAnchor: "ordering"
 
             contentItem: ColumnLayout {
                 spacing: Kirigami.Units.smallSpacing

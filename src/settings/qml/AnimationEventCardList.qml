@@ -69,6 +69,33 @@ SettingsFlickable {
                 // built. `_everInView` flips true and never back.
                 property bool _everInView: false
 
+                // Deep-link reveal: register this delegate under its event's
+                // path so global search can scroll the page to it. The OUTER
+                // Loader always exists (with reserved placeholder height) even
+                // before its card builds, so it is the stable reveal target —
+                // revealAnchor scrolls to + pulses it, and the card builds
+                // lazily as it enters view (card arg is null → scroll+pulse
+                // only, no expand). Registration is purely additive: it never
+                // touches the viewport/latching logic above.
+                readonly property string searchAnchor: cardLoader.modelData.eventPath || ""
+                // Only leaf events are addressable. Parent rows ("All X
+                // Events") carry isParentNode: true and are page-level group
+                // headers, not a single animation event.
+                readonly property bool searchable: cardLoader.modelData.isParentNode !== true && cardLoader.searchAnchor.length > 0
+
+                // Walk up to the hosting page (SettingsFlickable) — the object
+                // exposing registerSearchAnchor. Mirrors SettingsRow._searchPage.
+                function _searchPage() {
+                    var p = cardLoader.parent;
+                    while (p) {
+                        if (typeof p.registerSearchAnchor === "function")
+                            return p;
+
+                        p = p.parent;
+                    }
+                    return null;
+                }
+
                 Layout.fillWidth: true
                 // Reserve the real card height once built (a Loader's
                 // implicitHeight reflects its loaded item's implicitHeight),
@@ -117,7 +144,29 @@ SettingsFlickable {
                 // check once layout has positioned this Loader, so the
                 // viewport test sees the real slot position. Later re-checks
                 // come from onYChanged / the page Connections below.
-                Component.onCompleted: Qt.callLater(cardLoader._checkInView)
+                Component.onCompleted: {
+                    Qt.callLater(cardLoader._checkInView);
+                    // Defer registration like SettingsRow does: the parent
+                    // chain up to the page only settles after construction.
+                    // Register the Loader itself (card arg null) so reveal
+                    // scrolls + pulses; the card builds as it scrolls in.
+                    Qt.callLater(function () {
+                        if (!cardLoader.searchable)
+                            return;
+
+                        var pg = cardLoader._searchPage();
+                        if (pg)
+                            pg.registerSearchAnchor(cardLoader.searchAnchor, cardLoader, null);
+                    });
+                }
+                Component.onDestruction: {
+                    if (!cardLoader.searchable)
+                        return;
+
+                    var pg = cardLoader._searchPage();
+                    if (pg)
+                        pg.unregisterSearchAnchor(cardLoader.searchAnchor);
+                }
 
                 Connections {
                     target: page

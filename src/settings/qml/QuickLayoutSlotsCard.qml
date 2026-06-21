@@ -28,6 +28,7 @@ SettingsCard {
     }
 
     headerText: root.viewMode === 1 ? i18n("Tiling Quick Shortcuts") : i18n("Snapping Quick Shortcuts")
+    searchAnchor: "quickShortcuts"
     collapsible: true
 
     contentItem: ColumnLayout {

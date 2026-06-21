@@ -217,6 +217,7 @@ SettingsFlickable {
         SettingsCard {
             Layout.fillWidth: true
             headerText: i18n("User shaders")
+            searchAnchor: "userShaders"
 
             contentItem: ColumnLayout {
                 spacing: Kirigami.Units.smallSpacing

@@ -182,6 +182,7 @@ SettingsFlickable {
         // =====================================================================
         SettingsCard {
             headerText: i18n("Configuration")
+            searchAnchor: "configuration"
             collapsible: true
 
             contentItem: ColumnLayout {
@@ -189,6 +190,7 @@ SettingsFlickable {
 
                 SettingsRow {
                     title: i18n("Backup")
+                    searchAnchor: "backup"
                     description: i18n("Export all settings to a file")
 
                     Button {
@@ -203,6 +205,7 @@ SettingsFlickable {
 
                 SettingsRow {
                     title: i18n("Restore")
+                    searchAnchor: "restore"
                     description: i18n("Import settings from a previously exported file")
 
                     Button {
