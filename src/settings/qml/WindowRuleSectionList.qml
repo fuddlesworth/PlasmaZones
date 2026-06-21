@@ -194,7 +194,43 @@ Item {
             // content up to delegate height.
             readonly property real actualHeight: rowLayout.implicitHeight
             onActualHeightChanged: root.setDelegateHeight(modelData.ruleId, actualHeight)
-            Component.onCompleted: root.setDelegateHeight(modelData.ruleId, actualHeight)
+
+            // Register a per-rule deep-link anchor ("rule:<id>") with the host
+            // page's reveal registry so a window-rule search result scrolls to
+            // and pulses this exact row (expanding its section card if collapsed).
+            function _searchPage() {
+                var p = parent;
+                while (p) {
+                    if (typeof p.registerSearchAnchor === "function")
+                        return p;
+
+                    p = p.parent;
+                }
+                return null;
+            }
+            function _searchCard() {
+                var p = parent;
+                while (p) {
+                    if (p.isSettingsCard === true)
+                        return p;
+
+                    p = p.parent;
+                }
+                return null;
+            }
+            Component.onCompleted: {
+                root.setDelegateHeight(modelData.ruleId, actualHeight);
+                Qt.callLater(function () {
+                    var pg = delegateRoot._searchPage();
+                    if (pg)
+                        pg.registerSearchAnchor("rule:" + modelData.ruleId, delegateRoot, delegateRoot._searchCard());
+                });
+            }
+            Component.onDestruction: {
+                var pg = delegateRoot._searchPage();
+                if (pg)
+                    pg.unregisterSearchAnchor("rule:" + modelData.ruleId);
+            }
 
             width: root.width
             height: actualHeight

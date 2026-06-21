@@ -71,6 +71,12 @@ QVector<SearchEntry> WindowRulesSearchProvider::searchEntries() const
         SearchEntry e;
         e.kind = SearchEntry::Kind::Entity;
         e.pageId = QStringLiteral("window-rules");
+        // Per-rule reveal anchor; the rule rows register "rule:<id>" with the
+        // page (id is the QUuid-with-braces from IdRole, matching the QML side).
+        const QString id = model->data(idx, WindowRuleModel::IdRole).toString();
+        if (!id.isEmpty()) {
+            e.anchor = QStringLiteral("rule:") + id;
+        }
         e.title = name;
         const QString summary = model->data(idx, WindowRuleModel::MatchSummaryRole).toString();
         e.subtitle = summary.isEmpty() ? breadcrumb : summary;
