@@ -329,19 +329,22 @@ Kirigami.ApplicationWindow {
 
                     Layout.fillWidth: true
                     visible: headerExtrasLoader.visible
-                    implicitHeight: headerExtrasLoader.visible ? headerExtrasLoader.implicitHeight + Kirigami.Units.smallSpacing * 2 : 0
+                    // Row height tracks the loaded item's height + vertical
+                    // padding. Uses the Loader's own height (which adopts the
+                    // item's implicit size) so the row never collapses and clips
+                    // the field.
+                    implicitHeight: headerExtrasLoader.visible ? headerExtrasLoader.height + Kirigami.Units.smallSpacing * 2 : 0
                     Layout.preferredHeight: implicitHeight
 
                     Loader {
                         id: headerExtrasLoader
 
-                        // Centered horizontally. Width/height come from the loaded
-                        // item (slot contract: the consumer Component declares
-                        // implicitWidth/Height). visible gates on Loader.Ready so
-                        // a mid-instantiation skeleton can't take layout space.
+                        // Centered horizontally; the Loader adopts the loaded
+                        // item's implicit size (slot contract: the consumer
+                        // Component declares implicitWidth/Height). visible gates
+                        // on Loader.Ready so a mid-instantiation skeleton can't
+                        // take layout space.
                         anchors.centerIn: parent
-                        width: item ? item.implicitWidth : 0
-                        height: item ? item.implicitHeight : 0
                         visible: status === Loader.Ready && item
                     }
                 }
