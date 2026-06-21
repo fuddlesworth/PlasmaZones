@@ -161,7 +161,7 @@ void seedSearchCatalog(PhosphorControl::SearchController* search)
                PhosphorI18n::tr("Exclude transient windows"), general,
                {PhosphorI18n::tr("dialog"), PhosphorI18n::tr("popup"), PhosphorI18n::tr("tooltip")});
     addSetting(search, QStringLiteral("general"), QStringLiteral("resetDefaults"),
-               PhosphorI18n::tr("Reset to defaults"), general);
+               PhosphorI18n::tr("Reset to Defaults"), general);
 
     // ── Section anchors ──────────────────────────────────────────────────
     // Jump to a card on its page; paired with searchAnchor tags on those
