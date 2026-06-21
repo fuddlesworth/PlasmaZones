@@ -12,6 +12,9 @@
 #include "phosphor_i18n.h"
 #include "phosphor_qml_i18n.h"
 #include "searchcatalog.h"
+#include "searchproviders.h"
+#include "windowrulecontroller.h"
+#include "windowrulemodel.h"
 
 #include <PhosphorControl/SearchController.h>
 
@@ -206,6 +209,19 @@ int main(int argc, char* argv[])
     // Parented to `controller` (declared before the engine, destroyed after).
     auto* searchController = new PhosphorControl::SearchController(controller.app(), &controller);
     PlasmaZones::seedSearchCatalog(searchController);
+
+    // Dynamic content providers (layouts, window rules). Heap-allocated for the
+    // app's lifetime: SearchController holds them non-owning, and they only need
+    // to outlive it. Re-snapshot is driven by the source change signals below.
+    searchController->registerProvider(new PlasmaZones::LayoutsSearchProvider(&controller));
+    searchController->registerProvider(new PlasmaZones::WindowRulesSearchProvider(&controller));
+    QObject::connect(&controller, &PlasmaZones::SettingsController::layoutsChanged, searchController,
+                     &PhosphorControl::SearchController::invalidate);
+    if (controller.windowRulesPage() != nullptr && controller.windowRulesPage()->model() != nullptr) {
+        QObject::connect(controller.windowRulesPage()->model(), &PlasmaZones::WindowRuleModel::countChanged,
+                         searchController, &PhosphorControl::SearchController::invalidate);
+    }
+
     engine.rootContext()->setContextProperty(QStringLiteral("searchController"), searchController);
 
     if (!requestedAddress.isEmpty()) {
