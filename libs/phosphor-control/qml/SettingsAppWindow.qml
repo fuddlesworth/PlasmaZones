@@ -326,11 +326,12 @@ Kirigami.ApplicationWindow {
                 // Header-extras row ABOVE the breadcrumb trail: the headerExtras
                 // slot (e.g. global search) centered, with the optional
                 // headerTrailing slot (e.g. a status toggle) pinned right. The
-                // row collapses to zero height when neither slot is filled (a
-                // visible:false Layout child is excluded from the column).
-                // Side margins match the breadcrumb gutter so the trailing slot
-                // aligns to the content's right edge.
-                Item {
+                // row collapses when neither slot is filled. Side margins match
+                // the breadcrumb gutter so the trailing slot aligns to the
+                // content's right edge. A left phantom the width of the trailing
+                // keeps the centered slot window-centered (not biased left by
+                // the trailing's width).
+                RowLayout {
                     id: headerExtrasRow
 
                     Layout.fillWidth: true
@@ -338,25 +339,33 @@ Kirigami.ApplicationWindow {
                     Layout.rightMargin: Kirigami.Units.largeSpacing
                     Layout.topMargin: Kirigami.Units.smallSpacing
                     Layout.bottomMargin: Kirigami.Units.smallSpacing
-                    implicitHeight: Math.max(headerExtrasLoader.implicitHeight, headerTrailingLoader.implicitHeight)
-                    visible: headerExtrasLoader.visible || headerTrailingLoader.visible
+                    spacing: 0
+                    visible: headerExtrasLoader.item !== null || headerTrailingLoader.item !== null
 
-                    // Both Loaders adopt their loaded item's implicit size (slot
+                    Item {
+                        Layout.preferredWidth: headerTrailingLoader.width
+                    }
+
+                    Item {
+                        Layout.fillWidth: true
+                    }
+
+                    // The Loaders adopt their loaded item's implicit size (slot
                     // contract: the consumer Component declares implicitWidth/Height).
                     Loader {
                         id: headerExtrasLoader
 
-                        anchors.horizontalCenter: parent.horizontalCenter
-                        anchors.verticalCenter: parent.verticalCenter
-                        visible: status === Loader.Ready && item !== null
+                        Layout.alignment: Qt.AlignVCenter
+                    }
+
+                    Item {
+                        Layout.fillWidth: true
                     }
 
                     Loader {
                         id: headerTrailingLoader
 
-                        anchors.right: parent.right
-                        anchors.verticalCenter: parent.verticalCenter
-                        visible: status === Loader.Ready && item !== null
+                        Layout.alignment: Qt.AlignVCenter
                     }
                 }
 
