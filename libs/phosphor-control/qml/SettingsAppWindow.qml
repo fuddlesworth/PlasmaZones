@@ -321,32 +321,21 @@ Kirigami.ApplicationWindow {
                 spacing: 0
 
                 // Header extras (e.g. global search) on their own centered row
-                // ABOVE the breadcrumb trail. Collapses to zero height when no
-                // headerExtras Component is provided, so consumers that don't use
-                // the slot just see the breadcrumb row.
-                Item {
-                    id: headerExtrasRow
+                // ABOVE the breadcrumb trail. A Layout child with visible:false
+                // is excluded from the column, so consumers that don't provide a
+                // headerExtras Component get no empty row — no wrapper needed.
+                Loader {
+                    id: headerExtrasLoader
 
-                    Layout.fillWidth: true
-                    visible: headerExtrasLoader.visible
-                    // Row height tracks the loaded item's height + vertical
-                    // padding. Uses the Loader's own height (which adopts the
-                    // item's implicit size) so the row never collapses and clips
-                    // the field.
-                    implicitHeight: headerExtrasLoader.visible ? headerExtrasLoader.height + Kirigami.Units.smallSpacing * 2 : 0
-                    Layout.preferredHeight: implicitHeight
-
-                    Loader {
-                        id: headerExtrasLoader
-
-                        // Centered horizontally; the Loader adopts the loaded
-                        // item's implicit size (slot contract: the consumer
-                        // Component declares implicitWidth/Height). visible gates
-                        // on Loader.Ready so a mid-instantiation skeleton can't
-                        // take layout space.
-                        anchors.centerIn: parent
-                        visible: status === Loader.Ready && item
-                    }
+                    // Centered horizontally; the Loader adopts the loaded item's
+                    // implicit size (slot contract: the consumer Component
+                    // declares implicitWidth/Height). visible gates on
+                    // Loader.Ready so a mid-instantiation skeleton can't take
+                    // layout space.
+                    Layout.alignment: Qt.AlignHCenter
+                    Layout.topMargin: Kirigami.Units.smallSpacing
+                    Layout.bottomMargin: Kirigami.Units.smallSpacing
+                    visible: status === Loader.Ready && item
                 }
 
                 RowLayout {
