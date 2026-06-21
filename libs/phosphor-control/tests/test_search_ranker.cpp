@@ -43,7 +43,7 @@ private Q_SLOTS:
         QVERIFY(prefix > wordStart);
         QVERIFY(wordStart > substring);
         QVERIFY(substring > subseq);
-        QVERIFY(subseq > 0);
+        QVERIFY(subseq >= 120); // documented subsequence floor
     }
 
     void caseInsensitive()

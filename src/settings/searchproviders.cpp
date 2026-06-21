@@ -46,11 +46,14 @@ QVector<SearchEntry> LayoutsSearchProvider::searchEntries() const
 QVector<SearchEntry> WindowRulesSearchProvider::searchEntries() const
 {
     QVector<SearchEntry> out;
-    if (m_controller == nullptr || m_controller->windowRulesPage() == nullptr) {
+    if (m_controller == nullptr) {
         return out;
     }
-
-    WindowRuleModel* model = m_controller->windowRulesPage()->model();
+    WindowRuleController* page = m_controller->windowRulesPage();
+    if (page == nullptr) {
+        return out;
+    }
+    WindowRuleModel* model = page->model();
     if (model == nullptr) {
         return out;
     }

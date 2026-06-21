@@ -59,6 +59,7 @@ public:
     QString suggestion() const;
 
     int limit() const;
+    /// Max results. `n < 0` = uncapped; `n == 0` = no results.
     void setLimit(int n);
 
     /// Synonyms merged onto the auto-derived page entry for `pageId`.

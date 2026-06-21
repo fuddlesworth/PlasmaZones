@@ -65,10 +65,6 @@ Item {
     property string scopeClearerMethod: ""
 
     signal toggleClicked(bool checked)
-    /// Emitted when the expand animation completes. SettingsFlickable's
-    /// revealAnchor waits on this before measuring a target inside a card it
-    /// just expanded (geometry is mid-animation until then).
-    signal expandFinished
 
     onCollapsedChanged: {
         if (collapsed) {
@@ -339,10 +335,6 @@ Item {
 
             SequentialAnimation {
                 id: expandAnim
-
-                // Fires only on natural completion (not when collapseAnim
-                // stops it), so revealAnchor measures geometry once it's final.
-                onFinished: root.expandFinished()
 
                 PhosphorMotionAnimation {
                     target: contentClip

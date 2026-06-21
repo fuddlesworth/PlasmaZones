@@ -44,7 +44,9 @@ struct SearchEntry
     /// Extra synonyms / search terms (translated). Not displayed.
     QStringList keywords;
 
-    /// The navigable address consumed by SettingsController::navigateTo.
+    /// The navigable address consumed by SettingsController::navigateTo, which
+    /// splits on the FIRST '#'. Page ids must therefore not contain '#' (they
+    /// are registry identifiers, which never do); the anchor may.
     QString address() const
     {
         return anchor.isEmpty() ? pageId : (pageId + QLatin1Char('#') + anchor);

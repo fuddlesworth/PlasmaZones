@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 import QtQuick
+import QtQuick.Window
 import org.kde.kirigami as Kirigami
 
 /**
@@ -89,6 +90,8 @@ Flickable {
     // pulses a highlight. Registration via the page is generic — any page
     // rooted on SettingsFlickable inherits the whole reveal contract.
     property var _searchAnchors: ({})
+    // Item awaiting reveal once its containing card finishes expanding.
+    property var _revealPendingItem: null
 
     function registerSearchAnchor(anchorId, item, card) {
         if (!anchorId || anchorId.length === 0 || !item)
@@ -112,14 +115,13 @@ Flickable {
 
         var card = entry.card;
         if (card && card.collapsible === true && card.collapsed === true) {
-            // Expand first; measure + scroll only after the expand animation
-            // settles, else the target's geometry is still mid-collapse.
-            var onExpanded = function () {
-                card.expandFinished.disconnect(onExpanded);
-                settingsFlickable._scrollToReveal(entry.item);
-            };
-            card.expandFinished.connect(onExpanded);
+            // Expand, then settle: connecting to expandFinished would leak (and
+            // never fire) if the card is re-collapsed mid-animation, so drive the
+            // post-expand scroll off a one-shot timer (≈ the expand duration).
+            // _scrollToReveal still defers a frame for final layout.
+            settingsFlickable._revealPendingItem = entry.item;
             card.collapsed = false;
+            revealSettleTimer.restart();
         } else {
             settingsFlickable._scrollToReveal(entry.item);
         }
@@ -146,6 +148,21 @@ Flickable {
         });
     }
 
+    // Drives the post-expand reveal scroll (see revealAnchor). Interval ≈ the
+    // SettingsCard expand animation so geometry is final; _scrollToReveal also
+    // defers a frame via Qt.callLater for robustness against reduced-motion.
+    Timer {
+        id: revealSettleTimer
+
+        interval: Kirigami.Units.shortDuration + Kirigami.Units.veryShortDuration
+        onTriggered: {
+            if (settingsFlickable._revealPendingItem) {
+                settingsFlickable._scrollToReveal(settingsFlickable._revealPendingItem);
+                settingsFlickable._revealPendingItem = null;
+            }
+        }
+    }
+
     NumberAnimation {
         id: revealScrollAnim
 
@@ -163,7 +180,7 @@ Flickable {
         z: 100
         radius: Kirigami.Units.smallSpacing
         color: "transparent"
-        border.width: 2
+        border.width: Math.max(1, Math.round(Screen.devicePixelRatio * 2))
         border.color: Kirigami.Theme.highlightColor
         opacity: 0
         visible: opacity > 0
@@ -180,7 +197,7 @@ Flickable {
             }
 
             PauseAnimation {
-                duration: 700
+                duration: Kirigami.Units.veryLongDuration
             }
 
             NumberAnimation {

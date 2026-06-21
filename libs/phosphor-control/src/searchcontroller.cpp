@@ -116,6 +116,9 @@ QVector<SearchEntry> SearchController::buildIndex() const
 {
     QVector<SearchEntry> entries;
     if (m_app == nullptr || m_app->registry() == nullptr) {
+        // Defensive fallback (unreachable in practice — the app is alive for the
+        // controller's whole lifetime): return only static entries; page and
+        // provider entries both need the registry/app, which is unavailable here.
         return entries + m_staticEntries;
     }
 

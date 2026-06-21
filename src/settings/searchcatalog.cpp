@@ -151,11 +151,11 @@ void seedSearchCatalog(PhosphorControl::SearchController* search)
     // Paired with the GeneralPage reveal pilot (searchAnchor tags in QML), so a
     // result deep-links to the exact row and pulse-highlights it.
     const QString general = PhosphorI18n::tr("General");
-    addSetting(search, QStringLiteral("general"), QStringLiteral("rendering"), PhosphorI18n::tr("Rendering"), general);
+    addSection(search, QStringLiteral("general"), QStringLiteral("rendering"), PhosphorI18n::tr("Rendering"), general);
     addSetting(search, QStringLiteral("general"), QStringLiteral("renderingBackend"),
                PhosphorI18n::tr("Rendering backend"), general,
                {PhosphorI18n::tr("opengl"), PhosphorI18n::tr("vulkan"), PhosphorI18n::tr("graphics")});
-    addSetting(search, QStringLiteral("general"), QStringLiteral("windowFiltering"),
+    addSection(search, QStringLiteral("general"), QStringLiteral("windowFiltering"),
                PhosphorI18n::tr("Window filtering"), general);
     addSetting(search, QStringLiteral("general"), QStringLiteral("excludeTransient"),
                PhosphorI18n::tr("Exclude transient windows"), general,

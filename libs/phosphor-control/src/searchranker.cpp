@@ -32,7 +32,9 @@ int subsequenceScore(const QString& hay, const QString& n)
 {
     int hi = 0;
     int gaps = 0;
-    int prevMatch = -2;
+    // -1 so a match starting at index 0 registers zero gaps (a fully contiguous
+    // run scores the documented 360 max).
+    int prevMatch = -1;
     for (int ni = 0; ni < n.size(); ++ni) {
         while (hi < hay.size() && hay.at(hi) != n.at(ni)) {
             ++hi;

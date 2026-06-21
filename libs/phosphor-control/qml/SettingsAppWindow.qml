@@ -335,7 +335,7 @@ Kirigami.ApplicationWindow {
                     Layout.alignment: Qt.AlignHCenter
                     Layout.topMargin: Kirigami.Units.smallSpacing
                     Layout.bottomMargin: Kirigami.Units.smallSpacing
-                    visible: status === Loader.Ready && item
+                    visible: status === Loader.Ready && item !== null
                 }
 
                 RowLayout {

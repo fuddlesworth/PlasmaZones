@@ -210,15 +210,22 @@ int main(int argc, char* argv[])
     auto* searchController = new PhosphorControl::SearchController(controller.app(), &controller);
     PlasmaZones::seedSearchCatalog(searchController);
 
-    // Dynamic content providers (layouts, window rules). Heap-allocated for the
-    // app's lifetime: SearchController holds them non-owning, and they only need
-    // to outlive it. Re-snapshot is driven by the source change signals below.
-    searchController->registerProvider(new PlasmaZones::LayoutsSearchProvider(&controller));
-    searchController->registerProvider(new PlasmaZones::WindowRulesSearchProvider(&controller));
+    // Dynamic content providers (layouts, window rules). Owned here as
+    // unique_ptr locals that outlive the engine + searchController (which holds
+    // them non-owning); ISearchProvider is not a QObject, so no parent applies.
+    // Re-snapshot is driven by the source change signals below.
+    auto layoutsProvider = std::make_unique<PlasmaZones::LayoutsSearchProvider>(&controller);
+    auto windowRulesProvider = std::make_unique<PlasmaZones::WindowRulesSearchProvider>(&controller);
+    searchController->registerProvider(layoutsProvider.get());
+    searchController->registerProvider(windowRulesProvider.get());
     QObject::connect(&controller, &PlasmaZones::SettingsController::layoutsChanged, searchController,
                      &PhosphorControl::SearchController::invalidate);
     if (controller.windowRulesPage() != nullptr && controller.windowRulesPage()->model() != nullptr) {
+        // Both add/remove (countChanged) and in-place edits like a rule rename or
+        // match-summary change (dataChanged) must refresh the index.
         QObject::connect(controller.windowRulesPage()->model(), &PlasmaZones::WindowRuleModel::countChanged,
+                         searchController, &PhosphorControl::SearchController::invalidate);
+        QObject::connect(controller.windowRulesPage()->model(), &PlasmaZones::WindowRuleModel::dataChanged,
                          searchController, &PhosphorControl::SearchController::invalidate);
     }
 

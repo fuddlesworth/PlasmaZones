@@ -90,7 +90,7 @@ Item {
         x: 0
         width: Math.max(field.width, Kirigami.Units.gridUnit * 24)
         padding: Kirigami.Units.smallSpacing
-        closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutsideParent
+        closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutside
 
         contentItem: ColumnLayout {
             spacing: Kirigami.Units.smallSpacing
@@ -180,8 +180,8 @@ Item {
             Label {
                 Layout.fillWidth: true
                 Layout.margins: Kirigami.Units.smallSpacing
-                visible: field.text.length > 0 && resultsList.count === 0 && searchController.suggestion.length === 0
-                text: i18nc("@info search empty state", "No matches for “%1”", field.text)
+                visible: searchController.query.length > 0 && resultsList.count === 0 && searchController.suggestion.length === 0
+                text: i18nc("@info search empty state", "No matches for “%1”", searchController.query)
                 color: Kirigami.Theme.disabledTextColor
                 horizontalAlignment: Text.AlignHCenter
                 wrapMode: Text.Wrap

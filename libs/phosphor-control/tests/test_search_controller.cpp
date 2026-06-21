@@ -67,16 +67,6 @@ QStringList resultPageIds(const SearchController& sc)
     return ids;
 }
 
-QStringList resultTitles(const SearchController& sc)
-{
-    QStringList t;
-    const QVariantList r = sc.results();
-    for (const QVariant& v : r) {
-        t << v.toMap().value(QStringLiteral("title")).toString();
-    }
-    return t;
-}
-
 } // namespace
 
 class TestSearchController : public QObject
@@ -147,14 +137,18 @@ private Q_SLOTS:
         sc.addEntry(anchor);
 
         sc.setQuery(QStringLiteral("rendering"));
-        QVERIFY(resultTitles(sc).contains(QStringLiteral("Rendering backend")));
-        // address() composes pageId#anchor for navigateTo.
+        // address() composes pageId#anchor for navigateTo. Assert the matching
+        // result is actually present (a bare `contains` + conditional check would
+        // pass even if the entry vanished — the regression we'd most want caught).
+        bool found = false;
         for (const QVariant& v : sc.results()) {
             const QVariantMap m = v.toMap();
             if (m.value(QStringLiteral("title")).toString() == QStringLiteral("Rendering backend")) {
+                found = true;
                 QCOMPARE(m.value(QStringLiteral("address")).toString(), QStringLiteral("general#renderingBackend"));
             }
         }
+        QVERIFY(found);
     }
 
     void providerEntitiesAreSearchable()
@@ -163,10 +157,61 @@ private Q_SLOTS:
         StubProvider provider;
         sc.registerProvider(&provider);
         sc.setQuery(QStringLiteral("steam"));
-        const QVariantList r = sc.results();
-        QVERIFY(!r.isEmpty());
-        QCOMPARE(r.first().toMap().value(QStringLiteral("address")).toString(),
-                 QStringLiteral("window-rules#rule:abc"));
+        // Find the entity by address rather than assuming it ranks first.
+        bool found = false;
+        for (const QVariant& v : sc.results()) {
+            if (v.toMap().value(QStringLiteral("address")).toString() == QStringLiteral("window-rules#rule:abc")) {
+                found = true;
+            }
+        }
+        QVERIFY(found);
+    }
+
+    void limitCapsResultCount()
+    {
+        SearchController sc(m_app);
+        SearchEntry a;
+        a.kind = SearchEntry::Kind::Setting;
+        a.pageId = QStringLiteral("general");
+        a.title = QStringLiteral("Zoom alpha");
+        SearchEntry b = a;
+        b.title = QStringLiteral("Zoom beta");
+        sc.addEntry(a);
+        sc.addEntry(b);
+
+        sc.setQuery(QStringLiteral("zoom"));
+        QVERIFY(sc.resultCount() >= 2);
+        sc.setLimit(1);
+        QCOMPARE(sc.resultCount(), 1);
+    }
+
+    void invalidateRefreshesActiveQuery()
+    {
+        SearchController sc(m_app);
+        sc.setQuery(QStringLiteral("steam"));
+        QCOMPARE(sc.resultCount(), 0); // no provider yet
+
+        StubProvider provider;
+        sc.registerProvider(&provider); // marks index dirty, does NOT recompute
+        sc.invalidate(); // active query → rebuild + re-rank
+        QVERIFY(sc.resultCount() >= 1);
+    }
+
+    void lazyRebuildSeesAddedEntry()
+    {
+        SearchController sc(m_app);
+        sc.setQuery(QStringLiteral("alpha"));
+        QCOMPARE(sc.resultCount(), 0);
+
+        SearchEntry e;
+        e.kind = SearchEntry::Kind::Setting;
+        e.pageId = QStringLiteral("general");
+        e.anchor = QStringLiteral("alphaThing");
+        e.title = QStringLiteral("Alpha thing");
+        sc.addEntry(e); // marks dirty; rebuild happens on next query
+
+        sc.setQuery(QStringLiteral("alph")); // different query → recompute sees it
+        QVERIFY(sc.resultCount() >= 1);
     }
 
     void emptyQueryYieldsNoResults()
@@ -190,7 +235,7 @@ private Q_SLOTS:
         SearchController sc(m_app);
         QSignalSpy spy(&sc, &SearchController::resultsChanged);
         sc.setQuery(QStringLiteral("general"));
-        QVERIFY(spy.count() >= 1);
+        QCOMPARE(spy.count(), 1);
     }
 
 private:

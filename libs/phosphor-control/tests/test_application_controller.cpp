@@ -313,8 +313,12 @@ private Q_SLOTS:
         app.setCurrentPageId(QStringLiteral("a"));
         app.setPendingAnchor(QStringLiteral("a"), QStringLiteral("foo"));
         // Navigating to a different page must drop the stale pending anchor so
-        // a never-reached deep link never fires on the wrong page later.
+        // a never-reached deep link never fires on the wrong page later — and the
+        // clear must emit pendingAnchorChanged so an already-current PageHost
+        // listener is notified.
+        QSignalSpy spy(&app, &ApplicationController::pendingAnchorChanged);
         app.setCurrentPageId(QStringLiteral("b"));
+        QCOMPARE(spy.count(), 1);
         QVERIFY(app.takePendingAnchor(QStringLiteral("a")).isEmpty());
     }
 
