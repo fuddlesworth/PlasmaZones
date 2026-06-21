@@ -146,14 +146,19 @@ write-back and on load. Reserved `__v` key round-tripped opaquely (script self-m
 
 ### P4 — Aligned resize-aware grid reference algorithm
 
-Files:
-- `data/algorithms/aligned-grid.luau` (new, LGPL) — `supportsMemory = true`,
-  `supportsScriptState = true`; shared `colWidths[]`/`rowHeights[]` normalized fractions in `ctx.state`.
-- `libs/phosphor-tiles/src/pluau/pluau.luau` — add `fractionsToSizes(total, fractions, gap, minDims)`.
-- Register the new algorithm in the bundled-algorithms manifest/resource listing.
+Files (as implemented):
+- `data/algorithms/aligned-grid.luau` (new, **GPL-3.0-or-later** — matches the other bundled
+  `data/algorithms/*.luau`, not LGPL) — `supportsMemory = false`, `supportsScriptState = true`; shared
+  `colFractions[]`/`rowFractions[]` normalized fractions in `ctx.state`.
+- `libs/phosphor-tiles/src/pluau/pluau.d.luau` — type defs (`ResizeEvent`, `Context.{currentGeometries,
+  state}`, `WindowInfo.windowId`, `Metadata.supportsScriptState`, `Algorithm.onWindowResized`).
 
-Uniform-reset-on-reshape only. Boundary mutations written through the `onWindowResized` hook return.
-Float-toggle treated as a `count` change → reshape. Partial-last-row column drags are a documented no-op.
+`fractionsToSizes` is implemented inline in the algorithm (pure Luau) rather than as a new `pluau.luau`
+builtin — single consumer, keeps the change self-contained. Auto-discovered via the `data/algorithms`
+glob; no manifest entry needed. The boundary delta is normalized by reconstructing the content extent
+from the resized cell's old size and fraction, so the hook needs no screen-area input. Uniform reset on
+reshape; boundary mutations written through the `onWindowResized` hook return; partial-last-row column
+drags are a documented no-op.
 
 ## 4. Key Interfaces
 
@@ -249,8 +254,22 @@ and load boundaries. Script-internal format changes handled by the script via th
 
 ## 7. Test Plan
 
-All new tile/engine/Luau tests go in the top-level **GPL** `tests/unit/`; do NOT create
-`libs/phosphor-tiles/tests/`.
+All new tests go in the top-level **GPL** `tests/unit/` (gated behind `-DBUILD_TESTING=ON`).
+
+**Implemented (253/253 suite green):**
+- `tests/unit/autotile/test_split_tree.cpp` (extended): `splitOwningEdge` — two-window shared boundary,
+  screen-boundary edges, orthogonal-axis miss, nested nearest-collinear-ancestor; `resizeSplitNode` —
+  reflow, clamp, null/leaf no-op.
+- `tests/unit/scripting/test_luau_aligned_grid.cpp` (new): loads the real bundled `aligned-grid.luau` and
+  exercises the full P3+P4 path — resize-hook declaration, uniform grid, the column-moves-all-rows proof,
+  state-bag round-trip, and reshape-resets-to-uniform.
+
+The existing 251-test suite already covers the modified serialization / context-building / engine paths;
+all pass unchanged. (The originally-scoped engine-`onWindowResized` end-to-end and D-Bus-adaptor tests
+were judged lower-value given the above plus existing coverage; the novel logic — edge→split resolution
+and the scripting hook end-to-end — is directly tested.)
+
+Original full scope listed below for reference:
 
 - **P2 `tests/unit/autotile/test_split_tree.cpp` (extend):** `testOwningEdge_*` (single, nested skips
   orthogonal, nearest collinear ancestor, root→null, unknown window); `testResizeSplitNode_*`;
