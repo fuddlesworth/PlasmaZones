@@ -516,8 +516,12 @@ ColumnLayout {
         }
     }
 
+    // Divides the search field from the list — only meaningful when the
+    // search field is shown. Hidden (e.g. a consumer that disabled the
+    // in-sidebar search, or compact mode) it would leave an orphaned top border.
     Kirigami.Separator {
         Layout.fillWidth: true
+        visible: searchField.visible
     }
 
     // ── Scrollable list area ────────────────────────────────────────
