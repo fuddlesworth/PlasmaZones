@@ -26,6 +26,7 @@
 #include <memory>
 #include <QScreen>
 #include <PhosphorScreens/ScreenIdentity.h>
+#include <PhosphorIdentity/VirtualScreenId.h>
 
 namespace PlasmaZones {
 
@@ -108,7 +109,14 @@ void Daemon::updateAutotileScreens()
         for (const QString& screenId : effectiveIds) {
             if (!autotileScreens.contains(screenId))
                 continue;
+            // Virtual->physical fallback (mirrors getPerScreenSnappingWithFallback):
+            // a per-screen autotile override stored on a physical monitor must
+            // still apply when this screenId is one of its virtual sub-screens.
             QVariantMap overrides = m_settings->getPerScreenAutotileSettings(screenId);
+            if (overrides.isEmpty() && PhosphorIdentity::VirtualScreenId::isVirtual(screenId)) {
+                overrides = m_settings->getPerScreenAutotileSettings(
+                    PhosphorIdentity::VirtualScreenId::extractPhysicalId(screenId));
+            }
             // Inject algorithm from layout assignment (authoritative source)
             if (screenAlgorithms.contains(screenId)) {
                 const QString screenAlgo = screenAlgorithms.value(screenId);

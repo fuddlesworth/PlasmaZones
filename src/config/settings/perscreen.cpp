@@ -260,15 +260,13 @@ QVariant readPerScreenAutotileEntry(PhosphorConfig::IGroup& group, const QString
 }
 
 const QLatin1String kPerScreenSnappingKeys[] = {
-    PerScreenSnappingKey::SnapAssistEnabled,
-    // Snapping gaps (per-screen) — without these the Gaps card's overrides would
-    // not be re-loaded on next launch even after the validator accepts the write.
-    PerScreenSnappingKey::ZonePadding,
-    PerScreenSnappingKey::OuterGap,
-    PerScreenSnappingKey::UsePerSideOuterGap,
-    PerScreenSnappingKey::OuterGapTop,
-    PerScreenSnappingKey::OuterGapBottom,
-    PerScreenSnappingKey::OuterGapLeft,
+    // Snapping gaps (per-screen) — the Snapping → Window → Appearance "Gaps"
+    // card. These are the ONLY per-screen snapping keys: snap-assist is global
+    // and the zone-selector keys live in their own per-screen map. Without these
+    // the Gaps card's overrides would not be re-loaded on next launch even after
+    // the validator accepts the write.
+    PerScreenSnappingKey::ZonePadding,   PerScreenSnappingKey::OuterGap,       PerScreenSnappingKey::UsePerSideOuterGap,
+    PerScreenSnappingKey::OuterGapTop,   PerScreenSnappingKey::OuterGapBottom, PerScreenSnappingKey::OuterGapLeft,
     PerScreenSnappingKey::OuterGapRight,
 };
 
@@ -300,8 +298,6 @@ bool isPerScreenSnappingGapsKey(const QString& key)
 QVariant validatePerScreenSnappingValue(const QString& key, const QVariant& value)
 {
     namespace K = PerScreenSnappingKey;
-    if (key == K::SnapAssistEnabled)
-        return QVariant(value.toBool());
     // Per-screen snapping gaps (the Gaps card on Snapping → Window → Appearance).
     // Each key clamps against its own ConfigDefaults bounds — mirroring the
     // per-side handling in the autotile validator above; a uniform startsWith
@@ -327,8 +323,6 @@ QVariant validatePerScreenSnappingValue(const QString& key, const QVariant& valu
 QVariant readPerScreenSnappingEntry(PhosphorConfig::IGroup& group, const QString& key)
 {
     namespace K = PerScreenSnappingKey;
-    if (key == K::SnapAssistEnabled)
-        return QVariant(group.readBool(key, ConfigDefaults::snapAssistEnabled()));
     // UsePerSideOuterGap is a bool; the int gap keys (ZonePadding/OuterGap/per-side)
     // fall through to readInt below, which is the correct type for them.
     if (key == K::UsePerSideOuterGap)

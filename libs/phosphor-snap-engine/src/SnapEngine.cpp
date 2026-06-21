@@ -8,6 +8,7 @@
 #include <PhosphorSnapEngine/IZoneAdjacencyResolver.h>
 #include <PhosphorSnapEngine/ISnapSettings.h>
 #include <PhosphorEngine/IGeometrySettings.h>
+#include <PhosphorIdentity/VirtualScreenId.h>
 #include <PhosphorLayoutApi/EdgeGaps.h>
 #include <PhosphorZones/LayoutRegistry.h>
 #include <PhosphorZones/AssignmentEntry.h>
@@ -39,13 +40,70 @@ PhosphorEngine::ISnapSettings* SnapEngine::snapSettings() const
     return dynamic_cast<PhosphorEngine::ISnapSettings*>(engineSettings());
 }
 
-SnapEngine::GapParams SnapEngine::resolveGapParams() const
+namespace {
+// Resolve outer gaps from a per-screen snapping override map, falling back to
+// the global settings. Mirrors GeometryUtils::resolveOuterGapsFromMap + the
+// global branch of getEffectiveOuterGaps so the snap engine's empty-zone-fill
+// and rotation paths apply the same gaps as the main geometry pipeline.
+::PhosphorLayout::EdgeGaps resolveOuterGapsForScreen(const QVariantMap& perScreen,
+                                                     PhosphorEngine::IGeometrySettings* gs)
 {
+    namespace PSK = PhosphorEngine::PerScreenSnappingKey;
+    // Per-screen per-side block wins when engaged and any side is set.
+    const auto usePerSideIt = perScreen.constFind(PSK::UsePerSideOuterGap);
+    if (usePerSideIt != perScreen.constEnd() && usePerSideIt->toBool()) {
+        const auto topIt = perScreen.constFind(PSK::OuterGapTop);
+        const auto bottomIt = perScreen.constFind(PSK::OuterGapBottom);
+        const auto leftIt = perScreen.constFind(PSK::OuterGapLeft);
+        const auto rightIt = perScreen.constFind(PSK::OuterGapRight);
+        if (topIt != perScreen.constEnd() || bottomIt != perScreen.constEnd() || leftIt != perScreen.constEnd()
+            || rightIt != perScreen.constEnd()) {
+            const auto uniformIt = perScreen.constFind(PSK::OuterGap);
+            const int fallback = (uniformIt != perScreen.constEnd()) ? uniformIt->toInt() : gs->outerGap();
+            return ::PhosphorLayout::EdgeGaps{(topIt != perScreen.constEnd()) ? topIt->toInt() : fallback,
+                                              (bottomIt != perScreen.constEnd()) ? bottomIt->toInt() : fallback,
+                                              (leftIt != perScreen.constEnd()) ? leftIt->toInt() : fallback,
+                                              (rightIt != perScreen.constEnd()) ? rightIt->toInt() : fallback};
+        }
+    }
+    const auto uniformIt = perScreen.constFind(PSK::OuterGap);
+    if (uniformIt != perScreen.constEnd()) {
+        return ::PhosphorLayout::EdgeGaps::uniform(uniformIt->toInt());
+    }
+    // No per-screen override — global, honoring global per-side gaps.
+    if (gs->usePerSideOuterGap()) {
+        return ::PhosphorLayout::EdgeGaps{gs->outerGapTop(), gs->outerGapBottom(), gs->outerGapLeft(),
+                                          gs->outerGapRight()};
+    }
+    return ::PhosphorLayout::EdgeGaps::uniform(gs->outerGap());
+}
+} // namespace
+
+SnapEngine::GapParams SnapEngine::resolveGapParams(const QString& screenId) const
+{
+    namespace PSK = PhosphorEngine::PerScreenSnappingKey;
     auto* gs = dynamic_cast<PhosphorEngine::IGeometrySettings*>(engineSettings());
-    int zonePadding = gs ? gs->zonePadding() : PhosphorEngine::GeometryDefaults::ZonePadding;
-    auto outerGaps = gs ? ::PhosphorLayout::EdgeGaps::uniform(gs->outerGap())
-                        : ::PhosphorLayout::EdgeGaps::uniform(PhosphorEngine::GeometryDefaults::OuterGap);
-    return {zonePadding, outerGaps};
+    if (!gs) {
+        return {PhosphorEngine::GeometryDefaults::ZonePadding,
+                ::PhosphorLayout::EdgeGaps::uniform(PhosphorEngine::GeometryDefaults::OuterGap)};
+    }
+
+    // Per-screen snapping override with virtual->physical fallback, mirroring
+    // GeometryUtils::getPerScreenSnappingWithFallback so a per-monitor gap set on
+    // a physical screen still applies on its virtual sub-screens.
+    QVariantMap perScreen;
+    if (!screenId.isEmpty()) {
+        perScreen = gs->getPerScreenSnappingSettings(screenId);
+        if (perScreen.isEmpty() && PhosphorIdentity::VirtualScreenId::isVirtual(screenId)) {
+            perScreen =
+                gs->getPerScreenSnappingSettings(PhosphorIdentity::VirtualScreenId::extractPhysicalId(screenId));
+        }
+    }
+
+    const auto zpIt = perScreen.constFind(PSK::ZonePadding);
+    const int zonePadding = (zpIt != perScreen.constEnd()) ? zpIt->toInt() : gs->zonePadding();
+
+    return {zonePadding, resolveOuterGapsForScreen(perScreen, gs)};
 }
 
 // Out-of-line so unique_ptr<SnapNavigationTargetResolver> can destroy the

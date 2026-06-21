@@ -380,7 +380,7 @@ QVector<ZoneAssignmentEntry> SnapEngine::calculateSnapAllWindowEntries(const QSt
     // Track zones we're assigning in this batch (to avoid double-assigning)
     QSet<QUuid> batchOccupied = occupiedZoneIds;
 
-    auto [gapZonePadding, gapOuterGaps] = resolveGapParams();
+    auto [gapZonePadding, gapOuterGaps] = resolveGapParams(screenId);
 
     for (const QString& windowId : windowIds) {
         // Find the first unoccupied zone
@@ -502,7 +502,7 @@ QVector<ZoneAssignmentEntry> SnapEngine::calculateRotation(bool clockwise, const
             continue;
         }
 
-        auto [rotGapPadding, rotGapOuter] = resolveGapParams();
+        auto [rotGapPadding, rotGapOuter] = resolveGapParams(screenId);
 
         // Calculate rotated positions within this screen's zones
         for (const auto& pair : windowZoneIndices) {

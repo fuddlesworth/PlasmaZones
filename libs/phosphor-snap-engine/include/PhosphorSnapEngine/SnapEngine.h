@@ -686,7 +686,10 @@ private:
         int zonePadding;
         ::PhosphorLayout::EdgeGaps outerGaps;
     };
-    GapParams resolveGapParams() const;
+    // Resolve zone padding + outer gaps for @p screenId, honoring per-screen
+    // snapping overrides (with virtual->physical fallback) and falling back to
+    // the global values. An empty screenId yields the global values.
+    GapParams resolveGapParams(const QString& screenId) const;
 
     void commitSnapImpl(const QString& windowId, const QStringList& zoneIds, const QString& screenId,
                         PhosphorEngine::SnapIntent intent);

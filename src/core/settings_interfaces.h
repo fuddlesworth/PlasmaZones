@@ -105,11 +105,10 @@ using PhosphorEngine::PerScreenSnappingKey::OuterGapTop;
 using PhosphorEngine::PerScreenSnappingKey::UsePerSideOuterGap;
 using PhosphorEngine::PerScreenSnappingKey::ZonePadding;
 
-inline constexpr QLatin1String SnapAssistEnabled{"SnapAssistEnabled"};
-// Zone-selector per-screen overrides live in their own map/group keyed by
-// ZoneSelectorConfigKey (see kPerScreenKeys in perscreen.cpp); they are NOT
-// part of the snapping per-screen domain. The zone-selector enable switch is
-// global-only (ISettings::setZoneSelectorEnabled).
+// Only the gap keys above are per-screen. Snap-assist and the zone-selector
+// enable switch are global-only (ISettings::setSnapAssistEnabled /
+// setZoneSelectorEnabled); the per-screen zone-selector config lives in its own
+// map/group keyed by ZoneSelectorConfigKey (see kPerScreenKeys in perscreen.cpp).
 } // namespace PerScreenSnappingKey
 
 // ═══════════════════════════════════════════════════════════════════════════════
