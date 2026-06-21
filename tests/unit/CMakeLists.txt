@@ -166,6 +166,14 @@ target_compile_definitions(test_luau_parity PRIVATE "P_SOURCE_DIR=\"${PROJECT_SO
 target_link_libraries(test_luau_parity PRIVATE Qt6::Test Qt6::Core PhosphorTiles::PhosphorTiles)
 add_test(NAME test_luau_parity COMMAND test_luau_parity)
 
+# Aligned resize-aware grid: loads the real bundled algorithm and proves the
+# interactive-resize scripting hook + persistent state bag work end-to-end.
+add_executable(test_luau_aligned_grid scripting/test_luau_aligned_grid.cpp)
+set_target_properties(test_luau_aligned_grid PROPERTIES AUTOMOC ON)
+target_compile_definitions(test_luau_aligned_grid PRIVATE "P_SOURCE_DIR=\"${PROJECT_SOURCE_DIR}\"")
+target_link_libraries(test_luau_aligned_grid PRIVATE Qt6::Test Qt6::Core PhosphorTiles::PhosphorTiles)
+add_test(NAME test_luau_aligned_grid COMMAND test_luau_aligned_grid)
+
 # ═══════════════════════════════════════════════════════════════════════════════
 # autotile/ - Autotile Engine Tests (core, master, minsize, overflow)
 # ═══════════════════════════════════════════════════════════════════════════════

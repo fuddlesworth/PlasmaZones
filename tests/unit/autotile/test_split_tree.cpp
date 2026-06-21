@@ -57,6 +57,88 @@ private Q_SLOTS:
         QVERIFY(zones.isEmpty());
     }
 
+    // =========================================================================
+    // Interactive-resize edge→split resolution (splitOwningEdge / resizeSplitNode)
+    // =========================================================================
+
+    void testSplitOwningEdgeTwoWindows()
+    {
+        using Edge = PhosphorTiles::SplitTree::Edge;
+        PhosphorTiles::SplitTree tree;
+        tree.insertAtEnd(QStringLiteral("a"));
+        tree.insertAtEnd(QStringLiteral("b"));
+
+        PhosphorTiles::SplitNode* root = tree.root();
+        QVERIFY(root && !root->isLeaf());
+        QVERIFY(!root->splitHorizontal); // a|b is a vertical (left/right) split
+
+        // The shared boundary: a's right edge and b's left edge both own the root.
+        QVERIFY(tree.splitOwningEdge(QStringLiteral("a"), Edge::Right) == root);
+        QVERIFY(tree.splitOwningEdge(QStringLiteral("b"), Edge::Left) == root);
+        // Outer edges are screen boundaries — no owning split.
+        QVERIFY(tree.splitOwningEdge(QStringLiteral("a"), Edge::Left) == nullptr);
+        QVERIFY(tree.splitOwningEdge(QStringLiteral("b"), Edge::Right) == nullptr);
+        // Orthogonal axis has no split at this level.
+        QVERIFY(tree.splitOwningEdge(QStringLiteral("a"), Edge::Top) == nullptr);
+        QVERIFY(tree.splitOwningEdge(QStringLiteral("a"), Edge::Bottom) == nullptr);
+        // Unknown window.
+        QVERIFY(tree.splitOwningEdge(QStringLiteral("zzz"), Edge::Right) == nullptr);
+    }
+
+    void testSplitOwningEdgeNested()
+    {
+        using Edge = PhosphorTiles::SplitTree::Edge;
+        // insertAtEnd alternates split direction: root V(a, H(b, c)).
+        PhosphorTiles::SplitTree tree;
+        tree.insertAtEnd(QStringLiteral("a"));
+        tree.insertAtEnd(QStringLiteral("b"));
+        tree.insertAtEnd(QStringLiteral("c"));
+
+        PhosphorTiles::SplitNode* root = tree.root();
+        QVERIFY(root && !root->splitHorizontal);
+        PhosphorTiles::SplitNode* hnode = root->second.get();
+        QVERIFY(hnode && hnode->splitHorizontal);
+
+        // b/c are stacked inside root's right column. Their LEFT edge is the
+        // root's vertical split (nearest collinear ancestor, skipping the
+        // orthogonal H split), not the inner one.
+        QVERIFY(tree.splitOwningEdge(QStringLiteral("b"), Edge::Left) == root);
+        QVERIFY(tree.splitOwningEdge(QStringLiteral("c"), Edge::Left) == root);
+        // The b|c horizontal boundary is owned by the inner H node.
+        QVERIFY(tree.splitOwningEdge(QStringLiteral("b"), Edge::Bottom) == hnode);
+        QVERIFY(tree.splitOwningEdge(QStringLiteral("c"), Edge::Top) == hnode);
+        // a's right edge is the root split; c's right edge is the screen.
+        QVERIFY(tree.splitOwningEdge(QStringLiteral("a"), Edge::Right) == root);
+        QVERIFY(tree.splitOwningEdge(QStringLiteral("c"), Edge::Right) == nullptr);
+    }
+
+    void testResizeSplitNodeReflowsAndClamps()
+    {
+        PhosphorTiles::SplitTree tree;
+        tree.insertAtEnd(QStringLiteral("a"));
+        tree.insertAtEnd(QStringLiteral("b"));
+        PhosphorTiles::SplitNode* root = tree.root();
+
+        tree.resizeSplitNode(root, 0.25);
+        QCOMPARE(root->splitRatio, 0.25);
+        const QVector<QRect> zones = tree.applyGeometry(QRect(0, 0, 1000, 1000), 0);
+        QCOMPARE(zones.size(), 2);
+        QVERIFY(zones[0].width() >= 240 && zones[0].width() <= 260); // a ≈ 25%
+        QVERIFY(zones[1].width() >= 740); // b absorbed the rest
+
+        // Out-of-range ratios clamp to [MinSplitRatio, MaxSplitRatio].
+        tree.resizeSplitNode(root, 5.0);
+        QVERIFY(root->splitRatio <= PhosphorTiles::AutotileDefaults::MaxSplitRatio + 1e-9);
+        tree.resizeSplitNode(root, -1.0);
+        QVERIFY(root->splitRatio >= PhosphorTiles::AutotileDefaults::MinSplitRatio - 1e-9);
+
+        // Null and leaf nodes are no-ops (don't disturb the root ratio).
+        const qreal before = root->splitRatio;
+        tree.resizeSplitNode(nullptr, 0.5);
+        tree.resizeSplitNode(tree.leafForWindow(QStringLiteral("a")), 0.5);
+        QCOMPARE(root->splitRatio, before);
+    }
+
     void testInsertFirst()
     {
         PhosphorTiles::SplitTree tree;
