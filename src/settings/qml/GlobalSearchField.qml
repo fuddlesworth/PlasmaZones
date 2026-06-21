@@ -22,7 +22,7 @@ Item {
 
     readonly property bool searchOpen: resultsPopup.visible
 
-    implicitWidth: Kirigami.Units.gridUnit * 18
+    implicitWidth: Kirigami.Units.gridUnit * 22
     implicitHeight: field.implicitHeight
 
     function activate(index) {
@@ -88,7 +88,9 @@ Item {
 
         y: field.height + Kirigami.Units.smallSpacing
         x: 0
-        width: Math.max(field.width, Kirigami.Units.gridUnit * 24)
+        // Match the search field exactly so the dropdown's left/right edges line
+        // up with the input rather than spilling past it.
+        width: field.width
         padding: Kirigami.Units.smallSpacing
         closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutside
 
