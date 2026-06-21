@@ -396,42 +396,40 @@ SettingsFlickable {
             }
         }
 
-        // ── Filter chips ────────────────────────────────────────────────
-        // "Filter:" label + single-select category chips ("All" first),
-        // matching the Window Rules filter row.
-        RowLayout {
+        // ── Filter chips (collapsible) ────────────────────────────────────
+        // Disclosure toggle + single-select category chips ("All" first),
+        // matching the Window Rules filter row. Collapsed by default; the dot
+        // shows when a category filter is active while collapsed.
+        FilterDisclosureHeader {
+            id: shaderFilterHeader
+
+            hasActiveFilters: root.selectedCategory.length > 0
+        }
+
+        Flow {
             Layout.fillWidth: true
             spacing: Kirigami.Units.smallSpacing
+            visible: shaderFilterHeader.expanded
 
-            Label {
-                text: i18n("Filter:")
-                opacity: 0.7
+            Button {
+                text: i18nc("@action:button show every shader category", "All")
+                checkable: true
+                checked: root.selectedCategory === ""
+                Accessible.name: i18n("Show all shader categories")
+                onClicked: root.selectedCategory = ""
             }
 
-            Flow {
-                Layout.fillWidth: true
-                spacing: Kirigami.Units.smallSpacing
+            Repeater {
+                model: root._allCategories
 
-                Button {
-                    text: i18nc("@action:button show every shader category", "All")
+                delegate: Button {
+                    required property var modelData
+
+                    text: i18nc("@action:button category filter chip", "%1 (%2)", modelData.name, modelData.count)
                     checkable: true
-                    checked: root.selectedCategory === ""
-                    Accessible.name: i18n("Show all shader categories")
-                    onClicked: root.selectedCategory = ""
-                }
-
-                Repeater {
-                    model: root._allCategories
-
-                    delegate: Button {
-                        required property var modelData
-
-                        text: i18nc("@action:button category filter chip", "%1 (%2)", modelData.name, modelData.count)
-                        checkable: true
-                        checked: root.selectedCategory === modelData.name
-                        Accessible.name: i18n("Filter shaders by category: %1", modelData.name)
-                        onClicked: root.selectedCategory = modelData.name
-                    }
+                    checked: root.selectedCategory === modelData.name
+                    Accessible.name: i18n("Filter shaders by category: %1", modelData.name)
+                    onClicked: root.selectedCategory = modelData.name
                 }
             }
         }
