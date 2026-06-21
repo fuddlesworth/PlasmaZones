@@ -65,7 +65,13 @@ Item {
             root.dismiss();
             event.accepted = true;
         }
-        onAccepted: root.activate(0)
+        // The clear (X) button calls clear() then unconditionally fires
+        // accepted(); clear() empties the text first, so an empty field here
+        // means "cleared", not "Enter on a query" — don't navigate in that case.
+        onAccepted: {
+            if (field.text.length > 0)
+                root.activate(0);
+        }
     }
 
     // Debounce live typing before re-querying the index (matches the per-page
