@@ -136,6 +136,28 @@ QVector<SearchEntry> SearchController::buildIndex() const
         titles.insert(e.id, e.title);
     }
 
+    // Breadcrumb for a page: its ancestor titles, optionally with the page's own
+    // title appended. Setting/section/entity entries live ON a page, so they
+    // include the page itself ("Placement › Tiling › Appearance"); page entries
+    // show ancestors only ("Placement › Tiling › Window").
+    const auto breadcrumbFor = [&](const QString& pageId, bool includeSelf) -> QString {
+        QStringList crumbs;
+        const QStringList chain = m_app->parentChainFor(pageId);
+        for (const QString& ancestorId : chain) {
+            const QString t = titles.value(ancestorId);
+            if (!t.isEmpty()) {
+                crumbs << t;
+            }
+        }
+        if (includeSelf) {
+            const QString t = titles.value(pageId);
+            if (!t.isEmpty()) {
+                crumbs << t;
+            }
+        }
+        return crumbs.join(breadcrumbSeparator());
+    };
+
     for (const PageRegistry::Entry& e : pages) {
         // Only navigable leaves are search targets; category / drill parents
         // carry no QML and aren't a destination.
@@ -149,25 +171,32 @@ QVector<SearchEntry> SearchController::buildIndex() const
         se.title = e.title;
         se.icon = e.iconSource;
         se.keywords = m_pageKeywords.value(e.id);
-
-        QStringList crumbs;
-        const QStringList chain = m_app->parentChainFor(e.id);
-        for (const QString& ancestorId : chain) {
-            const QString t = titles.value(ancestorId);
-            if (!t.isEmpty()) {
-                crumbs << t;
-            }
-        }
-        se.subtitle = crumbs.join(breadcrumbSeparator());
+        se.subtitle = breadcrumbFor(e.id, false);
 
         entries.push_back(se);
     }
 
-    entries += m_staticEntries;
+    // Static + provider entries: auto-fill the breadcrumb from the page
+    // hierarchy when the producer didn't set one, so section/setting/entity
+    // results read consistently with page results. A producer-supplied subtitle
+    // (e.g. a window rule's match summary) is respected.
+    for (SearchEntry e : m_staticEntries) {
+        if (e.subtitle.isEmpty() && e.kind != SearchEntry::Kind::Page) {
+            e.subtitle = breadcrumbFor(e.pageId, true);
+        }
+        entries.push_back(e);
+    }
 
     for (const ISearchProvider* provider : m_providers) {
-        if (provider != nullptr) {
-            entries += provider->searchEntries();
+        if (provider == nullptr) {
+            continue;
+        }
+        const QVector<SearchEntry> provided = provider->searchEntries();
+        for (SearchEntry e : provided) {
+            if (e.subtitle.isEmpty()) {
+                e.subtitle = breadcrumbFor(e.pageId, true);
+            }
+            entries.push_back(e);
         }
     }
 

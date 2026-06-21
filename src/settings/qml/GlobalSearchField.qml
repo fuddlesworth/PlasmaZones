@@ -128,16 +128,22 @@ Item {
 
                     width: ListView.view ? ListView.view.width : implicitWidth
                     highlighted: ListView.isCurrentItem
+                    topPadding: Kirigami.Units.smallSpacing
+                    bottomPadding: Kirigami.Units.smallSpacing
                     Accessible.name: resultDelegate.modelData.subtitle.length > 0 ? i18nc("@info:whatsthis search result: title, breadcrumb", "%1, %2", resultDelegate.modelData.title, resultDelegate.modelData.subtitle) : resultDelegate.modelData.title
                     onClicked: root.activate(resultDelegate.index)
 
                     contentItem: RowLayout {
-                        spacing: Kirigami.Units.smallSpacing
+                        spacing: Kirigami.Units.largeSpacing
 
                         Kirigami.Icon {
                             source: resultDelegate.modelData.icon.length > 0 ? resultDelegate.modelData.icon : "settings-configure"
-                            Layout.preferredWidth: Kirigami.Units.iconSizes.small
-                            Layout.preferredHeight: Kirigami.Units.iconSizes.small
+                            Layout.alignment: Qt.AlignVCenter
+                            Layout.preferredWidth: Kirigami.Units.iconSizes.smallMedium
+                            Layout.preferredHeight: Kirigami.Units.iconSizes.smallMedium
+                            // Recolors symbolic icons to track the (highlighted)
+                            // text; full-color page icons ignore `color`.
+                            color: resultDelegate.highlighted ? Kirigami.Theme.highlightedTextColor : Kirigami.Theme.textColor
                         }
 
                         ColumnLayout {
@@ -148,6 +154,7 @@ Item {
                                 Layout.fillWidth: true
                                 text: resultDelegate.modelData.title
                                 elide: Text.ElideRight
+                                color: resultDelegate.highlighted ? Kirigami.Theme.highlightedTextColor : Kirigami.Theme.textColor
                             }
 
                             Label {
@@ -155,7 +162,8 @@ Item {
                                 visible: text.length > 0
                                 text: resultDelegate.modelData.subtitle
                                 font: Kirigami.Theme.smallFont
-                                color: Kirigami.Theme.disabledTextColor
+                                color: resultDelegate.highlighted ? Kirigami.Theme.highlightedTextColor : Kirigami.Theme.disabledTextColor
+                                opacity: resultDelegate.highlighted ? 0.85 : 1.0
                                 elide: Text.ElideRight
                             }
                         }

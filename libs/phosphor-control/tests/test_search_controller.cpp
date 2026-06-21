@@ -134,6 +134,26 @@ private Q_SLOTS:
                  QStringLiteral("Snapping › Appearance"));
     }
 
+    void settingSubtitleAutoDerivedFromPagePath()
+    {
+        // A Setting entry with no subtitle gets the full path to its page
+        // (ancestors + the page title), so it reads consistently with page
+        // results instead of an author-invented breadcrumb.
+        SearchController sc(m_app);
+        SearchEntry e;
+        e.kind = SearchEntry::Kind::Setting;
+        e.pageId = QStringLiteral("snapping-appearance-colors");
+        e.anchor = QStringLiteral("hue");
+        e.title = QStringLiteral("Hue");
+        sc.addEntry(e);
+
+        sc.setQuery(QStringLiteral("hue"));
+        const QVariantList r = sc.results();
+        QVERIFY(!r.isEmpty());
+        QCOMPARE(r.first().toMap().value(QStringLiteral("subtitle")).toString(),
+                 QStringLiteral("Snapping › Appearance › Colors"));
+    }
+
     void keywordEnablesSynonymSearch()
     {
         SearchController sc(m_app);
