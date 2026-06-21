@@ -270,31 +270,6 @@ const QLatin1String kPerScreenSnappingKeys[] = {
     PerScreenSnappingKey::OuterGapRight,
 };
 
-// Gaps sub-domain of the per-screen snapping keys — the keys the Snapping →
-// Window → Appearance "Gaps" card writes. The rest of kPerScreenSnappingKeys
-// (SnapAssist / ZoneSelector) is a different concern; the card reports its
-// override dot and clears its reset against ONLY these gap keys so a shared
-// whole-domain clear can't wipe the map's other overrides (data loss on reset).
-const QLatin1String kPerScreenSnappingGapsKeys[] = {
-    PerScreenSnappingKey::ZonePadding,   PerScreenSnappingKey::OuterGap,       PerScreenSnappingKey::UsePerSideOuterGap,
-    PerScreenSnappingKey::OuterGapTop,   PerScreenSnappingKey::OuterGapBottom, PerScreenSnappingKey::OuterGapLeft,
-    PerScreenSnappingKey::OuterGapRight,
-};
-
-bool isPerScreenSnappingGapsKey(const QString& key)
-{
-    // Snapping per-screen keys are stored unprefixed, so this is a direct
-    // membership test against the gaps-key set (derived once into a static set,
-    // mirroring isPerScreenAutotileGapsKey).
-    static const QSet<QString> gapsKeys = []() {
-        QSet<QString> keys;
-        for (const QLatin1String& k : kPerScreenSnappingGapsKeys)
-            keys.insert(QString(k));
-        return keys;
-    }();
-    return gapsKeys.contains(key);
-}
-
 QVariant validatePerScreenSnappingValue(const QString& key, const QVariant& value)
 {
     namespace K = PerScreenSnappingKey;
@@ -860,25 +835,6 @@ void Settings::clearPerScreenSnappingSettings(const QString& screenIdOrName)
 bool Settings::hasPerScreenSnappingSettings(const QString& screenIdOrName) const
 {
     return findPerScreenEntry(m_perScreenSnappingSettings, screenIdOrName) != m_perScreenSnappingSettings.constEnd();
-}
-
-// Gaps sub-domain accessors: the Gaps card reports/clears only the snapping
-// gap keys, leaving the map's other (SnapAssist / ZoneSelector) overrides
-// untouched — mirrors the autotile Gaps/Algorithm split.
-
-bool Settings::hasPerScreenSnappingGapsSettings(const QString& screenIdOrName) const
-{
-    return hasPerScreenKeySubset(m_perScreenSnappingSettings, screenIdOrName, isPerScreenSnappingGapsKey,
-                                 /*wantGaps=*/true);
-}
-
-void Settings::clearPerScreenSnappingGapsSettings(const QString& screenIdOrName)
-{
-    if (clearPerScreenKeySubset(m_perScreenSnappingSettings, screenIdOrName, isPerScreenSnappingGapsKey,
-                                /*clearGaps=*/true)) {
-        Q_EMIT perScreenSnappingSettingsChanged();
-        Q_EMIT settingsChanged();
-    }
 }
 
 } // namespace PlasmaZones
