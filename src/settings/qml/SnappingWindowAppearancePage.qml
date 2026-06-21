@@ -50,6 +50,7 @@ SettingsFlickable {
         SettingsCard {
             Layout.fillWidth: true
             headerText: i18n("Colors")
+            searchAnchor: "colors"
             collapsible: true
 
             contentItem: ColumnLayout {
@@ -57,6 +58,7 @@ SettingsFlickable {
 
                 SettingsRow {
                     title: i18n("Use system accent color")
+                    searchAnchor: "useSystemAccentColor"
                     description: i18n("Derive border colors from your system color scheme")
 
                     SettingsSwitch {
@@ -77,6 +79,7 @@ SettingsFlickable {
                 SettingsRow {
                     visible: !useSystemColorsSwitch.checked
                     title: i18n("Active border color")
+                    searchAnchor: "activeBorderColor"
                     description: i18n("Border color for the focused snapped window")
 
                     ColorSwatchRow {
@@ -95,6 +98,7 @@ SettingsFlickable {
                 SettingsRow {
                     visible: !useSystemColorsSwitch.checked
                     title: i18n("Inactive border color")
+                    searchAnchor: "inactiveBorderColor"
                     description: i18n("Border color for unfocused snapped windows")
 
                     ColorSwatchRow {
@@ -114,6 +118,7 @@ SettingsFlickable {
         SettingsCard {
             Layout.fillWidth: true
             headerText: i18n("Decorations")
+            searchAnchor: "decorations"
             collapsible: true
 
             contentItem: ColumnLayout {
@@ -121,6 +126,7 @@ SettingsFlickable {
 
                 SettingsRow {
                     title: i18n("Hide title bars")
+                    searchAnchor: "hideTitleBars"
                     description: i18n("Remove window title bars while snapped, restored when floating")
 
                     SettingsSwitch {
@@ -140,6 +146,7 @@ SettingsFlickable {
         SettingsCard {
             Layout.fillWidth: true
             headerText: i18n("Borders")
+            searchAnchor: "borders"
             showToggle: true
             toggleChecked: appSettings.snappingShowBorder
             onToggleClicked: checked => {
@@ -152,6 +159,7 @@ SettingsFlickable {
 
                 SettingsRow {
                     title: i18n("Border width")
+                    searchAnchor: "borderWidth"
                     description: i18n("Thickness of colored borders around snapped windows")
 
                     SettingsSpinBox {
@@ -168,6 +176,7 @@ SettingsFlickable {
 
                 SettingsRow {
                     title: i18n("Corner radius")
+                    searchAnchor: "cornerRadius"
                     description: i18n("Roundness of border corners (0 for square)")
 
                     SettingsSpinBox {
@@ -188,6 +197,7 @@ SettingsFlickable {
         // =================================================================
         GapsSettingsCard {
             Layout.fillWidth: true
+            searchAnchor: "gaps"
             scopeEnabled: true
             scopeAppSettings: settingsController
             scopeHasOverridesMethod: "hasPerScreenSnappingGapsSettings"

@@ -67,6 +67,7 @@ SettingsFlickable {
         SettingsCard {
             Layout.fillWidth: true
             headerText: i18n("Save current state")
+            searchAnchor: "saveMotionSet"
 
             contentItem: ColumnLayout {
                 spacing: Kirigami.Units.smallSpacing
@@ -144,6 +145,7 @@ SettingsFlickable {
         SettingsCard {
             Layout.fillWidth: true
             headerText: i18n("Saved sets (%1)", root.motionSetsList.length)
+            searchAnchor: "savedMotionSets"
 
             contentItem: ColumnLayout {
                 spacing: Kirigami.Units.smallSpacing

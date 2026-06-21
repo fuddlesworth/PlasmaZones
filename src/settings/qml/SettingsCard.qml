@@ -6,6 +6,7 @@ import QtQuick.Controls
 import QtQuick.Layouts
 import QtQuick.Window
 import org.kde.kirigami as Kirigami
+import "SearchAnchorHelpers.js" as SearchAnchors
 import org.phosphor.animation
 
 /**
@@ -50,6 +51,12 @@ Item {
     // Header enable toggle
     property bool showToggle: false
     property bool toggleChecked: false
+    /// Deep-link reveal anchor id for this card (section-level target). Empty
+    /// = not addressable. See SettingsFlickable.revealAnchor.
+    property string searchAnchor: ""
+    /// Stable type marker so a contained SettingsRow can identify its hosting
+    /// card by walking up the parent chain (used to expand the card on reveal).
+    readonly property bool isSettingsCard: true
 
     // Per-monitor scope chip (optional). When scopeEnabled, the header shows a
     // monitor scope chip right after the title, collapsed to "All Monitors",
@@ -83,6 +90,26 @@ Item {
             contentClip.height = 0;
             contentClip.opacity = 0;
         }
+        if (root.searchAnchor.length > 0)
+            Qt.callLater(root._registerSearchAnchor);
+    }
+    Component.onDestruction: {
+        if (root.searchAnchor.length > 0)
+            root._unregisterSearchAnchor();
+    }
+
+    // Register this card as a section-level reveal target (card == self).
+    // Deferred via callLater so the subtree is attached to the page before the
+    // shared helper walks the parent chain to find the hosting SettingsFlickable.
+    function _registerSearchAnchor() {
+        var pg = SearchAnchors.pageFor(root);
+        if (pg)
+            pg.registerSearchAnchor(root.searchAnchor, root, root);
+    }
+    function _unregisterSearchAnchor() {
+        var pg = SearchAnchors.pageFor(root);
+        if (pg)
+            pg.unregisterSearchAnchor(root.searchAnchor);
     }
     Layout.fillWidth: true
     implicitHeight: cardBg.height

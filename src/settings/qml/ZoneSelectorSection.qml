@@ -89,6 +89,7 @@ ColumnLayout {
     // overrides.
     SettingsRow {
         title: i18n("Zone selector popup")
+        searchAnchor: "zoneSelectorEnabled"
         description: i18n("Show a layout picker when dragging windows to screen edges")
 
         SettingsSwitch {
@@ -111,6 +112,7 @@ ColumnLayout {
             anchors.fill: parent
             enabled: appSettings.zoneSelectorEnabled
             headerText: i18n("Position & Trigger")
+            searchAnchor: "positionTrigger"
             collapsible: true
             scopeEnabled: true
             scopeAppSettings: root.controller
@@ -156,6 +158,7 @@ ColumnLayout {
                 // Trigger distance
                 SettingsRow {
                     title: i18n("Trigger distance")
+                    searchAnchor: "triggerDistance"
                     description: i18n("How close to the screen edge before the popup appears")
 
                     RowLayout {
@@ -203,6 +206,7 @@ ColumnLayout {
             anchors.fill: parent
             enabled: appSettings.zoneSelectorEnabled
             headerText: i18n("Layout Arrangement")
+            searchAnchor: "layoutArrangement"
             collapsible: true
             scopeEnabled: true
             scopeAppSettings: root.controller
@@ -214,6 +218,7 @@ ColumnLayout {
 
                 SettingsRow {
                     title: i18n("Arrangement")
+                    searchAnchor: "arrangement"
                     description: i18n("How layout previews are arranged in the popup")
 
                     WideComboBox {
@@ -250,6 +255,7 @@ ColumnLayout {
                 SettingsRow {
                     visible: root.effectiveLayoutMode === 0
                     title: i18n("Grid columns")
+                    searchAnchor: "gridColumns"
                     description: i18n("Number of layout previews per row")
 
                     SettingsSpinBox {
@@ -272,6 +278,7 @@ ColumnLayout {
                 SettingsRow {
                     visible: root.effectiveLayoutMode === 0
                     title: i18n("Max visible rows")
+                    searchAnchor: "maxVisibleRows"
                     description: i18n("Scrolling enabled when more rows exist")
 
                     SettingsSpinBox {
@@ -301,6 +308,7 @@ ColumnLayout {
             anchors.fill: parent
             enabled: appSettings.zoneSelectorEnabled
             headerText: i18n("Preview Size")
+            searchAnchor: "previewSize"
             collapsible: true
             scopeEnabled: true
             scopeAppSettings: root.controller

@@ -11,6 +11,12 @@
 #include "version.h"
 #include "phosphor_i18n.h"
 #include "phosphor_qml_i18n.h"
+#include "searchcatalog.h"
+#include "searchproviders.h"
+#include "windowrulecontroller.h"
+#include "windowrulemodel.h"
+
+#include <PhosphorControl/SearchController.h>
 
 #include "../core/constants.h"
 #include "../daemon/rendering/zoneshaderitem.h"
@@ -46,13 +52,16 @@ constexpr PlasmaZones::SingleInstanceIds kSettingsIds{PhosphorProtocol::Service:
 /// No Wayland workaround reliably convinces KWin to bring an already-mapped
 /// xdg_toplevel to the front from a programmatic caller, so the user has to
 /// focus the existing window themselves.
-bool activateRunningInstance(const QString& page)
+bool activateRunningInstance(const QString& address)
 {
     if (!PlasmaZones::SingleInstanceService::isRunning(kSettingsIds))
         return false;
 
-    if (!page.isEmpty()) {
-        PlasmaZones::SingleInstanceService::forward(kSettingsIds, QStringLiteral("setActivePage"), {page});
+    if (!address.isEmpty()) {
+        // The D-Bus method is still "setActivePage" (signature unchanged); the
+        // running instance routes it through navigateTo(), so an address with a
+        // trailing "#anchor" fragment deep-links to a specific setting.
+        PlasmaZones::SingleInstanceService::forward(kSettingsIds, QStringLiteral("setActivePage"), {address});
     }
     return true;
 }
@@ -97,12 +106,29 @@ int main(int argc, char* argv[])
     QCommandLineOption pageOption(QStringList{QStringLiteral("p"), QStringLiteral("page")},
                                   PhosphorI18n::tr("Open a specific settings page"), QStringLiteral("name"));
     parser.addOption(pageOption);
+    QCommandLineOption settingOption(QStringList{QStringLiteral("s"), QStringLiteral("setting")},
+                                     PhosphorI18n::tr("Reveal a specific setting on the page (deep link)"),
+                                     QStringLiteral("anchor"));
+    parser.addOption(settingOption);
+    QCommandLineOption sectionOption(QStringLiteral("section"),
+                                     PhosphorI18n::tr("Reveal a specific section on the page (deep link)"),
+                                     QStringLiteral("anchor"));
+    parser.addOption(sectionOption);
     parser.process(app);
 
     const QString requestedPage = parser.isSet(pageOption) ? parser.value(pageOption) : QString();
+    // --setting takes precedence over --section; either composes a
+    // "pageId#anchor" address consumed by navigateTo(). An anchor is
+    // meaningless without a page, so it's only appended when both are present.
+    const QString requestedAnchor = parser.isSet(settingOption)
+        ? parser.value(settingOption)
+        : (parser.isSet(sectionOption) ? parser.value(sectionOption) : QString());
+    const QString requestedAddress = (!requestedPage.isEmpty() && !requestedAnchor.isEmpty())
+        ? (requestedPage + QLatin1Char('#') + requestedAnchor)
+        : requestedPage;
 
-    // Single-instance: if another instance is running, forward the page request and exit
-    if (activateRunningInstance(requestedPage)) {
+    // Single-instance: if another instance is running, forward the request and exit
+    if (activateRunningInstance(requestedAddress)) {
         return 0;
     }
 
@@ -157,7 +183,7 @@ int main(int argc, char* argv[])
     // activateRunningInstance() check and now — retry forwarding and exit.
     if (!launcher.registerDBusService()) {
         qCWarning(PlasmaZones::lcCore) << "D-Bus service already owned; forwarding to running instance";
-        if (activateRunningInstance(requestedPage)) {
+        if (activateRunningInstance(requestedAddress)) {
             return 0;
         }
         // D-Bus name is taken but we can't reach the owner — bail out
@@ -170,6 +196,34 @@ int main(int argc, char* argv[])
     // shader browser — mirrors daemon/main.cpp + editor/main.cpp).
     qmlRegisterType<PlasmaZones::ZoneShaderItem>("PlasmaZones", 1, 0, "ZoneShaderItem");
 
+    // Global settings search, set up BEFORE the engine so the provider locals
+    // below outlive ~QQmlApplicationEngine: a model change signal firing during
+    // engine teardown must not reach a destroyed provider via invalidate() →
+    // buildIndex(). Page entries derive from the page registry; seedSearchCatalog
+    // adds per-page synonyms + addressable anchors. searchController is parented
+    // to `controller` (destroyed last).
+    auto* searchController = new PhosphorControl::SearchController(controller.app(), &controller);
+    PlasmaZones::seedSearchCatalog(searchController);
+
+    // Dynamic content providers (layouts, window rules). unique_ptr locals
+    // declared before the engine so they outlive it; SearchController holds them
+    // non-owning (ISearchProvider is not a QObject, so no parent applies).
+    auto layoutsProvider = std::make_unique<PlasmaZones::LayoutsSearchProvider>(&controller);
+    auto windowRulesProvider = std::make_unique<PlasmaZones::WindowRulesSearchProvider>(&controller);
+    searchController->registerProvider(layoutsProvider.get());
+    searchController->registerProvider(windowRulesProvider.get());
+    QObject::connect(&controller, &PlasmaZones::SettingsController::layoutsChanged, searchController,
+                     &PhosphorControl::SearchController::invalidate);
+    if (controller.windowRulesPage() != nullptr && controller.windowRulesPage()->model() != nullptr) {
+        // Both add/remove (countChanged) and any in-place edit (rename,
+        // match-summary, … via dataChanged) must refresh the index. invalidate()
+        // is lazy, so over-firing on unrelated role changes is cheap.
+        QObject::connect(controller.windowRulesPage()->model(), &PlasmaZones::WindowRuleModel::countChanged,
+                         searchController, &PhosphorControl::SearchController::invalidate);
+        QObject::connect(controller.windowRulesPage()->model(), &PlasmaZones::WindowRuleModel::dataChanged,
+                         searchController, &PhosphorControl::SearchController::invalidate);
+    }
+
     QQmlApplicationEngine engine;
 
     auto* localizedContext = new PhosphorLocalizedContext(&engine);
@@ -177,9 +231,10 @@ int main(int argc, char* argv[])
 
     engine.rootContext()->setContextProperty(QStringLiteral("settingsController"), &controller);
     engine.rootContext()->setContextProperty(QStringLiteral("appSettings"), controller.settings());
+    engine.rootContext()->setContextProperty(QStringLiteral("searchController"), searchController);
 
-    if (!requestedPage.isEmpty()) {
-        controller.setActivePage(requestedPage);
+    if (!requestedAddress.isEmpty()) {
+        controller.navigateTo(requestedAddress);
     }
 
     engine.loadFromModule("org.plasmazones.settings", "Main");

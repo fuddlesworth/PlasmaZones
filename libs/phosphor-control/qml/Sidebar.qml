@@ -72,6 +72,11 @@ ColumnLayout {
     property var expandedCategories: Object.create(null)
     //* Search text. Empty disables filtering.
     property alias searchText: searchField.text
+    /** When false, the sticky in-sidebar search field is hidden (and its
+     *  filter cleared). Lets a consumer that provides its own global search
+     *  (e.g. a header command field) suppress the redundant sidebar search
+     *  without losing the capability for other apps. */
+    property bool searchEnabled: true
     /** Optional Component instantiated next to each row's title. The
      *  loader exposes the row's entry as `modelData`. */
     property Component trailingDelegate: null
@@ -92,14 +97,6 @@ ColumnLayout {
     // (1.5×, 1.25×) don't yield sub-pixel widths that anti-alias to a
     // washed-out half-pixel line.
     readonly property int accentBarWidth: Math.round(Screen.devicePixelRatio * 2.5)
-    /** Rendered height of the sticky SearchField row's control (excludes
-     *  its surrounding Layout margins). The chrome binds the breadcrumb
-     *  bar's height to this so the search field and the breadcrumb sit
-     *  at the same vertical center and their separators land on the same
-     *  Y — keeping the sidebar header and content header aligned. Zero in
-     *  compact mode (search field hidden), so the consumer falls back to
-     *  the breadcrumb's own implicit height. */
-    readonly property real searchFieldHeight: searchField.visible ? searchField.implicitHeight : 0
 
     function drillInto(parentId) {
         // Short-circuit on either the already-displayed scope OR a
@@ -512,7 +509,7 @@ ColumnLayout {
         // (root.searchText = "") instead of directly on `text` makes
         // the side effect visible to external consumers that might be
         // tracking the aliased property.
-        visible: !root.compact
+        visible: !root.compact && root.searchEnabled
         onVisibleChanged: {
             if (!visible)
                 root.searchText = "";

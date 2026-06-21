@@ -20,6 +20,30 @@
 
 namespace PlasmaZones {
 
+void SettingsController::navigateTo(const QString& address)
+{
+    // Split the optional "#anchor" fragment. The page part flows through the
+    // normal setActivePage path (parent→leaf redirect + dirty handling +
+    // currentPageId sync); the fragment is keyed to the RESOLVED leaf so a
+    // parent-id address still reveals on the leaf it redirects to. A
+    // fragment-free address behaves byte-for-byte like setActivePage.
+    const int hash = address.indexOf(QLatin1Char('#'));
+    const QString page = (hash < 0) ? address : address.left(hash);
+    const QString anchor = (hash < 0) ? QString() : address.mid(hash + 1);
+
+    setActivePage(page);
+
+    // Key the anchor to the resolved leaf (mirroring setActivePage's redirect),
+    // and only when the page is valid — otherwise a bogus address would latch the
+    // anchor onto whatever page happened to be active.
+    if (!anchor.isEmpty() && app() != nullptr) {
+        const QString resolved = parentPageRedirects().value(page, page);
+        if (validPageNames().contains(resolved)) {
+            app()->setPendingAnchor(resolved, anchor);
+        }
+    }
+}
+
 void SettingsController::setActivePage(const QString& page)
 {
     // Resolve parent category names (e.g. "snapping" → "snapping-overlay-behavior")

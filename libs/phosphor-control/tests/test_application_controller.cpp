@@ -284,6 +284,55 @@ private Q_SLOTS:
         QCOMPARE(app.currentPageId(), QStringLiteral("known"));
     }
 
+    // ── Deep-link reveal latch (pending anchor) ──────────────────────────
+    void pendingAnchorConsumeOnceAndKeyed()
+    {
+        ApplicationController app;
+        app.registerPage(new StubPage(QStringLiteral("a")), {}, QStringLiteral("A"), QUrl());
+        app.registerPage(new StubPage(QStringLiteral("b")), {}, QStringLiteral("B"), QUrl());
+
+        QSignalSpy spy(&app, &ApplicationController::pendingAnchorChanged);
+        app.setCurrentPageId(QStringLiteral("a"));
+        app.setPendingAnchor(QStringLiteral("a"), QStringLiteral("foo"));
+        QCOMPARE(spy.count(), 1);
+
+        // Wrong page → nothing returned, pending preserved.
+        QVERIFY(app.takePendingAnchor(QStringLiteral("b")).isEmpty());
+        // Right page → returns the anchor and consumes it.
+        QCOMPARE(app.takePendingAnchor(QStringLiteral("a")), QStringLiteral("foo"));
+        // Consume-once: a second take is empty.
+        QVERIFY(app.takePendingAnchor(QStringLiteral("a")).isEmpty());
+    }
+
+    void pendingAnchorDiscardedOnNavigateAway()
+    {
+        ApplicationController app;
+        app.registerPage(new StubPage(QStringLiteral("a")), {}, QStringLiteral("A"), QUrl());
+        app.registerPage(new StubPage(QStringLiteral("b")), {}, QStringLiteral("B"), QUrl());
+
+        app.setCurrentPageId(QStringLiteral("a"));
+        app.setPendingAnchor(QStringLiteral("a"), QStringLiteral("foo"));
+        // Navigating to a different page must drop the stale pending anchor so
+        // a never-reached deep link never fires on the wrong page later — and the
+        // clear must emit pendingAnchorChanged so an already-current PageHost
+        // listener is notified.
+        QSignalSpy spy(&app, &ApplicationController::pendingAnchorChanged);
+        app.setCurrentPageId(QStringLiteral("b"));
+        QCOMPARE(spy.count(), 1);
+        QVERIFY(app.takePendingAnchor(QStringLiteral("a")).isEmpty());
+    }
+
+    void pendingAnchorRejectsEmptyParts()
+    {
+        ApplicationController app;
+        app.registerPage(new StubPage(QStringLiteral("a")), {}, QStringLiteral("A"), QUrl());
+
+        app.setPendingAnchor(QStringLiteral("a"), QString()); // empty anchor → no-op
+        QVERIFY(app.takePendingAnchor(QStringLiteral("a")).isEmpty());
+        app.setPendingAnchor(QString(), QStringLiteral("x")); // empty page → no-op
+        QVERIFY(app.takePendingAnchor(QString()).isEmpty());
+    }
+
     void registryIsAccessibleViaProperty()
     {
         ApplicationController app;
@@ -665,8 +714,8 @@ private Q_SLOTS:
         silent->setEmitApplyResult(false);
         // Stamping objectName exercises the "Domain %1 did not report
         // apply completion within timeout" branch in
-        // applicationcontroller.cpp's timeout handler — see the
-        // unnamed-vs-named arms around line 282 — instead of the
+        // applicationcontroller_async.cpp's timeout handler (the
+        // unnamed-vs-named arms in applyAllAsync) — instead of the
         // generic message. Asserting the name appears in the error
         // pins the named-domain branch.
         silent->setObjectName(QStringLiteral("SilentDomain"));
@@ -809,7 +858,7 @@ private Q_SLOTS:
     {
         // Symmetric forceResetAsyncState test for the discardAllAsync
         // half of the state machine — pins the `else if (m_discarding)`
-        // branch (around line 552 in applicationcontroller.cpp).
+        // branch in forceResetAsyncState (applicationcontroller_async.cpp).
         ApplicationController app;
         app.setAsyncBatchTimeoutMs(60'000);
 

@@ -68,6 +68,24 @@ public:
     QString currentPageId() const;
     void setCurrentPageId(const QString& id);
 
+    /** Deep-link reveal latch (generic — every settings app built on this
+     *  shell gets deep-link-to-anchor for free).
+     *
+     *  `setPendingAnchor` stashes a transient "reveal this anchor once its
+     *  page is built and current" request. `PageHost` consumes it via
+     *  `takePendingAnchor()` when the target page's Loader is ready + current
+     *  (and immediately when the page is already active, via the
+     *  `pendingAnchorChanged` signal), then invokes the page item's
+     *  `revealAnchor(anchor)` contract. The pending request is cleared
+     *  automatically when navigation moves to a different page
+     *  (discard-on-navigate-away), so a never-reached deep link never fires
+     *  on the wrong page. The fragment is NOT part of `currentPageId` — page
+     *  identity stays fragment-free so existing id comparisons are unaffected. */
+    void setPendingAnchor(const QString& pageId, const QString& anchor);
+    /// Returns + clears the pending anchor iff it targets `pageId`; otherwise
+    /// returns an empty string (consume-once).
+    Q_INVOKABLE QString takePendingAnchor(const QString& pageId);
+
     /** Register a page in the sidebar. The page is also tracked as a
      *  staging domain. The controller's parent is reassigned to this
      *  ApplicationController if it has none.
@@ -142,6 +160,9 @@ public:
 Q_SIGNALS:
     void dirtyChanged();
     void currentPageIdChanged();
+    /// Emitted when the deep-link pending anchor is set or cleared. PageHost
+    /// listens so an already-current page reveals immediately.
+    void pendingAnchorChanged();
     /// Emitted on every applying-state transition (false→true at the
     /// start of applyAllAsync, true→false when the last applyResult
     /// has landed). UnsavedChangesFooter binds Save button text +
@@ -177,6 +198,9 @@ private:
     PageRegistry* m_registry = nullptr;
     QList<QPointer<StagingDomain>> m_domains;
     QString m_currentPageId;
+    // Deep-link reveal latch (see setPendingAnchor). Transient; not page identity.
+    QString m_pendingAnchor;
+    QString m_pendingAnchorPage;
     bool m_dirty = false;
     // Set during applyAll / discardAll so each inner dirtyChanged →
     // recomputeDirty edge is suppressed; the outer transaction emits

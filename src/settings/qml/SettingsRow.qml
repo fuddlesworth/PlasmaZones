@@ -5,6 +5,7 @@ import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
 import org.kde.kirigami as Kirigami
+import "SearchAnchorHelpers.js" as SearchAnchors
 
 /**
  * @brief Two-line setting row with title, description, and a right-aligned control.
@@ -24,6 +25,9 @@ Item {
     // ── Public API ──────────────────────────────────────────────────────
     property string title: ""
     property string description: ""
+    /// Deep-link reveal anchor id for this row. Empty = not addressable.
+    /// See SettingsFlickable.revealAnchor.
+    property string searchAnchor: ""
     default property alias content: controlContainer.data
 
     Layout.fillWidth: true
@@ -32,6 +36,30 @@ Item {
     Accessible.name: root.title
     Accessible.description: root.description
     Accessible.role: Accessible.Row
+
+    Component.onCompleted: {
+        if (root.searchAnchor.length > 0)
+            Qt.callLater(root._registerSearchAnchor);
+    }
+    Component.onDestruction: {
+        if (root.searchAnchor.length > 0)
+            root._unregisterSearchAnchor();
+    }
+
+    // Register this row's reveal anchor with the hosting page, resolving the
+    // page + collapsible card via the shared walk-up helpers. Deferred via
+    // callLater because SettingsCard reparents its contentItem — the parent
+    // chain to the page is only complete after construction settles.
+    function _registerSearchAnchor() {
+        var pg = SearchAnchors.pageFor(root);
+        if (pg)
+            pg.registerSearchAnchor(root.searchAnchor, root, SearchAnchors.cardFor(root));
+    }
+    function _unregisterSearchAnchor() {
+        var pg = SearchAnchors.pageFor(root);
+        if (pg)
+            pg.unregisterSearchAnchor(root.searchAnchor);
+    }
 
     RowLayout {
         id: rowLayout
@@ -64,7 +92,6 @@ Item {
                 maximumLineCount: 3
                 elide: Text.ElideRight
             }
-
         }
 
         // Right side: control widget (default children)
@@ -75,7 +102,5 @@ Item {
             Layout.maximumWidth: rowLayout.width * 0.45
             spacing: Kirigami.Units.smallSpacing
         }
-
     }
-
 }

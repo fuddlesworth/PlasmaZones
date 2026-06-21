@@ -26,11 +26,10 @@ RowLayout {
 
     required property ApplicationController controller
     /** Per-segment maximum width budget. Long localised crumbs
-     *  (Spanish / German with deep nesting) push the headerExtras
-     *  Loader off-screen — clamp each crumb to this budget and elide
-     *  with a middle ellipsis so both ends (parent context + leaf
-     *  name) stay readable. Consumers can override for tighter or
-     *  wider chrome. */
+     *  (Spanish / German with deep nesting) would otherwise overflow the
+     *  breadcrumb bar — clamp each crumb to this budget and elide with a
+     *  middle ellipsis so both ends (parent context + leaf name) stay
+     *  readable. Consumers can override for tighter or wider chrome. */
     property real maxSegmentWidth: Kirigami.Units.gridUnit * 20
     //  Cycle guard EXTENDS ApplicationController::parentChainFor's
     //  kMaxParentChainHops with a seen-set: the C++ guard catches an
@@ -119,11 +118,10 @@ RowLayout {
                 }
 
                 // Long localised crumbs (e.g. "Mostrar configuración
-                // avanzada de personalización") would otherwise push the
-                // headerExtras Loader off-screen — clamp to the
-                // consumer-controllable maxSegmentWidth budget and
-                // elide with a middle ellipsis so both ends (parent
-                // context + leaf name) stay readable.
+                // avanzada de personalización") would otherwise overflow the
+                // breadcrumb bar — clamp to the consumer-controllable
+                // maxSegmentWidth budget and elide with a middle ellipsis so
+                // both ends (parent context + leaf name) stay readable.
                 Layout.preferredWidth: Math.min(segmentLabel.implicitWidth, root.maxSegmentWidth)
                 Layout.preferredHeight: segmentLabel.implicitHeight
                 activeFocusOnTab: segmentRow.clickable

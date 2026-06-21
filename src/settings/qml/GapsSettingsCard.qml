@@ -16,10 +16,10 @@ SettingsCard {
 
     required property int gapMax
     required property int gapMin
-    // The "primary" gap is the inter-window spacing: "Inner gap" for tiling,
-    // "Zone padding" for snapping. It has its own bounds (clamped against a
-    // different ConfigDefaults range than the outer/per-side gaps), so the UI
-    // range always matches the validator's clamp range.
+    // The "primary" gap is the inter-window spacing ("Inner gap" — both tiling
+    // and snapping share the label via primaryGapLabel). It has its own bounds
+    // (clamped against a different ConfigDefaults range than the outer/per-side
+    // gaps), so the UI range always matches the validator's clamp range.
     required property int primaryGapMin
     required property int primaryGapMax
     required property int primaryGapValue
@@ -32,8 +32,9 @@ SettingsCard {
     // Smart gaps is autotile-only; snapping hides the row.
     property bool showSmartGaps: true
     property bool smartGapsValue: false
-    // Labels differ per mode: tiling uses "Inner gap" / "Outer gap"; snapping
-    // uses "Zone padding" / "Edge gap".
+    // Defaults; hosts may override the label/description per mode. Tiling and
+    // snapping currently share "Inner gap" / "Outer gap" for cross-mode
+    // consistency (snapping just overrides the descriptions).
     property string primaryGapLabel: i18n("Inner gap")
     property string primaryGapDescription: i18n("Space between tiled windows")
     property string outerGapLabel: i18n("Outer gap")
@@ -56,6 +57,7 @@ SettingsCard {
 
         SettingsRow {
             title: root.primaryGapLabel
+            searchAnchor: "primaryGap"
             description: root.primaryGapDescription
 
             SpinBox {
@@ -79,6 +81,7 @@ SettingsCard {
         SettingsRow {
             visible: !tilePerSideSwitch.checked
             title: root.outerGapLabel
+            searchAnchor: "outerGap"
             description: root.outerGapDescription
 
             SpinBox {
@@ -99,6 +102,7 @@ SettingsCard {
 
         SettingsRow {
             title: i18n("Per-side outer gaps")
+            searchAnchor: "perSideOuterGaps"
             description: tilePerSideSwitch.checked ? i18n("Set different gap sizes for each screen edge") : i18n("Use a single outer gap value for all edges")
 
             SettingsSwitch {
@@ -205,6 +209,7 @@ SettingsCard {
         SettingsRow {
             visible: root.showSmartGaps
             title: i18n("Smart gaps")
+            searchAnchor: "smartGaps"
             description: i18n("Remove all gaps when only one window is tiled")
 
             SettingsSwitch {

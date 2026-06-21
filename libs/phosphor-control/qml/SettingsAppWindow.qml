@@ -320,50 +320,41 @@ Kirigami.ApplicationWindow {
                 Layout.fillWidth: true
                 spacing: 0
 
+                // Header extras (e.g. global search) on their own centered row
+                // ABOVE the breadcrumb trail. A Layout child with visible:false
+                // is excluded from the column, so consumers that don't provide a
+                // headerExtras Component get no empty row — no wrapper needed.
+                Loader {
+                    id: headerExtrasLoader
+
+                    // Centered horizontally; the Loader adopts the loaded item's
+                    // implicit size (slot contract: the consumer Component
+                    // declares implicitWidth/Height). visible gates on
+                    // Loader.Ready so a mid-instantiation skeleton can't take
+                    // layout space.
+                    Layout.alignment: Qt.AlignHCenter
+                    Layout.topMargin: Kirigami.Units.smallSpacing
+                    Layout.bottomMargin: Kirigami.Units.smallSpacing
+                    visible: status === Loader.Ready && item !== null
+                }
+
                 RowLayout {
                     id: breadcrumbBar
 
                     Layout.fillWidth: true
-                    // Horizontal gutter matches the PageHost content
-                    // margin + the UnsavedChangesFooter inset (both
-                    // largeSpacing) so the breadcrumb, page body, and
-                    // footer share one left/right edge. Vertical stays
-                    // at smallSpacing to keep the breadcrumb row compact.
+                    // Horizontal gutter matches the PageHost content margin + the
+                    // UnsavedChangesFooter inset (both largeSpacing) so breadcrumb,
+                    // page body, and footer share one left/right edge.
                     Layout.leftMargin: Kirigami.Units.largeSpacing
                     Layout.rightMargin: Kirigami.Units.largeSpacing
                     Layout.topMargin: Kirigami.Units.smallSpacing
                     Layout.bottomMargin: Kirigami.Units.smallSpacing
-                    // Match the sidebar's SearchField height so the two
-                    // header bars line up and their separators land on
-                    // the same Y. Falls back to the bar's own content
-                    // height in compact mode (search field hidden →
-                    // searchFieldHeight is 0).
-                    Layout.preferredHeight: Math.max(breadcrumbBar.implicitHeight, sidebarItem.searchFieldHeight)
                     spacing: Kirigami.Units.smallSpacing
 
                     Breadcrumbs {
                         Layout.fillWidth: true
-                        // Center the crumb trail in the bar so it shares
-                        // the search field's vertical center (the bar's
-                        // height is matched to the search field below).
                         Layout.alignment: Qt.AlignVCenter
                         controller: root.controller
-                    }
-
-                    Loader {
-                        id: headerExtrasLoader
-
-                        // Sizes from the loaded item's implicitWidth/Height so
-                        // the slot contract is "consumer Component must declare
-                        // implicitWidth/Height" rather than the silent "renders
-                        // as 0×0 if missing" pre-fix behaviour. Layout.alignment
-                        // matches the Breadcrumbs centering above. visible gates
-                        // on Loader.Ready so a mid-instantiation skeleton can't
-                        // take layout space.
-                        Layout.preferredWidth: item ? item.implicitWidth : 0
-                        Layout.preferredHeight: item ? item.implicitHeight : 0
-                        Layout.alignment: Qt.AlignVCenter
-                        visible: status === Loader.Ready && item
                     }
                 }
 

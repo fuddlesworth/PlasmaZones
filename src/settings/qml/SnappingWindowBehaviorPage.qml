@@ -37,6 +37,7 @@ SettingsFlickable {
 
                 anchors.fill: parent
                 headerText: i18n("Snap Assist")
+                searchAnchor: "snapAssist"
                 showToggle: true
                 toggleChecked: appSettings.snapAssistFeatureEnabled
                 collapsible: true
@@ -49,6 +50,7 @@ SettingsFlickable {
 
                     SettingsRow {
                         title: i18n("Always show after snapping")
+                        searchAnchor: "alwaysShowAfterSnapping"
                         description: i18n("Show a window picker after every snap to fill remaining empty zones")
 
                         SettingsSwitch {
@@ -66,6 +68,7 @@ SettingsFlickable {
 
                     SettingsRow {
                         title: i18n("Hold to enable")
+                        searchAnchor: "holdToEnable"
                         description: i18n("Hold this modifier when releasing a window to show the picker for that snap only")
                         enabled: !snapAssistAlwaysSwitch.checked
                         opacity: enabled ? 1 : 0.4
@@ -98,6 +101,7 @@ SettingsFlickable {
 
                 anchors.fill: parent
                 headerText: i18n("Window Handling")
+                searchAnchor: "windowHandling"
                 collapsible: true
 
                 contentItem: ColumnLayout {
@@ -105,6 +109,7 @@ SettingsFlickable {
 
                     SettingsRow {
                         title: i18n("Re-snap on resolution change")
+                        searchAnchor: "reSnapOnResolutionChange"
                         description: i18n("Move windows back to their zones after the screen resolution changes")
 
                         SettingsSwitch {
@@ -120,6 +125,7 @@ SettingsFlickable {
 
                     SettingsRow {
                         title: i18n("Open new windows in the last-used zone")
+                        searchAnchor: "openNewWindowsInLastUsedZone"
                         description: i18n("Snap every newly opened window into whichever zone you most recently snapped a window into")
 
                         SettingsSwitch {
@@ -135,6 +141,7 @@ SettingsFlickable {
 
                     SettingsRow {
                         title: i18n("Auto-assign new windows for all layouts")
+                        searchAnchor: "autoAssignNewWindowsAllLayouts"
                         description: i18n("Fill the first empty zone when a new window opens. When on, this overrides each layout's individual auto-assign toggle and applies to every layout.")
 
                         SettingsSwitch {
@@ -150,6 +157,7 @@ SettingsFlickable {
 
                     SettingsRow {
                         title: i18n("Restore size on unsnap")
+                        searchAnchor: "restoreSizeOnUnsnap"
                         description: i18n("Return a window to its original size when dragged out of a zone")
 
                         SettingsSwitch {
@@ -165,6 +173,7 @@ SettingsFlickable {
 
                     SettingsRow {
                         title: i18n("Restore windows to their previous zone")
+                        searchAnchor: "restoreWindowsToPreviousZone"
                         description: i18n("When an app reopens, during the session or after a logout, return it to the zone it was last snapped in")
 
                         SettingsSwitch {
@@ -180,6 +189,7 @@ SettingsFlickable {
 
                     SettingsRow {
                         title: i18n("Restore unsnapped windows to their previous position")
+                        searchAnchor: "restoreUnsnappedWindowsPosition"
                         description: i18n("When an unsnapped window reopens after a logout, it returns to the position and monitor it was on instead of wherever the compositor would place it. A per-window rule can override this either way, opting individual windows in or out.")
 
                         SettingsSwitch {
@@ -195,6 +205,7 @@ SettingsFlickable {
 
                     SettingsRow {
                         title: i18n("Unfloat to a zone when there is no previous zone")
+                        searchAnchor: "unfloatToZoneFallback"
                         description: i18n("When you unfloat a window that was never snapped, snap it to a fallback zone (last used, then first empty, then the first zone) instead of leaving it floating.")
 
                         SettingsSwitch {
@@ -210,6 +221,7 @@ SettingsFlickable {
 
                     SettingsRow {
                         title: i18n("Sticky windows")
+                        searchAnchor: "stickyWindows"
                         description: i18n("How to handle windows that appear on all desktops")
 
                         WideComboBox {
@@ -252,6 +264,7 @@ SettingsFlickable {
 
                 anchors.fill: parent
                 headerText: i18n("Focus")
+                searchAnchor: "focus"
                 collapsible: true
 
                 contentItem: ColumnLayout {
@@ -259,6 +272,7 @@ SettingsFlickable {
 
                     SettingsRow {
                         title: i18n("Focus new windows")
+                        searchAnchor: "focusNewWindows"
                         description: i18n("Focus a window when it is automatically placed into a zone on open")
 
                         SettingsSwitch {
@@ -274,6 +288,7 @@ SettingsFlickable {
 
                     SettingsRow {
                         title: i18n("Focus follows mouse")
+                        searchAnchor: "focusFollowsMouse"
                         description: i18n("Moving the mouse pointer over a snapped window gives it focus")
 
                         SettingsSwitch {
