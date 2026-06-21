@@ -135,6 +135,18 @@ private Q_SLOTS:
         // Garbage far from everything → no suggestion.
         QVERIFY(SearchRanker::closestTitle(QStringLiteral("zxqwvb"), entries).isEmpty());
     }
+
+    void shortQueryDoesNotFuzzyMatch()
+    {
+        // A <4-char query must not subsequence-match — "gap" must not hit
+        // "Graphics" (title or keyword), which was a real false positive.
+        QCOMPARE(SearchRanker::score(QStringLiteral("gap"), pageEntry(QStringLiteral("Graphics"))), 0);
+        QCOMPARE(SearchRanker::score(QStringLiteral("gap"),
+                                     pageEntry(QStringLiteral("Rendering"), {QStringLiteral("graphics")})),
+                 0);
+        // 4+ char subsequence still matches.
+        QVERIFY(SearchRanker::score(QStringLiteral("grph"), pageEntry(QStringLiteral("Graphics"))) > 0);
+    }
 };
 
 QTEST_MAIN(TestSearchRanker)

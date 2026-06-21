@@ -68,6 +68,13 @@ int fieldScore(const QString& field, const QString& needle)
     if (f.contains(needle)) {
         return 400;
     }
+    // Subsequence (gappy) matching is only trustworthy for longer queries — a
+    // 3-char query subsequence-matches far too much ("gap" ⊂ "graphics"), which
+    // surfaces nonsense. Short queries must hit exact/prefix/word-start/substring
+    // or miss entirely.
+    if (needle.size() < 4) {
+        return 0;
+    }
     return subsequenceScore(f, needle);
 }
 

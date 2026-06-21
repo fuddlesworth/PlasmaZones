@@ -320,50 +320,49 @@ Kirigami.ApplicationWindow {
                 Layout.fillWidth: true
                 spacing: 0
 
-                RowLayout {
-                    id: breadcrumbBar
+                // Header extras (e.g. global search) on their own centered row
+                // ABOVE the breadcrumb trail. Collapses to zero height when no
+                // headerExtras Component is provided, so consumers that don't use
+                // the slot just see the breadcrumb row.
+                Item {
+                    id: headerExtrasRow
 
                     Layout.fillWidth: true
-                    // Horizontal gutter matches the PageHost content
-                    // margin + the UnsavedChangesFooter inset (both
-                    // largeSpacing) so the breadcrumb, page body, and
-                    // footer share one left/right edge. Vertical stays
-                    // at smallSpacing to keep the breadcrumb row compact.
-                    Layout.leftMargin: Kirigami.Units.largeSpacing
-                    Layout.rightMargin: Kirigami.Units.largeSpacing
-                    Layout.topMargin: Kirigami.Units.smallSpacing
-                    Layout.bottomMargin: Kirigami.Units.smallSpacing
-                    // Match the sidebar's SearchField height so the two
-                    // header bars line up and their separators land on
-                    // the same Y. Falls back to the bar's own content
-                    // height in compact mode (search field hidden →
-                    // searchFieldHeight is 0).
-                    Layout.preferredHeight: Math.max(breadcrumbBar.implicitHeight, sidebarItem.searchFieldHeight)
-                    spacing: Kirigami.Units.smallSpacing
-
-                    Breadcrumbs {
-                        Layout.fillWidth: true
-                        // Center the crumb trail in the bar so it shares
-                        // the search field's vertical center (the bar's
-                        // height is matched to the search field below).
-                        Layout.alignment: Qt.AlignVCenter
-                        controller: root.controller
-                    }
+                    visible: headerExtrasLoader.visible
+                    implicitHeight: headerExtrasLoader.visible ? headerExtrasLoader.implicitHeight + Kirigami.Units.smallSpacing * 2 : 0
+                    Layout.preferredHeight: implicitHeight
 
                     Loader {
                         id: headerExtrasLoader
 
-                        // Sizes from the loaded item's implicitWidth/Height so
-                        // the slot contract is "consumer Component must declare
-                        // implicitWidth/Height" rather than the silent "renders
-                        // as 0×0 if missing" pre-fix behaviour. Layout.alignment
-                        // matches the Breadcrumbs centering above. visible gates
-                        // on Loader.Ready so a mid-instantiation skeleton can't
-                        // take layout space.
-                        Layout.preferredWidth: item ? item.implicitWidth : 0
-                        Layout.preferredHeight: item ? item.implicitHeight : 0
-                        Layout.alignment: Qt.AlignVCenter
+                        // Centered horizontally. Width/height come from the loaded
+                        // item (slot contract: the consumer Component declares
+                        // implicitWidth/Height). visible gates on Loader.Ready so
+                        // a mid-instantiation skeleton can't take layout space.
+                        anchors.centerIn: parent
+                        width: item ? item.implicitWidth : 0
+                        height: item ? item.implicitHeight : 0
                         visible: status === Loader.Ready && item
+                    }
+                }
+
+                RowLayout {
+                    id: breadcrumbBar
+
+                    Layout.fillWidth: true
+                    // Horizontal gutter matches the PageHost content margin + the
+                    // UnsavedChangesFooter inset (both largeSpacing) so breadcrumb,
+                    // page body, and footer share one left/right edge.
+                    Layout.leftMargin: Kirigami.Units.largeSpacing
+                    Layout.rightMargin: Kirigami.Units.largeSpacing
+                    Layout.topMargin: Kirigami.Units.smallSpacing
+                    Layout.bottomMargin: Kirigami.Units.smallSpacing
+                    spacing: Kirigami.Units.smallSpacing
+
+                    Breadcrumbs {
+                        Layout.fillWidth: true
+                        Layout.alignment: Qt.AlignVCenter
+                        controller: root.controller
                     }
                 }
 
