@@ -30,6 +30,18 @@ void addSetting(PhosphorControl::SearchController* search, const QString& pageId
     search->addEntry(e);
 }
 
+void addSection(PhosphorControl::SearchController* search, const QString& pageId, const QString& anchor,
+                const QString& title, const QString& breadcrumb)
+{
+    SearchEntry e;
+    e.kind = SearchEntry::Kind::Section;
+    e.pageId = pageId;
+    e.anchor = anchor;
+    e.title = title;
+    e.subtitle = breadcrumb;
+    search->addEntry(e);
+}
+
 } // namespace
 
 void seedSearchCatalog(PhosphorControl::SearchController* search)
@@ -150,6 +162,33 @@ void seedSearchCatalog(PhosphorControl::SearchController* search)
                {PhosphorI18n::tr("dialog"), PhosphorI18n::tr("popup"), PhosphorI18n::tr("tooltip")});
     addSetting(search, QStringLiteral("general"), QStringLiteral("resetDefaults"),
                PhosphorI18n::tr("Reset to defaults"), general);
+
+    // ── Section anchors ──────────────────────────────────────────────────
+    // Jump to a card on its page; paired with searchAnchor tags on those
+    // SettingsCards. (Behaviour pages first; the rest grow page-by-page.)
+    const QString snapOverlay = PhosphorI18n::tr("Snapping › Overlay");
+    addSection(search, QStringLiteral("snapping-overlay-behavior"), QStringLiteral("triggers"),
+               PhosphorI18n::tr("Triggers"), snapOverlay);
+    addSection(search, QStringLiteral("snapping-overlay-behavior"), QStringLiteral("zoneSpan"),
+               PhosphorI18n::tr("Zone Span"), snapOverlay);
+    addSection(search, QStringLiteral("snapping-overlay-behavior"), QStringLiteral("display"),
+               PhosphorI18n::tr("Display"), snapOverlay);
+
+    const QString snapWindow = PhosphorI18n::tr("Snapping › Window");
+    addSection(search, QStringLiteral("snapping-window-behavior"), QStringLiteral("snapAssist"),
+               PhosphorI18n::tr("Snap Assist"), snapWindow);
+    addSection(search, QStringLiteral("snapping-window-behavior"), QStringLiteral("windowHandling"),
+               PhosphorI18n::tr("Window Handling"), snapWindow);
+    addSection(search, QStringLiteral("snapping-window-behavior"), QStringLiteral("focus"), PhosphorI18n::tr("Focus"),
+               snapWindow);
+
+    const QString tilingWindow = PhosphorI18n::tr("Tiling › Window");
+    addSection(search, QStringLiteral("tiling-behavior"), QStringLiteral("triggers"), PhosphorI18n::tr("Triggers"),
+               tilingWindow);
+    addSection(search, QStringLiteral("tiling-behavior"), QStringLiteral("windowHandling"),
+               PhosphorI18n::tr("Window Handling"), tilingWindow);
+    addSection(search, QStringLiteral("tiling-behavior"), QStringLiteral("focus"), PhosphorI18n::tr("Focus"),
+               tilingWindow);
 }
 
 } // namespace PlasmaZones

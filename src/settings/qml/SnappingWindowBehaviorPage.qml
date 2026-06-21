@@ -37,6 +37,7 @@ SettingsFlickable {
 
                 anchors.fill: parent
                 headerText: i18n("Snap Assist")
+                searchAnchor: "snapAssist"
                 showToggle: true
                 toggleChecked: appSettings.snapAssistFeatureEnabled
                 collapsible: true
@@ -98,6 +99,7 @@ SettingsFlickable {
 
                 anchors.fill: parent
                 headerText: i18n("Window Handling")
+                searchAnchor: "windowHandling"
                 collapsible: true
 
                 contentItem: ColumnLayout {
@@ -252,6 +254,7 @@ SettingsFlickable {
 
                 anchors.fill: parent
                 headerText: i18n("Focus")
+                searchAnchor: "focus"
                 collapsible: true
 
                 contentItem: ColumnLayout {

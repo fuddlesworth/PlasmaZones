@@ -29,6 +29,7 @@ SettingsFlickable {
         SettingsCard {
             Layout.fillWidth: true
             headerText: i18n("Triggers")
+            searchAnchor: "triggers"
             collapsible: true
 
             contentItem: ColumnLayout {
@@ -95,6 +96,7 @@ SettingsFlickable {
         SettingsCard {
             Layout.fillWidth: true
             headerText: i18n("Window Handling")
+            searchAnchor: "windowHandling"
             collapsible: true
 
             contentItem: ColumnLayout {
@@ -247,6 +249,7 @@ SettingsFlickable {
         SettingsCard {
             Layout.fillWidth: true
             headerText: i18n("Focus")
+            searchAnchor: "focus"
             collapsible: true
 
             contentItem: ColumnLayout {

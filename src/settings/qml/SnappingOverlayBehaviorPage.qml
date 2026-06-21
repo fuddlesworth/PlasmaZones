@@ -38,6 +38,7 @@ SettingsFlickable {
 
                 anchors.fill: parent
                 headerText: i18n("Triggers")
+                searchAnchor: "triggers"
                 collapsible: true
 
                 contentItem: ColumnLayout {
@@ -120,6 +121,7 @@ SettingsFlickable {
 
                 anchors.fill: parent
                 headerText: i18n("Zone Span")
+                searchAnchor: "zoneSpan"
                 showToggle: true
                 toggleChecked: appSettings.zoneSpanEnabled
                 collapsible: true
@@ -193,6 +195,7 @@ SettingsFlickable {
 
                 anchors.fill: parent
                 headerText: i18n("Display")
+                searchAnchor: "display"
                 collapsible: true
 
                 contentItem: ColumnLayout {
