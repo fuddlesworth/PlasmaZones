@@ -53,6 +53,9 @@ Item {
     /// Deep-link reveal anchor id for this card (section-level target). Empty
     /// = not addressable. See SettingsFlickable.revealAnchor.
     property string searchAnchor: ""
+    /// Stable type marker so a contained SettingsRow can identify its hosting
+    /// card by walking up the parent chain (used to expand the card on reveal).
+    readonly property bool isSettingsCard: true
 
     // Per-monitor scope chip (optional). When scopeEnabled, the header shows a
     // monitor scope chip right after the title, collapsed to "All Monitors",

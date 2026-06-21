@@ -115,10 +115,10 @@ Flickable {
 
         var card = entry.card;
         if (card && card.collapsible === true && card.collapsed === true) {
-            // Expand, then settle: connecting to expandFinished would leak (and
-            // never fire) if the card is re-collapsed mid-animation, so drive the
-            // post-expand scroll off a one-shot timer (≈ the expand duration).
-            // _scrollToReveal still defers a frame for final layout.
+            // Expand, then settle: drive the post-expand scroll off a one-shot
+            // timer (≈ the expand duration) rather than an expand-finished signal —
+            // a signal would leak / never fire if the card is re-collapsed
+            // mid-animation. _scrollToReveal still defers a frame for final layout.
             settingsFlickable._revealPendingItem = entry.item;
             card.collapsed = false;
             revealSettleTimer.restart();

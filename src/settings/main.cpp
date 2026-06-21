@@ -196,24 +196,18 @@ int main(int argc, char* argv[])
     // shader browser — mirrors daemon/main.cpp + editor/main.cpp).
     qmlRegisterType<PlasmaZones::ZoneShaderItem>("PlasmaZones", 1, 0, "ZoneShaderItem");
 
-    QQmlApplicationEngine engine;
-
-    auto* localizedContext = new PhosphorLocalizedContext(&engine);
-    engine.rootContext()->setContextObject(localizedContext);
-
-    engine.rootContext()->setContextProperty(QStringLiteral("settingsController"), &controller);
-    engine.rootContext()->setContextProperty(QStringLiteral("appSettings"), controller.settings());
-
-    // Global settings search. Page entries are derived from the page registry;
-    // seedSearchCatalog adds per-page synonyms + addressable setting anchors.
-    // Parented to `controller` (declared before the engine, destroyed after).
+    // Global settings search, set up BEFORE the engine so the provider locals
+    // below outlive ~QQmlApplicationEngine: a model change signal firing during
+    // engine teardown must not reach a destroyed provider via invalidate() →
+    // buildIndex(). Page entries derive from the page registry; seedSearchCatalog
+    // adds per-page synonyms + addressable anchors. searchController is parented
+    // to `controller` (destroyed last).
     auto* searchController = new PhosphorControl::SearchController(controller.app(), &controller);
     PlasmaZones::seedSearchCatalog(searchController);
 
-    // Dynamic content providers (layouts, window rules). Owned here as
-    // unique_ptr locals that outlive the engine + searchController (which holds
-    // them non-owning); ISearchProvider is not a QObject, so no parent applies.
-    // Re-snapshot is driven by the source change signals below.
+    // Dynamic content providers (layouts, window rules). unique_ptr locals
+    // declared before the engine so they outlive it; SearchController holds them
+    // non-owning (ISearchProvider is not a QObject, so no parent applies).
     auto layoutsProvider = std::make_unique<PlasmaZones::LayoutsSearchProvider>(&controller);
     auto windowRulesProvider = std::make_unique<PlasmaZones::WindowRulesSearchProvider>(&controller);
     searchController->registerProvider(layoutsProvider.get());
@@ -229,6 +223,13 @@ int main(int argc, char* argv[])
                          searchController, &PhosphorControl::SearchController::invalidate);
     }
 
+    QQmlApplicationEngine engine;
+
+    auto* localizedContext = new PhosphorLocalizedContext(&engine);
+    engine.rootContext()->setContextObject(localizedContext);
+
+    engine.rootContext()->setContextProperty(QStringLiteral("settingsController"), &controller);
+    engine.rootContext()->setContextProperty(QStringLiteral("appSettings"), controller.settings());
     engine.rootContext()->setContextProperty(QStringLiteral("searchController"), searchController);
 
     if (!requestedAddress.isEmpty()) {

@@ -62,7 +62,7 @@ Item {
     function _searchCard() {
         var p = root.parent;
         while (p) {
-            if (p.expandFinished !== undefined)
+            if (p.isSettingsCard === true)
                 return p;
 
             p = p.parent;
