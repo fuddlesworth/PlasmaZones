@@ -322,6 +322,7 @@ qt_add_qml_module(plasmazones-settings
         qml/ShaderBrowserPage.qml
         qml/ShaderBrowserCard.qml
         qml/FilterDisclosureHeader.qml
+        qml/CollapsibleChipFlow.qml
         qml/ShaderBrowserDetailDialog.qml
         qml/CurveEditorDialog.qml
         qml/CurvePresets.qml

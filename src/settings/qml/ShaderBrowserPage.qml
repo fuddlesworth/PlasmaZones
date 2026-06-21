@@ -406,10 +406,8 @@ SettingsFlickable {
             hasActiveFilters: root.selectedCategory.length > 0
         }
 
-        Flow {
-            Layout.fillWidth: true
-            spacing: Kirigami.Units.smallSpacing
-            visible: shaderFilterHeader.expanded
+        CollapsibleChipFlow {
+            open: shaderFilterHeader.expanded
 
             Button {
                 text: i18nc("@action:button show every shader category", "All")

@@ -440,10 +440,8 @@ SettingsFlickable {
             hasActiveFilters: page.chipFilter !== -1
         }
 
-        Flow {
-            Layout.fillWidth: true
-            spacing: Kirigami.Units.smallSpacing
-            visible: rulesFilterHeader.expanded
+        CollapsibleChipFlow {
+            open: rulesFilterHeader.expanded
 
             Repeater {
                 // "All" chip prepended to the controller's section list — the
