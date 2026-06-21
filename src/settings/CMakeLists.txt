@@ -340,6 +340,7 @@ qt_add_qml_module(plasmazones-settings
         qml/SettingsRow.qml
         qml/SettingsSeparator.qml
         qml/SettingsFlickable.qml
+        qml/SearchAnchorHelpers.js
         qml/SettingsButtonGroup.qml
         qml/ColorSwatchRow.qml
         qml/NewLayoutDialog.qml

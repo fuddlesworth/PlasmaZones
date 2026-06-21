@@ -6,6 +6,7 @@ import QtQuick.Controls
 import QtQuick.Layouts
 import QtQuick.Window
 import org.kde.kirigami as Kirigami
+import "SearchAnchorHelpers.js" as SearchAnchors
 import org.phosphor.animation
 
 /**
@@ -98,25 +99,15 @@ Item {
     }
 
     // Register this card as a section-level reveal target (card == self).
-    // Deferred via callLater so the subtree is attached to the page before we
-    // walk the parent chain to find the hosting SettingsFlickable.
-    function _searchPage() {
-        var p = root.parent;
-        while (p) {
-            if (typeof p.registerSearchAnchor === "function")
-                return p;
-
-            p = p.parent;
-        }
-        return null;
-    }
+    // Deferred via callLater so the subtree is attached to the page before the
+    // shared helper walks the parent chain to find the hosting SettingsFlickable.
     function _registerSearchAnchor() {
-        var pg = root._searchPage();
+        var pg = SearchAnchors.pageFor(root);
         if (pg)
             pg.registerSearchAnchor(root.searchAnchor, root, root);
     }
     function _unregisterSearchAnchor() {
-        var pg = root._searchPage();
+        var pg = SearchAnchors.pageFor(root);
         if (pg)
             pg.unregisterSearchAnchor(root.searchAnchor);
     }

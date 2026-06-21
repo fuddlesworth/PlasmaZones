@@ -3,6 +3,7 @@
 import QtQuick
 import QtQuick.Layouts
 import org.kde.kirigami as Kirigami
+import "SearchAnchorHelpers.js" as SearchAnchors
 
 /**
  * A SettingsFlickable that renders a list of AnimationEventCards with
@@ -83,19 +84,6 @@ SettingsFlickable {
                 // headers, not a single animation event.
                 readonly property bool searchable: cardLoader.modelData.isParentNode !== true && cardLoader.searchAnchor.length > 0
 
-                // Walk up to the hosting page (SettingsFlickable) — the object
-                // exposing registerSearchAnchor. Mirrors SettingsRow._searchPage.
-                function _searchPage() {
-                    var p = cardLoader.parent;
-                    while (p) {
-                        if (typeof p.registerSearchAnchor === "function")
-                            return p;
-
-                        p = p.parent;
-                    }
-                    return null;
-                }
-
                 Layout.fillWidth: true
                 // Reserve the real card height once built (a Loader's
                 // implicitHeight reflects its loaded item's implicitHeight),
@@ -154,7 +142,7 @@ SettingsFlickable {
                         if (!cardLoader.searchable)
                             return;
 
-                        var pg = cardLoader._searchPage();
+                        var pg = SearchAnchors.pageFor(cardLoader);
                         if (pg)
                             pg.registerSearchAnchor(cardLoader.searchAnchor, cardLoader, null);
                     });
@@ -163,7 +151,7 @@ SettingsFlickable {
                     if (!cardLoader.searchable)
                         return;
 
-                    var pg = cardLoader._searchPage();
+                    var pg = SearchAnchors.pageFor(cardLoader);
                     if (pg)
                         pg.unregisterSearchAnchor(cardLoader.searchAnchor);
                 }

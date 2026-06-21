@@ -218,9 +218,12 @@ void SearchController::recompute()
         m_resultsVariant.push_back(toVariant(e));
     }
 
-    // "Did you mean …" only when a non-empty query found nothing.
-    m_suggestion =
-        (ranked.isEmpty() && !m_query.trimmed().isEmpty()) ? SearchRanker::closestTitle(m_query, m_index) : QString();
+    // "Did you mean …" only when a non-empty query found nothing. A limit of 0
+    // empties results by the cap, not by absence of matches, so it must not
+    // imply a typo.
+    m_suggestion = (ranked.isEmpty() && m_limit != 0 && !m_query.trimmed().isEmpty())
+        ? SearchRanker::closestTitle(m_query, m_index)
+        : QString();
 
     Q_EMIT resultsChanged();
 }

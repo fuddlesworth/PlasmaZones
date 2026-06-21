@@ -5,6 +5,7 @@ import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
 import org.kde.kirigami as Kirigami
+import "SearchAnchorHelpers.js" as SearchAnchors
 
 /**
  * @brief Two-line setting row with title, description, and a right-aligned control.
@@ -45,37 +46,17 @@ Item {
             root._unregisterSearchAnchor();
     }
 
-    // Resolve the hosting page (SettingsFlickable) and the collapsible card
-    // this row lives in (so reveal can expand the card first). Deferred via
+    // Register this row's reveal anchor with the hosting page, resolving the
+    // page + collapsible card via the shared walk-up helpers. Deferred via
     // callLater because SettingsCard reparents its contentItem — the parent
     // chain to the page is only complete after construction settles.
-    function _searchPage() {
-        var p = root.parent;
-        while (p) {
-            if (typeof p.registerSearchAnchor === "function")
-                return p;
-
-            p = p.parent;
-        }
-        return null;
-    }
-    function _searchCard() {
-        var p = root.parent;
-        while (p) {
-            if (p.isSettingsCard === true)
-                return p;
-
-            p = p.parent;
-        }
-        return null;
-    }
     function _registerSearchAnchor() {
-        var pg = root._searchPage();
+        var pg = SearchAnchors.pageFor(root);
         if (pg)
-            pg.registerSearchAnchor(root.searchAnchor, root, root._searchCard());
+            pg.registerSearchAnchor(root.searchAnchor, root, SearchAnchors.cardFor(root));
     }
     function _unregisterSearchAnchor() {
-        var pg = root._searchPage();
+        var pg = SearchAnchors.pageFor(root);
         if (pg)
             pg.unregisterSearchAnchor(root.searchAnchor);
     }

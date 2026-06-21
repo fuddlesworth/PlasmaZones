@@ -32,9 +32,10 @@ int subsequenceScore(const QString& hay, const QString& n)
 {
     int hi = 0;
     int gaps = 0;
-    // -1 so the first matched char never counts as a leading gap. (A fully
-    // contiguous run can't actually reach here — it's caught earlier as a 400
-    // substring; the densest reachable match has one gap, scoring 330.)
+    // -1 so a match landing at index 0 isn't counted as a leading gap (a match
+    // that first appears mid-string still does — that lead-in is a real gap). A
+    // fully contiguous run can't reach here (caught earlier as a 400 substring),
+    // so the densest reachable match has one gap, scoring 330.
     int prevMatch = -1;
     for (int ni = 0; ni < n.size(); ++ni) {
         while (hi < hay.size() && hay.at(hi) != n.at(ni)) {

@@ -7,6 +7,7 @@ import QtQuick.Layouts
 import org.kde.kirigami as Kirigami
 import org.phosphor.animation
 import org.plasmazones.settings
+import "SearchAnchorHelpers.js" as SearchAnchors
 
 /**
  * @brief Drag-reorderable, variable-height list of WindowRuleRow delegates.
@@ -198,36 +199,16 @@ Item {
             // Register a per-rule deep-link anchor ("rule:<id>") with the host
             // page's reveal registry so a window-rule search result scrolls to
             // and pulses this exact row (expanding its section card if collapsed).
-            function _searchPage() {
-                var p = parent;
-                while (p) {
-                    if (typeof p.registerSearchAnchor === "function")
-                        return p;
-
-                    p = p.parent;
-                }
-                return null;
-            }
-            function _searchCard() {
-                var p = parent;
-                while (p) {
-                    if (p.isSettingsCard === true)
-                        return p;
-
-                    p = p.parent;
-                }
-                return null;
-            }
             Component.onCompleted: {
                 root.setDelegateHeight(modelData.ruleId, actualHeight);
                 Qt.callLater(function () {
-                    var pg = delegateRoot._searchPage();
+                    var pg = SearchAnchors.pageFor(delegateRoot);
                     if (pg)
-                        pg.registerSearchAnchor("rule:" + modelData.ruleId, delegateRoot, delegateRoot._searchCard());
+                        pg.registerSearchAnchor("rule:" + modelData.ruleId, delegateRoot, SearchAnchors.cardFor(delegateRoot));
                 });
             }
             Component.onDestruction: {
-                var pg = delegateRoot._searchPage();
+                var pg = SearchAnchors.pageFor(delegateRoot);
                 if (pg)
                     pg.unregisterSearchAnchor("rule:" + modelData.ruleId);
             }

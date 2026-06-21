@@ -92,6 +92,10 @@ Flickable {
     property var _searchAnchors: ({})
     // Item awaiting reveal once its containing card finishes expanding.
     property var _revealPendingItem: null
+    // A revealAnchor() for an id that isn't registered yet — children register
+    // via Qt.callLater after the page builds, so a deep link can arrive first.
+    // Retained here and retried from registerSearchAnchor (consume-once).
+    property string _pendingRevealAnchor: ""
 
     function registerSearchAnchor(anchorId, item, card) {
         if (!anchorId || anchorId.length === 0 || !item)
@@ -101,6 +105,12 @@ Flickable {
             "item": item,
             "card": card || null
         };
+
+        // Satisfy a deep link that arrived before this anchor registered.
+        if (settingsFlickable._pendingRevealAnchor === anchorId) {
+            settingsFlickable._pendingRevealAnchor = "";
+            settingsFlickable.revealAnchor(anchorId);
+        }
     }
 
     function unregisterSearchAnchor(anchorId) {
@@ -110,8 +120,15 @@ Flickable {
 
     function revealAnchor(anchorId) {
         var entry = settingsFlickable._searchAnchors[anchorId];
-        if (!entry || !entry.item)
+        if (!entry || !entry.item) {
+            // Not registered yet — retain and retry once it registers, so the
+            // reveal isn't lost to the page-build / deferred-registration race.
+            settingsFlickable._pendingRevealAnchor = anchorId;
             return;
+        }
+
+        // This reveal wins over any anchor still awaiting registration.
+        settingsFlickable._pendingRevealAnchor = "";
 
         var card = entry.card;
         if (card && card.collapsible === true && card.collapsed === true) {

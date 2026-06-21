@@ -57,6 +57,21 @@ public:
     }
 };
 
+// Returns an entity with NO subtitle, on a registered page, so the controller's
+// auto-derive path (subtitle from the page hierarchy) is exercised.
+class StubProviderNoSubtitle : public ISearchProvider
+{
+public:
+    QVector<SearchEntry> searchEntries() const override
+    {
+        SearchEntry e;
+        e.kind = SearchEntry::Kind::Entity;
+        e.pageId = QStringLiteral("snapping-appearance-colors");
+        e.title = QStringLiteral("Floaty");
+        return {e};
+    }
+};
+
 QStringList resultPageIds(const SearchController& sc)
 {
     QStringList ids;
@@ -201,6 +216,33 @@ private Q_SLOTS:
             }
         }
         QVERIFY(found);
+    }
+
+    void providerSubtitleAutoDerivedWhenEmpty()
+    {
+        // A provider entity with no subtitle gets the full page path, exactly
+        // like a static Setting entry.
+        SearchController sc(m_app);
+        StubProviderNoSubtitle provider;
+        sc.registerProvider(&provider);
+        sc.setQuery(QStringLiteral("floaty"));
+        const QVariantList r = sc.results();
+        QVERIFY(!r.isEmpty());
+        QCOMPARE(r.first().toMap().value(QStringLiteral("subtitle")).toString(),
+                 QStringLiteral("Snapping › Appearance › Colors"));
+    }
+
+    void providerSubtitleRespectedWhenSet()
+    {
+        // A provider-supplied subtitle (e.g. a window rule's match summary) is
+        // never overwritten by the auto-derive.
+        SearchController sc(m_app);
+        StubProvider provider;
+        sc.registerProvider(&provider);
+        sc.setQuery(QStringLiteral("steam"));
+        const QVariantList r = sc.results();
+        QVERIFY(!r.isEmpty());
+        QCOMPARE(r.first().toMap().value(QStringLiteral("subtitle")).toString(), QStringLiteral("Window Rules"));
     }
 
     void limitCapsResultCount()
