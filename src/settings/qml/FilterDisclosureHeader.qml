@@ -14,14 +14,15 @@ import org.kde.kirigami as Kirigami
  * the chip content and gates its visibility on `expanded`:
  *
  *   FilterDisclosureHeader { id: filterHeader; hasActiveFilters: ... }
- *   Flow { visible: filterHeader.expanded; <chips> }
+ *   CollapsibleChipFlow { open: filterHeader.expanded; <chips> }
  */
 RowLayout {
     id: root
 
-    /// Whether the consumer's filter chips should be shown. Collapsed by
-    /// default to keep the page uncluttered.
-    property bool expanded: false
+    /// Whether the consumer's filter chips should be shown. Driven by the
+    /// toggle button (the single source of truth) so the state can't desync;
+    /// collapsed by default to keep the page uncluttered.
+    readonly property alias expanded: toggleButton.checked
     /// When collapsed, show an accent dot if a filter is currently applied.
     property bool hasActiveFilters: false
 
@@ -29,12 +30,12 @@ RowLayout {
     spacing: Kirigami.Units.smallSpacing
 
     ToolButton {
+        id: toggleButton
+
         text: i18nc("@action:button toggle the filter chips", "Filter")
-        icon.name: root.expanded ? "arrow-down" : "arrow-right"
+        icon.name: toggleButton.checked ? "arrow-down" : "arrow-right"
         checkable: true
-        checked: root.expanded
-        onClicked: root.expanded = !root.expanded
-        Accessible.name: root.expanded ? i18nc("@action:button", "Hide filters") : i18nc("@action:button", "Show filters")
+        Accessible.name: toggleButton.checked ? i18nc("@action:button", "Hide filters") : i18nc("@action:button", "Show filters")
     }
 
     Rectangle {
