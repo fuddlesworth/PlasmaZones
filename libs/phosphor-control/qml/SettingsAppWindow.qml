@@ -21,8 +21,11 @@ Kirigami.ApplicationWindow {
     id: root
 
     required property ApplicationController controller
-    //* Optional extra content shown in the header toolbar (e.g. global search).
+    //* Optional extra content shown centered in the header toolbar (e.g. global search).
     property alias headerExtras: headerExtrasLoader.sourceComponent
+    //* Optional content pinned to the RIGHT of the header-extras row (e.g. a
+    //  status toggle), sharing the row with the centered headerExtras.
+    property alias headerTrailing: headerTrailingLoader.sourceComponent
     /** Alias onto the chrome Sidebar item so consumers can configure
      *  the two delegate slots and drive navigation:
      *
@@ -320,22 +323,50 @@ Kirigami.ApplicationWindow {
                 Layout.fillWidth: true
                 spacing: 0
 
-                // Header extras (e.g. global search) on their own centered row
-                // ABOVE the breadcrumb trail. A Layout child with visible:false
-                // is excluded from the column, so consumers that don't provide a
-                // headerExtras Component get no empty row — no wrapper needed.
-                Loader {
-                    id: headerExtrasLoader
+                // Header-extras row ABOVE the breadcrumb trail: the headerExtras
+                // slot (e.g. global search) centered, with the optional
+                // headerTrailing slot (e.g. a status toggle) pinned right. The
+                // row collapses when neither slot is filled. Side margins match
+                // the breadcrumb gutter so the trailing slot aligns to the
+                // content's right edge. A left phantom the width of the trailing
+                // keeps the centered slot window-centered (not biased left by
+                // the trailing's width).
+                RowLayout {
+                    id: headerExtrasRow
 
-                    // Centered horizontally; the Loader adopts the loaded item's
-                    // implicit size (slot contract: the consumer Component
-                    // declares implicitWidth/Height). visible gates on
-                    // Loader.Ready so a mid-instantiation skeleton can't take
-                    // layout space.
-                    Layout.alignment: Qt.AlignHCenter
+                    Layout.fillWidth: true
+                    Layout.leftMargin: Kirigami.Units.largeSpacing
+                    Layout.rightMargin: Kirigami.Units.largeSpacing
                     Layout.topMargin: Kirigami.Units.smallSpacing
                     Layout.bottomMargin: Kirigami.Units.smallSpacing
-                    visible: status === Loader.Ready && item !== null
+                    spacing: 0
+                    visible: headerExtrasLoader.item !== null || headerTrailingLoader.item !== null
+
+                    Item {
+                        Layout.preferredWidth: headerTrailingLoader.width
+                    }
+
+                    Item {
+                        Layout.fillWidth: true
+                    }
+
+                    // The Loaders adopt their loaded item's implicit size (slot
+                    // contract: the consumer Component declares implicitWidth/Height).
+                    Loader {
+                        id: headerExtrasLoader
+
+                        Layout.alignment: Qt.AlignVCenter
+                    }
+
+                    Item {
+                        Layout.fillWidth: true
+                    }
+
+                    Loader {
+                        id: headerTrailingLoader
+
+                        Layout.alignment: Qt.AlignVCenter
+                    }
                 }
 
                 RowLayout {
