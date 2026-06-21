@@ -62,7 +62,9 @@ public:
     /// Max results. `n < 0` = uncapped; `n == 0` = no results.
     void setLimit(int n);
 
-    /// Synonyms merged onto the auto-derived page entry for `pageId`.
+    /// Sets the synonyms for the auto-derived page entry for `pageId` (the ranker
+    /// weighs them alongside the page's title/breadcrumb). Replaces any list
+    /// previously set for this `pageId` — successive calls do not accumulate.
     void setPageKeywords(const QString& pageId, const QStringList& keywords);
     /// A static section / setting anchor entry (or any extra entry).
     void addEntry(const SearchEntry& entry);
