@@ -37,6 +37,7 @@ SettingsFlickable {
 
                 SettingsRow {
                     title: i18n("Always re-insert on drag")
+                    searchAnchor: "alwaysReinsertOnDrag"
                     description: i18n("Dynamically insert dragged windows into the autotile stack at the cursor position without requiring a modifier key or mouse button")
 
                     SettingsSwitch {
@@ -54,6 +55,7 @@ SettingsFlickable {
 
                 SettingsRow {
                     title: i18n("Hold to re-insert into stack")
+                    searchAnchor: "holdToReinsert"
                     description: i18n("Hold a modifier or mouse button while dragging a window to dynamically insert it into the autotile stack at the cursor position")
                     enabled: !alwaysReinsertSwitch.checked
                     opacity: enabled ? 1 : 0.4
@@ -75,6 +77,7 @@ SettingsFlickable {
 
                 SettingsRow {
                     title: i18n("Toggle mode")
+                    searchAnchor: "triggersToggleMode"
                     description: i18n("Tap the re-insert trigger once to activate the stack preview, tap again to deactivate it")
                     enabled: !alwaysReinsertSwitch.checked
                     opacity: enabled ? 1 : 0.4
@@ -104,6 +107,7 @@ SettingsFlickable {
 
                 SettingsRow {
                     title: i18n("New window placement")
+                    searchAnchor: "newWindowPlacement"
                     description: i18n("Where newly opened windows appear in the tiling order")
 
                     ComboBox {
@@ -134,6 +138,7 @@ SettingsFlickable {
 
                 SettingsRow {
                     title: i18n("Respect minimum size")
+                    searchAnchor: "respectMinimumSize"
                     description: i18n("Prevent windows from being resized below their minimum; may leave gaps")
 
                     SettingsSwitch {
@@ -149,6 +154,7 @@ SettingsFlickable {
 
                 SettingsRow {
                     title: i18n("Restore untiled windows to their previous position")
+                    searchAnchor: "restoreUntiledWindowsPosition"
                     description: i18n("When an untiled (floated) window reopens after a logout, it returns to the position and monitor it was on instead of wherever the compositor would place it. A per-window rule can override this either way, opting individual windows in or out.")
 
                     SettingsSwitch {
@@ -164,6 +170,7 @@ SettingsFlickable {
 
                 SettingsRow {
                     title: i18n("Sticky windows")
+                    searchAnchor: "stickyWindows"
                     description: i18n("How to handle windows that appear on all desktops")
 
                     WideComboBox {
@@ -193,6 +200,7 @@ SettingsFlickable {
 
                 SettingsRow {
                     title: i18n("Drag behavior")
+                    searchAnchor: "dragBehavior"
                     description: i18n("Float converts a dragged tile to free-floating. Reorder keeps it tiled and swaps it into the drop slot.")
 
                     WideComboBox {
@@ -219,6 +227,7 @@ SettingsFlickable {
 
                 SettingsRow {
                     title: i18n("Overflow behavior")
+                    searchAnchor: "overflowBehavior"
                     description: i18n("Float excess windows beyond the max-windows cap, or Unlimited to tile every window regardless of count.")
 
                     WideComboBox {
@@ -257,6 +266,7 @@ SettingsFlickable {
 
                 SettingsRow {
                     title: i18n("Focus new windows")
+                    searchAnchor: "focusNewWindows"
                     description: i18n("Focus a window when it opens")
 
                     SettingsSwitch {
@@ -272,6 +282,7 @@ SettingsFlickable {
 
                 SettingsRow {
                     title: i18n("Focus follows mouse")
+                    searchAnchor: "focusFollowsMouse"
                     description: i18n("Moving the mouse pointer over a window gives it focus")
 
                     SettingsSwitch {

@@ -116,6 +116,7 @@ SettingsFlickable {
         SettingsCard {
             Layout.fillWidth: true
             headerText: i18n("Algorithm")
+            searchAnchor: "algorithm"
             collapsible: true
             scopeEnabled: true
             scopeAppSettings: settingsController
@@ -256,6 +257,7 @@ SettingsFlickable {
                 // Max windows
                 SettingsRow {
                     title: i18n("Max windows")
+                    searchAnchor: "maxWindows"
                     description: i18n("Maximum number of windows to tile on this screen")
 
                     SettingsSlider {
@@ -285,6 +287,7 @@ SettingsFlickable {
                 SettingsRow {
                     visible: root.algoSupportsSplitRatio
                     title: root.algoCenterLayout ? i18n("Center ratio") : i18n("Master ratio")
+                    searchAnchor: "masterRatio"
                     description: root.algoCenterLayout ? i18n("Width proportion allocated to the center column") : i18n("Width proportion allocated to the master area")
 
                     SettingsSlider {
@@ -307,6 +310,7 @@ SettingsFlickable {
                 SettingsRow {
                     visible: root.algoSupportsSplitRatio
                     title: i18n("Ratio step size")
+                    searchAnchor: "ratioStepSize"
                     description: i18n("Amount the ratio changes per keyboard shortcut press")
 
                     SettingsSlider {
@@ -333,6 +337,7 @@ SettingsFlickable {
                 SettingsRow {
                     visible: root.algoSupportsMasterCount
                     title: root.algoCenterLayout ? i18n("Center count") : i18n("Master count")
+                    searchAnchor: "masterCount"
                     description: root.algoCenterLayout ? i18n("Number of windows in the center column") : i18n("Number of windows in the master area")
 
                     SettingsSlider {

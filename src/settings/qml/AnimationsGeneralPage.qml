@@ -182,6 +182,7 @@ SettingsFlickable {
 
             Layout.fillWidth: true
             headerText: i18n("Global animation defaults")
+            searchAnchor: "globalAnimationDefaults"
             showToggle: true
             toggleChecked: page.appSettings.animationsEnabled
             collapsible: true
@@ -218,6 +219,7 @@ SettingsFlickable {
 
                 SettingsRow {
                     title: i18n("Multiple windows")
+                    searchAnchor: "multipleWindows"
                     description: i18n("How to animate when moving several windows at once")
 
                     WideComboBox {
@@ -234,6 +236,7 @@ SettingsFlickable {
                 SettingsRow {
                     visible: page.appSettings.animationSequenceMode === 1
                     title: i18n("Stagger delay")
+                    searchAnchor: "staggerDelay"
                     description: i18n("Pause between each window's animation start")
 
                     SettingsSlider {
@@ -255,6 +258,7 @@ SettingsFlickable {
 
                 SettingsRow {
                     title: i18n("Minimum distance")
+                    searchAnchor: "minimumDistance"
                     description: page.appSettings.animationMinDistance === 0 ? i18n("Currently: always animate, no threshold") : i18n("Skip animation when geometry changes less than this")
 
                     SettingsSpinBox {
@@ -297,6 +301,7 @@ SettingsFlickable {
 
             Layout.fillWidth: true
             headerText: i18n("Window Filtering")
+            searchAnchor: "windowFiltering"
             collapsible: true
 
             contentItem: ColumnLayout {
@@ -304,6 +309,7 @@ SettingsFlickable {
 
                 SettingsRow {
                     title: i18n("Exclude transient windows")
+                    searchAnchor: "excludeTransientWindows"
                     description: i18n("Skip animations for dialogs, popups, tooltips, and dropdown menus")
 
                     SettingsSwitch {
@@ -319,6 +325,7 @@ SettingsFlickable {
 
                 SettingsRow {
                     title: i18n("Exclude notifications and OSDs")
+                    searchAnchor: "excludeNotificationsAndOsds"
                     description: i18n("Skip animations for notification popups and on-screen displays such as volume and brightness")
 
                     SettingsSwitch {
@@ -334,6 +341,7 @@ SettingsFlickable {
 
                 SettingsRow {
                     title: i18n("Minimum window width")
+                    searchAnchor: "minimumWindowWidth"
                     description: page.appSettings.animationMinimumWindowWidth === 0 ? i18n("Disabled. No width threshold.") : i18n("Windows narrower than this will not animate")
 
                     SettingsSpinBox {
@@ -364,6 +372,7 @@ SettingsFlickable {
 
                 SettingsRow {
                     title: i18n("Minimum window height")
+                    searchAnchor: "minimumWindowHeight"
                     description: page.appSettings.animationMinimumWindowHeight === 0 ? i18n("Disabled. No height threshold.") : i18n("Windows shorter than this will not animate")
 
                     SettingsSpinBox {

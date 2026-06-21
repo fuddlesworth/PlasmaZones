@@ -46,6 +46,7 @@ SettingsFlickable {
 
                     SettingsRow {
                         title: i18n("Activate on every drag")
+                        searchAnchor: "activateOnEveryDrag"
                         description: i18n("Show the zone overlay on every window drag without requiring a modifier key or mouse button")
 
                         SettingsSwitch {
@@ -72,6 +73,7 @@ SettingsFlickable {
                         readonly property string activeDescription: alwaysActivateSwitch.checked ? i18n("Hold a modifier or mouse button while dragging to hide the zone overlay. Esc still cancels the drag entirely.") : i18n("Hold a modifier or mouse button to show zones while dragging")
 
                         title: activeTitle
+                        searchAnchor: "holdToActivate"
                         description: activeDescription
 
                         ModifierAndMouseCheckBoxes {
@@ -95,6 +97,7 @@ SettingsFlickable {
                         readonly property string activeDescription: alwaysActivateSwitch.checked ? i18n("Tap the trigger once to hide the overlay, tap again to show it") : i18n("Tap the activation trigger once to show the overlay, tap again to hide it")
 
                         title: i18n("Toggle mode")
+                        searchAnchor: "triggersToggleMode"
                         description: activeDescription
 
                         SettingsSwitch {
@@ -134,6 +137,7 @@ SettingsFlickable {
 
                     SettingsRow {
                         title: i18n("Span modifier")
+                        searchAnchor: "spanModifier"
                         description: i18n("Hold a modifier or mouse button while dragging to paint across zones")
 
                         ModifierAndMouseCheckBoxes {
@@ -153,6 +157,7 @@ SettingsFlickable {
 
                     SettingsRow {
                         title: i18n("Toggle mode")
+                        searchAnchor: "zoneSpanToggleMode"
                         description: i18n("Tap the span modifier once to start spanning, tap again to stop, instead of holding it")
 
                         SettingsSwitch {
@@ -168,6 +173,7 @@ SettingsFlickable {
 
                     SettingsRow {
                         title: i18n("Edge threshold")
+                        searchAnchor: "edgeThreshold"
                         description: i18n("Distance from zone edge for multi-zone selection")
 
                         SettingsSpinBox {
@@ -203,6 +209,7 @@ SettingsFlickable {
 
                     SettingsRow {
                         title: i18n("Show zones on all monitors")
+                        searchAnchor: "showZonesOnAllMonitors"
                         description: i18n("Display zone overlays on every monitor while dragging a window")
 
                         SettingsSwitch {
@@ -218,6 +225,7 @@ SettingsFlickable {
 
                     SettingsRow {
                         title: i18n("Filter by aspect ratio")
+                        searchAnchor: "filterByAspectRatio"
                         description: i18n("Only show layouts matching the current monitor's aspect ratio")
 
                         SettingsSwitch {

@@ -56,6 +56,7 @@ SettingsCard {
 
         SettingsRow {
             title: root.primaryGapLabel
+            searchAnchor: "primaryGap"
             description: root.primaryGapDescription
 
             SpinBox {
@@ -79,6 +80,7 @@ SettingsCard {
         SettingsRow {
             visible: !tilePerSideSwitch.checked
             title: root.outerGapLabel
+            searchAnchor: "outerGap"
             description: root.outerGapDescription
 
             SpinBox {
@@ -99,6 +101,7 @@ SettingsCard {
 
         SettingsRow {
             title: i18n("Per-side outer gaps")
+            searchAnchor: "perSideOuterGaps"
             description: tilePerSideSwitch.checked ? i18n("Set different gap sizes for each screen edge") : i18n("Use a single outer gap value for all edges")
 
             SettingsSwitch {
@@ -205,6 +208,7 @@ SettingsCard {
         SettingsRow {
             visible: root.showSmartGaps
             title: i18n("Smart gaps")
+            searchAnchor: "smartGaps"
             description: i18n("Remove all gaps when only one window is tiled")
 
             SettingsSwitch {
