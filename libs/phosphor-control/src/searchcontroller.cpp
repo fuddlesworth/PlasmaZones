@@ -193,7 +193,7 @@ QVector<SearchEntry> SearchController::buildIndex() const
         }
         const QVector<SearchEntry> provided = provider->searchEntries();
         for (SearchEntry e : provided) {
-            if (e.subtitle.isEmpty()) {
+            if (e.subtitle.isEmpty() && e.kind != SearchEntry::Kind::Page) {
                 e.subtitle = breadcrumbFor(e.pageId, true);
             }
             entries.push_back(e);

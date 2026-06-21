@@ -3,7 +3,6 @@
 
 #include "searchproviders.h"
 
-#include "phosphor_i18n.h"
 #include "settingscontroller.h"
 #include "windowrulecontroller.h"
 #include "windowrulemodel.h"
@@ -22,7 +21,6 @@ QVector<SearchEntry> LayoutsSearchProvider::searchEntries() const
         return out;
     }
 
-    const QString breadcrumb = PhosphorI18n::tr("Layouts");
     const QVariantList layouts = m_controller->layouts();
     out.reserve(layouts.size());
     for (const QVariant& v : layouts) {
@@ -36,7 +34,8 @@ QVector<SearchEntry> LayoutsSearchProvider::searchEntries() const
         e.kind = SearchEntry::Kind::Entity;
         e.pageId = QStringLiteral("layouts");
         e.title = name;
-        e.subtitle = breadcrumb;
+        // No subtitle: SearchController auto-derives the page breadcrumb, keeping
+        // these consistent with section/setting results.
         e.icon = QStringLiteral("view-grid-symbolic");
         out.push_back(e);
     }
@@ -58,7 +57,6 @@ QVector<SearchEntry> WindowRulesSearchProvider::searchEntries() const
         return out;
     }
 
-    const QString breadcrumb = PhosphorI18n::tr("Window Rules");
     const int rows = model->rowCount();
     out.reserve(rows);
     for (int i = 0; i < rows; ++i) {
@@ -78,8 +76,9 @@ QVector<SearchEntry> WindowRulesSearchProvider::searchEntries() const
             e.anchor = QStringLiteral("rule:") + id;
         }
         e.title = name;
-        const QString summary = model->data(idx, WindowRuleModel::MatchSummaryRole).toString();
-        e.subtitle = summary.isEmpty() ? breadcrumb : summary;
+        // The match summary is the meaningful per-rule context; when absent, leave
+        // the subtitle empty so SearchController auto-derives the page breadcrumb.
+        e.subtitle = model->data(idx, WindowRuleModel::MatchSummaryRole).toString();
         e.icon = QStringLiteral("window-symbolic");
         out.push_back(e);
     }

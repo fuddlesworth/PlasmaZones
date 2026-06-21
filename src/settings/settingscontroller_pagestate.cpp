@@ -33,8 +33,14 @@ void SettingsController::navigateTo(const QString& address)
 
     setActivePage(page);
 
+    // Key the anchor to the resolved leaf (mirroring setActivePage's redirect),
+    // and only when the page is valid — otherwise a bogus address would latch the
+    // anchor onto whatever page happened to be active.
     if (!anchor.isEmpty() && app() != nullptr) {
-        app()->setPendingAnchor(activePage(), anchor);
+        const QString resolved = parentPageRedirects().value(page, page);
+        if (validPageNames().contains(resolved)) {
+            app()->setPendingAnchor(resolved, anchor);
+        }
     }
 }
 

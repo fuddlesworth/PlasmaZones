@@ -267,6 +267,21 @@ void seedSearchCatalog(PhosphorControl::SearchController* search)
                PhosphorI18n::tr("Border width"), {PhosphorI18n::tr("thickness"), PhosphorI18n::tr("size")});
     addSetting(search, QStringLiteral("snapping-window-appearance"), QStringLiteral("cornerRadius"),
                PhosphorI18n::tr("Corner radius"), {PhosphorI18n::tr("rounding"), PhosphorI18n::tr("border")});
+    // Shared GapsSettingsCard is also hosted here (no Smart gaps on this page).
+    addSection(search, QStringLiteral("snapping-window-appearance"), QStringLiteral("gaps"), PhosphorI18n::tr("Gaps"));
+    addSetting(search, QStringLiteral("snapping-window-appearance"), QStringLiteral("primaryGap"),
+               PhosphorI18n::tr("Inner gap"),
+               {PhosphorI18n::tr("gap"), PhosphorI18n::tr("gaps"), PhosphorI18n::tr("spacing"),
+                PhosphorI18n::tr("padding"), PhosphorI18n::tr("margin"), PhosphorI18n::tr("inner")});
+    addSetting(
+        search, QStringLiteral("snapping-window-appearance"), QStringLiteral("outerGap"), PhosphorI18n::tr("Outer gap"),
+        {PhosphorI18n::tr("gap"), PhosphorI18n::tr("gaps"), PhosphorI18n::tr("spacing"), PhosphorI18n::tr("padding"),
+         PhosphorI18n::tr("margin"), PhosphorI18n::tr("outer"), PhosphorI18n::tr("edge")});
+    addSetting(search, QStringLiteral("snapping-window-appearance"), QStringLiteral("perSideOuterGaps"),
+               PhosphorI18n::tr("Per-side outer gaps"),
+               {PhosphorI18n::tr("gap"), PhosphorI18n::tr("gaps"), PhosphorI18n::tr("spacing"),
+                PhosphorI18n::tr("padding"), PhosphorI18n::tr("margin"), PhosphorI18n::tr("edge"),
+                PhosphorI18n::tr("side")});
 
     // Snapping › Overlay (behaviour rows)
     addSetting(search, QStringLiteral("snapping-overlay-behavior"), QStringLiteral("activateOnEveryDrag"),

@@ -197,6 +197,7 @@ SettingsFlickable {
         // =================================================================
         GapsSettingsCard {
             Layout.fillWidth: true
+            searchAnchor: "gaps"
             scopeEnabled: true
             scopeAppSettings: settingsController
             scopeHasOverridesMethod: "hasPerScreenSnappingGapsSettings"

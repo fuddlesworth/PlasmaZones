@@ -714,8 +714,8 @@ private Q_SLOTS:
         silent->setEmitApplyResult(false);
         // Stamping objectName exercises the "Domain %1 did not report
         // apply completion within timeout" branch in
-        // applicationcontroller.cpp's timeout handler — see the
-        // unnamed-vs-named arms around line 282 — instead of the
+        // applicationcontroller_async.cpp's timeout handler (the
+        // unnamed-vs-named arms in applyAllAsync) — instead of the
         // generic message. Asserting the name appears in the error
         // pins the named-domain branch.
         silent->setObjectName(QStringLiteral("SilentDomain"));
@@ -858,7 +858,7 @@ private Q_SLOTS:
     {
         // Symmetric forceResetAsyncState test for the discardAllAsync
         // half of the state machine — pins the `else if (m_discarding)`
-        // branch (around line 552 in applicationcontroller.cpp).
+        // branch in forceResetAsyncState (applicationcontroller_async.cpp).
         ApplicationController app;
         app.setAsyncBatchTimeoutMs(60'000);
 

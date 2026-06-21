@@ -123,6 +123,10 @@ Flickable {
             card.collapsed = false;
             revealSettleTimer.restart();
         } else {
+            // Cancel any in-flight expand-then-settle so this immediate reveal
+            // wins (latest reveal target always takes precedence).
+            settingsFlickable._revealPendingItem = null;
+            revealSettleTimer.stop();
             settingsFlickable._scrollToReveal(entry.item);
         }
     }
