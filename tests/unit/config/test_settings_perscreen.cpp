@@ -10,7 +10,7 @@
  * 2. Per-screen zone selector no-op-write emit/husk suppression
  * 3. Per-screen autotile validation
  * 4. Per-screen autotile gaps/algorithm sub-domain independence
- * 5. Per-screen snapping gaps sub-domain isolation
+ * 5. Per-screen snapping clear drops the (gaps-only) entry
  * 6. Fresh config defaults
  */
 
@@ -376,6 +376,10 @@ private Q_SLOTS:
         settings.setPerScreenSnappingSetting(screen, QStringLiteral("OuterGap"), 12);
 
         QVERIFY(settings.hasPerScreenSnappingSettings(screen));
+        // Pin the accept path: both gap keys round-trip through the validator.
+        const QVariantMap stored = settings.getPerScreenSnappingSettings(screen);
+        QCOMPARE(stored.value(QStringLiteral("ZonePadding")).toInt(), 8);
+        QCOMPARE(stored.value(QStringLiteral("OuterGap")).toInt(), 12);
 
         QSignalSpy spy(&settings, &Settings::perScreenSnappingSettingsChanged);
 

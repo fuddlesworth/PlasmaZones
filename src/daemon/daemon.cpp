@@ -1848,6 +1848,10 @@ void Daemon::stop()
 {
     m_shuttingDown = true;
 
+    // Cancel any pending debounced gap-resnap so it can't fire mid-teardown
+    // (the engine is cleared below; a late fire would be a wasted no-op).
+    m_gapResnapTimer.stop();
+
     // Drop the layout-manager provider lambdas FIRST, before the m_running
     // gate. They capture `this` and dereference m_settings; m_settings is
     // declared after m_layoutManager, so reverse-order member destruction
