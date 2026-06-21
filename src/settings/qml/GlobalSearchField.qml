@@ -54,15 +54,31 @@ Item {
         // user types. Disable it so accepted() means "the user pressed Enter".
         autoAccept: false
         onTextChanged: searchDebounce.restart()
-        // Tab completes the query to the top result's title (accept-best-match),
-        // keeping focus in the field to refine. A second Tab (already at the top
-        // title) falls through to normal focus traversal.
+        // Tab first completes the query to the top result's title
+        // (accept-best-match), keeping focus in the field; a second Tab (already
+        // at the top title) steps into the dropdown so the results stay
+        // tab-cyclable instead of focus escaping to the settings window.
         Keys.onTabPressed: function (event) {
             const list = searchController.results;
             const top = list.length > 0 ? list[0].title : "";
             if (top.length > 0 && top !== field.text) {
                 field.text = top;
                 field.cursorPosition = field.text.length;
+                event.accepted = true;
+            } else if (resultsPopup.visible && resultsList.count > 0) {
+                resultsList.currentIndex = 0;
+                resultsList.forceActiveFocus();
+                event.accepted = true;
+            } else {
+                event.accepted = false;
+            }
+        }
+        // Shift+Tab from the field enters the dropdown from the bottom (keeps the
+        // results tab-cyclable in reverse rather than leaving to the window).
+        Keys.onBacktabPressed: function (event) {
+            if (resultsPopup.visible && resultsList.count > 0) {
+                resultsList.currentIndex = resultsList.count - 1;
+                resultsList.forceActiveFocus();
                 event.accepted = true;
             } else {
                 event.accepted = false;
@@ -140,6 +156,22 @@ Item {
                         decrementCurrentIndex();
                         event.accepted = true;
                     }
+                }
+                // Tab/Shift+Tab cycle through results and wrap back to the field,
+                // so focus stays within the search dropdown while it's open.
+                Keys.onTabPressed: function (event) {
+                    if (resultsList.currentIndex < resultsList.count - 1)
+                        resultsList.incrementCurrentIndex();
+                    else
+                        field.forceActiveFocus();
+                    event.accepted = true;
+                }
+                Keys.onBacktabPressed: function (event) {
+                    if (resultsList.currentIndex > 0)
+                        resultsList.decrementCurrentIndex();
+                    else
+                        field.forceActiveFocus();
+                    event.accepted = true;
                 }
 
                 delegate: ItemDelegate {
