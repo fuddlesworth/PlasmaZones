@@ -431,15 +431,17 @@ SettingsFlickable {
             }
         }
 
-        // ── Filter chips ──
-        RowLayout {
-            Layout.fillWidth: true
-            spacing: Kirigami.Units.smallSpacing
+        // ── Filter chips (collapsible) ──
+        // Disclosure toggle + single-select section chips. Collapsed by default;
+        // the dot shows when a section filter is active while collapsed.
+        FilterDisclosureHeader {
+            id: rulesFilterHeader
 
-            Label {
-                text: i18n("Filter:")
-                opacity: 0.7
-            }
+            hasActiveFilters: page.chipFilter !== -1
+        }
+
+        CollapsibleChipFlow {
+            open: rulesFilterHeader.expanded
 
             Repeater {
                 // "All" chip prepended to the controller's section list — the
@@ -460,10 +462,6 @@ SettingsFlickable {
                     Accessible.name: i18n("Filter rules: %1", modelData.label)
                     onClicked: page.chipFilter = modelData.value
                 }
-            }
-
-            Item {
-                Layout.fillWidth: true
             }
         }
 
