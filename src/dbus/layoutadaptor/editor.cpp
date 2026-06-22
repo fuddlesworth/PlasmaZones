@@ -125,16 +125,15 @@ bool LayoutAdaptor::updateLayout(const QString& layoutJson)
         // layout-settings.json sidecar. Editor-managed keys are set when present
         // in the incoming object and cleared when absent (reset-to-default).
         QJsonObject overrides = m_layoutManager->loadAutotileOverrides(algoId);
-        const std::array<QLatin1String, 8> editorKeys{{
-            ::PhosphorZones::ZoneJsonKeys::ZonePadding,
-            ::PhosphorZones::ZoneJsonKeys::OuterGap,
-            ::PhosphorZones::ZoneJsonKeys::AllowedScreens,
-            ::PhosphorZones::ZoneJsonKeys::AllowedDesktops,
-            ::PhosphorZones::ZoneJsonKeys::AllowedActivities,
-            ::PhosphorZones::ZoneJsonKeys::ShaderId,
-            ::PhosphorZones::ZoneJsonKeys::ShaderParams,
-            ::PhosphorZones::ZoneJsonKeys::OverlayDisplayMode,
-        }};
+        // CTAD deduces the array size from the initializer so the element count
+        // stays in sync automatically (no hand-maintained size). hiddenFromSelector
+        // is intentionally absent — it's owned by setLayoutHidden, not the editor.
+        const std::array editorKeys{
+            ::PhosphorZones::ZoneJsonKeys::ZonePadding,       ::PhosphorZones::ZoneJsonKeys::OuterGap,
+            ::PhosphorZones::ZoneJsonKeys::AllowedScreens,    ::PhosphorZones::ZoneJsonKeys::AllowedDesktops,
+            ::PhosphorZones::ZoneJsonKeys::AllowedActivities, ::PhosphorZones::ZoneJsonKeys::ShaderId,
+            ::PhosphorZones::ZoneJsonKeys::ShaderParams,      ::PhosphorZones::ZoneJsonKeys::OverlayDisplayMode,
+        };
         for (const QLatin1String key : editorKeys) {
             if (obj.contains(key)) {
                 overrides[key] = obj.value(key);

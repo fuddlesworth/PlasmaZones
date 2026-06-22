@@ -149,7 +149,10 @@ bool LayoutSettingsStore::loadFromFile(const QString& path)
 
     const QJsonObject root = doc.object();
     for (auto it = root.constBegin(); it != root.constEnd(); ++it) {
-        if (it.key() == kVersionKey || !it.value().isObject()) {
+        // Skip the version stamp, non-object values, and an empty key (which a
+        // hand-edited/corrupt file could carry) — settingsFor("") must never
+        // resolve to a stored object.
+        if (it.key().isEmpty() || it.key() == kVersionKey || !it.value().isObject()) {
             continue;
         }
         m_byLayout.insert(it.key(), it.value().toObject());

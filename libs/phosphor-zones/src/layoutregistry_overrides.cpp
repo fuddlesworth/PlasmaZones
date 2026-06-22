@@ -113,13 +113,19 @@ void LayoutRegistry::migrateLegacyAutotileOverrides()
 
     // Retire the legacy file only after its contents are safely folded in. A
     // failed write keeps it in place so the fold retries next launch instead of
-    // permanently losing the user's autotile overrides.
+    // permanently losing the user's autotile overrides. The fold is idempotent
+    // (the settingsFor-empty guard above lets an already-migrated entry win), so
+    // a failed remove harmlessly re-folds next launch rather than duplicating.
     if (!m_layoutSettings.saveToFile(layoutSettingsFilePath())) {
         qCWarning(lcZonesLib) << "Autotile-overrides migration: failed to write unified sidecar — "
                                  "keeping legacy file for retry";
         return;
     }
-    QFile::remove(legacyPath);
+    if (!QFile::remove(legacyPath)) {
+        qCWarning(lcZonesLib) << "Autotile-overrides migration: folded into the unified sidecar but could not remove "
+                                 "the legacy file (will harmlessly re-fold next launch):"
+                              << legacyPath;
+    }
 }
 
 } // namespace PhosphorZones

@@ -553,9 +553,8 @@ private:
      * extraction.
      */
     void applyLayoutToScreen(const QString& screenId, Layout* layout);
-    /// One-time fold of the retired standalone autotile-overrides.json into the
-    /// unified layout-settings.json sidecar (keyed by "autotile:<id>"). Runs on
-    /// load; deletes the legacy file afterwards so it executes exactly once.
+    /// One-time idempotent fold of the retired autotile-overrides.json into the
+    /// unified layout-settings.json sidecar; deletes the legacy file when done.
     void migrateLegacyAutotileOverrides();
     Layout* resolveConfiguredDefault() const;
 
