@@ -68,23 +68,32 @@ Rectangle {
             border.color: Kirigami.Theme.highlightColor
             border.width: Math.max(1, Math.round(Screen.devicePixelRatio * 2))
             radius: Kirigami.Units.smallSpacing / 2
+            // Keep labels from painting outside the region in narrow (portrait /
+            // thin-split) zones \u2014 belt-and-braces alongside the width cap below.
+            clip: true
 
             ColumnLayout {
                 anchors.centerIn: parent
+                // Cap to the region width so the labels elide instead of
+                // overflowing past narrow zone edges.
+                width: Math.min(implicitWidth, regionRect.width - Kirigami.Units.smallSpacing)
                 spacing: Math.round(Kirigami.Units.smallSpacing / 2)
 
                 Label {
-                    Layout.alignment: Qt.AlignHCenter
+                    Layout.fillWidth: true
+                    horizontalAlignment: Text.AlignHCenter
                     text: modelData.displayName || i18n("Screen %1", index + 1)
                     font.weight: Font.DemiBold
                     font.pixelSize: Math.max(Kirigami.Theme.defaultFont.pixelSize * 0.7, Math.min(Kirigami.Theme.defaultFont.pixelSize * 1, regionRect.width * previewRoot.titleFontScaleFraction))
                     color: Kirigami.Theme.textColor
-                    elide: Text.ElideRight
-                    maximumLineCount: 1
+                    // Wrap rather than elide: portrait/thin zones are narrow but
+                    // tall, so wrapping keeps the full label readable.
+                    wrapMode: Text.Wrap
                 }
 
                 Label {
-                    Layout.alignment: Qt.AlignHCenter
+                    Layout.fillWidth: true
+                    horizontalAlignment: Text.AlignHCenter
                     text: {
                         var wpx = Math.round(modelData.width * previewRoot.screenWidth);
                         var hpx = Math.round(modelData.height * previewRoot.screenHeight);
@@ -96,6 +105,7 @@ Rectangle {
                     }
                     font.pixelSize: Math.max(Kirigami.Theme.defaultFont.pixelSize * 0.65, Math.min(Kirigami.Theme.defaultFont.pixelSize * 0.85, regionRect.width * previewRoot.detailFontScaleFraction))
                     color: Kirigami.Theme.disabledTextColor
+                    wrapMode: Text.Wrap
                 }
             }
         }
