@@ -96,6 +96,36 @@ SettingsFlickable {
         }
 
         // =====================================================================
+        // LAYOUT ASSIGNMENT CARD
+        // =====================================================================
+        // Mode-neutral: the toggle governs the synthesized default for BOTH the
+        // snapping and tiling engines, so it lives on the General page rather
+        // than either mode's behavior page.
+        SettingsCard {
+            headerText: i18n("Layout assignment")
+            collapsible: true
+            searchAnchor: "layoutAssignment"
+
+            contentItem: ColumnLayout {
+                spacing: Kirigami.Units.smallSpacing
+
+                SettingsRow {
+                    title: i18n("Don't assign a layout by default")
+                    searchAnchor: "suppressDefaultLayoutAssignment"
+                    description: i18n("Snapping and tiling stay off until you assign a layout. A window rule can re-enable the default per monitor.")
+
+                    SettingsSwitch {
+                        checked: appSettings.suppressDefaultLayoutAssignment
+                        accessibleName: i18n("Don't assign a layout to contexts by default")
+                        onToggled: function (newValue) {
+                            appSettings.suppressDefaultLayoutAssignment = newValue;
+                        }
+                    }
+                }
+            }
+        }
+
+        // =====================================================================
         // WINDOW FILTERING CARD
         // =====================================================================
         // The three global filters previously hosted on the standalone
