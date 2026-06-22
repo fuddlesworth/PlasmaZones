@@ -399,7 +399,7 @@ public:
     QString snappingLayoutForScreen(const QString& screenId, int virtualDesktop = 0,
                                     const QString& activity = QString()) const;
     QString tilingAlgorithmForScreen(const QString& screenId, int virtualDesktop = 0,
-                                     const QString& activity = QString()) const;
+                                     const QString& activity = QString()) const override;
 
     /// Flip mode to @c Snapping for every entry currently in @c Autotile
     /// (preserves @c snappingLayout + @c tilingAlgorithm). Emits

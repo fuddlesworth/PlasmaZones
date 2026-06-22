@@ -87,9 +87,14 @@ void LayoutRegistry::loadLayoutsFromDirectory(const QString& directory)
     const auto entries = dir.entryList({QStringLiteral("*.json")}, QDir::Files);
 
     for (const auto& entry : entries) {
+        // Skip sibling sidecar files that share this directory but aren't
+        // layouts. "autotile-overrides.json" is a retired format (folded into
+        // layout-settings.json by migrateLegacyAutotileOverrides); it's kept in
+        // the skip-list as a one-release safety net in case a stale copy lingers
+        // in a system data dir the migration didn't delete.
         if (entry == QStringLiteral("assignments.json") || entry == QStringLiteral("autotile-overrides.json")
             || entry == QStringLiteral("windowrules.json") || entry == QStringLiteral("quicklayouts.json")) {
-            continue; // Skip non-layout files
+            continue;
         }
 
         const QString filePath = dir.absoluteFilePath(entry);

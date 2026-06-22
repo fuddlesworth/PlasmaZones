@@ -144,6 +144,21 @@ public:
         return {};
     }
 
+    /// Raw id of the tiling algorithm active for the (@p screenId,
+    /// @p virtualDesktop, @p activity) context, or empty when none resolves.
+    /// Used by the unified-list builder to keep the active algorithm visible in
+    /// the picker even when it's been hidden (mirrors the active-layout
+    /// exemption for manual layouts). Default empty for non-resolving
+    /// implementers.
+    virtual QString tilingAlgorithmForScreen(const QString& screenId, int virtualDesktop = 0,
+                                             const QString& activity = QString()) const
+    {
+        Q_UNUSED(screenId)
+        Q_UNUSED(virtualDesktop)
+        Q_UNUSED(activity)
+        return {};
+    }
+
     /// Resolve the per-context gap override (zone padding + outer gaps) that
     /// window rules pin for the (@p screenId, @p virtualDesktop, @p activity)
     /// context — the same resolution the daemon's geometry resolver uses on the

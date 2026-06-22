@@ -324,9 +324,11 @@ QStringList LayoutAdaptor::getLayoutList()
             // "autotile:<id>". Surface it so the settings list shows the eye
             // toggle's true state.
             const QString algoId = PhosphorLayout::LayoutId::extractAlgorithmId(entry.id);
-            const QJsonObject overrides = m_layoutManager->loadAutotileOverrides(algoId);
-            json[QStringLiteral("hiddenFromSelector")] =
-                overrides.value(PhosphorZones::ZoneJsonKeys::HiddenFromSelector).toBool(false);
+            if (!algoId.isEmpty()) {
+                const QJsonObject overrides = m_layoutManager->loadAutotileOverrides(algoId);
+                json[QStringLiteral("hiddenFromSelector")] =
+                    overrides.value(PhosphorZones::ZoneJsonKeys::HiddenFromSelector).toBool(false);
+            }
         }
 
         result.append(QString::fromUtf8(QJsonDocument(json).toJson(QJsonDocument::Compact)));
@@ -413,6 +415,13 @@ void LayoutAdaptor::setLayoutHidden(const QString& layoutId, bool hidden)
     // layout-settings.json sidecar keyed by "autotile:<id>".
     if (PhosphorLayout::LayoutId::isAutotile(layoutId)) {
         const QString algoId = PhosphorLayout::LayoutId::extractAlgorithmId(layoutId);
+        // A bare "autotile:" id yields an empty algorithm key; writing under it
+        // would create an orphan sidecar entry no algorithm maps to. Mirror
+        // updateLayout's guard and reject it.
+        if (algoId.isEmpty()) {
+            qCWarning(lcDbusLayout) << "setLayoutHidden: autotile id with empty algorithm id rejected:" << layoutId;
+            return;
+        }
         const QString hiddenKey = PhosphorZones::ZoneJsonKeys::HiddenFromSelector;
         QJsonObject overrides = m_layoutManager->loadAutotileOverrides(algoId);
         if (overrides.value(hiddenKey).toBool(false) == hidden) {
