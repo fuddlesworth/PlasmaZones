@@ -34,6 +34,10 @@ const QList<QLatin1StringView> kContextDomainTypes = {
     // Layout lock — context-domain, resolved during the screen/desktop/
     // activity pass (mode-agnostic) like the other context actions.
     ActionType::LockContext,
+    // Default-assignment override — context-domain, resolved during the
+    // screen/desktop/activity pass (LayoutRegistry::resolveContextDefaultAssignment),
+    // mode-agnostic like LockContext.
+    ActionType::DefaultLayoutAssignment,
     // Gap overrides are context-domain — resolved during the
     // screen/desktop/activity pass, never per-window.
     ActionType::SetZonePadding,
