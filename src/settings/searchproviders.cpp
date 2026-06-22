@@ -34,6 +34,14 @@ QVector<SearchEntry> LayoutsSearchProvider::searchEntries() const
         e.kind = SearchEntry::Kind::Entity;
         e.pageId = QStringLiteral("layouts");
         e.title = name;
+        // Per-layout reveal anchor; LayoutGridDelegate registers "layout:<id>"
+        // with the page (id matches the QML modelData.id), so selecting a
+        // layouts search result scrolls to + pulses that exact card and expands
+        // its group. Empty id → no anchor (page-level open only).
+        const QString id = m.value(QStringLiteral("id")).toString();
+        if (!id.isEmpty()) {
+            e.anchor = QStringLiteral("layout:") + id;
+        }
         // No subtitle: SearchController auto-derives the page breadcrumb, keeping
         // these consistent with section/setting results.
         e.icon = QStringLiteral("view-grid-symbolic");
