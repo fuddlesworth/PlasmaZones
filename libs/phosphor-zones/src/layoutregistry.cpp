@@ -81,12 +81,33 @@ void LayoutRegistry::setSnappingPreferredProvider(std::function<bool()> provider
     m_snappingPreferredProvider = std::move(provider);
 }
 
+void LayoutRegistry::setDefaultAssignmentSuppressedProvider(std::function<bool()> provider)
+{
+    m_defaultAssignmentSuppressedProvider = std::move(provider);
+}
+
 bool LayoutRegistry::snappingPreferred() const
 {
     return m_snappingPreferredProvider && m_snappingPreferredProvider();
 }
 
 AssignmentEntry LayoutRegistry::resolveDefaultAssignmentEntry() const
+{
+    // Global suppress gate. When the user has opted to suppress the synthesized
+    // default assignment, no unassigned context gets a level-1 default — the
+    // result is a default-constructed (invalid) entry whose activeLayoutId() is
+    // empty, the SAME effective state as a system with no default providers
+    // configured. The daemon's existing "empty entry ⇒ no default, no active
+    // engine" handling therefore covers it with no further change. The
+    // per-context "allow" override bypasses this by calling the raw sibling
+    // directly (see resolveDefaultAssignmentEntryForContext).
+    if (m_defaultAssignmentSuppressedProvider && m_defaultAssignmentSuppressedProvider()) {
+        return AssignmentEntry{};
+    }
+    return resolveDefaultAssignmentEntryRaw();
+}
+
+AssignmentEntry LayoutRegistry::resolveDefaultAssignmentEntryRaw() const
 {
     // Level-1 global default. Resolution order:
     //

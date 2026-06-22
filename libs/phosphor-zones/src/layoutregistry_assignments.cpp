@@ -151,6 +151,49 @@ bool LayoutRegistry::resolveContextLocked(const QString& screenId, int virtualDe
                                 });
 }
 
+std::optional<bool> LayoutRegistry::resolveContextDefaultAssignment(const QString& screenId, int virtualDesktop,
+                                                                    const QString& activity) const
+{
+    // Mirror resolveContextLocked: a per-slot read off the evaluator's
+    // ResolvedActions, not the single-winner assignment walk. The
+    // DefaultAssignment slot is filled by the highest-priority matching context
+    // rule carrying a DefaultLayoutAssignment action; we report its boolean
+    // value (true = allow / force the default through, false = suppress). No
+    // engine-mode gate — a default-assignment-only context rule is a first-class
+    // overlay. std::nullopt means "no override rule" — the caller follows the
+    // global setting.
+    if (!m_evaluator) {
+        return std::nullopt;
+    }
+
+    return resolveCachedContext(m_contextDefaultAssignmentCache, m_contextDefaultAssignmentCacheRevision, screenId,
+                                virtualDesktop, activity, [&]() -> std::optional<bool> {
+                                    const PWR::WindowQuery query = makeContextQuery(screenId, virtualDesktop, activity);
+                                    const PWR::ResolvedActions resolved = m_evaluator->resolve(query);
+                                    if (const auto action =
+                                            resolved.slot(QString(PWR::ActionSlot::DefaultAssignment))) {
+                                        return action->params.value(PWR::ActionParam::Value).toBool();
+                                    }
+                                    return std::nullopt;
+                                });
+}
+
+AssignmentEntry LayoutRegistry::resolveDefaultAssignmentEntryForContext(const QString& screenId, int virtualDesktop,
+                                                                        const QString& activity) const
+{
+    // Single cascade-miss tail for every per-context resolver. The per-context
+    // DefaultLayoutAssignment override (if present) wins over the global
+    // suppress baseline:
+    //   - false (suppress) → invalid entry: this context gets no default.
+    //   - true  (allow)    → raw synth: force the default through even when the
+    //                        global suppress setting is on.
+    //   - no override      → the global-gated resolveDefaultAssignmentEntry.
+    if (const auto override = resolveContextDefaultAssignment(screenId, virtualDesktop, activity)) {
+        return *override ? resolveDefaultAssignmentEntryRaw() : AssignmentEntry{};
+    }
+    return resolveDefaultAssignmentEntry();
+}
+
 ContextOverlayOverride LayoutRegistry::resolveContextOverlay(const QString& screenId, int virtualDesktop,
                                                              const QString& activity) const
 {
@@ -602,8 +645,9 @@ QString LayoutRegistry::assignmentIdForScreen(const QString& screenId, int virtu
     }
 
     // No stored entry in the cascade — fall through to the level-1 global
-    // default via the injected providers.
-    const AssignmentEntry def = resolveDefaultAssignmentEntry();
+    // default via the injected providers, honoring the global suppress setting
+    // and any per-context DefaultLayoutAssignment override.
+    const AssignmentEntry def = resolveDefaultAssignmentEntryForContext(screenId, virtualDesktop, activity);
     return def.activeLayoutId();
 }
 
@@ -639,8 +683,9 @@ AssignmentEntry LayoutRegistry::assignmentEntryForScreen(const QString& screenId
         }
     }
 
-    // Cascade miss — synthesize from the level-1 global default.
-    return resolveDefaultAssignmentEntry();
+    // Cascade miss — synthesize from the level-1 global default, honoring the
+    // global suppress setting and any per-context DefaultLayoutAssignment override.
+    return resolveDefaultAssignmentEntryForContext(screenId, virtualDesktop, activity);
 }
 
 AssignmentEntry::Mode LayoutRegistry::modeForScreen(const QString& screenId, int virtualDesktop,
@@ -659,6 +704,64 @@ QString LayoutRegistry::tilingAlgorithmForScreen(const QString& screenId, int vi
                                                  const QString& activity) const
 {
     return assignmentEntryForScreen(screenId, virtualDesktop, activity).tilingAlgorithm;
+}
+
+bool LayoutRegistry::hasMatchingAssignmentRule(const QString& screenId, int virtualDesktop,
+                                               const QString& activity) const
+{
+    auto tryOne = [this, virtualDesktop, &activity](const QString& sid) {
+        return resolveAssignmentEntry(sid, virtualDesktop, activity).has_value();
+    };
+    if (tryOne(screenId)) {
+        return true;
+    }
+    if (PhosphorScreens::ScreenIdentity::isConnectorName(screenId)) {
+        const QString resolved = PhosphorScreens::ScreenIdentity::idForName(screenId);
+        if (resolved != screenId && tryOne(resolved)) {
+            return true;
+        }
+    }
+    if (PhosphorIdentity::VirtualScreenId::isVirtual(screenId)) {
+        if (tryOne(PhosphorIdentity::VirtualScreenId::extractPhysicalId(screenId))) {
+            return true;
+        }
+    }
+    return false;
+}
+
+bool LayoutRegistry::isDefaultAssignmentSuppressedForContext(const QString& screenId, int virtualDesktop,
+                                                             const QString& activity) const
+{
+    // The "is the synthesized default suppressed" primitive: a per-context
+    // DefaultLayoutAssignment override decides locally, otherwise the global gate.
+    if (const auto override = resolveContextDefaultAssignment(screenId, virtualDesktop, activity)) {
+        return !*override;
+    }
+    return m_defaultAssignmentSuppressedProvider && m_defaultAssignmentSuppressedProvider();
+}
+
+bool LayoutRegistry::isContextActiveLayoutSuppressed(const QString& screenId, int virtualDesktop,
+                                                     const QString& activity) const
+{
+    // An active layout exists (explicit assignment at any cascade level, or a
+    // default forced through by an "allow" override) — never suppressed.
+    if (!assignmentIdForScreen(screenId, virtualDesktop, activity).isEmpty()) {
+        return false;
+    }
+    // An enabled PINNED engine-mode assignment rule covers this context — a
+    // window rule that overrides the global suppress setting. The context stays
+    // active even when the rule sets only the mode (no layout): the layout
+    // falls back to the default exactly as it did before suppression existed,
+    // and the overlay / zone selector show because the mode is on.
+    if (hasMatchingAssignmentRule(screenId, virtualDesktop, activity)) {
+        return false;
+    }
+    // No active layout and no covering assignment rule. Report suppressed ONLY
+    // when the cause is the suppress feature (per-context override or the global
+    // gate). Any OTHER empty-assignment state (e.g. snapping enabled with no
+    // global default layout id) returns false, so callers keep their existing
+    // defaultLayout() fallback there.
+    return isDefaultAssignmentSuppressedForContext(screenId, virtualDesktop, activity);
 }
 
 } // namespace PhosphorZones
