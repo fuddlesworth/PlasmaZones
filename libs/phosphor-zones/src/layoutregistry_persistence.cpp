@@ -29,6 +29,12 @@ void LayoutRegistry::loadLayouts()
     // settings can be merged back onto its structural JSON as it loads.
     m_layoutSettings.loadFromFile(layoutSettingsFilePath());
 
+    // Fold the retired standalone autotile-overrides.json into the unified
+    // sidecar (one-time; self-deletes the legacy file). Done after the sidecar
+    // load so the store is populated, and before layouts merge so autotile
+    // entries are queryable for the rest of this load.
+    migrateLegacyAutotileOverrides();
+
     // Load from ALL data locations (system directories first, then user)
     // locateAll() returns paths in priority order: user first, system last
     // We reverse to load system first, so user layouts can override
@@ -81,9 +87,14 @@ void LayoutRegistry::loadLayoutsFromDirectory(const QString& directory)
     const auto entries = dir.entryList({QStringLiteral("*.json")}, QDir::Files);
 
     for (const auto& entry : entries) {
+        // Skip sibling sidecar files that share this directory but aren't
+        // layouts. "autotile-overrides.json" is a retired format (folded into
+        // layout-settings.json by migrateLegacyAutotileOverrides); it's kept in
+        // the skip-list as a one-release safety net in case a stale copy lingers
+        // in a system data dir the migration didn't delete.
         if (entry == QStringLiteral("assignments.json") || entry == QStringLiteral("autotile-overrides.json")
             || entry == QStringLiteral("windowrules.json") || entry == QStringLiteral("quicklayouts.json")) {
-            continue; // Skip non-layout files
+            continue;
         }
 
         const QString filePath = dir.absoluteFilePath(entry);

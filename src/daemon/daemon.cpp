@@ -768,6 +768,11 @@ bool Daemon::init()
     // are evicted on removal (bounds m_trackedLayouts over time).
     m_layoutComputeService->setLayoutManager(m_layoutManager.get());
 
+    // Seed the curated default picker visibility on a fresh install (no-op when
+    // a layout-settings.json / autotile-overrides.json already exists), before
+    // loadLayouts() so the seeded hidden state merges onto each layout.
+    m_layoutManager->seedDefaultLayoutSettingsIfFresh(ConfigDefaults::defaultLayoutVisibilitySettings());
+
     // Load layouts (defaultLayout() reads settings internally)
     m_layoutManager->loadLayouts();
     m_layoutManager->loadAssignments();

@@ -1,73 +1,131 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: LGPL-2.1-or-later
 //
-// Per-algorithm autotile layout overrides — JSON sidecar I/O.
-// Part of LayoutRegistry — split from layoutregistry_assignments.cpp to keep
-// each translation unit under the 800-line limit and to isolate the
-// autotile-overrides persistence concern (a single autotile-overrides.json
-// keyed by algorithm id) from the per-context assignment cascade.
+// Per-algorithm autotile layout overrides.
+// Autotile entries are NOT separate from manual layouts: they live in the same
+// layout-settings.json sidecar (LayoutSettingsStore), keyed by the canonical
+// "autotile:<id>" form so manual and autotile per-id settings share one store.
+// This file owns the autotile-facing accessors plus the one-time fold of the
+// legacy standalone autotile-overrides.json into that unified store.
 
 #include <PhosphorZones/LayoutRegistry.h>
+#include <PhosphorZones/LayoutSettingsStore.h>
+
+#include <PhosphorLayoutApi/LayoutId.h>
 
 #include "zoneslogging.h"
 
+#include <QDir>
 #include <QFile>
+#include <QFileInfo>
 #include <QJsonDocument>
-#include <QSaveFile>
 
 namespace PhosphorZones {
 
 namespace {
-// Filename of the per-algorithm autotile-overrides JSON sidecar, relative to
-// the layout directory. Hoisted so the load and save paths share one literal.
-const QString kAutotileOverridesFile = QStringLiteral("/autotile-overrides.json");
+// Legacy standalone sidecar, retired in favour of layout-settings.json. Read
+// once by migrateLegacyAutotileOverrides() and then deleted.
+const QString kLegacyAutotileOverridesFile = QStringLiteral("/autotile-overrides.json");
 } // namespace
-
-QJsonObject LayoutRegistry::loadAllAutotileOverrides() const
-{
-    QFile file(m_layoutDirectory + kAutotileOverridesFile);
-    if (!file.open(QIODevice::ReadOnly)) {
-        return {};
-    }
-    QJsonDocument doc = QJsonDocument::fromJson(file.readAll());
-    return doc.isObject() ? doc.object() : QJsonObject();
-}
-
-void LayoutRegistry::saveAllAutotileOverrides(const QJsonObject& all)
-{
-    ensureLayoutDirectory();
-    // QSaveFile gives atomic temp-write + rename — a crash mid-write never
-    // leaves a truncated autotile-overrides.json behind.
-    QSaveFile file(m_layoutDirectory + kAutotileOverridesFile);
-    if (!file.open(QIODevice::WriteOnly)) {
-        qCWarning(lcZonesLib) << "Failed to save autotile overrides:" << file.errorString();
-        return;
-    }
-    const QByteArray payload = QJsonDocument(all).toJson();
-    if (file.write(payload) != payload.size()) {
-        qCWarning(lcZonesLib) << "Failed to write autotile overrides:" << file.errorString();
-        file.cancelWriting();
-        return;
-    }
-    if (!file.commit()) {
-        qCWarning(lcZonesLib) << "Failed to commit autotile overrides:" << file.errorString();
-    }
-}
 
 QJsonObject LayoutRegistry::loadAutotileOverrides(const QString& algorithmId) const
 {
-    return loadAllAutotileOverrides().value(algorithmId).toObject();
+    return m_layoutSettings.settingsFor(PhosphorLayout::LayoutId::makeAutotileId(algorithmId));
 }
 
 void LayoutRegistry::saveAutotileOverrides(const QString& algorithmId, const QJsonObject& overrides)
 {
-    QJsonObject all = loadAllAutotileOverrides();
-    if (overrides.isEmpty()) {
-        all.remove(algorithmId);
-    } else {
-        all[algorithmId] = overrides;
+    // setSettingsFor clears the entry when overrides is empty, so a fully-reset
+    // algorithm collapses back to its defaults rather than persisting an empty
+    // object.
+    m_layoutSettings.setSettingsFor(PhosphorLayout::LayoutId::makeAutotileId(algorithmId), overrides);
+    if (!m_layoutSettings.saveToFile(layoutSettingsFilePath())) {
+        qCWarning(lcZonesLib) << "Failed to persist autotile overrides for" << algorithmId;
     }
-    saveAllAutotileOverrides(all);
+}
+
+void LayoutRegistry::seedDefaultLayoutSettingsIfFresh(const QJsonObject& defaults)
+{
+    if (defaults.isEmpty()) {
+        return;
+    }
+    // "Fresh" = neither the unified sidecar nor the legacy autotile sidecar
+    // exists yet. A user with either is an existing install and keeps every
+    // layout/algorithm visible — the curated default seeds new configs only,
+    // and never clobbers migrated legacy overrides.
+    const QString settingsPath = layoutSettingsFilePath();
+    if (QFile::exists(settingsPath) || QFile::exists(m_layoutDirectory + kLegacyAutotileOverridesFile)) {
+        return;
+    }
+    for (auto it = defaults.constBegin(); it != defaults.constEnd(); ++it) {
+        if (it.value().isObject()) {
+            m_layoutSettings.setSettingsFor(it.key(), it.value().toObject());
+        }
+    }
+    // Seeding runs at daemon init, before anything else has created the config
+    // directory — ensure it exists so the QSaveFile write doesn't silently fail.
+    // Persistence is disk-mediated: the caller's loadLayouts() reloads the
+    // sidecar from disk immediately after (clearing the in-memory map), so the
+    // on-disk copy written here is authoritative. A failed write degrades
+    // benignly to "everything visible" (logged below), not a crash.
+    QDir().mkpath(QFileInfo(settingsPath).absolutePath());
+    if (!m_layoutSettings.saveToFile(settingsPath)) {
+        qCWarning(lcZonesLib) << "Failed to seed default layout-settings.json";
+    }
+}
+
+void LayoutRegistry::migrateLegacyAutotileOverrides()
+{
+    const QString legacyPath = m_layoutDirectory + kLegacyAutotileOverridesFile;
+    QFile legacy(legacyPath);
+    if (!legacy.exists()) {
+        return;
+    }
+    if (!legacy.open(QIODevice::ReadOnly)) {
+        qCWarning(lcZonesLib) << "Autotile-overrides migration: cannot read" << legacyPath;
+        return;
+    }
+    QJsonParseError parseError;
+    const QJsonDocument doc = QJsonDocument::fromJson(legacy.readAll(), &parseError);
+    legacy.close();
+
+    if (parseError.error != QJsonParseError::NoError || !doc.isObject()) {
+        // Don't delete an unreadable/corrupt legacy file — leave it in place so
+        // the user's overrides survive for inspection and the fold can retry on
+        // a future launch, rather than silently dropping data.
+        qCWarning(lcZonesLib) << "Autotile-overrides migration: skipping unparseable" << legacyPath << ":"
+                              << parseError.errorString();
+        return;
+    }
+
+    const QJsonObject all = doc.object();
+    for (auto it = all.constBegin(); it != all.constEnd(); ++it) {
+        if (!it.value().isObject()) {
+            continue;
+        }
+        const QString key = PhosphorLayout::LayoutId::makeAutotileId(it.key());
+        // A store entry that already exists (a seeded default or a
+        // post-migration user toggle) wins over the legacy value.
+        if (m_layoutSettings.settingsFor(key).isEmpty()) {
+            m_layoutSettings.setSettingsFor(key, it.value().toObject());
+        }
+    }
+
+    // Retire the legacy file only after its contents are safely folded in. A
+    // failed write keeps it in place so the fold retries next launch instead of
+    // permanently losing the user's autotile overrides. The fold is idempotent
+    // (the settingsFor-empty guard above lets an already-migrated entry win), so
+    // a failed remove harmlessly re-folds next launch rather than duplicating.
+    if (!m_layoutSettings.saveToFile(layoutSettingsFilePath())) {
+        qCWarning(lcZonesLib) << "Autotile-overrides migration: failed to write unified sidecar — "
+                                 "keeping legacy file for retry";
+        return;
+    }
+    if (!QFile::remove(legacyPath)) {
+        qCWarning(lcZonesLib) << "Autotile-overrides migration: folded into the unified sidecar but could not remove "
+                                 "the legacy file (will harmlessly re-fold next launch):"
+                              << legacyPath;
+    }
 }
 
 } // namespace PhosphorZones

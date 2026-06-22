@@ -29,7 +29,12 @@ constexpr QLatin1String kZoneAppearanceMapKey{"zoneAppearance"};
 
 // The per-LAYOUT setting keys that move out of the layout file. The per-ZONE
 // appearance block is handled separately (see extract/strip/merge below).
-const std::array<QLatin1String, 13> layoutSettingKeys{{
+//
+// hiddenFromSelector is a user preference (which layouts the curated picker
+// shows), not part of the structural layout definition — so it lives here in
+// the sidecar, keyed by id, the same way the curated defaults are seeded. The
+// same store also holds autotile entries keyed by "autotile:<id>".
+const std::array<QLatin1String, 14> layoutSettingKeys{{
     ZoneJsonKeys::ZonePadding,
     ZoneJsonKeys::OuterGap,
     ZoneJsonKeys::UsePerSideOuterGap,
@@ -40,6 +45,7 @@ const std::array<QLatin1String, 13> layoutSettingKeys{{
     ZoneJsonKeys::ShowZoneNumbers,
     ZoneJsonKeys::OverlayDisplayMode,
     ZoneJsonKeys::AutoAssign,
+    ZoneJsonKeys::HiddenFromSelector,
     ZoneJsonKeys::UseFullScreenGeometry,
     ZoneJsonKeys::ShaderId,
     ZoneJsonKeys::ShaderParams,
@@ -143,7 +149,10 @@ bool LayoutSettingsStore::loadFromFile(const QString& path)
 
     const QJsonObject root = doc.object();
     for (auto it = root.constBegin(); it != root.constEnd(); ++it) {
-        if (it.key() == kVersionKey || !it.value().isObject()) {
+        // Skip the version stamp, non-object values, and an empty key (which a
+        // hand-edited/corrupt file could carry) — settingsFor("") must never
+        // resolve to a stored object.
+        if (it.key().isEmpty() || it.key() == kVersionKey || !it.value().isObject()) {
             continue;
         }
         m_byLayout.insert(it.key(), it.value().toObject());

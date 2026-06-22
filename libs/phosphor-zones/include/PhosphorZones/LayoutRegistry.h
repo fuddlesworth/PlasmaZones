@@ -399,7 +399,7 @@ public:
     QString snappingLayoutForScreen(const QString& screenId, int virtualDesktop = 0,
                                     const QString& activity = QString()) const;
     QString tilingAlgorithmForScreen(const QString& screenId, int virtualDesktop = 0,
-                                     const QString& activity = QString()) const;
+                                     const QString& activity = QString()) const override;
 
     /// Flip mode to @c Snapping for every entry currently in @c Autotile
     /// (preserves @c snappingLayout + @c tilingAlgorithm). Emits
@@ -489,7 +489,15 @@ public:
     // ─── Autotile layout overrides (per-algorithm user overrides) ─────────
 
     void saveAutotileOverrides(const QString& algorithmId, const QJsonObject& overrides);
-    QJsonObject loadAutotileOverrides(const QString& algorithmId) const;
+    QJsonObject loadAutotileOverrides(const QString& algorithmId) const override;
+
+    /// Seed curated default picker visibility into the sidecar, but ONLY on a
+    /// fresh install — when neither layout-settings.json nor the legacy
+    /// autotile-overrides.json exists. @p defaults is keyed exactly as the
+    /// sidecar (manual layouts by UUID, algorithms by "autotile:<id>"). Existing
+    /// installs are never reseeded. Call before @ref loadLayouts so the merge
+    /// picks up the seeded entries.
+    void seedDefaultLayoutSettingsIfFresh(const QJsonObject& defaults);
 
     /// Current entry count in the @ref resolveAssignmentEntry hot-path cache.
     /// Used by tests to verify the cache populates and invalidates against
@@ -545,8 +553,9 @@ private:
      * extraction.
      */
     void applyLayoutToScreen(const QString& screenId, Layout* layout);
-    QJsonObject loadAllAutotileOverrides() const;
-    void saveAllAutotileOverrides(const QJsonObject& all);
+    /// One-time idempotent fold of the retired autotile-overrides.json into the
+    /// unified layout-settings.json sidecar; deletes the legacy file when done.
+    void migrateLegacyAutotileOverrides();
     Layout* resolveConfiguredDefault() const;
 
     // ─── Rule-backed assignment resolution ────────────────────────────────
