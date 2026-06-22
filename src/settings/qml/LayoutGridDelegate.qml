@@ -30,7 +30,7 @@ Item {
     // the root so child controls (auto-assign button, CategoryBadge) share a
     // single binding and stay consistent.
     readonly property bool globalAutoAssign: root.appSettings.autoAssignAllLayouts === true
-    // Selection state (bound from parent GridView)
+    // Selection state (bound by the hosting page against its selectedLayoutId)
     property bool isSelected: false
     property bool isHovered: false
     // Inner padding of the card body (border → content). Single-sourced so the

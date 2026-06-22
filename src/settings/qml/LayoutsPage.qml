@@ -151,7 +151,7 @@ SettingsFlickable {
 
     // Empty-string layoutId is treated as "no-op, keep current selection" so
     // the post-add Qt.callLater path can pass through unrejected when the
-    // newly-added rule has no id yet.
+    // newly-added layout has no id yet.
     function selectLayoutById(layoutId) {
         if (layoutId)
             root.selectedLayoutId = layoutId;
