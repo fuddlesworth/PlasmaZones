@@ -378,6 +378,14 @@ void LayoutRegistry::removeLayout(PhosphorZones::Layout* layout)
     // Delete layout file (using stored path)
     QFile::remove(filePath);
 
+    // Drop the layout's settings sidecar entry. For a user override being
+    // deleted to restore the system original, this is also what we want — the
+    // restored system layout should not inherit the user's custom settings.
+    m_layoutSettings.removeLayout(layoutIdStr);
+    if (!m_layoutSettings.saveToFile(layoutSettingsFilePath())) {
+        qCWarning(lcZonesLib) << "Failed to persist layout settings sidecar after removing" << layoutIdStr;
+    }
+
     // Clear every pointer that could capture the about-to-deleteLater
     // layout. m_previousLayout is obvious. m_activeLayout is the subtle
     // one: the wasActive branches below call setActiveLayout(newLayout),

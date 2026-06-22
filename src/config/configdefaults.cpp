@@ -44,6 +44,11 @@ QString ConfigDefaults::quickLayoutsFilePath()
     return configDir() + QStringLiteral("/plasmazones/quicklayouts.json");
 }
 
+QString ConfigDefaults::layoutSettingsFilePath()
+{
+    return configDir() + QStringLiteral("/plasmazones/layout-settings.json");
+}
+
 QString ConfigDefaults::legacyConfigFilePath()
 {
     return configDir() + QStringLiteral("/plasmazonesrc");

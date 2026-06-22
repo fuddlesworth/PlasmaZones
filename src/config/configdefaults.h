@@ -678,6 +678,12 @@ public:
     // rule store. LayoutRegistry reads/writes this file directly.
     PLASMAZONES_EXPORT static QString quickLayoutsFilePath();
 
+    // Returns the absolute path to layout-settings.json — the per-layout
+    // settings sidecar (keyed by layout UUID). Per-layout settings are NOT part
+    // of the structural layout definition, so they live in a sibling sidecar
+    // next to windowrules.json rather than inside each layout file.
+    PLASMAZONES_EXPORT static QString layoutSettingsFilePath();
+
     // Returns the absolute path to the legacy plasmazonesrc file (INI format).
     // Used only by the one-time migration module.
     PLASMAZONES_EXPORT static QString legacyConfigFilePath();
