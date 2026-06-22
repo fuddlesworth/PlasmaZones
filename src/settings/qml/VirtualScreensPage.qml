@@ -574,42 +574,42 @@ SettingsFlickable {
                     Repeater {
                         model: [
                             {
-                                "label": i18n("50 / 50"),
+                                "label": i18n("50% / 50%"),
                                 "detail": i18n("Horizontal"),
                                 "regions": root._horizontalRegions([50, 50], [i18n("Left"), i18n("Right")])
                             },
                             {
-                                "label": i18n("60 / 40"),
+                                "label": i18n("60% / 40%"),
                                 "detail": i18n("Horizontal"),
                                 "regions": root._horizontalRegions([60, 40], [i18n("Main"), i18n("Side")])
                             },
                             {
-                                "label": i18n("33 / 33 / 33"),
+                                "label": i18n("33% / 33% / 33%"),
                                 "detail": i18n("Horizontal"),
                                 "regions": root._horizontalRegions([33.3, 33.4, 33.3], [i18n("Left"), i18n("Center"), i18n("Right")])
                             },
                             {
-                                "label": i18n("40 / 20 / 40"),
+                                "label": i18n("40% / 20% / 40%"),
                                 "detail": i18n("Horizontal"),
                                 "regions": root._horizontalRegions([40, 20, 40], [i18n("Left"), i18n("Center"), i18n("Right")])
                             },
                             {
-                                "label": i18n("50 / 50"),
+                                "label": i18n("50% / 50%"),
                                 "detail": i18n("Vertical"),
                                 "regions": root._gridRegions(1, 2, [i18n("Top"), i18n("Bottom")])
                             },
                             {
-                                "label": i18n("50 / 50"),
+                                "label": i18n("50% / 50%"),
                                 "detail": i18n("Grid"),
                                 "regions": root._gridRegions(2, 2, [i18n("Top-Left"), i18n("Top-Right"), i18n("Bottom-Left"), i18n("Bottom-Right")])
                             },
                             {
-                                "label": i18n("33 / 33 / 33"),
+                                "label": i18n("33% / 33% / 33%"),
                                 "detail": i18n("Grid"),
                                 "regions": root._gridRegions(3, 2, [i18n("Top-Left"), i18n("Top-Center"), i18n("Top-Right"), i18n("Bottom-Left"), i18n("Bottom-Center"), i18n("Bottom-Right")])
                             },
                             {
-                                "label": i18n("60 / 40"),
+                                "label": i18n("60% / 40%"),
                                 "detail": i18n("Grid"),
                                 "regions": [
                                     {
