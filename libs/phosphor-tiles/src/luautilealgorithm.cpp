@@ -574,8 +574,11 @@ QVariantMap LuauTileAlgorithm::buildContext(const TilingParams& params, const QR
     }
 
     // Persistent per-algorithm bag (ctx.state) — read view of the script's own
-    // stored state. Scripts write it back via the onWindowResized hook return.
-    if (params.state) {
+    // stored state. Only surfaced to algorithms that opt into persistence via
+    // metadata.supportsScriptState, so a non-opted-in algorithm can't read a bag
+    // left behind by a different algorithm on the same TilingState. Scripts write
+    // it back via the onWindowResized hook return.
+    if (m_metadata.supportsScriptState && params.state) {
         const QJsonObject bag = params.state->scriptState();
         if (!bag.isEmpty()) {
             ctx[QStringLiteral("state")] = bag.toVariantMap();
@@ -729,9 +732,12 @@ void LuauTileAlgorithm::onWindowResized(TilingState* state, const ResizeEvent& r
         return;
     }
     // The hook returns the new persistent state bag (or nothing to leave it
-    // unchanged). Sanitize at this trust boundary, then store so the retile the
-    // engine runs next lays the windows out from the updated state.
-    if (out.result.typeId() == QMetaType::QVariantMap) {
+    // unchanged). Persistence is opt-in via metadata.supportsScriptState — a
+    // script that reacts to resize without declaring it gets no stored state
+    // (and no ctx.state, see buildContext), keeping each algorithm's bag its own.
+    // Sanitize at this trust boundary, then store so the retile the engine runs
+    // next lays the windows out from the updated state.
+    if (m_metadata.supportsScriptState && out.result.typeId() == QMetaType::QVariantMap) {
         const QJsonObject sanitized = TilingState::sanitizeScriptState(QJsonObject::fromVariantMap(out.result.toMap()));
         state->setScriptState(sanitized);
     }
