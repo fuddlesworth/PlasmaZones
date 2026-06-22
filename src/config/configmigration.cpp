@@ -2489,13 +2489,21 @@ QJsonObject stripLayoutSettings(const QJsonObject& full)
     for (const QLatin1String key : kLayoutSettingKeys) {
         structural.remove(key);
     }
-    QJsonArray zones = structural.value(kLayoutZonesKey).toArray();
-    for (int i = 0; i < zones.size(); ++i) {
-        QJsonObject zone = zones.at(i).toObject();
-        zone.remove(kLayoutAppearanceKey);
-        zones.replace(i, zone);
+    // Kept in lockstep with PhosphorZones::LayoutSettingsStore::stripSettings:
+    // only touch zones when present, and only strip the appearance of an
+    // id-bearing zone (its appearance is what extractLayoutSettings moved to the
+    // sidecar map, keyed by zone id). An id-less zone keeps its inline appearance.
+    if (structural.contains(kLayoutZonesKey)) {
+        QJsonArray zones = structural.value(kLayoutZonesKey).toArray();
+        for (int i = 0; i < zones.size(); ++i) {
+            QJsonObject zone = zones.at(i).toObject();
+            if (!zone.value(kLayoutIdKey).toString().isEmpty()) {
+                zone.remove(kLayoutAppearanceKey);
+                zones.replace(i, zone);
+            }
+        }
+        structural.insert(QString(kLayoutZonesKey), zones);
     }
-    structural.insert(QString(kLayoutZonesKey), zones);
     return structural;
 }
 

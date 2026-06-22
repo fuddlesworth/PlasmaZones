@@ -78,13 +78,24 @@ QJsonObject LayoutSettingsStore::stripSettings(const QJsonObject& fullLayout)
         structural.remove(key);
     }
 
-    QJsonArray zones = structural.value(ZoneJsonKeys::Zones).toArray();
-    for (int i = 0; i < zones.size(); ++i) {
-        QJsonObject zone = zones.at(i).toObject();
-        zone.remove(ZoneJsonKeys::Appearance);
-        zones.replace(i, zone);
+    // Only touch the zones array if it actually exists, so stripSettings is the
+    // identity on a settings-free object rather than synthesising an empty
+    // "zones": [].
+    if (structural.contains(ZoneJsonKeys::Zones)) {
+        QJsonArray zones = structural.value(ZoneJsonKeys::Zones).toArray();
+        for (int i = 0; i < zones.size(); ++i) {
+            QJsonObject zone = zones.at(i).toObject();
+            // Mirror extractSettings: only an id-bearing zone's appearance is
+            // moved to the sidecar (the map is keyed by zone id), so only those
+            // are stripped here. An id-less zone keeps its inline appearance —
+            // it has no sidecar key to be restored from.
+            if (!zone.value(ZoneJsonKeys::Id).toString().isEmpty()) {
+                zone.remove(ZoneJsonKeys::Appearance);
+                zones.replace(i, zone);
+            }
+        }
+        structural.insert(QString(ZoneJsonKeys::Zones), zones);
     }
-    structural.insert(QString(ZoneJsonKeys::Zones), zones);
     return structural;
 }
 

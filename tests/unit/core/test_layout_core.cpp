@@ -627,9 +627,49 @@ private Q_SLOTS:
         QVERIFY(reloaded.loadFromFile(path));
         QCOMPARE(reloaded.settingsFor(layoutId).value(QStringLiteral("zonePadding")).toInt(), 8);
 
-        // Empty settings are dropped, not persisted as an empty object.
+        // Empty settings are dropped, not persisted as an empty object — and the
+        // save-time filter keeps an emptied layout out of the file entirely, so a
+        // reload sees no entry for it.
         store.setSettingsFor(layoutId, QJsonObject{});
         QVERIFY(store.isEmpty());
+        QVERIFY(store.saveToFile(path));
+        LayoutSettingsStore reloadedEmpty;
+        QVERIFY(reloadedEmpty.loadFromFile(path));
+        QVERIFY(reloadedEmpty.settingsFor(layoutId).isEmpty());
+        QVERIFY(reloadedEmpty.isEmpty());
+    }
+
+    void testLayoutSettings_stripIsIdentityOnSettingsFreeInput()
+    {
+        using PhosphorZones::LayoutSettingsStore;
+        // No settings keys and no zones → stripSettings must not synthesise an
+        // empty "zones" array; it is the identity.
+        const QJsonObject bare{{QStringLiteral("id"), QStringLiteral("{x}")},
+                               {QStringLiteral("name"), QStringLiteral("Bare")}};
+        QCOMPARE(LayoutSettingsStore::stripSettings(bare), bare);
+    }
+
+    void testLayoutSettings_idlessZoneKeepsInlineAppearance()
+    {
+        using PhosphorZones::LayoutSettingsStore;
+        // An id-less zone has no sidecar key, so extractSettings skips its
+        // appearance and stripSettings must leave it inline (otherwise it would
+        // be lost). Strip→merge round-trips the id-less zone unchanged.
+        QJsonObject idlessZone{{QStringLiteral("id"), QString()},
+                               {QStringLiteral("zoneNumber"), 1},
+                               {QStringLiteral("appearance"), QJsonObject{{QStringLiteral("borderWidth"), 3}}}};
+        const QJsonObject full{{QStringLiteral("id"), QStringLiteral("{abcd0000-0000-0000-0000-000000000000}")},
+                               {QStringLiteral("zonePadding"), 8},
+                               {QStringLiteral("zones"), QJsonArray{idlessZone}}};
+
+        const QJsonObject settings = LayoutSettingsStore::extractSettings(full);
+        QVERIFY(!settings.contains(QStringLiteral("zoneAppearance"))); // id-less zone not mapped
+
+        const QJsonObject structural = LayoutSettingsStore::stripSettings(full);
+        const QJsonObject sZone = structural.value(QStringLiteral("zones")).toArray().at(0).toObject();
+        QVERIFY(sZone.contains(QStringLiteral("appearance"))); // kept inline, not lost
+
+        QCOMPARE(LayoutSettingsStore::mergeSettings(structural, settings), full);
     }
 
     void testLayoutSettings_removeLayoutDropsOnlyThatEntry()

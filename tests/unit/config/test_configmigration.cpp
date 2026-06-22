@@ -1581,11 +1581,20 @@ private Q_SLOTS:
 
     QJsonObject fullLayoutWithSettings(const QString& layoutId) const
     {
+        // Carries all 13 relocated per-layout setting keys so the relocation and
+        // format-lock round-trip tests exercise the complete split, not a subset.
         return QJsonObject{
             {QStringLiteral("id"), layoutId},
             {QStringLiteral("name"), QStringLiteral("Settings Layout")},
             {QStringLiteral("showZoneNumbers"), false},
             {QStringLiteral("zonePadding"), 8},
+            {QStringLiteral("outerGap"), 12},
+            {QStringLiteral("usePerSideOuterGap"), true},
+            {QStringLiteral("outerGapTop"), 1},
+            {QStringLiteral("outerGapBottom"), 2},
+            {QStringLiteral("outerGapLeft"), 3},
+            {QStringLiteral("outerGapRight"), 4},
+            {QStringLiteral("overlayDisplayMode"), 1},
             {QStringLiteral("autoAssign"), true},
             {QStringLiteral("useFullScreenGeometry"), true},
             {QStringLiteral("shaderId"), QStringLiteral("dissolve")},
