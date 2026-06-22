@@ -82,8 +82,9 @@ Files:
   `windowStartUserMovedResized` (when `isUserResize()`) and reports it at finish.
 - **No `screenId` arg** — the daemon resolves the screen via `screenForTrackedWindow` (empty ⇒ not
   autotile-tracked ⇒ skip); `onWindowResized` lives on the `IPlacementEngine` interface (default no-op),
-  overridden by `AutotileEngine`. There is no `isWindowInAutotileMode` (it doesn't exist); the engine's
-  own guards (autotile screen, floating, `<2` windows, cross-output) are authoritative.
+  overridden by `AutotileEngine`. The resize path does NOT use `isWindowInAutotileMode` (that gates the
+  move/snap path); the engine's own guards (autotile screen, floating, `<2` windows, cross-output) are
+  authoritative here.
 - `skipAnimation` for the dragged window is **deferred** (see §9) — it needs a `TileRequestEntry`
   protocol-struct change and the dragged window's tiled zone already matches where the user left it, so
   it animates ≈0px without it.
