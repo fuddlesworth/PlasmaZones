@@ -13,7 +13,7 @@ import org.plasmazones.settings
  *
  * One surface for every window-matching rule — monitors, applications,
  * activities, animations. Backed by a single `WindowRuleModel` exposed by
- * `SettingsController.windowRulesPage`; section grouping, search and chip
+ * `SettingsController.windowRulesPage`; section grouping, search and section
  * filtering are all derived here in QML over that one model — there are no
  * per-section proxy models.
  *
@@ -98,8 +98,10 @@ SettingsFlickable {
     // ── Filter state ──
 
     property string searchText: ""
-    // Chip filter: -1 = All, else a WindowRuleModel.Section enum value as int.
-    property int chipFilter: -1
+    // Section filter (multi-select): the set of WindowRuleModel.Section enum
+    // values (as ints) the user has unchecked. Empty = show every section.
+    // The filter button owns this state; the page reads it one-way.
+    readonly property var excludedSections: rulesFilterButton.excluded
     property string monitorFilter: ""
     // Ordered section descriptors — `[{ value: int, label }]` straight from
     // the controller. The C++ Section enum order is never duplicated in QML.
@@ -116,8 +118,8 @@ SettingsFlickable {
     // without QML hardcoding the model's role layout.
     property int modelRevision: 0
     /// Build a `[ { section, label, rules: [...] } ]` array over the flat
-    /// model, applying search / chip / monitor filters. Reactive: depends on
-    /// searchText / chipFilter / monitorFilter and `modelRevision`.
+    /// model, applying search / section / monitor filters. Reactive: depends on
+    /// searchText / excludedSections / monitorFilter and `modelRevision`.
     readonly property var sectionModel: {
         // Touch the revision so the binding re-evaluates on any model change.
         var rev = page.modelRevision;
@@ -128,8 +130,8 @@ SettingsFlickable {
         var search = page.searchText.toLowerCase();
         for (var i = 0; i < snapshot.length; ++i) {
             var entry = snapshot[i];
-            // Chip filter.
-            if (page.chipFilter >= 0 && entry.section !== page.chipFilter)
+            // Section filter — hide entries whose section the user unchecked.
+            if (page.excludedSections.indexOf(entry.section) >= 0)
                 continue;
 
             // Search filter — match name / match summary / action summary.
@@ -411,7 +413,7 @@ SettingsFlickable {
             }
         }
 
-        // ── Search + Add rule ──
+        // ── Search + filter + Add rule ──
         RowLayout {
             Layout.fillWidth: true
             spacing: Kirigami.Units.smallSpacing
@@ -423,45 +425,26 @@ SettingsFlickable {
                 onTextChanged: page.searchText = text
             }
 
+            // Multi-select section filter, modeled on the Layouts page filter
+            // button. Section labels/order come from the controller (C++), not
+            // hardcoded here. `excluded` is the page's section filter state.
+            FilterMenuButton {
+                id: rulesFilterButton
+
+                menuTitle: i18nc("@title:menu", "Filter Rules")
+                groups: [page.sectionDescriptors.map(function (s) {
+                        return {
+                            "key": s.value,
+                            "label": s.label
+                        };
+                    })]
+            }
+
             Button {
                 text: i18n("Add rule")
                 icon.name: "list-add"
                 Accessible.name: i18n("Add a new window rule")
                 onClicked: addRuleWizard.open()
-            }
-        }
-
-        // ── Filter chips (collapsible) ──
-        // Disclosure toggle + single-select section chips. Collapsed by default;
-        // the dot shows when a section filter is active while collapsed.
-        FilterDisclosureHeader {
-            id: rulesFilterHeader
-
-            hasActiveFilters: page.chipFilter !== -1
-        }
-
-        CollapsibleChipFlow {
-            open: rulesFilterHeader.expanded
-
-            Repeater {
-                // "All" chip prepended to the controller's section list — the
-                // section labels and order come from C++, not hardcoded here.
-                model: [
-                    {
-                        "value": -1,
-                        "label": i18n("All")
-                    }
-                ].concat(page.sectionDescriptors)
-
-                delegate: Button {
-                    required property var modelData
-
-                    text: modelData.label
-                    checkable: true
-                    checked: page.chipFilter === modelData.value
-                    Accessible.name: i18n("Filter rules: %1", modelData.label)
-                    onClicked: page.chipFilter = modelData.value
-                }
             }
         }
 
