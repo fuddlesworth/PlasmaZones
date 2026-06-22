@@ -1026,6 +1026,18 @@ void AutotileEngine::setAlgorithm(const QString& algorithmId)
         }
     }
 
+    // Clear the per-algorithm script-state bag on every switch. It is opaque
+    // state private to the previous algorithm (e.g. an aligned grid's column
+    // fractions) with no meaning to the next — a different scripted algorithm
+    // that also opts into supportsScriptState must not inherit it. Unlike the
+    // split tree above (which two memory algorithms can meaningfully share),
+    // script state has no cross-algorithm validity, so this is unconditional.
+    // Safe because this point is reached only when the algorithm id changed
+    // (early return above).
+    for (auto* state : m_screenStates) {
+        state->setScriptState({});
+    }
+
     Q_EMIT algorithmChanged(m_algorithmId);
 
     // Backfill windows when the new algorithm's maxWindows is higher.
