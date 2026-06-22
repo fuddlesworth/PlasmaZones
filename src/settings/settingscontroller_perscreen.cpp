@@ -102,16 +102,6 @@ bool SettingsController::hasPerScreenSnappingSettings(const QString& screenName)
     return m_settings.hasPerScreenSnappingSettings(screenName);
 }
 
-bool SettingsController::hasPerScreenSnappingGapsSettings(const QString& screenName) const
-{
-    return m_settings.hasPerScreenSnappingGapsSettings(screenName);
-}
-
-void SettingsController::clearPerScreenSnappingGapsSettings(const QString& screenName)
-{
-    m_settings.clearPerScreenSnappingGapsSettings(screenName);
-}
-
 // ── Per-screen zone selector overrides ───────────────────────────────────
 
 QVariantMap SettingsController::getPerScreenZoneSelectorSettings(const QString& screenName) const

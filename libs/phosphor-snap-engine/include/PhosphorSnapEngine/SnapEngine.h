@@ -25,6 +25,7 @@
 namespace PhosphorZones {
 class IZoneDetector;
 class LayoutRegistry;
+class Layout;
 }
 
 // PhosphorWindowRules::RuleEvaluator is included as a member type of
@@ -686,10 +687,12 @@ private:
         int zonePadding;
         ::PhosphorLayout::EdgeGaps outerGaps;
     };
-    // Resolve zone padding + outer gaps for @p screenId, honoring per-screen
-    // snapping overrides (with virtual->physical fallback) and falling back to
-    // the global values. An empty screenId yields the global values.
-    GapParams resolveGapParams(const QString& screenId) const;
+    // Resolve zone padding + outer gaps for @p screenId, honoring the same
+    // precedence the main geometry pipeline uses (minus the context-rule tier,
+    // which the engine has no registry for): per-screen snapping override (with
+    // virtual->physical fallback) -> @p layout override -> global. An empty
+    // screenId skips the per-screen tier; a null layout skips the layout tier.
+    GapParams resolveGapParams(const QString& screenId, PhosphorZones::Layout* layout) const;
 
     void commitSnapImpl(const QString& windowId, const QStringList& zoneIds, const QString& screenId,
                         PhosphorEngine::SnapIntent intent);

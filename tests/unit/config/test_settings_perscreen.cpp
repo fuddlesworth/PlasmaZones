@@ -10,7 +10,7 @@
  * 2. Per-screen zone selector no-op-write emit/husk suppression
  * 3. Per-screen autotile validation
  * 4. Per-screen autotile gaps/algorithm sub-domain independence
- * 5. Per-screen snapping gaps sub-domain isolation
+ * 5. Per-screen snapping clear drops the (gaps-only) entry
  * 6. Fresh config defaults
  */
 
@@ -359,13 +359,12 @@ private Q_SLOTS:
     }
 
     /**
-     * The per-screen snapping map currently holds only gap keys (snap-assist is
-     * global; the zone-selector keys live in their own map), so the Gaps card's
-     * gaps-subdomain clear drops the whole entry. Verifies the clear reports the
-     * gap overrides, emits exactly once, and removes the entry — and that a
-     * redundant clear is a silent no-op.
+     * The per-screen snapping map holds only gap keys (snap-assist is global;
+     * the zone-selector keys live in their own map), so clearing it removes the
+     * whole entry. Verifies the clear reports the overrides, emits exactly once,
+     * and removes the entry — and that a redundant clear is a silent no-op.
      */
-    void testPerScreenSnapping_gapsClearDropsEntry()
+    void testPerScreenSnapping_clearDropsEntry()
     {
         IsolatedConfigGuard guard;
 
@@ -376,21 +375,21 @@ private Q_SLOTS:
         settings.setPerScreenSnappingSetting(screen, QStringLiteral("ZonePadding"), 8);
         settings.setPerScreenSnappingSetting(screen, QStringLiteral("OuterGap"), 12);
 
-        QVERIFY(settings.hasPerScreenSnappingGapsSettings(screen));
         QVERIFY(settings.hasPerScreenSnappingSettings(screen));
+        // Pin the accept path: both gap keys round-trip through the validator.
+        const QVariantMap stored = settings.getPerScreenSnappingSettings(screen);
+        QCOMPARE(stored.value(QStringLiteral("ZonePadding")).toInt(), 8);
+        QCOMPARE(stored.value(QStringLiteral("OuterGap")).toInt(), 12);
 
         QSignalSpy spy(&settings, &Settings::perScreenSnappingSettingsChanged);
 
-        // Clearing the gaps sub-domain emits once and, since gaps are the only
-        // per-screen snapping keys, removes the entry entirely.
-        settings.clearPerScreenSnappingGapsSettings(screen);
+        settings.clearPerScreenSnappingSettings(screen);
         QCOMPARE(spy.count(), 1);
-        QVERIFY(!settings.hasPerScreenSnappingGapsSettings(screen));
         QVERIFY(!settings.hasPerScreenSnappingSettings(screen));
         QVERIFY(settings.getPerScreenSnappingSettings(screen).isEmpty());
 
         // A no-op clear (nothing left) changes nothing and does not emit.
-        settings.clearPerScreenSnappingGapsSettings(screen);
+        settings.clearPerScreenSnappingSettings(screen);
         QCOMPARE(spy.count(), 1);
     }
 

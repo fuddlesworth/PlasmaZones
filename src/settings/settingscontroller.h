@@ -480,8 +480,6 @@ public:
     Q_INVOKABLE void setPerScreenSnappingSetting(const QString& screenName, const QString& key, const QVariant& value);
     Q_INVOKABLE void clearPerScreenSnappingSettings(const QString& screenName);
     Q_INVOKABLE bool hasPerScreenSnappingSettings(const QString& screenName) const;
-    Q_INVOKABLE bool hasPerScreenSnappingGapsSettings(const QString& screenName) const;
-    Q_INVOKABLE void clearPerScreenSnappingGapsSettings(const QString& screenName);
 
     // ── Virtual screen configuration ──────────────────────────────────────────
     Q_INVOKABLE QStringList getPhysicalScreens() const;
