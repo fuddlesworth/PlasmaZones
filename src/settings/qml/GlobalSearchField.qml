@@ -49,6 +49,9 @@ Item {
         anchors.fill: parent
         placeholderText: i18nc("@info:placeholder global settings search", "Search settings…")
         Accessible.name: i18n("Search settings")
+        // Centre the placeholder hint, but left-align once the user starts
+        // typing so the caret and query read normally.
+        horizontalAlignment: field.text.length === 0 ? Text.AlignHCenter : Text.AlignLeft
         // Kirigami.SearchField auto-fires accepted() shortly after the text
         // changes by default — which would navigate to the top result as the
         // user types. Disable it so accepted() means "the user pressed Enter".

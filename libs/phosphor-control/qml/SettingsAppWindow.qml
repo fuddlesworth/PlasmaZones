@@ -257,155 +257,166 @@ Kirigami.ApplicationWindow {
         padding: 0
         title: root.title
 
-        RowLayout {
+        ColumnLayout {
             anchors.fill: parent
             spacing: 0
 
-            Sidebar {
-                // `sidebarItem` (not `sidebar`) — the root has a
-                // `readonly property QtObject sidebar` façade above,
-                // and JS scope chain would resolve a bare `sidebar`
-                // identifier inside the façade's methods to the root
-                // property (returning the façade itself) before
-                // resolving it as a QML id. Naming the underlying
-                // Sidebar item `sidebarItem` removes the collision so
-                // the façade's `sidebarItem.drillInto(...)` etc. land
-                // on the actual Sidebar.
-                id: sidebarItem
+            // Full-width header bar spanning the ENTIRE window, ABOVE both the
+            // sidebar and the content panel: the headerExtras slot (e.g. global
+            // search) centered across the whole window, with the optional
+            // headerTrailing slot (e.g. a status toggle) pinned right. The row
+            // collapses when neither slot is filled. A left phantom the width of
+            // the trailing keeps the centered slot window-centered (not biased
+            // left by the trailing's width).
+            RowLayout {
+                id: headerExtrasRow
 
-                // Single intermediate property drives all three Layout
-                // width hints — one Behavior+animation runs per
-                // compact/non-compact transition instead of three
-                // concurrent ones doing identical work. Pattern
-                // mirrors UnsavedChangesFooter.qml's expansion driver.
-                //
-                // NOTE: not `readonly` — Qt 6.11 hardened the readonly
-                // contract and blocks Behavior attachments on
-                // readonly-marked properties. The value still flows
-                // from the binding below; the Behavior intercepts the
-                // transition between binding-driven values.
-                property real targetWidth: root.sidebarCompact ? Kirigami.Units.gridUnit * 3 : Kirigami.Units.gridUnit * 12
+                Layout.fillWidth: true
+                Layout.leftMargin: Kirigami.Units.largeSpacing
+                Layout.rightMargin: Kirigami.Units.largeSpacing
+                Layout.topMargin: Kirigami.Units.largeSpacing
+                Layout.bottomMargin: Kirigami.Units.largeSpacing
+                spacing: 0
+                visible: headerExtrasLoader.item !== null || headerTrailingLoader.item !== null
 
-                Layout.fillHeight: true
-                // Sidebar width tracks sidebarCompact: 12 gridUnits at
-                // normal width (matches legacy), collapses to 3
-                // gridUnits in compact mode (icon-only rail). All
-                // three Layout width hints stay in lockstep via
-                // targetWidth so the animation lands at a clean width
-                // and inner-child implicitWidth can't push the rail
-                // wider during the transition.
-                Layout.preferredWidth: targetWidth
-                Layout.minimumWidth: targetWidth
-                Layout.maximumWidth: targetWidth
-                controller: root.controller
-                compact: root.sidebarCompact
+                Item {
+                    Layout.preferredWidth: headerTrailingLoader.width
+                }
 
-                // Slide animation when the rail collapses / expands.
-                // Direction is read from `root.sidebarCompact` (the
-                // same flag that drove the width assignment above) so
-                // the easing leg is decided synchronously — reading
-                // `targetWidth` inside the Behavior would re-evaluate
-                // during the animation and converge to the wrong leg
-                // as the value approached its target.
-                Behavior on targetWidth {
-                    PhosphorMotionAnimation {
-                        profile: !root.sidebarCompact ? "panel.slideIn" : "panel.slideOut"
-                    }
+                Item {
+                    Layout.fillWidth: true
+                }
+
+                // The Loaders adopt their loaded item's implicit size (slot
+                // contract: the consumer Component declares implicitWidth/Height).
+                Loader {
+                    id: headerExtrasLoader
+
+                    Layout.alignment: Qt.AlignVCenter
+                }
+
+                Item {
+                    Layout.fillWidth: true
+                }
+
+                Loader {
+                    id: headerTrailingLoader
+
+                    Layout.alignment: Qt.AlignVCenter
                 }
             }
 
             Kirigami.Separator {
-                Layout.fillHeight: true
+                Layout.fillWidth: true
+                visible: headerExtrasRow.visible
             }
 
-            ColumnLayout {
-                Layout.fillHeight: true
+            // Sidebar + content panel sit BELOW the full-width header bar.
+            RowLayout {
                 Layout.fillWidth: true
+                Layout.fillHeight: true
                 spacing: 0
 
-                // Header-extras row ABOVE the breadcrumb trail: the headerExtras
-                // slot (e.g. global search) centered, with the optional
-                // headerTrailing slot (e.g. a status toggle) pinned right. The
-                // row collapses when neither slot is filled. Side margins match
-                // the breadcrumb gutter so the trailing slot aligns to the
-                // content's right edge. A left phantom the width of the trailing
-                // keeps the centered slot window-centered (not biased left by
-                // the trailing's width).
-                RowLayout {
-                    id: headerExtrasRow
+                Sidebar {
+                    // `sidebarItem` (not `sidebar`) — the root has a
+                    // `readonly property QtObject sidebar` façade above,
+                    // and JS scope chain would resolve a bare `sidebar`
+                    // identifier inside the façade's methods to the root
+                    // property (returning the façade itself) before
+                    // resolving it as a QML id. Naming the underlying
+                    // Sidebar item `sidebarItem` removes the collision so
+                    // the façade's `sidebarItem.drillInto(...)` etc. land
+                    // on the actual Sidebar.
+                    id: sidebarItem
 
-                    Layout.fillWidth: true
-                    Layout.leftMargin: Kirigami.Units.largeSpacing
-                    Layout.rightMargin: Kirigami.Units.largeSpacing
-                    Layout.topMargin: Kirigami.Units.smallSpacing
-                    Layout.bottomMargin: Kirigami.Units.smallSpacing
-                    spacing: 0
-                    visible: headerExtrasLoader.item !== null || headerTrailingLoader.item !== null
+                    // Single intermediate property drives all three Layout
+                    // width hints — one Behavior+animation runs per
+                    // compact/non-compact transition instead of three
+                    // concurrent ones doing identical work. Pattern
+                    // mirrors UnsavedChangesFooter.qml's expansion driver.
+                    //
+                    // NOTE: not `readonly` — Qt 6.11 hardened the readonly
+                    // contract and blocks Behavior attachments on
+                    // readonly-marked properties. The value still flows
+                    // from the binding below; the Behavior intercepts the
+                    // transition between binding-driven values.
+                    property real targetWidth: root.sidebarCompact ? Kirigami.Units.gridUnit * 3 : Kirigami.Units.gridUnit * 12
 
-                    Item {
-                        Layout.preferredWidth: headerTrailingLoader.width
-                    }
+                    Layout.fillHeight: true
+                    // Sidebar width tracks sidebarCompact: 12 gridUnits at
+                    // normal width (matches legacy), collapses to 3
+                    // gridUnits in compact mode (icon-only rail). All
+                    // three Layout width hints stay in lockstep via
+                    // targetWidth so the animation lands at a clean width
+                    // and inner-child implicitWidth can't push the rail
+                    // wider during the transition.
+                    Layout.preferredWidth: targetWidth
+                    Layout.minimumWidth: targetWidth
+                    Layout.maximumWidth: targetWidth
+                    controller: root.controller
+                    compact: root.sidebarCompact
 
-                    Item {
-                        Layout.fillWidth: true
-                    }
-
-                    // The Loaders adopt their loaded item's implicit size (slot
-                    // contract: the consumer Component declares implicitWidth/Height).
-                    Loader {
-                        id: headerExtrasLoader
-
-                        Layout.alignment: Qt.AlignVCenter
-                    }
-
-                    Item {
-                        Layout.fillWidth: true
-                    }
-
-                    Loader {
-                        id: headerTrailingLoader
-
-                        Layout.alignment: Qt.AlignVCenter
+                    // Slide animation when the rail collapses / expands.
+                    // Direction is read from `root.sidebarCompact` (the
+                    // same flag that drove the width assignment above) so
+                    // the easing leg is decided synchronously — reading
+                    // `targetWidth` inside the Behavior would re-evaluate
+                    // during the animation and converge to the wrong leg
+                    // as the value approached its target.
+                    Behavior on targetWidth {
+                        PhosphorMotionAnimation {
+                            profile: !root.sidebarCompact ? "panel.slideIn" : "panel.slideOut"
+                        }
                     }
                 }
 
-                RowLayout {
-                    id: breadcrumbBar
+                Kirigami.Separator {
+                    Layout.fillHeight: true
+                }
 
+                ColumnLayout {
+                    Layout.fillHeight: true
                     Layout.fillWidth: true
-                    // Horizontal gutter matches the PageHost content margin + the
-                    // UnsavedChangesFooter inset (both largeSpacing) so breadcrumb,
-                    // page body, and footer share one left/right edge.
-                    Layout.leftMargin: Kirigami.Units.largeSpacing
-                    Layout.rightMargin: Kirigami.Units.largeSpacing
-                    Layout.topMargin: Kirigami.Units.smallSpacing
-                    Layout.bottomMargin: Kirigami.Units.smallSpacing
-                    spacing: Kirigami.Units.smallSpacing
+                    spacing: 0
 
-                    Breadcrumbs {
+                    RowLayout {
+                        id: breadcrumbBar
+
                         Layout.fillWidth: true
-                        Layout.alignment: Qt.AlignVCenter
+                        // Horizontal gutter matches the PageHost content margin + the
+                        // UnsavedChangesFooter inset (both largeSpacing) so breadcrumb,
+                        // page body, and footer share one left/right edge.
+                        Layout.leftMargin: Kirigami.Units.largeSpacing
+                        Layout.rightMargin: Kirigami.Units.largeSpacing
+                        Layout.topMargin: Kirigami.Units.smallSpacing
+                        Layout.bottomMargin: Kirigami.Units.smallSpacing
+                        spacing: Kirigami.Units.smallSpacing
+
+                        Breadcrumbs {
+                            Layout.fillWidth: true
+                            Layout.alignment: Qt.AlignVCenter
+                            controller: root.controller
+                        }
+                    }
+
+                    Kirigami.Separator {
+                        Layout.fillWidth: true
+                    }
+
+                    PageHost {
+                        Layout.fillWidth: true
+                        Layout.fillHeight: true
                         controller: root.controller
                     }
-                }
 
-                Kirigami.Separator {
-                    Layout.fillWidth: true
-                }
+                    Kirigami.Separator {
+                        Layout.fillWidth: true
+                    }
 
-                PageHost {
-                    Layout.fillWidth: true
-                    Layout.fillHeight: true
-                    controller: root.controller
-                }
-
-                Kirigami.Separator {
-                    Layout.fillWidth: true
-                }
-
-                UnsavedChangesFooter {
-                    Layout.fillWidth: true
-                    controller: root.controller
+                    UnsavedChangesFooter {
+                        Layout.fillWidth: true
+                        controller: root.controller
+                    }
                 }
             }
         }

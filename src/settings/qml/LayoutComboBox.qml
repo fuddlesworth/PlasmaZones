@@ -192,6 +192,12 @@ ComboBox {
     }
 
     function _doRebuild() {
+        // A coalesced rebuild can fire via Qt.callLater after this ComboBox
+        // has been destroyed (fast page-switching); the dying context resolves
+        // the component's own methods to undefined. Bail before invoking them
+        // rather than throwing "_buildItems is not a function".
+        if (typeof _buildItems !== "function")
+            return;
         _rebuildScheduled = false;
         let items = _buildItems();
         if (_modelMatchesItems(items)) {

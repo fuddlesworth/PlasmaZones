@@ -389,12 +389,17 @@ SettingsController::SettingsController(QObject* parent)
     // Tiling→Algorithm page sub-controller. Owns 7 slider bounds + the
     // custom-parameter CRUD surface. Borrows the algorithm registry this
     // controller already owns; declared as a unique_ptr AFTER
-    // m_localAlgorithmRegistry so reverse-order member destruction tears
-    // the sub-controller down BEFORE the registry resets. Parenting to
-    // `this` would defer destruction to ~QObject, which runs AFTER the
-    // registry unique_ptr — leaving the controller's raw m_registry pointer
-    // briefly dangling.
-    m_tilingAlgorithmPage = std::make_unique<TilingAlgorithmController>(m_settings, *m_localAlgorithmRegistry, nullptr);
+    // m_localAlgorithmRegistry so reverse-order member destruction tears the
+    // sub-controller down BEFORE the registry resets.
+    //
+    // Parented to `this` so ApplicationController::registerPage does NOT adopt
+    // it: registerPage reparents parent-LESS pages to m_app, and m_app —
+    // declared last, destroyed first — would then delete this page, leaving the
+    // unique_ptr to double-free it (SIGSEGV on close). The parent is purely an
+    // ownership marker; the unique_ptr still resets in member order (before the
+    // borrowed registry, so raw m_registry never dangles), and ~QObject(this)
+    // finds nothing left to delete.
+    m_tilingAlgorithmPage = std::make_unique<TilingAlgorithmController>(m_settings, *m_localAlgorithmRegistry, this);
     connect(m_tilingAlgorithmPage.get(), &TilingAlgorithmController::changed, this,
             &SettingsController::onSettingsPropertyChanged);
 
@@ -671,8 +676,12 @@ SettingsController::SettingsController(QObject* parent)
     m_shaderPreviewBackend = std::make_unique<RegistryShaderPreviewBackend>(m_overlayShaderRegistry, &m_settings);
     m_shaderPreviewController = std::make_unique<ShaderPreviewController>(m_shaderPreviewBackend.get());
 
+    // Parented to `this` for the same reason as m_tilingAlgorithmPage above:
+    // without a parent, registerPage would adopt it to m_app (destroyed first)
+    // and the unique_ptr would then double-free it on close. The unique_ptr
+    // still drives destruction in member order, before the borrowed registries.
     m_snappingShadersPage = std::make_unique<SnappingShadersPageController>(
-        m_overlayShaderRegistry, m_localLayoutManager.get(), m_shaderPreviewController.get());
+        m_overlayShaderRegistry, m_localLayoutManager.get(), m_shaderPreviewController.get(), this);
 
     // Screen helper signals — wire BEFORE the initial refreshScreens()
     // so a synchronous screensChanged emit from the refresh reaches our

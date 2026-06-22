@@ -224,6 +224,8 @@ SettingsFlickable {
 
                 Label {
                     Layout.fillWidth: true
+                    Layout.leftMargin: Kirigami.Units.largeSpacing
+                    Layout.rightMargin: Kirigami.Units.largeSpacing
                     text: root.userShadersDescription
                     wrapMode: Text.WordWrap
                     color: Kirigami.Theme.disabledTextColor
@@ -235,6 +237,8 @@ SettingsFlickable {
                     readonly property bool _highlight: dropArea.containsDrag
 
                     Layout.fillWidth: true
+                    Layout.leftMargin: Kirigami.Units.largeSpacing
+                    Layout.rightMargin: Kirigami.Units.largeSpacing
                     Layout.preferredHeight: Kirigami.Units.gridUnit * 5
                     radius: Kirigami.Units.smallSpacing
                     color: _highlight ? Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g, Kirigami.Theme.highlightColor.b, 0.12) : Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.04)
@@ -312,6 +316,8 @@ SettingsFlickable {
 
                 RowLayout {
                     Layout.fillWidth: true
+                    Layout.leftMargin: Kirigami.Units.largeSpacing
+                    Layout.rightMargin: Kirigami.Units.largeSpacing
 
                     Item {
                         Layout.fillWidth: true
@@ -475,10 +481,22 @@ SettingsFlickable {
                     // delegate's identically-named `modelData` doesn't shadow
                     // the Repeater's auto-injection.
                     Flow {
+                        id: shaderFlow
+
                         Layout.fillWidth: true
-                        Layout.leftMargin: Kirigami.Units.smallSpacing
-                        Layout.rightMargin: Kirigami.Units.smallSpacing
+                        // Standard card-content inset (matches SettingsRow / the
+                        // section header), so the cards line up with everything
+                        // else rather than hugging the category card edge.
+                        Layout.leftMargin: Kirigami.Units.largeSpacing
+                        Layout.rightMargin: Kirigami.Units.largeSpacing
                         spacing: Kirigami.Units.smallSpacing
+
+                        // Responsive columns: fit as many cards as the minimum
+                        // card width allows, then stretch each card to fill the
+                        // row evenly so there's no dead gap on the right edge.
+                        readonly property real _minCardWidth: Kirigami.Units.gridUnit * 13
+                        readonly property int _columns: Math.max(1, Math.floor((width + spacing) / (_minCardWidth + spacing)))
+                        readonly property real _cardWidth: (width - spacing * (_columns - 1)) / _columns
 
                         Repeater {
                             model: modelData.effects
@@ -486,6 +504,7 @@ SettingsFlickable {
                             delegate: ShaderBrowserCard {
                                 required property var modelData
 
+                                width: shaderFlow._cardWidth
                                 effect: modelData
                                 bridge: root.bridge
                                 usagesRev: root._usagesRev

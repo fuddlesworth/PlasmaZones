@@ -7,6 +7,7 @@ import QtQuick.Layouts
 import QtQuick.Window
 import org.kde.kirigami as Kirigami
 import org.plasmazones.common as QFZCommon
+import org.phosphor.animation
 
 /**
  * @brief Settings page for virtual screen configuration.
@@ -462,7 +463,8 @@ SettingsFlickable {
                 Label {
                     Layout.leftMargin: Kirigami.Units.largeSpacing
                     text: {
-                        let res = root._screenWidth + " \u00d7 " + root._screenHeight;
+                        let orient = root._screenHeight > root._screenWidth ? i18nc("@label screen orientation", "Portrait") : i18nc("@label screen orientation", "Landscape");
+                        let res = root._screenWidth + " \u00d7 " + root._screenHeight + " \u00b7 " + orient;
                         let count = root._pendingScreens.length;
                         if (count > 1) {
                             if (root._rows > 1)
@@ -481,13 +483,20 @@ SettingsFlickable {
                 VirtualScreenPreview {
                     id: previewRect
 
-                    Layout.fillWidth: true
-                    Layout.maximumWidth: Kirigami.Units.gridUnit * 30
+                    // Fit the screen's real pixel dimensions inside the available
+                    // box so the preview is portrait for portrait monitors and
+                    // landscape for landscape ones — not a fixed horizontal
+                    // rectangle. A single uniform scale drives both width and
+                    // height off the true monitor size (bounded by the card's
+                    // content width and a max height, smaller bound wins), so the
+                    // whole screen always fits; the box is then centred.
+                    readonly property real _availWidth: Math.min(parent.width - Kirigami.Units.largeSpacing * 2, Kirigami.Units.gridUnit * 30)
+                    readonly property real _maxHeight: Kirigami.Units.gridUnit * 16
+                    readonly property real _fitScale: (root._screenWidth > 0 && root._screenHeight > 0) ? Math.min(_availWidth / root._screenWidth, _maxHeight / root._screenHeight) : 0
+
                     Layout.alignment: Qt.AlignHCenter
-                    Layout.preferredHeight: {
-                        var ratio = root._screenHeight / root._screenWidth;
-                        return Math.min(width * ratio, Kirigami.Units.gridUnit * 10);
-                    }
+                    Layout.preferredWidth: _fitScale > 0 ? root._screenWidth * _fitScale : _availWidth
+                    Layout.preferredHeight: _fitScale > 0 ? root._screenHeight * _fitScale : _availWidth * 9 / 16
                     Layout.leftMargin: Kirigami.Units.largeSpacing
                     Layout.rightMargin: Kirigami.Units.largeSpacing
                     Layout.bottomMargin: Kirigami.Units.largeSpacing
@@ -501,6 +510,23 @@ SettingsFlickable {
                     }
                     onRowDividerMoved: function (rowIndex, newFraction) {
                         root._moveRowDivider(rowIndex, newFraction);
+                    }
+
+                    // Smoothly morph the box when switching monitors or changing
+                    // the split — width and height animate independently so a
+                    // landscape→portrait change eases into the new shape.
+                    Behavior on Layout.preferredWidth {
+                        PhosphorMotionAnimation {
+                            profile: "widget.hover"
+                            durationOverride: Kirigami.Units.longDuration
+                        }
+                    }
+
+                    Behavior on Layout.preferredHeight {
+                        PhosphorMotionAnimation {
+                            profile: "widget.hover"
+                            durationOverride: Kirigami.Units.longDuration
+                        }
                     }
                 }
             }
@@ -611,10 +637,17 @@ SettingsFlickable {
 
                             readonly property bool active: root._matchesPreset(presetCard.modelData.regions)
 
+                            // Inner padding (card border -> content) applied as a
+                            // margin inside contentItem below, not via the Control's
+                            // padding: the org.kde.desktop ItemDelegate style overrides
+                            // per-side padding, so it would be ignored and the content
+                            // hugged the border. Control padding zeroed.
+                            readonly property real _cardPad: Kirigami.Units.largeSpacing
+
                             Layout.fillWidth: true
                             enabled: root._selectedScreen !== ""
                             hoverEnabled: true
-                            padding: Kirigami.Units.smallSpacing
+                            padding: 0
                             Accessible.name: i18n("Preset: %1 %2", presetCard.modelData.label, presetCard.modelData.detail)
                             // Deep-copy the preset's regions so divider drags mutate
                             // _pendingScreens, not the shared model entry.
@@ -638,53 +671,62 @@ SettingsFlickable {
                                 border.color: presetCard.active ? Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g, Kirigami.Theme.highlightColor.b, 0.5) : (presetCard.hovered ? Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g, Kirigami.Theme.highlightColor.b, 0.3) : Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.08))
                             }
 
-                            contentItem: RowLayout {
-                                spacing: Kirigami.Units.largeSpacing
+                            contentItem: Item {
+                                implicitWidth: presetRow.implicitWidth + presetCard._cardPad * 2
+                                implicitHeight: presetRow.implicitHeight + presetCard._cardPad * 2
 
-                                // Preview thumbnail (left): fixed 16:9 box using the
-                                // shared ZonePreview + the same box treatment as
-                                // LayoutThumbnail (0.08 fill, accent border that
-                                // thickens when active). Zone numbers off — the split
-                                // shape is what matters here.
-                                Rectangle {
-                                    Layout.preferredHeight: Kirigami.Units.gridUnit * 3
-                                    Layout.preferredWidth: Kirigami.Units.gridUnit * 3 * 16 / 9
-                                    Layout.alignment: Qt.AlignVCenter
-                                    radius: Kirigami.Units.smallSpacing
-                                    color: Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.08)
-                                    border.width: presetCard.active ? Math.round(Screen.devicePixelRatio * 2.5) : Math.round(Screen.devicePixelRatio)
-                                    border.color: presetCard.active ? Kirigami.Theme.highlightColor : Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.12)
+                                RowLayout {
+                                    id: presetRow
 
-                                    QFZCommon.ZonePreview {
-                                        anchors.fill: parent
-                                        anchors.margins: Kirigami.Units.smallSpacing
-                                        zones: presetCard.modelData.regions
-                                        isActive: presetCard.active
-                                        zonePadding: Math.round(Kirigami.Units.smallSpacing / 2)
-                                        edgeGap: Math.round(Kirigami.Units.smallSpacing / 2)
-                                        minZoneSize: 6
-                                        showZoneNumbers: false
-                                    }
-                                }
+                                    anchors.fill: parent
+                                    anchors.margins: presetCard._cardPad
+                                    spacing: Kirigami.Units.largeSpacing
 
-                                ColumnLayout {
-                                    Layout.fillWidth: true
-                                    Layout.alignment: Qt.AlignVCenter
-                                    spacing: 0
+                                    // Preview thumbnail (left): fixed 16:9 box using the
+                                    // shared ZonePreview + the same box treatment as
+                                    // LayoutThumbnail (0.08 fill, accent border that
+                                    // thickens when active). Zone numbers off — the split
+                                    // shape is what matters here.
+                                    Rectangle {
+                                        Layout.preferredHeight: Kirigami.Units.gridUnit * 3
+                                        Layout.preferredWidth: Kirigami.Units.gridUnit * 3 * 16 / 9
+                                        Layout.alignment: Qt.AlignVCenter
+                                        radius: Kirigami.Units.smallSpacing
+                                        color: Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.08)
+                                        border.width: presetCard.active ? Math.round(Screen.devicePixelRatio * 2.5) : Math.round(Screen.devicePixelRatio)
+                                        border.color: presetCard.active ? Kirigami.Theme.highlightColor : Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.12)
 
-                                    Label {
-                                        Layout.fillWidth: true
-                                        text: presetCard.modelData.label
-                                        font.weight: Font.Medium
-                                        elide: Text.ElideRight
+                                        QFZCommon.ZonePreview {
+                                            anchors.fill: parent
+                                            anchors.margins: Kirigami.Units.smallSpacing
+                                            zones: presetCard.modelData.regions
+                                            isActive: presetCard.active
+                                            zonePadding: Math.round(Kirigami.Units.smallSpacing / 2)
+                                            edgeGap: Math.round(Kirigami.Units.smallSpacing / 2)
+                                            minZoneSize: 6
+                                            showZoneNumbers: false
+                                        }
                                     }
 
-                                    Label {
+                                    ColumnLayout {
                                         Layout.fillWidth: true
-                                        text: presetCard.modelData.detail
-                                        font: Kirigami.Theme.smallFont
-                                        color: Kirigami.Theme.disabledTextColor
-                                        elide: Text.ElideRight
+                                        Layout.alignment: Qt.AlignVCenter
+                                        spacing: 0
+
+                                        Label {
+                                            Layout.fillWidth: true
+                                            text: presetCard.modelData.label
+                                            font.weight: Font.Medium
+                                            elide: Text.ElideRight
+                                        }
+
+                                        Label {
+                                            Layout.fillWidth: true
+                                            text: presetCard.modelData.detail
+                                            font: Kirigami.Theme.smallFont
+                                            color: Kirigami.Theme.disabledTextColor
+                                            elide: Text.ElideRight
+                                        }
                                     }
                                 }
                             }

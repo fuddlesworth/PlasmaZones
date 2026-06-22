@@ -101,6 +101,8 @@ SettingsFlickable {
                     property bool isDragging: false
 
                     Layout.fillWidth: true
+                    Layout.leftMargin: Kirigami.Units.largeSpacing
+                    Layout.rightMargin: Kirigami.Units.largeSpacing
                     Layout.preferredHeight: Math.max(orderModel.count * rowHeight, Kirigami.Units.gridUnit * 10)
                     clip: true
 
@@ -419,6 +421,8 @@ SettingsFlickable {
 
                 RowLayout {
                     Layout.fillWidth: true
+                    Layout.leftMargin: Kirigami.Units.largeSpacing
+                    Layout.rightMargin: Kirigami.Units.largeSpacing
                     spacing: Kirigami.Units.smallSpacing
 
                     Item {

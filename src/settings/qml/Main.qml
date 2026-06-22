@@ -166,9 +166,35 @@ PhosphorUi.SettingsAppWindow {
                 checked: settingsController.daemonRunning
                 enabled: !settingsController.daemonController.busy
                 accessibleName: i18n("Toggle daemon")
+                // The switch is fully controlled (checked is bound to
+                // daemonRunning and never self-toggles), so it stays visually
+                // "on" until the daemon actually stops. Turning OFF kills tiling
+                // + snapping for the whole session, so confirm first; turning ON
+                // applies immediately.
                 onToggled: function (newValue) {
-                    settingsController.daemonController.setEnabled(newValue);
+                    if (newValue)
+                        settingsController.daemonController.setEnabled(true);
+                    else
+                        daemonStopConfirm.open();
                 }
+            }
+
+            Kirigami.PromptDialog {
+                id: daemonStopConfirm
+
+                title: i18n("Stop daemon?")
+                subtitle: i18n("Stopping the PlasmaZones daemon disables window tiling and snapping until you start it again.")
+                standardButtons: Kirigami.Dialog.Cancel
+                customFooterActions: [
+                    Kirigami.Action {
+                        text: i18n("Stop daemon")
+                        icon.name: "system-shutdown"
+                        onTriggered: {
+                            settingsController.daemonController.setEnabled(false);
+                            daemonStopConfirm.close();
+                        }
+                    }
+                ]
             }
         }
     }
