@@ -2690,12 +2690,21 @@ void AutotileEngine::onWindowFocused(const QString& windowId)
     state->setFocusedWindow(windowId);
 }
 
-void AutotileEngine::onWindowResized(const QString& windowId, const QRect& oldFrame, const QRect& newFrame,
+void AutotileEngine::onWindowResized(const QString& rawWindowId, const QRect& oldFrame, const QRect& newFrame,
                                      const QString& screenId)
 {
-    if (windowId.isEmpty() || !oldFrame.isValid() || !newFrame.isValid()) {
+    if (rawWindowId.isEmpty() || !oldFrame.isValid() || !newFrame.isValid()) {
         return;
     }
+
+    // Resolve to the canonical instance id that keys m_windowToStateKey, the
+    // TilingState, and the SplitTree. The daemon calls this public boundary with
+    // the raw id (like every other IPlacementEngine override here); without this
+    // a window whose app class was renamed mid-session would pass the adaptor's
+    // canonicalizing screenForTrackedWindow guard but then miss every lookup
+    // below and silently drop the reflow. Lookup-only (no canonical-key mutation)
+    // since a resize is not a window-registration point.
+    const QString windowId = canonicalizeForLookup(rawWindowId);
 
     // The daemon resolved screenId from the same window→state map, so treat it as
     // authoritative. Resolve the owning state with a pure lookup: stateForWindow

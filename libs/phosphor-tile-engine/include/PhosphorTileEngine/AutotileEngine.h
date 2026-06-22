@@ -512,12 +512,13 @@ public:
      * gap-free. Floating windows, single-window screens, cross-output drags,
      * and algorithms without a reflow model are no-ops.
      *
-     * @param windowId The interactively-resized window
+     * @param rawWindowId The interactively-resized window (raw instance id;
+     *                    canonicalized internally to match the state/tree keys)
      * @param oldFrame The window's frame geometry before the resize (drag baseline)
      * @param newFrame The window's frame geometry after the resize
      * @param screenId Screen the daemon resolved the window to (authoritative)
      */
-    void onWindowResized(const QString& windowId, const QRect& oldFrame, const QRect& newFrame,
+    void onWindowResized(const QString& rawWindowId, const QRect& oldFrame, const QRect& newFrame,
                          const QString& screenId) override;
     // ═══════════════════════════════════════════════════════════════════════════
     // Settings synchronization
