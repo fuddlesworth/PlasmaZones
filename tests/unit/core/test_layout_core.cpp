@@ -77,6 +77,45 @@ private Q_SLOTS:
         layout.clearDirty();
         layout.setHiddenFromSelector(true);
         QVERIFY(layout.isDirty());
+
+        // The remaining per-layout settings (now relocated to the sidecar on
+        // save) must each mark the layout dirty, so an edit reaches saveLayout
+        // and triggers the structural/settings split.
+        layout.clearDirty();
+        layout.setUsePerSideOuterGap(true);
+        QVERIFY(layout.isDirty());
+
+        layout.clearDirty();
+        layout.setOuterGapTop(10);
+        QVERIFY(layout.isDirty());
+
+        layout.clearDirty();
+        layout.setOuterGapBottom(11);
+        QVERIFY(layout.isDirty());
+
+        layout.clearDirty();
+        layout.setOuterGapLeft(12);
+        QVERIFY(layout.isDirty());
+
+        layout.clearDirty();
+        layout.setOuterGapRight(13);
+        QVERIFY(layout.isDirty());
+
+        layout.clearDirty();
+        layout.setShowZoneNumbers(false);
+        QVERIFY(layout.isDirty());
+
+        layout.clearDirty();
+        layout.setOverlayDisplayMode(1);
+        QVERIFY(layout.isDirty());
+
+        layout.clearDirty();
+        layout.setAutoAssign(true);
+        QVERIFY(layout.isDirty());
+
+        layout.clearDirty();
+        layout.setUseFullScreenGeometry(true);
+        QVERIFY(layout.isDirty());
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
