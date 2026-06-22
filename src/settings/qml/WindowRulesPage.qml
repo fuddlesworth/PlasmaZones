@@ -13,7 +13,7 @@ import org.plasmazones.settings
  *
  * One surface for every window-matching rule — monitors, applications,
  * activities, animations. Backed by a single `WindowRuleModel` exposed by
- * `SettingsController.windowRulesPage`; section grouping, search and chip
+ * `SettingsController.windowRulesPage`; section grouping, search and section
  * filtering are all derived here in QML over that one model — there are no
  * per-section proxy models.
  *

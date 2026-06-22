@@ -33,8 +33,8 @@ import org.kde.kirigami as Kirigami
  *   • Optional info banner (`infoBannerText`).
  *   • User shaders card — drop zone for installing user shader packs +
  *     "Open Folder" button.
- *   • Search row — text search + built-in / user source filter + reset.
- *   • Filter chips — an "All" chip plus one single-select chip per category.
+ *   • Search row — text search + a multi-select filter button (source
+ *     toggles + one checkbox per category), modeled on the Layouts page.
  *   • Per-category sections — each category renders as a collapsible card of
  *     shader thumbnails (count shown in the header). Card click opens
  *     ShaderBrowserDetailDialog.
@@ -77,7 +77,6 @@ SettingsFlickable {
     //   "src:builtin" / "src:user" gate source; "cat:<name>" gate a category.
     readonly property bool showBuiltIn: !shaderFilterButton.isExcluded("src:builtin")
     readonly property bool showUser: !shaderFilterButton.isExcluded("src:user")
-    readonly property bool _hasActiveFilters: filterText.length > 0 || shaderFilterButton.hasActiveFilters
     // ── Derived: category index (sorted, with counts) ───────────────────
     readonly property var _allCategories: {
         var counts = {};
@@ -341,8 +340,8 @@ SettingsFlickable {
         }
 
         // ── Search row ──────────────────────────────────────────────────
-        // Full-width search + trailing source/reset icons, mirroring the
-        // Window Rules page's search row.
+        // Full-width search + a multi-select filter button (source +
+        // categories), mirroring the Window Rules page's search row.
         RowLayout {
             Layout.fillWidth: true
             spacing: Kirigami.Units.smallSpacing
