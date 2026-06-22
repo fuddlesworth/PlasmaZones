@@ -35,9 +35,9 @@ change: `TilingState` is session state on a separate JSON surface from `config.j
    fireAndForget notifyWindowResized(windowId, x,y,w,h)   [no effect-side membership cache]
  → D-Bus org.plasmazones.WindowTracking
  → Daemon adaptor (main thread)  WindowTrackingAdaptor::notifyWindowResized
-     validate → update m_frameGeometry shadow (capture oldFrame BEFORE overwrite)
-     gate: isWindowInAutotileMode (:299) — single authority
-     screen: screenForTrackedWindow (:548); guard: newRect center inside screenGeometry (cross-output)
+     validate (validateWindowId, new dims > 0) → update m_frameGeometry shadow with newFrame
+     gate + screen: screenForTrackedWindow (autotile engine) — empty ⇒ not autotile-tracked ⇒ skip
+     (oldFrame/newFrame come from the effect; the engine applies the cross-output centre guard)
    engine->onWindowResized(windowId, oldFrame, newFrame, screenId)  [synchronous]
  → AutotileEngine::onWindowResized (new)
      tier fork (single owner of precedence):
@@ -56,7 +56,8 @@ change: `TilingState` is session state on a separate JSON surface from `config.j
 
 The discriminator is the existing `m_resizingWindow` latch; no new effect state is added. The effect
 applies only locally-certain negative filters and unconditionally fires `notifyWindowResized`; the
-daemon owns the tiled-vs-snapped-vs-untracked decision via `isWindowInAutotileMode`. The call is
+daemon owns the tiled-vs-snapped-vs-untracked decision via `screenForTrackedWindow` (empty ⇒ not
+autotile-tracked ⇒ skip). The call is
 fire-and-forget because the resize is already committed in KWin; the reflow of *neighbors* is pushed
 back through the existing `windowsTiled` apply path. The engine handler is the single owner of tier
 precedence. The resize-finish path uses the **synchronous** `retileAfterOperation`, never the debounced
@@ -337,8 +338,8 @@ Run: `cmake --build build --parallel $(nproc)` then `cd build && ctest --output-
   before store; no NOTIFY on `m_scriptState`.
 - No ad-hoc backwards-compat: absent `scriptState` → empty bag → defaults; script self-migrates via `__v`.
 - `#pragma once` on new headers; forward-declare `ResizeEvent`/`SplitNode`.
-- Input validation at boundary: `validateWindowId`, geometry > 0, `isWindowInAutotileMode` (daemon);
-  `sanitizeScriptState` (serialization).
+- Input validation at boundary: `validateWindowId`, geometry > 0, `screenForTrackedWindow` non-empty
+  (daemon); `sanitizeScriptState` (serialization).
 - Qt Test: `QTEST_MAIN`/`QCOMPARE`/`QVERIFY`; register new files in `tests/unit/CMakeLists.txt`; list
   new `.luau` fixtures in the test target's data/resource listing.
 - DRY: single `sanitizeScriptState`, single canonical `onWindowResized(TilingState*, const ResizeEvent&)`,
