@@ -7,6 +7,7 @@
  */
 
 #include <QTest>
+#include <QFile>
 #include <QSignalSpy>
 #include <QJsonObject>
 #include <QJsonArray>
@@ -489,14 +490,26 @@ private Q_SLOTS:
                          {QStringLiteral("zoneNumber"), 1},
                          {QStringLiteral("relativeGeometry"), relGeo},
                          {QStringLiteral("appearance"), appearance}};
+        // shaderParams is the only object-valued setting — the highest-risk one
+        // for a strip/merge bug — so it's covered here alongside the sentinel
+        // (overlayDisplayMode) and per-side gap keys.
+        const QJsonObject shaderParams{{QStringLiteral("intensity"), 0.75}, {QStringLiteral("seed"), 42}};
         return QJsonObject{
             {QStringLiteral("id"), QStringLiteral("{abcd0000-0000-0000-0000-000000000000}")},
             {QStringLiteral("name"), QStringLiteral("Settings Layout")},
             {QStringLiteral("showZoneNumbers"), false},
             {QStringLiteral("zonePadding"), 8},
+            {QStringLiteral("outerGap"), 12},
+            {QStringLiteral("usePerSideOuterGap"), true},
+            {QStringLiteral("outerGapTop"), 1},
+            {QStringLiteral("outerGapBottom"), 2},
+            {QStringLiteral("outerGapLeft"), 3},
+            {QStringLiteral("outerGapRight"), 4},
+            {QStringLiteral("overlayDisplayMode"), 1},
             {QStringLiteral("autoAssign"), true},
             {QStringLiteral("useFullScreenGeometry"), true},
             {QStringLiteral("shaderId"), QStringLiteral("dissolve")},
+            {QStringLiteral("shaderParams"), shaderParams},
             {QStringLiteral("zones"), QJsonArray{zone}},
         };
     }
@@ -515,6 +528,10 @@ private Q_SLOTS:
         QVERIFY(!structural.contains(QStringLiteral("autoAssign")));
         QVERIFY(!structural.contains(QStringLiteral("useFullScreenGeometry")));
         QVERIFY(!structural.contains(QStringLiteral("shaderId")));
+        QVERIFY(!structural.contains(QStringLiteral("shaderParams")));
+        QVERIFY(!structural.contains(QStringLiteral("overlayDisplayMode")));
+        QVERIFY(!structural.contains(QStringLiteral("usePerSideOuterGap")));
+        QVERIFY(!structural.contains(QStringLiteral("outerGapTop")));
         const QJsonObject sZone = structural.value(QStringLiteral("zones")).toArray().at(0).toObject();
         QVERIFY(sZone.contains(QStringLiteral("relativeGeometry")));
         QVERIFY(!sZone.contains(QStringLiteral("appearance")));
@@ -523,7 +540,13 @@ private Q_SLOTS:
         QCOMPARE(settings.value(QStringLiteral("zonePadding")).toInt(), 8);
         QCOMPARE(settings.value(QStringLiteral("autoAssign")).toBool(), true);
         QCOMPARE(settings.value(QStringLiteral("useFullScreenGeometry")).toBool(), true);
+        QCOMPARE(settings.value(QStringLiteral("overlayDisplayMode")).toInt(), 1);
+        QCOMPARE(settings.value(QStringLiteral("outerGapLeft")).toInt(), 3);
         QCOMPARE(settings.value(QStringLiteral("shaderId")).toString(), QStringLiteral("dissolve"));
+        // The object-valued setting must survive as a nested object, not be flattened.
+        const QJsonObject sp = settings.value(QStringLiteral("shaderParams")).toObject();
+        QCOMPARE(sp.value(QStringLiteral("intensity")).toDouble(), 0.75);
+        QCOMPARE(sp.value(QStringLiteral("seed")).toInt(), 42);
         const QJsonObject zoneAppearance = settings.value(QStringLiteral("zoneAppearance")).toObject();
         QVERIFY(zoneAppearance.contains(QStringLiteral("{11111111-0000-0000-0000-000000000001}")));
     }
@@ -567,6 +590,49 @@ private Q_SLOTS:
 
         // Empty settings are dropped, not persisted as an empty object.
         store.setSettingsFor(layoutId, QJsonObject{});
+        QVERIFY(store.isEmpty());
+    }
+
+    void testLayoutSettings_removeLayoutDropsOnlyThatEntry()
+    {
+        using PhosphorZones::LayoutSettingsStore;
+        const QString idA = QStringLiteral("{aaaa0000-0000-0000-0000-000000000000}");
+        const QString idB = QStringLiteral("{bbbb0000-0000-0000-0000-000000000000}");
+
+        LayoutSettingsStore store;
+        store.setSettingsFor(idA, QJsonObject{{QStringLiteral("zonePadding"), 4}});
+        store.setSettingsFor(idB, QJsonObject{{QStringLiteral("zonePadding"), 9}});
+
+        store.removeLayout(idA);
+        QVERIFY(store.settingsFor(idA).isEmpty());
+        QCOMPARE(store.settingsFor(idB).value(QStringLiteral("zonePadding")).toInt(), 9);
+        QVERIFY(!store.isEmpty());
+    }
+
+    void testLayoutSettings_loadMissingFileIsEmptySuccess()
+    {
+        using PhosphorZones::LayoutSettingsStore;
+        QTemporaryDir tmp;
+        QVERIFY(tmp.isValid());
+        LayoutSettingsStore store;
+        // A missing sidecar is an empty store, not an error.
+        QVERIFY(store.loadFromFile(tmp.filePath(QStringLiteral("does-not-exist.json"))));
+        QVERIFY(store.isEmpty());
+    }
+
+    void testLayoutSettings_loadCorruptFileFails()
+    {
+        using PhosphorZones::LayoutSettingsStore;
+        QTemporaryDir tmp;
+        QVERIFY(tmp.isValid());
+        const QString path = tmp.filePath(QStringLiteral("corrupt.json"));
+        QFile f(path);
+        QVERIFY(f.open(QIODevice::WriteOnly));
+        f.write(QByteArrayLiteral("{ not valid json"));
+        f.close();
+
+        LayoutSettingsStore store;
+        QVERIFY(!store.loadFromFile(path));
         QVERIFY(store.isEmpty());
     }
 };

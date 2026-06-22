@@ -2521,9 +2521,21 @@ bool relocateLayoutSettingsImpl(const QString& layoutsDir, const QString& sideca
         }
     }
 
+    // Pass 1: scan every layout file, accumulate its settings into the in-memory
+    // sidecar, and stage the slimmed structural body — but DON'T touch any layout
+    // file on disk yet. The sidecar is the authoritative copy; it must be durably
+    // written BEFORE any source file is slimmed, so a crash (or a sidecar write
+    // failure) can never leave settings stripped from the layout file but absent
+    // from the sidecar. Mirrors finalizeV4Conversion's "write windowrules.json
+    // before retiring assignments.json" ordering.
+    struct PendingStrip
+    {
+        QString path;
+        QJsonObject structural;
+    };
     const QStringList files = dir.entryList({QStringLiteral("*.json")}, QDir::Files, QDir::Name);
+    QList<PendingStrip> pending;
     bool sidecarDirty = false;
-    bool allOk = true;
     for (const QString& fileName : files) {
         const QString path = dir.filePath(fileName);
         QFile f(path);
@@ -2547,19 +2559,32 @@ bool relocateLayoutSettingsImpl(const QString& layoutsDir, const QString& sideca
 
         sidecar.insert(layoutId, settings);
         sidecarDirty = true;
-
-        // Rewrite the layout file stripped of its settings.
-        if (!PhosphorConfig::JsonBackend::writeJsonAtomically(path, stripLayoutSettings(full))) {
-            qWarning("ConfigMigration: layout-settings relocation failed to rewrite %s", qPrintable(path));
-            allOk = false;
-        }
+        pending.append({path, stripLayoutSettings(full)});
     }
 
-    if (sidecarDirty) {
-        sidecar.insert(QString(kSettingsVersionKey), kLayoutSettingsSchemaVersion);
-        QDir().mkpath(QFileInfo(sidecarPath).absolutePath());
-        if (!PhosphorConfig::JsonBackend::writeJsonAtomically(sidecarPath, sidecar)) {
-            qWarning("ConfigMigration: layout-settings relocation failed to write %s", qPrintable(sidecarPath));
+    if (!sidecarDirty) {
+        return true; // every layout already slim — no writes, fully idempotent
+    }
+
+    // Commit the authoritative sidecar FIRST. If it can't be persisted, leave the
+    // layout files untouched (their embedded settings are still read by the
+    // runtime store) and report failure — the next run retries.
+    sidecar.insert(QString(kSettingsVersionKey), kLayoutSettingsSchemaVersion);
+    QDir().mkpath(QFileInfo(sidecarPath).absolutePath());
+    if (!PhosphorConfig::JsonBackend::writeJsonAtomically(sidecarPath, sidecar)) {
+        qWarning("ConfigMigration: layout-settings relocation failed to write %s — leaving layout files intact",
+                 qPrintable(sidecarPath));
+        return false;
+    }
+
+    // Pass 2: slim the source files now that their settings are durably stored.
+    // A failure here is recoverable — the still-fat file keeps its embedded
+    // settings (harmlessly re-applied by mergeSettings) and is re-slimmed on the
+    // next run.
+    bool allOk = true;
+    for (const PendingStrip& p : pending) {
+        if (!PhosphorConfig::JsonBackend::writeJsonAtomically(p.path, p.structural)) {
+            qWarning("ConfigMigration: layout-settings relocation failed to rewrite %s", qPrintable(p.path));
             allOk = false;
         }
     }
@@ -2585,6 +2610,15 @@ bool ConfigMigration::finalizeV4Conversion(const QString& jsonPath)
     // — a relocation failure leaves the settings embedded (still read by the
     // runtime store) and must not abort the v4 conversion, so its result does
     // not gate the return value.
+    //
+    // Deliberately runs BEFORE — and independent of — the config-version stall
+    // gate further down (the `configVersion < ConfigSchemaVersion` guard that
+    // refuses to commit windowrules.json on a stalled chain). The layout file
+    // format is NOT tied to config.json's `_version`: layouts live in the data
+    // dir, the version stamp lives in config.json. Relocating them is correct
+    // and safe regardless of whether the config chain advanced, and the step is
+    // crash-safe and idempotent, so running it on a stalled-chain retry is a
+    // no-op-or-progress, never a regression.
     {
         const QString layoutsDir = QStandardPaths::writableLocation(QStandardPaths::GenericDataLocation)
             + QLatin1Char('/') + ConfigDefaults::layoutsSubdir();

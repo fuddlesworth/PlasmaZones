@@ -382,7 +382,9 @@ void LayoutRegistry::removeLayout(PhosphorZones::Layout* layout)
     // deleted to restore the system original, this is also what we want — the
     // restored system layout should not inherit the user's custom settings.
     m_layoutSettings.removeLayout(layoutIdStr);
-    m_layoutSettings.saveToFile(layoutSettingsFilePath());
+    if (!m_layoutSettings.saveToFile(layoutSettingsFilePath())) {
+        qCWarning(lcZonesLib) << "Failed to persist layout settings sidecar after removing" << layoutIdStr;
+    }
 
     // Clear every pointer that could capture the about-to-deleteLater
     // layout. m_previousLayout is obvious. m_activeLayout is the subtle
