@@ -404,7 +404,7 @@ inline bool isEffectRuleAction(const QString& type)
 inline bool isLayoutEngineContextAction(const QString& type)
 {
     return type == SetEngineMode || type == SetSnappingLayout || type == SetTilingAlgorithm || type == DisableEngine
-        || type == LockContext;
+        || type == LockContext || type == DefaultLayoutAssignment;
 }
 } // namespace ActionType
 

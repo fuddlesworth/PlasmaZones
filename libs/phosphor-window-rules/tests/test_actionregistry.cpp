@@ -114,6 +114,7 @@ private Q_SLOTS:
         QVERIFY(!reg.isTerminal(makeAction(ActionType::SetOpacity)));
         QVERIFY(!reg.isTerminal(makeAction(ActionType::RestorePosition)));
         QVERIFY(!reg.isTerminal(makeAction(ActionType::LockContext)));
+        QVERIFY(!reg.isTerminal(makeAction(ActionType::DefaultLayoutAssignment)));
     }
 
     void testValidateAcceptsWellFormedRegisteredAction()

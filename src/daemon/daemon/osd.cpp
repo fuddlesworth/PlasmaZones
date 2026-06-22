@@ -263,7 +263,7 @@ void Daemon::showLayoutOsdForAlgorithm(const QString& algorithmId, const QString
     if (shouldSuppressOsd()) {
         return;
     }
-    auto* algo = m_algorithmRegistry.get()->algorithm(algorithmId);
+    auto* algo = m_algorithmRegistry ? m_algorithmRegistry->algorithm(algorithmId) : nullptr;
     if (!algo) {
         qCWarning(lcDaemon) << "OSD: algorithm not found, algorithmId=" << algorithmId;
         return;
@@ -613,7 +613,7 @@ void Daemon::showOsdForScreens(const QStringList& screenIds, const QString& acti
                     showNotAssignedOsd(screenId);
                     continue;
                 }
-                auto* algo = m_algorithmRegistry->algorithm(algoId);
+                auto* algo = m_algorithmRegistry ? m_algorithmRegistry->algorithm(algoId) : nullptr;
                 const QString displayName = algo ? algo->name() : algoId;
                 showLayoutOsdForAlgorithm(algoId, displayName, screenId);
             } else {

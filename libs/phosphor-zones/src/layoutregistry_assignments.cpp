@@ -44,6 +44,40 @@ namespace PWR = PhosphorWindowRules;
 // one place separate from the registry's member-bound resolution logic here.
 using namespace RuleHelpers;
 
+namespace {
+
+/// Run @p tryOne against the query-side screen-id fallback chain — the original
+/// id, then its connector-name → stable-id rewrite, then a virtual screen's
+/// physical id — and return the first engaged optional, or an empty optional if
+/// every variant misses. @p tryOne must return a @c std::optional; an engaged
+/// optional holding a "settled" value (e.g. a non-null-but-empty Layout*) stops
+/// the chain, exactly as the inline retries did. Centralizes the rewrite shared
+/// by layoutForScreen / assignmentIdForScreen / assignmentEntryForScreen /
+/// hasMatchingAssignmentRule so the four cannot drift.
+template<typename TryFn>
+auto resolveWithScreenFallback(const QString& screenId, TryFn&& tryOne) -> decltype(tryOne(screenId))
+{
+    if (auto result = tryOne(screenId)) {
+        return result;
+    }
+    if (PhosphorScreens::ScreenIdentity::isConnectorName(screenId)) {
+        const QString resolved = PhosphorScreens::ScreenIdentity::idForName(screenId);
+        if (resolved != screenId) {
+            if (auto result = tryOne(resolved)) {
+                return result;
+            }
+        }
+    }
+    if (PhosphorIdentity::VirtualScreenId::isVirtual(screenId)) {
+        if (auto result = tryOne(PhosphorIdentity::VirtualScreenId::extractPhysicalId(screenId))) {
+            return result;
+        }
+    }
+    return {};
+}
+
+} // namespace
+
 // ── Rule-backed cascade resolution ──────────────────────────────────────────
 
 std::optional<AssignmentEntry> LayoutRegistry::resolveAssignmentEntry(const QString& screenId, int virtualDesktop,
@@ -564,30 +598,13 @@ PhosphorZones::Layout* LayoutRegistry::layoutForScreen(const QString& screenId, 
         return std::optional<PhosphorZones::Layout*>(layoutById(QUuid::fromString(entry->snappingLayout)));
     };
 
-    if (const auto result = tryResolve(screenId)) {
-        return *result ? *result : defaultLayout();
-    }
-    // Connector-name fallback.
-    if (PhosphorScreens::ScreenIdentity::isConnectorName(screenId)) {
-        const QString resolved = PhosphorScreens::ScreenIdentity::idForName(screenId);
-        if (resolved != screenId) {
-            if (const auto result = tryResolve(resolved)) {
-                return *result ? *result : defaultLayout();
-            }
-        }
-    }
-    // Virtual-screen fallback — inherit the physical screen's assignment.
-    if (PhosphorIdentity::VirtualScreenId::isVirtual(screenId)) {
-        const QString physId = PhosphorIdentity::VirtualScreenId::extractPhysicalId(screenId);
-        if (const auto result = tryResolve(physId)) {
-            return *result ? *result : defaultLayout();
-        }
-    }
-
-    // No explicit assignment in the cascade — defer to the registry-wide
-    // default. layoutForScreen returns a snap Layout* and has no autotile
-    // counterpart; autotile-mode resolution is the autotile engine's job.
-    return defaultLayout();
+    // Connector-name then virtual-screen fallback (the physical screen's
+    // assignment is inherited). A settled {nullptr} stops the chain; a genuine
+    // miss (nullopt) and a {nullptr} both defer to the registry-wide default.
+    // layoutForScreen returns a snap Layout* and has no autotile counterpart;
+    // autotile-mode resolution is the autotile engine's job.
+    const auto result = resolveWithScreenFallback(screenId, tryResolve);
+    return (result && *result) ? *result : defaultLayout();
 }
 
 void LayoutRegistry::clearAssignment(const QString& screenId, int virtualDesktop, const QString& activity)
@@ -626,22 +643,8 @@ QString LayoutRegistry::assignmentIdForScreen(const QString& screenId, int virtu
         return id.isEmpty() ? std::nullopt : std::optional<QString>(id);
     };
 
-    if (const auto result = tryResolve(screenId)) {
+    if (const auto result = resolveWithScreenFallback(screenId, tryResolve)) {
         return *result;
-    }
-    if (PhosphorScreens::ScreenIdentity::isConnectorName(screenId)) {
-        const QString resolved = PhosphorScreens::ScreenIdentity::idForName(screenId);
-        if (resolved != screenId) {
-            if (const auto result = tryResolve(resolved)) {
-                return *result;
-            }
-        }
-    }
-    if (PhosphorIdentity::VirtualScreenId::isVirtual(screenId)) {
-        const QString physId = PhosphorIdentity::VirtualScreenId::extractPhysicalId(screenId);
-        if (const auto result = tryResolve(physId)) {
-            return *result;
-        }
     }
 
     // No stored entry in the cascade — fall through to the level-1 global
@@ -665,22 +668,8 @@ AssignmentEntry LayoutRegistry::assignmentEntryForScreen(const QString& screenId
         return entry;
     };
 
-    if (const auto result = tryResolve(screenId)) {
+    if (const auto result = resolveWithScreenFallback(screenId, tryResolve)) {
         return *result;
-    }
-    if (PhosphorScreens::ScreenIdentity::isConnectorName(screenId)) {
-        const QString resolved = PhosphorScreens::ScreenIdentity::idForName(screenId);
-        if (resolved != screenId) {
-            if (const auto result = tryResolve(resolved)) {
-                return *result;
-            }
-        }
-    }
-    if (PhosphorIdentity::VirtualScreenId::isVirtual(screenId)) {
-        const QString physId = PhosphorIdentity::VirtualScreenId::extractPhysicalId(screenId);
-        if (const auto result = tryResolve(physId)) {
-            return *result;
-        }
     }
 
     // Cascade miss — synthesize from the level-1 global default, honoring the
@@ -709,24 +698,11 @@ QString LayoutRegistry::tilingAlgorithmForScreen(const QString& screenId, int vi
 bool LayoutRegistry::hasMatchingAssignmentRule(const QString& screenId, int virtualDesktop,
                                                const QString& activity) const
 {
-    auto tryOne = [this, virtualDesktop, &activity](const QString& sid) {
-        return resolveAssignmentEntry(sid, virtualDesktop, activity).has_value();
-    };
-    if (tryOne(screenId)) {
-        return true;
-    }
-    if (PhosphorScreens::ScreenIdentity::isConnectorName(screenId)) {
-        const QString resolved = PhosphorScreens::ScreenIdentity::idForName(screenId);
-        if (resolved != screenId && tryOne(resolved)) {
-            return true;
-        }
-    }
-    if (PhosphorIdentity::VirtualScreenId::isVirtual(screenId)) {
-        if (tryOne(PhosphorIdentity::VirtualScreenId::extractPhysicalId(screenId))) {
-            return true;
-        }
-    }
-    return false;
+    return resolveWithScreenFallback(screenId,
+                                     [this, virtualDesktop, &activity](const QString& sid) {
+                                         return resolveAssignmentEntry(sid, virtualDesktop, activity);
+                                     })
+        .has_value();
 }
 
 bool LayoutRegistry::isDefaultAssignmentSuppressedForContext(const QString& screenId, int virtualDesktop,

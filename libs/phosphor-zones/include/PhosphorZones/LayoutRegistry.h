@@ -17,6 +17,7 @@
 #include <QUuid>
 #include <functional>
 #include <memory>
+#include <optional>
 
 namespace PhosphorZones {
 

@@ -116,7 +116,7 @@ SettingsFlickable {
 
                     SettingsSwitch {
                         checked: appSettings.suppressDefaultLayoutAssignment
-                        accessibleName: i18n("Don't assign a layout to contexts by default")
+                        accessibleName: i18n("Don't assign a layout by default")
                         onToggled: function (newValue) {
                             appSettings.suppressDefaultLayoutAssignment = newValue;
                         }
