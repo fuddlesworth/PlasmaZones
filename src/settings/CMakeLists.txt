@@ -321,8 +321,7 @@ qt_add_qml_module(plasmazones-settings
         # are thin wrappers that pass the right controller bridge.
         qml/ShaderBrowserPage.qml
         qml/ShaderBrowserCard.qml
-        qml/FilterDisclosureHeader.qml
-        qml/CollapsibleChipFlow.qml
+        qml/FilterMenuButton.qml
         qml/ShaderBrowserDetailDialog.qml
         qml/CurveEditorDialog.qml
         qml/CurvePresets.qml
