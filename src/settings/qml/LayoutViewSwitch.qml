@@ -12,12 +12,12 @@ import org.phosphor.animation
  * @brief Snapping / Tiling mode switch styled as the WindowRulesPage monitor
  *        switcher.
  *
- * A centered row of soft-highlight tiles (icon + label) mirroring
+ * A centered row of soft-highlight, label-only tiles mirroring
  * MonitorOverviewTile's visual treatment — selected tint + border, hover wash,
  * focus ring, and the shared widget.hover motion — instead of a segmented
  * button group, so the Layouts page reads consistently with the monitor pickers
  * elsewhere in the app. Radio semantics: exactly one mode is active and clicking
- * the active tile is a no-op (icons are the Snapping/Tiling sidebar icons).
+ * the active tile is a no-op.
  */
 Item {
     id: root

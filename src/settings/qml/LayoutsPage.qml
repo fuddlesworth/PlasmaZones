@@ -2,7 +2,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 import "LayoutFilterLogic.js" as Logic
-import QtCore
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Dialogs
@@ -14,9 +13,10 @@ import org.plasmazones.common as QFZCommon
  * @brief Layouts / tiling-algorithms listing page.
  *
  * Uses the standardized card-container pattern (see ShaderBrowserPage /
- * WindowRulesPage): a SettingsFlickable root whose content is the toolbar, the
- * filter/group/sort bar, and one collapsible SettingsCard per group, each
- * hosting a responsive Flow of LayoutGridDelegate cards. Rooting on
+ * WindowRulesPage): a SettingsFlickable root whose content is the view switch,
+ * the import card, the search row, the filter/group/sort bar, and one
+ * collapsible SettingsCard per group, each hosting a responsive Flow of
+ * LayoutGridDelegate cards. Rooting on
  * SettingsFlickable + per-layout reveal anchors (LayoutGridDelegate registers
  * "layout:<id>") gives the page global-search reveal + deep-linking parity with
  * the other listing pages.
