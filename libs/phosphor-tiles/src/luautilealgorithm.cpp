@@ -158,8 +158,9 @@ QVariantMap rectToVariant(const QRect& r)
     return m;
 }
 
-// Build the ctx.resize descriptor delivered to tile()/onWindowResized on a
-// resize-driven retile: { index, oldRect, newRect, edges = {left,right,top,bottom} }.
+// Build the resize descriptor passed as the second argument to the onWindowResized
+// hook: { index, oldRect, newRect, edges = {left,right,top,bottom} }. It is NOT
+// exposed on the tile() context — tile() reads only the persisted ctx.state.
 QVariantMap resizeToVariant(const ResizeEvent& ev)
 {
     QVariantMap m;
