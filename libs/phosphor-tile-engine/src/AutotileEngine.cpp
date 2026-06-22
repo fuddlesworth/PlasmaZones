@@ -2779,8 +2779,12 @@ bool AutotileEngine::applyTreeResizeReflow(PhosphorTiles::TilingState* state, co
     const QStringList tiled = state->tiledWindows();
     const QVector<QRect> zones = state->calculatedZones();
     // The reflow reads split extents from the rendered zones, so they must be in
-    // lockstep with the tiled-window list (they are, except transiently before a
-    // retile completes — bail rather than read a stale/short vector).
+    // lockstep with the tiled-window list. They diverge in two cases — both
+    // handled by bailing rather than reading a stale/short vector: transiently
+    // before a retile completes, and in steady state when maxWindows caps the
+    // layout (recalculateLayout sizes calculatedZones to min(tiledCount,
+    // maxWindows) while tiledWindows() keeps every window). Resizing an
+    // over-cap layout is a no-op, which is fine since overflow windows float.
     if (zones.isEmpty() || zones.size() != tiled.size()) {
         return false;
     }
