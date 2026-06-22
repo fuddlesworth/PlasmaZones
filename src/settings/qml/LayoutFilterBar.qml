@@ -22,7 +22,9 @@ RowLayout {
     property bool sortAscending: true
     property string filterText: ""
     // ── Exposed state: shared filters ───────────────────────────────────────
-    property bool showHidden: false
+    // Default ON: the layouts page shows hidden (curated-out) items by default
+    // so users can see and re-enable them; unchecking hides them.
+    property bool showHidden: true
     // ── Exposed state: snapping filters (all ON = show everything) ──────────
     property bool showAspectAny: true
     property bool showAspectStandard: true
@@ -47,9 +49,9 @@ RowLayout {
             return true;
 
         if (root.viewMode === 0)
-            return !showAspectAny || !showAspectStandard || !showAspectUltrawide || !showAspectSuperUltrawide || !showAspectPortrait || showHidden || !showAutoLayouts || !showManualLayouts || !showBuiltInLayouts || !showUserLayouts;
+            return !showAspectAny || !showAspectStandard || !showAspectUltrawide || !showAspectSuperUltrawide || !showAspectPortrait || !showHidden || !showAutoLayouts || !showManualLayouts || !showBuiltInLayouts || !showUserLayouts;
         else
-            return !showBuiltInAlgorithms || !showUserAlgorithms || showHidden || !showMasterCount || !showSplitRatio || !showOverlapping || !showPersistent || !showCustomParams;
+            return !showBuiltInAlgorithms || !showUserAlgorithms || !showHidden || !showMasterCount || !showSplitRatio || !showOverlapping || !showPersistent || !showCustomParams;
     }
     // ── Group-by index constants (must match model order below) ───────────
     // Snapping
@@ -81,7 +83,7 @@ RowLayout {
     // Adding a filter requires updating: property declaration, _defaultValues,
     // the relevant state map, persistedState, hasActiveFilters, menu item, and JS logic.
     readonly property var _defaultValues: {
-        "showHidden": false,
+        "showHidden": true,
         "showAspectAny": true,
         "showAspectStandard": true,
         "showAspectUltrawide": true,
@@ -416,7 +418,7 @@ RowLayout {
         property int snappingGroupByIndex: 0
         property int snappingSortByIndex: 0
         property bool snappingSortAscending: true
-        property bool snappingShowHidden: false
+        property bool snappingShowHidden: true
         property bool snappingShowAspectAny: true
         property bool snappingShowAspectStandard: true
         property bool snappingShowAspectUltrawide: true
@@ -430,7 +432,7 @@ RowLayout {
         property int tilingGroupByIndex: 0
         property int tilingSortByIndex: 0
         property bool tilingSortAscending: true
-        property bool tilingShowHidden: false
+        property bool tilingShowHidden: true
         property bool tilingShowBuiltInAlgorithms: true
         property bool tilingShowUserAlgorithms: true
         property bool tilingShowMasterCount: true
