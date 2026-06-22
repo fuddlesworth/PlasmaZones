@@ -7,6 +7,8 @@
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QJsonArray>
+#include <QStandardPaths>
+#include <QStringList>
 #include <QTextStream>
 
 #include "../../../src/config/configmigration.h"
@@ -1540,6 +1542,103 @@ private Q_SLOTS:
             }
         }
         QCOMPARE(disableMonitorRules, 4);
+    }
+
+    // =========================================================================
+    // v4: per-layout settings relocation into the layout-settings.json sidecar
+    // =========================================================================
+
+    QString layoutsDirPath() const
+    {
+        return QStandardPaths::writableLocation(QStandardPaths::GenericDataLocation) + QLatin1Char('/')
+            + ConfigDefaults::layoutsSubdir();
+    }
+
+    void writeLayoutFileWithSettings(const QString& fileName, const QString& layoutId)
+    {
+        QDir().mkpath(layoutsDirPath());
+        const QJsonObject relGeo{{QStringLiteral("x"), 0.0},
+                                 {QStringLiteral("y"), 0.0},
+                                 {QStringLiteral("width"), 1.0},
+                                 {QStringLiteral("height"), 1.0}};
+        const QJsonObject appearance{{QStringLiteral("useCustomColors"), true},
+                                     {QStringLiteral("highlightColor"), QStringLiteral("#ff112233")}};
+        const QJsonObject zone{{QStringLiteral("id"), QStringLiteral("{11111111-0000-0000-0000-000000000001}")},
+                               {QStringLiteral("name"), QStringLiteral("Z1")},
+                               {QStringLiteral("zoneNumber"), 1},
+                               {QStringLiteral("relativeGeometry"), relGeo},
+                               {QStringLiteral("appearance"), appearance}};
+        const QJsonObject layout{
+            {QStringLiteral("id"), layoutId},
+            {QStringLiteral("name"), QStringLiteral("Settings Layout")},
+            {QStringLiteral("showZoneNumbers"), false},
+            {QStringLiteral("zonePadding"), 8},
+            {QStringLiteral("autoAssign"), true},
+            {QStringLiteral("useFullScreenGeometry"), true},
+            {QStringLiteral("zones"), QJsonArray{zone}},
+        };
+        QFile f(layoutsDirPath() + QLatin1Char('/') + fileName);
+        QVERIFY(f.open(QIODevice::WriteOnly));
+        f.write(QJsonDocument(layout).toJson());
+    }
+
+    QByteArray readBytes(const QString& path)
+    {
+        QFile f(path);
+        return f.open(QIODevice::ReadOnly) ? f.readAll() : QByteArray();
+    }
+
+    void testLayoutSettingsRelocation_splitsLayoutFileIntoSidecar()
+    {
+        IsolatedConfigGuard guard;
+        const QString layoutId = QStringLiteral("{abcd0000-0000-0000-0000-000000000000}");
+        writeLayoutFileWithSettings(QStringLiteral("layout.json"), layoutId);
+
+        QVERIFY(ConfigMigration::relocateLayoutSettings(layoutsDirPath(), ConfigDefaults::layoutSettingsFilePath()));
+
+        // Layout file is slimmed: structural keys remain, settings gone.
+        const QJsonObject slim =
+            QJsonDocument::fromJson(readBytes(layoutsDirPath() + QStringLiteral("/layout.json"))).object();
+        QVERIFY(slim.contains(QStringLiteral("id")));
+        QVERIFY(slim.contains(QStringLiteral("zones")));
+        QVERIFY(!slim.contains(QStringLiteral("zonePadding")));
+        QVERIFY(!slim.contains(QStringLiteral("autoAssign")));
+        QVERIFY(!slim.contains(QStringLiteral("useFullScreenGeometry")));
+        QVERIFY(!slim.contains(QStringLiteral("showZoneNumbers")));
+        QVERIFY(!slim.value(QStringLiteral("zones")).toArray().at(0).toObject().contains(QStringLiteral("appearance")));
+
+        // Sidecar carries the settings keyed by layout UUID, in store format.
+        const QJsonObject sidecar = readJsonConfig(ConfigDefaults::layoutSettingsFilePath());
+        QCOMPARE(sidecar.value(QStringLiteral("_version")).toInt(), 1);
+        const QJsonObject settings = sidecar.value(layoutId).toObject();
+        QCOMPARE(settings.value(QStringLiteral("zonePadding")).toInt(), 8);
+        QCOMPARE(settings.value(QStringLiteral("autoAssign")).toBool(), true);
+        QCOMPARE(settings.value(QStringLiteral("useFullScreenGeometry")).toBool(), true);
+        const QJsonObject zoneAppearance = settings.value(QStringLiteral("zoneAppearance")).toObject();
+        QVERIFY(zoneAppearance.contains(QStringLiteral("{11111111-0000-0000-0000-000000000001}")));
+    }
+
+    void testLayoutSettingsRelocation_isIdempotent()
+    {
+        IsolatedConfigGuard guard;
+        writeLayoutFileWithSettings(QStringLiteral("layout.json"),
+                                    QStringLiteral("{abcd0000-0000-0000-0000-000000000000}"));
+
+        QVERIFY(ConfigMigration::relocateLayoutSettings(layoutsDirPath(), ConfigDefaults::layoutSettingsFilePath()));
+        const QByteArray layoutAfter1 = readBytes(layoutsDirPath() + QStringLiteral("/layout.json"));
+        const QByteArray sidecarAfter1 = readBytes(ConfigDefaults::layoutSettingsFilePath());
+
+        // Second pass over the already-slim file must not rewrite either file.
+        QVERIFY(ConfigMigration::relocateLayoutSettings(layoutsDirPath(), ConfigDefaults::layoutSettingsFilePath()));
+        QCOMPARE(readBytes(layoutsDirPath() + QStringLiteral("/layout.json")), layoutAfter1);
+        QCOMPARE(readBytes(ConfigDefaults::layoutSettingsFilePath()), sidecarAfter1);
+    }
+
+    void testLayoutSettingsRelocation_missingDirIsNoOpSuccess()
+    {
+        IsolatedConfigGuard guard;
+        QVERIFY(ConfigMigration::relocateLayoutSettings(layoutsDirPath(), ConfigDefaults::layoutSettingsFilePath()));
+        QVERIFY(!QFile::exists(ConfigDefaults::layoutSettingsFilePath()));
     }
 };
 

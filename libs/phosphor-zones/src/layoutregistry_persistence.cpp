@@ -5,6 +5,8 @@
 // Part of LayoutRegistry — split from layoutregistry.cpp for SRP.
 
 #include <PhosphorZones/LayoutRegistry.h>
+#include <PhosphorZones/LayoutSettingsStore.h>
+#include <PhosphorZones/ZoneJsonKeys.h>
 
 #include "zoneslogging.h"
 
@@ -22,6 +24,10 @@ namespace PhosphorZones {
 void LayoutRegistry::loadLayouts()
 {
     ensureLayoutDirectory();
+
+    // Load the per-layout settings sidecar once up front so each layout's
+    // settings can be merged back onto its structural JSON as it loads.
+    m_layoutSettings.loadFromFile(layoutSettingsFilePath());
 
     // Load from ALL data locations (system directories first, then user)
     // locateAll() returns paths in priority order: user first, system last
@@ -107,7 +113,16 @@ void LayoutRegistry::loadLayoutsFromDirectory(const QString& directory)
             continue;
         }
 
-        auto layout = PhosphorZones::Layout::fromJson(doc.object(), this);
+        // Merge the layout's settings (from the sidecar, keyed by layout UUID)
+        // back onto the structural JSON before constructing the Layout. A
+        // not-yet-split (full-format) file with no sidecar entry round-trips
+        // unchanged — mergeSettings preserves keys the file already carries.
+        const QJsonObject structural = doc.object();
+        const QString layoutId = structural.value(::PhosphorZones::ZoneJsonKeys::Id).toString();
+        const QJsonObject merged =
+            LayoutSettingsStore::mergeSettings(structural, m_layoutSettings.settingsFor(layoutId));
+
+        auto layout = PhosphorZones::Layout::fromJson(merged, this);
         if (!layout) {
             qCWarning(lcZonesLib) << "Failed to create layout from JSON:" << filePath;
             continue;
@@ -200,8 +215,17 @@ void LayoutRegistry::saveLayout(PhosphorZones::Layout* layout)
         return;
     }
 
-    // toJson() includes systemSourcePath so it persists across daemon restarts
-    QJsonDocument doc(layout->toJson());
+    // Split the full layout JSON: the per-layout SETTINGS go to the sidecar
+    // (keyed by layout UUID), and only the structural definition is written to
+    // the layout file. toJson() includes systemSourcePath so it persists across
+    // daemon restarts.
+    const QJsonObject full = layout->toJson();
+    m_layoutSettings.setSettingsFor(layout->id().toString(), LayoutSettingsStore::extractSettings(full));
+    if (!m_layoutSettings.saveToFile(layoutSettingsFilePath())) {
+        qCWarning(lcZonesLib) << "Failed to persist layout settings sidecar for" << layout->id().toString();
+    }
+
+    QJsonDocument doc(LayoutSettingsStore::stripSettings(full));
     const QByteArray data = doc.toJson(QJsonDocument::Indented);
 
     if (file.write(data) != data.size()) {
@@ -236,6 +260,14 @@ QString LayoutRegistry::quickLayoutsFilePath() const
     // JSON file next to the WindowRuleStore file (so the location is stable
     // and independent of any later setLayoutDirectory() call).
     return QFileInfo(m_ruleStore->filePath()).absolutePath() + QStringLiteral("/quicklayouts.json");
+}
+
+QString LayoutRegistry::layoutSettingsFilePath() const
+{
+    // Per-layout settings persist to a sibling JSON file next to the
+    // WindowRuleStore file — same stable, layout-dir-independent location as
+    // the quick-layout sidecar.
+    return QFileInfo(m_ruleStore->filePath()).absolutePath() + QStringLiteral("/layout-settings.json");
 }
 
 void LayoutRegistry::readQuickLayouts()

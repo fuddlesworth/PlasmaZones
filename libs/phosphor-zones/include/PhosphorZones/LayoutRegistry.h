@@ -6,6 +6,7 @@
 #include <PhosphorZones/AssignmentEntry.h>
 #include <PhosphorZones/IZoneLayoutRegistry.h>
 #include <PhosphorZones/Layout.h>
+#include <PhosphorZones/LayoutSettingsStore.h>
 
 #include <PhosphorWindowRules/RuleEvaluator.h>
 #include <PhosphorWindowRules/WindowRuleStore.h>
@@ -523,6 +524,7 @@ private:
     Layout* restoreSystemLayout(const QUuid& id, const QString& systemPath);
     QString layoutFilePath(const QUuid& id) const;
     QString quickLayoutsFilePath() const;
+    QString layoutSettingsFilePath() const;
     void readQuickLayouts();
     void writeQuickLayouts();
     Layout* cycleLayoutImpl(const QString& screenId, int direction);
@@ -773,6 +775,10 @@ private:
     Layout* m_activeLayout = nullptr;
     Layout* m_previousLayout = nullptr; ///< Active layout before last setActiveLayout (for resnap)
     QHash<int, QString> m_quickLayoutShortcuts; ///< slot number (1..9) → layout ID
+    /// Per-layout settings sidecar (layout-settings.json), keyed by layout UUID.
+    /// Settings are split out of the structural layout file on save and merged
+    /// back in on load — see layoutregistry_persistence.cpp.
+    LayoutSettingsStore m_layoutSettings;
     int m_currentVirtualDesktop = 1;
     /// Per-screen current virtual desktop (screenId → 1-based) under Plasma 6.7
     /// per-output virtual desktops (#648). Empty unless the daemon pushes

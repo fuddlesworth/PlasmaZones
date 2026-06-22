@@ -12,9 +12,12 @@
 #include <QJsonArray>
 #include <QJsonDocument>
 
+#include <QTemporaryDir>
+
 #include "core/constants.h"
 #include <PhosphorLayoutApi/AspectRatioClass.h>
 #include <PhosphorZones/Layout.h>
+#include <PhosphorZones/LayoutSettingsStore.h>
 #include <PhosphorZones/Zone.h>
 
 using namespace PlasmaZones;
@@ -464,6 +467,107 @@ private Q_SLOTS:
         QVERIFY(layout.fixedZoneBoundingBox().isEmpty());
         layout.recalculateZoneGeometries(QRectF(0, 0, 3840, 2160));
         QVERIFY(layout.fixedZoneReferenceGeometry().isEmpty());
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // LayoutSettingsStore: per-layout settings split out of the layout file
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    // Build a full layout JSON (as Layout::toJson would) carrying both structural
+    // data and per-layout settings, including one zone with a custom appearance.
+    QJsonObject makeFullLayoutWithSettings() const
+    {
+        QJsonObject relGeo{{QStringLiteral("x"), 0.0},
+                           {QStringLiteral("y"), 0.0},
+                           {QStringLiteral("width"), 1.0},
+                           {QStringLiteral("height"), 1.0}};
+        QJsonObject appearance{{QStringLiteral("useCustomColors"), true},
+                               {QStringLiteral("highlightColor"), QStringLiteral("#ff112233")},
+                               {QStringLiteral("borderWidth"), 5}};
+        QJsonObject zone{{QStringLiteral("id"), QStringLiteral("{11111111-0000-0000-0000-000000000001}")},
+                         {QStringLiteral("name"), QStringLiteral("Z1")},
+                         {QStringLiteral("zoneNumber"), 1},
+                         {QStringLiteral("relativeGeometry"), relGeo},
+                         {QStringLiteral("appearance"), appearance}};
+        return QJsonObject{
+            {QStringLiteral("id"), QStringLiteral("{abcd0000-0000-0000-0000-000000000000}")},
+            {QStringLiteral("name"), QStringLiteral("Settings Layout")},
+            {QStringLiteral("showZoneNumbers"), false},
+            {QStringLiteral("zonePadding"), 8},
+            {QStringLiteral("autoAssign"), true},
+            {QStringLiteral("useFullScreenGeometry"), true},
+            {QStringLiteral("shaderId"), QStringLiteral("dissolve")},
+            {QStringLiteral("zones"), QJsonArray{zone}},
+        };
+    }
+
+    void testLayoutSettings_splitProducesStructuralAndSettings()
+    {
+        using PhosphorZones::LayoutSettingsStore;
+        const QJsonObject full = makeFullLayoutWithSettings();
+
+        const QJsonObject structural = LayoutSettingsStore::stripSettings(full);
+        // Structural keeps identity + zone geometry, drops every setting.
+        QVERIFY(structural.contains(QStringLiteral("id")));
+        QVERIFY(structural.contains(QStringLiteral("zones")));
+        QVERIFY(!structural.contains(QStringLiteral("showZoneNumbers")));
+        QVERIFY(!structural.contains(QStringLiteral("zonePadding")));
+        QVERIFY(!structural.contains(QStringLiteral("autoAssign")));
+        QVERIFY(!structural.contains(QStringLiteral("useFullScreenGeometry")));
+        QVERIFY(!structural.contains(QStringLiteral("shaderId")));
+        const QJsonObject sZone = structural.value(QStringLiteral("zones")).toArray().at(0).toObject();
+        QVERIFY(sZone.contains(QStringLiteral("relativeGeometry")));
+        QVERIFY(!sZone.contains(QStringLiteral("appearance")));
+
+        const QJsonObject settings = LayoutSettingsStore::extractSettings(full);
+        QCOMPARE(settings.value(QStringLiteral("zonePadding")).toInt(), 8);
+        QCOMPARE(settings.value(QStringLiteral("autoAssign")).toBool(), true);
+        QCOMPARE(settings.value(QStringLiteral("useFullScreenGeometry")).toBool(), true);
+        QCOMPARE(settings.value(QStringLiteral("shaderId")).toString(), QStringLiteral("dissolve"));
+        const QJsonObject zoneAppearance = settings.value(QStringLiteral("zoneAppearance")).toObject();
+        QVERIFY(zoneAppearance.contains(QStringLiteral("{11111111-0000-0000-0000-000000000001}")));
+    }
+
+    void testLayoutSettings_mergeRestoresFullLayout()
+    {
+        using PhosphorZones::LayoutSettingsStore;
+        const QJsonObject full = makeFullLayoutWithSettings();
+        const QJsonObject structural = LayoutSettingsStore::stripSettings(full);
+        const QJsonObject settings = LayoutSettingsStore::extractSettings(full);
+
+        const QJsonObject merged = LayoutSettingsStore::mergeSettings(structural, settings);
+        QCOMPARE(merged, full);
+    }
+
+    void testLayoutSettings_mergeEmptyKeepsStructuralAsIs()
+    {
+        using PhosphorZones::LayoutSettingsStore;
+        // A not-yet-split (full-format) layout with no sidecar entry must round-
+        // trip unchanged through merge — settings already embedded survive.
+        const QJsonObject full = makeFullLayoutWithSettings();
+        const QJsonObject merged = LayoutSettingsStore::mergeSettings(full, QJsonObject{});
+        QCOMPARE(merged, full);
+    }
+
+    void testLayoutSettings_storeSaveLoadRoundTrip()
+    {
+        using PhosphorZones::LayoutSettingsStore;
+        QTemporaryDir tmp;
+        QVERIFY(tmp.isValid());
+        const QString path = tmp.filePath(QStringLiteral("layout-settings.json"));
+        const QString layoutId = QStringLiteral("{abcd0000-0000-0000-0000-000000000000}");
+
+        LayoutSettingsStore store;
+        store.setSettingsFor(layoutId, LayoutSettingsStore::extractSettings(makeFullLayoutWithSettings()));
+        QVERIFY(store.saveToFile(path));
+
+        LayoutSettingsStore reloaded;
+        QVERIFY(reloaded.loadFromFile(path));
+        QCOMPARE(reloaded.settingsFor(layoutId).value(QStringLiteral("zonePadding")).toInt(), 8);
+
+        // Empty settings are dropped, not persisted as an empty object.
+        store.setSettingsFor(layoutId, QJsonObject{});
+        QVERIFY(store.isEmpty());
     }
 };
 

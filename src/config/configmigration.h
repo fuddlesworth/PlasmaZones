@@ -54,6 +54,17 @@ namespace PlasmaZones {
 ///     freeing the Snapping.Appearance.* namespace for the new per-window
 ///     snapped-window decoration settings (snapping*). See moveGroupAtPath
 ///     in configmigration.cpp.
+///     v4 also relocates per-layout SETTINGS out of the layout files. The
+///     settings that used to be embedded in each layout JSON (per-zone
+///     appearance, gap/padding overrides, showZoneNumbers, overlay display mode,
+///     auto-assign, shader binding) move into a single layout-settings.json
+///     sidecar keyed by layout UUID — the same sibling-store pattern as
+///     windowrules.json / quicklayouts.json. Layout files keep only their
+///     structural definition (zones, geometry, identity, matching rules). The
+///     relocation runs from finalizeV4Conversion (see relocateLayoutSettings),
+///     and the runtime LayoutSettingsStore (in phosphor-zones) merges the
+///     sidecar back onto each layout on load, so the in-memory model is
+///     unchanged.
 inline constexpr int ConfigSchemaVersion = 4;
 
 class PLASMAZONES_EXPORT ConfigMigration
@@ -181,6 +192,16 @@ public:
     ///                 are derived as siblings via ConfigDefaults).
     /// @return true on success or a clean no-op; false on an I/O failure.
     static bool finalizeV4Conversion(const QString& jsonPath);
+
+    /// Part of the v4 conversion: read every `*.json` layout in @p layoutsDir,
+    /// split its embedded per-layout settings into the @p sidecarPath store
+    /// (keyed by layout UUID, in the LayoutSettingsStore format), and rewrite the
+    /// layout file stripped of those settings. Merges into an existing sidecar
+    /// rather than clobbering it, and skips already-slimmed files, so it is
+    /// idempotent and crash-safe — finalizeV4Conversion calls it on every run.
+    /// A missing layouts dir is a no-op success. Returns false only on a write
+    /// failure. Public for direct testing.
+    static bool relocateLayoutSettings(const QString& layoutsDir, const QString& sidecarPath);
 
 private:
     ConfigMigration() = default;
