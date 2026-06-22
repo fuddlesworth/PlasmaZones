@@ -455,6 +455,14 @@ public:
     {
         return false;
     }
+    // Off by default: every context still gets the synthesized level-1 default
+    // layout (today's behavior). When on, no context is assigned an active
+    // snapping or autotiling layout until the user explicitly assigns one —
+    // overridable per context by a DefaultLayoutAssignment window rule.
+    static bool suppressDefaultLayoutAssignment()
+    {
+        return false;
+    }
     static bool filterLayoutsByAspectRatio()
     {
         return true;
