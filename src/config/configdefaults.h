@@ -810,9 +810,16 @@ public:
     // Autotile Settings
     // ═══════════════════════════════════════════════════════════════════════════
 
+    // Autotiling is on out of the box so PlasmaZones tiles like a dynamic
+    // tiler (krohnkite, dwm, xmonad) without setup. The companion
+    // krohnkite-parity behaviors are already on by default elsewhere here:
+    // autotileFocusNewWindows, autotileSmartGaps (sole window fills the
+    // screen), autotileRespectMinimumSize, and excludeTransientWindows
+    // (dialogs / utility windows float), with new windows inserted at the
+    // stack end rather than as master.
     static bool autotileEnabled()
     {
-        return false;
+        return true;
     }
     static QString defaultAutotileAlgorithm()
     {
