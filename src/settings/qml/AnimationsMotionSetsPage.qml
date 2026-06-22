@@ -74,6 +74,8 @@ SettingsFlickable {
 
                 Label {
                     Layout.fillWidth: true
+                    Layout.leftMargin: Kirigami.Units.largeSpacing
+                    Layout.rightMargin: Kirigami.Units.largeSpacing
                     text: i18n("Capture every per-event override file as a named motion set.")
                     color: Kirigami.Theme.disabledTextColor
                     wrapMode: Text.WordWrap
@@ -87,6 +89,8 @@ SettingsFlickable {
                 // matches typeflow (name → description → save).
                 ColumnLayout {
                     Layout.fillWidth: true
+                    Layout.leftMargin: Kirigami.Units.largeSpacing
+                    Layout.rightMargin: Kirigami.Units.largeSpacing
                     spacing: Kirigami.Units.smallSpacing
 
                     TextField {
@@ -109,8 +113,6 @@ SettingsFlickable {
                         id: saveStatus
 
                         Layout.fillWidth: true
-                        Layout.leftMargin: Kirigami.Units.largeSpacing
-                        Layout.rightMargin: Kirigami.Units.largeSpacing
                         type: Kirigami.MessageType.Error
                         showCloseButton: true
                     }
@@ -156,6 +158,8 @@ SettingsFlickable {
                     color: Kirigami.Theme.disabledTextColor
                     font.italic: true
                     Layout.fillWidth: true
+                    Layout.leftMargin: Kirigami.Units.largeSpacing
+                    Layout.rightMargin: Kirigami.Units.largeSpacing
                 }
 
                 Repeater {
@@ -165,6 +169,8 @@ SettingsFlickable {
                         required property var modelData
 
                         Layout.fillWidth: true
+                        Layout.leftMargin: Kirigami.Units.largeSpacing
+                        Layout.rightMargin: Kirigami.Units.largeSpacing
                         spacing: Kirigami.Units.smallSpacing
 
                         ColumnLayout {

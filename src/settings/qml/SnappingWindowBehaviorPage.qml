@@ -71,7 +71,6 @@ SettingsFlickable {
                         searchAnchor: "holdToEnable"
                         description: i18n("Hold this modifier when releasing a window to show the picker for that snap only")
                         enabled: !snapAssistAlwaysSwitch.checked
-                        opacity: enabled ? 1 : 0.4
 
                         ModifierAndMouseCheckBoxes {
                             width: root.sliderPreferredWidth

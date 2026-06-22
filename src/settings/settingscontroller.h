@@ -480,8 +480,6 @@ public:
     Q_INVOKABLE void setPerScreenSnappingSetting(const QString& screenName, const QString& key, const QVariant& value);
     Q_INVOKABLE void clearPerScreenSnappingSettings(const QString& screenName);
     Q_INVOKABLE bool hasPerScreenSnappingSettings(const QString& screenName) const;
-    Q_INVOKABLE bool hasPerScreenSnappingGapsSettings(const QString& screenName) const;
-    Q_INVOKABLE void clearPerScreenSnappingGapsSettings(const QString& screenName);
 
     // ── Virtual screen configuration ──────────────────────────────────────────
     Q_INVOKABLE QStringList getPhysicalScreens() const;
@@ -749,25 +747,25 @@ private:
     /// and m_localAlgorithmRegistry reset.
     std::unique_ptr<AlgorithmService> m_algorithmService;
 
-    /// Tiling→Algorithm page sub-controller. Declared as unique_ptr (not
-    /// parented to `this`) and placed AFTER m_localAlgorithmRegistry so
-    /// reverse-order destruction runs ~TilingAlgorithmController BEFORE
-    /// the registry unique_ptr resets — the controller holds a raw pointer
-    /// to the registry. Parenting to `this` would defer destruction to
-    /// ~QObject, which runs AFTER these member unique_ptrs have already
-    /// released their borrowed targets.
+    /// Tiling→Algorithm page sub-controller. Held by unique_ptr and placed
+    /// AFTER m_localAlgorithmRegistry so reverse-order member destruction runs
+    /// ~TilingAlgorithmController (which holds a raw pointer to the registry)
+    /// BEFORE the registry unique_ptr resets. The unique_ptr — NOT ~QObject —
+    /// is what destroys it, so that ordering holds regardless of parent.
+    /// It is nonetheless constructed with parent `this` (see the ctor site):
+    /// registerPage adopts parent-LESS pages to m_app, which is destroyed
+    /// first and would double-free this object on close.
     std::unique_ptr<TilingAlgorithmController> m_tilingAlgorithmPage;
 
-    /// Snapping→Shaders page sub-controller. Same declaration-order
-    /// rationale as `m_tilingAlgorithmPage`: borrows
-    /// `m_localLayoutManager` (the registry walked by `shaderEffectUsages`
-    /// for the "Used in:" reverse-lookup), so it MUST be a `unique_ptr<>`
-    /// declared AFTER that registry. A QObject-child raw pointer would
-    /// defer destruction to ~QObject, which runs AFTER the registry's
-    /// unique_ptr has already reset, leaving the controller holding a
-    /// dangling layout-registry pointer if any teardown signal fires.
-    /// Borrows `m_overlayShaderRegistry` too, but that registry is a
-    /// QObject child of `this` and survives until ~QObject — fine.
+    /// Snapping→Shaders page sub-controller. Same rationale as
+    /// `m_tilingAlgorithmPage`: borrows `m_localLayoutManager` (the registry
+    /// walked by `shaderEffectUsages` for the "Used in:" reverse-lookup), so it
+    /// MUST be a `unique_ptr<>` declared AFTER that registry — the unique_ptr
+    /// reset (member order), not ~QObject, drives its destruction before the
+    /// borrowed registry resets. Constructed with parent `this` so registerPage
+    /// does not adopt it to the first-destroyed m_app (double-free on close).
+    /// Borrows `m_overlayShaderRegistry` too, but that registry is a QObject
+    /// child of `this` and survives until ~QObject — fine.
     std::unique_ptr<SnappingShadersPageController> m_snappingShadersPage;
 
     /// Recompute zone geometry for every manual layout in

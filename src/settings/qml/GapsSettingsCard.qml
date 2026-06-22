@@ -76,8 +76,6 @@ SettingsCard {
             }
         }
 
-        SettingsSeparator {}
-
         SettingsRow {
             visible: !tilePerSideSwitch.checked
             title: root.outerGapLabel
@@ -99,6 +97,8 @@ SettingsCard {
                 }
             }
         }
+
+        SettingsSeparator {}
 
         SettingsRow {
             title: i18n("Per-side outer gaps")

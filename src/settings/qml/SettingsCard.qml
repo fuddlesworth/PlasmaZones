@@ -57,6 +57,14 @@ Item {
     /// Stable type marker so a contained SettingsRow can identify its hosting
     /// card by walking up the parent chain (used to expand the card on reveal).
     readonly property bool isSettingsCard: true
+    /// Opacity applied to the card body when the master toggle is off. Kept
+    /// high enough that muted content stays legible — the disabled palette
+    /// already greys the text, so a low opacity on top compounds into an
+    /// unreadable wash. Note SettingsRows and SettingsSeparators hide themselves
+    /// when disabled (their `visible: enabled`), so a row-only body collapses
+    /// away entirely; cards with non-row content (editors, custom items) keep
+    /// that content visibly muted by this opacity.
+    readonly property real disabledContentOpacity: 0.85
 
     // Per-monitor scope chip (optional). When scopeEnabled, the header shows a
     // monitor scope chip right after the title, collapsed to "All Monitors",
@@ -297,7 +305,7 @@ Item {
             width: parent.width
             height: contentColumn.implicitHeight
             clip: true
-            opacity: root.showToggle && !root.toggleChecked ? 0.5 : 1
+            opacity: root.showToggle && !root.toggleChecked ? root.disabledContentOpacity : 1
             enabled: root.showToggle ? root.toggleChecked : true
 
             Item {
@@ -341,7 +349,7 @@ Item {
                 PhosphorMotionAnimation {
                     target: contentClip
                     properties: "opacity"
-                    to: root.showToggle && !root.toggleChecked ? 0.5 : 1
+                    to: root.showToggle && !root.toggleChecked ? root.disabledContentOpacity : 1
                     profile: "widget.fadeIn"
                 }
 
@@ -351,7 +359,7 @@ Item {
                             return contentColumn.implicitHeight;
                         });
                         contentClip.opacity = Qt.binding(function () {
-                            return root.showToggle && !root.toggleChecked ? 0.5 : 1;
+                            return root.showToggle && !root.toggleChecked ? root.disabledContentOpacity : 1;
                         });
                     }
                 }

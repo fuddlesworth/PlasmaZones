@@ -10,7 +10,7 @@
  * 2. Per-screen zone selector no-op-write emit/husk suppression
  * 3. Per-screen autotile validation
  * 4. Per-screen autotile gaps/algorithm sub-domain independence
- * 5. Per-screen snapping gaps sub-domain isolation
+ * 5. Per-screen snapping clear drops the (gaps-only) entry
  * 6. Fresh config defaults
  */
 
@@ -23,6 +23,7 @@
 #include "../../../src/core/constants.h"
 #include "../../../src/core/settings_interfaces.h"
 #include "../helpers/IsolatedConfigGuard.h"
+#include <PhosphorIdentity/VirtualScreenId.h>
 
 using namespace PlasmaZones;
 using PlasmaZones::TestHelpers::IsolatedConfigGuard;
@@ -59,6 +60,38 @@ private Q_SLOTS:
         // Clear and verify
         settings.clearPerScreenZoneSelectorSettings(screen);
         QVERIFY(!settings.hasPerScreenZoneSelectorSettings(screen));
+    }
+
+    /**
+     * Per-screen zone selector resolver: an override stored on the physical
+     * monitor must still resolve when queried with one of its virtual
+     * sub-screen ids ("<physical>/vs:N"). Mirrors the snapping geometry path's
+     * getPerScreenSnappingWithFallback() so the selector honors per-monitor
+     * overrides on virtual screens (regression for discussion #661).
+     */
+    void testPerScreenZoneSelector_virtualScreenFallsBackToPhysical()
+    {
+        IsolatedConfigGuard guard;
+
+        Settings settings;
+
+        const QString physical = QStringLiteral("test-screen-1");
+        const QString virtualId = PhosphorIdentity::VirtualScreenId::make(physical, 0);
+
+        // Baseline: with no override, the virtual screen resolves to the global
+        // default position (and that default is not the value we will set).
+        const int defaultPosition = settings.resolvedZoneSelectorConfig(virtualId).position;
+        QVERIFY(defaultPosition != 3);
+
+        // Store the override on the PHYSICAL id (as the settings UI does).
+        settings.setPerScreenZoneSelectorSetting(physical, QStringLiteral("Position"), 3);
+
+        // Querying the VIRTUAL sub-screen must fall back to the physical entry.
+        QCOMPARE(settings.resolvedZoneSelectorConfig(virtualId).position, 3);
+
+        // An unrelated screen still resolves to the default (no spurious match).
+        const QString otherVirtual = PhosphorIdentity::VirtualScreenId::make(QStringLiteral("other-screen"), 0);
+        QCOMPARE(settings.resolvedZoneSelectorConfig(otherVirtual).position, defaultPosition);
     }
 
     /**
@@ -326,11 +359,12 @@ private Q_SLOTS:
     }
 
     /**
-     * The per-screen snapping Gaps card shares one map with the snapping
-     * SnapAssist/ZoneSelector keys but must report and clear only its gap keys,
-     * so resetting the Gaps card never wipes the map's other overrides.
+     * The per-screen snapping map holds only gap keys (snap-assist is global;
+     * the zone-selector keys live in their own map), so clearing it removes the
+     * whole entry. Verifies the clear reports the overrides, emits exactly once,
+     * and removes the entry — and that a redundant clear is a silent no-op.
      */
-    void testPerScreenSnapping_gapsSubdomainIsolatesNonGapsKeys()
+    void testPerScreenSnapping_clearDropsEntry()
     {
         IsolatedConfigGuard guard;
 
@@ -338,30 +372,25 @@ private Q_SLOTS:
 
         const QString screen = QStringLiteral("test-screen-1");
 
-        // A gaps override (ZonePadding) and a non-gaps override
-        // (SnapAssistEnabled) coexist in the one shared per-screen snapping map.
         settings.setPerScreenSnappingSetting(screen, QStringLiteral("ZonePadding"), 8);
-        settings.setPerScreenSnappingSetting(screen, QStringLiteral("SnapAssistEnabled"), false);
+        settings.setPerScreenSnappingSetting(screen, QStringLiteral("OuterGap"), 12);
 
-        QVERIFY(settings.hasPerScreenSnappingGapsSettings(screen));
         QVERIFY(settings.hasPerScreenSnappingSettings(screen));
+        // Pin the accept path: both gap keys round-trip through the validator.
+        const QVariantMap stored = settings.getPerScreenSnappingSettings(screen);
+        QCOMPARE(stored.value(QStringLiteral("ZonePadding")).toInt(), 8);
+        QCOMPARE(stored.value(QStringLiteral("OuterGap")).toInt(), 12);
 
         QSignalSpy spy(&settings, &Settings::perScreenSnappingSettingsChanged);
 
-        // Clearing the gaps sub-domain emits once and leaves the SnapAssist
-        // override intact (the entry survives because a non-gaps key remains).
-        settings.clearPerScreenSnappingGapsSettings(screen);
+        settings.clearPerScreenSnappingSettings(screen);
         QCOMPARE(spy.count(), 1);
-        QVERIFY(!settings.hasPerScreenSnappingGapsSettings(screen));
-        QVERIFY(settings.hasPerScreenSnappingSettings(screen));
-        QVariantMap afterGapsClear = settings.getPerScreenSnappingSettings(screen);
-        QVERIFY2(!afterGapsClear.contains(QStringLiteral("ZonePadding")), "gaps key must be cleared");
-        QCOMPARE(afterGapsClear.value(QStringLiteral("SnapAssistEnabled")).toBool(), false);
+        QVERIFY(!settings.hasPerScreenSnappingSettings(screen));
+        QVERIFY(settings.getPerScreenSnappingSettings(screen).isEmpty());
 
-        // A no-op gaps clear (no gaps remain) changes nothing and does not emit.
-        settings.clearPerScreenSnappingGapsSettings(screen);
+        // A no-op clear (nothing left) changes nothing and does not emit.
+        settings.clearPerScreenSnappingSettings(screen);
         QCOMPARE(spy.count(), 1);
-        QVERIFY(settings.hasPerScreenSnappingSettings(screen));
     }
 
     // =========================================================================

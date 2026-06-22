@@ -930,6 +930,12 @@ private:
     // After geometry updates settle, request KWin effect to re-apply window positions (panel editor fix)
     QTimer m_reapplyGeometriesTimer;
 
+    // Debounced resnap of currently-snapped windows after a gap/padding change
+    // (global or per-screen snapping). Lets users see the new spacing applied to
+    // already-snapped windows on save instead of having to re-snap each one
+    // (discussion #661). Coalesces a batch of per-side edits into one pass.
+    QTimer m_gapResnapTimer;
+
     // Watchdog: if the KWin effect has not registered as a compositor bridge
     // within a grace period after startup, window control is dead (drags and
     // shortcuts do nothing). On timeout the daemon logs a diagnostic warning

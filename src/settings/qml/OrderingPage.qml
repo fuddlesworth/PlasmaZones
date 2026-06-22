@@ -101,6 +101,11 @@ SettingsFlickable {
                     property bool isDragging: false
 
                     Layout.fillWidth: true
+                    // No horizontal Layout margin here: each drag row already
+                    // insets its content by largeSpacing (the inner RowLayout's
+                    // anchors), so adding it here too double-inset the rows
+                    // relative to the reset row below. Row cards stay full-width;
+                    // their content lines up with the reset row at largeSpacing.
                     Layout.preferredHeight: Math.max(orderModel.count * rowHeight, Kirigami.Units.gridUnit * 10)
                     clip: true
 
@@ -419,6 +424,8 @@ SettingsFlickable {
 
                 RowLayout {
                     Layout.fillWidth: true
+                    Layout.leftMargin: Kirigami.Units.largeSpacing
+                    Layout.rightMargin: Kirigami.Units.largeSpacing
                     spacing: Kirigami.Units.smallSpacing
 
                     Item {
