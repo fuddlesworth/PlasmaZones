@@ -30,9 +30,9 @@ change: `TilingState` is session state on a separate JSON surface from `config.j
 ```
  KWin compositor
    windowFinishUserMovedResized (window_lifecycle.cpp:689); wasResize latch (m_resizingWindow :673,:690)
-   effect-side cheap negative filters only: wasResize && shouldHandleWindow && !isWindowFloating && valid geom
+   effect-side gate: wasResize (m_resizingWindow latch) && shouldHandleWindow && valid geom && new != old
  → PlasmaZones effect
-   fireAndForget notifyWindowResized(windowId, x,y,w,h)   [no effect-side membership cache]
+   fireAndForget notifyWindowResized(windowId, oldRect, newRect)   [daemon owns the tiled-vs-floating decision]
  → D-Bus org.plasmazones.WindowTracking
  → Daemon adaptor (main thread)  WindowTrackingAdaptor::notifyWindowResized
      validate (validateWindowId, new dims > 0) → update m_frameGeometry shadow with newFrame
@@ -48,9 +48,8 @@ change: `TilingState` is session state on a separate JSON surface from `config.j
              → subtreeBoundingRect (split extent from rendered zones) → ratio → resizeSplitNode
              → retileAfterOperation(screenId, true)   [SYNCHRONOUS]
    recalculateLayout → prepareTilingState → calculateZones (applyGeometryRecursive, gap-free)
- → applyTiling (AutotileEngine.cpp:3512): zones[i] → windows[i] by index;
-     ratio-equality guard (skip emit if unchanged); per-entry skipAnimation for dragged window
-   emit JSON 'windowsTiled' (:3598)
+ → applyTiling: zones[i] → windows[i] by index (retile skipped entirely if no ratio changed)
+   emit JSON 'windowsTiled'
  → KWin effect applies geometry (daemon_apply.cpp): neighbors animate; dragged window not re-animated
 ```
 
@@ -118,9 +117,8 @@ dissolves the F3/R3 reconciliation problem at the root, so no post-clamp reconci
 The ratio is computed position-based: `firstSize = newEdgePos - axisStart` (Right/Bottom) or
 `- innerGap` more (Left/Top); `ratio = firstSize / (axisExtent - innerGap)`, then `resizeSplitNode`
 clamps to `[0.1, 0.9]`. A pure move (both edges of an axis shift together) is rejected per-axis.
-Dragged-window animation suppression via a per-entry `skipAnimation` flag in the `windowsTiled` JSON
-entry (NOT `filterForPreview`). Emit guard: `applyTreeResizeReflow` returns false (no retile) when no
-ratio actually changed.
+Emit guard: `applyTreeResizeReflow` returns false (no retile) when no ratio actually changed.
+(Dragged-window animation suppression — the `skipAnimation` flag — is deferred; see §9.)
 
 ### P3 — ctx enrichment + onWindowResized hook + persistent state bag
 
@@ -138,12 +136,15 @@ Files:
 - `libs/phosphor-tiles/src/pluau/pluau.d.luau` — types for `ResizeEdge`/`ResizeEvent`,
   `Context.{windowId, resize, currentGeometries, state}`, `Algorithm.onWindowResized`,
   `WindowInfo.windowId`, `Metadata.supportsScriptState`.
-- `libs/phosphor-tile-engine/src/AutotileEngine.cpp` — `m_pendingResize` keyed by `(screenId, windowId)`
-  drained synchronously, Tier-B set in the non-memory branch, `setScriptState` write-back.
+- `libs/phosphor-tile-engine/src/AutotileEngine.cpp` — the non-memory branch of `onWindowResized`
+  builds the `ResizeEvent` and dispatches the algorithm hook synchronously (no pending-resize member),
+  then retiles; the hook's returned bag is written back via `setScriptState`.
 
 `ResizeEvent`: `{ int index; QRect oldRect; QRect newRect; bool left,right,top,bottom; }`.
-Luau ctx: `resize = { index, oldRect, newRect, edges = {left,right,top,bottom} }`.
-`ctx.currentGeometries` = last *applied* zones (advisory; scripts use `ctx.resize` for the resized cell).
+The hook receives it as `resize = { index, oldRect, newRect, edges = {left,right,top,bottom} }`
+(its second argument — not on the tile() ctx).
+`ctx.currentGeometries` = last *applied* zones (advisory; the resized cell comes from the hook's
+`resize` argument).
 `sanitizeScriptState`: 64 KB compact-JSON cap, depth ≤ 16, ≤ 4096 keys, reject NaN/Inf; runs on
 write-back and on load. Reserved `__v` key round-tripped opaquely (script self-migrates).
 `tile()`'s bare-array return contract is unchanged — write-back is the hook return only.
@@ -171,18 +172,23 @@ D-Bus (`dbus/org.plasmazones.WindowTracking.xml`):
 ```xml
 <method name="notifyWindowResized">
     <arg name="windowId" type="s" direction="in"/>
-    <arg name="x" type="i" direction="in"/>
-    <arg name="y" type="i" direction="in"/>
-    <arg name="width" type="i" direction="in"/>
-    <arg name="height" type="i" direction="in"/>
+    <arg name="oldX" type="i" direction="in"/>
+    <arg name="oldY" type="i" direction="in"/>
+    <arg name="oldWidth" type="i" direction="in"/>
+    <arg name="oldHeight" type="i" direction="in"/>
+    <arg name="newX" type="i" direction="in"/>
+    <arg name="newY" type="i" direction="in"/>
+    <arg name="newWidth" type="i" direction="in"/>
+    <arg name="newHeight" type="i" direction="in"/>
 </method>
 ```
 
 Engine handler (`AutotileEngine.h`):
 
 ```cpp
-void onWindowResized(const QString& windowId, const QRect& oldFrame,
-                     const QRect& newFrame, const QString& screenId);
+// override of IPlacementEngine::onWindowResized; rawWindowId is canonicalized internally
+void onWindowResized(const QString& rawWindowId, const QRect& oldFrame,
+                     const QRect& newFrame, const QString& screenId) override;
 ```
 
 SplitTree helpers (`SplitTree.h`):
@@ -210,9 +216,10 @@ ctx additions (`buildContext`, all conditional → nil when absent):
 ```
 ctx.windows[i].windowId : string
 ctx.currentGeometries   : { Zone }?    -- last APPLIED zones, advisory
-ctx.resize : { index, oldRect, newRect, edges = {left,right,top,bottom} }?  -- single-shot
-ctx.state  : { [string]: any }?        -- read view of m_scriptState
+ctx.state  : { [string]: any }?        -- read view of m_scriptState (only when supportsScriptState)
 ```
+The resize descriptor is NOT on the ctx — it is delivered as the `onWindowResized` hook's second
+argument (`{ index, oldRect, newRect, edges = {left,right,top,bottom} }`). `tile()` reads only `ctx.state`.
 
 Luau `onWindowResized` hook (`pluau.d.luau` + `TilingAlgorithm.h`):
 
@@ -234,18 +241,22 @@ retile. `tile()`'s return shape is unchanged.
   (Right/Bottom → leaf in `first`; Left/Top → leaf in `second`). Screen-boundary edge → `nullptr` → no-op.
 - **corner handling:** one H-edge + one V-edge → two independent `resizeSplitNode` calls on distinct
   nodes (order-independent). Boundary corner edge → only one ratio changes.
-- **min-size clamp:** over-drag clamps at `max(neighbor declared min if respectMinimumSize,
-  MinSplitRatio·splitContent)`. Tree ratio reconciled to post-clamp geometry (no hysteresis). No
-  push-through in v1.
+- **min-size clamp:** the new ratio is derived from the split's **rendered** extent (bounding box of
+  its subtree's zones) and clamped to `[MinSplitRatio, MaxSplitRatio]`; `enforceMinSizes` downstream
+  handles per-window minimums. Because the extent and the moved edge are both in rendered coordinates,
+  there is no pure-tree-vs-rendered divergence and no separate post-clamp reconciliation pass (this
+  supersedes the originally-planned reconciliation — see the P2 refinement). No push-through in v1.
 - **engine-reflow vs Luau-hook precedence (single owner = engine handler):** `supportsMemory()` →
-  Tier A, never sets `ctx.resize`, never fires the hook. Else `supportsResizeHook()` → Tier B. Else no-op.
+  Tier A (tree), never fires the hook. Else `supportsResizeHook()` → Tier B (hook). Else no-op.
 - **multi-monitor / cross-output:** daemon resolves via `screenForTrackedWindow`. If `newFrame.center()`
   leaves `screenGeometry(screenId)`, reject — `windowScreenChanged` owns the handoff.
 - **floating / XWayland / single-window:** floating excluded both sides. XWayland same path.
-  Single window (`leafCount() < 2`) → early no-op before `prepareTilingState`.
-- **infinite-retile guard:** finish-only; synchronous `retileAfterOperation`; single-shot
-  `(screenId,windowId)` consume; `setScriptState` emits no signal; clamped-to-identical ratio skips emit.
-- **frame ≠ zone:** edge diff uses the daemon `m_frameGeometry` old frame, not `calculatedZones`.
+  Single window (`tiledWindowCount() < 2`) → early no-op.
+- **infinite-retile guard:** finish-only; synchronous `retileAfterOperation`; `setScriptState` emits no
+  signal (so it can't re-enter the retile); a clamped-to-identical ratio leaves `changed == false` and
+  skips the retile/emit.
+- **frame baseline:** the edge diff uses the **effect-supplied** `oldFrame` (latched at resize start),
+  NOT the daemon `m_frameGeometry` shadow — the shadow updates mid-drag and can't serve as the baseline.
 
 ## 6. Persistence & Versioning
 
@@ -297,12 +308,12 @@ Run: `cmake --build build --parallel $(nproc)` then `cd build && ctest --output-
 
 | # | Risk | Mitigation |
 |---|------|-----------|
-| R1 | Dragged window snaps back | Per-entry `skipAnimation` flag (NOT `filterForPreview`); keeps entry so `enforceMinSizes` still applies. |
-| R2 | Wrong edge→split at depth | Table-driven `testOwningEdge_*` over orientation × side × depth; assert pointer identity. |
-| R3 | Tree ratio diverges from min-clamped geometry | Reconcile owning split's ratio from post-clamp child extents. |
-| R4 | Geometry round-trip drift | No parallel `nodeRect` impl; `applyGeometryRecursive` records node rects via out-param. |
-| R5 | Resize event lost to retile coalescing | Synchronous `retileAfterOperation`; `(screenId,windowId)`-keyed drain for Tier B. |
-| R6 | Frame≠zone baked offset in edge diff | Diff against daemon `m_frameGeometry` old frame. |
+| R1 | Dragged window snaps back | Minimal in practice — the dragged window's tiled zone matches the drag-end frame, so it re-applies at ≈0px. Dedicated `skipAnimation` suppression is deferred (see §9). |
+| R2 | Wrong edge→split at depth | `testSplitOwningEdge*` over orientation × side × depth (incl. nested + corner-two-distinct-splits); assert pointer identity. |
+| R3 | Tree ratio diverges from min-clamped geometry | Derive the ratio from the split's rendered extent so the math is in compositor coords; no post-clamp reconciliation needed (P2 refinement). |
+| R4 | Geometry round-trip drift | Split extent read from the rendered zones (`subtreeBoundingRect`), not recomputed — no parallel `nodeRect` impl, no out-param. |
+| R5 | Resize event lost to retile coalescing | Finish-only + synchronous `retileAfterOperation` (no debounced `scheduleRetileForScreen`). |
+| R6 | Frame baseline unreliable | Effect latches `oldFrame` at resize start and sends it; the daemon frame shadow is not used as the baseline. |
 | R7 | Cross-output resize double-drives | Reject when `newFrame.center()` leaves the screen. |
 | R8 | Script writes huge/garbage bag | `sanitizeScriptState` (64 KB / depth 16 / 4096 keys / NaN-reject) at write-back AND load. |
 | R9 | `tile()` return-shape change breaks 25 algorithms | Write-back via hook return only — `tile()` contract untouched. |
@@ -318,9 +329,9 @@ Run: `cmake --build build --parallel $(nproc)` then `cd build && ctest --output-
    matches the drag end position, so the re-animation is ≈0px. Track as a standalone follow-up.
 3. **Resize animation profile:** v1 reuses `WindowLayoutSwitch` for the reflow batch; dedicated
    `WindowResize` mapping is later polish.
-3. **`ResizeEdgeMoveThresholdPx`** default 5 px, dedicated constant (not `GapEdgeThresholdPx`).
-4. **Grid reshape:** uniform-reset-on-reshape only in P4.
-5. **Live-during-drag streaming:** deferred. Forward-compat note: live `oldRect` baseline must be a
+4. **`ResizeEdgeMoveThresholdPx`** default 5 px, dedicated constant (not `GapEdgeThresholdPx`).
+5. **Grid reshape:** uniform-reset-on-reshape only in P4.
+6. **Live-during-drag streaming:** deferred. Forward-compat note: live `oldRect` baseline must be a
    drag-start latch, not `calculatedZones`.
 
 ## 10. Compliance Checklist
