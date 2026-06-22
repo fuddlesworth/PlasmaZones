@@ -29,6 +29,12 @@ void LayoutRegistry::loadLayouts()
     // settings can be merged back onto its structural JSON as it loads.
     m_layoutSettings.loadFromFile(layoutSettingsFilePath());
 
+    // Fold the retired standalone autotile-overrides.json into the unified
+    // sidecar (one-time; self-deletes the legacy file). Done after the sidecar
+    // load so the store is populated, and before layouts merge so autotile
+    // entries are queryable for the rest of this load.
+    migrateLegacyAutotileOverrides();
+
     // Load from ALL data locations (system directories first, then user)
     // locateAll() returns paths in priority order: user first, system last
     // We reverse to load system first, so user layouts can override

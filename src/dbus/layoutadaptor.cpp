@@ -303,8 +303,7 @@ QStringList LayoutAdaptor::getLayoutList()
 
         // Enrich manual-layout entries with Layout-specific fields that
         // LayoutPreview doesn't carry (hasSystemOrigin, hiddenFromSelector,
-        // defaultOrder, allow-lists). Autotile entries have no Layout to
-        // look up so they skip this block.
+        // defaultOrder, allow-lists).
         auto uuidOpt = Utils::parseUuid(entry.id);
         if (uuidOpt) {
             PhosphorZones::Layout* layout = m_layoutManager->layoutById(*uuidOpt);
@@ -319,6 +318,15 @@ QStringList LayoutAdaptor::getLayoutList()
                 PhosphorZones::LayoutUtils::serializeAllowLists(json, layout->allowedScreens(),
                                                                 layout->allowedDesktops(), layout->allowedActivities());
             }
+        } else if (PhosphorLayout::LayoutId::isAutotile(entry.id)) {
+            // Autotile entries have no Layout object; their hiddenFromSelector
+            // (curated-picker state) lives in the unified sidecar keyed by
+            // "autotile:<id>". Surface it so the settings list shows the eye
+            // toggle's true state.
+            const QString algoId = PhosphorLayout::LayoutId::extractAlgorithmId(entry.id);
+            const QJsonObject overrides = m_layoutManager->loadAutotileOverrides(algoId);
+            json[QStringLiteral("hiddenFromSelector")] =
+                overrides.value(PhosphorZones::ZoneJsonKeys::HiddenFromSelector).toBool(false);
         }
 
         result.append(QString::fromUtf8(QJsonDocument(json).toJson(QJsonDocument::Compact)));
@@ -400,6 +408,29 @@ const QString kPropAspectRatioClass = QStringLiteral("aspectRatioClass");
 
 void LayoutAdaptor::setLayoutHidden(const QString& layoutId, bool hidden)
 {
+    // Autotile algorithms have no backing Layout object — their per-id settings
+    // (here, hiddenFromSelector for the curated picker) live in the unified
+    // layout-settings.json sidecar keyed by "autotile:<id>".
+    if (PhosphorLayout::LayoutId::isAutotile(layoutId)) {
+        const QString algoId = PhosphorLayout::LayoutId::extractAlgorithmId(layoutId);
+        const QString hiddenKey = PhosphorZones::ZoneJsonKeys::HiddenFromSelector;
+        QJsonObject overrides = m_layoutManager->loadAutotileOverrides(algoId);
+        if (overrides.value(hiddenKey).toBool(false) == hidden) {
+            return;
+        }
+        // Persist only the hiding state; drop the key on re-show so the entry
+        // collapses back to the algorithm default instead of storing "false".
+        if (hidden) {
+            overrides.insert(hiddenKey, true);
+        } else {
+            overrides.remove(hiddenKey);
+        }
+        m_layoutManager->saveAutotileOverrides(algoId, overrides);
+        qCInfo(lcDbusLayout) << "Set autotile" << layoutId << "hidden:" << hidden;
+        Q_EMIT layoutPropertyChanged(layoutId, kPropHidden, QDBusVariant(hidden));
+        return;
+    }
+
     auto* layout = getValidatedLayout(layoutId, QStringLiteral("set layout hidden"));
     if (!layout) {
         return;

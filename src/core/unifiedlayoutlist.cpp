@@ -10,6 +10,7 @@
 
 #include <PhosphorLayoutApi/AspectRatioClass.h>
 #include <PhosphorLayoutApi/ILayoutSource.h>
+#include <PhosphorLayoutApi/LayoutId.h>
 #include <PhosphorScreens/ScreenIdentity.h>
 #include <PhosphorTiles/AutotileLayoutSource.h>
 #include <PhosphorTiles/AutotilePreviewRender.h>
@@ -18,6 +19,7 @@
 #include <PhosphorZones/IZoneLayoutRegistry.h>
 #include <PhosphorZones/Layout.h>
 #include <PhosphorZones/LayoutUtils.h>
+#include <PhosphorZones/ZoneJsonKeys.h>
 #include <PhosphorZones/ZonesLayoutSource.h>
 
 #include <algorithm>
@@ -296,6 +298,21 @@ QVector<LayoutPreview> buildUnifiedLayoutList(PhosphorZones::IZoneLayoutRegistry
 
     if (includeAutotile) {
         appendAutotilePreviews(list, algorithmRegistry, autotileSource, autotilePreviewCanvas);
+
+        // Drop autotile previews the user has hidden from the curated picker.
+        // Manual layouts are filtered inline above (hiddenFromSelector on the
+        // Layout); autotile entries have no Layout, so their hidden state lives
+        // in the unified layout-settings.json sidecar keyed by "autotile:<id>".
+        list.erase(std::remove_if(list.begin(), list.end(),
+                                  [layoutManager](const LayoutPreview& preview) {
+                                      if (!preview.isAutotile()) {
+                                          return false;
+                                      }
+                                      const QString algoId = PhosphorLayout::LayoutId::extractAlgorithmId(preview.id);
+                                      const QJsonObject overrides = layoutManager->loadAutotileOverrides(algoId);
+                                      return overrides.value(ZoneJsonKeys::HiddenFromSelector).toBool(false);
+                                  }),
+                   list.end());
     }
 
     sortPreviews(list, customOrder);

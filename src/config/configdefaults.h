@@ -6,6 +6,7 @@
 #include <QColor>
 #include <QHash>
 #include <QRectF>
+#include <QJsonObject>
 #include <QString>
 #include <QStringList>
 #include <QVariantList>
@@ -683,6 +684,15 @@ public:
     // of the structural layout definition, so they live in a sibling sidecar
     // next to windowrules.json rather than inside each layout file.
     PLASMAZONES_EXPORT static QString layoutSettingsFilePath();
+
+    // Curated default picker visibility, seeded into layout-settings.json on a
+    // fresh install only (LayoutRegistry::seedDefaultLayoutSettingsIfFresh).
+    // Returns an object keyed exactly as layout-settings.json — manual layouts
+    // by bundled UUID (with braces), algorithms by the "autotile:<id>" form —
+    // mapping each non-curated id to `{ "hiddenFromSelector": true }`. Listed
+    // ids start hidden; everything else stays visible. Users re-show any item
+    // via the eye toggle, and existing installs are never reseeded.
+    PLASMAZONES_EXPORT static QJsonObject defaultLayoutVisibilitySettings();
 
     // Returns the absolute path to the legacy plasmazonesrc file (INI format).
     // Used only by the one-time migration module.

@@ -29,7 +29,12 @@ constexpr QLatin1String kZoneAppearanceMapKey{"zoneAppearance"};
 
 // The per-LAYOUT setting keys that move out of the layout file. The per-ZONE
 // appearance block is handled separately (see extract/strip/merge below).
-const std::array<QLatin1String, 13> layoutSettingKeys{{
+//
+// hiddenFromSelector is a user preference (which layouts the curated picker
+// shows), not part of the structural layout definition — so it lives here in
+// the sidecar, keyed by id, the same way the curated defaults are seeded. The
+// same store also holds autotile entries keyed by "autotile:<id>".
+const std::array<QLatin1String, 14> layoutSettingKeys{{
     ZoneJsonKeys::ZonePadding,
     ZoneJsonKeys::OuterGap,
     ZoneJsonKeys::UsePerSideOuterGap,
@@ -40,6 +45,7 @@ const std::array<QLatin1String, 13> layoutSettingKeys{{
     ZoneJsonKeys::ShowZoneNumbers,
     ZoneJsonKeys::OverlayDisplayMode,
     ZoneJsonKeys::AutoAssign,
+    ZoneJsonKeys::HiddenFromSelector,
     ZoneJsonKeys::UseFullScreenGeometry,
     ZoneJsonKeys::ShaderId,
     ZoneJsonKeys::ShaderParams,

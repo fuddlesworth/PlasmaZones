@@ -27,6 +27,7 @@
 #include <PhosphorZones/AssignmentEntry.h>
 #include <PhosphorZones/Layout.h>
 
+#include <QJsonObject>
 #include <QString>
 #include <QUuid>
 #include <QVector>
@@ -131,6 +132,17 @@ public:
         return currentVirtualDesktop();
     }
     virtual QString currentActivity() const = 0;
+
+    /// Per-algorithm autotile settings (gaps, shader, hiddenFromSelector, …)
+    /// stored in the unified layout-settings.json sidecar, keyed by raw
+    /// algorithm id. Default returns empty so non-persisting implementers and
+    /// the unified-list builder degrade to "no overrides". Concrete registries
+    /// (LayoutRegistry) read the sidecar.
+    virtual QJsonObject loadAutotileOverrides(const QString& algorithmId) const
+    {
+        Q_UNUSED(algorithmId)
+        return {};
+    }
 
     /// Resolve the per-context gap override (zone padding + outer gaps) that
     /// window rules pin for the (@p screenId, @p virtualDesktop, @p activity)
