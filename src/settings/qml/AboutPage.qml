@@ -114,7 +114,7 @@ PhosphorUi.AboutPageShell {
                     Layout.fillWidth: true
                     Layout.leftMargin: Kirigami.Units.largeSpacing
                     Layout.rightMargin: Kirigami.Units.largeSpacing
-                    text: i18n("Inspired by FancyZones, extended with automatic tiling")
+                    text: i18n("Inspired by FancyZones, extended with automatic tiling.")
                     opacity: 0.7
                 }
 
@@ -122,7 +122,7 @@ PhosphorUi.AboutPageShell {
                     Layout.fillWidth: true
                     Layout.leftMargin: Kirigami.Units.largeSpacing
                     Layout.rightMargin: Kirigami.Units.largeSpacing
-                    text: i18n("Built with Qt, KDE Frameworks, and Kirigami")
+                    text: i18n("Built with Qt, KDE Frameworks, and Kirigami.")
                     opacity: 0.7
                 }
             }
