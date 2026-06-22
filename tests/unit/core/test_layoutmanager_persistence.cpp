@@ -214,6 +214,9 @@ private Q_SLOTS:
 
         PhosphorZones::Layout* reloaded = mgr2->layoutById(id);
         QVERIFY(reloaded != nullptr);
+        // A genuinely fresh load from disk, not the in-memory object mgr still
+        // holds — proves the merge ran against the on-disk sidecar.
+        QVERIFY(reloaded != layout);
         QCOMPARE(reloaded->zonePadding(), 8);
         QVERIFY(reloaded->useFullScreenGeometry());
         QVERIFY(reloaded->autoAssign());
