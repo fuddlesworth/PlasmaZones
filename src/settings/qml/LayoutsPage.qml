@@ -235,29 +235,77 @@ SettingsFlickable {
         // filter-row → first-section gap lines up with the other listing pages.
         spacing: Kirigami.Units.largeSpacing
 
-        // ─── Toolbar (CRUD + view-mode switch) ─────────────────────────────
-        LayoutToolbar {
+        // ─── View switch (Snapping / Tiling) — only when autotiling is on ──
+        RowLayout {
             Layout.fillWidth: true
-            appSettings: root.settingsBridge
+            visible: root.settingsBridge.autotileEnabled
+
+            SettingsButtonGroup {
+                model: [i18n("Snapping"), i18n("Tiling")]
+                currentIndex: root.viewMode
+                onIndexChanged: index => {
+                    root.viewMode = index;
+                    root.selectedLayoutId = "";
+                    // rebuildModel() runs via filterBar.onViewModeChanged → loadState → filterSettingsChanged.
+                    root.selectDefaultLayout(index);
+                }
+            }
+
+            Item {
+                Layout.fillWidth: true
+            }
+        }
+
+        // ─── Import / Open Folder card (shader-style, drop-zone) ───
+        LayoutManageCard {
             viewMode: root.viewMode
-            onRequestCreateNewLayout: newLayoutDialog.open()
-            onRequestCreateNewAlgorithm: newAlgorithmDialog.open()
             onRequestImportLayout: importDialog.open()
             onRequestImportFromKZones: settingsController.importFromKZones()
             onRequestImportKZonesFile: kzonesFileDialog.open()
             onRequestOpenLayoutsFolder: settingsController.openLayoutsFolder()
             onRequestImportAlgorithm: algorithmImportDialog.open()
             onRequestOpenAlgorithmsFolder: settingsController.openAlgorithmsFolder()
-            onViewModeRequested: mode => {
-                root.viewMode = mode;
-                root.selectedLayoutId = "";
-                // rebuildModel() is triggered by filterBar.onViewModeChanged →
-                // loadState → filterSettingsChanged.
-                root.selectDefaultLayout(mode);
+        }
+
+        // ─── Search row (search + filter + New) ────────────
+        RowLayout {
+            Layout.fillWidth: true
+            spacing: Kirigami.Units.smallSpacing
+
+            Kirigami.SearchField {
+                id: searchField
+
+                Layout.fillWidth: true
+                placeholderText: root.viewMode === 0 ? i18n("Search layouts…") : i18n("Search algorithms…")
+                onTextChanged: filterBar.setSearchText(text)
+
+                Connections {
+                    function onSearchCleared() {
+                        if (searchField.text.length > 0)
+                            searchField.text = "";
+                    }
+
+                    target: filterBar
+                }
+            }
+
+            ToolButton {
+                icon.name: "view-filter"
+                checked: filterBar.hasActiveFilters
+                onClicked: filterBar.popupFilterMenu()
+                Accessible.name: filterBar.hasActiveFilters ? i18n("Filter (active)") : i18n("Filter")
+                ToolTip.visible: hovered
+                ToolTip.text: filterBar.hasActiveFilters ? i18n("Filters active — click to change") : i18n("Filter")
+            }
+
+            Button {
+                text: root.viewMode === 0 ? i18n("New Layout") : i18n("New Algorithm")
+                icon.name: "list-add"
+                onClicked: root.viewMode === 0 ? newLayoutDialog.open() : newAlgorithmDialog.open()
             }
         }
 
-        // ─── Filter / Group / Sort bar ─────────────────────────────────────
+        // ─── Group / Sort row ────────────────────
         LayoutFilterBar {
             id: filterBar
 
