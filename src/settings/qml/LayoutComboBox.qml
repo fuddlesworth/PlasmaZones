@@ -192,6 +192,12 @@ ComboBox {
     }
 
     function _doRebuild() {
+        // A coalesced rebuild can fire via Qt.callLater after this ComboBox
+        // has been destroyed (fast page-switching); the dying context resolves
+        // the component's own methods to undefined. Bail before invoking them
+        // rather than throwing "_buildItems is not a function".
+        if (typeof _buildItems !== "function")
+            return;
         _rebuildScheduled = false;
         let items = _buildItems();
         if (_modelMatchesItems(items)) {
@@ -209,6 +215,12 @@ ComboBox {
     }
 
     function updateSelection() {
+        // Same teardown guard as _doRebuild: a coalesced Qt.callLater(updateSelection)
+        // (the onLayoutFilterChanged path) can fire after this ComboBox is
+        // destroyed by fast page-switching; the dying context resolves the
+        // component's own members to undefined. Bail before touching them.
+        if (typeof _buildItems !== "function")
+            return;
         // Unmatched id → -1 (no selection), not 0. Coercing to row 0
         // silently rewrites a stale / deleted layout id to whatever
         // happens to be first in the list — when `showNoneOption: false`

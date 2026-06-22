@@ -58,7 +58,6 @@ SettingsFlickable {
                     searchAnchor: "holdToReinsert"
                     description: i18n("Hold a modifier or mouse button while dragging a window to dynamically insert it into the autotile stack at the cursor position")
                     enabled: !alwaysReinsertSwitch.checked
-                    opacity: enabled ? 1 : 0.4
 
                     ModifierAndMouseCheckBoxes {
                         width: root.triggerPreferredWidth
@@ -80,7 +79,6 @@ SettingsFlickable {
                     searchAnchor: "triggersToggleMode"
                     description: i18n("Tap the re-insert trigger once to activate the stack preview, tap again to deactivate it")
                     enabled: !alwaysReinsertSwitch.checked
-                    opacity: enabled ? 1 : 0.4
 
                     SettingsSwitch {
                         checked: appSettings.autotileDragInsertToggle

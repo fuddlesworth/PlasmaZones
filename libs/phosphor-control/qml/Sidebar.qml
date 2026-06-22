@@ -563,19 +563,25 @@ ColumnLayout {
                 model: visibleModel
                 interactive: false
                 spacing: 0
+                // Contain the accordion add/displaced transitions: without it
+                // the in-flight rows (animating `y` as a category expands)
+                // paint outside the list's bounds and are seen sliding down
+                // behind the rows / footer below it.
+                clip: true
 
                 add: Transition {
                     enabled: !root._suppressAccordion
 
+                    // Fade newly-revealed rows in AT their final position — no
+                    // `y` animation. Translating added rows made the category's
+                    // children visibly fly in from above the header; the
+                    // `displaced` transition below already slides the rows after
+                    // the insertion point down to open the gap, which is the
+                    // accordion motion we actually want.
                     PhosphorMotionAnimation {
                         properties: "opacity"
                         from: 0
                         to: 1
-                        profile: "widget.accordionExpand"
-                    }
-
-                    PhosphorMotionAnimation {
-                        properties: "y"
                         profile: "widget.accordionExpand"
                     }
                 }

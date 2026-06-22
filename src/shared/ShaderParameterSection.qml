@@ -72,76 +72,89 @@ ColumnLayout {
         Accessible.description: root.expanded ? i18ncp("@info:tooltip expanded section", "%1 parameter. Click to collapse.", "%1 parameters. Click to collapse.", root.paramCount) : i18ncp("@info:tooltip collapsed section", "%1 parameter. Click to expand.", "%1 parameters. Click to expand.", root.paramCount)
         onClicked: root.toggled()
 
-        contentItem: RowLayout {
-            spacing: Kirigami.Units.smallSpacing
+        contentItem: Item {
+            implicitWidth: paramHeaderRow.implicitWidth + Kirigami.Units.largeSpacing * 2
+            implicitHeight: paramHeaderRow.implicitHeight
 
-            Kirigami.Icon {
-                source: "arrow-right"
-                implicitWidth: Kirigami.Units.iconSizes.small
-                implicitHeight: Kirigami.Units.iconSizes.small
-                color: Kirigami.Theme.textColor
-                rotation: root.expanded ? 90 : 0
+            // Inset via a margin inside contentItem (not the Control's padding,
+            // which the org.kde.desktop ItemDelegate style overrides) so the
+            // header content doesn't hug the edge.
+            RowLayout {
+                id: paramHeaderRow
 
-                Behavior on rotation {
-                    PhosphorMotionAnimation {
-                        // Direction-bound: profile reads root.expanded after the
-                        // flip — true is the expand direction, false is collapse.
-                        profile: root.expanded ? "widget.accordionExpand" : "widget.accordionCollapse"
-                        durationOverride: Kirigami.Units.longDuration
+                anchors.fill: parent
+                anchors.leftMargin: Kirigami.Units.largeSpacing
+                anchors.rightMargin: Kirigami.Units.largeSpacing
+                spacing: Kirigami.Units.smallSpacing
+
+                Kirigami.Icon {
+                    source: "arrow-right"
+                    implicitWidth: Kirigami.Units.iconSizes.small
+                    implicitHeight: Kirigami.Units.iconSizes.small
+                    color: Kirigami.Theme.textColor
+                    rotation: root.expanded ? 90 : 0
+
+                    Behavior on rotation {
+                        PhosphorMotionAnimation {
+                            // Direction-bound: profile reads root.expanded after the
+                            // flip — true is the expand direction, false is collapse.
+                            profile: root.expanded ? "widget.accordionExpand" : "widget.accordionCollapse"
+                            durationOverride: Kirigami.Units.longDuration
+                        }
                     }
                 }
-            }
-
-            QQC.Label {
-                text: root.title
-                font.weight: Font.Medium
-                Layout.fillWidth: true
-            }
-
-            QQC.ToolButton {
-                // Reads `root.lockedParams[p.id]` inside the loop register
-                // the parent map as a binding dependency directly — no
-                // separate proxy property is needed for reactivity.
-                readonly property bool allLocked: {
-                    if (!root.groupParams || root.groupParams.length === 0 || !root.lockedParams)
-                        return false;
-
-                    for (var i = 0; i < root.groupParams.length; i++) {
-                        var p = root.groupParams[i];
-                        if (p && p.id !== undefined && root.lockedParams[p.id] !== true)
-                            return false;
-                    }
-                    return true;
-                }
-
-                // Hide the lock button on empty groups too — there's
-                // nothing to lock there, and rendering the unlocked-icon
-                // button on an empty section is just visual noise.
-                visible: root.enableLocking && root.paramCount > 0
-                icon.name: allLocked ? "object-locked" : "object-unlocked"
-                icon.width: Kirigami.Units.iconSizes.small
-                icon.height: Kirigami.Units.iconSizes.small
-                opacity: allLocked ? 1 : 0.4
-                display: QQC.ToolButton.IconOnly
-                QQC.ToolTip.text: allLocked ? i18nc("@info:tooltip", "Unlock all in %1", root.title) : i18nc("@info:tooltip", "Lock all in %1", root.title)
-                QQC.ToolTip.visible: hovered
-                QQC.ToolTip.delay: Kirigami.Units.toolTipDelay
-                onClicked: root.groupLockToggled(!allLocked)
-            }
-
-            Rectangle {
-                implicitWidth: countLabel.implicitWidth + Kirigami.Units.smallSpacing * 2
-                implicitHeight: Kirigami.Units.gridUnit
-                radius: height / 2
-                color: Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g, Kirigami.Theme.highlightColor.b, 0.2)
 
                 QQC.Label {
-                    id: countLabel
+                    text: root.title
+                    font.weight: Font.Medium
+                    Layout.fillWidth: true
+                }
 
-                    anchors.centerIn: parent
-                    text: root.paramCount
-                    font: Kirigami.Theme.smallFont
-                    color: Kirigami.Theme.textColor
+                QQC.ToolButton {
+                    // Reads `root.lockedParams[p.id]` inside the loop register
+                    // the parent map as a binding dependency directly — no
+                    // separate proxy property is needed for reactivity.
+                    readonly property bool allLocked: {
+                        if (!root.groupParams || root.groupParams.length === 0 || !root.lockedParams)
+                            return false;
+
+                        for (var i = 0; i < root.groupParams.length; i++) {
+                            var p = root.groupParams[i];
+                            if (p && p.id !== undefined && root.lockedParams[p.id] !== true)
+                                return false;
+                        }
+                        return true;
+                    }
+
+                    // Hide the lock button on empty groups too — there's
+                    // nothing to lock there, and rendering the unlocked-icon
+                    // button on an empty section is just visual noise.
+                    visible: root.enableLocking && root.paramCount > 0
+                    icon.name: allLocked ? "object-locked" : "object-unlocked"
+                    icon.width: Kirigami.Units.iconSizes.small
+                    icon.height: Kirigami.Units.iconSizes.small
+                    opacity: allLocked ? 1 : 0.4
+                    display: QQC.ToolButton.IconOnly
+                    QQC.ToolTip.text: allLocked ? i18nc("@info:tooltip", "Unlock all in %1", root.title) : i18nc("@info:tooltip", "Lock all in %1", root.title)
+                    QQC.ToolTip.visible: hovered
+                    QQC.ToolTip.delay: Kirigami.Units.toolTipDelay
+                    onClicked: root.groupLockToggled(!allLocked)
+                }
+
+                Rectangle {
+                    implicitWidth: countLabel.implicitWidth + Kirigami.Units.smallSpacing * 2
+                    implicitHeight: Kirigami.Units.gridUnit
+                    radius: height / 2
+                    color: Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g, Kirigami.Theme.highlightColor.b, 0.2)
+
+                    QQC.Label {
+                        id: countLabel
+
+                        anchors.centerIn: parent
+                        text: root.paramCount
+                        font: Kirigami.Theme.smallFont
+                        color: Kirigami.Theme.textColor
+                    }
                 }
             }
         }

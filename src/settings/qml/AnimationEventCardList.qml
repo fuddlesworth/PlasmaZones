@@ -120,6 +120,12 @@ SettingsFlickable {
                 function _checkInView() {
                     if (cardLoader._everInView)
                         return;
+                    // Fast page-switching can destroy this delegate while a
+                    // queued Qt.callLater / onYChanged is still pending; the
+                    // dying context resolves `page` to undefined. Bail instead
+                    // of throwing a TypeError reading page.placeholderHeight.
+                    if (!page)
+                        return;
                     const top = cardLoader.y;
                     if ((top + page.placeholderHeight) >= (page.contentY - page.buildBuffer) && top <= (page.contentY + page.height + page.buildBuffer))
                         cardLoader._everInView = true;
