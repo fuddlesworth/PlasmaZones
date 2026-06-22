@@ -123,6 +123,9 @@ SettingsFlickable {
                     delegate: RowLayout {
                         required property var modelData
 
+                        Layout.fillWidth: true
+                        Layout.leftMargin: Kirigami.Units.largeSpacing
+                        Layout.rightMargin: Kirigami.Units.largeSpacing
                         spacing: Kirigami.Units.smallSpacing
 
                         CurveThumbnail {
@@ -164,6 +167,9 @@ SettingsFlickable {
                     delegate: RowLayout {
                         required property var modelData
 
+                        Layout.fillWidth: true
+                        Layout.leftMargin: Kirigami.Units.largeSpacing
+                        Layout.rightMargin: Kirigami.Units.largeSpacing
                         spacing: Kirigami.Units.smallSpacing
 
                         CurveThumbnail {
@@ -231,6 +237,8 @@ SettingsFlickable {
                     color: Kirigami.Theme.disabledTextColor
                     wrapMode: Text.WordWrap
                     Layout.fillWidth: true
+                    Layout.leftMargin: Kirigami.Units.largeSpacing
+                    Layout.rightMargin: Kirigami.Units.largeSpacing
                     font.italic: true
                 }
             }
@@ -253,6 +261,9 @@ SettingsFlickable {
                     delegate: RowLayout {
                         required property var modelData
 
+                        Layout.fillWidth: true
+                        Layout.leftMargin: Kirigami.Units.largeSpacing
+                        Layout.rightMargin: Kirigami.Units.largeSpacing
                         spacing: Kirigami.Units.smallSpacing
 
                         CurveThumbnail {
@@ -299,6 +310,9 @@ SettingsFlickable {
                         required property var modelData
                         readonly property var _spring: root.parseSpring(modelData.curve)
 
+                        Layout.fillWidth: true
+                        Layout.leftMargin: Kirigami.Units.largeSpacing
+                        Layout.rightMargin: Kirigami.Units.largeSpacing
                         spacing: Kirigami.Units.smallSpacing
 
                         CurveThumbnail {
@@ -364,6 +378,8 @@ SettingsFlickable {
                     color: Kirigami.Theme.disabledTextColor
                     wrapMode: Text.WordWrap
                     Layout.fillWidth: true
+                    Layout.leftMargin: Kirigami.Units.largeSpacing
+                    Layout.rightMargin: Kirigami.Units.largeSpacing
                     font.italic: true
                 }
             }

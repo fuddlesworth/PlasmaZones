@@ -32,6 +32,11 @@ Item {
     // Selection state (bound from parent GridView)
     property bool isSelected: false
     property bool isHovered: false
+    // Inner padding of the card body (border → content). Single-sourced so the
+    // corner status/toggle icons — which offset back out past this inset with a
+    // negative anchor margin to sit near the card corner — can't drift off-corner
+    // if the body inset changes.
+    readonly property real _bodyInset: Kirigami.Units.largeSpacing
     // When false, the delegate's right-click context-menu affordance is
     // suppressed entirely (the underlying MouseArea drops RightButton
     // from `acceptedButtons`). Hosts that have no `layoutContextMenu`
@@ -112,7 +117,9 @@ Item {
 
         ColumnLayout {
             anchors.fill: parent
-            anchors.margins: Kirigami.Units.smallSpacing
+            // Standard inner padding so the content (status icons, thumbnail,
+            // footer) doesn't hug the card border. smallSpacing was too tight.
+            anchors.margins: root._bodyInset
             spacing: Kirigami.Units.smallSpacing
 
             // Thumbnail area
@@ -153,7 +160,12 @@ Item {
 
                     anchors.top: parent.top
                     anchors.left: parent.left
-                    anchors.margins: Kirigami.Units.smallSpacing
+                    // The content column is inset by _bodyInset, but these corner
+                    // status icons read better tucked near the card edge. Offset
+                    // back out past the column inset so they sit a small padding
+                    // from the card corner, not the thumbnail's.
+                    anchors.topMargin: Kirigami.Units.smallSpacing - root._bodyInset
+                    anchors.leftMargin: Kirigami.Units.smallSpacing - root._bodyInset
                     spacing: Kirigami.Units.smallSpacing / 2
 
                     Kirigami.Icon {
@@ -236,7 +248,11 @@ Item {
                 Row {
                     anchors.top: parent.top
                     anchors.right: parent.right
-                    anchors.margins: Kirigami.Units.smallSpacing / 2
+                    // See the top-left row: offset back out past the column's
+                    // _bodyInset so the toggle buttons sit near the card corner
+                    // with a small padding.
+                    anchors.topMargin: Kirigami.Units.smallSpacing / 2 - root._bodyInset
+                    anchors.rightMargin: Kirigami.Units.smallSpacing / 2 - root._bodyInset
                     spacing: 0
 
                     // Auto-assign toggle (hidden for autotile — the tiling engine manages those).
@@ -333,7 +349,7 @@ Item {
                 Label {
                     elide: Text.ElideRight
                     font: Kirigami.Theme.smallFont
-                    color: root.isSelected ? Kirigami.Theme.highlightedTextColor : Kirigami.Theme.disabledTextColor
+                    color: Kirigami.Theme.disabledTextColor
                     text: i18n("%1 zones", root.modelData.zoneCount || 0)
                 }
             }

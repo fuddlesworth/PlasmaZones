@@ -30,6 +30,15 @@ Item {
     property string searchAnchor: ""
     default property alias content: controlContainer.data
 
+    // A disabled row is hidden rather than shown super-dimmed: when a setting
+    // can't apply in the current state there's nothing actionable in it, so it
+    // collapses out of the layout instead of leaving dead, greyed space. This
+    // tracks `enabled` directly, so a row disabled by an ancestor (e.g. a
+    // card-level master toggle) hides too. Consumers that set their own
+    // `visible` binding override this default (those rows manage their own
+    // show/hide).
+    visible: enabled
+
     Layout.fillWidth: true
     implicitWidth: rowLayout.implicitWidth
     implicitHeight: rowLayout.implicitHeight
