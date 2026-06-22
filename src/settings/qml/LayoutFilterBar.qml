@@ -41,6 +41,7 @@ RowLayout {
     property bool showOverlapping: true
     property bool showPersistent: true
     property bool showCustomParams: true
+    property bool showReflowsOnResize: true
     // Whether any non-default filter is active (drives badge visibility)
     readonly property bool hasActiveFilters: {
         if (filterText.length > 0)
@@ -49,7 +50,7 @@ RowLayout {
         if (root.viewMode === 0)
             return !showAspectAny || !showAspectStandard || !showAspectUltrawide || !showAspectSuperUltrawide || !showAspectPortrait || showHidden || !showAutoLayouts || !showManualLayouts || !showBuiltInLayouts || !showUserLayouts;
         else
-            return !showBuiltInAlgorithms || !showUserAlgorithms || showHidden || !showMasterCount || !showSplitRatio || !showOverlapping || !showPersistent || !showCustomParams;
+            return !showBuiltInAlgorithms || !showUserAlgorithms || showHidden || !showMasterCount || !showSplitRatio || !showOverlapping || !showPersistent || !showCustomParams || !showReflowsOnResize;
     }
     // ── Group-by index constants (must match model order below) ───────────
     // Snapping
@@ -76,7 +77,7 @@ RowLayout {
     // NOTE: when adding a filter, also update: property declarations,
     // _defaultValues, _snappingStateMap or _tilingStateMap, and persistedState.
     readonly property var _snappingStateMap: [["groupByIndex", "snappingGroupByIndex"], ["sortByIndex", "snappingSortByIndex"], ["sortAscending", "snappingSortAscending"], ["showHidden", "snappingShowHidden"], ["showAspectAny", "snappingShowAspectAny"], ["showAspectStandard", "snappingShowAspectStandard"], ["showAspectUltrawide", "snappingShowAspectUltrawide"], ["showAspectSuperUltrawide", "snappingShowAspectSuperUltrawide"], ["showAspectPortrait", "snappingShowAspectPortrait"], ["showAutoLayouts", "snappingShowAutoLayouts"], ["showManualLayouts", "snappingShowManualLayouts"], ["showBuiltInLayouts", "snappingShowBuiltInLayouts"], ["showUserLayouts", "snappingShowUserLayouts"]]
-    readonly property var _tilingStateMap: [["groupByIndex", "tilingGroupByIndex"], ["sortByIndex", "tilingSortByIndex"], ["sortAscending", "tilingSortAscending"], ["showHidden", "tilingShowHidden"], ["showBuiltInAlgorithms", "tilingShowBuiltInAlgorithms"], ["showUserAlgorithms", "tilingShowUserAlgorithms"], ["showMasterCount", "tilingShowMasterCount"], ["showSplitRatio", "tilingShowSplitRatio"], ["showOverlapping", "tilingShowOverlapping"], ["showPersistent", "tilingShowPersistent"], ["showCustomParams", "tilingShowCustomParams"]]
+    readonly property var _tilingStateMap: [["groupByIndex", "tilingGroupByIndex"], ["sortByIndex", "tilingSortByIndex"], ["sortAscending", "tilingSortAscending"], ["showHidden", "tilingShowHidden"], ["showBuiltInAlgorithms", "tilingShowBuiltInAlgorithms"], ["showUserAlgorithms", "tilingShowUserAlgorithms"], ["showMasterCount", "tilingShowMasterCount"], ["showSplitRatio", "tilingShowSplitRatio"], ["showOverlapping", "tilingShowOverlapping"], ["showPersistent", "tilingShowPersistent"], ["showCustomParams", "tilingShowCustomParams"], ["showReflowsOnResize", "tilingShowReflowsOnResize"]]
     // Default values for all resettable filter properties (not group/sort).
     // Adding a filter requires updating: property declaration, _defaultValues,
     // the relevant state map, persistedState, hasActiveFilters, menu item, and JS logic.
@@ -97,10 +98,11 @@ RowLayout {
         "showSplitRatio": true,
         "showOverlapping": true,
         "showPersistent": true,
-        "showCustomParams": true
+        "showCustomParams": true,
+        "showReflowsOnResize": true
     }
 
-    signal filterSettingsChanged()
+    signal filterSettingsChanged
 
     // Resets filter and search state to defaults.
     // Group-by and sort-by are intentionally preserved — they are visible in
@@ -116,7 +118,6 @@ RowLayout {
             let prop = map[i][0];
             if (prop in _defaultValues)
                 root[prop] = _defaultValues[prop];
-
         }
         _resetting = false;
         filterSettingsChanged();
@@ -124,7 +125,8 @@ RowLayout {
 
     function saveState(mode) {
         let map = mode === 0 ? _snappingStateMap : _tilingStateMap;
-        for (let i = 0; i < map.length; i++) persistedState[map[i][1]] = root[map[i][0]]
+        for (let i = 0; i < map.length; i++)
+            persistedState[map[i][1]] = root[map[i][0]];
     }
 
     function loadState(mode) {
@@ -153,14 +155,13 @@ RowLayout {
     onFilterSettingsChanged: {
         if (!_resetting)
             saveState(viewMode);
-
     }
     spacing: Kirigami.Units.smallSpacing
     // Save current mode state, then load the new mode's persisted state.
     // Guard: skip if called during _resetting to avoid saving partial state.
     onViewModeChanged: {
         if (_resetting)
-            return ;
+            return;
 
         saveState(_previousViewMode);
         _previousViewMode = viewMode;
@@ -187,9 +188,9 @@ RowLayout {
         // re-syncs imperatively via groupByCombo.currentIndex = ...
         currentIndex: root.groupByIndex
         Accessible.name: i18n("Group by")
-        onActivated: (index) => {
+        onActivated: index => {
             if (index < 0 || index >= model.length)
-                return ;
+                return;
 
             root.groupByIndex = index;
             root.filterSettingsChanged();
@@ -212,9 +213,9 @@ RowLayout {
         // re-syncs imperatively via sortByCombo.currentIndex = ...
         currentIndex: root.sortByIndex
         Accessible.name: i18n("Sort by")
-        onActivated: (index) => {
+        onActivated: index => {
             if (index < 0 || index >= model.length)
-                return ;
+                return;
 
             root.sortByIndex = index;
             root.filterSettingsChanged();
@@ -252,7 +253,6 @@ RowLayout {
             // the filter badge and grid rebuild in sync — avoid setting it here.
             if (!root._resetting)
                 searchDebounce.restart();
-
         }
 
         ToolButton {
@@ -272,7 +272,6 @@ RowLayout {
             }
             Accessible.name: i18n("Clear search")
         }
-
     }
 
     Timer {
@@ -321,8 +320,7 @@ RowLayout {
             checked: root.showUserLayouts
         }
 
-        MenuSeparator {
-        }
+        MenuSeparator {}
 
         FilterMenuItem {
             text: i18n("All Monitors")
@@ -354,8 +352,7 @@ RowLayout {
             checked: root.showAspectPortrait
         }
 
-        MenuSeparator {
-        }
+        MenuSeparator {}
 
         FilterMenuItem {
             text: i18n("Auto")
@@ -369,8 +366,7 @@ RowLayout {
             checked: root.showManualLayouts
         }
 
-        MenuSeparator {
-        }
+        MenuSeparator {}
 
         FilterMenuItem {
             text: i18n("Show Hidden Layouts")
@@ -378,12 +374,9 @@ RowLayout {
             checked: root.showHidden
         }
 
-        MenuSeparator {
-        }
+        MenuSeparator {}
 
-        ResetMenuItem {
-        }
-
+        ResetMenuItem {}
     }
 
     // ── Tiling Filter Menu ──────────────────────────────────────────────────
@@ -404,8 +397,7 @@ RowLayout {
             checked: root.showUserAlgorithms
         }
 
-        MenuSeparator {
-        }
+        MenuSeparator {}
 
         FilterMenuItem {
             text: i18n("Master Count")
@@ -437,8 +429,13 @@ RowLayout {
             checked: root.showCustomParams
         }
 
-        MenuSeparator {
+        FilterMenuItem {
+            text: i18n("Reflows on Resize")
+            filterProperty: "showReflowsOnResize"
+            checked: root.showReflowsOnResize
         }
+
+        MenuSeparator {}
 
         FilterMenuItem {
             text: i18n("Show Hidden Algorithms")
@@ -446,12 +443,9 @@ RowLayout {
             checked: root.showHidden
         }
 
-        MenuSeparator {
-        }
+        MenuSeparator {}
 
-        ResetMenuItem {
-        }
-
+        ResetMenuItem {}
     }
 
     // ── Persisted UI state (per view mode) ───────────────────────────────
@@ -484,6 +478,7 @@ RowLayout {
         property bool tilingShowOverlapping: true
         property bool tilingShowPersistent: true
         property bool tilingShowCustomParams: true
+        property bool tilingShowReflowsOnResize: true
 
         category: "LayoutsPageFilterBar"
     }
@@ -497,7 +492,7 @@ RowLayout {
         checkable: true
         onToggled: {
             if (root._resetting)
-                return ;
+                return;
 
             root[filterProperty] = checked;
             root.filterSettingsChanged();
@@ -506,7 +501,6 @@ RowLayout {
         Binding on checked {
             value: root[filterProperty]
         }
-
     }
 
     // Shared "Reset Filters" action used by both filter menus
@@ -516,5 +510,4 @@ RowLayout {
         enabled: root.hasActiveFilters
         onTriggered: root.resetFilters()
     }
-
 }

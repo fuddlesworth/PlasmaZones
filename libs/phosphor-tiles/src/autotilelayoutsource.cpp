@@ -36,6 +36,9 @@ PhosphorLayout::AlgorithmMetadata buildMetadata(PhosphorTiles::TilingAlgorithm* 
     meta.producesOverlappingZones = algorithm->producesOverlappingZones();
     meta.supportsCustomParams = algorithm->supportsCustomParams();
     meta.supportsMemory = algorithm->supportsMemory();
+    // Reflows neighbours on interactive resize: tree algorithms (engine adjusts
+    // split ratios) or scripted algorithms with the onWindowResized hook.
+    meta.reflowsOnResize = algorithm->supportsMemory() || algorithm->supportsResizeHook();
     meta.isScripted = algorithm->isScripted();
     meta.isUserScript = algorithm->isUserScript();
     meta.zoneNumberDisplay = PhosphorLayout::zoneNumberDisplayFromString(algorithm->zoneNumberDisplay());
