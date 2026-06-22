@@ -14,7 +14,7 @@ import "ThemeHelpers.js" as ThemeHelpers
  * Extracted from Sidebar.qml so the (originally ~270-line) ItemDelegate
  * body can be reviewed and tested independently. The parent Sidebar
  * threads the model role values in as required properties + a small set
- * of visual settings (compact, navRowHeight, accentBarWidth); navigation
+ * of visual settings (compact, navRowHeight); navigation
  * intent flows back out through the three Q_SIGNALS below.
  *
  * Naming: the model role is called `pageId` (not `id`) because `id`
@@ -39,7 +39,6 @@ QQC2.ItemDelegate {
     required property bool isCurrent
     required property bool compact
     required property real navRowHeight
-    required property real accentBarWidth
     property Component trailingDelegate: null
 
     /// Navigation intents. Parent Sidebar wires these to
@@ -63,7 +62,7 @@ QQC2.ItemDelegate {
     Accessible.name: rowItem._isDivider ? "" : rowItem.title
     Accessible.role: rowItem._isDivider ? Accessible.Separator : Accessible.Button
     // Active row reads as "checked" to AT tools (matches the visual
-    // accent + bold label affordance). Dividers stay
+    // highlight + bold label affordance). Dividers stay
     // un-checkable — they're ornament with role Separator.
     Accessible.checkable: !rowItem._isDivider
     Accessible.checked: !rowItem._isDivider && rowItem.isCurrent
@@ -76,8 +75,8 @@ QQC2.ItemDelegate {
     // there's no room to express hierarchy when only the icon is
     // visible, and the user has the tooltip + active accent to orient
     // by.
-    leftPadding: rowItem.compact ? 0 : (Kirigami.Units.smallSpacing + (rowItem._depth * Kirigami.Units.gridUnit))
-    rightPadding: rowItem.compact ? 0 : Kirigami.Units.smallSpacing
+    leftPadding: rowItem.compact ? 0 : (Kirigami.Units.largeSpacing + (rowItem._depth * Kirigami.Units.gridUnit))
+    rightPadding: rowItem.compact ? 0 : Kirigami.Units.largeSpacing
     // Tooltip surfaces the row label when compact mode has hidden it.
     // Delay uses the Kirigami platform unit so theming / accessibility
     // overrides (slow-motion mode, high-feedback profiles) flow
@@ -115,11 +114,10 @@ QQC2.ItemDelegate {
         property bool _behaviorReady: false
 
         Component.onCompleted: _behaviorReady = true
-        // Active row: highlight tinted at 12% — same tint legacy used
-        // so the visual weight matches KCM modules. Hover: 6%
-        // textColor for a subtle "interactive" cue. Both transitions
-        // run through `widget.tint.fast` so they feel snappy without
-        // flicker.
+        // Active row: highlightColor background at ACTIVE_TINT_ALPHA (see
+        // ThemeHelpers). Hover: textColor at HOVER_TINT_ALPHA for a subtle
+        // "interactive" cue. Both transitions run through `widget.tint.fast`
+        // so they feel snappy without flicker.
         color: {
             // Dividers paint nothing — the Separator child below
             // provides their only visual.
@@ -135,20 +133,6 @@ QQC2.ItemDelegate {
             return Qt.rgba(0, 0, 0, 0);
         }
         radius: Kirigami.Units.smallSpacing
-
-        // Left accent bar — 2.5dp wide, half the row's height, rounded
-        // ends, highlightColor. Only visible on the active leaf so the
-        // user's location reads at a glance even when the background
-        // tint is subtle.
-        Rectangle {
-            anchors.left: parent.left
-            anchors.verticalCenter: parent.verticalCenter
-            width: rowItem.accentBarWidth
-            height: parent.height * 0.5
-            radius: width / 2
-            color: Kirigami.Theme.highlightColor
-            visible: rowItem.isCurrent
-        }
 
         // Section divider line — only present on divider rows.
         // Centered vertically with largeSpacing horizontal margins so
