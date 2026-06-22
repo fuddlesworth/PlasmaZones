@@ -73,6 +73,7 @@ ColumnLayout {
         onClicked: root.toggled()
 
         contentItem: Item {
+            implicitWidth: paramHeaderRow.implicitWidth + Kirigami.Units.largeSpacing * 2
             implicitHeight: paramHeaderRow.implicitHeight
 
             // Inset via a margin inside contentItem (not the Control's padding,

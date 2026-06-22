@@ -36,6 +36,10 @@ SettingsFlickable {
     // Grid dimensions inferred from pending screens
     property int _columns: 1
     property int _rows: 1
+    // Flips true one tick after the first geometry resolution so the preview
+    // box doesn't animate the initial fallback(16:9)→real-aspect jump on page
+    // open; monitor switches afterwards still animate.
+    property bool _geometrySettled: false
 
     function _refreshConfig() {
         if (_selectedScreen === "")
@@ -150,6 +154,15 @@ SettingsFlickable {
     }
 
     function _updateScreenGeometry() {
+        // Mark geometry settled on the next tick the first time we resolve, so
+        // the initial fallback→real transition lands without animating (the
+        // Behaviors below gate on _geometrySettled). Scheduled here, before the
+        // assignments, so it survives the function's several early returns.
+        if (!root._geometrySettled)
+            Qt.callLater(function () {
+                root._geometrySettled = true;
+            });
+
         var screens = settingsController.screens;
         // First pass: exact name match (physical screen entry)
         for (var i = 0; i < screens.length; i++) {
@@ -516,6 +529,7 @@ SettingsFlickable {
                     // the split — width and height animate independently so a
                     // landscape→portrait change eases into the new shape.
                     Behavior on Layout.preferredWidth {
+                        enabled: root._geometrySettled
                         PhosphorMotionAnimation {
                             profile: "widget.hover"
                             durationOverride: Kirigami.Units.longDuration
@@ -523,6 +537,7 @@ SettingsFlickable {
                     }
 
                     Behavior on Layout.preferredHeight {
+                        enabled: root._geometrySettled
                         PhosphorMotionAnimation {
                             profile: "widget.hover"
                             durationOverride: Kirigami.Units.longDuration

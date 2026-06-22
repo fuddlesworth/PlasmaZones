@@ -215,6 +215,12 @@ ComboBox {
     }
 
     function updateSelection() {
+        // Same teardown guard as _doRebuild: a coalesced Qt.callLater(updateSelection)
+        // (the onLayoutFilterChanged path) can fire after this ComboBox is
+        // destroyed by fast page-switching; the dying context resolves the
+        // component's own members to undefined. Bail before touching them.
+        if (typeof _buildItems !== "function")
+            return;
         // Unmatched id → -1 (no selection), not 0. Coercing to row 0
         // silently rewrites a stale / deleted layout id to whatever
         // happens to be first in the list — when `showNoneOption: false`
