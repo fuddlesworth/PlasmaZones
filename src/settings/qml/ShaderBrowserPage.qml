@@ -71,11 +71,13 @@ SettingsFlickable {
     property var effectList: bridge ? bridge.availableShaderEffects() : []
     // ── Filter state ────────────────────────────────────────────────────
     property string filterText: ""
-    /// Active category filter; "" = show all (single-select, with an "All" chip).
-    property string selectedCategory: ""
-    property bool showBuiltIn: true
-    property bool showUser: true
-    readonly property bool _hasActiveFilters: filterText.length > 0 || selectedCategory.length > 0 || !showBuiltIn || !showUser
+    // Source + category filters are multi-select checkboxes in the filter
+    // button (modeled on the Layouts page). These derive its unchecked-key set
+    // into the booleans / predicate the effect filter below consumes:
+    //   "src:builtin" / "src:user" gate source; "cat:<name>" gate a category.
+    readonly property bool showBuiltIn: !shaderFilterButton.isExcluded("src:builtin")
+    readonly property bool showUser: !shaderFilterButton.isExcluded("src:user")
+    readonly property bool _hasActiveFilters: filterText.length > 0 || shaderFilterButton.hasActiveFilters
     // ── Derived: category index (sorted, with counts) ───────────────────
     readonly property var _allCategories: {
         var counts = {};
@@ -114,7 +116,8 @@ SettingsFlickable {
             if (!isUser && !root.showBuiltIn)
                 continue;
 
-            if (root.selectedCategory.length > 0 && (e.category || "") !== root.selectedCategory)
+            var cat = e.category || "";
+            if (cat.length > 0 && shaderFilterButton.isExcluded("cat:" + cat))
                 continue;
 
             if (needle.length > 0) {
@@ -353,87 +356,37 @@ SettingsFlickable {
                 onTextChanged: searchDebounce.restart()
             }
 
-            ToolButton {
-                icon.name: "view-filter"
-                checkable: false
-                checked: !root.showBuiltIn || !root.showUser
-                Accessible.name: (root.showBuiltIn && root.showUser) ? i18nc("@action:button", "Source filter") : i18nc("@action:button", "Source filter (active)")
-                ToolTip.text: Accessible.name
-                ToolTip.visible: hovered
-                ToolTip.delay: Kirigami.Units.toolTipDelay
-                onClicked: sourceFilterMenu.popup()
+            // One multi-select filter button (source + categories), modeled on
+            // the Layouts page. Source toggles come first, then one checkbox per
+            // discovered category; the button's `excluded` set drives showBuiltIn
+            // / showUser and the per-category predicate above. Reset lives in the
+            // menu; the search field clears via its own affordance.
+            FilterMenuButton {
+                id: shaderFilterButton
 
-                Menu {
-                    id: sourceFilterMenu
-
-                    title: i18nc("@title:menu", "Source")
-
-                    MenuItem {
-                        text: i18nc("@option:check", "Built-in")
-                        checkable: true
-                        checked: root.showBuiltIn
-                        onToggled: root.showBuiltIn = checked
-                    }
-
-                    MenuItem {
-                        text: i18nc("@option:check", "User-installed")
-                        checkable: true
-                        checked: root.showUser
-                        onToggled: root.showUser = checked
-                    }
-                }
-            }
-
-            ToolButton {
-                icon.name: "edit-reset"
-                enabled: root._hasActiveFilters
-                Accessible.name: i18nc("@action:button", "Reset filters")
-                ToolTip.text: Accessible.name
-                ToolTip.visible: hovered
-                ToolTip.delay: Kirigami.Units.toolTipDelay
-                onClicked: {
-                    searchField.clear();
-                    searchDebounce.stop();
-                    root.filterText = "";
-                    root.selectedCategory = "";
-                    root.showBuiltIn = true;
-                    root.showUser = true;
-                }
-            }
-        }
-
-        // ── Filter chips (collapsible) ────────────────────────────────────
-        // Disclosure toggle + single-select category chips ("All" first),
-        // matching the Window Rules filter row. Collapsed by default; the dot
-        // shows when a category filter is active while collapsed.
-        FilterDisclosureHeader {
-            id: shaderFilterHeader
-
-            hasActiveFilters: root.selectedCategory.length > 0
-        }
-
-        CollapsibleChipFlow {
-            open: shaderFilterHeader.expanded
-
-            Button {
-                text: i18nc("@action:button show every shader category", "All")
-                checkable: true
-                checked: root.selectedCategory === ""
-                Accessible.name: i18n("Show all shader categories")
-                onClicked: root.selectedCategory = ""
-            }
-
-            Repeater {
-                model: root._allCategories
-
-                delegate: Button {
-                    required property var modelData
-
-                    text: i18nc("@action:button category filter chip", "%1 (%2)", modelData.name, modelData.count)
-                    checkable: true
-                    checked: root.selectedCategory === modelData.name
-                    Accessible.name: i18n("Filter shaders by category: %1", modelData.name)
-                    onClicked: root.selectedCategory = modelData.name
+                menuTitle: i18nc("@title:menu", "Filter Shaders")
+                // Two groups (source, categories) -> a divider between them,
+                // plus the trailing divider + Reset, mirroring the Layouts menu.
+                groups: {
+                    var source = [
+                        {
+                            "key": "src:builtin",
+                            "label": i18nc("@option:check", "Built-in")
+                        },
+                        {
+                            "key": "src:user",
+                            "label": i18nc("@option:check", "User-installed")
+                        }
+                    ];
+                    var cats = [];
+                    var all = root._allCategories;
+                    for (var i = 0; i < all.length; i++)
+                        cats.push({
+                            "key": "cat:" + all[i].name,
+                            "label": all[i].name,
+                            "count": all[i].count
+                        });
+                    return [source, cats];
                 }
             }
         }
