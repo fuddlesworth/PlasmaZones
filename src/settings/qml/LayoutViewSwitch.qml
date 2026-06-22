@@ -28,16 +28,7 @@ Item {
     // Emitted when the user picks a different mode.
     signal indexChanged(int index)
 
-    readonly property var _modes: [
-        {
-            "icon": "view-split-left-right",
-            "label": i18n("Snapping")
-        },
-        {
-            "icon": "window-duplicate",
-            "label": i18n("Tiling")
-        }
-    ]
+    readonly property var _modes: [i18n("Snapping"), i18n("Tiling")]
 
     implicitHeight: tileRow.implicitHeight
 
@@ -64,29 +55,16 @@ Item {
                 border.width: Math.round(Screen.devicePixelRatio)
                 border.color: tile.selected ? Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g, Kirigami.Theme.highlightColor.b, 0.5) : tileMouse.activeFocus ? Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g, Kirigami.Theme.highlightColor.b, 0.7) : Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.1)
                 Accessible.role: Accessible.RadioButton
-                Accessible.name: tile.modelData.label
+                Accessible.name: tile.modelData
                 Accessible.checked: tile.selected
 
-                ColumnLayout {
+                Label {
                     id: tileContent
 
                     anchors.centerIn: parent
-                    spacing: Kirigami.Units.smallSpacing / 2
-
-                    Kirigami.Icon {
-                        source: tile.modelData.icon
-                        Layout.preferredWidth: Kirigami.Units.iconSizes.medium
-                        Layout.preferredHeight: Kirigami.Units.iconSizes.medium
-                        Layout.alignment: Qt.AlignHCenter
-                        opacity: tile.selected ? 1 : 0.5
-                    }
-
-                    Label {
-                        text: tile.modelData.label
-                        font: Kirigami.Theme.smallFont
-                        Layout.alignment: Qt.AlignHCenter
-                        opacity: tile.selected ? 1 : 0.5
-                    }
+                    text: tile.modelData
+                    font: Kirigami.Theme.smallFont
+                    opacity: tile.selected ? 1 : 0.5
                 }
 
                 MouseArea {
