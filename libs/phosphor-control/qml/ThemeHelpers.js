@@ -24,7 +24,7 @@ function withAlpha(baseColor, alpha) {
 //
 // Values match the tints the legacy Phosphor chrome shipped — a
 // future visual-tweak pass can adjust them in one place.
-var ACTIVE_TINT_ALPHA = 0.12;   // Active-row highlight background
+var ACTIVE_TINT_ALPHA = 0.18;   // Active-row highlight background
 var HOVER_TINT_ALPHA = 0.06;    // Hover background
 var SUBTLE_BACKGROUND_ALPHA = 0.15; // Less-busy "I'm a placeholder" tint
 var SUBTLE_OUTLINE_ALPHA = 0.2; // Outline / divider tint

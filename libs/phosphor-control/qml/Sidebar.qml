@@ -2,7 +2,6 @@
 // SPDX-License-Identifier: LGPL-2.1-or-later
 
 import QtQuick
-import QtQuick.Window
 import QtQuick.Controls as QQC2
 import QtQuick.Layouts
 import org.kde.kirigami as Kirigami
@@ -92,11 +91,7 @@ ColumnLayout {
     // Legacy row-height multipliers — extracted from inline magic numbers
     // to a single source so a future row-density tweak touches one place.
     readonly property real backButtonHeight: Kirigami.Units.gridUnit * 2.6
-    readonly property real navRowHeight: Kirigami.Units.gridUnit * 2.2
-    // Active-row left-accent stripe width — Math.round so fractional DPRs
-    // (1.5×, 1.25×) don't yield sub-pixel widths that anti-alias to a
-    // washed-out half-pixel line.
-    readonly property int accentBarWidth: Math.round(Screen.devicePixelRatio * 2.5)
+    readonly property real navRowHeight: Kirigami.Units.gridUnit * 2.5
 
     function drillInto(parentId) {
         // Short-circuit on either the already-displayed scope OR a
@@ -552,7 +547,21 @@ ColumnLayout {
 
                 visible: root.currentParentId !== "" && root.searchText.length === 0
                 backButtonHeight: root.backButtonHeight
+                compact: root.compact
+                // Show the parent category name (e.g. "‹ Snapping"); pageData()
+                // returns an empty map for an unknown/empty id, so guard to "".
+                title: root.currentParentId !== "" ? (root.controller.registry.pageData(root.currentParentId).title || "") : ""
                 onBackClicked: root.drillOut()
+            }
+
+            // Drill-out rule — a first-class sibling (not buried in the back
+            // row's background) so it shares the section dividers' largeSpacing
+            // inset and lines up with the rows below.
+            Kirigami.Separator {
+                Layout.fillWidth: true
+                Layout.leftMargin: root.compact ? Kirigami.Units.smallSpacing : Kirigami.Units.largeSpacing
+                Layout.rightMargin: root.compact ? Kirigami.Units.smallSpacing : Kirigami.Units.largeSpacing
+                visible: backButton.visible
             }
 
             ListView {
@@ -621,7 +630,6 @@ ColumnLayout {
                     isCurrent: !rowItem._isCollapsibleHeader && rowItem.hasQmlSource && root.controller.currentPageId === rowItem.pageId
                     compact: root.compact
                     navRowHeight: root.navRowHeight
-                    accentBarWidth: root.accentBarWidth
                     trailingDelegate: root.trailingDelegate
                     onNavigationRequested: pid => {
                         // Synthetic divider rows have pageIds like
