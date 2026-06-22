@@ -84,7 +84,10 @@ QQC2.ItemDelegate {
     contentItem: QQC2.Label {
         readonly property string _chevron: LayoutMirroring.enabled ? "›" : "‹"
 
-        text: backButton.compact ? _chevron : _chevron + " " + backButton.title
+        // Title is normally the parent category name; fall back to "Back" if a
+        // malformed registry yields no title (so the row never reads as a lone
+        // chevron with a dangling space).
+        text: backButton.compact ? _chevron : _chevron + " " + (backButton.title.length > 0 ? backButton.title : qsTr("Back"))
         font.weight: Font.DemiBold
         opacity: 0.8
         elide: Text.ElideRight

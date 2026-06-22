@@ -525,8 +525,8 @@ ColumnLayout {
 
         Layout.fillWidth: true
         Layout.fillHeight: true
-        // Inset the row list horizontally so the active-row accent
-        // stripe and hover backgrounds don't run flush against the
+        // Inset the row list horizontally so the active-row highlight
+        // and hover backgrounds don't run flush against the
         // window's left edge. Matches the SearchField's smallSpacing
         // inset above so rows align with the search field's left edge,
         // and balances the right-hand scrollbar gutter the ScrollView

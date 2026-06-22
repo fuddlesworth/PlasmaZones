@@ -62,7 +62,7 @@ QQC2.ItemDelegate {
     Accessible.name: rowItem._isDivider ? "" : rowItem.title
     Accessible.role: rowItem._isDivider ? Accessible.Separator : Accessible.Button
     // Active row reads as "checked" to AT tools (matches the visual
-    // accent + bold label affordance). Dividers stay
+    // highlight + bold label affordance). Dividers stay
     // un-checkable — they're ornament with role Separator.
     Accessible.checkable: !rowItem._isDivider
     Accessible.checked: !rowItem._isDivider && rowItem.isCurrent
@@ -114,11 +114,10 @@ QQC2.ItemDelegate {
         property bool _behaviorReady: false
 
         Component.onCompleted: _behaviorReady = true
-        // Active row: highlight tinted at 12% — same tint legacy used
-        // so the visual weight matches KCM modules. Hover: 6%
-        // textColor for a subtle "interactive" cue. Both transitions
-        // run through `widget.tint.fast` so they feel snappy without
-        // flicker.
+        // Active row: highlightColor background at ACTIVE_TINT_ALPHA (see
+        // ThemeHelpers). Hover: textColor at HOVER_TINT_ALPHA for a subtle
+        // "interactive" cue. Both transitions run through `widget.tint.fast`
+        // so they feel snappy without flicker.
         color: {
             // Dividers paint nothing — the Separator child below
             // provides their only visual.

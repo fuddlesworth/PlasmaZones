@@ -19,11 +19,10 @@ function withAlpha(baseColor, alpha) {
 }
 
 // Conventional alpha presets — pre-named so the call sites read as
-// "highlightTintActive(color)" instead of "withAlpha(color, 0.12)"
-// where the 0.12 carries semantic meaning the literal doesn't.
+// "activeTint(color)" instead of "withAlpha(color, 0.18)" where the
+// literal carries semantic meaning it otherwise wouldn't.
 //
-// Values match the tints the legacy Phosphor chrome shipped — a
-// future visual-tweak pass can adjust them in one place.
+// Centralised so a future visual-tweak pass can adjust them in one place.
 var ACTIVE_TINT_ALPHA = 0.18;   // Active-row highlight background
 var HOVER_TINT_ALPHA = 0.06;    // Hover background
 var SUBTLE_BACKGROUND_ALPHA = 0.15; // Less-busy "I'm a placeholder" tint
