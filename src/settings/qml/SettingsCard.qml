@@ -60,10 +60,10 @@ Item {
     /// Opacity applied to the card body when the master toggle is off. Kept
     /// high enough that muted content stays legible — the disabled palette
     /// already greys the text, so a low opacity on top compounds into an
-    /// unreadable wash. Note SettingsRows hide themselves when disabled (see
-    /// SettingsRow's `visible: enabled`), so a row-only body collapses to its
-    /// separators; cards with non-row content (editors, custom items) keep that
-    /// content visibly muted by this opacity.
+    /// unreadable wash. Note SettingsRows and SettingsSeparators hide themselves
+    /// when disabled (their `visible: enabled`), so a row-only body collapses
+    /// away entirely; cards with non-row content (editors, custom items) keep
+    /// that content visibly muted by this opacity.
     readonly property real disabledContentOpacity: 0.85
 
     // Per-monitor scope chip (optional). When scopeEnabled, the header shows a
