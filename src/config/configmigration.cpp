@@ -2323,6 +2323,37 @@ constexpr QLatin1String kLayoutAppRulesKey{"appRules"};
 constexpr QLatin1String kLayoutAppRulePattern{"pattern"};
 constexpr QLatin1String kLayoutAppRuleZoneNumber{"zoneNumber"};
 
+// Frozen on-disk keys for the v4 per-layout settings relocation. Local literals
+// (NOT the live `ZoneJsonKeys::` / LayoutSettingsStore accessors) so a future
+// rename of those live keys can never retarget this migration away from what v4
+// layout files had on disk. The layout-settings.json format produced here MUST
+// match what PhosphorZones::LayoutSettingsStore reads — a round-trip test locks
+// the two together.
+constexpr QLatin1String kLayoutIdKey{"id"};
+constexpr QLatin1String kLayoutZonesKey{"zones"};
+constexpr QLatin1String kLayoutAppearanceKey{"appearance"};
+constexpr QLatin1String kSettingsVersionKey{"_version"};
+constexpr QLatin1String kSettingsZoneAppearanceMapKey{"zoneAppearance"};
+constexpr int kLayoutSettingsSchemaVersion = 1; // mirrors LayoutSettingsStore::SchemaVersion
+
+// The per-LAYOUT setting keys that move out of the layout file into the sidecar.
+// The per-ZONE appearance block is handled separately. Order is irrelevant.
+constexpr std::array<QLatin1String, 13> kLayoutSettingKeys{{
+    QLatin1String{"zonePadding"},
+    QLatin1String{"outerGap"},
+    QLatin1String{"usePerSideOuterGap"},
+    QLatin1String{"outerGapTop"},
+    QLatin1String{"outerGapBottom"},
+    QLatin1String{"outerGapLeft"},
+    QLatin1String{"outerGapRight"},
+    QLatin1String{"showZoneNumbers"},
+    QLatin1String{"overlayDisplayMode"},
+    QLatin1String{"autoAssign"},
+    QLatin1String{"useFullScreenGeometry"},
+    QLatin1String{"shaderId"},
+    QLatin1String{"shaderParams"},
+}};
+
 /// Convert each layout file's legacy per-layout `appRules` into first-class
 /// SnapToZone WindowRules. v3 stored app→zone assignments on the Layout
 /// (`Layout::appRules`: a `{pattern, zoneNumber, targetScreen}` triple, single
@@ -2424,12 +2455,187 @@ void appendLayoutAppRulesAsSnapToZone(QList<PhosphorWindowRules::WindowRule>& ru
     }
 }
 
+/// Extract the settings object (per-layout setting keys + per-zone appearance
+/// map) from a full layout JSON, in the LayoutSettingsStore on-disk shape.
+/// Returns an empty object when the layout carries no settings.
+QJsonObject extractLayoutSettings(const QJsonObject& full)
+{
+    QJsonObject settings;
+    for (const QLatin1String key : kLayoutSettingKeys) {
+        if (full.contains(key)) {
+            settings.insert(key, full.value(key));
+        }
+    }
+    QJsonObject zoneAppearance;
+    const QJsonArray zones = full.value(kLayoutZonesKey).toArray();
+    for (const QJsonValue& zoneVal : zones) {
+        const QJsonObject zone = zoneVal.toObject();
+        const QString zoneId = zone.value(kLayoutIdKey).toString();
+        if (!zoneId.isEmpty() && zone.contains(kLayoutAppearanceKey)) {
+            zoneAppearance.insert(zoneId, zone.value(kLayoutAppearanceKey));
+        }
+    }
+    if (!zoneAppearance.isEmpty()) {
+        settings.insert(QString(kSettingsZoneAppearanceMapKey), zoneAppearance);
+    }
+    return settings;
+}
+
+/// Return the structural-only layout JSON: the full layout minus every settings
+/// key and minus each zone's appearance block.
+QJsonObject stripLayoutSettings(const QJsonObject& full)
+{
+    QJsonObject structural = full;
+    for (const QLatin1String key : kLayoutSettingKeys) {
+        structural.remove(key);
+    }
+    // Kept in lockstep with PhosphorZones::LayoutSettingsStore::stripSettings:
+    // only touch zones when present, and only strip the appearance of an
+    // id-bearing zone (its appearance is what extractLayoutSettings moved to the
+    // sidecar map, keyed by zone id). An id-less zone keeps its inline appearance.
+    if (structural.contains(kLayoutZonesKey)) {
+        QJsonArray zones = structural.value(kLayoutZonesKey).toArray();
+        for (int i = 0; i < zones.size(); ++i) {
+            QJsonObject zone = zones.at(i).toObject();
+            if (!zone.value(kLayoutIdKey).toString().isEmpty()) {
+                zone.remove(kLayoutAppearanceKey);
+                zones.replace(i, zone);
+            }
+        }
+        structural.insert(QString(kLayoutZonesKey), zones);
+    }
+    return structural;
+}
+
+/// Worker for ConfigMigration::relocateLayoutSettings — kept in this anonymous
+/// namespace so it can reach the frozen `kLayout*` literals above.
+bool relocateLayoutSettingsImpl(const QString& layoutsDir, const QString& sidecarPath)
+{
+    QDir dir(layoutsDir);
+    if (!dir.exists()) {
+        return true; // nothing to relocate — not an error
+    }
+
+    // Merge into any existing sidecar rather than clobbering it, so a re-run
+    // (or a sidecar already partly written by the runtime store) is preserved.
+    QJsonObject sidecar;
+    {
+        QFile sf(sidecarPath);
+        if (sf.open(QIODevice::ReadOnly)) {
+            const QJsonDocument doc = QJsonDocument::fromJson(sf.readAll());
+            if (doc.isObject()) {
+                sidecar = doc.object();
+            }
+        }
+    }
+
+    // Pass 1: scan every layout file, accumulate its settings into the in-memory
+    // sidecar, and stage the slimmed structural body — but DON'T touch any layout
+    // file on disk yet. The sidecar is the authoritative copy; it must be durably
+    // written BEFORE any source file is slimmed, so a crash (or a sidecar write
+    // failure) can never leave settings stripped from the layout file but absent
+    // from the sidecar. Mirrors finalizeV4Conversion's "write windowrules.json
+    // before retiring assignments.json" ordering.
+    struct PendingStrip
+    {
+        QString path;
+        QJsonObject structural;
+    };
+    const QStringList files = dir.entryList({QStringLiteral("*.json")}, QDir::Files, QDir::Name);
+    QList<PendingStrip> pending;
+    bool sidecarDirty = false;
+    for (const QString& fileName : files) {
+        const QString path = dir.filePath(fileName);
+        QFile f(path);
+        if (!f.open(QIODevice::ReadOnly)) {
+            qWarning("ConfigMigration: layout-settings relocation could not read %s — skipping", qPrintable(path));
+            continue;
+        }
+        QJsonParseError err;
+        const QJsonDocument doc = QJsonDocument::fromJson(f.readAll(), &err);
+        f.close();
+        if (err.error != QJsonParseError::NoError || !doc.isObject()) {
+            qWarning("ConfigMigration: layout-settings relocation skipping unparseable %s", qPrintable(path));
+            continue;
+        }
+        const QJsonObject full = doc.object();
+        const QString layoutId = full.value(kLayoutIdKey).toString();
+        const QJsonObject settings = extractLayoutSettings(full);
+        if (layoutId.isEmpty() || settings.isEmpty()) {
+            continue; // already slimmed, or no settings / unidentifiable — leave as-is
+        }
+
+        sidecar.insert(layoutId, settings);
+        sidecarDirty = true;
+        pending.append({path, stripLayoutSettings(full)});
+    }
+
+    if (!sidecarDirty) {
+        return true; // every layout already slim — no writes, fully idempotent
+    }
+
+    // Commit the authoritative sidecar FIRST. If it can't be persisted, leave the
+    // layout files untouched (their embedded settings are still read by the
+    // runtime store) and report failure — the next run retries.
+    sidecar.insert(QString(kSettingsVersionKey), kLayoutSettingsSchemaVersion);
+    QDir().mkpath(QFileInfo(sidecarPath).absolutePath());
+    if (!PhosphorConfig::JsonBackend::writeJsonAtomically(sidecarPath, sidecar)) {
+        qWarning("ConfigMigration: layout-settings relocation failed to write %s — leaving layout files intact",
+                 qPrintable(sidecarPath));
+        return false;
+    }
+
+    // Pass 2: slim the source files now that their settings are durably stored.
+    // A failure here is recoverable — the still-fat file keeps its embedded
+    // settings (harmlessly re-applied by mergeSettings) and is re-slimmed on the
+    // next run.
+    bool allOk = true;
+    for (const PendingStrip& p : pending) {
+        if (!PhosphorConfig::JsonBackend::writeJsonAtomically(p.path, p.structural)) {
+            qWarning("ConfigMigration: layout-settings relocation failed to rewrite %s", qPrintable(p.path));
+            allOk = false;
+        }
+    }
+    return allOk;
+}
+
 } // namespace
+
+bool ConfigMigration::relocateLayoutSettings(const QString& layoutsDir, const QString& sidecarPath)
+{
+    return relocateLayoutSettingsImpl(layoutsDir, sidecarPath);
+}
 
 bool ConfigMigration::finalizeV4Conversion(const QString& jsonPath)
 {
     const QString windowRulesPath = ConfigDefaults::windowRulesFilePath();
     const QString assignmentsPath = legacyAssignmentsFilePath();
+
+    // ── Relocate per-layout settings out of the layout files (v4) ──────────
+    // Independent of the windowrules/assignments machinery below: split each
+    // layout file's embedded settings into the layout-settings.json sidecar and
+    // slim the file. Idempotent (already-slim files are skipped) and best-effort
+    // — a relocation failure leaves the settings embedded (still read by the
+    // runtime store) and must not abort the v4 conversion, so its result does
+    // not gate the return value.
+    //
+    // Deliberately runs BEFORE — and independent of — the config-version stall
+    // gate further down (the `configVersion < ConfigSchemaVersion` guard that
+    // refuses to commit windowrules.json on a stalled chain). The layout file
+    // format is NOT tied to config.json's `_version`: layouts live in the data
+    // dir, the version stamp lives in config.json. Relocating them is correct
+    // and safe regardless of whether the config chain advanced, and the step is
+    // crash-safe and idempotent, so running it on a stalled-chain retry is a
+    // no-op-or-progress, never a regression.
+    {
+        const QString layoutsDir = QStandardPaths::writableLocation(QStandardPaths::GenericDataLocation)
+            + QLatin1Char('/') + ConfigDefaults::layoutsSubdir();
+        if (!relocateLayoutSettings(layoutsDir, ConfigDefaults::layoutSettingsFilePath())) {
+            qWarning(
+                "ConfigMigration: per-layout settings relocation reported a write failure — "
+                "affected layouts keep their embedded settings until next save");
+        }
+    }
 
     // ── Conversion-done vs cleanup-done — two SEPARATE concerns ─────────────
     // The conversion is multi-step: write windowrules.json (the irreversible

@@ -72,6 +72,7 @@ set(phosphorzones_public_HDRS
     include/PhosphorZones/ZoneDefaults.h
     include/PhosphorZones/ZoneJsonKeys.h
     include/PhosphorZones/Layout.h
+    include/PhosphorZones/LayoutSettingsStore.h
     include/PhosphorZones/ZoneDetector.h
     include/PhosphorZones/ZoneHighlighter.h
     include/PhosphorZones/LayoutUtils.h
@@ -90,6 +91,7 @@ set(phosphorzones_public_HDRS
 set(phosphorzones_SRCS
     src/zone.cpp
     src/layout.cpp
+    src/layoutsettingsstore.cpp
     src/layout/factories.cpp
     src/layout/serialization.cpp
     src/zonedetector.cpp
