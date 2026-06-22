@@ -171,30 +171,15 @@ PhosphorUi.SettingsAppWindow {
                 // "on" until the daemon actually stops. Turning OFF kills tiling
                 // + snapping for the whole session, so confirm first; turning ON
                 // applies immediately.
+                // Routes through the root-level daemonStopConfirm (declared
+                // beside the other inline confirm dialogs) so the page-nav
+                // shortcut guard can see its `visible` state.
                 onToggled: function (newValue) {
                     if (newValue)
                         settingsController.daemonController.setEnabled(true);
                     else
                         daemonStopConfirm.open();
                 }
-            }
-
-            Kirigami.PromptDialog {
-                id: daemonStopConfirm
-
-                title: i18n("Stop daemon?")
-                subtitle: i18n("Stopping the PlasmaZones daemon disables window tiling and snapping until you start it again.")
-                standardButtons: Kirigami.Dialog.Cancel
-                customFooterActions: [
-                    Kirigami.Action {
-                        text: i18n("Stop daemon")
-                        icon.name: "system-shutdown"
-                        onTriggered: {
-                            settingsController.daemonController.setEnabled(false);
-                            daemonStopConfirm.close();
-                        }
-                    }
-                ]
             }
         }
     }
@@ -351,7 +336,8 @@ PhosphorUi.SettingsAppWindow {
     // ── Ctrl+PgUp / Ctrl+PgDown — step through navigable pages ──────
     // Guarded: page navigation must not fire while any of the inline
     // confirm dialogs (whatsNewDialog, resetConfirmDialog,
-    // defaultsConfirmDialog, sectionToggleDiscardConfirm), the shortcut
+    // defaultsConfirmDialog, sectionToggleDiscardConfirm, daemonStopConfirm),
+    // the shortcut
     // overlay, the active page's own modal stack (WindowRulesPage's
     // forceSaveConfirm / addRuleWizard / ruleEditorSheet /
     // windowPickerDialog), OR a native child window (QtQuick FileDialog,
@@ -384,7 +370,7 @@ PhosphorUi.SettingsAppWindow {
     // Shared enable-guard for page-navigation shortcuts. Hoisted from
     // the two identical inline expressions so a future dialog addition
     // doesn't drift between Ctrl+PgUp / Ctrl+PgDown.
-    readonly property bool _navShortcutsEnabled: window.active && !whatsNewDialog.visible && !resetConfirmDialog.visible && !defaultsConfirmDialog.visible && !sectionToggleDiscardConfirm.visible && !window._showShortcuts && !window._pageOwnedModalOpen && !window._searchOpen
+    readonly property bool _navShortcutsEnabled: window.active && !whatsNewDialog.visible && !resetConfirmDialog.visible && !defaultsConfirmDialog.visible && !sectionToggleDiscardConfirm.visible && !daemonStopConfirm.visible && !window._showShortcuts && !window._pageOwnedModalOpen && !window._searchOpen
 
     Shortcut {
         sequence: "Ctrl+PgUp"
@@ -877,6 +863,28 @@ PhosphorUi.SettingsAppWindow {
                 text: i18n("Cancel")
                 icon.name: "dialog-cancel"
                 onTriggered: sectionToggleDiscardConfirm.close()
+            }
+        ]
+    }
+
+    // Confirm before stopping the daemon from the header toggle. Declared at the
+    // window root (not in the headerTrailing Component) so the page-nav shortcut
+    // guard `_navShortcutsEnabled` can read its `visible` state; the header
+    // SettingsSwitch opens it via outer-scope reference.
+    Kirigami.PromptDialog {
+        id: daemonStopConfirm
+
+        title: i18n("Stop daemon?")
+        subtitle: i18n("Stopping the PlasmaZones daemon disables window tiling and snapping until you start it again.")
+        standardButtons: Kirigami.Dialog.Cancel
+        customFooterActions: [
+            Kirigami.Action {
+                text: i18n("Stop daemon")
+                icon.name: "system-shutdown"
+                onTriggered: {
+                    settingsController.daemonController.setEnabled(false);
+                    daemonStopConfirm.close();
+                }
             }
         ]
     }
