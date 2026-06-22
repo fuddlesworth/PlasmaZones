@@ -310,8 +310,14 @@ QString LayoutAdaptor::getScreenStates()
         obj[QLatin1String("activity")] = activity;
         obj[QLatin1String("mode")] = static_cast<int>(entry.mode);
 
-        // Snapping layout — use resolved layout (includes default fallback)
-        PhosphorZones::Layout* resolvedLayout = m_layoutManager->layoutForScreen(screenId, desktop, activity);
+        // Snapping layout — use the resolved layout (includes the default
+        // fallback), EXCEPT when the default is suppressed for this context: then
+        // report no layout so the settings/KCM monitor view shows the screen as
+        // unassigned instead of the default-layout fallback.
+        PhosphorZones::Layout* resolvedLayout =
+            m_layoutManager->isContextActiveLayoutSuppressed(screenId, desktop, activity)
+            ? nullptr
+            : m_layoutManager->layoutForScreen(screenId, desktop, activity);
         if (resolvedLayout) {
             obj[QLatin1String("layoutId")] = resolvedLayout->id().toString();
             obj[QLatin1String("layoutName")] = resolvedLayout->name();

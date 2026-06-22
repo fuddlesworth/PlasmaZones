@@ -331,20 +331,48 @@ void Daemon::initializeAutotile()
 
                 // Resolve algorithm from the AssignmentEntry's tilingAlgorithm
                 // (preserved even when mode is Snapping), then fall back to broader
-                // scopes, then to the user's configured default (settings).
+                // scopes. This is the EXPLICITLY-assigned algorithm for the context.
                 QString algoId = m_layoutManager->tilingAlgorithmForScreen(screenId, desktop, activity);
                 if (algoId.isEmpty() && !activity.isEmpty()) {
                     algoId = m_layoutManager->tilingAlgorithmForScreen(screenId, desktop, QString());
                 }
-                if (algoId.isEmpty() && m_settings) {
-                    algoId = m_settings->defaultAutotileAlgorithm();
-                }
-                if (algoId.isEmpty()) {
-                    algoId = PhosphorTiles::AlgorithmRegistry::staticDefaultAlgorithmId();
+                // No explicitly-assigned algorithm: fall back to the user's
+                // configured default — UNLESS the default is suppressed for this
+                // context. Under suppress, switching to autotile applies a bare
+                // "autotile:" assignment (mode set, no algorithm) so the context
+                // selects autotile mode but does NOT tile with the global default;
+                // updateAutotileScreens skips a suppressed bare context until the
+                // user assigns a concrete algorithm.
+                if (algoId.isEmpty()
+                    && !m_layoutManager->isDefaultAssignmentSuppressedForContext(screenId, desktop, activity)) {
+                    if (m_settings) {
+                        algoId = m_settings->defaultAutotileAlgorithm();
+                    }
+                    if (algoId.isEmpty()) {
+                        algoId = PhosphorTiles::AlgorithmRegistry::staticDefaultAlgorithmId();
+                    }
                 }
                 if (!algoId.isEmpty()) {
                     applied =
                         m_unifiedLayoutController->applyLayoutById(PhosphorLayout::LayoutId::makeAutotileId(algoId));
+                } else {
+                    // Suppressed with no explicitly-assigned algorithm: switch the
+                    // context to autotile mode WITHOUT an algorithm so it selects the
+                    // mode but does not tile. applyLayoutById can't apply a bare
+                    // "autotile:" (it has no matching layout preview and returns
+                    // false), so write the entry directly. The emitted layoutAssigned
+                    // drives the daemon's updateAutotileScreens, which skips this bare
+                    // suppressed context (no tiling); we refresh the mode filter here
+                    // since no layoutApplied/autotileApplied signal fires.
+                    PhosphorZones::AssignmentEntry entry;
+                    entry.mode = PhosphorZones::AssignmentEntry::Autotile;
+                    m_layoutManager->setAssignmentEntryDirect(screenId, desktop, activity, entry);
+                    updateLayoutFilter();
+                    // No layoutApplied/autotileApplied signal fires for a direct
+                    // entry write, so surface the feedback OSD here: the mode
+                    // switched to autotile but nothing is assigned to tile with.
+                    showNotAssignedOsd(screenId);
+                    applied = true;
                 }
             }
 
