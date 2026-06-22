@@ -236,23 +236,16 @@ SettingsFlickable {
         spacing: Kirigami.Units.largeSpacing
 
         // ─── View switch (Snapping / Tiling) — only when autotiling is on ──
-        RowLayout {
+        // Centered monitor-switcher-style tiles (see LayoutViewSwitch).
+        LayoutViewSwitch {
             Layout.fillWidth: true
             visible: root.settingsBridge.autotileEnabled
-
-            SettingsButtonGroup {
-                model: [i18n("Snapping"), i18n("Tiling")]
-                currentIndex: root.viewMode
-                onIndexChanged: index => {
-                    root.viewMode = index;
-                    root.selectedLayoutId = "";
-                    // rebuildModel() runs via filterBar.onViewModeChanged → loadState → filterSettingsChanged.
-                    root.selectDefaultLayout(index);
-                }
-            }
-
-            Item {
-                Layout.fillWidth: true
+            currentIndex: root.viewMode
+            onIndexChanged: index => {
+                root.viewMode = index;
+                root.selectedLayoutId = "";
+                // rebuildModel() runs via filterBar.onViewModeChanged → loadState → filterSettingsChanged.
+                root.selectDefaultLayout(index);
             }
         }
 

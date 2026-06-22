@@ -290,6 +290,7 @@ qt_add_qml_module(plasmazones-settings
         qml/MonitorScopeChip.qml
         qml/LayoutGridDelegate.qml
         qml/LayoutManageCard.qml
+        qml/LayoutViewSwitch.qml
         qml/LayoutFilterBar.qml
         qml/LayoutFilterLogic.js
         qml/ZoneSelectorSection.qml
