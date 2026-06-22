@@ -611,28 +611,33 @@ void OverlayService::hideDisabledAndRefresh()
     // context-toggle); each per-content slot fades out via its
     // configured hide leg. dismissOverlayWindow / hideZoneSelectorSlotOnScreen
     // both clear the per-screen sentinel on completion.
+    // The zone selector / layout picker is gated ONLY by the disabled list (it
+    // is how a layout gets assigned, so suppress must not hide it); the snap
+    // overlay is additionally gated by suppress / autotile mode via
+    // isSnappingContextInactive.
     if (m_settings) {
         const QStringList screenIds = m_screenStates.keys();
         for (const QString& screenId : screenIds) {
-            if (isSnappingContextInactive(screenId)) {
+            const bool disabled = isContextDisabled(m_settings, PhosphorZones::AssignmentEntry::Snapping, screenId,
+                                                    currentVirtualDesktopForScreen(screenId), m_currentActivity);
+            if (disabled) {
                 destroyZoneSelectorWindow(screenId);
-                if (m_visible) {
-                    dismissOverlayWindow(screenId);
-                }
+            }
+            if (m_visible && isSnappingContextInactive(screenId)) {
+                dismissOverlayWindow(screenId);
             }
         }
     }
 
-    // Update remaining (non-disabled) zone selector and overlay windows
+    // Update remaining zone selector (disabled-gated) and overlay (suppress-gated) windows.
     for (auto it = m_screenStates.constBegin(); it != m_screenStates.constEnd(); ++it) {
         const QString& screenId = it.key();
-        if (isSnappingContextInactive(screenId)) {
-            continue;
-        }
-        if (it.value().zoneSelectorSlot()) {
+        const bool disabled = isContextDisabled(m_settings, PhosphorZones::AssignmentEntry::Snapping, screenId,
+                                                currentVirtualDesktopForScreen(screenId), m_currentActivity);
+        if (!disabled && it.value().zoneSelectorSlot()) {
             updateZoneSelectorWindow(screenId);
         }
-        if (m_visible && it.value().overlayPhysScreen) {
+        if (!isSnappingContextInactive(screenId) && m_visible && it.value().overlayPhysScreen) {
             updateOverlayWindow(screenId, it.value().overlayPhysScreen);
         }
     }
