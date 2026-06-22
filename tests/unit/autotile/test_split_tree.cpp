@@ -139,6 +139,28 @@ private Q_SLOTS:
         QCOMPARE(root->splitRatio, before);
     }
 
+    // A corner drag moves one horizontal-axis edge and one vertical-axis edge.
+    // The two edges must resolve to two DISTINCT non-null splits (of opposite
+    // orientation) so the engine can adjust each independently without one
+    // clobbering the other. Tree: root V(a, H(b, c)); corner-resize c.
+    void testSplitOwningEdgeCornerTwoDistinctSplits()
+    {
+        using Edge = PhosphorTiles::SplitTree::Edge;
+        PhosphorTiles::SplitTree tree;
+        tree.insertAtEnd(QStringLiteral("a"));
+        tree.insertAtEnd(QStringLiteral("b"));
+        tree.insertAtEnd(QStringLiteral("c"));
+
+        // c's top-left corner: Left edge (vertical split) + Top edge (horizontal split).
+        const PhosphorTiles::SplitNode* leftOwner = tree.splitOwningEdge(QStringLiteral("c"), Edge::Left);
+        const PhosphorTiles::SplitNode* topOwner = tree.splitOwningEdge(QStringLiteral("c"), Edge::Top);
+        QVERIFY(leftOwner != nullptr);
+        QVERIFY(topOwner != nullptr);
+        QVERIFY(leftOwner != topOwner); // distinct nodes — no double-application
+        QVERIFY(!leftOwner->splitHorizontal); // Left → vertical split (the root)
+        QVERIFY(topOwner->splitHorizontal); // Top → horizontal split (the inner node)
+    }
+
     void testInsertFirst()
     {
         PhosphorTiles::SplitTree tree;

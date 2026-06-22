@@ -42,9 +42,10 @@ struct WindowInfo
 /**
  * @brief Describes an interactive resize that triggered a retile.
  *
- * Set on @ref TilingParams::resize (and delivered to the optional
- * @c onWindowResized algorithm hook) so resize-aware algorithms can react to
- * "the user dragged window N's right edge". Absent on every non-resize retile.
+ * Delivered as the argument to the optional @c onWindowResized algorithm hook
+ * (NOT via @ref TilingParams — see the note on currentGeometries) so resize-aware
+ * algorithms can react to "the user dragged window N's right edge". A non-resize
+ * retile never constructs one.
  */
 struct ResizeEvent
 {

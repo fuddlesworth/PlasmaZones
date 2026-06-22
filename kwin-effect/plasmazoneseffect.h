@@ -695,12 +695,12 @@ private:
     void setupDecorationManager();
 
     // Interactive-resize latch. windowStartUserMovedResized fires once with
-    // isUserResize() true when an edge drag begins; we capture the window and
-    // its pre-resize frame so windowFinishUserMovedResized can report the
-    // before/after geometry to the daemon for neighbour reflow (GitHub #652).
-    // The daemon's frame shadow can't serve as the baseline — it updates
-    // mid-drag via the debounced setFrameGeometry push.
-    QPointer<KWin::EffectWindow> m_resizeStartWindow;
+    // isUserResize() true when an edge drag begins; we capture the pre-resize
+    // frame so windowFinishUserMovedResized can report the before/after geometry
+    // to the daemon for neighbour reflow (GitHub #652). The resize-vs-move
+    // identity is the existing m_resizingWindow latch; this carries only the
+    // baseline geometry it lacks. The daemon's frame shadow can't serve as the
+    // baseline — it updates mid-drag via the debounced setFrameGeometry push.
     QRect m_resizeStartGeometry;
     void notifyWindowResized(KWin::EffectWindow* w, const QRect& oldGeometry);
 

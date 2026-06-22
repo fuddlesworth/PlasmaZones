@@ -2693,22 +2693,23 @@ void AutotileEngine::onWindowFocused(const QString& windowId)
 void AutotileEngine::onWindowResized(const QString& windowId, const QRect& oldFrame, const QRect& newFrame,
                                      const QString& screenId)
 {
-    if (windowId.isEmpty() || !newFrame.isValid()) {
+    if (windowId.isEmpty() || !oldFrame.isValid() || !newFrame.isValid()) {
         return;
     }
 
-    // Resolve the owning state. Trust the daemon-supplied screen (it resolved the
-    // window authoritatively via screenForTrackedWindow); fall back to a lookup
-    // only if it was empty or no longer an autotile screen.
-    QString resolvedScreen = screenId;
-    PhosphorTiles::TilingState* state = nullptr;
-    if (!resolvedScreen.isEmpty() && isAutotileScreen(resolvedScreen)) {
-        state = tilingStateForScreen(resolvedScreen);
+    // The daemon resolved screenId from the same window→state map, so treat it as
+    // authoritative. Resolve the owning state with a pure lookup: stateForWindow
+    // never creates state, whereas tilingStateForScreen would insert an empty
+    // TilingState for a known-but-stateless screen that then just fails the guards
+    // below. stateForWindow also keys off the window's stored desktop/activity,
+    // which must equal the daemon-supplied screen for a tracked window.
+    const QString resolvedScreen = screenId;
+    if (resolvedScreen.isEmpty() || !isAutotileScreen(resolvedScreen)) {
+        return;
     }
-    if (!state) {
-        state = stateForWindow(windowId, &resolvedScreen);
-    }
-    if (!state || resolvedScreen.isEmpty() || !isAutotileScreen(resolvedScreen)) {
+    QString ownerScreen;
+    PhosphorTiles::TilingState* state = stateForWindow(windowId, &ownerScreen);
+    if (!state || ownerScreen != resolvedScreen) {
         return;
     }
 

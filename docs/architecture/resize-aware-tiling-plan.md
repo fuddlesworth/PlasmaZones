@@ -42,9 +42,10 @@ change: `TilingState` is session state on a separate JSON surface from `config.j
  → AutotileEngine::onWindowResized (new)
      tier fork (single owner of precedence):
        supportsMemory()       → TIER A: applyTreeResizeReflow
-       else supportsResizeHook() → TIER B: dispatchScriptedResize
+       else supportsResizeHook() → TIER B: build ResizeEvent → algo->onWindowResized hook
        else                   → no-op (KWin keeps user geometry)
-     TIER A: diffEdges(oldFrame,newFrame) → splitOwningEdge → ratioForEdge → resizeSplitNode
+     TIER A (all inlined in applyTreeResizeReflow): per-axis edge diff → splitOwningEdge
+             → subtreeBoundingRect (split extent from rendered zones) → ratio → resizeSplitNode
              → retileAfterOperation(screenId, true)   [SYNCHRONOUS]
    recalculateLayout → prepareTilingState → calculateZones (applyGeometryRecursive, gap-free)
  → applyTiling (AutotileEngine.cpp:3512): zones[i] → windows[i] by index;
@@ -90,10 +91,12 @@ Files:
 ### P2 — Engine tree reflow + SplitTree helpers
 
 Files:
-- `libs/phosphor-tile-engine/include/PhosphorTileEngine/AutotileEngine.h` — declare `onWindowResized`,
-  private `applyTreeResizeReflow`, `dispatchScriptedResize` (stub).
-- `libs/phosphor-tile-engine/src/AutotileEngine.cpp` — handler after `onWindowFocused` (~`:2656`);
-  free helpers `diffEdges`, `ratioForEdge` in anon namespace.
+- `libs/phosphor-tile-engine/include/PhosphorTileEngine/AutotileEngine.h` — declare `onWindowResized`
+  (override) and private `applyTreeResizeReflow`. (Tier B dispatches the algorithm's `onWindowResized`
+  hook inline in the handler — no separate `dispatchScriptedResize` method was needed.)
+- `libs/phosphor-tile-engine/src/AutotileEngine.cpp` — handler after `onWindowFocused`; the per-axis edge
+  diff and delta→ratio math are inlined in `applyTreeResizeReflow`, with `unionSubtreeZones` /
+  `subtreeBoundingRect` anon-namespace helpers for the rendered-zone split extent.
 - `libs/phosphor-tiles/include/PhosphorTiles/SplitTree.h` — public `enum class Edge`; `splitOwningEdge`
   (const+non-const, after `:195`); `resizeSplitNode(SplitNode*, qreal)`; `resizeSplit` delegates.
 - `libs/phosphor-tiles/src/splittree.cpp` — implement `splitOwningEdge` + `resizeSplitNode`.
@@ -322,9 +325,10 @@ Run: `cmake --build build --parallel $(nproc)` then `cd build && ctest --output-
 ## 10. Compliance Checklist
 
 - SPDX header on every new/changed file: `// SPDX-FileCopyrightText: 2026 fuddlesworth`.
-- License per tree: `libs/phosphor-*/**` (incl. `data/algorithms/aligned-grid.luau`, `pluau.luau`) →
-  **LGPL-2.1-or-later**; `kwin-effect/**`, top-level `tests/**`, `src/**` → **GPL-3.0-or-later**.
-  Do NOT create `libs/phosphor-tiles/tests/`.
+- License per tree: `libs/phosphor-*/**` (incl. `pluau.d.luau`) → **LGPL-2.1-or-later**;
+  `kwin-effect/**`, top-level `tests/**`, `src/**`, and the bundled `data/algorithms/*.luau` (incl.
+  `aligned-grid.luau`) → **GPL-3.0-or-later** (the algorithms ship with the GPL shell, matching the 26
+  existing bundled algorithms). Do NOT create `libs/phosphor-tiles/tests/`.
 - Qt6 string literals: `QLatin1String` for JSON keys/compares; `QStringLiteral` for ctx field/method
   names; never raw `"string"`.
 - ConfigDefaults: N/A — no `config.json` key, no schema bump, no `configmigration.cpp` edit.

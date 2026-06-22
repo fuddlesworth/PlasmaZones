@@ -667,10 +667,18 @@ void PlasmaZonesEffect::setupWindowConnections(KWin::EffectWindow* w)
     // DragTracker::updateCursorPosition(), throttled to ~30Hz.
     connect(w, &KWin::EffectWindow::windowStartUserMovedResized, this, [this](KWin::EffectWindow* window) {
         m_dragTracker->handleWindowStartMoveResize(window);
-        // Latch interactive-resize identity for the finish handler (see below):
-        // KWin clears isUserResize() before windowFinishUserMovedResized fires, so
-        // the move-vs-resize discriminator must be captured here, at the start.
+        // Latch interactive-resize identity AND the pre-resize frame for the finish
+        // handler (see below): KWin clears isUserResize() before
+        // windowFinishUserMovedResized fires, so both the move-vs-resize
+        // discriminator and the baseline geometry must be captured here, at the
+        // start. The geometry feeds the neighbour-reflow report (GitHub #652);
+        // m_resizeStartGeometry is only read at finish when this latch identifies a
+        // resize, so a plain move leaves it cleared.
         m_resizingWindow = (window && window->isUserResize()) ? window : nullptr;
+        m_resizeStartGeometry = QRect();
+        if (m_resizingWindow) {
+            m_resizeStartGeometry = window->frameGeometry().toRect();
+        }
         // window.move / window.resize shader transitions: KWin's interactive
         // move/resize is its own animation system (Window::moveResize via
         // pointer drag), but we layer an effect-side shader for visual
@@ -684,13 +692,6 @@ void PlasmaZonesEffect::setupWindowConnections(KWin::EffectWindow* w)
                                    window->isUserResize() ? PhosphorAnimation::ProfilePaths::WindowResize
                                                           : PhosphorAnimation::ProfilePaths::WindowMove,
                                    animationDurationMs());
-            // Latch interactive resizes (the drag tracker only handles moves):
-            // capture the pre-resize frame so the finish handler can report the
-            // before/after geometry for neighbour reflow (GitHub #652).
-            if (window->isUserResize() && shouldHandleWindow(window)) {
-                m_resizeStartWindow = window;
-                m_resizeStartGeometry = window->frameGeometry().toRect();
-            }
         }
     });
     connect(w, &KWin::EffectWindow::windowFinishUserMovedResized, this, [this](KWin::EffectWindow* window) {
@@ -721,15 +722,14 @@ void PlasmaZonesEffect::setupWindowConnections(KWin::EffectWindow* w)
                         QStringLiteral("storePreTileGeometry - float resize"));
                 }
             }
-        }
-        m_dragTracker->handleWindowFinishMoveResize(window);
-        // If this interaction was the latched interactive resize, report the
-        // committed geometry to the daemon so it can reflow neighbours.
-        if (window && window == m_resizeStartWindow) {
+            // Report the committed resize to the daemon so it can reflow tiled
+            // neighbours (GitHub #652). The daemon ignores floating / untracked
+            // windows, so this is harmless for the float case handled just above.
+            // shouldHandleWindow is re-checked here (not latched at start) since
+            // the daemon re-validates membership regardless.
             notifyWindowResized(window, m_resizeStartGeometry);
         }
-        m_resizeStartWindow = nullptr;
-        m_resizeStartGeometry = QRect();
+        m_dragTracker->handleWindowFinishMoveResize(window);
     });
 
     // Track when user manually unmaximizes a monocle-maximized window

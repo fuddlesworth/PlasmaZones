@@ -74,8 +74,10 @@ RowLayout {
     property int _previousViewMode: 0
     // Property-name maps for data-driven save/load.
     // Each entry: [rootPropertyName, persistedStatePropertyName].
-    // NOTE: when adding a filter, also update: property declarations,
-    // _defaultValues, _snappingStateMap or _tilingStateMap, and persistedState.
+    // NOTE: adding a filter requires updating ALL of: property declaration,
+    // _defaultValues, the relevant _snapping/_tilingStateMap, persistedState,
+    // hasActiveFilters, the menu item, and the JS filter logic (see the same
+    // note above _defaultValues below — keep both lists in sync).
     readonly property var _snappingStateMap: [["groupByIndex", "snappingGroupByIndex"], ["sortByIndex", "snappingSortByIndex"], ["sortAscending", "snappingSortAscending"], ["showHidden", "snappingShowHidden"], ["showAspectAny", "snappingShowAspectAny"], ["showAspectStandard", "snappingShowAspectStandard"], ["showAspectUltrawide", "snappingShowAspectUltrawide"], ["showAspectSuperUltrawide", "snappingShowAspectSuperUltrawide"], ["showAspectPortrait", "snappingShowAspectPortrait"], ["showAutoLayouts", "snappingShowAutoLayouts"], ["showManualLayouts", "snappingShowManualLayouts"], ["showBuiltInLayouts", "snappingShowBuiltInLayouts"], ["showUserLayouts", "snappingShowUserLayouts"]]
     readonly property var _tilingStateMap: [["groupByIndex", "tilingGroupByIndex"], ["sortByIndex", "tilingSortByIndex"], ["sortAscending", "tilingSortAscending"], ["showHidden", "tilingShowHidden"], ["showBuiltInAlgorithms", "tilingShowBuiltInAlgorithms"], ["showUserAlgorithms", "tilingShowUserAlgorithms"], ["showMasterCount", "tilingShowMasterCount"], ["showSplitRatio", "tilingShowSplitRatio"], ["showOverlapping", "tilingShowOverlapping"], ["showPersistent", "tilingShowPersistent"], ["showCustomParams", "tilingShowCustomParams"], ["showReflowsOnResize", "tilingShowReflowsOnResize"]]
     // Default values for all resettable filter properties (not group/sort).

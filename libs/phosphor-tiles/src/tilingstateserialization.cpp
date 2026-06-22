@@ -45,6 +45,12 @@ bool sanitizeScriptValue(QJsonValue& value, int depth, int& keyCount)
         QJsonArray arr = value.toArray();
         QJsonArray cleaned;
         for (QJsonValue child : arr) {
+            // Count array elements against the same budget as object keys so a
+            // pathologically large flat array bails here rather than being fully
+            // materialized and only rejected later by the post-hoc byte cap.
+            if (++keyCount > AutotileDefaults::ScriptStateMaxKeys) {
+                break;
+            }
             if (sanitizeScriptValue(child, depth + 1, keyCount)) {
                 cleaned.append(child);
             }
@@ -73,6 +79,14 @@ QJsonObject TilingState::sanitizeScriptState(const QJsonObject& state)
         return {};
     }
     QJsonObject cleaned = root.toObject();
+    // The key/element budget breaks mid-container on overflow, silently dropping
+    // the tail. Warn once (here, not in the recursion) so a script that overruns
+    // the cap is diagnosable rather than mysteriously losing half its state —
+    // matching the byte-cap path's warning below.
+    if (keyCount > AutotileDefaults::ScriptStateMaxKeys) {
+        qCWarning(PhosphorTiles::lcTilesLib)
+            << "scriptState exceeds" << AutotileDefaults::ScriptStateMaxKeys << "entries — bag truncated";
+    }
     // Byte cap is checked on the post-strip object so a bag that only exceeds
     // it via dropped NaN/garbage can still squeak under.
     const int bytes = QJsonDocument(cleaned).toJson(QJsonDocument::Compact).size();
