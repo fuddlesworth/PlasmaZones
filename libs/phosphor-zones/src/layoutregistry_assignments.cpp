@@ -429,8 +429,8 @@ bool LayoutRegistry::purgeSnappingLayoutFromAssignments(const QString& layoutId)
         // Gate on isPureAssignmentRule (not isContextAssignmentRule) — the
         // Shape-1 rebuild path emits ONLY the three assignment slot actions
         // via makeAssignmentActions, so a mixed context rule carrying
-        // SetOpacity / OverrideAnimation* / Float / Exclude / LockContext
-        // alongside its assignment actions would silently lose those
+        // SetOpacity / OverrideAnimation* / Float / Exclude / LockContext /
+        // DefaultLayoutAssignment alongside its assignment actions would silently lose those
         // non-assignment actions on rebuild. Mixed rules fall through to Shape 2's
         // surgical SetSnappingLayout removal, which preserves every
         // other action verbatim.
