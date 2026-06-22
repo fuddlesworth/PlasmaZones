@@ -63,7 +63,6 @@ Item {
 
                     anchors.centerIn: parent
                     text: tile.modelData
-                    font: Kirigami.Theme.smallFont
                     opacity: tile.selected ? 1 : 0.5
                 }
 
