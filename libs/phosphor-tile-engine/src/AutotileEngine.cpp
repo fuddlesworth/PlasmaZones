@@ -926,6 +926,12 @@ void AutotileEngine::setAlgorithm(const QString& algorithmId)
         return;
     }
 
+    // Switching algorithms resets ratios/counts to the new algorithm's saved or
+    // default values for every desktop, so per-desktop user tunings no longer
+    // apply — drop them and let the propagate calls below re-seed each state.
+    m_userTunedSplitRatio.clear();
+    m_userTunedMasterCount.clear();
+
     PhosphorTiles::TilingAlgorithm* oldAlgo = registry->algorithm(m_algorithmId);
     PhosphorTiles::TilingAlgorithm* newAlgo = registry->algorithm(newId);
     const int oldMaxWindows = m_config->maxWindows;
@@ -1337,7 +1343,14 @@ void AutotileEngine::refreshConfigFromSettings()
     } while (0)
 
     if (!m_writeBackGuardTimer.isActive()) {
-        SYNC_FIELD(masterCount, autotileMasterCount);
+        const int newMasterCount = s->autotileMasterCount();
+        if (m_config->masterCount != newMasterCount) {
+            m_config->masterCount = newMasterCount;
+            configChanged = true;
+            // An explicit global master-count change (settings) overrides any
+            // per-desktop tunings, which the propagate below then re-applies.
+            m_userTunedMasterCount.clear();
+        }
     }
     SYNC_FIELD(innerGap, autotileInnerGap);
     SYNC_FIELD(outerGap, autotileOuterGap);
@@ -1357,6 +1370,9 @@ void AutotileEngine::refreshConfigFromSettings()
         if (!qFuzzyCompare(1.0 + m_config->splitRatio, 1.0 + newRatio)) {
             m_config->splitRatio = newRatio;
             configChanged = true;
+            // An explicit global split-ratio change (settings) overrides any
+            // per-desktop tunings, which the propagate below then re-applies.
+            m_userTunedSplitRatio.clear();
         }
     }
     {
@@ -1472,6 +1488,16 @@ bool AutotileEngine::hasPerScreenOverride(const QString& screenId, const QString
 void AutotileEngine::updatePerScreenOverride(const QString& screenId, const QString& key, const QVariant& value)
 {
     m_configResolver->updatePerScreenOverride(screenId, key, value);
+}
+
+void AutotileEngine::noteSplitRatioUserTuned(const QString& screenId)
+{
+    m_userTunedSplitRatio.insert(currentKeyForScreen(screenId));
+}
+
+void AutotileEngine::noteMasterCountUserTuned(const QString& screenId)
+{
+    m_userTunedMasterCount.insert(currentKeyForScreen(screenId));
 }
 
 int AutotileEngine::effectiveInnerGap(const QString& screenId) const
@@ -1803,21 +1829,6 @@ void AutotileEngine::setGlobalSplitRatio(qreal ratio)
 void AutotileEngine::setGlobalMasterCount(int count)
 {
     m_navigation->setGlobalMasterCount(count);
-}
-
-void AutotileEngine::syncShortcutAdjustmentToSettings()
-{
-    // Update per-algorithm saved settings so algorithm switches preserve the value
-    if (!m_algorithmId.isEmpty()) {
-        auto& entry = m_config->savedAlgorithmSettings[m_algorithmId];
-        entry.splitRatio = m_config->splitRatio;
-        entry.masterCount = m_config->masterCount;
-    }
-
-    {
-        m_writeBackGuardTimer.start();
-        writeBackTuning();
-    }
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -4017,12 +4028,16 @@ void AutotileEngine::propagateGlobalSplitRatio()
 {
     // Only propagate to current desktop/activity states — per-desktop split
     // ratio adjustments (via increaseMasterRatio) are preserved on other desktops.
+    // States the user explicitly tuned (m_userTunedSplitRatio) and screens with a
+    // per-screen override are skipped, so a local ratio tweak is never clobbered
+    // by a settings refresh.
     for (auto it = m_screenStates.constBegin(); it != m_screenStates.constEnd(); ++it) {
         if (it.key().desktop != currentKeyForScreen(it.key().screenId).desktop
             || it.key().activity != m_currentActivity) {
             continue;
         }
-        if (it.value() && !hasPerScreenOverride(it.key().screenId, PerScreenKeys::SplitRatio)) {
+        if (it.value() && !hasPerScreenOverride(it.key().screenId, PerScreenKeys::SplitRatio)
+            && !m_userTunedSplitRatio.contains(it.key())) {
             it.value()->setSplitRatio(m_config->splitRatio);
         }
     }
@@ -4031,13 +4046,16 @@ void AutotileEngine::propagateGlobalSplitRatio()
 void AutotileEngine::propagateGlobalMasterCount()
 {
     // Only propagate to current desktop/activity states — per-desktop master
-    // count adjustments are preserved on other desktops.
+    // count adjustments are preserved on other desktops. States the user
+    // explicitly tuned (m_userTunedMasterCount) and per-screen-override screens
+    // are skipped, so a local master-count tweak is never clobbered by a refresh.
     for (auto it = m_screenStates.constBegin(); it != m_screenStates.constEnd(); ++it) {
         if (it.key().desktop != currentKeyForScreen(it.key().screenId).desktop
             || it.key().activity != m_currentActivity) {
             continue;
         }
-        if (it.value() && !hasPerScreenOverride(it.key().screenId, PerScreenKeys::MasterCount)) {
+        if (it.value() && !hasPerScreenOverride(it.key().screenId, PerScreenKeys::MasterCount)
+            && !m_userTunedMasterCount.contains(it.key())) {
             it.value()->setMasterCount(m_config->masterCount);
         }
     }

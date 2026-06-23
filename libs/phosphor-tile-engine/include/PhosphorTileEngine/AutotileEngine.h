@@ -535,6 +535,14 @@ public:
     bool hasPerScreenOverride(const QString& screenId, const QString& key) const;
     void updatePerScreenOverride(const QString& screenId, const QString& key, const QVariant& value);
 
+    // Mark the active (screen, desktop, activity) state's split ratio / master
+    // count as user-tuned so propagateGlobalSplitRatio/MasterCount leaves it
+    // alone — the adjustment stays local to that desktop instead of bleeding into
+    // the global config. Called by NavigationController after a shortcut/resize
+    // adjustment in the no-per-screen-override case.
+    void noteSplitRatioUserTuned(const QString& screenId);
+    void noteMasterCountUserTuned(const QString& screenId);
+
     // Effective per-screen values — forwarded to PerScreenConfigResolver
     int effectiveInnerGap(const QString& screenId) const;
     int effectiveOuterGap(const QString& screenId) const;
@@ -1365,16 +1373,6 @@ private:
     QString currentAppIdFor(const QString& anyWindowId) const;
 
     /**
-     * @brief Sync shortcut-adjusted ratio/count to config and settings
-     *
-     * Called by NavigationController after increase/decreaseMasterRatio/Count.
-     * Updates per-algorithm saved settings and writes to Settings (signal-blocked)
-     * so that subsequent propagateGlobalSplitRatio() calls and settings syncs
-     * don't overwrite the shortcut-adjusted values.
-     */
-    void syncShortcutAdjustmentToSettings();
-
-    /**
      * @brief Shared toggle-float implementation for toggleFocusedWindowFloat/toggleWindowFloat
      *
      * Toggles the floating state, retiles, and emits windowFloatingChanged.
@@ -1427,6 +1425,15 @@ private:
     bool m_algorithmEverSet = false; ///< True after first successful setAlgorithm() call
     QString m_activeScreen; // Last-focused screen (updated by onWindowFocused)
     QHash<PhosphorEngine::TilingStateKey, PhosphorTiles::TilingState*> m_screenStates; // Owned via Qt parent (this)
+
+    // Screen+desktop states whose split ratio / master count the user has
+    // explicitly tuned (keyboard shortcut or interactive resize). propagateGlobal*
+    // skips these so a per-desktop tweak survives a settings refresh and is never
+    // written into the global config — keeping the adjustment local to that
+    // (screen, desktop, activity). Cleared on an algorithm switch and when the
+    // user changes the corresponding global value in settings.
+    QSet<PhosphorEngine::TilingStateKey> m_userTunedSplitRatio;
+    QSet<PhosphorEngine::TilingStateKey> m_userTunedMasterCount;
 
     QHash<QString, PhosphorEngine::TilingStateKey> m_windowToStateKey; // windowId -> owning state key
     QHash<QString, QSize> m_windowMinSizes; // windowId -> minimum size from KWin
