@@ -1,8 +1,14 @@
 {
     "releases": [
         {
-            "version": "Unreleased",
+            "version": "3.1.0",
+            "date": "2026-06-23",
             "highlights": [
+                "Autotiling is on by default, so PlasmaZones works like a dynamic tiler out of the box with no setup. Existing configs keep their current setting (#671)",
+                "Resize-aware tiling: master-stack, wide, focus-sidebar, zen, deck, and horizontal-deck now reflow when you drag a window edge, updating the split ratio for that desktop (#666)",
+                "New option to suppress the default layout for a context, on its own or through a window rule, so a screen, desktop, or activity can show no layout instead of falling back to the global default (#676)",
+                "Rebuilt Layouts page: a searchable, card-based catalogue with capability filters and badges, and search results that jump straight to a layout",
+                "Fixed: toggling from autotiling back to snapping no longer leaves windows stuck in their tiled positions, and master-ratio and master-count tweaks stay on the desktop you made them on instead of leaking to other screens",
                 "New Window Rules page: one place to manage everything that used to live across Snapping Assignments, Tiling Assignments, Animations App Rules, and the per-mode disabled-apps lists. Browse, add, edit, duplicate, drag-reorder, and disable rules from a single list",
                 "Each rule matches windows by class, title, role, app ID, desktop, activity, and screen, and now also by transient/notification kind, window size, and focus. Match terms combine with AND, OR, and NOT, then the rule applies snapping, tiling, animation, appearance (borders, title bars, corner radius, accent color, gaps, opacity), or exclusion actions",
                 "Your existing assignments, animation app rules, and per-monitor / per-desktop / per-activity disable settings were migrated automatically on first launch. If something looks off, your old configuration is preserved on disk and can be restored manually",
