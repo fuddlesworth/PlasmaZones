@@ -849,15 +849,29 @@ target_link_libraries(test_decoration_manager_timers PRIVATE Qt6::Test PhosphorC
 add_test(NAME test_decoration_manager_timers COMMAND test_decoration_manager_timers)
 
 # ═══════════════════════════════════════════════════════════════════════════════
-# Headless environment support
-# Apply QT_QPA_PLATFORM=offscreen to every test in this directory so new tests
-# added above automatically inherit it - a hand-maintained list rotted and left
-# tests aborting in CI when the author forgot to append.
+# Headless environment + config isolation
+# Apply a shared environment to every test in this directory so new tests added
+# above automatically inherit it - a hand-maintained list rotted and left tests
+# aborting in CI when the author forgot to append.
+#
+#   QT_QPA_PLATFORM=offscreen — headless rendering.
+#   XDG_{CONFIG,DATA,STATE,CACHE}_HOME — redirect QStandardPaths into a throwaway
+#     build-tree directory so tests that exercise config-writing paths
+#     (LayoutManager assignments, mode toggles, the WindowRule store) never
+#     mutate the developer's real ~/.config/plasmazones. Without this, running
+#     ctest wrote sample-screen rules (e.g. "eDP-1") into the live config.
 #
 # IMPORTANT: get_property(... PROPERTY TESTS) reads the test list at CMake
 # configure time, which means tests added BELOW this line are NOT covered.
 # Always add new test targets ABOVE this block — never after it.
 # ═══════════════════════════════════════════════════════════════════════════════
+set(_pz_test_home "${CMAKE_BINARY_DIR}/test-xdg")
+file(MAKE_DIRECTORY
+    "${_pz_test_home}/config"
+    "${_pz_test_home}/data"
+    "${_pz_test_home}/state"
+    "${_pz_test_home}/cache")
 get_property(_all_tests DIRECTORY . PROPERTY TESTS)
-set_tests_properties(${_all_tests} PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
+set_tests_properties(${_all_tests} PROPERTIES ENVIRONMENT
+    "QT_QPA_PLATFORM=offscreen;XDG_CONFIG_HOME=${_pz_test_home}/config;XDG_DATA_HOME=${_pz_test_home}/data;XDG_STATE_HOME=${_pz_test_home}/state;XDG_CACHE_HOME=${_pz_test_home}/cache")
 # ─── ABOVE THIS LINE: ADD NEW TESTS — BELOW THIS LINE: env wiring only ───
