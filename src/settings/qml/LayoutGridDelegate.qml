@@ -66,6 +66,11 @@ Item {
 
         implicitWidth: Kirigami.Units.iconSizes.small
         implicitHeight: Kirigami.Units.iconSizes.small
+        // Render as a mask tinted with `color` so every badge recolors uniformly:
+        // some symbolic icons (transform-scale, code-context) are not auto-recolored
+        // by the icon theme and would otherwise show a default grey, reading as
+        // "disabled" next to the recolored memory badge.
+        isMask: true
         opacity: 0.7
         ToolTip.delay: Kirigami.Units.toolTipDelay
         ToolTip.visible: badgeHover.hovered && badge.visible
