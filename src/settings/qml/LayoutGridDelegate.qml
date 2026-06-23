@@ -56,6 +56,26 @@ Item {
     width: cellWidth
     height: cellHeight
 
+    // Small capability indicator (the memory / reflow / script-state card badges).
+    // One definition keeps the icon sizing, opacity, and hover-tooltip wiring in a
+    // single place; each instance sets only visible/source/color/text.
+    component CapabilityBadge: Kirigami.Icon {
+        id: badge
+
+        property string tooltipText
+
+        implicitWidth: Kirigami.Units.iconSizes.small
+        implicitHeight: Kirigami.Units.iconSizes.small
+        opacity: 0.7
+        ToolTip.delay: Kirigami.Units.toolTipDelay
+        ToolTip.visible: badgeHover.hovered && badge.visible
+        ToolTip.text: badge.tooltipText
+
+        HoverHandler {
+            id: badgeHover
+        }
+    }
+
     // Register a per-layout deep-link anchor ("layout:<id>") with the host
     // page's reveal registry so a layouts search result scrolls to and pulses
     // this exact card (expanding its group card if collapsed). Deferred via
@@ -340,73 +360,33 @@ Item {
                 }
 
                 // Memory indicator for algorithms that persist split state
-                Kirigami.Icon {
+                CapabilityBadge {
                     visible: root.modelData.supportsMemory === true
                     source: "document-save-symbolic"
-                    implicitWidth: Kirigami.Units.iconSizes.small
-                    implicitHeight: Kirigami.Units.iconSizes.small
                     color: Kirigami.Theme.positiveTextColor
-                    opacity: 0.7
                     Accessible.name: i18n("Persistent algorithm")
-                    ToolTip.delay: Kirigami.Units.toolTipDelay
-                    ToolTip.visible: memoryIconMA.containsMouse && visible
-                    ToolTip.text: i18n("Remembers split positions across window changes")
-
-                    MouseArea {
-                        id: memoryIconMA
-
-                        anchors.fill: parent
-                        hoverEnabled: true
-                        acceptedButtons: Qt.NoButton
-                    }
+                    tooltipText: i18n("Remembers split positions across window changes")
                 }
 
                 // Reflow indicator for algorithms that adjust the layout when a
                 // tiled window is interactively resized.
-                Kirigami.Icon {
+                CapabilityBadge {
                     visible: root.modelData.reflowsOnResize === true
                     source: "transform-scale-symbolic"
-                    implicitWidth: Kirigami.Units.iconSizes.small
-                    implicitHeight: Kirigami.Units.iconSizes.small
                     color: Kirigami.Theme.highlightColor
-                    opacity: 0.7
                     Accessible.name: i18n("Reflows on resize")
-                    ToolTip.delay: Kirigami.Units.toolTipDelay
-                    ToolTip.visible: reflowIconMA.containsMouse && visible
-                    ToolTip.text: i18n("Reflows neighbouring windows when you resize a tiled window")
-
-                    MouseArea {
-                        id: reflowIconMA
-
-                        anchors.fill: parent
-                        hoverEnabled: true
-                        acceptedButtons: Qt.NoButton
-                    }
+                    tooltipText: i18n("Reflows neighbouring windows when you resize a tiled window")
                 }
 
                 // Script-state indicator for scripted algorithms that persist an
-                // opaque per-screen state bag across retiles.
-                Kirigami.Icon {
+                // opaque per-screen state bag across retiles. Distinct colour from
+                // the reflow badge so the two are tellable apart when both show.
+                CapabilityBadge {
                     visible: root.modelData.supportsScriptState === true
                     source: "code-context-symbolic"
-                    implicitWidth: Kirigami.Units.iconSizes.small
-                    implicitHeight: Kirigami.Units.iconSizes.small
-                    // Distinct from the reflow badge's highlight colour so the two
-                    // are tellable apart when an algorithm shows both.
                     color: Kirigami.Theme.neutralTextColor
-                    opacity: 0.7
                     Accessible.name: i18n("Persistent script state")
-                    ToolTip.delay: Kirigami.Units.toolTipDelay
-                    ToolTip.visible: scriptStateIconMA.containsMouse && visible
-                    ToolTip.text: i18n("Remembers script-managed layout state across window changes")
-
-                    MouseArea {
-                        id: scriptStateIconMA
-
-                        anchors.fill: parent
-                        hoverEnabled: true
-                        acceptedButtons: Qt.NoButton
-                    }
+                    tooltipText: i18n("Remembers script-managed layout state across window changes")
                 }
 
                 QFZCommon.AspectRatioBadge {

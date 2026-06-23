@@ -1431,7 +1431,10 @@ private:
     // skips these so a per-desktop tweak survives a settings refresh and is never
     // written into the global config — keeping the adjustment local to that
     // (screen, desktop, activity). Cleared on an algorithm switch and when the
-    // user changes the corresponding global value in settings.
+    // user changes the corresponding global value in settings. This is
+    // within-session state only: it is not persisted, so the per-desktop tweak
+    // does not survive a daemon restart (neither does the value it guards —
+    // autotile persistence is per-window, not per-desktop ratio/count).
     QSet<PhosphorEngine::TilingStateKey> m_userTunedSplitRatio;
     QSet<PhosphorEngine::TilingStateKey> m_userTunedMasterCount;
 

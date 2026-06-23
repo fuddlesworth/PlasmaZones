@@ -49,7 +49,7 @@ struct WindowInfo
  */
 struct ResizeEvent
 {
-    int index = -1; ///< Tiled index of the resized window (parallel to windowInfos)
+    int index = -1; ///< 0-based tiled index of the resized window (parallel to windowInfos)
     QRect oldRect; ///< Window frame before the resize (drag baseline)
     QRect newRect; ///< Window frame after the resize
     // At most one edge per axis is ever set: left XOR right, top XOR bottom.

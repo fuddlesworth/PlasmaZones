@@ -193,6 +193,36 @@ private Q_SLOTS:
         // skipped and the bag stays empty.
         QVERIFY(state.scriptState().isEmpty());
     }
+
+    // Cells in a partial last row are not column-aligned (the algorithm splits that
+    // row equally), so dragging their column edge must NOT move the shared column
+    // boundary that the full rows above use.
+    void partialRowColumnDragIsNoOp()
+    {
+        LuauTileAlgorithm algo(gridPath(), m_watchdog);
+        TilingState state(QStringLiteral("s"));
+        for (int i = 0; i < 5; ++i) { // cols=3, rows=2 → last row has 2 (partial)
+            state.addWindow(QStringLiteral("w%1").arg(i));
+        }
+
+        const QVector<QRect> before = algo.calculateZones(params(&state, 5));
+        QCOMPARE(before.size(), 5);
+
+        // w3 is the first cell of the partial last row (row=1, col=0).
+        ResizeEvent ev;
+        ev.index = 3;
+        ev.oldRect = before[3];
+        ev.newRect = QRect(before[3].x(), before[3].y(), before[3].width() + 200, before[3].height());
+        ev.right = true;
+        algo.onWindowResized(&state, ev);
+
+        const QVector<QRect> after = algo.calculateZones(params(&state, 5));
+        QCOMPARE(after.size(), 5);
+        // The full top row's three columns stay ~equal — the partial-row drag did
+        // not corrupt the shared column fractions.
+        QVERIFY(qAbs(after[0].width() - after[1].width()) <= 2);
+        QVERIFY(qAbs(after[1].width() - after[2].width()) <= 2);
+    }
 };
 
 QTEST_MAIN(TestLuauAlignedGrid)

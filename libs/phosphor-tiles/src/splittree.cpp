@@ -389,7 +389,15 @@ const SplitNode* SplitTree::splitOwningEdge(const QString& windowId, Edge edge) 
 
     const SplitNode* parent = child->parent;
     int depth = 0;
-    while (parent && depth <= MaxRuntimeTreeDepth) {
+    while (parent) {
+        if (depth > MaxRuntimeTreeDepth) {
+            // The parent chain should never exceed the tree height; exceeding the
+            // bound means a corrupt (cyclic) tree. Warn like the other structural
+            // guards in this file and treat the edge as a screen boundary.
+            qCWarning(PhosphorTiles::lcTilesLib)
+                << "SplitTree::splitOwningEdge: parent chain exceeded" << MaxRuntimeTreeDepth << "- corrupt tree";
+            return nullptr;
+        }
         if (parent->splitHorizontal == wantHorizontal) {
             const bool childIsFirst = (parent->first.get() == child);
             if (childIsFirst == wantFirst) {

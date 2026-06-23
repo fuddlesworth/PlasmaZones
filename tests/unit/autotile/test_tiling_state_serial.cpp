@@ -7,6 +7,7 @@
 #include <QJsonArray>
 #include <QScopedPointer>
 
+#include <PhosphorTiles/AutotileConstants.h>
 #include <PhosphorTiles/TilingState.h>
 #include "core/constants.h"
 #include "config/configdefaults.h"
@@ -230,6 +231,95 @@ private Q_SLOTS:
         QCOMPARE(restored->floatingWindows().size(), 0);
         // Invalid focused window should be ignored
         QVERIFY(restored->focusedWindow().isEmpty());
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // scriptState (opaque per-screen bag for scripted algorithms)
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    // A sanitized bag survives a toJson → fromJson round-trip unchanged.
+    void testScriptState_roundtrip()
+    {
+        PhosphorTiles::TilingState state(QStringLiteral("s"));
+        state.addWindow(QStringLiteral("A"));
+        QJsonObject bag;
+        bag[QStringLiteral("cols")] = 3;
+        bag[QStringLiteral("colFractions")] = QJsonArray({0.5, 0.25, 0.25});
+        bag[QStringLiteral("nested")] = QJsonObject{{QStringLiteral("k"), 1.5}};
+        state.setScriptState(bag); // already-sanitized per the setScriptState contract
+
+        const QJsonObject json = state.toJson();
+        QScopedPointer<PhosphorTiles::TilingState> restored(PhosphorTiles::TilingState::fromJson(json));
+        QVERIFY(!restored.isNull());
+        QCOMPARE(restored->scriptState(), bag);
+    }
+
+    // An empty bag is omitted from the serialized JSON (not written as an empty
+    // object) and round-trips back to empty.
+    void testScriptState_emptyOmitted()
+    {
+        PhosphorTiles::TilingState state(QStringLiteral("s"));
+        state.addWindow(QStringLiteral("A"));
+        const QJsonObject json = state.toJson();
+        QVERIFY(!json.contains(QStringLiteral("scriptState")));
+
+        QScopedPointer<PhosphorTiles::TilingState> restored(PhosphorTiles::TilingState::fromJson(json));
+        QVERIFY(!restored.isNull());
+        QVERIFY(restored->scriptState().isEmpty());
+    }
+
+    // sanitizeScriptState drops non-finite (NaN/±Inf) numeric leaves while keeping
+    // the finite siblings — the script trust boundary's NaN guard.
+    void testScriptState_sanitizeDropsNonFinite()
+    {
+        QJsonObject bag;
+        bag[QStringLiteral("good")] = 1.5;
+        bag[QStringLiteral("inf")] = QJsonValue(qInf());
+        bag[QStringLiteral("ninf")] = QJsonValue(-qInf());
+        bag[QStringLiteral("nan")] = QJsonValue(qQNaN());
+
+        const QJsonObject cleaned = PhosphorTiles::TilingState::sanitizeScriptState(bag);
+        QVERIFY(cleaned.contains(QStringLiteral("good")));
+        QVERIFY(qFuzzyCompare(cleaned.value(QStringLiteral("good")).toDouble(), 1.5));
+        QVERIFY(!cleaned.contains(QStringLiteral("inf")));
+        QVERIFY(!cleaned.contains(QStringLiteral("ninf")));
+        QVERIFY(!cleaned.contains(QStringLiteral("nan")));
+    }
+
+    // sanitizeScriptState drops the entire bag when its serialized size exceeds the
+    // byte cap (ScriptStateMaxBytes = 64 KiB).
+    void testScriptState_sanitizeByteCapDropsBag()
+    {
+        QJsonObject bag;
+        bag[QStringLiteral("blob")] = QString(70 * 1024, QLatin1Char('x')); // > 64 KiB
+        const QJsonObject cleaned = PhosphorTiles::TilingState::sanitizeScriptState(bag);
+        QVERIFY(cleaned.isEmpty());
+    }
+
+    // sanitizeScriptState prunes nesting deeper than ScriptStateMaxDepth (16) while
+    // preserving the shallow keys above the cap.
+    void testScriptState_sanitizeDepthCapPrunes()
+    {
+        // Build a chain nested well past the depth cap under a sibling shallow key.
+        QJsonObject deep{{QStringLiteral("leaf"), 1.0}};
+        for (int i = 0; i < 20; ++i) {
+            deep = QJsonObject{{QStringLiteral("n"), deep}};
+        }
+        QJsonObject bag;
+        bag[QStringLiteral("shallow")] = 2.0;
+        bag[QStringLiteral("deep")] = deep;
+
+        const QJsonObject cleaned = PhosphorTiles::TilingState::sanitizeScriptState(bag);
+        // The shallow sibling survives; the over-deep chain is pruned to a bounded
+        // depth rather than retained in full or dropping the whole bag.
+        QVERIFY(cleaned.contains(QStringLiteral("shallow")));
+        int depth = 0;
+        QJsonObject cursor = cleaned.value(QStringLiteral("deep")).toObject();
+        while (cursor.contains(QStringLiteral("n"))) {
+            cursor = cursor.value(QStringLiteral("n")).toObject();
+            ++depth;
+        }
+        QVERIFY(depth <= PhosphorTiles::AutotileDefaults::ScriptStateMaxDepth);
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
