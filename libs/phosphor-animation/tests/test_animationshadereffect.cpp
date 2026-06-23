@@ -139,9 +139,39 @@ private Q_SLOTS:
         original.bufferFilter = QStringLiteral("linear");
         original.bufferFilters = {QStringLiteral("nearest"), QStringLiteral("linear")};
         original.useDepthBuffer = true;
+        original.geometryGridSubdivisions = 40;
 
         const AnimationShaderEffect restored = AnimationShaderEffect::fromJson(original.toJson());
         QCOMPARE(restored, original);
+    }
+
+    /// `geometryGrid` is the per-axis quad subdivision count for
+    /// vertex-stage geometry shaders. It is clamped to >= 0 at parse time
+    /// (a negative count is meaningless) and omitted from `toJson` when 0
+    /// (terse-by-default, same idiom as `fboExtent` / `multipass`). Pin
+    /// both so a regression that drops the clamp or the omit surfaces in
+    /// CI rather than as a broken geometry transition.
+    void testFromJsonGeometryGrid()
+    {
+        QJsonObject obj;
+        obj.insert(QLatin1String("id"), QStringLiteral("test"));
+        obj.insert(QLatin1String("fragmentShader"), QStringLiteral("effect.frag"));
+
+        // Negative clamps to 0.
+        obj.insert(QLatin1String("geometryGrid"), -5);
+        QCOMPARE(AnimationShaderEffect::fromJson(obj).geometryGridSubdivisions, 0);
+
+        // A positive value round-trips and is emitted.
+        obj.insert(QLatin1String("geometryGrid"), 48);
+        const AnimationShaderEffect parsed = AnimationShaderEffect::fromJson(obj);
+        QCOMPARE(parsed.geometryGridSubdivisions, 48);
+        QCOMPARE(parsed.toJson().value(QLatin1String("geometryGrid")).toInt(), 48);
+
+        // Zero (the default) is omitted from toJson entirely.
+        AnimationShaderEffect zero;
+        zero.id = QStringLiteral("test");
+        zero.fragmentShaderPath = QStringLiteral("effect.frag");
+        QVERIFY(!zero.toJson().contains(QLatin1String("geometryGrid")));
     }
 
     /// `bufferScale` is clamped to `[0.125, 1.0]` at parse time so a

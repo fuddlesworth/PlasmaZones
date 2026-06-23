@@ -177,6 +177,15 @@ struct ShaderTransition
     /// Anchor-extent transitions (the default) keep the window-sized
     /// quad and uniforms.
     bool surfaceExtent = false;
+    /// Per-axis quad subdivision count for vertex-stage geometry
+    /// deformation, copied from the effect's `geometryGrid` metadata.
+    /// 0 (default) means `apply()` emits the single output-spanning
+    /// surface quad; > 0 means it emits an NxN grid of `WindowQuad` cells
+    /// over the window's destination rect so a custom vertex shader has
+    /// interior vertices to displace — the `flow` window-move effect lags
+    /// trailing grid rows behind the leading edge. Only honoured when
+    /// `surfaceExtent` is also true.
+    int gridSubdivisions = 0;
     /// Per-leg frame counter. Bumped each paintWindow tick where this
     /// transition feeds the shader; reset to 0 on every fresh
     /// beginShaderTransition install (or supersession). Mirrors the daemon's

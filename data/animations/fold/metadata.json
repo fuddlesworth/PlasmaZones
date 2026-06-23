@@ -1,0 +1,14 @@
+{
+    "id": "fold",
+    "name": "Fold",
+    "description": "Geometry move and resize transition where the window folds up like an accordion as it travels and unfolds flat into its destination zone. The creases run across the direction of motion and pick up a soft shadow at the peak of the fold, so the window looks like a sheet of paper tucking into the slot and opening out again once it lands.",
+    "author": "PlasmaZones",
+    "version": "1.0",
+    "category": "Geometry",
+    "appliesTo": ["geometry"],
+    "fragmentShader": "effect.frag",
+    "vertexShader": "effect.vert",
+    "fboExtent": "surface",
+    "geometryGrid": 48,
+    "parameters": []
+}
