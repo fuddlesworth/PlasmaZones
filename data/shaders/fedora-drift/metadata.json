@@ -2,7 +2,7 @@
     "id": "fedora-drift",
     "name": "Fedora Drift",
     "category": "Branded",
-    "description": "Procedural Fedora infinity-f logo drawn as SDF geometry, drifting through the scene \u2014 neon tube strokes animate with per-part audio reactivity, bass shatter, shockwave rings, and edge sparks against an icy northern-lights sky",
+    "description": "A procedural Fedora infinity-f logo drawn as SDF geometry drifts through the scene. Neon tube strokes animate with per-part audio reactivity, bass shatter, shockwave rings, and edge sparks against an icy northern-lights sky",
     "author": "PlasmaZones",
     "version": "1.0",
     "fragmentShader": "effect.frag",

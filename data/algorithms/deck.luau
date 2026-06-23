@@ -7,7 +7,7 @@ return pluau.algorithm {
     metadata = {
         name = "Deck",
         id = "deck",
-        description = "Focused window takes the left portion; remaining windows peek from the right edge. Ratio controls focused window width",
+        description = "Focused window takes the left portion. Remaining windows peek from the right edge. Ratio controls focused window width",
         producesOverlappingZones = true,
         supportsMasterCount = false,
         supportsSplitRatio = true,

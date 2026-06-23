@@ -7,7 +7,7 @@ return pluau.algorithm {
     metadata = {
         name = "Paper",
         id = "paper",
-        description = "Equal-width overlapping pages like a document viewer; splitRatio controls page width",
+        description = "Equal-width overlapping pages like a document viewer, where splitRatio controls page width",
         producesOverlappingZones = true,
         supportsMasterCount = false,
         supportsSplitRatio = true,

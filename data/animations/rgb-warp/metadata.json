@@ -1,7 +1,7 @@
 {
     "id": "rgb-warp",
     "name": "RGB Warp",
-    "description": "Vertical chromatic-aberration ripple — RGB channels lift off the top of the window at slightly different speeds",
+    "description": "A vertical chromatic-aberration ripple. The RGB channels lift off the top of the window at slightly different speeds",
     "author": "PlasmaZones",
     "version": "1.0",
     "category": "Glitch",

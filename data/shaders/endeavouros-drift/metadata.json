@@ -2,7 +2,7 @@
     "id": "endeavouros-drift",
     "name": "EndeavourOS Drift",
     "category": "Branded",
-    "description": "Procedural EndeavourOS tri-sail logo as three overlapping SDF polygon shapes drifting over a constellation network of orbiting dots connected by proximity lines. Logo interior features simplex noise flow tinted per-sail, per-sail bass pulses, summit convergence glow, and shared-edge highlights with a warm purple-to-coral gradient wash background and dense per-band audio reactivity",
+    "description": "A procedural EndeavourOS tri-sail logo built as three overlapping SDF polygon shapes drifts over a constellation network of orbiting dots connected by proximity lines. The logo interior shows simplex noise flow tinted per sail, per-sail bass pulses, a summit convergence glow, and shared-edge highlights, over a warm purple-to-coral gradient wash background with dense per-band audio reactivity",
     "author": "PlasmaZones",
     "version": "1.0",
     "fragmentShader": "effect.frag",

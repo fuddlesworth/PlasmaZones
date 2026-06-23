@@ -111,7 +111,7 @@ QString fieldDescription(Field f)
     case Field::DesktopFile:
         return PhosphorI18n::tr("The application's desktop entry file name.");
     case Field::WindowRole:
-        return PhosphorI18n::tr("The window's X11 role (WM_WINDOW_ROLE); empty for Wayland-native windows.");
+        return PhosphorI18n::tr("The window's X11 role (WM_WINDOW_ROLE). Empty for Wayland-native windows.");
     case Field::Pid:
         return PhosphorI18n::tr("The window's process ID.");
     case Field::Title:
@@ -162,7 +162,7 @@ QString fieldDescription(Field f)
         return PhosphorI18n::tr("Whether the window has been floated out of tiling (snap or autotile).");
     case Field::IsSnapped:
         return PhosphorI18n::tr(
-            "Whether the window is snapped into a zone (manual-zone mode; tiled windows are not snapped).");
+            "Whether the window is snapped into a zone (manual-zone mode, where tiled windows are not snapped).");
     case Field::Zone:
         return PhosphorI18n::tr("The zone the window is snapped into (manual-zone mode only).");
     case Field::ScreenId:

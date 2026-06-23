@@ -153,7 +153,7 @@
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/editor/main.cpp" line="145"/>
+        <location filename="../src/editor/main.cpp" line="151"/>
         <source>Create new layout</source>
         <translation type="unfinished"></translation>
     </message>
@@ -231,7 +231,7 @@
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/editor/main.cpp" line="141"/>
+        <location filename="../src/editor/main.cpp" line="147"/>
         <source>Layout ID to edit</source>
         <translation type="unfinished"></translation>
     </message>
@@ -259,6 +259,11 @@
     <message>
         <location filename="../src/daemon/daemon/osd.cpp" line="221"/>
         <source>Disabled on this activity</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/daemon/daemon/osd.cpp" line="251"/>
+        <source>No layout assigned</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
@@ -290,7 +295,7 @@
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/editor/main.cpp" line="146"/>
+        <location filename="../src/editor/main.cpp" line="152"/>
         <source>Open in read-only preview mode</source>
         <translation type="unfinished"></translation>
     </message>
@@ -398,12 +403,12 @@
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/editor/main.cpp" line="143"/>
+        <location filename="../src/editor/main.cpp" line="149"/>
         <source>Target screen name</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/daemon/daemon/osd.cpp" line="261"/>
+        <location filename="../src/daemon/daemon/osd.cpp" line="280"/>
         <source>Tiling: %1</source>
         <translation type="unfinished"></translation>
     </message>
@@ -438,7 +443,7 @@
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/editor/main.cpp" line="136"/>
+        <location filename="../src/editor/main.cpp" line="142"/>
         <source>Visual layout editor for PlasmaZones</source>
         <translation type="unfinished"></translation>
     </message>
@@ -521,22 +526,22 @@
         </translation>
     </message>
     <message>
-        <location filename="../src/daemon/daemon.cpp" line="1675"/>
+        <location filename="../src/daemon/daemon.cpp" line="1772"/>
         <source>The PlasmaZones KWin effect plugin is not installed where KWin can find it. Reinstall PlasmaZones.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/daemon/daemon.cpp" line="1714"/>
+        <location filename="../src/daemon/daemon.cpp" line="1811"/>
         <source>The PlasmaZones KWin effect was built for KWin %1 but KWin %2 is running, so KWin will not load it. Rebuild and reinstall PlasmaZones against the running KWin. On NixOS, install via the flake&apos;s nixosModules or overlay (not packages.default).</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/daemon/daemon.cpp" line="1743"/>
+        <location filename="../src/daemon/daemon.cpp" line="1840"/>
         <source>The PlasmaZones KWin effect has not registered with the daemon, so window dragging and shortcuts will not work. Make sure it is enabled in System Settings &gt; Desktop Effects, then restart the Plasma session.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/daemon/daemon.cpp" line="1762"/>
+        <location filename="../src/daemon/daemon.cpp" line="1859"/>
         <source>PlasmaZones: window manager integration inactive</source>
         <translation type="unfinished"></translation>
     </message>

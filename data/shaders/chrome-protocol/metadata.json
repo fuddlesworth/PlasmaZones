@@ -2,7 +2,7 @@
     "id": "chrome-protocol",
     "name": "Chrome Protocol",
     "category": "Cyberpunk",
-    "description": "3D stacked targeting array \u2014 7 concentric rings raymarched in Z with an orbiting camera, live 7-segment audio readout, rotating HUD panels, hexagonal background grid, and a spectrum-bar strip that replaces the original rolling blocks. Bass breathes the ring thickness and camera orbit, mids drive rotation speed, treble fractures the grid with glitch bands.",
+    "description": "A 3D stacked targeting array of 7 concentric rings raymarched in Z with an orbiting camera, a live 7-segment audio readout, rotating HUD panels, a hexagonal background grid, and a spectrum-bar strip that replaces the original rolling blocks. Bass breathes the ring thickness and camera orbit, mids drive rotation speed, and treble fractures the grid with glitch bands.",
     "author": "PlasmaZones",
     "version": "1.0",
     "fragmentShader": "effect.frag",

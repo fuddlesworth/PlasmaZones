@@ -1,7 +1,7 @@
 {
     "id": "heat-melt",
     "name": "Heat Melt",
-    "description": "Heat-driven melt — simplex noise carves the surface from a bottom-right corner with radial falloff.",
+    "description": "A heat-driven melt where simplex noise carves the surface away from the bottom-right corner with radial falloff.",
     "author": "PlasmaZones (ported from liixini/shaders, https://github.com/liixini/shaders)",
     "version": "1.0",
     "category": "Particle",

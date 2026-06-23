@@ -312,7 +312,7 @@ QString errorMessage(Result r)
     case Result::PackTooLarge:
         return PhosphorI18n::tr("The shader pack exceeds the maximum allowed size or file count.");
     case Result::CopyFailed:
-        return PhosphorI18n::tr("Copying the shader pack failed; the partial install was rolled back.");
+        return PhosphorI18n::tr("Copying the shader pack failed. The partial install was rolled back.");
     }
     return PhosphorI18n::tr("Unknown shader pack installer error.");
 }

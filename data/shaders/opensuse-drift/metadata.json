@@ -2,7 +2,7 @@
     "id": "opensuse-drift",
     "name": "openSUSE Drift",
     "category": "Branded",
-    "description": "Iridescent chameleon scale field with thin-film color shifting, Turing pattern markings, curl noise dust particles, and constructive SDF Geeko logo \u2014 audio-reactive chromatophore cascade, tail pulse, turret eye, camouflage shimmer, nanocrystal prism bursts, and scale ripple propagation",
+    "description": "An iridescent chameleon scale field with thin-film color shifting, Turing pattern markings, curl noise dust particles, and a constructive SDF Geeko logo. The audio reactivity drives a chromatophore cascade, tail pulse, turret eye, camouflage shimmer, nanocrystal prism bursts, and scale ripple propagation",
     "author": "PlasmaZones",
     "version": "1.0",
     "fragmentShader": "effect.frag",

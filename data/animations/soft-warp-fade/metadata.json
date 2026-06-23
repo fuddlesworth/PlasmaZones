@@ -1,7 +1,7 @@
 {
     "id": "soft-warp-fade",
     "name": "Soft Warp Fade",
-    "description": "Subtle noise warp combined with eased fade — a gentle, organic transition.",
+    "description": "A subtle noise warp combined with an eased fade for a gentle, organic transition.",
     "author": "PlasmaZones (ported from liixini/shaders, https://github.com/liixini/shaders)",
     "version": "1.0",
     "category": "Fade",

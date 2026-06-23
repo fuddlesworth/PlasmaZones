@@ -7,7 +7,7 @@ return pluau.algorithm {
     metadata = {
         name = "Corner Master",
         id = "corner-master",
-        description = "Master window in a corner; rest fill the L-shaped remainder",
+        description = "Master window in a corner, and the rest fill the L-shaped remainder",
         producesOverlappingZones = false,
         supportsMasterCount = false,
         supportsSplitRatio = true,

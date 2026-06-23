@@ -1,7 +1,7 @@
 {
     "id": "hexagon",
     "name": "Hexagon",
-    "description": "Tron-style hex-tile dissolve — window splits into shrinking hexagonal tiles overlaid with glowing edge lines",
+    "description": "A Tron-style hex-tile dissolve. The window splits into shrinking hexagonal tiles overlaid with glowing edge lines",
     "author": "PlasmaZones",
     "version": "1.0",
     "category": "Tile",

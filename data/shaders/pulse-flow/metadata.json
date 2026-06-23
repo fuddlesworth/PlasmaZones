@@ -2,7 +2,7 @@
     "id": "pulse-flow",
     "name": "Pulse Flow",
     "category": "Energy",
-    "description": "Lightweight energy aura: zone borders emit flowing energy that spirals inward through ping-pong feedback, building smooth radiant halos; bass drives emission surges and radial pulses, mids shift the spiral topology and cycle colors, treble injects spark traces; designed for full-screen performance",
+    "description": "A lightweight energy aura. Zone borders emit flowing energy that spirals inward through ping-pong feedback to build smooth radiant halos. Bass drives emission surges and radial pulses, mids shift the spiral topology and cycle colors, and treble injects spark traces. Built for full-screen performance",
     "author": "PlasmaZones",
     "version": "1.0",
     "multipass": true,

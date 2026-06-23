@@ -1,7 +1,7 @@
 {
     "id": "perlin",
     "name": "Perlin",
-    "description": "Perlin-noise threshold reveal — surface appears where noise crosses the rising progress threshold.",
+    "description": "A Perlin-noise threshold reveal where the surface appears as noise crosses the rising progress threshold.",
     "author": "PlasmaZones (ported from liixini/shaders, https://github.com/liixini/shaders)",
     "version": "1.0",
     "category": "Tile",

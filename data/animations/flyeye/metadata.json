@@ -1,7 +1,7 @@
 {
     "id": "flyeye",
     "name": "Flyeye",
-    "description": "Faceted-lens distortion — UV oscillates with cosine/sine grid, settling as the surface fades.",
+    "description": "Faceted-lens distortion. The UV oscillates on a cosine/sine grid and settles as the surface fades.",
     "author": "PlasmaZones (ported from liixini/shaders, https://github.com/liixini/shaders)",
     "version": "1.0",
     "category": "Distortion",

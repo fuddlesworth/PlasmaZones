@@ -1,7 +1,7 @@
 {
     "id": "polka-dots-curtain",
     "name": "Polka Dots Curtain",
-    "description": "Polka-dots curtain — reveal threshold scales with distance from origin so dots open faster near a corner.",
+    "description": "A polka-dots curtain where the reveal threshold scales with distance from the origin, so dots open faster near a corner.",
     "author": "PlasmaZones (ported from liixini/shaders, https://github.com/liixini/shaders)",
     "version": "1.0",
     "category": "Tile",

@@ -1,7 +1,7 @@
 {
     "id": "voronoi-shatter",
     "name": "Voronoi Shatter",
-    "description": "Voronoi-cell shatter — each shard reveals at its own threshold via per-cell hash.",
+    "description": "A Voronoi-cell shatter where each shard reveals at its own threshold using a per-cell hash.",
     "author": "PlasmaZones (ported from liixini/shaders, https://github.com/liixini/shaders)",
     "version": "1.0",
     "category": "Tile",

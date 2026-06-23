@@ -7,7 +7,7 @@ return pluau.algorithm {
     metadata = {
         name = "Zen",
         id = "zen",
-        description = "Centered column with margins — focused, distraction-free layout",
+        description = "Centered column with margins for a focused, distraction-free layout",
         producesOverlappingZones = false,
         supportsMasterCount = false,
         supportsSplitRatio = true,

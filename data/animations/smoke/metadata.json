@@ -1,7 +1,7 @@
 {
     "id": "smoke",
     "name": "Smoke",
-    "description": "Domain-warped fbm smoke — the surface dissipates into curling smoke. Asymmetric reveal vs. dissolve formula.",
+    "description": "Domain-warped fbm smoke. The surface dissipates into curling smoke, with different formulas for reveal and dissolve.",
     "author": "PlasmaZones (ported from liixini/shaders, https://github.com/liixini/shaders)",
     "version": "1.0",
     "category": "Particle",

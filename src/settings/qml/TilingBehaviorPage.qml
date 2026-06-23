@@ -137,7 +137,7 @@ SettingsFlickable {
                 SettingsRow {
                     title: i18n("Respect minimum size")
                     searchAnchor: "respectMinimumSize"
-                    description: i18n("Prevent windows from being resized below their minimum; may leave gaps")
+                    description: i18n("Prevent windows from being resized below their minimum, which may leave gaps")
 
                     SettingsSwitch {
                         checked: appSettings.autotileRespectMinimumSize

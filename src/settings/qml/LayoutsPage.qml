@@ -304,7 +304,7 @@ SettingsFlickable {
                 onClicked: filterBar.popupFilterMenu()
                 Accessible.name: filterBar.hasActiveFilters ? i18n("Filter (active)") : i18n("Filter")
                 ToolTip.visible: hovered
-                ToolTip.text: filterBar.hasActiveFilters ? i18n("Filters active — click to change") : i18n("Filter")
+                ToolTip.text: filterBar.hasActiveFilters ? i18n("Filters active. Click to change") : i18n("Filter")
             }
 
             Button {

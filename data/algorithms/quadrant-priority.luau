@@ -7,7 +7,7 @@ return pluau.algorithm {
     metadata = {
         name = "Quadrant Priority",
         id = "quadrant-priority",
-        description = "First window gets a large corner; rest fill the L-shaped remainder",
+        description = "First window gets a large corner, and the rest fill the L-shaped remainder",
         producesOverlappingZones = false,
         supportsMasterCount = false,
         supportsSplitRatio = true,

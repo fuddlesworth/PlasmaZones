@@ -1,7 +1,7 @@
 {
     "id": "focus",
     "name": "Focus",
-    "description": "Camera-focus rack — surface comes/goes via a depth-of-field-style blur ring.",
+    "description": "A camera-focus rack where the surface appears and disappears through a depth-of-field-style blur ring.",
     "author": "PlasmaZones (ported from Burn-My-Windows by Simon Schneegans, https://github.com/Schneegans/Burn-My-Windows)",
     "version": "1.0",
     "category": "Fade",

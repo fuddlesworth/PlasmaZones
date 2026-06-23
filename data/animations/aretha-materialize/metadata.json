@@ -1,7 +1,7 @@
 {
     "id": "aretha-materialize",
     "name": "Aretha Materialize",
-    "description": "Cyberpunk hex-grid materialize: the window resolves hexagon-by-hexagon along a diagonal data sweep with a glowing cyan leading edge, chromatic glitch and scanlines — matching the Aretha / Ghost-in-the-Shell shell aesthetic.",
+    "description": "The window resolves hexagon by hexagon along a diagonal data sweep, with a glowing cyan leading edge, chromatic glitch, and scanlines in the Aretha / Ghost-in-the-Shell style.",
     "author": "PlasmaZones",
     "version": "1.0",
     "category": "Glitch",

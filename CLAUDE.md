@@ -79,6 +79,17 @@ PlasmaZones: window tiling + zone management for KDE Plasma. Qt6, KF6, Kirigami,
 - QML: `i18n()` / `i18nc()` (via `PhosphorLocalizedContext`)
 - Extract: `cmake --build build --target update-ts`
 
+## User-Facing Text (Plain Prose)
+User-facing strings MUST read like plain, human-written prose with no LLM tics. This applies to every surface a user reads: `description`/`name` fields in `data/**/*.json` (animation, shader, layout metadata), `data/whatsnew.json` highlights, `data/algorithms/*.luau` `description` fields, `CHANGELOG.md` entries, and every translatable string (`PhosphorI18n::tr()`, QML `i18n()`/`i18nc()`).
+
+- NEVER use an em-dash (`—`, or the `—` escape) to splice clauses or tack on an appositive. Write two sentences, or join with a plain word (and, with, where, so, because).
+- NEVER use a clause-splicing semicolon to join two independent clauses. Split into sentences or use "and". Semicolons inside backticked code, and semicolons separating genuine comma-bearing list items, are fine.
+- NEVER use a spaced hyphen (` - `) as a stand-in dash. Rewrite the sentence.
+- NEVER use a dramatic "Label: payload" colon for effect. The Keep-a-Changelog `**Term**: description` lead-in and real field labels are fine.
+- AVOID rule-of-three triads and "not just X, but Y" constructions used for flourish.
+- A literal typographic separator between two nouns is acceptable (e.g. the `%1 — %2` Layout/Zone display format) and so are settings-path breadcrumbs (e.g. `Settings → Snapping`).
+- These rules do NOT apply to code comments, log/`qCWarning` messages, or other non-user-facing text.
+
 ## Settings
 
 ### Architecture

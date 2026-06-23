@@ -31,7 +31,7 @@ return pluau.algorithm {
     metadata = {
         name = "Cluster",
         id = "cluster",
-        description = "Groups windows by application — same app windows are placed adjacent",
+        description = "Groups windows by application so windows from the same app are placed adjacent",
         producesOverlappingZones = false,
         supportsMasterCount = false,
         supportsSplitRatio = false,

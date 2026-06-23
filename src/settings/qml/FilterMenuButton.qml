@@ -107,7 +107,7 @@ ToolButton {
     Accessible.name: root.hasActiveFilters ? i18nc("@action:button", "Filter (active)") : i18nc("@action:button", "Filter")
     ToolTip.visible: hovered
     ToolTip.delay: Kirigami.Units.toolTipDelay
-    ToolTip.text: root.hasActiveFilters ? i18nc("@info:tooltip", "Filters active — click to change") : i18nc("@info:tooltip", "Filter")
+    ToolTip.text: root.hasActiveFilters ? i18nc("@info:tooltip", "Filters active. Click to change") : i18nc("@info:tooltip", "Filter")
 
     Menu {
         id: filterMenu

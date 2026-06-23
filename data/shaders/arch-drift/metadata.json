@@ -2,7 +2,7 @@
     "id": "arch-drift",
     "name": "Arch Drift",
     "category": "Branded",
-    "description": "Procedural Arch Linux mountain logo as 95-vertex SDF geometry drifting through scrolling terminal rain, isometric chevron grid, traveling data packets, and CRT scan lines. Logo interior features roiling cloud flow, lightning flashes, rain streaks, animated energy contour waves, summit beacon, and traveling edge pulses with dense per-band audio reactivity",
+    "description": "A procedural Arch Linux mountain logo built as 95-vertex SDF geometry drifts through scrolling terminal rain, an isometric chevron grid, traveling data packets, and CRT scan lines. The logo interior shows roiling cloud flow, lightning flashes, rain streaks, animated energy contour waves, a summit beacon, and traveling edge pulses with dense per-band audio reactivity",
     "author": "PlasmaZones",
     "version": "2.0",
     "fragmentShader": "effect.frag",
