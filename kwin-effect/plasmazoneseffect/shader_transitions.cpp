@@ -935,6 +935,10 @@ bool PlasmaZonesEffect::beginShaderTransition(KWin::EffectWindow* window,
     // the drawn quad + anchor uniforms to the window's output.
     transition.surfaceExtent =
         (eff.fboExtentKind == PhosphorAnimationShaders::AnimationShaderEffect::FboExtentKind::Surface);
+    // Vertex-stage grid deformation (e.g. `flow`): subdivide the surface
+    // quad so the vertex shader has interior vertices to displace. Only
+    // meaningful for surface-extent shaders, mirroring `apply()`'s guard.
+    transition.gridSubdivisions = transition.surfaceExtent ? eff.geometryGridSubdivisions : 0;
 
     // Translate the friendly parameter map (e.g. {"direction": 1,
     // "parallax": 0.2}) to slot keys, then pack each

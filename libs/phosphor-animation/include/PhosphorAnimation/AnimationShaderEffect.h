@@ -173,6 +173,20 @@ struct PHOSPHORANIMATION_EXPORT AnimationShaderEffect
     };
     FboExtentKind fboExtentKind = FboExtentKind::Anchor;
 
+    /// Per-axis subdivision count for geometry shaders that deform the
+    /// drawn quad in the vertex stage (e.g. the `flow` window-move
+    /// effect, whose grid rows lag behind the leading edge so the
+    /// window streams into its destination zone). 0 (the default) keeps
+    /// the single output-spanning quad every other surface-extent
+    /// shader uses. A value of N tells the kwin-effect's `apply()` to
+    /// subdivide that quad into an N×N grid via
+    /// `WindowQuadList::makeRegularGrid` so the vertex shader has
+    /// interior vertices to displace. Only meaningful together with
+    /// `fboExtent: "surface"`; ignored otherwise. JSON key
+    /// `"geometryGrid"`, omitted from `toJson` when 0 to keep authored
+    /// metadata terse, same idiom as `fboExtent` / `multipass`.
+    int geometryGridSubdivisions = 0;
+
     /// Lower / upper bounds on `bufferScale` (multipass FBO downscale
     /// factor). 0.125 means a 1/8 downscale on each axis (1/64 area —
     /// the lowest cost-floor that still gives Shadertoy-style buffer

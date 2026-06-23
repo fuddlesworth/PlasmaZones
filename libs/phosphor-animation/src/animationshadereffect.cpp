@@ -95,6 +95,8 @@ QJsonObject AnimationShaderEffect::toJson() const
         if (!fboExtentStr.isEmpty())
             obj.insert(QLatin1String("fboExtent"), fboExtentStr);
     }
+    if (geometryGridSubdivisions > 0)
+        obj.insert(QLatin1String("geometryGrid"), geometryGridSubdivisions);
     if (isMultipass)
         obj.insert(QLatin1String("multipass"), true);
     if (!bufferShaderPaths.isEmpty()) {
@@ -264,6 +266,11 @@ AnimationShaderEffect AnimationShaderEffect::fromJson(const QJsonObject& obj)
         parseFboExtent(fboExtentRaw, e.fboExtentKind);
     }
 
+    // `geometryGrid` (int): per-axis quad subdivisions for vertex-stage
+    // geometry deformation. Negative values are clamped to 0 (no grid);
+    // a missing field falls through to the struct default (0).
+    e.geometryGridSubdivisions = qMax(0, obj.value(QLatin1String("geometryGrid")).toInt());
+
     const QJsonArray params = obj.value(QLatin1String("parameters")).toArray();
     e.parameters.reserve(params.size());
     for (const QJsonValue& v : params) {
@@ -368,6 +375,8 @@ bool AnimationShaderEffect::operator==(const AnimationShaderEffect& other) const
     if (previewPath != other.previewPath)
         return false;
     if (fboExtentKind != other.fboExtentKind)
+        return false;
+    if (geometryGridSubdivisions != other.geometryGridSubdivisions)
         return false;
     if (isMultipass != other.isMultipass || useWallpaper != other.useWallpaper || bufferFeedback != other.bufferFeedback
         || useDepthBuffer != other.useDepthBuffer)

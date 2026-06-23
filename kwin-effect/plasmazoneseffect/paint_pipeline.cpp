@@ -1164,6 +1164,62 @@ void PlasmaZonesEffect::apply(KWin::EffectWindow* window, int mask, KWin::Window
         qLeft = qMin(qLeft, quads[i].left());
         qTop = qMin(qTop, quads[i].top());
     }
+
+    // Window-relative grid deformation (e.g. the `flow` window-move
+    // effect). Build an NxN grid over the window's DESTINATION frame rect
+    // — the same rect pushed as iToRect — so the vertex shader can pull
+    // trailing rows back toward iFromRect while the leading edge settles
+    // first. Anchoring the grid to the window (not the output, as the
+    // single-quad path below does) keeps the deformation resolution
+    // constant regardless of how small a zone the window snaps into: every
+    // cell lands on the window. Texcoords are emitted as plain card uv
+    // (0..1, row 0 at the window's top); KWin Y-flips window-quad
+    // texcoords on upload, so the flow vertex stage re-applies the
+    // canonical `1.0 - texCoord.y` flip (same as the shared kwin vertex
+    // stage) to recover card uv with y = 0 at the top. Displaced trailing
+    // vertices reach past the destination rect toward iFromRect;
+    // surface-extent draws with Region::infinite (see paintWindow), so
+    // they are not clipped.
+    if (st->gridSubdivisions > 0) {
+        // Destination frame rect == iToRect. The window already jumped
+        // there via moveResize, so the live frameGeometry is a safe
+        // fallback if a transition somehow lacks a recorded destination.
+        QRectF dst = st->toGeometry;
+        if (!dst.isValid() || dst.isEmpty()) {
+            dst = window->frameGeometry();
+        }
+        if (dst.isEmpty()) {
+            return;
+        }
+        // quad-space <-> screen-space is a pure translation at 1:1 logical
+        // scale; qLeft/qTop is the captured texture's top-left in quad
+        // space and textureGeo its top-left in screen space.
+        const double qOffX = qLeft - textureGeo.x();
+        const double qOffY = qTop - textureGeo.y();
+        const int n = st->gridSubdivisions;
+        quads.clear();
+        quads.reserve(n * n);
+        for (int gy = 0; gy < n; ++gy) {
+            const double v0 = static_cast<double>(gy) / n;
+            const double v1 = static_cast<double>(gy + 1) / n;
+            const double y0 = dst.y() + v0 * dst.height() + qOffY;
+            const double y1 = dst.y() + v1 * dst.height() + qOffY;
+            for (int gx = 0; gx < n; ++gx) {
+                const double u0 = static_cast<double>(gx) / n;
+                const double u1 = static_cast<double>(gx + 1) / n;
+                const double x0 = dst.x() + u0 * dst.width() + qOffX;
+                const double x1 = dst.x() + u1 * dst.width() + qOffX;
+                KWin::WindowQuad cell;
+                cell[0] = KWin::WindowVertex(x0, y0, u0, v0);
+                cell[1] = KWin::WindowVertex(x1, y0, u1, v0);
+                cell[2] = KWin::WindowVertex(x1, y1, u1, v1);
+                cell[3] = KWin::WindowVertex(x0, y1, u0, v1);
+                quads.append(cell);
+            }
+        }
+        return;
+    }
+
     const double ox = qLeft + (outputGeo.x() - textureGeo.x());
     const double oy = qTop + (outputGeo.y() - textureGeo.y());
     const double ow = outputGeo.width();
