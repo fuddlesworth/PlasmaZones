@@ -8,6 +8,7 @@ import QtQuick.Layouts
 import org.kde.kirigami as Kirigami
 import org.phosphor.animation
 import org.plasmazones.common as QFZCommon
+import "SearchAnchorHelpers.js" as SearchAnchors
 
 /**
  * @brief Grid delegate for displaying a single layout card
@@ -29,7 +30,7 @@ Item {
     // the root so child controls (auto-assign button, CategoryBadge) share a
     // single binding and stay consistent.
     readonly property bool globalAutoAssign: root.appSettings.autoAssignAllLayouts === true
-    // Selection state (bound from parent GridView)
+    // Selection state (bound by the hosting page against its selectedLayoutId)
     property bool isSelected: false
     property bool isHovered: false
     // Inner padding of the card body (border → content). Single-sourced so the
@@ -54,6 +55,24 @@ Item {
 
     width: cellWidth
     height: cellHeight
+
+    // Register a per-layout deep-link anchor ("layout:<id>") with the host
+    // page's reveal registry so a layouts search result scrolls to and pulses
+    // this exact card (expanding its group card if collapsed). Deferred via
+    // callLater so the subtree is attached before the parent-chain walk; mirrors
+    // WindowRuleSectionList's per-row registration. No-op when hosted outside a
+    // SettingsFlickable (pageFor returns null).
+    Component.onCompleted: Qt.callLater(function () {
+        var pg = SearchAnchors.pageFor(root);
+        if (pg)
+            pg.registerSearchAnchor("layout:" + root.modelData.id, root, SearchAnchors.cardFor(root));
+    })
+    Component.onDestruction: {
+        var pg = SearchAnchors.pageFor(root);
+        if (pg)
+            pg.unregisterSearchAnchor("layout:" + root.modelData.id);
+    }
+
     Accessible.name: modelData.name || i18n("Unnamed Layout")
     Accessible.description: i18n("Layout with %1 zones", modelData.zoneCount || 0)
     Accessible.role: Accessible.ListItem

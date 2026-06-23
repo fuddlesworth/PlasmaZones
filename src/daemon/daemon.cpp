@@ -764,9 +764,22 @@ bool Daemon::init()
     m_layoutManager->setSnappingPreferredProvider([this]() {
         return m_settings && m_settings->snappingEnabled();
     });
+    // Global "suppress default layout assignment" gate. When on, the level-1
+    // default synthesis above is short-circuited so an unassigned context gets
+    // no active layout (no engine activates) until the user assigns one — the
+    // same effective state as having no default providers configured. The
+    // per-context DefaultLayoutAssignment window rule overrides this either way.
+    m_layoutManager->setDefaultAssignmentSuppressedProvider([this]() {
+        return m_settings && m_settings->suppressDefaultLayoutAssignment();
+    });
     // Wire the compute service to the layout manager so tracked layouts
     // are evicted on removal (bounds m_trackedLayouts over time).
     m_layoutComputeService->setLayoutManager(m_layoutManager.get());
+
+    // Seed the curated default picker visibility on a fresh install (no-op when
+    // a layout-settings.json / autotile-overrides.json already exists), before
+    // loadLayouts() so the seeded hidden state merges onto each layout.
+    m_layoutManager->seedDefaultLayoutSettingsIfFresh(ConfigDefaults::defaultLayoutVisibilitySettings());
 
     // Load layouts (defaultLayout() reads settings internally)
     m_layoutManager->loadLayouts();
@@ -1523,6 +1536,13 @@ bool Daemon::init()
             // pattern used for the mode-toggle locked feedback in connectShortcutSignals().
             const bool osdEnabled = m_settings && m_settings->showOsdOnLayoutSwitch();
             for (const auto& osd : std::as_const(osdEntries)) {
+                // Suppressed context → no active layout; skip its OSD, mirroring
+                // the per-screen desktop-switch OSD gate in showOsdForScreens.
+                if (m_layoutManager
+                    && m_layoutManager->isContextActiveLayoutSuppressed(
+                        osd.screenId, currentDesktopForScreen(osd.screenId), activity)) {
+                    continue;
+                }
                 const PhosphorZones::AssignmentEntry::Mode mode = osd.isAutotile
                     ? PhosphorZones::AssignmentEntry::Autotile
                     : PhosphorZones::AssignmentEntry::Snapping;
@@ -1870,6 +1890,7 @@ void Daemon::stop()
         m_layoutManager->setDefaultLayoutIdProvider({});
         m_layoutManager->setDefaultAutotileAlgorithmProvider({});
         m_layoutManager->setSnappingPreferredProvider({});
+        m_layoutManager->setDefaultAssignmentSuppressedProvider({});
     }
 
     // Null the QML static registry / manager pointers BEFORE the m_running

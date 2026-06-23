@@ -59,6 +59,18 @@ public:
         Q_EMIT defaultLayoutIdChanged();
         Q_EMIT settingsChanged();
     }
+    bool suppressDefaultLayoutAssignment() const override
+    {
+        return m_suppressDefaultLayoutAssignment;
+    }
+    void setSuppressDefaultLayoutAssignment(bool suppress) override
+    {
+        if (m_suppressDefaultLayoutAssignment == suppress)
+            return;
+        m_suppressDefaultLayoutAssignment = suppress;
+        Q_EMIT suppressDefaultLayoutAssignmentChanged();
+        Q_EMIT settingsChanged();
+    }
 
     // IZoneActivationSettings
     bool snappingEnabled() const override
@@ -1165,6 +1177,7 @@ public:
 
 private:
     QString m_defaultLayoutId;
+    bool m_suppressDefaultLayoutAssignment = false;
     QString m_renderingBackend = ConfigDefaults::renderingBackend();
     bool m_snapAssistFeatureEnabled = false;
     bool m_snapAssistEnabled = false;

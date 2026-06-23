@@ -49,6 +49,57 @@ QString ConfigDefaults::layoutSettingsFilePath()
     return configDir() + QStringLiteral("/plasmazones/layout-settings.json");
 }
 
+QJsonObject ConfigDefaults::defaultLayoutVisibilitySettings()
+{
+    // Out-of-the-box the picker shows a curated subset; the rest start hidden
+    // (users re-show any via the eye toggle). Keys mirror layout-settings.json
+    // exactly. The "hiddenFromSelector" key and "autotile:" prefix match
+    // PhosphorZones::ZoneJsonKeys::HiddenFromSelector and
+    // PhosphorLayout::LayoutId::AutotilePrefix — kept as literals here so the
+    // config layer takes no phosphor-zones / phosphor-layout-api dependency.
+    const QJsonObject hidden{{QStringLiteral("hiddenFromSelector"), true}};
+
+    // Non-curated standard snapping layouts, by bundled layout UUID.
+    static const QStringList layoutIds{
+        QStringLiteral("{b8669c74-947a-4551-ba8b-79b6444439e8}"), // Fibonacci
+        QStringLiteral("{a40ad8ca-2d60-4418-92cc-01b83420918e}"), // Grid (3x2)
+        QStringLiteral("{0c9585bc-ecae-4e87-a6b8-9d34e9b791f2}"), // Priority Grid
+        QStringLiteral("{a11899b1-f0e3-4425-9363-acb71726c566}"), // Split Focus
+        QStringLiteral("{a83addbc-1907-45a8-a3d5-59dedf079030}"), // Wide
+    };
+
+    // Non-curated tiling algorithms (visible set: bsp, master-stack, monocle,
+    // columns, spiral, three-column, grid, deck).
+    static const QStringList algorithmIds{
+        QStringLiteral("cascade"),
+        QStringLiteral("centered-master"),
+        QStringLiteral("cluster"),
+        QStringLiteral("corner-master"),
+        QStringLiteral("dwindle"),
+        QStringLiteral("dwindle-memory"),
+        QStringLiteral("floating-center"),
+        QStringLiteral("focus-sidebar"),
+        QStringLiteral("horizontal-deck"),
+        QStringLiteral("paper"),
+        QStringLiteral("quadrant-priority"),
+        QStringLiteral("rows"),
+        QStringLiteral("spread"),
+        QStringLiteral("stair"),
+        QStringLiteral("tatami"),
+        QStringLiteral("wide"),
+        QStringLiteral("zen"),
+    };
+
+    QJsonObject out;
+    for (const QString& id : layoutIds) {
+        out.insert(id, hidden);
+    }
+    for (const QString& id : algorithmIds) {
+        out.insert(QStringLiteral("autotile:") + id, hidden);
+    }
+    return out;
+}
+
 QString ConfigDefaults::legacyConfigFilePath()
 {
     return configDir() + QStringLiteral("/plasmazonesrc");

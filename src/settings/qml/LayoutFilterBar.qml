@@ -22,7 +22,9 @@ RowLayout {
     property bool sortAscending: true
     property string filterText: ""
     // ── Exposed state: shared filters ───────────────────────────────────────
-    property bool showHidden: false
+    // Default ON: the layouts page shows hidden (curated-out) items by default
+    // so users can see and re-enable them; unchecking hides them.
+    property bool showHidden: true
     // ── Exposed state: snapping filters (all ON = show everything) ──────────
     property bool showAspectAny: true
     property bool showAspectStandard: true
@@ -48,9 +50,9 @@ RowLayout {
             return true;
 
         if (root.viewMode === 0)
-            return !showAspectAny || !showAspectStandard || !showAspectUltrawide || !showAspectSuperUltrawide || !showAspectPortrait || showHidden || !showAutoLayouts || !showManualLayouts || !showBuiltInLayouts || !showUserLayouts;
+            return !showAspectAny || !showAspectStandard || !showAspectUltrawide || !showAspectSuperUltrawide || !showAspectPortrait || !showHidden || !showAutoLayouts || !showManualLayouts || !showBuiltInLayouts || !showUserLayouts;
         else
-            return !showBuiltInAlgorithms || !showUserAlgorithms || showHidden || !showMasterCount || !showSplitRatio || !showOverlapping || !showPersistent || !showCustomParams || !showReflowsOnResize;
+            return !showBuiltInAlgorithms || !showUserAlgorithms || !showHidden || !showMasterCount || !showSplitRatio || !showOverlapping || !showPersistent || !showCustomParams || !showReflowsOnResize;
     }
     // ── Group-by index constants (must match model order below) ───────────
     // Snapping
@@ -84,7 +86,7 @@ RowLayout {
     // Adding a filter requires updating: property declaration, _defaultValues,
     // the relevant state map, persistedState, hasActiveFilters, menu item, and JS logic.
     readonly property var _defaultValues: {
-        "showHidden": false,
+        "showHidden": true,
         "showAspectAny": true,
         "showAspectStandard": true,
         "showAspectUltrawide": true,
@@ -105,6 +107,28 @@ RowLayout {
     }
 
     signal filterSettingsChanged
+    // Emitted when search text is programmatically cleared (reset / view
+    // switch) so the page's search field — which now lives outside this
+    // component — can clear itself.
+    signal searchCleared
+
+    // Apply the page's search field text through the debounce. Called from the
+    // hosting page's SearchField since the field moved out to the search row.
+    function setSearchText(text) {
+        if (_resetting)
+            return;
+        searchDebounce.pendingText = text;
+        searchDebounce.restart();
+    }
+
+    // Open the filter checkbox menu for the current view mode. Invoked by the
+    // page's filter button (the button moved to the search row).
+    function popupFilterMenu() {
+        if (viewMode === 0)
+            snappingFilterMenu.popup();
+        else
+            tilingFilterMenu.popup();
+    }
 
     // Resets filter and search state to defaults.
     // Group-by and sort-by are intentionally preserved — they are visible in
@@ -112,7 +136,8 @@ RowLayout {
     // hidden dropdown state only.
     function resetFilters() {
         _resetting = true;
-        searchField.clear();
+        searchDebounce.stop();
+        searchCleared();
         filterText = "";
         // Only reset properties relevant to the current view mode
         let map = viewMode === 0 ? _snappingStateMap : _tilingStateMap;
@@ -134,7 +159,8 @@ RowLayout {
     function loadState(mode) {
         _resetting = true;
         // filterText is intentionally not persisted — always start with empty search
-        searchField.clear();
+        searchDebounce.stop();
+        searchCleared();
         filterText = "";
         let map = mode === 0 ? _snappingStateMap : _tilingStateMap;
         let maxGroup = (mode === 0 ? snappingGroupModel : tilingGroupModel).length - 1;
@@ -237,74 +263,18 @@ RowLayout {
         ToolTip.text: root.sortAscending ? i18n("Ascending") : i18n("Descending")
     }
 
-    Item {
-        Layout.fillWidth: true
-    }
-
-    // ── Search ──────────────────────────────────────────────────────────────
-    TextField {
-        id: searchField
-
-        Layout.preferredWidth: Kirigami.Units.gridUnit * 12
-        placeholderText: root.viewMode === 0 ? i18n("Search layouts\u2026") : i18n("Search algorithms\u2026")
-        inputMethodHints: Qt.ImhNoPredictiveText
-        rightPadding: clearButton.visible ? clearButton.width + Kirigami.Units.smallSpacing : Kirigami.Units.smallSpacing
-        Accessible.name: root.viewMode === 0 ? i18n("Search layouts") : i18n("Search algorithms")
-        onTextChanged: {
-            // filterText is set by the debounce timer (or clear button) to keep
-            // the filter badge and grid rebuild in sync — avoid setting it here.
-            if (!root._resetting)
-                searchDebounce.restart();
-        }
-
-        ToolButton {
-            id: clearButton
-
-            anchors.right: parent.right
-            anchors.verticalCenter: parent.verticalCenter
-            visible: searchField.text.length > 0
-            icon.name: "edit-clear"
-            icon.width: Kirigami.Units.iconSizes.small
-            icon.height: Kirigami.Units.iconSizes.small
-            onClicked: {
-                searchField.clear();
-                searchDebounce.stop();
-                root.filterText = "";
-                root.filterSettingsChanged();
-            }
-            Accessible.name: i18n("Clear search")
-        }
-    }
-
     Timer {
         id: searchDebounce
 
+        property string pendingText: ""
+
         interval: 150
         onTriggered: {
-            root.filterText = searchField.text;
+            root.filterText = pendingText;
             root.filterSettingsChanged();
         }
     }
 
-    // ── Filter Button ───────────────────────────────────────────────────────
-    // checked is driven by binding, not user toggle — checkable intentionally omitted
-    ToolButton {
-        id: filterButton
-
-        icon.name: "view-filter"
-        checked: root.hasActiveFilters
-        onClicked: {
-            if (root.viewMode === 0)
-                snappingFilterMenu.popup();
-            else
-                tilingFilterMenu.popup();
-        }
-        Accessible.name: root.hasActiveFilters ? i18n("Filter (active)") : i18n("Filter")
-        ToolTip.visible: hovered
-        ToolTip.text: root.hasActiveFilters ? i18n("Filters active \u2014 click to change") : i18n("Filter")
-    }
-
-    // ── Snapping Filter Menu ────────────────────────────────────────────────
     Menu {
         id: snappingFilterMenu
 
@@ -458,7 +428,7 @@ RowLayout {
         property int snappingGroupByIndex: 0
         property int snappingSortByIndex: 0
         property bool snappingSortAscending: true
-        property bool snappingShowHidden: false
+        property bool snappingShowHidden: true
         property bool snappingShowAspectAny: true
         property bool snappingShowAspectStandard: true
         property bool snappingShowAspectUltrawide: true
@@ -472,7 +442,7 @@ RowLayout {
         property int tilingGroupByIndex: 0
         property int tilingSortByIndex: 0
         property bool tilingSortAscending: true
-        property bool tilingShowHidden: false
+        property bool tilingShowHidden: true
         property bool tilingShowBuiltInAlgorithms: true
         property bool tilingShowUserAlgorithms: true
         property bool tilingShowMasterCount: true

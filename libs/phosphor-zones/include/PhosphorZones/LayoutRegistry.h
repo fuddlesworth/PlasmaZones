@@ -17,6 +17,7 @@
 #include <QUuid>
 #include <functional>
 #include <memory>
+#include <optional>
 
 namespace PhosphorZones {
 
@@ -263,6 +264,28 @@ public:
      */
     void setSnappingPreferredProvider(std::function<bool()> provider);
 
+    /**
+     * @brief Inject a callback that returns true when the user has opted to
+     * suppress the synthesized level-1 default layout assignment globally.
+     *
+     * When the callback returns true, @ref resolveDefaultAssignmentEntry yields
+     * a default-constructed (invalid) entry on cascade-miss instead of
+     * synthesizing one from the snap / autotile / snapping-preferred providers —
+     * i.e. a context with no explicit assignment gets NO active layout and no
+     * engine activates until the user assigns one. This is the same effective
+     * state as a system with every provider returning empty, so the daemon's
+     * existing "empty entry ⇒ no default" handling covers it unchanged.
+     *
+     * The global baseline is overridable PER CONTEXT by a
+     * `DefaultLayoutAssignment` rule (see @ref resolveContextDefaultAssignment):
+     * a `false` rule suppresses a single context even when this provider is off,
+     * a `true` rule forces the default through even when this provider is on.
+     *
+     * Optional. When unset, the resolver behaves as before (never suppresses).
+     * Same threading rules as the other providers.
+     */
+    void setDefaultAssignmentSuppressedProvider(std::function<bool()> provider);
+
     /// True when the snapping-preferred provider is wired AND reports true — i.e.
     /// snapping is globally enabled (the daemon wires the provider to
     /// `ISettings::snappingEnabled`). Mirrors the internal default-assignment
@@ -327,6 +350,18 @@ public:
     /// `value` is true. Same owner-thread affinity as the rest of the registry.
     bool resolveContextLocked(const QString& screenId, int virtualDesktop, const QString& activity) const override;
 
+    /// Resolve a per-context override of the global default-layout-assignment
+    /// baseline for the (screen, desktop, activity) context by evaluating a
+    /// windowless WindowQuery and reading the `ActionSlot::DefaultAssignment`
+    /// slot. Per-slot read (mirrors @ref resolveContextLocked): returns the
+    /// winning `DefaultLayoutAssignment` action's boolean `value`
+    /// (true = allow / force the default through, false = suppress), or
+    /// @c std::nullopt when no matching rule fills the slot (the context then
+    /// follows the global setting). Same owner-thread affinity as the rest of
+    /// the registry.
+    std::optional<bool> resolveContextDefaultAssignment(const QString& screenId, int virtualDesktop,
+                                                        const QString& activity) const;
+
     /// Resolve the per-context overlay-property override (shader / style)
     /// for (screen, desktop, activity) by evaluating a windowless WindowQuery and
     /// reading the OverlayShader / OverlayStyle slots. Per-slot
@@ -386,6 +421,35 @@ public:
     AssignmentEntry::Mode modeForScreen(const QString& screenId, int virtualDesktop = 0,
                                         const QString& activity = QString()) const;
 
+    /// True iff the context has NO active layout specifically because the default
+    /// assignment is suppressed — globally (see
+    /// @ref setDefaultAssignmentSuppressedProvider) or by a per-context
+    /// @c DefaultLayoutAssignment rule. Returns false when an active layout exists
+    /// (an explicit assignment, or a default forced through by an "allow" rule),
+    /// AND false for OTHER empty-assignment states (e.g. snapping enabled with no
+    /// global default layout id, where callers still fall back to
+    /// @ref defaultLayout). This lets daemon overlay / display paths — which
+    /// otherwise fall back to @ref defaultLayout on a missing assignment — treat a
+    /// suppressed context as "no layout, engine inactive" without regressing the
+    /// no-global-default case. Mode-agnostic: a suppressed context has no layout
+    /// for either engine.
+    bool isContextActiveLayoutSuppressed(const QString& screenId, int virtualDesktop = 0,
+                                         const QString& activity = QString()) const override;
+
+    /// True iff the SYNTHESIZED default (the level-1 provider layout / autotile
+    /// algorithm) is suppressed for this context — a per-context
+    /// @c DefaultLayoutAssignment override decides locally (suppress → true,
+    /// allow → false), otherwise the global suppress setting. Unlike
+    /// @ref isContextActiveLayoutSuppressed this does NOT consider whether a
+    /// mode-only assignment rule covers the context: such a rule sets the mode
+    /// but still draws its layout / algorithm from the default. The autotile
+    /// activation path uses this to refuse to tile a bare @c "autotile:" context
+    /// (mode set, no concrete algorithm) with the global default algorithm when
+    /// the default is suppressed — a concrete assigned algorithm is explicit and
+    /// always tiles.
+    bool isDefaultAssignmentSuppressedForContext(const QString& screenId, int virtualDesktop = 0,
+                                                 const QString& activity = QString()) const;
+
     /// Per-field cascade readers — return the named field from the first
     /// entry in the cascade where it is non-empty. Crucially, these do
     /// NOT route through the @c activeLayoutId-based reject filter that
@@ -399,7 +463,7 @@ public:
     QString snappingLayoutForScreen(const QString& screenId, int virtualDesktop = 0,
                                     const QString& activity = QString()) const;
     QString tilingAlgorithmForScreen(const QString& screenId, int virtualDesktop = 0,
-                                     const QString& activity = QString()) const;
+                                     const QString& activity = QString()) const override;
 
     /// Flip mode to @c Snapping for every entry currently in @c Autotile
     /// (preserves @c snappingLayout + @c tilingAlgorithm). Emits
@@ -489,7 +553,15 @@ public:
     // ─── Autotile layout overrides (per-algorithm user overrides) ─────────
 
     void saveAutotileOverrides(const QString& algorithmId, const QJsonObject& overrides);
-    QJsonObject loadAutotileOverrides(const QString& algorithmId) const;
+    QJsonObject loadAutotileOverrides(const QString& algorithmId) const override;
+
+    /// Seed curated default picker visibility into the sidecar, but ONLY on a
+    /// fresh install — when neither layout-settings.json nor the legacy
+    /// autotile-overrides.json exists. @p defaults is keyed exactly as the
+    /// sidecar (manual layouts by UUID, algorithms by "autotile:<id>"). Existing
+    /// installs are never reseeded. Call before @ref loadLayouts so the merge
+    /// picks up the seeded entries.
+    void seedDefaultLayoutSettingsIfFresh(const QJsonObject& defaults);
 
     /// Current entry count in the @ref resolveAssignmentEntry hot-path cache.
     /// Used by tests to verify the cache populates and invalidates against
@@ -545,8 +617,9 @@ private:
      * extraction.
      */
     void applyLayoutToScreen(const QString& screenId, Layout* layout);
-    QJsonObject loadAllAutotileOverrides() const;
-    void saveAllAutotileOverrides(const QJsonObject& all);
+    /// One-time idempotent fold of the retired autotile-overrides.json into the
+    /// unified layout-settings.json sidecar; deletes the legacy file when done.
+    void migrateLegacyAutotileOverrides();
     Layout* resolveConfiguredDefault() const;
 
     // ─── Rule-backed assignment resolution ────────────────────────────────
@@ -641,8 +714,8 @@ private:
     /// engine-mode is dropped entirely. Returns true if the rule set changed.
     bool purgeSnappingLayoutFromAssignments(const QString& layoutId);
 
-    /// Resolve the level-1 global default into an AssignmentEntry on
-    /// cascade-miss. Three-tier precedence:
+    /// Synthesize the level-1 global default into an AssignmentEntry,
+    /// IGNORING the global suppress setting. Three-tier precedence:
     ///   1. snapping-preferred provider (true → return Snapping with
     ///      possibly-empty layout, suppressing the autotile fallthrough
     ///      so users in snapping mode don't see autotile OSD content);
@@ -650,8 +723,38 @@ private:
     ///   3. autotile provider (non-empty → return AutoTile with that
     ///      algorithm).
     /// Returns a default-constructed (invalid) entry when no provider
-    /// has a value.
+    /// has a value. The "raw" sibling of @ref resolveDefaultAssignmentEntry —
+    /// used directly only by the per-context "allow" override, which must
+    /// force the default through even when the global suppress gate is on.
+    AssignmentEntry resolveDefaultAssignmentEntryRaw() const;
+
+    /// Resolve the level-1 global default into an AssignmentEntry on
+    /// cascade-miss, HONORING the global suppress setting. When the
+    /// default-assignment-suppressed provider (see
+    /// @ref setDefaultAssignmentSuppressedProvider) returns true, yields a
+    /// default-constructed (invalid) entry — no synthesized default. Otherwise
+    /// delegates to @ref resolveDefaultAssignmentEntryRaw.
     AssignmentEntry resolveDefaultAssignmentEntry() const;
+
+    /// Resolve the level-1 default for a specific context, applying the
+    /// per-context @c DefaultLayoutAssignment override (if any) over the global
+    /// suppress baseline. A `false` override returns an invalid entry (suppress
+    /// this context), a `true` override returns @ref resolveDefaultAssignmentEntryRaw
+    /// (force the default through), and no override defers to
+    /// @ref resolveDefaultAssignmentEntry (follow the global setting). This is
+    /// the single cascade-miss tail every per-context resolver routes through so
+    /// the override and the global gate can never drift between call sites.
+    AssignmentEntry resolveDefaultAssignmentEntryForContext(const QString& screenId, int virtualDesktop,
+                                                            const QString& activity) const;
+
+    /// True iff an enabled, PINNED (non-catch-all) engine-mode assignment rule
+    /// matches the (screen, desktop, activity) context — i.e. the user authored
+    /// an explicit per-context assignment, even one that sets only the mode with
+    /// no layout. Such a window rule overrides the global suppress setting (the
+    /// context is managed, never suppressed). Mirrors the connector /
+    /// virtual-screen fallback chain of @ref assignmentIdForScreen so a rule
+    /// keyed by the physical/connector id still matches a virtual-screen query.
+    bool hasMatchingAssignmentRule(const QString& screenId, int virtualDesktop, const QString& activity) const;
 
     /// Lookup key for @c m_contextResolveCache. Mirrors the parameters of
     /// @ref resolveAssignmentEntry — three independent context dimensions
@@ -681,9 +784,10 @@ private:
         return h;
     }
 
-    /// Shared revision-invalidated memoization for the three context resolvers
+    /// Shared revision-invalidated memoization for the five context resolvers
     /// (@ref resolveAssignmentEntry, @ref resolveContextGaps,
-    /// @ref resolveContextLocked). Drops @p cache wholesale whenever the rule
+    /// @ref resolveContextLocked, @ref resolveContextDefaultAssignment,
+    /// @ref resolveContextOverlay). Drops @p cache wholesale whenever the rule
     /// set's monotonic revision moves past @p cacheRevision, returns a cached
     /// hit, else runs @p compute, then soft-caps the cache at 256 entries —
     /// dropping the whole cache on overflow rather than evicting one key, which
@@ -743,6 +847,15 @@ private:
     mutable QHash<ContextResolveKey, bool> m_contextLockCache;
     mutable quint64 m_contextLockCacheRevision = 0;
 
+    /// Hot-path cache for @ref resolveContextDefaultAssignment, keyed and
+    /// revision-invalidated exactly like @c m_contextLockCache. The override is
+    /// read on every cascade-miss in @ref assignmentEntryForScreen /
+    /// @ref assignmentIdForScreen (and their connector / virtual-screen retries),
+    /// so memoizing the per-slot walk collapses repeats to one walk per rule-set
+    /// revision. A @c std::nullopt value (no override rule) is cached too.
+    mutable QHash<ContextResolveKey, std::optional<bool>> m_contextDefaultAssignmentCache;
+    mutable quint64 m_contextDefaultAssignmentCacheRevision = 0;
+
     /// Hot-path cache for @ref resolveContextOverlay, keyed and
     /// revision-invalidated exactly like @c m_contextGapCache. The overlay
     /// build path resolves the same (screen, desktop, activity) tuple on every
@@ -763,6 +876,11 @@ private:
     /// whether a global default snap layout id is configured. See
     /// @ref setSnappingPreferredProvider for the rationale.
     std::function<bool()> m_snappingPreferredProvider;
+    /// Empty = provider unset (never suppresses). Returns true when the user has
+    /// globally opted to suppress the synthesized level-1 default assignment, so
+    /// a context with no explicit assignment gets no active layout until the
+    /// user assigns one. See @ref setDefaultAssignmentSuppressedProvider.
+    std::function<bool()> m_defaultAssignmentSuppressedProvider;
     /// Borrowed unified rule store — the single assignment authority. The
     /// caller owns the store and must outlive the registry; always non-null
     /// (the ctor asserts it).

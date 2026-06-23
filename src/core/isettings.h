@@ -391,6 +391,7 @@ Q_SIGNALS:
     void snapAssistEnabledChanged();
     void snapAssistTriggersChanged();
     void defaultLayoutIdChanged();
+    void suppressDefaultLayoutAssignmentChanged();
     void filterLayoutsByAspectRatioChanged();
     // excludedApplications / excludedWindowClasses signals retired in v4
     // — see settings_interfaces.h for the rationale (lists folded into

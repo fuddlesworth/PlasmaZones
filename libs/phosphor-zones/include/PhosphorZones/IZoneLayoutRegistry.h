@@ -27,6 +27,7 @@
 #include <PhosphorZones/AssignmentEntry.h>
 #include <PhosphorZones/Layout.h>
 
+#include <QJsonObject>
 #include <QString>
 #include <QUuid>
 #include <QVector>
@@ -132,6 +133,32 @@ public:
     }
     virtual QString currentActivity() const = 0;
 
+    /// Per-algorithm autotile settings (gaps, shader, hiddenFromSelector, …)
+    /// stored in the unified layout-settings.json sidecar, keyed by raw
+    /// algorithm id. Default returns empty so non-persisting implementers and
+    /// the unified-list builder degrade to "no overrides". Concrete registries
+    /// (LayoutRegistry) read the sidecar.
+    virtual QJsonObject loadAutotileOverrides(const QString& algorithmId) const
+    {
+        Q_UNUSED(algorithmId)
+        return {};
+    }
+
+    /// Raw id of the tiling algorithm active for the (@p screenId,
+    /// @p virtualDesktop, @p activity) context, or empty when none resolves.
+    /// Used by the unified-list builder to keep the active algorithm visible in
+    /// the picker even when it's been hidden (mirrors the active-layout
+    /// exemption for manual layouts). Default empty for non-resolving
+    /// implementers.
+    virtual QString tilingAlgorithmForScreen(const QString& screenId, int virtualDesktop = 0,
+                                             const QString& activity = QString()) const
+    {
+        Q_UNUSED(screenId)
+        Q_UNUSED(virtualDesktop)
+        Q_UNUSED(activity)
+        return {};
+    }
+
     /// Resolve the per-context gap override (zone padding + outer gaps) that
     /// window rules pin for the (@p screenId, @p virtualDesktop, @p activity)
     /// context — the same resolution the daemon's geometry resolver uses on the
@@ -159,6 +186,22 @@ public:
     /// registry that does not model context rules — e.g. a fixture stub — keeps
     /// only the persisted manual-lock behaviour.
     virtual bool resolveContextLocked(const QString& screenId, int virtualDesktop, const QString& activity) const
+    {
+        Q_UNUSED(screenId);
+        Q_UNUSED(virtualDesktop);
+        Q_UNUSED(activity);
+        return false;
+    }
+
+    /// True iff the (@p screenId, @p virtualDesktop, @p activity) context has no
+    /// active layout specifically because the default assignment is suppressed —
+    /// globally or by a per-context @c DefaultLayoutAssignment rule. Daemon
+    /// overlay / display paths that otherwise fall back to @ref defaultLayout on a
+    /// missing assignment use this to treat a suppressed context as "no layout,
+    /// engine inactive" without regressing other empty-assignment states. The
+    /// default returns false (a stub registry never suppresses).
+    virtual bool isContextActiveLayoutSuppressed(const QString& screenId, int virtualDesktop,
+                                                 const QString& activity) const
     {
         Q_UNUSED(screenId);
         Q_UNUSED(virtualDesktop);

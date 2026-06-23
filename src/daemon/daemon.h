@@ -229,6 +229,12 @@ public:
     void showLockedOsd(const QString& screenId);
     void showLockedPreviewOsd(const QString& screenId);
     void showContextDisabledOsd(const QString& screenId, int desktop, const QString& activity, DisabledReason reason);
+    /// OSD shown when a context has no active layout because its default
+    /// assignment is suppressed (global setting or per-context rule) — the
+    /// "not assigned" counterpart to @ref showContextDisabledOsd. Tells the user
+    /// the mode is selected but nothing is assigned, instead of silently showing
+    /// no OSD.
+    void showNotAssignedOsd(const QString& screenId);
 
 private:
     /**

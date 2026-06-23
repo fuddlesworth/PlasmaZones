@@ -22,6 +22,10 @@
 #include <PhosphorZones/LayoutRegistry.h>
 #include <PhosphorZones/Layout.h>
 #include <PhosphorZones/Zone.h>
+#include <PhosphorWindowRules/ContextRuleBridge.h>
+#include <PhosphorWindowRules/RuleAction.h>
+#include <PhosphorWindowRules/WindowRule.h>
+#include <PhosphorWindowRules/WindowRuleStore.h>
 #include "core/constants.h"
 #include "../helpers/StubSettings.h"
 #include "../helpers/IsolatedConfigGuard.h"
@@ -52,6 +56,46 @@ private:
         QDir().mkpath(layoutDir);
         mgr->setLayoutDirectory(layoutDir);
         return mgr;
+    }
+
+    /// Author a per-context DefaultLayoutAssignment override rule into the
+    /// registry's owned rule store. @p allow true forces the synthesized default
+    /// through for the context; false suppresses it. Mirrors the shape
+    /// ContextRuleBridge::makeDisableRule produces for the per-mode disable case.
+    void addDefaultAssignmentRule(PhosphorZones::LayoutRegistry* mgr, const QString& screenId, int virtualDesktop,
+                                  const QString& activity, bool allow)
+    {
+        namespace PWR = PhosphorWindowRules;
+        auto* store = mgr->findChild<PWR::WindowRuleStore*>();
+        QVERIFY(store != nullptr);
+
+        PWR::WindowRule rule;
+        rule.id = QUuid::createUuid();
+        rule.name = QStringLiteral("test-default-assignment");
+        rule.enabled = true;
+        rule.priority =
+            PWR::ContextRuleBridge::contextPriority(!screenId.isEmpty(), virtualDesktop > 0, !activity.isEmpty());
+        rule.match = PWR::ContextRuleBridge::makeContextMatch(screenId, virtualDesktop, activity);
+
+        PWR::RuleAction action;
+        action.type = QString(PWR::ActionType::DefaultLayoutAssignment);
+        action.params.insert(PWR::ActionParam::Value, allow);
+        rule.actions.append(action);
+
+        QVERIFY(store->addRule(rule));
+    }
+
+    /// Author a PINNED engine-mode assignment rule (no layout) — the shape a user
+    /// gets from "set this monitor to snapping/autotile" without picking a layout.
+    void addEngineModeRule(PhosphorZones::LayoutRegistry* mgr, const QString& screenId, int virtualDesktop,
+                           const QString& activity, const QString& modeToken)
+    {
+        namespace PWR = PhosphorWindowRules;
+        auto* store = mgr->findChild<PWR::WindowRuleStore*>();
+        QVERIFY(store != nullptr);
+        const PWR::WindowRule rule = PWR::ContextRuleBridge::makeAssignmentRule(
+            QStringLiteral("test-mode"), screenId, virtualDesktop, activity, modeToken, QString(), QString());
+        QVERIFY(store->addRule(rule));
     }
 
     std::vector<std::unique_ptr<IsolatedConfigGuard>> m_guards;
@@ -767,6 +811,224 @@ private Q_SLOTS:
         QCOMPARE(entry.mode, PhosphorZones::AssignmentEntry::Snapping);
         QCOMPARE(entry.snappingLayout, layoutId);
         QCOMPARE(mgr->assignmentIdForScreen(QStringLiteral("DP-1"), 4), layoutId);
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // Suppress default layout assignment — the global gate + per-context override.
+    //
+    // The global setDefaultAssignmentSuppressedProvider gate makes an unassigned
+    // context resolve to NO active layout (the same empty-entry state as having no
+    // providers). A per-context DefaultLayoutAssignment rule overrides the global
+    // baseline either way: false suppresses one context even when global allows,
+    // true forces the default through even when global suppresses. Explicit
+    // assignments are never affected — suppression only gates the synthesized
+    // default.
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    void testSuppressDefault_globalOn_suppressesSynthesizedDefault()
+    {
+        QScopedPointer<PhosphorZones::LayoutRegistry> mgr(createManager());
+        auto* layout = createTestLayout(QStringLiteral("Snap"));
+        mgr->addLayout(layout);
+
+        const QString layoutId = layout->id().toString();
+        mgr->setDefaultLayoutIdProvider([layoutId]() {
+            return layoutId;
+        });
+        // Global suppress on — the snap default must NOT be synthesized.
+        mgr->setDefaultAssignmentSuppressedProvider([]() {
+            return true;
+        });
+
+        const auto entry = mgr->assignmentEntryForScreen(QStringLiteral("DP-1"), 4);
+        QVERIFY(!entry.isValid());
+        QVERIFY(mgr->assignmentIdForScreen(QStringLiteral("DP-1"), 4).isEmpty());
+    }
+
+    void testSuppressDefault_globalOff_synthesizesAsBefore()
+    {
+        QScopedPointer<PhosphorZones::LayoutRegistry> mgr(createManager());
+        auto* layout = createTestLayout(QStringLiteral("Snap"));
+        mgr->addLayout(layout);
+
+        const QString layoutId = layout->id().toString();
+        mgr->setDefaultLayoutIdProvider([layoutId]() {
+            return layoutId;
+        });
+        // Provider wired but reports off — behaviour is unchanged from today.
+        mgr->setDefaultAssignmentSuppressedProvider([]() {
+            return false;
+        });
+
+        const auto entry = mgr->assignmentEntryForScreen(QStringLiteral("DP-1"), 4);
+        QCOMPARE(entry.snappingLayout, layoutId);
+        QCOMPARE(mgr->assignmentIdForScreen(QStringLiteral("DP-1"), 4), layoutId);
+    }
+
+    void testSuppressDefault_perContextSuppress_overridesGlobalAllow()
+    {
+        QScopedPointer<PhosphorZones::LayoutRegistry> mgr(createManager());
+        auto* layout = createTestLayout(QStringLiteral("Snap"));
+        mgr->addLayout(layout);
+
+        const QString layoutId = layout->id().toString();
+        mgr->setDefaultLayoutIdProvider([layoutId]() {
+            return layoutId;
+        });
+        // Global allows the default (off). A per-context rule suppresses DP-1.
+        mgr->setDefaultAssignmentSuppressedProvider([]() {
+            return false;
+        });
+        addDefaultAssignmentRule(mgr.data(), QStringLiteral("DP-1"), 0, QString(), /*allow=*/false);
+
+        // DP-1 is suppressed by its rule.
+        QVERIFY(!mgr->assignmentEntryForScreen(QStringLiteral("DP-1"), 4).isValid());
+        QVERIFY(mgr->assignmentIdForScreen(QStringLiteral("DP-1"), 4).isEmpty());
+        // DP-2 (no rule) still gets the global default.
+        QCOMPARE(mgr->assignmentIdForScreen(QStringLiteral("DP-2"), 4), layoutId);
+    }
+
+    void testSuppressDefault_perContextAllow_overridesGlobalSuppress()
+    {
+        QScopedPointer<PhosphorZones::LayoutRegistry> mgr(createManager());
+        auto* layout = createTestLayout(QStringLiteral("Snap"));
+        mgr->addLayout(layout);
+
+        const QString layoutId = layout->id().toString();
+        mgr->setDefaultLayoutIdProvider([layoutId]() {
+            return layoutId;
+        });
+        // Global suppresses everywhere. A per-context rule re-enables DP-1.
+        mgr->setDefaultAssignmentSuppressedProvider([]() {
+            return true;
+        });
+        addDefaultAssignmentRule(mgr.data(), QStringLiteral("DP-1"), 0, QString(), /*allow=*/true);
+
+        // DP-1 forces the default through.
+        QCOMPARE(mgr->assignmentIdForScreen(QStringLiteral("DP-1"), 4), layoutId);
+        // DP-2 (no rule) stays suppressed by the global setting.
+        QVERIFY(mgr->assignmentIdForScreen(QStringLiteral("DP-2"), 4).isEmpty());
+    }
+
+    void testSuppressDefault_explicitAssignmentUnaffected()
+    {
+        QScopedPointer<PhosphorZones::LayoutRegistry> mgr(createManager());
+        auto* layout = createTestLayout(QStringLiteral("Manual"));
+        mgr->addLayout(layout);
+
+        // Global suppress on, but the user has an explicit assignment on DP-1.
+        mgr->setDefaultAssignmentSuppressedProvider([]() {
+            return true;
+        });
+        mgr->assignLayout(QStringLiteral("DP-1"), 0, QString(), layout);
+
+        // The explicit assignment wins — suppression only gates the synthesized
+        // default, never a stored assignment.
+        const auto entry = mgr->assignmentEntryForScreen(QStringLiteral("DP-1"), 0);
+        QCOMPARE(entry.snappingLayout, layout->id().toString());
+        QCOMPARE(entry.activeLayoutId(), layout->id().toString());
+    }
+
+    // isContextActiveLayoutSuppressed — the daemon's "no active layout because of
+    // suppression" gate. Must fire ONLY when suppression is the cause, never for
+    // other empty-assignment states (e.g. snapping enabled with no default id),
+    // so the daemon's defaultLayout() fallbacks are preserved there.
+
+    void testIsContextSuppressed_globalOn_unassigned_true()
+    {
+        QScopedPointer<PhosphorZones::LayoutRegistry> mgr(createManager());
+        auto* layout = createTestLayout(QStringLiteral("Snap"));
+        mgr->addLayout(layout);
+        const QString layoutId = layout->id().toString();
+        mgr->setDefaultLayoutIdProvider([layoutId]() {
+            return layoutId;
+        });
+        mgr->setDefaultAssignmentSuppressedProvider([]() {
+            return true;
+        });
+        QVERIFY(mgr->isContextActiveLayoutSuppressed(QStringLiteral("DP-1"), 4));
+    }
+
+    void testIsContextSuppressed_globalOff_noDefault_false()
+    {
+        // Regression guard: no providers wired (no default configured) is NOT
+        // suppression — the daemon must keep its defaultLayout() fallback here.
+        QScopedPointer<PhosphorZones::LayoutRegistry> mgr(createManager());
+        mgr->setDefaultAssignmentSuppressedProvider([]() {
+            return false;
+        });
+        QVERIFY(mgr->assignmentIdForScreen(QStringLiteral("DP-1"), 4).isEmpty());
+        QVERIFY(!mgr->isContextActiveLayoutSuppressed(QStringLiteral("DP-1"), 4));
+    }
+
+    void testIsContextSuppressed_explicitAssignment_false()
+    {
+        QScopedPointer<PhosphorZones::LayoutRegistry> mgr(createManager());
+        auto* layout = createTestLayout(QStringLiteral("Manual"));
+        mgr->addLayout(layout);
+        mgr->setDefaultAssignmentSuppressedProvider([]() {
+            return true;
+        });
+        mgr->assignLayout(QStringLiteral("DP-1"), 0, QString(), layout);
+        QVERIFY(!mgr->isContextActiveLayoutSuppressed(QStringLiteral("DP-1"), 0));
+    }
+
+    void testIsContextSuppressed_perContextOverrides()
+    {
+        QScopedPointer<PhosphorZones::LayoutRegistry> mgr(createManager());
+        auto* layout = createTestLayout(QStringLiteral("Snap"));
+        mgr->addLayout(layout);
+        const QString layoutId = layout->id().toString();
+        mgr->setDefaultLayoutIdProvider([layoutId]() {
+            return layoutId;
+        });
+        // Global off, but a per-context suppress rule on DP-1.
+        mgr->setDefaultAssignmentSuppressedProvider([]() {
+            return false;
+        });
+        addDefaultAssignmentRule(mgr.data(), QStringLiteral("DP-1"), 0, QString(), /*allow=*/false);
+        QVERIFY(mgr->isContextActiveLayoutSuppressed(QStringLiteral("DP-1"), 4));
+        // DP-2 (no rule) follows the global off → not suppressed.
+        QVERIFY(!mgr->isContextActiveLayoutSuppressed(QStringLiteral("DP-2"), 4));
+    }
+
+    void testIsContextSuppressed_pinnedModeOnlyRule_overridesGlobalSuppress()
+    {
+        // A window rule that sets only the engine mode (no layout) on a monitor
+        // must override the global suppress setting — the context stays active so
+        // the overlay / zone selector show and the layout falls back to default.
+        QScopedPointer<PhosphorZones::LayoutRegistry> mgr(createManager());
+        auto* layout = createTestLayout(QStringLiteral("Snap"));
+        mgr->addLayout(layout);
+        mgr->setDefaultAssignmentSuppressedProvider([]() {
+            return true;
+        });
+        addEngineModeRule(mgr.data(), QStringLiteral("DP-1"), 2, QString(), QStringLiteral("snapping"));
+        // DP-1 has a pinned mode rule → not suppressed despite global suppress.
+        QVERIFY(!mgr->isContextActiveLayoutSuppressed(QStringLiteral("DP-1"), 2));
+        // DP-2 (no rule) → still suppressed by the global setting.
+        QVERIFY(mgr->isContextActiveLayoutSuppressed(QStringLiteral("DP-2"), 2));
+    }
+
+    void testDefaultSuppressedForContext_bareAutotileModeRule_stillSuppressed()
+    {
+        // The autotile gate's primitive. A mode-only autotile rule sets the mode
+        // but draws its algorithm from the suppressed global default. So the
+        // context is NOT "active-layout-suppressed" (the mode rule covers it),
+        // yet its DEFAULT *is* suppressed — which is what the autotile activation
+        // gate checks to refuse tiling a bare "autotile:" context.
+        QScopedPointer<PhosphorZones::LayoutRegistry> mgr(createManager());
+        mgr->setDefaultAssignmentSuppressedProvider([]() {
+            return true;
+        });
+        addEngineModeRule(mgr.data(), QStringLiteral("DP-1"), 2, QString(), QStringLiteral("autotile"));
+        // The mode rule covers the context → not active-layout-suppressed.
+        QVERIFY(!mgr->isContextActiveLayoutSuppressed(QStringLiteral("DP-1"), 2));
+        // But the synthesized default IS suppressed → bare autotile must not tile.
+        QVERIFY(mgr->isDefaultAssignmentSuppressedForContext(QStringLiteral("DP-1"), 2));
+        // A per-context allow override flips it back on.
+        addDefaultAssignmentRule(mgr.data(), QStringLiteral("DP-1"), 2, QString(), /*allow=*/true);
+        QVERIFY(!mgr->isDefaultAssignmentSuppressedForContext(QStringLiteral("DP-1"), 2));
     }
 
     void testLevel1Default_storedEntryTakesPrecedence()

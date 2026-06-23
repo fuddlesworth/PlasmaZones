@@ -731,6 +731,7 @@ void appendBehaviorSchema(PhosphorConfig::Schema& schema)
         {CD::restoreFloatedOnLoginKey(), CD::snappingRestoreFloatedWindowsOnLogin(), QMetaType::Bool},
         {CD::unfloatFallbackToZoneKey(), CD::snapUnfloatFallbackToZone(), QMetaType::Bool},
         {CD::autoAssignAllLayoutsKey(), CD::autoAssignAllLayouts(), QMetaType::Bool},
+        {CD::suppressDefaultLayoutAssignmentKey(), CD::suppressDefaultLayoutAssignment(), QMetaType::Bool},
         {CD::defaultLayoutIdKey(), QString(), QMetaType::QString},
     };
     schema.groups[CD::snappingBehaviorSnapAssistGroup()] = {

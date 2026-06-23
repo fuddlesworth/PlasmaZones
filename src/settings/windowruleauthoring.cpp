@@ -274,6 +274,13 @@ QString paramLabel(const QString& type, const QString& key)
         // by priority, so a higher-priority off rule cancels a lower-priority on.
         return PhosphorI18n::tr("Lock the layout (off = don't lock)");
     }
+    if (type == ActionType::DefaultLayoutAssignment && key == ActionParam::Value) {
+        // on = this context gets the global default layout even when the global
+        // "don't assign by default" setting is on; off = suppress the default for
+        // this context (no layout until one is explicitly assigned), overriding
+        // the global setting the other way. Single-winner by priority.
+        return PhosphorI18n::tr("Assign a default layout (off = leave unassigned)");
+    }
     if (type == ActionType::SetOuterGapTop && key == ActionParam::Value) {
         return PhosphorI18n::tr("Top gap (px)");
     }
@@ -425,6 +432,9 @@ QString actionTypeLabelImpl(const QString& type)
     }
     if (type == ActionType::LockContext) {
         return PhosphorI18n::tr("Lock layout");
+    }
+    if (type == ActionType::DefaultLayoutAssignment) {
+        return PhosphorI18n::tr("Default layout assignment");
     }
     if (type == ActionType::Exclude) {
         return PhosphorI18n::tr("Exclude window");

@@ -239,12 +239,31 @@ void Daemon::showContextDisabledOsd(const QString& screenId, int desktop, const 
     qCInfo(lcDaemon) << "Showing disabled text OSD:" << reasonText << "screen=" << screenId;
 }
 
+void Daemon::showNotAssignedOsd(const QString& screenId)
+{
+    if (shouldSuppressOsd()) {
+        return;
+    }
+    const OsdStyle style = m_settings ? m_settings->osdStyle() : OsdStyle::Preview;
+    if (style == OsdStyle::None) {
+        return;
+    }
+    const QString text = PhosphorI18n::tr("No layout assigned");
+    if (style == OsdStyle::Preview && m_overlayService) {
+        m_overlayService->showDisabledOsd(text, screenId);
+        qCInfo(lcDaemon) << "Showing not-assigned preview OSD: screen=" << screenId;
+        return;
+    }
+    showKdeTextOsd(QStringLiteral("dialog-information"), text);
+    qCInfo(lcDaemon) << "Showing not-assigned text OSD: screen=" << screenId;
+}
+
 void Daemon::showLayoutOsdForAlgorithm(const QString& algorithmId, const QString& displayName, const QString& screenId)
 {
     if (shouldSuppressOsd()) {
         return;
     }
-    auto* algo = m_algorithmRegistry.get()->algorithm(algorithmId);
+    auto* algo = m_algorithmRegistry ? m_algorithmRegistry->algorithm(algorithmId) : nullptr;
     if (!algo) {
         qCWarning(lcDaemon) << "OSD: algorithm not found, algorithmId=" << algorithmId;
         return;
@@ -573,10 +592,28 @@ void Daemon::showOsdForScreens(const QStringList& screenIds, const QString& acti
                 showContextDisabledOsd(screenId, desktop, activity, why);
                 continue;
             }
+            // No active layout for this context because the default assignment is
+            // suppressed (global setting or per-context rule) — show a "not
+            // assigned" OSD instead of the global default layout / algorithm the
+            // fallback would otherwise surface for an unassigned screen.
+            if (m_layoutManager->isContextActiveLayoutSuppressed(screenId, desktop, activity)) {
+                showNotAssignedOsd(screenId);
+                continue;
+            }
             const QString assignmentId = m_layoutManager->assignmentIdForScreen(screenId, desktop, activity);
             if (PhosphorLayout::LayoutId::isAutotile(assignmentId)) {
                 const QString algoId = PhosphorLayout::LayoutId::extractAlgorithmId(assignmentId);
-                auto* algo = m_algorithmRegistry->algorithm(algoId);
+                // Bare autotile (mode set, no concrete algorithm) draws its
+                // algorithm from the suppressed global default, so it won't tile
+                // (see updateAutotileScreens) — show "not assigned" rather than
+                // announcing the default algorithm. A concrete assigned algorithm
+                // always shows.
+                if (algoId.isEmpty()
+                    && m_layoutManager->isDefaultAssignmentSuppressedForContext(screenId, desktop, activity)) {
+                    showNotAssignedOsd(screenId);
+                    continue;
+                }
+                auto* algo = m_algorithmRegistry ? m_algorithmRegistry->algorithm(algoId) : nullptr;
                 const QString displayName = algo ? algo->name() : algoId;
                 showLayoutOsdForAlgorithm(algoId, displayName, screenId);
             } else {

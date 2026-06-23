@@ -233,6 +233,11 @@ public:
     P_CONFIG_KEY(autoAssignAllLayoutsKey, "AutoAssignAllLayouts")
     P_CONFIG_KEY(stickyWindowHandlingKey, "StickyWindowHandling")
     P_CONFIG_KEY(defaultLayoutIdKey, "DefaultLayoutId")
+    // Mode-neutral: suppresses the synthesized level-1 default for BOTH the
+    // snapping and tiling engines (the default is a single mode-carrying
+    // AssignmentEntry). Stored in this group alongside the other
+    // default-assignment keys; surfaced mode-neutrally in the General UI page.
+    P_CONFIG_KEY(suppressDefaultLayoutAssignmentKey, "SuppressDefaultLayoutAssignment")
 
     // ═══════════════════════════════════════════════════════════════════════════
     // Config Keys — Snapping.Zones.Colors

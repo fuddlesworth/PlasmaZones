@@ -96,8 +96,10 @@ void OverlayService::handleScreenAdded(QScreen* screen)
     if (mgr && mgr->hasVirtualScreens(physScreenId)) {
         // Create overlays for each virtual screen on this physical screen
         for (const QString& vsId : mgr->virtualScreenIdsFor(physScreenId)) {
-            if (isContextDisabled(m_settings, PhosphorZones::AssignmentEntry::Snapping, vsId,
-                                  currentVirtualDesktopForScreen(vsId), m_currentActivity)) {
+            // Recreate the snap overlay only on virtual screens that have one —
+            // skip disabled, suppressed-default, and autotile-mode contexts,
+            // matching the overlay activation gate in overlay.cpp.
+            if (isSnappingContextInactive(vsId)) {
                 continue;
             }
             QRect vsGeom = mgr->screenGeometry(vsId);

@@ -288,6 +288,19 @@ inline constexpr QLatin1StringView DisableEngine{"disableEngine"};
 /// engines). The daemon resolves it LIVE on the context-lock path and never
 /// persists it, so rule locks and manual toggles never overwrite each other.
 inline constexpr QLatin1StringView LockContext{"lockContext"};
+/// Per-context override of the global "suppress default layout assignment"
+/// setting for the matched screen/desktop/activity context. Context domain
+/// (matches only context fields); mode-agnostic (the override governs the
+/// synthesized default for BOTH the snapping and tiling engines, since the
+/// level-1 default is a single mode-carrying `AssignmentEntry`). Boolean
+/// `value`: `false` SUPPRESSES the synthesized default for this context (no
+/// engine activates until the user explicitly assigns one), `true` ALLOWS it
+/// (forces the global default through even when the global suppress setting is
+/// on). With no such rule, the context follows the global setting. Carries no
+/// `SetEngineMode` action, so it is NOT a cascade-winning assignment rule — the
+/// daemon reads it as a per-slot overlay at cascade-miss via
+/// `LayoutRegistry::resolveContextDefaultAssignment`, mirroring `LockContext`.
+inline constexpr QLatin1StringView DefaultLayoutAssignment{"defaultLayoutAssignment"};
 inline constexpr QLatin1StringView Exclude{"exclude"};
 inline constexpr QLatin1StringView Float{"float"};
 /// Snap a matched window into one or more zones on open. Carries a non-empty
@@ -391,7 +404,7 @@ inline bool isEffectRuleAction(const QString& type)
 inline bool isLayoutEngineContextAction(const QString& type)
 {
     return type == SetEngineMode || type == SetSnappingLayout || type == SetTilingAlgorithm || type == DisableEngine
-        || type == LockContext;
+        || type == LockContext || type == DefaultLayoutAssignment;
 }
 } // namespace ActionType
 
@@ -451,6 +464,12 @@ inline constexpr QLatin1StringView EngineEnable{"engine-enable"};
 /// Context-domain layout-lock slot — filled by `ActionType::LockContext`.
 /// A single boolean: a winning rule with `value == true` locks the context.
 inline constexpr QLatin1StringView Locked{"locked"};
+/// Context-domain default-assignment override slot — filled by
+/// `ActionType::DefaultLayoutAssignment`. A single boolean (first-matching-rule-
+/// wins): `false` suppresses the synthesized level-1 default for the context,
+/// `true` forces it through. Read at cascade-miss by
+/// `LayoutRegistry::resolveContextDefaultAssignment`.
+inline constexpr QLatin1StringView DefaultAssignment{"default-assignment"};
 inline constexpr QLatin1StringView Manage{"manage"};
 inline constexpr QLatin1StringView Float{"float"};
 /// Window-scoped open-placement slot — filled by `ActionType::SnapToZone`. A
