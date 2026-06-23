@@ -7,7 +7,7 @@ MPRIS2 (`org.mpris.MediaPlayer2.*`) media-player discovery and control for Phosp
 
 ## Responsibility
 
-Watches the session bus for MPRIS players, surfaces their metadata + playback state, and forwards transport controls. No UI; the shell decides how a now-playing card, transport bar, or media pop-out is rendered.
+Watches the session bus for MPRIS players, surfaces their metadata + playback state, and forwards transport controls. No UI. The shell decides how a now-playing card, transport bar, or media pop-out is rendered.
 
 ## Key types
 
@@ -50,8 +50,8 @@ Repeater {
 
 ## Design notes
 
-- **Async D-Bus.** All property fetches go through `QDBusPendingCallWatcher`; the GUI thread is never blocked on a player that's slow to respond.
-- **PropertiesChanged + NameOwnerChanged.** Player discovery hangs off `NameOwnerChanged` for `org.mpris.MediaPlayer2.*` services; property updates ride `PropertiesChanged`. Both connect via `QDBusConnection::connect` with a SLOT() string because Qt's D-Bus API doesn't expose a lambda-friendly overload for those signals.
+- **Async D-Bus.** All property fetches go through `QDBusPendingCallWatcher`. The GUI thread is never blocked on a player that's slow to respond.
+- **PropertiesChanged + NameOwnerChanged.** Player discovery hangs off `NameOwnerChanged` for `org.mpris.MediaPlayer2.*` services, and property updates ride `PropertiesChanged`. Both connect via `QDBusConnection::connect` with a SLOT() string because Qt's D-Bus API doesn't expose a lambda-friendly overload for those signals.
 - **Row mirror.** `MprisPlayerModel` keeps its own `QList<MprisPlayer*>` instead of indexing into the host's, so the model's `beginInsertRows` / `endRemoveRows` transaction boundaries always straddle the actual mutation regardless of when the host emits its add/remove signals relative to its own list state.
 
 ## Dependencies
@@ -61,4 +61,4 @@ Repeater {
 
 ## Status
 
-Shipped. Extracted from the original `phosphor-services` umbrella as one of four per-domain siblings; the umbrella is gone, no backwards-compat shim (per `feedback_no_legacy_shims`). The C++ + QML API is unchanged from its pre-extraction form (`PhosphorServices::Mpris*` becomes `PhosphorServiceMpris::Mpris*`, `Phosphor.Services` QML module becomes `Phosphor.Service.Mpris`).
+Shipped. Extracted from the original `phosphor-services` umbrella as one of four per-domain siblings. The umbrella is gone, with no backwards-compat shim (per `feedback_no_legacy_shims`). The C++ + QML API is unchanged from its pre-extraction form (`PhosphorServices::Mpris*` becomes `PhosphorServiceMpris::Mpris*`, `Phosphor.Services` QML module becomes `Phosphor.Service.Mpris`).

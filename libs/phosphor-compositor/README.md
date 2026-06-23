@@ -17,15 +17,15 @@ A compositor plugin links `PhosphorCompositor`, implements
 `ICompositorBridge` (23 methods mapping native window handles to the
 daemon's vocabulary), wires handler interfaces for callbacks, and lets
 `DaemonClient` manage all D-Bus communication. The plugin never touches
-placement logic directly — the daemon decides *where*, the plugin applies
-*how*.
+placement logic directly. The daemon decides *where*, and the plugin
+applies *how*.
 
 ## Key types
 
 | Type | Purpose |
 |------|---------|
-| `ICompositorBridge` | Abstract interface a plugin implements — window lookup, identity, properties, filtering, actions |
-| `DaemonClient` | Typed D-Bus client — registration, service watching, reconnection, method calls, signal dispatch |
+| `ICompositorBridge` | Abstract interface a plugin implements for window lookup, identity, properties, filtering, actions |
+| `DaemonClient` | Typed D-Bus client handling registration, service watching, reconnection, method calls, signal dispatch |
 | `IDragHandler` | Callback interface for drag start/move/end/policy-change |
 | `IGeometryHandler` | Callback interface for geometry apply, batch operations, raise/activate |
 | `ILifecycleHandler` | Callback interface for window open/close/activate/float-change |
@@ -93,8 +93,8 @@ Compositor Plugin
 ICompositorBridge (plugin implements, wraps native window APIs)
 ```
 
-The daemon always runs. The plugin is stateless with respect to placement
-— it applies what the daemon tells it and reports window events back.
+The daemon always runs. The plugin is stateless with respect to placement.
+It applies what the daemon tells it and reports window events back.
 
 ## Dependencies
 

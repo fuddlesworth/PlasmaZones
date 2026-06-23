@@ -31,7 +31,7 @@ once per UI seam.
   factory.
 - **Hot-reload on disk change.** A `WatchedDirectorySet` (from
   phosphor-fsloader) watches the plugin root with a debounced
-  rescan. Added plugin directories load; removed directories
+  rescan. Added plugin directories load, and removed directories
   unregister. In-place `.so` replacement (writing new bytes to the
   same path) is NOT honoured today because POSIX `dlopen`
   refcounts loads by path. Reloading the same path returns the
@@ -39,10 +39,10 @@ once per UI seam.
   plugin directory or restart the process. Removed plugins keep
   their `.so` mapping pinned for the loader's lifetime so widgets
   the old factory created keep working until they destruct
-  naturally; a versioned-path scheme plus refcounted safe-unload
+  naturally. A versioned-path scheme plus refcounted safe-unload
   is a future addition alongside the sandbox.
 - **Capabilities are advisory for now.** Each factory declares a
-  `capabilities()` list (also mirrored into the plugin manifest); an
+  `capabilities()` list (also mirrored into the plugin manifest). An
   enforcement layer is a future addition.
 
 ## Key types
@@ -50,14 +50,14 @@ once per UI seam.
 | Type | Purpose |
 |------|---------|
 | `PhosphorRegistry::Registry<T>` | Template registry. Stores factories of type `T` keyed by `T::id()`. Instance-per-composition-root. Emits `factoryRegistered` / `factoryUnregistered` via its `RegistryNotifier`. |
-| `PhosphorRegistry::RegistryNotifier` | QObject signal carrier the template owns. The template itself can't be Q_OBJECT; signals route through this. Reached via `registry.notifier()`. |
+| `PhosphorRegistry::RegistryNotifier` | QObject signal carrier the template owns. The template itself can't be Q_OBJECT, so signals route through this. Reached via `registry.notifier()`. |
 | `PhosphorRegistry::IFactoryBase` | Common base for the five interface families. Declares `id()`, `displayName()`, `capabilities()`. |
 | `PhosphorRegistry::IBarWidgetFactory` | Factory for one top-bar widget (clock, workspaces, tray, etc.). Adds `createWidget(QQmlEngine*, QObject*)`. |
-| `PhosphorRegistry::IControlCenterTileFactory` | Factory for one tile inside the Control Center popout. Adds `createTile(QQmlEngine*, QObject*)`. **No consumer yet**; reserved for a future control-center surface. |
-| `PhosphorRegistry::ILauncherProviderFactory` | Factory for a launcher query provider (apps, calculator, etc.). Adds `createProvider(QObject*)`. **No consumer yet**; reserved for a future launcher surface. |
-| `PhosphorRegistry::IOSDFactory` | Factory for an on-screen display (volume / mic / brightness). Adds `createOSD(QQmlEngine*, QObject*)`. **No consumer yet**; reserved for a future OSD surface. |
-| `PhosphorRegistry::IDesktopWidgetFactory` | Factory for a desktop card / widget. Adds `createWidget(QQmlEngine*, QObject*)`. **No consumer yet**; reserved for a future desktop-widget surface. |
-| `PhosphorRegistry::Manifest` | Plain-old-data mirror of `manifest.json`. `Manifest::parse` reads the file; `parseObject` exists for tests. Rejects ABI mismatch, missing fields, id / directory mismatch. |
+| `PhosphorRegistry::IControlCenterTileFactory` | Factory for one tile inside the Control Center popout. Adds `createTile(QQmlEngine*, QObject*)`. **No consumer yet**, reserved for a future control-center surface. |
+| `PhosphorRegistry::ILauncherProviderFactory` | Factory for a launcher query provider (apps, calculator, etc.). Adds `createProvider(QObject*)`. **No consumer yet**, reserved for a future launcher surface. |
+| `PhosphorRegistry::IOSDFactory` | Factory for an on-screen display (volume / mic / brightness). Adds `createOSD(QQmlEngine*, QObject*)`. **No consumer yet**, reserved for a future OSD surface. |
+| `PhosphorRegistry::IDesktopWidgetFactory` | Factory for a desktop card / widget. Adds `createWidget(QQmlEngine*, QObject*)`. **No consumer yet**, reserved for a future desktop-widget surface. |
+| `PhosphorRegistry::Manifest` | Plain-old-data mirror of `manifest.json`. `Manifest::parse` reads the file, and `parseObject` exists for tests. Rejects ABI mismatch, missing fields, id / directory mismatch. |
 | `PhosphorRegistry::PluginLoader` | Scans a plugin root, loads each plugin's `.so` + manifest, registers in a `Registry<IBarWidgetFactory>`. Hot-reloads on filesystem change. |
 
 ## Typical use
@@ -88,9 +88,9 @@ QObject::connect(barRegistry.notifier(), &RegistryNotifier::factoryRegistered,
 **Glue layer**: the shell wraps the registry in a `QObject` controller
 that exposes the factory ids as a `Q_PROPERTY(QStringList)` and the
 widget construction as a `Q_INVOKABLE`. The library stays QML-free so
-consumers own their own facade; this controller pattern is what both
+consumers own their own facade. This controller pattern is what both
 phosphor-registry demos use. The snippets below name it `BarController`
-to match the production-shell shape (a top-bar widget controller);
+to match the production-shell shape (a top-bar widget controller).
 `examples/phosphor-registry-demo/Main.qml` wires the same pattern under
 the context-property name `demoController` to keep the demo's QML
 self-describing.
@@ -143,7 +143,7 @@ QQuickItem* BarController::createWidgetFor(const QString& id, QQuickItem* parent
 
 **Bar QML**: a `Repeater` drives `factoryIds` and parents each widget
 under its own delegate `Item`. Repeater destroys old delegates on
-model change; QObject's parent-cascade takes the C++-owned widgets
+model change, and QObject's parent-cascade takes the C++-owned widgets
 with them (no manual `child.destroy()`, which fails on C++-owned
 QQuickItems with "indestructible object" errors).
 
@@ -212,7 +212,7 @@ loader enforces this so on-disk layout and registry keys stay aligned.
   plugin loader hits the same path for any plugin whose id collides
   with an existing one.
 - **Factory id must match manifest id.** The loader cross-checks the
-  factory's `id()` against the manifest's `id` field; mismatch is a
+  factory's `id()` against the manifest's `id` field, and a mismatch is a
   refused load with a clear log message. This prevents a renamed
   plugin from quietly taking over another's slot.
 - **Symlinks are not followed.** Plugin subdirectories and `.so` files
@@ -222,7 +222,7 @@ loader enforces this so on-disk layout and registry keys stay aligned.
 - **Group/world-writable plugins refused.** Before `dlopen`, the loader
   refuses any `.so` (or plugin directory) that is group- or
   world-writable, the same StrictModes discipline OpenSSH and sudo
-  apply to files they trust: a permissive mode would let another local
+  apply to files they trust. A permissive mode would let another local
   process overwrite the code the shell is about to run. Signature /
   origin verification is reserved for a future sandbox.
 - **Unload is registry-drop only.** Removing a plugin from
@@ -241,12 +241,12 @@ loader enforces this so on-disk layout and registry keys stay aligned.
 
 ## Dependencies
 
-- `QtCore`, `QtQml`. The library does not link `QtGui` or `QtQuick`;
-  consumers that build widgets do.
+- `QtCore`, `QtQml`. The library does not link `QtGui` or `QtQuick`.
+  Consumers that build widgets do.
 - `phosphor-fsloader` (PUBLIC link): `WatchedDirectorySet` + `IScanStrategy`
   back both the plugin loader's hot-reload path and the header-only
   `MetadataPackLoader<T>` template, which exposes fsloader types in its public
-  interface — so the dependency is transitive (PUBLIC) for consumers.
+  interface, so the dependency is transitive (PUBLIC) for consumers.
 
 ## See also
 

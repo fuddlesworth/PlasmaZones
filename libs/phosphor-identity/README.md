@@ -10,11 +10,11 @@
 
 Wayland doesn't expose a reliable numeric window ID the way X11 does, and
 each compositor surfaces "which window" differently. KWin scripts use
-`internalId`; the daemon's compositor-bridge D-Bus interface carries
-string IDs over the wire; application QObjects own `QWindow` pointers.
+`internalId`, the daemon's compositor-bridge D-Bus interface carries
+string IDs over the wire, and application QObjects own `QWindow` pointers.
 
 `phosphor-identity` owns the wire formats for those identities. It is an
-INTERFACE library — every helper is `inline` in the public header — so
+INTERFACE library where every helper is `inline` in the public header, so
 all consumers link the same definitions without an extra `.so`.
 
 The three identity formats it owns:
@@ -31,7 +31,7 @@ The three identity formats it owns:
 | Type | Purpose |
 |------|---------|
 | `PhosphorIdentity::WindowId`        | Helpers for the canonical `appId|instanceId` window-id format |
-| `PhosphorIdentity::ScreenId`        | EDID parsing + screen-id construction; cached across TUs |
+| `PhosphorIdentity::ScreenId`        | EDID parsing + screen-id construction, cached across TUs |
 | `PhosphorIdentity::VirtualScreenId` | `<physicalId>/vs:<index>` make / parse / detect helpers |
 
 ## Typical use
@@ -59,9 +59,9 @@ if (VirtualScreenId::isVirtual(screenId)) {
 
 ## Design notes
 
-- **INTERFACE library.** No `.so` shipped — every function is `inline`
+- **INTERFACE library.** No `.so` is shipped. Every function is `inline`
   in the public header. Cross-process consumers all share one definition
-  by language rule; nobody links a third copy.
+  by language rule, and nobody links a third copy.
 - **Header-only by design.** The function-local static caches in
   `ScreenId.h` are guaranteed unique across translation units by the
   C++17 inline-function-static rule.
@@ -71,5 +71,5 @@ if (VirtualScreenId::isVirtual(screenId)) {
 
 ## Dependencies
 
-- `QtCore` only. Zero Phosphor dependencies; this is the foundation
+- `QtCore` only. Zero Phosphor dependencies. This is the foundation
   layer everything else builds on.

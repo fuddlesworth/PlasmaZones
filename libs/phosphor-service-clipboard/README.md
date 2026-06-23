@@ -9,10 +9,10 @@ A clipboard-history service for Phosphor-based desktop shells.
 
 Watches the session clipboard, keeps a de-duplicated, capped, on-disk history,
 and can re-apply any entry. It is the policy / history / persistence layer over
-`phosphor-wayland`'s `ClipboardDevice` (a `wlr-data-control` client); it composes
+`phosphor-wayland`'s `ClipboardDevice` (a `wlr-data-control` client). It composes
 the device rather than binding the protocol itself, so its public surface is a
-clean Qt/QML type with no Wayland types leaking out. No UI: it surfaces the
-history as a model and a shell renders the picker.
+clean Qt/QML type with no Wayland types leaking out. It surfaces the
+history as a model and leaves a shell to render the picker. No UI is provided here.
 
 - Watch the clipboard independent of keyboard focus (`wlr-data-control`).
 - Keep a de-duplicated, capped history that survives restarts.
@@ -25,7 +25,7 @@ The clipboard-manager UI itself is a future shell consumer of this library.
 
 | Type             | Role                                                                                  |
 |------------------|---------------------------------------------------------------------------------------|
-| `ClipboardService` | The clipboard-history host. Exposes `history` (a list model, most-recent first, with `preview` / `mimeType` / `offeredTypes` / `timestamp` roles) and `count`; `copy(index)` re-applies an entry, `remove(index)` and `clear()` prune. Loads from disk on construction and persists on every change. A plain instantiable QML type, not a singleton. |
+| `ClipboardService` | The clipboard-history host. Exposes `history` (a list model, most-recent first, with `preview` / `mimeType` / `offeredTypes` / `timestamp` roles) and `count`. `copy(index)` re-applies an entry, `remove(index)` and `clear()` prune. Loads from disk on construction and persists on every change. A plain instantiable QML type, not a singleton. |
 
 ## Typical use
 
@@ -76,21 +76,21 @@ phosphor-service-clipboard-cli copy 2
 ## Design notes
 
 - **Composes the foundation primitive.** The `wlr-data-control` client lives in
-  `phosphor-wayland` (`ClipboardDevice`); this library links it privately and
+  `phosphor-wayland` (`ClipboardDevice`). This library links it privately and
   builds the history / dedup / persistence / model layer on top. It binds no
   protocols itself.
 - **Reads asynchronously.** Each new selection is read off a pipe on the event
-  loop (`receive` returns immediately; the bytes arrive via a signal), so a large
+  loop (`receive` returns immediately and the bytes arrive via a signal), so a large
   or slow producer never blocks the UI. The model is driven through an
   `IClipboardSource` seam, so its policy is unit-tested with a fake source and no
   compositor.
 - **Never persist secrets.** A selection carrying a sensitivity hint (the KDE
-  `x-kde-passwordManagerHint`) is dropped entirely: never read, never kept, never
+  `x-kde-passwordManagerHint`) is dropped entirely and is never read, kept, or
   written. The on-disk store also refuses sensitive entries as a second line of
   defence, mirroring `phosphor-service-polkit`'s never-store-the-secret stance.
 - **On-disk history.** A JSON index plus per-entry content blobs (named by
   SHA-256, so identical content shares a blob) under
-  `~/.local/share/phosphor-clipboard`. Writes are atomic; orphaned blobs are
+  `~/.local/share/phosphor-clipboard`. Writes are atomic and orphaned blobs are
   pruned. The history loads on startup and saves on every change.
 - **A model, not a single host.** Clipboard is inherently a list, so the facade
   exposes a `QAbstractItemModel` (the `phosphor-service-notifications`
@@ -105,7 +105,7 @@ phosphor-service-clipboard-cli copy 2
 - Qt6 >= 6.6 (Core, Qml). The CLI additionally uses Qt6 Gui for
   `QGuiApplication`.
 - A compositor advertising `wlr-data-control-unstable-v1` for the live path (the
-  library loads inert without it; the persisted history still loads and reads).
+  library loads inert without it, and the persisted history still loads and reads).
 
 ## Status
 

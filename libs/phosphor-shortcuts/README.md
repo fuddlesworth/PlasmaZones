@@ -58,8 +58,8 @@ registry.bind(
 );
 ```
 
-Switching backends is a one-liner: the same `Registry` API, a different
-`IBackend`.
+Switching backends is a one-liner. The `Registry` API stays the same, and you
+pass a different `IBackend`.
 
 ```cpp
 auto portalBackend = createBackend(BackendHint::Portal);
@@ -76,8 +76,8 @@ adhoc.bind(id, seq, desc, cb, /*persistent*/ false);
   end up in the user's persistent shortcut editor live behind a different
   API, so the backend only persists the ones that asked for it.
 - **`createBackend(BackendHint::Auto)`** probes at runtime. First preference is
-  KGlobalAccel (fastest, native Plasma integration); it falls back to the
-  portal, and last to D-Bus.
+  KGlobalAccel (fastest, native Plasma integration), then the
+  portal, and last D-Bus.
 
 ## Dependencies
 

@@ -16,14 +16,14 @@ library provides:
 
 - **A `Store` front-end** with `read<T>(group, key)`, `readVariant(group, key)`,
   and `write(group, key, value)` over a pluggable `IBackend`. The library ships
-  `JsonBackend` and `QSettingsBackend`; tests can supply their own in-memory
+  `JsonBackend` and `QSettingsBackend`, and tests can supply their own in-memory
   `IBackend`.
 - **Schema-driven defaults and validation.** The `Schema` declares the groups
   and, per `KeyDef`, the default value, optional expected type, and an optional
   validator applied on both read and write.
 - **Versioned migrations.** `MigrationRunner` runs the `Schema`'s
   `MigrationStep` chain `v1 -> v2 -> v3 ...` against the raw JSON root. Each
-  schema-version bump lands one migration step; consumers never have to write
+  schema-version bump lands one migration step, and consumers never have to write
   per-key fallback reads.
 - **Group-path resolution.** An optional `IGroupPathResolver` on the `Schema`
   translates group names into a lookup the backend understands, regardless of
@@ -35,8 +35,8 @@ library provides:
 |------|---------|
 | `PhosphorConfig::Store`             | Front-end API: `read<T>()`, `readVariant()`, `write()`, `reset()`, `changed()` signal |
 | `PhosphorConfig::IBackend`          | Abstract backend. Shipped: `JsonBackend`, `QSettingsBackend` |
-| `PhosphorConfig::JsonBackend`       | JSON-on-disk; path chosen by the consumer (e.g. `$XDG_CONFIG_HOME/<app>/config.json`) |
-| `PhosphorConfig::QSettingsBackend`  | QSettings-backed; useful in Qt-only (non-KF6) builds |
+| `PhosphorConfig::JsonBackend`       | JSON-on-disk, with the path chosen by the consumer (e.g. `$XDG_CONFIG_HOME/<app>/config.json`) |
+| `PhosphorConfig::QSettingsBackend`  | QSettings-backed, useful in Qt-only (non-KF6) builds |
 | `PhosphorConfig::Schema`            | Declarative struct: groups of `KeyDef` (default + expected type + validator), version, migration chain |
 | `PhosphorConfig::MigrationRunner`   | Runs the schema's `MigrationStep` chain, one step per schema bump |
 | `PhosphorConfig::IGroupPathResolver`| Group-name to backend-key mapping |
@@ -100,7 +100,7 @@ MigrationRunner(schema).runOnFile(configPath);
 - **No ad-hoc backwards compatibility.** The library enforces one migration
   per schema bump and nothing else. No per-key fallback reads outside
   migration functions. Within a schema version, renaming a key means users
-  get the default for the new key; no silent rescue. This keeps the
+  get the default for the new key, with no silent rescue. This keeps the
   config-reading code trivial.
 - **Per-key validators.** Each `KeyDef` may carry a validator applied on both
   read and write, giving consumers one place to clamp ranges (`qBound`),
@@ -114,4 +114,4 @@ MigrationRunner(schema).runOnFile(configPath);
 
 ## Dependencies
 
-- `QtCore`, `QtGui`. Zero Phosphor deps; this is a leaf library.
+- `QtCore`, `QtGui`. Zero Phosphor deps. This is a leaf library.

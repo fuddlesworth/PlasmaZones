@@ -8,8 +8,8 @@ server for Phosphor-based desktop shells.
 
 ## Responsibility
 
-This library IS the notification daemon: it owns the well-known name and answers
-it, rather than being a client of one. No UI; it stores and lifecycles
+This library IS the notification daemon. It owns the well-known name and answers
+it, rather than being a client of one. There is no UI. It stores and lifecycles
 notifications and surfaces them as Qt + QML types for a shell to render.
 
 - Acquire `org.freedesktop.Notifications` on the session bus and answer its four
@@ -29,9 +29,9 @@ future shell consumers of this library, not part of it.
 
 | Type                 | Role                                                                              |
 |----------------------|-----------------------------------------------------------------------------------|
-| `NotificationServer` | Owns the bus name and the notification lifecycle; forwarding target of the generated `org.freedesktop.Notifications` adaptor. `dismissNotification` / `invokeAction` are `Q_INVOKABLE` for a UI, never exported on the bus. |
+| `NotificationServer` | Owns the bus name and the notification lifecycle, and is the forwarding target of the generated `org.freedesktop.Notifications` adaptor. `dismissNotification` / `invokeAction` are `Q_INVOKABLE` for a UI, never exported on the bus. |
 | `Notification`       | One decoded live notification (summary / body / actions / urgency / image / hints), mutated in place on `replaces_id`. |
-| `NotificationModel`  | `QAbstractListModel` over a server's live notifications (bind its `server` property); rows track add / replace / close. |
+| `NotificationModel`  | `QAbstractListModel` over a server's live notifications (bind its `server` property). Rows track add / replace / close. |
 
 ## Typical use
 
@@ -75,19 +75,19 @@ ListView {
   four methods reply synchronously, so there is no delayed-reply reason to
   hand-roll dispatch the way `phosphor-service-bluetooth`'s `Agent1` does.
 - **Name conflict is inert, with opt-in takeover.** Exactly one process may own
-  the name; when another daemon (dunst / mako / Plasma) holds it, the server
+  the name. When another daemon (dunst / mako / Plasma) holds it, the server
   surfaces `nameAcquired() == false` and stays inert. `acquireName(true)` (the
-  CLI's `--replace`) takes over an owner that allows replacement; it is never a
+  CLI's `--replace`) takes over an owner that allows replacement, and is never a
   forced default.
 - **Image decode, once.** The `image-data` `(iiibiiay)` hint is demarshalled
   inline (`QDBusArgument`) into a deep-copied `QImage`, with `image-path`
   falling back to a file load or an icon-theme name. This is the lib's only
-  `Qt::Gui` use, scoped to `QImage`; the raw hint map stays on `Notification`
+  `Qt::Gui` use, scoped to `QImage`. The raw hint map stays on `Notification`
   for advanced bindings. The `image` property / model role is a `QImage`, so a
   QML delegate that wants to paint it needs a `QQuickImageProvider` keyed off the
-  notification id (a shell toast supplies one); it is not directly an
+  notification id (a shell toast supplies one). It is not directly an
   `Image.source`.
-- **Markup stays raw.** `body` markup is stored, never rendered; `GetCapabilities`
+- **Markup stays raw.** `body` markup is stored, never rendered. `GetCapabilities`
   advertises `body` / `actions` / `icon-static` / `persistence` but not
   `body-markup` until a renderer exists.
 - **Dependency injection for tests.** `NotificationServer` takes an injectable

@@ -11,8 +11,8 @@
 ## Responsibility
 
 Qt's standard QPA plugins (`wayland`, `xcb`) create desktop-level
-windows. Overlays — zone outlines, snap-assist previews, shader
-wallpapers — need to live on a **layer-shell surface** with per-surface
+windows. Overlays such as zone outlines, snap-assist previews, and shader
+wallpapers need to live on a **layer-shell surface** with per-surface
 anchor, margin, exclusive-zone, and keyboard-interactivity
 configuration that the regular Qt surface API doesn't expose.
 
@@ -23,7 +23,7 @@ configuration that the regular Qt surface API doesn't expose.
   `QGuiApplication`. Hosts a `QQuickWindow` on top of a
   `wlr-layer-shell-v1` surface.
 - **`LayerSurface`** — the Qt wrapper around a layer-shell role.
-  Pure Qt API: callers get `QObject` + `Q_PROPERTY`s and never see
+  The API is pure Qt, so callers get `QObject` + `Q_PROPERTY`s and never see
   Wayland types directly. The wrapper communicates with the QPA
   plugin via a small set of dynamic property keys
   (`LayerSurfaceProps::*`), so a build that doesn't link this lib
@@ -86,7 +86,7 @@ int main(int argc, char** argv) {
 ## Design notes
 
 - **Pure Qt API surface.** No Wayland types leak through `LayerSurface`.
-  Callers see `QMargins`, `QScreen*`, and Qt enums — the QPA plugin
+  Callers see `QMargins`, `QScreen*`, and Qt enums. The QPA plugin
   consumes the dynamic properties on the underlying `QWindow` and
   drives `wl_layer_shell` itself.
 - **Header-only env-var setup.** `registerLayerShellPlugin()` is
@@ -94,7 +94,7 @@ int main(int argc, char** argv) {
   one environment variable. The plugin itself loads through Qt's
   standard QPA discovery once the env var is set.
 - **Compositor-running detection is conservative.**
-  `WAYLAND_DISPLAY` proves a compositor is up; we don't use
+  `WAYLAND_DISPLAY` proves a compositor is up. We don't use
   `XDG_SESSION_TYPE` because it can be `wayland` in SSH sessions or
   before the compositor starts. The fallback checks
   `$XDG_RUNTIME_DIR/wayland-{0,1}` for COSMIC and socket-activation

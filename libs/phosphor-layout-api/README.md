@@ -10,8 +10,8 @@
 ## Responsibility
 
 Both the zones library and the autotiling library produce "a layout for
-this screen at this moment" — zones from a user-drawn JSON description,
-autotiling from a dynamic algorithm over the current window set.
+this screen at this moment". Zones come from a user-drawn JSON description,
+and autotiling from a dynamic algorithm over the current window set.
 Downstream consumers (snap engine, overlay, settings-UI preview)
 shouldn't care which source a layout came from.
 
@@ -47,7 +47,7 @@ shouldn't care which source a layout came from.
 |------|---------|
 | `PhosphorLayout::ILayoutSource`              | Abstract layout producer |
 | `PhosphorLayout::ILayoutSourceFactory`       | Builds an `ILayoutSource` for a given layout-ID |
-| `PhosphorLayout::ILayoutSourceRegistry`      | Provider-side enumeration; emits `contentsChanged` |
+| `PhosphorLayout::ILayoutSourceRegistry`      | Provider-side enumeration that emits `contentsChanged` |
 | `PhosphorLayout::LayoutSourceProviderRegistry` | Process-wide "which providers exist" registrar |
 | `PhosphorLayout::LayoutSourceBundle`         | Per-process bundle of resolved provider instances |
 | `PhosphorLayout::LayoutId`                   | Stable string identifier, value-semantic |
@@ -96,11 +96,11 @@ ILayoutSource *combined = &composite;            // consumers don't know the dif
 
 ## Design notes
 
-- **Zero Qt-GUI deps in the core.** Most of the contract is `QtCore`-only;
-  `QRect` brings in `QtGui` but a headless test or a command-line tool
+- **Zero Qt-GUI deps in the core.** Most of the contract is `QtCore`-only.
+  `QRect` brings in `QtGui`, but a headless test or a command-line tool
   can still link against it without QML or Quick.
 - **Value-typed `LayoutId`.** `QString` would let two APIs disagree on
-  case-sensitivity; wrapping enforces a single canonical form.
+  case-sensitivity. Wrapping enforces a single canonical form.
 - **`CompositeLayoutSource`** is how a daemon handles mixed-source setups
   without special-casing per-screen logic in the snap or autotile engines.
 - **Provider registry pattern.** Both `phosphor-zones` and `phosphor-tiles`

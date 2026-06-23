@@ -9,16 +9,16 @@ A Wayland idle-management service for Phosphor-based desktop shells.
 
 Watches the session for inactivity through a configurable multi-stage timeout
 policy, and inhibits idle on request. It is the policy layer over the raw Wayland
-idle clients in `phosphor-wayland`; it composes them rather than binding the
+idle clients in `phosphor-wayland`. It composes them rather than binding the
 protocols itself, so its public surface is a clean Qt/QML type with no Wayland
-types leaking out. No UI: it reports which idle stage is active and the shell
-decides what each stage does (dim, lock, display-off).
+types leaking out. It reports which idle stage is active and lets the shell
+decide what each stage does (dim, lock, display-off). No UI is provided here.
 
 - Monitor inactivity as an ordered ladder of stages, each firing after its own
   timeout (`ext-idle-notify-v1`, via `PhosphorWayland::IdleNotifier`).
 - Reference-count idle inhibition so callers can keep the session awake while a
   video plays or a long task runs.
-- Stay mechanism, not policy: the library ships no default stages.
+- Stay a mechanism rather than a policy. The library ships no default stages.
 
 ## Key types
 
@@ -64,7 +64,7 @@ IdleService {
 //   idle.release(cookie)
 ```
 
-The CLI doubles as the worked example and the acceptance harness; it logs each
+The CLI doubles as the worked example and the acceptance harness. It logs each
 stage as it fires:
 
 ```sh
@@ -79,14 +79,14 @@ phosphor-service-idle-cli --stage dim:5 --inhibit-for 8
 - **Composes the foundation primitives.** The `ext-idle-notify-v1` and
   `zwp-idle-inhibit-v1` clients already live in `phosphor-wayland`
   (`IdleNotifier` / `IdleInhibitor`), which also vendors the protocol XML. This
-  library links `phosphor-wayland` privately and builds the policy on top; it
+  library links `phosphor-wayland` privately and builds the policy on top. It
   binds no protocols itself.
 - **A monotonic stage ladder.** Stages sort by ascending timeout. Each stage's
-  source fires in timeout order and advances `currentStage`; the first activity
+  source fires in timeout order and advances `currentStage`. The first activity
   resets the whole ladder to active. The shell reads the stage and decides the
   action.
 - **Inhibition pauses monitoring.** `inhibit()` / `release(cookie)` reference-count
-  inhibition; while any cookie is held the ladder is disarmed (so the compositor
+  inhibition. While any cookie is held the ladder is disarmed (so the compositor
   delivers no idle notifications) and the service reports active. This is the
   surface-less inhibition a shell needs, distinct from the surface-bound
   `PhosphorWayland::IdleInhibitor` a QML window uses to keep its own output awake.
@@ -119,5 +119,5 @@ surface with no compositor: the smoke harness (registration idempotency, inert
 construction), the facade test (stage round trip + sort, inhibition toggle), the
 QML-engine load test, the stage state machine (advance / reset / reconfigure /
 pause), and the inhibition ref-count. The idle-action policy (dim, lock, display
-power) is a future shell consumer; suspend / power coupling lives in the session
-service (session / logind).
+power) is a future shell consumer, and suspend / power coupling lives in the
+session service (session / logind).
