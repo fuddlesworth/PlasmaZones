@@ -20,7 +20,7 @@ library provides:
 - **Staging domains.** `StagingDomain` is the unit of staged work:
   `isDirty()`, `apply()`, `discard()`, `resetToDefaults()`, plus async
   completion signals. `PageController` is a domain that also has a QML page and
-  a sidebar row; headless domains hold cross-cutting state (e.g. per-screen
+  a sidebar row. Headless domains hold cross-cutting state (e.g. per-screen
   assignment maps) with no sidebar entry.
 - **A page catalogue.** `PageRegistry` holds the page tree (top-level entries
   plus drill-down or collapsible children), keyed by stable page id, and drives
@@ -45,7 +45,7 @@ library provides:
 |------|---------|
 | `PhosphorControl::ApplicationController` | Top-level orchestrator: owns the registry + domains, global dirty flag, batched `applyAllAsync` / `discardAllAsync`, current-page selection, deep-link anchor latch |
 | `PhosphorControl::StagingDomain`         | Abstract unit of staged changes: `isDirty()`, `apply()`, `discard()`, `resetToDefaults()`, with `applyResult` / `discardResult` async signals |
-| `PhosphorControl::PageController`         | A `StagingDomain` that also has a QML page and a sidebar row; carries a stable, globally-unique page id |
+| `PhosphorControl::PageController`         | A `StagingDomain` that also has a QML page and a sidebar row, with a stable, globally-unique page id |
 | `PhosphorControl::PageRegistry`           | Catalogue of registered pages as a tree (`Entry` per page); read-only after startup, supports dynamic add but not removal |
 | `PhosphorControl::SearchController`       | Global settings search: ranked results from page registry, authored anchors, and registered providers |
 | `PhosphorControl::SearchRanker`           | Pure, stateless, typo-tolerant scoring + ranking; headless and Qt-free beyond `QString` |
@@ -58,8 +58,8 @@ library provides:
 
 A consumer subclasses `ApplicationController` to declare its pages, subclasses
 `PageController` for each page, and points the QML `SettingsAppWindow` at the
-controller. Titles are translated by the caller — the library deliberately
-provides no translation context for app strings.
+controller. Titles are translated by the caller, because the library
+deliberately provides no translation context for app strings.
 
 ```cpp
 #include <PhosphorControl/ApplicationController.h>
@@ -116,7 +116,7 @@ See `examples/minimal/` for a complete two-page app (General + About).
   invokes `apply()` / `discard()` on domains whose `isDirty()` is true, so
   implementations must not rely on side effects that need to run while clean
   (timestamp stamping, notifications). Every domain must emit `applyResult` /
-  `discardResult` exactly once per batch — the async driver's pending counter
+  `discardResult` exactly once per batch. The async driver's pending counter
   parks the chrome's "Saving…" state until it lands or the 60 s timeout fires.
 - **Boundary with phosphor-config and phosphor-shortcuts.** This library owns no
   configuration store and no shortcut backend. Consumers wire their own
@@ -129,7 +129,7 @@ See `examples/minimal/` for a complete two-page app (General + About).
 - **Search is layered.** `SearchRanker` is pure and unit-testable on its own
   (best-tier-per-field scoring, weighted title > keywords > subtitle, edit
   distance only as a "did you mean" fallback). `SearchController` composes it
-  with the page registry and providers; the app supplies translated strings and
+  with the page registry and providers. The app supplies translated strings, and
   the index stores them verbatim.
 - **STATIC QML module in-tree, SHARED on opt-in.** `org.phosphor.control` builds
   STATIC for in-tree consumers (linked directly). Out-of-tree
@@ -138,7 +138,7 @@ See `examples/minimal/` for a complete two-page app (General + About).
 
 ## Dependencies
 
-- `QtCore`, `QtDBus`, `QtGui` (private), `QtQml`; the QML module adds `QtQuick`
+- `QtCore`, `QtDBus`, `QtGui` (private), `QtQml`. The QML module adds `QtQuick`
 - [`phosphor-animation`](../phosphor-animation/README.md) — the QML chrome
   imports `org.phosphor.animation` for the spring-physics motion profiles
   (panel fade, accordion expand/collapse, tint, pulse)
@@ -146,7 +146,7 @@ See `examples/minimal/` for a complete two-page app (General + About).
 ## See also
 
 - [`phosphor-config`](../phosphor-config/README.md) — the configuration store an
-  app's `ISettings` implementation is wired against; this library does not
+  app's `ISettings` implementation is wired against. This library does not
   duplicate that contract.
 - [`phosphor-shortcuts`](../phosphor-shortcuts/README.md) — global-shortcut
   backends, kept out of this library on purpose.
