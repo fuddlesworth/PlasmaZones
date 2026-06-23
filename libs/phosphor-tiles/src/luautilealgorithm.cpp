@@ -737,15 +737,31 @@ void LuauTileAlgorithm::onWindowResized(TilingState* state, const ResizeEvent& r
             << "LuauTileAlgorithm: onWindowResized() failed script=" << m_scriptId << ":" << out.message;
         return;
     }
-    // The hook returns the new persistent state bag (or nothing to leave it
-    // unchanged). Persistence is opt-in via metadata.supportsScriptState — a
-    // script that reacts to resize without declaring it gets no stored state
-    // (and no ctx.state, see buildContext), keeping each algorithm's bag its own.
-    // Sanitize at this trust boundary, then store so the retile the engine runs
-    // next lays the windows out from the updated state.
-    if (m_metadata.supportsScriptState && out.result.typeId() == QMetaType::QVariantMap) {
-        const QJsonObject sanitized = TilingState::sanitizeScriptState(QJsonObject::fromVariantMap(out.result.toMap()));
-        state->setScriptState(sanitized);
+    // The hook returns a control map. Two independent, optional outputs:
+    //
+    //   * "splitRatio" (reserved key): a new master/split ratio for the engine to
+    //     apply to this state — used by the ratio-based algorithms (master-stack,
+    //     deck, …) to reflow on an interactive resize. setSplitRatio clamps to
+    //     [MinSplitRatio, MaxSplitRatio]. The engine marks the state user-tuned
+    //     (per-desktop, survives a settings refresh) only when the value changes.
+    //
+    //   * the persistent state bag: opt-in via metadata.supportsScriptState — a
+    //     script that reacts to resize without declaring it gets no stored bag
+    //     (and no ctx.state, see buildContext), keeping each algorithm's bag its
+    //     own. Sanitized at this trust boundary, then stored so the engine's
+    //     follow-up retile lays the windows out from the updated state.
+    if (out.result.typeId() == QMetaType::QVariantMap) {
+        const QVariantMap result = out.result.toMap();
+
+        const auto ratioIt = result.constFind(QStringLiteral("splitRatio"));
+        if (ratioIt != result.constEnd() && ratioIt->canConvert<double>()) {
+            state->setSplitRatio(ratioIt->toDouble());
+        }
+
+        if (m_metadata.supportsScriptState) {
+            const QJsonObject sanitized = TilingState::sanitizeScriptState(QJsonObject::fromVariantMap(result));
+            state->setScriptState(sanitized);
+        }
     }
 }
 

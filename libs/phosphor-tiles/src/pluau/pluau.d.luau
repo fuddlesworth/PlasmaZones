@@ -88,8 +88,13 @@ export type Algorithm = {
     tile: (ctx: Context) -> { Zone },
     onWindowAdded: ((state: any, index: number) -> ())?,
     onWindowRemoved: ((state: any, index: number) -> ())?,
-    -- Called after an interactive resize. Return the new ctx.state bag (or nil to
-    -- leave it unchanged). Requires metadata.supportsScriptState for the bag to persist.
+    -- Called after an interactive resize. Return a control table (or nil to do
+    -- nothing). Two optional, independent outputs:
+    --   * splitRatio: number — a new master/split ratio the engine applies to this
+    --     state (clamped); ratio-based algorithms reflow on resize this way. The
+    --     change stays local to the current screen+desktop.
+    --   * any other keys — the new ctx.state bag; persisted only when
+    --     metadata.supportsScriptState is set (see `state` in Context).
     onWindowResized: ((state: any, resize: ResizeEvent) -> { [string]: any }?)?,
 }
 
