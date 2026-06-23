@@ -1,7 +1,7 @@
 {
     "id": "ripple",
     "name": "Ripple",
-    "description": "Outward radial ripple — sin-modulated UV displacement with seed-stable per-instance phase. Asymmetric envelope and alpha curves between open and close.",
+    "description": "An outward radial ripple using sin-modulated UV displacement with a seed-stable per-instance phase. The envelope and alpha curves differ between open and close.",
     "author": "PlasmaZones (ported from liixini/shaders, https://github.com/liixini/shaders)",
     "version": "1.0",
     "category": "Distortion",

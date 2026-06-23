@@ -1,7 +1,7 @@
 {
     "id": "static-fade",
     "name": "Static Fade",
-    "description": "TV-static interference reveal — random RGB static panels overlay the surface, ramping with intensity at midpoint.",
+    "description": "A TV-static interference reveal. Random RGB static panels overlay the surface and ramp up in intensity at the midpoint.",
     "author": "PlasmaZones (ported from liixini/shaders, https://github.com/liixini/shaders)",
     "version": "1.0",
     "category": "Glitch",

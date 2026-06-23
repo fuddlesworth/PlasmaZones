@@ -2,7 +2,7 @@
     "id": "tumbleweed-drift",
     "name": "Tumbleweed Drift",
     "category": "Branded",
-    "description": "Warm desert horizon with wind-carved sand dune textures, rolling tumbleweed pinwheel logos, dust devil vortices, parallax sand particles, erosion flow lines, and bass shockwave rings \u2014 audio-reactive wind intensity, multi-layer logo glow, treble sand glints, sandstorm band, wind-etched sandstone labels, and iridescent inner glow. Enable CAVA audio visualization in settings.",
+    "description": "A warm desert horizon with wind-carved sand dune textures, rolling tumbleweed pinwheel logos, dust devil vortices, parallax sand particles, erosion flow lines, and bass shockwave rings. The audio reactivity drives wind intensity, multi-layer logo glow, treble sand glints, a sandstorm band, wind-etched sandstone labels, and an iridescent inner glow. Enable CAVA audio visualization in settings.",
     "author": "PlasmaZones",
     "version": "2.0",
     "fragmentShader": "effect.frag",

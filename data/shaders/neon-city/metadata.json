@@ -2,7 +2,7 @@
     "id": "neon-city",
     "name": "Neon City",
     "category": "3D",
-    "description": "Fly past an infinite grid of pixel buildings lit by cascading neon signs and drifting street lights. Bass lifts the fog and pumps the street lights, treble flickers the signs, mids cycle the window palette \u2014 camera stays stable. Adapted from 'Neon City' by nikitamashchenko (Shadertoy). Enable CAVA audio visualization in settings.",
+    "description": "Fly past an infinite grid of pixel buildings lit by cascading neon signs and drifting street lights. Bass lifts the fog and pumps the street lights, treble flickers the signs, and mids cycle the window palette while the camera stays stable. Adapted from 'Neon City' by nikitamashchenko (Shadertoy). Enable CAVA audio visualization in settings.",
     "author": "PlasmaZones (adapted from nikitamashchenko, Shadertoy)",
     "version": "1.0",
     "fragmentShader": "effect.frag",

@@ -2,7 +2,7 @@
     "id": "cachyos-drift",
     "name": "CachyOS Drift",
     "category": "Branded",
-    "description": "Multiple procedural CachyOS logos drawn as SDF geometry, drifting independently through the scene \u2014 each facet animates with per-segment audio reactivity, bass shatter, shockwave rings, and faceted edge sparks",
+    "description": "Multiple procedural CachyOS logos drawn as SDF geometry drift independently through the scene. Each facet animates with per-segment audio reactivity, bass shatter, shockwave rings, and faceted edge sparks",
     "author": "PlasmaZones",
     "version": "1.0",
     "fragmentShader": "effect.frag",

@@ -2,7 +2,7 @@
     "id": "plasma-sigil",
     "name": "Plasma Sigil",
     "category": "Energy",
-    "description": "Holographic PlasmaZones icon rendered as a glowing energy sigil: five zone rectangles from the app icon are procedurally recreated with signed distance fields and animated with gradient energy flow, racing perimeter pulses, and energy bridge connections through layout dividers; bass pulses the sigil and expands the glow, mids cycle the gradient palette, treble spawns edge sparks along the icon strokes",
+    "description": "The PlasmaZones icon rendered as a glowing holographic energy sigil. Five zone rectangles from the app icon are recreated with signed distance fields and animated with gradient energy flow, racing perimeter pulses, and energy bridge connections through the layout dividers. Bass pulses the sigil and expands the glow, mids cycle the gradient palette, and treble spawns edge sparks along the icon strokes",
     "author": "PlasmaZones",
     "version": "1.0",
     "fragmentShader": "effect.frag",

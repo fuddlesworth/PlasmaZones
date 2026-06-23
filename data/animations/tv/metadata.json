@@ -1,7 +1,7 @@
 {
     "id": "tv",
     "name": "TV Effect",
-    "description": "Old-CRT power-off: window collapses vertically to a horizontal line, then horizontally to a point, then flashes",
+    "description": "An old-CRT power-off. The window collapses vertically to a horizontal line, then horizontally to a point, then flashes",
     "author": "PlasmaZones",
     "version": "1.0",
     "category": "Slide",

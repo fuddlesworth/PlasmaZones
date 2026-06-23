@@ -1,7 +1,7 @@
 {
     "id": "colour-distance",
     "name": "Colour Distance",
-    "description": "Luminance-thresholded reveal — pixels emerge in order of brightness.",
+    "description": "Pixels emerge in order of brightness, using a luminance threshold.",
     "author": "PlasmaZones (ported from liixini/shaders, https://github.com/liixini/shaders)",
     "version": "1.0",
     "category": "Fade",

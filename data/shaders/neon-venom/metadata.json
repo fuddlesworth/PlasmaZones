@@ -2,7 +2,7 @@
     "id": "neon-venom",
     "name": "Neon Venom",
     "category": "Cyberpunk",
-    "description": "Organic bioluminescent venom veins pulse through toxic pools with rising acid bubbles and venomous mist \u2014 inspired by Neon Venom",
+    "description": "Organic bioluminescent venom veins pulse through toxic pools with rising acid bubbles and venomous mist, inspired by Neon Venom",
     "author": "PlasmaZones",
     "version": "1.1",
     "fragmentShader": "effect.frag",

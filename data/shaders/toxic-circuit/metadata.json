@@ -2,7 +2,7 @@
     "id": "toxic-circuit",
     "name": "Toxic Circuit",
     "category": "Cyberpunk",
-    "description": "Cyberpunk venom overlay with glowing circuit traces, toxic drip effects, digital corruption, and neon shimmer - inspired by Neon Venom aesthetic",
+    "description": "A cyberpunk venom overlay with glowing circuit traces, toxic drip effects, digital corruption, and neon shimmer, inspired by the Neon Venom aesthetic",
     "author": "PlasmaZones",
     "version": "1.0",
     "fragmentShader": "effect.frag",

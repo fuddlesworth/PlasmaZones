@@ -1,7 +1,7 @@
 {
     "id": "randomsquares",
     "name": "Random Squares",
-    "description": "Random-grid block reveal — each cell flips on at its own threshold with a soft window.",
+    "description": "A random-grid block reveal where each cell flips on at its own threshold with a soft window.",
     "author": "PlasmaZones (ported from liixini/shaders, https://github.com/liixini/shaders)",
     "version": "1.0",
     "category": "Tile",

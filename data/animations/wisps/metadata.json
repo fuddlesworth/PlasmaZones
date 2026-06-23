@@ -1,7 +1,7 @@
 {
     "id": "wisps",
     "name": "Wisps",
-    "description": "Smoke wisps — sparse animated noise trails dissipate the surface.",
+    "description": "Sparse animated noise trails dissipate the surface like smoke wisps.",
     "author": "PlasmaZones (ported from Burn-My-Windows by Simon Schneegans, https://github.com/Schneegans/Burn-My-Windows)",
     "version": "1.0",
     "category": "Particle",
