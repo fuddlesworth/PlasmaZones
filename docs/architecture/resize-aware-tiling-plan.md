@@ -281,11 +281,15 @@ All new tests go in the top-level **GPL** `tests/unit/` (gated behind `-DBUILD_T
   screen-boundary edges, orthogonal-axis miss, nested nearest-collinear-ancestor; `resizeSplitNode` —
   reflow, clamp, null/leaf no-op.
 - `tests/unit/scripting/test_luau_aligned_grid.cpp` (new): loads the real bundled `aligned-grid.luau` and
-  exercises the full P3+P4 path — resize-hook declaration, uniform grid, the column-moves-all-rows proof,
-  state-bag round-trip, and reshape-resets-to-uniform.
+  exercises the full P3+P4 path — resize-hook declaration, uniform grid, the column-moves-all-rows and
+  row-moves-all-columns proofs, reshape-resets-to-uniform, the out-of-range-index no-op, and the
+  partial-row column-drag no-op.
 - `tests/unit/scripting/test_luau_ratio_reflow.cpp` (new): loads the six ratio-based bundled algorithms
   (master-stack, wide, focus-sidebar, zen, deck, horizontal-deck) and asserts each onWindowResized hook's
   returned split ratio, the index/edge gating, and the orthogonal-axis / single-window / peek no-ops.
+- `tests/unit/autotile/test_tiling_state_serial.cpp` (extended): scriptState toJson/fromJson round-trip,
+  empty-bag omission, and `sanitizeScriptState`'s NaN/±Inf-drop, byte-cap drop, depth-cap prune, and
+  key/array-element budget truncation (the script trust-boundary safety net).
 
 The existing 251-test suite already covers the modified serialization / context-building / engine paths;
 all pass unchanged. The originally-scoped engine-`onWindowResized` end-to-end and D-Bus-adaptor tests

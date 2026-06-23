@@ -322,6 +322,39 @@ private Q_SLOTS:
         QVERIFY(depth <= PhosphorTiles::AutotileDefaults::ScriptStateMaxDepth);
     }
 
+    // sanitizeScriptState truncates an object with more keys than ScriptStateMaxKeys
+    // (4096) rather than dropping the whole bag or retaining all keys. Keys/values
+    // are kept tiny so the result stays under the 64 KiB byte cap.
+    void testScriptState_sanitizeKeyCapTruncates()
+    {
+        QJsonObject bag;
+        for (int i = 0; i < 4200; ++i) { // > 4096 cap
+            bag[QStringLiteral("k%1").arg(i)] = i;
+        }
+        const QJsonObject cleaned = PhosphorTiles::TilingState::sanitizeScriptState(bag);
+        // Truncated to the cap, but not dropped entirely (byte cap not hit).
+        QVERIFY(!cleaned.isEmpty());
+        QVERIFY(cleaned.size() <= PhosphorTiles::AutotileDefaults::ScriptStateMaxKeys);
+        QVERIFY(cleaned.size() < bag.size());
+    }
+
+    // The array branch counts elements against the same key budget, so a flat array
+    // longer than ScriptStateMaxKeys is truncated rather than materialized in full.
+    void testScriptState_sanitizeArrayElementBudget()
+    {
+        QJsonArray big;
+        for (int i = 0; i < 5000; ++i) { // > 4096 cap
+            big.append(i);
+        }
+        QJsonObject bag;
+        bag[QStringLiteral("arr")] = big;
+        const QJsonObject cleaned = PhosphorTiles::TilingState::sanitizeScriptState(bag);
+        QVERIFY(cleaned.contains(QStringLiteral("arr")));
+        const QJsonArray out = cleaned.value(QStringLiteral("arr")).toArray();
+        QVERIFY(out.size() <= PhosphorTiles::AutotileDefaults::ScriptStateMaxKeys);
+        QVERIFY(out.size() < big.size());
+    }
+
     // ═══════════════════════════════════════════════════════════════════════════
     // clear()
     // ═══════════════════════════════════════════════════════════════════════════
