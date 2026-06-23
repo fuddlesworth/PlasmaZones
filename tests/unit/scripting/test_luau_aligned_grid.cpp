@@ -56,6 +56,7 @@ private Q_SLOTS:
         QVERIFY(algo.isValid());
         QVERIFY(algo.supportsResizeHook());
         QVERIFY(!algo.supportsMemory()); // it's script-state, not a SplitTree
+        QVERIFY(algo.supportsScriptState()); // opts into the persistent ctx.state bag
     }
 
     // Default (no stored state) → an equal 2x2 grid with aligned columns.

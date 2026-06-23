@@ -83,6 +83,8 @@ function applyTilingFilters(items, search, f) {
             return false;
         if (!f.showReflowsOnResize && item.reflowsOnResize === true)
             return false;
+        if (!f.showScriptState && item.supportsScriptState === true)
+            return false;
         return true;
     });
 }

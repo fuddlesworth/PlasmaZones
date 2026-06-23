@@ -44,6 +44,7 @@ RowLayout {
     property bool showPersistent: true
     property bool showCustomParams: true
     property bool showReflowsOnResize: true
+    property bool showScriptState: true
     // Whether any non-default filter is active (drives badge visibility)
     readonly property bool hasActiveFilters: {
         if (filterText.length > 0)
@@ -52,7 +53,7 @@ RowLayout {
         if (root.viewMode === 0)
             return !showAspectAny || !showAspectStandard || !showAspectUltrawide || !showAspectSuperUltrawide || !showAspectPortrait || !showHidden || !showAutoLayouts || !showManualLayouts || !showBuiltInLayouts || !showUserLayouts;
         else
-            return !showBuiltInAlgorithms || !showUserAlgorithms || !showHidden || !showMasterCount || !showSplitRatio || !showOverlapping || !showPersistent || !showCustomParams || !showReflowsOnResize;
+            return !showBuiltInAlgorithms || !showUserAlgorithms || !showHidden || !showMasterCount || !showSplitRatio || !showOverlapping || !showPersistent || !showCustomParams || !showReflowsOnResize || !showScriptState;
     }
     // ── Group-by index constants (must match model order below) ───────────
     // Snapping
@@ -81,7 +82,7 @@ RowLayout {
     // hasActiveFilters, the menu item, and the JS filter logic (see the same
     // note above _defaultValues below — keep both lists in sync).
     readonly property var _snappingStateMap: [["groupByIndex", "snappingGroupByIndex"], ["sortByIndex", "snappingSortByIndex"], ["sortAscending", "snappingSortAscending"], ["showHidden", "snappingShowHidden"], ["showAspectAny", "snappingShowAspectAny"], ["showAspectStandard", "snappingShowAspectStandard"], ["showAspectUltrawide", "snappingShowAspectUltrawide"], ["showAspectSuperUltrawide", "snappingShowAspectSuperUltrawide"], ["showAspectPortrait", "snappingShowAspectPortrait"], ["showAutoLayouts", "snappingShowAutoLayouts"], ["showManualLayouts", "snappingShowManualLayouts"], ["showBuiltInLayouts", "snappingShowBuiltInLayouts"], ["showUserLayouts", "snappingShowUserLayouts"]]
-    readonly property var _tilingStateMap: [["groupByIndex", "tilingGroupByIndex"], ["sortByIndex", "tilingSortByIndex"], ["sortAscending", "tilingSortAscending"], ["showHidden", "tilingShowHidden"], ["showBuiltInAlgorithms", "tilingShowBuiltInAlgorithms"], ["showUserAlgorithms", "tilingShowUserAlgorithms"], ["showMasterCount", "tilingShowMasterCount"], ["showSplitRatio", "tilingShowSplitRatio"], ["showOverlapping", "tilingShowOverlapping"], ["showPersistent", "tilingShowPersistent"], ["showCustomParams", "tilingShowCustomParams"], ["showReflowsOnResize", "tilingShowReflowsOnResize"]]
+    readonly property var _tilingStateMap: [["groupByIndex", "tilingGroupByIndex"], ["sortByIndex", "tilingSortByIndex"], ["sortAscending", "tilingSortAscending"], ["showHidden", "tilingShowHidden"], ["showBuiltInAlgorithms", "tilingShowBuiltInAlgorithms"], ["showUserAlgorithms", "tilingShowUserAlgorithms"], ["showMasterCount", "tilingShowMasterCount"], ["showSplitRatio", "tilingShowSplitRatio"], ["showOverlapping", "tilingShowOverlapping"], ["showPersistent", "tilingShowPersistent"], ["showCustomParams", "tilingShowCustomParams"], ["showReflowsOnResize", "tilingShowReflowsOnResize"], ["showScriptState", "tilingShowScriptState"]]
     // Default values for all resettable filter properties (not group/sort).
     // Adding a filter requires updating: property declaration, _defaultValues,
     // the relevant state map, persistedState, hasActiveFilters, menu item, and JS logic.
@@ -103,7 +104,8 @@ RowLayout {
         "showOverlapping": true,
         "showPersistent": true,
         "showCustomParams": true,
-        "showReflowsOnResize": true
+        "showReflowsOnResize": true,
+        "showScriptState": true
     }
 
     signal filterSettingsChanged
@@ -407,6 +409,12 @@ RowLayout {
             checked: root.showReflowsOnResize
         }
 
+        FilterMenuItem {
+            text: i18n("Script State")
+            filterProperty: "showScriptState"
+            checked: root.showScriptState
+        }
+
         MenuSeparator {}
 
         FilterMenuItem {
@@ -451,6 +459,7 @@ RowLayout {
         property bool tilingShowPersistent: true
         property bool tilingShowCustomParams: true
         property bool tilingShowReflowsOnResize: true
+        property bool tilingShowScriptState: true
 
         category: "LayoutsPageFilterBar"
     }

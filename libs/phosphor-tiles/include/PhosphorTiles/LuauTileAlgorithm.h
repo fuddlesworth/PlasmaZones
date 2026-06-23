@@ -116,6 +116,7 @@ public:
     // own ctx.state (e.g. an aligned grid remembering column widths).
     bool supportsResizeHook() const noexcept override;
     void onWindowResized(TilingState* state, const ResizeEvent& resize) override;
+    bool supportsScriptState() const noexcept override;
 
     // Custom parameters (v2)
     bool supportsCustomParams() const noexcept override;

@@ -361,6 +361,52 @@ Item {
                     }
                 }
 
+                // Reflow indicator for algorithms that adjust the layout when a
+                // tiled window is interactively resized.
+                Kirigami.Icon {
+                    visible: root.modelData.reflowsOnResize === true
+                    source: "transform-scale-symbolic"
+                    implicitWidth: Kirigami.Units.iconSizes.small
+                    implicitHeight: Kirigami.Units.iconSizes.small
+                    color: Kirigami.Theme.highlightColor
+                    opacity: 0.7
+                    Accessible.name: i18n("Reflows on resize")
+                    ToolTip.delay: Kirigami.Units.toolTipDelay
+                    ToolTip.visible: reflowIconMA.containsMouse && visible
+                    ToolTip.text: i18n("Reflows neighbouring windows when you resize a tiled window")
+
+                    MouseArea {
+                        id: reflowIconMA
+
+                        anchors.fill: parent
+                        hoverEnabled: true
+                        acceptedButtons: Qt.NoButton
+                    }
+                }
+
+                // Script-state indicator for scripted algorithms that persist an
+                // opaque per-screen state bag across retiles.
+                Kirigami.Icon {
+                    visible: root.modelData.supportsScriptState === true
+                    source: "code-context-symbolic"
+                    implicitWidth: Kirigami.Units.iconSizes.small
+                    implicitHeight: Kirigami.Units.iconSizes.small
+                    color: Kirigami.Theme.highlightColor
+                    opacity: 0.7
+                    Accessible.name: i18n("Persistent script state")
+                    ToolTip.delay: Kirigami.Units.toolTipDelay
+                    ToolTip.visible: scriptStateIconMA.containsMouse && visible
+                    ToolTip.text: i18n("Remembers script-managed layout state across window changes")
+
+                    MouseArea {
+                        id: scriptStateIconMA
+
+                        anchors.fill: parent
+                        hoverEnabled: true
+                        acceptedButtons: Qt.NoButton
+                    }
+                }
+
                 QFZCommon.AspectRatioBadge {
                     aspectRatioClass: root.modelData.aspectRatioClass || "any"
                 }

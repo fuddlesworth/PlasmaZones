@@ -106,6 +106,13 @@ struct AlgorithmMetadata
     /// surfaces a "drag-to-resize neighbours" filter/indicator.
     bool reflowsOnResize = false;
 
+    /// True when the algorithm persists an opaque per-screen script-state bag
+    /// (TilingState::scriptState) across retiles and sessions — a scripted
+    /// algorithm that opts in via its metadata (e.g. an aligned grid that
+    /// remembers column widths). Picker surfaces a "remembers script state"
+    /// filter/indicator.
+    bool supportsScriptState = false;
+
     /// True when the algorithm is loaded from a Luau script file rather than
     /// a built-in implementation. Affects how the picker renders the
     /// system-vs-user badge (see @c isUserScript).

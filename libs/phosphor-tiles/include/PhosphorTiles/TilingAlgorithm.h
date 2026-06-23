@@ -372,6 +372,17 @@ public:
      */
     virtual void onWindowResized(TilingState* state, const ResizeEvent& resize);
 
+    /**
+     * @brief Whether this algorithm persists an opaque per-screen script-state
+     * bag (TilingState::scriptState) across retiles and sessions.
+     *
+     * Scripted algorithms opt in via their metadata so the engine sanitizes and
+     * round-trips the bag (e.g. an aligned grid remembering column widths).
+     * Built-in algorithms do not use it. Used by the picker to surface a
+     * "remembers script state" filter/indicator. Default false.
+     */
+    virtual bool supportsScriptState() const noexcept;
+
     // ── Custom Parameters (optional, v2) ──────────────────────────────────
 
     /**

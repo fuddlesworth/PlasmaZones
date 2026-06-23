@@ -718,6 +718,11 @@ bool LuauTileAlgorithm::supportsResizeHook() const noexcept
     return m_hasOnWindowResized;
 }
 
+bool LuauTileAlgorithm::supportsScriptState() const noexcept
+{
+    return m_metadata.supportsScriptState;
+}
+
 void LuauTileAlgorithm::onWindowResized(TilingState* state, const ResizeEvent& resize)
 {
     if (!m_hasOnWindowResized || !state) {

@@ -138,6 +138,11 @@ void TilingAlgorithm::onWindowResized(TilingState* /*state*/, const ResizeEvent&
     // Default no-op. Non-memory algorithms that react to resize override.
 }
 
+bool TilingAlgorithm::supportsScriptState() const noexcept
+{
+    return false;
+}
+
 bool TilingAlgorithm::supportsCustomParams() const noexcept
 {
     return false;
