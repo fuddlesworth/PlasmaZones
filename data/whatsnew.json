@@ -28,7 +28,7 @@
             "version": "3.0.17",
             "date": "2026-06-18",
             "highlights": [
-                "Fixed PlasmaZones holding back KWin upgrades on Fedora/Debian/Arch — the package no longer pins KWin to the exact version it was built against, so a newer KWin no longer strands Plasma in a half-upgraded state ('No KScreen backend found' / black screen at login). The packages now require kwin >= 6.7.0; the drag-overlay effect simply doesn't load until PlasmaZones is rebuilt, while core tiling keeps working"
+                "Fixed PlasmaZones holding back KWin upgrades on Fedora, Debian, and Arch. The package no longer pins KWin to the exact version it was built against, so a newer KWin no longer strands Plasma in a half-upgraded state ('No KScreen backend found' or black screen at login). The packages now require kwin >= 6.7.0, and the drag-overlay effect does not load until PlasmaZones is rebuilt, while core tiling keeps working"
             ]
         },
         {
