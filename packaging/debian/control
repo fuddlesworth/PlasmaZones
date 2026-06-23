@@ -41,7 +41,16 @@ Architecture: any
 Depends:
  ${shlibs:Depends},
  ${misc:Depends},
- kwin-common (= ${kwin:Version}),
+# KWin: minimum version, NOT an exact pin. The kwin-effect plugin's IID embeds
+# KWin's exact upstream version and KWin refuses to load an effect whose IID
+# doesn't match (even across patch bumps, e.g. 6.7.0 -> 6.7.1). An exact pin,
+# however, makes apt hold KWin back whenever a newer KWin lands before this
+# package is rebuilt, stranding the desktop in a half-upgraded Plasma ("No
+# KScreen backend found", black screen). A mismatched effect is harmless: KWin
+# reads the IID from plugin metadata and never loads a non-matching effect, so
+# the .so stays inert; only the drag overlay is missing until a rebuild. Core
+# tiling runs in the daemon + layer-shell QPA plugin, independent of the effect.
+ kwin-common (>= 6.7.0),
  qt6-wayland (>= 6.10.0),
  libqt6shadertools6 (>= 6.10.0) | qt6-shadertools,
  libkf6kirigami-bin (>= 6.26.0) | kf6-kirigami | qml6-module-org-kde-kirigami,

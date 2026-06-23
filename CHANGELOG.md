@@ -70,6 +70,12 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - **Toggling from autotile back to snapping left windows stuck in their tiled positions** instead of returning to where they were before tiling. The transition fell through to a stale current-assignment resnap that re-pinned the tiled geometry and suppressed the float-back. Windows now float back to their pre-tile positions.
 - **Master-ratio and master-count adjustments bled into the global default** ([#666](https://github.com/fuddlesworth/PlasmaZones/pull/666)): the increase/decrease ratio and master-count shortcuts wrote the new value into the global config whenever a screen had no per-screen override, so the tweak propagated to sibling screens and new states on the next algorithm switch or settings refresh. The adjustment now stays local to the active screen, desktop, and activity, and resets only on an algorithm switch or an explicit ratio/count change in settings.
 
+## [3.0.17] - 2026-06-18
+
+### Fixed
+
+- **PlasmaZones held back KWin upgrades, stranding Plasma in a half-upgraded state**: the native packages pinned KWin to the *exact* version PlasmaZones was built against (to guarantee the KWin effect plugin's IID matched the running KWin). On distros that ship KWin and PlasmaZones from separate repos (e.g. Fedora KWin from the distro, PlasmaZones from COPR), a newer KWin landing before a matching PlasmaZones rebuild could not satisfy the exact pin, so the package manager held KWin back. That left KWin out of sync with the rest of Plasma, which surfaced as "No KScreen backend found" and, at worst, a black screen at login (reported on Fedora 44 / Plasma 6.7). The runtime dependency is now a minimum (`kwin >= 6.7.0`) across the RPM, Debian, and Arch (source/bin/git) packages instead of an exact pin, so a newer KWin no longer blocks the upgrade. A mismatched effect is harmless — KWin reads the IID from plugin metadata and never loads a non-matching effect, so the plugin stays inert and only the drag overlay is missing until PlasmaZones is rebuilt; core tiling (daemon + layer-shell QPA plugin) is unaffected. Nix is unchanged: it has no install-time pin and rebuilds the whole system, so it cannot strand the desktop.
+
 ## [3.0.16] - 2026-06-18
 
 ### Changed
@@ -1515,7 +1521,8 @@ Initial packaged release. Wayland-only (X11 support removed). Requires KDE Plasm
 - Window tracking: snap/restore behavior, zone clearing, startup timing, rotation zone ID matching, floating window exclusion ([#67])
 
 [Unreleased]: https://github.com/fuddlesworth/PlasmaZones/compare/v3.1.0...HEAD
-[3.1.0]: https://github.com/fuddlesworth/PlasmaZones/compare/v3.0.16...v3.1.0
+[3.1.0]: https://github.com/fuddlesworth/PlasmaZones/compare/v3.0.17...v3.1.0
+[3.0.17]: https://github.com/fuddlesworth/PlasmaZones/compare/v3.0.16...v3.0.17
 [3.0.16]: https://github.com/fuddlesworth/PlasmaZones/compare/v3.0.15...v3.0.16
 [3.0.15]: https://github.com/fuddlesworth/PlasmaZones/compare/v3.0.14...v3.0.15
 [3.0.14]: https://github.com/fuddlesworth/PlasmaZones/compare/v3.0.13...v3.0.14

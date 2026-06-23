@@ -371,8 +371,6 @@ jobs:
     runs-on: ubuntu-latest
     container:
       image: archlinux:latest
-    outputs:
-      kwin-version: ${{ steps.kwin-version.outputs.version }}
 
     steps:
       - name: Install prerequisites
@@ -392,16 +390,6 @@ jobs:
             kconfig kconfigwidgets \
             kcmutils kglobalaccel \
             qt6-wayland plasma-activities
-
-      - name: Capture build-time KWin version
-        id: kwin-version
-        # The kwin-effect plugin's IID embeds KWin's exact upstream version.
-        # We record the version we built against so the binary AUR PKGBUILD
-        # can pin to it (KWin refuses to load effects with mismatched IIDs).
-        run: |
-          KWIN_VER=$(pacman -Q kwin | awk '{print $2}' | cut -d- -f1)
-          echo "version=$KWIN_VER" >> "$GITHUB_OUTPUT"
-          echo "Built against KWin $KWIN_VER"
 
       - name: Configure
         run: |
@@ -511,14 +499,15 @@ jobs:
           arch=('x86_64')
           url="https://github.com/fuddlesworth/PlasmaZones"
           license=('GPL-3.0-or-later' 'LGPL-2.1-or-later')
-          # Exact KWin upstream pin — mirrors packaging/arch/PKGBUILD. kwin is
-          # installed in the CI build env, so this resolves at parse time.
-          _kwin_ver=$(pacman -Q kwin 2>/dev/null | awk '{print $2}' | cut -d- -f1)
+          # KWin minimum, not an exact pin — mirrors packaging/arch/PKGBUILD.
+          # An exact pin holds KWin back on -Syu and strands the desktop in a
+          # half-upgraded Plasma; the mismatched effect is harmless (KWin skips
+          # it). See packaging/arch/PKGBUILD for the full rationale.
           depends=(
               'qt6-base' 'qt6-declarative' 'qt6-shadertools' 'qt6-svg'
               'kconfig' 'kconfigwidgets' 'kirigami'
               'kcmutils' 'kglobalaccel' 'qt6-wayland'
-              "kwin${_kwin_ver:+=}${_kwin_ver}"
+              'kwin>=6.7.0'
           )
           makedepends=('cmake' 'extra-cmake-modules' 'qt6-tools' 'ninja')
           optdepends=('plasma-activities: activity-based layouts')
@@ -818,7 +807,6 @@ jobs:
         env:
           VERSION: ${{ needs.version.outputs.version }}
           SHA256: ${{ steps.hash.outputs.sha256 }}
-          KWIN_VERSION: ${{ needs.build-generic.outputs.kwin-version }}
         run: |
           git clone ssh://aur@aur.archlinux.org/plasmazones-bin.git /tmp/aur-bin
           cd /tmp/aur-bin
@@ -831,8 +819,6 @@ jobs:
           # Update version and hash. Use the same awk-anchored array
           # rewrite as the source PKGBUILD (below) so future additional
           # `source=` entries don't silently leave a stale second hash.
-          # Also pin _kwin_ver to the exact KWin this binary was built
-          # against — the effect plugin IID embeds KWin's version string.
           sed -i "s/^pkgver=.*/pkgver=$VERSION/" PKGBUILD
           sed -i "s/^pkgrel=.*/pkgrel=1/" PKGBUILD
           awk -v sum="$SHA256" '
@@ -854,7 +840,6 @@ jobs:
             in_block { next }
             { print }
           ' PKGBUILD > PKGBUILD.new && mv PKGBUILD.new PKGBUILD
-          sed -i "s/^_kwin_ver=.*/_kwin_ver=$KWIN_VERSION/" PKGBUILD
 
           # Generate .SRCINFO (mount files read-only to avoid chown breaking host git).
           # Enumerate inputs explicitly rather than `cp /build/*` so a future
