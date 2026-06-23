@@ -64,7 +64,7 @@ void Daemon::initializeAutotile()
                     // change is irrelevant in that case.
                     if (m_running && m_modeTracker && m_modeTracker->isAnyScreenAutotile() && m_settings
                         && m_settings->showOsdOnLayoutSwitch() && m_overlayService) {
-                        auto* algo = m_algorithmRegistry->algorithm(algorithmId);
+                        auto* algo = m_algorithmRegistry ? m_algorithmRegistry->algorithm(algorithmId) : nullptr;
                         QString displayName = algo ? algo->name() : algorithmId;
                         QString screenId;
                         if (m_autotileEngine) {
@@ -361,13 +361,13 @@ void Daemon::initializeAutotile()
                     // mode but does not tile. applyLayoutById can't apply a bare
                     // "autotile:" (it has no matching layout preview and returns
                     // false), so write the entry directly. The emitted layoutAssigned
-                    // drives the daemon's updateAutotileScreens, which skips this bare
-                    // suppressed context (no tiling); we refresh the mode filter here
-                    // since no layoutApplied/autotileApplied signal fires.
+                    // drives the daemon's updateAutotileScreens (which skips this bare
+                    // suppressed context, so it does not tile) AND updateLayoutFilter,
+                    // so the mode filter refreshes off that signal — no explicit call
+                    // needed here.
                     PhosphorZones::AssignmentEntry entry;
                     entry.mode = PhosphorZones::AssignmentEntry::Autotile;
                     m_layoutManager->setAssignmentEntryDirect(screenId, desktop, activity, entry);
-                    updateLayoutFilter();
                     // No layoutApplied/autotileApplied signal fires for a direct
                     // entry write, so surface the feedback OSD here: the mode
                     // switched to autotile but nothing is assigned to tile with.

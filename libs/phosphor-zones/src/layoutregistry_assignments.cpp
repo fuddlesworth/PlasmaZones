@@ -222,8 +222,8 @@ AssignmentEntry LayoutRegistry::resolveDefaultAssignmentEntryForContext(const QS
     //   - true  (allow)    → raw synth: force the default through even when the
     //                        global suppress setting is on.
     //   - no override      → the global-gated resolveDefaultAssignmentEntry.
-    if (const auto override = resolveContextDefaultAssignment(screenId, virtualDesktop, activity)) {
-        return *override ? resolveDefaultAssignmentEntryRaw() : AssignmentEntry{};
+    if (const auto contextOverride = resolveContextDefaultAssignment(screenId, virtualDesktop, activity)) {
+        return *contextOverride ? resolveDefaultAssignmentEntryRaw() : AssignmentEntry{};
     }
     return resolveDefaultAssignmentEntry();
 }
@@ -710,8 +710,8 @@ bool LayoutRegistry::isDefaultAssignmentSuppressedForContext(const QString& scre
 {
     // The "is the synthesized default suppressed" primitive: a per-context
     // DefaultLayoutAssignment override decides locally, otherwise the global gate.
-    if (const auto override = resolveContextDefaultAssignment(screenId, virtualDesktop, activity)) {
-        return !*override;
+    if (const auto contextOverride = resolveContextDefaultAssignment(screenId, virtualDesktop, activity)) {
+        return !*contextOverride;
     }
     return m_defaultAssignmentSuppressedProvider && m_defaultAssignmentSuppressedProvider();
 }

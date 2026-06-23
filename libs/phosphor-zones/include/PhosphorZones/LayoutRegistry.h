@@ -784,9 +784,10 @@ private:
         return h;
     }
 
-    /// Shared revision-invalidated memoization for the three context resolvers
+    /// Shared revision-invalidated memoization for the five context resolvers
     /// (@ref resolveAssignmentEntry, @ref resolveContextGaps,
-    /// @ref resolveContextLocked). Drops @p cache wholesale whenever the rule
+    /// @ref resolveContextLocked, @ref resolveContextDefaultAssignment,
+    /// @ref resolveContextOverlay). Drops @p cache wholesale whenever the rule
     /// set's monotonic revision moves past @p cacheRevision, returns a cached
     /// hit, else runs @p compute, then soft-caps the cache at 256 entries —
     /// dropping the whole cache on overflow rather than evicting one key, which

@@ -430,6 +430,7 @@ private Q_SLOTS:
         rejectsStray(ActionType::SetOuterGapTop, QJsonValue(8));
         rejectsStray(ActionType::SetUsePerSideOuterGap, QJsonValue(true));
         rejectsStray(ActionType::LockContext, QJsonValue(true));
+        rejectsStray(ActionType::DefaultLayoutAssignment, QJsonValue(true));
         // OverrideOverlayStyle also declares allowedKeys = {Value}.
         rejectsStray(ActionType::OverrideOverlayStyle, QJsonValue(QString(OverlayStyleToken::Preview)));
     }
@@ -540,6 +541,31 @@ private Q_SLOTS:
         for (const bool v : {true, false}) {
             QJsonObject o;
             o.insert(QStringLiteral("type"), QString(ActionType::LockContext));
+            o.insert(QStringLiteral("value"), v);
+            const auto action = RuleAction::fromJson(o);
+            QVERIFY(action.has_value());
+            QCOMPARE(action->params.value(QStringLiteral("value")), QJsonValue(v));
+            const auto roundTripped = RuleAction::fromJson(action->toJson());
+            QVERIFY(roundTripped.has_value());
+            QCOMPARE(roundTripped->params.value(QStringLiteral("value")), QJsonValue(v));
+        }
+    }
+
+    void testDefaultLayoutAssignment_fromJsonRoundTrip()
+    {
+        // DefaultLayoutAssignment is a context-domain boolean (per-context override
+        // of the global suppress setting): it must validate through the public
+        // fromJson boundary (not just the registry), require a bool `value`, and
+        // round-trip both true (allow / force the default through) and false
+        // (suppress this context) losslessly. Mirrors testLockContext_fromJsonRoundTrip.
+        QJsonObject bad;
+        bad.insert(QStringLiteral("type"), QString(ActionType::DefaultLayoutAssignment));
+        bad.insert(QStringLiteral("value"), 1); // a number is not a bool
+        QVERIFY(!RuleAction::fromJson(bad).has_value());
+
+        for (const bool v : {true, false}) {
+            QJsonObject o;
+            o.insert(QStringLiteral("type"), QString(ActionType::DefaultLayoutAssignment));
             o.insert(QStringLiteral("value"), v);
             const auto action = RuleAction::fromJson(o);
             QVERIFY(action.has_value());
