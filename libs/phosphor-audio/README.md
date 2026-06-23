@@ -9,7 +9,7 @@
 
 A lightweight audio-spectrum feed for shader effects and QML overlays.
 One contract (`IAudioSpectrumProvider`) and one bundled implementation
-that shells out to the user's `cava` install; consumers wire the emitted
+that shells out to the user's `cava` install. Consumers wire the emitted
 bar vector into a `ShaderEffect` UBO.
 
 ## Key types
@@ -36,7 +36,7 @@ provider->start();
   `cava`, which handles PulseAudio / PipeWire / ALSA detection and owns
   the FFT. The lib parses its framed byte output.
 - **Graceful degradation.** `isAvailable()` returns false when `cava` is
-  not installed; consumers should hide or disable audio-reactive overlays
+  not installed. Consumers should hide or disable audio-reactive overlays
   in that case rather than hard-fail.
 
 ## Dependencies

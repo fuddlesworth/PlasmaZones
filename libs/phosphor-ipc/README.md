@@ -11,9 +11,9 @@
 ## Responsibility
 
 Modern Wayland shells (DMS, Noctalia, Quickshell) all ship a typed
-CLI: a single socket, JSON-shaped requests, schema-described
-targets. `phosphor-ipc` is Phosphor's equivalent. It sits **alongside**
-the existing D-Bus adaptors. Service libraries register both an IPC
+CLI built on a single socket, with JSON-shaped requests and
+schema-described targets. `phosphor-ipc` is Phosphor's equivalent. It
+sits **alongside** the existing D-Bus adaptors. Service libraries register both an IPC
 target and (where appropriate) a D-Bus method for each callable.
 
 The library owns:
@@ -28,7 +28,7 @@ The library owns:
   directly. `IpcTarget.emitEvent("name", [args])` pushes a JSON
   event to every subscriber on (target, name).
 - **`IpcSchemaGenerator`**: `QMetaObject` → JSON Schema. Every
-  documented QMetaType maps to a JSON Schema fragment; unknown types
+  documented QMetaType maps to a JSON Schema fragment, and unknown types
   degrade to `{"description": "<QMetaType::name>"}` without a `type`
   constraint.
 - **`IpcEngine::install`**: small bridge that stashes the
@@ -44,7 +44,7 @@ subcommands.
 | Type | Purpose |
 |------|---------|
 | `PhosphorIpc::IpcRouter` | Per-application dispatcher. Owns one `QLocalServer`, the registry of named targets, and the per-socket subscription set. Single-threaded (GUI thread). |
-| `PhosphorIpc::IpcTarget` | QML element. Each instance binds to one target name. Functions declared on the instance become callable; the explicit `emitEvent(name, args)` pushes wire events. |
+| `PhosphorIpc::IpcTarget` | QML element. Each instance binds to one target name. Functions declared on the instance become callable, and the explicit `emitEvent(name, args)` pushes wire events. |
 | `PhosphorIpc::IpcProtocol` | Wire-format constants + parser/serialiser. Shared between the library (server) and the `phosphorctl` binary (client). |
 | `PhosphorIpc::IpcEngine` | Bridge between an application-owned `IpcRouter` and QML-side `IpcTarget` instances. |
 | `PhosphorIpc::IpcSchemaGenerator` | `QMetaObject` → JSON Schema. Used by the schema response and by the CLI for client-side argument validation. |
@@ -55,7 +55,7 @@ One JSON object per line, `\n`-terminated, UTF-8. Same NDJSON shape
 as niri-ipc and hyprland-ipc. Stable across protocol version 1.
 The version is a build-time invariant only (the
 `PHOSPHOR_IPC_PROTOCOL_VERSION` compile definition is cross-checked
-by a `static_assert` in `IpcProtocol.h`); it is NOT transmitted on
+by a `static_assert` in `IpcProtocol.h`). It is NOT transmitted on
 the wire and there is currently no version-negotiation handshake.
 Incompatible bumps surface as malformed-request errors against an
 older peer.
@@ -123,7 +123,7 @@ int main(int argc, char** argv) {
 ```
 
 The shell QML can now declare `IpcTarget` instances anywhere in the
-component tree; each one auto-registers via the router stashed on
+component tree, and each one auto-registers via the router stashed on
 the engine.
 
 ### QML side
@@ -150,9 +150,9 @@ declared signals, so `phosphorctl schema theme` shows the
 subscribable surface.
 
 **Calling the QML signal (e.g. `modeChanged(mode)`) does NOT
-broadcast to wire subscribers** — it only fires in-QML connections.
+broadcast to wire subscribers**. It only fires in-QML connections.
 Wire delivery happens through `emitEvent(name, args)` exclusively.
-The split is by design: introspecting Qt signals via `qt_metacall`
+The split is by design. Introspecting Qt signals via `qt_metacall`
 collides with moc-generated dispatch, and explicit `emitEvent`
 matches the "wire-visible state transitions are an explicit
 contract" model. Plugin authors must call both for in-QML AND wire
@@ -174,9 +174,9 @@ Socket-path priority: `--socket PATH` > `$PHOSPHOR_SOCKET` >
 
 `examples/phosphor-ipc-demo/` is the canonical end-to-end exercise.
 The demo window includes a live event-log panel that mirrors the
-broadcast stream: running `phosphorctl call count.increment` from a
+broadcast stream. Running `phosphorctl call count.increment` from a
 single sidecar terminal makes events appear in the demo window in
-real time, no separate `phosphorctl subscribe` terminal needed:
+real time, with no separate `phosphorctl subscribe` terminal needed:
 
 ```
 # terminal 1
@@ -192,7 +192,7 @@ phosphorctl subscribe count.countChanged   # optional: same events on stdout
 - **Duplicate target id arbitrated.** Re-registering the SAME
   `QObject` under the SAME name is a silent idempotent success (no
   warning, no signal re-emit). Registering a DIFFERENT `QObject`
-  under an existing name is rejected with a `qWarning`; the
+  under an existing name is rejected with a `qWarning`, and the
   incumbent registration is preserved. `registerTarget` returns
   `bool` so wrappers like `IpcTarget` can detect rejection and
   skip the paired unregister on teardown.
@@ -207,14 +207,14 @@ phosphorctl subscribe count.countChanged   # optional: same events on stdout
   disconnects, all its subscriptions are dropped automatically.
 - **Stale socket file recovery.** On `start`, if `listen()` fails
   and the socket path is occupied, the router probes with a quick
-  connect; if no live listener answers, the stale path is unlinked
+  connect. If no live listener answers, the stale path is unlinked
   and `listen()` retries. A live listener is left alone (start
   fails cleanly rather than clobbering).
 - **No subscribe auto-broadcast from Qt signals.** Plugin authors
   call `IpcTarget.emitEvent("name", args)` explicitly. Firing the
   QML signal (e.g. `modeChanged(...)`) only notifies in-QML
-  subscribers, NOT wire subscribers. This split is by design:
-  introspecting arbitrary Qt signals via `qt_metacall` clashes with
+  subscribers, NOT wire subscribers. This split is by design.
+  Introspecting arbitrary Qt signals via `qt_metacall` clashes with
   Q_OBJECT moc-generated code, and explicit `emitEvent` matches the
   "wire-visible state transitions are an explicit contract" model.
 

@@ -11,7 +11,7 @@ context-menu model.
 
 Registers the well-known `org.kde.StatusNotifierWatcher` service on the session bus, advertises hosts via `RegisterStatusNotifierHost`, watches `NameOwnerChanged` for tray-item appearance / disappearance, and exposes each live item plus its context menu as a Qt model that QML can bind to.
 
-No UI; the shell decides how the tray slot is rendered (capsule, dock, panel widget, free-floating overlay).
+There is no UI. The shell decides how the tray slot is rendered (capsule, dock, panel widget, free-floating overlay).
 
 ## Key types
 
@@ -25,7 +25,7 @@ No UI; the shell decides how the tray slot is rendered (capsule, dock, panel wid
 
 ## Typical use
 
-C++ shell composition root. The icon image provider must be mounted on every `QQmlEngine` the shell constructs; if the shell hot-reloads (a fresh engine per reload) the per-engine hook is what keeps the provider mounted after the rebuild:
+C++ shell composition root. The icon image provider must be mounted on every `QQmlEngine` the shell constructs. If the shell hot-reloads (a fresh engine per reload) the per-engine hook is what keeps the provider mounted after the rebuild:
 
 ```cpp
 #include <PhosphorServiceSni/QmlRegistration.h>
@@ -73,10 +73,10 @@ Repeater {
 
 ## Design notes
 
-- **Watcher election.** The watcher service has a well-known bus name (`org.kde.StatusNotifierWatcher`). Multiple shells racing for it is normal during compositor restart; whichever wins the name owns the watcher, the others observe `NameOwnerChanged` and reuse the winner. `StatusNotifierHost` handles this transparently: if you write two shells, both still see the tray.
+- **Watcher election.** The watcher service has a well-known bus name (`org.kde.StatusNotifierWatcher`). Multiple shells racing for it is normal during compositor restart. Whichever wins the name owns the watcher, and the others observe `NameOwnerChanged` and reuse the winner. `StatusNotifierHost` handles this transparently, so if you write two shells, both still see the tray.
 - **Icon publishing.** Items can ship an `IconName` (theme lookup via `phosphor-service-icontheme`), an `IconThemePath` (custom dir for non-system icons), and / or inline `IconPixmap` blobs. The model collapses all three into a single URL of the form `image://phosphor-service-icontheme/<service|path[#variant]>?v=<cacheKey>` per item. The `?v=` cache-key bust forces QML's `Image` element to re-fetch when the underlying data changes (it only diffs URL strings).
-- **`com.canonical.dbusmenu`.** Menus are hierarchical and lazy: `AboutToShow` populates a level on demand, `Event` fires activation. `DBusMenuModel` is a flat `QAbstractListModel` over one level of the tree; cascaded popups bind a fresh model rooted at the parent row's id. The QML side renders submenus as cascading popups, which fits a per-level flat model better than a tree-shaped one.
-- **dbustypes forced-include.** The generated D-Bus interface headers reference custom marshalled types (`DBusImageList`, `DBusToolTip`, `DBusMenuLayoutItem`) without `#include`ing `dbustypes.h`. The build forces the include into every TU (`-include src/dbustypes.h`) so AUTOMOC produces valid output for the generated headers in isolation. Unity build is disabled for the same reason. The `-include` flag is GCC/Clang-only; the project targets Linux/Qt6 so MSVC support is out of scope.
+- **`com.canonical.dbusmenu`.** Menus are hierarchical and lazy: `AboutToShow` populates a level on demand, `Event` fires activation. `DBusMenuModel` is a flat `QAbstractListModel` over one level of the tree, and cascaded popups bind a fresh model rooted at the parent row's id. The QML side renders submenus as cascading popups, which fits a per-level flat model better than a tree-shaped one.
+- **dbustypes forced-include.** The generated D-Bus interface headers reference custom marshalled types (`DBusImageList`, `DBusToolTip`, `DBusMenuLayoutItem`) without `#include`ing `dbustypes.h`. The build forces the include into every TU (`-include src/dbustypes.h`) so AUTOMOC produces valid output for the generated headers in isolation. Unity build is disabled for the same reason. The `-include` flag is GCC/Clang-only, and the project targets Linux/Qt6 so MSVC support is out of scope.
 
 ## Dependencies
 
@@ -86,4 +86,4 @@ Repeater {
 
 ## Status
 
-Shipped. Extracted from the original `phosphor-services` umbrella as one of four per-domain siblings and the last of the umbrella tenants; the umbrella is gone, no backwards-compat shim (per `feedback_no_legacy_shims`). Namespace `PhosphorServices::StatusNotifier*` → `PhosphorServiceSni::StatusNotifier*`, QML module `Phosphor.Services` → `Phosphor.Service.Sni`.
+Shipped. Extracted from the original `phosphor-services` umbrella as one of four per-domain siblings and the last of the umbrella tenants. The umbrella is gone, no backwards-compat shim (per `feedback_no_legacy_shims`). Namespace `PhosphorServices::StatusNotifier*` → `PhosphorServiceSni::StatusNotifier*`, QML module `Phosphor.Services` → `Phosphor.Service.Sni`.

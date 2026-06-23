@@ -31,7 +31,7 @@ A second pair of types specialises the base node for the **zone-overlay**
 case: `ZoneShaderNodeRhi` adds a labels texture binding and zone counts
 in the base UBO, and `ZoneUniformExtension` writes zone rects, fill /
 border colours, and per-zone parameters into the UBO tail. They are
-optional — non-zone shader effects use `ShaderEffect` + `ShaderNodeRhi`
+optional. Non-zone shader effects use `ShaderEffect` + `ShaderNodeRhi`
 directly.
 
 ## Key types
@@ -90,9 +90,9 @@ into the UBO tail.
   runs on OpenGL, Vulkan, and Metal backends. Shaders are authored in
   Vulkan-flavor GLSL 450.
 - **UBO is `BaseUniforms` + extension.** The base layout from
-  [`phosphor-shaders`](../phosphor-shaders/README.md) is Shadertoy-compatible;
-  consumers attach an `IUniformExtension` to append application-specific
-  data. Zone rendering uses `ZoneUniformExtension`; animations use a
+  [`phosphor-shaders`](../phosphor-shaders/README.md) is Shadertoy-compatible,
+  and consumers attach an `IUniformExtension` to append application-specific
+  data. Zone rendering uses `ZoneUniformExtension`, and animations use a
   different one declared in [`phosphor-animation`](../phosphor-animation/README.md).
 
 ## Dependencies

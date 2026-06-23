@@ -9,13 +9,13 @@ Display and keyboard backlight brightness for Phosphor-based desktop shells.
 
 Exposes the brightness-controllable backlights (display panels under
 `/sys/class/backlight`, keyboard backlights under `/sys/class/leds`) plus
-external monitors over DDC/CI as Qt + QML types. No UI; the shell decides how a
+external monitors over DDC/CI as Qt + QML types. No UI. The shell decides how a
 brightness slider or OSD is rendered.
 
 For internal panels and keyboard backlights the read path is sysfs (with a file
 watcher tracking external changes) and the write path is logind's
 `org.freedesktop.login1.Session.SetBrightness`, so no root or udev rule is
-required. Only display and keyboard backlights are surfaced; the other
+required. Only display and keyboard backlights are surfaced. The other
 `/sys/class/leds` entries (capslock / power / RGB / trigger indicators) are not
 brightness controls and are skipped.
 
@@ -27,7 +27,7 @@ host. This is compile-time optional (see Design notes).
 
 | Type                    | Role                                                                                              |
 |-------------------------|---------------------------------------------------------------------------------------------------|
-| `BrightnessDevice`      | One backlight or external monitor. `id` (stable unique key: sysfs name for backlights, I2C bus like `i2c-7` for external displays), `name` (human-readable, not unique: identical monitors share it), `kind` (Display / Keyboard / ExternalDisplay), `brightness`, `maxBrightness`, `percentage`; `setBrightness()`, `setPercentage()` (sysfs devices write fire-and-forget via logind; external displays route to the DDC worker). |
+| `BrightnessDevice`      | One backlight or external monitor. `id` (stable unique key: sysfs name for backlights, I2C bus like `i2c-7` for external displays), `name` (human-readable, not unique: identical monitors share it), `kind` (Display / Keyboard / ExternalDisplay), `brightness`, `maxBrightness`, `percentage`; `setBrightness()`, `setPercentage()` (sysfs devices write fire-and-forget via logind, and external displays route to the DDC worker). |
 | `BrightnessHost`        | Enumerates the brightness devices under a sysfs root, resolves the logind session for sysfs writes, and (when built with libddcutil) enumerates external monitors over DDC/CI. `deviceCount`, `deviceAt()`, `devices()`; `deviceAdded` / `deviceRemoved`. |
 | `BrightnessDeviceModel` | `QAbstractListModel` over the host's devices, tracking async `deviceAdded` / `deviceRemoved` (external displays arrive after enumeration). Roles: `device`, `id`, `name`, `kind`, `brightness`, `maxBrightness`, `percentage`. |
 
@@ -66,16 +66,16 @@ Repeater {
 ## Design notes
 
 - **sysfs read, logind write.** The current value comes from the sysfs
-  `brightness` attribute (`max_brightness` for the range); writes go through
+  `brightness` attribute (`max_brightness` for the range). Writes go through
   logind `Session.SetBrightness(subsystem, name, value)` with the matching
   subsystem (`backlight` for display, `leds` for keyboard), so the lib needs
   no root and no udev rules. With no logind session bound the write no-ops and
   the lib stays read-only.
 - **No optimistic writes.** `setBrightness` / `setPercentage` issue the logind
-  call and let the file watcher pick up the applied value; the cached
+  call and let the file watcher pick up the applied value. The cached
   `brightness` (and its NOTIFY) moves only once sysfs actually changes. External
-  displays are the same: the write routes to the DDC worker and the cached value
-  moves only on the worker's read-back.
+  displays work the same way. The write routes to the DDC worker and the cached
+  value moves only on the worker's read-back.
 - **External displays (DDC/CI), optional.** When built against `libddcutil`
   (ddcutil 2.x, detected via pkg-config), the host also enumerates external
   monitors over DDC/CI on I2C (VCP feature `0x10`) and surfaces them as
@@ -85,10 +85,10 @@ Repeater {
   slow, so enumeration and get/set run on a dedicated worker `QThread` and post
   back via queued signals. DDC/CI has no change notification and logind does not
   mediate it, so external displays need `/dev/i2c-*` access (the `i2c` group + a
-  udev rule) and refresh by polling rather than a watcher; without I2C access
+  udev rule) and refresh by polling rather than a watcher. Without I2C access
   the lib degrades to no external displays.
 - **Scope is brightness, not LEDs.** Display backlights plus the
-  `kbd_backlight` entries under `/sys/class/leds`; every other LED (indicator,
+  `kbd_backlight` entries under `/sys/class/leds`. Every other LED (indicator,
   RGB, trigger) is skipped. A general LED-control surface, if ever wanted, is a
   separate concern.
 - **Divide-by-zero safe.** A device whose `max_brightness` is 0 or missing
@@ -106,7 +106,7 @@ Repeater {
 - `PhosphorDBus` (private link; the logind `SetBrightness` call).
 - Qt6 ≥ 6.6 (Core, Qml, DBus). No QtGui.
 - `libddcutil` (ddcutil 2.x), optional: enables external-monitor (DDC/CI)
-  brightness when present; the build is unaffected when it is absent.
+  brightness when present. The build is unaffected when it is absent.
 
 ## Status
 

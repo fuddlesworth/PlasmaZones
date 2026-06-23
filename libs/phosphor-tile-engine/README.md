@@ -20,8 +20,8 @@ vocabulary.
 
 The engine manages:
 
-- **Lifecycle.** Window-open kicks the active algorithm; window-close
-  removes the entry from `TilingState` and re-runs layout; focus
+- **Lifecycle.** Window-open kicks the active algorithm. Window-close
+  removes the entry from `TilingState` and re-runs layout. Focus
   events drive the cursor / focus model the consumer cares about.
 - **Navigation.** `NavigationController` (a stateless helper holding
   a back-pointer to the engine) handles focus next / previous /
@@ -33,7 +33,7 @@ The engine manages:
   back through per-screen overrides → global `AutotileConfig`.
 - **Overflow.** `OverflowManager` tracks windows auto-floated when
   the tiled count exceeds `maxWindows`. Returns lists of windows to
-  float / unfloat; the engine performs the mutations and emits the
+  float / unfloat, and the engine performs the mutations and emits the
   signals so `TilingState` stays the single mutation point.
 - **Restore.** Autotile keeps no restore queue of its own: a
   closed-while-autotiled window's slot is captured into the shared
@@ -83,11 +83,11 @@ placementEngineRouter.bind("autotile", autotile);
   base's shared plumbing (settings injection, pruning, common signals) and
   adds the autotile-specific intent dispatch.
 - **`NavigationController` is stateless.** Every method dispatches back
-  to the engine for reads / writes; the controller carries only a
+  to the engine for reads / writes. The controller carries only a
   back-pointer, so it isolates navigation logic without forking any
   member state.
 - **`OverflowManager` doesn't mutate `TilingState`.** It returns the
-  lists of windows to float / unfloat; the engine performs the
+  lists of windows to float / unfloat, and the engine performs the
   mutations and emits signals. This keeps `TilingState` the sole
   mutation point and overflow accounting trivially testable.
 - **Per-app restore is bounded.** `WindowPlacementStore::MaxPerApp = 16`
@@ -95,7 +95,7 @@ placementEngineRouter.bind("autotile", autotile);
   restore state without limit.
 - **Algorithm settings are saved per-algorithm, not globally.**
   Switching from `master-stack` to `spiral` and back restores the
-  prior split ratio and master count for `master-stack` — users keep
+  prior split ratio and master count for `master-stack`, so users keep
   their tuning per algorithm.
 
 ## Dependencies

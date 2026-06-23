@@ -29,7 +29,7 @@ has one of these well-known roles."
   knows its current screen, exposes show / hide.
 - **SurfaceFactory** (`SurfaceFactory`): stateless builder that turns a
   `SurfaceConfig` + injected dependencies into a live `Surface`. One
-  factory per process; one `Surface` per `create()` call.
+  factory per process, and one `Surface` per `create()` call.
 - **Per-screen registry** (`ScreenSurfaceRegistry<T>`): templated bag
   that owns one `Surface` (or subclass) per screen for surfaces with
   AllScreens affinity.
@@ -47,7 +47,7 @@ has one of these well-known roles."
   layer-shell internals.
 - **Layer-shell transport** (`ILayerShellTransport`): the seam between
   this library and the Wayland binding. Default impl is
-  `PhosphorWaylandTransport`; tests use a mock.
+  `PhosphorWaylandTransport`, and tests use a mock.
 
 ## Key types
 
@@ -111,7 +111,7 @@ s->hide();
 ## Design notes
 
 - **Role identity is the scope prefix.** Two `Role` values with the
-  same scope prefix refer to the same logical surface kind; the
+  same scope prefix refer to the same logical surface kind, and the
   per-screen registry uses that to collapse duplicates. Consumers
   compose their roles by taking a pattern from
   `phosphor-shell-patterns` and stamping their own scope prefix on top.
@@ -120,7 +120,7 @@ s->hide();
   factory asked the transport to change anchor to Top+Right without a
   live Wayland compositor.
 - **Animator is optional.** Surfaces without an animator show and hide
-  with no transition; attach an `ISurfaceAnimator` to get fade, slide,
+  with no transition. Attach an `ISurfaceAnimator` to get fade, slide,
   or scale.
 - **`defaults/` lives next to the interfaces.** Each `I*` interface ships
   with a bundled implementation under `PhosphorLayer/defaults/` so

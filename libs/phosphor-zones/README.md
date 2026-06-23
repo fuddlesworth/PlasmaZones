@@ -88,7 +88,7 @@ if (z) {
   the `0.0 - 1.0` range, so the same layout works on any screen size.
   Conversion to pixels happens at read-time.
 - **CRUD lives on the concrete registry, not a separate manager.**
-  `LayoutRegistry` is the single concrete class; `IZoneLayoutRegistry`
+  `LayoutRegistry` is the single concrete class. `IZoneLayoutRegistry`
   exists only where mocking is useful. This mirrors
   `phosphor-tiles`'s `AlgorithmRegistry` shape.
 - **No process-global singleton.** Composition roots construct one
@@ -96,7 +96,7 @@ if (z) {
   build their own per-fixture instance.
 - **Quick-layout slots and screen-assignment CRUD live on the consumer.**
   The Phosphor daemon owns the user-facing surface (D-Bus methods,
-  quick-layout 1-9, etc.); this library exposes the data the daemon
+  quick-layout 1-9, etc.). This library exposes the data the daemon
   drives that surface from.
 
 ## Dependencies

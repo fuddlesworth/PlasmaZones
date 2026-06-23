@@ -9,9 +9,9 @@ Phosphor-based desktop shells.
 ## Responsibility
 
 When an application requests a privileged action, `polkitd` calls into the
-authentication agent registered for the session; the agent drives the PAM
-conversation that authenticates the user. This library is that agent. No UI; it
-surfaces the request and a respond / cancel path, and a shell renders the
+authentication agent registered for the session, and the agent drives the PAM
+conversation that authenticates the user. This library is that agent. It has no
+UI. It surfaces the request and a respond / cancel path, and a shell renders the
 authentication dialog.
 
 - Register with `polkitd` as the session's authentication agent (opt-in, since
@@ -72,7 +72,7 @@ AuthDialog {
 }
 ```
 
-The CLI doubles as the worked example and the acceptance harness; it runs as the
+The CLI doubles as the worked example and the acceptance harness. It runs as the
 agent itself:
 
 ```sh
@@ -84,15 +84,15 @@ pkexec true
 
 ## Design notes
 
-- **Wraps polkit-qt privately.** `PolkitAgent` is a plain `QObject`; the
+- **Wraps polkit-qt privately.** `PolkitAgent` is a plain `QObject`, and the
   `PolkitQt1::Agent::Listener` it subclasses lives in the `.cpp`. polkit-qt6 is
   a private link, so consumers neither include nor link it.
 - **Registration is explicit.** `registerAgent()` opts into becoming the
-  session's agent; the constructor has no side effects. Exactly one agent serves
+  session's agent, and the constructor has no side effects. Exactly one agent serves
   a session, so when the desktop's agent (KDE / GNOME) already holds it,
   registration fails and the object stays inert (`registered() == false`).
 - **Surface the request, never the secret.** The user's response flows straight
-  into `Agent::Session::setResponse`; the library never stores, logs, or echoes
+  into `Agent::Session::setResponse`. The library never stores, logs, or echoes
   it.
 - **Dependency injection for tests.** The agent takes an injectable session id +
   object path, so registration is exercised against a synthetic session with no
