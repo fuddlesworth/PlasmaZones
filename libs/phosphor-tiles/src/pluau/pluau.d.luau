@@ -56,7 +56,7 @@ export type Context = {
     splitRatio: number,
     minSizes: { MinSize },
     windows: { WindowInfo }?,
-    focusedIndex: number,
+    focusedIndex: number, -- 0-based tiled index of the focused window (-1 if none)
     screen: ScreenInfo?,
     tree: SplitNode?, -- present for memory-aware algorithms
     custom: { [string]: any }?,
@@ -78,7 +78,7 @@ export type Metadata = {
     defaultSplitRatio: number?,
     defaultMaxWindows: number?,
     minimumWindows: number?,
-    masterZoneIndex: number?,
+    masterZoneIndex: number?, -- 0-based index of the master zone
     zoneNumberDisplay: string?,
     customParams: { any }?,
 }

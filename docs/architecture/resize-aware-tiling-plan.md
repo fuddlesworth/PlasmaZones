@@ -276,13 +276,16 @@ and load boundaries. Script-internal format changes handled by the script via th
 
 All new tests go in the top-level **GPL** `tests/unit/` (gated behind `-DBUILD_TESTING=ON`).
 
-**Implemented (253/253 suite green):**
+**Implemented (full unit suite green):**
 - `tests/unit/autotile/test_split_tree.cpp` (extended): `splitOwningEdge` — two-window shared boundary,
   screen-boundary edges, orthogonal-axis miss, nested nearest-collinear-ancestor; `resizeSplitNode` —
   reflow, clamp, null/leaf no-op.
 - `tests/unit/scripting/test_luau_aligned_grid.cpp` (new): loads the real bundled `aligned-grid.luau` and
   exercises the full P3+P4 path — resize-hook declaration, uniform grid, the column-moves-all-rows proof,
   state-bag round-trip, and reshape-resets-to-uniform.
+- `tests/unit/scripting/test_luau_ratio_reflow.cpp` (new): loads the six ratio-based bundled algorithms
+  (master-stack, wide, focus-sidebar, zen, deck, horizontal-deck) and asserts each onWindowResized hook's
+  returned split ratio, the index/edge gating, and the orthogonal-axis / single-window / peek no-ops.
 
 The existing 251-test suite already covers the modified serialization / context-building / engine paths;
 all pass unchanged. The originally-scoped engine-`onWindowResized` end-to-end and D-Bus-adaptor tests
