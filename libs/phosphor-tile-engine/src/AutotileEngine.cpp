@@ -2791,6 +2791,14 @@ void AutotileEngine::onWindowResized(const QString& rawWindowId, const QRect& ol
             std::abs((newFrame.y() + newFrame.height()) - (oldFrame.y() + oldFrame.height())) > threshold;
         PhosphorTiles::ResizeEvent ev;
         ev.index = state->tiledWindows().indexOf(windowId);
+        // The window cleared the floating/tracked guards above, so it is normally
+        // present in tiledWindows(); drop the event rather than hand a -1 index to
+        // the script hook if that invariant ever fails (an over-cap window absent
+        // from the tiled list). Matches the resize-plan R10 "drop event if the
+        // resized window is beyond cap" contract.
+        if (ev.index < 0) {
+            return;
+        }
         ev.oldRect = oldFrame;
         ev.newRect = newFrame;
         // Report at most one edge per axis. When both edges of an axis moved

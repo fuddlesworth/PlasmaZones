@@ -252,12 +252,14 @@ retile. `tile()`'s return shape is unchanged.
 - **engine-reflow vs Luau-hook precedence (single owner = engine handler):** `supportsMemory()` →
   Tier A (tree), never fires the hook. Else `supportsResizeHook()` → Tier B (hook). Else no-op.
 - **multi-monitor / cross-output:** daemon resolves via `screenForTrackedWindow`. If `newFrame.center()`
-  leaves `screenGeometry(screenId)`, reject — `windowScreenChanged` owns the handoff.
+  leaves the full monitor rect (not the strut-inset work area, so a centre under a panel still counts as
+  on-screen), reject — `windowScreenChanged` owns the handoff.
 - **floating / XWayland / single-window:** floating excluded both sides. XWayland same path.
   Single window (`tiledWindowCount() < 2`) → early no-op.
 - **infinite-retile guard:** finish-only; synchronous `retileAfterOperation`; `setScriptState` emits no
-  signal (so it can't re-enter the retile); a clamped-to-identical ratio leaves `changed == false` and
-  skips the retile/emit.
+  signal (so it can't re-enter the retile). The retile fires whenever an edge moved past the threshold —
+  including when the ratio clamps to an identical value — to re-snap the dragged window onto its zone; it
+  cannot re-enter because `windowsTiled` is a geometry-apply, not a resize report back into the engine.
 - **frame baseline:** the edge diff uses the **effect-supplied** `oldFrame` (latched at resize start),
   NOT the daemon `m_frameGeometry` shadow — the shadow updates mid-drag and can't serve as the baseline.
 
@@ -283,9 +285,12 @@ All new tests go in the top-level **GPL** `tests/unit/` (gated behind `-DBUILD_T
   state-bag round-trip, and reshape-resets-to-uniform.
 
 The existing 251-test suite already covers the modified serialization / context-building / engine paths;
-all pass unchanged. (The originally-scoped engine-`onWindowResized` end-to-end and D-Bus-adaptor tests
-were judged lower-value given the above plus existing coverage; the novel logic — edge→split resolution
-and the scripting hook end-to-end — is directly tested.)
+all pass unchanged. The originally-scoped engine-`onWindowResized` end-to-end and D-Bus-adaptor tests
+were judged lower-value and deferred: the SplitTree edge→split resolution and the scripting hook
+end-to-end are directly tested, but the engine-level glue layered on top — the Tier-B per-axis edge-flag
+derivation (`ev.left = leftMoved && !rightMoved`, etc.) and the always-retile-on-edge-move decision in
+`applyTreeResizeReflow` — is exercised only indirectly through its primitives and is not asserted at the
+engine boundary.
 
 Original full scope listed below for reference:
 
@@ -296,7 +301,8 @@ Original full scope listed below for reference:
   content no-op).
 - **P2 `tests/unit/autotile/test_autotile_engine_resize.cpp` (new):** neighbor reflow gap-free,
   membership/order unchanged, min-clamp both regimes, tree-ratio reconciled, non-memory no-op,
-  single emit, clamped-identical no emit, dragged skipAnimation flag, zones-size parity, cross-output rejected.
+  single emit, clamped-identical still re-snaps (retiles on any edge move), dragged skipAnimation flag,
+  zones-size parity, cross-output rejected.
 - **P1 `tests/unit/dbus/test_window_tracking_resize.cpp` (new):** floating ignored, untracked ignored,
   forwards old+new frame, degenerate geometry rejected.
 - **P3 `tests/unit/scripting/test_luau_tile_algorithm.cpp` (extend):** `ctx.resize` absent/present,
