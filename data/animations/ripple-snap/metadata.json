@@ -1,0 +1,14 @@
+{
+    "id": "ripple-snap",
+    "name": "Ripple Snap",
+    "description": "Geometry move and resize transition where the window flies into its destination zone and a wave ripples across it from the edge that lands first, like a sheet snapping taut. The ripple fades out as the window settles flat into the slot.",
+    "author": "PlasmaZones",
+    "version": "1.0",
+    "category": "Geometry",
+    "appliesTo": ["geometry"],
+    "fragmentShader": "effect.frag",
+    "vertexShader": "effect.vert",
+    "fboExtent": "surface",
+    "geometryGrid": 48,
+    "parameters": []
+}
