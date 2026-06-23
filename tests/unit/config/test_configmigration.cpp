@@ -1581,7 +1581,7 @@ private Q_SLOTS:
 
     QJsonObject fullLayoutWithSettings(const QString& layoutId) const
     {
-        // Carries all 13 relocated per-layout setting keys so the relocation and
+        // Carries all 14 relocated per-layout setting keys so the relocation and
         // format-lock round-trip tests exercise the complete split, not a subset.
         return QJsonObject{
             {QStringLiteral("id"), layoutId},
@@ -1596,6 +1596,7 @@ private Q_SLOTS:
             {QStringLiteral("outerGapRight"), 4},
             {QStringLiteral("overlayDisplayMode"), 1},
             {QStringLiteral("autoAssign"), true},
+            {QStringLiteral("hiddenFromSelector"), true},
             {QStringLiteral("useFullScreenGeometry"), true},
             {QStringLiteral("shaderId"), QStringLiteral("dissolve")},
             {QStringLiteral("shaderParams"), QJsonObject{{QStringLiteral("intensity"), 0.5}}},
@@ -1638,6 +1639,7 @@ private Q_SLOTS:
         QVERIFY(slim.contains(QStringLiteral("zones")));
         QVERIFY(!slim.contains(QStringLiteral("zonePadding")));
         QVERIFY(!slim.contains(QStringLiteral("autoAssign")));
+        QVERIFY(!slim.contains(QStringLiteral("hiddenFromSelector")));
         QVERIFY(!slim.contains(QStringLiteral("useFullScreenGeometry")));
         QVERIFY(!slim.contains(QStringLiteral("showZoneNumbers")));
         QVERIFY(!slim.value(QStringLiteral("zones")).toArray().at(0).toObject().contains(QStringLiteral("appearance")));
@@ -1648,6 +1650,7 @@ private Q_SLOTS:
         const QJsonObject settings = sidecar.value(layoutId).toObject();
         QCOMPARE(settings.value(QStringLiteral("zonePadding")).toInt(), 8);
         QCOMPARE(settings.value(QStringLiteral("autoAssign")).toBool(), true);
+        QCOMPARE(settings.value(QStringLiteral("hiddenFromSelector")).toBool(), true);
         QCOMPARE(settings.value(QStringLiteral("useFullScreenGeometry")).toBool(), true);
         const QJsonObject zoneAppearance = settings.value(QStringLiteral("zoneAppearance")).toObject();
         QVERIFY(zoneAppearance.contains(QStringLiteral("{11111111-0000-0000-0000-000000000001}")));

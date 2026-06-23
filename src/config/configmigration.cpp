@@ -2338,7 +2338,7 @@ constexpr int kLayoutSettingsSchemaVersion = 1; // mirrors LayoutSettingsStore::
 
 // The per-LAYOUT setting keys that move out of the layout file into the sidecar.
 // The per-ZONE appearance block is handled separately. Order is irrelevant.
-constexpr std::array<QLatin1String, 13> kLayoutSettingKeys{{
+constexpr std::array<QLatin1String, 14> kLayoutSettingKeys{{
     QLatin1String{"zonePadding"},
     QLatin1String{"outerGap"},
     QLatin1String{"usePerSideOuterGap"},
@@ -2349,6 +2349,11 @@ constexpr std::array<QLatin1String, 13> kLayoutSettingKeys{{
     QLatin1String{"showZoneNumbers"},
     QLatin1String{"overlayDisplayMode"},
     QLatin1String{"autoAssign"},
+    // hiddenFromSelector is a user preference (which layouts the curated picker
+    // shows), relocated to the sidecar by the runtime store. It MUST be listed
+    // here too or a v3 user who hid a layout keeps the key embedded in the
+    // (otherwise slimmed) layout file and it never reaches the sidecar.
+    QLatin1String{"hiddenFromSelector"},
     QLatin1String{"useFullScreenGeometry"},
     QLatin1String{"shaderId"},
     QLatin1String{"shaderParams"},
