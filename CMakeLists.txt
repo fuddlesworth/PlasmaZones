@@ -344,31 +344,24 @@ add_subdirectory(libs/phosphor-animation)   # unified animation library: motion 
 add_subdirectory(libs/phosphor-audio)       # audio spectrum provider (CAVA backend)
 add_subdirectory(libs/phosphor-surfaces)    # managed surface lifecycle (engine, keep-alive, scope gen)
 add_subdirectory(libs/phosphor-overlay)     # per-screen shell-host + slot mechanism (rides on layer/shell-patterns/surfaces/animation/screens)
-# Foundation theme library. Built unconditionally so downstream libs and
-# tooling can consume it without the BUILD_PHOSPHOR_SHELL gate. Examples
-# are plugins and third-party shells. The lib has zero shell-side
-# dependencies and is a leaf module. Gating it would hide it from users
-# who don't ship the bundled shell. The shell binary itself stays gated.
-add_subdirectory(libs/phosphor-theme)       # M3 color-token store + Phosphor.Theme QML singletons
-# phosphor-popout is also unconditional. It is consumed by the
-# examples/phosphor-popout-demo target (also unconditional) and by
-# third-party hosts that may want to ship popout-style UI without
-# enabling BUILD_PHOSPHOR_SHELL. Gating phosphor-popout would break
-# the demo target. The shell binary itself stays gated below.
-add_subdirectory(libs/phosphor-popout)      # central popout coordinator (lifetime, focus, scope arbitration)
-# phosphor-ipc is also unconditional. Same rationale as the prior
-# three Phase-1 libs: third-party hosts and the demos consume it
-# without enabling the shell binary. Phase 1.4 deliverable.
-add_subdirectory(libs/phosphor-ipc)         # JSON-over-Unix-socket IpcRouter + IpcTarget QML type
-# phosphorctl is the typed IPC CLI shipped alongside phosphor-ipc.
-# Unconditional: it's a user-facing tool every dev/operator wants
-# by default. Links Qt6::Core + Qt6::Network only (no GUI, no QML).
-# Source dir is cli/phosphorctl/ (not bin/) because bin/ is the
-# project's runtime output directory; a same-named source subdir
-# would collide with the binary's final path.
-add_subdirectory(cli/phosphorctl)           # phosphorctl call / list / schema / subscribe
+# ───────────────────────────────────────────────────────────────────────
+# Phosphor SDK groundwork — gated behind BUILD_PHOSPHOR_SHELL (default off)
+# ───────────────────────────────────────────────────────────────────────
+# The Phase-1 foundation libraries (theme / popout / ipc), the phosphorctl
+# CLI, and the phosphor-shell binary are consumed only by the bundled shell,
+# the example demos, and third-party shells. NOTHING in the shipping
+# PlasmaZones tiler (daemon / editor / settings / kwin-effect) links them,
+# so building them in a default package is pure overhead and installs unused
+# runtime artifacts (the Phosphor.Theme QML plugin, /usr/bin/phosphorctl)
+# that a strict RPM build rejects as unpackaged files. Gate the whole tier;
+# the matching example demos under examples/ are gated the same way. Order
+# matters: phosphor-shell links theme/popout/ipc, so they precede it.
 if(BUILD_PHOSPHOR_SHELL)
-    add_subdirectory(libs/phosphor-shell)   # shell infrastructure and QML types (BUILD_PHOSPHOR_SHELL gate)
+    add_subdirectory(libs/phosphor-theme)   # M3 color-token store + Phosphor.Theme QML singletons
+    add_subdirectory(libs/phosphor-popout)  # central popout coordinator (lifetime, focus, scope arbitration)
+    add_subdirectory(libs/phosphor-ipc)     # JSON-over-Unix-socket IpcRouter + IpcTarget QML type
+    add_subdirectory(cli/phosphorctl)       # phosphorctl call / list / schema / subscribe
+    add_subdirectory(libs/phosphor-shell)   # shell infrastructure and QML types
 endif()
 add_subdirectory(libs/phosphor-engine)  # unified placement engine contracts + window registry (SHARED lib)
 add_subdirectory(libs/phosphor-workspaces)  # virtual desktop / workspace management
@@ -660,34 +653,23 @@ install(FILES ${_plasmazones_light_icons}
 # inner BUILD_PHOSPHOR_SHELL gates below.
 if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/examples")
 
-# phosphor-theme example apps. These are the lib's acceptance harness.
-# They consume only the phosphor-theme lib, so they build whenever the
-# lib builds. Gating them behind BUILD_PHOSPHOR_SHELL would force a
-# theme developer to pull in the whole shell tree just to run the demo.
-# phosphor-theme-demo renders the active PaletteStore as a swatch sheet
-# and hot-reloads from ~/.local/share/phosphor/palettes/current.json.
-# phosphor-theme-cli is the headless round-trip driver: wallpaper to
-# matugen to palette JSON to rendered template.
-add_subdirectory(examples/phosphor-theme-demo)
-add_subdirectory(examples/phosphor-theme-cli)
-
-# phosphor-popout-demo. Acceptance harness for libs/phosphor-popout.
-# Same gating logic as the theme demos: built unconditionally so a
-# popout developer doesn't need BUILD_PHOSPHOR_SHELL=ON to exercise
-# the arbitration. The demo links only phosphor-popout, phosphor-theme,
-# and base Qt; no Wayland dependency.
-add_subdirectory(examples/phosphor-popout-demo)
-
-# phosphor-registry-demo. Acceptance harness for libs/phosphor-registry's
-# in-process registration path. Two built-in IBarWidgetFactory
-# implementations registered explicitly in main(); the bar QML
-# enumerates them and instantiates one widget per id. Same
-# unconditional gating as the theme + popout demos.
-add_subdirectory(examples/phosphor-registry-demo)
-# phosphor-ipc-demo. Acceptance harness for libs/phosphor-ipc.
-# Three IpcTargets driven from another terminal via phosphorctl.
-# Unconditional (same rationale as the other foundation-lib demos).
-add_subdirectory(examples/phosphor-ipc-demo)
+# Phosphor SDK groundwork demos. These link the gated Phase-1 libraries
+# (phosphor-theme / popout / ipc), so they are gated to match: with
+# BUILD_PHOSPHOR_SHELL OFF those targets do not exist and an unconditional
+# add_subdirectory would fail the CMake generate step.
+#   phosphor-theme-demo  — swatch-sheet viewer, hot-reloads the PaletteStore.
+#   phosphor-theme-cli   — headless wallpaper → matugen → palette → template.
+#   phosphor-popout-demo — popout arbitration harness (popout + theme).
+#   phosphor-registry-demo — in-process IBarWidgetFactory registration
+#                            (registry + theme).
+#   phosphor-ipc-demo    — three IpcTargets driven via phosphorctl.
+if(BUILD_PHOSPHOR_SHELL)
+    add_subdirectory(examples/phosphor-theme-demo)
+    add_subdirectory(examples/phosphor-theme-cli)
+    add_subdirectory(examples/phosphor-popout-demo)
+    add_subdirectory(examples/phosphor-registry-demo)
+    add_subdirectory(examples/phosphor-ipc-demo)
+endif()
 
 # phosphor-perscreen-demo. Acceptance harness for the Phosphor.Shell
 # PerScreen helper (Phase 1.5). Opens a small window per monitor;
@@ -796,8 +778,11 @@ endif()
 # phosphor-registry-plugin-demo. Sibling of phosphor-registry-demo
 # that exercises the PluginLoader + hot-reload path. The third
 # (CPU-meter) widget builds as a separate .so + manifest.json and
-# is loaded via PluginLoader from a per-build plugin root.
-add_subdirectory(examples/phosphor-registry-plugin-demo)
+# is loaded via PluginLoader from a per-build plugin root. Links
+# PhosphorTheme, so it is gated with the other SDK groundwork demos.
+if(BUILD_PHOSPHOR_SHELL)
+    add_subdirectory(examples/phosphor-registry-plugin-demo)
+endif()
 
 if(BUILD_PHOSPHOR_SHELL)
     # Build the bundled example shell as a Qt QML module so qmlcachegen
