@@ -44,4 +44,23 @@ return pluau.algorithm {
         end
         return zones
     end,
+
+    -- Reflow on interactive resize: the centred column width is the split ratio.
+    -- The column is centre-anchored, so a one-edge drag of Δ must change the column
+    -- width by 2Δ for the dragged edge to land where the user released it. Every
+    -- window is the full column width, so there is no index gate — any window's
+    -- horizontal edge represents the same column boundary. setSplitRatio clamps a
+    -- negative/over-wide result.
+    onWindowResized = function(state, resize)
+        local count = state.windowCount
+        if count <= 1 then return nil end
+        local oldRatio = state.splitRatio
+        local old, new, edges = resize.oldRect, resize.newRect, resize.edges
+        if old.width <= 0 or oldRatio <= 0 then return nil end
+        if edges.left or edges.right then
+            local newColumnWidth = 2 * new.width - old.width
+            return { splitRatio = newColumnWidth * oldRatio / old.width }
+        end
+        return nil
+    end,
 }

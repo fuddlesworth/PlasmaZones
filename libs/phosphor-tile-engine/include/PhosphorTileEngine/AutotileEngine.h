@@ -499,6 +499,27 @@ public:
         return it == m_windowToStateKey.constEnd() ? QString() : it.value().screenId;
     }
 
+    /**
+     * @brief Reflow neighbors after a window was interactively resized.
+     *
+     * Entry point for the "drag an edge, neighbors fill the gap" behaviour
+     * (GitHub #652). Called by the daemon's WindowTracking adaptor when the
+     * compositor reports an interactive resize of a tiled window has finished.
+     *
+     * For tree/memory algorithms the moved edge(s) are mapped to the owning
+     * @ref PhosphorTiles::SplitTree split(s), whose ratio is adjusted so the
+     * neighbour subtree absorbs the change, then the screen is retiled
+     * gap-free. Floating windows, single-window screens, cross-output drags,
+     * and algorithms without a reflow model are no-ops.
+     *
+     * @param rawWindowId The interactively-resized window (raw instance id;
+     *                    canonicalized internally to match the state/tree keys)
+     * @param oldFrame The window's frame geometry before the resize (drag baseline)
+     * @param newFrame The window's frame geometry after the resize
+     * @param screenId Screen the daemon resolved the window to (authoritative)
+     */
+    void onWindowResized(const QString& rawWindowId, const QRect& oldFrame, const QRect& newFrame,
+                         const QString& screenId) override;
     // ═══════════════════════════════════════════════════════════════════════════
     // Settings synchronization
     // ═══════════════════════════════════════════════════════════════════════════
@@ -513,6 +534,14 @@ public:
     QVariantMap perScreenOverrides(const QString& screenId) const override;
     bool hasPerScreenOverride(const QString& screenId, const QString& key) const;
     void updatePerScreenOverride(const QString& screenId, const QString& key, const QVariant& value);
+
+    // Mark the active (screen, desktop, activity) state's split ratio / master
+    // count as user-tuned so propagateGlobalSplitRatio/MasterCount leaves it
+    // alone — the adjustment stays local to that desktop instead of bleeding into
+    // the global config. Called by NavigationController after a shortcut/resize
+    // adjustment in the no-per-screen-override case.
+    void noteSplitRatioUserTuned(const QString& screenId);
+    void noteMasterCountUserTuned(const QString& screenId);
 
     // Effective per-screen values — forwarded to PerScreenConfigResolver
     int effectiveInnerGap(const QString& screenId) const;
@@ -1106,6 +1135,18 @@ private:
     bool storeWindowMinSize(const QString& windowId, int minWidth, int minHeight);
     bool recalculateLayout(const QString& screenId);
     void applyTiling(const QString& screenId);
+
+    /**
+     * @brief Tier-A interactive-resize reflow for tree/memory algorithms.
+     *
+     * Maps the moved edge(s) of @p windowId to the owning SplitTree split(s)
+     * and adjusts their ratios so neighbours absorb the resize. Returns true if
+     * at least one split ratio actually changed (caller should retile). The
+     * split's extent is read from the currently rendered zones so the math
+     * stays in the same coordinate space as @p newFrame.
+     */
+    bool applyTreeResizeReflow(PhosphorTiles::TilingState* state, const QString& windowId, const QRect& oldFrame,
+                               const QRect& newFrame, const QString& screenId);
     bool shouldTileWindow(const QString& windowId) const;
     QString screenForWindow(const QString& windowId) const;
     QRect screenGeometry(const QString& screenId) const;
@@ -1332,16 +1373,6 @@ private:
     QString currentAppIdFor(const QString& anyWindowId) const;
 
     /**
-     * @brief Sync shortcut-adjusted ratio/count to config and settings
-     *
-     * Called by NavigationController after increase/decreaseMasterRatio/Count.
-     * Updates per-algorithm saved settings and writes to Settings (signal-blocked)
-     * so that subsequent propagateGlobalSplitRatio() calls and settings syncs
-     * don't overwrite the shortcut-adjusted values.
-     */
-    void syncShortcutAdjustmentToSettings();
-
-    /**
      * @brief Shared toggle-float implementation for toggleFocusedWindowFloat/toggleWindowFloat
      *
      * Toggles the floating state, retiles, and emits windowFloatingChanged.
@@ -1394,6 +1425,18 @@ private:
     bool m_algorithmEverSet = false; ///< True after first successful setAlgorithm() call
     QString m_activeScreen; // Last-focused screen (updated by onWindowFocused)
     QHash<PhosphorEngine::TilingStateKey, PhosphorTiles::TilingState*> m_screenStates; // Owned via Qt parent (this)
+
+    // Screen+desktop states whose split ratio / master count the user has
+    // explicitly tuned (keyboard shortcut or interactive resize). propagateGlobal*
+    // skips these so a per-desktop tweak survives a settings refresh and is never
+    // written into the global config — keeping the adjustment local to that
+    // (screen, desktop, activity). Cleared on an algorithm switch and when the
+    // user changes the corresponding global value in settings. This is
+    // within-session state only: it is not persisted, so the per-desktop tweak
+    // does not survive a daemon restart (neither does the value it guards —
+    // autotile persistence is per-window, not per-desktop ratio/count).
+    QSet<PhosphorEngine::TilingStateKey> m_userTunedSplitRatio;
+    QSet<PhosphorEngine::TilingStateKey> m_userTunedMasterCount;
 
     QHash<QString, PhosphorEngine::TilingStateKey> m_windowToStateKey; // windowId -> owning state key
     QHash<QString, QSize> m_windowMinSizes; // windowId -> minimum size from KWin

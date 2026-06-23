@@ -99,6 +99,20 @@ struct AlgorithmMetadata
     /// surface a "remembers your splits" indicator.
     bool supportsMemory = false;
 
+    /// True when the algorithm reflows the rest of the layout in response to an
+    /// interactive window resize (GitHub #652): either a tree algorithm whose
+    /// split ratios the engine adjusts (supportsMemory), or a scripted algorithm
+    /// that implements the onWindowResized hook (supportsResizeHook). Picker
+    /// surfaces a "drag-to-resize neighbours" filter/indicator.
+    bool reflowsOnResize = false;
+
+    /// True when the algorithm persists an opaque per-screen script-state bag
+    /// (TilingState::scriptState) across retiles and sessions — a scripted
+    /// algorithm that opts in via its metadata (e.g. an aligned grid that
+    /// remembers column widths). Picker surfaces a "remembers script state"
+    /// filter/indicator.
+    bool supportsScriptState = false;
+
     /// True when the algorithm is loaded from a Luau script file rather than
     /// a built-in implementation. Affects how the picker renders the
     /// system-vs-user badge (see @c isUserScript).

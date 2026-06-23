@@ -69,24 +69,16 @@ QJsonObject ConfigDefaults::defaultLayoutVisibilitySettings()
     };
 
     // Non-curated tiling algorithms (visible set: bsp, master-stack, monocle,
-    // columns, spiral, three-column, grid, deck).
+    // columns, dwindle-memory, three-column, grid, deck).
     static const QStringList algorithmIds{
-        QStringLiteral("cascade"),
-        QStringLiteral("centered-master"),
-        QStringLiteral("cluster"),
-        QStringLiteral("corner-master"),
-        QStringLiteral("dwindle"),
-        QStringLiteral("dwindle-memory"),
-        QStringLiteral("floating-center"),
-        QStringLiteral("focus-sidebar"),
-        QStringLiteral("horizontal-deck"),
-        QStringLiteral("paper"),
-        QStringLiteral("quadrant-priority"),
-        QStringLiteral("rows"),
-        QStringLiteral("spread"),
-        QStringLiteral("stair"),
-        QStringLiteral("tatami"),
-        QStringLiteral("wide"),
+        QStringLiteral("cascade"),       QStringLiteral("centered-master"),
+        QStringLiteral("cluster"),       QStringLiteral("corner-master"),
+        QStringLiteral("dwindle"),       QStringLiteral("floating-center"),
+        QStringLiteral("focus-sidebar"), QStringLiteral("horizontal-deck"),
+        QStringLiteral("paper"),         QStringLiteral("quadrant-priority"),
+        QStringLiteral("rows"),          QStringLiteral("spiral"),
+        QStringLiteral("spread"),        QStringLiteral("stair"),
+        QStringLiteral("tatami"),        QStringLiteral("wide"),
         QStringLiteral("zen"),
     };
 

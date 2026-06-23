@@ -29,6 +29,7 @@ QVector<WindowInfo> buildWindowInfos(const TilingState* state, int windowCount,
         // a no-op lambda; the resolver is cheap either way.
         info.appId = appIdResolver ? appIdResolver(windows[i]) : QString();
         info.focused = (windows[i] == focusedWin);
+        info.windowId = windows[i];
         if (info.focused) {
             focusedIndex = i;
         }
@@ -125,6 +126,21 @@ void TilingAlgorithm::onWindowAdded(TilingState* /*state*/, int /*windowIndex*/)
 void TilingAlgorithm::onWindowRemoved(TilingState* /*state*/, int /*windowIndex*/)
 {
     // Default no-op. Algorithms with lifecycle hooks override.
+}
+
+bool TilingAlgorithm::supportsResizeHook() const noexcept
+{
+    return false;
+}
+
+void TilingAlgorithm::onWindowResized(TilingState* /*state*/, const ResizeEvent& /*resize*/)
+{
+    // Default no-op. Non-memory algorithms that react to resize override.
+}
+
+bool TilingAlgorithm::supportsScriptState() const noexcept
+{
+    return false;
 }
 
 bool TilingAlgorithm::supportsCustomParams() const noexcept

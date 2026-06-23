@@ -63,6 +63,7 @@ struct ScriptMetadata
     bool supportsMasterCount = false;
     bool supportsSplitRatio = false;
     bool supportsMemory = false;
+    bool supportsScriptState = false; ///< Persists an opaque ctx.state bag across retiles (non-tree memory)
     bool producesOverlappingZones = false;
     bool centerLayout = false;
     bool supportsMinSizes = true; ///< Default true — most algorithms support min sizes

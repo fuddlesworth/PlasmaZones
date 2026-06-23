@@ -80,6 +80,22 @@ SettingsFlickable {
             "test": a => {
                 return a.supportsCustomParams === true;
             }
+        },
+        {
+            "key": "reflowsOnResize",
+            "label": i18n("Reflows on Resize"),
+            "order": 5,
+            "test": a => {
+                return a.reflowsOnResize === true;
+            }
+        },
+        {
+            "key": "scriptState",
+            "label": i18n("Script State"),
+            "order": 6,
+            "test": a => {
+                return a.supportsScriptState === true;
+            }
         }
     ]
 

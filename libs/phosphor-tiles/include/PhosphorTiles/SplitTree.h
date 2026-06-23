@@ -57,6 +57,19 @@ struct PHOSPHORTILES_EXPORT SplitNode
 class PHOSPHORTILES_EXPORT SplitTree
 {
 public:
+    /**
+     * @brief A geometric edge of a window's rectangle.
+     *
+     * Used by @ref splitOwningEdge to identify which ancestor split owns the
+     * boundary line collinear with a given edge of a leaf window.
+     */
+    enum class Edge {
+        Left,
+        Right,
+        Top,
+        Bottom
+    };
+
     /// Construct an empty tree (no root)
     SplitTree();
 
@@ -193,6 +206,39 @@ public:
      * @param newRatio New split ratio (clamped to MinSplitRatio..MaxSplitRatio)
      */
     void resizeSplit(const QString& windowId, qreal newRatio);
+
+    /**
+     * @brief Set the split ratio on a specific internal node
+     *
+     * Lower-level companion to @ref resizeSplit: resizes an arbitrary ancestor
+     * split (e.g. the one returned by @ref splitOwningEdge) rather than the
+     * window's immediate parent. The ratio is clamped to
+     * MinSplitRatio..MaxSplitRatio. A null node or a leaf node is a no-op.
+     *
+     * @param node Internal node whose split ratio to set
+     * @param newRatio New split ratio (clamped)
+     */
+    void resizeSplitNode(SplitNode* node, qreal newRatio);
+
+    /**
+     * @brief Find the ancestor split whose division line is collinear with a
+     *        given edge of a leaf window.
+     *
+     * Walks from the window's leaf toward the root and returns the nearest
+     * ancestor internal node that (a) splits along the edge's axis and (b) has
+     * the window's subtree on the side that touches the edge:
+     *   - Right/Bottom edge  → vertical/horizontal split with the leaf in @c first
+     *   - Left/Top edge      → vertical/horizontal split with the leaf in @c second
+     *
+     * Returns @c nullptr when the edge coincides with a screen boundary (no
+     * owning split exists) or the window is not in the tree.
+     *
+     * @param windowId Window whose edge to resolve
+     * @param edge Which edge of the window's rectangle
+     * @return Owning split node, or @c nullptr
+     */
+    const SplitNode* splitOwningEdge(const QString& windowId, Edge edge) const;
+    SplitNode* splitOwningEdge(const QString& windowId, Edge edge);
 
     // ═══════════════════════════════════════════════════════════════════════
     // Geometry
