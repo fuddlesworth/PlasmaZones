@@ -418,6 +418,15 @@ public:
 
     virtual QString defaultLayoutId() const = 0;
     virtual void setDefaultLayoutId(const QString& layoutId) = 0;
+
+    /// When true, no context is assigned an active snapping or autotiling layout
+    /// by default — the synthesized level-1 default is suppressed and a mode only
+    /// activates for a context the user has explicitly assigned (or a
+    /// DefaultLayoutAssignment window rule has re-enabled). Mode-neutral: governs
+    /// both engines, since the level-1 default is a single mode-carrying entry.
+    /// Off by default (every context gets the default, today's behavior).
+    virtual bool suppressDefaultLayoutAssignment() const = 0;
+    virtual void setSuppressDefaultLayoutAssignment(bool suppress) = 0;
 };
 
 /**

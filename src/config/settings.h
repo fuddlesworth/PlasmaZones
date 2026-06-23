@@ -188,6 +188,8 @@ public:
 
     // Default layout (used when no explicit assignment exists)
     Q_PROPERTY(QString defaultLayoutId READ defaultLayoutId WRITE setDefaultLayoutId NOTIFY defaultLayoutIdChanged)
+    Q_PROPERTY(bool suppressDefaultLayoutAssignment READ suppressDefaultLayoutAssignment WRITE
+                   setSuppressDefaultLayoutAssignment NOTIFY suppressDefaultLayoutAssignmentChanged)
 
     // PhosphorZones::Layout filtering
     Q_PROPERTY(bool filterLayoutsByAspectRatio READ filterLayoutsByAspectRatio WRITE setFilterLayoutsByAspectRatio
@@ -683,6 +685,8 @@ public:
     void setSnapAssistTriggers(const QVariantList& triggers) override;
     QString defaultLayoutId() const override;
     void setDefaultLayoutId(const QString& layoutId) override;
+    bool suppressDefaultLayoutAssignment() const override;
+    void setSuppressDefaultLayoutAssignment(bool suppress) override;
 
     bool filterLayoutsByAspectRatio() const override;
     void setFilterLayoutsByAspectRatio(bool filter) override;

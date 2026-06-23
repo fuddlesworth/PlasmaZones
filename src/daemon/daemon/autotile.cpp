@@ -71,8 +71,19 @@ void Daemon::updateAutotileScreens()
         }
         QString assignmentId = m_layoutManager->assignmentIdForScreen(screenId, desktop, activity);
         if (PhosphorLayout::LayoutId::isAutotile(assignmentId)) {
+            const QString algoId = PhosphorLayout::LayoutId::extractAlgorithmId(assignmentId);
+            // Bare autotile (mode set, no concrete algorithm — e.g. a mode-only
+            // rule or a plain mode swap) draws its algorithm from the global
+            // default, which the suppress setting disables. Don't tile such a
+            // context when its default is suppressed (globally or by a
+            // per-context rule): tiling is active and would rearrange windows
+            // with a default the user opted out of. A concrete assigned
+            // algorithm is explicit and always tiles.
+            if (algoId.isEmpty()
+                && m_layoutManager->isDefaultAssignmentSuppressedForContext(screenId, desktop, activity)) {
+                continue;
+            }
             autotileScreens.insert(screenId);
-            QString algoId = PhosphorLayout::LayoutId::extractAlgorithmId(assignmentId);
             if (!algoId.isEmpty()) {
                 screenAlgorithms[screenId] = algoId;
             }

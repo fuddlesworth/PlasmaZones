@@ -193,6 +193,22 @@ public:
         return false;
     }
 
+    /// True iff the (@p screenId, @p virtualDesktop, @p activity) context has no
+    /// active layout specifically because the default assignment is suppressed —
+    /// globally or by a per-context @c DefaultLayoutAssignment rule. Daemon
+    /// overlay / display paths that otherwise fall back to @ref defaultLayout on a
+    /// missing assignment use this to treat a suppressed context as "no layout,
+    /// engine inactive" without regressing other empty-assignment states. The
+    /// default returns false (a stub registry never suppresses).
+    virtual bool isContextActiveLayoutSuppressed(const QString& screenId, int virtualDesktop,
+                                                 const QString& activity) const
+    {
+        Q_UNUSED(screenId);
+        Q_UNUSED(virtualDesktop);
+        Q_UNUSED(activity);
+        return false;
+    }
+
     /// Resolve the per-context overlay-property override for the
     /// (@p screenId, @p virtualDesktop, @p activity) context — a per-slot read
     /// across all matching context rules (mirrors @ref resolveContextGaps), so

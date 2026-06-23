@@ -2114,6 +2114,10 @@ P_STORE_SET_BOOL(setSnapUnfloatFallbackToZone, snappingBehaviorWindowHandlingGro
 P_STORE_GET(bool, autoAssignAllLayouts, snappingBehaviorWindowHandlingGroup, autoAssignAllLayoutsKey, bool)
 P_STORE_SET_BOOL(setAutoAssignAllLayouts, snappingBehaviorWindowHandlingGroup, autoAssignAllLayoutsKey,
                  autoAssignAllLayoutsChanged)
+P_STORE_GET(bool, suppressDefaultLayoutAssignment, snappingBehaviorWindowHandlingGroup,
+            suppressDefaultLayoutAssignmentKey, bool)
+P_STORE_SET_BOOL(setSuppressDefaultLayoutAssignment, snappingBehaviorWindowHandlingGroup,
+                 suppressDefaultLayoutAssignmentKey, suppressDefaultLayoutAssignmentChanged)
 
 QString Settings::defaultLayoutId() const
 {

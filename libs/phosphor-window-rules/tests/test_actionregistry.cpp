@@ -51,6 +51,7 @@ private Q_SLOTS:
         QVERIFY(reg.isRegistered(QString(ActionType::SetOpacity)));
         QVERIFY(reg.isRegistered(QString(ActionType::RestorePosition)));
         QVERIFY(reg.isRegistered(QString(ActionType::LockContext)));
+        QVERIFY(reg.isRegistered(QString(ActionType::DefaultLayoutAssignment)));
     }
 
     void testSlots()
@@ -113,6 +114,7 @@ private Q_SLOTS:
         QVERIFY(!reg.isTerminal(makeAction(ActionType::SetOpacity)));
         QVERIFY(!reg.isTerminal(makeAction(ActionType::RestorePosition)));
         QVERIFY(!reg.isTerminal(makeAction(ActionType::LockContext)));
+        QVERIFY(!reg.isTerminal(makeAction(ActionType::DefaultLayoutAssignment)));
     }
 
     void testValidateAcceptsWellFormedRegisteredAction()
@@ -192,6 +194,34 @@ private Q_SLOTS:
         QJsonObject notBool;
         notBool.insert(QStringLiteral("value"), 1);
         QVERIFY2(!reg.validate(makeAction(ActionType::LockContext, notBool)), "non-bool value must fail");
+    }
+
+    void testDefaultLayoutAssignmentAction()
+    {
+        const ActionRegistry& reg = ActionRegistry::instance();
+        QVERIFY(reg.isRegistered(QString(ActionType::DefaultLayoutAssignment)));
+
+        QJsonObject allow;
+        allow.insert(QStringLiteral("value"), true);
+        QJsonObject suppress;
+        suppress.insert(QStringLiteral("value"), false);
+
+        // Context-domain boolean action filling its dedicated slot. Non-terminal:
+        // a default-assignment-only context rule composes with other context
+        // slots rather than short-circuiting (mirrors LockContext).
+        QCOMPARE(reg.slotFor(makeAction(ActionType::DefaultLayoutAssignment, allow)),
+                 QString(ActionSlot::DefaultAssignment));
+        QCOMPARE(reg.domainFor(makeAction(ActionType::DefaultLayoutAssignment, allow)), ActionDomain::Context);
+        QVERIFY(!reg.isTerminal(makeAction(ActionType::DefaultLayoutAssignment, allow)));
+
+        // Requires a boolean `value`; both true (allow) and false (suppress) are
+        // well-formed.
+        QVERIFY(reg.validate(makeAction(ActionType::DefaultLayoutAssignment, allow)));
+        QVERIFY(reg.validate(makeAction(ActionType::DefaultLayoutAssignment, suppress)));
+        QVERIFY2(!reg.validate(makeAction(ActionType::DefaultLayoutAssignment)), "missing value must fail validation");
+        QJsonObject notBool;
+        notBool.insert(QStringLiteral("value"), 1);
+        QVERIFY2(!reg.validate(makeAction(ActionType::DefaultLayoutAssignment, notBool)), "non-bool value must fail");
     }
 
     void testRegisterCustomAction()

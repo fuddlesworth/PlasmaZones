@@ -48,12 +48,13 @@ void OverlayService::show()
             // Fallback to primary screen if cursor position detection fails
             cursorScreen = Utils::primaryScreen();
         }
-        // If the cursor's screen has PlasmaZones disabled, don't show overlay at all
-        // Check both physical and effective (virtual) screen IDs
+        // If the cursor's screen has no active snapping overlay — disabled, or its
+        // default layout is suppressed, or it's in autotile mode — don't show the
+        // overlay at all. Mirrors the per-target gate in initializeOverlay.
+        // Check both physical and effective (virtual) screen IDs.
         if (cursorScreen && m_settings) {
             QString effectiveId = Utils::effectiveScreenIdAt(m_screenManager, QCursor::pos(), cursorScreen);
-            if (isContextDisabled(m_settings, PhosphorZones::AssignmentEntry::Snapping, effectiveId,
-                                  currentVirtualDesktopForScreen(effectiveId), m_currentActivity)) {
+            if (isSnappingContextInactive(effectiveId)) {
                 return;
             }
         }
@@ -77,12 +78,13 @@ void OverlayService::showAtPosition(int cursorX, int cursorY)
             cursorScreen = Utils::primaryScreen();
         }
 
-        // If the cursor's screen has PlasmaZones disabled, don't show overlay at all
-        // Check both physical and effective (virtual) screen IDs
+        // If the cursor's screen has no active snapping overlay — disabled, or its
+        // default layout is suppressed, or it's in autotile mode — don't show the
+        // overlay at all. Mirrors the per-target gate in initializeOverlay.
+        // Check both physical and effective (virtual) screen IDs.
         if (cursorScreen && m_settings) {
             QString effectiveId = Utils::effectiveScreenIdAt(m_screenManager, QPoint(cursorX, cursorY), cursorScreen);
-            if (isContextDisabled(m_settings, PhosphorZones::AssignmentEntry::Snapping, effectiveId,
-                                  currentVirtualDesktopForScreen(effectiveId), m_currentActivity)) {
+            if (isSnappingContextInactive(effectiveId)) {
                 return;
             }
         }

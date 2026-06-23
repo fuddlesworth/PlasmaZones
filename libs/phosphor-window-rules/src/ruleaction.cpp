@@ -424,6 +424,35 @@ void ActionRegistry::registerBuiltins()
         .tags = {QString(Tag::LayoutEngine)},
     });
 
+    // ── default-assignment slot — context-domain override of the global
+    //    "suppress default layout assignment" setting. A matched context rule
+    //    flips the synthesized level-1 default for its screen/desktop/activity:
+    //    value == false suppresses it (no engine activates until the user
+    //    explicitly assigns one), value == true forces it through even when the
+    //    global suppress setting is on. Mode-agnostic (the level-1 default is a
+    //    single mode-carrying AssignmentEntry) and live-resolved per-slot at
+    //    cascade-miss by LayoutRegistry::resolveContextDefaultAssignment —
+    //    carries no SetEngineMode action, so it never wins the single-rule
+    //    assignment cascade. Seeds FALSE: the global setting defaults OFF (every
+    //    context gets a default), so the only meaningful per-context rule a user
+    //    adds is "suppress on this monitor" — defaultDisplay 0.0 lands the fresh
+    //    action on that value.
+    registerAction(ActionDescriptor{
+        .type = QString(ActionType::DefaultLayoutAssignment),
+        .slotFor = constantSlot(ActionSlot::DefaultAssignment),
+        .validate =
+            [](const QJsonObject& p) {
+                return hasBool(p, ActionParam::Value);
+            },
+        .terminal = false,
+        .allowedKeys = {QString(ActionParam::Value)},
+        .domain = ActionDomain::Context,
+        .params = {P{.key = QString(ActionParam::Value), .kind = QStringLiteral("bool"), .defaultDisplay = 0.0}},
+        .category = QStringLiteral("layoutEngine"),
+        .displayOrder = 5,
+        .tags = {QString(Tag::LayoutEngine)},
+    });
+
     // ── manage slot — terminal. Exclude is intentionally free-form: an empty
     //    `allowedKeys` opts out of the strict-key check so a future Exclude
     //    reason/scope param can be added without a schema bump. ──
