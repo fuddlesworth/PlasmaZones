@@ -753,12 +753,14 @@ void LuauTileAlgorithm::onWindowResized(TilingState* state, const ResizeEvent& r
     if (out.result.typeId() == QMetaType::QVariantMap) {
         QVariantMap result = out.result.toMap();
 
-        // Apply a finite numeric ratio (setSplitRatio clamps). Require an actual
-        // double — a Luau number marshals to one — and reject non-finite values,
-        // mirroring the strict typing used for every other script-supplied number
-        // (std::clamp would otherwise pass NaN straight through).
+        // Apply a finite numeric ratio (setSplitRatio clamps). Accept the two types
+        // a Luau number marshals to — Double for fractional values, LongLong for a
+        // whole number such as an extreme-drag 0.0/1.0 (see luaumarshal.cpp) — while
+        // rejecting strings/other types, and guard std::isfinite (std::clamp would
+        // otherwise pass NaN straight through).
         const auto ratioIt = result.constFind(QStringLiteral("splitRatio"));
-        if (ratioIt != result.constEnd() && ratioIt->typeId() == QMetaType::Double) {
+        if (ratioIt != result.constEnd()
+            && (ratioIt->typeId() == QMetaType::Double || ratioIt->typeId() == QMetaType::LongLong)) {
             const double ratio = ratioIt->toDouble();
             if (std::isfinite(ratio)) {
                 state->setSplitRatio(ratio);

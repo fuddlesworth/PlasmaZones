@@ -28,7 +28,7 @@ export type ScreenInfo = { id: string, portrait: boolean, aspectRatio: number }
 -- Which edges of a window moved during an interactive resize, plus the before/
 -- after frames. Delivered to the onWindowResized hook (not via Context).
 export type ResizeEvent = {
-    index: number, -- tiled index of the resized window
+    index: number, -- 0-based tiled index of the resized window (NOT Luau-1-based)
     oldRect: Zone,
     newRect: Zone,
     edges: { left: boolean, right: boolean, top: boolean, bottom: boolean },
@@ -86,6 +86,7 @@ export type Metadata = {
 export type Algorithm = {
     metadata: Metadata,
     tile: (ctx: Context) -> { Zone },
+    -- index is the 0-based tiled index (NOT Luau-1-based).
     onWindowAdded: ((state: any, index: number) -> ())?,
     onWindowRemoved: ((state: any, index: number) -> ())?,
     -- Called after an interactive resize. Return a control table (or nil to do

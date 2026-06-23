@@ -186,6 +186,30 @@ private Q_SLOTS:
         QCOMPARE(state->masterCount(), 1);
     }
 
+    // Tuning a ratio records the state's key in the engine's user-tuned set;
+    // pruning that desktop must drop the key with the state (no dangling key, no
+    // crash) so a reused desktop number starts clean.
+    void testPruneTunedDesktop_isCrashSafe()
+    {
+        AutotileEngine engine(nullptr, nullptr, nullptr, PlasmaZones::TestHelpers::testRegistry());
+        const QString screen1 = QStringLiteral("Screen1");
+        engine.setAutotileScreens({screen1});
+
+        engine.windowOpened(QStringLiteral("win1"), screen1, 0, 0);
+        engine.windowOpened(QStringLiteral("win2"), screen1, 0, 0);
+        QCoreApplication::processEvents();
+
+        engine.windowFocused(QStringLiteral("win1"), screen1);
+        engine.increaseMasterRatio(0.1); // tunes the current desktop's state
+
+        engine.pruneStatesForDesktop(engine.currentDesktop());
+
+        // A fresh state on the same screen is created cleanly after the prune.
+        engine.windowOpened(QStringLiteral("win3"), screen1, 0, 0);
+        QCoreApplication::processEvents();
+        QVERIFY(engine.tilingStateForScreen(screen1) != nullptr);
+    }
+
     // =========================================================================
     // Per-screen override interaction tests
     // =========================================================================
