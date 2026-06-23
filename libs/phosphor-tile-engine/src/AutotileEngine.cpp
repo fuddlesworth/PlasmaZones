@@ -2790,12 +2790,13 @@ void AutotileEngine::onWindowResized(const QString& rawWindowId, const QRect& ol
     // Cross-output guard: if the resize carried the window's centre off its
     // screen, this is a monitor handoff — let windowScreenChanged own the
     // reassignment rather than reflowing a layout the window is leaving. Use the
-    // full monitor rect, not the strut-inset work area, so a window whose centre
+    // full screen rect, not the strut-inset work area, so a window whose centre
     // legitimately lands under a panel is not misread as having left the screen.
-    // Virtual screens are region-bounded sub-rects, so keep the virtual-aware
-    // available-geometry resolver for them.
+    // ScreenManager::screenGeometry() resolves both physical and virtual
+    // (region-bounded) IDs to their full rect; the engine's available-geometry
+    // helper is only a last resort when the manager has no tracked rect for the id.
     QRect screen;
-    if (m_screenManager && !PhosphorIdentity::VirtualScreenId::isVirtual(resolvedScreen)) {
+    if (m_screenManager) {
         screen = m_screenManager->screenGeometry(resolvedScreen);
     }
     if (!screen.isValid()) {
