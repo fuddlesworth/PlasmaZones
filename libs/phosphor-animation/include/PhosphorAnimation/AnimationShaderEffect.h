@@ -179,9 +179,9 @@ struct PHOSPHORANIMATION_EXPORT AnimationShaderEffect
     /// window streams into its destination zone). 0 (the default) keeps
     /// the single output-spanning quad every other surface-extent
     /// shader uses. A value of N tells the kwin-effect's `apply()` to
-    /// subdivide that quad into an N×N grid via
-    /// `WindowQuadList::makeRegularGrid` so the vertex shader has
-    /// interior vertices to displace. Only meaningful together with
+    /// emit an N×N grid of quad cells over the window's destination rect
+    /// so the vertex shader has interior vertices to displace. Only
+    /// meaningful together with
     /// `fboExtent: "surface"`; ignored otherwise. JSON key
     /// `"geometryGrid"`, omitted from `toJson` when 0 to keep authored
     /// metadata terse, same idiom as `fboExtent` / `multipass`.

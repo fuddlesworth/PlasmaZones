@@ -30,7 +30,7 @@ vec4 oldColor(vec2 uv) {
 vec4 pTransition(vec2 uv, float t) {
 #ifdef PLASMAZONES_KWIN
     vec2 cuv = vRip.xy;
-    float shade = clamp(vRip.z, 0.0, 2.0);
+    float shade = clamp(vRip.z, 0.0, 1.0);
     float fade = clamp(vRip.w, 0.0, 1.0);
 
     // Feathered window mask in card space.

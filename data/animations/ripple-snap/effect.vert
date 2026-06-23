@@ -79,7 +79,10 @@ void main() {
     vec2 toPos = iToRect.xy + cuv * iToRect.zw;
     vec2 displaced = position + (screenPos - toPos);
 
-    float shade = clamp(1.0 + wave * SHADE, 0.6, 1.25);
+    // Darken-only: brightening a premultiplied sample (scaling RGB and
+    // alpha together) would push alpha past 1.0 in the FBO, so cap at 1.0
+    // and let the troughs darken.
+    float shade = clamp(1.0 + wave * SHADE, 0.6, 1.0);
 
     vTexCoord = cuv;
     vRip = vec4(cuv, shade, teE);

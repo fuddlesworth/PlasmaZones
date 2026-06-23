@@ -31,12 +31,13 @@ layout(location = 0) out vec2 vTexCoord;
 uniform mat4 modelViewProjectionMatrix;
 uniform vec4 iFromRect;
 uniform vec4 iToRect;
-// Per-vertex data for the fragment: .xy = sampling card uv, .z = shade
-// (unused highlight hook, kept 1.0), .w = old->new cross-fade.
-layout(location = 1) out vec4 vStretch;
+// Per-vertex data for the fragment: .xy = sampling card uv, .z = old->new
+// cross-fade.
+layout(location = 1) out vec3 vStretch;
 
 // easeOutBack: rises to 1 with a single overshoot near the end, settling
-// exactly at 1. OVERSHOOT scales the spring; 1.0 is the classic ~10%.
+// exactly at 1. OVERSHOOT scales the spring: 1.0 gives the classic ~10%
+// overshoot, and 1.2 here for a slightly firmer snap.
 float backOut(float x) {
     const float OVERSHOOT = 1.2;
     float c1 = 1.70158 * OVERSHOOT;
@@ -94,7 +95,7 @@ void main() {
     vec2 displaced = position + (finalPos - toPos);
 
     vTexCoord = cuv;
-    vStretch = vec4(cuv, 1.0, clamp(eC, 0.0, 1.0));
+    vStretch = vec3(cuv, clamp(eC, 0.0, 1.0));
     gl_Position = modelViewProjectionMatrix * vec4(displaced, 0.0, 1.0);
 #else
     // Daemon RHI bake target: the stretch is compositor-only. Pass the

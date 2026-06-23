@@ -12,8 +12,8 @@
 
 #ifdef PLASMAZONES_KWIN
 uniform sampler2D uOldWindow;
-// .xy = sampling card uv, .z = shade, .w = old->new cross-fade.
-layout(location = 1) in vec4 vStretch;
+// .xy = sampling card uv, .z = old->new cross-fade.
+layout(location = 1) in vec3 vStretch;
 #endif
 
 #include <anchor_remap.glsl>
@@ -30,8 +30,7 @@ vec4 oldColor(vec2 uv) {
 vec4 pTransition(vec2 uv, float t) {
 #ifdef PLASMAZONES_KWIN
     vec2 cuv = vStretch.xy;
-    float shade = clamp(vStretch.z, 0.0, 2.0);
-    float fade = clamp(vStretch.w, 0.0, 1.0);
+    float fade = clamp(vStretch.z, 0.0, 1.0);
 
     // Feathered window mask in card space.
     vec2 fw = max(fwidth(cuv), vec2(1.0e-4));
@@ -44,10 +43,9 @@ vec4 pTransition(vec2 uv, float t) {
     vec4 oldC = oldColor(cuv);     // captured old frame, native aspect
     vec4 newC = surfaceColor(cuv); // live new content, native aspect
 
-    // Cross-fade old -> new as the move settles, then apply the shade.
-    // Inputs are premultiplied, so a straight mix and a scalar multiply are
-    // both correct on premultiplied colour.
-    return mix(oldC, newC, fade) * shade * mask;
+    // Cross-fade old -> new as the move settles. Inputs are premultiplied,
+    // so a straight mix is correct on premultiplied colour.
+    return mix(oldC, newC, fade) * mask;
 #else
     return surfaceColor(anchorRemap(uv));
 #endif
