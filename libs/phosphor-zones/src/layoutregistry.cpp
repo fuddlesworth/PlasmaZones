@@ -16,29 +16,44 @@
 
 namespace PhosphorZones {
 
-LayoutRegistry::LayoutRegistry(std::unique_ptr<PhosphorConfig::IBackend> backend, QString layoutSubdirectory,
+LayoutRegistry::LayoutRegistry(PhosphorWindowRules::WindowRuleStore* ruleStore, QString layoutSubdirectory,
                                QObject* parent)
     : IZoneLayoutRegistry(parent)
-    , m_ownedBackend(std::move(backend))
-    , m_configBackend(m_ownedBackend.get())
+    , m_ruleStore(ruleStore)
     , m_layoutSubdirectory(std::move(layoutSubdirectory))
 {
-    Q_ASSERT_X(m_configBackend != nullptr, "LayoutRegistry",
-               "backend is required — every persistence method dereferences it");
+    Q_ASSERT_X(m_ruleStore != nullptr, "LayoutRegistry",
+               "ruleStore is required — assignment resolution dereferences it");
     Q_ASSERT_X(!m_layoutSubdirectory.isEmpty(), "LayoutRegistry", "layoutSubdirectory is required");
+    initCommon();
+}
+
+void LayoutRegistry::initCommon()
+{
     // The subdirectory is appended to XDG data roots, so it must be a
     // relative path without traversal segments. An absolute path would
     // ignore the XDG root entirely; ".." would escape the user-writable
     // area. Reject both — this is a developer error (composition-root
-    // configuration), not user input, so assertion is the right signal.
-    Q_ASSERT_X(!m_layoutSubdirectory.startsWith(QLatin1Char('/')), "LayoutRegistry",
-               "layoutSubdirectory must be a relative XDG path, not absolute");
-    Q_ASSERT_X(!m_layoutSubdirectory.contains(QLatin1String("..")), "LayoutRegistry",
-               "layoutSubdirectory must not contain '..' traversal");
+    // configuration), not user input, so a fatal is the right signal:
+    // Q_ASSERT compiles out in release, but a bad subdirectory would silently
+    // proceed to QStandardPaths concatenation and produce a non-existent
+    // (absolute) or escaping (..) directory in EVERY build that ships.
+    if (m_layoutSubdirectory.startsWith(QLatin1Char('/'))) {
+        qFatal("LayoutRegistry: layoutSubdirectory must be a relative XDG path, not absolute: %s",
+               qPrintable(m_layoutSubdirectory));
+    }
+    if (m_layoutSubdirectory.contains(QLatin1String(".."))) {
+        qFatal("LayoutRegistry: layoutSubdirectory must not contain '..' traversal: %s",
+               qPrintable(m_layoutSubdirectory));
+    }
 
     m_layoutDirectory =
         QStandardPaths::writableLocation(QStandardPaths::GenericDataLocation) + QLatin1Char('/') + m_layoutSubdirectory;
     ensureLayoutDirectory();
+
+    // One evaluation model — bound to the store's live rule set. The store
+    // owns the set's lifetime; the evaluator holds a reference to it.
+    m_evaluator = std::make_unique<PhosphorWindowRules::RuleEvaluator>(m_ruleStore->ruleSet());
 
     // Forward the detailed layoutsChanged signal into the unified
     // ILayoutSourceRegistry::contentsChanged notifier so any subscribed
@@ -66,7 +81,33 @@ void LayoutRegistry::setSnappingPreferredProvider(std::function<bool()> provider
     m_snappingPreferredProvider = std::move(provider);
 }
 
+void LayoutRegistry::setDefaultAssignmentSuppressedProvider(std::function<bool()> provider)
+{
+    m_defaultAssignmentSuppressedProvider = std::move(provider);
+}
+
+bool LayoutRegistry::snappingPreferred() const
+{
+    return m_snappingPreferredProvider && m_snappingPreferredProvider();
+}
+
 AssignmentEntry LayoutRegistry::resolveDefaultAssignmentEntry() const
+{
+    // Global suppress gate. When the user has opted to suppress the synthesized
+    // default assignment, no unassigned context gets a level-1 default — the
+    // result is a default-constructed (invalid) entry whose activeLayoutId() is
+    // empty, the SAME effective state as a system with no default providers
+    // configured. The daemon's existing "empty entry ⇒ no default, no active
+    // engine" handling therefore covers it with no further change. The
+    // per-context "allow" override bypasses this by calling the raw sibling
+    // directly (see resolveDefaultAssignmentEntryForContext).
+    if (m_defaultAssignmentSuppressedProvider && m_defaultAssignmentSuppressedProvider()) {
+        return AssignmentEntry{};
+    }
+    return resolveDefaultAssignmentEntryRaw();
+}
+
+AssignmentEntry LayoutRegistry::resolveDefaultAssignmentEntryRaw() const
 {
     // Level-1 global default. Resolution order:
     //
@@ -96,7 +137,7 @@ AssignmentEntry LayoutRegistry::resolveDefaultAssignmentEntry() const
     // the KCM/UI is expected to surface "stale default" UX. Adding
     // membership validation here would silently swallow that signal —
     // see testLevel1Default_snapWithUnknownUuid_layoutForScreenFallsThrough.
-    if (m_snappingPreferredProvider && m_snappingPreferredProvider()) {
+    if (snappingPreferred()) {
         AssignmentEntry e;
         e.mode = AssignmentEntry::Snapping;
         if (m_defaultLayoutIdProvider) {
@@ -182,7 +223,7 @@ PhosphorZones::Layout* LayoutRegistry::defaultLayout() const
     if (m_defaultLayoutIdProvider) {
         const QString configuredId = m_defaultLayoutIdProvider();
         if (!configuredId.isEmpty()) {
-            if (PhosphorZones::Layout* layout = layoutById(QUuid(configuredId))) {
+            if (PhosphorZones::Layout* layout = layoutById(QUuid::fromString(configuredId))) {
                 return layout;
             }
         }
@@ -202,10 +243,18 @@ PhosphorZones::Layout* LayoutRegistry::cycleLayoutImpl(const QString& screenId, 
     // Translate connector name to screen ID for allowedScreens matching
     QString resolvedScreenId;
     if (!screenId.isEmpty()) {
-        resolvedScreenId = Phosphor::Screens::ScreenIdentity::isConnectorName(screenId)
-            ? Phosphor::Screens::ScreenIdentity::idForName(screenId)
+        resolvedScreenId = PhosphorScreens::ScreenIdentity::isConnectorName(screenId)
+            ? PhosphorScreens::ScreenIdentity::idForName(screenId)
             : screenId;
     }
+
+    // Per-output virtual desktops (#648): cycle relative to the target screen's
+    // OWN desktop, not the global active one, so the visibility filter and the
+    // reference-layout lookup below resolve against the same desktop the screen
+    // is actually showing. Falls back to the global desktop when no screen is
+    // known (empty screenId) or no per-output value is on record.
+    const int desktop =
+        resolvedScreenId.isEmpty() ? m_currentVirtualDesktop : currentVirtualDesktopForScreen(resolvedScreenId);
 
     // Build filtered list of visible layouts for current context
     QVector<PhosphorZones::Layout*> visible;
@@ -218,8 +267,8 @@ PhosphorZones::Layout* LayoutRegistry::cycleLayoutImpl(const QString& screenId, 
                 continue;
             }
         }
-        if (m_currentVirtualDesktop > 0 && !l->allowedDesktops().isEmpty()) {
-            if (!l->allowedDesktops().contains(m_currentVirtualDesktop)) {
+        if (desktop > 0 && !l->allowedDesktops().isEmpty()) {
+            if (!l->allowedDesktops().contains(desktop)) {
                 continue;
             }
         }
@@ -238,7 +287,7 @@ PhosphorZones::Layout* LayoutRegistry::cycleLayoutImpl(const QString& screenId, 
     // Use per-screen layout as reference for cycling so each screen cycles independently
     PhosphorZones::Layout* currentLayout = nullptr;
     if (!resolvedScreenId.isEmpty()) {
-        currentLayout = layoutForScreen(resolvedScreenId, m_currentVirtualDesktop, m_currentActivity);
+        currentLayout = layoutForScreen(resolvedScreenId, desktop, m_currentActivity);
     }
     if (!currentLayout) {
         currentLayout = defaultLayout();
@@ -272,14 +321,19 @@ void LayoutRegistry::applyLayoutToScreen(const QString& screenId, PhosphorZones:
     // Per-screen assignment: write per-desktop assignment first so the
     // layoutAssigned handler recalculates zone geometry for this screen.
     if (!screenId.isEmpty()) {
+        // Per-output virtual desktops (#648): write to the screen's OWN desktop,
+        // not the global active one. Both callers (cycleLayoutImpl and the D-Bus
+        // applyQuickLayout via LayoutAdaptor) pass an already idForName-resolved
+        // screenId, matching the per-output map's key.
+        const int desktop = currentVirtualDesktopForScreen(screenId);
         // Write per-desktop assignment with empty activity so it applies
         // regardless of which activity is active. Activity-specific
         // overrides are a separate KCM-only feature. Clear any stale
         // activity-keyed entry that would shadow this one in the cascade.
         if (!m_currentActivity.isEmpty()) {
-            clearAssignment(screenId, m_currentVirtualDesktop, m_currentActivity);
+            clearAssignment(screenId, desktop, m_currentActivity);
         }
-        assignLayout(screenId, m_currentVirtualDesktop, QString(), layout);
+        assignLayout(screenId, desktop, QString(), layout);
     }
     // Update the global active layout pointer (for overlay/zone detector
     // queries) but suppress activeLayoutChanged to prevent resnap buffer
@@ -345,6 +399,14 @@ void LayoutRegistry::removeLayout(PhosphorZones::Layout* layout)
     // Delete layout file (using stored path)
     QFile::remove(filePath);
 
+    // Drop the layout's settings sidecar entry. For a user override being
+    // deleted to restore the system original, this is also what we want — the
+    // restored system layout should not inherit the user's custom settings.
+    m_layoutSettings.removeLayout(layoutIdStr);
+    if (!m_layoutSettings.saveToFile(layoutSettingsFilePath())) {
+        qCWarning(lcZonesLib) << "Failed to persist layout settings sidecar after removing" << layoutIdStr;
+    }
+
     // Clear every pointer that could capture the about-to-deleteLater
     // layout. m_previousLayout is obvious. m_activeLayout is the subtle
     // one: the wasActive branches below call setActiveLayout(newLayout),
@@ -377,21 +439,28 @@ void LayoutRegistry::removeLayout(PhosphorZones::Layout* layout)
             setActiveLayout(restored);
         }
     } else {
-        // Truly deleted — clean up assignments and shortcuts referencing this layout
-        for (auto it = m_assignments.begin(); it != m_assignments.end();) {
-            if (it.value().snappingLayout == layoutIdStr || it.value().activeLayoutId() == layoutIdStr) {
-                it = m_assignments.erase(it);
+        // Truly deleted — clean up rules and shortcuts referencing this layout.
+        // A context rule references the layout iff its SetSnappingLayout action
+        // carries this layout's UUID string. The rule is NOT blanket-deleted:
+        // an Autotile-mode context rule can carry a stale SetSnappingLayout
+        // (the mode-toggle losslessness invariant), so dropping the whole rule
+        // would lose its SetEngineMode + SetTilingAlgorithm autotile intent.
+        // purgeSnappingLayoutFromAssignments rebuilds each affected rule with
+        // only the snapping layout cleared, dropping a rule only when nothing
+        // meaningful remains.
+        purgeSnappingLayoutFromAssignments(layoutIdStr);
+
+        bool shortcutRemoved = false;
+        for (auto it = m_quickLayoutShortcuts.begin(); it != m_quickLayoutShortcuts.end();) {
+            if (it.value() == layoutIdStr) {
+                it = m_quickLayoutShortcuts.erase(it);
+                shortcutRemoved = true;
             } else {
                 ++it;
             }
         }
-
-        for (auto it = m_quickLayoutShortcuts.begin(); it != m_quickLayoutShortcuts.end();) {
-            if (it.value() == layoutIdStr) {
-                it = m_quickLayoutShortcuts.erase(it);
-            } else {
-                ++it;
-            }
+        if (shortcutRemoved) {
+            writeQuickLayouts();
         }
 
         if (wasActive) {
@@ -400,7 +469,6 @@ void LayoutRegistry::removeLayout(PhosphorZones::Layout* layout)
     }
 
     Q_EMIT layoutsChanged();
-    saveAssignments();
 }
 
 void LayoutRegistry::removeLayoutById(const QUuid& id)
@@ -513,7 +581,7 @@ void LayoutRegistry::setQuickLayoutSlot(int number, const QString& layoutId)
     }
 
     // Save changes
-    saveAssignments();
+    writeQuickLayouts();
 }
 
 void LayoutRegistry::setAllQuickLayoutSlots(const QHash<int, QString>& slots)
@@ -556,7 +624,7 @@ void LayoutRegistry::setAllQuickLayoutSlots(const QHash<int, QString>& slots)
     }
 
     // Save once at the end
-    saveAssignments();
+    writeQuickLayouts();
     qCInfo(lcZonesLib) << "Batch set" << m_quickLayoutShortcuts.size() << "quick layout slots";
 }
 

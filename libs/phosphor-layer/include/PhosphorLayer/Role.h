@@ -68,9 +68,9 @@ Q_ENUM_NS(KeyboardInteractivity)
  *
  * The fluent `withX()` modifiers return copies for composition:
  * @code
- *     inline const Role PzOverlay =
+ *     inline const Role PhosphorOverlay =
  *         PhosphorShellPatterns::Hud().withScopePrefix(
- *             QStringLiteral("pz-overlay"));
+ *             QStringLiteral("phosphor-overlay"));
  * @endcode
  */
 struct PHOSPHORLAYER_EXPORT Role

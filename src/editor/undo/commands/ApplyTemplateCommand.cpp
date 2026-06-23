@@ -3,7 +3,7 @@
 
 #include "ApplyTemplateCommand.h"
 #include "../../services/ZoneManager.h"
-#include "pz_i18n.h"
+#include "phosphor_i18n.h"
 
 using namespace PlasmaZones;
 
@@ -11,7 +11,8 @@ ApplyTemplateCommand::ApplyTemplateCommand(QPointer<ZoneManager> zoneManager, co
                                            const QVariantList& oldZones, const QVariantList& newZones,
                                            const QString& text, QUndoCommand* parent)
     : BaseZoneCommand(zoneManager,
-                      text.isEmpty() ? PzI18n::tr("Apply Template: %1", "@action").arg(templateType) : text, parent)
+                      text.isEmpty() ? PhosphorI18n::tr("Apply Template: %1", "@action").arg(templateType) : text,
+                      parent)
     , m_templateType(templateType)
     , m_oldZones(oldZones)
     , m_newZones(newZones)

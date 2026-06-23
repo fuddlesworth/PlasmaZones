@@ -30,17 +30,9 @@
 // content compresses into the line — sampled UV outside [0,1]
 // (top/bottom of the squashed strip) is forced transparent.
 
-#version 450
-
-#include <animation_uniforms.glsl>
-
-// metadata.json: color → customColors[0] (flashColor — alpha is the
+// metadata.json: color → customColors[0] (p_flashColor — alpha is the
 // tint-mix gate so the user can dial in a fully transparent flash to
 // disable the colour wash entirely).
-#define flashColor customColors[0]
-
-layout(location = 0) in vec2 vTexCoord;
-layout(location = 0) out vec4 fragColor;
 
 const float BLUR_WIDTH = 0.01;
 const float TB_TIME    = 0.7;
@@ -51,10 +43,9 @@ const float SCALING    = 0.5;
 
 float easeOutQuad(float x) { return -1.0 * x * (x - 2.0); }
 
-void main()
+vec4 pTransition(vec2 uv, float t)
 {
-    vec2 uv = vTexCoord;
-    float visibility = clamp(iTime, 0.0, 1.0);
+    float visibility = clamp(t, 0.0, 1.0);
     float prog       = easeOutQuad(1.0 - visibility);
 
     // Vertical squash: window content scales down toward a centre
@@ -98,9 +89,9 @@ void main()
     // sampled is pre-multiplied; multiplying the flash colour by
     // sampled.a keeps the tint pre-multiplied-correct so transparent
     // window regions don't acquire a flash-colour halo.
-    vec4 flash    = flashColor;
+    vec4 flash    = p_flashColor;
     float tintMix = flash.a * smoothstep(0.0, 1.0, prog);
     sampled.rgb   = mix(sampled.rgb, flash.rgb * sampled.a, tintMix);
 
-    fragColor = sampled * mask;
+    return sampled * mask;
 }

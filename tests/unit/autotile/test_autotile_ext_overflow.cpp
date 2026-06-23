@@ -93,35 +93,15 @@ private Q_SLOTS:
 
     // =========================================================================
     // Mode transition
+    //
+    // NOTE: cross-mode float PERSISTENCE is no longer an engine-internal mechanism
+    // (the old m_savedFloatingWindows set was removed — it was a parallel source of
+    // truth that drifted from the unified record). It is now carried by the single
+    // WindowPlacement record: the engine records its autotile slot into the store on
+    // release and restores from it in insertWindow(). That requires a wired
+    // IWindowTrackingService/placement store, so it is covered by the store + WTA
+    // unit tests and live verification, not these tracker-less engine tests.
     // =========================================================================
-
-    void testModeTransition_savedFloatingRestoredOnReEnable()
-    {
-        AutotileEngine engine(nullptr, nullptr, nullptr, PlasmaZones::TestHelpers::testRegistry());
-        const QString screen = QStringLiteral("eDP-1");
-        engine.setAutotileScreens({screen});
-
-        engine.windowOpened(QStringLiteral("win1"), screen);
-        engine.windowOpened(QStringLiteral("win2"), screen);
-        QCoreApplication::processEvents();
-
-        engine.floatWindow(QStringLiteral("win1"));
-
-        PhosphorTiles::TilingState* state = engine.tilingStateForScreen(screen);
-        QVERIFY(state->isFloating(QStringLiteral("win1")));
-
-        engine.setAutotileScreens({});
-
-        engine.setAutotileScreens({screen});
-
-        engine.windowOpened(QStringLiteral("win1"), screen);
-        engine.windowOpened(QStringLiteral("win2"), screen);
-        QCoreApplication::processEvents();
-
-        state = engine.tilingStateForScreen(screen);
-        QVERIFY(state->containsWindow(QStringLiteral("win1")));
-        QVERIFY(state->isFloating(QStringLiteral("win1")));
-    }
 
     void testModeTransition_overflowWindowsNotSaved()
     {
@@ -150,29 +130,6 @@ private Q_SLOTS:
 
         state = engine.tilingStateForScreen(screen);
         QVERIFY(state->containsWindow(QStringLiteral("win3")));
-    }
-
-    void testModeTransition_clearSavedFloatingForZoneSnappedWindows()
-    {
-        AutotileEngine engine(nullptr, nullptr, nullptr, PlasmaZones::TestHelpers::testRegistry());
-        const QString screen = QStringLiteral("eDP-1");
-        engine.setAutotileScreens({screen});
-
-        engine.windowOpened(QStringLiteral("win1"), screen);
-        QCoreApplication::processEvents();
-
-        engine.floatWindow(QStringLiteral("win1"));
-        engine.setAutotileScreens({});
-
-        engine.clearSavedFloatingForWindows({QStringLiteral("win1")});
-
-        engine.setAutotileScreens({screen});
-        engine.windowOpened(QStringLiteral("win1"), screen);
-        QCoreApplication::processEvents();
-
-        PhosphorTiles::TilingState* state = engine.tilingStateForScreen(screen);
-        QVERIFY(state->containsWindow(QStringLiteral("win1")));
-        QVERIFY(!state->isFloating(QStringLiteral("win1")));
     }
 
     void testModeTransition_wtsFloatingPreserved()

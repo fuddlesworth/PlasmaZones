@@ -1,20 +1,12 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-#version 450
-
 // Neon City — Image Pass (compositing, zones, borders, labels, DOF)
 //
 // Reads the full-screen 3D cityscape from iChannel0 (buffer pass) and the
 // depth buffer from uDepthBuffer. Composites per-zone with rounded borders,
 // holographic labels, inner edge glow, outer glow, DOF, and a vignette.
 
-layout(location = 0) in vec2 vTexCoord;
-layout(location = 1) in vec2 vFragCoord;
-
-layout(location = 0) out vec4 fragColor;
-
-#include <common.glsl>
 #include <audio.glsl>
 #include <multipass.glsl>
 #include <depth.glsl>
@@ -27,19 +19,19 @@ vec4 renderZone(vec2 fragCoord, vec4 rect, vec4 params, bool isHighlighted,
     float borderRadius = max(params.x, 6.0);
     float borderWidth  = max(params.y, 2.5);
 
-    float reactivity   = customParams[0].x >= 0.0 ? customParams[0].x : 1.5;
-    float bassImpact   = customParams[2].x >= 0.0 ? customParams[2].x : 1.5;
-    float trebleImpact = customParams[2].y >= 0.0 ? customParams[2].y : 1.5;
-    float midsImpact   = customParams[2].z >= 0.0 ? customParams[2].z : 1.0;
-    float idleSpeed    = customParams[2].w >= 0.0 ? customParams[2].w : 1.0;
-    float fillOpacity  = customParams[3].x >= 0.0 ? customParams[3].x : 0.92;
-    float showLabels   = customParams[3].y;  // bool: >0.5 = show
-    float dofStrength  = customParams[3].z >= 0.0 ? customParams[3].z : 0.35;
-    float edgeGlow     = customParams[3].w >= 0.0 ? customParams[3].w : 1.4;
+    float reactivity   = p_reactivity >= 0.0 ? p_reactivity : 1.5;
+    float bassImpact   = p_bassImpact >= 0.0 ? p_bassImpact : 1.5;
+    float trebleImpact = p_trebleImpact >= 0.0 ? p_trebleImpact : 1.5;
+    float midsImpact   = p_midsImpact >= 0.0 ? p_midsImpact : 1.0;
+    float idleSpeed    = p_idleSpeed >= 0.0 ? p_idleSpeed : 1.0;
+    float fillOpacity  = p_fillOpacity >= 0.0 ? p_fillOpacity : 0.92;
+    float showLabels   = p_showLabels;  // bool: >0.5 = show
+    float dofStrength  = p_dofStrength >= 0.0 ? p_dofStrength : 0.35;
+    float edgeGlow     = p_edgeGlow >= 0.0 ? p_edgeGlow : 1.4;
 
-    vec3 accent  = colorWithFallback(customColors[1].rgb, vec3(0.50, 1.50, 2.00));
-    vec3 bassCol = colorWithFallback(customColors[2].rgb, vec3(0.00, 0.00, 1.50));
-    vec3 lightC  = colorWithFallback(customColors[3].rgb, vec3(0.80, 0.45, 0.18));
+    vec3 accent  = colorWithFallback(p_accentColor.rgb, vec3(0.50, 1.50, 2.00));
+    vec3 bassCol = colorWithFallback(p_bassColor.rgb, vec3(0.00, 0.00, 1.50));
+    vec3 lightC  = colorWithFallback(p_lightColor.rgb, vec3(0.80, 0.45, 0.18));
 
     // Audio channels scaled by reactivity AND per-band impact — consistent
     // with the buffer pass so the reactivity slider affects every element.
@@ -347,13 +339,11 @@ vec4 renderZone(vec2 fragCoord, vec4 rect, vec4 params, bool isHighlighted,
 
 // ─── Main ───────────────────────────────────────────────────────────
 
-void main() {
-    vec2 fragCoord = vFragCoord;
+vec4 pImage(vec2 fragCoord) {
     vec4 color = vec4(0.0);
 
     if (zoneCount == 0) {
-        fragColor = vec4(0.0);
-        return;
+        return vec4(0.0);
     }
 
     bool  hasAudio = iAudioSpectrumSize > 0;
@@ -378,5 +368,5 @@ void main() {
     float vig = 0.5 + 0.5 * pow(16.0 * q.x * q.y * (1.0 - q.x) * (1.0 - q.y), 0.1);
     color.rgb *= vig;
 
-    fragColor = clampFragColor(color);
+    return color;
 }

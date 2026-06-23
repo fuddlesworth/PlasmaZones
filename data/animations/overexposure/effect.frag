@@ -28,26 +28,15 @@
 // 1.18) clamps to 1.0 in the framebuffer for both implementations,
 // so the over-exposure flash is shared with niri.
 
-#version 450
-
-#include <animation_uniforms.glsl>
-
-// metadata.json declaration order → customParams[0] sub-slots
-#define strength customParams[0].x
-
-layout(location = 0) in vec2 vTexCoord;
-layout(location = 0) out vec4 fragColor;
-
-void main() {
+vec4 pTransition(vec2 uv, float t) {
     // ── niri OPEN body (handles both legs via runtime iTime flip) ──
-    float p = clamp(iTime, 0.0, 1.0);
-    vec2 uv = vTexCoord;
+    float p = clamp(t, 0.0, 1.0);
     float PI = 3.141592653589793;
 
     vec4 win = surfaceColor(uv);
 
-    float to_m = p + sin(PI * p) * strength;
-    fragColor = vec4(
+    float to_m = p + sin(PI * p) * p_strength;
+    return vec4(
         win.r * win.a * to_m,
         win.g * win.a * to_m,
         win.b * win.a * to_m,

@@ -5,13 +5,14 @@
 
 #include "../config/configdefaults.h"
 
+#include <PhosphorControl/PageController.h>
 #include <QObject>
 #include <QString>
 #include <QStringList>
 
 namespace PlasmaZones {
 
-class Settings;
+class ISettings;
 
 /// Q_PROPERTY surface for the "General" settings page.
 ///
@@ -23,7 +24,17 @@ class Settings;
 ///
 /// Import/export of the full config stays on SettingsController — those are
 /// top-level app actions that touch every page, not a "General" concern.
-class GeneralPageController : public QObject
+///
+/// Pure CONSTANT facade — no per-page staged state; isDirty/apply/discard
+/// are no-ops. Dirty tracking is global through SettingsController's
+/// meta-object loop on Settings's Q_PROPERTYs: any rendering-backend
+/// selection that calls `m_settings.setRenderingBackend` trips the
+/// Q_PROPERTY NOTIFY, which SettingsController's `onSettingsPropertyChanged`
+/// slot maps to the active page (or the top of `m_externalEditStack`).
+/// The "General" page therefore participates in dirty tracking via
+/// the Settings property surface, not via this controller's own
+/// signals.
+class GeneralPageController : public PhosphorControl::PageController
 {
     Q_OBJECT
 
@@ -38,8 +49,42 @@ class GeneralPageController : public QObject
     Q_PROPERTY(int animationStaggerIntervalMin READ animationStaggerIntervalMin CONSTANT)
     Q_PROPERTY(int animationStaggerIntervalMax READ animationStaggerIntervalMax CONSTANT)
 
+    // Window-filtering SpinBox bounds — bound from the schema, NOT from
+    // QML literals, so the SpinBox visible range always tracks the
+    // schema-allowed range. A user value persisted at the high end of
+    // the schema range (e.g. 1500 px when the schema allows 0–2000)
+    // would otherwise silently truncate when the SpinBox clamped the
+    // bound `value` to the QML literal. Both the snap-side
+    // (GeneralPage's "Window filtering" card) and the animation-side
+    // (AnimationsGeneralPage's filtering knobs) bind through these
+    // since they share this controller.
+    Q_PROPERTY(int minimumWindowWidthMin READ minimumWindowWidthMin CONSTANT)
+    Q_PROPERTY(int minimumWindowWidthMax READ minimumWindowWidthMax CONSTANT)
+    Q_PROPERTY(int minimumWindowHeightMin READ minimumWindowHeightMin CONSTANT)
+    Q_PROPERTY(int minimumWindowHeightMax READ minimumWindowHeightMax CONSTANT)
+    Q_PROPERTY(int animationMinimumWindowWidthMin READ animationMinimumWindowWidthMin CONSTANT)
+    Q_PROPERTY(int animationMinimumWindowWidthMax READ animationMinimumWindowWidthMax CONSTANT)
+    Q_PROPERTY(int animationMinimumWindowHeightMin READ animationMinimumWindowHeightMin CONSTANT)
+    Q_PROPERTY(int animationMinimumWindowHeightMax READ animationMinimumWindowHeightMax CONSTANT)
+
 public:
-    explicit GeneralPageController(Settings* settings, QObject* parent = nullptr);
+    /// Reference parameter, not pointer: the ISettings instance is required
+    /// at construction time (to snapshot the current rendering backend) and
+    /// must not be null. Taking it by reference makes the precondition a
+    /// compile-time guarantee. ISettings (not the concrete Settings) per
+    /// CLAUDE.md so unit tests can stub.
+    explicit GeneralPageController(ISettings& settings, QObject* parent = nullptr);
+
+    bool isDirty() const override
+    {
+        return false;
+    }
+    void apply() override
+    {
+    }
+    void discard() override
+    {
+    }
 
     QStringList renderingBackendOptions() const
     {
@@ -77,6 +122,39 @@ public:
     int animationStaggerIntervalMax() const
     {
         return ConfigDefaults::animationStaggerIntervalMax();
+    }
+
+    int minimumWindowWidthMin() const
+    {
+        return ConfigDefaults::minimumWindowWidthMin();
+    }
+    int minimumWindowWidthMax() const
+    {
+        return ConfigDefaults::minimumWindowWidthMax();
+    }
+    int minimumWindowHeightMin() const
+    {
+        return ConfigDefaults::minimumWindowHeightMin();
+    }
+    int minimumWindowHeightMax() const
+    {
+        return ConfigDefaults::minimumWindowHeightMax();
+    }
+    int animationMinimumWindowWidthMin() const
+    {
+        return ConfigDefaults::animationMinimumWindowWidthMin();
+    }
+    int animationMinimumWindowWidthMax() const
+    {
+        return ConfigDefaults::animationMinimumWindowWidthMax();
+    }
+    int animationMinimumWindowHeightMin() const
+    {
+        return ConfigDefaults::animationMinimumWindowHeightMin();
+    }
+    int animationMinimumWindowHeightMax() const
+    {
+        return ConfigDefaults::animationMinimumWindowHeightMax();
     }
 
 private:

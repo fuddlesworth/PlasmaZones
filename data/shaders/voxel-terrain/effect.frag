@@ -1,20 +1,15 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-#version 450
-
 // Voxel Terrain — Image Pass (compositing, zones, borders, labels, DOF)
 //
 // Reads the full-screen 3D scene from iChannel0 (buffer pass) and the
 // depth buffer from uDepthBuffer (binding 12). Composites per-zone with
 // borders, labels, inner edge glow, outer glow, depth-of-field, and vignette.
-
-layout(location = 0) in vec2 vTexCoord;
-layout(location = 1) in vec2 vFragCoord;
-
-layout(location = 0) out vec4 fragColor;
-
-#include <common.glsl>
+//
+// The harness supplies #version, <common.glsl> (zone UBO + ZoneCtx + helpers),
+// the vTexCoord/vFragCoord ins, the fragColor out, and the pImage entry-point
+// dispatch. audio/multipass/depth includes are pack-specific, so they stay here.
 #include <audio.glsl>
 #include <multipass.glsl>
 #include <depth.glsl>
@@ -28,17 +23,17 @@ vec4 renderZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor,
     float borderRadius = max(params.x, 6.0);
     float borderWidth  = max(params.y, 2.5);
 
-    float reactivity   = customParams[0].x >= 0.0 ? customParams[0].x : 1.5;
-    float edgeGlow     = customParams[0].w >= 0.0 ? customParams[0].w : 1.5;
-    float fillOpacity  = customParams[1].w >= 0.0 ? customParams[1].w : 0.92;
-    float bassImpact   = customParams[2].z >= 0.0 ? customParams[2].z : 2.0;
-    float idleSpeed    = customParams[2].w >= 0.0 ? customParams[2].w : 1.0;
-    float dofStrength  = customParams[3].y >= 0.0 ? customParams[3].y : 0.5;
+    float reactivity   = p_reactivity >= 0.0 ? p_reactivity : 1.5;
+    float edgeGlow     = p_edgeGlow >= 0.0 ? p_edgeGlow : 1.5;
+    float fillOpacity  = p_fillOpacity >= 0.0 ? p_fillOpacity : 0.92;
+    float bassImpact   = p_bassImpact >= 0.0 ? p_bassImpact : 2.0;
+    float idleSpeed    = p_idleSpeed >= 0.0 ? p_idleSpeed : 1.0;
+    float dofStrength  = p_dofStrength >= 0.0 ? p_dofStrength : 0.5;
 
-    vec3 primary   = colorWithFallback(customColors[0].rgb, vec3(0.06, 0.08, 0.18));
-    vec3 accent    = colorWithFallback(customColors[1].rgb, vec3(0.0, 0.83, 1.0));
-    vec3 bassCol   = colorWithFallback(customColors[2].rgb, vec3(0.9, 0.0, 0.67));
-    vec3 wireColor = colorWithFallback(customColors[3].rgb, vec3(0.6, 0.7, 0.9));
+    vec3 primary   = colorWithFallback(p_primaryColor.rgb, vec3(0.06, 0.08, 0.18));
+    vec3 accent    = colorWithFallback(p_accentColor.rgb, vec3(0.0, 0.83, 1.0));
+    vec3 bassCol   = colorWithFallback(p_bassColor.rgb, vec3(0.9, 0.0, 0.67));
+    vec3 wireColor = colorWithFallback(p_gridColor.rgb, vec3(0.6, 0.7, 0.9));
 
     float energy = hasAudio ? overall * reactivity : 0.0;
 
@@ -142,7 +137,7 @@ vec4 renderZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor,
         result.rgb += primary * innerGlow;
 
         // Zone labels — holographic voxel HUD style
-        if (customParams[3].x > 0.5) {
+        if (p_showLabels > 0.5) {
             vec2 labelUv = fragCoord / max(iResolution, vec2(0.001));
             vec2 texel = 1.0 / max(iResolution, vec2(1.0));
             vec4 labelSample = texture(uZoneLabels, labelUv);
@@ -273,13 +268,11 @@ vec4 renderZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor,
 
 // ─── Main ───────────────────────────────────────────────────────────
 
-void main() {
-    vec2 fragCoord = vFragCoord;
+vec4 pImage(vec2 fragCoord) {
     vec4 color = vec4(0.0);
 
     if (zoneCount == 0) {
-        fragColor = vec4(0.0);
-        return;
+        return vec4(0.0);
     }
 
     bool  hasAudio = iAudioSpectrumSize > 0;
@@ -306,5 +299,5 @@ void main() {
     float vig = 0.5 + 0.5 * pow(16.0 * q.x * q.y * (1.0 - q.x) * (1.0 - q.y), 0.1);
     color.rgb *= vig;
 
-    fragColor = clampFragColor(color);
+    return color;
 }

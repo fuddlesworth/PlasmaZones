@@ -5,7 +5,7 @@
 
 cmake_minimum_required(VERSION 3.16)
 
-project(PlasmaZones VERSION 3.0.17 LANGUAGES C CXX)
+project(PlasmaZones VERSION 3.1.0 LANGUAGES C CXX)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -101,6 +101,20 @@ find_package(Qt6 ${QT_MIN_VERSION} REQUIRED COMPONENTS
     ShaderTools
     Svg
 )
+# Silence Qt 6.6+ deprecation warnings on qt_add_qml_module: opt into
+# the new default for resource-prefix derivation (QTP0001) and the new
+# default for QML module dependency resolution (QTP0004). These are
+# the NEW behaviours we already rely on across phosphor-* and src/
+# qt_add_qml_module calls.
+# NOTE: CMake's if(POLICY) only understands CMP* CMake policies — for QTP*
+# Qt policies it is ALWAYS false. Qt's documented existence test is the
+# QT_KNOWN_POLICY_<policy> variable (set by the Qt CMake machinery from 6.5).
+if(QT_KNOWN_POLICY_QTP0001)
+    qt_policy(SET QTP0001 NEW)
+endif()
+if(QT_KNOWN_POLICY_QTP0004)
+    qt_policy(SET QTP0004 NEW)
+endif()
 # GuiPrivate (QRhi) and ShaderToolsPrivate (QShaderBaker) required for daemon zone overlay.
 # Some distros (Fedora) create these targets inside Qt6GuiConfig.cmake rather than providing
 # standalone config files, so only call find_package if the target doesn't already exist.
@@ -135,11 +149,13 @@ add_compile_definitions(PLASMAZONES_SHADERS_ENABLED)
 option(USE_KDE_FRAMEWORKS "Build with KDE Frameworks integration" ON)
 
 # Opt-in build for the in-progress phosphor-shell desktop shell and its
-# supporting libraries (libs/phosphor-shell, libs/phosphor-services) +
-# the bundled `phosphor-shell` example binary + the example QML/shader
-# tree under examples/phosphor-shell. Default OFF so packaging /
-# downstream installs of PlasmaZones don't pick up shell artefacts
-# before the shell ships. Enable explicitly for shell development:
+# supporting libraries (libs/phosphor-shell + the gated phosphor-service-*
+# group; see the add_subdirectory block farther down in this file for
+# the authoritative list) + the bundled `phosphor-shell` example binary
+# + the example QML/shader tree under examples/phosphor-shell. Default
+# OFF so packaging / downstream installs of PlasmaZones don't pick up
+# shell artefacts before the shell ships. Enable explicitly for shell
+# development:
 #   cmake -DBUILD_PHOSPHOR_SHELL=ON
 option(BUILD_PHOSPHOR_SHELL "Build the phosphor-shell desktop shell (work in progress)" OFF)
 
@@ -176,7 +192,7 @@ else()
 endif()
 
 # Wayland layer-shell support (direct zwlr_layer_shell_v1 protocol, no KDE
-# dependency). PlasmaZones is Wayland-only — Plasma 6 dropped X11 as a
+# dependency). PlasmaZones is Wayland-only, Plasma 6 dropped X11 as a
 # session target, and the layer-shell overlays we use have no X equivalent.
 find_package(Wayland 1.21 REQUIRED COMPONENTS Client)
 find_package(Qt6 6.10 REQUIRED COMPONENTS WaylandClient)
@@ -200,24 +216,45 @@ endif()
 #   make format-qml   (or ninja format-qml)
 # ---------------------------------------------------------------------------
 include(KDEClangFormat)
+# `**` is not a CMake glob primitive; it expands to the same regex as
+# `*` (anything except `/`). GLOB_RECURSE with a plain `*.cpp` pattern
+# already recurses into subdirectories, so the recursive form is what
+# we want; using `**/*.cpp` would require an intermediate path segment
+# and silently drop files directly under each root (e.g. src/phosphor_qml_i18n.cpp,
+# any top-level kwin-effect/.cpp).
 file(GLOB_RECURSE ALL_CLANG_FORMAT_SOURCE_FILES
-    ${CMAKE_SOURCE_DIR}/src/**/*.cpp
-    ${CMAKE_SOURCE_DIR}/src/**/*.h
-    ${CMAKE_SOURCE_DIR}/src/**/*.hpp
+    ${CMAKE_SOURCE_DIR}/src/*.cpp
+    ${CMAKE_SOURCE_DIR}/src/*.h
+    ${CMAKE_SOURCE_DIR}/src/*.hpp
+    ${CMAKE_SOURCE_DIR}/cli/*.cpp
+    ${CMAKE_SOURCE_DIR}/cli/*.h
+    ${CMAKE_SOURCE_DIR}/cli/*.hpp
     ${CMAKE_SOURCE_DIR}/kcm/*.cpp
     ${CMAKE_SOURCE_DIR}/kcm/*.h
+    ${CMAKE_SOURCE_DIR}/kcm/*.hpp
     ${CMAKE_SOURCE_DIR}/kwin-effect/*.cpp
     ${CMAKE_SOURCE_DIR}/kwin-effect/*.h
-    ${CMAKE_SOURCE_DIR}/tests/**/*.cpp
-    ${CMAKE_SOURCE_DIR}/tests/**/*.h
+    ${CMAKE_SOURCE_DIR}/kwin-effect/*.hpp
+    ${CMAKE_SOURCE_DIR}/tests/*.cpp
+    ${CMAKE_SOURCE_DIR}/tests/*.h
+    ${CMAKE_SOURCE_DIR}/libs/*.cpp
+    ${CMAKE_SOURCE_DIR}/libs/*.h
+    ${CMAKE_SOURCE_DIR}/libs/*.hpp
+    ${CMAKE_SOURCE_DIR}/examples/*.cpp
+    ${CMAKE_SOURCE_DIR}/examples/*.h
+    ${CMAKE_SOURCE_DIR}/examples/*.hpp
 )
 kde_clang_format(${ALL_CLANG_FORMAT_SOURCE_FILES})
 
 # QML: qmlformat (from qt6-tools, optional)
+# Same `**`-vs-recursion rationale as the clang-format glob above.
 find_program(QMLFORMAT qmlformat)
 file(GLOB_RECURSE ALL_QML_FILES
-    ${CMAKE_SOURCE_DIR}/src/**/*.qml
-    ${CMAKE_SOURCE_DIR}/kcm/**/*.qml
+    ${CMAKE_SOURCE_DIR}/src/*.qml
+    ${CMAKE_SOURCE_DIR}/cli/*.qml
+    ${CMAKE_SOURCE_DIR}/kcm/*.qml
+    ${CMAKE_SOURCE_DIR}/libs/*.qml
+    ${CMAKE_SOURCE_DIR}/examples/*.qml
 )
 if(QMLFORMAT AND ALL_QML_FILES)
     # Run qmlformat via helper script; per-file failures are ignored (one bad QML won't fail target)
@@ -235,99 +272,13 @@ else()
 endif()
 
 # ---------------------------------------------------------------------------
-# Translations (Qt Linguist)
-#
-# Daemon and editor use Qt Linguist (.ts/.qm).  lupdate scans source files
-# directly - i18n()/i18nc() are backed by Q_DECLARE_TR_FUNCTIONS(plasmazones)
-# in pz_i18n.h, so lupdate recognizes them as tr() calls.
-#
-#   make update-ts   - run lupdate to refresh .ts from source
-#   make (default)   - compiles translations/*/*.ts → .qm
+# Translations (Qt Linguist). Extracted to cmake/PhosphorTranslations.cmake
+# (included in this scope) to keep this file's growth in check — it has
+# since crept past the 800-line cap again; the next self-contained block
+# to outgrow its section should be extracted the same way. See that file
+# for the update-ts / lrelease detail.
 # ---------------------------------------------------------------------------
-find_package(Qt6LinguistTools QUIET)
-
-# Source files for lupdate string extraction (daemon + autotile + editor)
-set(PLASMAZONESD_I18N_SOURCES
-    ${CMAKE_SOURCE_DIR}/src/daemon/main.cpp
-    ${CMAKE_SOURCE_DIR}/src/daemon/daemon.cpp
-    ${CMAKE_SOURCE_DIR}/src/daemon/daemon/osd.cpp
-    ${CMAKE_SOURCE_DIR}/src/daemon/overlayservice.cpp
-    ${CMAKE_SOURCE_DIR}/src/daemon/shortcutmanager.cpp
-    ${CMAKE_SOURCE_DIR}/src/dbus/windowdragadaptor.cpp
-    ${CMAKE_SOURCE_DIR}/src/dbus/windowdragadaptor/drag.cpp
-)
-file(GLOB PLASMAZONESD_AUTOTILE_SOURCES
-    "${CMAKE_SOURCE_DIR}/src/autotile/algorithms/*.cpp"
-)
-list(APPEND PLASMAZONESD_I18N_SOURCES ${PLASMAZONESD_AUTOTILE_SOURCES})
-file(GLOB PLASMAZONESD_QML "${CMAKE_SOURCE_DIR}/src/ui/*.qml")
-
-file(GLOB PLASMAZONES_EDITOR_I18N_SOURCES
-    "${CMAKE_SOURCE_DIR}/src/editor/main.cpp"
-    "${CMAKE_SOURCE_DIR}/src/editor/EditorController.cpp"
-    "${CMAKE_SOURCE_DIR}/src/editor/controller/gaps.cpp"
-    "${CMAKE_SOURCE_DIR}/src/editor/controller/shader.cpp"
-    "${CMAKE_SOURCE_DIR}/src/editor/controller/layout.cpp"
-    "${CMAKE_SOURCE_DIR}/src/editor/controller/selection.cpp"
-    "${CMAKE_SOURCE_DIR}/src/editor/controller/multiselect.cpp"
-    "${CMAKE_SOURCE_DIR}/src/editor/controller/visibility.cpp"
-    "${CMAKE_SOURCE_DIR}/src/editor/controller/clipboard.cpp"
-    "${CMAKE_SOURCE_DIR}/src/editor/controller/zones.cpp"
-    "${CMAKE_SOURCE_DIR}/src/editor/controller/zoneops.cpp"
-    "${CMAKE_SOURCE_DIR}/src/editor/controller/settings.cpp"
-    "${CMAKE_SOURCE_DIR}/src/editor/undo/commands/*.cpp"
-)
-file(GLOB PLASMAZONES_EDITOR_QML "${CMAKE_SOURCE_DIR}/src/editor/qml/*.qml")
-
-# KCM QML sources (also covered by lupdate now)
-file(GLOB_RECURSE KCM_PLASMAZONES_QML "${CMAKE_SOURCE_DIR}/kcm/*.qml")
-list(APPEND KCM_PLASMAZONES_QML ${CMAKE_SOURCE_DIR}/src/shared/AspectRatioBadge.qml)
-list(APPEND KCM_PLASMAZONES_QML ${CMAKE_SOURCE_DIR}/src/shared/CategoryBadge.qml)
-
-# All sources for lupdate (daemon + editor + KCM - same translation context)
-set(_all_i18n_sources
-    ${PLASMAZONESD_I18N_SOURCES} ${PLASMAZONESD_QML}
-    ${PLASMAZONES_EDITOR_I18N_SOURCES} ${PLASMAZONES_EDITOR_QML}
-    ${KCM_PLASMAZONES_QML}
-)
-
-# Collect per-language .ts files (plasmazones_de.ts, plasmazones_fr.ts, etc.)
-# Flat layout: translations/plasmazones_<lang>.ts → plasmazones_<lang>.qm
-file(GLOB TRANSLATION_TS_FILES "${CMAKE_SOURCE_DIR}/translations/plasmazones_*.ts")
-# Exclude the English source template from compilation (it has no translations)
-list(FILTER TRANSLATION_TS_FILES EXCLUDE REGEX "plasmazones_en\\.ts$")
-
-# --- update-ts target: lupdate scans source directly ---
-# PzI18n::tr() uses Q_DECLARE_TR_FUNCTIONS(plasmazones) - lupdate
-# recognizes tr() natively.  No custom scripts or intermediate files.
-if(Qt6LinguistTools_FOUND)
-    # All .ts files to update (en template + per-language)
-    file(GLOB _all_ts_files "${CMAKE_SOURCE_DIR}/translations/plasmazones_*.ts")
-
-    add_custom_target(update-ts
-        COMMENT "Updating .ts translation files from source (lupdate)"
-        COMMAND Qt6::lupdate
-            -I ${CMAKE_SOURCE_DIR}/src
-            ${_all_i18n_sources}
-            -ts ${_all_ts_files}
-        WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
-    )
-else()
-    add_custom_target(update-ts
-        COMMAND ${CMAKE_COMMAND} -E echo "Qt6LinguistTools not found; install qt6-tools-dev"
-    )
-endif()
-
-# --- Compile .ts → .qm and install ---
-# Output: plasmazones_de.qm, plasmazones_fr.qm, etc.
-# QTranslator::load(locale, "plasmazones", "_", dir) finds these by name.
-if(Qt6LinguistTools_FOUND AND TRANSLATION_TS_FILES)
-    qt_add_lrelease(plasmazones_translations
-        TS_FILES ${TRANSLATION_TS_FILES}
-        QM_FILES_OUTPUT_VARIABLE QM_FILES
-    )
-    install(FILES ${QM_FILES} DESTINATION ${KDE_INSTALL_DATADIR}/plasmazones/translations)
-endif()
+include(cmake/PhosphorTranslations.cmake)
 
 
 # Generate version header with compile-time version info
@@ -345,35 +296,99 @@ include_directories("${CMAKE_BINARY_DIR}/generated")
 # following the same phosphor-<name> convention.
 add_subdirectory(libs/phosphor-identity)    # stable cross-process window identity (composite ids, app-id matching)
 add_subdirectory(libs/phosphor-dbus)        # generic, service-agnostic D-Bus client utilities (Client, HasDBusStreaming)
-add_subdirectory(libs/phosphor-protocol)    # D-Bus wire types and service constants — needed by phosphor-screens (Resolver endpoint defaults)
+add_subdirectory(libs/phosphor-protocol)    # D-Bus wire types and service constants, needed by phosphor-screens (Resolver endpoint defaults)
+add_subdirectory(libs/phosphor-fsloader)    # filesystem-backed loader scaffolding (WatchedDirectorySet + DirectoryLoader) - Core-only, needed by phosphor-window-rules's store watcher
+# phosphor-registry: generic Registry<T> + 5 factory interfaces + plugin/metadata
+# loaders. Unconditional (third-party hosts + demos consume it without the shell).
+# Moved ahead of phosphor-shaders: ShaderRegistry now composes Registry<T> +
+# MetadataPackLoader<T>, so the in-tree target must exist before shaders configures
+# (else find_package resolves a stale installed copy). Depends on phosphor-fsloader.
+add_subdirectory(libs/phosphor-registry)    # generic Registry<T> + 5 factory interfaces + plugin loader
+add_subdirectory(libs/phosphor-window-rules)  # unified window/context rule engine (MatchExpression, RuleEvaluator) - depends on phosphor-identity + phosphor-protocol + phosphor-fsloader
 add_subdirectory(libs/phosphor-layout-api)  # shared layout-preview contract (LayoutPreview, ILayoutSource)
-add_subdirectory(libs/phosphor-fsloader)    # filesystem-backed loader scaffolding (WatchedDirectorySet + DirectoryLoader)
 add_subdirectory(libs/phosphor-config)      # schema-driven configuration + migration runner - needed by phosphor-zones
 add_subdirectory(libs/phosphor-shaders)     # shader-domain primitives (BaseUniforms, IUniformExtension, ShaderRegistry)
 add_subdirectory(libs/phosphor-wayland)       # Wayland layer-shell QPA plugin + LayerSurface - needed by phosphor-screens
+add_subdirectory(libs/phosphor-geometry)    # pure geometry math (coordinate transforms, overlap, min-size) - needed by phosphor-screens (swapper directional selector)
 add_subdirectory(libs/phosphor-screens)     # screen-topology + virtual-screen subdivision - needed by phosphor-zones
-add_subdirectory(libs/phosphor-geometry)    # pure geometry math (coordinate transforms, overlap, min-size)
 add_subdirectory(libs/phosphor-zones)       # zone primitives + LayoutManager (depends on phosphor-config IBackend, phosphor-screens ScreenIdentity)
+add_subdirectory(libs/phosphor-context-resolver) # frozen-snapshot per-screen mode + disable/lock cascade façade (depends on phosphor-zones for AssignmentEntry::Mode)
+add_subdirectory(libs/phosphor-scripting)   # generic embedded Luau host (engine, sandbox, watchdog, marshalling) — vendored extern/luau
 add_subdirectory(libs/phosphor-tiles)       # auto-tiling algorithm primitives (TilingAlgorithm, AlgorithmRegistry, SplitTree)
 add_subdirectory(libs/phosphor-rendering)   # GPU shader rendering via Qt RHI
 add_subdirectory(libs/phosphor-layer)       # wlr-layer-shell surface lifecycle management
 add_subdirectory(libs/phosphor-shell-patterns) # UI-pattern recipes (axis 2) built on PhosphorLayer::Role
 add_subdirectory(libs/phosphor-shortcuts)   # global shortcut backends + domain-free Registry
-# PlasmaZones consumes the org.phosphor.animation QML module for shell
-# UI animations. PHOSPHOR_ANIMATION_QUICK is enabled before
-# add_subdirectory picks up the option() default so QtQuickClock builds.
-set(PHOSPHOR_ANIMATION_QUICK ON CACHE BOOL "Build QtQuickClock (required by QML animation module)")
+# PlasmaZones consumes the org.phosphor.animation QML module via the
+# daemon, the editor, and the phosphor-shell binary. The QML plugin's
+# QtQuickClockManager directly constructs QtQuickClock, which is gated
+# behind PHOSPHOR_ANIMATION_QUICK in phosphor-animation's CMakeLists.
+# Without it, the QML plugin emits an unresolved-symbol link error in
+# every PlasmaZones binary.
+#
+# FORCE so a stale cached OFF (from a prior standalone configure of
+# libs/phosphor-animation in this build directory, or an explicit
+# -DPHOSPHOR_ANIMATION_QUICK=OFF on the parent build) cannot silently
+# turn into a broken build. Surface the override loudly so a user who
+# DID pass -DPHOSPHOR_ANIMATION_QUICK=OFF understands their request
+# was rejected — and why.
+if(DEFINED CACHE{PHOSPHOR_ANIMATION_QUICK} AND NOT PHOSPHOR_ANIMATION_QUICK)
+    message(WARNING
+        "PHOSPHOR_ANIMATION_QUICK=OFF was requested but every PlasmaZones binary "
+        "links the org.phosphor.animation QML plugin which requires QtQuickClock. "
+        "Forcing PHOSPHOR_ANIMATION_QUICK=ON for this configure. "
+        "To build without QtQuickClock, configure libs/phosphor-animation standalone.")
+endif()
+set(PHOSPHOR_ANIMATION_QUICK ON CACHE BOOL "Build QtQuickClock (required by every PlasmaZones binary linking PhosphorAnimationQmlplugin)" FORCE)
 add_subdirectory(libs/phosphor-animation)   # unified animation library: motion runtime, QML module, shaders, layer
 add_subdirectory(libs/phosphor-audio)       # audio spectrum provider (CAVA backend)
 add_subdirectory(libs/phosphor-surfaces)    # managed surface lifecycle (engine, keep-alive, scope gen)
 add_subdirectory(libs/phosphor-overlay)     # per-screen shell-host + slot mechanism (rides on layer/shell-patterns/surfaces/animation/screens)
+# Foundation theme library. Built unconditionally so downstream libs and
+# tooling can consume it without the BUILD_PHOSPHOR_SHELL gate. Examples
+# are plugins and third-party shells. The lib has zero shell-side
+# dependencies and is a leaf module. Gating it would hide it from users
+# who don't ship the bundled shell. The shell binary itself stays gated.
+add_subdirectory(libs/phosphor-theme)       # M3 color-token store + Phosphor.Theme QML singletons
+# phosphor-popout is also unconditional. It is consumed by the
+# examples/phosphor-popout-demo target (also unconditional) and by
+# third-party hosts that may want to ship popout-style UI without
+# enabling BUILD_PHOSPHOR_SHELL. Gating phosphor-popout would break
+# the demo target. The shell binary itself stays gated below.
+add_subdirectory(libs/phosphor-popout)      # central popout coordinator (lifetime, focus, scope arbitration)
+# phosphor-ipc is also unconditional. Same rationale as the prior
+# three Phase-1 libs: third-party hosts and the demos consume it
+# without enabling the shell binary. Phase 1.4 deliverable.
+add_subdirectory(libs/phosphor-ipc)         # JSON-over-Unix-socket IpcRouter + IpcTarget QML type
+# phosphorctl is the typed IPC CLI shipped alongside phosphor-ipc.
+# Unconditional: it's a user-facing tool every dev/operator wants
+# by default. Links Qt6::Core + Qt6::Network only (no GUI, no QML).
+# Source dir is cli/phosphorctl/ (not bin/) because bin/ is the
+# project's runtime output directory; a same-named source subdir
+# would collide with the binary's final path.
+add_subdirectory(cli/phosphorctl)           # phosphorctl call / list / schema / subscribe
 if(BUILD_PHOSPHOR_SHELL)
     add_subdirectory(libs/phosphor-shell)   # shell infrastructure and QML types (BUILD_PHOSPHOR_SHELL gate)
 endif()
-add_subdirectory(libs/phosphor-engine)  # unified placement engine contracts (INTERFACE)
+add_subdirectory(libs/phosphor-engine)  # unified placement engine contracts + window registry (SHARED lib)
 add_subdirectory(libs/phosphor-workspaces)  # virtual desktop / workspace management
 add_subdirectory(libs/phosphor-tile-engine) # autotile placement engine (IAutotileSettings + engine code)
 add_subdirectory(libs/phosphor-snap-engine) # zone-based snap placement engine
+
+
+add_subdirectory(libs/phosphor-placement)   # window placement state tracking
+
+# Canonical list of engine library target names. Consumed by the
+# engine QML firewall below; declared here next to the engine
+# subdirs so the list moves with the targets it gates.
+set(PHOSPHOR_ENGINE_TARGETS
+    PhosphorZones
+    PhosphorSnapEngine
+    PhosphorTileEngine
+    PhosphorEngine
+    PhosphorWorkspaces
+    PhosphorPlacement
+)
 
 # ─── Engine QML firewall ─────────────────────────────────────────────────────
 #
@@ -382,44 +397,85 @@ add_subdirectory(libs/phosphor-snap-engine) # zone-based snap placement engine
 # Qt6::Quick, the cost model changes: every QObject in the engine gets a
 # JS scope, bindings cross language boundaries, and ownership becomes
 # implicit through QQmlEngine. That's the trajectory Noctalia couldn't
-# escape — their engines and config were both QML, so multi-day uptime
+# escape, their engines and config were both QML, so multi-day uptime
 # leaks (FD exhaustion, GC pauses, JSValue retention across reloads) had
 # nowhere to be fixed without a full rewrite.
 #
 # Refuse to configure if any engine target ever picks up a Qml/Quick
-# link. Cheap guardrail; failures here mean someone added a dependency
-# that drags Qml in transitively or wired a target up wrong.
-foreach(_pz_engine_lib PhosphorZones PhosphorSnapEngine PhosphorTileEngine PhosphorEngine)
-    if(TARGET ${_pz_engine_lib})
-        get_target_property(_pz_engine_links ${_pz_engine_lib} LINK_LIBRARIES)
-        if(_pz_engine_links)
-            foreach(_pz_link IN LISTS _pz_engine_links)
-                if(_pz_link MATCHES "(^|::)Qt6::(Qml|Quick)$")
+# link. Cheap guardrail over the targets' DIRECT link lists only — an
+# intermediate in-tree lib that PUBLICly links Qt6::Qml would pass
+# undetected (the engine target's own entries name the lib, not Qml).
+# Failures here mean someone linked Qml/Quick onto an engine target
+# directly or wired a target up wrong.
+#
+# Track whether ANY entry matched a real target so the firewall can't
+# silently degrade to a no-op if PHOSPHOR_ENGINE_TARGETS goes stale
+# (e.g. an engine lib gets renamed but the list doesn't follow). A
+# zero-match firewall would let a future Qml link through unnoticed,
+# which is exactly the failure mode the rationale above is designed
+# to prevent.
+set(_p_engine_matched_any FALSE)
+foreach(_p_engine_lib IN LISTS PHOSPHOR_ENGINE_TARGETS)
+    if(TARGET ${_p_engine_lib})
+        set(_p_engine_matched_any TRUE)
+        get_target_property(_p_engine_links ${_p_engine_lib} LINK_LIBRARIES)
+        if(_p_engine_links)
+            foreach(_p_link IN LISTS _p_engine_links)
+                if(_p_link MATCHES "(^|::)Qt6::(Qml|Quick)(Private)?$")
                     message(FATAL_ERROR
-                        "Engine library '${_pz_engine_lib}' links '${_pz_link}'. "
-                        "Engine libs must stay QML-free — see comment above this "
+                        "Engine library '${_p_engine_lib}' links '${_p_link}'. "
+                        "Engine libs must stay QML-free, see comment above this "
                         "check in CMakeLists.txt for rationale.")
                 endif()
             endforeach()
         endif()
-        get_target_property(_pz_engine_iface ${_pz_engine_lib} INTERFACE_LINK_LIBRARIES)
-        if(_pz_engine_iface)
-            foreach(_pz_link IN LISTS _pz_engine_iface)
-                if(_pz_link MATCHES "(^|::)Qt6::(Qml|Quick)$")
+        get_target_property(_p_engine_iface ${_p_engine_lib} INTERFACE_LINK_LIBRARIES)
+        if(_p_engine_iface)
+            foreach(_p_link IN LISTS _p_engine_iface)
+                if(_p_link MATCHES "(^|::)Qt6::(Qml|Quick)(Private)?$")
                     message(FATAL_ERROR
-                        "Engine library '${_pz_engine_lib}' publicly links '${_pz_link}'. "
-                        "Engine libs must stay QML-free — see comment above this "
+                        "Engine library '${_p_engine_lib}' publicly links '${_p_link}'. "
+                        "Engine libs must stay QML-free, see comment above this "
                         "check in CMakeLists.txt for rationale.")
                 endif()
             endforeach()
         endif()
     endif()
 endforeach()
-
-add_subdirectory(libs/phosphor-placement)   # window placement state tracking
+if(NOT _p_engine_matched_any)
+    message(FATAL_ERROR
+        "Engine QML firewall matched zero targets from PHOSPHOR_ENGINE_TARGETS "
+        "(${PHOSPHOR_ENGINE_TARGETS}). The firewall is a no-op in this state, "
+        "which defeats its purpose. Either an engine lib was renamed without "
+        "updating the list, the add_subdirectory order changed so engines "
+        "haven't been declared yet at this point, or every engine subdir got "
+        "gated behind an option that's currently OFF. Update "
+        "PHOSPHOR_ENGINE_TARGETS to match the real engine target names, or "
+        "move this firewall block below the add_subdirectory calls that "
+        "declare the engines.")
+endif()
 add_subdirectory(libs/phosphor-compositor)  # compositor-plugin SDK
+add_subdirectory(libs/phosphor-control) # reusable Qt6/QML/Kirigami settings-app framework (page controllers, registry, chrome)
 if(BUILD_PHOSPHOR_SHELL)
-    add_subdirectory(libs/phosphor-services) # DBus + platform-integration primitives (SNI tray, dbusmenu, future: notifications/MPRIS/UPower)
+    # Order: icontheme is consumed by sni (SNI publisher uses the
+    # image provider + theme resolver), so configure it first. The
+    # other Phase 2.0 siblings are independent. Phase 2.0 is complete:
+    # the phosphor-services umbrella has been dissolved into these
+    # per-domain libraries.
+    add_subdirectory(libs/phosphor-service-icontheme) # XDG icon-theme resolver + Qt image provider
+    add_subdirectory(libs/phosphor-service-sni)       # StatusNotifierItem host + watcher + dbusmenu
+    add_subdirectory(libs/phosphor-service-upower)    # UPower battery / power-supply readouts
+    add_subdirectory(libs/phosphor-service-mpris)     # MPRIS2 media-player discovery + control
+    add_subdirectory(libs/phosphor-service-pipewire)  # PipeWire mixer (Phase 2.1, shipped)
+    add_subdirectory(libs/phosphor-service-network)   # NetworkManager devices / connectivity (Phase 2.2)
+    add_subdirectory(libs/phosphor-service-bluetooth) # BlueZ adapters / devices / pairing (Phase 2.3)
+    add_subdirectory(libs/phosphor-service-brightness) # display / keyboard backlight brightness (Phase 2.4)
+    add_subdirectory(libs/phosphor-service-notifications) # org.freedesktop.Notifications server (Phase 2.5)
+    add_subdirectory(libs/phosphor-service-polkit)        # PolicyKit authentication agent (Phase 2.6)
+    add_subdirectory(libs/phosphor-service-idle)          # Wayland idle monitoring + inhibition (Phase 2.7)
+    add_subdirectory(libs/phosphor-service-clipboard)     # Wayland clipboard history (data-control) (Phase 2.8)
+    add_subdirectory(libs/phosphor-service-lock)          # PAM auth + ext-session-lock-v1 coordination (Phase 2.9)
+    add_subdirectory(libs/phosphor-service-session)       # logind session/power actions + inhibitors (Phase 2.10)
 endif()
 
 # Source directories
@@ -450,7 +506,7 @@ if(BUILD_TESTING)
 endif()
 
 # Install D-Bus interface XMLs (one per interface). Keep in sync with
-# dbus/*.xml on disk — third-party clients (and qdbus-qt6 introspection)
+# dbus/*.xml on disk, third-party clients (and qdbus-qt6 introspection)
 # resolve interfaces against these files post-install.
 install(FILES
     dbus/org.plasmazones.Autotile.xml
@@ -463,7 +519,9 @@ install(FILES
     dbus/org.plasmazones.Settings.xml
     dbus/org.plasmazones.SettingsApp.xml
     dbus/org.plasmazones.Shader.xml
+    dbus/org.plasmazones.Snap.xml
     dbus/org.plasmazones.WindowDrag.xml
+    dbus/org.plasmazones.WindowRules.xml
     dbus/org.plasmazones.WindowTracking.xml
     dbus/org.plasmazones.ZoneDetection.xml
     DESTINATION ${KDE_INSTALL_DBUSINTERFACEDIR}
@@ -509,16 +567,16 @@ install(DIRECTORY data/curves/
 # `plasmazones/profiles` subdirectory - never to a directory we don't
 # own - so an accidental wide install prefix can't cascade.
 # Use KDE_INSTALL_FULL_DATADIR (already prefix-resolved by ECM) so we
-# don't manually concatenate CMAKE_INSTALL_PREFIX with KDE_INSTALL_DATADIR
-# — that join produces `/usr//absolute/...` when ECM hands us an absolute
+# don't manually concatenate CMAKE_INSTALL_PREFIX with KDE_INSTALL_DATADIR:
+# that join produces `/usr//absolute/...` when ECM hands us an absolute
 # KDE_INSTALL_DATADIR (some distros override it that way).
 install(CODE "
-    set(_pz_profiles_install_dir \"\$ENV{DESTDIR}${KDE_INSTALL_FULL_DATADIR}/plasmazones/profiles\")
-    if(EXISTS \"\${_pz_profiles_install_dir}\")
-        file(GLOB _pz_stale_profile_jsons \"\${_pz_profiles_install_dir}/*.json\")
-        if(_pz_stale_profile_jsons)
-            message(STATUS \"Removing stale animation profile JSONs from \${_pz_profiles_install_dir}\")
-            file(REMOVE \${_pz_stale_profile_jsons})
+    set(_p_profiles_install_dir \"\$ENV{DESTDIR}${KDE_INSTALL_FULL_DATADIR}/plasmazones/profiles\")
+    if(EXISTS \"\${_p_profiles_install_dir}\")
+        file(GLOB _p_stale_profile_jsons \"\${_p_profiles_install_dir}/*.json\")
+        if(_p_stale_profile_jsons)
+            message(STATUS \"Removing stale animation profile JSONs from \${_p_profiles_install_dir}\")
+            file(REMOVE \${_p_stale_profile_jsons})
         endif()
     endif()
 ")
@@ -561,7 +619,7 @@ install(DIRECTORY data/animations/
 install(DIRECTORY data/algorithms/
     DESTINATION ${KDE_INSTALL_DATADIR}/plasmazones/algorithms
     FILES_MATCHING
-    PATTERN "*.js"
+    PATTERN "*.luau"
 )
 
 # Install support report script
@@ -571,7 +629,7 @@ install(PROGRAMS scripts/plasmazones-report.sh
 )
 
 # Install icons (hicolor for dark themes, hicolor-light for light themes).
-# The phosphor-shell.svg icons are conditional on BUILD_PHOSPHOR_SHELL —
+# The phosphor-shell.svg icons are conditional on BUILD_PHOSPHOR_SHELL:
 # no point shipping the icon if the binary isn't built.
 set(_plasmazones_dark_icons
     icons/hicolor/scalable/apps/plasmazones.svg
@@ -594,6 +652,153 @@ install(FILES ${_plasmazones_light_icons}
     DESTINATION ${KDE_INSTALL_ICONDIR}/hicolor-light/scalable/apps
 )
 
+# Example demos and CLI acceptance harnesses are not part of the installed
+# product. The Nix flake builds from a source tree with examples/ stripped
+# (flake.nix removes ./examples from the fileset), so only descend into the
+# example subdirectories when the directory is actually present. A normal git
+# checkout always has it, so this guard is a no-op there; it nests over the
+# inner BUILD_PHOSPHOR_SHELL gates below.
+if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/examples")
+
+# phosphor-theme example apps. These are the lib's acceptance harness.
+# They consume only the phosphor-theme lib, so they build whenever the
+# lib builds. Gating them behind BUILD_PHOSPHOR_SHELL would force a
+# theme developer to pull in the whole shell tree just to run the demo.
+# phosphor-theme-demo renders the active PaletteStore as a swatch sheet
+# and hot-reloads from ~/.local/share/phosphor/palettes/current.json.
+# phosphor-theme-cli is the headless round-trip driver: wallpaper to
+# matugen to palette JSON to rendered template.
+add_subdirectory(examples/phosphor-theme-demo)
+add_subdirectory(examples/phosphor-theme-cli)
+
+# phosphor-popout-demo. Acceptance harness for libs/phosphor-popout.
+# Same gating logic as the theme demos: built unconditionally so a
+# popout developer doesn't need BUILD_PHOSPHOR_SHELL=ON to exercise
+# the arbitration. The demo links only phosphor-popout, phosphor-theme,
+# and base Qt; no Wayland dependency.
+add_subdirectory(examples/phosphor-popout-demo)
+
+# phosphor-registry-demo. Acceptance harness for libs/phosphor-registry's
+# in-process registration path. Two built-in IBarWidgetFactory
+# implementations registered explicitly in main(); the bar QML
+# enumerates them and instantiates one widget per id. Same
+# unconditional gating as the theme + popout demos.
+add_subdirectory(examples/phosphor-registry-demo)
+# phosphor-ipc-demo. Acceptance harness for libs/phosphor-ipc.
+# Three IpcTargets driven from another terminal via phosphorctl.
+# Unconditional (same rationale as the other foundation-lib demos).
+add_subdirectory(examples/phosphor-ipc-demo)
+
+# phosphor-perscreen-demo. Acceptance harness for the Phosphor.Shell
+# PerScreen helper (Phase 1.5). Opens a small window per monitor;
+# hot-plug a display → window appears. Unlike the foundation-lib demos
+# above, this one links the gated PhosphorShell::PhosphorShellQml target
+# (PerScreen lives in libs/phosphor-shell), so it must be gated too: when
+# BUILD_PHOSPHOR_SHELL is OFF that target does not exist and an
+# unconditional add_subdirectory fails the CMake generate step.
+if(BUILD_PHOSPHOR_SHELL)
+    add_subdirectory(examples/phosphor-perscreen-demo)
+endif()
+
+# phosphor-service-pipewire-cli. Acceptance harness for the
+# phosphor-service-pipewire library (Phase 2.1). Headless driver
+# exercising the read paths (list sinks/sources/streams, default),
+# write paths (set-volume, mute/unmute), and metadata writes
+# (set-default-sink/source) against a live PipeWire + WirePlumber
+# daemon. Gated to match libs/phosphor-service-pipewire itself: when
+# BUILD_PHOSPHOR_SHELL is OFF the lib target does not exist, so the
+# CLI can't link.
+if(BUILD_PHOSPHOR_SHELL)
+    add_subdirectory(examples/phosphor-service-pipewire-cli)
+endif()
+
+# phosphor-service-network-cli. Acceptance harness for the
+# phosphor-service-network library (Phase 2.2). Headless driver
+# exercising the read paths (status, list-devices, list-connections,
+# list-aps) and write paths (scan, connect) against a live
+# org.freedesktop.NetworkManager. Gated like the lib: when
+# BUILD_PHOSPHOR_SHELL is OFF the lib target does not exist, so the CLI
+# can't link.
+if(BUILD_PHOSPHOR_SHELL)
+    add_subdirectory(examples/phosphor-service-network-cli)
+endif()
+
+# phosphor-service-bluetooth-cli. Acceptance harness for the
+# phosphor-service-bluetooth library (Phase 2.3). Headless driver exercising
+# the read paths (status, list-adapters, list-devices) and write paths
+# (power, scan, pair, connect, trust, remove) against a live org.bluez, with
+# an interactive pairing agent. Gated like the lib: when BUILD_PHOSPHOR_SHELL
+# is OFF the lib target does not exist, so the CLI can't link.
+if(BUILD_PHOSPHOR_SHELL)
+    add_subdirectory(examples/phosphor-service-bluetooth-cli)
+endif()
+
+# phosphor-service-brightness-cli. Acceptance harness for the
+# phosphor-service-brightness library (Phase 2.4). Headless driver exercising
+# the read path (list, get) and write path (set) against real sysfs backlights
+# and logind. Gated like the lib: when BUILD_PHOSPHOR_SHELL is OFF the lib
+# target does not exist, so the CLI can't link.
+if(BUILD_PHOSPHOR_SHELL)
+    add_subdirectory(examples/phosphor-service-brightness-cli)
+endif()
+
+# phosphor-service-notifications-cli. Acceptance harness for the
+# phosphor-service-notifications library (Phase 2.5). Both a server (watch: own
+# org.freedesktop.Notifications and log incoming Notify + close events) and a
+# client (send / close / info via D-Bus). Gated like the lib: when
+# BUILD_PHOSPHOR_SHELL is OFF the lib target does not exist, so the CLI can't link.
+if(BUILD_PHOSPHOR_SHELL)
+    add_subdirectory(examples/phosphor-service-notifications-cli)
+endif()
+
+# phosphor-service-polkit-cli. Acceptance harness for the phosphor-service-polkit
+# library (Phase 2.6). Runs as the session's PolicyKit authentication agent and
+# answers PAM prompts (trigger with `pkexec true`). Gated like the lib: when
+# BUILD_PHOSPHOR_SHELL is OFF the lib target does not exist, so the CLI can't link.
+if(BUILD_PHOSPHOR_SHELL)
+    add_subdirectory(examples/phosphor-service-polkit-cli)
+endif()
+
+# phosphor-service-idle-cli. Acceptance harness for the phosphor-service-idle
+# library (Phase 2.7). Reports idle support, logs each idle stage as it fires
+# with a wall-clock timestamp, and can hold an inhibition for a fixed duration
+# (--inhibit-for). Gated like the lib: when BUILD_PHOSPHOR_SHELL is OFF the lib
+# target does not exist, so the CLI can't link.
+if(BUILD_PHOSPHOR_SHELL)
+    add_subdirectory(examples/phosphor-service-idle-cli)
+endif()
+
+# phosphor-service-clipboard-cli. Acceptance harness for the
+# phosphor-service-clipboard library (Phase 2.8). Watches the clipboard, lists
+# the history, and copies an entry back. Gated like the lib: when
+# BUILD_PHOSPHOR_SHELL is OFF the lib target does not exist, so the CLI can't link.
+if(BUILD_PHOSPHOR_SHELL)
+    add_subdirectory(examples/phosphor-service-clipboard-cli)
+endif()
+
+# phosphor-service-lock-cli. Acceptance harness for the phosphor-service-lock
+# library (Phase 2.9). Authenticates the user (PAM) and drives the session lock.
+# Gated like the lib: when BUILD_PHOSPHOR_SHELL is OFF the lib target does not
+# exist, so the CLI can't link.
+if(BUILD_PHOSPHOR_SHELL)
+    add_subdirectory(examples/phosphor-service-lock-cli)
+endif()
+
+# phosphor-service-session-cli. Acceptance harness for the
+# phosphor-service-session library (Phase 2.10). Drives the logind session
+# capabilities + actions (status / lock / logout / suspend / ... / power-off).
+# Gated like the lib: when BUILD_PHOSPHOR_SHELL is OFF the lib target does not
+# exist, so the CLI can't link.
+if(BUILD_PHOSPHOR_SHELL)
+    add_subdirectory(examples/phosphor-service-session-cli)
+endif()
+
+# phosphor-registry-plugin-demo. Sibling of phosphor-registry-demo
+# that exercises the PluginLoader + hot-reload path. The third
+# (CPU-meter) widget builds as a separate .so + manifest.json and
+# is loaded via PluginLoader from a per-build plugin root.
+add_subdirectory(examples/phosphor-registry-plugin-demo)
+
 if(BUILD_PHOSPHOR_SHELL)
     # Build the bundled example shell as a Qt QML module so qmlcachegen
     # and qmlsc run at build time. The resulting static module gets linked
@@ -603,11 +808,11 @@ if(BUILD_PHOSPHOR_SHELL)
     add_subdirectory(examples/phosphor-shell)
 
     # Install the example phosphor-shell QML/shaders so users can copy
-    # them into their config dir and edit. Same source as the qrc above —
-    # qrc is the build-time frozen copy used as final fallback, this is
-    # the user-editable copy. ShellLoader::resolve() probes
-    # GenericConfigLocation (~/.config) → GenericDataLocation (this
-    # install) → qrc:/ (linked-in fallback) in that order.
+    # them into their config dir and edit. Same source as the qrc above.
+    # The qrc is the build-time frozen copy used as final fallback. This
+    # install is the user-editable copy. ShellLoader::resolve() probes
+    # GenericConfigLocation (~/.config), then GenericDataLocation (this
+    # install), then qrc:/ (linked-in fallback) in that order.
     install(DIRECTORY examples/phosphor-shell/
         DESTINATION ${KDE_INSTALL_DATADIR}/phosphor-shell
         FILES_MATCHING
@@ -616,6 +821,8 @@ if(BUILD_PHOSPHOR_SHELL)
             PATTERN "*.glsl"
     )
 endif()
+
+endif() # examples/ present (Nix strips it; see the guard above)
 
 # Custom uninstall target that cleans up directories properly
 configure_file(
@@ -632,12 +839,15 @@ add_custom_target(uninstall
 # Build/install only installs files. Enabling the daemon, refreshing sycoca/KWin,
 # and user-facing messages are handled by packaging (Arch .install, Debian postinst, RPM %post).
 
-# Vulkan headers are needed at build time for QVulkanInstance (Vulkan backend support).
-# OPTIONAL so PlasmaZones builds silently on systems without Vulkan dev packages -
-# the Vulkan backend simply won't be available at runtime.
-# All Vulkan-specific C++ code is guarded with #if QT_CONFIG(vulkan).
-# Note: packaging specs (PKGBUILD, debian/control, rpm .spec, nix) list Vulkan as a
-# hard BuildRequires to ensure the backend is always available in distribution packages.
+# Qt's WrapVulkanHeaders backs the QVulkanInstance Vulkan-backend support, which
+# is guarded throughout with #if QT_CONFIG(vulkan); it stays OPTIONAL here so that
+# backend degrades gracefully when absent.
+# NOTE: this does NOT make the whole build Vulkan-optional. The dma-buf thumbnail
+# daemon path hard-requires the Vulkan SDK via find_package(Vulkan REQUIRED) in
+# src/CMakeLists.txt (dmabuftextureprovider.cpp includes <vulkan/vulkan.h>
+# unconditionally), so a daemon build without the Vulkan SDK fails at configure time.
+# Packaging specs (PKGBUILD, debian/control, rpm .spec, nix) already list Vulkan as a
+# hard BuildRequires, so distribution packages are unaffected.
 set_package_properties(WrapVulkanHeaders PROPERTIES TYPE OPTIONAL)
 
 # Feature summary (REQUIRED + OPTIONAL only; RUNTIME hidden to reduce noise)
@@ -645,40 +855,4 @@ feature_summary(WHAT REQUIRED_PACKAGES_FOUND REQUIRED_PACKAGES_NOT_FOUND
                      OPTIONAL_PACKAGES_FOUND OPTIONAL_PACKAGES_NOT_FOUND
                 FATAL_ON_MISSING_REQUIRED_PACKAGES)
 
-# ═══════════════════════════════════════════════════════════════════════════════
-# CPack — source tarball generation (`cpack --config CPackSourceConfig.cmake`
-# or `make package_source`). Distro builds in release.yml still hand-roll
-# tarballs for filename-control reasons; this exists so a release engineer
-# can also bootstrap a tarball locally without the workflow.
-# ═══════════════════════════════════════════════════════════════════════════════
-set(CPACK_PACKAGE_NAME "${PROJECT_NAME}")
-set(CPACK_PACKAGE_VERSION "${PROJECT_VERSION}")
-set(CPACK_PACKAGE_VENDOR "fuddlesworth")
-set(CPACK_PACKAGE_CONTACT "fuddlesworth <fuddlesworth@users.noreply.github.com>")
-set(CPACK_PACKAGE_DESCRIPTION_SUMMARY "Window tiling and autotiling for KDE Plasma")
-set(CPACK_RESOURCE_FILE_LICENSE "${CMAKE_CURRENT_SOURCE_DIR}/LICENSE")
-set(CPACK_SOURCE_GENERATOR "TXZ;TGZ")
-set(CPACK_SOURCE_PACKAGE_FILE_NAME "${PROJECT_NAME}-${PROJECT_VERSION}")
-set(CPACK_SOURCE_IGNORE_FILES
-    "/\\\\.git/"
-    "/\\\\.github/"
-    "/\\\\.claude/"
-    "/\\\\.zed/"
-    "/\\\\.ccache/"
-    "/build/"
-    "/build-.*/"
-    "/install/"
-    "/dist/"
-    "/node_modules/"
-    "/\\\\.cache/"
-    "/\\\\.idea/"
-    "/\\\\.vscode/"
-    "/\\\\.DS_Store"
-    "/CMakeUserPresets\\\\.json$"
-    "/CMakeLists\\\\.txt\\\\.user"
-    "/compile_commands\\\\.json$"
-    "\\\\.qm$"
-    "\\\\.swp$"
-    "~$"
-)
-include(CPack)
+include(cmake/PhosphorCPack.cmake)

@@ -66,7 +66,7 @@ If you're adding new functionality, add tests for it. If you're fixing a bug, a 
 
 ## Translations
 
-PlasmaZones uses Qt Linguist (`.ts`/`.qm`) for all translations. C++ uses `PzI18n::tr()`; QML uses `i18n()` via `PzLocalizedContext`.
+PlasmaZones uses Qt Linguist (`.ts`/`.qm`) for all translations. C++ uses `PhosphorI18n::tr()`; QML uses `i18n()` via `PhosphorLocalizedContext`.
 
 - **Extract strings** after changing user-visible text:
   `cmake --build build --target update-ts`

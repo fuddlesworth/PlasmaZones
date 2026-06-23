@@ -22,33 +22,30 @@
 // of `iSurfaceScreenPos.xy`). `texture2D` (GLSL ES) is rewritten to
 // `texture` (GLSL 4.50 core) inline.
 
-#version 450
-
-#include <animation_uniforms.glsl>
+// The harness supplies #version, <animation_uniforms.glsl>, the in/out,
+// and main(). noise.glsl (surfaceSeed) is pack-specific, so it stays here.
 #include <noise.glsl>
 
-// metadata.json declaration order → customParams[0] sub-slots
-#define smoothness    customParams[0].x
-#define centerJitter  customParams[0].y
+// p_smoothness / p_centerJitter (customParams[0].xy) are generated from
+// metadata.json — no hand-written slot #defines.
 
-layout(location = 0) in vec2 vTexCoord;
-layout(location = 0) out vec4 fragColor;
-
-void main() {
+// Symmetric: a single pTransition. `t` is the leg's iTime, which the runtime
+// flips on the close leg (1→0), so the niri OPEN body auto-mirrors on close
+// with no direction code.
+vec4 pTransition(vec2 uv, float t) {
     // ── niri OPEN body (handles both legs via runtime iTime flip) ──
-    float p = clamp(iTime, 0.0, 1.0);
-    vec2 uv = vTexCoord;
+    float p = clamp(t, 0.0, 1.0);
     float seed = surfaceSeed();
 
     float SQRT_2 = 1.414213562;
 
-    vec2 center = vec2(0.5 + (seed - 0.5) * centerJitter, 0.5 + (seed * 0.7 - 0.35) * centerJitter);
+    vec2 center = vec2(0.5 + (seed - 0.5) * p_centerJitter, 0.5 + (seed * 0.7 - 0.35) * p_centerJitter);
 
     float dist = SQRT_2 * distance(center, uv);
-    float m = smoothstep(-smoothness, 0.0, dist - p * (1.0 + smoothness));
+    float m = smoothstep(-p_smoothness, 0.0, dist - p * (1.0 + p_smoothness));
     float reveal = 1.0 - m;
 
     vec4 color = surfaceColor(uv);
 
-    fragColor = color * reveal;
+    return color * reveal;
 }

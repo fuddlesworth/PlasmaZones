@@ -16,31 +16,28 @@
 // `texture(uTexture0, uv)` samples directly. `texture2D` (GLSL ES) is
 // rewritten to `texture` (GLSL 4.50 core) inline.
 
-#version 450
+// The harness supplies #version, <animation_uniforms.glsl>, the in/out,
+// and main().
 
-#include <animation_uniforms.glsl>
-
-// metadata.json declaration order → customParams[0] sub-slots
-#define radialFalloff customParams[0].x
-#define edgeFade      customParams[0].y
-
-layout(location = 0) in vec2 vTexCoord;
-layout(location = 0) out vec4 fragColor;
+// p_radialFalloff / p_edgeFade (customParams[0].xy) are generated from
+// metadata.json — no hand-written slot #defines.
 
 float crosshatch_rand(vec2 co) {
     return fract(sin(dot(co.xy, vec2(12.9898, 78.233))) * 43758.5453);
 }
 
-void main() {
+// Symmetric: a single pTransition. `t` is the leg's iTime, which the runtime
+// flips on the close leg (1→0), so the niri OPEN body auto-mirrors on close
+// with no direction code.
+vec4 pTransition(vec2 uv, float t) {
     // ── niri OPEN body (handles both legs via runtime iTime flip) ──
-    float p = clamp(iTime, 0.0, 1.0);
-    vec2 uv = vTexCoord;
+    float p = clamp(t, 0.0, 1.0);
     vec4 win = surfaceColor(uv);
 
     vec2 center = vec2(0.5);
-    float dist = distance(center, uv) / radialFalloff;
+    float dist = distance(center, uv) / p_radialFalloff;
     float r = p - min(crosshatch_rand(vec2(uv.y, 0.0)), crosshatch_rand(vec2(0.0, uv.x)));
-    float reveal = mix(0.0, mix(step(dist, r), 1.0, smoothstep(1.0 - edgeFade, 1.0, p)), smoothstep(0.0, edgeFade, p));
+    float reveal = mix(0.0, mix(step(dist, r), 1.0, smoothstep(1.0 - p_edgeFade, 1.0, p)), smoothstep(0.0, p_edgeFade, p));
 
-    fragColor = win * reveal;
+    return win * reveal;
 }

@@ -20,16 +20,8 @@
 // `texture(uTexture0, uv)` samples directly. `texture2D` (GLSL ES) is
 // rewritten to `texture` (GLSL 4.50 core) inline.
 
-#version 450
-
-#include <animation_uniforms.glsl>
-
-// metadata.json declaration order → customParams[0] sub-slots
-#define noiseScale   customParams[0].x
-#define edgeSoftness customParams[0].y
-
-layout(location = 0) in vec2 vTexCoord;
-layout(location = 0) out vec4 fragColor;
+// metadata.json declaration order → customParams[0] sub-slots:
+// p_noiseScale (customParams[0].x), p_edgeSoftness (customParams[0].y).
 
 // File-scope helpers kept verbatim from niri's source rather than
 // substituted with `<noise.glsl>`'s `hash22` / `simplex2D`. Niri's
@@ -62,10 +54,9 @@ float perlin_noise(in vec2 st) {
         (d - b) * u.x * u.y;
 }
 
-void main() {
+vec4 pTransition(vec2 uv, float t) {
     // ── niri OPEN body (handles both legs via runtime iTime flip) ──
     float pr = clamp(iTime, 0.0, 1.0);
-    vec2 uv = vTexCoord;
     vec4 win = surfaceColor(uv);
 
     // `noiseScale` means "noise cycles across the screen": multiplying
@@ -73,14 +64,14 @@ void main() {
     // the fraction of the screen this surface covers, so noise blob
     // pixel size stays constant across popup vs. maximized windows.
     // Matches niri's reference on full-screen (multiplier = 1.0 there).
-    vec2 perScreenScale = noiseScale * max(iAnchorSize, vec2(1.0))
+    vec2 perScreenScale = p_noiseScale * max(iAnchorSize, vec2(1.0))
                                      / max(iSurfaceScreenPos.zw, vec2(1.0));
     float n = perlin_noise(uv * perScreenScale);
-    float p = mix(-edgeSoftness, 1.0 + edgeSoftness, pr);
-    float lower = p - edgeSoftness;
-    float higher = p + edgeSoftness;
+    float p = mix(-p_edgeSoftness, 1.0 + p_edgeSoftness, pr);
+    float lower = p - p_edgeSoftness;
+    float higher = p + p_edgeSoftness;
     float q = smoothstep(lower, higher, n);
     float reveal = 1.0 - q;
 
-    fragColor = win * reveal;
+    return win * reveal;
 }

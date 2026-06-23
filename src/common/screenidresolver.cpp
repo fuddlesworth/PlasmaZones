@@ -18,10 +18,10 @@ void ensureScreenIdResolver()
     // layouts loaded from disk normalise connector names identically.
     static const bool installed = [] {
         PhosphorZones::Layout::setScreenIdResolver([](const QString& name) -> QString {
-            if (name.isEmpty() || !Phosphor::Screens::ScreenIdentity::isConnectorName(name)) {
+            if (name.isEmpty() || !PhosphorScreens::ScreenIdentity::isConnectorName(name)) {
                 return name;
             }
-            return Phosphor::Screens::ScreenIdentity::idForName(name);
+            return PhosphorScreens::ScreenIdentity::idForName(name);
         });
         return true;
     }();

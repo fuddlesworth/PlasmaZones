@@ -1,0 +1,15 @@
+# clangd project configuration.
+#
+# Point clangd at the CMake-generated compile database so it sees the real
+# include paths (Qt6, KF6, KWin, and the generated *_export.h headers under
+# build/). Without this, clangd parses every TU with no flags and reports
+# spurious "QObject file not found" / incomplete-type errors.
+#
+# Refresh the database after changing CMake targets/deps with:
+#   cmake -S . -B build -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
+CompileFlags:
+  CompilationDatabase: build
+  # GCC-only codegen flags clang's driver doesn't recognize (the build uses
+  # /usr/bin/c++). Harmless to compilation but clangd logs them as errors.
+  Remove:
+    - -mno-direct-extern-access

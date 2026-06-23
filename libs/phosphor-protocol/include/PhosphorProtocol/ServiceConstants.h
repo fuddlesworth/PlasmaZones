@@ -27,6 +27,7 @@ inline constexpr QLatin1String Screen("org.plasmazones.Screen");
 inline constexpr QLatin1String ZoneDetection("org.plasmazones.ZoneDetection");
 inline constexpr QLatin1String CompositorBridge("org.plasmazones.CompositorBridge");
 inline constexpr QLatin1String Snap("org.plasmazones.Snap");
+inline constexpr QLatin1String WindowRules("org.plasmazones.WindowRules");
 }
 
 /// D-Bus error names returned via `QDBusMessage::createErrorReply`. Centralised
@@ -45,12 +46,40 @@ inline constexpr QLatin1String Shutdown("org.plasmazones.Error.Shutdown");
 /// than duplicating string literals on both ends of the bus.
 namespace SettingProperty {
 inline constexpr QLatin1String ShaderProfileTree("shaderProfileTree");
-inline constexpr QLatin1String AnimationAppRules("animationAppRules");
 inline constexpr QLatin1String MotionProfileTree("motionProfileTree");
 inline constexpr QLatin1String AnimationShaderSearchPaths("animationShaderSearchPaths");
 }
 
-/// Single-instance app identities. Each PlasmaZones sub-process (settings,
+/// Keys for the extended-window-property QVariantMap (the trailing a{sv} argument
+/// of setWindowMetadata). The kwin-effect packs the live KWin-property / geometry
+/// snapshot under these keys; the daemon unpacks them into WindowMetadata so its
+/// window-rule resolvers match the same fields the effect path resolves. A key is
+/// PRESENT only when the value is known — absence leaves the WindowQuery field
+/// disengaged, mirroring window_query.cpp's engage-only-when-known contract.
+namespace WindowMetadataKey {
+inline constexpr QLatin1String IsMinimized("isMinimized");
+inline constexpr QLatin1String IsFullscreen("isFullscreen");
+inline constexpr QLatin1String IsSticky("isSticky");
+inline constexpr QLatin1String IsMaximized("isMaximized");
+inline constexpr QLatin1String IsFocused("isFocused");
+inline constexpr QLatin1String IsTransient("isTransient");
+inline constexpr QLatin1String IsNotification("isNotification");
+inline constexpr QLatin1String KeepAbove("keepAbove");
+inline constexpr QLatin1String KeepBelow("keepBelow");
+inline constexpr QLatin1String SkipTaskbar("skipTaskbar");
+inline constexpr QLatin1String SkipPager("skipPager");
+inline constexpr QLatin1String SkipSwitcher("skipSwitcher");
+inline constexpr QLatin1String IsModal("isModal");
+inline constexpr QLatin1String HasDecoration("hasDecoration");
+inline constexpr QLatin1String IsResizable("isResizable");
+inline constexpr QLatin1String Width("width");
+inline constexpr QLatin1String Height("height");
+inline constexpr QLatin1String PositionX("positionX");
+inline constexpr QLatin1String PositionY("positionY");
+inline constexpr QLatin1String CaptionNormal("captionNormal");
+}
+
+/// Single-instance app identities. Each Phosphor sub-process (settings,
 /// editor) advertises its own service name and a small controller object so
 /// the launcher can detect "already running" without scanning the bus.
 namespace Apps {
@@ -72,7 +101,7 @@ inline constexpr QLatin1String Interface("org.plasmazones.EditorController");
 // and reject if below their minimum. The version is a simple integer string
 // ("1", "2", …) to keep comparison trivial.
 //
-//   v1: original protocol (PlasmaZones v3.0–v3.x)
+//   v1: original protocol (Phosphor v3.0–v3.x)
 //   v2: split dragStopped + snapAssistReady signal (Phase C);
 //       WindowGeometryEntry gained `screenId` (a(siiiis)) so the compositor
 //       can seed its tracked-screen cache from the daemon's authoritative
@@ -86,9 +115,17 @@ inline constexpr QLatin1String Interface("org.plasmazones.EditorController");
 //       X-KDE-DBUS-Restricted-Interfaces gate are dropped. Mismatched
 //       peers fail the bridge handshake instead of producing
 //       method-not-found at first thumbnail post.
+//   v4: setWindowMetadata widened from 4 args (instanceId, appId,
+//       desktopFile, title) to 10: adds windowRole, pid, virtualDesktop,
+//       activity, windowType, plus a trailing a{sv} (QVariantMap) carrying the
+//       extended window-property snapshot (state flags, geometry, accessory
+//       flags, captionNormal — see WindowMetadataKey) so the daemon's
+//       window-rule resolvers match the same KWin-property fields the effect
+//       path resolves live. A stale effect sending an older form would fail
+//       marshalling, so the bridge handshake rejects mismatched peers up front.
 //
-inline constexpr int ApiVersion = 3;
-inline constexpr int MinPeerApiVersion = 3;
+inline constexpr int ApiVersion = 4;
+inline constexpr int MinPeerApiVersion = 4;
 
 // Hard cap on blocking synchronous D-Bus calls from the editor/settings
 // apps to the daemon. Qt's default is 25 seconds, long enough to freeze

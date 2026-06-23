@@ -1,5 +1,9 @@
 <!DOCTYPE node PUBLIC "-//freedesktop//DTD D-BUS Object Introspection 1.0//EN"
     "http://www.freedesktop.org/standards/dbus/1.0/introspect.dtd">
+<!--
+SPDX-FileCopyrightText: 2026 fuddlesworth
+SPDX-License-Identifier: GPL-3.0-or-later
+-->
 <node>
     <!-- Overlay Control Interface -->
     <interface name="org.plasmazones.Overlay">
@@ -149,6 +153,39 @@
             </arg>
             <arg name="accepted" type="b" direction="out">
                 <annotation name="org.gtk.GDBus.DocString" value="True iff the daemon stored the thumbnail in its LRU cache. False on auth failure, oversize-payload rejection, dimension/byte-count mismatch, or post-shutdown engine teardown. Callers use this to decide whether to mark the handle as recently-posted; a false reply must NOT be treated as success."/>
+            </arg>
+        </method>
+        <method name="setWindowThumbnailDmabuf">
+            <annotation name="org.gtk.GDBus.DocString" value="Deliver a window thumbnail as a single-plane DMA-BUF (zero-copy GPU path) instead of raw pixels. Experimental: the daemon only accepts it when started with PLASMAZONES_DMABUF_THUMBNAILS set, otherwise returns false and the caller must fall back to setSnapAssistThumbnail. Authenticated against /proc/&lt;pid&gt;/exe like the raw-pixel method. The fd is consumed/duplicated by the daemon's GPU import; the caller may close its copy after the call returns."/>
+            <arg name="compositorHandle" type="s" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="KWin internal UUID (EffectWindow::internalId().toString(), braced form)."/>
+            </arg>
+            <arg name="width" type="i" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="Image width in pixels. Bounded; oversized values are rejected."/>
+            </arg>
+            <arg name="height" type="i" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="Image height in pixels. Bounded; oversized values are rejected."/>
+            </arg>
+            <arg name="drmFormat" type="u" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="DRM FourCC pixel format of the buffer (e.g. DRM_FORMAT_ABGR8888)."/>
+            </arg>
+            <arg name="modifier" type="t" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="DRM format modifier (DRM_FORMAT_MOD_* or vendor-specific) describing the buffer's tiling/layout."/>
+            </arg>
+            <arg name="stride" type="u" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="Plane 0 row stride in bytes."/>
+            </arg>
+            <arg name="offset" type="u" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="Plane 0 byte offset within the buffer."/>
+            </arg>
+            <arg name="fd" type="h" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="DMA-BUF file descriptor for plane 0. Borrowed for the call; the daemon dup()s it if the import needs the buffer afterward."/>
+            </arg>
+            <arg name="fenceFd" type="h" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="sync_file fence fd that signals when the producer's GPU render into the buffer completes. The daemon waits on it before sampling so a repeated/live producer is not read mid-render. Borrowed for the call."/>
+            </arg>
+            <arg name="accepted" type="b" direction="out">
+                <annotation name="org.gtk.GDBus.DocString" value="True iff the daemon imported and stored the thumbnail. False when the dma-buf path is disabled (PLASMAZONES_DMABUF_THUMBNAILS unset), the driver/RHI backend can't import it, auth fails, or dimensions are out of range. On false the caller MUST fall back to setSnapAssistThumbnail."/>
             </arg>
         </method>
 

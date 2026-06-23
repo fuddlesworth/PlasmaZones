@@ -4,7 +4,7 @@
 #include "DividerResizeCommand.h"
 #include "../../services/ZoneManager.h"
 #include "../../../core/logging.h"
-#include "pz_i18n.h"
+#include "phosphor_i18n.h"
 
 using namespace PlasmaZones;
 
@@ -12,7 +12,7 @@ DividerResizeCommand::DividerResizeCommand(QPointer<ZoneManager> zoneManager, co
                                            const QString& zoneId2, qreal newDividerX, qreal newDividerY,
                                            bool isVertical, GeometryMap&& oldGeometries, const QString& text,
                                            QUndoCommand* parent)
-    : BaseZoneCommand(zoneManager, text.isEmpty() ? PzI18n::tr("Resize Zones", "@action") : text, parent)
+    : BaseZoneCommand(zoneManager, text.isEmpty() ? PhosphorI18n::tr("Resize Zones", "@action") : text, parent)
     , m_zoneId1(zoneId1)
     , m_zoneId2(zoneId2)
     , m_newDividerX(newDividerX)

@@ -1,25 +1,49 @@
 {
     "releases": [
         {
+            "version": "3.1.0",
+            "date": "2026-06-23",
+            "highlights": [
+                "Autotiling is on by default, so PlasmaZones works like a dynamic tiler out of the box with no setup. Existing configs keep their current setting (#671)",
+                "Resize-aware tiling: master-stack, wide, focus-sidebar, zen, deck, and horizontal-deck now reflow when you drag a window edge, updating the split ratio for that desktop (#666)",
+                "New option to suppress the default layout for a context, on its own or through a window rule, so a screen, desktop, or activity can show no layout instead of falling back to the global default (#676)",
+                "Rebuilt Layouts page: a searchable, card-based catalogue with capability filters and badges, and search results that jump straight to a layout",
+                "Fixed: toggling from autotiling back to snapping no longer leaves windows stuck in their tiled positions, and master-ratio and master-count tweaks stay on the desktop you made them on instead of leaking to other screens",
+                "New Window Rules page: one place to manage everything that used to live across Snapping Assignments, Tiling Assignments, Animations App Rules, and the per-mode disabled-apps lists. Browse, add, edit, duplicate, drag-reorder, and disable rules from a single list",
+                "Each rule matches windows by class, title, role, app ID, desktop, activity, and screen, and now also by transient/notification kind, window size, and focus. Match terms combine with AND, OR, and NOT, then the rule applies snapping, tiling, animation, appearance (borders, title bars, corner radius, accent color, gaps, opacity), or exclusion actions",
+                "Your existing assignments, animation app rules, and per-monitor / per-desktop / per-activity disable settings were migrated automatically on first launch. If something looks off, your old configuration is preserved on disk and can be restored manually",
+                "Snapping focus options to match autotiling: optionally focus a window when it snaps into a zone on open, and focus-follows-mouse over snapped windows (both off by default)",
+                "Per-window appearance for snapping: borders, corner radius, hidden title bars, and accent colors, mirroring the tiling options (the old Snapping → Appearance page is now called Zones)",
+                "Zone span toggle mode: tap the span modifier to start and stop spanning instead of holding it down for the whole drag",
+                "Unsnapped windows now return to the monitor and spot they closed on after you log back in (on by default, and can be turned off globally or per app)",
+                "Smoother animations: window move, resize, and snap now play a shader-driven morph, and the on-screen popups fade and scale in and out",
+                "Live, interactive shader preview in the Shaders browser, with save/load presets and inline error messages so you can see a shader before applying it",
+                "Settings get easier to navigate: a collapsible sidebar, a per-monitor scope chip with a spatial map of your displays, and consistent Snapping/Tiling layouts",
+                "Faster and lighter: substantially lower memory and idle CPU use, and settings pages that used to lag on first open now load quickly",
+                "Scripted tiling algorithms are now written in Luau (a safe, sandboxed language) instead of JavaScript. All built-in algorithms are ported. Custom JavaScript scripts must be rewritten in Luau",
+                "Fixed: layouts no longer render stretched when editing on a 16:9 or 4K screen, and a zone-spanning window no longer jumps to fullscreen when you switch layouts"
+            ]
+        },
+        {
             "version": "3.0.17",
             "date": "2026-06-18",
             "highlights": [
-                "Fixed PlasmaZones holding back KWin upgrades on Fedora/Debian/Arch — the package no longer pins KWin to the exact version it was built against, so a newer KWin no longer strands Plasma in a half-upgraded state ('No KScreen backend found' / black screen at login). The packages now require kwin >= 6.7.0; the drag-overlay effect simply doesn't load until PlasmaZones is rebuilt, while core tiling keeps working"
+                "Fixed PlasmaZones holding back KWin upgrades on Fedora, Debian, and Arch. The package no longer pins KWin to the exact version it was built against, so a newer KWin no longer strands Plasma in a half-upgraded state ('No KScreen backend found' or black screen at login). The packages now require kwin >= 6.7.0, and the drag-overlay effect does not load until PlasmaZones is rebuilt, while core tiling keeps working"
             ]
         },
         {
             "version": "3.0.16",
             "date": "2026-06-18",
             "highlights": [
-                "Now supports KDE Plasma 6.7 (KDE Frameworks 6.26, Qt 6.10, KWin 6.7) — the KWin effect is ported to the 6.7 effect API. Plasma 6.6 is no longer supported (#638)",
-                "Reworked in-process snap-assist thumbnail capture for KWin 6.7, which removed the offscreen-QML readback the old path used — thumbnails now render via an offscreen GLFramebuffer (#638)"
+                "Now supports KDE Plasma 6.7 (KDE Frameworks 6.26, Qt 6.10, KWin 6.7). The KWin effect is ported to the 6.7 effect API. Plasma 6.6 is no longer supported (#638)",
+                "Reworked in-process snap-assist thumbnail capture for KWin 6.7, which removed the offscreen-QML readback the old path used. Thumbnails now render via an offscreen GLFramebuffer (#638)"
             ]
         },
         {
             "version": "3.0.15",
             "date": "2026-05-28",
             "highlights": [
-                "Fixed the zone-selector popup switching the active layout on hover when snap-assist was up — dragging a window past the top of the screen no longer resnaps every other tiled window into a different layout (#542)",
+                "Fixed the zone-selector popup switching the active layout on hover when snap-assist was up. Dragging a window past the top of the screen no longer resnaps every other tiled window into a different layout (#542)",
                 "Removed: switching the autotile algorithm by hovering the zone-selector popup. Use NextLayout / QuickLayout1–9 / Layout Picker (Meta+Alt+Space) instead (#542)"
             ]
         },
@@ -27,28 +51,28 @@
             "version": "3.0.14",
             "date": "2026-05-27",
             "highlights": [
-                "Fixed intermittent DPMS-wake autotile orphan reassignment on dual-monitor setups — KWin's screenAdded/screenRemoved signals now latch the screen-change-in-progress flag early enough to catch the per-window outputChanged race (#527, #536)"
+                "Fixed intermittent DPMS-wake autotile orphan reassignment on dual-monitor setups. KWin's screenAdded/screenRemoved signals now latch the screen-change-in-progress flag early enough to catch the per-window outputChanged race (#527, #536)"
             ]
         },
         {
             "version": "3.0.13",
             "date": "2026-05-26",
             "highlights": [
-                "Fixed windows from disabled monitors being pulled into the active autotile zone after DPMS sleep — the autotile path now skips KWin's orphan-window reassignment, matching the existing snapping-side guard (#527, #528)"
+                "Fixed windows from disabled monitors being pulled into the active autotile zone after DPMS sleep. The autotile path now skips KWin's orphan-window reassignment, matching the existing snapping-side guard (#527, #528)"
             ]
         },
         {
             "version": "3.0.12",
             "date": "2026-05-25",
             "highlights": [
-                "Fixed focus-follows-mouse stealing focus from active floating and overflow windows when the cursor wandered onto an underlying tiled window — pauses until a tiled window becomes active (#461, #525)"
+                "Fixed focus-follows-mouse stealing focus from active floating and overflow windows when the cursor wandered onto an underlying tiled window. Focus-follows-mouse now pauses until a tiled window becomes active (#461, #525)"
             ]
         },
         {
             "version": "3.0.11",
             "date": "2026-05-24",
             "highlights": [
-                "Fixed focus-follows-mouse activating tiled windows underneath an active emoji picker, notification popup, or krunner — pauses until a tileable window becomes active (#461, #521)",
+                "Fixed focus-follows-mouse activating tiled windows underneath an active emoji picker, notification popup, or krunner. Focus-follows-mouse now pauses until a tileable window becomes active (#461, #521)",
                 "Fixed stale pending-restore entries for excluded apps growing session.json and logging on every daemon start (#461, #521)",
                 "Fixed drag artifacts, post-snap flicker, and a gray decoration ring during snap drags on hybrid Intel+NVIDIA setups (#516, #523)",
                 "Skip redundant layer-shell setter messages across virtual-desktop switches (#522)"
@@ -59,7 +83,7 @@
             "date": "2026-05-23",
             "highlights": [
                 "Fixed focus-follows-mouse stopping after any OSD, snap preview, or layout picker was shown on an autotile monitor (#461, #517)",
-                "Fixed popups and dialogs consuming the main window's saved zone on reopen — snap-restore now matches structural window kind (#461, #518)",
+                "Fixed popups and dialogs consuming the main window's saved zone on reopen. Snap-restore now matches structural window kind (#461, #518)",
                 "Fixed the passive overlay shell staying mapped and prewarmed even with effects disabled (#515, #519)",
                 "Fixed animation shader pattern features (sparkle, streak, smoke) scaling inconsistently across different monitor sizes (#520)"
             ]
@@ -68,7 +92,7 @@
             "version": "3.0.9",
             "date": "2026-05-22",
             "highlights": [
-                "Fixed per-virtual-desktop and per-activity assignment toggles being unable to re-enable once turned off — the row's disabled state was cascading to the nested switch (#461, #514)"
+                "Fixed per-virtual-desktop and per-activity assignment toggles being unable to re-enable once turned off. The row's disabled state was cascading to the nested switch (#461, #514)"
             ]
         },
         {
@@ -96,7 +120,7 @@
                 "Fixed a faint grey halo painted around OSDs during the bounce and fly-in transitions (#475)",
                 "bounce now drops the window in from above its frame, matching niri's original motion (#475)",
                 "The layout OSD, navigation OSD, layout picker, and zone selector now share one card style with a consistent soft glow (#475)",
-                "Removed the crosswarp transition — its front-speed control is now a frontSpeed parameter on wave-warp (#475)",
+                "Removed the crosswarp transition. Its front-speed control is now a frontSpeed parameter on wave-warp (#475)",
                 "Removed the plasma-flow transition, which duplicated soft-warp-fade (#475)"
             ]
         },
@@ -104,11 +128,11 @@
             "version": "3.0.6",
             "date": "2026-05-20",
             "highlights": [
-                "Fixed the settings window (and any 5th+ window) being left tiled when toggling autotile → snapping with more autotiled windows than zones in the manual layout (#504)",
-                "Fixed the 250 ms+ stall before windows start moving on autotile → snap — windows now animate to their snap positions within ~2 ms of the toggle (#504)",
+                "Fixed the settings window (and any 5th+ window) being left tiled when toggling autotile to snapping with more autotiled windows than zones in the manual layout (#504)",
+                "Fixed the 250 ms+ stall before windows start moving on the autotile-to-snap toggle. Windows now animate to their snap positions within ~2 ms (#504)",
                 "Fixed focus-follows-mouse not re-focusing a window after focus was stolen by a keyboard shortcut, click, or new window (#461)",
-                "Fixed tiling assignments saved on the settings page silently dropping — the dropdown selection now persists across navigation (#497)",
-                "Fixed the daemon toggle re-enabling itself after disable — the unit is now masked so window-lifecycle D-Bus calls can't reactivate it (#497)",
+                "Fixed tiling assignments saved on the settings page silently dropping. The dropdown selection now persists across navigation (#497)",
+                "Fixed the daemon toggle re-enabling itself after disable. The unit is now masked so window-lifecycle D-Bus calls can't reactivate it (#497)",
                 "Fixed the Snapping Assignments Monitor row reverting to its old value after Save when a per-desktop or per-activity entry masked the screen-level slot (#497)",
                 "Fixed the OSD announcing the wrong layout name after editing a non-current-context assignment slot (#497)",
                 "Fixed windows on disabled monitors / desktops still being tracked and resurrected after restart (#461)",
@@ -124,7 +148,7 @@
             "highlights": [
                 "Fixed the shader picker dropdown being disabled in the layout editor after enabling shader effects (#494)",
                 "Fixed newly-opened windows still auto-snapping to zones when snapping was turned off globally (#461)",
-                "Fixed keyboard snap-to-zone shortcuts still firing when snapping was turned off globally — Snapping.Enabled=false is now a total kill-switch at parity with autotiling (#461)",
+                "Fixed keyboard snap-to-zone shortcuts still firing when snapping was turned off globally. Snapping.Enabled=false is now a total kill-switch at parity with autotiling (#461)",
                 "Fixed Electron/CEF child surfaces (Steam image previews, Discord popups, VS Code dialogs) being snapped to zones (#461)",
                 "KWin effect-load failures now name the exact build-vs-running KWin version and the remediation, instead of a generic 'effect not running' message (#481)",
                 "Nix flake hardened: new overlays.default output, and module/install docs explicitly steer users toward the NixOS/Home Manager modules and away from the unsafe `nix profile install` path (#481)"
@@ -138,15 +162,15 @@
                 "Fixed snapping and keyboard snap-to-zone ignoring the per-monitor, per-desktop, and per-activity disable settings (#461)",
                 "Fixed windows with a blank window class restoring into each other's saved zones (#461)",
                 "Fixed windows staying tiled after switching onto a desktop where autotiling is disabled (#461)",
-                "Fixed the KWin desktop effect not appearing on NixOS — the flake now builds PlasmaZones against your system's KWin so the effect always matches the running compositor (#481)",
-                "Fixed support report generation crashing on Qt 6.11+ — plasmazones-report and the bug-report instructions now use busctl, which is unaffected (#481)"
+                "Fixed the KWin desktop effect not appearing on NixOS. The flake now builds PlasmaZones against your system's KWin so the effect always matches the running compositor (#481)",
+                "Fixed support report generation crashing on Qt 6.11+. The plasmazones-report tool and the bug-report instructions now use busctl, which is unaffected (#481)"
             ]
         },
         {
             "version": "3.0.3",
             "date": "2026-05-17",
             "highlights": [
-                "Fixed zones sliding underneath a top panel, with the bottom edge over-reserved — the daemon now uses the compositor's authoritative work area for panel struts (#461, #472)"
+                "Fixed zones sliding underneath a top panel, with the bottom edge over-reserved. The daemon now uses the compositor's authoritative work area for panel struts (#461, #472)"
             ]
         },
         {
@@ -190,22 +214,22 @@
             "date": "2026-04-14",
             "highlights": [
                 "New BUILD_KWIN_EFFECT CMake option (default ON) lets packagers build PlasmaZones on distros with KWin < 6.6 (Debian 13, Ubuntu 24.04, Fedora 40) by skipping just the C++ effect plugin (#321, thanks @iubayb)",
-                "Fixed Qt 6.8 build failure from a Qt 6.9-only QWaylandWindow::updateExposure() call — now guarded with a QT_VERSION check and a public-API fallback (#321)"
+                "Fixed Qt 6.8 build failure from a Qt 6.9-only QWaylandWindow::updateExposure() call. It is now guarded with a QT_VERSION check and a public-API fallback (#321)"
             ]
         },
         {
             "version": "2.8.6",
             "date": "2026-04-11",
             "highlights": [
-                "Fixed Emby and other Electron/CEF apps silently breaking after mid-session WM_CLASS rename (#271) — float toggle, focus navigation, and snap operations now survive class mutations",
-                "New WindowRegistry decouples runtime state from mutable app classes; daemon always reads the live class instead of a frozen first-seen string"
+                "Fixed Emby and other Electron/CEF apps silently breaking after mid-session WM_CLASS rename (#271). Float toggle, focus navigation, and snap operations now survive class mutations",
+                "New WindowRegistry decouples runtime state from mutable app classes. The daemon always reads the live class instead of a frozen first-seen string"
             ]
         },
         {
             "version": "2.8.5",
             "date": "2026-04-10",
             "highlights": [
-                "Fixed master window ballooning to 100% on every notification (#271) — 75ms debounce coalesces spurious KWin minimize/unminimize cycles triggered by plasmashell popups",
+                "Fixed master window ballooning to 100% on every notification (#271). A 75ms debounce coalesces spurious KWin minimize/unminimize cycles triggered by plasmashell popups",
                 "Filtered Plasma shell surfaces (notification popups, emoji picker, krunner) out of autotile tracking entirely",
                 "Settings toggle now recovers the systemd unit from failed state, so users can re-enable PlasmaZones after killing a terminal-run daemon without logging out"
             ]

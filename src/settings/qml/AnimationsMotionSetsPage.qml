@@ -39,6 +39,15 @@ SettingsFlickable {
             root._saving = false;
         }
 
+        // Surface controller-emitted toast requests (e.g. an apply/save
+        // refused mid-discard) through the shell `window.showToast`.
+        // Without this the controller's diagnostic vanishes and the
+        // user sees an unexplained no-op.
+        function onToastRequested(text) {
+            if (window && window.showToast)
+                window.showToast(text);
+        }
+
         target: settingsController.animationsPage
     }
 
@@ -52,18 +61,21 @@ SettingsFlickable {
             Layout.fillWidth: true
             type: Kirigami.MessageType.Information
             visible: true
-            text: i18n("Motion sets bundle your per-event overrides into one shareable JSON file. Applying a set merges into your current overrides; paths it doesn't cover are left unchanged.")
+            text: i18n("Motion sets bundle your per-event overrides into one shareable JSON file. Applying a set merges into your current overrides. Paths it doesn't cover are left unchanged.")
         }
 
         SettingsCard {
             Layout.fillWidth: true
             headerText: i18n("Save current state")
+            searchAnchor: "saveMotionSet"
 
             contentItem: ColumnLayout {
                 spacing: Kirigami.Units.smallSpacing
 
                 Label {
                     Layout.fillWidth: true
+                    Layout.leftMargin: Kirigami.Units.largeSpacing
+                    Layout.rightMargin: Kirigami.Units.largeSpacing
                     text: i18n("Capture every per-event override file as a named motion set.")
                     color: Kirigami.Theme.disabledTextColor
                     wrapMode: Text.WordWrap
@@ -77,6 +89,8 @@ SettingsFlickable {
                 // matches typeflow (name → description → save).
                 ColumnLayout {
                     Layout.fillWidth: true
+                    Layout.leftMargin: Kirigami.Units.largeSpacing
+                    Layout.rightMargin: Kirigami.Units.largeSpacing
                     spacing: Kirigami.Units.smallSpacing
 
                     TextField {
@@ -126,16 +140,14 @@ SettingsFlickable {
                             root._saving = false;
                         }
                     }
-
                 }
-
             }
-
         }
 
         SettingsCard {
             Layout.fillWidth: true
             headerText: i18n("Saved sets (%1)", root.motionSetsList.length)
+            searchAnchor: "savedMotionSets"
 
             contentItem: ColumnLayout {
                 spacing: Kirigami.Units.smallSpacing
@@ -146,6 +158,8 @@ SettingsFlickable {
                     color: Kirigami.Theme.disabledTextColor
                     font.italic: true
                     Layout.fillWidth: true
+                    Layout.leftMargin: Kirigami.Units.largeSpacing
+                    Layout.rightMargin: Kirigami.Units.largeSpacing
                 }
 
                 Repeater {
@@ -155,6 +169,8 @@ SettingsFlickable {
                         required property var modelData
 
                         Layout.fillWidth: true
+                        Layout.leftMargin: Kirigami.Units.largeSpacing
+                        Layout.rightMargin: Kirigami.Units.largeSpacing
                         spacing: Kirigami.Units.smallSpacing
 
                         ColumnLayout {
@@ -180,7 +196,6 @@ SettingsFlickable {
                                 color: Kirigami.Theme.disabledTextColor
                                 font: Kirigami.Theme.smallFont
                             }
-
                         }
 
                         Button {
@@ -227,15 +242,9 @@ SettingsFlickable {
                                 deleteConfirm.close();
                             }
                         }
-
                     }
-
                 }
-
             }
-
         }
-
     }
-
 }

@@ -17,7 +17,7 @@
 #include <QLoggingCategory>
 #include <QThread>
 
-namespace Phosphor::Screens {
+namespace PhosphorScreens {
 
 Q_DECLARE_EXPORTED_LOGGING_CATEGORY(lcPhosphorScreens, PHOSPHORSCREENSCORE_EXPORT)
 
@@ -33,4 +33,4 @@ Q_DECLARE_EXPORTED_LOGGING_CATEGORY(lcPhosphorScreens, PHOSPHORSCREENSCORE_EXPOR
                    && QThread::currentThread() == QCoreApplication::instance()->thread(),                              \
                Q_FUNC_INFO, "ScreenManager accessors must be called on the GUI thread")
 
-} // namespace Phosphor::Screens
+} // namespace PhosphorScreens

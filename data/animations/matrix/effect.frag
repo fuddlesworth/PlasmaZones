@@ -19,31 +19,22 @@
 // `matrix-font.png`). Per-column delays and speeds keep the cascade
 // from looking metronomic.
 //
-// Direction handling: matrix is asymmetric — rain physically falls
-// top-to-bottom in BOTH directions, while the window-content reveal
-// trajectory inverts (open: invisible → visible; close: visible →
-// invisible). The runtime exposes `iIsReversed` so the shader can
-// branch the windowAlpha math without needing to flip the rain
-// direction. The runtime ALSO flips iTime for reverse legs (1→0
-// instead of 0→1), so an absolute-forward leg progress is recovered
-// via `mix(iTime, 1.0 - iTime, float(iIsReversed))`.
+// DIRECTION — matrix is ASYMMETRIC: rain physically falls top-to-bottom
+// in BOTH directions, but the window-content reveal trajectory inverts
+// (open: invisible → visible; close: visible → invisible). So it is
+// written as a `pIn`/`pOut` pair: the harness feeds both a forward
+// 0→1 `t` (it applies `legProgress()` for us, so the rain always falls
+// forward) and dispatches to the right function by leg direction. The
+// only difference between the two is `windowFadingIn`, threaded into the
+// windowAlpha sweep — no `iIsReversed`, no manual iTime un-flip.
 
-#version 450
-
-#include <animation_uniforms.glsl>
+// The harness supplies #version, <animation_uniforms.glsl>, the in/out,
+// and main(). noise.glsl (hash22) is pack-specific, so it stays here.
 #include <noise.glsl>
 
-// metadata.json declaration order → customParams[0] sub-slots.
-#define letterSize customParams[0].x
-#define randomness customParams[0].y
-#define overshoot  customParams[0].z
-
-// metadata.json color declaration order → customColors[0..1].
-#define trailColor customColors[0]
-#define tipColor   customColors[1]
-
-layout(location = 0) in vec2 vTexCoord;
-layout(location = 0) out vec4 fragColor;
+// p_letterSize / p_randomness / p_overshoot (customParams[0].xyz) and
+// p_trailColor / p_tipColor (customColors[0..1]) are generated from
+// metadata.json — no hand-written slot #defines.
 
 const float EDGE_FADE             = 30.0;
 const float FADE_WIDTH            = 150.0;
@@ -87,7 +78,7 @@ float getText(vec2 fragCoord) {
     // doesn't divide-by-zero into NaN texture UVs. Live metadata
     // declares a min of 5.0 so this is defence in depth against a
     // hand-rolled animation engine bypassing schema validation.
-    float ls = max(letterSize, 1.0);
+    float ls = max(p_letterSize, 1.0);
     vec2 pixelCoords = fragCoord * iResolution;
     vec2 uv          = mod(pixelCoords, ls) / ls;
     vec2 block       = pixelCoords / ls - uv;
@@ -104,15 +95,16 @@ float getText(vec2 fragCoord) {
 //   .y = window content visibility (0 = obscured, 1 = revealed)
 //
 // `legProgress` is the absolute forward leg progress (0 at leg start,
-// 1 at leg end) regardless of direction — recovered from iTime by
-// undoing the runtime's reverse flip when iIsReversed is set.
-// distToDrop > 0 means the drop head has passed this fragment;
-// < 0 means it hasn't reached yet.
-vec2 getRain(vec2 fragCoord, float legProgress) {
+// 1 at leg end) regardless of direction — the harness already un-flipped
+// iTime via legProgress() before calling. `windowFadingIn` is the leg
+// direction (true = open/in, false = close/out), which selects the
+// windowAlpha trajectory. distToDrop > 0 means the drop head has passed
+// this fragment; < 0 means it hasn't reached yet.
+vec2 getRain(vec2 fragCoord, float legProgress, bool windowFadingIn) {
     // Floor letterSize for parity with getText — `mod(column, 0)` is
     // undefined / NaN in GLSL; defence in depth against a metadata
     // bypass that pushes letterSize to zero.
-    float ls = max(letterSize, 1.0);
+    float ls = max(p_letterSize, 1.0);
     // Floor iResolution so a first-frame zero-sized surface doesn't
     // collapse `column` to zero across every fragment — that would
     // synchronize every visible drop to one column for that paint.
@@ -125,7 +117,7 @@ vec2 getRain(vec2 fragCoord, float legProgress) {
     // Clamp randomness as defence in depth — metadata declares [0,1]
     // but a host that bypasses validation could push it out of range
     // and turn the per-column delay/speed jitter into NaN territory.
-    float r = clamp(randomness, 0.0, 1.0);
+    float r = clamp(p_randomness, 0.0, 1.0);
 
     // Offset `sin(column)` so the leftmost column (column == 0) gets
     // a non-trivial phase. Without the offset, `sin(0) == 0` makes
@@ -150,16 +142,16 @@ vec2 getRain(vec2 fragCoord, float legProgress) {
     rainAlpha *= edgeMask(EDGE_FADE);
 
     float shorten =
-        fract(sin(column + 42.0) * 33.423) * (r * overshoot * 0.25);
+        fract(sin(column + 42.0) * 33.423) * (r * p_overshoot * 0.25);
     if (shorten > 0.0) {
         rainAlpha *= smoothstep(0.0, 1.0, clamp(fragCoord.y / shorten, 0.0, 1.0));
         rainAlpha *= smoothstep(0.0, 1.0, clamp((1.0 - fragCoord.y) / shorten, 0.0, 1.0));
     }
 
     // Direction-aware windowAlpha: BMW's CLOSE math gives the trajectory
-    // 1 → 0 (visible at start, wiped at end). For OPEN, invert so the
-    // window fades INTO visibility behind the rain.
-    float windowAlpha = (iIsReversed == 1) ? windowSweep : (1.0 - windowSweep);
+    // 1 → 0 (visible at start, wiped at end). For OPEN (windowFadingIn),
+    // invert so the window fades INTO visibility behind the rain.
+    float windowAlpha = windowFadingIn ? (1.0 - windowSweep) : windowSweep;
     return vec2(rainAlpha, windowAlpha);
 }
 
@@ -185,7 +177,7 @@ vec4 alphaOver(vec4 under, vec4 over) {
 // zero blow-ups at edge-fade pixels where alpha can land in the
 // 0..0.001 range and produce rgb >> 1.0.
 //
-// Off-window guard: `main()` remaps `coords.y` through
+// Off-window guard: the entry remaps `coords.y` through
 // `coords.y * (overshoot + 1) - overshoot * 0.5`, which lands outside
 // [0, 1] for the overshoot bands at the top/bottom of the surface
 // whenever `overshoot > 0`. Without this guard, the clamp-to-edge
@@ -204,17 +196,14 @@ vec4 getInputColor(vec2 coords) {
     return color;
 }
 
-void main() {
-    vec2 coords = vTexCoord;
-    coords.y    = coords.y * (overshoot + 1.0) - overshoot * 0.5;
+// Shared body for both legs. `t` is forward 0→1 leg progress (the harness
+// un-flipped iTime via legProgress()); `windowFadingIn` selects the
+// window-reveal trajectory. `uv` is vTexCoord.
+vec4 matrixRain(vec2 uv, float t, bool windowFadingIn) {
+    vec2 coords = uv;
+    coords.y    = coords.y * (p_overshoot + 1.0) - p_overshoot * 0.5;
 
-    // Absolute forward leg progress: 0 at leg start, 1 at leg end,
-    // regardless of direction. The runtime flips iTime for reverse
-    // legs (1→0); undo it here so the rain physically falls top-to-
-    // bottom in both directions.
-    float legProgress = (iIsReversed == 1) ? (1.0 - iTime) : iTime;
-
-    vec2 rainMask  = getRain(coords, legProgress);
+    vec2 rainMask  = getRain(coords, t, windowFadingIn);
     float textMask = getText(coords);
 
     vec4 oColor = getInputColor(coords);
@@ -233,16 +222,18 @@ void main() {
 
     // Final-fade: in the last 20% of the leg the residual rain trail
     // fades out so the resolved frame is pure window content with no
-    // lingering pixels. Drives off `legProgress` so it ramps in as
-    // the transition nears completion regardless of direction.
+    // lingering pixels. Drives off `t` so it ramps in as the transition
+    // nears completion regardless of direction.
     float finalFade =
-        1.0 - clamp((legProgress - FINAL_FADE_START_TIME) / (1.0 - FINAL_FADE_START_TIME), 0.0, 1.0);
+        1.0 - clamp((t - FINAL_FADE_START_TIME) / (1.0 - FINAL_FADE_START_TIME), 0.0, 1.0);
     float rainAlpha = finalFade * rainMask.x;
 
-    vec4 text = vec4(mix(trailColor.rgb, tipColor.rgb,
+    vec4 text = vec4(mix(p_trailColor.rgb, p_tipColor.rgb,
                          min(1.0, pow(rainAlpha + 0.1, 4.0))),
                      rainAlpha * textMask * surfaceAlpha);
 
-    oColor    = alphaOver(oColor, text);
-    fragColor = oColor;
+    return alphaOver(oColor, text);
 }
+
+vec4 pIn(vec2 uv, float t)  { return matrixRain(uv, t, true);  }
+vec4 pOut(vec2 uv, float t) { return matrixRain(uv, t, false); }

@@ -5,7 +5,7 @@
 #include "../overlayservice.h"
 #include "qml_property_names.h"
 #include "../../core/logging.h"
-#include "pz_slot_keys.h"
+#include "phosphor_slot_keys.h"
 #include <PhosphorOverlay/ShellHost.h>
 #include <PhosphorSurfaces/SurfaceManager.h>
 #include <PhosphorZones/Layout.h>
@@ -20,16 +20,46 @@
 #include <QScreen>
 #include <QQmlEngine>
 #include <QQmlComponent>
+#include <QImage>
 #include <QMutexLocker>
 #include <QPointer>
 
 #include <PhosphorLayer/ILayerShellTransport.h>
 #include <PhosphorLayer/Surface.h>
 #include <PhosphorAnimation/SurfaceAnimator.h>
-#include "pz_roles.h"
+#include "phosphor_roles.h"
 #include <PhosphorScreens/ScreenIdentity.h>
 
 namespace PlasmaZones {
+
+namespace {
+
+// Collapse a dismissed overlay slot's labels texture to a 1x1 placeholder so
+// the labels payload (the sparse glyph-tile ZoneLabelTexture) is released while
+// the overlay is hidden rather than pinned on the persistent slot property for
+// the whole session. The wallpaperTexture
+// is reset for symmetry and to drop the slot's stale reference across a
+// wallpaper change, but the bulk wallpaper image is owned by ShaderRegistry's
+// static cache (s_cachedWallpaperImage / crops) and is COW-shared, so that
+// reset reclaims little RSS on its own - the labels release is the real win.
+// The next show() rebuilds both via createOverlayWindow ->
+// updateLabelsTextureForWindow / applyShaderInfoToWindow. Callers MUST also
+// reset PerScreenOverlayState::labelsTextureHash to 0 so the hash compare in
+// updateLabelsTextureForWindow does not short-circuit the rebuild and leave
+// the 1x1 placeholder showing with no labels.
+void releaseOverlaySlotTextures(QQuickItem* slot)
+{
+    if (!slot) {
+        return;
+    }
+    QImage placeholder(1, 1, QImage::Format_ARGB32);
+    placeholder.fill(Qt::transparent);
+    const QVariant placeholderVar = QVariant::fromValue(placeholder);
+    writeQmlProperty(slot, QStringLiteral("labelsTexture"), placeholderVar);
+    writeQmlProperty(slot, QStringLiteral("wallpaperTexture"), placeholderVar);
+}
+
+} // namespace
 
 void OverlayService::destroyIfTypeMismatch(const QString& screenId)
 {
@@ -68,7 +98,7 @@ void OverlayService::initializeOverlay(QScreen* cursorScreen, const QPoint& curs
         QPoint pos = (cursorPos.x() >= 0) ? cursorPos : QCursor::pos();
         cursorEffectiveId = Utils::effectiveScreenIdAt(m_screenManager, pos, cursorScreen);
     } else if (cursorScreen) {
-        cursorEffectiveId = Phosphor::Screens::ScreenIdentity::identifierFor(cursorScreen);
+        cursorEffectiveId = PhosphorScreens::ScreenIdentity::identifierFor(cursorScreen);
     }
 
     // Store the effective screen ID for cross-virtual-screen detection in showAtPosition()
@@ -97,13 +127,12 @@ void OverlayService::initializeOverlay(QScreen* cursorScreen, const QPoint& curs
     QHash<QString, QRect> targetGeometries;
     if (haveEffective) {
         for (const QString& screenId : effectiveIds) {
-            const Phosphor::Screens::PhysicalScreen phys = mgr->physicalScreenFor(screenId);
+            const PhosphorScreens::PhysicalScreen phys = mgr->physicalScreenFor(screenId);
             QScreen* physScreen = phys.qscreen;
             if (!physScreen) {
                 continue;
             }
-            if (isContextDisabled(m_settings, PhosphorZones::AssignmentEntry::Snapping, screenId,
-                                  m_currentVirtualDesktop, m_currentActivity)) {
+            if (isSnappingContextInactive(screenId)) {
                 continue;
             }
             if (m_excludedScreens.contains(screenId)) {
@@ -115,9 +144,8 @@ void OverlayService::initializeOverlay(QScreen* cursorScreen, const QPoint& curs
         }
     } else {
         for (auto* screen : Utils::allScreens()) {
-            const QString screenId = Phosphor::Screens::ScreenIdentity::identifierFor(screen);
-            if (isContextDisabled(m_settings, PhosphorZones::AssignmentEntry::Snapping, screenId,
-                                  m_currentVirtualDesktop, m_currentActivity)) {
+            const QString screenId = PhosphorScreens::ScreenIdentity::identifierFor(screen);
+            if (isSnappingContextInactive(screenId)) {
                 continue;
             }
             if (m_excludedScreens.contains(screenId)) {
@@ -231,7 +259,7 @@ void OverlayService::initializeOverlay(QScreen* cursorScreen, const QPoint& curs
                     shellSurface->show();
                 }
                 slot->setVisible(true);
-                m_surfaceAnimator->beginShow(shellSurface, slot, PzRoles::ZoneOverlay, []() { });
+                m_surfaceAnimator->beginShow(shellSurface, slot, PhosphorRoles::ZoneOverlay, []() { });
                 // Main overlay during drag is purely visual (KWin owns
                 // the drag, daemon receives cursor pushes via D-Bus).
                 // Sync to keep the surface click-through unless a
@@ -265,6 +293,11 @@ void OverlayService::initializeOverlay(QScreen* cursorScreen, const QPoint& curs
     }
 
     m_visible = true;
+    m_overlayIdled = false; // a fresh show is displaying content
+
+    // Spin up the audio-visualizer capture now that the overlay is displaying
+    // (no-op if audio-viz is disabled). syncCavaState gates on isOverlayDisplaying.
+    syncCavaState();
 
     if (anyScreenUsesShader()) {
         updateZonesForAllWindows(); // Push initial zone data
@@ -285,6 +318,15 @@ void OverlayService::updateLayout(PhosphorZones::Layout* layout)
 {
     setLayout(layout);
     if (m_visible) {
+        // Apply the new layout to the windows even while warm-idled:
+        // updateGeometries() → updateOverlayWindow() re-applies each window's
+        // shader source/params + geometry, which MUST be current for the next
+        // refreshFromIdle() resume — refreshFromIdle() re-pushes zones but NOT
+        // shader info, so deferring this would leave the previous shader
+        // rendering after a mid-idle active-layout switch. The zone data
+        // updateOverlayWindow also writes is hidden by _idled while idled and
+        // re-pushed by refreshFromIdle() on resume, and updateGeometries() does
+        // not set m_zoneDataDirty, so the drag-pause blank is preserved.
         updateGeometries();
 
         // Flash zones to indicate layout change if enabled
@@ -301,14 +343,20 @@ void OverlayService::updateLayout(PhosphorZones::Layout* layout)
         }
 
         // Shader state management - MUST be outside flashZonesOnSwitch block
-        // to ensure shader animations work regardless of flash setting
+        // to ensure shader animations work regardless of flash setting.
+        // Gate the render-loop restart on isOverlayDisplaying(): while warm-idled
+        // a layout switch must NOT start the 60 Hz loop or re-push zones — that
+        // would undo the idle quiesce and un-blank the overlay. refreshFromIdle()
+        // restarts the loop and re-pushes zones on resume.
         if (anyScreenUsesShader()) {
-            // Ensure shader timing + updates continue after layout switch
-            ensureShaderTimerStarted(m_shaderTimer, m_shaderTimerMutex, m_lastFrameTime, m_frameCount);
-            m_zoneDataDirty = true;
-            updateZonesForAllWindows();
-            if (!m_shaderUpdateTimer || !m_shaderUpdateTimer->isActive()) {
-                startShaderAnimation();
+            if (isOverlayDisplaying()) {
+                // Ensure shader timing + updates continue after layout switch
+                ensureShaderTimerStarted(m_shaderTimer, m_shaderTimerMutex, m_lastFrameTime, m_frameCount);
+                m_zoneDataDirty = true;
+                updateZonesForAllWindows();
+                if (!m_shaderUpdateTimer || !m_shaderUpdateTimer->isActive()) {
+                    startShaderAnimation();
+                }
             }
         } else {
             stopShaderAnimation();
@@ -318,10 +366,16 @@ void OverlayService::updateLayout(PhosphorZones::Layout* layout)
 
 void OverlayService::updateGeometries()
 {
-    for (const QString& screenId : m_screenStates.keys()) {
-        QScreen* physScreen = m_screenStates.value(screenId).overlayPhysScreen;
+    // Iterate via constBegin/constEnd rather than `.keys()` — the prior
+    // shape allocated a QStringList copy on every geometry update; this
+    // is a hot path during multi-monitor compositor signal storms (Plasma
+    // emits screenAdded/screenRemoved/geometryChanged in tight bursts on
+    // hotplug and DPMS-wake). updateOverlayWindow does not mutate
+    // m_screenStates, so iterating in-place is safe.
+    for (auto it = m_screenStates.constBegin(); it != m_screenStates.constEnd(); ++it) {
+        QScreen* physScreen = it.value().overlayPhysScreen;
         if (physScreen) {
-            updateOverlayWindow(screenId, physScreen);
+            updateOverlayWindow(it.key(), physScreen);
         }
     }
     // Geometry data is now current - do NOT bump version here.
@@ -400,7 +454,7 @@ void OverlayService::updateMousePosition(int cursorX, int cursorY)
 
 void OverlayService::createOverlayWindow(QScreen* screen)
 {
-    const QString screenId = Phosphor::Screens::ScreenIdentity::identifierFor(screen);
+    const QString screenId = PhosphorScreens::ScreenIdentity::identifierFor(screen);
     auto* mgr = m_screenManager;
     QRect geom = (mgr && mgr->screenGeometry(screenId).isValid()) ? mgr->screenGeometry(screenId) : screen->geometry();
     createOverlayWindow(screenId, screen, geom);
@@ -408,7 +462,7 @@ void OverlayService::createOverlayWindow(QScreen* screen)
 
 void OverlayService::createOverlayWindow(const QString& screenId, QScreen* physScreen, const QRect& geometry)
 {
-    // Post-shell-migration: the per-screen PzRoles::ZoneOverlay wl_surface
+    // Post-shell-migration: the per-screen PhosphorRoles::ZoneOverlay wl_surface
     // is replaced by an Item slot inside the per-screen passive shell.
     // Both overlay modes (rectangles + shader) live as alternative
     // sourceComponents inside the same slot, switched via the slot's
@@ -453,11 +507,19 @@ void OverlayService::createOverlayWindow(const QString& screenId, QScreen* physS
     if (usingShader && screenLayout) {
         auto* registry = m_shaderRegistry;
         if (registry) {
-            const QString shaderId = screenLayout->shaderId();
+            // A context overlay rule may override the layout's shader (with
+            // optional uniform params). When the rule sets the shader, use its
+            // params — an override with no params falls back to the shader's
+            // defaults; otherwise use the layout's params.
+            const PhosphorZones::ContextOverlayOverride overlayOverride =
+                overlayOverrideForScreen(m_layoutManager, screenId);
+            const QString shaderId = overlayOverride.shaderId.value_or(screenLayout->shaderId());
+            const QVariantMap rawParams =
+                overlayOverride.shaderId ? overlayOverride.shaderParams : screenLayout->shaderParams();
             const ShaderRegistry::ShaderInfo info = registry->shader(shaderId);
             qCDebug(lcOverlay) << "Overlay shader=" << shaderId << "multipass=" << info.isMultipass
                                << "bufferPaths=" << info.bufferShaderPaths.size();
-            QVariantMap translatedParams = registry->translateParamsToUniforms(shaderId, screenLayout->shaderParams());
+            QVariantMap translatedParams = registry->translateParamsToUniforms(shaderId, rawParams);
             applyShaderInfoToWindow(slot, info, translatedParams, geometry, physScreenGeom);
         }
     }
@@ -467,6 +529,22 @@ void OverlayService::createOverlayWindow(const QString& screenId, QScreen* physS
         writeQmlProperty(slot, QStringLiteral("zoneDataVersion"), m_zoneDataVersion);
     }
     state->overlayGeomConnection = geomConn;
+}
+
+void OverlayService::refreshOverlayPropertiesIfShown()
+{
+    // Only the live overlay needs this: when hidden, the next show() re-resolves
+    // the override through initializeOverlay (destroyIfTypeMismatch +
+    // updateOverlayWindow), so a hidden overlay already picks up the rule change.
+    if (!isOverlayDisplaying()) {
+        return;
+    }
+    // A style override can flip whether a screen uses the shader overlay (the
+    // Loader's `useShader`); recreate the mismatched slots first (no-op when no
+    // type changed), then re-push each window's effective shader id/params via
+    // updateGeometries() → updateOverlayWindow().
+    recreateOverlayWindowsOnTypeMismatch();
+    updateGeometries();
 }
 
 void OverlayService::recreateOverlayWindowsOnTypeMismatch()
@@ -495,8 +573,7 @@ void OverlayService::recreateOverlayWindowsOnTypeMismatch()
         stopShaderAnimation();
 
     for (const QString& screenId : screensToFlip) {
-        if (isContextDisabled(m_settings, PhosphorZones::AssignmentEntry::Snapping, screenId, m_currentVirtualDesktop,
-                              m_currentActivity)) {
+        if (isSnappingContextInactive(screenId)) {
             continue;
         }
         QScreen* physScreen = m_screenStates.value(screenId).overlayPhysScreen;
@@ -509,7 +586,13 @@ void OverlayService::recreateOverlayWindowsOnTypeMismatch()
         createOverlayWindow(screenId, physScreen, geom.isValid() ? geom : physScreen->geometry());
         updateOverlayWindow(screenId, physScreen);
     }
-    if (wasVisible && anyScreenUsesShader()) {
+    // Gate the render-loop restart + zone repopulation on isOverlayDisplaying(),
+    // not wasVisible: while warm-idled (m_visible but m_overlayIdled — windows
+    // kept alive after a drag), a settings toggle or live-edit reaches here, and
+    // restarting the 60 Hz loop + re-pushing zones would un-blank the overlay and
+    // undo the idle quiesce. The next refreshFromIdle() on the following drag
+    // repopulates and restarts. Mirrors the same gate in updateLayout().
+    if (isOverlayDisplaying() && anyScreenUsesShader()) {
         updateZonesForAllWindows();
         startShaderAnimation();
     }
@@ -517,7 +600,7 @@ void OverlayService::recreateOverlayWindowsOnTypeMismatch()
 
 void OverlayService::dismissOverlayWindow(QScreen* screen)
 {
-    const QString physId = Phosphor::Screens::ScreenIdentity::identifierFor(screen);
+    const QString physId = PhosphorScreens::ScreenIdentity::identifierFor(screen);
 
     // Collect matching overlay keys - may be virtual screen IDs for this physical screen
     QStringList matchingKeys;
@@ -561,7 +644,7 @@ void OverlayService::dismissOverlayWindow(const QString& screenId)
     // a stale onComplete callback racing the next show.
     auto* shellSurface = it->shell ? it->shell->shellSurface() : nullptr;
     if (shellSurface) {
-        m_shellHost->hideSlot(screenId, PzSlotKeys::MainOverlay(), [this, screenIdCopy = screenId]() {
+        m_shellHost->hideSlot(screenId, PhosphorSlotKeys::MainOverlay(), [this, screenIdCopy = screenId]() {
             auto sit = m_screenStates.find(screenIdCopy);
             if (sit == m_screenStates.end() || !sit->mainOverlaySlot()) {
                 return;
@@ -570,13 +653,19 @@ void OverlayService::dismissOverlayWindow(const QString& screenId)
             sit->overlayGeomConnection = {};
             sit->overlayPhysScreen = nullptr;
             sit->overlayGeometry = QRect();
-            // labelsTextureHash is intentionally NOT cleared - the
-            // QML labelsTexture property still holds the previously-
-            // built image, and updateLabelsTextureForWindow's hash
-            // compare on the next show() will detect any genuine
-            // input change and rebuild only then. Zeroing the hash
-            // would force a redundant 23 MB QImage rebuild on every
-            // hide/show cycle even for unchanged zone inputs.
+            // Release the labels payload (the sparse glyph-tile ZoneLabelTexture)
+            // the persistent slot property would otherwise keep resident for the
+            // whole session while hidden (the wallpaper reset is symmetric only -
+            // its image is pinned by ShaderRegistry's static cache; see
+            // releaseOverlaySlotTextures). Zeroing labelsTextureHash forces
+            // updateLabelsTextureForWindow to rebuild on the next show()
+            // instead of short-circuiting on the now-1x1 placeholder (which
+            // would render no labels). The trade is one ZoneLabelTextureBuilder
+            // rebuild per drag-start vs. the sparse glyph-tile payload held idle
+            // per screen; the warm drag-pause path (setIdleForDragPause) is
+            // untouched and keeps the texture warm mid-drag.
+            releaseOverlaySlotTextures(sit->mainOverlaySlot());
+            sit->labelsTextureHash = 0;
             writeQmlProperty(sit->mainOverlaySlot(), QStringLiteral("loaded"), false);
             sit->mainOverlaySlot()->setVisible(false);
             syncPassiveShellSurfaceState(screenIdCopy);
@@ -589,6 +678,10 @@ void OverlayService::dismissOverlayWindow(const QString& screenId)
         it->overlayGeomConnection = {};
         it->overlayPhysScreen = nullptr;
         it->overlayGeometry = QRect();
+        // Mirror the shell-surface path: release the slot's labels + wallpaper
+        // textures and reset the hash so the next show() rebuilds correctly.
+        releaseOverlaySlotTextures(slot);
+        it->labelsTextureHash = 0;
         writeQmlProperty(slot, QStringLiteral("loaded"), false);
         slot->setVisible(false);
         syncPassiveShellSurfaceState(screenId);
@@ -597,7 +690,7 @@ void OverlayService::dismissOverlayWindow(const QString& screenId)
 
 void OverlayService::destroyOverlayWindow(QScreen* screen)
 {
-    const QString screenId = Phosphor::Screens::ScreenIdentity::identifierFor(screen);
+    const QString screenId = PhosphorScreens::ScreenIdentity::identifierFor(screen);
     qCDebug(lcOverlay) << "destroyOverlayWindow:" << screenId;
     destroyOverlayWindow(screenId);
 }
@@ -618,12 +711,20 @@ void OverlayService::destroyOverlayWindow(const QString& screenId)
     it->overlayPhysScreen = nullptr;
     it->overlayGeometry = QRect();
     it->overlayGeomConnection = {};
+    // Release the slot's labels payload too. A shader->non-shader
+    // type flip routes through here (destroyIfTypeMismatch) and the
+    // non-shader createOverlayWindow reload does NOT overwrite labelsTexture,
+    // so without this the slot would pin the last shader-mode labels payload for
+    // the screen's whole non-shader session. The screen-teardown callers
+    // immediately destroyPassiveShell, where this is a harmless no-op on an
+    // about-to-be-freed slot. Mirrors dismissOverlayWindow's release.
+    releaseOverlaySlotTextures(it->mainOverlaySlot());
     it->labelsTextureHash = 0;
 }
 
 void OverlayService::updateOverlayWindow(QScreen* screen)
 {
-    const QString screenId = Phosphor::Screens::ScreenIdentity::identifierFor(screen);
+    const QString screenId = PhosphorScreens::ScreenIdentity::identifierFor(screen);
     updateOverlayWindow(screenId, screen);
 }
 
@@ -651,9 +752,13 @@ void OverlayService::updateOverlayWindow(const QString& screenId, QScreen* physS
     if (windowIsShader && screenUsesShader && screenLayout) {
         auto* registry = m_shaderRegistry;
         if (registry) {
-            const QString shaderId = screenLayout->shaderId();
+            const PhosphorZones::ContextOverlayOverride overlayOverride =
+                overlayOverrideForScreen(m_layoutManager, screenId);
+            const QString shaderId = overlayOverride.shaderId.value_or(screenLayout->shaderId());
+            const QVariantMap rawParams =
+                overlayOverride.shaderId ? overlayOverride.shaderParams : screenLayout->shaderParams();
             const ShaderRegistry::ShaderInfo info = registry->shader(shaderId);
-            QVariantMap translatedParams = registry->translateParamsToUniforms(shaderId, screenLayout->shaderParams());
+            QVariantMap translatedParams = registry->translateParamsToUniforms(shaderId, rawParams);
             const QRect vsGeom = resolveScreenGeometry(m_screenManager, screenId);
             const QRect physGeom = physScreen ? physScreen->geometry() : vsGeom;
             applyShaderInfoToWindow(slot, info, translatedParams, vsGeom, physGeom);

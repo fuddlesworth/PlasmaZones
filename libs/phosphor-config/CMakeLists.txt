@@ -5,7 +5,7 @@
 #
 # Pluggable config backends (JSON, QSettings/INI), schema-driven defaults,
 # and a versioned migration runner. Built standalone or as a subdirectory
-# of PlasmaZones.
+# of Phosphor.
 
 cmake_minimum_required(VERSION 3.16)
 
@@ -81,7 +81,7 @@ target_include_directories(PhosphorConfig
 
 # C++20 as a PUBLIC target feature: CMAKE_CXX_STANDARD is only set by the
 # `if(NOT PROJECT_VERSION)` block above — i.e. only when PhosphorConfig is
-# the top-level project. When built as a subdirectory of PlasmaZones (or any
+# the top-level project. When built as a subdirectory of Phosphor (or any
 # other parent) consumers inherit whatever standard the parent picked. Declare
 # the requirement on the target so find_package(PhosphorConfig) consumers get
 # the right compile-feature propagation regardless of build configuration.

@@ -16,7 +16,7 @@
 #include <QRegularExpression>
 #include <QUuid>
 
-namespace Phosphor::Shortcuts {
+namespace PhosphorShortcuts {
 
 namespace {
 
@@ -580,4 +580,4 @@ void PortalBackend::onAnyRequestResponse(uint response, const QVariantMap& resul
     qCDebug(lcPhosphorShortcuts) << "Portal Response: untracked path" << path << "— dropping";
 }
 
-} // namespace Phosphor::Shortcuts
+} // namespace PhosphorShortcuts

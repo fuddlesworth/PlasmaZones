@@ -16,7 +16,7 @@
 #include "../../core/constants.h"
 #include "../../core/logging.h"
 
-#include "pz_i18n.h"
+#include "phosphor_i18n.h"
 #include <QPointer>
 #include <utility>
 
@@ -172,22 +172,22 @@ void EditorController::changeZOrderImpl(const QString& zoneId, ZOrderOp op, cons
 
 void EditorController::bringToFront(const QString& zoneId)
 {
-    changeZOrderImpl(zoneId, ZOrderOp::BringToFront, PzI18n::tr("Bring to Front", "@action"));
+    changeZOrderImpl(zoneId, ZOrderOp::BringToFront, PhosphorI18n::tr("Bring to Front", "@action"));
 }
 
 void EditorController::sendToBack(const QString& zoneId)
 {
-    changeZOrderImpl(zoneId, ZOrderOp::SendToBack, PzI18n::tr("Send to Back", "@action"));
+    changeZOrderImpl(zoneId, ZOrderOp::SendToBack, PhosphorI18n::tr("Send to Back", "@action"));
 }
 
 void EditorController::bringForward(const QString& zoneId)
 {
-    changeZOrderImpl(zoneId, ZOrderOp::BringForward, PzI18n::tr("Bring Forward", "@action"));
+    changeZOrderImpl(zoneId, ZOrderOp::BringForward, PhosphorI18n::tr("Bring Forward", "@action"));
 }
 
 void EditorController::sendBackward(const QString& zoneId)
 {
-    changeZOrderImpl(zoneId, ZOrderOp::SendBackward, PzI18n::tr("Send Backward", "@action"));
+    changeZOrderImpl(zoneId, ZOrderOp::SendBackward, PhosphorI18n::tr("Send Backward", "@action"));
 }
 
 /**

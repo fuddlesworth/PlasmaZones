@@ -15,7 +15,7 @@
 #include <algorithm>
 #include <utility>
 
-namespace Phosphor::Screens {
+namespace PhosphorScreens {
 
 /**
  * @brief Definition of a single virtual screen within a physical screen.
@@ -354,4 +354,4 @@ struct VirtualScreenConfig
     }
 };
 
-} // namespace Phosphor::Screens
+} // namespace PhosphorScreens

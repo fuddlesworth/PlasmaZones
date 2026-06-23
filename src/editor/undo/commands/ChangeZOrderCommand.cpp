@@ -3,14 +3,14 @@
 
 #include "ChangeZOrderCommand.h"
 #include "../../services/ZoneManager.h"
-#include "pz_i18n.h"
+#include "phosphor_i18n.h"
 
 using namespace PlasmaZones;
 
 ChangeZOrderCommand::ChangeZOrderCommand(QPointer<ZoneManager> zoneManager, const QString& zoneId,
                                          const QVariantList& oldZones, const QVariantList& newZones,
                                          const QString& text, QUndoCommand* parent)
-    : BaseZoneCommand(zoneManager, text.isEmpty() ? PzI18n::tr("Change Z-Order", "@action") : text, parent)
+    : BaseZoneCommand(zoneManager, text.isEmpty() ? PhosphorI18n::tr("Change Z-Order", "@action") : text, parent)
     , m_zoneId(zoneId)
     , m_oldZones(oldZones)
     , m_newZones(newZones)

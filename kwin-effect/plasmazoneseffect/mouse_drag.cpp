@@ -14,6 +14,7 @@
 
 #include "../autotilehandler.h"
 #include "../dragtracker.h"
+#include "../snaphandler.h"
 
 namespace PlasmaZones {
 
@@ -49,7 +50,7 @@ void PlasmaZonesEffect::slotMouseChanged(const QPointF& pos, const QPointF& oldp
             // windowFinishUserMovedResized wouldn't fire until ALL buttons are
             // released. forceEnd() gives immediate snap response on LMB release.
             //
-            // After forceEnd, applySnapGeometry will defer (retry every 100 ms)
+            // After forceEnd, applyWindowGeometry will defer (retry every 100 ms)
             // until isUserMove() clears when the remaining buttons are released.
             m_dragTracker->forceEnd(pos);
         } else if (modifiersChanged || buttonsChanged) {
@@ -118,6 +119,11 @@ void PlasmaZonesEffect::slotMouseChanged(const QPointF& pos, const QPointF& oldp
     // Reuse effectiveScreenId computed above to avoid redundant resolveEffectiveScreenId call.
     if (!m_dragTracker->isDragging() && output) {
         m_autotileHandler->handleCursorMoved(pos, effectiveScreenId);
+        // Snapping FFM runs alongside autotile FFM. The two are disjoint: autotile FFM
+        // bails when the cursor screen is not an autotile screen, and snapping FFM only
+        // acts on windows in the snap tiled set (which live on snapping-mode screens), so
+        // at most one of them activates a window for any given cursor position.
+        m_snapHandler->handleCursorMoved(pos, effectiveScreenId);
     }
 }
 

@@ -70,8 +70,9 @@ class AnimationShaderRegistry;
 namespace PlasmaZones {
 class ShaderRegistry;
 class SnapAssistThumbnailProvider;
+class DmabufTextureProvider;
 }
-namespace Phosphor::Screens {
+namespace PhosphorScreens {
 class ScreenManager;
 }
 class QQuickWindow;
@@ -138,9 +139,9 @@ public:
         QMetaObject::Connection overlayGeomConnection; ///< geometryChanged connection for overlay
         // Cache key for the last successful labelsTexture rebuild on this window.
         // Hashes (size, showNumbers, font settings, per-zone {number,x,y,w,h}). When
-        // updateLabelsTextureForWindow is called with the same hash, both the 23 MB
-        // QImage rebuild AND Qt's QVariant(QImage) property-write equality compare
-        // are skipped. 0 = never computed / cache invalid.
+        // updateLabelsTextureForWindow is called with the same hash, both the sparse
+        // glyph-tile payload rebuild AND the labelsTexture property write (with its
+        // value compare) are skipped. 0 = never computed / cache invalid.
         quint64 labelsTextureHash = 0;
         QScreen* zoneSelectorPhysScreen = nullptr;
         /// Intended geometry of the zone selector inside its shell. On
@@ -163,7 +164,7 @@ public:
     ///                 hand it through here - the singleton accessor is
     ///                 gone (Phase A3 of the architecture refactor).
     /// @param parent Qt parent.
-    explicit OverlayService(Phosphor::Screens::ScreenManager* screenManager, ShaderRegistry* shaderRegistry,
+    explicit OverlayService(PhosphorScreens::ScreenManager* screenManager, ShaderRegistry* shaderRegistry,
                             PhosphorAnimation::PhosphorProfileRegistry* profileRegistry, QObject* parent = nullptr);
     ~OverlayService() override;
 
@@ -216,11 +217,17 @@ public:
     /// "set-once after construction" discipline used by every other
     /// setAutotileLayoutSource call site keeps the contract uniform.
     void setAutotileLayoutSource(PhosphorLayout::ILayoutSource* source);
-    Phosphor::Screens::ScreenManager* screenManager() const
+    PhosphorScreens::ScreenManager* screenManager() const
     {
         return m_screenManager;
     }
     void setCurrentVirtualDesktop(int desktop);
+    /// This screen's current virtual desktop under Plasma 6.7 per-output virtual
+    /// desktops (#648). Delegates to the layout registry — the single source of
+    /// truth for the per-output desktop map — so overlay resolution matches
+    /// layout resolution; falls back to the global desktop when no registry is
+    /// wired.
+    int currentVirtualDesktopForScreen(const QString& screenId) const;
     void setCurrentActivity(const QString& activityId);
 
     /**
@@ -376,6 +383,7 @@ public:
     bool isSnapAssistVisible() const override;
     bool setSnapAssistThumbnail(const QString& compositorHandle, int width, int height,
                                 const QByteArray& pixels) override;
+    bool setWindowThumbnailDmabuf(const QString& compositorHandle, const DmabufThumbnailDesc& desc) override;
 
     // PhosphorZones::Layout Picker overlay (interactive layout browser + resnap)
     void showLayoutPicker(const QString& screenId = QString());
@@ -388,6 +396,28 @@ public:
     /// fire. No-op when no picker is visible.
     void pickerMoveSelection(int dx, int dy);
     void pickerConfirmSelection();
+
+    /// Re-push the context lock state to any open zone selector and the layout
+    /// picker. Called when window rules change at runtime (e.g. a `LockContext`
+    /// rule is toggled, re-prioritised or re-matched) so an already-visible
+    /// overlay's lock affordance updates in place instead of waiting for the
+    /// next show — mirroring how `ISettings::settingsChanged` refreshes the
+    /// selectors for manual-lock edits. The authoritative block is still the
+    /// live re-check at commit (the selector hit-test and `isScreenLocked`);
+    /// this only keeps the visual in sync.
+    void refreshContextLockState();
+
+    /// Re-apply the (possibly rule-overridden) overlay shader / style to a
+    /// currently-displaying overlay after a window-rule change. A rule edit bumps
+    /// the rule-set revision (so the next `LayoutRegistry::resolveContextOverlay`
+    /// read drops its now-stale cache) but does not itself re-query it for the
+    /// live main overlay; this flips any
+    /// shader↔non-shader slot whose type the new style override changed, then
+    /// re-pushes each window's shader id/params. A no-op when the overlay is
+    /// hidden — the next `show()` re-resolves via `initializeOverlay`. Mirrors
+    /// the `overlayDisplayModeChanged` / `enableShaderEffectsChanged` wiring for
+    /// the equivalent global settings.
+    void refreshOverlayPropertiesIfShown();
 
 public Q_SLOTS:
     // hideLayoutOsd / hideNavigationOsd intentionally absent. Phase-5
@@ -426,8 +456,20 @@ private Q_SLOTS:
     void onLayoutPickerDismissRequested();
 
 private:
-    // Sync CAVA service state (start/stop/reconfigure) with current settings.
+    // Sync CAVA service state (start/stop/reconfigure) with current settings AND
+    // whether the overlay is actually displaying content — CAVA runs only while
+    // the overlay (un-idled) or shader preview is on screen.
     void syncCavaState();
+    // Whether the overlay is actively displaying content right now: visible and
+    // not in the warm-idled drag-pause/drag-end state (or the shader preview is
+    // up). The overlay QQuickWindows are kept alive across drags to dodge an
+    // NVIDIA teardown deadlock, so "visible" alone stays true at rest — this is
+    // the predicate that gates the 60 Hz shader render loop + CAVA.
+    bool isOverlayDisplaying() const;
+    // Defer stopping the render loop + CAVA by a short grace period after the
+    // overlay goes idle, so rapid drag thrash keeps everything warm; the
+    // deferred stop re-checks isOverlayDisplaying() before acting.
+    void scheduleIdleQuiesce();
 
     // Refresh zone selector and overlay windows that are currently visible.
     // Skips hidden windows - showZoneSelector()/show() refresh before showing.
@@ -538,6 +580,14 @@ private:
     PhosphorZones::Layout* resolveScreenLayout(QScreen* screen) const;
     PhosphorZones::Layout* resolveScreenLayout(const QString& screenId) const;
 
+    /// True when the snapping overlay must NOT show on @p screenId for the current
+    /// desktop/activity: either the context is on a disable list, OR its default
+    /// layout assignment is suppressed (the global "don't assign by default"
+    /// setting, or a per-context rule) and nothing is explicitly assigned. Folds
+    /// the two gates so every overlay / selector activation site treats a
+    /// suppressed context exactly like a disabled one.
+    bool isSnappingContextInactive(const QString& screenId) const;
+
     // PhosphorLayer infrastructure - owns the wlr-layer-shell binding, screen
     // enumeration, and Surface factory for all overlay-style windows. Members
     // ordered so factory is destroyed before provider/transport (factory keeps
@@ -586,7 +636,7 @@ private:
     PhosphorTiles::ITileAlgorithmRegistry* m_algorithmRegistry = nullptr; ///< Borrowed; outlives service
     ShaderRegistry* m_shaderRegistry = nullptr; ///< Borrowed; outlives service
     PhosphorLayout::ILayoutSource* m_autotileLayoutSource = nullptr; ///< Borrowed; outlives service (optional)
-    Phosphor::Screens::ScreenManager* m_screenManager = nullptr;
+    PhosphorScreens::ScreenManager* m_screenManager = nullptr;
     QList<QPointer<PhosphorZones::Layout>> m_observedLayouts; ///< Layouts we watch for live edits
 
     // Precise disconnect handles for signal sources whose slots are lambdas
@@ -600,7 +650,9 @@ private:
     // fire starts a timer; subsequent fires before the timer elapses do
     // nothing; the timer callback runs refreshVisibleWindows once.
     bool m_refreshCoalescePending = false;
-    int m_currentVirtualDesktop = 1; // Current virtual desktop (1-based)
+    int m_currentVirtualDesktop = 1; // Current virtual desktop (1-based); global
+                                     // fallback for currentVirtualDesktopForScreen
+                                     // when no layout registry is wired (#648).
     QString m_currentActivity; // Current KDE activity (empty = all activities)
     bool m_visible = false;
     bool m_zoneSelectorVisible = false;
@@ -671,6 +723,22 @@ private:
     // rather than relying on the single-threaded teardown invariant.
     std::unique_ptr<SnapAssistThumbnailProvider> m_thumbnailProviderOwned;
     std::atomic<SnapAssistThumbnailProvider*> m_thumbnailProvider{nullptr};
+    // Zero-copy GPU thumbnail provider (PLASMAZONES_DMABUF_THUMBNAILS). Same
+    // ownership pattern as m_thumbnailProvider: constructed eagerly, ownership
+    // released to the QQmlEngine in engineConfigurator, borrowed atomic pointer
+    // nulled when the engine tears it down. Registered under the separate
+    // DmabufTextureProvider::ProviderId (Texture-type) image scheme. The full
+    // delete→null teardown-window safety analysis above (no-event-loop-pumping
+    // during ~QQmlEngine + std::atomic null-out) applies identically here.
+    std::unique_ptr<DmabufTextureProvider> m_dmabufTextureProviderOwned;
+    std::atomic<DmabufTextureProvider*> m_dmabufTextureProvider{nullptr};
+    // Single-shot idle-grace timer: started on every hideSnapAssist and
+    // stopped on showSnapAssist. If snap-assist stays dismissed long enough
+    // for it to fire, it clears the thumbnail cache so its bounded (~6 MB
+    // worst-case) pixel buffers don't sit resident for the rest of the
+    // session. Rapid dismiss/re-show continuations restart it before it
+    // fires, keeping the warm cache. Lazily created (parented to this).
+    QTimer* m_snapAssistCacheTrimTimer = nullptr;
     // Layout Picker (interactive layout browser). Post-shell-migration
     // the picker is an Item slot inside the per-screen passive shell;
     // these track which screen's shell currently shows it (singleton
@@ -693,8 +761,8 @@ private:
     /// one slot per prime cycle for the surface's lifetime under rapid
     /// show/hide toggling.
     QHash<PhosphorLayer::Surface*, QMetaObject::Connection> m_primingFrameConnections;
-    /// Per-surface destroyed-signal Connection. Replaces the earlier
-    /// `pz_primingDestroyedConnected` Qt dynamic property gate which
+    /// Per-surface destroyed-signal Connection. Replaces an earlier
+    /// per-surface Qt dynamic-property gate which
     /// leaked across OverlayService instances (test fixtures, daemon
     /// hot-restart) - a fresh service that re-encountered the same
     /// Surface* would skip wiring its own cleanup. Per-instance
@@ -883,10 +951,12 @@ private:
      * lookups - surfaces mid-animation keep the config they bound at
      * beginShow/beginHide. That mirrors motion-tree live-reload semantics.
      *
-     * A default-constructed tree (empty baseline + no overrides) silently
-     * resolves every path to an empty effect id - same end result as the
-     * pre-shader-wireup motion-only behaviour. Used during the initial
-     * @c setupSurfaceAnimator pass before @c m_settings is wired.
+     * A default-constructed tree (empty baseline + no overrides) resolves each
+     * path to its built-in default shader (via @c resolveShaderWithDefault):
+     * overlay show/hide paths to "fade", paths without a default to empty
+     * (motion-only). Used during the initial @c setupSurfaceAnimator pass
+     * before @c m_settings is wired; the live tree later applies user
+     * overrides on top.
      */
     void applyShaderProfilesToAnimator(const PhosphorAnimationShaders::ShaderProfileTree& tree);
 
@@ -895,6 +965,12 @@ private:
      *          False if the provider was torn down (engine destroyed) or the
      *          image was null after format conversion. */
     bool updateSnapAssistCandidateThumbnail(const QString& compositorHandle, QImage image);
+
+    /** Push a resolved thumbnail image:// URL into the live snap-assist
+     *  candidate list (and QML) for @p compositorHandle. Shared tail of the
+     *  raw-pixel and dma-buf thumbnail paths. @return true (the URL is already
+     *  stored in its provider regardless of whether snap-assist is visible). */
+    bool applyCandidateThumbnailUrl(const QString& compositorHandle, const QString& providerUrl);
 
     /**
      * @brief Re-assert a window's screen and geometry before showing on Wayland
@@ -928,7 +1004,7 @@ private:
         // Required.
         QUrl qmlUrl = {}; ///< QML file (Window-rooted - PZ's overlay QML convention)
         QScreen* screen = nullptr; ///< target screen (physical; virtual-screen positioning is the caller's job)
-        PhosphorLayer::Role role = {}; ///< protocol-level preset (see pz_roles.h)
+        PhosphorLayer::Role role = {}; ///< protocol-level preset (see phosphor_roles.h)
         const char* windowType = ""; ///< debug/telemetry label
 
         // Optional - explicit `= {}` suppresses GCC's
@@ -970,7 +1046,7 @@ private:
      *
      * Common pattern for ensurePassiveShellFor (and the LayoutPicker
      * surface in snapassist.cpp): (1) caller builds a per-instance
-     * scope-prefixed Role via @ref PzRoles::makePerInstanceRole,
+     * scope-prefixed Role via @ref PhosphorRoles::makePerInstanceRole,
      * (2) this helper calls createLayerSurface with keepMappedOnHide=true,
      * (3) string-connects the QML-side `dismissRequested()` signal to
      * `Surface::hide()` so the auto-dismiss timer (or backdrop click for
@@ -982,7 +1058,7 @@ private:
      * window pointers into PerScreenOverlayState.
      *
      * @param role           Fully-formed per-instance role (use
-     *                       PzRoles::makePerInstanceRole to build).
+     *                       PhosphorRoles::makePerInstanceRole to build).
      * @param qmlUrl         QML file to load.
      * @param physScreen     Target physical screen.
      * @param windowType     Debug/telemetry label.
@@ -1039,6 +1115,14 @@ private:
 
     // Audio spectrum provider (CAVA backend via phosphor-audio)
     std::unique_ptr<PhosphorAudio::IAudioSpectrumProvider> m_audioProvider;
+    // Single-shot grace timer that quiesces the render loop + CAVA after the
+    // overlay goes idle (see scheduleIdleQuiesce). Cancelled if the overlay
+    // displays again within the grace window.
+    QTimer* m_idleQuiesceTimer = nullptr;
+    // True while the overlay is in the warm-idled state (blanked + _idled, but
+    // its QQuickWindows kept alive). Distinct from m_visible, which stays true
+    // across drags because the windows are never torn down.
+    bool m_overlayIdled = false;
 
     // PhosphorZones::Zone data version for shader synchronization
     int m_zoneDataVersion = 0;

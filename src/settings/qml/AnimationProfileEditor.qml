@@ -17,7 +17,7 @@ import org.plasmazones.common as PZCommon
  * for timing, effect id / parameter map for shader) and renders the
  * widget tree the per-event card and the App Rules form both need
  * (CurveThumbnail + Customize button → CurveEditorDialog,
- * timing-mode combo, duration slider, ShaderPickerButton +
+ * timing-mode combo, duration slider, CategoryMenuButton +
  * ShaderParameterEditor + ColorDialog).
  *
  * The editor is intentionally persistence-agnostic: it emits
@@ -57,16 +57,14 @@ ColumnLayout {
     property string shaderEffectId: ""
     /// Current per-effect parameter overrides. Keys are the effect's
     /// `parameters` schema ids; values are the user's overrides.
-    property var shaderParams: ({
-    })
+    property var shaderParams: ({})
     /// Per-card lock state for the parameter editor's lock toolbar.
     /// UI affordance only — not persisted. The per-event card
     /// rewires this on shader switch (same-named ids in different
     /// shader schemas are unrelated); App Rules leaves locking off.
-    property var lockedShaderParams: ({
-    })
+    property var lockedShaderParams: ({})
     // ── Configuration inputs ────────────────────────────────────────
-    /// Title for the curve dialog ("Customize Curve — <eventLabel>").
+    /// Title for the curve dialog ("Customize Curve: <eventLabel>").
     property string eventLabel: ""
     /// Whether the shader section is rendered at all. The per-event
     /// card sets this false for events whose runtime path doesn't
@@ -126,7 +124,7 @@ ColumnLayout {
     /// side-effects like dropping the previous effect's params).
     /// Per-event card connects this to its imperative commit path;
     /// App Rules leaves it disconnected (commits on Add click).
-    signal valueChanged()
+    signal valueChanged
     /// Emitted when the user activates a shader from the picker.
     /// Distinct from `valueChanged` so the consumer can persist a
     /// shader switch (which carries side-effects: dropping the
@@ -217,6 +215,10 @@ ColumnLayout {
         // override toggle gates the whole timing section).
         CheckBox {
             Layout.fillWidth: true
+            // Inset to match the SettingsRows below (which self-inset by
+            // largeSpacing); without it this custom row runs edge-to-edge.
+            Layout.leftMargin: Kirigami.Units.largeSpacing
+            Layout.rightMargin: Kirigami.Units.largeSpacing
             visible: root.showOverrideCheckboxes
             text: i18n("Override curve")
             checked: root.overrideCurve
@@ -234,6 +236,12 @@ ColumnLayout {
         // weight with the active controls.
         RowLayout {
             Layout.fillWidth: true
+            // Inset the curve-summary row (thumbnail + description + Customize…)
+            // to match the SettingsRows below, which self-inset by largeSpacing.
+            // Without it the thumbnail hugs the left edge and the Customize button
+            // the right edge of the card.
+            Layout.leftMargin: Kirigami.Units.largeSpacing
+            Layout.rightMargin: Kirigami.Units.largeSpacing
             spacing: Kirigami.Units.largeSpacing
             opacity: (!root.showOverrideCheckboxes || root.overrideCurve) ? 1 : 0.5
             enabled: !root.showOverrideCheckboxes || root.overrideCurve
@@ -267,7 +275,6 @@ ColumnLayout {
                     color: Kirigami.Theme.disabledTextColor
                     elide: Text.ElideRight
                 }
-
             }
 
             Button {
@@ -276,11 +283,9 @@ ColumnLayout {
                 Accessible.name: root.eventLabel.length > 0 ? i18n("Customize curve for %1", root.eventLabel) : i18n("Customize curve")
                 onClicked: curveDialog.open()
             }
-
         }
 
-        SettingsSeparator {
-        }
+        SettingsSeparator {}
 
         // Timing mode — Easing vs Spring discriminator.
         SettingsRow {
@@ -291,12 +296,11 @@ ColumnLayout {
                 Accessible.name: i18n("Timing mode")
                 model: [i18n("Easing"), i18n("Spring")]
                 currentIndex: root.timingMode
-                onActivated: function(index) {
+                onActivated: function (index) {
                     root.timingMode = index;
                     root.valueChanged();
                 }
             }
-
         }
 
         // Duration (easing only — spring derives its own settle time).
@@ -332,14 +336,12 @@ ColumnLayout {
                 Accessible.name: i18n("Animation duration")
                 labelWidth: Kirigami.Units.gridUnit * 4
                 value: root.duration
-                onMoved: function(value) {
+                onMoved: function (value) {
                     root.duration = Math.round(value);
                     root.valueChanged();
                 }
             }
-
         }
-
     }
 
     // ── Shader section ──────────────────────────────────────────────
@@ -352,7 +354,7 @@ ColumnLayout {
         title: i18n("Shader effect")
         description: i18n("Apply a shader transition to this event")
 
-        PZCommon.ShaderPickerButton {
+        PZCommon.CategoryMenuButton {
             id: shaderPicker
 
             // `availableShaders` is supplied by the consumer; bumping
@@ -363,17 +365,16 @@ ColumnLayout {
             }
 
             Layout.fillWidth: true
-            shaders: _effectModel
-            currentShaderId: root.shaderEffectId
-            noneShaderId: ""
+            items: _effectModel
+            currentId: root.shaderEffectId
+            noneId: ""
             includeNoneEntry: true
             placeholderText: i18nc("@action:button", "Select shader…")
-            onShaderSelected: function(id) {
+            onSelected: function (id) {
                 var sid = id || "";
                 root.shaderEffectActivated(sid);
             }
         }
-
     }
 
     // Inline parameter editor surfaces only when an effect is
@@ -396,10 +397,10 @@ ColumnLayout {
         enableGroups: true
         enableImage: root.enableImage
         compact: true
-        onValueChanged: function(paramId, value) {
+        onValueChanged: function (paramId, value) {
             root.shaderParamWriteRequested(root.shaderEffectId, paramId, value);
         }
-        onLockToggled: function(paramId, locked) {
+        onLockToggled: function (paramId, locked) {
             // Editor owns `lockedShaderParams` — self-update before
             // emitting so subscribers reading the property see the
             // post-toggle map. Consumers that just want to persist the
@@ -408,7 +409,7 @@ ColumnLayout {
             root.lockedShaderParams = paramEditor.lockedAfterToggle(paramId, locked);
             root.lockToggleRequested(paramId, locked);
         }
-        onLockAllRequested: function(lock) {
+        onLockAllRequested: function (lock) {
             root.lockedShaderParams = paramEditor.lockedAfterAllToggle(lock);
             root.lockAllToggleRequested(lock);
         }
@@ -421,7 +422,7 @@ ColumnLayout {
             root.shaderParams = rolled;
             root.randomizeRequested(rolled);
         }
-        onRequestColorPicker: function(paramId, paramName, current) {
+        onRequestColorPicker: function (paramId, paramName, current) {
             colorDialog.effectId = root.shaderEffectId;
             colorDialog.paramId = paramId;
             colorDialog.paramName = paramName;
@@ -444,12 +445,12 @@ ColumnLayout {
         easingCurve: root.easingCurve
         springOmega: root.springOmega
         springZeta: root.springZeta
-        onCurveApplied: function(curve) {
+        onCurveApplied: function (curve) {
             root.easingCurve = curve;
             root.timingMode = CurvePresets.timingModeEasing;
             root.valueChanged();
         }
-        onSpringApplied: function(omega, zeta) {
+        onSpringApplied: function (omega, zeta) {
             root.springOmega = omega;
             root.springZeta = zeta;
             root.timingMode = CurvePresets.timingModeSpring;
@@ -466,6 +467,8 @@ ColumnLayout {
     ColorDialog {
         id: colorDialog
 
+        options: ColorDialog.ShowAlphaChannel
+
         property string effectId: ""
         property string paramId: ""
         property string paramName: ""
@@ -473,10 +476,9 @@ ColumnLayout {
         title: paramName.length > 0 ? i18nc("@title:window", "Choose %1", paramName) : i18nc("@title:window", "Pick color")
         onAccepted: {
             if (paramId === "" || effectId === "")
-                return ;
+                return;
 
             root.shaderParamWriteRequested(effectId, paramId, selectedColor.toString());
         }
     }
-
 }

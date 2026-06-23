@@ -6,10 +6,14 @@
 #include <PhosphorAnimation/AnimationShaderEffect.h>
 #include <PhosphorAnimation/phosphoranimation_export.h>
 
-#include <PhosphorFsLoader/MetadataPackRegistryBase.h>
-#include <PhosphorFsLoader/MetadataPackScanStrategy.h>
+#include <PhosphorRegistry/IFactoryBase.h>
+#include <PhosphorRegistry/MetadataPackLoader.h>
+#include <PhosphorRegistry/Registry.h>
+
+#include <PhosphorShaders/ShaderEntryPoint.h>
 
 #include <QList>
+#include <QObject>
 #include <QString>
 #include <QStringList>
 #include <QVariantMap>
@@ -43,9 +47,11 @@ namespace PhosphorAnimationShaders {
  *
  * ## Search paths and live reload
  *
+ * Storage + change-notify is the generic `PhosphorRegistry::Registry<AnimationPack>`
+ * (one AnimationPack wraps one discovered AnimationShaderEffect); the on-disk
+ * scan + hot-reload is a `PhosphorRegistry::MetadataPackLoader<AnimationPack>`.
  * Search-path management (`addSearchPath`, `addSearchPaths`,
- * `searchPaths`, `setUserPath`, `refresh`) is inherited from
- * `PhosphorFsLoader::MetadataPackRegistryBase`. The first
+ * `searchPaths`, `setUserPath`, `refresh`) forwards to that loader. The first
  * `addSearchPath[s]` call with `LiveReload::On` (the default) installs a
  * `QFileSystemWatcher` with the standard 50 ms debounce, parent-watch
  * promotion for missing user-data dirs, per-file watches re-armed on
@@ -53,16 +59,15 @@ namespace PhosphorAnimationShaders {
  * roots (`$HOME`, `/`, XDG data/config/cache/temp/runtime, Documents,
  * Downloads) are refused.
  *
- * `effectsChanged` is gated on a SHA-1 signature change inside the
- * strategy — emits exactly when the discovered set or any payload
- * fingerprint actually differs from the previous scan, including any
- * `metadata.json` field edit (the strategy mixes the metadata file's
- * size+mtime into the per-rescan signature).
+ * `effectsChanged` fires on every committed rescan (the loader's coarse
+ * onCommitted hook) — i.e. whenever the discovered set or any watched-file
+ * fingerprint differs from the previous scan, including any `metadata.json`
+ * field edit or shader-source edit.
  *
  * ## Thread safety
  *
  * GUI-thread only for both reads and mutations. The pack map lives
- * inside the strategy and is rebuilt on the GUI thread inside the
+ * inside the registry and is rebuilt on the GUI thread inside the
  * rescan; the public lookup methods read it without synchronisation.
  *
  * `searchPaths()` is the one exception: it returns a by-value snapshot
@@ -71,13 +76,52 @@ namespace PhosphorAnimationShaders {
  * *from* a worker thread concurrently with a GUI-thread mutation is a
  * data race; snapshot on the GUI thread first.
  */
-class PHOSPHORANIMATION_EXPORT AnimationShaderRegistry : public PhosphorFsLoader::MetadataPackRegistryBase
+class PHOSPHORANIMATION_EXPORT AnimationShaderRegistry : public QObject
 {
     Q_OBJECT
 
 public:
+    /// Registry entry: a discovered animation effect as a `PhosphorRegistry`
+    /// factory. `Registry<AnimationPack>` keys on `id()`; `displayName()` is
+    /// the effect's human name. Wraps the parsed `AnimationShaderEffect` by
+    /// value (consumers read it back via `effect()`). Effects carry no
+    /// capability metadata, so the `IFactoryBase` default `capabilities()`
+    /// (`{}`) applies unchanged.
+    class AnimationPack final : public PhosphorRegistry::IFactoryBase
+    {
+    public:
+        explicit AnimationPack(AnimationShaderEffect effect)
+            : m_effect(std::move(effect))
+        {
+        }
+        [[nodiscard]] QString id() const override
+        {
+            return m_effect.id;
+        }
+        [[nodiscard]] QString displayName() const override
+        {
+            return m_effect.name;
+        }
+        [[nodiscard]] const AnimationShaderEffect& effect() const
+        {
+            return m_effect;
+        }
+
+    private:
+        AnimationShaderEffect m_effect;
+    };
+
     explicit AnimationShaderRegistry(QObject* parent = nullptr);
     ~AnimationShaderRegistry() override;
+
+    // ── Search paths (forwarded to the internal MetadataPackLoader) ───
+    void addSearchPath(const QString& path, PhosphorFsLoader::LiveReload liveReload = PhosphorFsLoader::LiveReload::On);
+    void addSearchPaths(
+        const QStringList& paths, PhosphorFsLoader::LiveReload liveReload = PhosphorFsLoader::LiveReload::On,
+        PhosphorFsLoader::RegistrationOrder order = PhosphorFsLoader::RegistrationOrder::LowestPriorityFirst);
+    [[nodiscard]] QStringList searchPaths() const;
+    void setUserPath(const QString& path);
+    void refresh();
 
     // Lookup -------------------------------------------------------------------
 
@@ -132,37 +176,53 @@ public:
     /// overload.
     static QVariantMap translateAnimationParams(const AnimationShaderEffect& effect, const QVariantMap& friendlyParams);
 
+    /// Build the generated `#define p_<id> <glsl-accessor>` preamble for
+    /// @p effect's declared parameters so authors read a parameter by name
+    /// (`p_speed`) instead of hand-decoding a `customParams[N].xyzw` lane.
+    ///
+    /// The slot allocation mirrors `translateAnimationParams` exactly — color
+    /// params fill `customColors[N]`, everything else fills
+    /// `customParams[N].<xyzw>`, both in metadata declaration order — so the
+    /// macro a shader reads resolves to the same UBO lane the value is
+    /// uploaded to. Both runtimes splice the result after the shader's
+    /// `#version` line (via `PhosphorShaders::spliceAfterVersion`). Returns an
+    /// empty string when the effect declares no parameters.
+    static QString paramPreamble(const AnimationShaderEffect& effect);
+
+    /// The T1.4/T1.5 entry-point prologue for animation shaders: `#version`,
+    /// the `animation_uniforms.glsl` include (uniforms + `legProgress()` /
+    /// `p_reversed` / `surfaceColor()`), and the `vTexCoord` in / `fragColor`
+    /// out. Prepended to an entry-only pack before include expansion; identical
+    /// on both runtimes (the include's `#ifdef PLASMAZONES_KWIN` branch handles
+    /// the binding difference).
+    static QString animationEntryPrologue();
+
+    /// The direction-dispatched entry candidates (T1.5), in priority order:
+    ///   • `vec4 pTransition(vec2 uv, float t)` — symmetric; the harness keeps
+    ///     the runtime's `iTime` flip so it auto-mirrors (`t` is raw `iTime`).
+    ///   • `vec4 pIn(vec2,float)` + `vec4 pOut(vec2,float)` — asymmetric; the
+    ///     harness applies `legProgress()` (so `t` is always forward 0→1) and
+    ///     calls the right one by `p_reversed`. Requires BOTH to be defined.
+    /// A pack defining its own `main()` is passed through. Install via
+    /// `ShaderEffect::setEntryScaffold` (daemon) and apply via
+    /// `PhosphorShaders::assembleEntryPoint` (kwin) so both runtimes agree.
+    static QList<PhosphorShaders::EntryCandidate> animationEntryCandidates();
+
 Q_SIGNALS:
     void effectsChanged();
 
-protected:
-    void onUserPathChanged(const QString& path) override;
-
 private:
-    using ScanStrategy = PhosphorFsLoader::MetadataPackScanStrategy<AnimationShaderEffect>;
-
-    /// Build + configure the scan strategy. Returns the base type so
-    /// the helper can be invoked from the ctor's member-init list while
-    /// staying agnostic of the subclass-private `ScanStrategy` typedef.
-    ///
-    /// `self` is captured for later signal emission via the strategy's
-    /// rescan callback lambda. The static helper itself only stores
-    /// `self` in lambda captures and MUST NOT dereference it before
-    /// the constructor returns — the strategy is built from the base
-    /// class's member-init list, so member fields of the derived
-    /// `AnimationShaderRegistry` are still uninitialised at the call
-    /// site. The first deref happens later, on a watcher-triggered
-    /// rescan, by which time the constructor has fully run.
-    static std::unique_ptr<PhosphorFsLoader::IScanStrategy> buildScanStrategy(AnimationShaderRegistry* self);
-
-    // Non-owning typed alias for the strategy the base owns. Populated
-    // in the ctor body via dynamic_cast (asserted non-null) so the
-    // invariant fires BEFORE the typed pointer is committed — keeps the
-    // narrow UB window between a hypothetical subclass-mismatch
-    // static_cast and its diagnostic out of the field's lifetime. Named
-    // distinctly from the base's private `m_strategy` to make the
-    // shadowing explicit at the field declaration.
-    ScanStrategy* m_typedStrategy = nullptr;
+    // Generic id-keyed storage + change-notify for the discovered effect
+    // packs. m_loader (below) populates it from disk; the lookup methods
+    // read it. Declared before m_loader so it is destroyed AFTER the loader:
+    // the loader holds a borrowed Registry pointer (used during live rescans
+    // in reconcile(), not at teardown), which must stay valid for the loader's
+    // whole lifetime.
+    PhosphorRegistry::Registry<AnimationPack> m_registry;
+    // On-disk scan + hot-reload. Parses each pack's metadata.json into an
+    // AnimationPack and reconciles m_registry; its onCommitted hook
+    // re-emits effectsChanged.
+    std::unique_ptr<PhosphorRegistry::MetadataPackLoader<AnimationPack>> m_loader;
 };
 
 } // namespace PhosphorAnimationShaders

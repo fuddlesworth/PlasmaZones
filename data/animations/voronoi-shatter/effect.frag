@@ -18,27 +18,14 @@
 // `texture(uTexture0, uv)` samples directly. `texture2D` (GLSL ES) is
 // rewritten to `texture` (GLSL 4.50 core) inline.
 
-#version 450
-
-#include <animation_uniforms.glsl>
-
-// metadata.json declaration order → customParams[0] sub-slots.
-#define cellDensity   customParams[0].x
-#define revealSpread  customParams[0].y
-#define shardSoftness customParams[0].z
-
-layout(location = 0) in vec2 vTexCoord;
-layout(location = 0) out vec4 fragColor;
-
 vec2 vs_hash2(vec2 p) {
     return fract(sin(vec2(dot(p, vec2(127.1, 311.7)),
                            dot(p, vec2(269.5, 183.3)))) * 43758.5453);
 }
 
-void main() {
+vec4 pTransition(vec2 uv, float t) {
     // ── niri OPEN body (handles both legs via runtime iTime flip) ──
     float p = clamp(iTime, 0.0, 1.0);
-    vec2 uv = vTexCoord;
     vec4 win = surfaceColor(uv);
 
     // `cellDensity` means "Voronoi cells across the screen": multiplying
@@ -46,7 +33,7 @@ void main() {
     // fraction of the screen this surface covers, so shard pixel size
     // stays constant across popup vs. maximized windows. Matches niri's
     // reference on full-screen (multiplier = 1.0 there).
-    vec2 scale = vec2(cellDensity) * max(iAnchorSize, vec2(1.0))
+    vec2 scale = vec2(p_cellDensity) * max(iAnchorSize, vec2(1.0))
                                    / max(iSurfaceScreenPos.zw, vec2(1.0));
     vec2 q = uv * scale;
     vec2 g = floor(q);
@@ -62,8 +49,8 @@ void main() {
         }
     }
     float seed = vs_hash2(cell).x;
-    float shard_p = smoothstep(seed * 0.5, seed * 0.5 + revealSpread, p);
-    float reveal = smoothstep(0.0, shardSoftness, shard_p);
+    float shard_p = smoothstep(seed * 0.5, seed * 0.5 + p_revealSpread, p);
+    float reveal = smoothstep(0.0, p_shardSoftness, shard_p);
 
-    fragColor = win * reveal;
+    return win * reveal;
 }

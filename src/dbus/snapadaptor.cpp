@@ -15,9 +15,25 @@ SnapAdaptor::SnapAdaptor(PhosphorSnapEngine::SnapEngine* engine, WindowTrackingA
     , m_adaptor(adaptor)
     , m_settings(settings)
 {
-    if (!m_engine || !adaptor) {
-        qCWarning(lcDbusWindow) << "SnapAdaptor created with null engine or adaptor";
-        return;
+    // Engine + adaptor + settings are mandatory — a misordered Daemon
+    // wiring that constructs SnapAdaptor before its dependencies would
+    // otherwise produce a silently-no-op D-Bus object that swallows every
+    // method call. qFatal aborts unambiguously in both debug and release
+    // builds, matching the sibling WindowTrackingAdaptor's defensive
+    // pattern — a wiring regression is loud and immediate at construction,
+    // not at the first D-Bus call.
+    if (!m_engine || !m_adaptor || !m_settings) {
+        qFatal(
+            "SnapAdaptor: null dependency at construction "
+            "(engine=%p, adaptor=%p, settings=%p) — daemon-wiring bug",
+            static_cast<void*>(m_engine), static_cast<void*>(m_adaptor), static_cast<void*>(m_settings));
+        return; // QMessageLogger::fatal IS [[noreturn]] on every non-MSVC build via
+                // Q_NORETURN (see qlogging.h / qcompilerdetection.h), but MSVC builds
+                // skip the annotation. Keep the explicit return so the dead-store
+                // contract is encoded at the source level on every compiler and any
+                // future change that turns one of these deps into a recoverable
+                // optional can't silently fall through into the signal-wiring block
+                // below with null pointers.
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
@@ -83,12 +99,12 @@ void SnapAdaptor::clearEngine()
     m_engine = nullptr;
     m_adaptor = nullptr;
     m_settings = nullptr;
-    m_screenModeRouter = nullptr;
-}
-
-void SnapAdaptor::setScreenModeRouter(ScreenModeRouter* router)
-{
-    m_screenModeRouter = router;
+    // Clear the late-bound context resolver too — symmetric with the
+    // other late-bound deps above. A late-arriving D-Bus call that landed
+    // between clearEngine() and ~SnapAdaptor would otherwise dereference
+    // a possibly-stale pointer; the existing per-slot null guards now
+    // catch the cleared state instead.
+    m_contextResolver = nullptr;
 }
 
 PhosphorSnapEngine::SnapEngine* SnapAdaptor::engine() const

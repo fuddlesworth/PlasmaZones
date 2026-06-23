@@ -23,24 +23,14 @@
 // falls back to user-texture-0 (transparent fallback) and the
 // shader is a visual no-op.
 
-#version 450
-
-#include <animation_uniforms.glsl>
 #include <noise.glsl>
 
-// metadata.json declaration order → customParams[0] sub-slots.
-// `maxBlockSize` is interpreted in NORMALISED UV units (0..1 across
-// the surface). 0.1 ≈ a 10×10 block grid at peak pixelation.
-#define maxBlockSize customParams[0].x
+// `p_maxBlockSize` is generated from metadata.json (the customParams[0].x
+// sub-slot) by the harness. It is interpreted in NORMALISED UV units
+// (0..1 across the surface). 0.1 ≈ a 10×10 block grid at peak pixelation.
 
-layout(location = 0) in vec2 vTexCoord;
-layout(location = 0) out vec4 fragColor;
-
-void main()
+vec4 pTransition(vec2 uv, float t)
 {
-    // UV from the vertex stage; gl_FragCoord/iResolution overshoots [0,1]
-    // by DPR on high-DPI displays.
-    vec2 uv = vTexCoord;
 
     // iTime is the per-leg progress driven by SurfaceAnimator's
     // shaderTime AnimatedValue: 0→1 on show, 1→0 on hide. Block size
@@ -48,7 +38,7 @@ void main()
     // clears at iTime=1, so the visual reads "pixelated → clear" on
     // show and "clear → pixelated" on hide.
     float visibility = clamp(iTime, 0.0, 1.0);
-    float blockPx = (1.0 - visibility) * max(maxBlockSize, 0.0);
+    float blockPx = (1.0 - visibility) * max(p_maxBlockSize, 0.0);
 
     // Floor sub-pixel sizes to the per-pixel grid so the shader doesn't
     // collapse to a single sample point at full visibility. Use the
@@ -74,5 +64,5 @@ void main()
     // chain scene-graph opacity is applied at blend time, so the
     // shader emits the sampled colour directly without a manual
     // visibility multiply.
-    fragColor = sampled;
+    return sampled;
 }

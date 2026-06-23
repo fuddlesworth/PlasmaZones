@@ -17,11 +17,15 @@
 
 class QScreen;
 
-namespace Phosphor::Screens {
+namespace PhosphorScreens {
 class ScreenManager;
 }
 
-namespace Phosphor::Shortcuts::Integration {
+namespace PhosphorContext {
+class IContextResolver;
+} // namespace PhosphorContext
+
+namespace PhosphorShortcutsIntegration {
 class IAdhocRegistrar;
 }
 
@@ -62,7 +66,7 @@ class PLASMAZONES_EXPORT WindowDragAdaptor : public QDBusAbstractAdaptor
 public:
     explicit WindowDragAdaptor(IOverlayService* overlay, PhosphorZones::IZoneDetector* detector,
                                PhosphorZones::LayoutRegistry* layoutManager,
-                               Phosphor::Screens::ScreenManager* screenManager, ISettings* settings,
+                               PhosphorScreens::ScreenManager* screenManager, ISettings* settings,
                                WindowTrackingAdaptor* windowTracking, QObject* parent = nullptr);
     ~WindowDragAdaptor() override = default;
 
@@ -76,6 +80,19 @@ public:
     void setAutotileEngine(PhosphorEngine::IPlacementEngine* engine)
     {
         m_autotileEngine = engine;
+    }
+
+    /**
+     * @brief Set the frozen-snapshot resolver used to gate snap/drag handlers
+     *        on the per-screen disable + lock cascade.
+     *
+     * Late-bound because the resolver is constructed after both this adaptor
+     * and the daemon's ScreenModeRouter exist. Daemon calls this after
+     * `m_contextResolver` lands. Pass nullptr during shutdown.
+     */
+    void setContextResolver(PhosphorContext::IContextResolver* resolver)
+    {
+        m_contextResolver = resolver;
     }
 
     /**
@@ -94,7 +111,7 @@ public:
      * shutdown (member destruction order: unique_ptr members destruct before
      * ~QObject runs, so ShortcutManager dies before this adaptor does).
      */
-    void setShortcutRegistrar(Phosphor::Shortcuts::Integration::IAdhocRegistrar* registrar)
+    void setShortcutRegistrar(PhosphorShortcutsIntegration::IAdhocRegistrar* registrar)
     {
         m_shortcutRegistrar = registrar;
     }
@@ -210,13 +227,6 @@ public Q_SLOTS:
     void cancelSnap();
 
     /**
-     * Called when a window is closed during or after a drag operation
-     * @param windowId Window ID that was closed
-     * @note Cleans up any drag state associated with this window
-     */
-    void handleWindowClosed(const QString& windowId);
-
-    /**
      * Clear any drag state the daemon is still holding. Called when the
      * compositor bridge re-registers (e.g. KWin reloaded the effect, the
      * effect process restarted, or the daemon is being re-adopted by a fresh
@@ -224,8 +234,44 @@ public Q_SLOTS:
      * abandoned: the new effect has no knowledge of it and the next
      * dragStarted from the fresh connection must land on a clean slate.
      * Also hides any leftover overlay so stale visuals don't linger.
+     *
+     * MUST stay under `public Q_SLOTS` — this is genuinely invoked
+     * cross-process. The effect fires it on shutdown via
+     * `PlasmaZonesEffect::clearDaemonCompositorState()`
+     * (`ClientHelpers::sendOneWay(...WindowDrag, "clearForCompositorReconnect")`,
+     * lifecycle.cpp) so the daemon drops stale drag/overlay state the
+     * moment the effect tears down, not just on the next re-registration.
+     * It is NOT listed in `org.plasmazones.WindowDrag.xml` (the XML is
+     * hand-maintained doc, not adaptor-generating), so the bus surface for
+     * this method comes solely from its `Q_SLOTS` placement: moving it to a
+     * plain `public:` member would silently remove it from the wire and the
+     * effect's fire-and-forget `sendOneWay` call would no-op without any
+     * error. The daemon also calls it in-process from `Daemon::init` via the
+     * `bridgeRegistered` signal, but that only covers re-registration, not
+     * the effect's explicit shutdown-time clear. Contrast `handleWindowClosed`
+     * below, which has no remote caller and is correctly a plain member.
      */
     void clearForCompositorReconnect();
+
+public:
+    /**
+     * Called when a window is closed during or after a drag operation.
+     * Connected to WindowTrackingAdaptor::windowClosedNotification — the
+     * canonical close path also tears down drag state when the closing
+     * window was in flight.
+     *
+     * Declared as a public plain member function (NOT under Q_SLOTS):
+     * QDBusAbstractAdaptor's runtime introspection exposes every PUBLIC
+     * scriptable slot on the bus regardless of what the hand-maintained
+     * XML lists. Keeping this in `public Q_SLOTS` would re-expose
+     * `WindowDrag.handleWindowClosed` on the wire even after removing
+     * it from `org.plasmazones.WindowDrag.xml`. Plain member-function
+     * placement keeps the in-process function-pointer-`connect()`
+     * target reachable while the bus surface truly matches the XML.
+     *
+     * @param windowId Window ID that was closed
+     */
+    void handleWindowClosed(const QString& windowId);
 
 Q_SIGNALS:
     /**
@@ -298,7 +344,7 @@ private:
     // to rewrite it into the new protocol wrappers. The D-Bus surface no
     // longer exposes them — external clients go through the new protocol.
     // ═══════════════════════════════════════════════════════════════════════
-    void dragStarted(const QString& windowId, double x, double y, double width, double height, int mouseButtons);
+    void dragStarted(const QString& windowId, double x, double y, double width, double height);
     void dragMoved(const QString& windowId, int cursorX, int cursorY, int modifiers, int mouseButtons);
     void dragStopped(const QString& windowId, int cursorX, int cursorY, int modifiers, int mouseButtons, int& snapX,
                      int& snapY, int& snapWidth, int& snapHeight, bool& shouldApplyGeometry,
@@ -336,20 +382,22 @@ public:
      * @param windowId Dragged window (used for the isWindowTracked lookup
      *                 that decides immediateFloatOnStart)
      * @param screenId Virtual-screen-aware screen ID at drag start
-     * @param curDesktop Current virtual desktop (for context-disabled check)
-     * @param curActivity Current activity (for context-disabled check)
+     * @param resolver Frozen-snapshot context resolver — supplies the
+     *        (desktop, activity, Snapping-mode) tuple used for the
+     *        context-disabled check. nullptr disables the disable gate
+     *        (matches the historical `settings == nullptr` fallback).
      */
     static PhosphorProtocol::DragPolicy computeDragPolicy(const ISettings* settings,
                                                           const PhosphorEngine::IPlacementEngine* autotileEngine,
                                                           const QString& windowId, const QString& screenId,
-                                                          int curDesktop, const QString& curActivity);
+                                                          const PhosphorContext::IContextResolver* resolver);
 
 private:
     // Helper: Find screen containing a point (returns primary screen if not found)
     QScreen* screenAtPoint(int x, int y) const;
 
     // Helper: Returns the effective (virtual-aware) screen ID for a cursor position.
-    // Prefers virtual screen resolution via Phosphor::Screens::ScreenManager, falls back to physical screen.
+    // Prefers virtual screen resolution via PhosphorScreens::ScreenManager, falls back to physical screen.
     QString effectiveScreenIdAt(int x, int y) const;
 
     // Shared preamble for drag handler methods (DRY extraction)
@@ -379,11 +427,13 @@ private:
     IOverlayService* m_overlayService;
     PhosphorZones::IZoneDetector* m_zoneDetector;
     PhosphorZones::LayoutRegistry* m_layoutManager; // Concrete type for signal connections
-    Phosphor::Screens::ScreenManager* m_screenManager;
+    PhosphorScreens::ScreenManager* m_screenManager;
     ISettings* m_settings;
     WindowTrackingAdaptor* m_windowTracking;
     PhosphorEngine::IPlacementEngine* m_autotileEngine = nullptr; // Optional: per-screen autotile check
-    Phosphor::Shortcuts::Integration::IAdhocRegistrar* m_shortcutRegistrar =
+    PhosphorContext::IContextResolver* m_contextResolver =
+        nullptr; // Non-owning; set via setContextResolver after Daemon builds it.
+    PhosphorShortcutsIntegration::IAdhocRegistrar* m_shortcutRegistrar =
         nullptr; // Non-owning: owned by Daemon (ShortcutManager)
 
     // Snap-assist deferred compute state. Populated in dragStopped when snap
@@ -393,6 +443,14 @@ private:
     // reply.
     QString m_snapAssistPendingWindowId;
     QString m_snapAssistPendingScreenId;
+    // Desktop snapshotted at drop time so the deferred snap-assist compute
+    // describes "what zones were empty on the desktop the user dropped on"
+    // rather than re-reading the live desktop at timer-fire time. If the
+    // user changed virtual desktop between endDrag and the timer firing,
+    // the live read would otherwise filter against the new desktop.
+    // Cleared alongside the windowId/screenId pair in cancelSnap and the
+    // pending-clear sites.
+    int m_snapAssistPendingDesktop = 0;
 
     // Current drag state
     QString m_draggedWindowId;
@@ -425,7 +483,6 @@ private:
     // laziness now lives on the daemon side.
     QString m_pendingSnapDragWindowId;
     QRect m_pendingSnapDragGeometry;
-    int m_pendingSnapDragMouseButtons = 0;
     bool m_pendingSnapDragWasSnapped = false;
     QString m_currentZoneId;
     QRect m_currentZoneGeometry;
@@ -435,6 +492,8 @@ private:
     bool m_prevTriggerHeld = false; // Previous frame's trigger state for edge detection
     bool m_autotileDragInsertToggled = false; // Current toggle state for autotile drag-insert
     bool m_prevAutotileDragInsertHeld = false; // Previous frame's autotile drag-insert trigger state
+    bool m_zoneSpanToggled = false; // Current toggle state for zone span (toggle mode)
+    bool m_prevZoneSpanTriggerHeld = false; // Previous frame's zone span trigger state for edge detection
     // Drag-to-reorder mode is active for the current drag: cached at beginDrag
     // time so per-tick dragMoved work (60+ Hz) doesn't have to re-query the
     // settings + engine on every cursor update. Requires (a) autotile-bypass
@@ -520,10 +579,11 @@ private:
      */
     void computeAndEmitSnapAssist();
 
-    // Pre-snap geometry helper (reduces code duplication)
-    // Overload with captured values to prevent race conditions in dragStopped()
-    void tryStorePreSnapGeometry(const QString& windowId);
-    void tryStorePreSnapGeometry(const QString& windowId, bool wasSnapped, const QRect& originalGeometry);
+    // Pre-snap geometry helper (reduces code duplication). Takes the
+    // captured pre-snap geometry to prevent race conditions in
+    // dragStopped() — the in-flight value may have already been
+    // overwritten by the snap commit by the time this runs.
+    void tryStorePreSnapGeometry(const QString& windowId, const QRect& originalGeometry);
 
 private Q_SLOTS:
     /**

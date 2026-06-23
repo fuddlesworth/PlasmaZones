@@ -12,23 +12,27 @@
 
 #include <memory>
 
+namespace PhosphorScripting {
+class LuauEngine;
+class LuauWatchdog;
+}
+
 namespace PhosphorTiles {
 
 class ITileAlgorithmRegistry;
-class ScriptedAlgorithmWatchdog;
 
 /**
- * @brief Discovers, loads, and hot-reloads ScriptedAlgorithm instances
+ * @brief Discovers, loads, and hot-reloads LuauTileAlgorithm instances
  *
- * Scans system and user algorithm directories for .js files, creates
- * ScriptedAlgorithm instances, and registers them with the injected
+ * Scans system and user algorithm directories for .luau files, creates
+ * LuauTileAlgorithm instances, and registers them with the injected
  * ITileAlgorithmRegistry. Watches directories and files via
  * QFileSystemWatcher with debounced refresh so that new/modified/
  * deleted scripts are picked up automatically.
  *
  * The application injects the subdirectory name (relative to
  * `QStandardPaths::GenericDataLocation`) at construction — the library is
- * brand-agnostic. For PlasmaZones this is `"plasmazones/algorithms"`.
+ * brand-agnostic. For Phosphor this is `"plasmazones/algorithms"`.
  *
  * User scripts under `writableLocation/<subdirectory>/` override system
  * scripts with the same filename (system dirs come from every XDG
@@ -55,7 +59,7 @@ public:
     ~ScriptedAlgorithmLoader() override;
 
     /**
-     * @brief Discover and load all .js algorithms from system + user dirs
+     * @brief Discover and load all .luau algorithms from system + user dirs
      *
      * Clears existing scripted algorithms from the registry, then rescans
      * all algorithm directories. System directories are loaded first so that
@@ -99,12 +103,17 @@ Q_SIGNALS:
     void algorithmsChanged();
 
 private:
-    class JsScanStrategy;
+    class LuauScanStrategy;
     QStringList performScan(const QStringList& directoriesInScanOrder);
 
     void loadFromDirectory(const QString& dir, bool isUserDir, const QString& canonicalUserDir);
     QStringList algorithmDirectories() const;
-    QStringList validatedJsFiles(const QString& dirPath, int maxFiles) const;
+    QStringList validatedLuauFiles(const QString& dirPath, int maxFiles) const;
+
+    /// Lazily build the VM shared by all trusted bundled scripts (init + pluau
+    /// prelude + sandbox, paid once). Returns nullptr if VM setup fails, in
+    /// which case bundled scripts fall back to their own per-script VMs.
+    std::shared_ptr<PhosphorScripting::LuauEngine> ensureSharedEngine();
 
     QString m_subdirectory; ///< XDG-relative path (e.g. "plasmazones/algorithms")
     ITileAlgorithmRegistry* m_registry = nullptr; ///< Borrowed; owner outlives loader
@@ -115,11 +124,19 @@ private:
     /// algorithm shares ownership of the watchdog so the thread is
     /// joined only when the very last user releases its strong
     /// reference (typically here in ~Loader, occasionally in a
-    /// deferred-delete ~ScriptedAlgorithm). Per-loader instead of a
+    /// deferred-delete ~LuauTileAlgorithm). Per-loader instead of a
     /// process-wide singleton means each composition root (daemon,
     /// editor, settings) gets its own supervisor thread.
-    std::shared_ptr<ScriptedAlgorithmWatchdog> m_watchdog;
-    std::unique_ptr<JsScanStrategy> m_strategy;
+    std::shared_ptr<PhosphorScripting::LuauWatchdog> m_watchdog;
+    /// VM shared by all trusted bundled scripts so the ~per-VM baseline + 42 KB
+    /// pluau prelude is paid once instead of per script. shared_ptr because a
+    /// deferred-deleted algorithm may outlive this loader and still hold (and
+    /// on teardown, release its module from) this engine. Untrusted user
+    /// scripts get their own isolated engines instead (not this one). Created
+    /// lazily by ensureSharedEngine() on the first bundled script.
+    std::shared_ptr<PhosphorScripting::LuauEngine> m_sharedEngine;
+    bool m_sharedEngineFailed = false; ///< Latches a failed setup so we don't retry every scan.
+    std::unique_ptr<LuauScanStrategy> m_strategy;
     std::unique_ptr<PhosphorFsLoader::WatchedDirectorySet> m_watcher;
     QHash<QString, QString> m_scriptIdToPath; ///< script ID -> file path
     /// Signature of the last registered script set — sorted (id, path,

@@ -7,6 +7,8 @@
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QJsonArray>
+#include <QStandardPaths>
+#include <QStringList>
 #include <QTextStream>
 
 #include "../../../src/config/configmigration.h"
@@ -14,6 +16,8 @@
 #include "../../../src/config/configbackends.h"
 #include "../../../src/config/settingsschema.h"
 #include "../helpers/IsolatedConfigGuard.h"
+
+#include <PhosphorZones/LayoutSettingsStore.h>
 
 #include <PhosphorConfig/Schema.h>
 
@@ -43,6 +47,14 @@ private:
             return {};
         }
         return QJsonDocument::fromJson(f.readAll()).object();
+    }
+
+    void writeJsonRaw(const QString& path, const QJsonObject& obj)
+    {
+        QDir().mkpath(QFileInfo(path).absolutePath());
+        QFile f(path);
+        QVERIFY(f.open(QIODevice::WriteOnly));
+        f.write(QJsonDocument(obj).toJson());
     }
 
 private Q_SLOTS:
@@ -139,8 +151,10 @@ private Q_SLOTS:
 
         QJsonObject root = readJsonConfig(ConfigDefaults::configFilePath());
         QJsonObject snapping = root.value(QStringLiteral("Snapping")).toObject();
-        QJsonObject appearance = snapping.value(QStringLiteral("Appearance")).toObject();
-        QJsonObject colors = appearance.value(QStringLiteral("Colors")).toObject();
+        // The v3→v4 step renames the zone-overlay groups Snapping.Appearance.*
+        // → Snapping.Zones.*, so the fully-migrated config lands them here.
+        QJsonObject zones = snapping.value(QStringLiteral("Zones")).toObject();
+        QJsonObject colors = zones.value(QStringLiteral("Colors")).toObject();
 
         // Colors should be converted to hex
         QString highlight = colors.value(QStringLiteral("Highlight")).toString();
@@ -223,24 +237,51 @@ private Q_SLOTS:
                                     "SnappingLayout={uuid-here}\n"
                                     "TilingAlgorithm=bsp\n"));
 
+        // ensureJsonConfig runs the full v1→v4 chain. The v1→v2 step extracts
+        // Assignment groups to assignments.json; the v4 conversion folds them
+        // into windowrules.json and retires assignments.json (renames it to
+        // assignments.json.migrated so a downgrade can recover). Assert the
+        // v4 end-state.
         QVERIFY(ConfigMigration::ensureJsonConfig());
 
-        // Assignment groups must NOT be in config.json (they're extracted to assignments.json)
+        // Assignment groups must NOT be in config.json.
         QJsonObject configRoot = readJsonConfig(ConfigDefaults::configFilePath());
         QVERIFY2(!configRoot.contains(QStringLiteral("PerScreen")), "Assignment groups should not be under PerScreen");
         const QString groupName = QStringLiteral("Assignment:eDP-1:Desktop:1:Activity:abc-123");
         QVERIFY2(!configRoot.contains(groupName), "Assignment group should not remain in config.json");
 
-        // They should be in assignments.json
-        QJsonObject assignRoot = readJsonConfig(ConfigDefaults::assignmentsFilePath());
-        QVERIFY2(assignRoot.contains(groupName), "Assignment group should be in assignments.json");
+        // assignments.json was superseded by windowrules.json and retired from
+        // its original location (renamed to .migrated, or removed in the
+        // fallback path).
+        const QString assignmentsPath =
+            QFileInfo(ConfigDefaults::windowRulesFilePath()).absolutePath() + QStringLiteral("/assignments.json");
+        QVERIFY2(!QFile::exists(assignmentsPath), "assignments.json must be retired by the v4 conversion");
 
-        QJsonObject assignment = assignRoot.value(groupName).toObject();
-        QCOMPARE(assignment.value(QStringLiteral("Mode")).toInt(), 0);
-        QCOMPARE(assignment.value(QStringLiteral("TilingAlgorithm")).toString(), QStringLiteral("bsp"));
+        // The assignment lives in windowrules.json as a context rule. The
+        // exact (screen+desktop+activity) cascade level → priority 610, with
+        // SetEngineMode (snapping) + SetSnappingLayout + SetTilingAlgorithm.
+        const QJsonObject wr = readJsonConfig(ConfigDefaults::windowRulesFilePath());
+        QCOMPARE(wr.value(QStringLiteral("_version")).toInt(), 4);
+        bool foundExact = false;
+        for (const QJsonValue& v : wr.value(QStringLiteral("rules")).toArray()) {
+            const QJsonObject r = v.toObject();
+            if (r.value(QStringLiteral("priority")).toInt() != 610) {
+                continue;
+            }
+            QStringList types;
+            for (const QJsonValue& av : r.value(QStringLiteral("actions")).toArray()) {
+                types.append(av.toObject().value(QStringLiteral("type")).toString());
+            }
+            types.sort();
+            QCOMPARE(types,
+                     (QStringList{QStringLiteral("setEngineMode"), QStringLiteral("setSnappingLayout"),
+                                  QStringLiteral("setTilingAlgorithm")}));
+            foundExact = true;
+        }
+        QVERIFY2(foundExact, "exact-cascade assignment rule (priority 610) missing from windowrules.json");
     }
 
-    void testMigrateAssignmentGroups_readableByBackend()
+    void testMigrateAssignmentGroups_readableAsWindowRule()
     {
         IsolatedConfigGuard guard;
         writeIniFile(ConfigDefaults::legacyConfigFilePath(),
@@ -250,15 +291,32 @@ private Q_SLOTS:
 
         QVERIFY(ConfigMigration::ensureJsonConfig());
 
-        // Assignment groups are now in assignments.json, not config.json
-        auto backend = PlasmaZones::createAssignmentsBackend();
-        QStringList groups = backend->groupList();
-        QVERIFY(groups.contains(QStringLiteral("Assignment:eDP-1:Desktop:1")));
-
-        // Reading via group() should work
-        auto g = backend->group(QStringLiteral("Assignment:eDP-1:Desktop:1"));
-        QCOMPARE(g->readInt(QStringLiteral("Mode")), 1);
-        QCOMPARE(g->readString(QStringLiteral("TilingAlgorithm")), QStringLiteral("dwindle"));
+        // The v3→v4 conversion turned the assignment into a screen+desktop
+        // context rule (priority 410, autotile mode + the dwindle algorithm).
+        const QJsonObject wr = readJsonConfig(ConfigDefaults::windowRulesFilePath());
+        bool foundDesktopRule = false;
+        for (const QJsonValue& v : wr.value(QStringLiteral("rules")).toArray()) {
+            const QJsonObject r = v.toObject();
+            if (r.value(QStringLiteral("priority")).toInt() != 410) {
+                continue;
+            }
+            QString mode;
+            QString algorithm;
+            // RuleAction serializes its params inline alongside `type` — there
+            // is no nested "params" object.
+            for (const QJsonValue& av : r.value(QStringLiteral("actions")).toArray()) {
+                const QJsonObject action = av.toObject();
+                if (action.value(QStringLiteral("type")).toString() == QLatin1String("setEngineMode")) {
+                    mode = action.value(QStringLiteral("mode")).toString();
+                } else if (action.value(QStringLiteral("type")).toString() == QLatin1String("setTilingAlgorithm")) {
+                    algorithm = action.value(QStringLiteral("algorithm")).toString();
+                }
+            }
+            QCOMPARE(mode, QStringLiteral("autotile"));
+            QCOMPARE(algorithm, QStringLiteral("dwindle"));
+            foundDesktopRule = true;
+        }
+        QVERIFY2(foundDesktopRule, "screen+desktop assignment rule (priority 410) missing from windowrules.json");
     }
 
     void testMigrateNumericValues()
@@ -280,8 +338,9 @@ private Q_SLOTS:
         QCOMPARE(gaps.value(QStringLiteral("Inner")).toInt(), 8);
         QCOMPARE(gaps.value(QStringLiteral("Outer")).toInt(), 4);
 
-        QJsonObject appearance = snapping.value(QStringLiteral("Appearance")).toObject();
-        QJsonObject opacity = appearance.value(QStringLiteral("Opacity")).toObject();
+        // Zone-overlay groups land under Snapping.Zones.* after the v3→v4 rename.
+        QJsonObject zones = snapping.value(QStringLiteral("Zones")).toObject();
+        QJsonObject opacity = zones.value(QStringLiteral("Opacity")).toObject();
         QCOMPARE(opacity.value(QStringLiteral("Active")).toDouble(), 0.3);
     }
 
@@ -935,14 +994,15 @@ private Q_SLOTS:
             QCOMPARE(g->readBool(QStringLiteral("Enabled")), true);
         }
         {
-            auto g = backend->group(QStringLiteral("Snapping.Appearance.Colors"));
+            // Zone-overlay groups land under Snapping.Zones.* after the v3→v4 rename.
+            auto g = backend->group(QStringLiteral("Snapping.Zones.Colors"));
             QColor c = g->readColor(QStringLiteral("Highlight"));
             QCOMPARE(c.red(), 82);
             QCOMPARE(c.green(), 148);
             QCOMPARE(c.blue(), 226);
         }
         {
-            auto g = backend->group(QStringLiteral("Snapping.Appearance.Opacity"));
+            auto g = backend->group(QStringLiteral("Snapping.Zones.Opacity"));
             QCOMPARE(g->readDouble(QStringLiteral("Active")), 0.3);
         }
     }
@@ -1452,10 +1512,12 @@ private Q_SLOTS:
         QVERIFY(!root.contains(QStringLiteral("Snapping")));
     }
 
-    /// End-to-end check that ensureJsonConfig() chains v1→v2→v3 when given a
-    /// v1 file with disabled-monitor data — the data must end up in BOTH the
-    /// snap and autotile v3 lists, not just the snap one.
-    void testMigrateV1ToV3_chainPreservesDisableLists()
+    /// End-to-end check that ensureJsonConfig() chains v1→v4 when given a v1
+    /// file with disabled-monitor data. The v2→v3 step duplicates the single
+    /// legacy list into BOTH the snap and autotile lists; the v3→v4 step then
+    /// converts every entry into a DisableEngine context rule in
+    /// windowrules.json and REMOVES the config.json Display.*Disabled* keys.
+    void testMigrateV1ToV4_chainConvertsDisableListsToRules()
     {
         IsolatedConfigGuard guard;
         QDir().mkpath(QFileInfo(ConfigDefaults::configFilePath()).absolutePath());
@@ -1470,9 +1532,226 @@ private Q_SLOTS:
 
         const QJsonObject root = readJsonConfig(ConfigDefaults::configFilePath());
         QCOMPARE(root.value(QStringLiteral("_version")).toInt(), PlasmaZones::ConfigSchemaVersion);
-        const QJsonObject v3Display = root.value(QStringLiteral("Display")).toObject();
-        QCOMPARE(v3Display.value(QStringLiteral("SnappingDisabledMonitors")).toString(), QStringLiteral("DP-1,HDMI-1"));
-        QCOMPARE(v3Display.value(QStringLiteral("AutotileDisabledMonitors")).toString(), QStringLiteral("DP-1,HDMI-1"));
+
+        // The Display.*Disabled* keys are gone from config.json — windowrules
+        // .json supersedes them.
+        const QJsonObject display = root.value(QStringLiteral("Display")).toObject();
+        QVERIFY(!display.contains(QStringLiteral("SnappingDisabledMonitors")));
+        QVERIFY(!display.contains(QStringLiteral("AutotileDisabledMonitors")));
+
+        // Two monitors × two modes = four DisableEngine monitor rules.
+        const QJsonObject wr = readJsonConfig(ConfigDefaults::windowRulesFilePath());
+        int disableMonitorRules = 0;
+        for (const QJsonValue& v : wr.value(QStringLiteral("rules")).toArray()) {
+            const QJsonObject r = v.toObject();
+            for (const QJsonValue& av : r.value(QStringLiteral("actions")).toArray()) {
+                if (av.toObject().value(QStringLiteral("type")).toString() == QLatin1String("disableEngine")) {
+                    ++disableMonitorRules;
+                    break;
+                }
+            }
+        }
+        QCOMPARE(disableMonitorRules, 4);
+    }
+
+    // =========================================================================
+    // v4: per-layout settings relocation into the layout-settings.json sidecar
+    // =========================================================================
+
+    QString layoutsDirPath() const
+    {
+        return QStandardPaths::writableLocation(QStandardPaths::GenericDataLocation) + QLatin1Char('/')
+            + ConfigDefaults::layoutsSubdir();
+    }
+
+    QJsonObject zoneWithAppearance(const QString& zoneId, int zoneNumber) const
+    {
+        const QJsonObject relGeo{{QStringLiteral("x"), 0.0},
+                                 {QStringLiteral("y"), 0.0},
+                                 {QStringLiteral("width"), 1.0},
+                                 {QStringLiteral("height"), 1.0}};
+        const QJsonObject appearance{{QStringLiteral("useCustomColors"), true},
+                                     {QStringLiteral("highlightColor"), QStringLiteral("#ff112233")}};
+        return QJsonObject{{QStringLiteral("id"), zoneId},
+                           {QStringLiteral("name"), QStringLiteral("Z%1").arg(zoneNumber)},
+                           {QStringLiteral("zoneNumber"), zoneNumber},
+                           {QStringLiteral("relativeGeometry"), relGeo},
+                           {QStringLiteral("appearance"), appearance}};
+    }
+
+    QJsonObject fullLayoutWithSettings(const QString& layoutId) const
+    {
+        // Carries all 14 relocated per-layout setting keys so the relocation and
+        // format-lock round-trip tests exercise the complete split, not a subset.
+        return QJsonObject{
+            {QStringLiteral("id"), layoutId},
+            {QStringLiteral("name"), QStringLiteral("Settings Layout")},
+            {QStringLiteral("showZoneNumbers"), false},
+            {QStringLiteral("zonePadding"), 8},
+            {QStringLiteral("outerGap"), 12},
+            {QStringLiteral("usePerSideOuterGap"), true},
+            {QStringLiteral("outerGapTop"), 1},
+            {QStringLiteral("outerGapBottom"), 2},
+            {QStringLiteral("outerGapLeft"), 3},
+            {QStringLiteral("outerGapRight"), 4},
+            {QStringLiteral("overlayDisplayMode"), 1},
+            {QStringLiteral("autoAssign"), true},
+            {QStringLiteral("hiddenFromSelector"), true},
+            {QStringLiteral("useFullScreenGeometry"), true},
+            {QStringLiteral("shaderId"), QStringLiteral("dissolve")},
+            {QStringLiteral("shaderParams"), QJsonObject{{QStringLiteral("intensity"), 0.5}}},
+            {QStringLiteral("zones"),
+             QJsonArray{zoneWithAppearance(QStringLiteral("{11111111-0000-0000-0000-000000000001}"), 1)}},
+        };
+    }
+
+    void writeLayoutFile(const QString& fileName, const QJsonObject& layout)
+    {
+        QDir().mkpath(layoutsDirPath());
+        QFile f(layoutsDirPath() + QLatin1Char('/') + fileName);
+        QVERIFY(f.open(QIODevice::WriteOnly));
+        f.write(QJsonDocument(layout).toJson());
+    }
+
+    void writeLayoutFileWithSettings(const QString& fileName, const QString& layoutId)
+    {
+        writeLayoutFile(fileName, fullLayoutWithSettings(layoutId));
+    }
+
+    QByteArray readBytes(const QString& path)
+    {
+        QFile f(path);
+        return f.open(QIODevice::ReadOnly) ? f.readAll() : QByteArray();
+    }
+
+    void testLayoutSettingsRelocation_splitsLayoutFileIntoSidecar()
+    {
+        IsolatedConfigGuard guard;
+        const QString layoutId = QStringLiteral("{abcd0000-0000-0000-0000-000000000000}");
+        writeLayoutFileWithSettings(QStringLiteral("layout.json"), layoutId);
+
+        QVERIFY(ConfigMigration::relocateLayoutSettings(layoutsDirPath(), ConfigDefaults::layoutSettingsFilePath()));
+
+        // Layout file is slimmed: structural keys remain, settings gone.
+        const QJsonObject slim =
+            QJsonDocument::fromJson(readBytes(layoutsDirPath() + QStringLiteral("/layout.json"))).object();
+        QVERIFY(slim.contains(QStringLiteral("id")));
+        QVERIFY(slim.contains(QStringLiteral("zones")));
+        QVERIFY(!slim.contains(QStringLiteral("zonePadding")));
+        QVERIFY(!slim.contains(QStringLiteral("autoAssign")));
+        QVERIFY(!slim.contains(QStringLiteral("hiddenFromSelector")));
+        QVERIFY(!slim.contains(QStringLiteral("useFullScreenGeometry")));
+        QVERIFY(!slim.contains(QStringLiteral("showZoneNumbers")));
+        QVERIFY(!slim.value(QStringLiteral("zones")).toArray().at(0).toObject().contains(QStringLiteral("appearance")));
+
+        // Sidecar carries the settings keyed by layout UUID, in store format.
+        const QJsonObject sidecar = readJsonConfig(ConfigDefaults::layoutSettingsFilePath());
+        QCOMPARE(sidecar.value(QStringLiteral("_version")).toInt(), 1);
+        const QJsonObject settings = sidecar.value(layoutId).toObject();
+        QCOMPARE(settings.value(QStringLiteral("zonePadding")).toInt(), 8);
+        QCOMPARE(settings.value(QStringLiteral("autoAssign")).toBool(), true);
+        QCOMPARE(settings.value(QStringLiteral("hiddenFromSelector")).toBool(), true);
+        QCOMPARE(settings.value(QStringLiteral("useFullScreenGeometry")).toBool(), true);
+        const QJsonObject zoneAppearance = settings.value(QStringLiteral("zoneAppearance")).toObject();
+        QVERIFY(zoneAppearance.contains(QStringLiteral("{11111111-0000-0000-0000-000000000001}")));
+    }
+
+    void testLayoutSettingsRelocation_isIdempotent()
+    {
+        IsolatedConfigGuard guard;
+        writeLayoutFileWithSettings(QStringLiteral("layout.json"),
+                                    QStringLiteral("{abcd0000-0000-0000-0000-000000000000}"));
+
+        QVERIFY(ConfigMigration::relocateLayoutSettings(layoutsDirPath(), ConfigDefaults::layoutSettingsFilePath()));
+        const QByteArray layoutAfter1 = readBytes(layoutsDirPath() + QStringLiteral("/layout.json"));
+        const QByteArray sidecarAfter1 = readBytes(ConfigDefaults::layoutSettingsFilePath());
+
+        // Second pass over the already-slim file must not rewrite either file.
+        QVERIFY(ConfigMigration::relocateLayoutSettings(layoutsDirPath(), ConfigDefaults::layoutSettingsFilePath()));
+        QCOMPARE(readBytes(layoutsDirPath() + QStringLiteral("/layout.json")), layoutAfter1);
+        QCOMPARE(readBytes(ConfigDefaults::layoutSettingsFilePath()), sidecarAfter1);
+    }
+
+    void testLayoutSettingsRelocation_missingDirIsNoOpSuccess()
+    {
+        IsolatedConfigGuard guard;
+        QVERIFY(ConfigMigration::relocateLayoutSettings(layoutsDirPath(), ConfigDefaults::layoutSettingsFilePath()));
+        QVERIFY(!QFile::exists(ConfigDefaults::layoutSettingsFilePath()));
+    }
+
+    // Format lock: the sidecar the migration writes MUST be consumable by
+    // PhosphorZones::LayoutSettingsStore (the two split implementations are
+    // duplicated by the migration-freeze policy). Load the migration's output
+    // through the real store and reconstruct the original layout — proves the
+    // formats agree end to end, not just by hand-asserted key shape.
+    void testLayoutSettingsRelocation_outputRoundTripsThroughStore()
+    {
+        IsolatedConfigGuard guard;
+        const QString layoutId = QStringLiteral("{abcd0000-0000-0000-0000-000000000000}");
+        const QJsonObject original = fullLayoutWithSettings(layoutId);
+        writeLayoutFile(QStringLiteral("layout.json"), original);
+
+        QVERIFY(ConfigMigration::relocateLayoutSettings(layoutsDirPath(), ConfigDefaults::layoutSettingsFilePath()));
+
+        PhosphorZones::LayoutSettingsStore store;
+        QVERIFY(store.loadFromFile(ConfigDefaults::layoutSettingsFilePath()));
+        const QJsonObject slim =
+            QJsonDocument::fromJson(readBytes(layoutsDirPath() + QStringLiteral("/layout.json"))).object();
+
+        const QJsonObject reconstructed =
+            PhosphorZones::LayoutSettingsStore::mergeSettings(slim, store.settingsFor(layoutId));
+        QCOMPARE(reconstructed, original);
+    }
+
+    void testLayoutSettingsRelocation_mergesIntoExistingSidecar()
+    {
+        IsolatedConfigGuard guard;
+        // A sidecar already holding a different layout's entry (e.g. written by
+        // the runtime store, or a prior partial run) must be preserved.
+        const QString existingId = QStringLiteral("{eeee0000-0000-0000-0000-000000000000}");
+        QDir().mkpath(QFileInfo(ConfigDefaults::layoutSettingsFilePath()).absolutePath());
+        writeJsonRaw(ConfigDefaults::layoutSettingsFilePath(),
+                     QJsonObject{{QStringLiteral("_version"), 1},
+                                 {existingId, QJsonObject{{QStringLiteral("zonePadding"), 99}}}});
+
+        const QString newId = QStringLiteral("{abcd0000-0000-0000-0000-000000000000}");
+        writeLayoutFileWithSettings(QStringLiteral("layout.json"), newId);
+
+        QVERIFY(ConfigMigration::relocateLayoutSettings(layoutsDirPath(), ConfigDefaults::layoutSettingsFilePath()));
+
+        const QJsonObject sidecar = readJsonConfig(ConfigDefaults::layoutSettingsFilePath());
+        QCOMPARE(sidecar.value(existingId).toObject().value(QStringLiteral("zonePadding")).toInt(), 99);
+        QCOMPARE(sidecar.value(newId).toObject().value(QStringLiteral("zonePadding")).toInt(), 8);
+    }
+
+    void testLayoutSettingsRelocation_multipleLayoutsSelectiveZoneAppearance()
+    {
+        IsolatedConfigGuard guard;
+        const QString idA = QStringLiteral("{aaaa0000-0000-0000-0000-000000000000}");
+        const QString idB = QStringLiteral("{bbbb0000-0000-0000-0000-000000000000}");
+        writeLayoutFileWithSettings(QStringLiteral("a.json"), idA);
+
+        // Layout B: two zones, only the first has a custom appearance.
+        const QJsonObject zone1 = zoneWithAppearance(QStringLiteral("{22222222-0000-0000-0000-000000000001}"), 1);
+        QJsonObject zone2 = zoneWithAppearance(QStringLiteral("{22222222-0000-0000-0000-000000000002}"), 2);
+        zone2.remove(QStringLiteral("appearance"));
+        writeLayoutFile(QStringLiteral("b.json"),
+                        QJsonObject{{QStringLiteral("id"), idB},
+                                    {QStringLiteral("name"), QStringLiteral("B")},
+                                    {QStringLiteral("zonePadding"), 3},
+                                    {QStringLiteral("zones"), QJsonArray{zone1, zone2}}});
+
+        QVERIFY(ConfigMigration::relocateLayoutSettings(layoutsDirPath(), ConfigDefaults::layoutSettingsFilePath()));
+
+        const QJsonObject sidecar = readJsonConfig(ConfigDefaults::layoutSettingsFilePath());
+        // Both layouts relocated; each keyed independently.
+        QCOMPARE(sidecar.value(idA).toObject().value(QStringLiteral("zonePadding")).toInt(), 8);
+        QCOMPARE(sidecar.value(idB).toObject().value(QStringLiteral("zonePadding")).toInt(), 3);
+        // Only the zone that HAD an appearance is in B's zoneAppearance map.
+        const QJsonObject bZoneAppearance =
+            sidecar.value(idB).toObject().value(QStringLiteral("zoneAppearance")).toObject();
+        QVERIFY(bZoneAppearance.contains(QStringLiteral("{22222222-0000-0000-0000-000000000001}")));
+        QVERIFY(!bZoneAppearance.contains(QStringLiteral("{22222222-0000-0000-0000-000000000002}")));
     }
 };
 

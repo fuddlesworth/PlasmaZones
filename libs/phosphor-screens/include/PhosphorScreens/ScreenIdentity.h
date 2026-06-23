@@ -18,7 +18,7 @@
 
 class QScreen;
 
-namespace Phosphor::Screens {
+namespace PhosphorScreens {
 
 /**
  * @brief Stable cross-process screen identifier helpers.
@@ -214,4 +214,4 @@ PHOSPHORSCREENSCORE_EXPORT bool belongsToPhysicalScreen(const QString& storedScr
 
 } // namespace ScreenIdentity
 
-} // namespace Phosphor::Screens
+} // namespace PhosphorScreens

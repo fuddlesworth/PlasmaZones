@@ -3,7 +3,7 @@
 
 #include "DeleteZoneWithFillCommand.h"
 #include "../../services/ZoneManager.h"
-#include "pz_i18n.h"
+#include "phosphor_i18n.h"
 
 using namespace PlasmaZones;
 
@@ -11,7 +11,7 @@ DeleteZoneWithFillCommand::DeleteZoneWithFillCommand(QPointer<ZoneManager> zoneM
                                                      const QVariantMap& deletedZoneData, const QVariantList& oldZones,
                                                      const QVariantList& newZones, const QString& text,
                                                      QUndoCommand* parent)
-    : BaseZoneCommand(zoneManager, text.isEmpty() ? PzI18n::tr("Delete Zone", "@action") : text, parent)
+    : BaseZoneCommand(zoneManager, text.isEmpty() ? PhosphorI18n::tr("Delete Zone", "@action") : text, parent)
     , m_zoneId(zoneId)
     , m_deletedZoneData(deletedZoneData)
     , m_oldZones(oldZones)

@@ -8,274 +8,71 @@
 #include "../undo/commands/UpdateShaderParamsCommand.h"
 #include "../helpers/ShaderDbusQueries.h"
 #include "../helpers/SettingsDbusQueries.h"
-#include "../../core/constants.h"
+#include "../../config/configdefaults.h"
 #include "../../core/shaderregistry.h"
 #include "../../core/logging.h"
-#include "../../daemon/rendering/zonelabeltexturebuilder.h"
-#include <PhosphorAudio/CavaSpectrumProvider.h>
+#include "../../shaderpreview/shaderpreviewcontroller.h"
 
-#include "pz_i18n.h"
-#include <QColor>
-#include <QDir>
-#include <QFile>
-#include <QFileInfo>
-#include <QJsonArray>
-#include <QJsonDocument>
-#include <QJsonObject>
-#include <QStandardPaths>
+#include "phosphor_i18n.h"
 
 namespace PlasmaZones {
 
 QVariantList EditorController::zonesForShaderPreview(int width, int height) const
 {
-    QVariantList result;
-    if (width <= 0 || height <= 0) {
-        return result;
-    }
+    return m_shaderPreview->zonesForShaderPreview(width, height);
+}
 
-    const qreal resW = static_cast<qreal>(width);
-    const qreal resH = static_cast<qreal>(height);
+// ── IShaderPreviewBackend: the editor's preview data source ──
+// D-Bus shader metadata from the daemon registry + the live edited layout's
+// zones + the audio-visualizer config. (targetScreenSize() lives in
+// controller/gaps.cpp and is the sixth backend method.)
 
-    // Use the real layout zones so the preview matches what the user is editing.
-    const QVariantList zones = m_zoneManager ? m_zoneManager->zones() : QVariantList();
+QVariantList EditorController::previewZones() const
+{
+    return m_zoneManager ? m_zoneManager->zones() : QVariantList();
+}
 
-    if (zones.isEmpty()) {
-        // Fallback: single zone filling the preview area
-        QVariantMap out;
-        out[QLatin1String(::PhosphorZones::ZoneJsonKeys::Id)] =
-            QStringLiteral("{00000000-0000-0000-0000-000000000001}");
-        out[QLatin1String(::PhosphorZones::ZoneJsonKeys::X)] = 4.0;
-        out[QLatin1String(::PhosphorZones::ZoneJsonKeys::Y)] = 4.0;
-        out[QLatin1String(::PhosphorZones::ZoneJsonKeys::Width)] = resW - 8.0;
-        out[QLatin1String(::PhosphorZones::ZoneJsonKeys::Height)] = resH - 8.0;
-        out[QLatin1String(::PhosphorZones::ZoneJsonKeys::ZoneNumber)] = 1;
-        out[QLatin1String(::PhosphorZones::ZoneJsonKeys::IsHighlighted)] = false;
-        const QColor fc = ::PhosphorZones::ZoneDefaults::HighlightColor;
-        const qreal a = ::PhosphorZones::ZoneDefaults::Opacity;
-        out[QLatin1String("fillR")] = fc.redF() * a;
-        out[QLatin1String("fillG")] = fc.greenF() * a;
-        out[QLatin1String("fillB")] = fc.blueF() * a;
-        out[QLatin1String("fillA")] = a;
-        const QColor bc = ::PhosphorZones::ZoneDefaults::BorderColor;
-        out[QLatin1String("borderR")] = bc.redF();
-        out[QLatin1String("borderG")] = bc.greenF();
-        out[QLatin1String("borderB")] = bc.blueF();
-        out[QLatin1String("borderA")] = bc.alphaF();
-        out[QLatin1String("shaderBorderRadius")] = 8.0;
-        out[QLatin1String("shaderBorderWidth")] = 2.0;
-        result.append(out);
-        return result;
-    }
+QVariantMap EditorController::shaderInfo(const QString& shaderId) const
+{
+    return ShaderDbusQueries::queryShaderInfo(shaderId);
+}
 
-    // Screen size for converting fixed-geometry pixel coords to fractional
-    const QSize screenSz = targetScreenSize();
-    const qreal screenW = qMax(1.0, static_cast<qreal>(screenSz.width()));
-    const qreal screenH = qMax(1.0, static_cast<qreal>(screenSz.height()));
+QVariantMap EditorController::translateParams(const QString& shaderId, const QVariantMap& params) const
+{
+    return ShaderDbusQueries::queryTranslateShaderParams(shaderId, params);
+}
 
-    // Scale zone coordinates to preview pixel dimensions.
-    // Relative zones: fractional 0-1 * preview size.
-    // Fixed zones: pixel coords / screen size * preview size.
-    for (const QVariant& zoneVar : zones) {
-        const QVariantMap zone = zoneVar.toMap();
-        const bool isFixed = ZoneManager::isFixedMode(zone);
+bool EditorController::audioVisualizerEnabled() const
+{
+    return SettingsDbusQueries::queryBoolSetting(QStringLiteral("enableAudioVisualizer"),
+                                                 ConfigDefaults::enableAudioVisualizer());
+}
 
-        qreal px, py, pw, ph;
-        if (isFixed) {
-            // Fixed geometry: pixel coords relative to screen, scale to preview
-            px = zone.value(::PhosphorZones::ZoneJsonKeys::FixedX, 0.0).toReal() / screenW * resW;
-            py = zone.value(::PhosphorZones::ZoneJsonKeys::FixedY, 0.0).toReal() / screenH * resH;
-            pw = zone.value(::PhosphorZones::ZoneJsonKeys::FixedWidth, 100.0).toReal() / screenW * resW;
-            ph = zone.value(::PhosphorZones::ZoneJsonKeys::FixedHeight, 100.0).toReal() / screenH * resH;
-        } else {
-            // Relative geometry: fractional 0-1, scale to preview
-            px = zone.value(::PhosphorZones::ZoneJsonKeys::X).toReal() * resW;
-            py = zone.value(::PhosphorZones::ZoneJsonKeys::Y).toReal() * resH;
-            pw = zone.value(::PhosphorZones::ZoneJsonKeys::Width).toReal() * resW;
-            ph = zone.value(::PhosphorZones::ZoneJsonKeys::Height).toReal() * resH;
-        }
-
-        QVariantMap out;
-        out[QLatin1String(::PhosphorZones::ZoneJsonKeys::Id)] = zone.value(::PhosphorZones::ZoneJsonKeys::Id);
-        out[QLatin1String(::PhosphorZones::ZoneJsonKeys::X)] = px;
-        out[QLatin1String(::PhosphorZones::ZoneJsonKeys::Y)] = py;
-        out[QLatin1String(::PhosphorZones::ZoneJsonKeys::Width)] = pw;
-        out[QLatin1String(::PhosphorZones::ZoneJsonKeys::Height)] = ph;
-        out[QLatin1String(::PhosphorZones::ZoneJsonKeys::ZoneNumber)] =
-            zone.value(::PhosphorZones::ZoneJsonKeys::ZoneNumber);
-        out[QLatin1String(::PhosphorZones::ZoneJsonKeys::IsHighlighted)] =
-            zone.value(::PhosphorZones::ZoneJsonKeys::IsHighlighted, false);
-
-        // Fill color from zone appearance (or defaults)
-        const bool useCustom = zone.value(::PhosphorZones::ZoneJsonKeys::UseCustomColors).toBool();
-        QColor fillColor(zone.value(::PhosphorZones::ZoneJsonKeys::HighlightColor).toString());
-        if (!useCustom || !fillColor.isValid())
-            fillColor = ::PhosphorZones::ZoneDefaults::HighlightColor;
-        const qreal alpha = useCustom
-            ? zone.value(::PhosphorZones::ZoneJsonKeys::ActiveOpacity, ::PhosphorZones::ZoneDefaults::Opacity).toReal()
-            : ::PhosphorZones::ZoneDefaults::Opacity;
-        out[QLatin1String("fillR")] = fillColor.redF() * alpha;
-        out[QLatin1String("fillG")] = fillColor.greenF() * alpha;
-        out[QLatin1String("fillB")] = fillColor.blueF() * alpha;
-        out[QLatin1String("fillA")] = alpha;
-
-        // Border color
-        QColor borderColor(zone.value(::PhosphorZones::ZoneJsonKeys::BorderColor).toString());
-        if (!useCustom || !borderColor.isValid())
-            borderColor = ::PhosphorZones::ZoneDefaults::BorderColor;
-        out[QLatin1String("borderR")] = borderColor.redF();
-        out[QLatin1String("borderG")] = borderColor.greenF();
-        out[QLatin1String("borderB")] = borderColor.blueF();
-        out[QLatin1String("borderA")] = borderColor.alphaF();
-
-        // Border dimensions
-        out[QLatin1String("shaderBorderRadius")] = useCustom
-            ? zone.value(::PhosphorZones::ZoneJsonKeys::BorderRadius, ::PhosphorZones::ZoneDefaults::BorderRadius)
-                  .toReal()
-            : static_cast<qreal>(::PhosphorZones::ZoneDefaults::BorderRadius);
-        out[QLatin1String("shaderBorderWidth")] = useCustom
-            ? zone.value(::PhosphorZones::ZoneJsonKeys::BorderWidth, ::PhosphorZones::ZoneDefaults::BorderWidth)
-                  .toReal()
-            : static_cast<qreal>(::PhosphorZones::ZoneDefaults::BorderWidth);
-
-        result.append(out);
-    }
-
-    return result;
+int EditorController::audioBarCount() const
+{
+    return SettingsDbusQueries::queryIntSetting(QStringLiteral("audioSpectrumBarCount"),
+                                                ConfigDefaults::audioSpectrumBarCount());
 }
 
 QVariantMap EditorController::translateShaderParams(const QString& shaderId, const QVariantMap& params) const
 {
-    return ShaderDbusQueries::queryTranslateShaderParams(shaderId, params);
+    return m_shaderPreview->translateShaderParams(shaderId, params);
 }
 
 bool EditorController::saveShaderPreset(const QString& filePath, const QString& shaderId,
                                         const QVariantMap& shaderParams, const QString& presetName)
 {
-    if (filePath.isEmpty()) {
-        Q_EMIT shaderPresetSaveFailed(PzI18n::tr("File path cannot be empty", "@info"));
-        return false;
-    }
-
-    if (ShaderRegistry::isNoneShader(shaderId)) {
-        Q_EMIT shaderPresetSaveFailed(PzI18n::tr("No shader selected to save", "@info"));
-        return false;
-    }
-
-    QString name = presetName;
-    if (name.isEmpty()) {
-        name = QFileInfo(filePath).completeBaseName();
-    }
-
-    QJsonObject obj;
-    obj[QLatin1String(::PhosphorZones::ZoneJsonKeys::Name)] = name;
-    obj[QLatin1String(::PhosphorZones::ZoneJsonKeys::ShaderId)] = shaderId;
-    obj[QLatin1String(::PhosphorZones::ZoneJsonKeys::ShaderParams)] = QJsonObject::fromVariantMap(shaderParams);
-
-    QFile file(filePath);
-    if (!file.open(QIODevice::WriteOnly | QIODevice::Text)) {
-        QString error = PzI18n::tr("Failed to save preset: %1", "@info").arg(file.errorString());
-        Q_EMIT shaderPresetSaveFailed(error);
-        qCWarning(lcEditor) << error;
-        return false;
-    }
-
-    QByteArray json = QJsonDocument(obj).toJson(QJsonDocument::Indented);
-    if (file.write(json) != json.size()) {
-        QString error = PzI18n::tr("Failed to write preset file: %1", "@info").arg(file.errorString());
-        Q_EMIT shaderPresetSaveFailed(error);
-        qCWarning(lcEditor) << error;
-        return false;
-    }
-
-    return true;
+    return m_shaderPreview->saveShaderPreset(filePath, shaderId, shaderParams, presetName);
 }
 
 QVariantMap EditorController::loadShaderPreset(const QString& filePath)
 {
-    QVariantMap result;
-
-    if (filePath.isEmpty()) {
-        Q_EMIT shaderPresetLoadFailed(PzI18n::tr("File path cannot be empty", "@info"));
-        return result;
-    }
-
-    QFile file(filePath);
-    if (!file.open(QIODevice::ReadOnly | QIODevice::Text)) {
-        QString error = PzI18n::tr("Failed to open preset file: %1", "@info").arg(file.errorString());
-        Q_EMIT shaderPresetLoadFailed(error);
-        qCWarning(lcEditor) << error;
-        return result;
-    }
-
-    QJsonParseError parseError;
-    QJsonDocument doc = QJsonDocument::fromJson(file.readAll(), &parseError);
-    if (parseError.error != QJsonParseError::NoError) {
-        QString error = PzI18n::tr("Invalid preset file: %1", "@info").arg(parseError.errorString());
-        Q_EMIT shaderPresetLoadFailed(error);
-        qCWarning(lcEditor) << error;
-        return result;
-    }
-
-    if (!doc.isObject()) {
-        QString error = PzI18n::tr("Preset file must contain a JSON object", "@info");
-        Q_EMIT shaderPresetLoadFailed(error);
-        qCWarning(lcEditor) << error;
-        return result;
-    }
-
-    QJsonObject obj = doc.object();
-    QString shaderId = obj[QLatin1String(::PhosphorZones::ZoneJsonKeys::ShaderId)].toString();
-    if (shaderId.isEmpty()) {
-        QString error = PzI18n::tr("Preset file missing shader ID", "@info");
-        Q_EMIT shaderPresetLoadFailed(error);
-        qCWarning(lcEditor) << error;
-        return result;
-    }
-
-    // Validate that shader exists in available shaders
-    bool shaderFound = false;
-    for (const QVariant& shaderVar : m_availableShaders) {
-        QVariantMap shaderMap = shaderVar.toMap();
-        if (shaderMap[QLatin1String("id")].toString() == shaderId) {
-            shaderFound = true;
-            break;
-        }
-    }
-    if (!shaderFound) {
-        QString error = PzI18n::tr("Shader in preset is no longer available", "@info");
-        Q_EMIT shaderPresetLoadFailed(error);
-        qCWarning(lcEditor) << error;
-        return result;
-    }
-
-    QVariantMap shaderParams;
-    if (obj.contains(QLatin1String(::PhosphorZones::ZoneJsonKeys::ShaderParams))) {
-        shaderParams = obj[QLatin1String(::PhosphorZones::ZoneJsonKeys::ShaderParams)].toObject().toVariantMap();
-    }
-
-    result[QLatin1String(::PhosphorZones::ZoneJsonKeys::Name)] =
-        obj[QLatin1String(::PhosphorZones::ZoneJsonKeys::Name)].toString();
-    result[QLatin1String(::PhosphorZones::ZoneJsonKeys::ShaderId)] = shaderId;
-    result[QLatin1String(::PhosphorZones::ZoneJsonKeys::ShaderParams)] = shaderParams;
-
-    return result;
+    return m_shaderPreview->loadShaderPreset(filePath);
 }
 
-QString EditorController::shaderPresetDirectory()
+QString EditorController::shaderPresetDirectory() const
 {
-    QString path = QStandardPaths::writableLocation(QStandardPaths::GenericDataLocation)
-        + QStringLiteral("/plasmazones/shader-presets");
-
-    QDir dir(path);
-    if (!dir.exists()) {
-        if (dir.mkpath(QStringLiteral("."))) {
-            qCDebug(lcEditor) << "Created shader preset directory:" << dir.absolutePath();
-        } else {
-            qCWarning(lcEditor) << "Failed to create shader preset directory:" << path;
-        }
-    }
-
-    return path;
+    return m_shaderPreview->shaderPresetDirectory();
 }
 
 // =============================================================================
@@ -421,7 +218,7 @@ void EditorController::resetShaderParameters()
 {
     if (!m_currentShaderParams.isEmpty()) {
         auto* cmd = new UpdateShaderParamsCommand(this, m_currentShaderParams, QVariantMap(),
-                                                  PzI18n::tr("Reset Shader Parameters", "@action"));
+                                                  PhosphorI18n::tr("Reset Shader Parameters", "@action"));
         if (m_undoController) {
             m_undoController->push(cmd);
         } else {
@@ -437,7 +234,7 @@ void EditorController::switchShader(const QString& id, const QVariantMap& params
     }
 
     if (m_undoController) {
-        m_undoController->beginMacro(PzI18n::tr("Switch Shader Effect", "@action"));
+        m_undoController->beginMacro(PhosphorI18n::tr("Switch Shader Effect", "@action"));
     }
     setCurrentShaderId(id);
     setCurrentShaderParams(params);
@@ -487,61 +284,37 @@ void EditorController::refreshAvailableShaders()
 
 QVariantMap EditorController::getShaderInfo(const QString& shaderId) const
 {
-    return ShaderDbusQueries::queryShaderInfo(shaderId);
+    return m_shaderPreview->getShaderInfo(shaderId);
+}
+
+QString EditorController::shaderParamPreamble(const QString& shaderId) const
+{
+    return m_shaderPreview->shaderParamPreamble(shaderId);
 }
 
 QImage EditorController::buildLabelsTexture(const QVariantList& zones, int width, int height) const
 {
-    if (zones.isEmpty() || width <= 0 || height <= 0) {
-        return QImage();
-    }
-    return ZoneLabelTextureBuilder::build(zones, QSize(width, height), Qt::white, true);
+    return m_shaderPreview->buildLabelsTexture(zones, width, height);
 }
 
 QImage EditorController::loadWallpaperTexture() const
 {
-    return ShaderRegistry::loadWallpaperImage();
+    return m_shaderPreview->loadWallpaperTexture();
 }
 
 QVariant EditorController::audioSpectrumVariant() const
 {
-    return QVariant::fromValue(m_audioSpectrum);
+    return m_shaderPreview->audioSpectrumVariant();
 }
 
 void EditorController::startAudioCapture()
 {
-    if (m_audioProvider && m_audioProvider->isRunning()) {
-        return;
-    }
-    if (!SettingsDbusQueries::queryBoolSetting(QStringLiteral("enableAudioVisualizer"), false)) {
-        return;
-    }
-    if (!PhosphorAudio::CavaSpectrumProvider::isCavaInstalled()) {
-        qCDebug(lcEditor) << "Audio spectrum: CAVA not available, disabled";
-        return;
-    }
-    if (!m_audioProvider) {
-        m_audioProvider = new PhosphorAudio::CavaSpectrumProvider(this);
-        connect(m_audioProvider, &PhosphorAudio::IAudioSpectrumProvider::spectrumUpdated, this,
-                [this](const QVector<float>& spectrum) {
-                    m_audioSpectrum = spectrum;
-                    Q_EMIT audioSpectrumChanged();
-                });
-    }
-    const int barCount = SettingsDbusQueries::queryIntSetting(QStringLiteral("audioSpectrumBarCount"), 64);
-    m_audioProvider->setBarCount(barCount);
-    m_audioProvider->start();
+    m_shaderPreview->startAudioCapture();
 }
 
 void EditorController::stopAudioCapture()
 {
-    if (m_audioProvider && m_audioProvider->isRunning()) {
-        m_audioProvider->stop();
-    }
-    if (!m_audioSpectrum.isEmpty()) {
-        m_audioSpectrum.clear();
-        Q_EMIT audioSpectrumChanged();
-    }
+    m_shaderPreview->stopAudioCapture();
 }
 
 } // namespace PlasmaZones

@@ -7,7 +7,10 @@
 #include "../overlayservice.h"
 #include "../unifiedlayoutcontroller.h"
 #include "../../config/settings.h"
+#include <PhosphorContext/ContextResolver.h>
 #include <PhosphorEngine/IPlacementEngine.h>
+#include <PhosphorSnapEngine/SnapEngine.h>
+#include "../../core/constants.h"
 #include "../../core/logging.h"
 #include "../../core/screenmoderouter.h"
 #include "../../core/utils.h"
@@ -25,28 +28,6 @@
 namespace PlasmaZones {
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// Engine routing
-// ═══════════════════════════════════════════════════════════════════════════════
-
-PhosphorEngine::IPlacementEngine* Daemon::engineForScreen(const QString& screenId) const
-{
-    // Single source of truth. Delegates to the central router so daemon
-    // navigation handlers, adaptor D-Bus entry points, and resnap paths
-    // all agree on the same mode-ownership decision.
-    if (m_screenModeRouter) {
-        return m_screenModeRouter->engineFor(screenId);
-    }
-    // Fallback for very-early-startup paths where the router isn't wired
-    // yet. Mirrors the legacy logic.
-    if (isAutotileScreen(screenId)) {
-        return m_autotileEngine.get();
-    }
-    if (m_snapEngine) {
-        return m_snapEngine.get();
-    }
-    return nullptr;
-}
-
 // Local helper: mode check with nullptr-safe fallback. Every daemon
 // navigation handler routes through this so the autotile-vs-snap branch
 // is expressed as "does the router say autotile?" rather than inspecting
@@ -57,6 +38,16 @@ bool Daemon::isAutotileScreen(const QString& screenId) const
         return m_screenModeRouter->isAutotileMode(screenId);
     }
     return m_autotileEngine && m_autotileEngine->isActiveOnScreen(screenId);
+}
+
+PhosphorZones::AssignmentEntry::Mode Daemon::currentModeFor(const QString& screenId) const
+{
+    if (m_screenModeRouter) {
+        return m_screenModeRouter->modeFor(screenId);
+    }
+    // Same Snapping fallback DaemonScreenModeAdapter applies — see
+    // contextresolverwiring.cpp.
+    return PhosphorZones::AssignmentEntry::Snapping;
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -74,10 +65,11 @@ bool Daemon::isAutotileScreen(const QString& screenId) const
 // info" early return and the context population so individual handlers
 // stay short and all shortcut dispatches use the same resolution logic.
 static PhosphorEngine::IPlacementEngine* navigatorForShortcut(ScreenModeRouter* router, WindowTrackingAdaptor* wta,
+                                                              PhosphorScreens::ScreenManager* screenManager,
                                                               PhosphorEngine::NavigationContext& outCtx,
                                                               const char* shortcutName)
 {
-    outCtx.screenId = resolveShortcutScreenId(wta && wta->service() ? wta->service()->screenManager() : nullptr, wta);
+    outCtx.screenId = resolveShortcutScreenId(screenManager, wta);
     if (outCtx.screenId.isEmpty()) {
         qCDebug(lcDaemon) << shortcutName << "shortcut: no screen info";
         return nullptr;
@@ -103,6 +95,29 @@ static PhosphorEngine::IPlacementEngine* navigatorForShortcut(ScreenModeRouter* 
     return nav;
 }
 
+// Local helper: per-context disable cascade gate for navigation shortcuts
+// that commit window-geometry side effects on the focused screen.
+//
+// Returns true when the handler should silently no-op (resolver null
+// during the daemon's shutdown window, or the focused (monitor, desktop,
+// activity) is on the user's disable list). Mirrors the inline check
+// every gated handler used to carry. Centralising it makes the bug class
+// from discussion #461 — "shortcut still fires on a disabled context" —
+// a single line per handler to opt into.
+//
+// Handlers that only manipulate focus (handleFocus / handleCycle) do NOT
+// use this gate because focus changes are not a geometry side effect and
+// the user expects them to keep working on a "disabled" context.
+bool Daemon::isFocusedContextGated(const QString& screenId) const
+{
+    return !m_contextResolver || m_contextResolver->isDisabled(m_contextResolver->handleFor(screenId));
+}
+
+bool Daemon::isFocusedContextGatedForMode(const QString& screenId, PhosphorZones::AssignmentEntry::Mode mode) const
+{
+    return !m_contextResolver || m_contextResolver->isDisabled(m_contextResolver->handleForMode(screenId, mode));
+}
+
 void Daemon::handleRotate(bool clockwise)
 {
     if (m_rotateDebounce.isValid() && m_rotateDebounce.elapsed() < kShortcutDebounceMs) {
@@ -111,26 +126,37 @@ void Daemon::handleRotate(bool clockwise)
     m_rotateDebounce.restart();
 
     NavigationContext ctx;
-    if (auto* nav = navigatorForShortcut(m_screenModeRouter.get(), m_windowTrackingAdaptor, ctx, "Rotate")) {
+    if (auto* nav = navigatorForShortcut(m_screenModeRouter.get(), m_windowTrackingAdaptor, m_screenManager.get(), ctx,
+                                         "Rotate")) {
+        if (isFocusedContextGated(ctx.screenId)) {
+            return;
+        }
         nav->rotateWindows(clockwise, ctx);
     }
 }
 
 void Daemon::handleFloat()
 {
+    // Debounce keyboard auto-repeat — float toggling kicks unsnap →
+    // float → resnap on un-float, each of which is a real geometry
+    // commit. Mirrors the rotate handler's pile-up guard.
+    if (m_floatDebounce.isValid() && m_floatDebounce.elapsed() < kShortcutDebounceMs) {
+        return;
+    }
+    m_floatDebounce.restart();
+
     // Float toggles the active window regardless of which screen it's on.
     // The navigatorForShortcut helper pulls both windowId and screenId
     // from the WTA shadow, so the engine call is fully resolved without
     // reaching back into WTA state.
     NavigationContext ctx;
-    if (auto* nav = navigatorForShortcut(m_screenModeRouter.get(), m_windowTrackingAdaptor, ctx, "Float")) {
+    if (auto* nav = navigatorForShortcut(m_screenModeRouter.get(), m_windowTrackingAdaptor, m_screenManager.get(), ctx,
+                                         "Float")) {
         // Honor the per-context disable lists, same as handleSnap. Un-floating
         // a window re-runs commitSnap; without this gate that re-snaps the
         // window on a monitor / desktop / activity the user disabled
         // (discussion #461 — observed re-snapping on a disabled desktop).
-        const auto mode =
-            m_screenModeRouter ? m_screenModeRouter->modeFor(ctx.screenId) : PhosphorZones::AssignmentEntry::Snapping;
-        if (isContextDisabled(m_settings.get(), mode, ctx.screenId, currentDesktop(), currentActivity())) {
+        if (isFocusedContextGated(ctx.screenId)) {
             return;
         }
         nav->toggleFocusedFloat(ctx);
@@ -140,7 +166,8 @@ void Daemon::handleFloat()
 void Daemon::handleMove(NavigationDirection direction)
 {
     NavigationContext ctx;
-    auto* nav = navigatorForShortcut(m_screenModeRouter.get(), m_windowTrackingAdaptor, ctx, "Move");
+    auto* nav =
+        navigatorForShortcut(m_screenModeRouter.get(), m_windowTrackingAdaptor, m_screenManager.get(), ctx, "Move");
     if (!nav) {
         return;
     }
@@ -149,13 +176,17 @@ void Daemon::handleMove(NavigationDirection direction)
         qCWarning(lcDaemon) << "Unknown move navigation direction:" << static_cast<int>(direction);
         return;
     }
+    if (isFocusedContextGated(ctx.screenId)) {
+        return;
+    }
     nav->moveFocusedInDirection(dirStr, ctx);
 }
 
 void Daemon::handleFocus(NavigationDirection direction)
 {
     NavigationContext ctx;
-    auto* nav = navigatorForShortcut(m_screenModeRouter.get(), m_windowTrackingAdaptor, ctx, "Focus");
+    auto* nav =
+        navigatorForShortcut(m_screenModeRouter.get(), m_windowTrackingAdaptor, m_screenManager.get(), ctx, "Focus");
     if (!nav) {
         return;
     }
@@ -170,7 +201,11 @@ void Daemon::handleFocus(NavigationDirection direction)
 void Daemon::handlePush()
 {
     NavigationContext ctx;
-    if (auto* nav = navigatorForShortcut(m_screenModeRouter.get(), m_windowTrackingAdaptor, ctx, "PushToEmptyZone")) {
+    if (auto* nav = navigatorForShortcut(m_screenModeRouter.get(), m_windowTrackingAdaptor, m_screenManager.get(), ctx,
+                                         "PushToEmptyZone")) {
+        if (isFocusedContextGated(ctx.screenId)) {
+            return;
+        }
         // Autotile adapter's impl is a deliberate no-op — empty zones don't
         // exist in autotile mode — so this shortcut is harmlessly absorbed
         // on autotile screens instead of the daemon branching at entry.
@@ -181,9 +216,13 @@ void Daemon::handlePush()
 void Daemon::handleRestore()
 {
     NavigationContext ctx;
-    if (auto* nav = navigatorForShortcut(m_screenModeRouter.get(), m_windowTrackingAdaptor, ctx, "Restore")) {
+    if (auto* nav = navigatorForShortcut(m_screenModeRouter.get(), m_windowTrackingAdaptor, m_screenManager.get(), ctx,
+                                         "Restore")) {
         // Autotile: toggle float (restore out of layout).
         // Snap: restore to captured pre-snap geometry.
+        if (isFocusedContextGated(ctx.screenId)) {
+            return;
+        }
         nav->restoreFocusedWindow(ctx);
     }
 }
@@ -191,7 +230,8 @@ void Daemon::handleRestore()
 void Daemon::handleSwap(NavigationDirection direction)
 {
     NavigationContext ctx;
-    auto* nav = navigatorForShortcut(m_screenModeRouter.get(), m_windowTrackingAdaptor, ctx, "Swap");
+    auto* nav =
+        navigatorForShortcut(m_screenModeRouter.get(), m_windowTrackingAdaptor, m_screenManager.get(), ctx, "Swap");
     if (!nav) {
         return;
     }
@@ -200,22 +240,22 @@ void Daemon::handleSwap(NavigationDirection direction)
         qCWarning(lcDaemon) << "Unknown swap navigation direction:" << static_cast<int>(direction);
         return;
     }
+    if (isFocusedContextGated(ctx.screenId)) {
+        return;
+    }
     nav->swapFocusedInDirection(dirStr, ctx);
 }
 
 void Daemon::handleSnap(int zoneNumber)
 {
     NavigationContext ctx;
-    if (auto* nav = navigatorForShortcut(m_screenModeRouter.get(), m_windowTrackingAdaptor, ctx, "SnapToZone")) {
+    if (auto* nav = navigatorForShortcut(m_screenModeRouter.get(), m_windowTrackingAdaptor, m_screenManager.get(), ctx,
+                                         "SnapToZone")) {
         // Honor the per-context disable lists. engineFor() routes purely on
         // mode and never consults them, so a keyboard snap-to-zone would
         // otherwise place a window on a monitor / desktop / activity the user
-        // disabled (discussion #461). Take the screen's mode from the router
-        // (the single source of truth) rather than inferring it from the
-        // engine-id string, which a future third engine would misroute.
-        const auto mode =
-            m_screenModeRouter ? m_screenModeRouter->modeFor(ctx.screenId) : PhosphorZones::AssignmentEntry::Snapping;
-        if (isContextDisabled(m_settings.get(), mode, ctx.screenId, currentDesktop(), currentActivity())) {
+        // disabled (discussion #461).
+        if (isFocusedContextGated(ctx.screenId)) {
             return;
         }
         nav->moveFocusedToPosition(zoneNumber, ctx);
@@ -225,7 +265,8 @@ void Daemon::handleSnap(int zoneNumber)
 void Daemon::handleCycle(bool forward)
 {
     NavigationContext ctx;
-    if (auto* nav = navigatorForShortcut(m_screenModeRouter.get(), m_windowTrackingAdaptor, ctx, "Cycle")) {
+    if (auto* nav = navigatorForShortcut(m_screenModeRouter.get(), m_windowTrackingAdaptor, m_screenManager.get(), ctx,
+                                         "Cycle")) {
         nav->cycleFocus(forward, ctx);
     }
 }
@@ -233,7 +274,11 @@ void Daemon::handleCycle(bool forward)
 void Daemon::handleResnap()
 {
     NavigationContext ctx;
-    if (auto* nav = navigatorForShortcut(m_screenModeRouter.get(), m_windowTrackingAdaptor, ctx, "Resnap")) {
+    if (auto* nav = navigatorForShortcut(m_screenModeRouter.get(), m_windowTrackingAdaptor, m_screenManager.get(), ctx,
+                                         "Resnap")) {
+        if (isFocusedContextGated(ctx.screenId)) {
+            return;
+        }
         nav->reapplyLayout(ctx);
     }
 }
@@ -241,7 +286,11 @@ void Daemon::handleResnap()
 void Daemon::handleSnapAll()
 {
     NavigationContext ctx;
-    if (auto* nav = navigatorForShortcut(m_screenModeRouter.get(), m_windowTrackingAdaptor, ctx, "SnapAllWindows")) {
+    if (auto* nav = navigatorForShortcut(m_screenModeRouter.get(), m_windowTrackingAdaptor, m_screenManager.get(), ctx,
+                                         "SnapAllWindows")) {
+        if (isFocusedContextGated(ctx.screenId)) {
+            return;
+        }
         nav->snapAllWindows(ctx);
     }
 }
@@ -256,9 +305,19 @@ void Daemon::handleIncreaseMasterRatio()
     const QString screenId = resolveShortcutScreenId(m_screenManager.get(), m_windowTrackingAdaptor);
     if (screenId.isEmpty() || !isAutotileScreen(screenId))
         return;
-    if (isContextDisabled(m_settings.get(), PhosphorZones::AssignmentEntry::Autotile, screenId, currentDesktop(),
-                          currentActivity()))
+    if (isFocusedContextGatedForMode(screenId, PhosphorZones::AssignmentEntry::Autotile))
         return;
+    // Set the engine's active-screen hint before the parameterless engine
+    // call — the engine's NavigationController resolves the target screen
+    // from `m_activeScreen`, falling back to the first entry of
+    // `m_autotileScreens` (hash-ordered) when the hint is unset. Without
+    // the hint, a Meta+Plus on screen B with B's last focus event stale
+    // would silently bump screen A's master ratio. The
+    // HANDLE_AUTOTILE_ONLY macro sets this hint for every other autotile
+    // shortcut; these two handlers exist out-of-line only to thread the
+    // per-screen `effectiveSplitRatioStep`, so they must replicate the
+    // hint-setting the macro does.
+    m_autotileEngine->setActiveScreenHint(screenId);
     const qreal step = m_autotileEngine->effectiveSplitRatioStep(screenId);
     m_autotileEngine->increaseMasterRatio(step);
 }
@@ -270,9 +329,10 @@ void Daemon::handleDecreaseMasterRatio()
     const QString screenId = resolveShortcutScreenId(m_screenManager.get(), m_windowTrackingAdaptor);
     if (screenId.isEmpty() || !isAutotileScreen(screenId))
         return;
-    if (isContextDisabled(m_settings.get(), PhosphorZones::AssignmentEntry::Autotile, screenId, currentDesktop(),
-                          currentActivity()))
+    if (isFocusedContextGatedForMode(screenId, PhosphorZones::AssignmentEntry::Autotile))
         return;
+    // See handleIncreaseMasterRatio for the active-screen-hint rationale.
+    m_autotileEngine->setActiveScreenHint(screenId);
     const qreal step = m_autotileEngine->effectiveSplitRatioStep(screenId);
     m_autotileEngine->decreaseMasterRatio(step);
 }
@@ -284,21 +344,39 @@ void Daemon::handleRetile()
     if (!m_autotileEngine || !m_autotileEngine->isEnabled()) {
         return;
     }
+    // Mirror every sister handler (HANDLE_AUTOTILE_ONLY at macros.h:29 and
+    // the master-ratio handlers): silently no-op when the focused screen
+    // isn't in autotile mode OR when its autotile-mode disable cascade
+    // trips. retile() itself is engine-global, but a user firing the
+    // shortcut from a Snapping/Scrolling screen (or from an
+    // autotile-disabled context) expects "nothing happens on the screen
+    // I'm focused on", not "every other autotile screen retiles". Fail
+    // closed on a null resolver — matches the rest of this file
+    // (handleSnap, handleFloat, master-ratio handlers); the resolver is
+    // null only inside the tiny shutdown window where every navigation
+    // handler should be silently inert anyway. A null focused screen
+    // (no resolvable focus) is treated the same as the macro at
+    // macros.h:29 does: silent no-op, NOT a fallthrough to the legacy
+    // engine-global retile. Without this symmetry, a user with no
+    // focused window — e.g. all windows minimised, or focus lost mid-
+    // session — would trigger a global retile across every autotile
+    // screen, ignoring the per-screen disable cascade.
+    const QString focusedScreen = resolveShortcutScreenId(m_screenManager.get(), m_windowTrackingAdaptor);
+    if (focusedScreen.isEmpty()) {
+        return;
+    }
+    if (!isAutotileScreen(focusedScreen)) {
+        return;
+    }
+    if (isFocusedContextGatedForMode(focusedScreen, PhosphorZones::AssignmentEntry::Autotile)) {
+        return;
+    }
     m_autotileEngine->retile();
     if (m_settings && m_settings->showNavigationOsd() && m_overlayService) {
-        QString screenId = resolveShortcutScreenId(m_screenManager.get(), m_windowTrackingAdaptor);
-        if (screenId.isEmpty() && m_screenModeRouter) {
-            QStringList autotile =
-                m_screenModeRouter
-                    ->partitionByMode(m_screenManager ? m_screenManager->effectiveScreenIds() : QStringList{})
-                    .autotile;
-            autotile.sort();
-            if (!autotile.isEmpty()) {
-                screenId = autotile.first();
-            }
-        }
+        // focusedScreen is guaranteed non-empty here — the early-return
+        // above the retile call rejects the empty case.
         m_overlayService->showNavigationOsd(true, QStringLiteral("retile"), QStringLiteral("retiled"), QString(),
-                                            QString(), screenId);
+                                            QString(), focusedScreen);
     }
 }
 
@@ -337,12 +415,47 @@ void Daemon::resnapIfManualMode()
         // physically reposition windows on other desktops to the
         // just-cycled layout's zones, which the user perceives as
         // "every desktop got the same layout".
-        const int currentDesktop = m_virtualDesktopManager ? m_virtualDesktopManager->currentDesktop() : 0;
-        m_windowTrackingAdaptor->service()->populateResnapBufferForAllScreens(autotileScreens, {}, currentDesktop);
+        // Use the `Daemon::currentDesktop()` helper (defined in
+        // osd.cpp) for the null-safe VDM read — the same pattern used
+        // by every daemon-side site that needs the current desktop
+        // (autotile.cpp, signals.cpp, osd.cpp, start.cpp).
+        m_windowTrackingAdaptor->service()->populateResnapBufferForAllScreens(autotileScreens, {}, currentDesktop());
     }
-    m_suppressResnapOsd = 1;
+    // Co-locate the suppress pre-arm with the resnap call so a null
+    // m_snapAdaptor doesn't leave the counter armed for the next
+    // unrelated navigationFeedback. Mirrors the daemon.cpp:1249 site.
     if (m_snapAdaptor) {
+        m_suppressResnapOsd = 1;
         m_snapAdaptor->resnapToNewLayout();
+    }
+    // Restore snap-float positions for windows the picker/cycle just released
+    // from autotile — the resnap above (buffer-based) cannot cover floating
+    // windows. See the helper for why only the float half is emitted here.
+    emitPendingSnapFloatRestoresForResnapBuffer();
+}
+
+void Daemon::emitPendingSnapFloatRestoresForResnapBuffer()
+{
+    if (m_pendingSnapFloatRestores.isEmpty()) {
+        return;
+    }
+    QVector<ZoneAssignmentEntry> floatEntries;
+    for (const ZoneAssignmentEntry& e : std::as_const(m_pendingSnapFloatRestores)) {
+        if (e.targetZoneId == RestoreSentinel) {
+            floatEntries.append(e);
+        }
+    }
+    // Consume the whole buffer: the float entries are emitted below; the
+    // snap-ZONE entries are deliberately handed to the in-flight
+    // resnapToNewLayout (new-layout zones), not re-applied here against the
+    // old layout. Clearing prevents them leaking into the next windowsReleased.
+    m_pendingSnapFloatRestores.clear();
+    if (floatEntries.isEmpty() || !m_snapEngine) {
+        return;
+    }
+    if (auto* concreteSnap = qobject_cast<PhosphorSnapEngine::SnapEngine*>(m_snapEngine.get())) {
+        ++m_suppressResnapOsd; // the batched emit drives an additional resnap feedback
+        concreteSnap->emitBatchedResnap(floatEntries);
     }
 }
 
@@ -377,13 +490,13 @@ void Daemon::handleSwapVirtualScreen(NavigationDirection direction)
     // shortcut signals are wired, so it's always non-null on this path —
     // no per-call assertion needed.
     const auto result = m_virtualScreenSwapper->swapInDirection(screenId, dirStr);
-    const bool ok = (result == Phosphor::Screens::VirtualScreenSwapper::Result::Ok);
+    const bool ok = (result == PhosphorScreens::VirtualScreenSwapper::Result::Ok);
     qCDebug(lcDaemon) << "SwapVirtualScreen:" << screenId << dirStr << "->" << static_cast<int>(result);
 
     if (m_settings && m_settings->showNavigationOsd() && m_overlayService) {
         // On success, surface the direction (the OSD style needs a string to
         // render the arrow). On failure, surface the structured reason.
-        const QString osdReason = ok ? dirStr : Phosphor::Screens::VirtualScreenSwapper::reasonString(result);
+        const QString osdReason = ok ? dirStr : PhosphorScreens::VirtualScreenSwapper::reasonString(result);
         m_overlayService->showNavigationOsd(ok, QStringLiteral("swap_vs"), osdReason, QString(), QString(), physId);
     }
 }
@@ -407,7 +520,7 @@ void Daemon::handleRotateVirtualScreens(bool clockwise)
     // Swapper is always non-null on the shortcut path — see matching
     // comment in handleSwapVirtualScreen above.
     const auto result = m_virtualScreenSwapper->rotate(physId, clockwise);
-    const bool ok = (result == Phosphor::Screens::VirtualScreenSwapper::Result::Ok);
+    const bool ok = (result == PhosphorScreens::VirtualScreenSwapper::Result::Ok);
     qCDebug(lcDaemon) << "RotateVirtualScreens:" << physId << "cw=" << clockwise << "->" << static_cast<int>(result);
 
     if (m_settings && m_settings->showNavigationOsd() && m_overlayService) {
@@ -416,7 +529,7 @@ void Daemon::handleRotateVirtualScreens(bool clockwise)
         // rotation direction; on failure surface the structured reason so the
         // user sees "no_subdivision" instead of an ambiguous "clockwise" fail.
         const QString osdReason = ok ? (clockwise ? QStringLiteral("clockwise") : QStringLiteral("counterclockwise"))
-                                     : Phosphor::Screens::VirtualScreenSwapper::reasonString(result);
+                                     : PhosphorScreens::VirtualScreenSwapper::reasonString(result);
         m_overlayService->showNavigationOsd(ok, QStringLiteral("rotate_vs"), osdReason, QString(), QString(), physId);
     }
 }

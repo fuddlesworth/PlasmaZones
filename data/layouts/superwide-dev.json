@@ -1,7 +1,7 @@
 {
     "id": "{c6fd8b9c-5dae-4acd-ec7b-9fb03c5d7e9f}",
     "name": "Super-Ultrawide Dev",
-    "description": "Dual-workspace dev layout for 32:9 — left half for code, right half for reference/tools",
+    "description": "Dual-workspace dev layout for 32:9, with the left half for code and the right half for reference and tools",
     "type": 5,
     "isBuiltIn": true,
     "showZoneNumbers": true,

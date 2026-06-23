@@ -3,11 +3,12 @@
 
 #include <PhosphorShaders/ShaderRegistry.h>
 #include <PhosphorShaders/IWallpaperProvider.h>
+#include <PhosphorShaders/ShaderParamPreamble.h>
 #include "shaderutils.h"
 
-#include <PhosphorFsLoader/MetadataPackScanStrategy.h>
-
 #include <QColor>
+#include <QCryptographicHash>
+#include <QDateTime>
 #include <QDir>
 #include <QFile>
 #include <QFileInfo>
@@ -15,6 +16,7 @@
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QLoggingCategory>
+#include <QSet>
 #include <QUrl>
 #include <QUuid>
 
@@ -207,6 +209,70 @@ ShaderRegistry::ShaderInfo parseShaderMetadata(const QString& shaderDir, const Q
         }
     }
 
+    // Automatic slot assignment (T1.1): a parameter that omits `slot` is packed
+    // into the next free lane of its pool in declaration order — float/int/bool
+    // → 0..31, color → 0..15, image → 0..3 — so authors no longer hand-number
+    // slots (the `p_<id>` preamble and the upload both derive from this same
+    // slot). Explicit slots are reserved first, so a pack may mix the two; the
+    // migrated zone packs drop slots entirely, becoming pure declaration order.
+    // A collision (two explicit params on one lane) is left as-is for the
+    // validator (T1.2) to flag, not silently reshuffled.
+    {
+        // An id that isn't a valid GLSL identifier can't get a p_<id> define
+        // (buildParamPreamble skips it), so it must claim no lane either: force its
+        // slot to -1 (overriding any explicit metadata slot) so it reserves
+        // nothing, auto-fills to nothing, AND uploads nothing — uniformName()
+        // returns "" for slot < 0, so translateParamsToUniforms drops it. Without
+        // this, an invalid-id param with an explicit slot would still upload to
+        // that lane while a valid auto-slot param (the lane was never reserved)
+        // collides onto it.
+        for (ShaderRegistry::ParameterInfo& p : info.parameters) {
+            if (!isValidParamId(p.id)) {
+                p.slot = -1;
+            }
+        }
+        auto poolOf = [](const QString& type) -> int { // 0 = scalar, 1 = color, 2 = image
+            if (type == QLatin1String("color")) {
+                return 1;
+            }
+            if (type == QLatin1String("image")) {
+                return 2;
+            }
+            return 0;
+        };
+        QSet<int> usedScalar, usedColor, usedImage;
+        for (const ShaderRegistry::ParameterInfo& p : std::as_const(info.parameters)) {
+            // Reserve only slots that buildParamPreamble also honors — an invalid
+            // id is skipped on both sides, so the two reservation passes stay
+            // byte-identical (not just the auto-fill passes).
+            if (p.slot < 0 || !isValidParamId(p.id)) {
+                continue;
+            }
+            (poolOf(p.type) == 1 ? usedColor : poolOf(p.type) == 2 ? usedImage : usedScalar).insert(p.slot);
+        }
+        int nextScalar = 0, nextColor = 0, nextImage = 0;
+        for (ShaderRegistry::ParameterInfo& p : info.parameters) {
+            if (p.slot >= 0) {
+                continue;
+            }
+            // Skip ids buildParamPreamble would reject (invalid GLSL identifier),
+            // so this upload-lane numbering stays byte-identical to the p_<id>
+            // define numbering — a rejected param gets no define and no lane.
+            if (!isValidParamId(p.id)) {
+                continue;
+            }
+            const int pool = poolOf(p.type);
+            QSet<int>& used = (pool == 1 ? usedColor : pool == 2 ? usedImage : usedScalar);
+            int& next = (pool == 1 ? nextColor : pool == 2 ? nextImage : nextScalar);
+            while (used.contains(next)) {
+                ++next;
+            }
+            p.slot = next;
+            used.insert(next);
+            ++next;
+        }
+    }
+
     // Presets
     const QJsonObject presetsObj = root.value(QLatin1String("presets")).toObject();
     for (auto it = presetsObj.begin(); it != presetsObj.end(); ++it) {
@@ -314,66 +380,106 @@ bool shaderSubdirSkip(const QString& subdirName)
     return subdirName == QLatin1String("none") || subdirName == QLatin1String("shared");
 }
 
-// No `setSignatureContrib` is wired below — the strategy auto-fingerprints
-// every distinct file `shaderEntryWatchPaths` and `shaderTopLevelWatchPaths`
-// return (path|size|mtime|), which already covers every shader source
-// reachable through the `*.frag/*.vert/*.glsl/*.json` globs: the per-pack
-// frag/vert/buffer shaders, the per-pack auxiliary `helpers.glsl`, AND
-// the top-level shared includes (`common.glsl`, `audio.glsl`, the default
-// `zone.vert`, …). An edit to any of them shifts the signature and fires
-// `OnCommit`. A bespoke `SignatureContrib` would be redundant.
+// Per-entry content signature: the path|size|mtime of every file that
+// defines a pack — its metadata.json plus frag/vert/buffer shaders. Drives
+// MetadataPackLoader's per-entry reconcile so an edit to a pack's metadata
+// OR its shader sources re-registers THAT pack (fresh ShaderInfo) while
+// leaving unedited siblings untouched. Edits to SHARED includes
+// (common.glsl, audio.glsl, the default zone.vert) belong to no single
+// pack — they reach the loader's coarse onCommitted hook via the
+// per-directory watch set (shaderTopLevelWatchPaths) and re-emit
+// shadersChanged without per-pack churn.
+void shaderContentSignature(QCryptographicHash& hasher, const ShaderRegistry::ShaderInfo& info)
+{
+    const auto mixFile = [&hasher](const QString& path) {
+        if (path.isEmpty()) {
+            return;
+        }
+        const QFileInfo fi(path);
+        hasher.addData(path.toUtf8());
+        hasher.addData(QByteArray::number(fi.size()));
+        hasher.addData(QByteArray::number(fi.lastModified().toMSecsSinceEpoch()));
+    };
+    // metadata.json sits in the same directory as the frag source.
+    if (!info.sourcePath.isEmpty()) {
+        mixFile(QFileInfo(info.sourcePath).absolutePath() + QStringLiteral("/metadata.json"));
+    }
+    mixFile(info.sourcePath);
+    mixFile(info.vertexShaderPath);
+    for (const QString& buf : info.bufferShaderPaths) {
+        mixFile(buf);
+    }
+    // isUser is set from the user-path classification, NOT from file content —
+    // it can flip (setUserPath after addSearchPaths) with no file change, so
+    // mix it in or the reconcile would keep the stale-classification entry.
+    hasher.addData(info.isUserShader ? "u" : "s");
+}
 
 } // namespace
 
-/// Build + configure the scan strategy and hand ownership to the caller
-/// as the upcasted base type (`IScanStrategy`) — the consumer of this
-/// helper is `MetadataPackRegistryBase`'s ctor, which doesn't see the
-/// `Payload` template parameter. The subclass recovers the typed pointer
-/// via `static_cast<ScanStrategy*>(strategy())` from its mem-init list.
-///
-/// Lifted out of the ctor so the base can take the unique_ptr in a
-/// single-phase init while the subclass still applies all the
-/// schema-specific setters. The OnCommit lambda captures @p self only
-/// as a pointer — by the time the lambda fires, the subclass ctor has
-/// finished and Q_EMIT dispatches through the full ShaderRegistry vtable.
-///
-/// Note: a most-derived ctor (e.g. `PlasmaZones::ShaderRegistry`) may call
-/// `addSearchPaths` from its own body, which triggers a synchronous rescan
-/// and fires `OnCommit` → `Q_EMIT self->shadersChanged()` while that
-/// most-derived ctor is still on the stack. Harmless — no external code
-/// can have `connect`-ed to the signal yet, since the constructed object
-/// hasn't been returned to anyone — but worth knowing if a future
-/// in-tree subclass adds slot wiring during construction.
-std::unique_ptr<PhosphorFsLoader::IScanStrategy> ShaderRegistry::buildScanStrategy(ShaderRegistry* self)
-{
-    auto strategy = std::make_unique<ScanStrategy>(parseShader, [self]() {
-        Q_EMIT self->shadersChanged();
-    });
-    strategy->setPerEntryWatchPaths(shaderEntryWatchPaths);
-    strategy->setPerDirectoryWatchPaths(shaderTopLevelWatchPaths);
-    strategy->setPerSubdirSkip(shaderSubdirSkip);
-    strategy->setLoggingCategory(lcShaderRegistry());
-    return strategy;
-}
-
 ShaderRegistry::ShaderRegistry(QObject* parent)
-    : MetadataPackRegistryBase(lcShaderRegistry(), buildScanStrategy(this), parent)
-    , m_typedStrategy(static_cast<ScanStrategy*>(strategy()))
+    : QObject(parent)
+    , m_loader(std::make_unique<PhosphorRegistry::MetadataPackLoader<ShaderPack>>(
+          &m_registry,
+          // Parser: reuse the existing metadata→ShaderInfo parse, then wrap
+          // the result in a ShaderPack for the registry.
+          [](const QString& subdir, const QJsonObject& root, bool isUser) -> std::shared_ptr<ShaderPack> {
+              std::optional<ShaderInfo> info = parseShader(subdir, root, isUser);
+              return info ? std::make_shared<ShaderPack>(std::move(*info)) : nullptr;
+          },
+          lcShaderRegistry()))
 {
-    // The static_cast above is safe by construction (`buildScanStrategy`
-    // is the only path that populates the base's strategy slot, and it
-    // always produces a `ScanStrategy`). Pin that invariant in debug
-    // builds via dynamic_cast so a future refactor that diverts the
-    // strategy slot fails loudly instead of silently UB-ing on lookup.
-    Q_ASSERT_X(dynamic_cast<ScanStrategy*>(strategy()) != nullptr, "ShaderRegistry",
-               "buildScanStrategy must return a MetadataPackScanStrategy<ShaderInfo>");
+    // Watch each pack's frag/vert/buffer sources (per-entry) + the shared
+    // top-level includes (per-directory); skip the "none"/"shared" sentinel
+    // subdirs. The per-entry content signature drives the reconcile so a
+    // metadata- or source-edited pack re-registers with fresh info; the
+    // coarse onCommitted hook re-emits shadersChanged on any committed
+    // rescan (incl. shared-include edits), matching the legacy registry's
+    // single shadersChanged-on-any-change contract.
+    m_loader->setPerEntryWatchPaths([](const ShaderPack& p) {
+        return shaderEntryWatchPaths(p.info());
+    });
+    m_loader->setPerDirectoryWatchPaths(shaderTopLevelWatchPaths);
+    m_loader->setPerSubdirSkip(shaderSubdirSkip);
+    m_loader->setSignatureContrib([](QCryptographicHash& hasher, const ShaderPack& p) {
+        shaderContentSignature(hasher, p.info());
+    });
+    // Q_EMIT through `this`: a most-derived ctor (PlasmaZones::ShaderRegistry)
+    // may call addSearchPaths from its own body, firing this while still on
+    // the stack — harmless, nothing has connected yet.
+    m_loader->setOnCommitted([this]() {
+        Q_EMIT shadersChanged();
+    });
 }
 
 ShaderRegistry::~ShaderRegistry() = default;
 
-void ShaderRegistry::onUserPathChanged(const QString& path)
+// ── Search paths (forwarded to the loader) ───────────────────────────────
+
+void ShaderRegistry::addSearchPath(const QString& path, PhosphorFsLoader::LiveReload liveReload)
 {
-    m_typedStrategy->setUserPath(path);
+    m_loader->addSearchPath(path, liveReload);
+}
+
+void ShaderRegistry::addSearchPaths(const QStringList& paths, PhosphorFsLoader::LiveReload liveReload,
+                                    PhosphorFsLoader::RegistrationOrder order)
+{
+    m_loader->addSearchPaths(paths, liveReload, order);
+}
+
+QStringList ShaderRegistry::searchPaths() const
+{
+    return m_loader->searchPaths();
+}
+
+void ShaderRegistry::setUserPath(const QString& path)
+{
+    m_loader->setUserPath(path);
+}
+
+void ShaderRegistry::refresh()
+{
+    m_loader->refresh();
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -411,9 +517,17 @@ void ShaderRegistry::reportShaderBakeFinished(const QString& shaderId, bool succ
 
 QList<ShaderRegistry::ShaderInfo> ShaderRegistry::availableShaders() const
 {
-    // Strategy returns a sorted-by-id snapshot — single source of truth
-    // for QHash-randomisation-stable output across process launches.
-    return m_typedStrategy->packs();
+    // Registry iteration is insertion order; sort by id for alphabetical
+    // output (the legacy strategy returned sorted).
+    QList<ShaderInfo> result;
+    result.reserve(m_registry.size());
+    m_registry.forEach([&result](const std::shared_ptr<ShaderPack>& pack) {
+        result.append(pack->info());
+    });
+    std::sort(result.begin(), result.end(), [](const ShaderInfo& a, const ShaderInfo& b) {
+        return a.id < b.id;
+    });
+    return result;
 }
 
 QVariantList ShaderRegistry::availableShadersVariant() const
@@ -429,23 +543,26 @@ QVariantList ShaderRegistry::availableShadersVariant() const
 
 ShaderRegistry::ShaderInfo ShaderRegistry::shader(const QString& id) const
 {
-    return m_typedStrategy->pack(id);
+    const auto pack = m_registry.factory(id);
+    return pack ? pack->info() : ShaderInfo{};
 }
 
 QVariantMap ShaderRegistry::shaderInfo(const QString& id) const
 {
-    if (!m_typedStrategy->contains(id)) {
+    const auto pack = m_registry.factory(id);
+    if (!pack) {
         return QVariantMap();
     }
-    return shaderInfoToVariantMap(m_typedStrategy->pack(id));
+    return shaderInfoToVariantMap(pack->info());
 }
 
 QUrl ShaderRegistry::shaderUrl(const QString& id) const
 {
-    if (isNoneShader(id) || !m_typedStrategy->contains(id)) {
+    if (isNoneShader(id)) {
         return QUrl();
     }
-    return m_typedStrategy->pack(id).shaderUrl;
+    const auto pack = m_registry.factory(id);
+    return pack ? pack->info().shaderUrl : QUrl();
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -925,6 +1042,67 @@ QVariantMap ShaderRegistry::translateParamsToUniforms(const QString& shaderId, c
     }
 
     return result;
+}
+
+QString ShaderRegistry::paramPreamble(const ShaderInfo& info)
+{
+    // By the time this runs, parseShaderMetadata has resolved every VALID-id
+    // parameter's slot to >= 0 — an explicit metadata `slot`, or one auto-assigned
+    // by declaration order when omitted (most migrated packs drop `slot`); an
+    // invalid-id param keeps slot -1 and is skipped identically by buildParamPreamble
+    // (no define) and translateParamsToUniforms (no upload). So each emitted
+    // PreambleParam carries a concrete explicit slot (buildParamPreamble's
+    // auto-numbering isn't exercised on this zone path). buildParamPreamble turns
+    // each into `#define p_<id> <glsl-accessor>` using the same slot→accessor rule
+    // ParameterInfo::uniformName()/translateParamsToUniforms upload to: color →
+    // customColors[slot], image → uTexture<slot>, else → customParams[slot/4].
+    // <xyzw>. So p_<id> reads exactly the lane the value lands in.
+    QList<PreambleParam> params;
+    params.reserve(info.parameters.size());
+    for (const ParameterInfo& p : info.parameters) {
+        PreambleParam entry;
+        entry.id = p.id;
+        if (p.type == QLatin1String("color")) {
+            entry.pool = PreambleParam::Pool::Color;
+        } else if (p.type == QLatin1String("image")) {
+            entry.pool = PreambleParam::Pool::Image;
+        } else {
+            entry.pool = PreambleParam::Pool::Scalar;
+        }
+        entry.explicitSlot = p.slot;
+        params.append(entry);
+    }
+    return buildParamPreamble(params);
+}
+
+ShaderRegistry::ShaderInfo ShaderRegistry::parsePackMetadata(const QString& packDir, QString* error)
+{
+    const QString metaPath = QDir(packDir).filePath(QStringLiteral("metadata.json"));
+    QFile file(metaPath);
+    if (!file.open(QIODevice::ReadOnly)) {
+        if (error) {
+            *error = QStringLiteral("cannot open %1").arg(metaPath);
+        }
+        return {};
+    }
+    QJsonParseError parseError;
+    const QJsonDocument doc = QJsonDocument::fromJson(file.readAll(), &parseError);
+    if (parseError.error != QJsonParseError::NoError) {
+        if (error) {
+            *error = QStringLiteral("invalid JSON: %1").arg(parseError.errorString());
+        }
+        return {};
+    }
+    if (!doc.isObject()) {
+        if (error) {
+            *error = QStringLiteral("metadata root is not a JSON object");
+        }
+        return {};
+    }
+    // parseShaderMetadata lives in this TU's anonymous namespace; it sets
+    // sourcePath / vertexShaderPath / bufferShaderPaths from packDir and applies
+    // the same auto-slot assignment the live scan does.
+    return parseShaderMetadata(packDir, doc.object());
 }
 
 } // namespace PhosphorShaders

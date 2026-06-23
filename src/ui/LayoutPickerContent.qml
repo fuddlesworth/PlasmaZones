@@ -17,7 +17,7 @@ import org.plasmazones.common as QFZCommon
  *
  * Phase 5: surface lifecycle + show/hide animations are driven entirely
  * by PhosphorAnimationLayer::SurfaceAnimator (registered for
- * PzRoles::LayoutPicker with `osd.show` / `osd.pop` / `osd.hide`
+ * PhosphorRoles::LayoutPicker with `osd.show` / `osd.pop` / `osd.hide`
  * profiles). PhosphorLayer::Surface handles `Qt.WindowTransparentForInput`
  * on the underlying QWindow during the hide cycle, and OverlayService::
  * showLayoutPicker / hideLayoutPicker drive `Surface::show()` /
@@ -104,7 +104,6 @@ Item {
         for (var i = 0; i < layouts.length; i++) {
             if (layouts[i].id === activeLayoutId)
                 return i;
-
         }
         return 0;
     }
@@ -125,12 +124,12 @@ Item {
     /// race). C++ event filter and OverlayService::hideLayoutPicker
     /// translate this into Surface::hide() — which then drives the library
     /// animator. Same shape as LayoutOsd / NavigationOsd for consistency.
-    signal dismissRequested()
+    signal dismissRequested
 
     /// Internal: emit dismissRequested at most once per show cycle.
     function _requestDismiss() {
         if (_dismissed)
-            return ;
+            return;
 
         _dismissed = true;
         root.dismissRequested();
@@ -138,7 +137,7 @@ Item {
 
     function moveSelection(dx, dy) {
         if (layoutCount === 0 || root.locked)
-            return ;
+            return;
 
         var col = selectedIndex % gridColumns;
         var row = Math.floor(selectedIndex / gridColumns);
@@ -155,7 +154,7 @@ Item {
 
     function confirmSelection() {
         if (root.locked)
-            return ;
+            return;
 
         if (selectedIndex >= 0 && selectedIndex < layoutCount) {
             var layout = layouts[selectedIndex];
@@ -254,7 +253,7 @@ Item {
         MouseArea {
             anchors.fill: parent
             Accessible.ignored: true
-            onClicked: function(mouse) {
+            onClicked: function (mouse) {
                 mouse.accepted = true;
             }
         }
@@ -357,14 +356,13 @@ Item {
                             anchors.fill: parent
                             hoverEnabled: true
                             cursorShape: Qt.ForbiddenCursor
-                            onClicked: function(mouse) {
+                            onClicked: function (mouse) {
                                 mouse.accepted = true;
                             }
-                            onPressed: function(mouse) {
+                            onPressed: function (mouse) {
                                 mouse.accepted = true;
                             }
                         }
-
                     }
 
                     MouseArea {
@@ -376,25 +374,20 @@ Item {
                         cursorShape: root.locked && !layoutCard.isActive ? Qt.ForbiddenCursor : Qt.PointingHandCursor
                         onClicked: {
                             if (root.locked)
-                                return ;
+                                return;
 
                             root.selectedIndex = index;
                             root.confirmSelection();
                         }
                         onEntered: {
                             if (root.locked && !layoutCard.isActive)
-                                return ;
+                                return;
 
                             root.selectedIndex = index;
                         }
                     }
-
                 }
-
             }
-
         }
-
     }
-
 }

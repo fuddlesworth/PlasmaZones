@@ -165,23 +165,26 @@ void appendShadersSchema(PhosphorConfig::Schema& schema)
 }
 
 // ─── Appearance ─────────────────────────────────────────────────────────────
-// Five sub-groups under Snapping.Appearance.*: Colors (system toggle + 3
-// zone colors), Labels (font family/color/scale/weight + italic/underline/
-// strikeout toggles), Opacity (active + inactive), Border (width + radius),
-// plus Effects.Blur which shares the load function.
+// Declares seven groups. Four zone-overlay sub-groups under Snapping.Zones.*:
+// Colors (system toggle + 3 zone colors), Labels (font family/color/scale/weight
+// + italic/underline/strikeout toggles), Opacity (active + inactive), Border
+// (width + radius). (Effects.Blur is a zone-overlay setting too but shares the
+// Effects container declared in appendDisplaySchema.) Plus three
+// Snapping.Appearance.{Colors,Decorations,Borders} snapped-window decoration
+// groups (parallel to Tiling.Appearance.*).
 
 void appendAppearanceSchema(PhosphorConfig::Schema& schema)
 {
     using CD = ConfigDefaults;
 
-    schema.groups[CD::snappingAppearanceColorsGroup()] = {
+    schema.groups[CD::snappingZonesColorsGroup()] = {
         {CD::useSystemKey(), CD::useSystemColors(), QMetaType::Bool},
         {CD::highlightKey(), CD::highlightColor(), QMetaType::QColor, {}, validColorOr(CD::highlightColor())},
         {CD::inactiveKey(), CD::inactiveColor(), QMetaType::QColor, {}, validColorOr(CD::inactiveColor())},
         {CD::borderKey(), CD::borderColor(), QMetaType::QColor, {}, validColorOr(CD::borderColor())},
     };
 
-    schema.groups[CD::snappingAppearanceLabelsGroup()] = {
+    schema.groups[CD::snappingZonesLabelsGroup()] = {
         {CD::fontColorKey(), CD::labelFontColor(), QMetaType::QColor, {}, validColorOr(CD::labelFontColor())},
         {CD::fontFamilyKey(), CD::labelFontFamily(), QMetaType::QString},
         {CD::fontSizeScaleKey(),
@@ -199,7 +202,7 @@ void appendAppearanceSchema(PhosphorConfig::Schema& schema)
         {CD::fontStrikeoutKey(), CD::labelFontStrikeout(), QMetaType::Bool},
     };
 
-    schema.groups[CD::snappingAppearanceOpacityGroup()] = {
+    schema.groups[CD::snappingZonesOpacityGroup()] = {
         {CD::activeKey(),
          CD::activeOpacity(),
          QMetaType::Double,
@@ -212,7 +215,7 @@ void appendAppearanceSchema(PhosphorConfig::Schema& schema)
          clampDouble(CD::inactiveOpacityMin(), CD::inactiveOpacityMax())},
     };
 
-    schema.groups[CD::snappingAppearanceBorderGroup()] = {
+    schema.groups[CD::snappingZonesBorderGroup()] = {
         {CD::widthKey(), CD::borderWidth(), QMetaType::Int, {}, clampInt(CD::borderWidthMin(), CD::borderWidthMax())},
         {CD::radiusKey(),
          CD::borderRadius(),
@@ -223,6 +226,37 @@ void appendAppearanceSchema(PhosphorConfig::Schema& schema)
     // Effects.Blur lives in the Effects group alongside the display-OSD keys;
     // the whole Effects group is declared in one shot by appendDisplaySchema
     // below to avoid split-across-two-call-sites ordering bugs.
+
+    // Snapping.Appearance.* — the snapped window's border / title-bar
+    // decoration (parallel to Tiling.Appearance.* in appendAutotilingSchema;
+    // defaults via snapping* in ConfigDefaults).
+    schema.groups[CD::snappingAppearanceColorsGroup()] = {
+        {CD::activeKey(), CD::snappingBorderColor(), QMetaType::QColor, {}, validColorOr(CD::snappingBorderColor())},
+        {CD::inactiveKey(),
+         CD::snappingInactiveBorderColor(),
+         QMetaType::QColor,
+         {},
+         validColorOr(CD::snappingInactiveBorderColor())},
+        {CD::useSystemKey(), CD::snappingUseSystemBorderColors(), QMetaType::Bool},
+    };
+
+    schema.groups[CD::snappingAppearanceDecorationsGroup()] = {
+        {CD::hideTitleBarsKey(), CD::snappingHideTitleBars(), QMetaType::Bool},
+    };
+
+    schema.groups[CD::snappingAppearanceBordersGroup()] = {
+        {CD::showBorderKey(), CD::snappingShowBorder(), QMetaType::Bool},
+        {CD::widthKey(),
+         CD::snappingBorderWidth(),
+         QMetaType::Int,
+         {},
+         clampInt(CD::snappingBorderWidthMin(), CD::snappingBorderWidthMax())},
+        {CD::radiusKey(),
+         CD::snappingBorderRadius(),
+         QMetaType::Int,
+         {},
+         clampInt(CD::snappingBorderRadiusMin(), CD::snappingBorderRadiusMax())},
+    };
 }
 
 // ─── Ordering ───────────────────────────────────────────────────────────────
@@ -277,11 +311,6 @@ void appendAnimationsSchema(PhosphorConfig::Schema& schema)
         // by Store::read's legacy-string fallback on first load.
         {CD::animationProfileKey(), CD::animationProfile(sSchemaRegistry), QMetaType::QVariantMap},
         {CD::shaderProfileTreeKey(), CD::shaderProfileTree(), QMetaType::QVariantMap},
-        // AnimationAppRules persists as an ordered JSON array (each
-        // element a rule object). Stored under the same Animations
-        // group so the on-disk layout keeps everything animation-
-        // related in one section.
-        {CD::animationAppRulesKey(), CD::animationAppRules(), QMetaType::QVariantList},
     };
 }
 
@@ -499,17 +528,26 @@ void appendEditorSchema(PhosphorConfig::Schema& schema)
     };
 }
 
-// ─── Exclusions ─────────────────────────────────────────────────────────────
-// Apps and window classes to exclude from snapping + minimum-size filters
-// + the transient-window toggle. List keys use canonicalCommaList to
-// normalize formatting; ints are clamped.
+// ─── Exclusions + Animation Window Filtering ────────────────────────────────
+// Two distinct schema groups declared together:
+//   1. `Exclusions` — snapping/tiling minimum-size + transient-window
+//      globals.
+//   2. `Animations.WindowFiltering` — animation-side equivalents plus a
+//      NotificationsAndOsd knob.
+// Both retired their per-app / per-class string lists in v4 (folded into
+// Application-subject WindowRules); only the global behavioural knobs
+// survive. Ints are clamped via schema validators.
 
 void appendExclusionsSchema(PhosphorConfig::Schema& schema)
 {
     using CD = ConfigDefaults;
     schema.groups[CD::exclusionsGroup()] = {
-        {CD::applicationsKey(), QString(), QMetaType::QString, {}, canonicalCommaList},
-        {CD::windowClassesKey(), QString(), QMetaType::QString, {}, canonicalCommaList},
+        // The `Applications` / `WindowClasses` leaf keys retired in v4 —
+        // the v4 migration drains them into Application-subject Exclude
+        // WindowRules. Re-declaring them here would let the schema-driven
+        // backend silently re-write dead defaults under the Exclusions
+        // group, re-introducing keys we explicitly migrated out in v3→v4.
+        // Only the three global knobs survive in this group.
         {CD::transientWindowsKey(), CD::excludeTransientWindows(), QMetaType::Bool},
         {CD::minimumWindowWidthKey(),
          CD::minimumWindowWidth(),
@@ -523,12 +561,14 @@ void appendExclusionsSchema(PhosphorConfig::Schema& schema)
          clampInt(CD::minimumWindowHeightMin(), CD::minimumWindowHeightMax())},
     };
 
-    // Animation window filtering — same key shapes as the Exclusions
-    // group above but stored independently so a user can disable
-    // animations for an app while still snapping it (or vice versa).
+    // Animation window filtering — same shape as the Exclusions group
+    // above plus a NotificationsAndOsd knob, stored independently so a
+    // user can disable animations for an app while still snapping it
+    // (or vice versa).
     schema.groups[CD::animationsWindowFilteringGroup()] = {
-        {CD::applicationsKey(), QString(), QMetaType::QString, {}, canonicalCommaList},
-        {CD::windowClassesKey(), QString(), QMetaType::QString, {}, canonicalCommaList},
+        // The `Applications` / `WindowClasses` leaf keys retired in v4 —
+        // the v4 migration drains them into ExcludeAnimations WindowRules.
+        // Only the four global knobs survive in this group.
         {CD::transientWindowsKey(), CD::animationExcludeTransientWindows(), QMetaType::Bool},
         {CD::notificationsAndOsdKey(), CD::animationExcludeNotificationsAndOsd(), QMetaType::Bool},
         {CD::minimumWindowWidthKey(),
@@ -548,9 +588,15 @@ void appendExclusionsSchema(PhosphorConfig::Schema& schema)
 // Snapping.Behavior.Display plus the Effects sub-group entries that aren't
 // the blur toggle (already migrated via Appearance). Enum ints (OsdStyle,
 // OverlayDisplayMode) get clamp validators; lists use canonicalCommaList.
-// Note: disabled-monitor connector-name resolution (Phosphor::Screens::ScreenIdentity::idForName)
-// stays PZ-side — we keep the wire format as comma-joined and let the
-// Settings getter do the resolution step.
+//
+// Per-mode disable lists (formerly Display.{Snapping,Autotile}Disabled*)
+// are NOT in the schema: as of the window-rule refactor (PR #477) every
+// read/write routes through `windowrules.json` via Settings::disableEntriesFor
+// / writeDisableEntries. Re-declaring them here would let the schema-driven
+// backend silently re-write dead defaults under the mode-neutral Display
+// group, re-introducing keys we explicitly migrated out in v3→v4. The v3
+// key accessors live on solely for migrateV3ToV4 to read the legacy values
+// before they are moved to the rule store.
 
 void appendDisplaySchema(PhosphorConfig::Schema& schema)
 {
@@ -559,18 +605,6 @@ void appendDisplaySchema(PhosphorConfig::Schema& schema)
     schema.groups[CD::snappingBehaviorDisplayGroup()] = {
         {CD::showOnAllMonitorsKey(), CD::showOnAllMonitors(), QMetaType::Bool},
         {CD::filterByAspectRatioKey(), CD::filterLayoutsByAspectRatio(), QMetaType::Bool},
-    };
-
-    // Mode-neutral Display group: per-mode disable lists. Each pair is independent —
-    // disabling a monitor for snap leaves autotile gates untouched. Connector-name
-    // resolution stays PZ-side (see Settings::disabledMonitors).
-    schema.groups[CD::displayGroup()] = {
-        {CD::snappingDisabledMonitorsKey(), QString(), QMetaType::QString, {}, canonicalCommaList},
-        {CD::autotileDisabledMonitorsKey(), QString(), QMetaType::QString, {}, canonicalCommaList},
-        {CD::snappingDisabledDesktopsKey(), QString(), QMetaType::QString, {}, canonicalCommaList},
-        {CD::autotileDisabledDesktopsKey(), QString(), QMetaType::QString, {}, canonicalCommaList},
-        {CD::snappingDisabledActivitiesKey(), QString(), QMetaType::QString, {}, canonicalCommaList},
-        {CD::autotileDisabledActivitiesKey(), QString(), QMetaType::QString, {}, canonicalCommaList},
     };
 
     // Full Effects group declared here in one shot. Blur is logically an
@@ -648,6 +682,8 @@ void appendActivationSchema(PhosphorConfig::Schema& schema)
     schema.groups[CD::snappingBehaviorGroup()] = {
         {CD::triggersKey(), CD::dragActivationTriggers(), QMetaType::QVariantList, {}, canonicalTriggerList},
         {CD::toggleActivationKey(), CD::toggleActivation(), QMetaType::Bool},
+        {CD::focusNewWindowsKey(), CD::snappingFocusNewWindows(), QMetaType::Bool},
+        {CD::focusFollowsMouseKey(), CD::snappingFocusFollowsMouse(), QMetaType::Bool},
     };
     schema.groups[CD::snappingBehaviorZoneSpanGroup()] = {
         {CD::enabledKey(), CD::zoneSpanEnabled(), QMetaType::Bool},
@@ -670,6 +706,7 @@ void appendActivationSchema(PhosphorConfig::Schema& schema)
                      static_cast<int>(DragModifier::CtrlAltMeta)},
                     static_cast<int>(DragModifier::Disabled))},
         {CD::triggersKey(), CD::zoneSpanTriggers(), QMetaType::QVariantList, {}, canonicalTriggerList},
+        {CD::toggleActivationKey(), CD::zoneSpanToggleMode(), QMetaType::Bool},
     };
 }
 
@@ -685,13 +722,16 @@ void appendBehaviorSchema(PhosphorConfig::Schema& schema)
         {CD::moveNewToLastZoneKey(), CD::moveNewWindowsToLastZone(), QMetaType::Bool},
         {CD::restoreOnUnsnapKey(), CD::restoreOriginalSizeOnUnsnap(), QMetaType::Bool},
         {CD::stickyWindowHandlingKey(),
-         CD::stickyWindowHandling(),
+         CD::snappingStickyWindowHandling(),
          QMetaType::Int,
          {},
          clampInt(static_cast<int>(StickyWindowHandling::TreatAsNormal),
                   static_cast<int>(StickyWindowHandling::IgnoreAll))},
         {CD::restoreOnLoginKey(), CD::restoreWindowsToZonesOnLogin(), QMetaType::Bool},
+        {CD::restoreFloatedOnLoginKey(), CD::snappingRestoreFloatedWindowsOnLogin(), QMetaType::Bool},
+        {CD::unfloatFallbackToZoneKey(), CD::snapUnfloatFallbackToZone(), QMetaType::Bool},
         {CD::autoAssignAllLayoutsKey(), CD::autoAssignAllLayouts(), QMetaType::Bool},
+        {CD::suppressDefaultLayoutAssignmentKey(), CD::suppressDefaultLayoutAssignment(), QMetaType::Bool},
         {CD::defaultLayoutIdKey(), QString(), QMetaType::QString},
     };
     schema.groups[CD::snappingBehaviorSnapAssistGroup()] = {
@@ -749,6 +789,7 @@ void appendAutotilingSchema(PhosphorConfig::Schema& schema)
         {CD::focusNewWindowsKey(), CD::autotileFocusNewWindows(), QMetaType::Bool},
         {CD::focusFollowsMouseKey(), CD::autotileFocusFollowsMouse(), QMetaType::Bool},
         {CD::respectMinimumSizeKey(), CD::autotileRespectMinimumSize(), QMetaType::Bool},
+        {CD::restoreFloatedOnLoginKey(), CD::autotileRestoreFloatedWindowsOnLogin(), QMetaType::Bool},
         {CD::stickyWindowHandlingKey(),
          CD::autotileStickyWindowHandling(),
          QMetaType::Int,

@@ -38,6 +38,23 @@ layout(std140, binding = 0) uniform ZoneUniforms {
     vec4 zoneParams[64];
 };
 
+// Per-zone context handed to a `vec4 pZone(ZoneCtx z)` entry function (T1.4).
+// When a pack defines pZone instead of main(), the harness generates the
+// dispatch loop: for each visible zone it fills one ZoneCtx and accumulates the
+// returned colors with blendOver(), then clampFragColor()s the result. The full
+// zoneRects[]/iTime/audio globals stay readable inside pZone, so continuous-
+// field and cross-zone effects remain expressible. Unused by packs that keep
+// their own main().
+struct ZoneCtx {
+    int   index;         // zone i (0 .. zoneCount-1)
+    vec2  fragCoord;     // screen-space pixel (the vFragCoord the loop passes in)
+    vec4  rect;          // zoneRects[i]
+    vec4  fillColor;     // zoneFillColors[i]
+    vec4  borderColor;   // zoneBorderColors[i]
+    vec4  params;        // zoneParams[i] (x=borderRadius, y=borderWidth, z=highlight flag, …)
+    bool  isHighlighted; // zoneParams[i].z > 0.5
+};
+
 // Shader time-wrap period — must match kShaderTimeWrap in zoneshadercommon.h
 // iTime is wrapped into [0, K_TIME_WRAP); iTimeHi is the floor-offset. Without
 // wrapping, float32 ULP would grow past one frame at ~36h uptime and kill any

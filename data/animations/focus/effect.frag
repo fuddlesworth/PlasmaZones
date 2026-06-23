@@ -30,18 +30,7 @@
 // `focus-blur-*` keys in `schemas/.../burn-my-windows-profile.gschema.xml`
 // and the corresponding adjustments in `resources/ui/adw/focus.ui`.
 
-#version 450
-
-#include <animation_uniforms.glsl>
-
-layout(location = 0) in vec2 vTexCoord;
-layout(location = 0) out vec4 fragColor;
-
 #include <bmw_compat.glsl>
-
-// metadata.json declaration order → customParams[0] sub-slots
-#define uBlurAmount  customParams[0].x   // peak blur radius in px, BMW default 50
-#define uBlurQuality customParams[0].y   // sample count per direction, BMW default 3
 
 // BMW common.glsl verbatim — sine-based smooth easing for the blur
 // radius envelope. Not in `<bmw_compat.glsl>` because no other BMW
@@ -106,7 +95,7 @@ vec4 getBlurredInputColor(vec2 uv, float radius, float samples) {
   return color / max(weight, 1.0);
 }
 
-void main() {
+vec4 pTransition(vec2 uv, float t) {
 
     // Calculate the progression value based on the animation direction.
     // If opening, use uProgress as-is; if closing, invert the progression.
@@ -120,11 +109,11 @@ void main() {
 
     // Calculate the blur amount by interpolating (mixing) between the maximum blur (uBlurAmount)
     // and zero blur based on the eased progression value.
-    float blurAmount = mix(uBlurAmount, 0.0, easedProgressBlur);
+    float blurAmount = mix(p_uBlurAmount, 0.0, easedProgressBlur);
 
     // Apply the calculated blur effect to the texture at the current texture coordinates.
-    // The blur function uses the blur amount and quality (uBlurQuality) for sampling.
-    vec4 texColor = getBlurredInputColor(iTexCoord.st, blurAmount, uBlurQuality);
+    // The blur function uses the blur amount and quality (p_uBlurQuality) for sampling.
+    vec4 texColor = getBlurredInputColor(iTexCoord.st, blurAmount, p_uBlurQuality);
 
     // Calculate the alpha value for the transition using eased progress.
     // This determines how transparent the final color will appear.
@@ -135,5 +124,5 @@ void main() {
     texColor.a *= alpha;
 
     // Output the final color with the applied blur and alpha transition.
-    setOutputColor(texColor);
+    return vec4(texColor.rgb * texColor.a, texColor.a);
 }

@@ -50,7 +50,9 @@ public:
     /// algorithm with that id is registered.
     virtual TilingAlgorithm* algorithm(const QString& id) const = 0;
 
-    /// All registered algorithm ids, in registration order.
+    /// All registered algorithm ids. Order is not part of the contract — the
+    /// concrete @c AlgorithmRegistry returns them sorted for a stable
+    /// cross-platform order; callers must not rely on a specific ordering.
     virtual QStringList availableAlgorithms() const = 0;
 
     /// Every registered algorithm pointer. Ownership stays with the

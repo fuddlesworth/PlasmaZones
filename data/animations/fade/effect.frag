@@ -12,70 +12,69 @@
 // alpha, while close uses `mix(1.0, 0.95, p)` for scale and
 // `smoothstep(1.0, 0.2, p)` for alpha. These are different curves,
 // not a simple time-reversal, so the iTime flip alone can't express
-// both legs. We branch on `iIsReversed` to select the correct body.
+// both legs. We branch on `windowFadingIn` (open vs close leg) to select
+// the correct body, exposed as a `pIn`/`pOut` pair.
 //
-// Per the contract, on the close leg PlasmaZones flips iTime so it
-// runs 1→0; the niri close.glsl reads `niri_clamped_progress`
-// directly (no inversion in the source), so its translation in the
-// reversed branch becomes `(1.0 - clamp(iTime, 0.0, 1.0))` — that
-// recovers the ABSOLUTE leg progress in [0,1] running 0→1 across the
-// close leg's wall-clock time, which is what the niri close.glsl body
-// was authored to consume.
+// Per the entry-point contract, the harness un-flips iTime to an
+// ABSOLUTE forward leg progress `t` in [0,1] running 0→1 on BOTH legs
+// (the old close-leg `(1.0 - clamp(iTime, 0.0, 1.0))` translation
+// produced exactly this). Both niri bodies were authored to consume
+// that absolute leg progress, so `p` is simply `t` in each branch.
 //
 // niri's `niri_geo_to_tex` is the identity mat3 in PlasmaZones (geometry
 // == texture coords here), so the matrix multiply is dropped and
 // `texture(uTexture0, uv)` samples directly. `texture2D` (GLSL ES) is
 // rewritten to `texture` (GLSL 4.50 core) inline.
 
-#version 450
-
-#include <animation_uniforms.glsl>
+// The harness supplies #version, <animation_uniforms.glsl>, the in/out,
+// and main(). noise.glsl (boundaryMask) is pack-specific, so it stays here.
 #include <noise.glsl>
 
-// metadata.json declaration order → customParams[0] sub-slots
-#define scaleAmount  customParams[0].x
-#define revealStart  customParams[0].y
-#define revealEnd    customParams[0].z
+// p_scaleAmount / p_revealStart / p_revealEnd (customParams[0].xyz) are
+// generated from metadata.json — no hand-written slot #defines.
 
-layout(location = 0) in vec2 vTexCoord;
-layout(location = 0) out vec4 fragColor;
-
-void main() {
+// Shared body for both legs. `t` is forward 0→1 leg progress (the harness
+// un-flipped iTime via legProgress()); `windowFadingIn` selects the niri
+// open vs close body — these legs are GENUINELY ASYMMETRIC (different
+// scale/alpha curves), not a simple time-reversal, so the direction is
+// threaded in rather than left to an iTime flip.
+vec4 fadeBody(vec2 uv, float t, bool windowFadingIn) {
     vec4 result;
-    if (iIsReversed != 0) {
+    if (!windowFadingIn) {
         // ── niri close.glsl body ──
-        // close-leg p = niri_clamped_progress; iTime is flipped to
-        // 1→0 on the close leg, so absolute leg progress in [0,1] is
-        // (1.0 - clamp(iTime, 0.0, 1.0)).
-        float p = 1.0 - clamp(iTime, 0.0, 1.0);
-        vec2 uv = vTexCoord;
+        // close-leg p = niri_clamped_progress; the harness un-flips iTime
+        // to absolute leg progress in [0,1], which is `t`.
+        float p = t;
 
         vec2 center = vec2(0.5, 0.5);
-        float scale = mix(1.0, 1.0 - scaleAmount, p);
+        float scale = mix(1.0, 1.0 - p_scaleAmount, p);
         vec2 scaled_uv = (uv - center) / scale + center;
 
         // boundaryMask: see noise.glsl. Crops off-window samples to transparent.
         vec4 color = surfaceColor(scaled_uv) * boundaryMask(scaled_uv);
 
-        float alpha = smoothstep(1.0 - revealStart, 1.0 - revealEnd, p);
+        float alpha = smoothstep(1.0 - p_revealStart, 1.0 - p_revealEnd, p);
 
         result = color * alpha;
     } else {
         // ── niri open.glsl body ──
-        // open-leg p = niri_clamped_progress; iTime runs 0→1 forward.
-        float p = clamp(iTime, 0.0, 1.0);
-        vec2 uv = vTexCoord;
+        // open-leg p = niri_clamped_progress; the harness feeds forward
+        // 0→1 leg progress, which is `t`.
+        float p = t;
 
         vec2 center = vec2(0.5, 0.5);
-        float scale = mix(1.0 - scaleAmount, 1.0, p);
+        float scale = mix(1.0 - p_scaleAmount, 1.0, p);
         vec2 scaled_uv = (uv - center) / scale + center;
 
         // boundaryMask: see noise.glsl. Crops off-window samples to transparent.
         vec4 color = surfaceColor(scaled_uv) * boundaryMask(scaled_uv);
 
-        float alpha = smoothstep(revealStart, revealEnd, p);
+        float alpha = smoothstep(p_revealStart, p_revealEnd, p);
 
         result = color * alpha;
     }
-    fragColor = result;
+    return result;
 }
+
+vec4 pIn(vec2 uv, float t)  { return fadeBody(uv, t, true);  }
+vec4 pOut(vec2 uv, float t) { return fadeBody(uv, t, false); }

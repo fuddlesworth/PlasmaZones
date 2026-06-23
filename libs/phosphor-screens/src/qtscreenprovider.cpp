@@ -9,7 +9,7 @@
 #include <QGuiApplication>
 #include <QScreen>
 
-namespace Phosphor::Screens {
+namespace PhosphorScreens {
 
 namespace {
 /// Snapshot a live QScreen into a PhysicalScreen, resolving the stable
@@ -109,4 +109,4 @@ void QtScreenProvider::onQtScreenRemoved(QScreen* screen)
     Q_EMIT screenRemoved(removed);
 }
 
-} // namespace Phosphor::Screens
+} // namespace PhosphorScreens

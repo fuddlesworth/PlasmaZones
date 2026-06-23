@@ -6,6 +6,8 @@
 #include "../unifiedlayoutcontroller.h"
 #include "../modetracker.h"
 #include "../../core/screenmoderouter.h"
+#include <PhosphorContext/ContextResolver.h>
+#include <PhosphorZones/AssignmentEntry.h>
 #include <PhosphorZones/LayoutRegistry.h>
 #include <PhosphorScreens/Manager.h>
 #include <PhosphorWorkspaces/VirtualDesktopManager.h>
@@ -21,13 +23,13 @@
 #include <PhosphorTiles/AlgorithmRegistry.h>
 #include <PhosphorTiles/AutotilePreviewRender.h>
 #include <PhosphorTiles/TilingAlgorithm.h>
-#include "../config/settings.h"
+#include "../../config/settings.h"
 #include <QDBusConnection>
 #include <QDBusMessage>
 #include <QDBusPendingCall>
 #include <QScreen>
 #include <QTimer>
-#include "pz_i18n.h"
+#include "phosphor_i18n.h"
 #include <PhosphorScreens/ScreenIdentity.h>
 
 namespace PlasmaZones {
@@ -47,15 +49,17 @@ void showKdeTextOsd(const QString& icon, const QString& text)
 
 void Daemon::showOverlay()
 {
-    // Don't show overlay when all screens are in autotile mode
-    // (the overlay is for manual zone selection during drag)
+    // The overlay shows manual snap-zone selection during a drag. Don't
+    // show it when no screen is in snap mode — that covers both
+    // "every screen is autotile" and "every screen is in scrolling
+    // (passthrough) mode" (a regression on the prior shape, which only
+    // guarded the autotile-only case and let an all-scrolling setup
+    // surface an empty overlay).
     if (m_screenModeRouter && m_screenManager) {
         const QStringList effectiveIds = m_screenManager->effectiveScreenIds();
         const auto parts = m_screenModeRouter->partitionByMode(effectiveIds);
-        if (!parts.autotile.isEmpty()) {
-            if (parts.snap.isEmpty()) {
-                return;
-            }
+        if (parts.snap.isEmpty()) {
+            return;
         }
     }
     // Per-screen autotile exclusion is handled by OverlayService::initializeOverlay()
@@ -116,7 +120,7 @@ void Daemon::showLayoutOsd(PhosphorZones::Layout* layout, const QString& screenI
         return;
 
     case OsdStyle::Text: {
-        QString displayText = PzI18n::tr("Layout: %1").arg(layoutName);
+        QString displayText = PhosphorI18n::tr("Layout: %1").arg(layoutName);
         showKdeTextOsd(QStringLiteral("plasmazones"), displayText);
         qCInfo(lcDaemon) << "Showing text OSD for layout=" << layoutName;
     } break;
@@ -143,7 +147,7 @@ void Daemon::showLockedOsd(const QString& screenId)
         return;
     }
 
-    showKdeTextOsd(QStringLiteral("object-locked"), PzI18n::tr("Layout Locked"));
+    showKdeTextOsd(QStringLiteral("object-locked"), PhosphorI18n::tr("Layout Locked"));
     qCInfo(lcDaemon) << "Showing locked text OSD for screen=" << screenId;
 }
 
@@ -159,7 +163,7 @@ void Daemon::showLockedPreviewOsd(const QString& screenId)
 
     // Show the visual preview OSD with lock overlay showing the current layout
     if (style == OsdStyle::Preview && m_overlayService && m_layoutManager) {
-        const QString resolvedId = Phosphor::Screens::ScreenIdentity::idForName(screenId);
+        const QString resolvedId = PhosphorScreens::ScreenIdentity::idForName(screenId);
         PhosphorZones::Layout* layout =
             m_layoutManager->resolveLayoutForScreen(resolvedId.isEmpty() ? screenId : resolvedId);
         if (layout) {
@@ -192,7 +196,7 @@ void Daemon::showContextDisabledOsd(const QString& screenId, int desktop, const 
     QString reasonText;
     switch (reason) {
     case DisabledReason::MonitorDisabled:
-        reasonText = PzI18n::tr("Disabled on this monitor");
+        reasonText = PhosphorI18n::tr("Disabled on this monitor");
         break;
     case DisabledReason::DesktopDisabled: {
         QString desktopLabel;
@@ -203,9 +207,9 @@ void Daemon::showContextDisabledOsd(const QString& screenId, int desktop, const 
             }
         }
         if (desktopLabel.isEmpty()) {
-            desktopLabel = PzI18n::tr("Desktop %1").arg(desktop);
+            desktopLabel = PhosphorI18n::tr("Desktop %1").arg(desktop);
         }
-        reasonText = PzI18n::tr("Disabled on %1").arg(desktopLabel);
+        reasonText = PhosphorI18n::tr("Disabled on %1").arg(desktopLabel);
         break;
     }
     case DisabledReason::ActivityDisabled: {
@@ -214,9 +218,9 @@ void Daemon::showContextDisabledOsd(const QString& screenId, int desktop, const 
             activityLabel = m_activityManager->activityName(activity);
         }
         if (activityLabel.isEmpty()) {
-            reasonText = PzI18n::tr("Disabled on this activity");
+            reasonText = PhosphorI18n::tr("Disabled on this activity");
         } else {
-            reasonText = PzI18n::tr("Disabled on %1").arg(activityLabel);
+            reasonText = PhosphorI18n::tr("Disabled on %1").arg(activityLabel);
         }
         break;
     }
@@ -235,12 +239,31 @@ void Daemon::showContextDisabledOsd(const QString& screenId, int desktop, const 
     qCInfo(lcDaemon) << "Showing disabled text OSD:" << reasonText << "screen=" << screenId;
 }
 
+void Daemon::showNotAssignedOsd(const QString& screenId)
+{
+    if (shouldSuppressOsd()) {
+        return;
+    }
+    const OsdStyle style = m_settings ? m_settings->osdStyle() : OsdStyle::Preview;
+    if (style == OsdStyle::None) {
+        return;
+    }
+    const QString text = PhosphorI18n::tr("No layout assigned");
+    if (style == OsdStyle::Preview && m_overlayService) {
+        m_overlayService->showDisabledOsd(text, screenId);
+        qCInfo(lcDaemon) << "Showing not-assigned preview OSD: screen=" << screenId;
+        return;
+    }
+    showKdeTextOsd(QStringLiteral("dialog-information"), text);
+    qCInfo(lcDaemon) << "Showing not-assigned text OSD: screen=" << screenId;
+}
+
 void Daemon::showLayoutOsdForAlgorithm(const QString& algorithmId, const QString& displayName, const QString& screenId)
 {
     if (shouldSuppressOsd()) {
         return;
     }
-    auto* algo = m_algorithmRegistry.get()->algorithm(algorithmId);
+    auto* algo = m_algorithmRegistry ? m_algorithmRegistry->algorithm(algorithmId) : nullptr;
     if (!algo) {
         qCWarning(lcDaemon) << "OSD: algorithm not found, algorithmId=" << algorithmId;
         return;
@@ -254,7 +277,7 @@ void Daemon::showLayoutOsdForAlgorithm(const QString& algorithmId, const QString
         return;
 
     case OsdStyle::Text: {
-        QString displayText = PzI18n::tr("Tiling: %1").arg(displayName);
+        QString displayText = PhosphorI18n::tr("Tiling: %1").arg(displayName);
         showKdeTextOsd(QStringLiteral("plasmazones"), displayText);
         qCInfo(lcDaemon) << "Showing text OSD for algorithm=" << displayName;
     } break;
@@ -363,7 +386,7 @@ void Daemon::updateLayoutFilterForScreen(const QString& focusedScreenId)
     bool manualActive = false;
 
     if (m_settings->autotileEnabled() && m_layoutManager && m_screenManager) {
-        const int desktop = currentDesktop();
+        const int desktop = currentDesktopForScreen(focusedScreenId);
         const QString activity = currentActivity();
 
         if (!focusedScreenId.isEmpty()) {
@@ -409,7 +432,6 @@ void Daemon::syncModeFromAssignments()
         return;
     }
 
-    const int desktop = currentDesktop();
     const QString activity = currentActivity();
 
     // Sync UnifiedLayoutController's current layout ID to match this desktop.
@@ -429,6 +451,8 @@ void Daemon::syncModeFromAssignments()
                 }
             }
         }
+        // Per-output virtual desktops (#648): each screen resolves its own desktop.
+        const int desktop = currentDesktopForScreen(focusedScreenId);
         if (!focusedScreenId.isEmpty()) {
             const QString focusedAssignmentId =
                 m_layoutManager->assignmentIdForScreen(focusedScreenId, desktop, activity);
@@ -466,7 +490,7 @@ void Daemon::syncModeFromAssignments()
     updateLayoutFilter();
 }
 
-void Daemon::showDesktopSwitchOsd(int desktop, const QString& activity)
+void Daemon::showDesktopSwitchOsd(const QString& activity)
 {
     // Skip during startup — the initial activity/desktop detection fires
     // before start() completes and should not produce an OSD flash.
@@ -480,10 +504,35 @@ void Daemon::showDesktopSwitchOsd(int desktop, const QString& activity)
         || !m_screenManager) {
         return;
     }
-    showOsdForAllScreens(desktop, activity);
+    showOsdForAllScreens(activity);
 }
 
-void Daemon::showOsdForAllScreens(int desktop, const QString& activity)
+void Daemon::showDesktopSwitchOsdForScreen(const QString& screenId, const QString& activity)
+{
+    // Per-output virtual desktops (#648): only the screen that actually switched
+    // shows the OSD, not every monitor. Same gating as the all-screens variant.
+    if (!m_running) {
+        return;
+    }
+    if (shouldSuppressOsd()) {
+        return;
+    }
+    if (!m_settings || !m_settings->showOsdOnDesktopSwitch() || !m_overlayService || !m_layoutManager
+        || !m_screenManager) {
+        return;
+    }
+    showOsdForScreens({screenId}, activity);
+}
+
+void Daemon::showOsdForAllScreens(const QString& activity)
+{
+    if (!m_screenManager) {
+        return;
+    }
+    showOsdForScreens(m_screenManager->effectiveScreenIds(), activity);
+}
+
+void Daemon::showOsdForScreens(const QStringList& screenIds, const QString& activity)
 {
     if (!m_layoutManager || !m_screenManager) {
         return;
@@ -494,26 +543,77 @@ void Daemon::showOsdForAllScreens(int desktop, const QString& activity)
     // Batch all per-screen OSD shows into one deferred call so every
     // screen's surface->show() fires in the same event loop pass and the
     // compositor renders them simultaneously.
-    QTimer::singleShot(0, this, [this, desktop, activity]() {
+    QTimer::singleShot(0, this, [this, screenIds, activity]() {
         if (!m_layoutManager || !m_screenManager) {
             return;
         }
         if (shouldSuppressOsd()) {
             return;
         }
-        const QStringList effectiveIds = m_screenManager->effectiveScreenIds();
-        for (const QString& screenId : effectiveIds) {
-            const auto mode =
-                m_screenModeRouter ? m_screenModeRouter->modeFor(screenId) : PhosphorZones::AssignmentEntry::Snapping;
-            const DisabledReason why = contextDisabledReason(m_settings.get(), mode, screenId, desktop, activity);
+        for (const QString& screenId : screenIds) {
+            // Each screen reports against its OWN current virtual desktop
+            // (Plasma 6.7 per-output virtual desktops, #648).
+            const int desktop =
+                m_virtualDesktopManager ? m_virtualDesktopManager->currentDesktopForScreen(screenId) : currentDesktop();
+            // Route the disabled-context probe through the resolver so this
+            // OSD pass uses the same single snapshot façade as every other
+            // call site — the prior hand-stitched (modeFor → settings →
+            // contextDisabledReason) cascade was the exact 3-step rebuild
+            // PhosphorContext::IContextResolver was introduced to collapse.
+            // `handleForPersisted` is the right axis here because the
+            // caller already pinned the (desktop, activity) tuple the OSD
+            // reports against, while the screen's mode stays live.
+            DisabledReason why = DisabledReason::NotDisabled;
+            if (m_contextResolver) {
+                // Map PhosphorContext::DisabledReason → PlasmaZones::DisabledReason.
+                // The two enums are value-identical by intent (the LGPL lib's
+                // DisabledReason.h documents it mirrors the GPL daemon's),
+                // but the conversion is written as a switch so a future enum
+                // value added on one side surfaces here as a compile-time
+                // -Wswitch warning rather than a silent value coercion.
+                const auto reason = m_contextResolver->disabledReason(
+                    m_contextResolver->handleForPersisted(screenId, desktop, activity));
+                switch (reason) {
+                case PhosphorContext::DisabledReason::NotDisabled:
+                    why = DisabledReason::NotDisabled;
+                    break;
+                case PhosphorContext::DisabledReason::MonitorDisabled:
+                    why = DisabledReason::MonitorDisabled;
+                    break;
+                case PhosphorContext::DisabledReason::DesktopDisabled:
+                    why = DisabledReason::DesktopDisabled;
+                    break;
+                case PhosphorContext::DisabledReason::ActivityDisabled:
+                    why = DisabledReason::ActivityDisabled;
+                    break;
+                }
+            }
             if (why != DisabledReason::NotDisabled) {
                 showContextDisabledOsd(screenId, desktop, activity, why);
+                continue;
+            }
+            // No active layout for this context because the default assignment is
+            // suppressed (global setting or per-context rule) — show a "not
+            // assigned" OSD instead of the global default layout / algorithm the
+            // fallback would otherwise surface for an unassigned screen.
+            if (m_layoutManager->isContextActiveLayoutSuppressed(screenId, desktop, activity)) {
+                showNotAssignedOsd(screenId);
                 continue;
             }
             const QString assignmentId = m_layoutManager->assignmentIdForScreen(screenId, desktop, activity);
             if (PhosphorLayout::LayoutId::isAutotile(assignmentId)) {
                 const QString algoId = PhosphorLayout::LayoutId::extractAlgorithmId(assignmentId);
-                auto* algo = m_algorithmRegistry.get()->algorithm(algoId);
+                // Bare autotile (mode set, no concrete algorithm) draws its
+                // algorithm from the suppressed global default, so it won't tile
+                // (see updateAutotileScreens) — show "not assigned" rather than
+                // announcing the default algorithm. A concrete assigned algorithm
+                // always shows.
+                if (algoId.isEmpty()
+                    && m_layoutManager->isDefaultAssignmentSuppressedForContext(screenId, desktop, activity)) {
+                    showNotAssignedOsd(screenId);
+                    continue;
+                }
+                auto* algo = m_algorithmRegistry ? m_algorithmRegistry->algorithm(algoId) : nullptr;
                 const QString displayName = algo ? algo->name() : algoId;
                 showLayoutOsdForAlgorithm(algoId, displayName, screenId);
             } else {
@@ -531,27 +631,24 @@ int Daemon::currentDesktop() const
     return m_virtualDesktopManager ? m_virtualDesktopManager->currentDesktop() : 0;
 }
 
+int Daemon::currentDesktopForScreen(const QString& screenId) const
+{
+    // Per-output virtual desktops (#648): resolve THIS screen's current desktop,
+    // falling back to the global current when no per-output value is on record.
+    return m_virtualDesktopManager ? m_virtualDesktopManager->currentDesktopForScreen(screenId) : 0;
+}
+
 QString Daemon::currentActivity() const
 {
-    return (m_activityManager && PhosphorWorkspaces::ActivityManager::isAvailable())
-        ? m_activityManager->currentActivity()
-        : QString();
+    return PhosphorWorkspaces::ActivityManager::currentActivityOrEmpty(m_activityManager.get());
 }
 
-bool Daemon::isCurrentContextLocked(const QString& screenId) const
+bool Daemon::isCurrentContextLockedForMode(const QString& screenId, PhosphorZones::AssignmentEntry::Mode mode) const
 {
-    // Check both snapping and tiling locks (mode-agnostic check)
-    if (!m_settings)
+    if (!m_contextResolver) {
         return false;
-    return m_settings->isContextLocked(Utils::contextLockKey(0, screenId), currentDesktop(), currentActivity())
-        || m_settings->isContextLocked(Utils::contextLockKey(1, screenId), currentDesktop(), currentActivity());
-}
-
-bool Daemon::isCurrentContextLockedForMode(const QString& screenId, int mode) const
-{
-    if (!m_settings)
-        return false;
-    return m_settings->isContextLocked(Utils::contextLockKey(mode, screenId), currentDesktop(), currentActivity());
+    }
+    return m_contextResolver->isLocked(m_contextResolver->handleForMode(screenId, mode));
 }
 
 } // namespace PlasmaZones

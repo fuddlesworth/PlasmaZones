@@ -15,10 +15,10 @@
 ///   - axis 1 (compositor primitive: Layer, Anchors, ...). Those live on
 ///     @ref PhosphorLayer::Role.
 ///   - axis 3 (application role: what the consumer uses it for). Those
-///     live in consumer-side role files (e.g. PlasmaZones' `pz_roles.h`).
+///     live in consumer-side role files (e.g. Phosphor's `phosphor_roles.h`).
 ///
 /// This library is the seam between protocol primitives and consumer
-/// app-roles, so any Phosphor shell (PZ today, Phosphor-as-standalone
+/// app-roles, so any Phosphor shell (Phosphor today, Phosphor-as-standalone
 /// tomorrow) composes its public roles from these recipes without having
 /// to know the wlr-layer-shell wire details.
 ///

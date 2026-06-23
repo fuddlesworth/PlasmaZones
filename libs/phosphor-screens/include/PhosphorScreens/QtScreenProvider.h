@@ -8,7 +8,7 @@
 
 class QScreen;
 
-namespace Phosphor::Screens {
+namespace PhosphorScreens {
 
 /**
  * @brief Production IScreenProvider — a thin wrapper over QGuiApplication.
@@ -37,4 +37,4 @@ private:
     void onQtScreenRemoved(QScreen* screen);
 };
 
-} // namespace Phosphor::Screens
+} // namespace PhosphorScreens

@@ -35,6 +35,13 @@ include(GenerateExportHeader)
 
 find_package(Qt6 6.10 REQUIRED COMPONENTS Core)
 
+# PhosphorRegistry — ILayoutSourceFactory derives IFactoryBase and
+# LayoutSourceBundle keeps its factory catalogue in a Registry<ILayoutSourceFactory>,
+# both exposed in public headers, so this is a PUBLIC dependency.
+if(NOT TARGET PhosphorRegistry::PhosphorRegistry)
+    find_package(PhosphorRegistry 0.1.0 REQUIRED)
+endif()
+
 # ═══════════════════════════════════════════════════════════════════════════════
 # Library
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -99,6 +106,7 @@ target_compile_features(PhosphorLayoutApi PUBLIC cxx_std_20)
 target_link_libraries(PhosphorLayoutApi
     PUBLIC
         Qt6::Core
+        PhosphorRegistry::PhosphorRegistry
 )
 
 set_target_properties(PhosphorLayoutApi PROPERTIES

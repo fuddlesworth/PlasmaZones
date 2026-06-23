@@ -12,7 +12,6 @@
 #include "zoneshadernoderhi.h"
 
 #include <plasmazones_rendering_export.h>
-#include <QImage>
 #include <QMutex>
 #include <QVariantList>
 #include <QVector>
@@ -64,8 +63,9 @@ class PLASMAZONES_RENDERING_EXPORT ZoneShaderItem : public PhosphorRendering::Sh
     Q_PROPERTY(
         int hoveredZoneIndex READ hoveredZoneIndex WRITE setHoveredZoneIndex NOTIFY hoveredZoneIndexChanged FINAL)
 
-    // Labels texture (pre-rendered zone numbers for shader pass)
-    Q_PROPERTY(QImage labelsTexture READ labelsTexture WRITE setLabelsTexture NOTIFY labelsTextureChanged FINAL)
+    // Labels payload (sparse pre-rendered zone-number glyph tiles for shader pass)
+    Q_PROPERTY(PhosphorRendering::ZoneLabelTexture labelsTexture READ labelsTexture WRITE setLabelsTexture NOTIFY
+                   labelsTextureChanged FINAL)
 
 public:
     explicit ZoneShaderItem(QQuickItem* parent = nullptr);
@@ -94,8 +94,8 @@ public:
     void setHoveredZoneIndex(int index);
 
     // Labels texture getter/setter
-    QImage labelsTexture() const;
-    void setLabelsTexture(const QImage& image);
+    PhosphorRendering::ZoneLabelTexture labelsTexture() const;
+    void setLabelsTexture(const PhosphorRendering::ZoneLabelTexture& labels);
 
     /**
      * @brief Get a thread-safe copy of zone data for rendering
@@ -204,16 +204,13 @@ private:
     int m_hoveredZoneIndex = -1;
 
     // Labels texture (main thread writes, render thread reads via updatePaintNode)
-    QImage m_labelsTexture;
+    PhosphorRendering::ZoneLabelTexture m_labelsTexture;
     mutable QMutex m_labelsTextureMutex;
 
     // Thread-safe zone data storage
     // Protected by m_zoneDataMutex for render thread access
     mutable QMutex m_zoneDataMutex;
     PhosphorRendering::ZoneDataSnapshot m_zoneData;
-
-    // Render node tracking for safe teardown
-    PhosphorRendering::ZoneShaderNodeRhi* m_zoneRenderNode = nullptr;
 
     // ZoneUniformExtension owned HERE (not on the node) so its lifetime
     // matches the QML-visible item rather than the transient QSGRenderNode.

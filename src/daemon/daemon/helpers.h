@@ -28,7 +28,7 @@ namespace PlasmaZones {
  * @p mgr is the injected ScreenManager (required — pass null only in tests
  * that don't exercise VS resolution; null is treated as "no subdivision").
  */
-inline QString resolveVirtualScreenId(Phosphor::Screens::ScreenManager* mgr, const QString& physicalId,
+inline QString resolveVirtualScreenId(PhosphorScreens::ScreenManager* mgr, const QString& physicalId,
                                       const WindowTrackingAdaptor* trackingAdaptor,
                                       const QPoint& cursorPos = QPoint(-1, -1))
 {
@@ -43,7 +43,7 @@ inline QString resolveVirtualScreenId(Phosphor::Screens::ScreenManager* mgr, con
     if (trackingAdaptor && trackingAdaptor->service()) {
         const QString activeWindowId = trackingAdaptor->lastActiveWindowId();
         if (!activeWindowId.isEmpty()) {
-            const QString trackedScreen = trackingAdaptor->service()->screenAssignments().value(activeWindowId);
+            const QString trackedScreen = trackingAdaptor->service()->screenForWindow(activeWindowId);
             if (PhosphorIdentity::VirtualScreenId::isVirtual(trackedScreen)
                 && PhosphorIdentity::VirtualScreenId::extractPhysicalId(trackedScreen) == physicalId) {
                 return trackedScreen;
@@ -87,12 +87,12 @@ inline QString resolveVirtualScreenId(Phosphor::Screens::ScreenManager* mgr, con
  * shortcuts). Using cursor-first silently misroutes actions when the user
  * lets the mouse rest on a different virtual screen than the focused window.
  */
-inline QString resolveShortcutScreenId(Phosphor::Screens::ScreenManager* mgr,
+inline QString resolveShortcutScreenId(PhosphorScreens::ScreenManager* mgr,
                                        const WindowTrackingAdaptor* trackingAdaptor)
 {
     if (!trackingAdaptor) {
         QScreen* primary = Utils::primaryScreen();
-        return primary ? Phosphor::Screens::ScreenIdentity::identifierFor(primary) : QString();
+        return primary ? PhosphorScreens::ScreenIdentity::identifierFor(primary) : QString();
     }
 
     // Primary: focused window's screen (may already be a virtual ID from the effect)
@@ -115,7 +115,7 @@ inline QString resolveShortcutScreenId(Phosphor::Screens::ScreenManager* mgr,
 
     // Last resort: primary screen physical ID
     QScreen* primary = Utils::primaryScreen();
-    return primary ? Phosphor::Screens::ScreenIdentity::identifierFor(primary) : QString();
+    return primary ? PhosphorScreens::ScreenIdentity::identifierFor(primary) : QString();
 }
 
 /**
@@ -135,7 +135,7 @@ inline QString resolveShortcutScreenId(Phosphor::Screens::ScreenManager* mgr,
  * the call site mirrors @ref resolveShortcutScreenId and so a future
  * resolution policy that needs ScreenManager has a place to land.
  */
-inline QString resolveCursorScreenId(Phosphor::Screens::ScreenManager* /*mgr*/,
+inline QString resolveCursorScreenId(PhosphorScreens::ScreenManager* /*mgr*/,
                                      const WindowTrackingAdaptor* trackingAdaptor)
 {
     if (trackingAdaptor) {
@@ -149,7 +149,7 @@ inline QString resolveCursorScreenId(Phosphor::Screens::ScreenManager* /*mgr*/,
         }
     }
     QScreen* primary = Utils::primaryScreen();
-    return primary ? Phosphor::Screens::ScreenIdentity::identifierFor(primary) : QString();
+    return primary ? PhosphorScreens::ScreenIdentity::identifierFor(primary) : QString();
 }
 
 /**

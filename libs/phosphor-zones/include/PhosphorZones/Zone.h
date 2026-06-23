@@ -21,7 +21,7 @@ namespace PhosphorZones {
  * Fixed:    Absolute pixel coordinates relative to reference screen origin.
  *
  * Owned by phosphor-zones because it's a per-zone shape; the former
- * PlasmaZones-side using-alias in src/core/ was removed when the decoupling
+ * Phosphor-side using-alias in src/core/ was removed when the decoupling
  * sweep landed — all callers now reference @c PhosphorZones::ZoneGeometryMode
  * directly.
  */

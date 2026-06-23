@@ -33,18 +33,7 @@
 // at progress=0.5 (mid-leg). An edge fade keeps the rising-content
 // reading clean at the surface boundary.
 
-#version 450
-
-#include <animation_uniforms.glsl>
 #include <noise.glsl>
-
-#define brightness customParams[0].x
-#define speedR     customParams[0].y
-#define speedG     customParams[0].z
-#define speedB     customParams[0].w
-
-layout(location = 0) in vec2 vTexCoord;
-layout(location = 0) out vec4 fragColor;
 
 // Bell curve in [0, 1], peaks at t=0.5. `power` controls steepness.
 // `pow(x, y)` is undefined per GLSL 4.50 spec when x < 0; the input
@@ -58,10 +47,9 @@ float fadeInOut(float t, float power)
     return clamp(s, 0.0, 1.0);
 }
 
-void main()
+vec4 pTransition(vec2 uv, float t)
 {
-    vec2 uv = vTexCoord;
-    float visibility = clamp(iTime, 0.0, 1.0);
+    float visibility = clamp(t, 0.0, 1.0);
     float progress   = 1.0 - visibility;
 
     // The wave sweeps faster when minSpeed is small (wave finishes
@@ -74,14 +62,14 @@ void main()
     // denominator — safe by construction.
     // Clamp each channel speed individually FIRST so a host that bypasses
     // metadata pushes ALL three below 0.05 doesn't produce negative
-    // multipliers below. Without this individual clamp, e.g. speedR=0.01
+    // multipliers below. Without this individual clamp, e.g. p_speedR=0.01
     // with floored minSpeed=0.05 yields mulR = max(0.01 - 0.05 + 1, 0) =
     // 0.96 — a downward multiplier (channel trails DOWN, not up) that
     // violates the "slowest channel gets ×1, faster channels higher"
     // contract.
-    float speedRClamped = clamp(speedR, 0.05, 1.0);
-    float speedGClamped = clamp(speedG, 0.05, 1.0);
-    float speedBClamped = clamp(speedB, 0.05, 1.0);
+    float speedRClamped = clamp(p_speedR, 0.05, 1.0);
+    float speedGClamped = clamp(p_speedG, 0.05, 1.0);
+    float speedBClamped = clamp(p_speedB, 0.05, 1.0);
     float minSpeed = min(speedRClamped, min(speedGClamped, speedBClamped));
     float waveTime = mix(0.1, 0.9, minSpeed);
 
@@ -95,7 +83,7 @@ void main()
     // about one window-minus-waveTime height.
     float offset = max(waveProgress - uv.y, 0.0);
     // Floor the denominator so an out-of-range minSpeed that drives
-    // waveTime to >=1.0 (e.g. a future UI that lets speedR/G/B exceed 1)
+    // waveTime to >=1.0 (e.g. a future UI that lets p_speedR/G/B exceed 1)
     // does not divide by zero. At waveTime=1.0 exactly, `(1/1)-1=0` —
     // without the floor `offset/0` produces Inf and the texture sample
     // walks off the surface with NaN UVs.
@@ -141,7 +129,7 @@ void main()
     vec3 rgb = straight * a;
 
     // Brightness pulse, peaks mid-leg.
-    rgb *= mix(1.0, brightness, fadeInOut(progress, 4.0));
+    rgb *= mix(1.0, p_brightness, fadeInOut(progress, 4.0));
 
     // Surface-edge fade in pixel space (~30 px from each edge) so the
     // rising-off-top reading is clean. Floor `iResolution` so a first-
@@ -156,5 +144,5 @@ void main()
                      smoothstep(0.0, 30.0, edgeFar.x) *
                      smoothstep(0.0, 30.0, edgeFar.y);
 
-    fragColor = vec4(rgb, a) * edgeFade;
+    return vec4(rgb, a) * edgeFade;
 }

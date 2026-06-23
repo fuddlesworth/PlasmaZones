@@ -42,10 +42,6 @@
 // iTime 0→1 on show and 1→0 on hide, so this single shader covers
 // both directions.
 
-#version 450
-
-#include <animation_uniforms.glsl>
-
 #define ROOT_THREE 1.73205080757
 
 // metadata.json declaration order → customParams[0] sub-slots.
@@ -65,12 +61,6 @@
 //                   fraction of card span, not a hex feature size).
 //                   Default 0.15 matches niri's hard-coded value so
 //                   the per-cell reveal cadence reads identically.
-#define hexSize  customParams[0].x
-#define softEdge customParams[0].y
-
-layout(location = 0) in vec2 vTexCoord;
-layout(location = 0) out vec4 fragColor;
-
 float roundValue(float v) { return floor(v + 0.5); }
 
 // Snap fractional axial coords to the integer axial coord of the
@@ -127,7 +117,7 @@ vec2 getHexCenter(vec2 axial, float size)
     return vec2(x, y);
 }
 
-void main()
+vec4 pTransition(vec2 uv, float t)
 {
     float progress = clamp(iTime, 0.0, 1.0);
 
@@ -156,8 +146,8 @@ void main()
     // reference). Floor guards against the pre-first-frame
     // iSurfaceScreenPos = (0,0) state.
     float screenHeight = max(iSurfaceScreenPos.w, 1.0);
-    float unitSize = max(hexSize, 0.04) * screenHeight / flooredAnchor.y;
-    float softEdgeWidth = max(softEdge, 0.001);
+    float unitSize = max(p_hexSize, 0.04) * screenHeight / flooredAnchor.y;
+    float softEdgeWidth = max(p_softEdge, 0.001);
 
     // Snap the fragment to the centre of its enclosing hex cell, then
     // compute the centre's distance from screen centre. Every fragment
@@ -207,5 +197,5 @@ void main()
     // the same scalar keeps the daemon's blend pipeline composing
     // correctly with the parent chain's opacity.
     vec4 sampled = surfaceColor(vTexCoord);
-    fragColor = sampled * (1.0 - steppedMask);
+    return sampled * (1.0 - steppedMask);
 }

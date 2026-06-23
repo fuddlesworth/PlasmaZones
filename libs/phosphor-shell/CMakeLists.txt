@@ -24,6 +24,14 @@ include(GenerateExportHeader)
 # ═══════════════════════════════════════════════════════════════════════════════
 
 find_package(Qt6 6.10 REQUIRED COMPONENTS Core Gui Quick Qml WaylandClient)
+
+# Qt 6.5+ resource-prefix policy. NEW = use `:/qt/qml/` as the QML
+# module resource prefix. Mirrors the same opt-in phosphor-theme's
+# CMakeLists.txt does; required so qt_add_qml_module below produces
+# resource URLs that match the module URI cleanly.
+if(COMMAND qt_policy)
+    qt_policy(SET QTP0001 NEW)
+endif()
 if(NOT TARGET Qt6::WaylandClientPrivate)
     find_package(Qt6WaylandClientPrivate REQUIRED)
 endif()
@@ -147,6 +155,62 @@ set_target_properties(PhosphorShell PROPERTIES
     SOVERSION 0
     CXX_VISIBILITY_PRESET hidden
     VISIBILITY_INLINES_HIDDEN ON
+)
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# QML module, STATIC (in-tree linkable)
+# ═══════════════════════════════════════════════════════════════════════════════
+#
+# First QML-side surface from phosphor-shell. URI Phosphor.Shell. Hosts
+# `PerScreen.qml` (Phase 1.5) — a reset-aware Instantiator wrapper around
+# ScreenModel that keys delegates on QScreen* identity so hot-plug
+# doesn't tear down delegates for surviving screens. Mirrors the
+# Phosphor.Theme / Phosphor.Popout split: separate static QML module
+# target, alias under `PhosphorShell::PhosphorShellQml`.
+
+set(_phosphor_shell_qml_files
+    qml/Phosphor/Shell/PerScreen.qml
+)
+
+# Pin each QML file's resource alias to its basename so the resource URL
+# matches the module URI cleanly. Without this, qt_add_qml_module nests
+# the file's source-relative path under the URI path, producing URLs
+# like `qrc:/qt/qml/Phosphor/Shell/qml/Phosphor/Shell/PerScreen.qml` —
+# the doubled path breaks intra-module type resolution.
+foreach(_qml_file IN LISTS _phosphor_shell_qml_files)
+    get_filename_component(_qml_basename ${_qml_file} NAME)
+    set_source_files_properties(${_qml_file}
+        PROPERTIES
+            QT_RESOURCE_ALIAS ${_qml_basename}
+    )
+endforeach()
+
+# Directory-scope suppression of -Wmissing-include-dirs for the targets
+# qt_add_qml_module generates here: Qt adds <target>_autogen/include to each
+# sub-target's -I list, but when a module carries no Q_OBJECT sources AUTOMOC
+# never creates that directory (and --clean-first deletes it), so cc1plus
+# warns on a Qt-managed scratch path. Full rationale: src/shared/CMakeLists.txt.
+set_property(DIRECTORY APPEND PROPERTY COMPILE_OPTIONS "-Wno-missing-include-dirs")
+
+qt_add_qml_module(PhosphorShellQml
+    URI Phosphor.Shell
+    VERSION 1.0
+    STATIC
+    QML_FILES ${_phosphor_shell_qml_files}
+    OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/qml/Phosphor/Shell
+)
+
+add_library(PhosphorShell::PhosphorShellQml ALIAS PhosphorShellQml)
+
+target_compile_features(PhosphorShellQml PUBLIC cxx_std_20)
+
+target_link_libraries(PhosphorShellQml
+    PUBLIC
+        PhosphorShell::PhosphorShell
+        Qt6::Core
+        Qt6::Gui
+        Qt6::Qml
+        Qt6::Quick
 )
 
 # ═══════════════════════════════════════════════════════════════════════════════

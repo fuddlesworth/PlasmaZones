@@ -4,7 +4,6 @@
 #include <PhosphorZones/Layout.h>
 #include <PhosphorZones/LayoutUtils.h>
 #include "zoneslogging.h"
-#include <PhosphorIdentity/WindowId.h>
 #include <QJsonArray>
 #include <QStandardPaths>
 #include <algorithm>
@@ -127,7 +126,6 @@ Layout::Layout(const Layout& other)
     , m_sourcePath() // Copies have no source path (will be saved to user directory)
     , m_systemSourcePath() // Copies carry no system-origin tracking (see class comment)
     , m_defaultOrder(other.m_defaultOrder)
-    , m_appRules(other.m_appRules)
     , m_autoAssign(other.m_autoAssign)
     , m_useFullScreenGeometry(other.m_useFullScreenGeometry)
     , m_shaderId(other.m_shaderId)
@@ -188,8 +186,6 @@ Layout& Layout::operator=(const Layout& other)
         m_isSystemLayout = false; // Cache stays consistent with the cleared source path
         m_shaderId = other.m_shaderId;
         m_shaderParams = other.m_shaderParams;
-        bool rulesChanged = m_appRules != other.m_appRules;
-        m_appRules = other.m_appRules;
         bool autoAssignDiff = m_autoAssign != other.m_autoAssign;
         m_autoAssign = other.m_autoAssign;
         bool fullScreenGeomDiff = m_useFullScreenGeometry != other.m_useFullScreenGeometry;
@@ -224,8 +220,6 @@ Layout& Layout::operator=(const Layout& other)
             Q_EMIT allowedDesktopsChanged();
         if (activitiesChanged)
             Q_EMIT allowedActivitiesChanged();
-        if (rulesChanged)
-            Q_EMIT appRulesChanged();
         if (autoAssignDiff)
             Q_EMIT autoAssignChanged();
         if (fullScreenGeomDiff)
@@ -409,35 +403,6 @@ void Layout::setSourcePath(const QString& path)
         }
         Q_EMIT sourcePathChanged();
     }
-}
-
-// App-to-zone rules
-void Layout::setAppRules(const QVector<AppRule>& rules)
-{
-    if (m_appRules != rules) {
-        m_appRules = rules;
-        Q_EMIT appRulesChanged();
-        emitModifiedIfNotBatched();
-    }
-}
-
-AppRuleMatch Layout::matchAppRule(const QString& windowClass) const
-{
-    if (windowClass.isEmpty() || m_appRules.isEmpty()) {
-        return {};
-    }
-    for (const auto& rule : m_appRules) {
-        if (rule.pattern.isEmpty()) {
-            continue;
-        }
-        // Segment-aware match: "firefox" matches "org.mozilla.firefox" (dot-boundary),
-        // "org.mozilla.firefox" matches "firefox", exact match always works.
-        // Prevents "fire" from matching "firefox" (no dot boundary).
-        if (::PhosphorIdentity::WindowId::appIdMatches(windowClass, rule.pattern)) {
-            return {rule.zoneNumber, rule.targetScreen};
-        }
-    }
-    return {};
 }
 
 void Layout::clearZonePaddingOverride()

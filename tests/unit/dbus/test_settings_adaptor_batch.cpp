@@ -237,6 +237,101 @@ private Q_SLOTS:
     }
 
     // ─────────────────────────────────────────────────────────────────────
+    // Snap-window decoration keys (per-mode window appearance). The KWin
+    // effect fetches these via the D-Bus getSettings batch to decorate
+    // snap-managed windows; they are registered with REGISTER_BOOL/INT/
+    // COLOR_SETTING in initializeRegistry(), so they resolve on a stub
+    // backend. If the adaptor allow-list dropped any of the seven the effect
+    // would silently fall back to defaults — pin the whole set here so an
+    // omission breaks the build's test gate. Mirrors the gap/overlay batch
+    // test above: every requested key must come back, valid, with the right
+    // wire type (color keys serialize to a HexArgb string).
+    // ─────────────────────────────────────────────────────────────────────
+    void testGetSettings_snappingKeys_allReturnedWithTypes()
+    {
+        const QStringList keys{
+            QStringLiteral("snappingHideTitleBars"),         QStringLiteral("snappingShowBorder"),
+            QStringLiteral("snappingBorderWidth"),           QStringLiteral("snappingBorderRadius"),
+            QStringLiteral("snappingBorderColor"),           QStringLiteral("snappingInactiveBorderColor"),
+            QStringLiteral("snappingUseSystemBorderColors"),
+        };
+
+        const QVariantMap result = m_adaptor->getSettings(keys);
+
+        QCOMPARE(result.size(), keys.size());
+        for (const QString& k : keys) {
+            QVERIFY2(result.contains(k), qPrintable(QStringLiteral("missing key: %1").arg(k)));
+            QVERIFY2(result.value(k).isValid(), qPrintable(QStringLiteral("invalid variant for: %1").arg(k)));
+        }
+        // Bool / int / color wire types — color keys serialize to a string via
+        // the REGISTER_COLOR_SETTING getter (QColor::name(HexArgb)).
+        QCOMPARE(result.value(QStringLiteral("snappingHideTitleBars")).metaType().id(), QMetaType::Bool);
+        QCOMPARE(result.value(QStringLiteral("snappingShowBorder")).metaType().id(), QMetaType::Bool);
+        QCOMPARE(result.value(QStringLiteral("snappingUseSystemBorderColors")).metaType().id(), QMetaType::Bool);
+        QCOMPARE(result.value(QStringLiteral("snappingBorderWidth")).metaType().id(), QMetaType::Int);
+        QCOMPARE(result.value(QStringLiteral("snappingBorderRadius")).metaType().id(), QMetaType::Int);
+        QCOMPARE(result.value(QStringLiteral("snappingBorderColor")).metaType().id(), QMetaType::QString);
+        QCOMPARE(result.value(QStringLiteral("snappingInactiveBorderColor")).metaType().id(), QMetaType::QString);
+
+        // Values mirror the stub's snapping* getters, proving each key is
+        // wired to its own accessor rather than collapsed onto a neighbour. The
+        // int (width 2 / radius 0) and color (white / black) keys hold mutually
+        // distinct values, so any swap among them flips a mirror. Among the three
+        // bools only showBorder (false) differs from hideTitleBars/useSystem
+        // (both true) — two booleans cannot encode three distinct values — so the
+        // bool mirrors catch any swap involving showBorder; a hideTitleBars↔
+        // useSystem swap is instead pinned by the verified-correct production
+        // registration and the per-key metaType assertions above.
+        QCOMPARE(result.value(QStringLiteral("snappingBorderWidth")).toInt(), m_settings->snappingBorderWidth());
+        QCOMPARE(result.value(QStringLiteral("snappingBorderRadius")).toInt(), m_settings->snappingBorderRadius());
+        QCOMPARE(QColor(result.value(QStringLiteral("snappingBorderColor")).toString()),
+                 m_settings->snappingBorderColor());
+        QCOMPARE(QColor(result.value(QStringLiteral("snappingInactiveBorderColor")).toString()),
+                 m_settings->snappingInactiveBorderColor());
+        QCOMPARE(result.value(QStringLiteral("snappingHideTitleBars")).toBool(), m_settings->snappingHideTitleBars());
+        QCOMPARE(result.value(QStringLiteral("snappingShowBorder")).toBool(), m_settings->snappingShowBorder());
+        QCOMPARE(result.value(QStringLiteral("snappingUseSystemBorderColors")).toBool(),
+                 m_settings->snappingUseSystemBorderColors());
+    }
+
+    // ─────────────────────────────────────────────────────────────────────
+    // Drag-activation toggle keys. The KWin effect fetches these three bools
+    // (via loadSettingAsync → getSetting, the singular form of this batch) to
+    // decide whether to keep streaming drag-cursor ticks while no trigger is
+    // physically held, so the daemon's rising-edge toggle latches still fire.
+    // If the adaptor registry drops any registration the effect silently reads
+    // false and that toggle feature dies — zoneSpanToggleMode shipped
+    // unregistered until PR #595's audit caught it, so pin the whole set here
+    // to break the test gate on any future omission. Mirrors the snap-window
+    // batch test above: every requested key must come back, valid, Bool-typed,
+    // and wired to its own ISettings accessor.
+    // ─────────────────────────────────────────────────────────────────────
+    void testGetSettings_dragToggleKeys_allReturnedWithTypes()
+    {
+        const QStringList keys{
+            QStringLiteral("toggleActivation"),
+            QStringLiteral("autotileDragInsertToggle"),
+            QStringLiteral("zoneSpanToggleMode"),
+        };
+
+        const QVariantMap result = m_adaptor->getSettings(keys);
+
+        QCOMPARE(result.size(), keys.size());
+        for (const QString& k : keys) {
+            QVERIFY2(result.contains(k), qPrintable(QStringLiteral("missing key: %1").arg(k)));
+            QVERIFY2(result.value(k).isValid(), qPrintable(QStringLiteral("invalid variant for: %1").arg(k)));
+            QCOMPARE(result.value(k).metaType().id(), QMetaType::Bool);
+        }
+
+        // Each key resolves to its own ISettings accessor rather than collapsing
+        // onto a neighbour.
+        QCOMPARE(result.value(QStringLiteral("toggleActivation")).toBool(), m_settings->toggleActivation());
+        QCOMPARE(result.value(QStringLiteral("autotileDragInsertToggle")).toBool(),
+                 m_settings->autotileDragInsertToggle());
+        QCOMPARE(result.value(QStringLiteral("zoneSpanToggleMode")).toBool(), m_settings->zoneSpanToggleMode());
+    }
+
+    // ─────────────────────────────────────────────────────────────────────
     // Phase 5: setPerScreenSettings batch surface.
     //
     // The contract mirrors setSettings (global batch): empty map returns
@@ -350,6 +445,8 @@ private Q_SLOTS:
 private:
     std::unique_ptr<IsolatedConfigGuard> m_guard;
     CountingStubSettings* m_settings = nullptr;
+    // CountingStubSettings publicly inherits StubSettings, whose snapping*
+    // getters back the value assertions in testGetSettings_snappingKeys_*.
     QObject* m_parent = nullptr;
     SettingsAdaptor* m_adaptor = nullptr;
 };

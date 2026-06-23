@@ -84,7 +84,7 @@ void TestOverlaySmoke::stateForMaterializesOnFirstAccess()
     PhosphorOverlay::ShellHost host;
     QVERIFY(!host.hasState(QStringLiteral("DP-1")));
 
-    auto& state = host.stateFor(QStringLiteral("DP-1"));
+    auto& state = host.getOrCreateStateFor(QStringLiteral("DP-1"));
     Q_UNUSED(state);
     QVERIFY(host.hasState(QStringLiteral("DP-1")));
 }
@@ -98,7 +98,7 @@ void TestOverlaySmoke::stateForConstReturnsNullForUnknownScreen()
 void TestOverlaySmoke::removeStateClearsEntry()
 {
     PhosphorOverlay::ShellHost host;
-    host.stateFor(QStringLiteral("DP-1"));
+    host.getOrCreateStateFor(QStringLiteral("DP-1"));
     QVERIFY(host.hasState(QStringLiteral("DP-1")));
     host.removeState(QStringLiteral("DP-1"));
     QVERIFY(!host.hasState(QStringLiteral("DP-1")));
@@ -107,8 +107,8 @@ void TestOverlaySmoke::removeStateClearsEntry()
 void TestOverlaySmoke::screenIdsReflectsLiveEntries()
 {
     PhosphorOverlay::ShellHost host;
-    host.stateFor(QStringLiteral("DP-1"));
-    host.stateFor(QStringLiteral("HDMI-A-1"));
+    host.getOrCreateStateFor(QStringLiteral("DP-1"));
+    host.getOrCreateStateFor(QStringLiteral("HDMI-A-1"));
     const auto ids = host.screenIds();
     QCOMPARE(ids.size(), 2);
     QVERIFY(ids.contains(QStringLiteral("DP-1")));
@@ -131,7 +131,7 @@ void TestOverlaySmoke::rekeySameKeyReturnsFalseWhenNoLiveEntry()
     // No entry exists - postcondition "live entry at key" cannot hold.
     QCOMPARE(host.rekey(QStringLiteral("DP-1"), QStringLiteral("DP-1")), false);
     // Materialize a zeroed entry - still no live shell.
-    host.stateFor(QStringLiteral("DP-1"));
+    host.getOrCreateStateFor(QStringLiteral("DP-1"));
     QCOMPARE(host.rekey(QStringLiteral("DP-1"), QStringLiteral("DP-1")), false);
 }
 
@@ -144,10 +144,10 @@ void TestOverlaySmoke::rekeyReturnsFalseWhenDonorAbsent()
 void TestOverlaySmoke::rekeyReturnsFalseWhenDonorHasNoLiveShell()
 {
     PhosphorOverlay::ShellHost host;
-    // stateFor materializes a zeroed entry (shellSurface == nullptr).
+    // getOrCreateStateFor materializes a zeroed entry (shellSurface == nullptr).
     // Rekey requires a live shell on the donor and must reject this case
     // rather than silently moving an empty entry.
-    host.stateFor(QStringLiteral("DP-1"));
+    host.getOrCreateStateFor(QStringLiteral("DP-1"));
     QCOMPARE(host.rekey(QStringLiteral("DP-1"), QStringLiteral("HDMI-A-1")), false);
 }
 
@@ -171,7 +171,7 @@ void TestOverlaySmoke::hideSlotFiresCompletionWhenNoSlot()
     PhosphorAnimation::PhosphorProfileRegistry registry;
     PhosphorAnimationLayer::SurfaceAnimator animator(registry);
     host.setSurfaceAnimator(&animator);
-    host.stateFor(QStringLiteral("DP-1")); // zeroed entry, no shellSurface
+    host.getOrCreateStateFor(QStringLiteral("DP-1")); // zeroed entry, no shellSurface
 
     int fired = 0;
     host.hideSlot(QStringLiteral("DP-1"), QStringLiteral("osd"), [&]() {
@@ -194,7 +194,7 @@ void TestOverlaySmoke::hideSlotFiresCompletionWhenSlotItemIsNullQPointer()
     PhosphorAnimationLayer::SurfaceAnimator animator(registry);
     host.setSurfaceAnimator(&animator);
 
-    auto& state = host.stateFor(QStringLiteral("DP-1"));
+    auto& state = host.getOrCreateStateFor(QStringLiteral("DP-1"));
     // Inject a SlotEntry whose QPointer is default-null. Mirrors the
     // "QML item never materialised" / "item already destroyed" cases.
     state.slots.insert(QStringLiteral("osd"),
@@ -242,7 +242,7 @@ void TestOverlaySmoke::hideSlotDropsCompletionWhenAnimatorMissing()
 void TestOverlaySmoke::destroyShellOnZeroedEntrySkipsCallback()
 {
     PhosphorOverlay::ShellHost host;
-    host.stateFor(QStringLiteral("DP-1")); // zeroed (shellSurface == nullptr)
+    host.getOrCreateStateFor(QStringLiteral("DP-1")); // zeroed (shellSurface == nullptr)
 
     int callbackFired = 0;
     host.setPreDestroyCallback([&](const QString&) {
@@ -272,9 +272,9 @@ void TestOverlaySmoke::dtorWithMaterializedZeroedEntriesIsSafe()
             ++callbackFired;
         });
         // Materialize several zeroed entries via the public surface.
-        host.stateFor(QStringLiteral("DP-1"));
-        host.stateFor(QStringLiteral("HDMI-A-1"));
-        host.stateFor(QStringLiteral("DP-2"));
+        host.getOrCreateStateFor(QStringLiteral("DP-1"));
+        host.getOrCreateStateFor(QStringLiteral("HDMI-A-1"));
+        host.getOrCreateStateFor(QStringLiteral("DP-2"));
     }
     // None had a live shellSurface, so PreDestroyCallback must not fire
     // during ~ShellHost - otherwise consumer state that may have

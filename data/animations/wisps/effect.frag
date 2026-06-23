@@ -13,30 +13,9 @@
 // (byte-equivalent to BMW's). See bmw_compat.glsl header for the
 // BMW-to-PlasmaZones uniform-name remap.
 
-#version 450
-
-#include <animation_uniforms.glsl>
 #include <noise.glsl>
 
-layout(location = 0) in vec2 vTexCoord;
-layout(location = 0) out vec4 fragColor;
-
 #include <bmw_compat.glsl>
-
-// metadata.json declaration order → customParams sub-slots.
-// BMW's `uSeed` is vec2 — PlasmaZones param slots are scalar, so we
-// expose the two components as separate `uSeedX` / `uSeedY` floats and
-// reassemble at the (single) call site below.
-#define uScale          customParams[0].x
-#define uSeedX          customParams[0].y
-#define uSeedY          customParams[0].z
-
-// metadata.json color declaration order → customColors[0..2].
-// BMW declares uColorN as vec3; PlasmaZones color slots are vec4 so
-// the body samples .rgb. The .a channel is unused.
-#define uColor1         customColors[0].rgb
-#define uColor2         customColors[1].rgb
-#define uColor3         customColors[2].rgb
 
 const float WISPS_RADIUS    = 20.0;
 const float WISPS_SPEED     = 10.0;
@@ -76,7 +55,7 @@ vec4 getWisps(vec2 texCoords, float gridSize, vec2 seed) {
 
   cellUV += offset;
 
-  vec3 color = tritone(hash12(cellID * seed * 1.256), uColor1, uColor2, uColor3);
+  vec3 color = tritone(hash12(cellID * seed * 1.256), p_uColor1.rgb, p_uColor2.rgb, p_uColor3.rgb);
 
   // Use distance to center of shifted / rotated UV coordinates to draw a glaring point.
   float dist = length(cellUV - 0.5) * gridSize / radius;
@@ -88,7 +67,7 @@ vec4 getWisps(vec2 texCoords, float gridSize, vec2 seed) {
   return vec4(0.0);
 }
 
-void main() {
+vec4 pTransition(vec2 uv, float t) {
   float progress = uForOpening ? 1.0 - easeOutQuad(uProgress) : easeOutQuad(uProgress);
 
   // Scale down the window slightly.
@@ -109,11 +88,11 @@ void main() {
   vec4 oColor = getInputColor(coords) * boundaryMask(coords);
 
   // Compute several layers of moving wisps.
-  vec2 uv = (iTexCoord.st - 0.5) / mix(1.0, 0.5, progress) + 0.5;
-  uv /= uScale;
+  vec2 wispUv = (iTexCoord.st - 0.5) / mix(1.0, 0.5, progress) + 0.5;
+  wispUv /= p_uScale;
   vec4 wisps = vec4(0.0);
   for (float i = 0.0; i < WISPS_LAYERS; ++i) {
-    wisps = alphaOver(wisps, getWisps(uv * 0.3, WISPS_SPACING, vec2(uSeedX, uSeedY) * (i + 1.0)));
+    wisps = alphaOver(wisps, getWisps(wispUv * 0.3, WISPS_SPACING, vec2(p_uSeedX, p_uSeedY) * (i + 1.0)));
   }
 
   // Compute shrinking edge mask.
@@ -127,7 +106,7 @@ void main() {
 
   // Use a noise function to dissolve the window.
   float noise =
-    smoothstep(1.0, 0.0, abs(2.0 * simplex2DFractal(uv * uSize / 250.0) - 1.0));
+    smoothstep(1.0, 0.0, abs(2.0 * simplex2DFractal(wispUv * uSize / 250.0) - 1.0));
   float windowMask = 1.0 - (windowOut < 0.5 ? mix(0.0, noise, windowOut * 2.0)
                                             : mix(noise, 1.0, windowOut * 2.0 - 1.0));
   oColor.a *= windowMask * mask;
@@ -142,5 +121,5 @@ void main() {
   // oColor = vec4(vec3(noise), 1.0);
   // oColor = vec4(vec3(mask*min(wispsIn, 1.0 - wispsOut)), 1.0);
 
-  setOutputColor(oColor);
+  return vec4(oColor.rgb * oColor.a, oColor.a);
 }

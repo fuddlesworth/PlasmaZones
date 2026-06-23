@@ -4,9 +4,11 @@
 # PhosphorTiles — auto-tiling algorithm primitives.
 #
 # Stateless tiling-algorithm layer: TilingAlgorithm interface, AlgorithmRegistry
-# singleton, SplitTree primitive (BSP node tree + serialization + rebuild),
+# (per-composition-root, no global singleton), SplitTree primitive (BSP node
+# tree + serialization + rebuild),
 # TilingState (per-screen mutable state consumed by previews), and the scripted-
-# algorithm runtime (QJSEngine sandbox + loader + helpers). Implements
+# algorithm runtime (Luau-backed LuauTileAlgorithm + ScriptedAlgorithmLoader,
+# evaluated through PhosphorScripting). Implements
 # PhosphorLayout::ILayoutSource via AutotileLayoutSource so editor / settings
 # code can render autotile previews without depending on the daemon engine.
 #
@@ -17,7 +19,7 @@
 #
 # Self-contained: depends only on Qt6 + PhosphorLayoutApi.  Logging is
 # library-local (`PhosphorTiles::lcTilesLib`).  Strings in
-# scriptedalgorithm.cpp ship as untranslated English placeholders — the
+# luautilealgorithm.cpp ship as untranslated English placeholders — the
 # application config layer overrides them via algorithm display name.
 
 cmake_minimum_required(VERSION 3.16)
@@ -38,20 +40,26 @@ include(GenerateExportHeader)
 # Dependencies
 # ═══════════════════════════════════════════════════════════════════════════════
 
-find_package(Qt6 6.10 REQUIRED COMPONENTS Core Qml)
+find_package(Qt6 6.10 REQUIRED COMPONENTS Core)
 
 # PhosphorLayoutApi provides the LayoutPreview / ILayoutSource contract that
 # this library implements via AutotileLayoutSource. Found via add_subdirectory
-# in PZ in-tree builds; falls back to find_package when this library is
+# in Phosphor in-tree builds; falls back to find_package when this library is
 # consumed standalone.
 if(NOT TARGET PhosphorLayoutApi::PhosphorLayoutApi)
     find_package(PhosphorLayoutApi CONFIG REQUIRED)
 endif()
 
 # phosphor-fsloader — shared filesystem-loader scaffolding (used by
-# ScriptedAlgorithmLoader's WatchedDirectorySet + JsScanStrategy).
+# ScriptedAlgorithmLoader's WatchedDirectorySet + LuauScanStrategy).
 if(NOT TARGET PhosphorFsLoader::PhosphorFsLoader)
     find_package(PhosphorFsLoader 0.1.0 REQUIRED)
+endif()
+
+# phosphor-registry — AlgorithmRegistry's storage is a Registry<TileAlgorithmEntry>.
+# Used only in algorithmregistry.cpp (the header is pimpl), so a PRIVATE link.
+if(NOT TARGET PhosphorRegistry::PhosphorRegistry)
+    find_package(PhosphorRegistry 0.1.0 REQUIRED)
 endif()
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -62,19 +70,15 @@ set(phosphortiles_public_HDRS
     include/PhosphorTiles/PhosphorTiles.h
     include/PhosphorTiles/AutotileConstants.h
     include/PhosphorTiles/TilingAlgorithm.h
-    include/PhosphorTiles/TilingAlgorithmHelpers.h
     include/PhosphorTiles/TilingParams.h
     include/PhosphorTiles/TilingState.h
     include/PhosphorTiles/SplitTree.h
     include/PhosphorTiles/AlgorithmPreviewParams.h
     include/PhosphorTiles/AlgorithmRegistry.h
     include/PhosphorTiles/ITileAlgorithmRegistry.h
-    include/PhosphorTiles/ScriptedAlgorithm.h
-    include/PhosphorTiles/ScriptedAlgorithmHelpers.h
-    include/PhosphorTiles/ScriptedAlgorithmJsBuiltins.h
+    include/PhosphorTiles/LuauTileAlgorithm.h
+    include/PhosphorTiles/TileScriptMetadata.h
     include/PhosphorTiles/ScriptedAlgorithmLoader.h
-    include/PhosphorTiles/ScriptedAlgorithmSandbox.h
-    include/PhosphorTiles/ScriptedAlgorithmWatchdog.h
     include/PhosphorTiles/AutotileLayoutSource.h
     include/PhosphorTiles/AutotileLayoutSourceFactory.h
     include/PhosphorTiles/AutotilePreviewRender.h
@@ -91,18 +95,13 @@ set(phosphortiles_SRCS
     src/splittree.cpp
     src/splittreerebuild.cpp
     src/splittreeserializer.cpp
-    src/scriptedalgorithm.cpp
-    src/scriptedalgorithm_hooks.cpp
-    src/scriptedalgorithm_tree.cpp
-    src/scriptedalgorithmhelpers.cpp
-    src/scriptedalgorithmjsbuiltins.cpp
     src/scriptedalgorithmloader.cpp
-    src/scriptedalgorithmsandbox.cpp
-    src/scriptedalgorithmwatchdog.cpp
+    src/luautilealgorithm.cpp
+    src/tilescriptmetadata.cpp
     src/tileslogging.h
     src/tileslogging.cpp
-    # Builtin JS helpers compiled into the binary as Qt resources.
-    src/builtins.qrc
+    # The pluau Luau standard library, compiled into the binary as a Qt resource.
+    src/pluau.qrc
 )
 
 add_library(PhosphorTiles SHARED
@@ -136,14 +135,18 @@ target_compile_features(PhosphorTiles PUBLIC cxx_std_20)
 target_link_libraries(PhosphorTiles
     PUBLIC
         Qt6::Core
-        Qt6::Qml
         PhosphorLayoutApi::PhosphorLayoutApi
         PhosphorEngine::PhosphorEngine
+        PhosphorScripting::PhosphorScripting
         # PhosphorFsLoader is publicly exposed via
         # ScriptedAlgorithmLoader's `LiveReload` parameter — consumers
         # including `<PhosphorTiles/ScriptedAlgorithmLoader.h>` need
         # its headers on their include path.
         PhosphorFsLoader::PhosphorFsLoader
+    PRIVATE
+        # AlgorithmRegistry composes Registry<TileAlgorithmEntry> in its .cpp
+        # only (pimpl header), so this stays private — not in the public ABI.
+        PhosphorRegistry::PhosphorRegistry
 )
 
 set_target_properties(PhosphorTiles PROPERTIES
@@ -171,6 +174,18 @@ endif()
 if(NOT DEFINED KDE_INSTALL_BINDIR)
     set(KDE_INSTALL_BINDIR ${CMAKE_INSTALL_BINDIR})
 endif()
+if(NOT DEFINED KDE_INSTALL_DATADIR)
+    include(GNUInstallDirs)
+    set(KDE_INSTALL_DATADIR ${CMAKE_INSTALL_DATAROOTDIR})
+endif()
+
+# Ship the pluau standard-library type definitions so users authoring custom
+# `.luau` algorithms get luau-lsp autocomplete and luau-analyze type-checking
+# (see docs/architecture/luau-algorithm-authoring.md). Installed OUTSIDE the
+# scanned algorithms subdirectory — the loader globs `*.luau`, and a `.d.luau`
+# sitting next to the algorithms would be mistaken for one.
+install(FILES src/pluau/pluau.d.luau
+    DESTINATION ${KDE_INSTALL_DATADIR}/plasmazones)
 
 install(TARGETS PhosphorTiles
     EXPORT PhosphorTilesTargets

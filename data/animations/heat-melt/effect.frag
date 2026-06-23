@@ -17,19 +17,6 @@
 // `texture(uTexture0, uv)` samples directly. `texture2D` (GLSL ES) is
 // rewritten to `texture` (GLSL 4.50 core) inline.
 
-#version 450
-
-#include <animation_uniforms.glsl>
-
-// metadata.json declaration order → customParams[0] sub-slots
-#define meltOriginX        customParams[0].x
-#define meltOriginY        customParams[0].y
-#define meltAggressiveness customParams[0].z
-#define meltNoiseScale     customParams[0].w
-
-layout(location = 0) in vec2 vTexCoord;
-layout(location = 0) out vec4 fragColor;
-
 float hm_rand(vec2 co) { return fract(sin(dot(co.xy, vec2(12.9898, 78.233))) * 43758.5453); }
 vec3 hm_mod289_3(vec3 x) { return x - floor(x * (1.0 / 289.0)) * 289.0; }
 vec2 hm_mod289_2(vec2 x) { return x - floor(x * (1.0 / 289.0)) * 289.0; }
@@ -56,13 +43,12 @@ float hm_snoise(vec2 v) {
     return 130.0 * dot(m, g);
 }
 
-void main() {
+vec4 pTransition(vec2 uv, float t) {
     // ── niri OPEN body (handles both legs via runtime iTime flip) ──
-    float p = clamp(iTime, 0.0, 1.0);
-    vec2 uv = vTexCoord;
+    float p = clamp(t, 0.0, 1.0);
     vec4 win = surfaceColor(uv);
 
-    vec2 center = vec2(meltOriginX, meltOriginY);
+    vec2 center = vec2(p_meltOriginX, p_meltOriginY);
     // `meltNoiseScale` means "noise cycles across the screen WIDTH":
     // multiplying by iAnchorSize.x/iSurfaceScreenPos.z scales the cycle
     // count to the fraction of the screen this surface covers, so
@@ -70,11 +56,11 @@ void main() {
     // maximized windows. Matches niri's reference on full-screen
     // (multiplier = 1.0 there). Floor guards against the pre-first-
     // frame iSurfaceScreenPos = (0,0,0,0) state.
-    float perScreenScaleX = meltNoiseScale * max(iAnchorSize.x, 1.0)
+    float perScreenScaleX = p_meltNoiseScale * max(iAnchorSize.x, 1.0)
                                            / max(iSurfaceScreenPos.z, 1.0);
-    float dist = distance(center, uv) - p * exp(hm_snoise(vec2(uv.x * perScreenScaleX, 0.0)) * meltAggressiveness);
+    float dist = distance(center, uv) - p * exp(hm_snoise(vec2(uv.x * perScreenScaleX, 0.0)) * p_meltAggressiveness);
     float r = p - hm_rand(vec2(uv.x, 0.1));
     float reveal = (dist <= r) ? 1.0 : (p * p * p);
 
-    fragColor = win * reveal;
+    return win * reveal;
 }

@@ -6,21 +6,41 @@ import QtQuick.Controls
 import QtQuick.Layouts
 import org.kde.kirigami as Kirigami
 
+// Shared Gaps card for both Tiling → Appearance and Snapping → Window
+// Appearance. The two modes differ only in labels and whether Smart gaps is
+// shown, so they are exposed as properties; the per-screen wiring lives in the
+// host page, which feeds the *Value properties and handles the *Modified
+// signals.
 SettingsCard {
     id: root
 
     required property int gapMax
     required property int gapMin
-    required property int innerGapValue
+    // The "primary" gap is the inter-window spacing ("Inner gap" — both tiling
+    // and snapping share the label via primaryGapLabel). It has its own bounds
+    // (clamped against a different ConfigDefaults range than the outer/per-side
+    // gaps), so the UI range always matches the validator's clamp range.
+    required property int primaryGapMin
+    required property int primaryGapMax
+    required property int primaryGapValue
     required property int outerGapValue
     required property bool usePerSideOuterGap
-    required property bool smartGapsValue
     required property int outerGapTopValue
     required property int outerGapBottomValue
     required property int outerGapLeftValue
     required property int outerGapRightValue
+    // Smart gaps is autotile-only; snapping hides the row.
+    property bool showSmartGaps: true
+    property bool smartGapsValue: false
+    // Defaults; hosts may override the label/description per mode. Tiling and
+    // snapping currently share "Inner gap" / "Outer gap" for cross-mode
+    // consistency (snapping just overrides the descriptions).
+    property string primaryGapLabel: i18n("Inner gap")
+    property string primaryGapDescription: i18n("Space between tiled windows")
+    property string outerGapLabel: i18n("Outer gap")
+    property string outerGapDescription: i18n("Space from screen edges to tiled windows")
 
-    signal innerGapModified(int value)
+    signal primaryGapModified(int value)
     signal outerGapModified(int value)
     signal usePerSideOuterGapToggled(bool checked)
     signal outerGapTopModified(int value)
@@ -36,27 +56,31 @@ SettingsCard {
         spacing: Kirigami.Units.smallSpacing
 
         SettingsRow {
-            title: i18n("Inner gap")
-            description: i18n("Space between tiled windows")
+            title: root.primaryGapLabel
+            searchAnchor: "primaryGap"
+            description: root.primaryGapDescription
 
-            SettingsSpinBox {
-                from: root.gapMin
-                to: root.gapMax
-                value: root.innerGapValue
-                onValueModified: (value) => {
-                    return root.innerGapModified(value);
+            SpinBox {
+                id: primaryGapSpinBox
+
+                from: root.primaryGapMin
+                to: root.primaryGapMax
+                onValueModified: root.primaryGapModified(value)
+                Accessible.name: root.primaryGapLabel
+
+                Binding on value {
+                    value: root.primaryGapValue
+                    when: !primaryGapSpinBox.activeFocus
+                    restoreMode: Binding.RestoreNone
                 }
             }
-
-        }
-
-        SettingsSeparator {
         }
 
         SettingsRow {
             visible: !tilePerSideSwitch.checked
-            title: i18n("Outer gap")
-            description: i18n("Space from screen edges to tiled windows")
+            title: root.outerGapLabel
+            searchAnchor: "outerGap"
+            description: root.outerGapDescription
 
             SpinBox {
                 id: outerGapSpinBox
@@ -64,20 +88,21 @@ SettingsCard {
                 from: root.gapMin
                 to: root.gapMax
                 onValueModified: root.outerGapModified(value)
-                Accessible.name: i18n("Outer gap")
+                Accessible.name: root.outerGapLabel
 
                 Binding on value {
                     value: root.outerGapValue
                     when: !outerGapSpinBox.activeFocus
                     restoreMode: Binding.RestoreNone
                 }
-
             }
-
         }
+
+        SettingsSeparator {}
 
         SettingsRow {
             title: i18n("Per-side outer gaps")
+            searchAnchor: "perSideOuterGaps"
             description: tilePerSideSwitch.checked ? i18n("Set different gap sizes for each screen edge") : i18n("Use a single outer gap value for all edges")
 
             SettingsSwitch {
@@ -85,11 +110,10 @@ SettingsCard {
 
                 checked: root.usePerSideOuterGap
                 accessibleName: i18n("Set gaps per side")
-                onToggled: function(newValue) {
+                onToggled: function (newValue) {
                     root.usePerSideOuterGapToggled(newValue);
                 }
             }
-
         }
 
         // Per-side gap grid (only when per-side is enabled)
@@ -118,7 +142,6 @@ SettingsCard {
                     when: !topGapSpinBox.activeFocus
                     restoreMode: Binding.RestoreNone
                 }
-
             }
 
             Label {
@@ -138,7 +161,6 @@ SettingsCard {
                     when: !bottomGapSpinBox.activeFocus
                     restoreMode: Binding.RestoreNone
                 }
-
             }
 
             Label {
@@ -158,7 +180,6 @@ SettingsCard {
                     when: !leftGapSpinBox.activeFocus
                     restoreMode: Binding.RestoreNone
                 }
-
             }
 
             Label {
@@ -178,28 +199,26 @@ SettingsCard {
                     when: !rightGapSpinBox.activeFocus
                     restoreMode: Binding.RestoreNone
                 }
-
             }
-
         }
 
         SettingsSeparator {
+            visible: root.showSmartGaps
         }
 
         SettingsRow {
+            visible: root.showSmartGaps
             title: i18n("Smart gaps")
+            searchAnchor: "smartGaps"
             description: i18n("Remove all gaps when only one window is tiled")
 
             SettingsSwitch {
                 checked: root.smartGapsValue
                 accessibleName: i18n("Smart gaps")
-                onToggled: function(newValue) {
+                onToggled: function (newValue) {
                     root.smartGapsToggled(newValue);
                 }
             }
-
         }
-
     }
-
 }

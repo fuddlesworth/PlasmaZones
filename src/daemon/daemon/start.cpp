@@ -10,6 +10,7 @@
 #include <PhosphorZones/LayoutRegistry.h>
 #include <PhosphorZones/LayoutComputeService.h>
 #include <PhosphorScreens/Manager.h>
+#include <PhosphorContext/ContextResolver.h>
 #include <PhosphorWorkspaces/VirtualDesktopManager.h>
 #include <PhosphorWorkspaces/ActivityManager.h>
 #include "../../core/geometryutils.h"
@@ -26,16 +27,16 @@
 #include "../../dbus/windowtrackingadaptor.h"
 #include "../../dbus/windowdragadaptor.h"
 #include "../../dbus/autotileadaptor.h"
-#include "../../dbus/snapadaptor.h"
 #include <PhosphorEngine/PlacementEngineBase.h>
 #include <PhosphorTiles/AlgorithmRegistry.h>
 #include <PhosphorTiles/TilingAlgorithm.h>
 #include <PhosphorTiles/ScriptedAlgorithmLoader.h>
 #include "../../core/shaderregistry.h"
+#include "../../config/settingsconfigstore.h"
 #include <PhosphorZones/ZoneDetector.h>
 #include <QProcess>
 #include <QPointer>
-#include "../config/settings.h"
+#include "../../config/settings.h"
 #include <QGuiApplication>
 #include <QScreen>
 #include <PhosphorScreens/ScreenIdentity.h>
@@ -56,28 +57,28 @@ void Daemon::connectScreenSignals()
     // catches users plugging a second identical monitor mid-session, where
     // the disambiguation "/CONNECTOR" suffix kicks in for the first time.
     Utils::warnDuplicateScreenIds();
-    connect(m_screenManager.get(), &Phosphor::Screens::ScreenManager::screenAdded, this,
-            [](const Phosphor::Screens::PhysicalScreen&) {
+    connect(m_screenManager.get(), &PhosphorScreens::ScreenManager::screenAdded, this,
+            [](const PhosphorScreens::PhysicalScreen&) {
                 Utils::warnDuplicateScreenIds();
             });
 
-    // Settings → Phosphor::Screens::ScreenManager refresh flows exclusively through the
+    // Settings → PhosphorScreens::ScreenManager refresh flows exclusively through the
     // IConfigStore contract: SettingsConfigStore forwards
     // Settings::virtualScreenConfigsChanged to IConfigStore::changed, which
-    // Phosphor::Screens::ScreenManager subscribes to in its start() (already called above) and
+    // PhosphorScreens::ScreenManager subscribes to in its start() (already called above) and
     // which also seeds the initial cache via loadAll(). A parallel direct
     // Settings observer here would double every refresh — left intentionally
     // absent.
 
-    // React to Phosphor::Screens::ScreenManager VS cache changes (driven by the IConfigStore
+    // React to PhosphorScreens::ScreenManager VS cache changes (driven by the IConfigStore
     // OR by direct test calls). Delegates to onVirtualScreensReconfigured
     // which migrates window assignments, refreshes autotile, resnaps
     // windows, and schedules downstream geometry updates. NOTE: this
     // handler no longer writes back to Settings — Settings is now the
     // source, not the sink.
-    connect(m_screenManager.get(), &Phosphor::Screens::ScreenManager::virtualScreensChanged, this,
+    connect(m_screenManager.get(), &PhosphorScreens::ScreenManager::virtualScreensChanged, this,
             &Daemon::onVirtualScreensReconfigured);
-    connect(m_screenManager.get(), &Phosphor::Screens::ScreenManager::virtualScreenRegionsChanged, this,
+    connect(m_screenManager.get(), &PhosphorScreens::ScreenManager::virtualScreenRegionsChanged, this,
             &Daemon::onVirtualScreenRegionsChanged);
 
     // Identifier-drift propagation: ScreenManager just re-keyed its own
@@ -86,7 +87,7 @@ void Daemon::connectScreenSignals()
     // Fires on same-model hotplug where disambiguation flips
     // bare ↔ "/CONNECTOR"-suffixed form. Gated on m_settings so tests that
     // construct a manager without Settings don't crash.
-    connect(m_screenManager.get(), &Phosphor::Screens::ScreenManager::screenIdentifierChanged, this,
+    connect(m_screenManager.get(), &PhosphorScreens::ScreenManager::screenIdentifierChanged, this,
             [this](const QString& oldId, const QString& newId) {
                 if (!m_settings) {
                     return;
@@ -108,28 +109,27 @@ void Daemon::connectScreenSignals()
             });
 
     // Connect screen manager signals
-    connect(m_screenManager.get(), &Phosphor::Screens::ScreenManager::screenAdded, this,
-            [this](const Phosphor::Screens::PhysicalScreen& screen) {
+    connect(m_screenManager.get(), &PhosphorScreens::ScreenManager::screenAdded, this,
+            [this](const PhosphorScreens::PhysicalScreen& screen) {
                 // Invalidate cached EDID serial so a fresh sysfs read happens for this connector
                 // (handles the case where EDID wasn't available during very early startup)
-                Phosphor::Screens::ScreenIdentity::invalidateEdidCache(screen.name);
+                PhosphorScreens::ScreenIdentity::invalidateEdidCache(screen.name);
                 // The daemon's ScreenManager runs on the live QtScreenProvider,
                 // so a tracked screen always carries a real QScreen — qscreen
                 // is non-null here.
                 m_overlayService->handleScreenAdded(screen.qscreen);
                 // Recalculate zone geometries for all effective screen IDs on this physical screen.
                 // Note: VS cache restoration on screen re-add is no longer needed —
-                // Phosphor::Screens::ScreenManager::onScreenRemoved no longer wipes m_virtualConfigs, so
+                // PhosphorScreens::ScreenManager::onScreenRemoved no longer wipes m_virtualConfigs, so
                 // the entry survives a disconnect and is reused as-is when the screen
                 // comes back. Settings is the source of truth and pushes updates via
                 // refreshVirtualConfigs() in response to its own change signal.
                 const QString physId = screen.identifier;
                 const QStringList vsIds = m_screenManager->virtualScreenIdsFor(physId);
-                const int desktop = m_virtualDesktopManager->currentDesktop();
-                const QString activity = m_activityManager && PhosphorWorkspaces::ActivityManager::isAvailable()
-                    ? m_activityManager->currentActivity()
-                    : QString();
+                const QString activity = currentActivity();
                 for (const QString& sid : vsIds) {
+                    // Per-output virtual desktops (#648): each screen its own desktop.
+                    const int desktop = currentDesktopForScreen(sid);
                     PhosphorZones::Layout* screenLayout = m_layoutManager->layoutForScreen(sid, desktop, activity);
                     if (screenLayout) {
                         PhosphorZones::LayoutComputeService::recalculateSync(
@@ -139,8 +139,8 @@ void Daemon::connectScreenSignals()
                 }
             });
 
-    connect(m_screenManager.get(), &Phosphor::Screens::ScreenManager::screenRemoved, this,
-            [this](const Phosphor::Screens::PhysicalScreen& screen) {
+    connect(m_screenManager.get(), &PhosphorScreens::ScreenManager::screenRemoved, this,
+            [this](const PhosphorScreens::PhysicalScreen& screen) {
                 // Suppress OSD shows for ~1 s after any screen removal — see m_screensSettlingUntil.
                 m_screensSettlingUntil = std::chrono::steady_clock::now() + std::chrono::seconds(1);
 
@@ -150,8 +150,21 @@ void Daemon::connectScreenSignals()
                 const QString removedName = screen.name;
                 const QString removedScreenId = screen.identifier;
 
+                // Drop the removed output's per-output virtual-desktop entries (#648)
+                // so the maps don't retain stale desktops across monitor hot-plug.
+                // The autotile engine self-prunes via updateAutotileScreens; the VDM
+                // and layout registry are physical-id keyed (the effect reports
+                // physical output ids), matching removedScreenId. The overlay service
+                // delegates to the layout registry, so clearing it there suffices.
+                if (m_virtualDesktopManager) {
+                    m_virtualDesktopManager->removeScreenDesktop(removedScreenId);
+                }
+                if (m_layoutManager) {
+                    m_layoutManager->clearCurrentVirtualDesktopForScreen(removedScreenId);
+                }
+
                 // Invalidate cached EDID serial so a different monitor on this connector is detected
-                Phosphor::Screens::ScreenIdentity::invalidateEdidCache(removedName);
+                PhosphorScreens::ScreenIdentity::invalidateEdidCache(removedName);
 
                 // Clean stale entries from layout visibility restrictions
                 // Check both screen ID (new) and connector name (legacy)
@@ -168,7 +181,7 @@ void Daemon::connectScreenSignals()
                 }
             });
 
-    connect(m_screenManager.get(), &Phosphor::Screens::ScreenManager::screenGeometryChanged, this, [this] {
+    connect(m_screenManager.get(), &PhosphorScreens::ScreenManager::screenGeometryChanged, this, [this] {
         m_geometryUpdatePending = true;
         m_geometryUpdateTimer.start();
     });
@@ -176,7 +189,7 @@ void Daemon::connectScreenSignals()
     // Connect to available geometry changes (panels added/removed/resized)
     // This is reactive - the sensor windows automatically track panel changes
     // Uses debouncing to coalesce rapid changes into a single update
-    connect(m_screenManager.get(), &Phosphor::Screens::ScreenManager::availableGeometryChanged, this, [this] {
+    connect(m_screenManager.get(), &PhosphorScreens::ScreenManager::availableGeometryChanged, this, [this] {
         m_geometryUpdatePending = true;
         m_geometryUpdateTimer.start();
     });
@@ -194,50 +207,65 @@ void Daemon::connectDesktopActivity()
     m_virtualDesktopManager->init();
     m_virtualDesktopManager->start();
 
-    // Connect virtual desktop changes to layout switching
+    // Virtual desktop changes are handled on TWO distinct paths (#648):
+    //
+    // 1) currentDesktopChanged — KWin's GLOBAL current desktop. Under Plasma 6.7
+    //    "switch desktops independently for each screen", this flips merely on
+    //    cursor movement between monitors on different desktops, so reacting to it
+    //    with OSD / autotile recompute is the bug. Here it ONLY keeps the global
+    //    desktop caches coherent with the active screen's desktop, for the
+    //    currentVirtualDesktop() consumers (and the per-screen-map fallback). These
+    //    are cheap value-sets that already fired on cursor-follow before the fix,
+    //    so this is not a regression. NO OSD, NO autotile recompute here.
     connect(m_virtualDesktopManager.get(), &PhosphorWorkspaces::VirtualDesktopManager::currentDesktopChanged, this,
             [this](int desktop) {
-                // Update all components with current desktop for per-desktop layout lookup
-                // NOTE: PhosphorZones::LayoutRegistry is the single source of truth for desktop/activity.
-                // WindowDragAdaptor reads from PhosphorZones::LayoutRegistry directly via resolveLayoutForScreen().
-                m_overlayService->setCurrentVirtualDesktop(desktop);
                 m_layoutManager->setCurrentVirtualDesktop(desktop);
                 if (m_unifiedLayoutController) {
                     m_unifiedLayoutController->setCurrentVirtualDesktop(desktop);
                 }
-                // Desktop switch invalidates the TilingStateKey context — cancel any
-                // active drag-insert preview before the engine's desktop changes,
-                // otherwise cancel/commit would operate on the wrong PhosphorTiles::TilingState.
+            });
+
+    // 2) screenDesktopChanged — the KWin effect's PER-OUTPUT desktopChanged report
+    //    (via VirtualDesktopManager). The authoritative per-screen switch; drives
+    //    all context + OSD work scoped to the ONE screen that switched. The effect
+    //    does NOT report this on cursor movement, so the per-desktop context thrash
+    //    and the spurious all-screens OSD of #648 are gone. In single-desktop mode
+    //    the effect fans this out to every screen, so behaviour is unchanged.
+    connect(m_virtualDesktopManager.get(), &PhosphorWorkspaces::VirtualDesktopManager::screenDesktopChanged, this,
+            [this](const QString& screenId, int desktop) {
+                // [SEQ A] Cancel any active drag-insert preview before the engine's
+                // desktop changes, else cancel/commit would hit the wrong TilingState.
                 if (m_autotileEngine && m_autotileEngine->hasDragInsertPreview()) {
                     m_autotileEngine->cancelDragInsertPreview();
                 }
-                // Pin screens where all autotiled windows are sticky (on all desktops)
-                // BEFORE changing the desktop context. This ensures currentKeyForScreen()
-                // continues to resolve existing TilingStates for screens managed by the
-                // KWin "virtualdesktopsonlyonprimary" script.
+                // [SEQ B] Pin screens where all autotiled windows are sticky BEFORE
+                // changing the desktop context, so currentKeyForScreen() still
+                // resolves existing TilingStates ("virtualdesktopsonlyonprimary").
                 if (m_autotileEngine && m_windowTrackingAdaptor) {
                     auto* service = m_windowTrackingAdaptor->service();
                     m_autotileEngine->updateStickyScreenPins([service](const QString& windowId) {
                         return service->isWindowSticky(windowId);
                     });
                 }
-                // Set engine's desktop context BEFORE updateAutotileScreens() so it
-                // resolves TilingStates for the correct desktop. Without this, the
-                // engine would look up/create states under the OLD desktop's key.
+                // [SEQ C] Set THIS screen's engine desktop context (pure per-screen
+                // swap, no state migration) BEFORE updateAutotileScreens() so the
+                // engine resolves TilingStates under the new (screen, desktop) key.
                 if (m_autotileEngine) {
-                    m_autotileEngine->setCurrentDesktop(desktop);
+                    m_autotileEngine->setCurrentDesktopForScreen(screenId, desktop);
                 }
-                // Per-desktop assignments may differ — recompute autotile screens
+                // [SEQ D] Per-screen layout/overlay resolution context. The
+                // overlay service delegates to the layout registry for per-output
+                // desktop resolution, so this one push drives both (#648).
+                m_layoutManager->setCurrentVirtualDesktopForScreen(screenId, desktop);
+                // [SEQ E] Per-desktop assignments may differ — recompute autotile
+                // screens, re-sync mode/filter, then refresh overlay geometry.
                 updateAutotileScreens();
-                // Sync mode, layout filter, and controller state from per-desktop assignments.
-                // This ensures ModeTracker, layout filter, and cycling index reflect the
-                // new desktop — not the old one's global state.
                 syncModeFromAssignments();
                 if (m_overlayService->isVisible()) {
                     m_overlayService->updateGeometries();
                 }
-
-                showDesktopSwitchOsd(desktop, currentActivity());
+                // OSD on the ONE screen that switched (#648).
+                showDesktopSwitchOsdForScreen(screenId, currentActivity());
             });
 
     // Prune stale PhosphorTiles::TilingState entries and disabled-desktop numbers when desktops are removed
@@ -253,8 +281,7 @@ void Daemon::connectDesktopActivity()
                     // Prune both per-mode lists — a stale entry in either side leaks
                     // gates on now-deleted desktops just as effectively.
                     bool changed = false;
-                    for (const auto mode :
-                         {PhosphorZones::AssignmentEntry::Snapping, PhosphorZones::AssignmentEntry::Autotile}) {
+                    for (const auto mode : PhosphorZones::allModes()) {
                         QStringList disabled = m_settings->disabledDesktops(mode);
                         if (pruneDisabledDesktopEntries(disabled, newCount)) {
                             m_settings->setDisabledDesktops(mode, disabled);
@@ -285,7 +312,7 @@ void Daemon::connectDesktopActivity()
 
     // Set initial virtual desktop on components that maintain their own copy
     // (WindowDragAdaptor reads from PhosphorZones::LayoutRegistry directly via resolveLayoutForScreen())
-    const int initialDesktop = m_virtualDesktopManager->currentDesktop();
+    const int initialDesktop = currentDesktop();
     m_overlayService->setCurrentVirtualDesktop(initialDesktop);
     m_layoutManager->setCurrentVirtualDesktop(initialDesktop);
     if (m_autotileEngine) {
@@ -309,8 +336,7 @@ void Daemon::connectDesktopActivity()
             // Prune both per-mode disabled-activity lists.
             if (m_settings) {
                 bool changed = false;
-                for (const auto mode :
-                     {PhosphorZones::AssignmentEntry::Snapping, PhosphorZones::AssignmentEntry::Autotile}) {
+                for (const auto mode : PhosphorZones::allModes()) {
                     QStringList disabled = m_settings->disabledActivities(mode);
                     if (pruneDisabledActivityEntries(disabled, validSet)) {
                         m_settings->setDisabledActivities(mode, disabled);
@@ -368,7 +394,7 @@ void Daemon::connectDesktopActivity()
                         m_overlayService->updateGeometries();
                     }
 
-                    showDesktopSwitchOsd(currentDesktop(), activityId);
+                    showDesktopSwitchOsd(activityId);
                 });
     }
 }
@@ -564,8 +590,8 @@ void Daemon::connectShortcutSignals()
     // Escape no longer exists), so we register the global Escape
     // accelerator on every snap-assist show — cancelSnap() routes
     // Escape to hideSnapAssist() via the existing
-    // isSnapAssistVisible() branch (windowdragadaptor.cpp:265). The
-    // matching unregister fires on snapAssistDismissed via
+    // isSnapAssistVisible() branch in WindowDragAdaptor::cancelSnap.
+    // The matching unregister fires on snapAssistDismissed via
     // WindowDragAdaptor::onSnapAssistDismissed.
     connect(m_overlayService.get(), &IOverlayService::snapAssistShown, this,
             [this](const QString&, const PhosphorProtocol::EmptyZoneList&,
@@ -590,11 +616,14 @@ void Daemon::connectShortcutSignals()
         if (!m_unifiedLayoutController) {
             return;
         }
-        // Check if screen is locked for its current mode
+        // Check if screen is locked for its current mode. Route through
+        // the resolver's `handleFor(screenId)` — it composes the live
+        // (mode, desktop, activity) tuple via the bound IModeProvider /
+        // IWorkspaceState adapters, so this site stops re-stitching the
+        // 3-step cascade the resolver was introduced to collapse.
         QString screenId = m_unifiedLayoutController->currentScreenName();
-        if (!screenId.isEmpty() && m_layoutManager) {
-            int mode = static_cast<int>(m_layoutManager->modeForScreen(screenId, currentDesktop(), currentActivity()));
-            if (isCurrentContextLockedForMode(screenId, mode)) {
+        if (!screenId.isEmpty() && m_contextResolver) {
+            if (m_contextResolver->isLocked(m_contextResolver->handleFor(screenId))) {
                 showLockedPreviewOsd(screenId);
                 return;
             }
@@ -611,13 +640,19 @@ void Daemon::connectShortcutSignals()
         // Screen-targeted (locks a screen's layout) — resolve cursor-first.
         // See layoutPickerRequested above for the rationale.
         const QString screenId = resolveCursorScreenId(m_screenManager.get(), m_windowTrackingAdaptor);
-        if (screenId.isEmpty() || !m_settings || !m_layoutManager) {
+        if (screenId.isEmpty() || !m_settings || !m_contextResolver) {
             return;
         }
-        int desktop = currentDesktop();
-        QString activity = currentActivity();
-        int mode = static_cast<int>(m_layoutManager->modeForScreen(screenId, desktop, activity));
-        QString key = QString::number(mode) + QStringLiteral(":") + screenId;
+        // Read the live mode through the resolver's frozen snapshot so this
+        // site stops re-stitching (modeForScreen + Utils::contextLockKey)
+        // — the resolver already composes the same Mode-typed lock key
+        // internally via DaemonSettingsGateAdapter. We only need the
+        // wire-encoded `key` here for the existing settings.setScreenLocked
+        // mutation path, so the cast-and-compose stays — but the mode it
+        // derives from is the resolver's authoritative value.
+        const auto handle = m_contextResolver->handleFor(screenId);
+        const int mode = static_cast<int>(handle.mode);
+        QString key = Utils::contextLockKey(mode, screenId);
         // Lock at screen-level (desktop=0, activity="") so it applies to all desktops/activities
         // and matches the KCM's screen-level lock button
         bool wasLocked = m_settings->isScreenLocked(key);
@@ -673,11 +708,16 @@ void Daemon::pruneContextMapsForActivities(const QSet<QString>& validActivities)
 
 bool Daemon::isScreenLockedForLayoutChange(const QString& screenId)
 {
-    if (!m_layoutManager) {
+    // Route through the resolver — it composes the live (mode, desktop,
+    // activity) tuple from the bound IModeProvider/IWorkspaceState, so
+    // this site stops re-stitching the cascade Pass 1's sister sites
+    // (`layoutPickerSelected`, `toggleLayoutLockRequested`) already
+    // migrated. Null-guard the resolver for the same shutdown-window
+    // reason as the other lock-check sites.
+    if (!m_contextResolver) {
         return false;
     }
-    int mode = static_cast<int>(m_layoutManager->modeForScreen(screenId, currentDesktop(), currentActivity()));
-    if (isCurrentContextLockedForMode(screenId, mode)) {
+    if (m_contextResolver->isLocked(m_contextResolver->handleFor(screenId))) {
         showLockedPreviewOsd(screenId);
         return true;
     }
@@ -792,20 +832,19 @@ void Daemon::onVirtualScreensReconfigured(const QString& physicalScreenId)
     // m_windowTrackingAdaptor is constructed later in init() and may be null
     // if the signal somehow fires before construction (e.g. early Settings
     // load); guard those uses individually.
-    const Phosphor::Screens::VirtualScreenConfig config = m_screenManager->virtualScreenConfig(physicalScreenId);
+    const PhosphorScreens::VirtualScreenConfig config = m_screenManager->virtualScreenConfig(physicalScreenId);
 
     // Recalculate zone geometries inline for the affected screens FIRST so
     // that any PhosphorTiles::TilingState created by the upcoming updateAutotileScreens
     // call (and the resnap below) reads fresh zone bounds. The screenAdded
     // handler does the same inline recalc for newly-added physical screens.
-    const int desktop = m_virtualDesktopManager ? m_virtualDesktopManager->currentDesktop() : 0;
-    const QString activity = m_activityManager && PhosphorWorkspaces::ActivityManager::isAvailable()
-        ? m_activityManager->currentActivity()
-        : QString();
+    const QString activity = currentActivity();
     const QStringList affectedScreenIds = config.hasSubdivisions()
         ? m_screenManager->virtualScreenIdsFor(physicalScreenId)
         : QStringList{physicalScreenId};
     for (const QString& sid : affectedScreenIds) {
+        // Per-output virtual desktops (#648): each screen its own desktop.
+        const int desktop = currentDesktopForScreen(sid);
         PhosphorZones::Layout* screenLayout = m_layoutManager->layoutForScreen(sid, desktop, activity);
         if (screenLayout) {
             PhosphorZones::LayoutComputeService::recalculateSync(
@@ -864,7 +903,7 @@ void Daemon::onVirtualScreensReconfigured(const QString& physicalScreenId)
     // (overlays, panel requery, autotile retile). Reuse the same debounced
     // path as physical screen geometry changes.
     if (m_screenManager ? m_screenManager->physicalScreenFor(physicalScreenId).isValid()
-                        : (Phosphor::Screens::ScreenIdentity::findByIdOrName(physicalScreenId) != nullptr)) {
+                        : (PhosphorScreens::ScreenIdentity::findByIdOrName(physicalScreenId) != nullptr)) {
         m_geometryUpdatePending = true;
         m_geometryUpdateTimer.start();
     }
@@ -883,12 +922,11 @@ void Daemon::onVirtualScreenRegionsChanged(const QString& physicalScreenId)
     // pass on top of the engine's own, producing the visible "move then
     // retile" double-movement reported on VS swap/rotate.
 
-    const int desktop = m_virtualDesktopManager ? m_virtualDesktopManager->currentDesktop() : 0;
-    const QString activity = m_activityManager && PhosphorWorkspaces::ActivityManager::isAvailable()
-        ? m_activityManager->currentActivity()
-        : QString();
+    const QString activity = currentActivity();
     const QStringList affectedScreenIds = m_screenManager->virtualScreenIdsFor(physicalScreenId);
     for (const QString& sid : affectedScreenIds) {
+        // Per-output virtual desktops (#648): each screen its own desktop.
+        const int desktop = currentDesktopForScreen(sid);
         PhosphorZones::Layout* screenLayout = m_layoutManager->layoutForScreen(sid, desktop, activity);
         if (screenLayout) {
             PhosphorZones::LayoutComputeService::recalculateSync(

@@ -5,9 +5,15 @@
 
 include(CMakeFindDependencyMacro)
 
-find_dependency(Qt6 6.10 COMPONENTS Core Qml)
+find_dependency(Qt6 6.10 COMPONENTS Core)
 find_dependency(PhosphorEngine)
 find_dependency(PhosphorLayoutApi)
+# Mirror the PUBLIC link set in CMakeLists.txt: PhosphorScripting (the Luau
+# host) and PhosphorFsLoader (ScriptedAlgorithmLoader's LiveReload param) are
+# publicly linked, so find_package(PhosphorTiles) consumers must resolve them
+# transitively or the exported targets file references undefined targets.
+find_dependency(PhosphorScripting)
+find_dependency(PhosphorFsLoader)
 
 include("${CMAKE_CURRENT_LIST_DIR}/PhosphorTilesTargets.cmake")
 

@@ -17,19 +17,7 @@
 // `texture(uTexture0, uv)` samples directly. `texture2D` (GLSL ES) is
 // rewritten to `texture` (GLSL 4.50 core) inline.
 
-#version 450
-
-#include <animation_uniforms.glsl>
 #include <noise.glsl>
-
-// metadata.json declaration order → customParams[0] sub-slots
-#define blobScale    customParams[0].x
-#define fingerScale  customParams[0].y
-#define splashSpeed  customParams[0].z
-#define edgeSoftness customParams[0].w
-
-layout(location = 0) in vec2 vTexCoord;
-layout(location = 0) out vec4 fragColor;
 
 float is_fbm(vec2 p) {
     float v = 0.0;
@@ -42,10 +30,9 @@ float is_fbm(vec2 p) {
     return v;
 }
 
-void main() {
+vec4 pTransition(vec2 uv, float t) {
     // ── niri OPEN body (handles both legs via runtime iTime flip) ──
-    float p = clamp(iTime, 0.0, 1.0);
-    vec2 uv = vTexCoord;
+    float p = clamp(t, 0.0, 1.0);
     vec4 win = surfaceColor(uv);
 
     // `blobScale` / `fingerScale` mean "fbm cycles across the screen":
@@ -55,16 +42,16 @@ void main() {
     // popup vs. maximized windows. Matches niri's reference on full-
     // screen (multiplier = 1.0 there).
     vec2 screenScale = max(iAnchorSize, vec2(1.0)) / max(iSurfaceScreenPos.zw, vec2(1.0));
-    float blob = is_fbm(uv * blobScale * screenScale);
-    float fingers = is_fbm(uv * fingerScale * screenScale);
+    float blob = is_fbm(uv * p_blobScale * screenScale);
+    float fingers = is_fbm(uv * p_fingerScale * screenScale);
     float distortion = (blob - 0.5) * 0.5 + (fingers - 0.5) * 0.18;
     vec2 c = uv - vec2(0.5);
     c.x *= iAnchorSize.x / max(iAnchorSize.y, 0.0001);
     float d = length(c);
     float splash_d = d + distortion;
-    float boundary = p * splashSpeed - 0.15;
+    float boundary = p * p_splashSpeed - 0.15;
     float diff = splash_d - boundary;
-    float reveal = smoothstep(edgeSoftness, -edgeSoftness, diff);
+    float reveal = smoothstep(p_edgeSoftness, -p_edgeSoftness, diff);
 
-    fragColor = win * reveal;
+    return win * reveal;
 }

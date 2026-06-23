@@ -27,6 +27,7 @@
 #include "core/utils.h"
 #include "../helpers/StubSettings.h"
 #include "../helpers/IsolatedConfigGuard.h"
+#include "../helpers/LayoutRegistryTestHelpers.h"
 
 using namespace PlasmaZones;
 using PhosphorEngine::ZoneAssignmentEntry;
@@ -105,8 +106,8 @@ private Q_SLOTS:
     void testMultiZoneGeometry_someZonesInvalid()
     {
         IsolatedConfigGuard guard;
-        QScopedPointer<PhosphorZones::LayoutRegistry> layoutManager(new PhosphorZones::LayoutRegistry(
-            PlasmaZones::createAssignmentsBackend(), QStringLiteral("plasmazones/layouts")));
+        QScopedPointer<PhosphorZones::LayoutRegistry> layoutManager(
+            PlasmaZones::TestHelpers::makeLayoutRegistry(QStringLiteral("plasmazones/layouts")));
         QScopedPointer<StubSettings> settings(new StubSettings(nullptr));
         QScopedPointer<StubZoneDetectorSvc> detector(new StubZoneDetectorSvc(nullptr));
         QScopedPointer<PhosphorPlacement::WindowTrackingService> service(
@@ -138,8 +139,8 @@ private Q_SLOTS:
     void testCalculateRotation_uuidFormatMismatch()
     {
         IsolatedConfigGuard guard;
-        QScopedPointer<PhosphorZones::LayoutRegistry> layoutManager(new PhosphorZones::LayoutRegistry(
-            PlasmaZones::createAssignmentsBackend(), QStringLiteral("plasmazones/layouts")));
+        QScopedPointer<PhosphorZones::LayoutRegistry> layoutManager(
+            PlasmaZones::TestHelpers::makeLayoutRegistry(QStringLiteral("plasmazones/layouts")));
         QScopedPointer<StubSettings> settings(new StubSettings(nullptr));
         QScopedPointer<StubZoneDetectorSvc> detector(new StubZoneDetectorSvc(nullptr));
         QScopedPointer<PhosphorPlacement::WindowTrackingService> service(

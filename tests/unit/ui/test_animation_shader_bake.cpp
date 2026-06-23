@@ -1,12 +1,16 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: GPL-3.0-or-later
 //
-// Pins every built-in animation shader against `ShaderCompiler::compileFromFile`
-// (qsb / glslang for SPIR-V + GLSL bake targets). Catches the
-// "non-opaque uniforms outside a block" qsb rejection class — the
-// regression that motivated the canonical `animation_uniforms.glsl`
-// UBO in the first place — and any future drift that breaks the
-// daemon's overlay-surface execution site for a built-in animation.
+// Pins every built-in animation VERTEX shader against
+// `ShaderCompiler::compileFromFile` (qsb / glslang for SPIR-V + GLSL bake
+// targets). Catches the "non-opaque uniforms outside a block" qsb rejection
+// class — the regression that motivated the canonical `animation_uniforms.glsl`
+// UBO — and any future drift that breaks the daemon's overlay-surface execution
+// site. Fragment-stage coverage moved to `test_animation_shader_preamble_bake`,
+// which bakes every effect.frag through the FULL runtime assembly (T1.4/T1.5
+// entry scaffold + T1.1 param preamble + include expansion); a raw
+// compileFromFile here would reject an entry-only pack that defines pTransition
+// / pZone instead of main().
 
 #include <PhosphorRendering/ShaderCompiler.h>
 
@@ -35,11 +39,9 @@ private Q_SLOTS:
             if (sub == QLatin1String("shared")) {
                 continue; // shared/ holds the canonical UBO include + default vert, not a pack
             }
-            const QString frag = animationsDir + QLatin1Char('/') + sub + QStringLiteral("/effect.frag");
-            if (QFileInfo::exists(frag)) {
-                QTest::newRow(qPrintable(sub + QStringLiteral(":frag"))) << frag;
-                any = true;
-            }
+            // Fragment-stage bake coverage lives in
+            // test_animation_shader_preamble_bake (full runtime assembly). Here
+            // we only cover the vertex stage.
             // Also bake the optional vertex shader. Per the AnimationShaderEffect
             // contract, packs that ship their own `effect.vert` must compile under
             // the same UBO contract as the fragment side. Without this row the

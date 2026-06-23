@@ -6,7 +6,7 @@
 #include "../core/interfaces.h"
 #include <PhosphorZones/LayoutRegistry.h>
 
-namespace Phosphor::Screens {
+namespace PhosphorScreens {
 class ScreenManager;
 }
 
@@ -81,7 +81,7 @@ public:
     };
     Q_ENUM(State)
 
-    explicit ZoneSelectorController(Phosphor::Screens::ScreenManager* screenManager, QObject* parent = nullptr);
+    explicit ZoneSelectorController(PhosphorScreens::ScreenManager* screenManager, QObject* parent = nullptr);
     ~ZoneSelectorController() override;
 
     // State management
@@ -280,7 +280,7 @@ private:
     QPointer<ISettings> m_settings;
     PhosphorTiles::ITileAlgorithmRegistry* m_algorithmRegistry = nullptr; ///< Borrowed; outlives controller
     PhosphorLayout::ILayoutSource* m_autotileLayoutSource = nullptr; ///< Borrowed; outlives controller (optional)
-    QPointer<Phosphor::Screens::ScreenManager> m_screenManager;
+    QPointer<PhosphorScreens::ScreenManager> m_screenManager;
     QPointer<QScreen> m_screen;
     QString m_screenId; // Virtual-aware screen ID (set explicitly or derived from m_screen)
     QPointer<QQuickItem> m_qmlItem;

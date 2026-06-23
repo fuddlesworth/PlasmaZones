@@ -142,7 +142,7 @@ private Q_SLOTS:
         settings.setDragActivationTriggers(userTriggers);
         QCOMPARE(settings.dragActivationTriggers().size(), max);
 
-        SnappingBehaviorController controller(&settings);
+        SnappingBehaviorController controller(settings);
         QSignalSpy alwaysSpy(&controller, &SnappingBehaviorController::alwaysActivateOnDragChanged);
         controller.setAlwaysActivateOnDrag(true);
 
@@ -163,7 +163,7 @@ private Q_SLOTS:
         userTriggers << storedTrigger(static_cast<int>(DragModifier::Alt));
         settings.setDragActivationTriggers(userTriggers);
 
-        SnappingBehaviorController controller(&settings);
+        SnappingBehaviorController controller(settings);
         controller.setAlwaysActivateOnDrag(true);
         QVERIFY(controller.alwaysActivateOnDrag());
         controller.setAlwaysActivateOnDrag(false);
@@ -189,7 +189,7 @@ private Q_SLOTS:
         // ever configuring a non-sentinel trigger.
         settings.setDragActivationTriggers({storedTrigger(static_cast<int>(DragModifier::AlwaysActive))});
 
-        SnappingBehaviorController controller(&settings);
+        SnappingBehaviorController controller(settings);
         QVERIFY(controller.alwaysActivateOnDrag());
         controller.setAlwaysActivateOnDrag(false);
         QVERIFY(!controller.alwaysActivateOnDrag());
@@ -204,7 +204,7 @@ private Q_SLOTS:
     {
         IsolatedConfigGuard guard;
         Settings settings;
-        SnappingBehaviorController controller(&settings);
+        SnappingBehaviorController controller(settings);
         controller.setAlwaysActivateOnDrag(true);
         QVERIFY(controller.alwaysActivateOnDrag());
 

@@ -16,8 +16,8 @@
 #include "../overlayservice.h"
 #include "../../core/logging.h"
 #include "../../core/utils.h"
-#include "pz_roles.h"
-#include "pz_slot_keys.h"
+#include "phosphor_roles.h"
+#include "phosphor_slot_keys.h"
 
 #include <PhosphorOverlay/ShellHost.h>
 
@@ -58,7 +58,7 @@ void OverlayService::ensureOsdScreenAddedConnected()
             return;
         }
         auto* mgr2 = m_screenManager;
-        const QString physId = Phosphor::Screens::ScreenIdentity::identifierFor(screen);
+        const QString physId = PhosphorScreens::ScreenIdentity::identifierFor(screen);
         const QStringList ids = mgr2 ? mgr2->virtualScreenIdsFor(physId) : QStringList{physId};
         for (const QString& sid : ids) {
             ensurePassiveShellFor(sid, screen);
@@ -81,7 +81,7 @@ OverlayService::PerScreenOverlayState* OverlayService::ensurePassiveShellFor(con
     // Helper: enforce the "non-null shell pointer ⇒ live surface"
     // contract on either failure-return path by nulling any stale
     // cached pointer (a previous successful ensure may have wired
-    // pzState.shell to a ShellState whose fields have since been
+    // pState.shell to a ShellState whose fields have since been
     // zeroed by destroyShell). Callers gate on shell->shellSurface()
     // today, but keeping the cache true to the contract removes a
     // class of latent bugs.
@@ -118,9 +118,9 @@ OverlayService::PerScreenOverlayState* OverlayService::ensurePassiveShellFor(con
     if (auto* window = shellState->shellWindow()) {
         window->setFlag(Qt::WindowTransparentForInput, true);
     }
-    auto& pzState = m_screenStates[effectiveId];
-    pzState.shell = shellState;
-    return &pzState;
+    auto& pState = m_screenStates[effectiveId];
+    pState.shell = shellState;
+    return &pState;
 }
 
 void OverlayService::wirePassiveShellSlots(const QString& screenId, PhosphorOverlay::ShellState& shellState)
@@ -167,11 +167,15 @@ void OverlayService::wirePassiveShellSlots(const QString& screenId, PhosphorOver
         shellState.slots.insert(slotKey, PhosphorOverlay::SlotEntry{item, role});
     };
 
-    wireSlot(PzSlotKeys::Osd(), "osdSlotItem", PzRoles::Osd, "OSD content writes");
-    wireSlot(PzSlotKeys::SnapAssist(), "snapAssistSlotItem", PzRoles::SnapAssist, "snap-assist on this screen");
-    wireSlot(PzSlotKeys::LayoutPicker(), "layoutPickerSlotItem", PzRoles::LayoutPicker, "picker on this screen");
-    wireSlot(PzSlotKeys::ZoneSelector(), "zoneSelectorSlotItem", PzRoles::ZoneSelector, "selector on this screen");
-    wireSlot(PzSlotKeys::MainOverlay(), "mainOverlaySlotItem", PzRoles::ZoneOverlay, "main overlay on this screen");
+    wireSlot(PhosphorSlotKeys::Osd(), "osdSlotItem", PhosphorRoles::Osd, "OSD content writes");
+    wireSlot(PhosphorSlotKeys::SnapAssist(), "snapAssistSlotItem", PhosphorRoles::SnapAssist,
+             "snap-assist on this screen");
+    wireSlot(PhosphorSlotKeys::LayoutPicker(), "layoutPickerSlotItem", PhosphorRoles::LayoutPicker,
+             "picker on this screen");
+    wireSlot(PhosphorSlotKeys::ZoneSelector(), "zoneSelectorSlotItem", PhosphorRoles::ZoneSelector,
+             "selector on this screen");
+    wireSlot(PhosphorSlotKeys::MainOverlay(), "mainOverlaySlotItem", PhosphorRoles::ZoneOverlay,
+             "main overlay on this screen");
 
     // Wire QML signals → animator-driven slot hide / forward.
     // String-based SIGNAL/SLOT macros are required here because the source

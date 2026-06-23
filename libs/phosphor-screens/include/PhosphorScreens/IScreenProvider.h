@@ -9,7 +9,7 @@
 #include <QObject>
 #include <QVector>
 
-namespace Phosphor::Screens {
+namespace PhosphorScreens {
 
 /**
  * @brief Pluggable source of the connected-output set and its lifecycle.
@@ -65,4 +65,4 @@ Q_SIGNALS:
     void screenGeometryChanged(const PhysicalScreen& screen);
 };
 
-} // namespace Phosphor::Screens
+} // namespace PhosphorScreens

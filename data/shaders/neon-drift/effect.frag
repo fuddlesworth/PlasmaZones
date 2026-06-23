@@ -1,8 +1,6 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-#version 450
-
 /*
  * KDE NEON DRIFT - Fragment Shader (Neon Tube Gear — Multi-Instance)
  *
@@ -24,12 +22,6 @@
  *   Treble = flicker + electron speed + edge sparks + ember spawn rate
  */
 
-layout(location = 0) in vec2 vTexCoord;
-layout(location = 1) in vec2 vFragCoord;
-
-layout(location = 0) out vec4 fragColor;
-
-#include <common.glsl>
 #include <audio.glsl>
 
 
@@ -489,42 +481,42 @@ vec4 renderNeonZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor,
     float borderRadius = max(params.x, 8.0);
     float borderWidth = max(params.y, 2.0);
 
-    float speed         = customParams[0].x >= 0.0 ? customParams[0].x : 0.12;
-    float flowSpeed     = customParams[0].y >= 0.0 ? customParams[0].y : 0.25;
-    float noiseScale    = customParams[0].z >= 0.0 ? customParams[0].z : 3.5;
-    int octaves         = int(customParams[0].w >= 0.0 ? customParams[0].w : 6.0);
+    float speed         = p_speed >= 0.0 ? p_speed : 0.12;
+    float flowSpeed     = p_flowSpeed >= 0.0 ? p_flowSpeed : 0.25;
+    float noiseScale    = p_noiseScale >= 0.0 ? p_noiseScale : 3.5;
+    int octaves         = int(p_octaves >= 0.0 ? p_octaves : 6.0);
 
-    float gridScale     = customParams[1].x >= 0.0 ? customParams[1].x : 4.0;
-    float gridStrength  = customParams[1].y >= 0.0 ? customParams[1].y : 0.3;
-    float brightness    = customParams[1].z >= 0.0 ? customParams[1].z : 0.8;
-    float contrast      = customParams[1].w >= 0.0 ? customParams[1].w : 0.9;
+    float gridScale     = p_gridScale >= 0.0 ? p_gridScale : 4.0;
+    float gridStrength  = p_gridStrength >= 0.0 ? p_gridStrength : 0.3;
+    float brightness    = p_brightness >= 0.0 ? p_brightness : 0.8;
+    float contrast      = p_contrast >= 0.0 ? p_contrast : 0.9;
 
-    float fillOpacity       = customParams[2].x >= 0.0 ? customParams[2].x : 0.85;
-    float borderGlow        = customParams[2].y >= 0.0 ? customParams[2].y : 0.35;
-    float edgeFadeStart     = customParams[2].z >= 0.0 ? customParams[2].z : 30.0;
-    float borderBrightness  = customParams[2].w >= 0.0 ? customParams[2].w : 1.4;
+    float fillOpacity       = p_fillOpacity >= 0.0 ? p_fillOpacity : 0.85;
+    float borderGlow        = p_borderGlow >= 0.0 ? p_borderGlow : 0.35;
+    float edgeFadeStart     = p_edgeFadeStart >= 0.0 ? p_edgeFadeStart : 30.0;
+    float borderBrightness  = p_borderBrightness >= 0.0 ? p_borderBrightness : 1.4;
 
-    float audioReact    = customParams[3].x >= 0.0 ? customParams[3].x : 1.0;
-    float particleStr   = customParams[3].y >= 0.0 ? customParams[3].y : 0.5;
-    float innerGlowStr  = customParams[3].z >= 0.0 ? customParams[3].z : 0.45;
-    float sparkleStr    = customParams[3].w >= 0.0 ? customParams[3].w : 2.0;
+    float audioReact    = p_audioReactivity >= 0.0 ? p_audioReactivity : 1.0;
+    float particleStr   = p_particleStrength >= 0.0 ? p_particleStrength : 0.5;
+    float innerGlowStr  = p_innerGlowStrength >= 0.0 ? p_innerGlowStrength : 0.45;
+    float sparkleStr    = p_sparkleIntensity >= 0.0 ? p_sparkleIntensity : 2.0;
 
-    float fbmRot        = customParams[4].w >= 0.0 ? customParams[4].w : 0.6;
-    float flowDirection = customParams[5].x >= 0.0 ? customParams[5].x : 0.3;
+    float fbmRot        = p_fbmRotation >= 0.0 ? p_fbmRotation : 0.6;
+    float flowDirection = p_flowDirection >= 0.0 ? p_flowDirection : 0.3;
 
-    float logoScale     = customParams[5].y >= 0.0 ? customParams[5].y : 0.55;
-    float logoIntensity = customParams[5].z >= 0.0 ? customParams[5].z : 0.85;
-    float logoPulse     = customParams[5].w >= 0.0 ? customParams[5].w : 0.8;
+    float logoScale     = p_logoScale >= 0.0 ? p_logoScale : 0.55;
+    float logoIntensity = p_logoIntensity >= 0.0 ? p_logoIntensity : 0.85;
+    float logoPulse     = p_logoPulse >= 0.0 ? p_logoPulse : 0.8;
 
-    int   logoCount     = clamp(int(customParams[6].x >= 0.0 ? customParams[6].x : 4.0), 1, 8);
-    float logoSizeMin   = customParams[6].y >= 0.0 ? customParams[6].y : 0.4;
-    float logoSizeMax   = customParams[6].z >= 0.0 ? customParams[6].z : 1.0;
+    int   logoCount     = clamp(int(p_logoCount >= 0.0 ? p_logoCount : 4.0), 1, 8);
+    float logoSizeMin   = p_logoSizeMin >= 0.0 ? p_logoSizeMin : 0.4;
+    float logoSizeMax   = p_logoSizeMax >= 0.0 ? p_logoSizeMax : 1.0;
 
-    float flowCenterX   = customParams[6].w >= -1.5 ? customParams[6].w : 0.5;
-    float flowCenterY   = customParams[7].x >= -1.5 ? customParams[7].x : 0.5;
+    float flowCenterX   = p_flowCenterX >= -1.5 ? p_flowCenterX : 0.5;
+    float flowCenterY   = p_flowCenterY >= -1.5 ? p_flowCenterY : 0.5;
 
-    float gearSpin      = customParams[7].z >= 0.0 ? customParams[7].z : 0.15;
-    float idleStrength  = customParams[7].w >= 0.0 ? customParams[7].w : 0.5;
+    float gearSpin      = p_gearSpin >= 0.0 ? p_gearSpin : 0.15;
+    float idleStrength  = p_idleStrength >= 0.0 ? p_idleStrength : 0.5;
 
     vec2 rectPos = zoneRectPos(rect);
     vec2 rectSize = zoneRectSize(rect);
@@ -538,10 +530,10 @@ vec4 renderNeonZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor,
     float time = iTime;
 
     // KDE Neon brand palette
-    vec3 palPrimary   = colorWithFallback(customColors[0].rgb, vec3(0.102, 0.737, 0.612));
-    vec3 palSecondary = colorWithFallback(customColors[1].rgb, vec3(0.161, 0.502, 0.725));
-    vec3 palAccent    = colorWithFallback(customColors[2].rgb, vec3(0.239, 0.859, 0.761));
-    vec3 palGlow      = colorWithFallback(customColors[3].rgb, vec3(0.878, 1.0, 0.969));
+    vec3 palPrimary   = colorWithFallback(p_primaryColor.rgb, vec3(0.102, 0.737, 0.612));
+    vec3 palSecondary = colorWithFallback(p_secondaryColor.rgb, vec3(0.161, 0.502, 0.725));
+    vec3 palAccent    = colorWithFallback(p_accentColor.rgb, vec3(0.239, 0.859, 0.761));
+    vec3 palGlow      = colorWithFallback(p_glowColor.rgb, vec3(0.878, 1.0, 0.969));
 
     float vitality = isHighlighted ? 1.0 : 0.3;
     float idlePulse = hasAudio ? 0.0 : (0.5 + 0.5 * sin(time * 0.8 * PI)) * idleStrength;
@@ -869,14 +861,14 @@ vec4 compositeNeonLabels(vec4 color, vec2 fragCoord,
     vec2 px = 1.0 / max(iResolution, vec2(1.0));
     vec4 labels = texture(uZoneLabels, uv);
 
-    vec3 palPrimary   = colorWithFallback(customColors[0].rgb, vec3(0.102, 0.737, 0.612));
-    vec3 palSecondary = colorWithFallback(customColors[1].rgb, vec3(0.161, 0.502, 0.725));
-    vec3 palAccent    = colorWithFallback(customColors[2].rgb, vec3(0.239, 0.859, 0.761));
-    vec3 palGlow      = colorWithFallback(customColors[3].rgb, vec3(0.878, 1.0, 0.969));
+    vec3 palPrimary   = colorWithFallback(p_primaryColor.rgb, vec3(0.102, 0.737, 0.612));
+    vec3 palSecondary = colorWithFallback(p_secondaryColor.rgb, vec3(0.161, 0.502, 0.725));
+    vec3 palAccent    = colorWithFallback(p_accentColor.rgb, vec3(0.239, 0.859, 0.761));
+    vec3 palGlow      = colorWithFallback(p_glowColor.rgb, vec3(0.878, 1.0, 0.969));
 
-    float labelGlowSpread = customParams[4].x >= 0.0 ? customParams[4].x : 3.0;
-    float labelBrightness = customParams[4].y >= 0.0 ? customParams[4].y : 2.5;
-    float labelAudioReact = customParams[4].z >= 0.0 ? customParams[4].z : 1.0;
+    float labelGlowSpread = p_labelGlowSpread >= 0.0 ? p_labelGlowSpread : 3.0;
+    float labelBrightness = p_labelBrightness >= 0.0 ? p_labelBrightness : 2.5;
+    float labelAudioReact = p_labelAudioReact >= 0.0 ? p_labelAudioReact : 1.0;
 
     float time = iTime;
 
@@ -1018,13 +1010,11 @@ vec4 compositeNeonLabels(vec4 color, vec2 fragCoord,
     return color;
 }
 
-void main() {
-    vec2 fragCoord = vFragCoord;
+vec4 pImage(vec2 fragCoord) {
     vec4 color = vec4(0.0);
 
     if (zoneCount == 0) {
-        fragColor = vec4(0.0);
-        return;
+        return vec4(0.0);
     }
 
     bool  hasAudio = iAudioSpectrumSize > 0;
@@ -1043,8 +1033,8 @@ void main() {
         color = blendOver(color, zoneColor);
     }
 
-    if (customParams[7].y > 0.5) {
+    if (p_showLabels > 0.5) {
         color = compositeNeonLabels(color, fragCoord, bass, treble, hasAudio);
     }
-    fragColor = clampFragColor(color);
+    return color;
 }

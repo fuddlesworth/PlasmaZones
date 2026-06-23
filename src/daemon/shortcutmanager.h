@@ -13,10 +13,10 @@
 #include <functional>
 #include <memory>
 
-namespace Phosphor::Shortcuts {
+namespace PhosphorShortcuts {
 class IBackend;
 class Registry;
-} // namespace Phosphor::Shortcuts
+} // namespace PhosphorShortcuts
 
 namespace PhosphorZones {
 class LayoutRegistry;
@@ -39,13 +39,13 @@ enum class NavigationDirection {
 /**
  * @brief Manages global keyboard shortcuts for PlasmaZones.
  *
- * Thin glue layer on top of Phosphor::Shortcuts::Registry. Owns one entry per
+ * Thin glue layer on top of PhosphorShortcuts::Registry. Owns one entry per
  * PlasmaZones action, wires each entry's current sequence to the matching
  * Settings getter, and fans activation into the domain-specific Q_SIGNALS
  * below. The actual key-grab mechanism (KGlobalAccel / XDG Portal /
  * D-Bus trigger) is selected inside the PhosphorShortcuts library.
  */
-class ShortcutManager : public QObject, public Phosphor::Shortcuts::Integration::IAdhocRegistrar
+class ShortcutManager : public QObject, public PhosphorShortcutsIntegration::IAdhocRegistrar
 {
     Q_OBJECT
 
@@ -146,8 +146,8 @@ private:
     Settings* m_settings = nullptr;
     PhosphorZones::LayoutRegistry* m_layoutManager = nullptr;
 
-    std::unique_ptr<Phosphor::Shortcuts::IBackend> m_backend;
-    std::unique_ptr<Phosphor::Shortcuts::Registry> m_registry;
+    std::unique_ptr<PhosphorShortcuts::IBackend> m_backend;
+    std::unique_ptr<PhosphorShortcuts::Registry> m_registry;
 
     QVector<Entry> m_entries;
     QVector<PendingAdhocOp> m_pendingAdhocOps;

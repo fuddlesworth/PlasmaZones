@@ -20,7 +20,7 @@
 
 #include <optional>
 
-namespace Phosphor::Screens {
+namespace PhosphorScreens {
 class ScreenManager;
 }
 
@@ -235,7 +235,7 @@ inline PhosphorZones::Zone* findZoneInAnyLayout(PhosphorZones::IZoneLayoutRegist
 template<typename LogCategory>
 QScreen* getScreenOrWarn(const QString& screenId, const QString& operation, LogCategory category)
 {
-    QScreen* screen = Phosphor::Screens::ScreenIdentity::findByIdOrName(screenId);
+    QScreen* screen = PhosphorScreens::ScreenIdentity::findByIdOrName(screenId);
     if (!screen) {
         qCWarning(category) << operation << ": screen not found:" << screenId;
         return nullptr;
@@ -315,18 +315,18 @@ inline bool validateNonEmpty(const QString& value, const QString& paramName, con
  *
  * When screenId is empty, resolves via cursor position then primary screen fallback.
  * When non-empty, passes virtual screen IDs through and resolves physical names
- * via Phosphor::Screens::ScreenIdentity::idForName.
+ * via PhosphorScreens::ScreenIdentity::idForName.
  */
-QString resolveScreenId(Phosphor::Screens::ScreenManager* mgr, const QString& screenId);
+QString resolveScreenId(PhosphorScreens::ScreenManager* mgr, const QString& screenId);
 
 /**
  * @brief Resolve a screen ID (physical or virtual) to its backing QScreen*
  *
- * Uses Phosphor::Screens::ScreenManager::physicalScreenFor() when available, then falls back to
- * Phosphor::Screens::ScreenIdentity::findByIdOrName(). Does NOT fall back to primaryScreen - returns
+ * Uses PhosphorScreens::ScreenManager::physicalScreenFor() when available, then falls back to
+ * PhosphorScreens::ScreenIdentity::findByIdOrName(). Does NOT fall back to primaryScreen - returns
  * nullptr so the caller can decide the appropriate fallback behavior.
  */
-QScreen* resolvePhysicalQScreen(Phosphor::Screens::ScreenManager* mgr, const QString& screenId);
+QScreen* resolvePhysicalQScreen(PhosphorScreens::ScreenManager* mgr, const QString& screenId);
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // Screen Geometry Resolution (implemented in dbushelpers.cpp to reduce header weight)
@@ -335,11 +335,11 @@ QScreen* resolvePhysicalQScreen(Phosphor::Screens::ScreenManager* mgr, const QSt
 /**
  * @brief Resolve effective screen geometry for a layout, handling virtual screens
  *
- * Prefers Phosphor::Screens::ScreenManager geometry (virtual-screen-aware) when available,
+ * Prefers PhosphorScreens::ScreenManager geometry (virtual-screen-aware) when available,
  * falls back to resolving the physical QScreen and using the QScreen overload.
  * Returns an invalid QRectF if no geometry can be resolved.
  */
-QRectF resolveScreenGeometry(Phosphor::Screens::ScreenManager* mgr, PhosphorZones::Layout* layout,
+QRectF resolveScreenGeometry(PhosphorScreens::ScreenManager* mgr, PhosphorZones::Layout* layout,
                              const QString& screenId);
 
 } // namespace DbusHelpers

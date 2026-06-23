@@ -39,6 +39,9 @@ void main() {
     gl_Position = modelViewProjectionMatrix * vec4(position, 0.0, 1.0);
 #else
     vTexCoord = texCoord;
-    gl_Position = vec4(position, 0.0, 1.0);
+    // Direct-to-window daemon path: qt_Matrix carries the per-backend NDC
+    // Y-flip (identity on Vulkan, Y-flip on OpenGL). See animation.vert for
+    // the full rationale and why overlay (zone.vert) shaders omit it.
+    gl_Position = qt_Matrix * vec4(position, 0.0, 1.0);
 #endif
 }

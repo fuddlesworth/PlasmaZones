@@ -13,34 +13,9 @@
 // (byte-equivalent to BMW's). See bmw_compat.glsl header for the
 // BMW-to-PlasmaZones uniform-name remap.
 
-#version 450
-
-#include <animation_uniforms.glsl>
 #include <noise.glsl>
 
-layout(location = 0) in vec2 vTexCoord;
-layout(location = 0) out vec4 fragColor;
-
 #include <bmw_compat.glsl>
-
-// metadata.json declaration order → customParams sub-slots.
-//
-// `u3DNoise` and `uRandomColor` are BMW booleans; PlasmaZones declares
-// them as `int` slots and the cast-to-bool below lets the body's
-// `if (u3DNoise) ...` / `if (uRandomColor) ...` branches stay verbatim.
-// Six floats spill from customParams[0] (.xyzw) into customParams[1].xy
-// — well clear of the customParams[7] redline.
-#define uScale          customParams[0].x
-#define uMovementSpeed  customParams[0].y
-#define uSeed           customParams[0].z
-#define u3DNoise        (int(customParams[0].w) != 0)
-#define uRandomColor    (int(customParams[1].x) != 0)
-
-#define uGradient1      customColors[0]
-#define uGradient2      customColors[1]
-#define uGradient3      customColors[2]
-#define uGradient4      customColors[3]
-#define uGradient5      customColors[4]
 
 // These may be configurable in the future.
 const float EDGE_FADE  = 70.0;
@@ -118,15 +93,15 @@ vec2 effectMask(float hideTime, float fadeWidth, float edgeFadeWidth) {
   return vec2(windowMask, effectMask);
 }
 
-void main() {
+vec4 pTransition(vec2 uv, float t) {
   // Get a noise value which moves vertically in time.
-  vec2 uv = iTexCoord.st * uSize / vec2(400, 600) / uScale;
-  uv.y += (float(iFrame) / 60.0) * uMovementSpeed;
+  vec2 fireUv = iTexCoord.st * uSize / vec2(400, 600) / p_uScale;
+  fireUv.y += (float(iFrame) / 60.0) * p_uMovementSpeed;
 
   float noise =
-    u3DNoise
-      ? simplex3DFractal(vec3(uv * 4.0, (float(iFrame) / 60.0) * uMovementSpeed * 1.5))
-      : simplex2DFractal(uv * 4.0);
+    (int(p_u3DNoise) != 0)
+      ? simplex3DFractal(vec3(fireUv * 4.0, (float(iFrame) / 60.0) * p_uMovementSpeed * 1.5))
+      : simplex2DFractal(fireUv * 4.0);
 
   // Modulate noise by effect mask.
   vec2 effectMask = effectMask(HIDE_TIME, FADE_WIDTH, EDGE_FADE);
@@ -135,8 +110,8 @@ void main() {
   // Map noise value to color.
   vec4 fire = vec4(0.0);
 
-  if (uRandomColor) {
-    vec3 baseColor0 = offsetHue(vec3(1.0, 0.0, 0.0), hash11(uSeed));
+  if (int(p_uRandomColor) != 0) {
+    vec3 baseColor0 = offsetHue(vec3(1.0, 0.0, 0.0), hash11(p_uSeed));
     vec3 baseColor1 = offsetHue(baseColor0, 0.1);
     vec3 baseColor2 = offsetHue(baseColor1, 0.1);
 
@@ -150,7 +125,7 @@ void main() {
     fire = getFireColor(noise, c0, c1, c2, c3, c4);
   } else {
     fire =
-      getFireColor(noise, uGradient1, uGradient2, uGradient3, uGradient4, uGradient5);
+      getFireColor(noise, p_uGradient1, p_uGradient2, p_uGradient3, p_uGradient4, p_uGradient5);
   }
 
   // Get the window texture.
@@ -167,5 +142,5 @@ void main() {
   // oColor = vec4(vec3(effectMask.x), 1);
   // oColor = vec4(vec3(effectMask.y), 1);
 
-  setOutputColor(oColor);
+  return vec4(oColor.rgb * oColor.a, oColor.a);
 }

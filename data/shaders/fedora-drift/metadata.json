@@ -2,7 +2,7 @@
     "id": "fedora-drift",
     "name": "Fedora Drift",
     "category": "Branded",
-    "description": "Procedural Fedora infinity-f logo drawn as SDF geometry, drifting through the scene \u2014 neon tube strokes animate with per-part audio reactivity, bass shatter, shockwave rings, and edge sparks against an icy northern-lights sky",
+    "description": "A procedural Fedora infinity-f logo drawn as SDF geometry drifts through the scene. Neon tube strokes animate with per-part audio reactivity, bass shatter, shockwave rings, and edge sparks against an icy northern-lights sky",
     "author": "PlasmaZones",
     "version": "1.0",
     "fragmentShader": "effect.frag",
@@ -12,7 +12,6 @@
             "name": "Animation Speed",
             "group": "Animation",
             "type": "float",
-            "slot": 0,
             "default": 0.12,
             "min": 0.01,
             "max": 0.5
@@ -22,7 +21,6 @@
             "name": "Flow Speed",
             "group": "Animation",
             "type": "float",
-            "slot": 1,
             "default": 0.25,
             "min": 0.05,
             "max": 1.0
@@ -32,7 +30,6 @@
             "name": "Noise Scale",
             "group": "Pattern",
             "type": "float",
-            "slot": 2,
             "default": 3.5,
             "min": 1.0,
             "max": 10.0
@@ -42,7 +39,6 @@
             "name": "Detail Level",
             "group": "Pattern",
             "type": "int",
-            "slot": 3,
             "default": 6,
             "min": 2,
             "max": 8
@@ -52,7 +48,6 @@
             "name": "Facet Grid Scale",
             "group": "Crystal",
             "type": "float",
-            "slot": 4,
             "default": 4.0,
             "min": 1.0,
             "max": 12.0
@@ -62,7 +57,6 @@
             "name": "Facet Grid Strength",
             "group": "Crystal",
             "type": "float",
-            "slot": 5,
             "default": 0.3,
             "min": 0.0,
             "max": 0.5
@@ -72,7 +66,6 @@
             "name": "Brightness",
             "group": "Colors",
             "type": "float",
-            "slot": 6,
             "default": 0.8,
             "min": 0.2,
             "max": 1.0
@@ -82,7 +75,6 @@
             "name": "Contrast",
             "group": "Colors",
             "type": "float",
-            "slot": 7,
             "default": 0.9,
             "min": 0.5,
             "max": 1.5
@@ -92,7 +84,6 @@
             "name": "Fill Opacity",
             "group": "Zone",
             "type": "float",
-            "slot": 8,
             "default": 0.85,
             "min": 0.5,
             "max": 1.0
@@ -102,7 +93,6 @@
             "name": "Border Glow",
             "group": "Zone",
             "type": "float",
-            "slot": 9,
             "default": 0.35,
             "min": 0.0,
             "max": 1.0
@@ -112,7 +102,6 @@
             "name": "Edge Fade Start",
             "group": "Zone",
             "type": "float",
-            "slot": 10,
             "default": 30.0,
             "min": 5.0,
             "max": 60.0
@@ -122,7 +111,6 @@
             "name": "Border Brightness",
             "group": "Zone",
             "type": "float",
-            "slot": 11,
             "default": 1.4,
             "min": 0.8,
             "max": 2.0
@@ -132,7 +120,6 @@
             "name": "Audio Reactivity",
             "group": "Audio",
             "type": "float",
-            "slot": 12,
             "default": 1.0,
             "min": 0.0,
             "max": 2.0
@@ -142,7 +129,6 @@
             "name": "Particle Strength",
             "group": "Crystal",
             "type": "float",
-            "slot": 13,
             "default": 0.5,
             "min": 0.0,
             "max": 1.0
@@ -152,7 +138,6 @@
             "name": "Inner Glow Strength",
             "group": "Appearance",
             "type": "float",
-            "slot": 14,
             "default": 0.45,
             "min": 0.0,
             "max": 0.8
@@ -162,7 +147,6 @@
             "name": "Spark Intensity",
             "group": "Audio",
             "type": "float",
-            "slot": 15,
             "default": 2.0,
             "min": 0.0,
             "max": 5.0
@@ -172,7 +156,6 @@
             "name": "Label Halo Spread",
             "group": "Labels",
             "type": "float",
-            "slot": 16,
             "default": 3.0,
             "min": 1.0,
             "max": 6.0
@@ -182,7 +165,6 @@
             "name": "Label Brightness",
             "group": "Labels",
             "type": "float",
-            "slot": 17,
             "default": 2.5,
             "min": 1.0,
             "max": 4.0
@@ -192,7 +174,6 @@
             "name": "Label Reactivity",
             "group": "Labels",
             "type": "float",
-            "slot": 18,
             "default": 1.0,
             "min": 0.0,
             "max": 2.0
@@ -202,7 +183,6 @@
             "name": "FBM Rotation Angle",
             "group": "Pattern",
             "type": "float",
-            "slot": 19,
             "default": 0.6,
             "min": 0.1,
             "max": 1.5
@@ -212,7 +192,6 @@
             "name": "Flow Direction",
             "group": "Animation",
             "type": "float",
-            "slot": 20,
             "default": 0.3,
             "min": 0.0,
             "max": 1.0
@@ -222,7 +201,6 @@
             "name": "Logo Scale",
             "group": "Logo",
             "type": "float",
-            "slot": 21,
             "default": 0.5,
             "min": 0.1,
             "max": 1.0
@@ -232,7 +210,6 @@
             "name": "Logo Intensity",
             "group": "Logo",
             "type": "float",
-            "slot": 22,
             "default": 0.85,
             "min": 0.0,
             "max": 1.5
@@ -242,7 +219,6 @@
             "name": "Logo Bass Pulse",
             "group": "Logo",
             "type": "float",
-            "slot": 23,
             "default": 0.8,
             "min": 0.0,
             "max": 2.0
@@ -252,7 +228,6 @@
             "name": "Logo Count",
             "group": "Logo",
             "type": "int",
-            "slot": 24,
             "default": 4,
             "min": 1,
             "max": 8
@@ -262,7 +237,6 @@
             "name": "Logo Size Min",
             "group": "Logo",
             "type": "float",
-            "slot": 25,
             "default": 0.4,
             "min": 0.1,
             "max": 1.0
@@ -272,7 +246,6 @@
             "name": "Logo Size Max",
             "group": "Logo",
             "type": "float",
-            "slot": 26,
             "default": 1.0,
             "min": 0.3,
             "max": 1.5
@@ -282,7 +255,6 @@
             "name": "Flow Center X",
             "group": "Animation",
             "type": "float",
-            "slot": 27,
             "default": 0.5,
             "min": -1.0,
             "max": 2.0
@@ -292,7 +264,6 @@
             "name": "Flow Center Y",
             "group": "Animation",
             "type": "float",
-            "slot": 28,
             "default": 0.5,
             "min": -1.0,
             "max": 2.0
@@ -302,7 +273,6 @@
             "name": "Show Labels",
             "group": "Labels",
             "type": "bool",
-            "slot": 29,
             "default": true
         },
         {
@@ -310,7 +280,6 @@
             "name": "Logo Wobble",
             "group": "Logo",
             "type": "float",
-            "slot": 30,
             "default": 0.15,
             "min": 0.0,
             "max": 0.5
@@ -320,7 +289,6 @@
             "name": "Idle Animation",
             "group": "Animation",
             "type": "float",
-            "slot": 31,
             "default": 0.5,
             "min": 0.0,
             "max": 1.0
@@ -330,7 +298,6 @@
             "name": "Primary (Fedora Blue)",
             "group": "Palette",
             "type": "color",
-            "slot": 0,
             "default": "#51A2DA"
         },
         {
@@ -338,7 +305,6 @@
             "name": "Secondary (Dark Blue)",
             "group": "Palette",
             "type": "color",
-            "slot": 1,
             "default": "#294172"
         },
         {
@@ -346,7 +312,6 @@
             "name": "Accent (Light Blue)",
             "group": "Palette",
             "type": "color",
-            "slot": 2,
             "default": "#79BEE8"
         },
         {
@@ -354,7 +319,6 @@
             "name": "Glow (Frost White)",
             "group": "Palette",
             "type": "color",
-            "slot": 3,
             "default": "#D4EFFF"
         }
     ]

@@ -34,9 +34,62 @@ QString ConfigDefaults::sessionFilePath()
     return configDir() + QStringLiteral("/plasmazones/session.json");
 }
 
-QString ConfigDefaults::assignmentsFilePath()
+QString ConfigDefaults::windowRulesFilePath()
 {
-    return configDir() + QStringLiteral("/plasmazones/assignments.json");
+    return configDir() + QStringLiteral("/plasmazones/windowrules.json");
+}
+
+QString ConfigDefaults::quickLayoutsFilePath()
+{
+    return configDir() + QStringLiteral("/plasmazones/quicklayouts.json");
+}
+
+QString ConfigDefaults::layoutSettingsFilePath()
+{
+    return configDir() + QStringLiteral("/plasmazones/layout-settings.json");
+}
+
+QJsonObject ConfigDefaults::defaultLayoutVisibilitySettings()
+{
+    // Out-of-the-box the picker shows a curated subset; the rest start hidden
+    // (users re-show any via the eye toggle). Keys mirror layout-settings.json
+    // exactly. The "hiddenFromSelector" key and "autotile:" prefix match
+    // PhosphorZones::ZoneJsonKeys::HiddenFromSelector and
+    // PhosphorLayout::LayoutId::AutotilePrefix — kept as literals here so the
+    // config layer takes no phosphor-zones / phosphor-layout-api dependency.
+    const QJsonObject hidden{{QStringLiteral("hiddenFromSelector"), true}};
+
+    // Non-curated standard snapping layouts, by bundled layout UUID.
+    static const QStringList layoutIds{
+        QStringLiteral("{b8669c74-947a-4551-ba8b-79b6444439e8}"), // Fibonacci
+        QStringLiteral("{a40ad8ca-2d60-4418-92cc-01b83420918e}"), // Grid (3x2)
+        QStringLiteral("{0c9585bc-ecae-4e87-a6b8-9d34e9b791f2}"), // Priority Grid
+        QStringLiteral("{a11899b1-f0e3-4425-9363-acb71726c566}"), // Split Focus
+        QStringLiteral("{a83addbc-1907-45a8-a3d5-59dedf079030}"), // Wide
+    };
+
+    // Non-curated tiling algorithms (visible set: bsp, master-stack, monocle,
+    // columns, dwindle-memory, three-column, grid, deck).
+    static const QStringList algorithmIds{
+        QStringLiteral("cascade"),       QStringLiteral("centered-master"),
+        QStringLiteral("cluster"),       QStringLiteral("corner-master"),
+        QStringLiteral("dwindle"),       QStringLiteral("floating-center"),
+        QStringLiteral("focus-sidebar"), QStringLiteral("horizontal-deck"),
+        QStringLiteral("paper"),         QStringLiteral("quadrant-priority"),
+        QStringLiteral("rows"),          QStringLiteral("spiral"),
+        QStringLiteral("spread"),        QStringLiteral("stair"),
+        QStringLiteral("tatami"),        QStringLiteral("wide"),
+        QStringLiteral("zen"),
+    };
+
+    QJsonObject out;
+    for (const QString& id : layoutIds) {
+        out.insert(id, hidden);
+    }
+    for (const QString& id : algorithmIds) {
+        out.insert(QStringLiteral("autotile:") + id, hidden);
+    }
+    return out;
 }
 
 QString ConfigDefaults::legacyConfigFilePath()
@@ -64,13 +117,18 @@ QString ConfigDefaults::readRenderingBackendFromDisk()
         }
     }
 
-    // Fallback: read from legacy INI file if JSON doesn't exist yet (migration
-    // hasn't run — this function is called very early, before ensureJsonConfig()).
+    // Fallback: read from the legacy INI when the JSON is absent, unparseable,
+    // or doesn't carry the key — in practice the pre-migration window (this
+    // function is called very early, before ensureJsonConfig(), and a
+    // successful migration renames the INI away).
     const QString iniPath = legacyConfigFilePath();
     if (QFile::exists(iniPath)) {
         QSettings cfg(iniPath, QSettings::IniFormat);
-        // Hardcoded v1 key name — the INI file predates the v2 rename to "Backend"
-        const QString raw = cfg.value(QStringLiteral("RenderingBackend"), renderingBackend()).toString();
+        // v1 INI key name — the INI file predates the v2 rename to "Backend".
+        // Routed through the frozen `Legacy::v1RenderingBackendKey()` accessor
+        // shared with `migrateIniToJson` / `migrateV1ToV2` so a future rename
+        // of the literal can't drift one consumer behind the others.
+        const QString raw = cfg.value(ConfigKeys::Legacy::v1RenderingBackendKey(), renderingBackend()).toString();
         return normalizeRenderingBackend(raw);
     }
 

@@ -5,12 +5,10 @@
 
 #include "plasmazones_export.h"
 #include <PhosphorProtocol/BridgeMarshalling.h>
-#include <PhosphorProtocol/WindowMarshalling.h>
 #include <QObject>
 #include <QDBusAbstractAdaptor>
 #include <QString>
 #include <QStringList>
-#include <QVariantMap>
 
 namespace PlasmaZones {
 
@@ -19,12 +17,11 @@ namespace PlasmaZones {
  *
  * Provides D-Bus interface: org.plasmazones.CompositorBridge
  *
- * This interface defines the daemon→compositor command protocol. Compositor
- * bridges (KWin effect, Hyprland bridge, Sway bridge) subscribe to the
- * signals to receive window manipulation commands.
- *
- * The interface also accepts bridge registration and modifier state reports
- * from the compositor side.
+ * Compositor-agnostic bridge protocol: the registration handshake and
+ * modifier-state reporting. Window manipulation commands do NOT flow over
+ * this interface — they ride org.plasmazones.WindowTracking
+ * (applyGeometryRequested, applyGeometriesBatch, raiseWindowsRequested, ...),
+ * which bridges subscribe to after a successful registration.
  *
  * @note This is an EXPERIMENTAL interface — may change before v2.
  */
@@ -70,16 +67,22 @@ public Q_SLOTS:
     /**
      * @brief Register a compositor bridge
      * @param compositorName Name of the compositor (e.g. "kwin", "hyprland", "sway")
-     * @param version Compositor version string
+     * @param version Protocol API version as a decimal integer string
+     *        (PhosphorProtocol::Service::ApiVersion) — NOT the compositor's
+     *        release version; peers below the daemon's minimum are rejected
      * @param capabilities List of supported capabilities
-     * @return PhosphorProtocol::BridgeRegistrationResult struct: {apiVersion, bridgeName, sessionId}
+     * @return PhosphorProtocol::BridgeRegistrationResult struct: {apiVersion,
+     *         bridgeName, sessionId}; sessionId == "REJECTED" signals a
+     *         rejected registration the caller MUST check — protocol-version
+     *         mismatch or invalid input (empty compositorName)
      *
      * Capabilities:
-     *   "borderless"  — bridge supports setWindowBorderless
-     *   "maximize"    — bridge supports maximizeWindow
+     *   "borderless"  — bridge manages window decorations (title-bar hiding
+     *                   via its compositor-local DecorationManager)
      *   "animation"   — bridge supports skipAnimation flag
      *   "borders"     — bridge supports native window border rendering
-     *   "modifiers"   — bridge reports keyboard modifier state
+     *   "modifiers"   — bridge reports keyboard modifier state via
+     *                   reportModifierState
      */
     PhosphorProtocol::BridgeRegistrationResult registerBridge(const QString& compositorName, const QString& version,
                                                               const QStringList& capabilities);
@@ -89,54 +92,24 @@ public Q_SLOTS:
      * @param modifiers Qt::KeyboardModifiers bitmask
      * @param mouseButtons Qt::MouseButtons bitmask
      * @note For non-drag contexts (focus-follows-mouse, etc.)
+     * @note Reserved forward surface: the KWin bridge does not call this
+     *       (it reports modifiers through the drag pipeline) and nothing
+     *       daemon-side consumes modifierStateChanged yet — the method
+     *       exists for non-KWin bridges that lack a drag channel. The
+     *       interface is EXPERIMENTAL; revisit before v2.
      */
     void reportModifierState(int modifiers, int mouseButtons);
 
 Q_SIGNALS:
     // ═══════════════════════════════════════════════════════════════════════════
-    // Window geometry commands (daemon → compositor)
-    // ═══════════════════════════════════════════════════════════════════════════
-
-    /**
-     * @brief Apply geometry to a single window
-     */
-    void applyWindowGeometry(const QString& windowId, int x, int y, int width, int height, const QString& zoneId,
-                             bool skipAnimation);
-
-    /**
-     * @brief Apply geometry to a batch of windows
-     * @param batchJson JSON array of [{windowId, x, y, width, height, targetZoneId, ...}]
-     * @param action Operation type ("rotate", "resnap", "snap_all")
-     */
-    void applyWindowGeometriesBatch(const PhosphorProtocol::WindowGeometryList& geometries, const QString& action);
-
-    // ═══════════════════════════════════════════════════════════════════════════
-    // Window focus and stacking commands (daemon → compositor)
-    // ═══════════════════════════════════════════════════════════════════════════
-
-    void activateWindow(const QString& windowId);
-    void raiseWindows(const QStringList& windowIds);
-
-    // ═══════════════════════════════════════════════════════════════════════════
-    // Window decoration commands (daemon → compositor)
-    // ═══════════════════════════════════════════════════════════════════════════
-
-    /**
-     * @brief Set window borderless state
-     * @param windowId Window to modify
-     * @param borderless True to hide title bar, false to show
-     */
-    void setWindowBorderless(const QString& windowId, bool borderless);
-
-    /**
-     * @brief Maximize or restore a window
-     * @param windowId Window to modify
-     * @param mode 0=restore, 3=full maximize
-     */
-    void maximizeWindow(const QString& windowId, int mode);
-
-    // ═══════════════════════════════════════════════════════════════════════════
     // Bridge lifecycle
+    //
+    // NOTE: this interface deliberately carries NO window-manipulation
+    // command signals. Geometry/focus/stacking commands flow over
+    // org.plasmazones.WindowTracking (applyGeometryRequested,
+    // applyGeometriesBatch, raiseWindowsRequested, ...) — a set of dead,
+    // never-emitted command signals used to live here and misled bridge
+    // implementers into subscribing to a channel that never fired.
     // ═══════════════════════════════════════════════════════════════════════════
 
     void bridgeRegistered(const QString& compositorName, const QString& version, const QStringList& capabilities);

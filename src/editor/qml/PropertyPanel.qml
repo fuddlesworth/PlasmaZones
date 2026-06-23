@@ -67,7 +67,7 @@ Rectangle {
     Layout.minimumWidth: 0
     Layout.fillHeight: true
     color: Theme.withAlpha(Kirigami.Theme.backgroundColor, Theme.panelAlpha)
-    border.width: Math.round(Kirigami.Units.devicePixelRatio)
+    border.width: Math.round(Screen.devicePixelRatio)
     border.color: Theme.withAlpha(Kirigami.Theme.textColor, 0.08)
     visible: panelMode !== "hidden"
     opacity: visible ? 1 : 0
@@ -113,13 +113,11 @@ Rectangle {
                 onClicked: {
                     if (editorController)
                         editorController.clearSelection();
-
                 }
                 ToolTip.text: i18nc("@tooltip", "Close panel")
                 ToolTip.visible: hovered
                 Accessible.name: i18nc("@info:accessibility", "Close properties panel")
             }
-
         }
 
         ScrollView {
@@ -153,7 +151,6 @@ Rectangle {
                     onToggled: {
                         if (editorController)
                             editorController.updateSelectedZonesAppearance("useCustomColors", checked);
-
                     }
                 }
 
@@ -212,10 +209,9 @@ Rectangle {
                     sliderEnabled: editorController !== null
                     accessibleName: i18nc("@label", "Active opacity for all selected zones")
                     toolTipText: i18nc("@info:tooltip", "Set active opacity for all selected zones (0-100%)")
-                    onOpacityEdited: function(value) {
+                    onOpacityEdited: function (value) {
                         if (editorController)
                             editorController.updateSelectedZonesAppearance("activeOpacity", value);
-
                     }
                 }
 
@@ -229,10 +225,9 @@ Rectangle {
                     sliderEnabled: editorController !== null
                     accessibleName: i18nc("@label", "Inactive opacity for all selected zones")
                     toolTipText: i18nc("@info:tooltip", "Set inactive opacity for all selected zones (0-100%)")
-                    onOpacityEdited: function(value) {
+                    onOpacityEdited: function (value) {
                         if (editorController)
                             editorController.updateSelectedZonesAppearance("inactiveOpacity", value);
-
                     }
                 }
 
@@ -247,10 +242,9 @@ Rectangle {
                     spinEnabled: editorController !== null
                     accessibleName: i18nc("@label", "Border width for all selected zones")
                     toolTipText: i18nc("@info:tooltip", "Set border width for all selected zones (0-20)")
-                    onSpinValueModified: function(newValue) {
+                    onSpinValueModified: function (newValue) {
                         if (editorController)
                             editorController.updateSelectedZonesAppearance("borderWidth", newValue);
-
                     }
                 }
 
@@ -264,10 +258,9 @@ Rectangle {
                     spinEnabled: editorController !== null
                     accessibleName: i18nc("@label", "Border radius for all selected zones")
                     toolTipText: i18nc("@info:tooltip", "Set corner radius for all selected zones (0-50)")
-                    onSpinValueModified: function(newValue) {
+                    onSpinValueModified: function (newValue) {
                         if (editorController)
                             editorController.updateSelectedZonesAppearance("borderRadius", newValue);
-
                     }
                 }
 
@@ -300,7 +293,6 @@ Rectangle {
                     onClicked: {
                         if (editorController)
                             editorController.deleteSelectedZones();
-
                     }
                 }
 
@@ -322,7 +314,6 @@ Rectangle {
                     onTextChanged: {
                         if (selectedZoneId && editorController)
                             updateTimer.restart();
-
                     }
                     onEditingFinished: {
                         updateTimer.stop();
@@ -331,11 +322,10 @@ Rectangle {
                             var error = editorController.validateZoneName(selectedZoneId, text);
                             if (error !== "") {
                                 validationError = error;
-                                return ;
+                                return;
                             }
                             if (selectedZone && selectedZone.name !== text)
                                 editorController.updateZoneName(selectedZoneId, text);
-
                         }
                     }
 
@@ -347,11 +337,10 @@ Rectangle {
                                 var error = editorController.validateZoneName(selectedZoneId, zoneNameField.text);
                                 if (error !== "") {
                                     zoneNameField.validationError = error;
-                                    return ;
+                                    return;
                                 }
                                 if (selectedZone && selectedZone.name !== zoneNameField.text)
                                     editorController.updateZoneName(selectedZoneId, zoneNameField.text);
-
                             }
                         }
                     }
@@ -360,24 +349,20 @@ Rectangle {
                         color: zoneNameField.hasError ? Qt.rgba(Kirigami.Theme.negativeTextColor.r, Kirigami.Theme.negativeTextColor.g, Kirigami.Theme.negativeTextColor.b, 0.15) : zoneNameField.palette.base
                         radius: Kirigami.Units.smallSpacing
                         border.color: zoneNameField.hasError ? Kirigami.Theme.negativeTextColor : zoneNameField.palette.shadow
-                        border.width: zoneNameField.hasError ? 2 : 1
+                        border.width: zoneNameField.hasError ? Math.max(2, Math.round(Screen.devicePixelRatio * 2)) : Math.max(1, Math.round(Screen.devicePixelRatio))
 
                         Behavior on border.color {
                             PhosphorMotionAnimation {
                                 profile: "widget.tint.fast"
                             }
-
                         }
 
                         Behavior on border.width {
                             PhosphorMotionAnimation {
                                 profile: "widget.tint.fast"
                             }
-
                         }
-
                     }
-
                 }
 
                 Label {
@@ -405,13 +390,13 @@ Rectangle {
                     Accessible.name: i18nc("@label", "Zone number")
                     onValueModified: {
                         if (!selectedZoneId || !editorController)
-                            return ;
+                            return;
 
                         validationError = "";
                         var error = editorController.validateZoneNumber(selectedZoneId, value);
                         if (error !== "") {
                             validationError = error;
-                            return ;
+                            return;
                         }
                         editorController.updateZoneNumber(selectedZoneId, value);
                     }
@@ -449,7 +434,6 @@ Rectangle {
                     onToggled: {
                         if (selectedZoneId && editorController)
                             editorController.toggleZoneGeometryMode(selectedZoneId);
-
                     }
                 }
 
@@ -466,7 +450,6 @@ Rectangle {
                     onValueModified: {
                         if (selectedZoneId && editorController)
                             editorController.updateZoneFixedGeometry(selectedZoneId, value, fixedYSpin.value, fixedWidthSpin.value, fixedHeightSpin.value);
-
                     }
                 }
 
@@ -483,7 +466,6 @@ Rectangle {
                     onValueModified: {
                         if (selectedZoneId && editorController)
                             editorController.updateZoneFixedGeometry(selectedZoneId, fixedXSpin.value, value, fixedWidthSpin.value, fixedHeightSpin.value);
-
                     }
                 }
 
@@ -500,7 +482,6 @@ Rectangle {
                     onValueModified: {
                         if (selectedZoneId && editorController)
                             editorController.updateZoneFixedGeometry(selectedZoneId, fixedXSpin.value, fixedYSpin.value, value, fixedHeightSpin.value);
-
                     }
                 }
 
@@ -517,7 +498,6 @@ Rectangle {
                     onValueModified: {
                         if (selectedZoneId && editorController)
                             editorController.updateZoneFixedGeometry(selectedZoneId, fixedXSpin.value, fixedYSpin.value, fixedWidthSpin.value, value);
-
                     }
                 }
 
@@ -525,12 +505,12 @@ Rectangle {
                 Connections {
                     function onZonesChanged() {
                         if (!selectedZone || !fixedGeometryCheck.checked)
-                            return ;
+                            return;
 
                         // Use Qt.callLater to avoid binding loops
-                        Qt.callLater(function() {
+                        Qt.callLater(function () {
                             if (!selectedZone)
-                                return ;
+                                return;
 
                             fixedXSpin.value = selectedZone.fixedX !== undefined ? selectedZone.fixedX : 0;
                             fixedYSpin.value = selectedZone.fixedY !== undefined ? selectedZone.fixedY : 0;
@@ -565,7 +545,6 @@ Rectangle {
                     onToggled: {
                         if (selectedZoneId && editorController)
                             editorController.updateZoneAppearance(selectedZoneId, "useCustomColors", checked);
-
                     }
                 }
 
@@ -636,10 +615,9 @@ Rectangle {
                     sliderEnabled: selectedZone !== null && editorController !== null
                     accessibleName: i18nc("@label", "Zone active opacity")
                     toolTipText: i18nc("@info:tooltip", "Adjust zone opacity when highlighted (0-100%)")
-                    onOpacityEdited: function(value) {
+                    onOpacityEdited: function (value) {
                         if (selectedZoneId && editorController)
                             editorController.updateZoneAppearance(selectedZoneId, "activeOpacity", value);
-
                     }
                 }
 
@@ -653,10 +631,9 @@ Rectangle {
                     sliderEnabled: selectedZone !== null && editorController !== null
                     accessibleName: i18nc("@label", "Zone inactive opacity")
                     toolTipText: i18nc("@info:tooltip", "Adjust zone opacity when not highlighted (0-100%)")
-                    onOpacityEdited: function(value) {
+                    onOpacityEdited: function (value) {
                         if (selectedZoneId && editorController)
                             editorController.updateZoneAppearance(selectedZoneId, "inactiveOpacity", value);
-
                     }
                 }
 
@@ -671,10 +648,9 @@ Rectangle {
                     spinEnabled: Boolean(selectedZone) && Boolean(editorController)
                     accessibleName: i18nc("@label", "Border width in pixels")
                     toolTipText: i18nc("@info:tooltip", "Set zone border width in pixels (0-20)")
-                    onSpinValueModified: function(newValue) {
+                    onSpinValueModified: function (newValue) {
                         if (selectedZoneId && editorController)
                             editorController.updateZoneAppearance(selectedZoneId, "borderWidth", newValue);
-
                     }
                 }
 
@@ -688,10 +664,9 @@ Rectangle {
                     spinEnabled: Boolean(selectedZone) && Boolean(editorController)
                     accessibleName: i18nc("@label", "Border radius in pixels")
                     toolTipText: i18nc("@info:tooltip", "Set zone corner radius in pixels (0-50)")
-                    onSpinValueModified: function(newValue) {
+                    onSpinValueModified: function (newValue) {
                         if (selectedZoneId && editorController)
                             editorController.updateZoneAppearance(selectedZoneId, "borderRadius", newValue);
-
                     }
                 }
 
@@ -722,10 +697,9 @@ Rectangle {
                     enabled: Boolean(selectedZone) && Boolean(editorController)
                     Accessible.name: i18nc("@label", "Zone overlay display mode")
                     Accessible.description: i18nc("@info:accessibility", "Override the overlay style for this zone only")
-                    onActivated: (index) => {
+                    onActivated: index => {
                         if (selectedZoneId && editorController)
                             editorController.updateZoneAppearance(selectedZoneId, "overlayDisplayMode", index - 1);
-
                     }
 
                     popup: T.Popup {
@@ -747,10 +721,9 @@ Rectangle {
                         background: Rectangle {
                             color: Kirigami.Theme.backgroundColor
                             border.color: Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.2)
-                            border.width: 1
+                            border.width: Math.max(1, Math.round(Screen.devicePixelRatio))
                             radius: Kirigami.Units.smallSpacing
                         }
-
                     }
 
                     delegate: ItemDelegate {
@@ -772,9 +745,7 @@ Rectangle {
                             elide: Text.ElideRight
                             verticalAlignment: Text.AlignVCenter
                         }
-
                     }
-
                 }
 
                 // ═══════════════════════════════════════════════════════════════
@@ -797,7 +768,6 @@ Rectangle {
                     onClicked: {
                         if (selectedZoneId && editorController)
                             editorController.deleteZone(selectedZoneId);
-
                     }
                 }
 
@@ -809,16 +779,14 @@ Rectangle {
                         zoneNumberSpinBox.validationError = "";
                         if (selectedZone)
                             zoneNumberSpinBox.value = selectedZone.zoneNumber || 1;
-
                     }
 
                     function onZoneNameValidationError(zoneId, error) {
                         if (zoneId === selectedZoneId) {
                             zoneNameField.validationError = error;
-                            Qt.callLater(function() {
+                            Qt.callLater(function () {
                                 if (selectedZone)
                                     zoneNameField.text = selectedZone.name || "";
-
                             });
                         }
                     }
@@ -826,15 +794,12 @@ Rectangle {
                     function onZoneNumberValidationError(zoneId, error) {
                         if (zoneId === selectedZoneId)
                             zoneNumberSpinBox.validationError = error;
-
                     }
 
                     target: editorController
                     enabled: editorController !== null && selectedZoneId !== ""
                 }
-
             }
-
         }
 
         // ═══════════════════════════════════════════════════════════════
@@ -848,10 +813,9 @@ Rectangle {
             selectedZoneId: propertyPanel.selectedZoneId
             selectedZone: propertyPanel.selectedZone
             colorProperty: "highlightColor"
-            onColorAccepted: function(hexColor) {
+            onColorAccepted: function (hexColor) {
                 if (selectedZoneId && editorController)
                     editorController.updateZoneColor(selectedZoneId, "highlightColor", hexColor);
-
             }
         }
 
@@ -863,10 +827,9 @@ Rectangle {
             selectedZoneId: propertyPanel.selectedZoneId
             selectedZone: propertyPanel.selectedZone
             colorProperty: "inactiveColor"
-            onColorAccepted: function(hexColor) {
+            onColorAccepted: function (hexColor) {
                 if (selectedZoneId && editorController)
                     editorController.updateZoneColor(selectedZoneId, "inactiveColor", hexColor);
-
             }
         }
 
@@ -878,10 +841,9 @@ Rectangle {
             selectedZoneId: propertyPanel.selectedZoneId
             selectedZone: propertyPanel.selectedZone
             colorProperty: "borderColor"
-            onColorAccepted: function(hexColor) {
+            onColorAccepted: function (hexColor) {
                 if (selectedZoneId && editorController)
                     editorController.updateZoneColor(selectedZoneId, "borderColor", hexColor);
-
             }
         }
 
@@ -893,7 +855,7 @@ Rectangle {
 
             title: i18nc("@title:window", "Highlight Color for All Selected Zones")
             isMultiMode: true
-            onMultiColorAccepted: function(hexColor, selectedColor) {
+            onMultiColorAccepted: function (hexColor, selectedColor) {
                 if (editorController) {
                     editorController.updateSelectedZonesColor("highlightColor", hexColor);
                     propertyPanel.multiHighlightColor = selectedColor;
@@ -906,7 +868,7 @@ Rectangle {
 
             title: i18nc("@title:window", "Inactive Color for All Selected Zones")
             isMultiMode: true
-            onMultiColorAccepted: function(hexColor, selectedColor) {
+            onMultiColorAccepted: function (hexColor, selectedColor) {
                 if (editorController) {
                     editorController.updateSelectedZonesColor("inactiveColor", hexColor);
                     propertyPanel.multiInactiveColor = selectedColor;
@@ -919,14 +881,13 @@ Rectangle {
 
             title: i18nc("@title:window", "Border Color for All Selected Zones")
             isMultiMode: true
-            onMultiColorAccepted: function(hexColor, selectedColor) {
+            onMultiColorAccepted: function (hexColor, selectedColor) {
                 if (editorController) {
                     editorController.updateSelectedZonesColor("borderColor", hexColor);
                     propertyPanel.multiBorderColor = selectedColor;
                 }
             }
         }
-
     }
 
     Behavior on opacity {
@@ -937,7 +898,6 @@ Rectangle {
             profile: visible ? "panel.fadeIn" : "panel.fadeOut"
             durationOverride: Theme.animDuration
         }
-
     }
 
     Behavior on Layout.preferredWidth {
@@ -948,7 +908,5 @@ Rectangle {
             profile: visible ? "panel.slideIn" : "panel.slideOut"
             durationOverride: Theme.animDuration
         }
-
     }
-
 }

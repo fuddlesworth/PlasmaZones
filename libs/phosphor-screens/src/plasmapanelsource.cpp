@@ -18,7 +18,7 @@
 #include <QScreen>
 #include <QThread>
 
-namespace Phosphor::Screens {
+namespace PhosphorScreens {
 
 namespace {
 constexpr auto kPlasmaShellService = "org.kde.plasmashell";
@@ -486,4 +486,4 @@ void PlasmaPanelSource::issueQuery(bool emitRequeryCompleted)
         });
 }
 
-} // namespace Phosphor::Screens
+} // namespace PhosphorScreens

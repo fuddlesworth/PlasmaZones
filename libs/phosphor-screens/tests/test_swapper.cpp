@@ -8,11 +8,11 @@
 
 #include <QTest>
 
-namespace Direction = Phosphor::Screens::Direction;
-using Phosphor::Screens::InMemoryConfigStore;
-using Phosphor::Screens::VirtualScreenConfig;
-using Phosphor::Screens::VirtualScreenDef;
-using Phosphor::Screens::VirtualScreenSwapper;
+namespace Direction = PhosphorScreens::Direction;
+using PhosphorScreens::InMemoryConfigStore;
+using PhosphorScreens::VirtualScreenConfig;
+using PhosphorScreens::VirtualScreenDef;
+using PhosphorScreens::VirtualScreenSwapper;
 
 namespace {
 

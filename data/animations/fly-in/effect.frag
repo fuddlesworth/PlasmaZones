@@ -36,25 +36,19 @@
 // PlasmaZones flips iTime on reverse legs (0→1 on open, 1→0 on close),
 // so the close leg slides back out automatically — no reversed branch.
 
-#version 450
-
-#include <animation_uniforms.glsl>
 #include <noise.glsl>
 #include <anchor_remap.glsl>
 
-layout(location = 0) in vec2 vTexCoord;
-layout(location = 0) out vec4 fragColor;
-
-void main() {
+vec4 pTransition(vec2 uv, float t) {
     // Clamp: bouncy easing curves can drive iTime past [0, 1], and a
     // reverse leg flipping 1→0 can dip negative on overshoot.
-    float t = clamp(iTime, 0.0, 1.0);
+    t = clamp(t, 0.0, 1.0);
     float remaining = 1.0 - t;
 
     // Surface-spanning UV → the window's own ("anchor") [0,1] space.
     // Fragments outside the window map outside [0,1] and are cropped by
     // boundaryMaskAA below.
-    vec2 uv = anchorRemap(vTexCoord);
+    vec2 auv = anchorRemap(uv);
 
     // Decide the fly-in edge from the window's position within its
     // render target. `iAnchorPosInFbo` (render-target-relative origin)
@@ -91,7 +85,7 @@ void main() {
 
     // Rigid horizontal translate: a window shifted toward +x on screen
     // is sampled further toward -x in its own texture.
-    vec2 sample_uv = uv;
-    sample_uv.x = uv.x - offsetUv;
-    fragColor = surfaceColor(sample_uv) * boundaryMaskAA(sample_uv);
+    vec2 sample_uv = auv;
+    sample_uv.x = auv.x - offsetUv;
+    return surfaceColor(sample_uv) * boundaryMaskAA(sample_uv);
 }

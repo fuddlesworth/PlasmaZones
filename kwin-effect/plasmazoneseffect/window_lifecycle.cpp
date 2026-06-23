@@ -17,6 +17,7 @@
 #include <QPointer>
 
 #include "../autotilehandler.h"
+#include "../snaphandler.h"
 #include "../dragtracker.h"
 #include "../navigationhandler.h"
 #include "../screenchangehandler.h"
@@ -76,35 +77,39 @@ void PlasmaZonesEffect::slotWindowAdded(KWin::EffectWindow* w)
     setupWindowConnections(w);
     updateWindowStickyState(w);
 
+    // Tileable-app predicate: a normal top-level window we both handle and can
+    // tile, that didn't open minimized. Drives the snap-restore candidacy and
+    // the first-frame suppression decision below. It does NOT gate the open
+    // shader — that gates on the animation filter (see the window.open block),
+    // so the user's "exclude transient windows" animation setting stays
+    // authoritative for which windows animate on open.
+    const bool tileableAppWindow = shouldHandleWindow(w) && isTileableWindow(w) && !w->isMinimized();
+
     // Whether this window is a snap-restore candidate — it may be
     // teleported into a saved zone moments after opening (instantly from
-    // cache, or after an async daemon resolve). Stricter filter — only
-    // normal application windows, NOT dialogs / utilities.
-    const bool canSnapRestore =
-        shouldHandleWindow(w) && isTileableWindow(w) && !w->isMinimized() && !hasOtherWindowOfClassWithDifferentPid(w);
-
-    // window.open shader transition: fires once for every newly-mapped
-    // normal top-level window we handle. Gate by the same filter as the
-    // snap-restore candidate check so the shader DOESN'T fire on the
-    // child surfaces an app spawns alongside its main window (popup
-    // menus, dropdowns, tooltips, dialogs, transient utility windows).
-    // Without this gate, a single app open like Discord triggers a
-    // fly-in on every sub-surface — main window sliding in slowly while
-    // sidebar / popup surfaces slide in moments behind it from t=0,
-    // producing the "main slow + copies fast" visual artifact users
-    // describe as "multiple ghosted copies of the animation". KWin's
-    // stock fade-in still handles the cosmetic motion for the filtered-
-    // out surfaces; we just skip the user's surface-extent shader leg.
-    // Same predicate gates both the user-assigned open shader and the
-    // first-frame suppression decision below. Compute once.
-    const bool tileableAppWindow = shouldHandleWindow(w) && isTileableWindow(w) && !w->isMinimized();
-    if (tileableAppWindow) {
-        // holdAddedGrab=true: take KWin::WindowAddedGrabRole so KWin's
-        // stock window-open built-ins (fade / scale / slide / glide)
-        // skip this window. Without it, KWin's stock fade-in renders
-        // the window at its natural position concurrently with our
-        // shader's UV-shifted animation, producing the visible
-        // multi-copy ghost trail.
+    // cache, or after an async daemon resolve). Stricter than
+    // tileableAppWindow: also excludes multi-instance siblings.
+    const bool canSnapRestore = tileableAppWindow && !hasOtherWindowOfClassWithDifferentPid(w);
+    // window.open shader transition. Gate on the animation filter
+    // (shouldAnimateWindow, enforced inside tryBeginShaderForEvent) — NOT on
+    // tiling eligibility. isTileableWindow() rejects every transient / dialog /
+    // popup / menu, so gating the open shader on tileableAppWindow suppressed it
+    // for those windows regardless of the user's "exclude transient windows"
+    // animation setting, while slotWindowClosed (window.close) gates only on
+    // shouldAnimateWindow. That asymmetry made transients animate on close but
+    // never on open. Mirroring the close path makes the setting authoritative
+    // for both: with exclude-transients off (the default) a transient gets its
+    // open shader; with it on, shouldAnimateWindow drops the child surfaces,
+    // preserving the ghost-trail suppression the old tiling gate provided for
+    // apps that spawn popups/dropdowns alongside their main window.
+    //
+    // holdAddedGrab=true: take KWin::WindowAddedGrabRole so KWin's stock
+    // window-open built-ins (fade / scale / slide / glide) skip this window;
+    // without it KWin's stock fade-in renders concurrently with our shader,
+    // producing the visible multi-copy ghost trail. tryBeginShaderForEvent
+    // takes the grab only after shouldAnimateWindow passes, so it is never held
+    // for a window we don't animate.
+    if (!w->isMinimized()) {
         tryBeginShaderForEvent(w, PhosphorAnimation::ProfilePaths::WindowOpen, animationDurationMs(),
                                /*reverse=*/false, /*holdCloseGrab=*/false, /*holdAddedGrab=*/true);
     }
@@ -147,7 +152,7 @@ void PlasmaZonesEffect::slotWindowAdded(KWin::EffectWindow* w)
     // populates the cache only for pending restores whose saved screen is in snap
     // mode, so an entry being present means "this app wants to land on a
     // snap-mode zone". Cross-VS/cross-monitor teleport works because moveResize
-    // takes absolute compositor coordinates, so applySnapGeometry moves the
+    // takes absolute compositor coordinates, so applyWindowGeometry moves the
     // window to whichever screen the cached rect lives on. After teleport,
     // re-evaluate onAutotileScreen because KWin updates the window's output
     // assignment.
@@ -155,16 +160,18 @@ void PlasmaZonesEffect::slotWindowAdded(KWin::EffectWindow* w)
     // Rare race: the saved screen may have flipped from snap→autotile between
     // when the cache was populated and when the window opens. Re-check the
     // entry's screen mode via the autotile handler before applying.
-    if (canSnapRestore && !m_snapRestoreCache.isEmpty()) {
-        QString appId = ::PhosphorIdentity::WindowId::extractAppId(windowId);
-        auto cacheIt = m_snapRestoreCache.find(appId);
-        if (cacheIt != m_snapRestoreCache.end()) {
-            const CachedSnapRestore& cached = cacheIt.value();
+    if (canSnapRestore && !m_snapHandler->restoreCacheEmpty()) {
+        const QString appId = ::PhosphorIdentity::WindowId::extractAppId(windowId);
+        // Single-shot semantics: takeRestore erases the entry on lookup, so any
+        // entry seen here is consumed regardless of which branch below runs (the
+        // entry has been considered for routing whether or not it was applied,
+        // so the next open of the same appId won't re-evaluate a dead entry).
+        if (const std::optional<CachedSnapRestore> cached = m_snapHandler->takeRestore(appId)) {
             const bool savedScreenNowAutotile =
-                !cached.screenId.isEmpty() && m_autotileHandler->isAutotileScreen(cached.screenId);
-            if (cached.geometry.isValid() && !savedScreenNowAutotile) {
-                qCInfo(lcEffect) << "Instant snap restore for" << appId << "to:" << cached.geometry
-                                 << "screen:" << cached.screenId;
+                !cached->screenId.isEmpty() && m_autotileHandler->isAutotileScreen(cached->screenId);
+            if (cached->geometry.isValid() && !savedScreenNowAutotile) {
+                qCInfo(lcEffect) << "Instant snap restore for" << appId << "to:" << cached->geometry
+                                 << "screen:" << cached->screenId;
                 // skipAnimation=true: teleport straight into the zone.
                 // First-frame open suppression (beginRestoreSuppression
                 // above in slotWindowAdded) withholds the window from
@@ -173,28 +180,20 @@ void PlasmaZonesEffect::slotWindowAdded(KWin::EffectWindow* w)
                 // already reports the resolved zone — the surface-extent
                 // open shader (bounce, fly-in) plays into the zone from
                 // the first painted frame without any anchor pinning.
-                applySnapGeometry(w, cached.geometry, false, /*skipAnimation=*/true);
+                applyWindowGeometry(w, cached->geometry, false, /*skipAnimation=*/true);
                 // Re-evaluate screen after teleport — cross-VS/cross-monitor
                 // moveResize updates KWin's output assignment, so the window
                 // may no longer be on an autotile screen.
                 onAutotileScreen = m_autotileHandler->isAutotileScreen(getWindowScreenId(w));
             } else if (savedScreenNowAutotile) {
                 qCDebug(lcEffect) << "Skipping instant snap restore for" << appId
-                                  << "- saved screen now autotile:" << cached.screenId;
+                                  << "- saved screen now autotile:" << cached->screenId;
             } else {
                 // Cached geometry is invalid (corrupt / zero-size persisted
-                // rect on a snap-mode screen). The cache is single-shot
-                // per app-open: any entry seen here has been considered
-                // for routing, regardless of whether it was actually
-                // applied. Drop it so the next open of the same appId
-                // doesn't re-evaluate this same dead entry forever.
+                // rect on a snap-mode screen).
                 qCDebug(lcEffect) << "Discarding instant snap restore entry for" << appId
-                                  << "- geometry invalid:" << cached.geometry << "screen:" << cached.screenId;
+                                  << "- geometry invalid:" << cached->geometry << "screen:" << cached->screenId;
             }
-            // Single-shot semantics: the entry is consumed regardless of
-            // which branch ran, so erase unconditionally once we've
-            // looked at it.
-            m_snapRestoreCache.erase(cacheIt);
         }
     }
 
@@ -214,7 +213,7 @@ void PlasmaZonesEffect::slotWindowAdded(KWin::EffectWindow* w)
         // window, daemon decided not to tile, already-notified), nothing
         // further will move the window, so release suppression immediately
         // rather than waiting for the 250ms deadline.
-        callResolveWindowRestore(
+        m_snapHandler->callResolveWindowRestore(
             w,
             [this, safeW]() {
                 if (!safeW || safeW->isDeleted()) {
@@ -254,83 +253,17 @@ void PlasmaZonesEffect::slotWindowAdded(KWin::EffectWindow* w)
         // nothing got registered (zones=1 of 7 in the field logs).
         //
         // The earlier skip of this call after an instant restore assumed the
-        // daemon "would just answer no zone" once the effect's m_snapRestoreCache
-        // entry was consumed. That is false: m_snapRestoreCache is an effect-side
-        // latency cache, separate from the daemon's pending-restore queue.
+        // daemon "would just answer no zone" once the snap restore cache
+        // entry was consumed. That is false: the snap restore cache is an
+        // effect-side latency cache, separate from the daemon's pending-restore queue.
         // pendingRestoreGeometries() (which populates the cache) is a const
         // read and does NOT consume the daemon queue, so resolveWindowRestore
         // still matches the pending entry, consumes it, and commits. When
         // instant restore already placed the window the daemon returns the
         // same zone rect, so the re-apply is a no-op moveResize to the
         // current geometry — the price of correct registration.
-        callResolveWindowRestore(w);
+        m_snapHandler->callResolveWindowRestore(w);
     }
-}
-
-// Window-restore-on-open: when a window we handle is mapped, ask the daemon
-// whether it has a saved zone to restore it into, and apply it. This is the
-// async counterpart of slotWindowAdded's instant cache restore. It lives
-// here, next to slotWindowAdded (its only caller), rather than in
-// drag_snap.cpp — it has nothing to do with drag-to-snap; it only happens to
-// build on the shared applySnapGeometry / tryAsyncSnapCall machinery.
-void PlasmaZonesEffect::callResolveWindowRestore(KWin::EffectWindow* window, std::function<void()> onComplete,
-                                                 bool releaseSuppressionOnMiss)
-{
-    if (!window) {
-        if (onComplete) {
-            onComplete();
-        }
-        return;
-    }
-
-    if (!isDaemonReady("resolve window restore")) {
-        // No daemon means no snap-restore (and no autotile either — it
-        // needs the daemon too). Release first-frame suppression so the
-        // window is not held invisible waiting on a reposition that will
-        // never come.
-        endRestoreSuppression(window);
-        if (onComplete) {
-            onComplete();
-        }
-        return;
-    }
-
-    QPointer<KWin::EffectWindow> safeWindow = window;
-    QString windowId = getWindowId(window);
-    QString screenId = getWindowScreenId(window);
-    bool sticky = isWindowSticky(window);
-
-    // On a resolve miss (daemon found no zone) release first-frame
-    // suppression — unless the caller says another path will still
-    // reposition the window (autotile-screen path), in which case the
-    // suppression must hold until that reposition's geometry settles.
-    std::function<void()> onMiss;
-    if (releaseSuppressionOnMiss) {
-        onMiss = [this, safeWindow]() {
-            if (safeWindow) {
-                endRestoreSuppression(safeWindow);
-            }
-        };
-    }
-
-    // Single D-Bus call — daemon runs the full appRule → persisted → emptyZone → lastZone chain.
-    //
-    // skipAnimation=true: teleport the window straight into the resolved
-    // zone. The animated morph path tweens the window from its spawn
-    // position, which both reads as "KDE opened the window, then we moved
-    // it" and collides with any in-flight surface-extent window.open
-    // shader (bounce / fly-in) — the morph translates the output-spanning
-    // shader quad. Placing the window directly lets the open shader play
-    // cleanly into the zone.
-    //
-    // storePreSnap=false: the window is already at its snap/zone position (from before
-    // daemon restart or from KWin session restore), so its current frameGeometry is the
-    // zone geometry — NOT the free-floating geometry. Storing it as pre-tile would cause
-    // float toggle to restore to the zone geometry instead of the original free-floating position.
-    const int kindInt = static_cast<int>(classifyWindowKind(window));
-    tryAsyncSnapCall(PhosphorProtocol::Service::Interface::Snap, QStringLiteral("resolveWindowRestore"),
-                     {windowId, screenId, sticky, kindInt}, safeWindow, windowId, false, onMiss, nullptr,
-                     /*skipAnimation=*/true, onComplete);
 }
 
 void PlasmaZonesEffect::slotWindowClosed(KWin::EffectWindow* w)
@@ -344,9 +277,13 @@ void PlasmaZonesEffect::slotWindowClosed(KWin::EffectWindow* w)
     // Delegate to helpers
     m_dragTracker->handleWindowClosed(w);
 
-    // Clear floating state — floating is runtime-only and resets on window close.
-    // The daemon clears its side in windowClosed().
-    m_navigationHandler->setWindowFloating(getWindowId(w), false);
+    // Clear floating and snap-zone state — both are runtime-only and reset on
+    // window close. The daemon clears its side in windowClosed(). Done here while
+    // getWindowId(w) still resolves (before the windowId cache drops the entry),
+    // so a reused id can't inherit a stale zone.
+    const QString closingWindowId = getWindowId(w);
+    m_navigationHandler->setWindowFloating(closingWindowId, false);
+    m_navigationHandler->clearWindowZone(closingWindowId);
 
     // Tear down any in-flight zone.* shader transition first — this window
     // is going away and we don't want a half-faded zone shader fighting the
@@ -373,11 +310,25 @@ void PlasmaZonesEffect::slotWindowClosed(KWin::EffectWindow* w)
     const QString closedScreenId = getWindowScreenId(w);
 
     // Clean up snap-mode minimize tracking
-    m_minimizeFloatedWindows.remove(closedWindowId);
+    m_snapHandler->removeMinimizeFloated(closedWindowId);
     m_dragFloatedWindowIds.remove(closedWindowId);
 
-    // Notify autotile handler for cleanup (tracking sets + autotile D-Bus)
-    m_autotileHandler->onWindowClosed(closedWindowId, closedScreenId);
+    // Notify autotile handler for cleanup (tracking sets + autotile D-Bus).
+    // Genuine destruction also drops any desktop-move geometry stash —
+    // onWindowClosed itself must not (the desktop-move path creates the
+    // stash immediately before calling it).
+    m_autotileHandler->onWindowClosed(closedWindowId, closedScreenId, /*windowDestroyed=*/true);
+    m_autotileHandler->clearDesktopMoveStash(closedWindowId);
+
+    // Mirror that cleanup for snapping's own border set. Pure bookkeeping —
+    // the window is being destroyed, so no setNoBorder/removeWindowBorder is
+    // needed here (the border item is removed just below and the title bar
+    // dies with the window).
+    m_snapHandler->onWindowClosed(closedWindowId);
+    // Drop the window's decoration ownership state (mode owners, rule
+    // overrides, vetoes). forgetWindow makes zero compositor calls — the
+    // decoration dies with the window.
+    m_decorationManager->forgetWindow(closedWindowId);
 
     // Remove the window's border item (parent WindowItem is being destroyed anyway,
     // but clean up our tracking hash to avoid stale entries).
@@ -393,12 +344,69 @@ void PlasmaZonesEffect::slotWindowClosed(KWin::EffectWindow* w)
     m_windowIdReverse.remove(closedWindowId);
     m_trackedScreenPerWindow.remove(w);
     m_restoreSuppress.remove(w);
+    // Drop any pending-but-not-yet-flushed frame geometry for the
+    // closing window. The windowDeleted lambda in lifecycle.cpp does
+    // the same removal as belt-and-suspenders against a
+    // windowFrameGeometryChanged emission re-inserting between this
+    // slot and windowDeleted (possible for windows held alive via
+    // WindowClosedGrabRole). Daemon would discard a stale
+    // setFrameGeometry call for a no-longer-tracked windowId anyway,
+    // so the leak was wasted D-Bus rather than incorrect — but the
+    // cleanup keeps the pending-batch in lockstep with the live
+    // window set.
+    m_pendingFrameGeometry.remove(closedWindowId);
+    // Symmetric with the `windowDeleted` lambda in `lifecycle.cpp`
+    // (which removes the same key from `m_frameOpacityCache` after the
+    // close-grab unref). Close shaders held via `holdCloseGrab=true`
+    // keep the EffectWindow alive past slotWindowClosed and the
+    // close-path paints can still touch the opacity cache; clearing
+    // here ensures the next windowDeleted has nothing to clean up if
+    // the close shader runs zero frames.
+    m_shaderManager.m_frameOpacityCache.remove(w);
 }
 
 void PlasmaZonesEffect::slotWindowActivated(KWin::EffectWindow* w)
 {
     // Filtering (e.g. shouldHandleWindow) is done inside notifyWindowActivated
     notifyWindowActivated(w);
+
+    // Focus is a window-rule match input (Field::IsFocused), and both the
+    // border-appearance and opacity resolvers go through the evaluator's
+    // per-window match cache (resolveCached), which is keyed on
+    // (windowId, ruleSet revision) — neither of which moves on a focus
+    // change. Without dropping the cache, a window keeps the actions it
+    // resolved at its FIRST focus state forever (a `WHEN focused` border
+    // colour would never revert when the window loses focus). Mirror the
+    // windowClass / desktopFile invalidation: drop the whole cache so the
+    // re-resolve below (and the next per-frame opacity resolve) sees the new
+    // focus state. Gated on a non-empty rule set so the no-rules case pays
+    // nothing. The per-frame opacity cache clears every frame at
+    // postPaintScreen, so a focus-scoped opacity re-resolves on the next paint.
+    if (!m_shaderManager.animationRuleSet().isEmpty()) {
+        m_shaderManager.animationRuleEvaluator().clearCache();
+
+        // A focus-scoped SetOpacity rule changes a window's resolved opacity
+        // when it gains or loses focus. updateAllBorders() below repaints any
+        // window that carries a border item, but an opacity-only (borderless)
+        // window has nothing to recreate — so without an explicit repaint its
+        // re-resolved opacity would not reach the screen until some unrelated
+        // damage happened to repaint it. Force a repaint of both the window
+        // gaining focus (w) and the one losing it (m_lastActivatedWindow).
+        // Gated on hasOpacityRules() because pure border-colour changes are
+        // already covered by updateAllBorders()'s item recreate.
+        if (m_shaderManager.hasOpacityRules()) {
+            if (w) {
+                w->addRepaintFull();
+            }
+            if (m_lastActivatedWindow && m_lastActivatedWindow != w) {
+                m_lastActivatedWindow->addRepaintFull();
+            }
+        }
+    }
+    // Track the now-active window as the next focus change's "previously
+    // active" window. Updated unconditionally (even with no rules yet) so the
+    // pointer is correct if opacity rules are added before the next activation.
+    m_lastActivatedWindow = w;
 
     // Recreate all borders so the active window gets the active color
     // and inactive windows get the inactive color.  A full recreate is
@@ -425,17 +433,21 @@ void PlasmaZonesEffect::setupWindowConnections(KWin::EffectWindow* w)
                 // Save pre-autotile geometry before onWindowClosed clears it.
                 // When the window is re-added on the target desktop, this preserved
                 // geometry is used instead of the current (tiled) frame position.
-                m_autotileHandler->savePreAutotileForDesktopMove(windowId, screenId);
+                m_autotileHandler->savePreAutotileForDesktopMove(windowId);
 
-                // Restore title bar before removing from tiling — onWindowClosed
-                // only clears tracking, it doesn't call setNoBorder(false) since
-                // it's also used for truly closing windows.
-                if (m_autotileHandler->isBorderlessWindow(windowId)) {
-                    KWin::Window* kw = window->window();
-                    if (kw) {
-                        kw->setNoBorder(false);
-                    }
-                }
+                // Do NOT release autotile's decoration ownership here: the window
+                // is still autotile-managed, just relocated to another desktop.
+                // releaseKind runs restoreNow and brings the title bar / border
+                // back, stranding the window decorated until the target desktop
+                // becomes current and the catch-scan re-tiles it (observed: title
+                // bar visible for the whole interval). Keeping the claim across
+                // the desktop hop mirrors the cross-OUTPUT transfer (which keeps
+                // the claim on an autotile→autotile move): the no-border intent
+                // survives, KWin's off-desktop reset is corrected on desktop
+                // return by updateAllBorders → resyncWindow (a no-op without an
+                // owned claim), and the claim is released for real only when the
+                // window genuinely closes. onWindowClosed below only clears
+                // effect-side tracking (shared with the genuine-close path).
                 m_autotileHandler->onWindowClosed(windowId, screenId);
                 removeWindowBorder(windowId);
                 qCInfo(lcEffect) << "Window moved off current desktop, removed from autotile:" << windowId;
@@ -530,7 +542,7 @@ void PlasmaZonesEffect::setupWindowConnections(KWin::EffectWindow* w)
             // Suppress crossing detection while the daemon is moving this window in response
             // to a VS swap/rotate or resnap. The cached m_virtualScreenDefs may still hold
             // pre-rotation regions when the geometry change fires synchronously from
-            // applySnapGeometry, so getWindowScreenId would resolve the new position against
+            // applyWindowGeometry, so getWindowScreenId would resolve the new position against
             // stale boundaries and report a phantom crossing.
             if (m_inDaemonGeometryApply) {
                 return;
@@ -543,8 +555,8 @@ void PlasmaZonesEffect::setupWindowConnections(KWin::EffectWindow* w)
             m_trackedScreenPerWindow[safeW] = newScreenId;
 
             // Skip during drag — the drag system owns state transitions.
-            // Autotile drag handles VS transfers in dragStopped (line 262-285).
-            // Snapping drag handles cross-screen unsnap in dragStopped via daemon.
+            // Autotile drag handles VS transfers via the drag-policy-changed path.
+            // Snapping drag handles cross-screen unsnap on drag-stop via the daemon.
             if (m_dragTracker->isDragging()) {
                 return;
             }
@@ -591,9 +603,40 @@ void PlasmaZonesEffect::setupWindowConnections(KWin::EffectWindow* w)
                 pushWindowMetadata(safeW);
             }
         };
+        // Caption changes fire every frame for terminals / browsers; the extended
+        // property snapshot (geometry / state flags) doesn't change on a title tick,
+        // so refresh the registry's core metadata (title) WITHOUT rebuilding and
+        // marshalling the ~20-entry a{sv} each frame. The daemon preserves the
+        // existing extended fields when none are sent.
+        auto pushCaptionOnly = [this, safeW]() {
+            if (safeW && !safeW->isDeleted()) {
+                pushWindowMetadata(safeW, /*includeExtended=*/false);
+            }
+        };
+        // Class / desktop-file mutations invalidate the animation rule
+        // evaluator's per-window match cache. The cache is keyed on the
+        // window's frozen composite id but the cascade resolves against
+        // the LIVE windowClass — so without invalidation, a SetOpacity /
+        // OverrideAnimation* rule for the post-rename class silently
+        // never applies (Electron/CEF/Steam family). pushLatest already
+        // refreshes the daemon's WindowRegistry record; mirror that
+        // refresh on the effect's local resolver cache. Caption /
+        // desktops / activities / role changes don't feed the
+        // WindowClass matcher so they don't need the cache drop.
+        auto invalidateRuleCache = [this]() {
+            m_shaderManager.animationRuleEvaluator().clearCache();
+        };
         connect(kw, &KWin::Window::windowClassChanged, this, pushLatest);
+        connect(kw, &KWin::Window::windowClassChanged, this, invalidateRuleCache);
         connect(kw, &KWin::Window::desktopFileNameChanged, this, pushLatest);
-        connect(kw, &KWin::Window::captionChanged, this, pushLatest);
+        connect(kw, &KWin::Window::desktopFileNameChanged, this, invalidateRuleCache);
+        connect(kw, &KWin::Window::captionChanged, this, pushCaptionOnly);
+        // Per-window virtual-desktop / activity / role changes also refresh the
+        // registry so context-aware rule resolution sees current values. Same
+        // record-only contract: no retroactive re-evaluation of committed state.
+        connect(kw, &KWin::Window::desktopsChanged, this, pushLatest);
+        connect(kw, &KWin::Window::activitiesChanged, this, pushLatest);
+        connect(kw, &KWin::Window::windowRoleChanged, this, pushLatest);
 
         // Diagnostic dump on identity change — but ONLY for class / desktop-file,
         // never caption. CEF/Electron apps (Steam included) map with a
@@ -624,6 +667,18 @@ void PlasmaZonesEffect::setupWindowConnections(KWin::EffectWindow* w)
     // DragTracker::updateCursorPosition(), throttled to ~30Hz.
     connect(w, &KWin::EffectWindow::windowStartUserMovedResized, this, [this](KWin::EffectWindow* window) {
         m_dragTracker->handleWindowStartMoveResize(window);
+        // Latch interactive-resize identity AND the pre-resize frame for the finish
+        // handler (see below): KWin clears isUserResize() before
+        // windowFinishUserMovedResized fires, so both the move-vs-resize
+        // discriminator and the baseline geometry must be captured here, at the
+        // start. The geometry feeds the neighbour-reflow report (GitHub #652);
+        // m_resizeStartGeometry is only read at finish when this latch identifies a
+        // resize, so a plain move leaves it cleared.
+        m_resizingWindow = (window && window->isUserResize()) ? window : nullptr;
+        m_resizeStartGeometry = QRect();
+        if (m_resizingWindow) {
+            m_resizeStartGeometry = window->frameGeometry().toRect();
+        }
         // window.move / window.resize shader transitions: KWin's interactive
         // move/resize is its own animation system (Window::moveResize via
         // pointer drag), but we layer an effect-side shader for visual
@@ -640,6 +695,41 @@ void PlasmaZonesEffect::setupWindowConnections(KWin::EffectWindow* w)
         }
     });
     connect(w, &KWin::EffectWindow::windowFinishUserMovedResized, this, [this](KWin::EffectWindow* window) {
+        const bool wasResize = (window && m_resizingWindow == window);
+        m_resizingWindow = nullptr;
+        // A floating window the user just RESIZED has a new free size. Persist it
+        // immediately into the unified record's shared free geometry (overwrite=true)
+        // so the float-back is durable right away — recordFreeGeometry marks the
+        // placement store dirty, arming the debounced save. The save-time sweep only
+        // folds the live frame shadow into the record on the next dirtying event /
+        // shutdown, and a bare resize never marks anything dirty, so without this the
+        // new size could be lost on an unclean exit. Resizes never snap, so this can
+        // never race the drag→snap pipeline (which owns the move case); guarding on
+        // isWindowFloating keeps it to genuinely floated windows.
+        if (wasResize && shouldHandleWindow(window)) {
+            const QString windowId = getWindowId(window);
+            if (!windowId.isEmpty() && isWindowFloating(windowId)) {
+                // toRect() (rounding) rather than truncation: fractional-scale
+                // outputs leave sub-pixel residue in frameGeometry(), and the
+                // other geometry-capture paths round too.
+                const QRect geom = window->frameGeometry().toRect();
+                if (geom.width() > 0 && geom.height() > 0) {
+                    PhosphorProtocol::ClientHelpers::fireAndForget(
+                        this, PhosphorProtocol::Service::Interface::WindowTracking,
+                        QStringLiteral("storePreTileGeometry"),
+                        {windowId, geom.x(), geom.y(), geom.width(), geom.height(), getWindowScreenId(window),
+                         /*overwrite=*/true},
+                        QStringLiteral("storePreTileGeometry - float resize"));
+                }
+            }
+            // Report the committed resize to the daemon so it can reflow tiled
+            // neighbours (GitHub #652). The daemon ignores floating / untracked
+            // windows, so this is harmless for the float case handled just above.
+            // The enclosing shouldHandleWindow(window) is the effect-side gate
+            // (excluded windows never reach here); the daemon then additionally
+            // re-validates membership before reflowing.
+            notifyWindowResized(window, m_resizeStartGeometry);
+        }
         m_dragTracker->handleWindowFinishMoveResize(window);
     });
 
@@ -697,7 +787,7 @@ void PlasmaZonesEffect::setupWindowConnections(KWin::EffectWindow* w)
     // Body 1 — first-frame open suppression release: a window withheld
     // from compositing on open (see RestoreSuppression) is released the
     // moment its reposition configure lands — detected as the live
-    // geometry leaving the spawn point once applySnapGeometry has
+    // geometry leaving the spawn point once applyWindowGeometry has
     // stamped the resolved target. Before the target is known a
     // geometry change is just the client's own initial size negotiation
     // and is ignored. Full-rect compare (not just topLeft) catches
@@ -727,6 +817,20 @@ void PlasmaZonesEffect::setupWindowConnections(KWin::EffectWindow* w)
                 if (windowId.isEmpty()) {
                     return;
                 }
+                // Self-heal a noBorder reset KWin issues asynchronously after a
+                // cross-OUTPUT move. The daemon-driven destination retile keeps
+                // the autotile decoration claim and re-acquires it on the new
+                // screen (releaseOthersOfKind + acquire), but the manager already
+                // believes the window hidden, so reconcile re-asserts nothing —
+                // then KWin re-evaluates the decoration on the output change and
+                // flips noBorder back ON in a later turn. The synchronous resync
+                // in updateAllBorders runs in the retile turn, BEFORE that reset,
+                // so it bails ("still suppressed"). KWin grows the frame by the
+                // title-bar height when it re-decorates, firing this very signal:
+                // resyncWindow re-hides exactly the windows the manager owns and
+                // believes hidden whose decoration drifted back, and is a self-
+                // guarding no-op otherwise.
+                m_decorationManager->resyncWindow(windowId);
                 const QRect geo = safeW->frameGeometry().toRect();
                 if (geo.width() <= 0 || geo.height() <= 0) {
                     return;
@@ -758,9 +862,45 @@ void PlasmaZonesEffect::notifyWindowClosed(KWin::EffectWindow* w)
     }
 
     const int kindInt = static_cast<int>(classifyWindowKind(w));
-    qCInfo(lcEffect) << "Notifying daemon: windowClosed" << windowId << "kind=" << kindInt;
+    // Pass KWin's authoritative current screen for the window. The daemon uses it
+    // as the final-placement screen when a cross-screen move has left the window
+    // untracked by both engines at close — otherwise its float-back records the
+    // stale source screen and it reopens on the wrong monitor.
+    const QString closeScreenId = getWindowScreenId(w);
+    qCInfo(lcEffect) << "Notifying daemon: windowClosed" << windowId << "kind=" << kindInt
+                     << "screen=" << closeScreenId;
     PhosphorProtocol::ClientHelpers::fireAndForget(this, PhosphorProtocol::Service::Interface::WindowTracking,
-                                                   QStringLiteral("windowClosed"), {windowId, kindInt});
+                                                   QStringLiteral("windowClosed"), {windowId, kindInt, closeScreenId});
+}
+
+void PlasmaZonesEffect::notifyWindowResized(KWin::EffectWindow* w, const QRect& oldGeometry)
+{
+    if (!w) {
+        return;
+    }
+    if (!isDaemonReady("notify windowResized")) {
+        return;
+    }
+
+    const QString windowId = getWindowId(w);
+    if (windowId.isEmpty()) {
+        return;
+    }
+
+    const QRect newGeometry = w->frameGeometry().toRect();
+    if (!oldGeometry.isValid() || newGeometry.width() <= 0 || newGeometry.height() <= 0) {
+        return;
+    }
+    // Cancelled / no-op resize (Escape, or a same-size finish): nothing moved.
+    if (newGeometry == oldGeometry) {
+        return;
+    }
+
+    qCInfo(lcEffect) << "Notifying daemon: windowResized" << windowId << oldGeometry << "->" << newGeometry;
+    PhosphorProtocol::ClientHelpers::fireAndForget(
+        this, PhosphorProtocol::Service::Interface::WindowTracking, QStringLiteral("notifyWindowResized"),
+        {windowId, oldGeometry.x(), oldGeometry.y(), oldGeometry.width(), oldGeometry.height(), newGeometry.x(),
+         newGeometry.y(), newGeometry.width(), newGeometry.height()});
 }
 
 void PlasmaZonesEffect::notifyWindowActivated(KWin::EffectWindow* w)
@@ -774,11 +914,7 @@ void PlasmaZonesEffect::notifyWindowActivated(KWin::EffectWindow* w)
     // correctly skip excluded windows instead of operating on a stale
     // m_lastActiveWindowId.
     const QString windowClass = w->windowClass();
-    if (windowClass.contains(QLatin1String("plasmazonesd"), Qt::CaseInsensitive)
-        || windowClass.contains(QLatin1String("plasmazones-editor"), Qt::CaseInsensitive)) {
-        return;
-    }
-    if (windowClass.contains(QLatin1String("xdg-desktop-portal"), Qt::CaseInsensitive)) {
+    if (isOwnOverlayClass(windowClass) || isXdgDesktopPortalSurface(windowClass)) {
         return;
     }
     // Plasma shell surfaces — independent filter chain from shouldHandleWindow()
@@ -859,6 +995,14 @@ KWin::EffectWindow* PlasmaZonesEffect::findWindowById(const QString& windowId) c
 
     const auto windows = KWin::effects->stackingOrder();
     for (KWin::EffectWindow* w : windows) {
+        // Skip dying windows: close-shader grabs (WindowClosedGrabRole) keep
+        // deleted windows in the stacking order between windowClosed and
+        // windowDeleted, and matching one would both resolve a dead window
+        // AND re-insert its just-scrubbed id into the caches via getWindowId.
+        // The exact-match path above enforces the same !isDeleted().
+        if (!w || w->isDeleted()) {
+            continue;
+        }
         const QString wId = getWindowId(w);
         if (::PhosphorIdentity::WindowId::extractAppId(wId) == targetAppId) {
             appMatch = w;
@@ -873,12 +1017,16 @@ KWin::EffectWindow* PlasmaZonesEffect::findWindowById(const QString& windowId) c
 
 QVector<KWin::EffectWindow*> PlasmaZonesEffect::findAllWindowsById(const QString& windowId) const
 {
-    // Instance ids are unique — "all windows for a given id" is at most one
-    // window. findAllWindowsById exists as an API seam for the (historical)
-    // case where callers wanted every instance of an app class matching a
-    // given composite; that semantic now lives on the daemon's
-    // WindowRegistry::instancesWithAppId() + per-instance lookups. The
-    // single-instance behavior here is the only case that remains.
+    // Two cases:
+    //   1. Exact-instance match (`wId == windowId`): returns a single-
+    //      element vector with just that window — discards any appId
+    //      matches accumulated earlier in the stacking-order walk
+    //      because the instance id is the strictly stronger identifier.
+    //   2. Fuzzy appId match (no exact instance found): accumulates
+    //      every window that shares the composite's appId. Used by
+    //      autotile to disambiguate when multiple windows share an
+    //      appId (e.g. two Firefox instances) — see the header doc on
+    //      `plasmazoneseffect.h::findAllWindowsById`.
     QVector<KWin::EffectWindow*> out;
     if (windowId.isEmpty()) {
         return out;
@@ -886,6 +1034,12 @@ QVector<KWin::EffectWindow*> PlasmaZonesEffect::findAllWindowsById(const QString
     const QString targetAppId = ::PhosphorIdentity::WindowId::extractAppId(windowId);
     const auto windows = KWin::effects->stackingOrder();
     for (KWin::EffectWindow* w : windows) {
+        // Skip dying windows — same rationale as findWindowById's fuzzy walk
+        // (close-grabbed deleted windows linger in the stacking order, and
+        // getWindowId would re-pollute the just-scrubbed caches).
+        if (!w || w->isDeleted()) {
+            continue;
+        }
         const QString wId = getWindowId(w);
         if (wId == windowId) {
             // Exact match — discard any appId matches accumulated from earlier

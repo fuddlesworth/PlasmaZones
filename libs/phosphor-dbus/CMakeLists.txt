@@ -8,7 +8,7 @@
 #                   (connection, service, objectPath) triple
 #   - Streaming.h : the HasDBusStreaming<T> compile-time marshalling check
 #
-# This library knows nothing about Phosphor / PlasmaZones. Any Qt application
+# This library knows nothing about Phosphor. Any Qt application
 # talking to any D-Bus service can reuse it. Project-specific service names
 # and wire types belong one layer up (see phosphor-protocol).
 #
@@ -40,11 +40,13 @@ find_package(Qt6 6.10 REQUIRED COMPONENTS Core DBus)
 set(phosphordbus_SRCS
     src/client.cpp
     src/logging.cpp
+    src/objectmanager.cpp
 )
 
 set(phosphordbus_public_HDRS
     include/PhosphorDBus/Client.h
     include/PhosphorDBus/Logging.h
+    include/PhosphorDBus/ObjectManager.h
     include/PhosphorDBus/Streaming.h
 )
 

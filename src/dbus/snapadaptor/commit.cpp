@@ -170,8 +170,8 @@ void SnapAdaptor::swapWindowsById(const QString& windowId1, const QString& windo
     }
 
     // Get screens for each window
-    QString screen1 = svc->screenAssignments().value(windowId1);
-    QString screen2 = svc->screenAssignments().value(windowId2);
+    QString screen1 = svc->screenForWindow(windowId1);
+    QString screen2 = svc->screenForWindow(windowId2);
 
     // Get the OTHER window's zone geometry (for the swap)
     QRect geo1 = svc->zoneGeometry(zoneId2, screen2); // window1 moves to zone2
@@ -245,6 +245,12 @@ PhosphorProtocol::UnfloatRestoreResult SnapAdaptor::calculateUnfloatRestore(cons
     }
 
     UnfloatResult unfloat = m_engine->resolveUnfloatGeometry(windowId, screenId);
+    if (!unfloat.found) {
+        // Mirror the live unfloat path (SnapEngine::unfloatToZone): when the window
+        // has no pre-float zone, honour the unfloatFallbackToZone setting so this
+        // D-Bus query stays consistent with the in-engine toggle behaviour.
+        unfloat = m_engine->resolveFallbackUnfloatGeometry(windowId, screenId);
+    }
     if (!unfloat.found) {
         qCDebug(lcDbusWindow) << "calculateUnfloatRestore: no restore target for" << windowId;
         return PhosphorProtocol::UnfloatRestoreResult{};

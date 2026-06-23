@@ -29,9 +29,17 @@ PhosphorProtocol::BridgeRegistrationResult CompositorBridgeAdaptor::registerBrid
                                                                                    const QString& version,
                                                                                    const QStringList& capabilities)
 {
-    if (!m_bridgeName.isEmpty()) {
-        qCWarning(lcDbusWindow) << "Compositor bridge re-registration: replacing" << m_bridgeName << m_bridgeVersion
-                                << "with" << compositorName << version;
+    // Input validation at the D-Bus boundary: an empty compositorName would
+    // commit a registration that isBridgeRegistered() (keyed on a non-empty
+    // name) can never observe, silently skipping the re-registration warning
+    // on the next register too. Reject before any state changes.
+    if (compositorName.isEmpty()) {
+        qCWarning(lcDbusWindow) << "Compositor bridge REJECTED: empty compositorName";
+        PhosphorProtocol::BridgeRegistrationResult result;
+        result.apiVersion = QString::number(DaemonApiVersion);
+        result.bridgeName = compositorName;
+        result.sessionId = QStringLiteral("REJECTED");
+        return result;
     }
 
     // Version gate: reject effects that speak an older protocol version.
@@ -46,6 +54,13 @@ PhosphorProtocol::BridgeRegistrationResult CompositorBridgeAdaptor::registerBrid
         result.bridgeName = compositorName;
         result.sessionId = QStringLiteral("REJECTED");
         return result;
+    }
+
+    // Logged only once every rejection gate has passed: a rejected peer
+    // replaces nothing, so warning before the gates would mislead.
+    if (!m_bridgeName.isEmpty()) {
+        qCWarning(lcDbusWindow) << "Compositor bridge re-registration: replacing" << m_bridgeName << m_bridgeVersion
+                                << "with" << compositorName << version;
     }
 
     m_bridgeName = compositorName;

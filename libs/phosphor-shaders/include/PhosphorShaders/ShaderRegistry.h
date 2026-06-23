@@ -5,14 +5,16 @@
 
 #include <PhosphorShaders/phosphorshaders_export.h>
 
-#include <PhosphorFsLoader/MetadataPackRegistryBase.h>
-#include <PhosphorFsLoader/MetadataPackScanStrategy.h>
+#include <PhosphorRegistry/IFactoryBase.h>
+#include <PhosphorRegistry/MetadataPackLoader.h>
+#include <PhosphorRegistry/Registry.h>
 
 #include <QHash>
 #include <QImage>
 #include <QList>
 #include <QMap>
 #include <QMutex>
+#include <QObject>
 #include <QRect>
 #include <QSize>
 #include <QString>
@@ -32,17 +34,20 @@ class IWallpaperProvider;
 ///
 /// Composition roots own a per-process instance and register search
 /// paths explicitly — there is no library-level singleton. Tests
-/// construct a per-fixture registry; downstream consumers (PlasmaZones
+/// construct a per-fixture registry; downstream consumers (Phosphor
 /// shell, future plugin compositors) instantiate their own.
 ///
+/// Storage + change-notify is the generic `PhosphorRegistry::Registry<ShaderPack>`
+/// (one ShaderPack wraps one discovered ShaderInfo); the on-disk scan +
+/// hot-reload is a `PhosphorRegistry::MetadataPackLoader<ShaderPack>` that
+/// parses each pack's `metadata.json` and reconciles the registry.
 /// Search-path management (`addSearchPath`, `addSearchPaths`,
-/// `searchPaths`, `setUserPath`, `refresh`) is inherited from
-/// `PhosphorFsLoader::MetadataPackRegistryBase`.
+/// `searchPaths`, `setUserPath`, `refresh`) forwards to that loader.
 ///
 /// ## Thread safety
 ///
 /// GUI-thread only for both reads and mutations. The shader map lives
-/// inside the strategy and is rebuilt on the GUI thread inside the
+/// inside the registry and is rebuilt on the GUI thread inside the
 /// rescan; the public lookup methods (`availableShaders`, `shader`,
 /// `shaderInfo`, `shaderUrl`) read it without synchronisation.
 ///
@@ -52,7 +57,7 @@ class IWallpaperProvider;
 /// shader-warming path's contract). Calling `searchPaths()` *from* a
 /// worker thread concurrently with a GUI-thread mutation is a data race;
 /// snapshot on the GUI thread first.
-class PHOSPHORSHADERS_EXPORT ShaderRegistry : public PhosphorFsLoader::MetadataPackRegistryBase
+class PHOSPHORSHADERS_EXPORT ShaderRegistry : public QObject
 {
     Q_OBJECT
 
@@ -106,8 +111,49 @@ public:
         }
     };
 
+    /// Registry entry: a discovered shader as a `PhosphorRegistry` factory.
+    /// `Registry<ShaderPack>` keys on `id()`; `displayName()` is the shader's
+    /// human name. Wraps the parsed `ShaderInfo` by value (consumers read it
+    /// back via `info()`). Shaders carry no capability metadata, so the
+    /// `IFactoryBase` default `capabilities()` (`{}`) applies unchanged.
+    class ShaderPack final : public PhosphorRegistry::IFactoryBase
+    {
+    public:
+        explicit ShaderPack(ShaderInfo info)
+            : m_info(std::move(info))
+        {
+        }
+        [[nodiscard]] QString id() const override
+        {
+            return m_info.id;
+        }
+        [[nodiscard]] QString displayName() const override
+        {
+            return m_info.name;
+        }
+        [[nodiscard]] const ShaderInfo& info() const
+        {
+            return m_info;
+        }
+
+    private:
+        ShaderInfo m_info;
+    };
+
     explicit ShaderRegistry(QObject* parent = nullptr);
     ~ShaderRegistry() override;
+
+    // ── Search paths (forwarded to the internal MetadataPackLoader) ───
+    //
+    // Same surface the legacy MetadataPackRegistryBase provided. liveReload
+    // defaults to On (production hot-reload); pass Off for one-shot scans.
+    void addSearchPath(const QString& path, PhosphorFsLoader::LiveReload liveReload = PhosphorFsLoader::LiveReload::On);
+    void addSearchPaths(
+        const QStringList& paths, PhosphorFsLoader::LiveReload liveReload = PhosphorFsLoader::LiveReload::On,
+        PhosphorFsLoader::RegistrationOrder order = PhosphorFsLoader::RegistrationOrder::LowestPriorityFirst);
+    [[nodiscard]] QStringList searchPaths() const;
+    void setUserPath(const QString& path);
+    Q_INVOKABLE void refresh();
 
     // ── Shader discovery ──────────────────────────────────────────────
 
@@ -127,6 +173,29 @@ public:
     bool validateParams(const QString& id, const QVariantMap& params) const;
     QVariantMap validateAndCoerceParams(const QString& id, const QVariantMap& params) const;
     Q_INVOKABLE QVariantMap translateParamsToUniforms(const QString& shaderId, const QVariantMap& storedParams) const;
+
+    /// Build the generated `#define p_<id> <glsl-accessor>` preamble (T1.1) for
+    /// @p info's declared parameters, so a zone shader author reads a parameter
+    /// by name (`p_borderRadius`) instead of hand-decoding a
+    /// `customParams[N].xyzw` lane. Each param's explicit `slot` drives the
+    /// accessor exactly as `ParameterInfo::uniformName()` /
+    /// `translateParamsToUniforms` derive the upload target — scalar slot N →
+    /// `customParams[N/4].<xyzw>`, color slot N → `customColors[N]`, image slot
+    /// N → `uTexture<N>` — so the macro a shader reads resolves to the same UBO
+    /// lane the value is uploaded to. The daemon overlay splices the result
+    /// after the shader's `#version` (via `PhosphorShaders::spliceAfterVersion`).
+    /// Empty when the shader declares no parameters.
+    static QString paramPreamble(const ShaderInfo& info);
+
+    /// Parse a pack directory's `metadata.json` into a ShaderInfo using the SAME
+    /// parser the live registry uses (T1.1 auto-slot assignment included), so an
+    /// offline validator (`phosphor-shader-validate`) and the daemon agree on
+    /// what a pack is. Returns an invalid ShaderInfo and sets @p error on a
+    /// missing/unreadable file or non-object JSON root. Does NOT verify that the
+    /// frag/buffer files exist on disk — that's a validator lint, not a parse
+    /// failure — so `sourcePath`/`bufferShaderPaths` are returned as declared.
+    static ShaderInfo parsePackMetadata(const QString& packDir, QString* error = nullptr);
+
     Q_INVOKABLE QVariantMap presetParams(const QString& shaderId, const QString& presetName) const;
     Q_INVOKABLE QStringList shaderPresetNames(const QString& shaderId) const;
     Q_INVOKABLE QVariantList shaderPresetsVariant(const QString& shaderId) const;
@@ -186,29 +255,23 @@ Q_SIGNALS:
     void shaderCompilationStarted(const QString& shaderId);
     void shaderCompilationFinished(const QString& shaderId, bool success, const QString& error);
 
-protected:
-    void onUserPathChanged(const QString& path) override;
-
 private:
     bool validateParameterValue(const ParameterInfo& param, const QVariant& value) const;
     QVariantMap shaderInfoToVariantMap(const ShaderInfo& info) const;
     QVariantMap parameterInfoToVariantMap(const ParameterInfo& param) const;
 
-    using ScanStrategy = PhosphorFsLoader::MetadataPackScanStrategy<ShaderInfo>;
-
-    /// Build + configure the scan strategy. Returns the base type so
-    /// the helper can be invoked from the ctor's member-init list while
-    /// staying agnostic of the subclass-private `ScanStrategy` typedef.
-    /// Defined in the .cpp to keep schema-specific parser / signature
-    /// hookups out of the public header.
-    static std::unique_ptr<PhosphorFsLoader::IScanStrategy> buildScanStrategy(ShaderRegistry* self);
-
-    // Non-owning typed alias for the strategy the base owns. Populated
-    // in the ctor's member-init list via `static_cast<ScanStrategy*>(strategy())`
-    // — the cast is safe because we passed in the same instance. Named
-    // distinctly from the base's private `m_strategy` so a future reader
-    // can't accidentally read this as the same field.
-    ScanStrategy* m_typedStrategy;
+    // Generic id-keyed storage + change-notify for the discovered shader
+    // packs. m_loader (below) populates it from disk; the lookup methods
+    // read it. Declared before m_loader so it is destroyed AFTER the loader:
+    // the loader holds a borrowed Registry pointer (used during live rescans
+    // in reconcile(), not at teardown), which must stay valid for the loader's
+    // whole lifetime.
+    PhosphorRegistry::Registry<ShaderPack> m_registry;
+    // On-disk scan + hot-reload. Parses each pack's metadata.json into a
+    // ShaderPack and reconciles m_registry; its onCommitted hook re-emits
+    // shadersChanged. unique_ptr so the ctor can configure it after the
+    // member-init list (parser, watch paths, signature, commit hook).
+    std::unique_ptr<PhosphorRegistry::MetadataPackLoader<ShaderPack>> m_loader;
 
     static std::unique_ptr<IWallpaperProvider> s_wallpaperProvider;
     static QString s_cachedWallpaperPath;

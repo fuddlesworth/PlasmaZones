@@ -17,25 +17,21 @@
 // `texture(uTexture0, uv)` samples directly. `texture2D` (GLSL ES) is
 // rewritten to `texture` (GLSL 4.50 core) inline.
 
-#version 450
+// The harness supplies #version, <animation_uniforms.glsl>, the in/out,
+// and main().
 
-#include <animation_uniforms.glsl>
+// p_dirX / p_dirY / p_wipeSmoothness (customParams[0].xyz) are generated
+// from metadata.json — no hand-written slot #defines.
 
-// metadata.json declaration order → customParams[0] sub-slots
-#define dirX           customParams[0].x
-#define dirY           customParams[0].y
-#define wipeSmoothness customParams[0].z
-
-layout(location = 0) in vec2 vTexCoord;
-layout(location = 0) out vec4 fragColor;
-
-void main() {
+// Symmetric: a single pTransition. `t` is the leg's iTime, which the runtime
+// flips on the close leg (1→0), so the niri OPEN body auto-mirrors on close
+// with no direction code.
+vec4 pTransition(vec2 uv, float t) {
     // ── niri OPEN body (handles both legs via runtime iTime flip) ──
-    float p = clamp(iTime, 0.0, 1.0);
-    vec2 uv = vTexCoord;
+    float p = clamp(t, 0.0, 1.0);
     vec4 win = surfaceColor(uv);
 
-    vec2 dir = vec2(dirX, dirY);
+    vec2 dir = vec2(p_dirX, p_dirY);
     // Defend against (0,0) which would NaN through normalize().
     // magnitude < 1e-6 falls back to vertical default.
     if (length(dir) < 1e-6) {
@@ -46,7 +42,7 @@ void main() {
     v /= abs(v.x) + abs(v.y);
     float d = v.x * center.x + v.y * center.y;
     float reveal = (1.0 - step(p, 0.0)) *
-        (1.0 - smoothstep(-wipeSmoothness, 0.0, v.x * uv.x + v.y * uv.y - (d - 0.5 + p * (1.0 + wipeSmoothness))));
+        (1.0 - smoothstep(-p_wipeSmoothness, 0.0, v.x * uv.x + v.y * uv.y - (d - 0.5 + p * (1.0 + p_wipeSmoothness))));
 
-    fragColor = win * reveal;
+    return win * reveal;
 }

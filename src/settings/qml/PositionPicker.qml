@@ -22,18 +22,27 @@ Item {
 
     // Selected cell index (0-8)
     property int position: 1
-    property bool enabled: true
+    // `enabled` is the built-in Item property (declaring our own shadowed the base
+    // member — the "overrides a member of the base object" warning). The internal
+    // `root.enabled` reads + the callers that set it work against the base property.
+
     // Position labels for tooltips
     readonly property var positionLabels: [i18n("Top-Left"), i18n("Top"), i18n("Top-Right"), i18n("Left"), i18n("Center"), i18n("Right"), i18n("Bottom-Left"), i18n("Bottom"), i18n("Bottom-Right")]
 
     signal positionSelected(int newPosition)
 
-    implicitWidth: 160
-    implicitHeight: 110
+    implicitWidth: Kirigami.Units.gridUnit * 10
+    implicitHeight: Kirigami.Units.gridUnit * 7
 
+    // The miniature uses Kirigami.Units for all structural sizing/spacing/margins.
+    // The few small integer literals that remain below (indicator-bar thickness,
+    // 1-2px insets, corner radii, the hover duration override) are intentional
+    // fixed drawing dimensions of this custom-painted preview — they are visual
+    // detail of the diagram itself, not layout spacing, and are deliberately not
+    // theme-scaled so the bars/insets keep their proportions at every gridUnit.
     ColumnLayout {
         anchors.fill: parent
-        spacing: 4
+        spacing: Kirigami.Units.smallSpacing
 
         Rectangle {
             id: screenFrame
@@ -47,7 +56,7 @@ Item {
 
             Rectangle {
                 anchors.fill: parent
-                anchors.margins: 4
+                anchors.margins: Kirigami.Units.smallSpacing
                 color: Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.05)
                 radius: Kirigami.Units.smallSpacing / 2
 
@@ -55,10 +64,10 @@ Item {
                     id: positionGrid
 
                     anchors.fill: parent
-                    anchors.margins: 6
+                    anchors.margins: Kirigami.Units.smallSpacing
                     columns: 3
                     rows: 3
-                    spacing: 3
+                    spacing: Kirigami.Units.smallSpacing
 
                     Repeater {
                         model: 9
@@ -160,7 +169,7 @@ Item {
                                 anchors.fill: parent
                                 hoverEnabled: true
                                 enabled: root.enabled
-                                cursorShape: enabled ? Qt.PointingHandCursor : Qt.ArrowCursor
+                                cursorShape: root.enabled ? Qt.PointingHandCursor : Qt.ArrowCursor
                                 onClicked: {
                                     root.position = cell.index;
                                     root.positionSelected(cell.index);
@@ -175,7 +184,6 @@ Item {
                                     profile: "widget.hover"
                                     durationOverride: 100
                                 }
-
                             }
 
                             Behavior on border.color {
@@ -183,17 +191,11 @@ Item {
                                     profile: "widget.hover"
                                     durationOverride: 100
                                 }
-
                             }
-
                         }
-
                     }
-
                 }
-
             }
-
         }
 
         Label {
@@ -202,7 +204,5 @@ Item {
             font: Kirigami.Theme.smallFont
             opacity: 0.7
         }
-
     }
-
 }

@@ -27,27 +27,20 @@
 // wheel "fills in" each spoke clockwise as progress grows, with
 // `spokeCount` parallel sweeps.
 
-#version 450
-
-#include <animation_uniforms.glsl>
 #include <noise.glsl>
 
-#define maxPixelSize customParams[0].x
-#define spokeCount   customParams[0].y
+// `p_maxPixelSize` / `p_spokeCount` are generated from metadata.json
+// (the customParams[0] sub-slots) by the harness.
 
-layout(location = 0) in vec2 vTexCoord;
-layout(location = 0) out vec4 fragColor;
-
-void main()
+vec4 pTransition(vec2 uv, float t)
 {
-    vec2 uv = vTexCoord;
     float visibility = clamp(iTime, 0.0, 1.0);
     float progress   = smoothstep(0.0, 1.0, 1.0 - visibility);
 
     // Pixelate. Cell size grows with progress; at progress=0 this is
     // `ceil(0+1)=1` so the grid collapses to per-pixel sampling
     // (visual no-op).
-    float pixelSize = ceil(maxPixelSize * progress + 1.0);
+    float pixelSize = ceil(p_maxPixelSize * progress + 1.0);
     // Floor iResolution so an early-frame zero-sized surface doesn't
     // divide-by-zero into an infinite pixelGrid. Real frames replace
     // this with the actual surface size.
@@ -79,10 +72,10 @@ void main()
     // Each spoke wedge is its own [0,1] gradient. Cells with low
     // threshold (clockwise-leading edge) are hidden first; cells
     // with high threshold (clockwise-trailing edge) are hidden last.
-    float threshold = mod(angle * max(spokeCount, 1.0), 1.0);
+    float threshold = mod(angle * max(p_spokeCount, 1.0), 1.0);
     if (progress > threshold) {
         sampled = vec4(0.0);
     }
 
-    fragColor = sampled;
+    return sampled;
 }

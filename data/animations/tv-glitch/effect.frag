@@ -13,24 +13,9 @@
 // to BMW's). See bmw_compat.glsl header for the BMW-to-PlasmaZones
 // uniform-name remap.
 
-#version 450
-
-#include <animation_uniforms.glsl>
 #include <noise.glsl>
 
-layout(location = 0) in vec2 vTexCoord;
-layout(location = 0) out vec4 fragColor;
-
 #include <bmw_compat.glsl>
-
-// metadata.json declaration order → customParams[0] sub-slots.
-#define uScale    customParams[0].x
-#define uStrength customParams[0].y
-#define uSpeed    customParams[0].z
-
-// metadata.json color slot → customColors[0] (full RGBA — alpha gates
-// how strongly the interference / grain / scanline tinting blends).
-#define uColor customColors[0]
 
 // uSeed: BMW samples Math.random() per leg; PlasmaZones derives a
 // stable per-surface scalar via `surfaceSeed()` (noise.glsl).
@@ -58,7 +43,7 @@ const float SCALING    = 0.5;   // Additional vertical scaling of the window.
 
 // This is a combination of the effects from tv.frag and glitch.frag. Credits go to Kurt
 // Wilson (https://github.com/Kurtoid) for this idea!
-void main() {
+vec4 pTransition(vec2 uv, float t) {
 
   // Add the tv effect sooner/later in the animation, compared to the original TV effect.
   float tOffset    = uForOpening ? 0.0 : 1.0;
@@ -72,10 +57,10 @@ void main() {
 
   // This is from the original Glitch effect.
   float progress = easeInQuad(uForOpening ? 1.0 - uProgress : uProgress);
-  float time     = progress * uDuration * uSpeed;
-  float strength = uStrength * progress;
+  float time     = progress * uDuration * p_uSpeed;
+  float strength = p_uStrength * progress;
   float displace = 1000.0 * strength / uSize.x;
-  float yPos     = uScale * uSize.y * (coords.y + uSeed * 10.0);
+  float yPos     = p_uScale * uSize.y * (coords.y + uSeed * 10.0);
 
   // Create large noise waves and add some smaller noise waves.
   float noise = clamp(simplex2D(vec2(time, yPos * 0.002)) - 0.5, 0.0, 1.0);
@@ -86,18 +71,18 @@ void main() {
   vec4 oColor = getClippedInputColor(vec2(xPos, coords.y));
 
   // Mix in some random interference lines.
-  vec3 interference          = uColor.rgb * hash12(vec2(yPos * time));
+  vec3 interference          = p_uColor.rgb * hash12(vec2(yPos * time));
   float interferenceStrength = noise * min(strength, 1.0);
-  oColor.rgb = mix(oColor.rgb, interference, uColor.a * interferenceStrength);
+  oColor.rgb = mix(oColor.rgb, interference, p_uColor.a * interferenceStrength);
 
   // Mix in some grainy noise.
-  vec3 grain          = uColor.rgb * simplex2D(uSize * coords + vec2(time * 100.0));
+  vec3 grain          = p_uColor.rgb * simplex2D(uSize * coords + vec2(time * 100.0));
   float grainStrength = 0.2 * min(strength, 1.0);
-  oColor.rgb          = mix(oColor.rgb, grain, uColor.a * grainStrength);
+  oColor.rgb          = mix(oColor.rgb, grain, p_uColor.a * grainStrength);
 
   // Add a subtle line pattern every 4 pixels.
   if (floor(mod(yPos * 0.25, 2.0)) == 0.0) {
-    oColor.rgb = mix(oColor.rgb, uColor.rgb, uColor.a * (0.15 * noise));
+    oColor.rgb = mix(oColor.rgb, p_uColor.rgb, p_uColor.a * (0.15 * noise));
   }
 
   // Shift green/blue channels.
@@ -131,10 +116,10 @@ void main() {
 
   // Assemble the final color value.
   oColor.rgb =
-    mix(oColor.rgb, uColor.rgb * oColor.a, uColor.a * smoothstep(0.0, 1.0, tvProgress));
+    mix(oColor.rgb, p_uColor.rgb * oColor.a, p_uColor.a * smoothstep(0.0, 1.0, tvProgress));
   float mask = tbMask * lrMask * ffMask;
 
   oColor.a *= mask;
 
-  setOutputColor(oColor);
+  return vec4(oColor.rgb * oColor.a, oColor.a);
 }

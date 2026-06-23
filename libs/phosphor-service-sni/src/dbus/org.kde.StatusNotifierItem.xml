@@ -1,0 +1,88 @@
+<!DOCTYPE node PUBLIC "-//freedesktop//DTD D-Bus Object Introspection 1.0//EN"
+"http://www.freedesktop.org/standards/dbus/1.0/introspect.dtd">
+<!--
+SPDX-FileCopyrightText: 2026 fuddlesworth
+SPDX-License-Identifier: LGPL-2.1-or-later
+
+org.kde.StatusNotifierItem: interface implemented by each tray item.
+The shell consumes this; it does NOT implement it. We mostly read
+properties + react to NewXxx signals; the only methods we call are the
+activation entry points (Activate / SecondaryActivate / ContextMenu /
+Scroll). Spec:
+https://www.freedesktop.org/wiki/Specifications/StatusNotifierItem/StatusNotifierItem/
+
+The KIconPixmap / KToolTip custom types are registered with QtDBus in
+statusnotifieritem.cpp before any proxy is constructed.
+-->
+<node>
+    <interface name="org.kde.StatusNotifierItem">
+        <!-- Plain-text properties -->
+        <property name="Category" type="s" access="read"/>
+        <property name="Id" type="s" access="read"/>
+        <property name="Title" type="s" access="read"/>
+        <property name="Status" type="s" access="read"/>
+        <property name="WindowId" type="u" access="read"/>
+
+        <!-- Icon properties: IconName is XDG-themed; IconPixmap is raw
+             ARGB32 byte data. IconThemePath overrides the system theme
+             lookup root for this item (Steam / OBS-style custom themes). -->
+        <property name="IconThemePath" type="s" access="read"/>
+        <property name="IconName" type="s" access="read"/>
+        <property name="IconPixmap" type="a(iiay)" access="read">
+            <annotation name="org.qtproject.QtDBus.QtTypeName"
+                        value="PhosphorServiceSni::DBusImageList"/>
+        </property>
+        <property name="OverlayIconName" type="s" access="read"/>
+        <property name="OverlayIconPixmap" type="a(iiay)" access="read">
+            <annotation name="org.qtproject.QtDBus.QtTypeName"
+                        value="PhosphorServiceSni::DBusImageList"/>
+        </property>
+        <property name="AttentionIconName" type="s" access="read"/>
+        <property name="AttentionIconPixmap" type="a(iiay)" access="read">
+            <annotation name="org.qtproject.QtDBus.QtTypeName"
+                        value="PhosphorServiceSni::DBusImageList"/>
+        </property>
+        <property name="AttentionMovieName" type="s" access="read"/>
+
+        <!-- ToolTip: (iconName, iconPixmaps, title, body) -->
+        <property name="ToolTip" type="(sa(iiay)ss)" access="read">
+            <annotation name="org.qtproject.QtDBus.QtTypeName"
+                        value="PhosphorServiceSni::DBusToolTip"/>
+        </property>
+
+        <!-- DBusmenu path. Empty string => no menu (use ContextMenu method). -->
+        <property name="Menu" type="o" access="read"/>
+        <property name="ItemIsMenu" type="b" access="read"/>
+
+        <!-- Activation methods -->
+        <method name="ContextMenu">
+            <arg name="x" type="i" direction="in"/>
+            <arg name="y" type="i" direction="in"/>
+        </method>
+        <method name="Activate">
+            <arg name="x" type="i" direction="in"/>
+            <arg name="y" type="i" direction="in"/>
+        </method>
+        <method name="SecondaryActivate">
+            <arg name="x" type="i" direction="in"/>
+            <arg name="y" type="i" direction="in"/>
+        </method>
+        <method name="Scroll">
+            <arg name="delta" type="i" direction="in"/>
+            <arg name="orientation" type="s" direction="in"/>
+        </method>
+
+        <!-- Property-change signals: the spec is famously vague about
+             whether items also fire org.freedesktop.DBus.Properties
+             PropertiesChanged. They mostly don't, so we re-fetch the
+             affected property when one of these arrives. -->
+        <signal name="NewTitle"/>
+        <signal name="NewIcon"/>
+        <signal name="NewAttentionIcon"/>
+        <signal name="NewOverlayIcon"/>
+        <signal name="NewToolTip"/>
+        <signal name="NewStatus">
+            <arg name="status" type="s"/>
+        </signal>
+    </interface>
+</node>

@@ -29,6 +29,8 @@ Kirigami.Dialog {
     property var availableStyles: []
     property bool wasDefault: false
     property string systemFontFamily: ""
+    // Preview text size (px), adjustable via slider
+    property int previewSize: Kirigami.Units.gridUnit * 2
 
     function open() {
         workingWeight = selectedWeight;
@@ -52,7 +54,7 @@ Kirigami.Dialog {
         if (workingFamily === "") {
             availableStyles = [];
             workingStyle = "";
-            return ;
+            return;
         }
         availableStyles = appSettings.fontStylesForFamily(workingFamily);
         // Find the style matching current weight/italic
@@ -66,7 +68,6 @@ Kirigami.Dialog {
             var si = appSettings.fontStyleItalic(workingFamily, availableStyles[i]);
             if (sw === workingWeight && si === workingItalic)
                 return availableStyles[i];
-
         }
         // Fall back to closest weight match
         var bestIdx = 0;
@@ -113,13 +114,14 @@ Kirigami.Dialog {
             return allFontFamilies;
 
         var lower = searchText.toLowerCase();
-        return allFontFamilies.filter(function(f) {
+        return allFontFamilies.filter(function (f) {
             return f.toLowerCase().indexOf(lower) !== -1;
         });
     }
 
     title: i18n("Choose Label Font")
     standardButtons: Kirigami.Dialog.Ok | Kirigami.Dialog.Cancel
+    padding: Kirigami.Units.largeSpacing
     preferredWidth: Math.min(Kirigami.Units.gridUnit * 32, parent.width * 0.85)
     preferredHeight: Math.min(Kirigami.Units.gridUnit * 30, parent.height * 0.85)
     onAccepted: {
@@ -155,7 +157,7 @@ Kirigami.Dialog {
                 Layout.fillWidth: true
                 Layout.fillHeight: true
                 Layout.preferredWidth: 3
-                spacing: 0
+                spacing: Kirigami.Units.smallSpacing
 
                 Label {
                     text: i18n("Family")
@@ -186,9 +188,7 @@ Kirigami.Dialog {
                             dialog.updateStyles();
                         }
                     }
-
                 }
-
             }
 
             Kirigami.Separator {
@@ -200,7 +200,7 @@ Kirigami.Dialog {
                 Layout.fillWidth: true
                 Layout.fillHeight: true
                 Layout.preferredWidth: 2
-                spacing: 0
+                spacing: Kirigami.Units.smallSpacing
 
                 Label {
                     text: i18n("Style")
@@ -230,11 +230,8 @@ Kirigami.Dialog {
                             dialog.workingItalic = appSettings.fontStyleItalic(dialog.workingFamily, modelData);
                         }
                     }
-
                 }
-
             }
-
         }
 
         Kirigami.Separator {
@@ -262,28 +259,47 @@ Kirigami.Dialog {
                 checked: dialog.workingStrikeout
                 onToggled: dialog.workingStrikeout = checked
             }
-
         }
 
         Kirigami.Separator {
             Layout.fillWidth: true
         }
 
+        // Preview size slider
+        RowLayout {
+            Layout.fillWidth: true
+            spacing: Kirigami.Units.largeSpacing
+
+            Label {
+                text: i18n("Size:")
+                Layout.alignment: Qt.AlignVCenter
+            }
+
+            Slider {
+                id: sizeSlider
+
+                Layout.fillWidth: true
+                from: Kirigami.Units.gridUnit
+                to: Kirigami.Units.gridUnit * 5
+                value: dialog.previewSize
+                onMoved: dialog.previewSize = value
+            }
+        }
+
         // Preview
         Label {
             Layout.fillWidth: true
             Layout.preferredHeight: Kirigami.Units.gridUnit * 3
-            horizontalAlignment: Text.AlignHCenter
+            horizontalAlignment: Text.AlignLeft
             verticalAlignment: Text.AlignVCenter
+            leftPadding: Kirigami.Units.smallSpacing
             text: i18n("AaBbCc 123")
             font.family: dialog.workingFamily
             font.weight: dialog.workingWeight
             font.italic: dialog.workingItalic
             font.underline: dialog.workingUnderline
             font.strikeout: dialog.workingStrikeout
-            font.pixelSize: Kirigami.Units.gridUnit * 2
+            font.pixelSize: dialog.previewSize
         }
-
     }
-
 }

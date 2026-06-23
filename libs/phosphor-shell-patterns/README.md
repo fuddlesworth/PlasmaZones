@@ -6,17 +6,18 @@
 > UI-pattern recipes on top of `PhosphorLayer::Role`. The axis-2
 > vocabulary between wlr-layer-shell wire primitives (axis 1, in
 > phosphor-layer) and consumer-side application roles (axis 3, e.g.
-> PZ's `PzRoles`).
+> Phosphor's `PhosphorRoles`).
 
 ## Responsibility
 
 A `Role` in [`phosphor-layer`](../phosphor-layer/README.md) is a bundle
 of wlr-layer-shell parameters: `Layer`, `Anchors`, exclusive zone,
-keyboard interactivity, scope prefix — intentionally domain-agnostic.
+keyboard interactivity, and scope prefix. It is intentionally
+domain-agnostic.
 
 `phosphor-shell-patterns` names the *UI patterns* a shell wants
-("a wallpaper covers the background; a panel reserves an edge; a modal
-grabs the keyboard; a toast appears in a corner") as ready-to-use
+(a wallpaper covers the background, a panel reserves an edge, a modal
+grabs the keyboard, a toast appears in a corner) as ready-to-use
 `Role` values, so consumers compose their public roles from named
 recipes instead of re-deriving the layer / anchor / keyboard combo each
 time.
@@ -32,12 +33,12 @@ time.
 | `Panel(Edge)`           | `Role`        | Edge-anchored, reserves space via exclusive zone, kbd OnDemand |
 | `Toast(Corner)`         | `Role`        | Corner-anchored, click-through, no exclusive zone |
 
-`Edge` is `Top | Bottom | Left | Right`; `Corner` is `TopLeft |
+`Edge` is `Top | Bottom | Left | Right`. `Corner` is `TopLeft |
 TopRight | BottomLeft | BottomRight`.
 
 The four fixed presets are exposed as accessor functions that return a
-reference to a function-local static (Meyers singleton). First call
-constructs the Role lazily; subsequent calls return the same object.
+reference to a function-local static (Meyers singleton). The first call
+constructs the Role lazily, and subsequent calls return the same object.
 This makes the presets safe to use from any consumer's static
 initializer regardless of dynamic-init order across translation units
 or shared libraries.
@@ -71,8 +72,8 @@ inline const PhosphorLayer::Role MyAppToast =
 - **Three-axis separation.** Protocol (axis 1, on `Role` in
   `phosphor-layer`), UI pattern (axis 2, here), app role (axis 3,
   consumer-side). A consumer that wants to override one axis without
-  disturbing the others targets just that one — e.g. swap `Hud` for
-  `Wallpaper` on a particular consumer role without retyping every
+  disturbing the others targets just that one. For example, swap `Hud`
+  for `Wallpaper` on a particular consumer role without retyping every
   other field.
 - **Patterns are open vocabulary.** Adding a new pattern (e.g. `Card`
   for in-place transient surfaces) costs one entry here and zero

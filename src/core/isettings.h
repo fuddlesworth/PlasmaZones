@@ -15,9 +15,6 @@
 #include "enums.h"
 #include "settings_interfaces.h"
 
-#include <PhosphorAnimation/AnimationAppRule.h>
-#include <PhosphorAnimation/ShaderProfileTree.h>
-
 #include <QColor>
 #include <QObject>
 #include <QString>
@@ -31,6 +28,34 @@ namespace PlasmaZones {
  * Allows dependency inversion - components depend on this interface
  * rather than concrete Settings implementation. Inherits from focused
  * sub-interfaces so components can depend on just what they need.
+ *
+ * Note on the sub-interface NOTIFY surface: the sub-interfaces
+ * (IZoneActivationSettings, IZoneSelectorSettings, etc.) are
+ * deliberately non-QObject and so cannot declare Q_SIGNALS of their
+ * own. All notify signals live on this ISettings level. The codebase
+ * idiom is for a consumer that needs both the value AND the signal to
+ * hold BOTH pointers — `IZoneSelectorSettings*` for reads/writes,
+ * `ISettings*` (or `QObject*`) for `connect()`:
+ *
+ * @code
+ * class Consumer {
+ * public:
+ *     Consumer(ISettings* settings)
+ *         : m_settings(settings),               // for connect()
+ *           m_selector(settings)                // for value access
+ *     {
+ *         connect(m_settings, &ISettings::zoneSelectorEnabledChanged,
+ *                 this, &Consumer::onChanged);
+ *     }
+ * private:
+ *     ISettings* m_settings;
+ *     IZoneSelectorSettings* m_selector;
+ * };
+ * @endcode
+ *
+ * A `dynamic_cast<ISettings*>(zoneSelectorSettingsPtr)` also works at the
+ * call site since `Settings` (the only concrete subclass) inherits from both
+ * bases, but holding both pointers from construction is cheaper and clearer.
  */
 class PLASMAZONES_EXPORT ISettings : public QObject,
                                      public IZoneActivationSettings,
@@ -40,7 +65,8 @@ class PLASMAZONES_EXPORT ISettings : public QObject,
                                      public IZoneSelectorSettings,
                                      public IWindowBehaviorSettings,
                                      public IDefaultLayoutSettings,
-                                     public IOrderingSettings
+                                     public IOrderingSettings,
+                                     public IAnimationSettings
 {
     Q_OBJECT
 
@@ -70,13 +96,20 @@ public:
     /// True only when the zone selector is enabled AND snapping is enabled
     /// at the top level. Use this in consumers instead of
     /// zoneSelectorEnabled() unless you need the raw child flag value.
+    ///
+    /// Test-stub note: `StubSettings` (tests/unit/helpers/StubSettings.h)
+    /// defaults `snappingEnabled() == true` and `zoneSelectorEnabled() == true`,
+    /// so this returns true unless a test explicitly overrides one of the
+    /// two flags. The same applies to `isSnapAssistActive` (defaults
+    /// `snapAssistEnabled() == false` so it returns false until overridden).
     bool isZoneSelectorActive() const
     {
         return snappingEnabled() && zoneSelectorEnabled();
     }
 
     /// True only when snap assist is enabled AND snapping is enabled at
-    /// the top level. Same pattern as isZoneSelectorActive.
+    /// the top level. Same pattern as isZoneSelectorActive (see that
+    /// method's doc comment for the StubSettings default semantics).
     bool isSnapAssistActive() const
     {
         return snappingEnabled() && snapAssistEnabled();
@@ -91,50 +124,32 @@ public:
     //   - IZoneSelectorSettings: zone selector UI configuration
     //   - IWindowBehaviorSettings: snap restore, sticky handling
     //   - IDefaultLayoutSettings: default layout ID
+    //   - IAnimationSettings: animation/shader-profile state + window filtering
     //
     // See settings_interfaces.h for the full API.
     // ═══════════════════════════════════════════════════════════════════════════
 
-    // Animation settings (global — applies to snapping and autotiling)
-    virtual bool animationsEnabled() const = 0;
-    virtual void setAnimationsEnabled(bool enabled) = 0;
-    virtual int animationDuration() const = 0;
-    virtual void setAnimationDuration(int duration) = 0;
-    virtual QString animationEasingCurve() const = 0;
-    virtual void setAnimationEasingCurve(const QString& curve) = 0;
-    virtual int animationMinDistance() const = 0;
-    virtual void setAnimationMinDistance(int distance) = 0;
-    virtual int animationSequenceMode() const = 0;
-    virtual void setAnimationSequenceMode(int mode) = 0;
-    virtual int animationStaggerInterval() const = 0;
-    virtual void setAnimationStaggerInterval(int ms) = 0;
-    virtual PhosphorAnimationShaders::ShaderProfileTree shaderProfileTree() const = 0;
-    virtual void setShaderProfileTree(const PhosphorAnimationShaders::ShaderProfileTree& tree) = 0;
-    virtual PhosphorAnimationShaders::AnimationAppRuleList animationAppRules() const = 0;
-    virtual void setAnimationAppRules(const PhosphorAnimationShaders::AnimationAppRuleList& rules) = 0;
-
-    // Animation window filtering — gates animations BEFORE the app-rule
-    // cascade. A class-pattern rule whose pattern matches the window's
-    // class overrides the filter at the resolver layer, so users can
-    // re-enable animations for a specific app even when it'd otherwise
-    // be excluded. Mirrors the snapping/tiling Exclusion settings but
-    // lives in its own namespace so the two filter sets can diverge.
-    virtual bool animationExcludeTransientWindows() const = 0;
-    virtual void setAnimationExcludeTransientWindows(bool exclude) = 0;
-    virtual bool animationExcludeNotificationsAndOsd() const = 0;
-    virtual void setAnimationExcludeNotificationsAndOsd(bool exclude) = 0;
-    virtual int animationMinimumWindowWidth() const = 0;
-    virtual void setAnimationMinimumWindowWidth(int width) = 0;
-    virtual int animationMinimumWindowHeight() const = 0;
-    virtual void setAnimationMinimumWindowHeight(int height) = 0;
-    virtual QStringList animationExcludedApplications() const = 0;
-    virtual void setAnimationExcludedApplications(const QStringList& apps) = 0;
-    virtual QStringList animationExcludedWindowClasses() const = 0;
-    virtual void setAnimationExcludedWindowClasses(const QStringList& classes) = 0;
+    // Animation + shader-profile settings are segregated into
+    // IAnimationSettings (mixed in above). The matching NOTIFY signals stay on
+    // this QObject (see Q_SIGNALS below): Qt forbids multiple QObject
+    // inheritance, so a consumer that needs an animation signal depends on
+    // ISettings, not IAnimationSettings alone.
+    //
+    // animationExcludedApplications / animationExcludedWindowClasses virtuals
+    // retired in v4 — the lists folded into ExcludeAnimations WindowRules; the
+    // KWin effect now derives its m_animationExclusionRuleSet from the unified
+    // rule store via PhosphorWindowRules::ExclusionRules::excludeAnimationsRulesFrom.
 
     // Autotile decoration settings (fetched by KWin effect via D-Bus)
     virtual bool autotileFocusFollowsMouse() const = 0;
     virtual void setAutotileFocusFollowsMouse(bool enabled) = 0;
+    // Snapping focus behavior. focusNewWindows is read daemon-side by SnapAdaptor
+    // to activate auto-placed-on-open windows; focusFollowsMouse is fetched by the
+    // KWin effect via D-Bus.
+    virtual bool snappingFocusNewWindows() const = 0;
+    virtual void setSnappingFocusNewWindows(bool enabled) = 0;
+    virtual bool snappingFocusFollowsMouse() const = 0;
+    virtual void setSnappingFocusFollowsMouse(bool enabled) = 0;
     virtual bool autotileHideTitleBars() const = 0;
     virtual void setAutotileHideTitleBars(bool hide) = 0;
     virtual bool autotileShowBorder() const = 0;
@@ -149,6 +164,24 @@ public:
     virtual void setAutotileInactiveBorderColor(const QColor& color) = 0;
     virtual bool autotileUseSystemBorderColors() const = 0;
     virtual void setAutotileUseSystemBorderColors(bool use) = 0;
+
+    // Snapping window decoration settings (fetched by KWin effect via D-Bus).
+    // Parallel to autotile* — the snapped window's border / title-bar.
+    virtual bool snappingHideTitleBars() const = 0;
+    virtual void setSnappingHideTitleBars(bool hide) = 0;
+    virtual bool snappingShowBorder() const = 0;
+    virtual void setSnappingShowBorder(bool show) = 0;
+    virtual int snappingBorderWidth() const = 0;
+    virtual void setSnappingBorderWidth(int width) = 0;
+    virtual int snappingBorderRadius() const = 0;
+    virtual void setSnappingBorderRadius(int radius) = 0;
+    virtual QColor snappingBorderColor() const = 0;
+    virtual void setSnappingBorderColor(const QColor& color) = 0;
+    virtual QColor snappingInactiveBorderColor() const = 0;
+    virtual void setSnappingInactiveBorderColor(const QColor& color) = 0;
+    virtual bool snappingUseSystemBorderColors() const = 0;
+    virtual void setSnappingUseSystemBorderColors(bool use) = 0;
+
     virtual StickyWindowHandling autotileStickyWindowHandling() const = 0;
     virtual void setAutotileStickyWindowHandling(StickyWindowHandling handling) = 0;
     virtual AutotileDragBehavior autotileDragBehavior() const = 0;
@@ -163,9 +196,53 @@ public:
     virtual bool autotileDragInsertToggle() const = 0;
     virtual void setAutotileDragInsertToggle(bool enable) = 0;
 
+    // Per-algorithm autotile settings map. Settings inherits from
+    // PhosphorEngine::IAutotileSettings (which also declares these),
+    // so the override in Settings covers both bases — the redundant
+    // declaration here is the price of letting page controllers
+    // depend on ISettings without dragging in PhosphorTileEngine.
+    virtual QVariantMap autotilePerAlgorithmSettings() const = 0;
+    virtual void setAutotilePerAlgorithmSettings(const QVariantMap& settings) = 0;
+
+    // Color-import helper used by SnappingZonesController. Returns
+    // an empty string on success, a user-readable error message
+    // otherwise. The signature mirrors Settings::loadColorsFromFile
+    // exactly so its existing Q_INVOKABLE annotation overrides this.
+    virtual QString loadColorsFromFile(const QString& filePath) = 0;
+
+    // Snapping behavior triggers (dragActivation, zoneSpan, snapAssist)
+    // are declared by the IZoneActivationSettings / IZoneSelectorSettings
+    // sub-interfaces ISettings inherits from — see settings_interfaces.h.
+    // Re-declaring them here would shadow the parent virtual.
+
     // Rendering backend (pipeline-level, not specific to any sub-interface)
     virtual QString renderingBackend() const = 0;
     virtual void setRenderingBackend(const QString& backend) = 0;
+
+    // Editor settings — used by EditorPageController. Editor-scope rather
+    // than Snapping/Tiling-scope, so they don't fit any sub-interface.
+    virtual QString editorDuplicateShortcut() const = 0;
+    virtual void setEditorDuplicateShortcut(const QString& shortcut) = 0;
+    virtual QString editorSplitHorizontalShortcut() const = 0;
+    virtual void setEditorSplitHorizontalShortcut(const QString& shortcut) = 0;
+    virtual QString editorSplitVerticalShortcut() const = 0;
+    virtual void setEditorSplitVerticalShortcut(const QString& shortcut) = 0;
+    virtual QString editorFillShortcut() const = 0;
+    virtual void setEditorFillShortcut(const QString& shortcut) = 0;
+    virtual bool editorGridSnappingEnabled() const = 0;
+    virtual void setEditorGridSnappingEnabled(bool enabled) = 0;
+    virtual bool editorEdgeSnappingEnabled() const = 0;
+    virtual void setEditorEdgeSnappingEnabled(bool enabled) = 0;
+    virtual qreal editorSnapIntervalX() const = 0;
+    virtual void setEditorSnapIntervalX(qreal interval) = 0;
+    virtual qreal editorSnapIntervalY() const = 0;
+    virtual void setEditorSnapIntervalY(qreal interval) = 0;
+    virtual int editorSnapOverrideModifier() const = 0;
+    virtual void setEditorSnapOverrideModifier(int mod) = 0;
+    virtual bool fillOnDropEnabled() const = 0;
+    virtual void setFillOnDropEnabled(bool enabled) = 0;
+    virtual int fillOnDropModifier() const = 0;
+    virtual void setFillOnDropModifier(int mod) = 0;
 
     // ═══════════════════════════════════════════════════════════════════════════
     // Per-screen overrides — category-keyed maps of setting key → value that
@@ -210,6 +287,14 @@ public:
         return false;
     }
 
+    // NOTE: only the getter `override`s — `getPerScreenSnappingSettings`
+    // is the lone snapping accessor declared on
+    // PhosphorEngine::IGeometrySettings (consumed by the geometry
+    // pipeline). The set/clear/has triplet is ISettings-only (writers
+    // live in settings + KCM, never reached from the geometry path),
+    // so they're plain `virtual` with no base to override. Mirrors the
+    // autotile + zone-selector blocks above where neither side declares
+    // any of the four on IGeometrySettings.
     QVariantMap getPerScreenSnappingSettings(const QString& /*screenIdOrName*/) const override
     {
         return {};
@@ -227,6 +312,16 @@ public:
     }
 
     // Persistence (unique to ISettings)
+    //
+    // Borrowed-store contract for load(): when the concrete Settings was
+    // constructed with an externally-owned `WindowRuleStore*` (e.g. the
+    // daemon's shared store), load() MUST NOT reload that store — the owner
+    // is the writer and an interleaved load() here would clobber unflushed
+    // in-memory edits. Only the owning side (or a future cross-process
+    // watcher) drives reloads on the borrowed path. Implementations that
+    // own their store (the standard constructor) reload normally. See
+    // Settings::load (settings.cpp) for the live guard against
+    // `m_ownedWindowRuleStore`.
     virtual void load() = 0;
     virtual void save() = 0;
     virtual void reset() = 0;
@@ -239,6 +334,7 @@ Q_SIGNALS:
     void zoneSpanEnabledChanged();
     void zoneSpanModifierChanged();
     void zoneSpanTriggersChanged();
+    void zoneSpanToggleModeChanged();
     void toggleActivationChanged();
     void snappingEnabledChanged();
     void showZonesOnAllMonitorsChanged();
@@ -285,30 +381,36 @@ Q_SIGNALS:
     void keepWindowsInZonesOnResolutionChangeChanged();
     void moveNewWindowsToLastZoneChanged();
     void restoreOriginalSizeOnUnsnapChanged();
-    void stickyWindowHandlingChanged();
+    void snappingStickyWindowHandlingChanged();
     void restoreWindowsToZonesOnLoginChanged();
+    void snappingRestoreFloatedWindowsOnLoginChanged();
+    void autotileRestoreFloatedWindowsOnLoginChanged();
+    void snapUnfloatFallbackToZoneChanged();
     void autoAssignAllLayoutsChanged();
     void snapAssistFeatureEnabledChanged();
     void snapAssistEnabledChanged();
     void snapAssistTriggersChanged();
     void defaultLayoutIdChanged();
+    void suppressDefaultLayoutAssignmentChanged();
     void filterLayoutsByAspectRatioChanged();
-    void excludedApplicationsChanged();
-    void excludedWindowClassesChanged();
+    // excludedApplications / excludedWindowClasses signals retired in v4
+    // — see settings_interfaces.h for the rationale (lists folded into
+    // unified Exclude WindowRules; consumers subscribe to the rule store
+    // through PhosphorWindowRules::WindowRuleStore::rulesChanged instead).
     void excludeTransientWindowsChanged();
     void minimumWindowWidthChanged();
     void minimumWindowHeightChanged();
-    // Animation window filtering — paired with the virtuals at the top
-    // of this interface. Same shape as the snapping/tiling exclusion
-    // signals; lives in its own change-set so animation-only consumers
-    // (the kwin-effect, the AnimationsPageController) don't have to
-    // discriminate when filtering NOTIFY traffic.
+    // Animation window filtering — paired with the IAnimationSettings
+    // virtuals. Same shape as the snapping/tiling exclusion signals; lives
+    // in its own change-set so animation-only consumers (the kwin-effect,
+    // the AnimationsPageController) don't have to discriminate when
+    // filtering NOTIFY traffic.
     void animationExcludeTransientWindowsChanged();
     void animationExcludeNotificationsAndOsdChanged();
     void animationMinimumWindowWidthChanged();
     void animationMinimumWindowHeightChanged();
-    void animationExcludedApplicationsChanged();
-    void animationExcludedWindowClassesChanged();
+    // animationExcludedApplicationsChanged / animationExcludedWindowClassesChanged
+    // signals retired in v4 alongside the list virtuals above.
     void zoneSelectorEnabledChanged();
     void zoneSelectorTriggerDistanceChanged();
     void zoneSelectorPositionChanged();
@@ -324,6 +426,18 @@ Q_SIGNALS:
     void perScreenSnappingSettingsChanged();
     // Rendering
     void renderingBackendChanged();
+    // Editor
+    void editorDuplicateShortcutChanged();
+    void editorSplitHorizontalShortcutChanged();
+    void editorSplitVerticalShortcutChanged();
+    void editorFillShortcutChanged();
+    void editorGridSnappingEnabledChanged();
+    void editorEdgeSnappingEnabledChanged();
+    void editorSnapIntervalXChanged();
+    void editorSnapIntervalYChanged();
+    void editorSnapOverrideModifierChanged();
+    void fillOnDropEnabledChanged();
+    void fillOnDropModifierChanged();
     // Shader effects
     void enableShaderEffectsChanged();
     void shaderFrameRateChanged();
@@ -422,6 +536,8 @@ Q_SIGNALS:
     void autotileInsertPositionChanged();
     void autotileRespectMinimumSizeChanged();
     void autotileFocusFollowsMouseChanged();
+    void snappingFocusNewWindowsChanged();
+    void snappingFocusFollowsMouseChanged();
     void autotileHideTitleBarsChanged();
     void autotileShowBorderChanged();
     void autotileBorderWidthChanged();
@@ -429,6 +545,13 @@ Q_SIGNALS:
     void autotileBorderColorChanged();
     void autotileInactiveBorderColorChanged();
     void autotileUseSystemBorderColorsChanged();
+    void snappingHideTitleBarsChanged();
+    void snappingShowBorderChanged();
+    void snappingBorderWidthChanged();
+    void snappingBorderRadiusChanged();
+    void snappingBorderColorChanged();
+    void snappingInactiveBorderColorChanged();
+    void snappingUseSystemBorderColorsChanged();
     void autotileStickyWindowHandlingChanged();
     void autotileDragBehaviorChanged();
     void autotileOverflowBehaviorChanged();
@@ -445,7 +568,6 @@ Q_SIGNALS:
     void animationSequenceModeChanged();
     void animationStaggerIntervalChanged();
     void shaderProfileTreeChanged();
-    void animationAppRulesChanged();
 
     // Autotile shortcuts
     void autotileToggleShortcutChanged();

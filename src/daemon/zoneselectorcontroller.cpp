@@ -25,7 +25,7 @@ constexpr int CollapseDelayMs = 300; // Delay before collapsing selector after c
 constexpr int ProximityCheckMs = 16; // ~60fps polling
 } // namespace
 
-ZoneSelectorController::ZoneSelectorController(Phosphor::Screens::ScreenManager* screenManager, QObject* parent)
+ZoneSelectorController::ZoneSelectorController(PhosphorScreens::ScreenManager* screenManager, QObject* parent)
     : QObject(parent)
     , m_screenManager(screenManager)
 {
@@ -98,10 +98,11 @@ QVariantList ZoneSelectorController::layouts() const
         screenId = m_screenId;
         aspectRatio = Utils::screenAspectRatio(m_screen);
     }
+    const int desktop =
+        m_layoutManager ? m_layoutManager->currentVirtualDesktopForScreen(screenId) : m_currentVirtualDesktop;
     const auto entries = PhosphorZones::LayoutUtils::buildUnifiedLayoutList(
-        m_layoutManager, m_algorithmRegistry, screenId, m_currentVirtualDesktop, m_currentActivity,
-        m_includeManualLayouts, m_includeAutotileLayouts, aspectRatio,
-        m_settings && m_settings->filterLayoutsByAspectRatio(),
+        m_layoutManager, m_algorithmRegistry, screenId, desktop, m_currentActivity, m_includeManualLayouts,
+        m_includeAutotileLayouts, aspectRatio, m_settings && m_settings->filterLayoutsByAspectRatio(),
         PhosphorZones::LayoutUtils::buildCustomOrder(m_settings, m_includeManualLayouts, m_includeAutotileLayouts),
         m_autotileLayoutSource);
     return PlasmaZones::toVariantList(entries);
@@ -201,8 +202,8 @@ void ZoneSelectorController::setLayoutManager(PhosphorZones::LayoutRegistry* lay
                     // Pass current virtual desktop for per-desktop layout lookup
                     PhosphorZones::Layout* effectiveLayout = nullptr;
                     if (m_screen) {
-                        effectiveLayout =
-                            m_layoutManager->layoutForScreen(m_screenId, m_currentVirtualDesktop, m_currentActivity);
+                        effectiveLayout = m_layoutManager->layoutForScreen(
+                            m_screenId, m_layoutManager->currentVirtualDesktopForScreen(m_screenId), m_currentActivity);
                     }
                     if (!effectiveLayout) {
                         effectiveLayout = layout;
@@ -240,13 +241,13 @@ void ZoneSelectorController::setScreen(QScreen* screen)
     m_screen = screen;
     // Derive screen ID from QScreen if not already set by setScreenId()
     if (m_screenId.isEmpty() && screen) {
-        m_screenId = Phosphor::Screens::ScreenIdentity::identifierFor(screen);
+        m_screenId = PhosphorScreens::ScreenIdentity::identifierFor(screen);
     }
 
     // Update active layout ID for this screen and current desktop
     if (m_screen && m_layoutManager) {
-        PhosphorZones::Layout* screenLayout =
-            m_layoutManager->layoutForScreen(m_screenId, m_currentVirtualDesktop, m_currentActivity);
+        PhosphorZones::Layout* screenLayout = m_layoutManager->layoutForScreen(
+            m_screenId, m_layoutManager->currentVirtualDesktopForScreen(m_screenId), m_currentActivity);
         if (screenLayout) {
             setActiveLayoutId(screenLayout->id().toString());
         } else if (auto* def = m_layoutManager->defaultLayout()) {
@@ -262,8 +263,8 @@ void ZoneSelectorController::setCurrentVirtualDesktop(int desktop)
         m_currentVirtualDesktop = desktop;
         // Update active layout ID when desktop changes
         if (m_screen && m_layoutManager) {
-            PhosphorZones::Layout* screenLayout =
-                m_layoutManager->layoutForScreen(m_screenId, m_currentVirtualDesktop, m_currentActivity);
+            PhosphorZones::Layout* screenLayout = m_layoutManager->layoutForScreen(
+                m_screenId, m_layoutManager->currentVirtualDesktopForScreen(m_screenId), m_currentActivity);
             if (screenLayout) {
                 setActiveLayoutId(screenLayout->id().toString());
             }
@@ -403,12 +404,13 @@ void ZoneSelectorController::selectLayout(const QString& layoutId)
 bool ZoneSelectorController::isScreenLocked() const
 {
     if (m_layoutManager && m_settings && m_screen) {
-        const int desktop = m_layoutManager->currentVirtualDesktop();
+        const int desktop = m_layoutManager->currentVirtualDesktopForScreen(m_screenId);
         const QString activity = m_layoutManager->currentActivity();
-        // Check both modes (0 = manual, 1 = autotile) to match OverlayService behavior.
-        // A lock on either mode should block the zone selector regardless of which mode
-        // is currently active, preventing inconsistency with overlay lock checks.
-        return isAnyModeLocked(m_settings, m_screenId, desktop, activity);
+        // Match OverlayService behavior: a rule-driven LockContext lock is checked first,
+        // then both manual modes (0 = manual, 1 = autotile). A lock from any of these
+        // sources should block the zone selector regardless of which mode is currently
+        // active, preventing inconsistency with overlay lock checks.
+        return isAnyModeLocked(m_settings, m_layoutManager, m_screenId, desktop, activity);
     }
     return false;
 }

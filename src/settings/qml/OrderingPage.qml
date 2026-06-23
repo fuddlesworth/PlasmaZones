@@ -29,15 +29,13 @@ SettingsFlickable {
     property bool hideZeroBadge: false
     property bool _rebuilding: false
     property bool _movingLocally: false
-    property var _zoneCache: ({
-    })
+    property var _zoneCache: ({})
 
     function rebuildModel() {
         _rebuilding = true;
         orderModel.clear();
         let items = resolveOrder();
-        let cache = {
-        };
+        let cache = {};
         for (let i = 0; i < items.length; i++) {
             let item = items[i];
             let key = root.previewZonesKey;
@@ -54,7 +52,7 @@ SettingsFlickable {
     // Move locally within the QML model and notify the controller without a full rebuild
     function moveLocal(from, to) {
         if (from < 0 || from >= orderModel.count || to < 0 || to >= orderModel.count || from === to)
-            return ;
+            return;
 
         _movingLocally = true;
         orderModel.move(from, to, 1);
@@ -64,7 +62,8 @@ SettingsFlickable {
 
     function commitOrder() {
         let ids = [];
-        for (let i = 0; i < orderModel.count; i++) ids.push(orderModel.get(i).id)
+        for (let i = 0; i < orderModel.count; i++)
+            ids.push(orderModel.get(i).id);
         return ids;
     }
 
@@ -87,6 +86,7 @@ SettingsFlickable {
 
         SettingsCard {
             headerText: root.headerText
+            searchAnchor: "ordering"
 
             contentItem: ColumnLayout {
                 spacing: Kirigami.Units.smallSpacing
@@ -101,6 +101,11 @@ SettingsFlickable {
                     property bool isDragging: false
 
                     Layout.fillWidth: true
+                    // No horizontal Layout margin here: each drag row already
+                    // insets its content by largeSpacing (the inner RowLayout's
+                    // anchors), so adding it here too double-inset the rows
+                    // relative to the reset row below. Row cards stay full-width;
+                    // their content lines up with the reset row at largeSpacing.
                     Layout.preferredHeight: Math.max(orderModel.count * rowHeight, Kirigami.Units.gridUnit * 10)
                     clip: true
 
@@ -135,12 +140,10 @@ SettingsFlickable {
                                     // Dragging down: items between (from, to] shift up
                                     if (index > from && index <= to)
                                         return -orderContainer.rowHeight;
-
                                 } else {
                                     // Dragging up: items between [to, from) shift down
                                     if (index >= to && index < from)
                                         return orderContainer.rowHeight;
-
                                 }
                                 return 0;
                             }
@@ -197,12 +200,11 @@ SettingsFlickable {
                                         orderContainer.dragFromIndex = -1;
                                         orderContainer.dropTargetIndex = -1;
                                         // Reset position — the model move will reposition
-                                        delegateRoot.y = Qt.binding(function() {
+                                        delegateRoot.y = Qt.binding(function () {
                                             return delegateRoot.baseY + delegateRoot.visualOffset;
                                         });
                                         if (from >= 0 && to >= 0 && from !== to && from < orderModel.count && to < orderModel.count)
                                             root.moveLocal(from, to);
-
                                     }
                                     onPositionChanged: {
                                         if (drag.active) {
@@ -211,7 +213,6 @@ SettingsFlickable {
                                             let targetIndex = Math.max(0, Math.min(orderModel.count - 1, Math.floor(centerY / orderContainer.rowHeight)));
                                             if (targetIndex !== orderContainer.dropTargetIndex)
                                                 orderContainer.dropTargetIndex = targetIndex;
-
                                         }
                                     }
                                 }
@@ -238,9 +239,7 @@ SettingsFlickable {
                                                 profile: "widget.reorder"
                                                 durationOverride: Kirigami.Units.shortDuration
                                             }
-
                                         }
-
                                     }
 
                                     // Position number
@@ -275,7 +274,6 @@ SettingsFlickable {
                                                 profile: "widget.reorder"
                                                 durationOverride: Kirigami.Units.shortDuration
                                             }
-
                                         }
 
                                         Behavior on border.width {
@@ -283,18 +281,19 @@ SettingsFlickable {
                                                 profile: "widget.reorder"
                                                 durationOverride: Kirigami.Units.shortDuration
                                             }
-
                                         }
-
                                     }
 
                                     // Name + description
                                     ColumnLayout {
                                         Layout.fillWidth: true
-                                        spacing: 2
+                                        spacing: Kirigami.Units.smallSpacing / 2
 
                                         Label {
-                                            text: delegateRoot.model.displayName
+                                            // Guard against a transient undefined role while the
+                                            // ordering model is (re)populated — assigning undefined
+                                            // to the QString `text` warns otherwise.
+                                            text: delegateRoot.model.displayName || ""
                                             elide: Text.ElideRight
                                             Layout.fillWidth: true
                                         }
@@ -307,7 +306,6 @@ SettingsFlickable {
                                             visible: text.length > 0
                                             Layout.fillWidth: true
                                         }
-
                                     }
 
                                     // Zone count badge
@@ -328,7 +326,6 @@ SettingsFlickable {
                                             font: Kirigami.Theme.smallFont
                                             color: Kirigami.Theme.highlightColor
                                         }
-
                                     }
 
                                     // Move up
@@ -341,16 +338,14 @@ SettingsFlickable {
                                         onClicked: root.moveLocal(delegateRoot.index, delegateRoot.index - 1)
                                         ToolTip.visible: hovered
                                         ToolTip.text: i18n("Move up")
-                                        Accessible.name: i18n("Move %1 up", delegateRoot.model.displayName)
+                                        Accessible.name: i18n("Move %1 up", delegateRoot.model.displayName || "")
 
                                         Behavior on opacity {
                                             PhosphorMotionAnimation {
                                                 profile: "widget.reorder"
                                                 durationOverride: Kirigami.Units.shortDuration
                                             }
-
                                         }
-
                                     }
 
                                     // Move down
@@ -363,18 +358,15 @@ SettingsFlickable {
                                         onClicked: root.moveLocal(delegateRoot.index, delegateRoot.index + 1)
                                         ToolTip.visible: hovered
                                         ToolTip.text: i18n("Move down")
-                                        Accessible.name: i18n("Move %1 down", delegateRoot.model.displayName)
+                                        Accessible.name: i18n("Move %1 down", delegateRoot.model.displayName || "")
 
                                         Behavior on opacity {
                                             PhosphorMotionAnimation {
                                                 profile: "widget.reorder"
                                                 durationOverride: Kirigami.Units.shortDuration
                                             }
-
                                         }
-
                                     }
-
                                 }
 
                                 Behavior on color {
@@ -382,7 +374,6 @@ SettingsFlickable {
                                         profile: "widget.reorder"
                                         durationOverride: Kirigami.Units.shortDuration
                                     }
-
                                 }
 
                                 Behavior on border.width {
@@ -390,7 +381,6 @@ SettingsFlickable {
                                         profile: "widget.reorder"
                                         durationOverride: Kirigami.Units.shortDuration
                                     }
-
                                 }
 
                                 // Subtle lift on hover
@@ -402,9 +392,7 @@ SettingsFlickable {
                                             profile: "widget.reorder"
                                             durationOverride: Kirigami.Units.shortDuration
                                         }
-
                                     }
-
                                 }
 
                                 Behavior on scale {
@@ -412,9 +400,7 @@ SettingsFlickable {
                                         profile: "widget.reorder"
                                         durationOverride: Kirigami.Units.shortDuration
                                     }
-
                                 }
-
                             }
 
                             Behavior on y {
@@ -424,11 +410,8 @@ SettingsFlickable {
                                     profile: "widget.reorder"
                                     durationOverride: Kirigami.Units.longDuration
                                 }
-
                             }
-
                         }
-
                     }
 
                     Kirigami.PlaceholderMessage {
@@ -437,11 +420,12 @@ SettingsFlickable {
                         text: root.emptyText
                         explanation: root.emptyExplanation
                     }
-
                 }
 
                 RowLayout {
                     Layout.fillWidth: true
+                    Layout.leftMargin: Kirigami.Units.largeSpacing
+                    Layout.rightMargin: Kirigami.Units.largeSpacing
                     spacing: Kirigami.Units.smallSpacing
 
                     Item {
@@ -455,13 +439,8 @@ SettingsFlickable {
                         onClicked: root.resetOrder()
                         Accessible.name: root.resetAccessibleName
                     }
-
                 }
-
             }
-
         }
-
     }
-
 }

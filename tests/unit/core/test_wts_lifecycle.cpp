@@ -42,6 +42,7 @@
 #include <PhosphorWorkspaces/VirtualDesktopManager.h>
 #include "core/utils.h"
 #include "../helpers/IsolatedConfigGuard.h"
+#include "../helpers/LayoutRegistryTestHelpers.h"
 
 #include "../helpers/StubSettings.h"
 #include "../helpers/StubZoneDetector.h"
@@ -64,8 +65,7 @@ private Q_SLOTS:
     {
         m_guard = std::make_unique<IsolatedConfigGuard>();
         // Pass nullptr as parent to avoid double-delete: cleanup() deletes manually
-        m_layoutManager = new PhosphorZones::LayoutRegistry(PlasmaZones::createAssignmentsBackend(),
-                                                            QStringLiteral("plasmazones/layouts"));
+        m_layoutManager = PlasmaZones::TestHelpers::makeLayoutRegistry(QStringLiteral("plasmazones/layouts"));
         m_settings = new StubSettings(nullptr);
         m_zoneDetector = new StubZoneDetector(nullptr);
         m_service = new PhosphorPlacement::WindowTrackingService(m_layoutManager, m_zoneDetector, nullptr, nullptr);
@@ -134,21 +134,11 @@ private Q_SLOTS:
         QVERIFY(!m_service->pendingRestoreQueues().contains(appId));
     }
 
-    void testWindowClosed_preTileGeometryConvertedToStableId()
-    {
-        QString windowId = QStringLiteral("org.kde.dolphin|99999");
-        QString appId = PhosphorIdentity::WindowId::extractAppId(windowId);
-
-        m_engine->storeUnmanagedGeometry(windowId, QRect(100, 200, 800, 600), QString());
-        QVERIFY(m_engine->hasUnmanagedGeometry(windowId));
-
-        m_service->windowClosed(windowId);
-
-        QVERIFY(m_engine->hasUnmanagedGeometry(appId));
-        QRect geo = m_engine->unmanagedGeometry(appId);
-        QCOMPARE(geo.x(), 100);
-        QCOMPARE(geo.width(), 800);
-    }
+    // testWindowClosed_preTileGeometryConvertedToStableId removed: the per-engine
+    // unmanaged-geometry store and its windowId→appId alias copy on close were
+    // collapsed into the unified WindowPlacementStore, whose record already lives in
+    // its appId bucket (so the appId fallback finds the float-back on reopen with no
+    // manual copy). Covered by the WindowPlacementStore appId-FIFO tests.
 
     void testWindowClosed_floatStateClearedOnClose()
     {
@@ -355,6 +345,251 @@ private Q_SLOTS:
         // must still be populated with the window IDs that were snapped.
         QVERIFY2(!resnap.isEmpty(), "Resnap buffer must contain entries for the previously-snapped windows");
         QCOMPARE(resnap.size(), 2);
+    }
+
+    void testResnapFromAutotileOrder_preClaimedZoneSkippedByPositionalFallback()
+    {
+        // window A has a recorded zone (zone[0]); window B has none, so it goes
+        // through the positional fallback. A zone reserved by ANOTHER restore
+        // producer (passed as preClaimedZoneIds) must be skipped by the fallback
+        // so B never lands on the reserved zone — the two-windows-one-zone
+        // collision this parameter exists to prevent.
+        const QString winA = QStringLiteral("appA|aaaa");
+        const QString winB = QStringLiteral("appB|bbbb");
+        m_service->assignWindowToZone(winA, m_zoneIds[0], QString(), 0);
+
+        const QStringList order{winA, winB};
+
+        // Control: no pre-claim → B takes the first unclaimed zone (zone[1]).
+        QVector<ZoneAssignmentEntry> noClaim = m_engine->calculateResnapEntriesFromAutotileOrder(order, QString());
+        QVERIFY2(!noClaim.isEmpty(), "resnap must produce entries (zone geometry must resolve in fixture)");
+        ZoneAssignmentEntry bNoClaim;
+        for (const ZoneAssignmentEntry& e : noClaim) {
+            if (e.windowId == winB)
+                bNoClaim = e;
+        }
+        QCOMPARE(bNoClaim.targetZoneId, m_zoneIds[1]);
+
+        // With zone[1] pre-claimed by another producer, B must avoid it and take
+        // the next unclaimed zone (zone[2]).
+        QVector<ZoneAssignmentEntry> claimed =
+            m_engine->calculateResnapEntriesFromAutotileOrder(order, QString(), QStringList{m_zoneIds[1]});
+        ZoneAssignmentEntry bClaimed;
+        for (const ZoneAssignmentEntry& e : claimed) {
+            if (e.windowId == winB)
+                bClaimed = e;
+        }
+        QVERIFY2(bClaimed.targetZoneId != m_zoneIds[1], "B must not be assigned the pre-claimed zone");
+        QCOMPARE(bClaimed.targetZoneId, m_zoneIds[2]);
+        // A still restores to its OWN recorded zone regardless of the pre-claim.
+        ZoneAssignmentEntry aClaimed;
+        for (const ZoneAssignmentEntry& e : claimed) {
+            if (e.windowId == winA)
+                aClaimed = e;
+        }
+        QCOMPARE(aClaimed.targetZoneId, m_zoneIds[0]);
+    }
+
+    void testResnapFromAutotileOrder_preClaimedZoneStacksPass1Window()
+    {
+        // window A's OWN recorded zone is the one another producer reserved. Because
+        // snapping supports multiple windows per zone, A STILL restores to its own
+        // recorded zone (stacked with the reserver) — pass-1 does not yield on an
+        // occupied zone; only the positional fallback avoids occupied zones.
+        const QString winA = QStringLiteral("appA|aaaa");
+        m_service->assignWindowToZone(winA, m_zoneIds[1], QString(), 0);
+
+        QVector<ZoneAssignmentEntry> claimed =
+            m_engine->calculateResnapEntriesFromAutotileOrder(QStringList{winA}, QString(), QStringList{m_zoneIds[1]});
+        ZoneAssignmentEntry a;
+        for (const ZoneAssignmentEntry& e : claimed) {
+            if (e.windowId == winA)
+                a = e;
+        }
+        QCOMPARE(a.targetZoneId, m_zoneIds[1]);
+    }
+
+    void testRecordFreeGeometry_refusesSnappedFrame()
+    {
+        // A snapped window's live frame IS the zone rect. Recording it as free
+        // geometry would poison the float-back with the snapped geometry — the
+        // single write point must refuse it.
+        const QString windowId = QStringLiteral("firefox|cccc");
+        const QString appId = PhosphorIdentity::WindowId::extractAppId(windowId);
+        const QString screen = QStringLiteral("DP-1");
+
+        m_service->assignWindowToZone(windowId, m_zoneIds[0], screen, 0);
+        QVERIFY(m_service->isWindowSnapped(windowId));
+        QVERIFY(!m_service->isWindowFloating(windowId));
+
+        m_service->recordFreeGeometry(windowId, screen, QRect(8, 894, 1588, 846), /*overwrite=*/true);
+
+        const auto rec = m_service->placementStore().peek(windowId, appId);
+        QVERIFY2(!rec || !rec->freeGeometryFor(screen).isValid(),
+                 "snapped frame must NOT enter the shared free geometry");
+    }
+
+    void testRecordFreeGeometry_acceptsFloatingWithPreservedZone()
+    {
+        // A window floated AFTER snapping keeps its zone assignment (preserved for
+        // restore), so isWindowSnapped stays true — but it is FLOATING, its frame is
+        // a genuine free position, and it must be recorded. Guards "snapped AND not
+        // floating", not "snapped".
+        const QString windowId = QStringLiteral("firefox|dddd");
+        const QString appId = PhosphorIdentity::WindowId::extractAppId(windowId);
+        const QString screen = QStringLiteral("DP-1");
+
+        m_service->assignWindowToZone(windowId, m_zoneIds[0], screen, 0);
+        m_service->setWindowFloating(windowId, true);
+        QVERIFY(m_service->isWindowFloating(windowId));
+
+        m_service->recordFreeGeometry(windowId, screen, QRect(100, 100, 800, 600), /*overwrite=*/true);
+
+        const auto rec = m_service->placementStore().peek(windowId, appId);
+        QVERIFY(rec);
+        QCOMPARE(rec->freeGeometryFor(screen), QRect(100, 100, 800, 600));
+    }
+
+    void testRecordFreeGeometry_firstCaptureWins_whenNotOverwrite()
+    {
+        // overwrite=false is the production capture path: the FIRST captured free
+        // frame wins; a later non-overwrite write is ignored; overwrite=true replaces.
+        const QString windowId = QStringLiteral("firefox|eeee");
+        const QString appId = PhosphorIdentity::WindowId::extractAppId(windowId);
+        const QString screen = QStringLiteral("DP-1");
+
+        m_service->recordFreeGeometry(windowId, screen, QRect(10, 10, 400, 300), /*overwrite=*/false);
+        m_service->recordFreeGeometry(windowId, screen, QRect(20, 20, 800, 600), /*overwrite=*/false);
+        const auto rec = m_service->placementStore().peek(windowId, appId);
+        QVERIFY(rec);
+        QCOMPARE(rec->freeGeometryFor(screen), QRect(10, 10, 400, 300)); // first wins
+
+        m_service->recordFreeGeometry(windowId, screen, QRect(30, 30, 500, 400), /*overwrite=*/true);
+        const auto rec2 = m_service->placementStore().peek(windowId, appId);
+        QVERIFY(rec2);
+        QCOMPARE(rec2->freeGeometryFor(screen), QRect(30, 30, 500, 400)); // overwrite replaces
+    }
+
+    void testRecordedSnapZones_appIdFallbackAfterRelogin()
+    {
+        // After a relogin the window's uuid changes; the durable record stored under
+        // the OLD uuid must still resolve for a NEW same-app window via the appId
+        // bucket (the exact-uuid branch misses, the appId fallback hits).
+        const QString oldId = QStringLiteral("firefox|old-uuid");
+        PhosphorEngine::WindowPlacement p;
+        p.windowId = oldId;
+        p.appId = PhosphorIdentity::WindowId::extractAppId(oldId);
+        PhosphorEngine::EngineSlot snap;
+        snap.state = PhosphorEngine::WindowPlacement::stateSnapped();
+        snap.zoneIds = QStringList{m_zoneIds[1]};
+        p.engines.insert(PhosphorEngine::WindowPlacement::snapEngineId(), snap);
+        m_service->placementStore().record(p);
+
+        const QString newId = QStringLiteral("firefox|new-uuid");
+        QCOMPARE(m_service->recordedSnapZones(newId), QStringList{m_zoneIds[1]});
+    }
+
+    void testResnapFromAutotileOrder_sameAppInstancesEachKeepOwnZone()
+    {
+        // Two instances of the same app, one LIVE-assigned and one DURABLE-only (cold
+        // cache, e.g. post-restart): each must resolve to its OWN recorded zone via the
+        // exact-uuid path — never cross-routed through the shared appId bucket.
+        const QString instA = QStringLiteral("firefox|aaaa");
+        const QString instB = QStringLiteral("firefox|bbbb");
+
+        m_service->assignWindowToZone(instA, m_zoneIds[0], QString(), 0);
+
+        PhosphorEngine::WindowPlacement p;
+        p.windowId = instB;
+        p.appId = PhosphorIdentity::WindowId::extractAppId(instB);
+        PhosphorEngine::EngineSlot snap;
+        snap.state = PhosphorEngine::WindowPlacement::stateSnapped();
+        snap.zoneIds = QStringList{m_zoneIds[2]};
+        p.engines.insert(PhosphorEngine::WindowPlacement::snapEngineId(), snap);
+        m_service->placementStore().record(p);
+
+        QCOMPARE(m_service->recordedSnapZones(instA), QStringList{m_zoneIds[0]});
+        QCOMPARE(m_service->recordedSnapZones(instB), QStringList{m_zoneIds[2]});
+
+        QVector<ZoneAssignmentEntry> entries =
+            m_engine->calculateResnapEntriesFromAutotileOrder(QStringList{instA, instB}, QString());
+        ZoneAssignmentEntry a;
+        ZoneAssignmentEntry b;
+        for (const ZoneAssignmentEntry& e : entries) {
+            if (e.windowId == instA)
+                a = e;
+            if (e.windowId == instB)
+                b = e;
+        }
+        QCOMPARE(a.targetZoneId, m_zoneIds[0]);
+        QCOMPARE(b.targetZoneId, m_zoneIds[2]);
+    }
+
+    void testRecordedSnapZones_fallsBackToDurableRecordWhenLiveCold()
+    {
+        const QString windowId = QStringLiteral("firefox|aaaa");
+        const QString appId = PhosphorIdentity::WindowId::extractAppId(windowId);
+
+        // No live assignment and no record → empty.
+        QVERIFY(m_service->recordedSnapZones(windowId).isEmpty());
+
+        // Seed a DURABLE record with a snapped slot but NO live assignment — this is
+        // the post-daemon-restart state, where the live zone cache is cold but the
+        // persisted record survives.
+        PhosphorEngine::WindowPlacement p;
+        p.windowId = windowId;
+        p.appId = appId;
+        PhosphorEngine::EngineSlot snap;
+        snap.state = PhosphorEngine::WindowPlacement::stateSnapped();
+        snap.zoneIds = QStringList{m_zoneIds[2]};
+        p.engines.insert(PhosphorEngine::WindowPlacement::snapEngineId(), snap);
+        m_service->placementStore().record(p);
+
+        QCOMPARE(m_service->recordedSnapZones(windowId), QStringList{m_zoneIds[2]});
+
+        // A live assignment takes precedence over the durable record.
+        m_service->assignWindowToZone(windowId, m_zoneIds[0], QString(), 0);
+        QCOMPARE(m_service->recordedSnapZones(windowId), QStringList{m_zoneIds[0]});
+    }
+
+    void testRecordedSnapZones_ignoresNonSnappedDurableSlot()
+    {
+        // A record whose snap slot is FLOATING (not snapped) must not be treated as
+        // a recorded snap zone — recordedSnapZones is for resnap restoration only.
+        const QString windowId = QStringLiteral("firefox|bbbb");
+        PhosphorEngine::WindowPlacement p;
+        p.windowId = windowId;
+        p.appId = PhosphorIdentity::WindowId::extractAppId(windowId);
+        PhosphorEngine::EngineSlot snap;
+        snap.state = PhosphorEngine::WindowPlacement::stateFloating();
+        snap.zoneIds = QStringList{m_zoneIds[1]};
+        p.engines.insert(PhosphorEngine::WindowPlacement::snapEngineId(), snap);
+        m_service->placementStore().record(p);
+
+        QVERIFY(m_service->recordedSnapZones(windowId).isEmpty());
+    }
+
+    void testResnapFromAutotileOrder_multipleWindowsRecordedSameZoneStack()
+    {
+        // Two windows both recorded the SAME zone (a user-built multi-window-per-zone
+        // stack). Both must restore to it — neither is dropped or relocated.
+        const QString winA = QStringLiteral("appA|aaaa");
+        const QString winB = QStringLiteral("appB|bbbb");
+        m_service->assignWindowToZone(winA, m_zoneIds[2], QString(), 0);
+        m_service->assignWindowToZone(winB, m_zoneIds[2], QString(), 0);
+
+        QVector<ZoneAssignmentEntry> entries =
+            m_engine->calculateResnapEntriesFromAutotileOrder(QStringList{winA, winB}, QString());
+        ZoneAssignmentEntry a;
+        ZoneAssignmentEntry b;
+        for (const ZoneAssignmentEntry& e : entries) {
+            if (e.windowId == winA)
+                a = e;
+            if (e.windowId == winB)
+                b = e;
+        }
+        QCOMPARE(a.targetZoneId, m_zoneIds[2]);
+        QCOMPARE(b.targetZoneId, m_zoneIds[2]);
     }
 
     void testOnLayoutChanged_floatingWindowsExcludedFromResnap()

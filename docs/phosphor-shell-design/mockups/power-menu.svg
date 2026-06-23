@@ -1,0 +1,141 @@
+<!-- SPDX-FileCopyrightText: 2026 fuddlesworth -->
+<!-- SPDX-License-Identifier: GPL-3.0-or-later -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 720" font-family="Inter, system-ui, sans-serif">
+  <defs>
+    <linearGradient id="wp" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#0B1730"/>
+      <stop offset=".55" stop-color="#070F22"/>
+      <stop offset="1" stop-color="#050916"/>
+    </linearGradient>
+    <filter id="blur" x="-20%" y="-20%" width="140%" height="140%">
+      <feGaussianBlur stdDeviation="80"/>
+    </filter>
+    <symbol id="i-moon" viewBox="0 0 28 28">
+      <path d="M 22 18 A 10 10 0 1 1 11 6 A 8.5 8.5 0 0 0 22 18 Z" fill="currentColor"/>
+    </symbol>
+    <symbol id="i-snow" viewBox="0 0 28 28">
+      <g stroke="currentColor" stroke-width="2" stroke-linecap="round">
+        <line x1="14" y1="3" x2="14" y2="25"/>
+        <line x1="4" y1="8" x2="24" y2="20"/>
+        <line x1="4" y1="20" x2="24" y2="8"/>
+        <line x1="14" y1="3" x2="11" y2="6"/>
+        <line x1="14" y1="3" x2="17" y2="6"/>
+        <line x1="14" y1="25" x2="11" y2="22"/>
+        <line x1="14" y1="25" x2="17" y2="22"/>
+      </g>
+    </symbol>
+    <symbol id="i-lock" viewBox="0 0 28 28">
+      <rect x="6" y="13" width="16" height="12" rx="2" fill="currentColor"/>
+      <path d="M 9 13 V 9 A 5 5 0 0 1 19 9 V 13" fill="none" stroke="currentColor" stroke-width="2"/>
+    </symbol>
+    <symbol id="i-logout" viewBox="0 0 28 28">
+      <path d="M 4 6 V 22 A 2 2 0 0 0 6 24 H 14 V 21 H 7 V 7 H 14 V 4 H 6 A 2 2 0 0 0 4 6 Z" fill="currentColor"/>
+      <path d="M 17 9 L 23 14 L 17 19" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/>
+      <line x1="13" y1="14" x2="23" y2="14" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+    </symbol>
+    <symbol id="i-restart" viewBox="0 0 28 28">
+      <path d="M 24 14 A 10 10 0 1 1 14 4 V 1 L 19 5 L 14 9 V 6" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/>
+    </symbol>
+    <symbol id="i-power" viewBox="0 0 28 28">
+      <path d="M 14 4 V 14" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/>
+      <path d="M 7 9 A 9 9 0 1 0 21 9" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/>
+    </symbol>
+  </defs>
+
+  <rect width="1280" height="720" fill="url(#wp)"/>
+  <g opacity=".5" filter="url(#blur)">
+    <circle cx="800" cy="420" r="280" fill="#F43F5E"/>
+  </g>
+  <rect width="1280" height="720" fill="#050916" opacity=".45"/>
+
+  <!-- Modal -->
+  <g transform="translate(340 200)">
+    <rect width="600" height="320" rx="24" fill="#0B1730" opacity=".97" stroke="#1E293B"/>
+    <text x="300" y="40" text-anchor="middle" fill="#94A3B8" font-size="11">SESSION</text>
+
+    <g transform="translate(24 64)">
+      <!-- Row 1 -->
+      <g>
+        <rect width="168" height="116" rx="20" fill="#101A36" stroke="#1E293B"/>
+        <g transform="translate(70 22)" color="#3B82F6"><use href="#i-moon" width="28" height="28"/></g>
+        <text x="84" y="78" text-anchor="middle" fill="#E6EDFF" font-size="13" font-weight="600">Suspend</text>
+        <text x="84" y="98" text-anchor="middle" fill="#94A3B8" font-size="11">S</text>
+      </g>
+      <g transform="translate(180 0)">
+        <rect width="168" height="116" rx="20" fill="#101A36" stroke="#1E293B"/>
+        <g transform="translate(70 22)" color="#22D3EE"><use href="#i-snow" width="28" height="28"/></g>
+        <text x="84" y="78" text-anchor="middle" fill="#E6EDFF" font-size="13" font-weight="600">Hibernate</text>
+        <text x="84" y="98" text-anchor="middle" fill="#94A3B8" font-size="11">H</text>
+      </g>
+      <!-- Lock = default focus, pulses -->
+      <g transform="translate(360 0)">
+        <rect width="168" height="116" rx="20" fill="#3B82F6">
+          <animate attributeName="opacity" values="1;0.82;1" dur="2.4s" repeatCount="indefinite"/>
+        </rect>
+        <g transform="translate(70 22)" color="#0B1730"><use href="#i-lock" width="28" height="28"/></g>
+        <text x="84" y="78" text-anchor="middle" fill="#F0F9FF" font-size="13" font-weight="600">Lock</text>
+        <text x="84" y="98" text-anchor="middle" fill="#F0F9FF" opacity=".75" font-size="11">L · default</text>
+      </g>
+
+      <!-- Row 2 -->
+      <g transform="translate(0 128)">
+        <rect width="168" height="80" rx="20" fill="#101A36" stroke="#1E293B"/>
+        <g transform="translate(70 14)" color="#A855F7"><use href="#i-logout" width="28" height="28"/></g>
+        <text x="84" y="58" text-anchor="middle" fill="#E6EDFF" font-size="13" font-weight="600">Log out</text>
+        <text x="84" y="74" text-anchor="middle" fill="#94A3B8" font-size="11">O</text>
+      </g>
+      <g transform="translate(180 128)">
+        <rect width="168" height="80" rx="20" fill="#101A36" stroke="#1E293B"/>
+        <g transform="translate(70 14)" color="#FBBF24"><use href="#i-restart" width="28" height="28"/></g>
+        <text x="84" y="58" text-anchor="middle" fill="#E6EDFF" font-size="13" font-weight="600">Restart</text>
+        <text x="84" y="74" text-anchor="middle" fill="#94A3B8" font-size="11">R</text>
+      </g>
+      <g transform="translate(360 128)">
+        <rect width="168" height="80" rx="20" fill="#101A36" stroke="#1E293B"/>
+        <g transform="translate(70 14)" color="#F43F5E"><use href="#i-power" width="28" height="28"/></g>
+        <text x="84" y="58" text-anchor="middle" fill="#E6EDFF" font-size="13" font-weight="600">Shut down</text>
+        <text x="84" y="74" text-anchor="middle" fill="#94A3B8" font-size="11">P</text>
+      </g>
+    </g>
+  </g>
+
+  <g font-size="11">
+    <g transform="translate(40 240)">
+      <rect width="260" height="76" rx="8" fill="#070F22" stroke="#3B82F6" opacity=".96"/>
+      <text x="14" y="22" font-weight="600" fill="#3B82F6">Modal popout</text>
+      <text x="14" y="38" fill="#94A3B8">PopoutService Modal mode dims rest,</text>
+      <text x="14" y="52" fill="#94A3B8">grabs keyboard, suppresses every</text>
+      <text x="14" y="66" fill="#94A3B8">Cooperative popout system‑wide.</text>
+    </g>
+    <g transform="translate(40 340)">
+      <rect width="260" height="92" rx="8" fill="#070F22" stroke="#A855F7" opacity=".96"/>
+      <text x="14" y="22" font-weight="600" fill="#A855F7">Single‑key activation</text>
+      <text x="14" y="38" fill="#94A3B8">Each action has a one‑letter shortcut</text>
+      <text x="14" y="52" fill="#94A3B8">(L S H O R P) visible in the chip.</text>
+      <text x="14" y="66" fill="#94A3B8">Esc dismisses. Default focus = Lock</text>
+      <text x="14" y="80" fill="#94A3B8">(safest non‑destructive action).</text>
+    </g>
+
+    <g transform="translate(980 240)">
+      <rect width="260" height="76" rx="8" fill="#070F22" stroke="#22D3EE" opacity=".96"/>
+      <text x="14" y="22" font-weight="600" fill="#22D3EE">Backed by logind</text>
+      <text x="14" y="38" fill="#94A3B8">phosphor‑session wraps</text>
+      <text x="14" y="52" fill="#94A3B8">org.freedesktop.login1, no shelling</text>
+      <text x="14" y="66" fill="#94A3B8">out to systemctl.</text>
+    </g>
+    <g transform="translate(980 340)">
+      <rect width="260" height="76" rx="8" fill="#070F22" stroke="#3B82F6" opacity=".96"/>
+      <text x="14" y="22" font-weight="600" fill="#3B82F6">phosphorctl call power.show</text>
+      <text x="14" y="38" fill="#94A3B8">Bound to Ctrl+Alt+Del by default.</text>
+      <text x="14" y="52" fill="#94A3B8">User remappable via compositor binds.</text>
+      <text x="14" y="66" fill="#94A3B8">Hibernate hidden if logind says no.</text>
+    </g>
+  </g>
+
+  <text x="640" y="680" text-anchor="middle" fill="#E6EDFF" font-size="14" font-weight="600">
+    Phosphor, Power / session menu (default theme)
+  </text>
+  <text x="640" y="698" text-anchor="middle" fill="#94A3B8" font-size="9" opacity=".7">
+    Theme: phosphor‑works.github.io/palette
+  </text>
+</svg>

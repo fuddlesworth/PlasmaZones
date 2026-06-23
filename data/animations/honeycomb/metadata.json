@@ -1,7 +1,7 @@
 {
     "id": "honeycomb",
     "name": "Honeycomb",
-    "description": "Hexagonal-grid radial wipe — cells reveal/hide from the centre outward",
+    "description": "A hexagonal-grid radial wipe where cells reveal and hide from the centre outward",
     "author": "arch-disciple, ported by PlasmaZones",
     "version": "1.0",
     "category": "Tile",

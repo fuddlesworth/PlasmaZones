@@ -277,7 +277,7 @@ QDBusArgument& operator<<(QDBusArgument& arg, const SwapTargetResult& e)
 {
     arg.beginStructure();
     arg << e.success << e.reason << e.windowId1 << e.x1 << e.y1 << e.w1 << e.h1 << e.zoneId1 << e.windowId2 << e.x2
-        << e.y2 << e.w2 << e.h2 << e.zoneId2 << e.screenName << e.sourceZoneId << e.targetZoneId;
+        << e.y2 << e.w2 << e.h2 << e.zoneId2 << e.screenName << e.sourceZoneId << e.targetZoneId << e.screenName2;
     arg.endStructure();
     return arg;
 }
@@ -286,7 +286,7 @@ const QDBusArgument& operator>>(const QDBusArgument& arg, SwapTargetResult& e)
 {
     arg.beginStructure();
     arg >> e.success >> e.reason >> e.windowId1 >> e.x1 >> e.y1 >> e.w1 >> e.h1 >> e.zoneId1 >> e.windowId2 >> e.x2
-        >> e.y2 >> e.w2 >> e.h2 >> e.zoneId2 >> e.screenName >> e.sourceZoneId >> e.targetZoneId;
+        >> e.y2 >> e.w2 >> e.h2 >> e.zoneId2 >> e.screenName >> e.sourceZoneId >> e.targetZoneId >> e.screenName2;
     arg.endStructure();
     return arg;
 }
@@ -376,43 +376,43 @@ void registerWireTypes()
     // crash dispatch at runtime (see the dbus_adaptor_routing integration
     // test for that failure mode).
 
-#define PZ_REGISTER_DBUS_TYPE(Type) qDBusRegisterMetaType<Type>()
+#define P_REGISTER_DBUS_TYPE(Type) qDBusRegisterMetaType<Type>()
 
-    PZ_REGISTER_DBUS_TYPE(WindowGeometryEntry);
-    PZ_REGISTER_DBUS_TYPE(WindowGeometryList);
-    PZ_REGISTER_DBUS_TYPE(TileRequestEntry);
-    PZ_REGISTER_DBUS_TYPE(TileRequestList);
-    PZ_REGISTER_DBUS_TYPE(SnapAllResultEntry);
-    PZ_REGISTER_DBUS_TYPE(SnapAllResultList);
-    PZ_REGISTER_DBUS_TYPE(SnapConfirmationEntry);
-    PZ_REGISTER_DBUS_TYPE(SnapConfirmationList);
-    PZ_REGISTER_DBUS_TYPE(WindowOpenedEntry);
-    PZ_REGISTER_DBUS_TYPE(WindowOpenedList);
-    PZ_REGISTER_DBUS_TYPE(WindowStateEntry);
-    PZ_REGISTER_DBUS_TYPE(WindowStateList);
-    PZ_REGISTER_DBUS_TYPE(UnfloatRestoreResult);
-    PZ_REGISTER_DBUS_TYPE(ZoneGeometryRect);
-    PZ_REGISTER_DBUS_TYPE(ZoneGeometryList);
-    PZ_REGISTER_DBUS_TYPE(EmptyZoneEntry);
-    PZ_REGISTER_DBUS_TYPE(EmptyZoneList);
-    PZ_REGISTER_DBUS_TYPE(SnapAssistCandidate);
-    PZ_REGISTER_DBUS_TYPE(SnapAssistCandidateList);
-    PZ_REGISTER_DBUS_TYPE(NamedZoneGeometry);
-    PZ_REGISTER_DBUS_TYPE(NamedZoneGeometryList);
-    PZ_REGISTER_DBUS_TYPE(AlgorithmInfoEntry);
-    PZ_REGISTER_DBUS_TYPE(AlgorithmInfoList);
-    PZ_REGISTER_DBUS_TYPE(BridgeRegistrationResult);
-    PZ_REGISTER_DBUS_TYPE(MoveTargetResult);
-    PZ_REGISTER_DBUS_TYPE(FocusTargetResult);
-    PZ_REGISTER_DBUS_TYPE(CycleTargetResult);
-    PZ_REGISTER_DBUS_TYPE(SwapTargetResult);
-    PZ_REGISTER_DBUS_TYPE(RestoreTargetResult);
-    PZ_REGISTER_DBUS_TYPE(PreTileGeometryEntry);
-    PZ_REGISTER_DBUS_TYPE(PreTileGeometryList);
-    PZ_REGISTER_DBUS_TYPE(DragPolicy);
-    PZ_REGISTER_DBUS_TYPE(DragOutcome);
+    P_REGISTER_DBUS_TYPE(WindowGeometryEntry);
+    P_REGISTER_DBUS_TYPE(WindowGeometryList);
+    P_REGISTER_DBUS_TYPE(TileRequestEntry);
+    P_REGISTER_DBUS_TYPE(TileRequestList);
+    P_REGISTER_DBUS_TYPE(SnapAllResultEntry);
+    P_REGISTER_DBUS_TYPE(SnapAllResultList);
+    P_REGISTER_DBUS_TYPE(SnapConfirmationEntry);
+    P_REGISTER_DBUS_TYPE(SnapConfirmationList);
+    P_REGISTER_DBUS_TYPE(WindowOpenedEntry);
+    P_REGISTER_DBUS_TYPE(WindowOpenedList);
+    P_REGISTER_DBUS_TYPE(WindowStateEntry);
+    P_REGISTER_DBUS_TYPE(WindowStateList);
+    P_REGISTER_DBUS_TYPE(UnfloatRestoreResult);
+    P_REGISTER_DBUS_TYPE(ZoneGeometryRect);
+    P_REGISTER_DBUS_TYPE(ZoneGeometryList);
+    P_REGISTER_DBUS_TYPE(EmptyZoneEntry);
+    P_REGISTER_DBUS_TYPE(EmptyZoneList);
+    P_REGISTER_DBUS_TYPE(SnapAssistCandidate);
+    P_REGISTER_DBUS_TYPE(SnapAssistCandidateList);
+    P_REGISTER_DBUS_TYPE(NamedZoneGeometry);
+    P_REGISTER_DBUS_TYPE(NamedZoneGeometryList);
+    P_REGISTER_DBUS_TYPE(AlgorithmInfoEntry);
+    P_REGISTER_DBUS_TYPE(AlgorithmInfoList);
+    P_REGISTER_DBUS_TYPE(BridgeRegistrationResult);
+    P_REGISTER_DBUS_TYPE(MoveTargetResult);
+    P_REGISTER_DBUS_TYPE(FocusTargetResult);
+    P_REGISTER_DBUS_TYPE(CycleTargetResult);
+    P_REGISTER_DBUS_TYPE(SwapTargetResult);
+    P_REGISTER_DBUS_TYPE(RestoreTargetResult);
+    P_REGISTER_DBUS_TYPE(PreTileGeometryEntry);
+    P_REGISTER_DBUS_TYPE(PreTileGeometryList);
+    P_REGISTER_DBUS_TYPE(DragPolicy);
+    P_REGISTER_DBUS_TYPE(DragOutcome);
 
-#undef PZ_REGISTER_DBUS_TYPE
+#undef P_REGISTER_DBUS_TYPE
 }
 
 } // namespace PhosphorProtocol

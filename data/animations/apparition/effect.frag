@@ -43,21 +43,6 @@
 // alpha `oColor.a *= 1.0 - progress` followed by setOutputColor
 // premultiplication.
 
-#version 450
-
-#include <animation_uniforms.glsl>
-
-// metadata.json declaration order → customParams sub-slots
-#define seedX      customParams[0].x
-#define seedY      customParams[0].y
-#define shake      customParams[0].z
-#define twirl      customParams[0].w
-#define suction    customParams[1].x
-#define randomness customParams[1].y
-
-layout(location = 0) in vec2 vTexCoord;
-layout(location = 0) out vec4 fragColor;
-
 // Whirl: rotate `coords` around its origin by an angle that grows
 // quadratically toward the centre. Inner points rotate strongly,
 // edge points (length≥1) rotate not at all. This is the same math
@@ -72,13 +57,11 @@ vec2 whirl(vec2 coords, float warping, float rotation)
     return vec2(dot(coords, vec2(c, -s)), dot(coords, vec2(s, c)));
 }
 
-void main()
+vec4 pTransition(vec2 uv, float t)
 {
-    vec2 uv = vTexCoord;
-
     // Visibility 1 at fully solid, 0 at fully gone. `progress` is
     // its complement and drives every distortion magnitude.
-    float visibility = clamp(iTime, 0.0, 1.0);
+    float visibility = clamp(t, 0.0, 1.0);
     float progress   = 1.0 - visibility;
 
     // Suction centre: at randomness=0 the centre is the window
@@ -86,8 +69,8 @@ void main()
     // centre is at (seedX, seedY) — useful for an off-centre
     // pinch. Default randomness=0.5 nudges the centre slightly
     // toward (seedX, seedY) without going fully off-centre.
-    vec2 seed   = vec2(seedX, seedY);
-    vec2 center = mix(vec2(0.5), seed, clamp(randomness, 0.0, 1.0));
+    vec2 seed   = vec2(p_seedX, p_seedY);
+    vec2 center = mix(vec2(0.5), seed, clamp(p_randomness, 0.0, 1.0));
 
     // Coords relative to the suction centre, in UV space.
     vec2 coords = uv - center;
@@ -97,8 +80,8 @@ void main()
     // the wobble — this is what gives the effect its "rattly" feel
     // rather than a uniform sway. Both axes use the same template
     // (sin on x, cos on y) with the seed coords as phase offsets.
-    coords.x += progress * 0.05 * shake * sin((progress + seed.x) * (1.0 + seed.x) * shake);
-    coords.y += progress * 0.05 * shake * cos((progress + seed.y) * (1.0 + seed.y) * shake);
+    coords.x += progress * 0.05 * p_shake * sin((progress + seed.x) * (1.0 + seed.x) * p_shake);
+    coords.y += progress * 0.05 * p_shake * cos((progress + seed.y) * (1.0 + seed.y) * p_shake);
 
     // Suction: push sample position outward from centre proportional
     // to progress. The push direction is `coords / (length/sqrt(2))
@@ -111,7 +94,7 @@ void main()
     // and exits the window".
     float dist = length(coords) / sqrt(2.0);
     if (dist > 0.0001) {
-        coords += progress * (coords / dist) * 0.5 * suction;
+        coords += progress * (coords / dist) * 0.5 * p_suction;
     }
 
     // Whirl: rotate the displaced coords around the suction centre.
@@ -119,7 +102,7 @@ void main()
     // strongly, outer points barely. Combined with the suction-
     // outward push, the visual feel is "window content spirals as
     // it gets sucked out of the window".
-    coords = whirl(coords, twirl * progress, 0.0);
+    coords = whirl(coords, p_twirl * progress, 0.0);
 
     // Sample. Without explicit clipping the edge-clamp sampler
     // would smear the texture edge across off-window UVs as the
@@ -134,5 +117,5 @@ void main()
     // than smootherstepping) means the suction/whirl amplitudes and
     // alpha decay together at the same rate, which is what BMW does
     // and what makes the dissolve feel coupled to the distortion.
-    fragColor = sampled * visibility;
+    return sampled * visibility;
 }

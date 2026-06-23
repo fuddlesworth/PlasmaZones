@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 #include "updatechecker.h"
+#include "../phosphor_i18n.h"
 #include "version.h"
 #include <QNetworkReply>
 #include <QJsonDocument>
@@ -10,9 +11,9 @@
 #include <QDateTime>
 #include <QRegularExpression>
 
-Q_LOGGING_CATEGORY(lcUpdateChecker, "plasmazones.updatechecker", QtInfoMsg)
-
 namespace PlasmaZones {
+
+Q_LOGGING_CATEGORY(lcUpdateChecker, "plasmazones.updatechecker", QtInfoMsg)
 
 namespace {
 const QString GITHUB_API_URL = QStringLiteral("https://api.github.com/repos/%1/releases/latest").arg(GITHUB_REPO);
@@ -130,6 +131,16 @@ void UpdateChecker::onRequestFinished(QNetworkReply* reply)
 
     reply->deleteLater();
 
+    // Drop the pooled SSL connection now that we're done with this one-shot
+    // request. QNetworkAccessManager otherwise keeps the underlying socket in
+    // its connection cache for ~120 s; the remote server closes its end during
+    // that window, and any subsequent activity that nudges the cache (e.g.
+    // event-loop ticks while the user navigates settings pages) triggers a
+    // `QIODevice::read (QSslSocket): device not open` warning when Qt probes
+    // the half-closed socket. Clearing the cache here makes the next check
+    // open a fresh connection instead.
+    m_networkManager->clearConnectionCache();
+
     if (reply->error() != QNetworkReply::NoError) {
         m_errorMessage = reply->errorString();
         qCWarning(lcUpdateChecker) << "Update check: failed," << m_errorMessage;
@@ -143,7 +154,7 @@ void UpdateChecker::onRequestFinished(QNetworkReply* reply)
     QJsonDocument doc = QJsonDocument::fromJson(data, &parseError);
 
     if (parseError.error != QJsonParseError::NoError) {
-        m_errorMessage = tr("Failed to parse response: %1").arg(parseError.errorString());
+        m_errorMessage = PhosphorI18n::tr("Failed to parse response: %1").arg(parseError.errorString());
         qCWarning(lcUpdateChecker) << m_errorMessage;
         Q_EMIT errorMessageChanged();
         Q_EMIT checkFinished(false);
@@ -157,7 +168,7 @@ void UpdateChecker::onRequestFinished(QNetworkReply* reply)
     QString latestVersion = stripVersionPrefix(tagName);
 
     if (latestVersion.isEmpty()) {
-        m_errorMessage = tr("No version found in release data");
+        m_errorMessage = PhosphorI18n::tr("No version found in release data");
         qCWarning(lcUpdateChecker) << m_errorMessage;
         Q_EMIT errorMessageChanged();
         Q_EMIT checkFinished(false);

@@ -33,10 +33,10 @@ The consumer shouldn't care which backend is active. `phosphor-shortcuts`:
 
 | Type | Purpose |
 |------|---------|
-| `Phosphor::Shortcuts::Registry`        | Front-end: `bind()` a shortcut id and callback |
-| `Phosphor::Shortcuts::IBackend`        | Abstract backend. Shipped implementations: KGlobalAccel, XDG-Portal, D-Bus |
-| `Phosphor::Shortcuts::Integration::IAdhocRegistrar` | Short-lived registrations that skip persistent storage |
-| `Phosphor::Shortcuts::createBackend`   | Selects the right backend based on running environment |
+| `PhosphorShortcuts::Registry`        | Front-end: `bind()` a shortcut id and callback |
+| `PhosphorShortcuts::IBackend`        | Abstract backend. Shipped implementations: KGlobalAccel, XDG-Portal, D-Bus |
+| `PhosphorShortcutsIntegration::IAdhocRegistrar` | Short-lived registrations that skip persistent storage |
+| `PhosphorShortcuts::createBackend`   | Selects the right backend based on running environment |
 
 ## Typical use
 
@@ -44,7 +44,7 @@ The consumer shouldn't care which backend is active. `phosphor-shortcuts`:
 #include <PhosphorShortcuts/Registry.h>
 #include <PhosphorShortcuts/Factory.h>
 
-using namespace Phosphor::Shortcuts;
+using namespace PhosphorShortcuts;
 
 auto backend = createBackend();  // picks KGlobalAccel on Plasma
 Registry registry(backend.get());
@@ -58,8 +58,8 @@ registry.bind(
 );
 ```
 
-Switching backends is a one-liner: the same `Registry` API, a different
-`IBackend`.
+Switching backends is a one-liner. The `Registry` API stays the same, and you
+pass a different `IBackend`.
 
 ```cpp
 auto portalBackend = createBackend(BackendHint::Portal);
@@ -76,8 +76,8 @@ adhoc.bind(id, seq, desc, cb, /*persistent*/ false);
   end up in the user's persistent shortcut editor live behind a different
   API, so the backend only persists the ones that asked for it.
 - **`createBackend(BackendHint::Auto)`** probes at runtime. First preference is
-  KGlobalAccel (fastest, native Plasma integration); it falls back to the
-  portal, and last to D-Bus.
+  KGlobalAccel (fastest, native Plasma integration), then the
+  portal, and last D-Bus.
 
 ## Dependencies
 

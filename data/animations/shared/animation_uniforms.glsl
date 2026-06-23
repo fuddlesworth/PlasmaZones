@@ -141,6 +141,18 @@ uniform vec2 iAnchorSize;
 // consumes it.
 uniform vec2 iAnchorPosInFbo;
 
+// Window's effective rule-resolved opacity in [0, 1] — compositor path
+// only. A `SetOpacity` window rule must dim the window for the whole
+// transition, but the custom transition shader is compiled
+// `MapTexture`-only (no `Modulate` trait), so KWin never applies
+// `data.opacity()` to it. `surfaceColor()` below multiplies the
+// premultiplied surface sample by this uniform so the dim holds across
+// the animation instead of snapping in only after it ends. The
+// kwin-effect pushes 1.0 for windows with no matching rule, so the
+// multiply is a no-op in the common case. Daemon-only animations have no
+// window-rule opacity, so the UBO branch omits this field entirely.
+uniform float iWindowOpacity;
+
 // Card's UV sub-rect within `uTexture0`, as (x, y, width, height) in
 // the texture's [0, 1] space. Both runtimes capture more than the bare
 // card: KWin's OffscreenEffect redirects the whole window item —
@@ -324,12 +336,42 @@ layout(binding = 10) uniform sampler2D uTexture3;
 vec4 surfaceColor(vec2 uv) {
     vec2 t = iAnchorRectInTexture.xy + uv * iAnchorRectInTexture.zw;
 #ifdef PLASMAZONES_KWIN
-    // KWin's FBO is bottom-origin (Y-up) — flip last.
-    return texture(uTexture0, vec2(t.x, 1.0 - t.y));
+    // KWin's FBO is bottom-origin (Y-up) — flip last. Then scale by the
+    // window-rule opacity: uTexture0 is premultiplied, so multiplying the
+    // whole sample by the [0, 1] `iWindowOpacity` is the correct
+    // premultiplied-alpha dim. This is what makes a `SetOpacity` rule hold
+    // throughout a transition (the MapTexture-only shader can't see
+    // `data.opacity()`); the effect feeds 1.0 when no rule matches, so the
+    // common case is unchanged. Every window-content shader reads the
+    // surface through this helper (directly or via bmw_compat's
+    // `getInputColor`), so the dim propagates uniformly without per-shader
+    // edits.
+    return texture(uTexture0, vec2(t.x, 1.0 - t.y)) * iWindowOpacity;
 #else
-    // The daemon's Qt-RHI texture is top-origin (Y-down) — no flip.
+    // The daemon's Qt-RHI texture is top-origin (Y-down) — no flip. The
+    // daemon path has no window-rule opacity (SetOpacity is a compositor
+    // window-rule feature), so there is no iWindowOpacity multiply here.
     return texture(uTexture0, t);
 #endif
+}
+
+// ─── Direction helpers (T1.5) ──────────────────────────────────────────
+// A transition plays forward (in: window.open / snapIn / show) or reverse
+// (out: window.close / snapOut / hide). The runtime exposes that as
+// `iIsReversed` (1 on reverse legs) and by flipping `iTime` (0→1 in, 1→0
+// out) so symmetric shaders auto-mirror. Both names below resolve in the
+// daemon UBO and the kwin default-block branch, so a shader uses them
+// identically on either runtime.
+
+// Direction as a clean boolean — replaces the `iIsReversed == 1` exact-
+// equality test (branching on `!= 0` was the documented footgun).
+#define p_reversed (iIsReversed == 1)
+
+// Un-flipped, always-forward 0→1 leg progress. 24 of the bundled shaders
+// hand-roll exactly this `(iIsReversed == 1) ? (1.0 - iTime) : iTime` to
+// recover direction-independent progress; call this instead.
+float legProgress() {
+    return p_reversed ? (1.0 - iTime) : iTime;
 }
 
 #endif // PLASMAZONES_ANIMATION_UNIFORMS_GLSL

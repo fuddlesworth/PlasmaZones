@@ -10,6 +10,7 @@
 #include "../../core/enums.h"
 #include "../windowtrackingadaptor.h"
 #include "../../core/interfaces.h"
+#include <PhosphorContext/ContextResolver.h>
 #include <PhosphorZones/LayoutRegistry.h>
 #include <PhosphorZones/LayoutComputeService.h>
 #include <PhosphorZones/Layout.h>
@@ -26,11 +27,8 @@
 
 namespace PlasmaZones {
 
-void WindowDragAdaptor::dragStarted(const QString& windowId, double x, double y, double width, double height,
-                                    int mouseButtons)
+void WindowDragAdaptor::dragStarted(const QString& windowId, double x, double y, double width, double height)
 {
-    Q_UNUSED(mouseButtons); // Only used in dragMoved for dynamic activation
-
     if (windowId.isEmpty()) {
         qCWarning(lcDbusWindow) << "dragStarted: empty windowId";
         return;
@@ -70,7 +68,9 @@ void WindowDragAdaptor::dragStarted(const QString& windowId, double x, double y,
     m_isMultiZoneMode = false;
     m_currentMultiZoneGeometry = QRect();
     m_paintedZoneIds.clear();
-    m_modifierConflictWarned = false;
+    // m_modifierConflictWarned reset moved to beginDrag — keeping it
+    // here only covered snap-path drags, leaving the latch stale across
+    // bypass drags.
     m_lastEmittedZoneGeometry = QRect();
     m_restoreSizeEmittedDuringDrag = false;
     m_lastLoggedActivationActive = false;
@@ -83,6 +83,10 @@ void WindowDragAdaptor::dragStarted(const QString& windowId, double x, double y,
     // and is also commonly the configured snap activation trigger). The user
     // must perform a real release→press cycle to toggle.
     m_prevTriggerHeld = true;
+    // Zone span toggle latch (#563) reset lives in beginDrag, not here — the
+    // bypass path (autotile-only) never calls dragStarted, so resetting it
+    // here would leave the latch stale across bypass drags (same hazard the
+    // autotile drag-insert latch and m_modifierConflictWarned avoid).
     m_overlayShown = false;
     // m_overlayIdled is NOT reset here. The previous drag's end sets it:
     // a normal drop (hideOverlayAndSelector) leaves it true because the
@@ -119,7 +123,7 @@ void WindowDragAdaptor::dragStarted(const QString& windowId, double x, double y,
         if (screen) {
             QString screenId = effectiveScreenIdAt(m_originalGeometry.center().x(), m_originalGeometry.center().y());
             if (screenId.isEmpty())
-                screenId = Phosphor::Screens::ScreenIdentity::identifierFor(screen);
+                screenId = PhosphorScreens::ScreenIdentity::identifierFor(screen);
             auto* layout = m_layoutManager->resolveLayoutForScreen(screenId);
             if (layout) {
                 PhosphorZones::LayoutComputeService::recalculateSync(
@@ -127,7 +131,7 @@ void WindowDragAdaptor::dragStarted(const QString& windowId, double x, double y,
 
                 for (auto* zone : layout->zones()) {
                     QRect zoneRect = GeometryUtils::getZoneGeometryForScreen(m_screenManager, zone, screen, screenId,
-                                                                             layout, m_settings);
+                                                                             layout, m_settings, m_layoutManager);
 
                     // Use class constants for tolerances
                     int xDiff = std::abs(m_originalGeometry.x() - zoneRect.x());
@@ -156,8 +160,13 @@ PhosphorZones::Layout* WindowDragAdaptor::prepareHandlerContext(int x, int y, QS
         return nullptr;
     }
     outScreenId = resolved.screenId;
-    if (isContextDisabled(m_settings, PhosphorZones::AssignmentEntry::Snapping, outScreenId,
-                          m_layoutManager->currentVirtualDesktop(), m_layoutManager->currentActivity())) {
+    // Live-mode disable check — `handleFor` not `handleForMode(Snapping)`.
+    // The cursor can cross from a snap-mode screen onto an autotile-mode
+    // screen mid-drag; gating on the hard-coded Snapping disable list
+    // would consult the wrong list for the destination. Mirrors the
+    // matching fix in drop.cpp::useOverlayZone and
+    // drag_protocol.cpp::computeDragPolicy.
+    if (m_contextResolver && m_contextResolver->isDisabled(m_contextResolver->handleFor(outScreenId))) {
         if (m_overlayShown && m_overlayService) {
             m_overlayService->hide();
             m_overlayShown = false;
@@ -433,8 +442,8 @@ void WindowDragAdaptor::handleMultiZoneModifier(int x, int y)
             m_zoneDetector->highlightZone(result.primaryZone);
             m_overlayService->highlightZone(zoneId);
 
-            m_currentZoneGeometry = GeometryUtils::getZoneGeometryForScreen(m_screenManager, result.primaryZone, screen,
-                                                                            screenId, layout, m_settings);
+            m_currentZoneGeometry = GeometryUtils::getZoneGeometryForScreen(
+                m_screenManager, result.primaryZone, screen, screenId, layout, m_settings, m_layoutManager);
             m_currentMultiZoneGeometry = QRect();
         }
     } else {
@@ -612,15 +621,27 @@ void WindowDragAdaptor::dragMoved(const QString& windowId, int cursorX, int curs
     // Keeping this independent of the logging predicate above means a
     // missed transition log (or a coalesced dragMoved) can still refresh
     // the overlay. refreshFromIdle() is cheap when inputs are unchanged —
-    // L2's labels-texture hash cache skips the 23 MB QImage rebuild, and
-    // the QVariantList zones push is small.
+    // L2's labels-texture hash cache skips the sparse glyph-tile payload
+    // rebuild, and the QVariantList zones push is small.
     if (activationActive && m_overlayIdled && m_overlayService) {
         m_overlayService->refreshFromIdle();
         m_overlayIdled = false;
     }
 
-    // Check all configured zone span triggers (multi-bind support)
-    const bool zoneSpanModifierHeld = anyTriggerHeld(m_cachedZoneSpanTriggers, mods, mouseButtons);
+    // Check all configured zone span triggers (multi-bind support). In toggle
+    // mode the raw held-state is resolved through the same rising-edge latch as
+    // activation (#563): tap the span modifier once to start spanning, tap
+    // again to stop, instead of holding it. alwaysActiveOnDrag is always false
+    // here — zone span has no always-active sentinel. The latch is evaluated
+    // every tick (not just when the overlay is active) so a release→press while
+    // the overlay is off is still seen on the next active tick.
+    const bool rawZoneSpanHeld = anyTriggerHeld(m_cachedZoneSpanTriggers, mods, mouseButtons);
+    const ActivationDecision zoneSpanDecision =
+        resolveActivationActive(rawZoneSpanHeld, m_settings->zoneSpanToggleMode(), /*alwaysActiveOnDrag=*/false,
+                                m_prevZoneSpanTriggerHeld, m_zoneSpanToggled);
+    m_prevZoneSpanTriggerHeld = zoneSpanDecision.nextPrevTriggerHeld;
+    m_zoneSpanToggled = zoneSpanDecision.nextActivationToggled;
+    const bool zoneSpanModifierHeld = zoneSpanDecision.active;
 
     // Conflict detection: warn once per drag when activation and zone span
     // can both fire on the same physical input. Runtime semantics are AND

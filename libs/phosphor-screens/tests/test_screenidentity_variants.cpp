@@ -20,7 +20,7 @@
 #include <QTest>
 #include <QStringList>
 
-using namespace Phosphor::Screens::ScreenIdentity;
+using namespace PhosphorScreens::ScreenIdentity;
 
 class TestScreenIdentityVariants : public QObject
 {

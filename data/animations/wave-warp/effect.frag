@@ -18,9 +18,6 @@
 // `texture(uTexture0, uv)` samples directly. `texture2D` (GLSL ES) is
 // rewritten to `texture` (GLSL 4.50 core) inline.
 
-#version 450
-
-#include <animation_uniforms.glsl>
 #include <noise.glsl>
 
 // metadata.json declaration order → customParams[0] sub-slots.
@@ -32,30 +29,22 @@
 // warp completes early and holds fully revealed for the rest of the
 // leg. This subsumes the former standalone `crosswarp` shader, whose
 // only dial was an equivalent front-speed control.
-#define waveSmoothness customParams[0].x
-#define waveAngle      customParams[0].y
-#define frontSpeed     customParams[0].z
-
-layout(location = 0) in vec2 vTexCoord;
-layout(location = 0) out vec4 fragColor;
-
-void main() {
+vec4 pTransition(vec2 uv, float t) {
     // ── niri OPEN body (handles both legs via runtime iTime flip) ──
     // `frontSpeed` scales leg progress before the clamp; see the
     // customParams block above.
-    float p = clamp(iTime * frontSpeed, 0.0, 1.0);
-    vec2 uv = vTexCoord;
+    float p = clamp(iTime * p_frontSpeed, 0.0, 1.0);
 
     // `(cos θ, sin θ)` is unit-length for any finite θ, so niri's
     // `normalize(dir)` is a no-op here — dropped. The `v /=
     // abs(v.x) + abs(v.y)` rescale below is the load-bearing
     // L1-normalisation that converts the unit direction into the
     // diagonal-aware wave coordinate space.
-    vec2 dir = vec2(cos(waveAngle), sin(waveAngle));
+    vec2 dir = vec2(cos(p_waveAngle), sin(p_waveAngle));
     vec2 v = dir;
     v /= abs(v.x) + abs(v.y);
     float d = v.x * 0.5 + v.y * 0.5;
-    float m = 1.0 - smoothstep(-waveSmoothness, 0.0, v.x * uv.x + v.y * uv.y - (d - 0.5 + p * (1.0 + waveSmoothness)));
+    float m = 1.0 - smoothstep(-p_waveSmoothness, 0.0, v.x * uv.x + v.y * uv.y - (d - 0.5 + p * (1.0 + p_waveSmoothness)));
 
     // The contraction is bounded: `m ∈ [0, 1]` (smoothstep-clamped) and
     // `uv ∈ [0, 1]` give `warped = (uv - 0.5) * m + 0.5 ∈ [0, 1]`, so
@@ -64,5 +53,5 @@ void main() {
     // no boundary mask is needed either. The `m` multiply on the final
     // colour fades the contracted silhouette out as the wipe completes.
     vec2 warped = (uv - 0.5) * m + 0.5;
-    fragColor = surfaceColor(warped) * m;
+    return surfaceColor(warped) * m;
 }

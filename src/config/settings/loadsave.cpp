@@ -12,7 +12,7 @@ namespace PlasmaZones {
 // Display, ZoneSelector, Activation, Behavior, Autotiling) load on-demand
 // through Settings getters and persist via setters. The only groups that
 // still need explicit load/save logic are the per-physical-screen Virtual
-// Screen configs (below), whose QHash<QString, Phosphor::Screens::VirtualScreenConfig> shape
+// Screen configs (below), whose QHash<QString, PhosphorScreens::VirtualScreenConfig> shape
 // doesn't fit the Store's scalar-key-per-setting model.
 //
 // BACKEND NOTE: the per-screen-index key compositions below use '/' as an
@@ -50,12 +50,12 @@ void Settings::loadVirtualScreenConfigs(PhosphorConfig::IBackend* backend)
             continue;
         }
 
-        Phosphor::Screens::VirtualScreenConfig config;
+        PhosphorScreens::VirtualScreenConfig config;
         config.physicalScreenId = physId;
 
         for (int i = 0; i < count; ++i) {
             const QString p = QString::number(i) + QLatin1Char('/');
-            Phosphor::Screens::VirtualScreenDef vs;
+            PhosphorScreens::VirtualScreenDef vs;
             vs.physicalScreenId = physId;
             vs.index = i;
             vs.id = PhosphorIdentity::VirtualScreenId::make(physId, i);
@@ -75,7 +75,7 @@ void Settings::loadVirtualScreenConfigs(PhosphorConfig::IBackend* backend)
         // pairwise-overlap + total-coverage check is delegated to
         // VirtualScreenConfig::isValid so there's one authoritative predicate
         // shared with the D-Bus admission path and the swap/rotate validator.
-        QVector<Phosphor::Screens::VirtualScreenDef> validScreens;
+        QVector<PhosphorScreens::VirtualScreenDef> validScreens;
         for (const auto& vs : config.screens) {
             if (!vs.isValid()) {
                 qCWarning(lcConfig) << "Skipping VirtualScreen" << vs.id << "with invalid region:" << vs.region;
@@ -93,8 +93,8 @@ void Settings::loadVirtualScreenConfigs(PhosphorConfig::IBackend* backend)
             continue;
 
         QString error;
-        if (!Phosphor::Screens::VirtualScreenConfig::isValid(config, physId,
-                                                             ConfigDefaults::maxVirtualScreensPerPhysical(), &error)) {
+        if (!PhosphorScreens::VirtualScreenConfig::isValid(config, physId,
+                                                           ConfigDefaults::maxVirtualScreensPerPhysical(), &error)) {
             qCWarning(lcConfig) << "loadVirtualScreenConfigs: rejecting config for" << physId << "—" << error;
             continue;
         }
@@ -119,7 +119,7 @@ void Settings::saveVirtualScreenConfigs(PhosphorConfig::IBackend* backend)
     // identical IDs to what was saved.
     for (auto it = m_virtualScreenConfigs.constBegin(); it != m_virtualScreenConfigs.constEnd(); ++it) {
         const QString& physId = it.key();
-        const Phosphor::Screens::VirtualScreenConfig& config = it.value();
+        const PhosphorScreens::VirtualScreenConfig& config = it.value();
         if (config.screens.isEmpty())
             continue;
 
@@ -127,7 +127,7 @@ void Settings::saveVirtualScreenConfigs(PhosphorConfig::IBackend* backend)
         group->writeInt(ConfigDefaults::virtualScreenCountKey(), config.screens.size());
 
         for (int i = 0; i < config.screens.size(); ++i) {
-            Phosphor::Screens::VirtualScreenDef vs = config.screens[i];
+            PhosphorScreens::VirtualScreenDef vs = config.screens[i];
             // Normalize index and id to match the save position so round-trip is stable
             vs.index = i;
             vs.id = PhosphorIdentity::VirtualScreenId::make(physId, i);

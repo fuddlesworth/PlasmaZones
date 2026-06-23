@@ -4,8 +4,11 @@
 #include "internal.h"
 
 #include <PhosphorRendering/ShaderCompiler.h>
+#include <PhosphorShaders/ShaderParamPreamble.h>
 
+#include <QFile>
 #include <QFileInfo>
+#include <QTextStream>
 #include <cmath>
 
 namespace PhosphorRendering {
@@ -155,7 +158,7 @@ void ShaderNodeRhi::setAppField0(int value)
     m_baseUniforms.appField0 = value;
     m_uniformsDirty = true;
     // Use the granular K_APP_FIELDS region (8 bytes) instead of the full
-    // scene header (~512 bytes). PlasmaZones updates these on every hover.
+    // scene header (~512 bytes). Phosphor updates these on every hover.
     m_appFieldsDirty = true;
 }
 
@@ -513,20 +516,56 @@ bool ShaderNodeRhi::loadFragmentShader(const QString& path)
 {
     // Capture mtime BEFORE the read (TOCTOU-safe cache key); see loadVertexShader.
     const qint64 mtime = QFileInfo(path).lastModified().toMSecsSinceEpoch();
-    QString err;
-    QStringList includedPaths;
-    m_fragmentShaderSource = loadAndExpandShaderTracked(path, &includedPaths, &err);
-    if (m_fragmentShaderSource.isEmpty()) {
-        m_shaderError = err.startsWith(QStringLiteral("Failed to open:"))
-            ? QString(QStringLiteral("Failed to open fragment shader: ") + path)
-            : QString(QStringLiteral("Fragment shader include: ") + err);
+
+    // Read raw, then apply the T1.4 entry-point assembly BEFORE include
+    // expansion so an entry-only pack's generated `#include` scaffold is
+    // resolved. When no scaffold is installed (animation path) or the source
+    // already defines `main()` (every traditional pack), applyEntryAssembly is
+    // the identity, and read+expandSource is the exact equivalent of the old
+    // loadAndExpand(path). The mtime + included-paths fingerprints are unchanged;
+    // the entry scaffold is folded into the bake-cache key in render().
+    QFile fragFile(path);
+    if (!fragFile.open(QIODevice::ReadOnly | QIODevice::Text)) {
+        m_shaderError = QStringLiteral("Failed to open fragment shader: ") + path;
         return false;
     }
+    const QString rawSource = QTextStream(&fragFile).readAll();
+    const QString assembled = applyEntryAssembly(rawSource, m_entryPrologue, m_entryCandidates);
+
+    QString err;
+    QStringList includedPaths;
+    QString expanded = ShaderCompiler::expandSource(assembled, QFileInfo(path).absolutePath(), m_shaderIncludePaths,
+                                                    &err, &includedPaths);
+    if (expanded.isEmpty()) {
+        m_shaderError = err.isEmpty() ? QString(QStringLiteral("Failed to load fragment shader: ") + path)
+                                      : QString(QStringLiteral("Fragment shader include: ") + err);
+        return false;
+    }
+    // Splice the generated named-param preamble AFTER include expansion (T1.1)
+    // so its `#line` fixup math, which is based on the resolver's raw line
+    // positions, isn't disturbed. Empty preamble = no-op (returns the source
+    // unchanged). The preamble is folded into the bake-cache key below, so a
+    // cache hit can never serve SPIR-V baked with a different preamble.
+    m_fragmentShaderSource = PhosphorShaders::spliceAfterVersion(expanded, m_paramPreamble);
     m_fragmentPath = path;
     m_fragmentMtime = mtime;
     m_fragmentIncludedPaths = std::move(includedPaths);
     m_shaderDirty = true;
     return true;
+}
+
+void ShaderNodeRhi::setEntryScaffold(const QString& prologue, const QList<PhosphorShaders::EntryCandidate>& candidates)
+{
+    if (m_entryPrologue == prologue && m_entryCandidates == candidates) {
+        return;
+    }
+    m_entryPrologue = prologue;
+    m_entryCandidates = candidates;
+    // Like setParamPreamble: the scaffold is applied inside loadFragmentShader
+    // and folded into the bake-cache key, so a change must force a reload+rebake.
+    // The owning ShaderEffect re-invokes loadFragmentShader on its next dirty
+    // updatePaintNode, which re-assembles with the new scaffold.
+    m_shaderDirty = true;
 }
 
 void ShaderNodeRhi::setVertexShaderSource(const QString& source)
@@ -594,6 +633,20 @@ void ShaderNodeRhi::invalidateUniforms()
 void ShaderNodeRhi::setShaderIncludePaths(const QStringList& paths)
 {
     m_shaderIncludePaths = paths;
+}
+
+void ShaderNodeRhi::setParamPreamble(const QString& preamble)
+{
+    if (m_paramPreamble == preamble) {
+        return;
+    }
+    m_paramPreamble = preamble;
+    // The preamble is spliced inside loadFragmentShader and folded into the
+    // bake-cache key, so a change must force a reload+rebake — marking dirty
+    // alone (without a re-load) would re-bake the already-spliced cached
+    // source. The owning ShaderEffect re-invokes loadFragmentShader on its
+    // next updatePaintNode when dirty, which re-splices with the new preamble.
+    m_shaderDirty = true;
 }
 
 // ============================================================================

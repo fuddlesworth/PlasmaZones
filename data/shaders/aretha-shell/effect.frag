@@ -1,19 +1,11 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-#version 450
-
 // Aretha Shell — Ghost in the Shell / Aretha Dark Layered Shader
 // Ported from Ghostty shader: ~/.config/ghostty/shaders/aretha_shell.glsl
 // Original: MonoBall-inspired three-layer composite (Color Grade + Hex Grid + Data Streams)
 // PlasmaZones enhancements: audio reactivity, bidirectional streams, IDS scan lines
 
-layout(location = 0) in vec2 vTexCoord;
-layout(location = 1) in vec2 vFragCoord;
-
-layout(location = 0) out vec4 fragColor;
-
-#include <common.glsl>
 #include <audio.glsl>
 
 
@@ -21,30 +13,30 @@ layout(location = 0) out vec4 fragColor;
 // PARAMETERS  (customParams slots 0-21, customColors slots 0-7)
 // ═══════════════════════════════════════════════════════════════════════════════
 
-float getSpeed()           { return customParams[0].x >= 0.0 ? customParams[0].x : 0.08; }
-float getGradeIntensity()  { return customParams[0].y >= 0.0 ? customParams[0].y : 0.25; }
-float getGradeSaturation() { return customParams[0].z >= 0.0 ? customParams[0].z : 1.08; }
-float getShimmerIntensity(){ return customParams[0].w >= 0.0 ? customParams[0].w : 0.02; }
-float getHexPixelSize()    { return customParams[1].x >= 0.0 ? customParams[1].x : 35.0; }
-float getHexLineThickness(){ return customParams[1].y >= 0.0 ? customParams[1].y : 0.05; }
-float getHexOpacity()      { return customParams[1].z >= 0.0 ? customParams[1].z : 0.18; }
-float getHexPulseSpeed()   { return customParams[1].w >= 0.0 ? customParams[1].w : 1.5; }
-float getHexScanSpeed()    { return customParams[2].x >= 0.0 ? customParams[2].x : 1.0; }
-float getStreamColumns()   { return customParams[2].y >= 0.0 ? customParams[2].y : 35.0; }
-float getStreamOpacity()   { return customParams[2].z >= 0.0 ? customParams[2].z : 0.15; }
-float getStreamSpeed()     { return customParams[2].w >= 0.0 ? customParams[2].w : 0.8; }
-float getTrailLength()     { return customParams[3].x >= 0.0 ? customParams[3].x : 0.20; }
-float getAudioSensitivity(){ return customParams[3].y >= 0.0 ? customParams[3].y : 1.0; }
-float getFillOpacity()     { return customParams[3].z >= 0.0 ? customParams[3].z : 0.95; }
-float getDataSurgeIntensity() { return customParams[3].w >= 0.0 ? customParams[3].w : 1.0; }
+float getSpeed()           { return p_speed >= 0.0 ? p_speed : 0.08; }
+float getGradeIntensity()  { return p_gradeIntensity >= 0.0 ? p_gradeIntensity : 0.25; }
+float getGradeSaturation() { return p_gradeSaturation >= 0.0 ? p_gradeSaturation : 1.08; }
+float getShimmerIntensity(){ return p_shimmerIntensity >= 0.0 ? p_shimmerIntensity : 0.02; }
+float getHexPixelSize()    { return p_hexPixelSize >= 0.0 ? p_hexPixelSize : 35.0; }
+float getHexLineThickness(){ return p_hexLineThickness >= 0.0 ? p_hexLineThickness : 0.05; }
+float getHexOpacity()      { return p_hexOpacity >= 0.0 ? p_hexOpacity : 0.18; }
+float getHexPulseSpeed()   { return p_hexPulseSpeed >= 0.0 ? p_hexPulseSpeed : 1.5; }
+float getHexScanSpeed()    { return p_hexScanSpeed >= 0.0 ? p_hexScanSpeed : 1.0; }
+float getStreamColumns()   { return p_streamColumns >= 0.0 ? p_streamColumns : 35.0; }
+float getStreamOpacity()   { return p_streamOpacity >= 0.0 ? p_streamOpacity : 0.15; }
+float getStreamSpeed()     { return p_streamSpeed >= 0.0 ? p_streamSpeed : 0.8; }
+float getTrailLength()     { return p_trailLength >= 0.0 ? p_trailLength : 0.20; }
+float getAudioSensitivity(){ return p_audioSensitivity >= 0.0 ? p_audioSensitivity : 1.0; }
+float getFillOpacity()     { return p_fillOpacity >= 0.0 ? p_fillOpacity : 0.95; }
+float getDataSurgeIntensity() { return p_dataSurgeIntensity >= 0.0 ? p_dataSurgeIntensity : 1.0; }
 
 // Tri-Hex parameters (customParams[4] and customParams[5])
-float getTriLineThickness() { return customParams[4].x >= 0.0 ? customParams[4].x : 0.03; }
-float getTriLineOpacity()   { return customParams[4].y >= 0.0 ? customParams[4].y : 0.25; }
-float getTriFillOpacity()   { return customParams[4].z >= 0.0 ? customParams[4].z : 0.12; }
-float getTriPulseSpeed()    { return customParams[4].w >= 0.0 ? customParams[4].w : 2.0;  }
-float getTriRotSpeed()      { return customParams[5].x >= 0.0 ? customParams[5].x : 0.4;  }
-float getTriColorMix()      { return customParams[5].y >= 0.0 ? customParams[5].y : 0.5;  }
+float getTriLineThickness() { return p_triLineThickness >= 0.0 ? p_triLineThickness : 0.03; }
+float getTriLineOpacity()   { return p_triLineOpacity >= 0.0 ? p_triLineOpacity : 0.25; }
+float getTriFillOpacity()   { return p_triFillOpacity >= 0.0 ? p_triFillOpacity : 0.12; }
+float getTriPulseSpeed()    { return p_triPulseSpeed >= 0.0 ? p_triPulseSpeed : 2.0;  }
+float getTriRotSpeed()      { return p_triRotSpeed >= 0.0 ? p_triRotSpeed : 0.4;  }
+float getTriColorMix()      { return p_triColorMix >= 0.0 ? p_triColorMix : 0.5;  }
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // COLORS
@@ -58,19 +50,19 @@ const vec3 gradeMid       = vec3(0.000, 0.620, 0.741);
 const vec3 gradeHighlight = vec3(0.333, 0.667, 1.000);
 
 vec3 getBackgroundColor() {
-    vec3 bg = customColors[4].rgb;
+    vec3 bg = p_backgroundColor.rgb;
     return length(bg) > 0.01 ? bg : arethaBg;
 }
 
-vec3 getArethaCyan()   { vec3 c = customColors[0].rgb; return length(c) > 0.01 ? c : vec3(0.333, 0.667, 1.000); }
-vec3 getArethaPink()   { vec3 c = customColors[1].rgb; return length(c) > 0.01 ? c : vec3(1.000, 0.333, 0.498); }
-vec3 getArethaTeal()   { vec3 c = customColors[2].rgb; return length(c) > 0.01 ? c : vec3(0.000, 0.620, 0.741); }
-vec3 getArethaPurple() { vec3 c = customColors[3].rgb; return length(c) > 0.01 ? c : vec3(0.333, 0.333, 1.000); }
+vec3 getArethaCyan()   { vec3 c = p_arethaCyan.rgb; return length(c) > 0.01 ? c : vec3(0.333, 0.667, 1.000); }
+vec3 getArethaPink()   { vec3 c = p_arethaPink.rgb; return length(c) > 0.01 ? c : vec3(1.000, 0.333, 0.498); }
+vec3 getArethaTeal()   { vec3 c = p_arethaTeal.rgb; return length(c) > 0.01 ? c : vec3(0.000, 0.620, 0.741); }
+vec3 getArethaPurple() { vec3 c = p_arethaPurple.rgb; return length(c) > 0.01 ? c : vec3(0.333, 0.333, 1.000); }
 
 // Tri-Hex colors (warm accents to contrast with cool hex grid)
-vec3 getTriColor1()    { vec3 c = customColors[5].rgb; return length(c) > 0.01 ? c : vec3(1.000, 0.200, 0.550); }  // #ff3388 hot pink
-vec3 getTriColor2()    { vec3 c = customColors[6].rgb; return length(c) > 0.01 ? c : vec3(1.000, 0.450, 0.300); }  // #ff734d warm coral
-vec3 getTriLineColor() { vec3 c = customColors[7].rgb; return length(c) > 0.01 ? c : vec3(0.900, 0.150, 0.700); }  // #e626b3 vivid magenta
+vec3 getTriColor1()    { vec3 c = p_triColor1.rgb; return length(c) > 0.01 ? c : vec3(1.000, 0.200, 0.550); }  // #ff3388 hot pink
+vec3 getTriColor2()    { vec3 c = p_triColor2.rgb; return length(c) > 0.01 ? c : vec3(1.000, 0.450, 0.300); }  // #ff734d warm coral
+vec3 getTriLineColor() { vec3 c = p_triLineColor.rgb; return length(c) > 0.01 ? c : vec3(0.900, 0.150, 0.700); }  // #e626b3 vivid magenta
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // UTILITIES
@@ -714,10 +706,10 @@ vec4 compositeArethaLabels(vec4 color, vec2 fragCoord,
     vec3 arethaPink = getArethaPink();
     vec3 arethaTeal = getArethaTeal();
 
-    float labelGlowSpread = customParams[5].z >= 0.0 ? customParams[5].z : 2.5;
-    float labelBrightness = customParams[5].w >= 0.0 ? customParams[5].w : 2.0;
-    float labelAudioReact = customParams[6].x >= 0.0 ? customParams[6].x : 1.0;
-    float glitchFreq = customParams[6].y >= 0.0 ? customParams[6].y : 0.5;
+    float labelGlowSpread = p_glitchSpread >= 0.0 ? p_glitchSpread : 2.5;
+    float labelBrightness = p_scanlineBright >= 0.0 ? p_scanlineBright : 2.0;
+    float labelAudioReact = p_surgeReact >= 0.0 ? p_surgeReact : 1.0;
+    float glitchFreq = p_glitchFrequency >= 0.0 ? p_glitchFrequency : 0.5;
 
     // Gaussian halo for smooth glitch outline
     float halo = 0.0;
@@ -773,13 +765,11 @@ vec4 compositeArethaLabels(vec4 color, vec2 fragCoord,
 // MAIN
 // ═══════════════════════════════════════════════════════════════════════════════
 
-void main() {
-    vec2 fragCoord = vFragCoord;
+vec4 pImage(vec2 fragCoord) {
     vec4 color = vec4(0.0);
 
     if (zoneCount == 0) {
-        fragColor = vec4(0.0);
-        return;
+        return vec4(0.0);
     }
 
     // Audio analysis (computed once for all zones)
@@ -817,7 +807,7 @@ void main() {
         }
     }
 
-    if (customParams[6].z > 0.5)
+    if (p_showLabels > 0.5)
         color = compositeArethaLabels(color, fragCoord, bass, treble, hasAudio);
-    fragColor = clampFragColor(color);
+    return color;
 }

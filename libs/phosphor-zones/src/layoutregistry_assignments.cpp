@@ -3,160 +3,547 @@
 //
 // Layout assignment management (per-screen, per-desktop, per-activity).
 // Part of LayoutRegistry — split from layoutregistry.cpp for SRP.
+//
+// Phase 3b: the per-context assignment cascade is reimplemented on the
+// unified WindowRule engine. There is one resolution model: a windowless
+// WindowQuery evaluated through RuleEvaluator against the WindowRuleStore's
+// rule set. The deterministic Assignment cascade (exact → activity → desktop
+// → screen → provider default) is reproduced by the ContextRuleBridge
+// priority formula — higher priority pins more context dimensions, so the
+// evaluator's descending-priority, first-action-per-slot walk returns the
+// same result the old walkCascade() did. Connector-name / virtual-screen
+// fallback is NOT a priority band — it is a query-side recursive key rewrite,
+// kept here in layoutForScreen() / the shared resolve helper.
 
 #include <PhosphorZones/LayoutRegistry.h>
 
+#include "layoutregistry_rulehelpers_p.h"
 #include "zoneslogging.h"
 
 #include <PhosphorScreens/ScreenIdentity.h>
 #include <PhosphorScreens/VirtualScreen.h>
 
-#include <QFile>
-#include <QJsonDocument>
+#include <PhosphorWindowRules/ContextRuleBridge.h>
+#include <PhosphorWindowRules/MatchExpression.h>
+#include <PhosphorWindowRules/RuleAction.h>
+#include <PhosphorWindowRules/WindowQuery.h>
+#include <PhosphorWindowRules/WindowRule.h>
+
+#include <algorithm>
 #include <optional>
 
 namespace PhosphorZones {
 
+namespace PWR = PhosphorWindowRules;
+
+// The rule-shape classification / context helpers (contextRuleName,
+// decodeDims, the matchIsExactContext* family, hasEngineModeAction,
+// isContextAssignmentRule, entryFromRuleMatchActions, makeContextQuery)
+// are pure functions with no LayoutRegistry-member dependency and live in
+// layoutregistry_rulehelpers.cpp / _p.h, keeping the rule-shape vocabulary in
+// one place separate from the registry's member-bound resolution logic here.
+using namespace RuleHelpers;
+
 namespace {
 
-// Walk the assignment cascade for a screen/desktop/activity context.
-// Visitor: (const AssignmentEntry&) -> std::optional<T>
-// Returns the first non-nullopt result from the visitor, or std::nullopt if
-// no entry satisfied the visitor at any cascade level.
-//
-// Cascade order — most specific first:
-//   1. Exact match (screenId, virtualDesktop, activity)
-//   2. Screen + activity, any desktop — `setAllActivityAssignments` stores
-//      per-activity entries at (screen, 0, activity) so this is where
-//      "Settings → Snapping → Assignments → Activity" toggles end up. Sits
-//      above the desktop-keyed level so activity context wins when both
-//      assignment dimensions are configured (matches the KDE Activities
-//      semantics: an activity is a higher-level workspace context than a
-//      virtual desktop).
-//   3. Screen + desktop, any activity
-//   4. Screen only (desktop=0, activity="") — the "display default" /
-//      monitor assignment
-//   5. Connector name fallback (recursive)
-//   6. Virtual screen fallback — inherit from physical screen ID (recursive)
-template<typename Visitor>
-auto walkCascade(const QHash<LayoutAssignmentKey, AssignmentEntry>& assignments, const QString& screenId,
-                 int virtualDesktop, const QString& activity, Visitor&& visitor)
-    -> decltype(visitor(std::declval<const AssignmentEntry&>()))
+/// Run @p tryOne against the query-side screen-id fallback chain — the original
+/// id, then its connector-name → stable-id rewrite, then a virtual screen's
+/// physical id — and return the first engaged optional, or an empty optional if
+/// every variant misses. @p tryOne must return a @c std::optional; an engaged
+/// optional holding a "settled" value (e.g. a non-null-but-empty Layout*) stops
+/// the chain, exactly as the inline retries did. Centralizes the rewrite shared
+/// by layoutForScreen / assignmentIdForScreen / assignmentEntryForScreen /
+/// hasMatchingAssignmentRule so the four cannot drift.
+template<typename TryFn>
+auto resolveWithScreenFallback(const QString& screenId, TryFn&& tryOne) -> decltype(tryOne(screenId))
 {
-    using Result = decltype(visitor(std::declval<const AssignmentEntry&>()));
-
-    // 1. Exact match
-    LayoutAssignmentKey exactKey{screenId, virtualDesktop, activity};
-    if (auto it = assignments.constFind(exactKey); it != assignments.constEnd()) {
-        if (auto r = visitor(it.value()))
-            return r;
+    if (auto result = tryOne(screenId)) {
+        return result;
     }
-
-    // 2. Screen + activity (any desktop). Activity entries are persisted
-    // by `setAllActivityAssignments` at virtualDesktop=0 regardless of
-    // which desktop happened to be current at save time, so the lookup
-    // here pins desktop to 0 even when the caller passes a non-zero
-    // desktop. Without this level, every per-activity assignment was
-    // dead-letter — written but never read — and the cascade fell
-    // straight to the monitor default below, masking the user's
-    // activity choice (discussion #413).
-    if (!activity.isEmpty()) {
-        LayoutAssignmentKey activityKey{screenId, 0, activity};
-        if (auto it = assignments.constFind(activityKey); it != assignments.constEnd()) {
-            if (auto r = visitor(it.value()))
-                return r;
-        }
-    }
-
-    // 3. Screen + desktop (any activity)
-    LayoutAssignmentKey desktopKey{screenId, virtualDesktop, QString()};
-    if (auto it = assignments.constFind(desktopKey); it != assignments.constEnd()) {
-        if (auto r = visitor(it.value()))
-            return r;
-    }
-
-    // 4. Screen only (any desktop, any activity) — the "display default"
-    LayoutAssignmentKey screenKey{screenId, 0, QString()};
-    if (auto it = assignments.constFind(screenKey); it != assignments.constEnd()) {
-        if (auto r = visitor(it.value()))
-            return r;
-    }
-
-    // 5. Connector name fallback: if screenId looks like a connector name (no colons),
-    // try resolving to a screen ID and looking up again.
-    if (Phosphor::Screens::ScreenIdentity::isConnectorName(screenId)) {
-        QString resolved = Phosphor::Screens::ScreenIdentity::idForName(screenId);
+    if (PhosphorScreens::ScreenIdentity::isConnectorName(screenId)) {
+        const QString resolved = PhosphorScreens::ScreenIdentity::idForName(screenId);
         if (resolved != screenId) {
-            return walkCascade(assignments, resolved, virtualDesktop, activity, std::forward<Visitor>(visitor));
+            if (auto result = tryOne(resolved)) {
+                return result;
+            }
         }
     }
-
-    // 6. Virtual screen fallback: try physical screen ID if this is a virtual screen.
-    // This lets virtual screens inherit the physical screen's snapping layout assignment
-    // when no per-virtual-screen assignment exists.
-    //
-    // Design note: the fallback is intentionally layout-resolution-only from the caller's
-    // perspective. layoutForScreen()'s visitor already guards against Autotile mode by
-    // returning std::nullopt for Autotile entries — so a VS inheriting a physical screen's
-    // Autotile assignment from this cascade correctly falls through to the global default
-    // layout rather than activating autotile on the VS. assignmentEntryForScreen() does
-    // not apply this guard, so callers that need mode isolation (e.g. AutotileEngine
-    // checking whether a VS is in autotile mode) must treat an inherited Autotile entry
-    // as "no explicit VS assignment" and use hasExplicitAssignment() to distinguish.
     if (PhosphorIdentity::VirtualScreenId::isVirtual(screenId)) {
-        const QString physId = PhosphorIdentity::VirtualScreenId::extractPhysicalId(screenId);
-        auto result = walkCascade(assignments, physId, virtualDesktop, activity, std::forward<Visitor>(visitor));
-        if (result)
+        if (auto result = tryOne(PhosphorIdentity::VirtualScreenId::extractPhysicalId(screenId))) {
             return result;
+        }
     }
-
-    return Result{};
+    return {};
 }
 
-} // anonymous namespace
+} // namespace
+
+// ── Rule-backed cascade resolution ──────────────────────────────────────────
+
+std::optional<AssignmentEntry> LayoutRegistry::resolveAssignmentEntry(const QString& screenId, int virtualDesktop,
+                                                                      const QString& activity) const
+{
+    // The cascade is reproduced by the rule set's descending-priority order.
+    // The legacy walkCascade treated the provider default as a MISS
+    // (resolveDefaultAssignmentEntry handled it via injected lambdas), so the
+    // catch-all rule is excluded here — only PINNED context rules count as a
+    // cascade hit.
+    //
+    // The descending-priority, tie-break-by-list-order walk is the shared
+    // RuleEvaluator::highestPriorityMatch — the one place that walk lives, so
+    // this resolver can never drift from the evaluator's own ordering. The
+    // candidate filter keeps only pinned context-assignment rules.
+    // SetSnappingLayout and SetTilingAlgorithm share the `layout` action slot,
+    // so the winning rule's full action list is read, preserving the
+    // mode-toggle losslessness invariant (an entry keeps BOTH snappingLayout
+    // and tilingAlgorithm regardless of active mode).
+    //
+    // Hot-path cache via the shared revision-invalidated memoizer. The linear
+    // walk is O(N rules × M predicates per match); overlay/OSD callers issue it
+    // per cursor-move, and the connector + virtual-screen fallback chain in the
+    // public resolvers triples that on a miss. A @c nullopt is cached too — a
+    // genuine miss must not re-walk three times per cursor frame.
+    return resolveCachedContext(m_contextResolveCache, m_contextResolveCacheRevision, screenId, virtualDesktop,
+                                activity, [&]() -> std::optional<AssignmentEntry> {
+                                    const PWR::WindowQuery query = makeContextQuery(screenId, virtualDesktop, activity);
+                                    const PWR::WindowRule* winner =
+                                        m_evaluator->highestPriorityMatch(query, [](const PWR::WindowRule& rule) {
+                                            return hasEngineModeAction(rule) && !rule.match.isCatchAll();
+                                        });
+                                    if (winner != nullptr) {
+                                        return entryFromRuleMatchActions(*winner);
+                                    }
+                                    return std::nullopt;
+                                });
+}
+
+ContextGapOverride LayoutRegistry::resolveContextGaps(const QString& screenId, int virtualDesktop,
+                                                      const QString& activity) const
+{
+    // Unlike resolveAssignmentEntry (single winning engine-mode rule), gap
+    // overrides are read PER SLOT from the evaluator's ResolvedActions, so a
+    // gap-only rule and, say, a separate engine-mode rule on the same context
+    // compose — and two gap rules touching different slots both apply. No
+    // engine-mode gate and no isValid() filter: a gap-only context rule is a
+    // first-class override here.
+    if (!m_evaluator) {
+        return ContextGapOverride{};
+    }
+
+    // Hot-path cache via the shared revision-invalidated memoizer: the geometry
+    // path resolves the same context twice per op (zone padding + outer gaps)
+    // and N× inside a multi-zone snap, all with identical arguments.
+    return resolveCachedContext(
+        m_contextGapCache, m_contextGapCacheRevision, screenId, virtualDesktop, activity, [&]() -> ContextGapOverride {
+            ContextGapOverride gaps;
+            const PWR::WindowQuery query = makeContextQuery(screenId, virtualDesktop, activity);
+            const PWR::ResolvedActions resolved = m_evaluator->resolve(query);
+
+            const auto readInt = [&resolved](QLatin1StringView slot, std::optional<int>& out) {
+                if (const auto action = resolved.slot(QString(slot))) {
+                    out = action->params.value(PWR::ActionParam::Value).toInt();
+                }
+            };
+            const auto readBool = [&resolved](QLatin1StringView slot, std::optional<bool>& out) {
+                if (const auto action = resolved.slot(QString(slot))) {
+                    out = action->params.value(PWR::ActionParam::Value).toBool();
+                }
+            };
+            readInt(PWR::ActionSlot::ZonePadding, gaps.zonePadding);
+            readInt(PWR::ActionSlot::OuterGap, gaps.outerGap);
+            readBool(PWR::ActionSlot::UsePerSideOuterGap, gaps.usePerSideOuterGap);
+            readInt(PWR::ActionSlot::OuterGapTop, gaps.outerGapTop);
+            readInt(PWR::ActionSlot::OuterGapBottom, gaps.outerGapBottom);
+            readInt(PWR::ActionSlot::OuterGapLeft, gaps.outerGapLeft);
+            readInt(PWR::ActionSlot::OuterGapRight, gaps.outerGapRight);
+            return gaps;
+        });
+}
+
+bool LayoutRegistry::resolveContextLocked(const QString& screenId, int virtualDesktop, const QString& activity) const
+{
+    // Mirror resolveContextGaps: a per-slot read off the evaluator's
+    // ResolvedActions, not the single-winner assignment walk. The Locked slot
+    // is filled by the highest-priority matching context rule carrying a
+    // LockContext action; we report its boolean value. No engine-mode gate —
+    // a lock-only context rule is a first-class overlay.
+    if (!m_evaluator) {
+        return false;
+    }
+
+    // Hot-path cache via the shared revision-invalidated memoizer: the lock
+    // check runs per cursor-move while a selector is open and on every
+    // layout-switch attempt.
+    return resolveCachedContext(m_contextLockCache, m_contextLockCacheRevision, screenId, virtualDesktop, activity,
+                                [&]() -> bool {
+                                    const PWR::WindowQuery query = makeContextQuery(screenId, virtualDesktop, activity);
+                                    const PWR::ResolvedActions resolved = m_evaluator->resolve(query);
+                                    if (const auto action = resolved.slot(QString(PWR::ActionSlot::Locked))) {
+                                        return action->params.value(PWR::ActionParam::Value).toBool();
+                                    }
+                                    return false;
+                                });
+}
+
+std::optional<bool> LayoutRegistry::resolveContextDefaultAssignment(const QString& screenId, int virtualDesktop,
+                                                                    const QString& activity) const
+{
+    // Mirror resolveContextLocked: a per-slot read off the evaluator's
+    // ResolvedActions, not the single-winner assignment walk. The
+    // DefaultAssignment slot is filled by the highest-priority matching context
+    // rule carrying a DefaultLayoutAssignment action; we report its boolean
+    // value (true = allow / force the default through, false = suppress). No
+    // engine-mode gate — a default-assignment-only context rule is a first-class
+    // overlay. std::nullopt means "no override rule" — the caller follows the
+    // global setting.
+    if (!m_evaluator) {
+        return std::nullopt;
+    }
+
+    return resolveCachedContext(m_contextDefaultAssignmentCache, m_contextDefaultAssignmentCacheRevision, screenId,
+                                virtualDesktop, activity, [&]() -> std::optional<bool> {
+                                    const PWR::WindowQuery query = makeContextQuery(screenId, virtualDesktop, activity);
+                                    const PWR::ResolvedActions resolved = m_evaluator->resolve(query);
+                                    if (const auto action =
+                                            resolved.slot(QString(PWR::ActionSlot::DefaultAssignment))) {
+                                        return action->params.value(PWR::ActionParam::Value).toBool();
+                                    }
+                                    return std::nullopt;
+                                });
+}
+
+AssignmentEntry LayoutRegistry::resolveDefaultAssignmentEntryForContext(const QString& screenId, int virtualDesktop,
+                                                                        const QString& activity) const
+{
+    // Single cascade-miss tail for every per-context resolver. The per-context
+    // DefaultLayoutAssignment override (if present) wins over the global
+    // suppress baseline:
+    //   - false (suppress) → invalid entry: this context gets no default.
+    //   - true  (allow)    → raw synth: force the default through even when the
+    //                        global suppress setting is on.
+    //   - no override      → the global-gated resolveDefaultAssignmentEntry.
+    if (const auto contextOverride = resolveContextDefaultAssignment(screenId, virtualDesktop, activity)) {
+        return *contextOverride ? resolveDefaultAssignmentEntryRaw() : AssignmentEntry{};
+    }
+    return resolveDefaultAssignmentEntry();
+}
+
+ContextOverlayOverride LayoutRegistry::resolveContextOverlay(const QString& screenId, int virtualDesktop,
+                                                             const QString& activity) const
+{
+    // Per-slot read across all matching context rules (mirrors resolveContextGaps):
+    // independent overlay-shader / overlay-style rules compose, and
+    // each populated field overrides the active layout's own value at the overlay
+    // build site. No engine-mode gate — an overlay-only context rule is first-class.
+    if (!m_evaluator) {
+        return ContextOverlayOverride{};
+    }
+
+    return resolveCachedContext(
+        m_contextOverlayCache, m_contextOverlayCacheRevision, screenId, virtualDesktop, activity,
+        [&]() -> ContextOverlayOverride {
+            ContextOverlayOverride overlay;
+            const PWR::WindowQuery query = makeContextQuery(screenId, virtualDesktop, activity);
+            const PWR::ResolvedActions resolved = m_evaluator->resolve(query);
+
+            if (const auto action = resolved.slot(QString(PWR::ActionSlot::OverlayShader))) {
+                const QString id = action->params.value(PWR::ActionParam::EffectId).toString();
+                if (!id.isEmpty()) {
+                    overlay.shaderId = id;
+                    // Optional shader uniform overrides — empty when the rule
+                    // overrides only the shader id (shader defaults apply).
+                    overlay.shaderParams = action->params.value(PWR::ActionParam::Params).toObject().toVariantMap();
+                }
+            }
+            if (const auto action = resolved.slot(QString(PWR::ActionSlot::OverlayStyle))) {
+                // Wire token → OverlayDisplayMode int so consumers compare against
+                // the same enum Layout::overlayDisplayMode() exposes (0 =
+                // ZoneRectangles, 1 = LayoutPreview).
+                const QString token = action->params.value(PWR::ActionParam::Value).toString();
+                if (token == PWR::OverlayStyleToken::Rectangles) {
+                    overlay.style = 0;
+                } else if (token == PWR::OverlayStyleToken::Preview) {
+                    overlay.style = 1;
+                }
+            }
+            return overlay;
+        });
+}
+
+bool LayoutRegistry::hasExactContextRule(const QString& screenId, int virtualDesktop, const QString& activity) const
+{
+    return findExactContextRule(screenId, virtualDesktop, activity) != nullptr;
+}
+const PhosphorWindowRules::WindowRule* LayoutRegistry::findExactContextRule(const QString& screenId, int virtualDesktop,
+                                                                            const QString& activity) const
+{
+    // The deterministic v5 derivation lets us look up a stored assignment by
+    // its identity tuple — the bridge guarantees identical tuples produce
+    // identical ids. We scan the rule list once for the id (the linear walk
+    // is unavoidable here because callers need a stable in-set pointer, not
+    // the value-copy `ruleById` returns), then guard with
+    // hasEngineModeAction + matchIsExactContext so a hand-edited match that
+    // no longer satisfies the canonical context shape can never be returned
+    // even if its id happens to match the deterministic derivation.
+    //
+    // The win over the previous implementation is the predicate cost: the
+    // old scan called matchIsExactContext on EVERY rule's match expression;
+    // this scan compares ids first and only evaluates the context-shape
+    // predicate on the unique candidate.
+    //
+    // O(N) intentional: a hash lookup would need WindowRuleSet to expose a
+    // pointer-returning accessor into its in-set storage with a documented
+    // dangle-on-setRules contract — too sharp an edge for the win at the
+    // rule counts we care about (<= ~1000 rules per profile). Revisit only
+    // if rule counts grow well into the thousands.
+    // Two-pass scan: prefer the deterministic-id rule (cheap id compare,
+    // the canonical shape the bridge produces). If no rule has the
+    // canonical id, fall back to a shape-based scan that picks up
+    // user-authored PURE-assignment rules whose UUIDs were generated by
+    // the settings UI (windowruletemplates.cpp's `QUuid::createUuid()`
+    // path). The shape fallback gates on `isPureAssignmentRule` — a
+    // user rule that ALSO carries SetOpacity / OverrideAnimation* /
+    // Float / Exclude / LockContext alongside the assignment slots is
+    // intentionally NOT claimed here. Admitting it would feed it through
+    // upsertAssignmentRule / assignLayout / applyBatchAssignments which
+    // rebuild via makeAssignmentActions and emit only the three slot
+    // actions — silently stripping the user's other actions. Falling
+    // through to the addRule branch instead preserves the user's data
+    // (the duplicate-shadow at the same cascade band is a known limit;
+    // documented at upsertAssignmentRule's contract).
+    const QUuid candidateId = PWR::ContextRuleBridge::assignmentRuleIdFor(screenId, virtualDesktop, activity);
+    const PWR::WindowRule* shapeMatch = nullptr;
+    for (const PWR::WindowRule& rule : m_ruleStore->ruleSet().rules()) {
+        if (rule.id == candidateId) {
+            if (!hasEngineModeAction(rule) || !matchIsExactContext(rule.match, screenId, virtualDesktop, activity)) {
+                // Deterministic-id rule exists but its match shape was
+                // hand-edited away from the canonical form. Return
+                // nothing so callers don't act on a malformed rule.
+                return nullptr;
+            }
+            return &rule;
+        }
+        // Remember the first PURE-assignment rule we see — we only
+        // return it if no deterministic-id rule exists in the set.
+        if (shapeMatch == nullptr && isPureAssignmentRule(rule)
+            && matchIsExactContext(rule.match, screenId, virtualDesktop, activity)) {
+            shapeMatch = &rule;
+        }
+    }
+    return shapeMatch;
+}
+
+QUuid LayoutRegistry::exactContextRuleId(const QString& screenId, int virtualDesktop, const QString& activity) const
+{
+    const PWR::WindowRule* rule = findExactContextRule(screenId, virtualDesktop, activity);
+    return rule ? rule->id : QUuid();
+}
+
+void LayoutRegistry::upsertAssignmentRule(const QString& screenId, int virtualDesktop, const QString& activity,
+                                          const AssignmentEntry& entry)
+{
+    // Pass the entry's mode through `modeToWireString` so a future Mode
+    // (e.g. Scrolling) round-trips without collapsing to Snapping/Autotile.
+    // The earlier `bool autotile` shape silently produced "snapping" for any
+    // mode that wasn't Autotile, which would corrupt a Scrolling assignment
+    // on save and round-trip back as Snapping on load.
+    const QString modeToken = modeToWireString(entry.mode);
+    // Pass an empty rule name — the settings UI renders an auto-friendly
+    // title from the rule's match (with lookup-resolved screen/activity
+    // labels). Stamping a raw `screenId · Desktop N · Activity` here would
+    // bake connector strings and activity UUIDs into the stored rule.
+    PWR::WindowRule rule = PWR::ContextRuleBridge::makeAssignmentRule(
+        QString(), screenId, virtualDesktop, activity, modeToken, entry.snappingLayout, entry.tilingAlgorithm);
+
+    const PWR::WindowRule* existing = findExactContextRule(screenId, virtualDesktop, activity);
+    if (existing == nullptr) {
+        m_ruleStore->addRule(rule);
+    } else {
+        rule.id = existing->id; // preserve the rule's identity across the update
+        // makeAssignmentRule always stamps enabled = true; an upsert must not
+        // silently re-enable a rule the user disabled. A disabled context
+        // assignment is still an explicit assignment — preserve the flag.
+        rule.enabled = existing->enabled;
+        m_ruleStore->updateRule(rule);
+    }
+}
+
+bool LayoutRegistry::removeAssignmentRule(const QString& screenId, int virtualDesktop, const QString& activity)
+{
+    const QUuid existing = exactContextRuleId(screenId, virtualDesktop, activity);
+    if (existing.isNull()) {
+        return false;
+    }
+    return m_ruleStore->removeRule(existing);
+}
+
+bool LayoutRegistry::purgeSnappingLayoutFromAssignments(const QString& layoutId)
+{
+    // A snap layout was deleted. Every rule whose SetSnappingLayout action
+    // carries this id must lose that reference — but NOT the whole rule, and
+    // NOT its other actions.
+    //
+    // Two rule shapes can carry a SetSnappingLayout action for the deleted id:
+    //
+    //  1. A pure context-assignment rule (per-screen / -desktop / -activity).
+    //     An Autotile-mode context rule can still carry a stale
+    //     SetSnappingLayout (mode-toggle losslessness), so blanket-deleting it
+    //     would drop its SetEngineMode + SetTilingAlgorithm autotile intent.
+    //     Rebuild via ContextRuleBridge::makeAssignmentActions with the
+    //     snapping layout cleared but mode + tilingAlgorithm preserved; only
+    //     drop the whole rule when, after the clear, nothing but a default
+    //     (Snapping) engine-mode remains — a pure Snapping mode-only context
+    //     rule encodes no intent beyond the default.
+    //
+    //  2. A window-property rule that legitimately carries a SetSnappingLayout
+    //     action (the phased rollout introduces exactly such rules). Rebuilding
+    //     it through makeAssignmentActions would force-inject a SetEngineMode
+    //     action and drop every other action it carries. Instead, surgically
+    //     remove ONLY the matching SetSnappingLayout action and leave all
+    //     other actions intact; drop the rule only if nothing meaningful
+    //     remains after the removal.
+    QList<PWR::WindowRule> kept;
+    // De-duplicate (screenId, virtualDesktop) — two distinct rules pinned
+    // to the same screen/desktop with different activities would otherwise
+    // produce duplicate layoutAssigned emissions at the post-update loop
+    // below, causing 2-3× redundant refresh work in observers (overlays,
+    // settings tiles, autotile state). Note: the `layoutAssigned` signal
+    // signature has no activity field, so activity-only rules on the
+    // same screen (virtualDesktop=0) collapse to one `(screen, 0)` key —
+    // observers that key on activity rely on the rule-store's broader
+    // `rulesChanged` signal for their refresh instead of layoutAssigned.
+    QSet<QPair<QString, int>> affected;
+    bool changed = false;
+    for (const PWR::WindowRule& rule : m_ruleStore->ruleSet().rules()) {
+        const bool referencesDeleted =
+            std::any_of(rule.actions.cbegin(), rule.actions.cend(), [&layoutId](const PWR::RuleAction& action) {
+                return action.type == QLatin1String(PWR::ActionType::SetSnappingLayout)
+                    && action.params.value(PWR::ActionParam::LayoutId).toString() == layoutId;
+            });
+        if (!referencesDeleted) {
+            kept.append(rule);
+            continue;
+        }
+        changed = true;
+
+        // Gate on isPureAssignmentRule (not isContextAssignmentRule) — the
+        // Shape-1 rebuild path emits ONLY the three assignment slot actions
+        // via makeAssignmentActions, so a mixed context rule carrying
+        // SetOpacity / OverrideAnimation* / Float / Exclude / LockContext /
+        // DefaultLayoutAssignment alongside its assignment actions would silently lose those
+        // non-assignment actions on rebuild. Mixed rules fall through to Shape 2's
+        // surgical SetSnappingLayout removal, which preserves every
+        // other action verbatim.
+        if (isContextAssignmentRule(rule) && isPureAssignmentRule(rule)) {
+            // Shape 1: rebuild the lossless context-action set with the dead
+            // snapping reference cleared; mode + tilingAlgorithm survive.
+            const AssignmentEntry entry = entryFromRuleMatchActions(rule);
+            const ContextDims dims = decodeDims(rule.match);
+            // Track the affected (screen, desktop) for the post-update
+            // layoutAssigned emit — every observer keyed on this rule's
+            // context needs to refresh, whether the rule was dropped or just
+            // rebuilt.
+            affected.insert(qMakePair(dims.screenId, dims.virtualDesktop));
+            if (entry.mode == AssignmentEntry::Snapping && entry.tilingAlgorithm.isEmpty()) {
+                // Nothing meaningful remains — a bare Snapping engine-mode is
+                // the default. Drop the whole rule.
+                qCDebug(lcZonesLib) << "purgeSnappingLayoutFromAssignments: dropped context rule" << rule.id.toString()
+                                    << "— only a default Snapping mode remained after clearing the deleted layout";
+                continue;
+            }
+            PWR::WindowRule rebuilt = rule;
+            rebuilt.actions = PWR::ContextRuleBridge::makeAssignmentActions(modeToWireString(entry.mode), QString(),
+                                                                            entry.tilingAlgorithm);
+            kept.append(rebuilt);
+            qCDebug(lcZonesLib) << "purgeSnappingLayoutFromAssignments: rebuilt context rule" << rule.id.toString()
+                                << "— cleared deleted snapping layout, preserved mode/tilingAlgorithm";
+            continue;
+        }
+
+        // Shape 2: a window-property (or otherwise non-context) rule. Remove
+        // only the SetSnappingLayout actions referencing the deleted layout;
+        // every other action is preserved verbatim.
+        PWR::WindowRule trimmed = rule;
+        trimmed.actions.erase(std::remove_if(trimmed.actions.begin(), trimmed.actions.end(),
+                                             [&layoutId](const PWR::RuleAction& action) {
+                                                 return action.type == QLatin1String(PWR::ActionType::SetSnappingLayout)
+                                                     && action.params.value(PWR::ActionParam::LayoutId).toString()
+                                                     == layoutId;
+                                             }),
+                              trimmed.actions.end());
+        if (trimmed.actions.isEmpty()) {
+            // The rule's only action was the dead snapping reference — nothing
+            // meaningful remains, so drop it.
+            qCDebug(lcZonesLib) << "purgeSnappingLayoutFromAssignments: dropped rule" << rule.id.toString()
+                                << "— its only action referenced the deleted snapping layout";
+            continue;
+        }
+        kept.append(trimmed);
+        qCDebug(lcZonesLib) << "purgeSnappingLayoutFromAssignments: trimmed rule" << rule.id.toString()
+                            << "— removed the SetSnappingLayout action for the deleted layout, kept all others";
+    }
+    if (changed) {
+        m_ruleStore->setAllRules(kept);
+        // Notify per-screen observers (overlays, autotile state, settings
+        // tile caption, etc.) so they refresh against the new cascade.
+        // Mirrors `clearAutotileAssignments`'s emit pattern — without it,
+        // a layout delete left those consumers showing stale assignments.
+        for (const auto& [sid, desk] : std::as_const(affected)) {
+            Q_EMIT layoutAssigned(sid, desk, nullptr);
+        }
+    }
+    return changed;
+}
+
+// ── Mutators ────────────────────────────────────────────────────────────────
 
 void LayoutRegistry::assignLayout(const QString& screenId, int virtualDesktop, const QString& activity,
                                   PhosphorZones::Layout* layout)
 {
-    LayoutAssignmentKey key{screenId, virtualDesktop, activity};
-
     if (layout) {
-        AssignmentEntry& entry = m_assignments[key];
+        // Preserve an existing tilingAlgorithm — only mode + snappingLayout
+        // change (the mode-toggle losslessness invariant). One exact-shape
+        // lookup reads the stored rule's actions directly: a wider cascade
+        // entry must NOT bleed its tilingAlgorithm into this narrower rule,
+        // so only the rule pinning exactly this tuple seeds the entry.
+        AssignmentEntry entry;
+        if (const PWR::WindowRule* existing = findExactContextRule(screenId, virtualDesktop, activity)) {
+            entry = entryFromRuleMatchActions(*existing);
+        }
         entry.mode = AssignmentEntry::Snapping;
         entry.snappingLayout = layout->id().toString();
-        // Preserve existing tilingAlgorithm — only mode + snappingLayout change
+        upsertAssignmentRule(screenId, virtualDesktop, activity, entry);
         qCDebug(lcZonesLib) << "assignLayout: screen=" << screenId << "desktop=" << virtualDesktop
                             << "activity=" << (activity.isEmpty() ? QStringLiteral("(all)") : activity)
                             << "layout=" << layout->name();
     } else {
-        // Clearing: remove the entry entirely.
-        // Skip save/signal when there's nothing to remove — avoids a redundant
-        // disk write and layoutAssigned emission (e.g. clearAssignment for an
-        // activity-keyed entry that doesn't exist).
-        bool hadAssignment = m_assignments.remove(key);
-        if (!hadAssignment) {
+        // Clearing: remove the exact-shape rule entirely. Skip the signal
+        // when there was nothing to remove.
+        if (!removeAssignmentRule(screenId, virtualDesktop, activity)) {
             return;
         }
         qCDebug(lcZonesLib) << "assignLayout: removed screen=" << screenId << "desktop=" << virtualDesktop
                             << "activity=" << (activity.isEmpty() ? QStringLiteral("(all)") : activity);
     }
 
-    Q_EMIT layoutAssigned(screenId, key.virtualDesktop, layout);
-    saveAssignments();
+    Q_EMIT layoutAssigned(screenId, virtualDesktop, layout);
 }
 
 void LayoutRegistry::assignLayoutById(const QString& screenId, int virtualDesktop, const QString& activity,
                                       const QString& layoutId)
 {
     if (PhosphorLayout::LayoutId::isAutotile(layoutId)) {
-        // Store autotile assignment — set mode to Autotile, preserve snappingLayout
-        LayoutAssignmentKey key{screenId, virtualDesktop, activity};
-        AssignmentEntry& entry = m_assignments[key];
+        // Store autotile assignment — set mode to Autotile, preserve the
+        // existing snappingLayout. One exact-shape lookup (see assignLayout)
+        // — only the rule pinning exactly this tuple seeds the entry.
+        AssignmentEntry entry;
+        if (const PWR::WindowRule* existing = findExactContextRule(screenId, virtualDesktop, activity)) {
+            entry = entryFromRuleMatchActions(*existing);
+        }
         entry.mode = AssignmentEntry::Autotile;
         entry.tilingAlgorithm = PhosphorLayout::LayoutId::extractAlgorithmId(layoutId);
-        // Preserve existing snappingLayout — only mode + tilingAlgorithm change
+        upsertAssignmentRule(screenId, virtualDesktop, activity, entry);
         Q_EMIT layoutAssigned(screenId, virtualDesktop, nullptr);
-        saveAssignments();
     } else {
         assignLayout(screenId, virtualDesktop, activity, layoutById(QUuid::fromString(layoutId)));
     }
@@ -165,276 +552,59 @@ void LayoutRegistry::assignLayoutById(const QString& screenId, int virtualDeskto
 void LayoutRegistry::setAssignmentEntryDirect(const QString& screenId, int virtualDesktop, const QString& activity,
                                               const AssignmentEntry& entry)
 {
-    LayoutAssignmentKey key{screenId, virtualDesktop, activity};
-
-    // Store the entry unconditionally — mode-only entries (empty snapping + empty tiling)
-    // are valid when explicitly set by the KCM to preserve mode at a context level.
-    m_assignments[key] = entry;
+    // Store the entry unconditionally — mode-only entries (empty snapping +
+    // empty tiling) are valid when explicitly set by the KCM to preserve
+    // mode at a context level.
+    upsertAssignmentRule(screenId, virtualDesktop, activity, entry);
 
     qCDebug(lcZonesLib) << "setAssignmentEntryDirect: screen=" << screenId << "desktop=" << virtualDesktop
                         << "activity=" << activity << "mode=" << entry.mode << "snapping=" << entry.snappingLayout
                         << "tiling=" << entry.tilingAlgorithm;
 
-    // Resolve layout for signal emission
     PhosphorZones::Layout* layout = nullptr;
     if (entry.mode == AssignmentEntry::Snapping && !entry.snappingLayout.isEmpty()) {
         layout = layoutById(QUuid::fromString(entry.snappingLayout));
     }
     Q_EMIT layoutAssigned(screenId, virtualDesktop, layout);
-    saveAssignments();
 }
 
-namespace {
-// Decide the AssignmentEntry to start from when a single-field write
-// arrives at (screenId, virtualDesktop, activity). The KCM "Assignments"
-// pages (per ADR-discussion-497) want the edit to record a preference at
-// that exact slot WITHOUT flipping the rendered mode.
-//
-// If a local entry exists at the exact slot we always use it as the seed
-// — even when its `activeLayoutId()` happens to be empty (e.g. an entry
-// with {mode=Snapping, snap="", tile="cluster"} that holds a stored
-// tile preference). Falling back to the cascade in that case would
-// clobber the opposite-field value the user had explicitly recorded at
-// this slot.
-//
-// Only when the slot has no local entry at all do we seed from the
-// cascade-resolved ambient state, so the new value lands in the right
-// mode and survives the cascade visitor's `activeLayoutId().isEmpty()`
-// reject filter.
-AssignmentEntry seedForPartialUpdate(const LayoutRegistry& self,
-                                     const QHash<LayoutAssignmentKey, AssignmentEntry>& assignments,
-                                     const QString& screenId, int virtualDesktop, const QString& activity)
-{
-    LayoutAssignmentKey key{screenId, virtualDesktop, activity};
-    auto it = assignments.constFind(key);
-    if (it != assignments.constEnd()) {
-        return *it;
-    }
-    return self.assignmentEntryForScreen(screenId, virtualDesktop, activity);
-}
-} // namespace
-
-namespace {
-// Shared write path for partial-update / promote methods. Applies @p mutator
-// to the seed entry (taken from the slot itself or from the cascade-resolved
-// ambient state — see seedForPartialUpdate), then persists. When both fields
-// end up empty the slot is removed rather than left as a cascade-skipped
-// no-op record.
-//
-// Returns true when the persisted assignments actually changed; callers
-// should skip the `layoutAssigned` emit + `saveAssignments` call when
-// false (a clear that targeted an already-empty slot).
-//
-// @p caller is the calling method name; used only for log trace context.
-template<typename Mutator>
-bool applyPartialOrPromote(LayoutRegistry& self, QHash<LayoutAssignmentKey, AssignmentEntry>& assignments,
-                           const QString& screenId, int virtualDesktop, const QString& activity, bool seedFromCascade,
-                           const char* caller, Mutator&& mutator)
-{
-    LayoutAssignmentKey key{screenId, virtualDesktop, activity};
-
-    // Seed entry: cascade-resolved fallback (preserve-mode path) or
-    // local-only (promote path — shadows are cleared separately, so
-    // pulling cascade data would defeat the point).
-    AssignmentEntry entry;
-    if (seedFromCascade) {
-        entry = seedForPartialUpdate(self, assignments, screenId, virtualDesktop, activity);
-    } else if (auto it = assignments.constFind(key); it != assignments.constEnd()) {
-        entry = *it;
-    }
-
-    mutator(entry);
-
-    if (entry.snappingLayout.isEmpty() && entry.tilingAlgorithm.isEmpty()) {
-        bool hadAssignment = assignments.remove(key);
-        if (hadAssignment) {
-            qCDebug(lcZonesLib) << caller << ": removed empty entry screen=" << screenId << "desktop=" << virtualDesktop
-                                << "activity=" << activity;
-        }
-        return hadAssignment;
-    }
-    assignments[key] = entry;
-    qCDebug(lcZonesLib) << caller << ": screen=" << screenId << "desktop=" << virtualDesktop << "activity=" << activity
-                        << "mode=" << entry.mode << "snapping=" << entry.snappingLayout
-                        << "tiling=" << entry.tilingAlgorithm;
-    return true;
-}
-} // namespace
-
-void LayoutRegistry::setSnappingLayoutPreservingMode(const QString& screenId, int virtualDesktop,
-                                                     const QString& activity, const QString& layoutId)
-{
-    const bool changed =
-        applyPartialOrPromote(*this, m_assignments, screenId, virtualDesktop, activity, /*seedFromCascade=*/true,
-                              "setSnappingLayoutPreservingMode", [&](AssignmentEntry& entry) {
-                                  entry.snappingLayout = layoutId;
-                              });
-    if (!changed) {
-        return;
-    }
-    PhosphorZones::Layout* layout = layoutId.isEmpty() ? nullptr : layoutById(QUuid::fromString(layoutId));
-    Q_EMIT layoutAssigned(screenId, virtualDesktop, layout);
-    saveAssignments();
-}
-
-void LayoutRegistry::clearShadowsForSlot(const QString& screenId, int virtualDesktop, const QString& activity)
-{
-    // Resolve the physical screen so VS variants of the same physical
-    // also get treated as "same screen" — the cascade walks VS → phys
-    // at level 6, so leaving VS entries intact would re-shadow the slot
-    // we're about to promote.
-    const QString targetPhysId = PhosphorIdentity::VirtualScreenId::isVirtual(screenId)
-        ? PhosphorIdentity::VirtualScreenId::extractPhysicalId(screenId)
-        : screenId;
-    const LayoutAssignmentKey targetKey{screenId, virtualDesktop, activity};
-
-    auto sameScreen = [&](const QString& s) -> bool {
-        if (s == screenId)
-            return true;
-        if (s == targetPhysId)
-            return true;
-        if (PhosphorIdentity::VirtualScreenId::isVirtual(s)
-            && PhosphorIdentity::VirtualScreenId::extractPhysicalId(s) == targetPhysId)
-            return true;
-        return false;
-    };
-
-    // Determine which keys on the same screen would win at a higher (or
-    // equal) cascade level than the target slot for some context the
-    // target slot is meant to cover. Reading bottom-up by slot shape:
-    //   - Monitor row (vd=0, activity=""): the slot is the universal
-    //     fallback for the screen; every other entry on the screen
-    //     shadows it for some context → clear them all.
-    //   - Per-desktop (vd>0, activity=""): the slot is the fallback
-    //     for (this screen, this desktop, *). Two key shapes shadow it
-    //     for context (vd, activity=X):
-    //       L1 (vd, X)           — same-desktop+activity entries
-    //       L2 (0, X)            — per-activity entries (cascade walks
-    //                              activity before per-desktop, see
-    //                              walkCascade level 2)
-    //     Clear BOTH; leaving per-activity entries intact would let any
-    //     activity-keyed entry continue to win over the promoted slot
-    //     whenever that activity is current.
-    //   - Per-activity (vd=0, activity!=""): the slot is the fallback
-    //     for (this screen, *, this activity). Per-desktop+activity
-    //     entries with the same activity (anyVd>0, activity) shadow
-    //     at L1 → clear them.
-    //   - Specific (vd>0, activity!=""): no other entry shadows it
-    //     in the cascade, so nothing to clear.
-    auto shouldClear = [&](const LayoutAssignmentKey& key) -> bool {
-        if (key == targetKey)
-            return false;
-        if (!sameScreen(key.screenId))
-            return false;
-
-        if (virtualDesktop == 0 && activity.isEmpty())
-            return true; // Monitor row: clear everything else on screen
-        if (virtualDesktop > 0 && activity.isEmpty()) {
-            // Per-desktop scope: same-desktop entries (L1 shadows) AND
-            // per-activity entries (L2 shadows for contexts with matching
-            // activity). Leaving the latter would let an activity-keyed
-            // entry mask the promoted per-desktop slot when that activity
-            // is current.
-            return key.virtualDesktop == virtualDesktop || (key.virtualDesktop == 0 && !key.activity.isEmpty());
-        }
-        if (virtualDesktop == 0 && !activity.isEmpty())
-            return key.activity == activity; // Per-activity scope
-        return false; // Specific (vd, activity): no shadow to clear
-    };
-
-    QList<LayoutAssignmentKey> toRemove;
-    for (auto it = m_assignments.constBegin(); it != m_assignments.constEnd(); ++it) {
-        if (shouldClear(it.key()))
-            toRemove.append(it.key());
-    }
-    for (const auto& key : std::as_const(toRemove)) {
-        m_assignments.remove(key);
-        qCDebug(lcZonesLib) << "clearShadowsForSlot: removed shadow screen=" << key.screenId
-                            << "desktop=" << key.virtualDesktop << "activity=" << key.activity;
-    }
-}
-
-void LayoutRegistry::setSnappingLayoutPromoting(const QString& screenId, int virtualDesktop, const QString& activity,
-                                                const QString& layoutId)
-{
-    // clearShadowsForSlot itself emits no signal — its mutation is rolled
-    // into the layoutAssigned emit below. The applyPartialOrPromote
-    // return is intentionally discarded (cast to void to make intent
-    // explicit): even when the helper reports "unchanged" for the
-    // target slot, clearShadows may have removed shadow entries that
-    // must still be persisted and observed.
-    clearShadowsForSlot(screenId, virtualDesktop, activity);
-
-    (void)applyPartialOrPromote(*this, m_assignments, screenId, virtualDesktop, activity, /*seedFromCascade=*/false,
-                                "setSnappingLayoutPromoting", [&](AssignmentEntry& entry) {
-                                    entry.mode = AssignmentEntry::Snapping;
-                                    entry.snappingLayout = layoutId;
-                                });
-
-    PhosphorZones::Layout* layout = layoutId.isEmpty() ? nullptr : layoutById(QUuid::fromString(layoutId));
-    Q_EMIT layoutAssigned(screenId, virtualDesktop, layout);
-    saveAssignments();
-}
-
-void LayoutRegistry::setTilingAlgorithmPromoting(const QString& screenId, int virtualDesktop, const QString& activity,
-                                                 const QString& algorithmId)
-{
-    // See note in setSnappingLayoutPromoting about always emitting.
-    clearShadowsForSlot(screenId, virtualDesktop, activity);
-
-    (void)applyPartialOrPromote(*this, m_assignments, screenId, virtualDesktop, activity, /*seedFromCascade=*/false,
-                                "setTilingAlgorithmPromoting", [&](AssignmentEntry& entry) {
-                                    entry.mode = AssignmentEntry::Autotile;
-                                    entry.tilingAlgorithm = algorithmId;
-                                });
-
-    Q_EMIT layoutAssigned(screenId, virtualDesktop, nullptr);
-    saveAssignments();
-}
-
-void LayoutRegistry::setTilingAlgorithmPreservingMode(const QString& screenId, int virtualDesktop,
-                                                      const QString& activity, const QString& algorithmId)
-{
-    const bool changed =
-        applyPartialOrPromote(*this, m_assignments, screenId, virtualDesktop, activity, /*seedFromCascade=*/true,
-                              "setTilingAlgorithmPreservingMode", [&](AssignmentEntry& entry) {
-                                  entry.tilingAlgorithm = algorithmId;
-                              });
-    if (!changed) {
-        return;
-    }
-    // Emit with nullptr — tiling changes don't have a snap Layout* to
-    // pass through; daemon-side recalc paths key off the screenId.
-    Q_EMIT layoutAssigned(screenId, virtualDesktop, nullptr);
-    saveAssignments();
-}
-
-// layoutForScreen, assignmentIdForScreen, and assignmentEntryForScreen share the
-// same fallback cascade, implemented once in walkCascade() above. Each method
-// supplies a visitor that decides whether to accept or cascade past each entry.
+// ── Queries ─────────────────────────────────────────────────────────────────
 
 PhosphorZones::Layout* LayoutRegistry::layoutForScreen(const QString& screenId, int virtualDesktop,
                                                        const QString& activity) const
 {
-    auto result = walkCascade(m_assignments, screenId, virtualDesktop, activity,
-                              [this](const AssignmentEntry& entry) -> std::optional<PhosphorZones::Layout*> {
-                                  if (entry.mode == AssignmentEntry::Autotile)
-                                      return std::nullopt;
-                                  if (entry.snappingLayout.isEmpty())
-                                      return std::nullopt;
-                                  PhosphorZones::Layout* layout = layoutById(QUuid::fromString(entry.snappingLayout));
-                                  return layout ? std::optional<PhosphorZones::Layout*>(layout) : std::nullopt;
-                              });
-    if (result)
-        return *result;
+    // Connector-name / virtual-screen fallback: a query-side recursive key
+    // rewrite, not a priority band. The retry is gated on "no cascade entry
+    // at all", NOT "no snap Layout*" — the legacy walkCascade terminated at
+    // the first matching entry (including a narrower Autotile entry) and only
+    // then fell through to the global default. Treating an Autotile entry as
+    // a miss would let a connector/VS retry surface a different (snapping)
+    // assignment the legacy walk never reached. So tryResolve returns:
+    //   - nullopt   -> no cascade entry; the caller may retry.
+    //   - {nullptr} -> an entry exists but yields no snap Layout* (Autotile,
+    //                  or a snap entry with empty/unknown layout id) — the
+    //                  cascade is settled, fall through to defaultLayout().
+    //   - {layout}  -> resolved snap layout.
+    auto tryResolve = [this, virtualDesktop, &activity](const QString& sid) -> std::optional<PhosphorZones::Layout*> {
+        const auto entry = resolveAssignmentEntry(sid, virtualDesktop, activity);
+        if (!entry) {
+            return std::nullopt; // genuine miss — the caller may retry
+        }
+        // An entry exists; the cascade is settled — never retry. An Autotile
+        // entry (or a snap entry with an empty layout id) has no snap Layout*.
+        if (entry->mode == AssignmentEntry::Autotile || entry->snappingLayout.isEmpty()) {
+            return std::optional<PhosphorZones::Layout*>(nullptr);
+        }
+        return std::optional<PhosphorZones::Layout*>(layoutById(QUuid::fromString(entry->snappingLayout)));
+    };
 
-    // No explicit assignment in the cascade — defer to the registry-wide
-    // default (snap provider via defaultLayout(), then first layout by
-    // defaultOrder). layoutForScreen returns a snap Layout* and has no
-    // autotile counterpart; autotile-mode resolution is the autotile
-    // engine's job, driven by assignmentIdForScreen returning an
-    // "autotile:<algo>" id from the level-1 cascade.
-    return defaultLayout();
+    // Connector-name then virtual-screen fallback (the physical screen's
+    // assignment is inherited). A settled {nullptr} stops the chain; a genuine
+    // miss (nullopt) and a {nullptr} both defer to the registry-wide default.
+    // layoutForScreen returns a snap Layout* and has no autotile counterpart;
+    // autotile-mode resolution is the autotile engine's job.
+    const auto result = resolveWithScreenFallback(screenId, tryResolve);
+    return (result && *result) ? *result : defaultLayout();
 }
 
 void LayoutRegistry::clearAssignment(const QString& screenId, int virtualDesktop, const QString& activity)
@@ -444,58 +614,67 @@ void LayoutRegistry::clearAssignment(const QString& screenId, int virtualDesktop
 
 bool LayoutRegistry::hasExplicitAssignment(const QString& screenId, int virtualDesktop, const QString& activity) const
 {
-    LayoutAssignmentKey key{screenId, virtualDesktop, activity};
-    return m_assignments.contains(key);
+    // Exact-shape store lookup — NEVER a resolve() (which always returns the
+    // catch-all). True iff a rule whose match is exactly this tuple's shape
+    // exists in the rule set.
+    //
+    // A DISABLED exact-context rule still counts as an explicit assignment:
+    // "explicit" means the user stored an entry for this tuple, not that the
+    // entry is currently active. resolveAssignmentEntry() (via the evaluator)
+    // skips disabled rules, so the two introspection APIs intentionally
+    // diverge — hasExplicitAssignment reports stored intent, the resolvers
+    // report the effective cascade result. The KCM relies on this so a
+    // disabled assignment is not lost from the UI.
+    return hasExactContextRule(screenId, virtualDesktop, activity);
 }
 
 QString LayoutRegistry::assignmentIdForScreen(const QString& screenId, int virtualDesktop,
                                               const QString& activity) const
 {
-    auto result = walkCascade(m_assignments, screenId, virtualDesktop, activity,
-                              [](const AssignmentEntry& entry) -> std::optional<QString> {
-                                  QString id = entry.activeLayoutId();
-                                  return id.isEmpty() ? std::nullopt : std::optional<QString>(id);
-                              });
-    if (result) {
+    // Shared cascade with layoutForScreen, but accepts any entry whose
+    // activeLayoutId() is non-empty (incl. Autotile entries). Connector /
+    // virtual-screen fallback applies here too.
+    auto tryResolve = [this, virtualDesktop, &activity](const QString& sid) -> std::optional<QString> {
+        const auto entry = resolveAssignmentEntry(sid, virtualDesktop, activity);
+        if (!entry) {
+            return std::nullopt;
+        }
+        const QString id = entry->activeLayoutId();
+        return id.isEmpty() ? std::nullopt : std::optional<QString>(id);
+    };
+
+    if (const auto result = resolveWithScreenFallback(screenId, tryResolve)) {
         return *result;
     }
+
     // No stored entry in the cascade — fall through to the level-1 global
-    // default so callers (autotile engine activation, OSD, KCM) see the
-    // user's intended mode for contexts that were never explicitly
-    // configured. resolveDefaultAssignmentEntry handles the snap-then-
-    // autotile precedence; if neither provider has a value we return the
-    // historical empty string ("no assignment").
-    const AssignmentEntry def = resolveDefaultAssignmentEntry();
+    // default via the injected providers, honoring the global suppress setting
+    // and any per-context DefaultLayoutAssignment override.
+    const AssignmentEntry def = resolveDefaultAssignmentEntryForContext(screenId, virtualDesktop, activity);
     return def.activeLayoutId();
 }
 
 AssignmentEntry LayoutRegistry::assignmentEntryForScreen(const QString& screenId, int virtualDesktop,
                                                          const QString& activity) const
 {
-    // Acceptance rule must match assignmentIdForScreen so the two cascade
-    // views of the same stored entry agree. `activeLayoutId()` returns
-    // `"autotile:<algo>"` for Autotile mode (non-empty even when the
-    // algorithm is blank — "use the default algorithm"), and the raw
-    // snappingLayout for Snapping mode. Rejecting only when both a mode
-    // and a content yield an empty identifier keeps mode-only Autotile
-    // entries — which the KCM stores via setAssignmentEntryDirect — from
-    // being silently skipped and replaced by a wider cascade entry.
-    auto result = walkCascade(m_assignments, screenId, virtualDesktop, activity,
-                              [](const AssignmentEntry& entry) -> std::optional<AssignmentEntry> {
-                                  if (entry.activeLayoutId().isEmpty())
-                                      return std::nullopt;
-                                  return entry;
-                              });
-    if (result) {
+    auto tryResolve = [this, virtualDesktop, &activity](const QString& sid) -> std::optional<AssignmentEntry> {
+        const auto entry = resolveAssignmentEntry(sid, virtualDesktop, activity);
+        if (!entry) {
+            return std::nullopt;
+        }
+        if (entry->activeLayoutId().isEmpty()) {
+            return std::nullopt;
+        }
+        return entry;
+    };
+
+    if (const auto result = resolveWithScreenFallback(screenId, tryResolve)) {
         return *result;
     }
-    // Cascade miss — synthesize from the level-1 global default so
-    // callers that branch on mode (autotile engine activation, OSD,
-    // KCM "current mode" displays) see the user's intended mode for
-    // contexts that were never explicitly configured. The helper
-    // returns a default-constructed entry when neither provider has a
-    // value, matching pre-368 behaviour.
-    return resolveDefaultAssignmentEntry();
+
+    // Cascade miss — synthesize from the level-1 global default, honoring the
+    // global suppress setting and any per-context DefaultLayoutAssignment override.
+    return resolveDefaultAssignmentEntryForContext(screenId, virtualDesktop, activity);
 }
 
 AssignmentEntry::Mode LayoutRegistry::modeForScreen(const QString& screenId, int virtualDesktop,
@@ -507,309 +686,58 @@ AssignmentEntry::Mode LayoutRegistry::modeForScreen(const QString& screenId, int
 QString LayoutRegistry::snappingLayoutForScreen(const QString& screenId, int virtualDesktop,
                                                 const QString& activity) const
 {
-    // Per-field cascade: accept the first entry whose snap field is set.
-    // Cannot route through `assignmentEntryForScreen` because its visitor
-    // rejects entries whose `activeLayoutId()` is empty — which happens
-    // for preserve-mode entries shaped like {mode=Snapping, snap="",
-    // tile="cluster"} after a snap-clear that preserved the tile
-    // preference (see setSnappingLayoutPreservingMode). Reading via the
-    // mode-resolved cascade would hide the stored tile field from the
-    // tile-row in the KCM Assignments page and vice versa.
-    auto result = walkCascade(m_assignments, screenId, virtualDesktop, activity,
-                              [](const AssignmentEntry& entry) -> std::optional<QString> {
-                                  if (entry.snappingLayout.isEmpty())
-                                      return std::nullopt;
-                                  return entry.snappingLayout;
-                              });
-    if (result) {
-        return *result;
-    }
-    // Cascade miss — consult the snap-side global default provider
-    // directly. Cannot route through `resolveDefaultAssignmentEntry`
-    // because that helper synthesizes a single mode-resolved entry and
-    // returns Autotile-only state with snap="" when the user has
-    // autotile preferred (and vice versa for the tile reader). This is
-    // a per-field reader: the snap default exists independently of
-    // which mode the cascade winner would render.
-    return m_defaultLayoutIdProvider ? m_defaultLayoutIdProvider() : QString();
+    return assignmentEntryForScreen(screenId, virtualDesktop, activity).snappingLayout;
 }
 
 QString LayoutRegistry::tilingAlgorithmForScreen(const QString& screenId, int virtualDesktop,
                                                  const QString& activity) const
 {
-    // Per-field cascade — see snappingLayoutForScreen above.
-    auto result = walkCascade(m_assignments, screenId, virtualDesktop, activity,
-                              [](const AssignmentEntry& entry) -> std::optional<QString> {
-                                  if (entry.tilingAlgorithm.isEmpty())
-                                      return std::nullopt;
-                                  return entry.tilingAlgorithm;
-                              });
-    if (result) {
-        return *result;
-    }
-    // Symmetric per-field default: consult the autotile-side global
-    // default provider directly so the KCM Tiling Assignments default
-    // row shows the user's configured default autotile algorithm even
-    // when the snapping-preferred provider would steer
-    // `resolveDefaultAssignmentEntry` into a snap-mode entry with an
-    // empty tile field.
-    return m_defaultAutotileAlgorithmProvider ? m_defaultAutotileAlgorithmProvider() : QString();
+    return assignmentEntryForScreen(screenId, virtualDesktop, activity).tilingAlgorithm;
 }
 
-void LayoutRegistry::clearAutotileAssignments()
+bool LayoutRegistry::hasMatchingAssignmentRule(const QString& screenId, int virtualDesktop,
+                                               const QString& activity) const
 {
-    // Collect autotile keys first, then modify in a second pass.
-    QList<LayoutAssignmentKey> autotileKeys;
-    for (auto it = m_assignments.constBegin(); it != m_assignments.constEnd(); ++it) {
-        if (it.value().mode == AssignmentEntry::Autotile) {
-            autotileKeys.append(it.key());
-        }
-    }
-
-    bool changed = !autotileKeys.isEmpty();
-    for (const LayoutAssignmentKey& key : autotileKeys) {
-        AssignmentEntry& entry = m_assignments[key];
-        // Flip mode to Snapping — preserve both snappingLayout and tilingAlgorithm
-        // so re-enabling autotile can restore the previous algorithm.
-        entry.mode = AssignmentEntry::Snapping;
-        qCDebug(lcZonesLib) << "clearAutotileAssignments: flipped to Snapping for screen=" << key.screenId
-                            << "desktop=" << key.virtualDesktop;
-        Q_EMIT layoutAssigned(key.screenId, key.virtualDesktop, nullptr);
-    }
-
-    // Also clear autotile quick layout slots
-    for (auto it = m_quickLayoutShortcuts.begin(); it != m_quickLayoutShortcuts.end();) {
-        if (PhosphorLayout::LayoutId::isAutotile(it.value())) {
-            it = m_quickLayoutShortcuts.erase(it);
-            changed = true;
-        } else {
-            ++it;
-        }
-    }
-
-    if (changed) {
-        saveAssignments();
-        qCInfo(lcZonesLib) << "Cleared all autotile assignments";
-    }
+    return resolveWithScreenFallback(screenId,
+                                     [this, virtualDesktop, &activity](const QString& sid) {
+                                         return resolveAssignmentEntry(sid, virtualDesktop, activity);
+                                     })
+        .has_value();
 }
 
-void LayoutRegistry::setAllScreenAssignments(const QHash<QString, QString>& assignments)
+bool LayoutRegistry::isDefaultAssignmentSuppressedForContext(const QString& screenId, int virtualDesktop,
+                                                             const QString& activity) const
 {
-    // Snapshot existing base entries so fromLayoutId can preserve the "other" field
-    // (e.g. batch-setting snapping layout preserves tilingAlgorithm)
-    QHash<LayoutAssignmentKey, AssignmentEntry> oldBase;
-    for (auto it = m_assignments.begin(); it != m_assignments.end();) {
-        if (it.key().virtualDesktop == 0 && it.key().activity.isEmpty()) {
-            oldBase[it.key()] = it.value();
-            it = m_assignments.erase(it);
-        } else {
-            ++it;
-        }
+    // The "is the synthesized default suppressed" primitive: a per-context
+    // DefaultLayoutAssignment override decides locally, otherwise the global gate.
+    if (const auto contextOverride = resolveContextDefaultAssignment(screenId, virtualDesktop, activity)) {
+        return !*contextOverride;
     }
-
-    // Set new assignments, tracking which screens were successfully stored
-    int count = 0;
-    QSet<QString> storedScreens;
-    for (auto it = assignments.begin(); it != assignments.end(); ++it) {
-        const QString& screenId = it.key();
-        const QString& layoutId = it.value();
-
-        if (screenId.isEmpty()) {
-            qCWarning(lcZonesLib) << "Skipping assignment with empty screen ID";
-            continue;
-        }
-        if (shouldSkipLayoutAssignment(layoutId, QStringLiteral("screen ") + screenId)) {
-            continue;
-        }
-
-        LayoutAssignmentKey key{screenId, 0, QString()};
-        AssignmentEntry entry = AssignmentEntry::fromLayoutId(layoutId, oldBase.value(key));
-        m_assignments[key] = entry;
-        storedScreens.insert(screenId);
-        ++count;
-        qCDebug(lcZonesLib) << "Batch: assigned layout" << layoutId << "to screen" << screenId;
-    }
-
-    saveAssignments();
-
-    // Emit layoutAssigned for stored entries, deduplicated by screenId.
-    // Resolve at desktop=0 (the base level we just wrote) so the KCM
-    // receives the actual display default — NOT the current desktop's
-    // effective layout, which would corrupt its m_screenAssignments cache.
-    for (const QString& screenId : storedScreens) {
-        emitLayoutAssigned(screenId, 0, assignmentIdForScreen(screenId, 0, QString()));
-    }
-
-    qCInfo(lcZonesLib) << "Batch set" << count << "screen assignments";
+    return m_defaultAssignmentSuppressedProvider && m_defaultAssignmentSuppressedProvider();
 }
 
-void LayoutRegistry::setAllDesktopAssignments(const QHash<QPair<QString, int>, QString>& assignments)
+bool LayoutRegistry::isContextActiveLayoutSuppressed(const QString& screenId, int virtualDesktop,
+                                                     const QString& activity) const
 {
-    // Snapshot existing per-desktop entries so fromLayoutId can preserve the "other" field
-    QHash<LayoutAssignmentKey, AssignmentEntry> oldDesktop;
-    for (auto it = m_assignments.begin(); it != m_assignments.end();) {
-        if (it.key().virtualDesktop > 0 && it.key().activity.isEmpty()) {
-            oldDesktop[it.key()] = it.value();
-            it = m_assignments.erase(it);
-        } else {
-            ++it;
-        }
+    // An active layout exists (explicit assignment at any cascade level, or a
+    // default forced through by an "allow" override) — never suppressed.
+    if (!assignmentIdForScreen(screenId, virtualDesktop, activity).isEmpty()) {
+        return false;
     }
-
-    // Set new assignments, tracking which screens were successfully stored
-    int count = 0;
-    QSet<QString> storedScreens;
-    for (auto it = assignments.begin(); it != assignments.end(); ++it) {
-        const QString& screenId = it.key().first;
-        int virtualDesktop = it.key().second;
-        const QString& layoutId = it.value();
-
-        if (screenId.isEmpty() || virtualDesktop < 1) {
-            qCWarning(lcZonesLib) << "Skipping invalid desktop assignment:" << screenId << virtualDesktop;
-            continue;
-        }
-        QString context = QStringLiteral("%1 desktop %2").arg(screenId).arg(virtualDesktop);
-        if (shouldSkipLayoutAssignment(layoutId, context)) {
-            continue;
-        }
-
-        LayoutAssignmentKey key{screenId, virtualDesktop, QString()};
-        AssignmentEntry entry = AssignmentEntry::fromLayoutId(layoutId, oldDesktop.value(key));
-        m_assignments[key] = entry;
-        storedScreens.insert(screenId);
-        ++count;
-        qCDebug(lcZonesLib) << "Batch: assigned layout" << layoutId << "to" << screenId << "desktop" << virtualDesktop;
+    // An enabled PINNED engine-mode assignment rule covers this context — a
+    // window rule that overrides the global suppress setting. The context stays
+    // active even when the rule sets only the mode (no layout): the layout
+    // falls back to the default exactly as it did before suppression existed,
+    // and the overlay / zone selector show because the mode is on.
+    if (hasMatchingAssignmentRule(screenId, virtualDesktop, activity)) {
+        return false;
     }
-
-    saveAssignments();
-
-    // Emit once per screen (deduplicated) — use cascading resolution so the
-    // signal carries the effective layout for the current context.
-    for (const QString& screenId : storedScreens) {
-        emitLayoutAssigned(screenId, m_currentVirtualDesktop,
-                           assignmentIdForScreen(screenId, m_currentVirtualDesktop, m_currentActivity));
-    }
-
-    qCInfo(lcZonesLib) << "Batch set" << count << "desktop assignments";
-}
-
-void LayoutRegistry::setAllActivityAssignments(const QHash<QPair<QString, QString>, QString>& assignments)
-{
-    // Snapshot existing per-activity entries so fromLayoutId can preserve the "other" field
-    QHash<LayoutAssignmentKey, AssignmentEntry> oldActivity;
-    for (auto it = m_assignments.begin(); it != m_assignments.end();) {
-        if (!it.key().activity.isEmpty() && it.key().virtualDesktop == 0) {
-            oldActivity[it.key()] = it.value();
-            it = m_assignments.erase(it);
-        } else {
-            ++it;
-        }
-    }
-
-    // Set new assignments, tracking which screens were successfully stored
-    int count = 0;
-    QSet<QString> storedScreens;
-    for (auto it = assignments.begin(); it != assignments.end(); ++it) {
-        const QString& screenId = it.key().first;
-        const QString& activityId = it.key().second;
-        const QString& layoutId = it.value();
-
-        if (screenId.isEmpty() || activityId.isEmpty()) {
-            qCWarning(lcZonesLib) << "Skipping invalid activity assignment:" << screenId << activityId;
-            continue;
-        }
-        QString context = QStringLiteral("%1 activity %2").arg(screenId, activityId);
-        if (shouldSkipLayoutAssignment(layoutId, context)) {
-            continue;
-        }
-
-        LayoutAssignmentKey key{screenId, 0, activityId};
-        AssignmentEntry entry = AssignmentEntry::fromLayoutId(layoutId, oldActivity.value(key));
-        m_assignments[key] = entry;
-        storedScreens.insert(screenId);
-        ++count;
-        qCDebug(lcZonesLib) << "Batch: assigned layout" << layoutId << "to" << screenId << "activity" << activityId;
-    }
-
-    saveAssignments();
-
-    // Emit once per screen (deduplicated) — resolve at the base level
-    // (desktop=0) so the KCM receives the display default, not the
-    // current desktop's effective layout which would corrupt its cache.
-    for (const QString& screenId : storedScreens) {
-        emitLayoutAssigned(screenId, 0, assignmentIdForScreen(screenId, 0, QString()));
-    }
-
-    qCInfo(lcZonesLib) << "Batch set" << count << "activity assignments";
-}
-
-QHash<QPair<QString, int>, QString> LayoutRegistry::desktopAssignments() const
-{
-    QHash<QPair<QString, int>, QString> result;
-
-    for (auto it = m_assignments.begin(); it != m_assignments.end(); ++it) {
-        const LayoutAssignmentKey& key = it.key();
-        // Per-desktop: virtualDesktop > 0 and activity is empty
-        if (key.virtualDesktop > 0 && key.activity.isEmpty()) {
-            result[qMakePair(key.screenId, key.virtualDesktop)] = it.value().activeLayoutId();
-        }
-    }
-
-    return result;
-}
-
-QHash<QPair<QString, QString>, QString> LayoutRegistry::activityAssignments() const
-{
-    QHash<QPair<QString, QString>, QString> result;
-
-    for (auto it = m_assignments.begin(); it != m_assignments.end(); ++it) {
-        const LayoutAssignmentKey& key = it.key();
-        // Per-activity: activity is non-empty (for any desktop value)
-        if (!key.activity.isEmpty()) {
-            result[qMakePair(key.screenId, key.activity)] = it.value().activeLayoutId();
-        }
-    }
-
-    return result;
-}
-
-// Autotile layout overrides
-
-QJsonObject LayoutRegistry::loadAllAutotileOverrides() const
-{
-    QFile file(m_layoutDirectory + QStringLiteral("/autotile-overrides.json"));
-    if (!file.open(QIODevice::ReadOnly)) {
-        return {};
-    }
-    QJsonDocument doc = QJsonDocument::fromJson(file.readAll());
-    return doc.isObject() ? doc.object() : QJsonObject();
-}
-
-void LayoutRegistry::saveAllAutotileOverrides(const QJsonObject& all)
-{
-    ensureLayoutDirectory();
-    QFile file(m_layoutDirectory + QStringLiteral("/autotile-overrides.json"));
-    if (!file.open(QIODevice::WriteOnly)) {
-        qCWarning(lcZonesLib) << "Failed to save autotile overrides:" << file.errorString();
-        return;
-    }
-    file.write(QJsonDocument(all).toJson());
-}
-
-QJsonObject LayoutRegistry::loadAutotileOverrides(const QString& algorithmId) const
-{
-    return loadAllAutotileOverrides().value(algorithmId).toObject();
-}
-
-void LayoutRegistry::saveAutotileOverrides(const QString& algorithmId, const QJsonObject& overrides)
-{
-    QJsonObject all = loadAllAutotileOverrides();
-    if (overrides.isEmpty()) {
-        all.remove(algorithmId);
-    } else {
-        all[algorithmId] = overrides;
-    }
-    saveAllAutotileOverrides(all);
+    // No active layout and no covering assignment rule. Report suppressed ONLY
+    // when the cause is the suppress feature (per-context override or the global
+    // gate). Any OTHER empty-assignment state (e.g. snapping enabled with no
+    // global default layout id) returns false, so callers keep their existing
+    // defaultLayout() fallback there.
+    return isDefaultAssignmentSuppressedForContext(screenId, virtualDesktop, activity);
 }
 
 } // namespace PhosphorZones

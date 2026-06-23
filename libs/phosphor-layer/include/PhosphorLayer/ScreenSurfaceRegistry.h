@@ -28,9 +28,9 @@ class Surface;
  * Template parameter lets consumers subclass Surface and keep their type
  * through the API:
  * @code
- *     class PzOverlaySurface : public Surface { ... };
- *     ScreenSurfaceRegistry<PzOverlaySurface> reg(factory, screens);
- *     auto* s = reg.surfaceForScreen(myScreen);  // typed as PzOverlaySurface*
+ *     class PhosphorOverlaySurface : public Surface { ... };
+ *     ScreenSurfaceRegistry<PhosphorOverlaySurface> reg(factory, screens);
+ *     auto* s = reg.surfaceForScreen(myScreen);  // typed as PhosphorOverlaySurface*
  * @endcode
  *
  * The registry does NOT listen to screensChanged itself — that is the
@@ -42,7 +42,7 @@ class Surface;
  * library exports for every combination.
  *
  * @note **Status (v0.1):** not yet used by the reference consumer
- * (PlasmaZones OverlayService, which tracks per-screen state in its own
+ * (Phosphor OverlayService, which tracks per-screen state in its own
  * QHash keyed by virtual-screen id). The registry is a public primitive
  * for consumers whose per-screen state maps cleanly to physical QScreen*.
  * Its API is covered by unit tests but has no production integration yet;

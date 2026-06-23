@@ -2,7 +2,7 @@
     "id": "neon-venom",
     "name": "Neon Venom",
     "category": "Cyberpunk",
-    "description": "Organic bioluminescent venom veins pulse through toxic pools with rising acid bubbles and venomous mist \u2014 inspired by Neon Venom",
+    "description": "Organic bioluminescent venom veins pulse through toxic pools with rising acid bubbles and venomous mist, inspired by Neon Venom",
     "author": "PlasmaZones",
     "version": "1.1",
     "fragmentShader": "effect.frag",
@@ -12,7 +12,6 @@
             "name": "Vein Scale",
             "group": "Veins",
             "type": "float",
-            "slot": 0,
             "default": 4.0,
             "min": 1.0,
             "max": 10.0
@@ -22,7 +21,6 @@
             "name": "Vein Pulse Speed",
             "group": "Veins",
             "type": "float",
-            "slot": 1,
             "default": 0.6,
             "min": 0.1,
             "max": 2.0
@@ -32,7 +30,6 @@
             "name": "Vein Sharpness",
             "group": "Veins",
             "type": "float",
-            "slot": 2,
             "default": 3.0,
             "min": 1.0,
             "max": 8.0
@@ -42,7 +39,6 @@
             "name": "Vein Warping",
             "group": "Veins",
             "type": "float",
-            "slot": 3,
             "default": 0.4,
             "min": 0.0,
             "max": 1.0
@@ -52,7 +48,6 @@
             "name": "Acid Pool Intensity",
             "group": "Pools",
             "type": "float",
-            "slot": 4,
             "default": 0.5,
             "min": 0.0,
             "max": 1.0
@@ -62,7 +57,6 @@
             "name": "Bubble Count",
             "group": "Pools",
             "type": "int",
-            "slot": 5,
             "default": 8,
             "min": 0,
             "max": 20
@@ -72,7 +66,6 @@
             "name": "Bubble Rise Speed",
             "group": "Pools",
             "type": "float",
-            "slot": 6,
             "default": 0.4,
             "min": 0.1,
             "max": 1.5
@@ -82,7 +75,6 @@
             "name": "Fill Opacity",
             "group": "Appearance",
             "type": "float",
-            "slot": 7,
             "default": 0.75,
             "min": 0.3,
             "max": 1.0
@@ -92,7 +84,6 @@
             "name": "Glow Strength",
             "group": "Appearance",
             "type": "float",
-            "slot": 8,
             "default": 1.2,
             "min": 0.3,
             "max": 3.0
@@ -102,7 +93,6 @@
             "name": "Venom Mist",
             "group": "Atmosphere",
             "type": "float",
-            "slot": 9,
             "default": 0.15,
             "min": 0.0,
             "max": 0.5
@@ -112,7 +102,6 @@
             "name": "Audio Reactivity",
             "group": "Audio",
             "type": "float",
-            "slot": 10,
             "default": 1.0,
             "min": 0.0,
             "max": 2.0
@@ -122,7 +111,6 @@
             "name": "Spark Intensity",
             "group": "Audio",
             "type": "float",
-            "slot": 11,
             "default": 1.5,
             "min": 0.0,
             "max": 4.0
@@ -132,7 +120,6 @@
             "name": "Label Glow Spread",
             "group": "Labels",
             "type": "float",
-            "slot": 12,
             "default": 3.0,
             "min": 1.0,
             "max": 6.0
@@ -142,7 +129,6 @@
             "name": "Label Brightness",
             "group": "Labels",
             "type": "float",
-            "slot": 13,
             "default": 2.5,
             "min": 1.0,
             "max": 4.0
@@ -152,7 +138,6 @@
             "name": "Label Reactivity",
             "group": "Labels",
             "type": "float",
-            "slot": 14,
             "default": 1.0,
             "min": 0.0,
             "max": 2.0
@@ -162,7 +147,6 @@
             "name": "Edge Glow",
             "group": "Appearance",
             "type": "float",
-            "slot": 15,
             "default": 0.4,
             "min": 0.0,
             "max": 1.0
@@ -172,7 +156,6 @@
             "name": "Warp Detail",
             "group": "Veins",
             "type": "int",
-            "slot": 16,
             "default": 5,
             "min": 2,
             "max": 8
@@ -182,7 +165,6 @@
             "name": "Show Labels",
             "group": "Labels",
             "type": "bool",
-            "slot": 17,
             "default": true
         },
         {
@@ -190,7 +172,6 @@
             "name": "Pool Animation Speed",
             "group": "Pools",
             "type": "float",
-            "slot": 18,
             "default": 1.0,
             "min": 0.2,
             "max": 3.0
@@ -200,7 +181,6 @@
             "name": "Surge Threshold",
             "group": "Audio",
             "type": "float",
-            "slot": 19,
             "default": 0.15,
             "min": 0.05,
             "max": 0.5
@@ -210,7 +190,6 @@
             "name": "Mouse Influence",
             "group": "Interaction",
             "type": "float",
-            "slot": 20,
             "default": 1.5,
             "min": 0.0,
             "max": 4.0
@@ -220,7 +199,6 @@
             "name": "Bubble Size",
             "group": "Pools",
             "type": "float",
-            "slot": 21,
             "default": 1.0,
             "min": 0.3,
             "max": 3.0
@@ -230,7 +208,6 @@
             "name": "Fine Vein Detail",
             "group": "Veins",
             "type": "float",
-            "slot": 22,
             "default": 0.4,
             "min": 0.0,
             "max": 1.0
@@ -240,7 +217,6 @@
             "name": "Venom Green",
             "group": "Palette",
             "type": "color",
-            "slot": 0,
             "default": "#39FF14"
         },
         {
@@ -248,7 +224,6 @@
             "name": "Acid Purple",
             "group": "Palette",
             "type": "color",
-            "slot": 1,
             "default": "#BF00FF"
         },
         {
@@ -256,7 +231,6 @@
             "name": "Glow Highlight",
             "group": "Palette",
             "type": "color",
-            "slot": 2,
             "default": "#CCFF00"
         },
         {
@@ -264,7 +238,6 @@
             "name": "Mist Tint",
             "group": "Palette",
             "type": "color",
-            "slot": 3,
             "default": "#0D001A"
         }
     ]

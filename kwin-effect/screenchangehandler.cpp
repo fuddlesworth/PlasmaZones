@@ -198,7 +198,10 @@ void ScreenChangeHandler::applyWindowGeometries(const PhosphorProtocol::WindowGe
     QHash<QString, KWin::EffectWindow*> windowByAppId;
     const auto windows = KWin::effects->stackingOrder();
     for (KWin::EffectWindow* w : windows) {
-        if (!w || !m_effect->shouldHandleWindow(w)) {
+        // isDeleted: a dying sibling must not claim the insert-if-absent
+        // appId slot — the apply loop's own isDeleted guard would then
+        // silently drop the live window's reapply.
+        if (!w || w->isDeleted() || !m_effect->shouldHandleWindow(w)) {
             continue;
         }
         QString fullId = m_effect->getWindowId(w);
@@ -248,8 +251,15 @@ void ScreenChangeHandler::applyWindowGeometries(const PhosphorProtocol::WindowGe
     m_effect->applyStaggeredOrImmediate(toApply.size(), [this, toApply](int i) {
         const ApplyEntry& e = toApply[i];
         if (e.window && !e.window->isDeleted() && m_effect->shouldHandleWindow(e.window)) {
+            // Re-check at apply time (mirrors the build-time guard above): the
+            // window's screen can flip to autotile during the stagger interval,
+            // and a snap-path applyWindowGeometry would then fight the autotile
+            // engine for placement.
+            if (m_effect->m_autotileHandler->isAutotileScreen(m_effect->getWindowScreenId(e.window))) {
+                return;
+            }
             qCInfo(lcScreenChange) << "Repositioning window" << m_effect->getWindowId(e.window) << "to" << e.geometry;
-            m_effect->applySnapGeometry(e.window, e.geometry);
+            m_effect->applyWindowGeometry(e.window, e.geometry);
         }
     });
 }

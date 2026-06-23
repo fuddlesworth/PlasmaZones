@@ -40,7 +40,7 @@ Control {
     signal modifierCaptured(int modifierMask)
     signal mouseCaptured(int buttonBit)
     signal keySequenceCaptured(string sequence)
-    signal captureCancelled()
+    signal captureCancelled
 
     function startCapture() {
         root.capturing = true;
@@ -96,8 +96,7 @@ Control {
         } else if (key >= Qt.Key_0 && key <= Qt.Key_9) {
             keyStr = String.fromCharCode(48 + (key - Qt.Key_0));
         } else {
-            var table = {
-            };
+            var table = {};
             table[Qt.Key_F1] = "F1";
             table[Qt.Key_F2] = "F2";
             table[Qt.Key_F3] = "F3";
@@ -166,10 +165,9 @@ Control {
         anchors.fill: parent
         hoverEnabled: true
         acceptedButtons: Qt.LeftButton
-        onClicked: (mouse) => {
+        onClicked: mouse => {
             if (!root.capturing)
                 root.startCapture();
-
         }
     }
 
@@ -204,22 +202,22 @@ Control {
             focus: true
             width: captureOverlay.width
             height: captureOverlay.height
-            Keys.onPressed: (event) => {
+            Keys.onPressed: event => {
                 event.accepted = true;
                 if (event.key === Qt.Key_Escape) {
                     root.cancelCapture();
-                    return ;
+                    return;
                 }
                 if (root.acceptMode === root.acceptModeMouseOnly)
-                    return ;
+                    return;
 
                 var modMask = root.qtModifiersToMask(event.modifiers);
                 if (root.isModifierKey(event.key)) {
                     root.pendingModifierMask = modMask;
-                    return ;
+                    return;
                 }
                 if (root.acceptMode === root.acceptModeMetaOnly)
-                    return ;
+                    return;
 
                 root.nonModifierKeyPressed = true;
                 var seq = root.keyToSequenceString(event.key, event.modifiers);
@@ -228,10 +226,10 @@ Control {
                     root.keySequenceCaptured(seq);
                 }
             }
-            Keys.onReleased: (event) => {
+            Keys.onReleased: event => {
                 event.accepted = true;
                 if (root.acceptMode !== root.acceptModeMetaOnly && root.acceptMode !== root.acceptModeAll)
-                    return ;
+                    return;
 
                 if (root.isModifierKey(event.key) && !root.nonModifierKeyPressed && root.pendingModifierMask !== 0) {
                     root.endCapture();
@@ -242,17 +240,17 @@ Control {
             MouseArea {
                 anchors.fill: parent
                 acceptedButtons: Qt.AllButtons
-                onPressed: (mouse) => {
+                onPressed: mouse => {
                     mouse.accepted = true;
                     if (root.acceptMode === root.acceptModeMetaOnly)
-                        return ;
+                        return;
 
                     if (mouse.button === Qt.LeftButton) {
                         // In MouseOnly mode, left click cancels (no capture); in All mode, ignore so user can press a key/mouse
                         if (root.acceptMode === root.acceptModeMouseOnly)
                             root.cancelCapture();
 
-                        return ;
+                        return;
                     }
                     var bit = mouse.button;
                     if (bit >= 2 && bit <= 128) {
@@ -264,13 +262,11 @@ Control {
 
             Label {
                 anchors.centerIn: parent
-                text: root.acceptMode === root.acceptModeMetaOnly ? i18n("Press modifier(s) — Escape to cancel") : (root.acceptMode === root.acceptModeMouseOnly ? i18n("Press any mouse button (Right, Middle, Back, Forward, etc.) — Escape to cancel") : i18n("Press key, modifier(s), or mouse button — Escape to cancel"))
+                text: root.acceptMode === root.acceptModeMetaOnly ? i18n("Press modifier(s). Escape to cancel.") : (root.acceptMode === root.acceptModeMouseOnly ? i18n("Press any mouse button (Right, Middle, Back, Forward, etc.). Escape to cancel.") : i18n("Press key, modifier(s), or mouse button. Escape to cancel."))
                 color: Kirigami.Theme.textColor
                 font.italic: true
             }
-
         }
-
     }
 
     contentItem: Item {
@@ -286,7 +282,6 @@ Control {
             font.pixelSize: Kirigami.Theme.smallFont.pixelSize
             font.italic: root.capturing
         }
-
     }
 
     background: Rectangle {
@@ -295,5 +290,4 @@ Control {
         border.width: 1
         radius: Kirigami.Units.smallSpacing
     }
-
 }

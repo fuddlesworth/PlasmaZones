@@ -1,95 +1,75 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: GPL-3.0-or-later
 import QtQuick
-import QtQuick.Layouts
-import org.kde.kirigami as Kirigami
 
-SettingsFlickable {
-    contentHeight: col.implicitHeight
-    clip: true
+// Window animation events. The card list is viewport-virtualized by
+// AnimationEventCardList (only visible AnimationEventCards build) — see
+// that component for the rationale.
+//
+// `window.snapResize` (resize-only branch of applyWindowGeometry) is
+// intentionally NOT listed: no kwin-effect callsite routes a resize-only
+// event through tryBeginShaderForEvent today, so a card here would be
+// runtime-dead.
+AnimationEventCardList {
     Accessible.name: i18n("Window animation events")
-
-    ColumnLayout {
-        // `window.snapResize` (resize-only branch of applySnapGeometry)
-        // is intentionally NOT exposed here: no kwin-effect callsite
-        // routes a resize-only event through tryBeginShaderForEvent
-        // today, so a card here would be runtime-dead.
-
-        id: col
-
-        width: parent.width
-        spacing: Kirigami.Units.smallSpacing
-
-        AnimationEventCard {
-            Layout.fillWidth: true
-            eventPath: "window"
-            eventLabel: i18n("All Window Events")
-            isParentNode: true
+    eventModel: [
+        {
+            "eventPath": "window",
+            "eventLabel": i18n("All Window Events"),
+            "isParentNode": true
+        },
+        {
+            "eventPath": "window.open",
+            "eventLabel": i18n("Open"),
+            "isParentNode": false
+        },
+        {
+            "eventPath": "window.close",
+            "eventLabel": i18n("Close"),
+            "isParentNode": false
+        },
+        {
+            "eventPath": "window.minimize",
+            "eventLabel": i18n("Minimize"),
+            "isParentNode": false
+        },
+        {
+            "eventPath": "window.maximize",
+            "eventLabel": i18n("Maximize"),
+            "isParentNode": false
+        },
+        {
+            "eventPath": "window.move",
+            "eventLabel": i18n("Move"),
+            "isParentNode": false
+        },
+        {
+            "eventPath": "window.resize",
+            "eventLabel": i18n("Resize"),
+            "isParentNode": false
+        },
+        {
+            "eventPath": "window.focus",
+            "eventLabel": i18n("Focus"),
+            "isParentNode": false
+        },
+        // Snap-into-zone window animations driven by the kwin-effect. The
+        // window quad animates when it snaps into / out of a zone or when a
+        // layout switch repositions it.
+        {
+            "eventPath": "window.snapIn",
+            "eventLabel": i18n("Snap Into Zone"),
+            "isParentNode": false
+        },
+        {
+            "eventPath": "window.snapOut",
+            "eventLabel": i18n("Snap Out of Zone"),
+            "isParentNode": false
+        },
+        {
+            "eventPath": "window.layoutSwitch",
+            "eventLabel": i18n("Layout Switch"),
+            "isParentNode": false
         }
-
-        AnimationEventCard {
-            Layout.fillWidth: true
-            eventPath: "window.open"
-            eventLabel: i18n("Open")
-        }
-
-        AnimationEventCard {
-            Layout.fillWidth: true
-            eventPath: "window.close"
-            eventLabel: i18n("Close")
-        }
-
-        AnimationEventCard {
-            Layout.fillWidth: true
-            eventPath: "window.minimize"
-            eventLabel: i18n("Minimize")
-        }
-
-        AnimationEventCard {
-            Layout.fillWidth: true
-            eventPath: "window.maximize"
-            eventLabel: i18n("Maximize")
-        }
-
-        AnimationEventCard {
-            Layout.fillWidth: true
-            eventPath: "window.move"
-            eventLabel: i18n("Move")
-        }
-
-        AnimationEventCard {
-            Layout.fillWidth: true
-            eventPath: "window.resize"
-            eventLabel: i18n("Resize")
-        }
-
-        AnimationEventCard {
-            Layout.fillWidth: true
-            eventPath: "window.focus"
-            eventLabel: i18n("Focus")
-        }
-
-        // Snap-into-zone window animations driven by the kwin-effect.
-        // The window quad animates when it snaps into / out of a zone
-        // or when a layout switch repositions it.
-        AnimationEventCard {
-            Layout.fillWidth: true
-            eventPath: "window.snapIn"
-            eventLabel: i18n("Snap Into Zone")
-        }
-
-        AnimationEventCard {
-            Layout.fillWidth: true
-            eventPath: "window.snapOut"
-            eventLabel: i18n("Snap Out of Zone")
-        }
-
-        AnimationEventCard {
-            Layout.fillWidth: true
-            eventPath: "window.layoutSwitch"
-            eventLabel: i18n("Layout Switch")
-        }
-
-    }
-
+    ]
 }

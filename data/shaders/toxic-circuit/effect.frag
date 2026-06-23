@@ -1,14 +1,9 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-#version 450
-
-layout(location = 0) in vec2 vTexCoord;
-layout(location = 1) in vec2 vFragCoord;
-
-layout(location = 0) out vec4 fragColor;
-
-#include <common.glsl>
+// The harness supplies #version, <common.glsl> (zone UBO + ZoneCtx + helpers),
+// the vTexCoord/vFragCoord ins, the fragColor out, and the pImage entry-point
+// dispatch. audio.glsl is pack-specific, so it stays here.
 #include <audio.glsl>
 
 /*
@@ -18,16 +13,16 @@ layout(location = 0) out vec4 fragColor;
  * Structure: diagonalCircuitGrid + circuitPattern (traces/nodes), toxicDrip,
  * glitchOffset, atmosphericSmog; then renderToxicCircuitZone (base + circuits +
  * drip + smog + shimmer + mouse interaction). Parameters:
- *   customParams[0].x = circuitDensity (4.0-20.0) - Circuit trace density
- *   customParams[0].y = pulseSpeed (0.5-3.0) - Energy pulse animation speed
- *   customParams[0].z = dripIntensity (0.0-1.0) - Toxic drip effect strength
- *   customParams[0].w = glitchAmount (0.0-0.5) - Digital corruption intensity
- *   customParams[1].x = glowStrength (0.5-3.0) - Neon glow intensity
- *   customParams[1].y = smogDensity (0.0-0.5) - Atmospheric haze
+ *   p_circuitDensity = circuitDensity (4.0-20.0) - Circuit trace density
+ *   p_pulseSpeed = pulseSpeed (0.5-3.0) - Energy pulse animation speed
+ *   p_dripIntensity = dripIntensity (0.0-1.0) - Toxic drip effect strength
+ *   p_glitchAmount = glitchAmount (0.0-0.5) - Digital corruption intensity
+ *   p_glowStrength = glowStrength (0.5-3.0) - Neon glow intensity
+ *   p_smogDensity = smogDensity (0.0-0.5) - Atmospheric haze
  *   customParams[1].z = chromaShift (0.0-15.0) - Chromatic aberration
- *   customParams[1].w = fillOpacity (0.3-0.9) - Inner fill darkness
- *   customColors[0] - Primary color (default #39FF14)
- *   customColors[1] - Secondary color (default #BF00FF)
+ *   p_fillOpacity = fillOpacity (0.3-0.9) - Inner fill darkness
+ *   p_primaryColor - Primary color (default #39FF14)
+ *   p_secondaryColor - Secondary color (default #BF00FF)
  */
 
 
@@ -141,7 +136,7 @@ float toxicDrip(vec2 uv, float time, float intensity) {
     float drip = 0.0;
 
     // Multiple drip streams
-    int dripStreams = int(customParams[3].w >= 0.0 ? customParams[3].w : 5.0);
+    int dripStreams = int(p_dripCount >= 0.0 ? p_dripCount : 5.0);
     for (int i = 0; i < dripStreams && i < 10; i++) {
         float fi = float(i);
         float xOffset = hash11(fi * 17.3) * 0.8 + 0.1;
@@ -219,18 +214,18 @@ vec4 renderToxicCircuitZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 bord
     float borderWidth = max(params.y, 2.5);
 
     // Parameters with defaults (toned down for subtlety)
-    float circuitDensity = customParams[0].x >= 0.0 ? customParams[0].x : 12.0;
-    float pulseSpeed = customParams[0].y >= 0.0 ? customParams[0].y : 1.0;
-    float dripIntensity = customParams[0].z >= 0.0 ? customParams[0].z : 0.2;
-    float glitchAmount = customParams[0].w >= 0.0 ? customParams[0].w : 0.08;
-    float glowStrength = customParams[1].x >= 0.0 ? customParams[1].x : 1.0;
-    float smogDensity = customParams[1].y >= 0.0 ? customParams[1].y : 0.1;
+    float circuitDensity = p_circuitDensity >= 0.0 ? p_circuitDensity : 12.0;
+    float pulseSpeed = p_pulseSpeed >= 0.0 ? p_pulseSpeed : 1.0;
+    float dripIntensity = p_dripIntensity >= 0.0 ? p_dripIntensity : 0.2;
+    float glitchAmount = p_glitchAmount >= 0.0 ? p_glitchAmount : 0.08;
+    float glowStrength = p_glowStrength >= 0.0 ? p_glowStrength : 1.0;
+    float smogDensity = p_smogDensity >= 0.0 ? p_smogDensity : 0.1;
     float chromaShift = customParams[1].z >= 0.0 ? customParams[1].z : 3.0;
-    float fillOpacity = customParams[1].w >= 0.0 ? customParams[1].w : 0.7;
-    float edgeGlowStrength = customParams[2].x >= 0.0 ? customParams[2].x : 0.35;
-    float mouseInfluenceStrength = customParams[2].y >= 0.0 ? customParams[2].y : 1.5;
-    float audioSensitivity = customParams[2].z >= 0.0 ? customParams[2].z : 1.0;
-    float sparkIntensity   = customParams[2].w >= 0.0 ? customParams[2].w : 1.0;
+    float fillOpacity = p_fillOpacity >= 0.0 ? p_fillOpacity : 0.7;
+    float edgeGlowStrength = p_edgeGlowStrength >= 0.0 ? p_edgeGlowStrength : 0.35;
+    float mouseInfluenceStrength = p_mouseInfluenceStrength >= 0.0 ? p_mouseInfluenceStrength : 1.5;
+    float audioSensitivity = p_audioSensitivity >= 0.0 ? p_audioSensitivity : 1.0;
+    float sparkIntensity   = p_sparkIntensity >= 0.0 ? p_sparkIntensity : 1.0;
 
     // Voltage level: overall energy is the circuit's operating voltage.
     // Low voltage = brownout (dim, flickery), high voltage = running hot.
@@ -272,10 +267,10 @@ vec4 renderToxicCircuitZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 bord
     float d = sdRoundedBox(p, rectSize * 0.5, borderRadius);
 
     // Colors - Toxic Circuit palette
-    vec3 primaryColor = colorWithFallback(customColors[0].rgb, vec3(0.224, 1.0, 0.078));   // #39FF14
-    vec3 secondaryColor = colorWithFallback(customColors[1].rgb, vec3(0.749, 0.0, 1.0)); // #BF00FF
-    vec3 arcColorParam = colorWithFallback(customColors[2].rgb, vec3(0.0, 1.0, 0.533));   // #00ff88
-    vec3 smogColorParam = colorWithFallback(customColors[3].rgb, vec3(0.102, 0.0, 0.2));  // #1a0033
+    vec3 primaryColor = colorWithFallback(p_primaryColor.rgb, vec3(0.224, 1.0, 0.078));   // #39FF14
+    vec3 secondaryColor = colorWithFallback(p_secondaryColor.rgb, vec3(0.749, 0.0, 1.0)); // #BF00FF
+    vec3 arcColorParam = colorWithFallback(p_arcColor.rgb, vec3(0.0, 1.0, 0.533));   // #00ff88
+    vec3 smogColorParam = colorWithFallback(p_smogColor.rgb, vec3(0.102, 0.0, 0.2));  // #1a0033
     vec3 bgColor = smogColorParam;
     vec3 accentColor = vec3(1.0, 0.063, 0.941);                                          // #FF10F0
 
@@ -687,12 +682,12 @@ vec4 compositeToxicLabels(vec4 color, vec2 fragCoord,
     vec2 px = 1.0 / max(iResolution, vec2(1.0));
     vec4 labels = texture(uZoneLabels, uv);
 
-    vec3 primaryColor = colorWithFallback(customColors[0].rgb, vec3(0.224, 1.0, 0.078));
-    vec3 secondaryColor = colorWithFallback(customColors[1].rgb, vec3(0.749, 0.0, 1.0));
-    float labelGlowSpread = customParams[3].x >= 0.0 ? customParams[3].x : 3.0;
-    float labelBrightness = customParams[3].y >= 0.0 ? customParams[3].y : 2.2;
-    float labelAudioReact = customParams[3].z >= 0.0 ? customParams[3].z : 1.0;
-    float arcFreq = customParams[4].x >= 0.0 ? customParams[4].x : 12.0;
+    vec3 primaryColor = colorWithFallback(p_primaryColor.rgb, vec3(0.224, 1.0, 0.078));
+    vec3 secondaryColor = colorWithFallback(p_secondaryColor.rgb, vec3(0.749, 0.0, 1.0));
+    float labelGlowSpread = p_arcSpread >= 0.0 ? p_arcSpread : 3.0;
+    float labelBrightness = p_dischargeBright >= 0.0 ? p_dischargeBright : 2.2;
+    float labelAudioReact = p_toxicReact >= 0.0 ? p_toxicReact : 1.0;
+    float arcFreq = p_arcFrequency >= 0.0 ? p_arcFrequency : 12.0;
 
     // Gaussian halo with angular noise arcs
     float halo = 0.0;
@@ -745,13 +740,11 @@ vec4 compositeToxicLabels(vec4 color, vec2 fragCoord,
     return color;
 }
 
-void main() {
-    vec2 fragCoord = vFragCoord;
+vec4 pImage(vec2 fragCoord) {
     vec4 color = vec4(0.0);
 
     if (zoneCount == 0) {
-        fragColor = vec4(0.0);
-        return;
+        return vec4(0.0);
     }
 
     // Audio analysis (computed once for all zones)
@@ -772,8 +765,8 @@ void main() {
         color = blendOver(color, zoneColor);
     }
 
-    if (customParams[4].y > 0.5)
+    if (p_showLabels > 0.5)
         color = compositeToxicLabels(color, fragCoord, bass, treble, overall, hasAudio);
 
-    fragColor = clampFragColor(color);
+    return color;
 }

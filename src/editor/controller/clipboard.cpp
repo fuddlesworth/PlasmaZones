@@ -10,7 +10,7 @@
 #include "../../core/constants.h"
 #include "../../core/logging.h"
 
-#include "pz_i18n.h"
+#include "phosphor_i18n.h"
 #include <QClipboard>
 #include <QGuiApplication>
 #include <QMimeData>
@@ -31,7 +31,7 @@ void EditorController::copyZones(const QStringList& zoneIds)
 {
     if (!m_zoneManager) {
         qCWarning(lcEditor) << "ZoneManager not initialized";
-        Q_EMIT clipboardOperationFailed(PzI18n::tr("Zone manager not initialized", "@info"));
+        Q_EMIT clipboardOperationFailed(PhosphorI18n::tr("Zone manager not initialized", "@info"));
         return;
     }
 
@@ -93,7 +93,7 @@ void EditorController::cutZones(const QStringList& zoneIds)
     // Then delete with undo macro for single undo step
     {
         BatchOperationScope scope(m_undoController, m_zoneManager,
-                                  PzI18n::tr("Cut %1 Zones", "@action").arg(zoneIds.count()));
+                                  PhosphorI18n::tr("Cut %1 Zones", "@action").arg(zoneIds.count()));
         for (const QString& zoneId : zoneIds) {
             deleteZone(zoneId);
         }
@@ -104,7 +104,7 @@ QStringList EditorController::pasteZones(bool withOffset)
 {
     if (!m_undoController || !m_zoneManager) {
         qCWarning(lcEditor) << "pasteZones: undo controller or zone manager is null";
-        Q_EMIT clipboardOperationFailed(PzI18n::tr("Zone manager not initialized", "@info"));
+        Q_EMIT clipboardOperationFailed(PhosphorI18n::tr("Zone manager not initialized", "@info"));
         return QStringList();
     }
 
@@ -193,7 +193,7 @@ QStringList EditorController::pasteZones(bool withOffset)
 
     // Create and push single command for all pasted zones (handles atomic undo/redo)
     auto* command = new PasteZonesCommand(QPointer<ZoneManager>(m_zoneManager), preparedZones,
-                                          PzI18n::tr("Paste %1 Zones", "@action").arg(preparedZones.count()));
+                                          PhosphorI18n::tr("Paste %1 Zones", "@action").arg(preparedZones.count()));
     m_undoController->push(command);
 
     // Select all pasted zones

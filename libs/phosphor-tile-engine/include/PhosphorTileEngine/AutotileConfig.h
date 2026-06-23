@@ -5,7 +5,6 @@
 
 #include <phosphortileengine_export.h>
 #include <PhosphorTiles/AutotileConstants.h>
-#include <QColor>
 #include <QHash>
 #include <QJsonObject>
 #include <QString>

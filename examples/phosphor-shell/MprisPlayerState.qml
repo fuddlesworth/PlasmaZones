@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-import Phosphor.Services 1.0
+import Phosphor.Service.Mpris 1.0
 import QtQuick
 
 // Non-visual helper bundling the derived MPRIS state shared by the panel
@@ -14,9 +14,13 @@ QtObject {
 
     // Player to observe; null when none is selected.
     property MprisPlayer player: null
-    // When false, `progress` freezes at 0 — set from the consuming
-    // view's visibility so the 1 Hz position binding doesn't wake the
-    // JS engine for an off-screen widget.
+    // When false, `progress` evaluates to 0 unconditionally (the
+    // early-return short-circuits before reading `player.position`,
+    // so the QML binding tracker drops it as a dependency and the
+    // expression stays dormant until sampling flips back to true).
+    // The upstream C++ position timer keeps ticking; this only mutes
+    // the QML side. Set from the consuming view's visibility to avoid
+    // waking the JS engine for an off-screen widget.
     property bool sampling: true
     readonly property bool hasPlayer: player !== null
     readonly property bool isPlaying: hasPlayer && player.isPlaying
@@ -29,7 +33,7 @@ QtObject {
     // Album-art URL. A plain binding is already flicker-free: it tracks
     // both `player` and `player.trackArtUrl` (NOTIFY metadataChanged),
     // and QML suppresses the change signal when the recomputed string is
-    // identical — so an Image bound to this never reloads on an
+    // identical: so an Image bound to this never reloads on an
     // unrelated metadataChanged.
     readonly property string stableArtUrl: (player && player.trackArtUrl) ? player.trackArtUrl : ""
 
@@ -47,5 +51,4 @@ QtObject {
 
         return m + ":" + ms;
     }
-
 }

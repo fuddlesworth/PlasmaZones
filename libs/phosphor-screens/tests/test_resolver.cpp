@@ -15,8 +15,8 @@
 #include <QScreen>
 #include <QTest>
 
-using Phosphor::Screens::ResolverEndpoint;
-using Phosphor::Screens::ScreenResolver;
+using PhosphorScreens::ResolverEndpoint;
+using PhosphorScreens::ScreenResolver;
 
 class TestResolver : public QObject
 {
@@ -40,7 +40,7 @@ private Q_SLOTS:
         // Must fall back to the canonical EDID-style identifier (NOT the
         // connector name). Consumers route both daemon and fallback paths
         // through one resolver and expect one ID shape.
-        QCOMPARE(id, Phosphor::Screens::ScreenIdentity::identifierFor(primary));
+        QCOMPARE(id, PhosphorScreens::ScreenIdentity::identifierFor(primary));
     }
 
     void testDaemonAbsentShortCircuitsQuickly()

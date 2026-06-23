@@ -3,11 +3,11 @@
 
 #include "screenslogging.h"
 
-namespace Phosphor::Screens {
+namespace PhosphorScreens {
 
 // Default Info threshold matches the rest of the Phosphor* libraries —
 // Debug-level output stays off unless the consumer enables it via
 // QT_LOGGING_RULES.
 Q_LOGGING_CATEGORY(lcPhosphorScreens, "phosphor.screens", QtInfoMsg)
 
-} // namespace Phosphor::Screens
+} // namespace PhosphorScreens

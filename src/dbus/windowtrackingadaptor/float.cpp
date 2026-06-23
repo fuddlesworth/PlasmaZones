@@ -30,7 +30,7 @@ void WindowTrackingAdaptor::notifyDragOutUnsnap(const QString& windowId)
         return;
     }
 
-    QString screenId = m_service->screenAssignments().value(windowId, m_lastActiveScreenId);
+    QString screenId = m_service->screenForWindow(windowId, m_lastActiveScreenId);
     qCInfo(lcDbusWindow) << "Drag-out unsnap (no activation trigger) for" << windowId << "screen:" << screenId;
 
     // Delegate unsnap-for-float to the service directly (the SnapAdaptor
@@ -45,26 +45,25 @@ void WindowTrackingAdaptor::notifyDragOutUnsnap(const QString& windowId)
         auto geo = m_service->validatedUnmanagedGeometry(windowId, screenId);
         if (geo) {
             Q_EMIT applyGeometryRequested(windowId, 0, 0, geo->width(), geo->height(), QString(), screenId, true);
-            if (m_snapEngine) {
-                m_snapEngine->clearUnmanagedGeometry(windowId);
-            }
+            // Single float-back store: clear the record's shared free geometry now
+            // that we've consumed it for this drag-out restore.
+            m_service->clearFreeGeometry(windowId);
             qCInfo(lcDbusWindow) << "Drag-out unsnap: restoring size" << geo->width() << "x" << geo->height();
         }
     }
 }
 
-bool WindowTrackingAdaptor::getPreFloatZone(const QString& windowId, QString& zoneIdOut)
+bool WindowTrackingAdaptor::getPreFloatZone(const QString& windowId, QString& zoneId)
 {
     if (windowId.isEmpty()) {
         qCDebug(lcDbusWindow) << "getPreFloatZone: empty windowId";
-        zoneIdOut.clear();
+        zoneId.clear();
         return false;
     }
     // Delegate to service
-    zoneIdOut = m_service->preFloatZone(windowId);
-    qCDebug(lcDbusWindow) << "getPreFloatZone for" << windowId << "-> found:" << !zoneIdOut.isEmpty()
-                          << "zone:" << zoneIdOut;
-    return !zoneIdOut.isEmpty();
+    zoneId = m_service->preFloatZone(windowId);
+    qCDebug(lcDbusWindow) << "getPreFloatZone for" << windowId << "-> found:" << !zoneId.isEmpty() << "zone:" << zoneId;
+    return !zoneId.isEmpty();
 }
 
 void WindowTrackingAdaptor::clearPreFloatZone(const QString& windowId)
@@ -100,12 +99,26 @@ void WindowTrackingAdaptor::setWindowFloating(const QString& windowId, bool floa
     if (!validateWindowId(windowId, QStringLiteral("set float state"))) {
         return;
     }
-    // Delegate to service
     m_service->setWindowFloating(windowId, floating);
+    // Gate the signal emissions on a real change in what we last BROADCAST, not
+    // on a re-query of the service's float state. Under the per-engine float
+    // model the owning engine flips its float bit BEFORE the daemon's sync slot
+    // reaches this writer (e.g. AutotileEngine::performToggleFloat toggles then
+    // emits windowFloatingChanged, which Daemon::syncAutotileFloatState relays
+    // here), so m_service->isWindowFloating() already reports the post-transition
+    // value — the old `floating == wasFloating` gate then suppressed every
+    // autotile float broadcast, leaving subscribers (the effect's float cache,
+    // which the autotile FFM float-pause depends on) permanently stale.
+    // Tracking the last-broadcast value detects the real edge regardless of when
+    // the engine updated its bit, and still honours "only emit when changed".
+    if (m_broadcastFloating.value(windowId, false) == floating) {
+        return;
+    }
+    m_broadcastFloating[windowId] = floating;
     qCInfo(lcDbusWindow) << "Window" << windowId << "is now" << (floating ? "floating" : "not floating");
     // Notify effect so it can update its local cache (use full windowId for per-instance tracking).
     // Use the window's tracked screen if available, otherwise fall back to last active screen.
-    QString screen = m_service->screenAssignments().value(windowId, m_lastActiveScreenId);
+    QString screen = m_service->screenForWindow(windowId, m_lastActiveScreenId);
     Q_EMIT windowFloatingChanged(windowId, floating, screen);
 
     // Emit unified state change
@@ -119,6 +132,9 @@ void WindowTrackingAdaptor::setWindowFloating(const QString& windowId, bool floa
                                   QStringList{},
                                   false,
                               });
+
+    // Unified model: refresh the live placement record on float toggle.
+    captureWindowPlacement(windowId);
 }
 
 QStringList WindowTrackingAdaptor::getFloatingWindows()
@@ -143,7 +159,7 @@ bool WindowTrackingAdaptor::applyGeometryForFloat(const QString& windowId, const
 }
 
 // WindowTrackingAdaptor::clearFloatingStateForSnap was removed — all
-// snap-commit paths now route through PhosphorPlacement::WindowTrackingService::commitSnap
+// snap-commit paths now route through PhosphorSnapEngine::SnapEngine::commitSnap
 // which handles clearing the floating state internally and emits
 // windowFloatingClearedForSnap, which this adaptor relays to its own
 // windowFloatingChanged D-Bus signal in the constructor wiring.

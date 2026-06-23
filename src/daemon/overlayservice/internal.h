@@ -5,6 +5,18 @@
 
 #include <optional>
 
+#include "overlay_helpers.h"
+#include "../../core/settings_interfaces.h"
+#include "../../core/interfaces.h"
+#include "../../core/shaderregistry.h"
+#include "../../core/utils.h"
+#include "../config/configdefaults.h"
+
+#include <PhosphorLayer/Role.h>
+#include <PhosphorScreens/Manager.h>
+#include <PhosphorScreens/ScreenIdentity.h>
+#include <PhosphorZones/IZoneLayoutRegistry.h>
+
 #include <QFont>
 #include <QGuiApplication>
 #include <QMargins>
@@ -12,18 +24,6 @@
 #include <QQuickItem>
 #include <QQuickWindow>
 #include <QScreen>
-
-#include <PhosphorLayer/Role.h>
-#include <PhosphorScreens/Manager.h>
-#include <PhosphorScreens/ScreenIdentity.h>
-
-#include "overlay_helpers.h"
-#include <PhosphorScreens/Manager.h>
-#include "../../core/settings_interfaces.h"
-#include "../../core/interfaces.h"
-#include "../../core/shaderregistry.h"
-#include "../../core/utils.h"
-#include "../config/configdefaults.h"
 
 namespace PlasmaZones {
 
@@ -116,15 +116,15 @@ inline ZoneSelectorConfig defaultZoneSelectorConfig()
 // Uses ScreenManager::physicalScreenFor which handles virtual screen IDs +
 // connector names. Falls back to the primary screen when the manager is null
 // (unit tests) or the lookup returns nothing.
-inline QScreen* resolveTargetScreen(Phosphor::Screens::ScreenManager* mgr, const QString& screenId)
+inline QScreen* resolveTargetScreen(PhosphorScreens::ScreenManager* mgr, const QString& screenId)
 {
     if (mgr) {
-        const Phosphor::Screens::PhysicalScreen phys = mgr->physicalScreenFor(screenId);
+        const PhosphorScreens::PhysicalScreen phys = mgr->physicalScreenFor(screenId);
         if (phys.isValid() && phys.qscreen) {
             return phys.qscreen;
         }
     }
-    QScreen* s = Phosphor::Screens::ScreenIdentity::findByIdOrName(screenId);
+    QScreen* s = PhosphorScreens::ScreenIdentity::findByIdOrName(screenId);
     return s ? s : QGuiApplication::primaryScreen();
 }
 
@@ -175,9 +175,9 @@ inline VsLayerPlacement layerPlacementAt(const QPoint& topLeft, const QRect& phy
 
 /// Resolve target screen geometry for a screen ID (virtual or physical).
 /// For virtual screens (format "physicalId/vs:N"), returns the virtual screen
-/// geometry from Phosphor::Screens::ScreenManager. For physical screens, falls back to QScreen::geometry().
+/// geometry from PhosphorScreens::ScreenManager. For physical screens, falls back to QScreen::geometry().
 /// Returns the geometry the overlay window should cover.
-inline QRect resolveScreenGeometry(Phosphor::Screens::ScreenManager* mgr, const QString& screenId)
+inline QRect resolveScreenGeometry(PhosphorScreens::ScreenManager* mgr, const QString& screenId)
 {
     if (mgr) {
         QRect geom = mgr->screenGeometry(screenId);
@@ -185,7 +185,7 @@ inline QRect resolveScreenGeometry(Phosphor::Screens::ScreenManager* mgr, const 
             return geom;
         }
     }
-    // Fallback: physical screen geometry only. This path is hit when Phosphor::Screens::ScreenManager
+    // Fallback: physical screen geometry only. This path is hit when PhosphorScreens::ScreenManager
     // is unavailable (e.g. early startup) or when screenId doesn't match any virtual
     // screen. The caller gets raw QScreen::geometry() which is always the full
     // physical monitor — acceptable as a last-resort fallback.
@@ -226,6 +226,11 @@ inline void applyShaderInfoToWindow(QObject* window, const ShaderRegistry::Shade
     writeQmlProperty(window, QStringLiteral("bufferFilters"), QVariant::fromValue(info.bufferFilters));
     writeQmlProperty(window, QStringLiteral("useDepthBuffer"), info.useDepthBuffer);
     writeQmlProperty(window, QStringLiteral("shaderParams"), QVariant::fromValue(params));
+    // T1.1 (zone): the generated `#define p_<id> ...` preamble so packs read
+    // params by name. Set before shaderSource (written LAST below, which
+    // triggers the load) so the node splices it on first bake. Empty for packs
+    // that declare no params.
+    writeQmlProperty(window, QStringLiteral("paramPreamble"), ShaderRegistry::paramPreamble(info));
     // Desktop wallpaper subscription
     writeQmlProperty(window, QStringLiteral("useWallpaper"), info.useWallpaper);
     if (info.useWallpaper) {
@@ -252,11 +257,20 @@ inline void applyShaderInfoToWindow(QObject* window, const ShaderRegistry::Shade
 /// Previously, ZoneSelectorController only checked the current mode, causing inconsistencies when the
 /// overlay reported a lock but the selector did not.
 ///
+/// A rule-driven `LockContext` lock is checked FIRST, ahead of the persisted per-mode store: it is
+/// mode-agnostic (locks regardless of @p currentMode) and live-resolved, exactly mirroring the
+/// daemon's resolver-routed `IContextGateSource::isContextLocked`. Without this, a `LockContext`
+/// window rule would block the layout-switch gate but leave the selector/overlay reporting unlocked —
+/// the same overlay-vs-selector split PR #247 eliminated for manual locks.
+///
 /// Pass the current mode explicitly when only the active mode's lock is relevant.
 // contextLockKey is defined in Utils:: (src/core/utils.h)
-inline bool isAnyModeLocked(ISettings* settings, const QString& screenId, int desktop, const QString& activity,
-                            int currentMode = -1)
+inline bool isAnyModeLocked(ISettings* settings, PhosphorZones::IZoneLayoutRegistry* layoutRegistry,
+                            const QString& screenId, int desktop, const QString& activity, int currentMode = -1)
 {
+    if (layoutRegistry && layoutRegistry->resolveContextLocked(screenId, desktop, activity)) {
+        return true;
+    }
     if (!settings) {
         return false;
     }
@@ -266,6 +280,25 @@ inline bool isAnyModeLocked(ISettings* settings, const QString& screenId, int de
     // Default: check both modes (maintains PR #247 behavior)
     return settings->isContextLocked(Utils::contextLockKey(0, screenId), desktop, activity)
         || settings->isContextLocked(Utils::contextLockKey(1, screenId), desktop, activity);
+}
+
+/// Resolve the per-context overlay-property override (shader / style)
+/// for @p screenId at that screen's current virtual desktop + activity. A thin
+/// wrapper over IZoneLayoutRegistry::resolveContextOverlay that supplies the live
+/// context, mirroring how @ref isAnyModeLocked routes the lock check. Under
+/// per-output virtual desktops (#648) the desktop is resolved per-screen so the
+/// override matches the desktop actually shown on @p screenId, not the active
+/// monitor's. Returns an empty override when there is no registry or no matching
+/// overlay rule, so the overlay falls through to the active layout's own
+/// shader / display-mode.
+inline PhosphorZones::ContextOverlayOverride
+overlayOverrideForScreen(PhosphorZones::IZoneLayoutRegistry* layoutRegistry, const QString& screenId)
+{
+    if (!layoutRegistry) {
+        return {};
+    }
+    return layoutRegistry->resolveContextOverlay(screenId, layoutRegistry->currentVirtualDesktopForScreen(screenId),
+                                                 layoutRegistry->currentActivity());
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════

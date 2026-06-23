@@ -41,8 +41,8 @@ configs port with minimal rework.
 | `PersistentProperties`   | QML-friendly persistence of property values across launches and hot reloads. |
 | `Process`                | Sandboxed subprocess runner exposed to QML. |
 | `FileView`               | Watched-file reader for QML config-driven panels (`/proc`, `/sys`, config files). |
-| `SystemClock`            | Timer-driven clock — hours/minutes/seconds/date — with configurable tick precision. |
-| `WallpaperService`       | Decodes the desktop wallpaper off the GUI thread; reached from QML via `ShellGlobal.wallpaper`. |
+| `SystemClock`            | Timer-driven clock (hours/minutes/seconds/date) with configurable tick precision. |
+| `WallpaperService`       | Decodes the desktop wallpaper off the GUI thread. Reached from QML via `ShellGlobal.wallpaper`. |
 | `Environment`            | Cross-platform env-var, locale, and runtime-dir helpers. |
 | `ShellGlobal`            | QML context object (`PhosphorShell`) with shell-wide config and runtime state. |
 | `ScreenModel`            | Reactive list of physical screens for per-screen `Variants`. |
@@ -54,11 +54,11 @@ configs port with minimal rework.
 above it re-exports a few from sibling libraries, so shell QML needs a
 single import:
 
-- `ShaderBackground` — animated shader surface (from `phosphor-rendering`).
-- `IdleInhibitor`, `IdleNotifier` — idle inhibition and idle detection
-  (from `phosphor-wayland`).
-- `ForeignToplevel` — one entry of the `Toplevels` window list
-  (uncreatable; vended by `Toplevels`).
+- `ShaderBackground`: animated shader surface (from `phosphor-rendering`).
+- `IdleInhibitor`: surface-bound idle inhibition (from `phosphor-wayland`).
+  Session-wide idle detection lives in `Phosphor.Service.Idle`'s `IdleService`.
+- `ForeignToplevel`: one entry of the `Toplevels` window list
+  (uncreatable, vended by `Toplevels`).
 
 ## Dependencies
 
@@ -71,6 +71,9 @@ working reference for consumers.
 
 ## See also
 
-- [`phosphor-services`](../phosphor-services/README.md) — system tray, MPRIS media, and UPower power services.
-- [`phosphor-layer`](../phosphor-layer/README.md) — Role vocabulary the window types compose from.
-- [`phosphor-shell-patterns`](../phosphor-shell-patterns/README.md) — named Role recipes the panels use.
+- [`phosphor-service-sni`](../phosphor-service-sni/README.md): StatusNotifierItem tray + dbusmenu.
+- [`phosphor-service-mpris`](../phosphor-service-mpris/README.md): MPRIS2 media-player discovery + control.
+- [`phosphor-service-upower`](../phosphor-service-upower/README.md): battery + power-supply readouts.
+- [`phosphor-service-icontheme`](../phosphor-service-icontheme/README.md): XDG icon-theme resolver + Qt image provider used by the tray.
+- [`phosphor-layer`](../phosphor-layer/README.md): Role vocabulary the window types compose from.
+- [`phosphor-shell-patterns`](../phosphor-shell-patterns/README.md): named Role recipes the panels use.

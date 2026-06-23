@@ -5,7 +5,6 @@
 #include "../core/interfaces.h"
 #include "../config/settings.h" // For concrete Settings type
 #include "../core/dbusvariantutils.h"
-#include <PhosphorAnimation/AnimationAppRule.h>
 #include <PhosphorAnimation/PhosphorProfileRegistry.h>
 #include <PhosphorAnimation/ProfilePaths.h>
 #include <PhosphorAnimation/ProfileTree.h>
@@ -26,7 +25,6 @@ namespace PlasmaZones {
 
 namespace {
 constexpr qsizetype kMaxShaderProfileTreeBytes = 64 * 1024;
-constexpr qsizetype kMaxAnimationAppRulesBytes = 64 * 1024;
 }
 
 SettingsAdaptor::SettingsAdaptor(ISettings* settings, ShaderRegistry* shaderRegistry,
@@ -327,6 +325,7 @@ void SettingsAdaptor::initializeRegistry()
 
     REGISTER_BOOL_SETTING("autotileDragInsertToggle", autotileDragInsertToggle, setAutotileDragInsertToggle)
     REGISTER_BOOL_SETTING("toggleActivation", toggleActivation, setToggleActivation)
+    REGISTER_BOOL_SETTING("zoneSpanToggleMode", zoneSpanToggleMode, setZoneSpanToggleMode)
     REGISTER_BOOL_SETTING("snappingEnabled", snappingEnabled, setSnappingEnabled)
 
     // Display settings
@@ -445,23 +444,32 @@ void SettingsAdaptor::initializeRegistry()
                           setKeepWindowsInZonesOnResolutionChange)
     REGISTER_BOOL_SETTING("moveNewWindowsToLastZone", moveNewWindowsToLastZone, setMoveNewWindowsToLastZone)
     REGISTER_BOOL_SETTING("restoreOriginalSizeOnUnsnap", restoreOriginalSizeOnUnsnap, setRestoreOriginalSizeOnUnsnap)
-    // stickyWindowHandling: enum (0=TreatAsNormal, 1=RestoreOnly, 2=IgnoreAll)
-    m_getters[QStringLiteral("stickyWindowHandling")] = [this]() {
-        return static_cast<int>(m_settings->stickyWindowHandling());
+    // snappingStickyWindowHandling: enum (0=TreatAsNormal, 1=RestoreOnly, 2=IgnoreAll)
+    m_getters[QStringLiteral("snappingStickyWindowHandling")] = [this]() {
+        return static_cast<int>(m_settings->snappingStickyWindowHandling());
     };
-    m_setters[QStringLiteral("stickyWindowHandling")] = [this](const QVariant& v) {
+    m_setters[QStringLiteral("snappingStickyWindowHandling")] = [this](const QVariant& v) {
         int val = v.toInt();
         if (val >= 0 && val <= 2) {
-            m_settings->setStickyWindowHandling(static_cast<StickyWindowHandling>(val));
+            m_settings->setSnappingStickyWindowHandling(static_cast<StickyWindowHandling>(val));
             return true;
         }
         return false;
     };
-    m_schemas[QStringLiteral("stickyWindowHandling")] = QStringLiteral("int");
+    m_schemas[QStringLiteral("snappingStickyWindowHandling")] = QStringLiteral("int");
     REGISTER_BOOL_SETTING("restoreWindowsToZonesOnLogin", restoreWindowsToZonesOnLogin, setRestoreWindowsToZonesOnLogin)
+    REGISTER_BOOL_SETTING("snappingRestoreFloatedWindowsOnLogin", snappingRestoreFloatedWindowsOnLogin,
+                          setSnappingRestoreFloatedWindowsOnLogin)
+    REGISTER_BOOL_SETTING("autotileRestoreFloatedWindowsOnLogin", autotileRestoreFloatedWindowsOnLogin,
+                          setAutotileRestoreFloatedWindowsOnLogin)
+    REGISTER_BOOL_SETTING("snapUnfloatFallbackToZone", snapUnfloatFallbackToZone, setSnapUnfloatFallbackToZone)
     REGISTER_BOOL_SETTING("autoAssignAllLayouts", autoAssignAllLayouts, setAutoAssignAllLayouts)
+    REGISTER_BOOL_SETTING("suppressDefaultLayoutAssignment", suppressDefaultLayoutAssignment,
+                          setSuppressDefaultLayoutAssignment)
     REGISTER_BOOL_SETTING("snapAssistFeatureEnabled", snapAssistFeatureEnabled, setSnapAssistFeatureEnabled)
     REGISTER_BOOL_SETTING("snapAssistEnabled", snapAssistEnabled, setSnapAssistEnabled)
+    REGISTER_BOOL_SETTING("snappingFocusNewWindows", snappingFocusNewWindows, setSnappingFocusNewWindows)
+    REGISTER_BOOL_SETTING("snappingFocusFollowsMouse", snappingFocusFollowsMouse, setSnappingFocusFollowsMouse)
 
     // Snap assist triggers (when always-enabled is off, hold any trigger at drop to enable)
     m_getters[QStringLiteral("snapAssistTriggers")] = [this]() {
@@ -476,9 +484,9 @@ void SettingsAdaptor::initializeRegistry()
     // Default layout
     REGISTER_STRING_SETTING("defaultLayoutId", defaultLayoutId, setDefaultLayoutId)
 
-    // Exclusions
-    REGISTER_STRINGLIST_SETTING("excludedApplications", excludedApplications, setExcludedApplications)
-    REGISTER_STRINGLIST_SETTING("excludedWindowClasses", excludedWindowClasses, setExcludedWindowClasses)
+    // Window filtering — the per-app / per-class exclusion lists
+    // (excludedApplications, excludedWindowClasses) retired in v4 along
+    // with their settings page; only the three global knobs below remain.
     REGISTER_BOOL_SETTING("excludeTransientWindows", excludeTransientWindows, setExcludeTransientWindows)
     REGISTER_INT_SETTING("minimumWindowWidth", minimumWindowWidth, setMinimumWindowWidth)
     REGISTER_INT_SETTING("minimumWindowHeight", minimumWindowHeight, setMinimumWindowHeight)
@@ -492,10 +500,10 @@ void SettingsAdaptor::initializeRegistry()
                           setAnimationExcludeNotificationsAndOsd)
     REGISTER_INT_SETTING("animationMinimumWindowWidth", animationMinimumWindowWidth, setAnimationMinimumWindowWidth)
     REGISTER_INT_SETTING("animationMinimumWindowHeight", animationMinimumWindowHeight, setAnimationMinimumWindowHeight)
-    REGISTER_STRINGLIST_SETTING("animationExcludedApplications", animationExcludedApplications,
-                                setAnimationExcludedApplications)
-    REGISTER_STRINGLIST_SETTING("animationExcludedWindowClasses", animationExcludedWindowClasses,
-                                setAnimationExcludedWindowClasses)
+    // animationExcludedApplications / animationExcludedWindowClasses
+    // retired in v4 — folded into ExcludeAnimations WindowRules; the
+    // effect derives its animation exclusion rule set from the unified
+    // store via the WindowRules.rulesChanged subscription instead.
 
     // PhosphorZones::Zone selector settings
     REGISTER_BOOL_SETTING("zoneSelectorEnabled", zoneSelectorEnabled, setZoneSelectorEnabled)
@@ -576,28 +584,6 @@ void SettingsAdaptor::initializeRegistry()
             return true;
         };
         m_schemas[QString(PhosphorProtocol::Service::SettingProperty::ShaderProfileTree)] = QStringLiteral("string");
-
-        // Animation app rules: ordered JSON array round-trip — the wire
-        // shape mirrors `Settings::animationAppRulesJson`. Same byte cap
-        // as the profile tree since both blobs share the same per-user
-        // upper bound (dozens of overrides at most).
-        m_getters[QString(PhosphorProtocol::Service::SettingProperty::AnimationAppRules)] = [concrete]() {
-            return QString::fromUtf8(
-                QJsonDocument(concrete->animationAppRules().toJson()).toJson(QJsonDocument::Compact));
-        };
-        m_setters[QString(PhosphorProtocol::Service::SettingProperty::AnimationAppRules)] =
-            [concrete](const QVariant& v) -> bool {
-            // Same UTF-8-byte gate rationale as shaderProfileTree above.
-            const QByteArray raw = v.toString().toUtf8();
-            if (raw.size() > kMaxAnimationAppRulesBytes)
-                return false;
-            const QJsonDocument doc = QJsonDocument::fromJson(raw);
-            if (!doc.isArray())
-                return false;
-            concrete->setAnimationAppRules(PhosphorAnimationShaders::AnimationAppRuleList::fromJson(doc.array()));
-            return true;
-        };
-        m_schemas[QString(PhosphorProtocol::Service::SettingProperty::AnimationAppRules)] = QStringLiteral("string");
     }
 
     // Per-event motion-profile tree (read-only, JSON blob round-trip).
@@ -704,6 +690,17 @@ void SettingsAdaptor::initializeRegistry()
     REGISTER_COLOR_SETTING("autotileInactiveBorderColor", autotileInactiveBorderColor, setAutotileInactiveBorderColor)
     REGISTER_BOOL_SETTING("autotileUseSystemBorderColors", autotileUseSystemBorderColors,
                           setAutotileUseSystemBorderColors)
+
+    // Snapping window decoration settings (on ISettings interface)
+    REGISTER_BOOL_SETTING("snappingHideTitleBars", snappingHideTitleBars, setSnappingHideTitleBars)
+    REGISTER_BOOL_SETTING("snappingShowBorder", snappingShowBorder, setSnappingShowBorder)
+    REGISTER_INT_SETTING("snappingBorderWidth", snappingBorderWidth, setSnappingBorderWidth)
+    REGISTER_INT_SETTING("snappingBorderRadius", snappingBorderRadius, setSnappingBorderRadius)
+    REGISTER_COLOR_SETTING("snappingBorderColor", snappingBorderColor, setSnappingBorderColor)
+    REGISTER_COLOR_SETTING("snappingInactiveBorderColor", snappingInactiveBorderColor, setSnappingInactiveBorderColor)
+    REGISTER_BOOL_SETTING("snappingUseSystemBorderColors", snappingUseSystemBorderColors,
+                          setSnappingUseSystemBorderColors)
+
     REGISTER_BOOL_SETTING("autotileFocusFollowsMouse", autotileFocusFollowsMouse, setAutotileFocusFollowsMouse)
     m_getters[QStringLiteral("autotileStickyWindowHandling")] = [this]() {
         return static_cast<int>(m_settings->autotileStickyWindowHandling());
@@ -1017,8 +1014,16 @@ bool SettingsAdaptor::setSettings(const QVariantMap& settings)
             const QString& key = it.key();
             auto setter = m_setters.find(key);
             if (setter == m_setters.end()) {
-                qCWarning(lcDbusSettings) << "setSettings: unknown key" << key;
-                allOk = false;
+                // A key with a getter but no setter is read-only (e.g.
+                // motionProfileTree, animationShaderSearchPaths). getAllSettings
+                // serializes those, so a getAllSettings -> setSettings round-trip
+                // legitimately carries them back; skip them silently rather than
+                // failing the whole batch. Only a key unknown to BOTH maps is a
+                // genuine error.
+                if (!m_getters.contains(key)) {
+                    qCWarning(lcDbusSettings) << "setSettings: unknown key" << key;
+                    allOk = false;
+                }
                 continue;
             }
             // Convert QDBusArgument types to plain Qt types before passing to setters.
@@ -1201,8 +1206,11 @@ bool SettingsAdaptor::setPerScreenSettings(const QString& screenId, const QStrin
 
     for (auto it = values.constBegin(); it != values.constEnd(); ++it) {
         // Values arriving over the wire can be QDBusArgument-wrapped when
-        // they contain lists or maps; normalize to plain Qt types first —
-        // matches the single-key setPerScreenSetting path exactly.
+        // they contain lists or maps; normalize to plain Qt types first.
+        // (The single-key setPerScreenSetting path passes the QDBusVariant's
+        // payload through raw — fine there because per-screen values are
+        // scalars, which demarshal to plain QVariants; this batch path
+        // normalizes defensively since a map payload arrives wrapped.)
         const QVariant converted = DBusVariantUtils::convertDbusArgument(it.value());
         dispatch->set(screenId, it.key(), converted);
     }

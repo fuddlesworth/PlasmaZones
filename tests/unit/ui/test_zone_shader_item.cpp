@@ -11,10 +11,14 @@
 #include <QUrl>
 
 #include "daemon/rendering/zoneshaderitem.h"
+#include "daemon/rendering/zonelabeltexturebuilder.h"
 #include <PhosphorRendering/ZoneShaderCommon.h>
+#include <PhosphorRendering/ZoneLabelTexture.h>
 #include "config/configdefaults.h"
 #include "core/constants.h"
 #include "../helpers/TestHelpers.h"
+
+#include <QImage>
 
 using namespace PlasmaZones;
 
@@ -420,6 +424,123 @@ private Q_SLOTS:
         // Invalid values should normalize to "clamp"
         item.setBufferWrap(QStringLiteral("invalid"));
         QCOMPARE(item.bufferWrap(), QStringLiteral("clamp"));
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // Zone-label sparse payload (memory: full-screen image → sparse glyph tiles)
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    void testZoneLabelBuilder_producesSparseTilesNotFullScreen()
+    {
+        const QSize screen(1920, 1080);
+        const PhosphorRendering::ZoneLabelTexture labels =
+            ZoneLabelTextureBuilder::build(makeFourZoneLayout(), screen, Qt::white, /*showNumbers=*/true);
+
+        QVERIFY(!labels.isEmpty());
+        // The payload is screen-addressed but carries one tile per numbered zone.
+        QCOMPARE(labels.size, screen);
+        QCOMPARE(labels.tiles.size(), 4);
+
+        const qint64 fullScreenBytes = qint64(screen.width()) * screen.height() * 4;
+        qint64 tileBytes = 0;
+        for (const PhosphorRendering::ZoneLabelTile& tile : labels.tiles) {
+            QVERIFY(!tile.image.isNull());
+            // Each tile is a small glyph region, far smaller than the screen.
+            QVERIFY(tile.image.width() < screen.width() / 2);
+            QVERIFY(tile.image.height() < screen.height() / 2);
+            // And it sits fully inside the texture.
+            const QRect r(tile.dest, tile.image.size());
+            QVERIFY(QRect(QPoint(0, 0), screen).contains(r));
+            tileBytes += qint64(tile.image.width()) * tile.image.height() * 4;
+        }
+        // The whole point: glyph tiles cost a tiny fraction of a full-screen image.
+        QVERIFY(tileBytes < fullScreenBytes / 10);
+    }
+
+    void testZoneLabelBuilder_emptyWhenNumbersOff()
+    {
+        const PhosphorRendering::ZoneLabelTexture labels =
+            ZoneLabelTextureBuilder::build(makeFourZoneLayout(), QSize(1920, 1080), Qt::white, /*showNumbers=*/false);
+        QVERIFY(labels.isEmpty());
+        QVERIFY(labels.toImage().isNull());
+    }
+
+    void testZoneLabelTexture_toImageCompositesToFullSize()
+    {
+        const QSize screen(1920, 1080);
+        const PhosphorRendering::ZoneLabelTexture labels =
+            ZoneLabelTextureBuilder::build(makeFourZoneLayout(), screen, Qt::white, /*showNumbers=*/true);
+
+        const QImage composited = labels.toImage();
+        QCOMPARE(composited.size(), screen);
+        QVERIFY(!composited.isNull());
+
+        // Some pixels must be non-transparent (the glyphs were painted in).
+        bool anyOpaque = false;
+        for (const PhosphorRendering::ZoneLabelTile& tile : labels.tiles) {
+            // Sample the centre of each tile's destination region.
+            const QPoint c = tile.dest + QPoint(tile.image.width() / 2, tile.image.height() / 2);
+            if (qAlpha(composited.pixel(c)) > 0) {
+                anyOpaque = true;
+                break;
+            }
+        }
+        QVERIFY(anyOpaque);
+    }
+
+    void testZoneShaderItem_labelsTexturePayloadRoundTrips()
+    {
+        ZoneShaderItem item;
+        const PhosphorRendering::ZoneLabelTexture labels =
+            ZoneLabelTextureBuilder::build(makeFourZoneLayout(), QSize(1920, 1080), Qt::white, /*showNumbers=*/true);
+
+        QSignalSpy spy(&item, &ZoneShaderItem::labelsTextureChanged);
+        item.setLabelsTexture(labels);
+        QCOMPARE(spy.count(), 1);
+
+        const PhosphorRendering::ZoneLabelTexture got = item.labelsTexture();
+        QCOMPARE(got.size, labels.size);
+        QCOMPARE(got.tiles.size(), labels.tiles.size());
+    }
+
+    void testZoneShaderItem_qImageConverterWrapsAsSingleTile()
+    {
+        // The editor/settings shader previews still hand the labelsTexture
+        // property a full QImage; the ctor-registered converter must wrap it as
+        // a single full-size tile so those paths keep working unchanged.
+        ZoneShaderItem item; // ctor registers the QImage→ZoneLabelTexture converter
+
+        QImage img(64, 48, QImage::Format_ARGB32);
+        img.fill(Qt::red);
+
+        QVERIFY(item.setProperty("labelsTexture", QVariant::fromValue(img)));
+        const PhosphorRendering::ZoneLabelTexture got = item.labelsTexture();
+        QCOMPARE(got.size, img.size());
+        QCOMPARE(got.tiles.size(), 1);
+        QCOMPARE(got.tiles.first().dest, QPoint(0, 0));
+        QCOMPARE(got.tiles.first().image.size(), img.size());
+    }
+
+    void testZoneShaderItem_labelsTextureSamePayloadSuppressesSignal()
+    {
+        ZoneShaderItem item;
+        const PhosphorRendering::ZoneLabelTexture labels =
+            ZoneLabelTextureBuilder::build(makeFourZoneLayout(), QSize(1920, 1080), Qt::white, /*showNumbers=*/true);
+
+        item.setLabelsTexture(labels); // first set: genuine change from the empty default
+
+        QSignalSpy spy(&item, &ZoneShaderItem::labelsTextureChanged);
+        // Re-setting an equal payload must be suppressed by the operator== guard
+        // (the "emit only on change" rule). Without the guard this would fire.
+        item.setLabelsTexture(labels);
+        QCOMPARE(spy.count(), 0);
+
+        // A genuinely different payload (same geometry, different glyph color →
+        // different tile pixels) still emits.
+        const PhosphorRendering::ZoneLabelTexture other =
+            ZoneLabelTextureBuilder::build(makeFourZoneLayout(), QSize(1920, 1080), Qt::red, /*showNumbers=*/true);
+        item.setLabelsTexture(other);
+        QCOMPARE(spy.count(), 1);
     }
 };
 

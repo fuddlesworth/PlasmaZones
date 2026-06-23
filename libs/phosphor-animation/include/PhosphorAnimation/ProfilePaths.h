@@ -49,7 +49,7 @@ PHOSPHORANIMATION_EXPORT extern const QString WindowLayoutSwitch;
 // (fill-preview, drag-resize-preview). NOT triggered by runtime
 // window snapping — window-snap animations are KWin's
 // compositor-level domain. These paths only fire inside the
-// PlasmaZones layout editor.
+// Phosphor layout editor.
 PHOSPHORANIMATION_EXPORT extern const QString Editor;
 PHOSPHORANIMATION_EXPORT extern const QString EditorSnapIn;
 PHOSPHORANIMATION_EXPORT extern const QString EditorSnapOut;
@@ -127,11 +127,57 @@ PHOSPHORANIMATION_EXPORT extern const QString WidgetZoneHighlightBorder;
 // content effect on the overlay, not a per-zone animation.
 PHOSPHORANIMATION_EXPORT extern const QString WidgetZoneOverlayFlash;
 
+// ── Event classes ───────────────────────────────────────────────────────
+// A coarse capability axis layered over the path taxonomy: an animation
+// either reshapes a window's GEOMETRY (it has a before-rect and an
+// after-rect) or it changes a surface's APPEARANCE (a single surface fading
+// / scaling / glitching in or out). A geometry-only shader such as
+// window-morph cross-fades `iFromRect → iToRect` and is a silent no-op on an
+// appearance event, so a shader can declare which classes it supports
+// (AnimationShaderEffect::appliesTo) and the settings UI dims the rows it
+// can't drive. These string tokens are the SSOT for that vocabulary —
+// matched verbatim against `appliesTo` entries and `eventClassForPath`.
+
+/// Geometry transitions: move, resize, snapIn/snapOut/snapResize,
+/// layoutSwitch, maximize — every leg that carries an old and new rect.
+PHOSPHORANIMATION_EXPORT extern const QString EventClassGeometry;
+
+/// Appearance transitions: open, close, minimize, focus, and every OSD /
+/// popup show/hide — a single surface materialising or dissolving.
+PHOSPHORANIMATION_EXPORT extern const QString EventClassAppearance;
+
+/// Classify @p path into an event class, or empty string when the path has
+/// no single class (a mixed ancestor like `window`, or a path outside the
+/// window/OSD/popup families — editor / panel / widget / cursor / shader /
+/// global). Resolution is leaf-aware: the OSD and popup roots and all their
+/// descendants are `appearance`; the window leaves split by
+/// motion-vs-lifecycle; the `window` root itself is mixed → empty.
+PHOSPHORANIMATION_EXPORT QString eventClassForPath(const QString& path);
+
 /// Full list of built-in paths in taxonomy order.
 PHOSPHORANIMATION_EXPORT QStringList allBuiltInPaths();
 
 /// Walk @p path up one level ("window.open" -> "window" -> "global" -> "").
 PHOSPHORANIMATION_EXPORT QString parentPath(const QString& path);
+
+/// Built-in default shader effect id for an event @p path, or empty for none.
+///
+/// SSOT for "what shader does this event animate with out of the box". Two
+/// families default to a shader:
+///   • Window MOVE/RESIZE (snap, tile, layout-switch, move, resize) →
+///     "window-morph" (geometry cross-fade), run by the kwin-effect.
+///   • Overlay show/hide leaves (osd.{show,hide},
+///     popup.{zoneSelector,layoutPicker,snapAssist}.{show,hide}) → "fade"
+///     (fade-and-scale), run by the daemon SurfaceAnimator instead of its C++
+///     opacity/scale legs. The category roots (osd, popup, osd.pop) carry no
+///     default.
+/// Every other event defaults to none. The default applies only when the user
+/// has set no override for the path or an ancestor (an explicit "None" is an
+/// override and is respected) — see `resolveShaderWithDefault` in
+/// ShaderProfileTree.h. Consumed by the kwin-effect resolution, the daemon
+/// overlay resolution (animation_config), and the settings UI so the default
+/// both plays at runtime and shows as the current value in settings.
+PHOSPHORANIMATION_EXPORT QString defaultShaderEffectIdForPath(const QString& path);
 
 } // namespace ProfilePaths
 

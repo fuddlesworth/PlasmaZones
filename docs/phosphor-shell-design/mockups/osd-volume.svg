@@ -1,0 +1,135 @@
+<!-- SPDX-FileCopyrightText: 2026 fuddlesworth -->
+<!-- SPDX-License-Identifier: GPL-3.0-or-later -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 720" font-family="Inter, system-ui, sans-serif">
+  <defs>
+    <linearGradient id="wp" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#0B1730"/>
+      <stop offset=".55" stop-color="#070F22"/>
+      <stop offset="1" stop-color="#050916"/>
+    </linearGradient>
+    <filter id="blur" x="-20%" y="-20%" width="140%" height="140%">
+      <feGaussianBlur stdDeviation="60"/>
+    </filter>
+    <symbol id="i-vol" viewBox="0 0 22 18">
+      <path d="M 2 7 H 7 L 12 2 V 16 L 7 11 H 2 Z" fill="currentColor"/>
+      <path d="M 14 5 C 16 7, 16 11, 14 13" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/>
+      <path d="M 16 3 C 19 6, 19 12, 16 15" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/>
+    </symbol>
+    <symbol id="i-mic" viewBox="0 0 16 18">
+      <rect x="5" y="2" width="6" height="10" rx="3" fill="currentColor"/>
+      <path d="M 2.5 9 V 10.5 C 2.5 13.5, 5 15.5, 8 15.5 S 13.5 13.5, 13.5 10.5 V 9" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/>
+      <line x1="8" y1="15.5" x2="8" y2="17.5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>
+    </symbol>
+    <symbol id="i-sun" viewBox="0 0 18 18">
+      <circle cx="9" cy="9" r="3.4" fill="currentColor"/>
+      <g stroke="currentColor" stroke-width="1.4" stroke-linecap="round">
+        <line x1="9" y1="1.5" x2="9" y2="3.5"/>
+        <line x1="9" y1="14.5" x2="9" y2="16.5"/>
+        <line x1="1.5" y1="9" x2="3.5" y2="9"/>
+        <line x1="14.5" y1="9" x2="16.5" y2="9"/>
+        <line x1="3.4" y1="3.4" x2="4.8" y2="4.8"/>
+        <line x1="13.2" y1="13.2" x2="14.6" y2="14.6"/>
+        <line x1="3.4" y1="14.6" x2="4.8" y2="13.2"/>
+        <line x1="13.2" y1="4.8" x2="14.6" y2="3.4"/>
+      </g>
+    </symbol>
+  </defs>
+
+  <rect width="1280" height="720" fill="url(#wp)"/>
+  <g opacity=".35" filter="url(#blur)">
+    <circle cx="640" cy="360" r="280" fill="#3B82F6"/>
+  </g>
+  <rect x="120" y="100" width="1040" height="460" rx="20" fill="#0B1730" opacity=".35"/>
+
+  <!-- Primary OSD: fades in, slider animates, fades out, gap, repeats -->
+  <g transform="translate(440 570)">
+    <animate attributeName="opacity"
+      values="0; 1; 1; 0; 0"
+      keyTimes="0; 0.08; 0.7; 0.85; 1"
+      dur="5s" repeatCount="indefinite"/>
+    <rect width="400" height="56" rx="22" fill="#0B1730" stroke="#1E293B"/>
+    <g transform="translate(20 19)" color="#E6EDFF">
+      <use href="#i-vol" width="22" height="18"/>
+    </g>
+    <g transform="translate(60 28)">
+      <rect width="280" height="6" rx="3" fill="#1E293B"/>
+      <rect width="148" height="6" rx="3" fill="#3B82F6">
+        <animate attributeName="width" values="148;174;174;174" keyTimes="0;0.4;0.7;1" dur="5s" repeatCount="indefinite"/>
+      </rect>
+      <circle cx="148" cy="3" r="9" fill="#3B82F6" stroke="#050916" stroke-width="2">
+        <animate attributeName="cx" values="148;174;174;174" keyTimes="0;0.4;0.7;1" dur="5s" repeatCount="indefinite"/>
+      </circle>
+    </g>
+    <text x="380" y="34" text-anchor="end" fill="#E6EDFF" font-size="13" font-weight="600" font-variant-numeric="tabular-nums">62</text>
+  </g>
+
+  <!-- Alternate samples (faded, just for catalog reference) -->
+  <g transform="translate(60 570)" opacity=".55">
+    <rect width="300" height="56" rx="22" fill="#0B1730" stroke="#1E293B"/>
+    <g transform="translate(20 19)" color="#FBBF24">
+      <use href="#i-mic" width="16" height="18"/>
+    </g>
+    <g transform="translate(54 28)">
+      <rect width="200" height="6" rx="3" fill="#1E293B"/>
+      <rect width="66" height="6" rx="3" fill="#FBBF24"/>
+    </g>
+    <text x="280" y="34" text-anchor="end" fill="#E6EDFF" font-size="12">mic · 33</text>
+  </g>
+
+  <g transform="translate(920 570)" opacity=".55">
+    <rect width="300" height="56" rx="22" fill="#0B1730" stroke="#1E293B"/>
+    <g transform="translate(20 19)" color="#A855F7">
+      <use href="#i-sun" width="18" height="18"/>
+    </g>
+    <g transform="translate(54 28)">
+      <rect width="200" height="6" rx="3" fill="#1E293B"/>
+      <rect width="156" height="6" rx="3" fill="#A855F7"/>
+    </g>
+    <text x="280" y="34" text-anchor="end" fill="#E6EDFF" font-size="12">bright · 78</text>
+  </g>
+
+  <g font-size="11">
+    <g transform="translate(80 180)">
+      <rect width="280" height="92" rx="8" fill="#070F22" stroke="#3B82F6"/>
+      <text x="14" y="22" font-weight="600" fill="#3B82F6">One layer‑shell surface per screen</text>
+      <text x="14" y="38" fill="#94A3B8">OSDHost (PhosphorLayer · Top) holds</text>
+      <text x="14" y="52" fill="#94A3B8">all OSDs. Stacking rather than spawning</text>
+      <text x="14" y="66" fill="#94A3B8">a window each, so the compositor sees</text>
+      <text x="14" y="80" fill="#94A3B8">one client surface.</text>
+    </g>
+    <g transform="translate(80 300)">
+      <rect width="280" height="92" rx="8" fill="#070F22" stroke="#A855F7"/>
+      <text x="14" y="22" font-weight="600" fill="#A855F7">IOSDFactory registry</text>
+      <text x="14" y="38" fill="#94A3B8">Each OSD style registers via</text>
+      <text x="14" y="52" fill="#94A3B8">IOSDFactory. Volume / Mic / Bright /</text>
+      <text x="14" y="66" fill="#94A3B8">Caps / Idle / Power / Media are</text>
+      <text x="14" y="80" fill="#94A3B8">built‑ins; plugins add more.</text>
+    </g>
+
+    <g transform="translate(920 180)">
+      <rect width="280" height="76" rx="8" fill="#070F22" stroke="#22D3EE"/>
+      <text x="14" y="22" font-weight="600" fill="#22D3EE">Auto‑hide + dedupe</text>
+      <text x="14" y="38" fill="#94A3B8">OSDHost owns timers, anti‑spam,</text>
+      <text x="14" y="52" fill="#94A3B8">debounce. Repeated volume events</text>
+      <text x="14" y="66" fill="#94A3B8">just restart the timer.</text>
+    </g>
+    <g transform="translate(920 282)">
+      <rect width="280" height="92" rx="8" fill="#070F22" stroke="#3B82F6"/>
+      <text x="14" y="22" font-weight="600" fill="#3B82F6">phosphorctl drives it</text>
+      <text x="14" y="38" fill="#94A3B8">phosphorctl call osd.show volume 62</text>
+      <text x="14" y="52" fill="#94A3B8">Compositor keybinds wire to this,</text>
+      <text x="14" y="66" fill="#94A3B8">no per‑OSD hardcoding. Hardware</text>
+      <text x="14" y="80" fill="#94A3B8">keys (XF86AudioRaise…) route here.</text>
+    </g>
+  </g>
+
+  <text x="640" y="660" text-anchor="middle" fill="#E6EDFF" font-size="14" font-weight="600">
+    Phosphor, OSDs (volume primary cycles in/out · mic / brightness alts shown faded)
+  </text>
+  <text x="640" y="678" text-anchor="middle" fill="#94A3B8" font-size="11">
+    Primary OSD: fade in → value updates → hold → fade out → wait, every 5 seconds
+  </text>
+  <text x="640" y="696" text-anchor="middle" fill="#94A3B8" font-size="9" opacity=".7">
+    Theme: phosphor‑works.github.io/palette
+  </text>
+</svg>

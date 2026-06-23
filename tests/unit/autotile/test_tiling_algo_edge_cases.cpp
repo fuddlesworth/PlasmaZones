@@ -19,7 +19,7 @@ using namespace PlasmaZones;
 using namespace PlasmaZones::TestHelpers;
 
 /**
- * @brief Cross-cutting edge case tests for all 24 JS tiling algorithms
+ * @brief Cross-cutting edge case tests for all 25 Luau tiling algorithms
  *
  * Tests extreme screen sizes, gap overflows, masterCount boundary values,
  * minSizes, dwindle-memory tree paths, and frozen-globals sandbox integrity.
@@ -34,13 +34,14 @@ private:
     QRect m_screenGeometry{0, 0, ScreenWidth, ScreenHeight};
     ScriptedAlgoTestSetup m_scriptSetup;
 
-    // All 24 algorithm IDs
+    // All 25 algorithm IDs
     QStringList allAlgoIds() const
     {
         return {
             QLatin1String("bsp"),
             QLatin1String("cascade"),
             QLatin1String("centered-master"),
+            QLatin1String("cluster"),
             QLatin1String("columns"),
             QLatin1String("corner-master"),
             QLatin1String("deck"),
@@ -68,8 +69,8 @@ private:
 private Q_SLOTS:
     void initTestCase()
     {
-        QVERIFY(m_scriptSetup.init(QStringLiteral(PZ_SOURCE_DIR)));
-        // Verify all 24 algorithms are loaded
+        QVERIFY(m_scriptSetup.init(QStringLiteral(P_SOURCE_DIR)));
+        // Verify all 25 algorithms are loaded
         for (const auto& id : allAlgoIds()) {
             QVERIFY2(m_scriptSetup.registry()->algorithm(id) != nullptr,
                      qPrintable(QStringLiteral("Algorithm '%1' not found in registry").arg(id)));
@@ -541,7 +542,7 @@ private Q_SLOTS:
     {
         // Use a known algorithm to verify that injected builtins are frozen.
         // After calculateZones, the engine state is live — but we cannot directly
-        // access the JS engine. Instead, verify indirectly: if a builtin like
+        // access the Luau engine. Instead, verify indirectly: if a builtin like
         // distributeEvenly were overwritable, running a second calculateZones
         // after a hypothetical overwrite would produce wrong results.
         //

@@ -17,7 +17,11 @@ namespace PhosphorAnimation {
 
 /// String-id <-> curve factory registry. Enables config round-trip
 /// ("typeId:params" strings) and third-party curve extension at runtime.
-/// Thread-safe (internal QMutex). Per-process instance, owned by composition root.
+/// Thread-safe (internal QMutex) — concurrent access never corrupts the store
+/// and each individual operation is atomic. Registration is expected on the
+/// composition root / loader thread; the only compound operation,
+/// registerFactory's "was replaced" bool return, is exact only for
+/// single-threaded registration. Per-process instance, owned by composition root.
 class PHOSPHORANIMATION_EXPORT CurveRegistry
 {
 public:
@@ -56,7 +60,8 @@ public:
     /// Build a curve from @p typeId + JSON parameters. Returns nullptr on failure.
     std::shared_ptr<const Curve> tryCreateFromJson(const QString& typeId, const QJsonObject& parameters) const;
 
-    /// All registered typeIds in insertion order.
+    /// All registered typeIds, sorted alphabetically (a stable, deterministic
+    /// order for membership checks; not registration order).
     QStringList knownTypes() const;
 
     /// True if @p typeId has a registered factory.

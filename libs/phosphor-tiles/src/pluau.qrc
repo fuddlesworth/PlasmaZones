@@ -1,0 +1,7 @@
+<!-- SPDX-FileCopyrightText: 2026 fuddlesworth -->
+<!-- SPDX-License-Identifier: LGPL-2.1-or-later -->
+<RCC>
+    <qresource prefix="/pluau">
+        <file alias="pluau.luau">pluau/pluau.luau</file>
+    </qresource>
+</RCC>

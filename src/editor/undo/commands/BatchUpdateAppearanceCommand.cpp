@@ -3,7 +3,7 @@
 
 #include "BatchUpdateAppearanceCommand.h"
 #include "../../services/ZoneManager.h"
-#include "pz_i18n.h"
+#include "phosphor_i18n.h"
 
 using namespace PlasmaZones;
 
@@ -18,7 +18,8 @@ BatchUpdateAppearanceCommand::BatchUpdateAppearanceCommand(QPointer<ZoneManager>
                                                            QUndoCommand* parent)
     : BaseZoneCommand(
           zoneManager,
-          text.isEmpty() ? PzI18n::tr("Update Appearance for %1 Zones", "@action").arg(zoneIds.count()) : text, parent)
+          text.isEmpty() ? PhosphorI18n::tr("Update Appearance for %1 Zones", "@action").arg(zoneIds.count()) : text,
+          parent)
     , m_zoneIds(zoneIds)
     , m_propertyName(propertyName)
     , m_oldValues(oldValues)
@@ -67,9 +68,9 @@ void BatchUpdateAppearanceCommand::redo()
 BatchUpdateColorCommand::BatchUpdateColorCommand(QPointer<ZoneManager> zoneManager, const QStringList& zoneIds,
                                                  const QString& colorType, const QMap<QString, QString>& oldColors,
                                                  const QString& newColor, const QString& text, QUndoCommand* parent)
-    : BaseZoneCommand(zoneManager,
-                      text.isEmpty() ? PzI18n::tr("Update Color for %1 Zones", "@action").arg(zoneIds.count()) : text,
-                      parent)
+    : BaseZoneCommand(
+          zoneManager,
+          text.isEmpty() ? PhosphorI18n::tr("Update Color for %1 Zones", "@action").arg(zoneIds.count()) : text, parent)
     , m_zoneIds(zoneIds)
     , m_colorType(colorType)
     , m_oldColors(oldColors)

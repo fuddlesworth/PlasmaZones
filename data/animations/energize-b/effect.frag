@@ -35,33 +35,24 @@
 // energy"), then add three additive emission layers: shower band,
 // streaks, atoms. All layers are tinted with the beam colour.
 
-#version 450
-
-#include <animation_uniforms.glsl>
 #include <noise.glsl>
 
 // metadata.json declaration order:
-//   color  → customColors[0]  (beamColor — only `.rgb` used; the effect
+//   color  → customColors[0]  (p_beamColor — only `.rgb` used; the effect
 //                              drives its own emission alpha from the
 //                              shower / streak / atom envelopes)
-//   float  → customParams[0]  (particleScale)
-#define beamColor     customColors[0]
-#define particleScale customParams[0].x
-
-layout(location = 0) in vec2 vTexCoord;
-layout(location = 0) out vec4 fragColor;
+//   float  → customParams[0]  (p_particleScale)
 
 // 2D simplex noise — MIT-licensed (Inigo Quilez,
 // https://www.shadertoy.com/view/Msf3WH). Definitions in
 // shared/noise.glsl.
 
-void main()
+vec4 pTransition(vec2 uv, float t)
 {
-    vec3 effectColor = beamColor.rgb;
-    float pScale     = max(particleScale, 0.05);
+    vec3 effectColor = p_beamColor.rgb;
+    float pScale     = max(p_particleScale, 0.05);
 
-    vec2 uv = vTexCoord;
-    float v = clamp(iTime, 0.0, 1.0);
+    float v = clamp(t, 0.0, 1.0);
 
     // ----- Envelopes ------------------------------------------------------
 
@@ -216,7 +207,7 @@ void main()
     float totalEmitA   = clamp(showerA + streakA + atomA, 0.0, 1.0);
     vec3  totalEmitRgb = effectColor * totalEmitA;
 
-    fragColor = vec4(
+    return vec4(
         sampled.rgb + totalEmitRgb,
         clamp(sampled.a + totalEmitA, 0.0, 1.0)
     );

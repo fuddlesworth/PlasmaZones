@@ -12,7 +12,7 @@ import org.plasmazones.common as QFZCommon
  * ZoneSelectorWindow.qml, hosted inside the unified
  * PassiveOverlayShell's zoneSelector slot.
  *
- * Shell migration: the per-VS PzRoles::ZoneSelector wl_surface is
+ * Shell migration: the per-VS PhosphorRoles::ZoneSelector wl_surface is
  * replaced by an Item slot inside the per-screen passive shell.
  * Per-VS positioning is handled by the C++ side sizing the slot's
  * `width` / `height` to match the VS rect; anchors live on the slot
@@ -494,7 +494,7 @@ Item {
                                 anchors.fill: parent
                                 hoverEnabled: true
                                 cursorShape: Qt.ForbiddenCursor
-                                Accessible.name: i18nc("@info:whatsthis zone selector lock overlay", "Layout is locked — switch to this layout before selecting a zone")
+                                Accessible.name: i18nc("@info:whatsthis zone selector lock overlay", "Layout is locked. Switch to this layout before selecting a zone.")
                                 onClicked: function (mouse) {
                                     mouse.accepted = true;
                                 }

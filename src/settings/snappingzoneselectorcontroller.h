@@ -5,6 +5,7 @@
 
 #include "../config/configdefaults.h"
 
+#include <PhosphorControl/PageController.h>
 #include <QObject>
 
 namespace PlasmaZones {
@@ -17,7 +18,7 @@ namespace PlasmaZones {
 /// and read directly via `appSettings.X` from QML. This sub-controller
 /// only owns the per-widget min/max bounds so the sliders and spin boxes
 /// don't hard-code numbers in QML.
-class SnappingZoneSelectorController : public QObject
+class SnappingZoneSelectorController : public PhosphorControl::PageController
 {
     Q_OBJECT
 
@@ -25,16 +26,33 @@ class SnappingZoneSelectorController : public QObject
     Q_PROPERTY(int triggerDistanceMax READ triggerDistanceMax CONSTANT)
     Q_PROPERTY(int previewWidthMin READ previewWidthMin CONSTANT)
     Q_PROPERTY(int previewWidthMax READ previewWidthMax CONSTANT)
+    // Small/Medium/Large quick-size preset widths for the popup preview.
+    Q_PROPERTY(int previewWidthSmall READ previewWidthSmall CONSTANT)
+    Q_PROPERTY(int previewWidthMedium READ previewWidthMedium CONSTANT)
+    Q_PROPERTY(int previewWidthLarge READ previewWidthLarge CONSTANT)
     Q_PROPERTY(int previewHeightMin READ previewHeightMin CONSTANT)
     Q_PROPERTY(int previewHeightMax READ previewHeightMax CONSTANT)
     Q_PROPERTY(int gridColumnsMin READ gridColumnsMin CONSTANT)
     Q_PROPERTY(int gridColumnsMax READ gridColumnsMax CONSTANT)
     Q_PROPERTY(int maxRowsMin READ maxRowsMin CONSTANT)
-    Q_PROPERTY(int gapMin READ gapMin CONSTANT)
-    Q_PROPERTY(int gapMax READ gapMax CONSTANT)
+    Q_PROPERTY(int maxRowsMax READ maxRowsMax CONSTANT)
 
 public:
-    using QObject::QObject;
+    explicit SnappingZoneSelectorController(QObject* parent = nullptr)
+        : PhosphorControl::PageController(QStringLiteral("snapping-zoneselector"), parent)
+    {
+    }
+
+    bool isDirty() const override
+    {
+        return false;
+    }
+    void apply() override
+    {
+    }
+    void discard() override
+    {
+    }
 
     int triggerDistanceMin() const
     {
@@ -51,6 +69,18 @@ public:
     int previewWidthMax() const
     {
         return ConfigDefaults::previewWidthMax();
+    }
+    int previewWidthSmall() const
+    {
+        return ConfigDefaults::previewWidthSmall();
+    }
+    int previewWidthMedium() const
+    {
+        return ConfigDefaults::previewWidth();
+    }
+    int previewWidthLarge() const
+    {
+        return ConfigDefaults::previewWidthLarge();
     }
     int previewHeightMin() const
     {
@@ -72,13 +102,9 @@ public:
     {
         return ConfigDefaults::maxRowsMin();
     }
-    int gapMin() const
+    int maxRowsMax() const
     {
-        return ConfigDefaults::outerGapMin();
-    }
-    int gapMax() const
-    {
-        return ConfigDefaults::outerGapMax();
+        return ConfigDefaults::maxRowsMax();
     }
 };
 

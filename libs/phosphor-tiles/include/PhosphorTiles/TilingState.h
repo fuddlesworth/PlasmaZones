@@ -393,6 +393,41 @@ public:
      */
     void rebuildSplitTree();
 
+    // ═══════════════════════════════════════════════════════════════════════
+    // Script state (opaque persistent bag for scripted algorithms)
+    // ═══════════════════════════════════════════════════════════════════════
+
+    /**
+     * @brief Get the persistent per-algorithm script-state bag.
+     *
+     * An opaque JSON object that scripted algorithms read (exposed as
+     * ctx.state) and write back (via the onWindowResized hook return) to
+     * remember layout adjustments — e.g. an aligned grid's column widths —
+     * across retiles. Empty by default. The engine never interprets it.
+     */
+    QJsonObject scriptState() const;
+
+    /**
+     * @brief Replace the script-state bag wholesale.
+     *
+     * Callers must pass already-sanitized JSON (see @c sanitizeScriptState in
+     * tilingstateserialization.cpp). No NOTIFY signal: this is internal
+     * persistence, not a UI-observable property, and writing it must never
+     * schedule a retile (that would risk a resize→retile→resize loop).
+     */
+    void setScriptState(const QJsonObject& state);
+
+    /**
+     * @brief Validate and bound a script-written state bag at the trust boundary.
+     *
+     * Enforces the AutotileDefaults::ScriptState* limits (compact-JSON byte
+     * cap, nesting depth, total key count) and strips non-finite numbers.
+     * Returns the sanitized object, or an empty object if the bag exceeds the
+     * byte cap and can't be safely stored. Shared by @c fromJson (load path)
+     * and the scripted-algorithm write-back path so both apply identical rules.
+     */
+    static QJsonObject sanitizeScriptState(const QJsonObject& state);
+
 Q_SIGNALS:
     /**
      * @brief Emitted when window count changes (add/remove)
@@ -443,6 +478,7 @@ private:
     qreal m_splitRatio = AutotileDefaults::DefaultSplitRatio;
     QVector<QRect> m_calculatedZones;
     std::unique_ptr<SplitTree> m_splitTree;
+    QJsonObject m_scriptState; ///< Opaque persistent bag for scripted algorithms (empty by default)
 
     // Helper to emit stateChanged after other signals
     void notifyStateChanged();

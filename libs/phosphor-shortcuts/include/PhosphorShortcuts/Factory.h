@@ -9,7 +9,7 @@
 
 #include "phosphorshortcuts_export.h"
 
-namespace Phosphor::Shortcuts {
+namespace PhosphorShortcuts {
 
 class IBackend;
 
@@ -51,4 +51,4 @@ enum class BackendHint {
 PHOSPHORSHORTCUTS_EXPORT std::unique_ptr<IBackend> createBackend(BackendHint hint = BackendHint::Auto,
                                                                  QObject* parent = nullptr);
 
-} // namespace Phosphor::Shortcuts
+} // namespace PhosphorShortcuts

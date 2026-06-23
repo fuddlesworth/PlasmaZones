@@ -5,17 +5,18 @@
 #include <PhosphorAnimation/Easing.h>
 #include <PhosphorAnimation/Spring.h>
 
-#include <QHash>
+#include <PhosphorRegistry/IFactoryBase.h>
+#include <PhosphorRegistry/Registry.h>
+
 #include <QJsonObject>
 #include <QJsonValue>
 #include <QLoggingCategory>
-#include <QMutex>
-#include <QMutexLocker>
 #include <QSet>
 #include <QtMath>
 
+#include <algorithm>
 #include <cmath>
-#include <vector>
+#include <memory>
 
 namespace PhosphorAnimation {
 
@@ -25,27 +26,44 @@ Q_LOGGING_CATEGORY(lcCurveRegistry, "phosphoranimation.curveregistry")
 // Impl — private state
 // ═══════════════════════════════════════════════════════════════════════════════
 
+/// Registry entry: one typeId's string-form factory (primary dispatch used by
+/// create/tryCreate), an optional JSON-parameter factory (the loader's
+/// parseFile path), wrapped as a PhosphorRegistry factory so the registry's
+/// generic storage + thread-safety + owner-tagged unregister + replace-on-
+/// reregister back the curve catalogue instead of a hand-rolled mutex+QHash.
+/// displayName() is the typeId (curves carry no separate human label);
+/// capabilities() defaults to {}.
+class CurveFactoryEntry final : public PhosphorRegistry::IFactoryBase
+{
+public:
+    CurveFactoryEntry(QString typeId, CurveRegistry::Factory stringFactory, CurveRegistry::JsonFactory jsonFactory)
+        : stringFactory(std::move(stringFactory))
+        , jsonFactory(std::move(jsonFactory))
+        , m_typeId(std::move(typeId))
+    {
+    }
+    [[nodiscard]] QString id() const override
+    {
+        return m_typeId;
+    }
+    [[nodiscard]] QString displayName() const override
+    {
+        return m_typeId;
+    }
+
+    CurveRegistry::Factory stringFactory;
+    CurveRegistry::JsonFactory jsonFactory; ///< may be null for string-only registrations
+
+private:
+    QString m_typeId;
+};
+
 class CurveRegistry::Impl
 {
 public:
-    /// Per-typeId registration holding the string-form factory (the
-    /// primary dispatch used by `create` / `tryCreate`), an optional
-    /// JSON-parameter factory used by the loader's `parseFile` path,
-    /// and the owner tag used by `unregisterByOwner` to partition
-    /// clean-up by registrant.
-    struct Entry
-    {
-        Factory stringFactory;
-        JsonFactory jsonFactory; ///< may be null for string-only registrations
-        QString ownerTag; ///< empty = process-lifetime / untagged
-    };
-
-    mutable QMutex mutex;
-    // insertionOrder keeps knownTypes() stable across platforms; factories
-    // is the actual lookup. A QHash alone would be unordered and make
-    // snapshot tests brittle.
-    std::vector<QString> insertionOrder;
-    QHash<QString, Entry> factories;
+    // Generic, thread-safe id-keyed store. Replaces the former
+    // mutex + insertionOrder + QHash<typeId, Entry> hand-roll.
+    PhosphorRegistry::Registry<CurveFactoryEntry> registry;
 
     void registerBuiltins();
 };
@@ -193,10 +211,9 @@ void CurveRegistry::Impl::registerBuiltins()
         const QString spec = QStringLiteral("%1,%2,%3,%4").arg(x1).arg(y1).arg(x2).arg(y2);
         return std::make_shared<Easing>(Easing::fromString(spec));
     };
-    insertionOrder.push_back(QStringLiteral("bezier"));
-    factories.insert(QStringLiteral("bezier"), Entry{bezierFactory, bezierJson, QString()});
-    insertionOrder.push_back(QStringLiteral("cubic-bezier"));
-    factories.insert(QStringLiteral("cubic-bezier"), Entry{bezierFactory, bezierJson, QString()});
+    registry.registerFactory(std::make_shared<CurveFactoryEntry>(QStringLiteral("bezier"), bezierFactory, bezierJson));
+    registry.registerFactory(
+        std::make_shared<CurveFactoryEntry>(QStringLiteral("cubic-bezier"), bezierFactory, bezierJson));
 
     // Elastic variants use "name:params" — Easing::fromString needs the
     // typeId in the spec to choose the right Type enumerator.
@@ -219,8 +236,7 @@ void CurveRegistry::Impl::registerBuiltins()
             const QString spec = QStringLiteral("%1:%2,%3").arg(id).arg(amplitude).arg(period);
             return std::make_shared<Easing>(Easing::fromString(spec));
         };
-        insertionOrder.push_back(id);
-        factories.insert(id, Entry{namedEasingFactory, elasticJson, QString()});
+        registry.registerFactory(std::make_shared<CurveFactoryEntry>(id, namedEasingFactory, elasticJson));
     }
 
     const QStringList bounceIds{
@@ -238,8 +254,7 @@ void CurveRegistry::Impl::registerBuiltins()
             const QString spec = QStringLiteral("%1:%2,%3").arg(id).arg(amplitude).arg(bounces);
             return std::make_shared<Easing>(Easing::fromString(spec));
         };
-        insertionOrder.push_back(id);
-        factories.insert(id, Entry{namedEasingFactory, bounceJson, QString()});
+        registry.registerFactory(std::make_shared<CurveFactoryEntry>(id, namedEasingFactory, bounceJson));
     }
 
     // Spring: single typeId, dedicated factory.
@@ -255,8 +270,7 @@ void CurveRegistry::Impl::registerBuiltins()
         const QString spec = QStringLiteral("spring:%1,%2").arg(omega).arg(zeta);
         return std::make_shared<Spring>(Spring::fromString(spec));
     };
-    insertionOrder.push_back(QStringLiteral("spring"));
-    factories.insert(QStringLiteral("spring"), Entry{springFactory, springJson, QString()});
+    registry.registerFactory(std::make_shared<CurveFactoryEntry>(QStringLiteral("spring"), springFactory, springJson));
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -292,64 +306,31 @@ bool CurveRegistry::registerFactory(const QString& typeId, Factory stringFactory
         qCWarning(lcCurveRegistry) << "registerFactory: empty typeId or null factory rejected";
         return false;
     }
-
-    QMutexLocker locker(&m_impl->mutex);
-    const bool replaced = m_impl->factories.contains(typeId);
-    if (!replaced) {
-        m_impl->insertionOrder.push_back(typeId);
-    }
-    m_impl->factories.insert(typeId, Impl::Entry{std::move(stringFactory), std::move(jsonFactory), ownerTag});
+    // Returns whether a prior registration was overwritten (the documented
+    // contract). The registry's Replace policy overwrites in place; check
+    // first since registerFactory(...Replace) returns success, not replaced.
+    // The check + Replace are two separate registry lock acquisitions, so the
+    // returned bool is exact only for single-threaded registration (the
+    // composition-root / loader case — see CurveRegistry.h); a concurrent
+    // mutation of the same typeId between them could make it stale. The
+    // storage itself stays consistent regardless (each call is atomic).
+    const bool replaced = m_impl->registry.factory(typeId) != nullptr;
+    m_impl->registry.registerFactory(
+        std::make_shared<CurveFactoryEntry>(typeId, std::move(stringFactory), std::move(jsonFactory)), ownerTag,
+        PhosphorRegistry::DuplicatePolicy::Replace);
     return replaced;
 }
 
 bool CurveRegistry::unregisterFactory(const QString& typeId)
 {
-    QMutexLocker locker(&m_impl->mutex);
-    if (!m_impl->factories.remove(typeId)) {
-        return false;
-    }
-    auto it = std::find(m_impl->insertionOrder.begin(), m_impl->insertionOrder.end(), typeId);
-    if (it != m_impl->insertionOrder.end()) {
-        m_impl->insertionOrder.erase(it);
-    }
-    return true;
+    return m_impl->registry.unregisterFactory(typeId);
 }
 
 int CurveRegistry::unregisterByOwner(const QString& ownerTag)
 {
-    if (ownerTag.isEmpty()) {
-        // An empty ownerTag would match every untagged built-in —
-        // wiping the whole registry. That's never what the caller
-        // wants; reject silently with a debug trace and return 0.
-        qCDebug(lcCurveRegistry) << "unregisterByOwner: empty ownerTag ignored";
-        return 0;
-    }
-
-    QStringList toRemove;
-    {
-        QMutexLocker locker(&m_impl->mutex);
-        for (auto it = m_impl->factories.constBegin(); it != m_impl->factories.constEnd(); ++it) {
-            if (it.value().ownerTag == ownerTag) {
-                toRemove.append(it.key());
-            }
-        }
-        for (const QString& key : toRemove) {
-            m_impl->factories.remove(key);
-            auto orderIt = std::find(m_impl->insertionOrder.begin(), m_impl->insertionOrder.end(), key);
-            if (orderIt != m_impl->insertionOrder.end()) {
-                m_impl->insertionOrder.erase(orderIt);
-            }
-        }
-    }
-    // Info-level per-removal log is emitted OUTSIDE the mutex so diag
-    // logging can't deadlock against a logger that routes through Qt's
-    // signal/slot infrastructure. Mirrors the PhosphorProfileRegistry
-    // partitioned-reload shape.
-    for (const QString& key : toRemove) {
-        qCInfo(lcCurveRegistry).nospace()
-            << "unregisterByOwner: removed typeId '" << key << "' (owner='" << ownerTag << "')";
-    }
-    return toRemove.size();
+    // The registry rejects an empty tag (it would otherwise wipe every
+    // untagged built-in) and emits per-entry factoryUnregistered signals.
+    return m_impl->registry.unregisterByOwner(ownerTag);
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -412,20 +393,11 @@ std::shared_ptr<const Curve> CurveRegistry::tryCreate(const QString& spec) const
 
     const ParsedSpec parsed = parseSpec(spec);
 
-    Factory factory;
-    {
-        QMutexLocker locker(&m_impl->mutex);
-        const auto it = m_impl->factories.constFind(parsed.typeId);
-        if (it != m_impl->factories.constEnd()) {
-            factory = it.value().stringFactory;
-        }
-    }
-
-    if (!factory) {
+    const auto entry = m_impl->registry.factory(parsed.typeId);
+    if (!entry || !entry->stringFactory) {
         return nullptr;
     }
-
-    return factory(parsed.typeId, parsed.params);
+    return entry->stringFactory(parsed.typeId, parsed.params);
 }
 
 std::shared_ptr<const Curve> CurveRegistry::tryCreateFromJson(const QString& typeId,
@@ -435,20 +407,11 @@ std::shared_ptr<const Curve> CurveRegistry::tryCreateFromJson(const QString& typ
         return nullptr;
     }
 
-    JsonFactory factory;
-    {
-        QMutexLocker locker(&m_impl->mutex);
-        const auto it = m_impl->factories.constFind(typeId);
-        if (it != m_impl->factories.constEnd()) {
-            factory = it.value().jsonFactory;
-        }
-    }
-
-    if (!factory) {
+    const auto entry = m_impl->registry.factory(typeId);
+    if (!entry || !entry->jsonFactory) {
         return nullptr;
     }
-
-    return factory(parameters);
+    return entry->jsonFactory(parameters);
 }
 
 std::shared_ptr<const Curve> CurveRegistry::create(const QString& spec) const
@@ -468,22 +431,14 @@ std::shared_ptr<const Curve> CurveRegistry::create(const QString& spec) const
 
     const ParsedSpec parsed = parseSpec(spec);
 
-    Factory factory;
-    {
-        QMutexLocker locker(&m_impl->mutex);
-        const auto it = m_impl->factories.constFind(parsed.typeId);
-        if (it != m_impl->factories.constEnd()) {
-            factory = it.value().stringFactory;
-        }
-    }
-
-    if (!factory) {
+    const auto entry = m_impl->registry.factory(parsed.typeId);
+    if (!entry || !entry->stringFactory) {
         qCWarning(lcCurveRegistry) << "unknown curve typeId" << parsed.typeId << "in spec" << spec
                                    << "- returning default";
         return std::make_shared<Easing>();
     }
 
-    auto curve = factory(parsed.typeId, parsed.params);
+    auto curve = entry->stringFactory(parsed.typeId, parsed.params);
     if (!curve) {
         qCWarning(lcCurveRegistry) << "factory for" << parsed.typeId << "returned null for params" << parsed.params
                                    << "- returning default";
@@ -494,19 +449,17 @@ std::shared_ptr<const Curve> CurveRegistry::create(const QString& spec) const
 
 QStringList CurveRegistry::knownTypes() const
 {
-    QMutexLocker locker(&m_impl->mutex);
-    QStringList result;
-    result.reserve(static_cast<int>(m_impl->insertionOrder.size()));
-    for (const QString& id : m_impl->insertionOrder) {
-        result.append(id);
-    }
+    // The registry returns ids in insertion order; sort for a stable
+    // alphabetical order. Consumers — only tests today — check membership,
+    // not order.
+    QStringList result = m_impl->registry.ids();
+    std::sort(result.begin(), result.end());
     return result;
 }
 
 bool CurveRegistry::has(const QString& typeId) const
 {
-    QMutexLocker locker(&m_impl->mutex);
-    return m_impl->factories.contains(typeId);
+    return m_impl->registry.factory(typeId) != nullptr;
 }
 
 bool CurveRegistry::isBuiltinTypeId(const QString& typeId)

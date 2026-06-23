@@ -85,8 +85,7 @@ Item {
         // (mid-warmup, malformed path) so downstream `r.curve` /
         // `r.duration` reads don't throw and the bindings fall back
         // cleanly to the curve / duration defaults below.
-        return settingsController.animationsPage.resolvedProfile(root.eventPath) || ({
-        });
+        return settingsController.animationsPage.resolvedProfile(root.eventPath) || ({});
     }
     // True only for event paths the daemon's overlay service actually
     // consumes as a shader-leg surface. Gates the shader picker, the
@@ -171,7 +170,7 @@ Item {
     // silently retarget the write at a different effect's param map.
     function _writeShaderParam(effectId, paramId, value) {
         if (!effectId)
-            return ;
+            return;
 
         // Bail if the user navigated to a different effect while the
         // dialog (color picker / etc.) was open. Calling
@@ -180,11 +179,9 @@ Item {
         // navigation and reviving a dropped param map. Better to drop the
         // late accept than to clobber state the user explicitly changed.
         if (effectId !== root.currentShaderEffectId)
-            return ;
+            return;
 
-        var next = Object.assign({
-        }, root.currentShaderParams || {
-        });
+        var next = Object.assign({}, root.currentShaderParams || {});
         next[paramId] = value;
         root.currentShaderParams = next;
         settingsController.animationsPage.setShaderOverride(root.eventPath, effectId, next);
@@ -195,7 +192,7 @@ Item {
     /// `_writeShaderParam`.
     function _writeAllShaderParams(effectId, allParams) {
         if (!effectId || effectId !== root.currentShaderEffectId)
-            return ;
+            return;
 
         root.currentShaderParams = allParams;
         settingsController.animationsPage.setShaderOverride(root.eventPath, effectId, allParams);
@@ -207,12 +204,10 @@ Item {
         // Stale-lock clear on effect switch — same-named ids in
         // different shaders are unrelated.
         if (nextEffectId !== root.currentShaderEffectId)
-            root.lockedShaderParams = ({
-        });
+            root.lockedShaderParams = ({});
 
         root.currentShaderEffectId = nextEffectId;
-        root.currentShaderParams = (resolved && resolved.parameters) ? resolved.parameters : ({
-        });
+        root.currentShaderParams = (resolved && resolved.parameters) ? resolved.parameters : ({});
         // Recompute deeper-override count on every shader-tree update —
         // the warning banner below depends on it. Cheap (O(N) over
         // overriddenPaths). Only meaningful for parent-node cards but
@@ -272,7 +267,6 @@ Item {
             root.currentTimingMode = CurvePresets.timingModeEasing;
             if (typeof curve === "string" && curve.length > 0)
                 root.currentEasingCurve = curve;
-
         }
         root.currentDuration = effective.duration !== undefined ? effective.duration : CurvePresets.defaultDurationMs;
     }
@@ -315,7 +309,7 @@ Item {
             // a single check covers both per-path filtering and the
             // global-broadcast carve-out.
             if (!root._pathAffectsThisCard(path))
-                return ;
+                return;
 
             root.refreshFromTree();
             // The signal is per-path but the resolved profile depends on
@@ -336,7 +330,7 @@ Item {
             // every card refreshes for it; per-path emits still get
             // the prefix filter.
             if (!root._pathAffectsThisCard(path))
-                return ;
+                return;
 
             root.refreshShaderFromTree();
             // The card's "Override" toggle now reflects whether either
@@ -406,7 +400,7 @@ Item {
         showToggle: !root.alwaysEnabled
         toggleChecked: root.alwaysEnabled || root.overrideEnabled
         collapsible: root.collapsible
-        onToggleClicked: function(checked) {
+        onToggleClicked: function (checked) {
             if (checked) {
                 root.commitOverride();
             } else {
@@ -420,8 +414,7 @@ Item {
                 // The reverse order would record neither on a partial
                 // failure, dropping the disable intent entirely.
                 if (root._shaderLegSupported)
-                    settingsController.animationsPage.setShaderOverride(root.eventPath, "", ({
-                }));
+                    settingsController.animationsPage.setShaderOverride(root.eventPath, "", ({}));
 
                 settingsController.animationsPage.clearOverride(root.eventPath);
             }
@@ -433,6 +426,8 @@ Item {
             // ── Inheritance info ──────────────────────────────────────
             Kirigami.InlineMessage {
                 Layout.fillWidth: true
+                Layout.leftMargin: Kirigami.Units.largeSpacing
+                Layout.rightMargin: Kirigami.Units.largeSpacing
                 type: Kirigami.MessageType.Information
                 visible: !root.alwaysEnabled && (root.isParentNode ? root.overrideEnabled : !root.overrideEnabled)
                 text: {
@@ -460,6 +455,8 @@ Item {
             // each shadowing leaf manually and clear its override.
             Kirigami.InlineMessage {
                 Layout.fillWidth: true
+                Layout.leftMargin: Kirigami.Units.largeSpacing
+                Layout.rightMargin: Kirigami.Units.largeSpacing
                 type: Kirigami.MessageType.Warning
                 visible: root.isParentNode && root._shadowingChildrenCount > 0
                 text: i18np("%n descendant event has a shader override that shadows this parent.", "%n descendant events have shader overrides that shadow this parent.", root._shadowingChildrenCount)
@@ -475,6 +472,11 @@ Item {
             }
 
             Label {
+                Layout.fillWidth: true
+                // Inset to match the rows / banners in this card instead of
+                // hugging the left edge.
+                Layout.leftMargin: Kirigami.Units.largeSpacing
+                Layout.rightMargin: Kirigami.Units.largeSpacing
                 visible: !root.alwaysEnabled && !root.overrideEnabled
                 text: i18n("Current: %1", root.inheritSummaryText())
                 font.italic: true
@@ -507,16 +509,20 @@ Item {
                 onValueChanged: {
                     if (root.alwaysEnabled || root.overrideEnabled)
                         root.commitOverride();
-
                 }
                 // Picker model fed via the registry-tick dependency
                 // so the binding re-evaluates on
                 // `shaderEffectsChanged`.
+                // Path-aware list: each effect carries `dimmed`/`dimReason`
+                // for this event, so the category picker greys out shaders
+                // that can't drive this row (e.g. the geometry-only
+                // window-morph on a show/hide event) with a warning tooltip —
+                // the same affordance the window-rule action picker uses.
                 availableShaders: {
                     void (root._shaderRegistryRev);
-                    return settingsController.animationsPage.availableShaderEffects();
+                    return settingsController.animationsPage.availableShaderEffectsForPath(root.eventPath);
                 }
-                onShaderEffectActivated: function(id) {
+                onShaderEffectActivated: function (id) {
                     var sid = id || "";
                     var rawShader = settingsController.animationsPage.rawShaderProfile(root.eventPath);
                     var directEffectId = (rawShader && typeof rawShader.effectId === "string") ? rawShader.effectId : "";
@@ -526,24 +532,22 @@ Item {
                         // path already holds it.
                         var alreadyDisabled = rawShader && typeof rawShader.effectId === "string" && rawShader.effectId === "";
                         if (alreadyDisabled)
-                            return ;
+                            return;
 
-                        settingsController.animationsPage.setShaderOverride(root.eventPath, "", ({
-                        }));
-                        return ;
+                        settingsController.animationsPage.setShaderOverride(root.eventPath, "", ({}));
+                        return;
                     }
                     // No-op when the user re-picks the value already
                     // sitting at this path's DIRECT override.
                     if (sid === directEffectId)
-                        return ;
+                        return;
 
                     // Switching effect (or promoting an inherited
                     // value to a direct override): drop the previous
                     // effect's parameter map.
-                    settingsController.animationsPage.setShaderOverride(root.eventPath, sid, ({
-                    }));
+                    settingsController.animationsPage.setShaderOverride(root.eventPath, sid, ({}));
                 }
-                onShaderParamWriteRequested: function(effectId, paramId, value) {
+                onShaderParamWriteRequested: function (effectId, paramId, value) {
                     root._writeShaderParam(effectId, paramId, value);
                 }
                 // Lock-toggle handlers are no-ops here —
@@ -553,7 +557,7 @@ Item {
                 // re-assign here would be idempotent. The signals
                 // remain connect-free until / unless the lock state
                 // becomes persistent (today it's working-state only).
-                onRandomizeRequested: function(rolled) {
+                onRandomizeRequested: function (rolled) {
                     // Editor already staged `rolled` onto its
                     // `shaderParams`; this card's persistence is
                     // through the controller, so route the rolled map
@@ -562,9 +566,6 @@ Item {
                     root._writeAllShaderParams(root.currentShaderEffectId, rolled);
                 }
             }
-
         }
-
     }
-
 }

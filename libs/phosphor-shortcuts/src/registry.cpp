@@ -8,7 +8,7 @@
 
 #include <algorithm>
 
-namespace Phosphor::Shortcuts {
+namespace PhosphorShortcuts {
 
 Registry::Registry(IBackend* backend, QObject* parent)
     : QObject(parent)
@@ -17,7 +17,7 @@ Registry::Registry(IBackend* backend, QObject* parent)
     // A null backend yields a permanently-broken registry; flag it loudly in
     // both debug and release builds so misuse doesn't hide behind silent
     // flush short-circuits.
-    Q_ASSERT_X(backend, "Phosphor::Shortcuts::Registry", "backend must not be null");
+    Q_ASSERT_X(backend, "PhosphorShortcuts::Registry", "backend must not be null");
     if (!backend) {
         qCCritical(lcPhosphorShortcuts)
             << "Registry constructed with null backend — all bind/flush calls will be silently dropped";
@@ -190,4 +190,4 @@ void Registry::onBackendReady()
     Q_EMIT ready();
 }
 
-} // namespace Phosphor::Shortcuts
+} // namespace PhosphorShortcuts

@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 import QtQuick
+import QtQuick.Window
 import QtQuick.Controls
 import QtQuick.Layouts
 import org.kde.kirigami as Kirigami
@@ -35,7 +36,7 @@ Rectangle {
 
     color: Qt.rgba(Kirigami.Theme.backgroundColor.r, Kirigami.Theme.backgroundColor.g, Kirigami.Theme.backgroundColor.b, 0.5)
     border.color: Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.3)
-    border.width: 1
+    border.width: Math.max(1, Math.round(Screen.devicePixelRatio))
     radius: Kirigami.Units.smallSpacing
 
     // "No subdivisions" label when empty
@@ -65,25 +66,34 @@ Rectangle {
             Accessible.role: Accessible.Pane
             color: Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g, Kirigami.Theme.highlightColor.b, 0.15)
             border.color: Kirigami.Theme.highlightColor
-            border.width: Math.max(1, Math.round(Kirigami.Units.devicePixelRatio * 2))
+            border.width: Math.max(1, Math.round(Screen.devicePixelRatio * 2))
             radius: Kirigami.Units.smallSpacing / 2
+            // Keep labels from painting outside the region in narrow (portrait /
+            // thin-split) zones \u2014 belt-and-braces alongside the width cap below.
+            clip: true
 
             ColumnLayout {
                 anchors.centerIn: parent
+                // Cap to the region width so the labels elide instead of
+                // overflowing past narrow zone edges.
+                width: Math.min(implicitWidth, regionRect.width - Kirigami.Units.smallSpacing)
                 spacing: Math.round(Kirigami.Units.smallSpacing / 2)
 
                 Label {
-                    Layout.alignment: Qt.AlignHCenter
+                    Layout.fillWidth: true
+                    horizontalAlignment: Text.AlignHCenter
                     text: modelData.displayName || i18n("Screen %1", index + 1)
                     font.weight: Font.DemiBold
                     font.pixelSize: Math.max(Kirigami.Theme.defaultFont.pixelSize * 0.7, Math.min(Kirigami.Theme.defaultFont.pixelSize * 1, regionRect.width * previewRoot.titleFontScaleFraction))
                     color: Kirigami.Theme.textColor
-                    elide: Text.ElideRight
-                    maximumLineCount: 1
+                    // Wrap rather than elide: portrait/thin zones are narrow but
+                    // tall, so wrapping keeps the full label readable.
+                    wrapMode: Text.Wrap
                 }
 
                 Label {
-                    Layout.alignment: Qt.AlignHCenter
+                    Layout.fillWidth: true
+                    horizontalAlignment: Text.AlignHCenter
                     text: {
                         var wpx = Math.round(modelData.width * previewRoot.screenWidth);
                         var hpx = Math.round(modelData.height * previewRoot.screenHeight);
@@ -95,12 +105,10 @@ Rectangle {
                     }
                     font.pixelSize: Math.max(Kirigami.Theme.defaultFont.pixelSize * 0.65, Math.min(Kirigami.Theme.defaultFont.pixelSize * 0.85, regionRect.width * previewRoot.detailFontScaleFraction))
                     color: Kirigami.Theme.disabledTextColor
+                    wrapMode: Text.Wrap
                 }
-
             }
-
         }
-
     }
 
     // ── Column dividers (vertical lines between adjacent columns) ────────
@@ -140,7 +148,6 @@ Rectangle {
                         profile: "widget.hover"
                         durationOverride: Kirigami.Units.shortDuration
                     }
-
                 }
 
                 Behavior on color {
@@ -148,9 +155,7 @@ Rectangle {
                         profile: "widget.hover"
                         durationOverride: Kirigami.Units.shortDuration
                     }
-
                 }
-
             }
 
             // Drag grip indicator
@@ -160,7 +165,7 @@ Rectangle {
                 height: Math.round(Kirigami.Units.gridUnit * 1.5)
                 radius: 4
                 color: colDragArea.containsMouse || colDragArea.pressed ? Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g, Kirigami.Theme.highlightColor.b, 0.3) : Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.1)
-                border.width: 1
+                border.width: Math.max(1, Math.round(Screen.devicePixelRatio))
                 border.color: colDragArea.containsMouse || colDragArea.pressed ? Kirigami.Theme.highlightColor : Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.2)
                 visible: previewRoot.height > Math.round(Kirigami.Units.gridUnit * 2.5)
 
@@ -173,17 +178,14 @@ Rectangle {
                         model: 3
 
                         Rectangle {
-                            width: Math.max(2, Math.round(Kirigami.Units.devicePixelRatio * 2))
-                            height: Math.max(2, Math.round(Kirigami.Units.devicePixelRatio * 2))
+                            width: Math.max(2, Math.round(Screen.devicePixelRatio * 2))
+                            height: Math.max(2, Math.round(Screen.devicePixelRatio * 2))
                             radius: 1
                             color: Kirigami.Theme.textColor
                             opacity: 0.5
                         }
-
                     }
-
                 }
-
             }
 
             MouseArea {
@@ -196,13 +198,17 @@ Rectangle {
                 anchors.margins: -4
                 cursorShape: Qt.SplitHCursor
                 hoverEnabled: true
-                onPressed: function(mouse) {
+                // Keep the drag from being stolen by the enclosing
+                // SettingsFlickable — without this, dragging a divider also
+                // flicks/scrolls the whole settings page.
+                preventStealing: true
+                onPressed: function (mouse) {
                     dragStartX = mouse.x + colDividerHandle.x;
                     dragStartFraction = colDividerHandle.dividerX / previewRoot.width;
                 }
-                onPositionChanged: function(mouse) {
+                onPositionChanged: function (mouse) {
                     if (!pressed)
-                        return ;
+                        return;
 
                     var globalX = mouse.x + colDividerHandle.x;
                     var deltaFraction = (globalX - dragStartX) / previewRoot.width;
@@ -210,9 +216,7 @@ Rectangle {
                     previewRoot.columnDividerMoved(colDividerHandle.index, newFraction);
                 }
             }
-
         }
-
     }
 
     // ── Row dividers (horizontal lines between adjacent rows) ────────────
@@ -253,7 +257,6 @@ Rectangle {
                         profile: "widget.hover"
                         durationOverride: Kirigami.Units.shortDuration
                     }
-
                 }
 
                 Behavior on color {
@@ -261,9 +264,7 @@ Rectangle {
                         profile: "widget.hover"
                         durationOverride: Kirigami.Units.shortDuration
                     }
-
                 }
-
             }
 
             // Drag grip indicator (horizontal orientation)
@@ -273,7 +274,7 @@ Rectangle {
                 height: Math.round(Kirigami.Units.gridUnit * 0.75)
                 radius: 4
                 color: rowDragArea.containsMouse || rowDragArea.pressed ? Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g, Kirigami.Theme.highlightColor.b, 0.3) : Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.1)
-                border.width: 1
+                border.width: Math.max(1, Math.round(Screen.devicePixelRatio))
                 border.color: rowDragArea.containsMouse || rowDragArea.pressed ? Kirigami.Theme.highlightColor : Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.2)
                 visible: previewRoot.width > Math.round(Kirigami.Units.gridUnit * 2.5)
 
@@ -286,17 +287,14 @@ Rectangle {
                         model: 3
 
                         Rectangle {
-                            width: Math.max(2, Math.round(Kirigami.Units.devicePixelRatio * 2))
-                            height: Math.max(2, Math.round(Kirigami.Units.devicePixelRatio * 2))
+                            width: Math.max(2, Math.round(Screen.devicePixelRatio * 2))
+                            height: Math.max(2, Math.round(Screen.devicePixelRatio * 2))
                             radius: 1
                             color: Kirigami.Theme.textColor
                             opacity: 0.5
                         }
-
                     }
-
                 }
-
             }
 
             MouseArea {
@@ -309,13 +307,17 @@ Rectangle {
                 anchors.margins: -4
                 cursorShape: Qt.SplitVCursor
                 hoverEnabled: true
-                onPressed: function(mouse) {
+                // Keep the drag from being stolen by the enclosing
+                // SettingsFlickable — without this, dragging a divider also
+                // flicks/scrolls the whole settings page.
+                preventStealing: true
+                onPressed: function (mouse) {
                     dragStartY = mouse.y + rowDividerHandle.y;
                     dragStartFraction = rowDividerHandle.dividerY / previewRoot.height;
                 }
-                onPositionChanged: function(mouse) {
+                onPositionChanged: function (mouse) {
                     if (!pressed)
-                        return ;
+                        return;
 
                     var globalY = mouse.y + rowDividerHandle.y;
                     var deltaFraction = (globalY - dragStartY) / previewRoot.height;
@@ -323,9 +325,6 @@ Rectangle {
                     previewRoot.rowDividerMoved(rowDividerHandle.index, newFraction);
                 }
             }
-
         }
-
     }
-
 }

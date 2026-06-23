@@ -110,15 +110,15 @@ public:
      *
      * Example:
      * @code
-     *     class PzOverlaySurface : public PhosphorLayer::Surface {
+     *     class PhosphorOverlaySurface : public PhosphorLayer::Surface {
      *     public:
-     *         PzOverlaySurface(Surface::CtorToken tok,
+     *         PhosphorOverlaySurface(Surface::CtorToken tok,
      *                          SurfaceConfig cfg, SurfaceDeps deps,
      *                          QObject* parent)
      *             : Surface(tok, std::move(cfg), std::move(deps), parent) {}
      *     };
      *
-     *     auto* s = factory.createAs<PzOverlaySurface>(std::move(cfg));
+     *     auto* s = factory.createAs<PhosphorOverlaySurface>(std::move(cfg));
      * @endcode
      */
     template<typename T>

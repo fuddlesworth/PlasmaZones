@@ -1,8 +1,6 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-#version 450
-
 /*
  * COSMIC FLOW - Fragment Shader
  *
@@ -15,14 +13,13 @@
  * inner edge glow with bevel, and organic audio reactivity (FBM contrast
  * deepening, palette phase rotation, vein widening — no UV warping or
  * shockwave clichés).
+ *
+ * The harness supplies #version, <common.glsl> (zone UBO + ZoneCtx + helpers),
+ * the vTexCoord/vFragCoord ins, and the fragColor out. audio.glsl is
+ * pack-specific, so it stays here. A whole-frame label composite runs after
+ * the per-zone loop, so this is a pImage entry point.
  */
 
-layout(location = 0) in vec2 vTexCoord;
-layout(location = 1) in vec2 vFragCoord;
-
-layout(location = 0) out vec4 fragColor;
-
-#include <common.glsl>
 #include <audio.glsl>
 
 
@@ -55,27 +52,27 @@ vec4 renderCosmicZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColo
     float borderWidth = max(params.y, 2.0);
 
     // Get shader parameters with defaults
-    float speed = customParams[0].x >= 0.0 ? customParams[0].x : 0.1;
-    float flowSpeed = customParams[0].y >= 0.0 ? customParams[0].y : 0.3;
-    float noiseScale = customParams[0].z >= 0.0 ? customParams[0].z : 3.0;
-    int octaves = int(customParams[0].w >= 0.0 ? customParams[0].w : 6.0);
+    float speed = p_speed >= 0.0 ? p_speed : 0.1;
+    float flowSpeed = p_flowSpeed >= 0.0 ? p_flowSpeed : 0.3;
+    float noiseScale = p_noiseScale >= 0.0 ? p_noiseScale : 3.0;
+    int octaves = int(p_octaves >= 0.0 ? p_octaves : 6.0);
 
-    float colorShift = customParams[1].x >= 0.0 ? customParams[1].x : 0.0;
-    float saturation = customParams[1].y >= 0.0 ? customParams[1].y : 0.5;
-    float brightness = customParams[1].z >= 0.0 ? customParams[1].z : 0.5;
-    float contrast = customParams[1].w >= 0.0 ? customParams[1].w : 0.95;
+    float colorShift = p_colorShift >= 0.0 ? p_colorShift : 0.0;
+    float saturation = p_saturation >= 0.0 ? p_saturation : 0.5;
+    float brightness = p_brightness >= 0.0 ? p_brightness : 0.5;
+    float contrast = p_contrast >= 0.0 ? p_contrast : 0.95;
 
-    float fillOpacity = customParams[2].x >= 0.0 ? customParams[2].x : 0.85;
-    float borderGlow = customParams[2].y >= 0.0 ? customParams[2].y : 0.3;
-    float edgeFadeStart = customParams[2].z >= 0.0 ? customParams[2].z : 30.0;
-    float borderBrightness = customParams[2].w >= 0.0 ? customParams[2].w : 1.3;
+    float fillOpacity = p_fillOpacity >= 0.0 ? p_fillOpacity : 0.85;
+    float borderGlow = p_borderGlow >= 0.0 ? p_borderGlow : 0.3;
+    float edgeFadeStart = p_edgeFadeStart >= 0.0 ? p_edgeFadeStart : 30.0;
+    float borderBrightness = p_borderBrightness >= 0.0 ? p_borderBrightness : 1.3;
 
-    float audioReact = customParams[3].x >= 0.0 ? customParams[3].x : 1.0;
-    float veinDetail = customParams[3].y >= 0.0 ? customParams[3].y : 0.25;
-    float innerGlowStr = customParams[3].z >= 0.0 ? customParams[3].z : 0.25;
-    float sparkleStr = customParams[3].w >= 0.0 ? customParams[3].w : 2.5;
+    float audioReact = p_audioReactivity >= 0.0 ? p_audioReactivity : 1.0;
+    float veinDetail = p_veinDetail >= 0.0 ? p_veinDetail : 0.25;
+    float innerGlowStr = p_innerGlowStrength >= 0.0 ? p_innerGlowStrength : 0.25;
+    float sparkleStr = p_sparkleIntensity >= 0.0 ? p_sparkleIntensity : 2.5;
 
-    float fbmRot = customParams[4].w >= 0.0 ? customParams[4].w : 0.5;
+    float fbmRot = p_fbmRotation >= 0.0 ? p_fbmRotation : 0.5;
 
     // Convert rect to pixel coordinates
     vec2 rectPos = zoneRectPos(rect);
@@ -98,10 +95,10 @@ vec4 renderCosmicZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColo
     centeredUV.x *= aspect;
 
     // Palette colors from uniforms or defaults
-    vec3 palA = customColors[0].rgb;
-    vec3 palB = customColors[1].rgb;
-    vec3 palC = customColors[2].rgb;
-    vec3 palD = customColors[3].rgb;
+    vec3 palA = p_paletteColorA.rgb;
+    vec3 palB = p_paletteColorB.rgb;
+    vec3 palC = p_paletteColorC.rgb;
+    vec3 palD = p_paletteColorD.rgb;
 
     // IQ palette: when palette colors are unset, palA/palB become gray (brightness/saturation);
     // set palette colors in the UI for full control.
@@ -268,18 +265,18 @@ vec4 compositeCosmicLabels(vec4 color, vec2 fragCoord,
     vec4 labels = texture(uZoneLabels, uv);
 
     // Reconstruct IQ palette colors (same defaults as renderCosmicZone)
-    float brightness = customParams[1].z >= 0.0 ? customParams[1].z : 0.5;
-    float saturation = customParams[1].y >= 0.0 ? customParams[1].y : 0.5;
-    float colorShift = customParams[1].x >= 0.0 ? customParams[1].x : 0.0;
-    vec3 palA = colorWithFallback(customColors[0].rgb, vec3(brightness));
-    vec3 palB = colorWithFallback(customColors[1].rgb, vec3(saturation));
-    vec3 palC = colorWithFallback(customColors[2].rgb, vec3(1.0));
-    vec3 palD = colorWithFallback(customColors[3].rgb, vec3(0.0, 0.10, 0.20));
+    float brightness = p_brightness >= 0.0 ? p_brightness : 0.5;
+    float saturation = p_saturation >= 0.0 ? p_saturation : 0.5;
+    float colorShift = p_colorShift >= 0.0 ? p_colorShift : 0.0;
+    vec3 palA = colorWithFallback(p_paletteColorA.rgb, vec3(brightness));
+    vec3 palB = colorWithFallback(p_paletteColorB.rgb, vec3(saturation));
+    vec3 palC = colorWithFallback(p_paletteColorC.rgb, vec3(1.0));
+    vec3 palD = colorWithFallback(p_paletteColorD.rgb, vec3(0.0, 0.10, 0.20));
     palD += vec3(colorShift);
 
-    float labelGlowSpread = customParams[4].x >= 0.0 ? customParams[4].x : 3.0;
-    float labelBrightness = customParams[4].y >= 0.0 ? customParams[4].y : 2.5;
-    float labelAudioReact = customParams[4].z >= 0.0 ? customParams[4].z : 1.0;
+    float labelGlowSpread = p_nebulaSpread >= 0.0 ? p_nebulaSpread : 3.0;
+    float labelBrightness = p_lensIntensity >= 0.0 ? p_lensIntensity : 2.5;
+    float labelAudioReact = p_stellarReact >= 0.0 ? p_stellarReact : 1.0;
 
     // Gaussian halo with nebula palette tint
     float halo = 0.0;
@@ -325,13 +322,11 @@ vec4 compositeCosmicLabels(vec4 color, vec2 fragCoord,
     return color;
 }
 
-void main() {
-    vec2 fragCoord = vFragCoord;
+vec4 pImage(vec2 fragCoord) {
     vec4 color = vec4(0.0);
 
     if (zoneCount == 0) {
-        fragColor = vec4(0.0);
-        return;
+        return vec4(0.0);
     }
 
     // Audio analysis (computed once for all zones)
@@ -351,8 +346,8 @@ void main() {
         color = blendOver(color, zoneColor);
     }
 
-    if (customParams[5].y > 0.5)
+    if (p_showLabels > 0.5)
         color = compositeCosmicLabels(color, fragCoord, bass, treble, hasAudio);
 
-    fragColor = clampFragColor(color);
+    return color;
 }

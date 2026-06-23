@@ -67,7 +67,7 @@ private Q_SLOTS:
 
     void initTestCase()
     {
-        QVERIFY(m_scriptSetup.init(QStringLiteral(PZ_SOURCE_DIR)));
+        QVERIFY(m_scriptSetup.init(QStringLiteral(P_SOURCE_DIR)));
     }
 
     void cleanupTestCase()
@@ -77,7 +77,7 @@ private Q_SLOTS:
         const QStringList testIds = {
             QStringLiteral("test-replace"),  QStringLiteral("test-signal"),     QStringLiteral("test-double-1"),
             QStringLiteral("test-double-2"), QStringLiteral("test-unregister"), QStringLiteral("test-order-remove"),
-            QStringLiteral("test-null"),
+            QStringLiteral("test-null"),     QStringLiteral("test-clearid"),    QStringLiteral("test-replace-clearid"),
         };
         for (const auto& id : testIds) {
             if (registry->hasAlgorithm(id)) {
@@ -170,6 +170,24 @@ private Q_SLOTS:
         QVERIFY(registry->hasAlgorithm(id1));
         QCOMPARE(registry->algorithm(id1), algo);
 
+        // Re-registering the SAME pointer under its OWN id is a safe no-op —
+        // it must NOT fall through to the Replace path, which would wrap the
+        // already-owned pointer in a second shared_ptr and double-free it.
+        registry->registerAlgorithm(id1, algo);
+        QVERIFY(registry->hasAlgorithm(id1));
+        QCOMPARE(registry->algorithm(id1), algo); // still the same, still alive
+        QCOMPARE(spy.count(), 0); // no re-registration signal
+
+        // Re-registering the already-owned pointer under an INVALID id must NOT
+        // delete it (the double-ownership guard runs before the id-validation
+        // delete paths) — it stays owned + alive under id1. Reading its name
+        // would be a use-after-free if the validation path had freed it.
+        registry->registerAlgorithm(QStringLiteral("autotile:bad"), algo);
+        QVERIFY(registry->hasAlgorithm(id1));
+        QCOMPARE(registry->algorithm(id1), algo);
+        QCOMPARE(registry->algorithm(id1)->name(), QStringLiteral("Double Test")); // alive, not freed
+        QVERIFY(!registry->hasAlgorithm(QStringLiteral("autotile:bad")));
+
         registry->unregisterAlgorithm(id1);
     }
 
@@ -205,7 +223,43 @@ private Q_SLOTS:
         QCOMPARE(spy.count(), 0);
     }
 
-    void testUnregister_removesFromOrder()
+    // Unregistering clears the removed algorithm's registry id while the
+    // object is still alive on the deferred-delete queue, so a cached-pointer
+    // holder observes the unregistered state (TilingAlgorithm contract; the
+    // previewFromAlgorithm guard treats an empty id as "not registered").
+    void testUnregister_clearsRegistryId()
+    {
+        auto* registry = m_scriptSetup.registry();
+        const QString testId = QStringLiteral("test-clearid");
+
+        auto* algo = new CustomTestAlgorithm();
+        registry->registerAlgorithm(testId, algo);
+        QCOMPARE(algo->registryId(), testId);
+
+        registry->unregisterAlgorithm(testId);
+        QVERIFY(algo->registryId().isEmpty()); // algo still alive (deleteLater queued)
+    }
+
+    // Replacing an id clears the OLD algorithm's registry id (it lives on past
+    // the replace via deferred delete); the new algorithm holds the id.
+    void testReplace_clearsOldAlgorithmRegistryId()
+    {
+        auto* registry = m_scriptSetup.registry();
+        const QString testId = QStringLiteral("test-replace-clearid");
+
+        auto* algo1 = new CustomTestAlgorithm(QStringLiteral("First"));
+        registry->registerAlgorithm(testId, algo1);
+        QCOMPARE(algo1->registryId(), testId);
+
+        auto* algo2 = new CustomTestAlgorithm(QStringLiteral("Second"));
+        registry->registerAlgorithm(testId, algo2); // replace
+        QVERIFY(algo1->registryId().isEmpty()); // old cleared, still alive
+        QCOMPARE(algo2->registryId(), testId); // new holds the id
+
+        registry->unregisterAlgorithm(testId);
+    }
+
+    void testUnregister_removesFromAvailable()
     {
         auto* registry = m_scriptSetup.registry();
         const QString testId = QStringLiteral("test-order-remove");
@@ -218,15 +272,16 @@ private Q_SLOTS:
     }
 
     // =========================================================================
-    // Registration order tests
+    // Enumeration tests (membership + available/all consistency; order is not
+    // a contract — availableAlgorithms() is sorted, see ITileAlgorithmRegistry)
     // =========================================================================
 
-    void testOrder_preservedInAvailableAlgorithms()
+    void testAllBuiltinsPresentInAvailable()
     {
         auto* registry = m_scriptSetup.registry();
         auto available = registry->availableAlgorithms();
 
-        // At least 15 built-in algorithms should be present (loaded from JS scripts)
+        // At least 15 built-in algorithms should be present (loaded from Luau scripts)
         QVERIFY(available.size() >= 15);
 
         // Verify all core algorithms are registered (order depends on filesystem scan)

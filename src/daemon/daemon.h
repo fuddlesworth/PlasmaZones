@@ -21,7 +21,7 @@
 #include <PhosphorEngine/PlacementEngineBase.h>
 #include <PhosphorTiles/AlgorithmPreviewParams.h>
 
-namespace Phosphor::Screens {
+namespace PhosphorScreens {
 class PlasmaPanelSource;
 class DBusScreenAdaptor;
 }
@@ -49,12 +49,29 @@ class ActivityManager;
 class VirtualDesktopManager;
 }
 
+// PhosphorWindowRules::WindowRuleSet is held as a value member below
+// (m_excludeRuleSet) — needs a complete type, so include the header
+// rather than forward-declare. WindowRuleStore stays in the header by
+// pointer only; including WindowRuleSet.h leaves the store forward
+// declared here.
+#include <PhosphorWindowRules/WindowRuleSet.h>
+
+namespace PhosphorWindowRules {
+class WindowRuleStore;
+}
+
 namespace PhosphorZones {
 class Layout;
 class LayoutComputeService;
 class LayoutRegistry;
 class ZoneDetector;
-}
+} // namespace PhosphorZones
+
+// `AssignmentEntry::Mode` appears in member-function signatures below, so
+// the full struct definition must be visible here (a forward declaration
+// can't surface a nested enum). The header is LGPL-LGPL safe (PhosphorZones
+// to daemon header is the standard direction).
+#include <PhosphorZones/AssignmentEntry.h>
 
 namespace PlasmaZones {
 
@@ -72,11 +89,24 @@ class OverlayAdaptor;
 class ZoneDetectionAdaptor;
 class WindowTrackingAdaptor;
 class WindowDragAdaptor;
+class WindowRuleAdaptor;
 class ModeTracker;
 class ZoneSelectorController;
 class UnifiedLayoutController;
 class AutotileAdaptor;
 class ScreenModeRouter;
+class CrossSurfaceResolver;
+class DaemonScreenModeAdapter;
+class DaemonSettingsGateAdapter;
+class DaemonWorkspaceStateAdapter;
+
+} // namespace PlasmaZones
+
+namespace PhosphorContext {
+class ContextResolver;
+} // namespace PhosphorContext
+
+namespace PlasmaZones {
 class SettingsConfigStore;
 class SnapAdaptor;
 class ShaderRegistry;
@@ -144,7 +174,7 @@ public:
     {
         return m_overlayService.get();
     }
-    Phosphor::Screens::ScreenManager* screenManager() const
+    PhosphorScreens::ScreenManager* screenManager() const
     {
         return m_screenManager.get();
     }
@@ -155,6 +185,30 @@ public:
     PhosphorWorkspaces::ActivityManager* activityManager() const
     {
         return m_activityManager.get();
+    }
+    /**
+     * @brief Frozen-snapshot per-screen mode + disable/lock cascade façade.
+     *
+     * Borrowed by the three D-Bus adaptors (SnapAdaptor,
+     * WindowTrackingAdaptor, WindowDragAdaptor) and the daemon's own
+     * navigation / OSD paths so the cascade
+     * `(modeFor → currentDesktop → currentActivity → isContextDisabled
+     * → isContextLocked)` resolves through one call instead of being
+     * hand-stitched at each site. OverlayService is NOT yet a consumer —
+     * its disabled-context gates still call the legacy
+     * `isContextDisabled(m_settings, ...)` directly; migrating it is
+     * follow-up work. The pointer is non-null after `init()` and stays
+     * non-null until `stop()` runs to completion (which calls
+     * `m_contextResolver.reset()` in the teardown order documented at
+     * @ref m_contextResolver). Note that `stop()` returns early when
+     * `m_running` is false — the init-without-start teardown path
+     * therefore skips the explicit reset, and the resolver is destroyed
+     * later by `~Daemon` via the unique_ptr member dtor. See
+     * @ref m_contextResolver for the declaration-order invariant.
+     */
+    PhosphorContext::ContextResolver* contextResolver() const
+    {
+        return m_contextResolver.get();
     }
     ShortcutManager* shortcutManager() const
     {
@@ -175,6 +229,12 @@ public:
     void showLockedOsd(const QString& screenId);
     void showLockedPreviewOsd(const QString& screenId);
     void showContextDisabledOsd(const QString& screenId, int desktop, const QString& activity, DisabledReason reason);
+    /// OSD shown when a context has no active layout because its default
+    /// assignment is suppressed (global setting or per-context rule) — the
+    /// "not assigned" counterpart to @ref showContextDisabledOsd. Tells the user
+    /// the mode is selected but nothing is assigned, instead of silently showing
+    /// no OSD.
+    void showNotAssignedOsd(const QString& screenId);
 
 private:
     /**
@@ -234,9 +294,6 @@ private:
     // Resolve screen → check mode (autotile vs zones) → delegate → OSD from backend
     // ═══════════════════════════════════════════════════════════════════════════
 
-    /** @brief Return the active IPlacementEngine for a screen (autotile or snap) */
-    PhosphorEngine::IPlacementEngine* engineForScreen(const QString& screenId) const;
-
     /**
      * @brief Convenience mode check: routed through m_screenModeRouter.
      *
@@ -244,9 +301,49 @@ private:
      * screen in autotile mode?" use this method instead of checking the
      * engine pointer directly. Centralising the lookup behind one call
      * is how the single-source-of-truth invariant is enforced inside the
-     * daemon.
+     * daemon. The router itself (src/core/screenmoderouter.cpp) IS the
+     * underlying source and inspects `m_autotileEngine->isActiveOnScreen`
+     * directly — every other caller (navigation/signal/start/osd paths)
+     * routes through `isAutotileScreen` or `m_screenModeRouter->isAutotileMode`.
      */
     bool isAutotileScreen(const QString& screenId) const;
+
+    /**
+     * @brief Resolve the current mode for @p screenId via the router with
+     * the same "null router → Snapping" fallback DaemonScreenModeAdapter
+     * applies. Single point of truth for daemon-internal mode lookups
+     * that don't have the ContextResolver handle in hand (signal
+     * handlers, OSD paths). Eliminates the open-coded
+     * `m_screenModeRouter ? m_screenModeRouter->modeFor(...) : Snapping`
+     * rebuild that used to sit inline.
+     */
+    PhosphorZones::AssignmentEntry::Mode currentModeFor(const QString& screenId) const;
+
+    /**
+     * @brief Per-context disable cascade gate for navigation shortcuts.
+     *
+     * Returns true when the handler should silently no-op — either the
+     * resolver is null (shutdown window) or the focused (monitor,
+     * desktop, activity) is on the user's disable list. Centralises
+     * the inline gate every geometry-side-effect handler must carry so
+     * the discussion #461 bug class can't recur when a new handler is
+     * added. Handlers that only manipulate focus (no geometry side
+     * effect) intentionally do NOT use this gate.
+     */
+    bool isFocusedContextGated(const QString& screenId) const;
+
+    /**
+     * @brief Mode-explicit sibling of isFocusedContextGated for autotile-only
+     * shortcuts.
+     *
+     * Same fail-closed null-resolver semantics, but queries the resolver
+     * with an explicit mode (skipping the router-driven mode lookup).
+     * Used by handleRetile / handleIncreaseMasterRatio /
+     * handleDecreaseMasterRatio / HANDLE_AUTOTILE_ONLY — paths that
+     * must gate against the Autotile disable list specifically rather
+     * than the live mode for the screen.
+     */
+    bool isFocusedContextGatedForMode(const QString& screenId, PhosphorZones::AssignmentEntry::Mode mode) const;
 
     void handleRotate(bool clockwise);
     void handleFloat();
@@ -275,7 +372,7 @@ private:
     /** @brief Handle cycle-layout shortcut (previous or next) */
     void handleCycleLayout(const QString& screenId, bool forward);
 
-    // Start-up sub-methods (defined in start.cpp)
+    // Start-up sub-methods (definitions split across start.cpp and signals.cpp).
     void connectScreenSignals();
     void connectDesktopActivity();
     void connectShortcutSignals();
@@ -299,12 +396,17 @@ private:
     void seedAutotileOrderForScreen(const QString& screenId);
 
     /**
-     * @brief Handle autotile feature being disabled (clear assignments, restore manual mode)
+     * @brief Flip every autotile assignment to Snapping; restore each screen's
+     *        saved snap layout; reset autotile-floating state. Caller is
+     *        responsible for the post-conditioning calls
+     *        (updateAutotileScreens, updateLayoutFilter, snap resnap).
      */
     void handleAutotileDisabled();
 
     /**
-     * @brief Handle snapping toggle activating autotile mode on all screens
+     * @brief Activate autotile on every screen NOT already on an autotile
+     *        assignment. Idempotent for mixed-mode setups: screens already
+     *        running autotile keep their per-screen algorithm customisation.
      */
     void handleSnappingToAutotile();
 
@@ -329,16 +431,17 @@ private:
     QHash<TilingStateKey, QStringList> captureAutotileOrders() const;
 
     /**
-     * @brief Restore pre-tile geometry for autotile-only windows
+     * @brief Build pre-tile geometry restore entries for autotile-only windows.
      *
-     * Iterates m_lastAutotileOrders and calls applyGeometryForFloat for each
-     * window that has no zone assignment (never manually snapped). PhosphorZones::Zone-snapped
-     * windows are already handled by resnapCurrentAssignments.
+     * Iterates m_lastAutotileOrders and produces a `ZoneAssignmentEntry` per
+     * autotile-only window (no zone assignment, never manually snapped).
+     * Returns the batch so the caller can feed it to
+     * `SnapEngine::emitBatchedResnap` — one batched signal per autotile
+     * toggle instead of per-window D-Bus chatter. Zone-snapped windows are
+     * already handled by `SnapAdaptor::resnapCurrentAssignments`.
      */
-    void restoreAutotileOnlyGeometries(const QSet<QString>& excludeWindows = {}, int desktop = -1,
-                                       const QString& activity = QString());
-    QVector<ZoneAssignmentEntry> buildAutotileRestoreEntries(const QSet<QString>& excludeWindows, int desktop,
-                                                             const QString& activity);
+    QVector<ZoneAssignmentEntry> buildAutotileRestoreEntries(const QSet<QString>& excludeWindows = {}, int desktop = -1,
+                                                             const QString& activity = QString());
 
     /** @brief Show layout OSD deferred (avoids blocking on first-time QML compilation) */
     void showLayoutOsdDeferred(const QUuid& layoutId, const QString& screenId);
@@ -352,10 +455,18 @@ private:
      * the appropriate OSD (layout or algorithm). DRY helper for both
      * currentDesktopChanged and currentActivityChanged handlers.
      *
-     * @param desktop Current virtual desktop number
      * @param activity Current activity ID
      */
-    void showDesktopSwitchOsd(int desktop, const QString& activity);
+    void showDesktopSwitchOsd(const QString& activity);
+
+    /**
+     * @brief Per-screen desktop-switch OSD (Plasma 6.7 per-output virtual desktops)
+     *
+     * Shows the desktop-switch OSD only on @p screenId, using that screen's own
+     * current virtual desktop. Driven by the per-screen screenDesktopChanged
+     * handler so a single screen's switch doesn't flash every monitor (#648).
+     */
+    void showDesktopSwitchOsdForScreen(const QString& screenId, const QString& activity);
 
     /**
      * @brief Show per-screen OSD for all effective screens
@@ -363,9 +474,19 @@ private:
      * Iterates effectiveScreenIds, resolves assignment (autotile vs snapping),
      * and calls showLayoutOsdForAlgorithm or showLayoutOsd per screen inside
      * a single deferred event-loop pass so all surfaces show simultaneously.
-     * DRY helper shared by showDesktopSwitchOsd and settingsChanged handler.
+     * DRY helper shared by showDesktopSwitchOsd and the startup OSD path
+     * (finalizeStartup).
      */
-    void showOsdForAllScreens(int desktop, const QString& activity);
+    void showOsdForAllScreens(const QString& activity);
+
+    /**
+     * @brief Per-screen OSD for an explicit screen set
+     *
+     * Like showOsdForAllScreens but for the given @p screenIds; each screen uses
+     * its OWN current virtual desktop (per-output virtual desktops). Backs both
+     * showOsdForAllScreens and showDesktopSwitchOsdForScreen.
+     */
+    void showOsdForScreens(const QStringList& screenIds, const QString& activity);
 
     /**
      * @brief Recompute which screens use autotile from layout assignments
@@ -376,9 +497,9 @@ private:
     void updateAutotileScreens();
 
     /**
-     * @brief Respond to a Phosphor::Screens::ScreenManager VS cache change for a physical screen
+     * @brief Respond to a PhosphorScreens::ScreenManager VS cache change for a physical screen
      *
-     * Wired to Phosphor::Screens::ScreenManager::virtualScreensChanged. Performs the post-change
+     * Wired to PhosphorScreens::ScreenManager::virtualScreensChanged. Performs the post-change
      * fan-out: clears stale resnap buffer, migrates window assignments to the
      * new VS IDs (when subdivisions exist), prunes stale autotile orders,
      * refreshes the autotile screen set, recalculates affected zone
@@ -408,6 +529,24 @@ private:
     void resnapIfManualMode();
 
     /**
+     * @brief Emit the float-restore half of m_pendingSnapFloatRestores for the
+     *        resnap-buffer paths (picker / quick-layout cycle / KCM apply).
+     *
+     * windowsReleased populates m_pendingSnapFloatRestores whenever a screen
+     * leaves the autotile set, but the resnap-buffer paths
+     * (populateResnapBufferForAllScreens + resnapToNewLayout) never consume it
+     * — only the mode-toggle and autotile-disable paths do. A window
+     * snap-FLOATED before passing through autotile would therefore lose its
+     * float-back position on a picker/KCM flip. Floating windows are excluded
+     * from the resnap buffer, so these float restores are a disjoint set the
+     * buffer path cannot cover; emit them as a separate batch. The snap-ZONE
+     * restores in the buffer reference the OLD layout and are intentionally
+     * left to resnapToNewLayout (which re-snaps to the NEW layout's zones).
+     * Consumes (clears) m_pendingSnapFloatRestores.
+     */
+    void emitPendingSnapFloatRestoresForResnapBuffer();
+
+    /**
      * @brief Update layout filter on overlay service and unified layout controller
      *
      * Shows both manual and autotile layouts when the feature gate is enabled.
@@ -426,6 +565,27 @@ private:
     void syncModeFromAssignments();
 
     std::unique_ptr<PhosphorConfig::IBackend> m_configBackend;
+    // Unified WindowRule store (windowrules.json). Declared BEFORE
+    // m_layoutManager because the LayoutRegistry borrows it for its
+    // rule-backed assignment cascade — construction order must build the
+    // store first. The WindowRuleAdaptor borrows it too.
+    std::unique_ptr<PhosphorWindowRules::WindowRuleStore> m_windowRuleStore;
+    // Filtered slice of m_windowRuleStore — only rules whose action list
+    // contains a terminal `Exclude`. Built via
+    // `PhosphorWindowRules::ExclusionRules::excludeRulesFrom` and kept in
+    // lockstep with the unified store via the rulesChanged subscription
+    // wired in init(). SnapEngine borrows a pointer into this set for its
+    // `isAppIdExcluded` probe; the WindowTrackingAdaptor's
+    // `pruneExcludedPendingRestores` receives the AppId patterns extracted
+    // from this same filtered slice by the daemon at refilter time. Held
+    // as a member (stable address) rather than rebuilt per access so the
+    // bound RuleEvaluator's per-revision cache stays valid across
+    // back-to-back resolves. Replaces a legacy QStringList-based settings
+    // path that derived the equivalent set from two flat string lists —
+    // see configmigration.cpp::migrateV3ToV4 for the schema fold; the
+    // unified `PhosphorWindowRules::ExclusionRules` namespace now does the
+    // slicing across both the daemon and the kwin-effect.
+    PhosphorWindowRules::WindowRuleSet m_excludeRuleSet;
     std::unique_ptr<PhosphorZones::LayoutRegistry> m_layoutManager;
     // Daemon-owned tile-algorithm registry. Replaces the old
     // AlgorithmRegistry::instance() singleton — per-process ownership is
@@ -513,13 +673,13 @@ private:
     std::unique_ptr<PhosphorEngine::WindowRegistry> m_windowRegistry;
     /// Plasma D-Bus panel-offset source. Declared before m_screenManager
     /// because the manager holds a non-owning IPanelSource* into it.
-    std::unique_ptr<Phosphor::Screens::PlasmaPanelSource> m_panelSource;
+    std::unique_ptr<PhosphorScreens::PlasmaPanelSource> m_panelSource;
     /// Settings-backed IConfigStore for VS topology. Shared by
     /// m_screenManager (Config::configStore) and m_virtualScreenSwapper
     /// (constructor arg). Declared before both so destruction order
     /// runs swapper → screen-manager → store.
     std::unique_ptr<SettingsConfigStore> m_virtualScreenStore;
-    std::unique_ptr<Phosphor::Screens::ScreenManager> m_screenManager;
+    std::unique_ptr<PhosphorScreens::ScreenManager> m_screenManager;
     /// Per-daemon shader registry. Replaces the previous
     /// ShaderRegistry::instance() singleton — per-process ownership is the
     /// plugin-architecture-friendly shape (matches m_algorithmRegistry).
@@ -545,7 +705,7 @@ private:
     OverlayAdaptor* m_overlayAdaptor = nullptr; // Overlay visibility only
     ZoneDetectionAdaptor* m_zoneDetectionAdaptor = nullptr; // PhosphorZones::Zone detection queries
     WindowTrackingAdaptor* m_windowTrackingAdaptor = nullptr; // Window-zone tracking
-    Phosphor::Screens::DBusScreenAdaptor* m_screenAdaptor = nullptr;
+    PhosphorScreens::DBusScreenAdaptor* m_screenAdaptor = nullptr;
     WindowDragAdaptor* m_windowDragAdaptor = nullptr; // Window drag handling
     // Held so stop() can invoke detach() before the unique_ptr members
     // those adaptors borrow from are destroyed. ~QObject runs AFTER all
@@ -554,6 +714,12 @@ private:
     // window (and any queued D-Bus call landing in that window would UAF).
     ShaderAdaptor* m_shaderAdaptor = nullptr;
     ControlAdaptor* m_controlAdaptor = nullptr;
+    // Unified WindowRule store + its D-Bus adaptor. The store owns
+    // windowrules.json (daemon sole writer); the adaptor exposes it on
+    // org.plasmazones.WindowRules. Adaptor is Qt-parented (raw pointer); it
+    // borrows the store, so stop() calls detach() before the store unique_ptr
+    // is destroyed.
+    WindowRuleAdaptor* m_windowRuleAdaptor = nullptr;
     // Compositor bridge adaptor (KWin effect ↔ daemon protocol endpoint).
     // Parented to `this`; holds only plain state, so it needs no detach().
     CompositorBridgeAdaptor* m_compositorBridge = nullptr;
@@ -564,23 +730,45 @@ private:
     // Unified layout management
     std::unique_ptr<UnifiedLayoutController> m_unifiedLayoutController;
 
-    // Scripted algorithm loader (file watcher for user-defined JS algorithms).
+    // Scripted algorithm loader (file watcher for user-defined Luau algorithms).
     // m_algorithmRegistry is declared up at the top of the member block with
     // m_layoutManager — see the DECLARATION ORDER INVARIANT comment there.
     std::unique_ptr<PhosphorTiles::ScriptedAlgorithmLoader> m_scriptedAlgorithmLoader;
+
+    // Shared neighbour-output / neighbour-desktop resolver injected into both
+    // engines. Declared BEFORE the engines so it is destroyed AFTER them (they
+    // borrow it), and after m_screenManager / m_virtualDesktopManager (which it
+    // borrows) so those outlive it.
+    std::unique_ptr<CrossSurfaceResolver> m_crossSurfaceResolver;
 
     // Window engines (held as base class; concrete types known only in daemon.cpp/enginefactory.cpp)
     std::unique_ptr<PhosphorEngine::PlacementEngineBase> m_autotileEngine;
     std::unique_ptr<PhosphorEngine::PlacementEngineBase> m_snapEngine;
     /// Single source of truth for "which engine owns screen X". Used by
-    /// WindowTrackingAdaptor and (via @ref engineForScreen) daemon-internal
-    /// dispatch paths. Owns no state of its own — just delegates to the
-    /// layout manager and engine pointers it was constructed with.
+    /// WindowTrackingAdaptor and the daemon's navigation handlers (via
+    /// `navigatorForShortcut` in navigation.cpp). Owns no state of its
+    /// own — just delegates to the layout manager and engine pointers it
+    /// was constructed with.
     std::unique_ptr<ScreenModeRouter> m_screenModeRouter;
+    /// PhosphorContext::ContextResolver wiring.
+    ///
+    /// DECLARATION ORDER INVARIANT: the three adapter members must be
+    /// declared (and therefore destroyed) AFTER `m_settings`,
+    /// `m_virtualDesktopManager`, `m_activityManager`, and
+    /// `m_screenModeRouter` — they hold non-owning pointers to those
+    /// services. `m_contextResolver` must be declared AFTER the three
+    /// adapters because it holds non-owning pointers to them. Reverse
+    /// destruction order is C++'s default, so this declaration order
+    /// guarantees the resolver tears down first, then the adapters,
+    /// then the underlying services.
+    std::unique_ptr<DaemonWorkspaceStateAdapter> m_workspaceStateAdapter;
+    std::unique_ptr<DaemonScreenModeAdapter> m_screenModeAdapter;
+    std::unique_ptr<DaemonSettingsGateAdapter> m_settingsGateAdapter;
+    std::unique_ptr<PhosphorContext::ContextResolver> m_contextResolver;
     /// Stateless facade over m_virtualScreenStore for VS swap/rotate.
     /// Held as a member rather than reconstructed per-call so navigation
     /// handlers don't need to know about its dependencies.
-    std::unique_ptr<Phosphor::Screens::VirtualScreenSwapper> m_virtualScreenSwapper;
+    std::unique_ptr<PhosphorScreens::VirtualScreenSwapper> m_virtualScreenSwapper;
     SnapAdaptor* m_snapAdaptor = nullptr;
     AutotileAdaptor* m_autotileAdaptor = nullptr;
 
@@ -612,9 +800,11 @@ private:
 
     // Desktop/activity resolution helpers (DRY — used by multiple handlers)
     int currentDesktop() const;
+    /// This screen's current virtual desktop (Plasma 6.7 per-output virtual
+    /// desktops, #648), falling back to the global currentDesktop().
+    int currentDesktopForScreen(const QString& screenId) const;
     QString currentActivity() const;
-    bool isCurrentContextLocked(const QString& screenId) const;
-    bool isCurrentContextLockedForMode(const QString& screenId, int mode) const;
+    bool isCurrentContextLockedForMode(const QString& screenId, PhosphorZones::AssignmentEntry::Mode mode) const;
 
     /**
      * @brief Sync daemon-side float state when autotile floats/unfloats a window
@@ -745,6 +935,12 @@ private:
 
     // After geometry updates settle, request KWin effect to re-apply window positions (panel editor fix)
     QTimer m_reapplyGeometriesTimer;
+
+    // Debounced resnap of currently-snapped windows after a gap/padding change
+    // (global or per-screen snapping). Lets users see the new spacing applied to
+    // already-snapped windows on save instead of having to re-snap each one
+    // (discussion #661). Coalesces a batch of per-side edits into one pass.
+    QTimer m_gapResnapTimer;
 
     // Watchdog: if the KWin effect has not registered as a compositor bridge
     // within a grace period after startup, window control is dead (drags and

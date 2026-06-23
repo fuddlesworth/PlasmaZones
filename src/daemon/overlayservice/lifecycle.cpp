@@ -48,12 +48,13 @@ void OverlayService::show()
             // Fallback to primary screen if cursor position detection fails
             cursorScreen = Utils::primaryScreen();
         }
-        // If the cursor's screen has PlasmaZones disabled, don't show overlay at all
-        // Check both physical and effective (virtual) screen IDs
+        // If the cursor's screen has no active snapping overlay — disabled, or its
+        // default layout is suppressed, or it's in autotile mode — don't show the
+        // overlay at all. Mirrors the per-target gate in initializeOverlay.
+        // Check both physical and effective (virtual) screen IDs.
         if (cursorScreen && m_settings) {
             QString effectiveId = Utils::effectiveScreenIdAt(m_screenManager, QCursor::pos(), cursorScreen);
-            if (isContextDisabled(m_settings, PhosphorZones::AssignmentEntry::Snapping, effectiveId,
-                                  m_currentVirtualDesktop, m_currentActivity)) {
+            if (isSnappingContextInactive(effectiveId)) {
                 return;
             }
         }
@@ -77,12 +78,13 @@ void OverlayService::showAtPosition(int cursorX, int cursorY)
             cursorScreen = Utils::primaryScreen();
         }
 
-        // If the cursor's screen has PlasmaZones disabled, don't show overlay at all
-        // Check both physical and effective (virtual) screen IDs
+        // If the cursor's screen has no active snapping overlay — disabled, or its
+        // default layout is suppressed, or it's in autotile mode — don't show the
+        // overlay at all. Mirrors the per-target gate in initializeOverlay.
+        // Check both physical and effective (virtual) screen IDs.
         if (cursorScreen && m_settings) {
             QString effectiveId = Utils::effectiveScreenIdAt(m_screenManager, QPoint(cursorX, cursorY), cursorScreen);
-            if (isContextDisabled(m_settings, PhosphorZones::AssignmentEntry::Snapping, effectiveId,
-                                  m_currentVirtualDesktop, m_currentActivity)) {
+            if (isSnappingContextInactive(effectiveId)) {
                 return;
             }
         }
@@ -138,7 +140,18 @@ void OverlayService::showAtPosition(int cursorX, int cursorY)
             cursorMainOverlay != nullptr && !qFuzzyCompare(cursorMainOverlay->opacity(), 0.0);
         if ((cursorVsHasWindow && cursorSlotVisible) || m_excludedScreens.contains(cursorEffectiveId)) {
             m_currentOverlayScreenId = showOnAllMonitors ? QString() : cursorEffectiveId;
-            applyIdleStateForCursor(cursorEffectiveId, showOnAllMonitors);
+            if (m_overlayIdled) {
+                // A trigger-show arriving while warm-idled (a drag-end kept the
+                // windows alive but blanked: zones=[], shader + CAVA quiesced).
+                // applyIdleStateForCursor() alone only flips _idled, so it would
+                // un-blank the slot but leave it showing the empty zone data with
+                // a frozen shader. refreshFromIdle() clears m_overlayIdled,
+                // restarts the render loop + CAVA, re-pushes zone data, and then
+                // applies the cursor idle state (via m_currentOverlayScreenId).
+                refreshFromIdle();
+            } else {
+                applyIdleStateForCursor(cursorEffectiveId, showOnAllMonitors);
+            }
             return;
         }
         // Fall through - initializeOverlay will (re)build the per-VS window
@@ -155,10 +168,15 @@ void OverlayService::hide()
     }
 
     m_visible = false;
+    m_overlayIdled = false; // not "warm-idled" — fully hidden
     m_currentOverlayScreenId.clear();
 
     // Stop shader animation
     stopShaderAnimation();
+    // Wind down the audio-visualizer capture (deferred by a grace period in
+    // syncCavaState so a quick re-show keeps it warm), so an idle daemon does
+    // no continuous audio capture or repaint.
+    syncCavaState();
 
     // Do NOT invalidate m_shaderTimer - keeping iTime continuous across
     // show/hide cycles prevents the shader phase from restarting at 0
@@ -218,12 +236,11 @@ void OverlayService::setIdleForDragPause()
         if (!it.value().overlayPhysScreen) {
             continue;
         }
-        // _idled and the zone-data properties live on
-        // mainOverlaySlot() (PassiveOverlayShell.qml lines
-        // 633, 652, 661-662, etc.), not on the shell window root.
-        // Writing on the window root creates dynamic properties that
-        // QML never observes - the slot's content keeps rendering live
-        // zones while the user expects an idle blank.
+        // _idled and the zone-data properties live on mainOverlaySlot()
+        // (declared on the slot in PassiveOverlayShell.qml), not on the shell
+        // window root. Writing on the window root creates dynamic properties that
+        // QML never observes - the slot's content keeps rendering live zones
+        // while the user expects an idle blank.
         QQuickItem* slot = it.value().mainOverlaySlot();
         if (!slot) {
             continue;
@@ -242,11 +259,11 @@ void OverlayService::setIdleForDragPause()
         // of sync with what anyInputGrabbing reports.
         syncPassiveShellSurfaceState(it.key());
         // NOTE: labelsTextureHash is intentionally NOT cleared here. The QML
-        // side's labelsTexture property still holds the previously-built image
+        // side's labelsTexture property still holds the previously-built payload
         // (setProperty was never called with a new one); it just isn't sampled
         // while zoneCount is 0. Keeping the hash means refreshFromIdle() with
         // unchanged zones hits the cache and costs one hash compute instead
-        // of rebuilding 23 MB of pixels.
+        // of rebuilding the sparse glyph-tile payload.
     }
     // CRITICAL: mark zone data CLEAN, not dirty. updateShaderUniforms
     // re-runs updateZonesForAllWindows() whenever m_zoneDataDirty is
@@ -254,14 +271,16 @@ void OverlayService::setIdleForDragPause()
     // idle state is "what we just wrote, do not re-derive from layout
     // data until refreshFromIdle() is called."
     m_zoneDataDirty = false;
-    // NOTE: we deliberately do NOT call stopShaderAnimation() here. The
-    // shader timer keeps ticking at ~60 Hz while idled, but with zoneCount
-    // set to 0 the per-frame work collapses to a handful of uniform uploads
-    // to a surface that's rendering no visible geometry - bounded cost, O(1)
-    // per screen. Pausing and restarting the timer across the idle cycle
-    // would require additional state tracking in refreshFromIdle() and add
-    // a startup transient on every modifier re-press. The bounded per-frame
-    // cost is the cheaper trade.
+
+    // Real drag-end routes here too (the QQuickWindows are kept alive to dodge
+    // an NVIDIA teardown deadlock — see WindowDragAdaptor), so without this the
+    // 60 Hz shader render loop + CAVA would run for the daemon's whole lifetime
+    // after the first drag. Mark idle and schedule a grace-period quiesce: a
+    // quick re-trigger (modifier thrash) cancels it via refreshFromIdle() and
+    // keeps everything warm; a genuine rest stops the render loop + CAVA after
+    // the grace window. The windows stay alive, so no teardown cost on resume.
+    m_overlayIdled = true;
+    scheduleIdleQuiesce();
 }
 
 void OverlayService::refreshFromIdle()
@@ -277,6 +296,19 @@ void OverlayService::refreshFromIdle()
     if (!m_visible) {
         return;
     }
+
+    // Coming back from the warm-idled state: cancel any pending quiesce and
+    // resume the render loop + CAVA that scheduleIdleQuiesce() may have stopped.
+    m_overlayIdled = false;
+    if (m_idleQuiesceTimer) {
+        m_idleQuiesceTimer->stop();
+    }
+    if (anyScreenUsesShader() && (!m_shaderUpdateTimer || !m_shaderUpdateTimer->isActive())) {
+        ensureShaderTimerStarted(m_shaderTimer, m_shaderTimerMutex, m_lastFrameTime, m_frameCount);
+        startShaderAnimation();
+    }
+    syncCavaState();
+
     updateZonesForAllWindows();
     // Resolve the cursor's current VS - the drag adaptor keeps
     // m_currentOverlayScreenId updated via showAtPosition, so this

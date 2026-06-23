@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 import QtQuick
+import QtQuick.Window
 import QtQuick.Controls
 import QtQuick.Layouts
 import "WizardUtils.js" as WizardUtils
@@ -37,163 +38,190 @@ Kirigami.Dialog {
     property real screenAspectRatio: 16 / 9
     // Template previews match TemplateService strategies exactly
     // (see src/editor/services/TemplateService.cpp and core/constants.h)
-    readonly property var templates: [{
-        "name": i18n("Blank Canvas"),
-        "type": "custom",
-        "desc": i18n("Start from scratch in the editor"),
-        "zones": [{
-            "relativeGeometry": {
-                "x": 0,
-                "y": 0,
-                "width": 1,
-                "height": 1
-            },
-            "zoneNumber": 1
-        }]
-    }, {
-        "name": i18n("Columns"),
-        "type": "columns",
-        "desc": i18n("Two equal vertical columns"),
-        "zones": [{
-            "relativeGeometry": {
-                "x": 0,
-                "y": 0,
-                "width": 0.5,
-                "height": 1
-            },
-            "zoneNumber": 1
-        }, {
-            "relativeGeometry": {
-                "x": 0.5,
-                "y": 0,
-                "width": 0.5,
-                "height": 1
-            },
-            "zoneNumber": 2
-        }]
-    }, {
-        "name": i18n("Rows"),
-        "type": "rows",
-        "desc": i18n("Two equal horizontal rows"),
-        "zones": [{
-            "relativeGeometry": {
-                "x": 0,
-                "y": 0,
-                "width": 1,
-                "height": 0.5
-            },
-            "zoneNumber": 1
-        }, {
-            "relativeGeometry": {
-                "x": 0,
-                "y": 0.5,
-                "width": 1,
-                "height": 0.5
-            },
-            "zoneNumber": 2
-        }]
-    }, {
-        "name": i18n("Grid"),
-        "type": "grid",
-        "desc": i18n("2\u00d72 equal quadrants"),
-        "zones": [{
-            "relativeGeometry": {
-                "x": 0,
-                "y": 0,
-                "width": 0.5,
-                "height": 0.5
-            },
-            "zoneNumber": 1
-        }, {
-            "relativeGeometry": {
-                "x": 0.5,
-                "y": 0,
-                "width": 0.5,
-                "height": 0.5
-            },
-            "zoneNumber": 2
-        }, {
-            "relativeGeometry": {
-                "x": 0,
-                "y": 0.5,
-                "width": 0.5,
-                "height": 0.5
-            },
-            "zoneNumber": 3
-        }, {
-            "relativeGeometry": {
-                "x": 0.5,
-                "y": 0.5,
-                "width": 0.5,
-                "height": 0.5
-            },
-            "zoneNumber": 4
-        }]
-    }, {
-        "name": i18n("Priority"),
-        "type": "priority",
-        "desc": i18n("Large main + secondary stack"),
-        "zones": [{
-            "relativeGeometry": {
-                "x": 0,
-                "y": 0,
-                "width": 0.667,
-                "height": 1
-            },
-            "zoneNumber": 1
-        }, {
-            "relativeGeometry": {
-                "x": 0.667,
-                "y": 0,
-                "width": 0.333,
-                "height": 0.5
-            },
-            "zoneNumber": 2
-        }, {
-            "relativeGeometry": {
-                "x": 0.667,
-                "y": 0.5,
-                "width": 0.333,
-                "height": 0.5
-            },
-            "zoneNumber": 3
-        }]
-    }, {
-        "name": i18n("Focus"),
-        "type": "focus",
-        "desc": i18n("Center panel + side panels"),
-        "zones": [{
-            "relativeGeometry": {
-                "x": 0,
-                "y": 0,
-                "width": 0.2,
-                "height": 1
-            },
-            "zoneNumber": 1
-        }, {
-            "relativeGeometry": {
-                "x": 0.2,
-                "y": 0,
-                "width": 0.6,
-                "height": 1
-            },
-            "zoneNumber": 2
-        }, {
-            "relativeGeometry": {
-                "x": 0.8,
-                "y": 0,
-                "width": 0.2,
-                "height": 1
-            },
-            "zoneNumber": 3
-        }]
-    }]
+    readonly property var templates: [
+        {
+            "name": i18n("Blank Canvas"),
+            "type": "custom",
+            "desc": i18n("Start from scratch in the editor"),
+            "zones": [
+                {
+                    "relativeGeometry": {
+                        "x": 0,
+                        "y": 0,
+                        "width": 1,
+                        "height": 1
+                    },
+                    "zoneNumber": 1
+                }
+            ]
+        },
+        {
+            "name": i18n("Columns"),
+            "type": "columns",
+            "desc": i18n("Two equal vertical columns"),
+            "zones": [
+                {
+                    "relativeGeometry": {
+                        "x": 0,
+                        "y": 0,
+                        "width": 0.5,
+                        "height": 1
+                    },
+                    "zoneNumber": 1
+                },
+                {
+                    "relativeGeometry": {
+                        "x": 0.5,
+                        "y": 0,
+                        "width": 0.5,
+                        "height": 1
+                    },
+                    "zoneNumber": 2
+                }
+            ]
+        },
+        {
+            "name": i18n("Rows"),
+            "type": "rows",
+            "desc": i18n("Two equal horizontal rows"),
+            "zones": [
+                {
+                    "relativeGeometry": {
+                        "x": 0,
+                        "y": 0,
+                        "width": 1,
+                        "height": 0.5
+                    },
+                    "zoneNumber": 1
+                },
+                {
+                    "relativeGeometry": {
+                        "x": 0,
+                        "y": 0.5,
+                        "width": 1,
+                        "height": 0.5
+                    },
+                    "zoneNumber": 2
+                }
+            ]
+        },
+        {
+            "name": i18n("Grid"),
+            "type": "grid",
+            "desc": i18n("2\u00d72 equal quadrants"),
+            "zones": [
+                {
+                    "relativeGeometry": {
+                        "x": 0,
+                        "y": 0,
+                        "width": 0.5,
+                        "height": 0.5
+                    },
+                    "zoneNumber": 1
+                },
+                {
+                    "relativeGeometry": {
+                        "x": 0.5,
+                        "y": 0,
+                        "width": 0.5,
+                        "height": 0.5
+                    },
+                    "zoneNumber": 2
+                },
+                {
+                    "relativeGeometry": {
+                        "x": 0,
+                        "y": 0.5,
+                        "width": 0.5,
+                        "height": 0.5
+                    },
+                    "zoneNumber": 3
+                },
+                {
+                    "relativeGeometry": {
+                        "x": 0.5,
+                        "y": 0.5,
+                        "width": 0.5,
+                        "height": 0.5
+                    },
+                    "zoneNumber": 4
+                }
+            ]
+        },
+        {
+            "name": i18n("Priority"),
+            "type": "priority",
+            "desc": i18n("Large main + secondary stack"),
+            "zones": [
+                {
+                    "relativeGeometry": {
+                        "x": 0,
+                        "y": 0,
+                        "width": 0.667,
+                        "height": 1
+                    },
+                    "zoneNumber": 1
+                },
+                {
+                    "relativeGeometry": {
+                        "x": 0.667,
+                        "y": 0,
+                        "width": 0.333,
+                        "height": 0.5
+                    },
+                    "zoneNumber": 2
+                },
+                {
+                    "relativeGeometry": {
+                        "x": 0.667,
+                        "y": 0.5,
+                        "width": 0.333,
+                        "height": 0.5
+                    },
+                    "zoneNumber": 3
+                }
+            ]
+        },
+        {
+            "name": i18n("Focus"),
+            "type": "focus",
+            "desc": i18n("Center panel + side panels"),
+            "zones": [
+                {
+                    "relativeGeometry": {
+                        "x": 0,
+                        "y": 0,
+                        "width": 0.2,
+                        "height": 1
+                    },
+                    "zoneNumber": 1
+                },
+                {
+                    "relativeGeometry": {
+                        "x": 0.2,
+                        "y": 0,
+                        "width": 0.6,
+                        "height": 1
+                    },
+                    "zoneNumber": 2
+                },
+                {
+                    "relativeGeometry": {
+                        "x": 0.8,
+                        "y": 0,
+                        "width": 0.2,
+                        "height": 1
+                    },
+                    "zoneNumber": 3
+                }
+            ]
+        }
+    ]
     // Resolve the selected template's data for step 2 preview
     readonly property var selectedTemplate: {
         for (let i = 0; i < templates.length; i++) {
             if (templates[i].type === root.selectedType)
                 return templates[i];
-
         }
         return templates[0];
     }
@@ -284,11 +312,8 @@ Kirigami.Dialog {
                                 isHovered: templateDelegate.isHovered || templateDelegate.selected
                                 highlightColor: Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g, Kirigami.Theme.highlightColor.b, templateDelegate.selected ? 0.8 : 0.5)
                             }
-
                         }
-
                     }
-
                 }
 
                 Label {
@@ -297,7 +322,6 @@ Kirigami.Dialog {
                     font: Kirigami.Theme.smallFont
                     opacity: 0.4
                 }
-
             }
 
             // ── Step 2: Configure ──────────────────────────────────────
@@ -312,7 +336,7 @@ Kirigami.Dialog {
                     Layout.alignment: Qt.AlignHCenter
                     radius: Kirigami.Units.smallSpacing * 2
                     color: root._subtleBg
-                    border.width: Math.round(Kirigami.Units.devicePixelRatio)
+                    border.width: Math.round(Screen.devicePixelRatio)
                     border.color: root._accentBorder
 
                     QFZCommon.ZonePreview {
@@ -328,7 +352,6 @@ Kirigami.Dialog {
                     WizardPreviewBadge {
                         text: root.selectedTemplate.name
                     }
-
                 }
 
                 // Config card
@@ -353,7 +376,6 @@ Kirigami.Dialog {
                             Keys.onReturnPressed: {
                                 if (wizardFooter.createEnabled)
                                     wizardFooter.createClicked();
-
                             }
                         }
 
@@ -361,12 +383,10 @@ Kirigami.Dialog {
                             function onCurrentStepChanged() {
                                 if (root.currentStep === 1)
                                     nameField.forceActiveFocus();
-
                             }
 
                             target: root
                         }
-
                     }
 
                     // Aspect ratio
@@ -383,7 +403,7 @@ Kirigami.Dialog {
                         SettingsButtonGroup {
                             model: [i18n("Auto"), "16:9", "21:9", "32:9", i18n("Portrait")]
                             currentIndex: root.selectedAspectRatio + 1
-                            onIndexChanged: (index) => {
+                            onIndexChanged: index => {
                                 root.selectedAspectRatio = index - 1;
                             }
                         }
@@ -394,7 +414,6 @@ Kirigami.Dialog {
                             font: Kirigami.Theme.smallFont
                             opacity: 0.4
                         }
-
                     }
 
                     Kirigami.Separator {
@@ -408,20 +427,15 @@ Kirigami.Dialog {
                         onToggled: root.openInEditor = checked
                         Accessible.name: text
                     }
-
                 }
-
             }
-
         }
-
     }
 
     Connections {
         function onLayoutOperationFailed(reason) {
             if (root.opened)
                 wizardFooter.errorText = reason;
-
         }
 
         target: root.controller
@@ -439,9 +453,7 @@ Kirigami.Dialog {
             wizardFooter.errorText = "";
             if (root.controller.createNewLayout(nameField.text.trim(), root.selectedType, root.selectedAspectRatio, root.openInEditor))
                 root.close();
-
         }
         onCancelClicked: root.close()
     }
-
 }

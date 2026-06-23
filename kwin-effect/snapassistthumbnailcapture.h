@@ -12,10 +12,15 @@
 #include <QUuid>
 #include <QVector>
 
+#include <array>
+#include <cstdint>
+#include <memory>
+
 class QImage;
 
 namespace KWin {
 class EffectWindow;
+class GLTexture;
 }
 
 namespace PlasmaZones {
@@ -38,11 +43,17 @@ namespace PlasmaZones {
  * Captures run sequentially, one render+readback at a time, mirroring the
  * throttling the daemon's previous ScreenShot2 path needed (concurrent
  * CaptureWindow calls could starve KWin's screenshot queue). Each completed
- * image is posted
- * back to the daemon via @c org.plasmazones.Overlay.setSnapAssistThumbnail
- * as raw ARGB32 (non-premultiplied) bytes plus dimensions — no PNG encode,
- * no base64. The daemon validates the buffer shape and copies the bytes
- * into a QImage that lands in its bounded LRU cache.
+ * image is posted back to the daemon via
+ * @c org.plasmazones.Overlay.setSnapAssistThumbnail as raw ARGB32
+ * (non-premultiplied) bytes plus dimensions — no PNG encode, no base64. The
+ * daemon validates the buffer shape and copies the bytes into a QImage that
+ * lands in its bounded LRU cache.
+ *
+ * An opt-in zero-copy GPU path (@c PLASMAZONES_DMABUF_THUMBNAILS) exports the
+ * rendered FBO texture as a single-plane dma-buf and ships the fd via
+ * @c setWindowThumbnailDmabuf instead of the raw bytes. It degrades to the
+ * raw-pixel path automatically when the driver lacks the required EGL
+ * extensions or the daemon repeatedly rejects the import (@ref onDmabufRejected).
  */
 class SnapAssistThumbnailCapture : public QObject
 {
@@ -94,20 +105,70 @@ private Q_SLOTS:
     void processNext();
 
 private:
-    /// Render @p w into an offscreen GLFramebuffer fit within @p box (aspect
-    /// ratio preserved) and read it back as a straight-alpha ARGB32 QImage.
-    /// Returns a null image if the window can't be found/rendered. MUST run on
-    /// the compositor thread; it makes the GL context current itself, so it is
-    /// safe to call outside a paint pass (KWin 6.7's drawWindow/GLFramebuffer
-    /// path needs no OutputFrame).
-    QImage grabWindowImage(KWin::EffectWindow* w, QSize box) const;
-    void postThumbnail(const QUuid& internalId, const QImage& image);
+    /// Single-plane DMA-BUF exported from a rendered thumbnail texture. @c ok
+    /// is false when the compositor is not on an EGL/GL backend or the driver
+    /// lacks EGL_MESA_image_dma_buf_export. Per-export failures and daemon
+    /// import rejections are counted; after @ref DmabufFailureThreshold
+    /// consecutive failures the capture switches the whole session back to the
+    /// raw-pixel path (@ref onDmabufRejected) so an unsupported setup degrades
+    /// to working pixel thumbnails instead of stranding candidates on icons.
+    struct DmabufExport
+    {
+        bool ok = false;
+        int fd = -1;
+        int fenceFd = -1; ///< sync_file fence: signals when the GL render completed.
+        int width = 0;
+        int height = 0;
+        uint32_t fourcc = 0;
+        uint64_t modifier = 0;
+        uint32_t stride = 0;
+        uint32_t offset = 0;
+    };
 
     struct Pending
     {
         QUuid internalId;
         QSize maxSize;
     };
+
+    /// Render @p w into an offscreen GLFramebuffer fit within @p box (aspect
+    /// ratio preserved) and read it back as a straight-alpha ARGB32 QImage.
+    /// Returns a null image if the window can't be found/rendered. MUST run on
+    /// the compositor thread; it makes the GL context current itself, so it is
+    /// safe to call outside a paint pass (KWin 6.7's drawWindow/GLFramebuffer
+    /// path needs no OutputFrame). This is the raw-pixel path.
+    QImage grabWindowImage(KWin::EffectWindow* w, QSize box) const;
+
+    /// Render @p w into a pooled, persistent GLFramebuffer texture and return
+    /// it (a borrowed pointer into @ref m_texturePool). Used by the dma-buf
+    /// path: the exported buffer aliases the texture, so it must outlive the
+    /// daemon's async import — the pool round-robins so a slot isn't reused
+    /// until @ref TexturePoolSize captures later, giving the daemon's copy a
+    /// margin (mirroring the producer-scene pool the OffscreenQuickScene path
+    /// used). Returns nullptr if the window can't be found/rendered.
+    ///
+    /// Unlike @ref grabWindowImage this does NOT manage GL context currency:
+    /// the caller makes the compositor context current before calling and
+    /// keeps it current through the subsequent @ref exportTextureToDmabuf
+    /// (which reads it via @c eglGetCurrentContext).
+    KWin::GLTexture* renderWindowToPooledTexture(KWin::EffectWindow* w, QSize box);
+
+    void postThumbnail(const QUuid& internalId, const QImage& image);
+    void postThumbnailDmabuf(const Pending& p, const DmabufExport& exported);
+
+    /// Record a dma-buf capture failure (export failure or daemon import
+    /// rejection) for @p p. After @ref DmabufFailureThreshold consecutive
+    /// failures, permanently switches this session to the raw-pixel path
+    /// (clears @c m_dmabufEnabled) and re-enqueues @p p so it re-captures via
+    /// pixels. Pure state mutation — the caller owns kicking @ref processNext.
+    void onDmabufRejected(const Pending& p);
+
+    /// Export a rendered thumbnail texture to a single-plane dma-buf via
+    /// EGL_MESA_image_dma_buf_export. Must be called with KWin's GL/EGL
+    /// context current (i.e. while @ref renderWindowToPooledTexture's context
+    /// is still active). Returns {ok=false} on any failure; the caller drops
+    /// the candidate.
+    DmabufExport exportTextureToDmabuf(KWin::GLTexture* texture) const;
 
     /// Render and read back the thumbnail for @p p; on a null image, retry
     /// once with a longer delay before giving up. A freshly mapped window
@@ -165,6 +226,28 @@ private:
     static_assert(RecentPostedCapacity > 0,
                   "RecentPostedCapacity must be positive — the eviction loop in markRecentlyPosted "
                   "assumes the just-inserted handle survives the capacity check.");
+
+    /// Opt-in zero-copy GPU path (PLASMAZONES_DMABUF_THUMBNAILS). When set,
+    /// each capture renders into a pooled FBO texture, exports it as a dma-buf
+    /// and posts via setWindowThumbnailDmabuf instead of the raw-ARGB32
+    /// setSnapAssistThumbnail. Initialised from the env var at construction;
+    /// cleared by @ref onDmabufRejected if the path proves unavailable at
+    /// runtime, after which the session uses the pixel path.
+    bool m_dmabufEnabled = false;
+    /// Consecutive dma-buf capture failures (export or daemon rejection).
+    /// Reset on success; triggers the session fallback at
+    /// @ref DmabufFailureThreshold.
+    int m_dmabufConsecutiveFailures = 0;
+
+    /// Small pool of persistent FBO textures driving the dma-buf path.
+    /// Consecutive captures round-robin across the pool so a texture isn't
+    /// reused until @ref TexturePoolSize captures later — long enough for the
+    /// daemon to have copied the exported buffer into its own per-candidate
+    /// texture. The raw-pixel path does not use the pool (@ref grabWindowImage
+    /// allocates a throwaway texture and copies immediately via toImage()).
+    static constexpr int TexturePoolSize = 3;
+    std::array<std::unique_ptr<KWin::GLTexture>, TexturePoolSize> m_texturePool;
+    int m_poolNext = 0;
 
     QQueue<Pending> m_queue;
     /// Bookkeeping for @ref wasRecentlyPosted: O(1) membership via the set,

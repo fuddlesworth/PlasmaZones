@@ -1,8 +1,6 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-#version 450
-
 /*
  * TUMBLEWEED DRIFT — openSUSE Tumbleweed branded zone overlay
  *
@@ -19,55 +17,52 @@
  *   Treble = sparkle + edge discharge + particle twinkle + scan acceleration
  */
 
-layout(location = 0) in vec2 vTexCoord;
-layout(location = 1) in vec2 vFragCoord;
-
-layout(location = 0) out vec4 fragColor;
-
-#include <common.glsl>
+// The harness supplies #version, <common.glsl> (zone UBO + ZoneCtx + helpers),
+// the vTexCoord/vFragCoord ins, the fragColor out, and the pImage entry-point
+// dispatch. audio.glsl is pack-specific, so it stays here.
 #include <audio.glsl>
 
 // ─── Parameter helpers ─────────────────────────────────────────────
 
-float pSpeed()           { return customParams[0].x >= 0.0 ? customParams[0].x : 0.08; }
-float pFlowSpeed()       { return customParams[0].y >= 0.0 ? customParams[0].y : 0.15; }
-float pNoiseScale()      { return customParams[0].z >= 0.0 ? customParams[0].z : 3.5;  }
-float pWindDirection()   { return customParams[0].w >= 0.0 ? customParams[0].w : 0.3;  }
-float pBrightness()      { return customParams[1].x >= 0.0 ? customParams[1].x : 0.7;  }
-float pContrast()        { return customParams[1].y >= 0.0 ? customParams[1].y : 0.9;  }
+float pSpeed()           { return p_speed >= 0.0 ? p_speed : 0.08; }
+float pFlowSpeed()       { return p_flowSpeed >= 0.0 ? p_flowSpeed : 0.15; }
+float pNoiseScale()      { return p_noiseScale >= 0.0 ? p_noiseScale : 3.5;  }
+float pWindDirection()   { return p_windDirection >= 0.0 ? p_windDirection : 0.3;  }
+float pBrightness()      { return p_brightness >= 0.0 ? p_brightness : 0.7;  }
+float pContrast()        { return p_contrast >= 0.0 ? p_contrast : 0.9;  }
 // slot 6 reserved
-float pInnerGlowStr()    { return customParams[1].w >= 0.0 ? customParams[1].w : 0.4;  }
-float pFillOpacity()     { return customParams[2].x >= 0.0 ? customParams[2].x : 0.85; }
-float pBorderGlow()      { return customParams[2].y >= 0.0 ? customParams[2].y : 0.35; }
-float pEdgeFadeStart()   { return customParams[2].z >= 0.0 ? customParams[2].z : 30.0; }
-float pBorderBrightness(){ return customParams[2].w >= 0.0 ? customParams[2].w : 1.4;  }
-float pAudioReactivity() { return customParams[3].x >= 0.0 ? customParams[3].x : 1.0;  }
-float pParticleStrength(){ return customParams[3].y >= 0.0 ? customParams[3].y : 0.5;  }
-float pDustDevilStr()    { return customParams[3].z >= 0.0 ? customParams[3].z : 0.4;  }
-float pErosionStrength() { return customParams[3].w >= 0.0 ? customParams[3].w : 0.3;  }
-float pLabelGlowSpread() { return customParams[4].x >= 0.0 ? customParams[4].x : 3.0;  }
-float pLabelBrightness() { return customParams[4].y >= 0.0 ? customParams[4].y : 2.5;  }
-float pLabelAudioReact() { return customParams[4].z >= 0.0 ? customParams[4].z : 1.0;  }
+float pInnerGlowStr()    { return p_innerGlowStrength >= 0.0 ? p_innerGlowStrength : 0.4;  }
+float pFillOpacity()     { return p_fillOpacity >= 0.0 ? p_fillOpacity : 0.85; }
+float pBorderGlow()      { return p_borderGlow >= 0.0 ? p_borderGlow : 0.35; }
+float pEdgeFadeStart()   { return p_edgeFadeStart >= 0.0 ? p_edgeFadeStart : 30.0; }
+float pBorderBrightness(){ return p_borderBrightness >= 0.0 ? p_borderBrightness : 1.4;  }
+float pAudioReactivity() { return p_audioReactivity >= 0.0 ? p_audioReactivity : 1.0;  }
+float pParticleStrength(){ return p_particleStrength >= 0.0 ? p_particleStrength : 0.5;  }
+float pDustDevilStr()    { return p_dustDevilStrength >= 0.0 ? p_dustDevilStrength : 0.4;  }
+float pErosionStrength() { return p_erosionStrength >= 0.0 ? p_erosionStrength : 0.3;  }
+float pLabelGlowSpread() { return p_labelGlowSpread >= 0.0 ? p_labelGlowSpread : 3.0;  }
+float pLabelBrightness() { return p_labelBrightness >= 0.0 ? p_labelBrightness : 2.5;  }
+float pLabelAudioReact() { return p_labelAudioReact >= 0.0 ? p_labelAudioReact : 1.0;  }
 float pLabelChroma()     { return customParams[4].w >= 0.0 ? customParams[4].w : 0.5;  }
-float pLogoScale()       { return customParams[5].x >= 0.0 ? customParams[5].x : 0.35; }
-float pLogoIntensity()   { return customParams[5].y >= 0.0 ? customParams[5].y : 0.8;  }
-float pLogoPulse()       { return customParams[5].z >= 0.0 ? customParams[5].z : 0.8;  }
-float pLogoCount()       { return customParams[5].w >= 0.0 ? customParams[5].w : 3.0;  }
-float pLogoSizeMin()     { return customParams[6].x >= 0.0 ? customParams[6].x : 0.4;  }
-float pLogoSizeMax()     { return customParams[6].y >= 0.0 ? customParams[6].y : 1.0;  }
-float pLogoSpin()        { return customParams[6].z >= 0.0 ? customParams[6].z : 0.3;  }
-float pIdleStrength()    { return customParams[6].w >= 0.0 ? customParams[6].w : 0.6;  }
+float pLogoScale()       { return p_logoScale >= 0.0 ? p_logoScale : 0.35; }
+float pLogoIntensity()   { return p_logoIntensity >= 0.0 ? p_logoIntensity : 0.8;  }
+float pLogoPulse()       { return p_logoPulse >= 0.0 ? p_logoPulse : 0.8;  }
+float pLogoCount()       { return p_logoCount >= 0.0 ? p_logoCount : 3.0;  }
+float pLogoSizeMin()     { return p_logoSizeMin >= 0.0 ? p_logoSizeMin : 0.4;  }
+float pLogoSizeMax()     { return p_logoSizeMax >= 0.0 ? p_logoSizeMax : 1.0;  }
+float pLogoSpin()        { return p_logoSpin >= 0.0 ? p_logoSpin : 0.3;  }
+float pIdleStrength()    { return p_idleStrength >= 0.0 ? p_idleStrength : 0.6;  }
 float pFlowCenterX()     { return customParams[7].x >= -1.5 ? customParams[7].x : 0.4; }
-float pShowLabels()      { return customParams[7].y >= 0.0 ? customParams[7].y : 1.0;  }
+float pShowLabels()      { return p_showLabels >= 0.0 ? p_showLabels : 1.0;  }
 float pFlowCenterY()     { return customParams[7].z >= -1.5 ? customParams[7].z : 0.5; }
-float pSparkleIntensity(){ return customParams[7].w >= 0.0 ? customParams[7].w : 2.0;  }
+float pSparkleIntensity(){ return p_sparkleIntensity >= 0.0 ? p_sparkleIntensity : 2.0;  }
 
 // ─── Palette ───────────────────────────────────────────────────────
 
-vec3 colPrimary()   { return colorWithFallback(customColors[0].rgb, vec3(0.102, 0.227, 0.290)); }
-vec3 colSecondary() { return colorWithFallback(customColors[1].rgb, vec3(0.769, 0.584, 0.416)); }
-vec3 colAccent()    { return colorWithFallback(customColors[2].rgb, vec3(0.208, 0.725, 0.671)); }
-vec3 colGlow()      { return colorWithFallback(customColors[3].rgb, vec3(0.451, 0.729, 0.145)); }
+vec3 colPrimary()   { return colorWithFallback(p_primaryColor.rgb, vec3(0.102, 0.227, 0.290)); }
+vec3 colSecondary() { return colorWithFallback(p_secondaryColor.rgb, vec3(0.769, 0.584, 0.416)); }
+vec3 colAccent()    { return colorWithFallback(p_accentColor.rgb, vec3(0.208, 0.725, 0.671)); }
+vec3 colGlow()      { return colorWithFallback(p_glowColor.rgb, vec3(0.451, 0.729, 0.145)); }
 
 // ─── Rotation matrix ───────────────────────────────────────────────
 
@@ -927,13 +922,11 @@ vec4 compositeTumbleweedLabels(vec4 color, vec2 fragCoord,
 
 // ─── Main ──────────────────────────────────────────────────────────
 
-void main() {
-    vec2 fragCoord = vFragCoord;
+vec4 pImage(vec2 fragCoord) {
     vec4 color = vec4(0.0);
 
     if (zoneCount == 0) {
-        fragColor = vec4(0.0);
-        return;
+        return vec4(0.0);
     }
 
     bool  hasAudio = iAudioSpectrumSize > 0;
@@ -969,5 +962,5 @@ void main() {
     if (pShowLabels() > 0.5)
         color = compositeTumbleweedLabels(color, fragCoord, bass, mids, treble, hasAudio);
 
-    fragColor = clampFragColor(color);
+    return color;
 }

@@ -86,4 +86,16 @@ private:
     QStringList m_insertionOrder;
 };
 
+/// Resolve @p path against @p tree, applying the built-in per-event default
+/// shader (ProfilePaths::defaultShaderEffectIdForPath, e.g. "window-morph" for
+/// window-move events) when the path is TRULY UNSET — i.e. neither it nor any
+/// ancestor carries an override. An explicit "None" (an engaged-empty
+/// override) IS an override, so it is respected and the default is NOT applied.
+///
+/// SSOT for "what shader does this event use", shared by the kwin-effect
+/// resolution and the settings UI so the built-in default both plays at runtime
+/// and shows as the current value in settings — without persisting the default
+/// into the user's config (it's computed, not stored).
+PHOSPHORANIMATION_EXPORT ShaderProfile resolveShaderWithDefault(const ShaderProfileTree& tree, const QString& path);
+
 } // namespace PhosphorAnimationShaders

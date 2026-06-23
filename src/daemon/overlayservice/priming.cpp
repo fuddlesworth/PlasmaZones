@@ -38,7 +38,7 @@ void OverlayService::primeSurfaceRenderPipeline(PhosphorLayer::Surface* surface)
 
     // Single destroyed-cleanup per surface (per OverlayService
     // instance), tracked in m_primingDestroyedConnections. Replaces
-    // the earlier `pz_primingDestroyedConnected` dynamic-property
+    // an earlier per-surface dynamic-property
     // gate which leaked across service instances - a fresh service
     // re-encountering the same Surface* would skip wiring its own
     // cleanup. The slot's static_cast on `dying` is safe because the

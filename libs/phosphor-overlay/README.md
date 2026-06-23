@@ -15,7 +15,7 @@ consumer-provided surface factory, `ShellHost` owns the per-screen
 layer-shell shell lifecycle (create / destroy / rekey), the slot map
 keyed by consumer-chosen slot names, animator-driven slot hides, and
 per-role animator-config registration. The library knows nothing about
-zones, layouts, or specific content; consumers wire their slot
+zones, layouts, or specific content. Consumers wire their slot
 vocabulary through callbacks.
 
 ## Key types
@@ -63,7 +63,7 @@ host.destroyShell(screenId);
 ## Design notes
 
 - **Stable pointers via raw owning pointers.** `ShellState` entries are
-  heap-allocated; the host stores `QHash<QString, ShellState*>`.
+  heap-allocated, and the host stores `QHash<QString, ShellState*>`.
   Consumers cache the `ShellState*` returned by `ensureShell` /
   `stateFor` in parallel per-screen state and rely on the pointer
   staying valid across rehashes. `QHash<QString, std::unique_ptr<ShellState>>`
@@ -79,19 +79,19 @@ host.destroyShell(screenId);
   every consumer-specific decision: which role / qmlSource the surface
   uses, which slot QML object names to look up, which signal handlers
   to wire, which parallel content state to clear at teardown. The
-  library owns surface lifecycle; the consumer owns content.
+  library owns surface lifecycle, and the consumer owns content.
 - **Slot role pinned at wire time.** Each `SlotEntry` carries the
   `PhosphorLayer::Role` the slot animates as, so `hideSlot` can drive
   `SurfaceAnimator::beginHide` without the caller re-specifying the
   role at every dismiss / cancel call site.
 - **`syncSurfaceState` is mechanism-only.** Consumers compute
   `anyVisible` and `anyInputGrabbing` from their content slot
-  visibility (e.g. modal vs non-modal classification); the library
+  visibility (e.g. modal vs non-modal classification), and the library
   decides surface mapping + `Qt::WindowTransparentForInput` toggling.
 - **Sticky per-screen creation failure.** When the surface factory
   returns nullptr for a screen, the host flags it. Subsequent
   `ensureShell` calls short-circuit until `clearFailure(screenId)` is
-  called: typically on hot-plug. `failureScreenIds()` exposes the
+  called, typically on hot-plug. `failureScreenIds()` exposes the
   current set so consumers with their own id grammar (e.g. virtual-
   screen prefixes) can clear by prefix without the library learning
   the grammar.
@@ -108,7 +108,7 @@ host.destroyShell(screenId);
 - [`phosphor-animation`](../phosphor-animation/README.md) —
   `SurfaceAnimator` that drives every overlay show / hide leg.
 - [`phosphor-screens`](../phosphor-screens/README.md) — screen
-  topology + stable identifiers (consumer-facing dep; the lib itself
+  topology + stable identifiers (consumer-facing dep, since the lib itself
   only forward-declares `QScreen`).
 
 ## See also

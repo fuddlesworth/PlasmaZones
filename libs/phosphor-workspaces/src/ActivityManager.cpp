@@ -106,6 +106,11 @@ QString ActivityManager::currentActivity() const
     return m_currentActivity;
 }
 
+QString ActivityManager::currentActivityOrEmpty(const ActivityManager* manager)
+{
+    return (manager && isAvailable()) ? manager->currentActivity() : QString();
+}
+
 QStringList ActivityManager::activities() const
 {
 #ifdef KACTIVITIES_AVAILABLE

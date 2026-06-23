@@ -6,15 +6,18 @@
  * @brief Unit tests for WindowTrackingService session restore, clear-stale, and resnap
  *
  * Tests cover:
- * 1. PhosphorZones::Zone-number fallback on session restore
- * 2. Floating window skips restore
- * 3. Clear stale pending assignments
- * 4. Resnap from previous layout
- * 5. Rotation calculations
- * 6. Daemon restart / pending restore
- * 7. Multi-monitor restore edge cases
- * 8. Auto-snap marking
- * 9. Consume pending assignment
+ * 1. Clear stale pending assignments
+ * 2. Resnap from previous layout
+ * 3. Rotation calculations
+ * 4. Daemon restart / pending-restore-available emission
+ * 5. Multi-monitor restore edge cases
+ * 6. Auto-snap marking
+ * 7. Consume pending assignment
+ * 8. Layout import UUID collision
+ *
+ * Session zone-restore-from-session (the old calculateRestoreFromSession /
+ * PendingRestoreQueues path) is now covered by the unified WindowPlacementStore
+ * tests (test_window_placement_store, test_wta_convenience).
  *
  * WIRE FORMAT NOTE: fixtures use legacy "appId|uuid" composites because the
  * WTS is constructed without a WindowRegistry. See header in
@@ -42,6 +45,7 @@
 #include <PhosphorWorkspaces/VirtualDesktopManager.h>
 #include "core/utils.h"
 #include "../helpers/IsolatedConfigGuard.h"
+#include "../helpers/LayoutRegistryTestHelpers.h"
 
 using namespace PlasmaZones;
 using PhosphorEngine::SnapResult;
@@ -54,80 +58,17 @@ using PlasmaZones::TestHelpers::IsolatedConfigGuard;
 // =========================================================================
 
 #include "../helpers/StubSettings.h"
+#include "../helpers/StubZoneDetector.h"
 
 using StubSettingsSession = StubSettings;
 
 // =========================================================================
-// Stub PhosphorZones::Zone Detector
+// Stub PhosphorZones::Zone Detector + createTestLayout come from the shared
+// helper (StubZoneDetector.h). No local Q_OBJECT subclass is needed — see the
+// rationale in that header.
 // =========================================================================
 
-class StubZoneDetectorSession : public PhosphorZones::IZoneDetector
-{
-    Q_OBJECT
-public:
-    explicit StubZoneDetectorSession(QObject* parent = nullptr)
-        : PhosphorZones::IZoneDetector(parent)
-    {
-    }
-    PhosphorZones::Layout* layout() const override
-    {
-        return m_layout;
-    }
-    void setLayout(PhosphorZones::Layout* layout) override
-    {
-        m_layout = layout;
-    }
-    PhosphorZones::ZoneDetectionResult detectZone(const QPointF&) const override
-    {
-        return {};
-    }
-    PhosphorZones::ZoneDetectionResult detectMultiZone(const QPointF&) const override
-    {
-        return {};
-    }
-    PhosphorZones::Zone* zoneAtPoint(const QPointF&) const override
-    {
-        return nullptr;
-    }
-    PhosphorZones::Zone* nearestZone(const QPointF&) const override
-    {
-        return nullptr;
-    }
-    QVector<PhosphorZones::Zone*> expandPaintedZonesToRect(const QVector<PhosphorZones::Zone*>&) const override
-    {
-        return {};
-    }
-    void highlightZone(PhosphorZones::Zone*) override
-    {
-    }
-    void highlightZones(const QVector<PhosphorZones::Zone*>&) override
-    {
-    }
-    void clearHighlights() override
-    {
-    }
-
-private:
-    PhosphorZones::Layout* m_layout = nullptr;
-};
-
-// =========================================================================
-// Helper
-// =========================================================================
-
-static PhosphorZones::Layout* createTestLayout(int zoneCount, QObject* parent)
-{
-    auto* layout = new PhosphorZones::Layout(QStringLiteral("TestLayout"), parent);
-    for (int i = 0; i < zoneCount; ++i) {
-        auto* zone = new PhosphorZones::Zone(layout);
-        qreal x = static_cast<qreal>(i) / zoneCount;
-        qreal w = 1.0 / zoneCount;
-        zone->setRelativeGeometry(QRectF(x, 0.0, w, 1.0));
-        zone->setZoneNumber(i + 1);
-        layout->addZone(zone);
-    }
-    return layout;
-}
+using StubZoneDetectorSession = StubZoneDetector;
 
 // =========================================================================
 // Test Class
@@ -141,8 +82,7 @@ private Q_SLOTS:
     void init()
     {
         m_guard = std::make_unique<IsolatedConfigGuard>();
-        m_layoutManager = new PhosphorZones::LayoutRegistry(PlasmaZones::createAssignmentsBackend(),
-                                                            QStringLiteral("plasmazones/layouts"));
+        m_layoutManager = PlasmaZones::TestHelpers::makeLayoutRegistry(QStringLiteral("plasmazones/layouts"));
         m_settings = new StubSettingsSession(nullptr);
         m_zoneDetector = new StubZoneDetectorSession(nullptr);
         m_service = new PhosphorPlacement::WindowTrackingService(m_layoutManager, m_zoneDetector, nullptr, nullptr);
@@ -183,47 +123,10 @@ private Q_SLOTS:
     // P1: Session Restore
     // =====================================================================
 
-    void testRestore_zoneNumberFallback()
-    {
-        QString appId = QStringLiteral("firefox");
-        QString oldZoneId = QUuid::createUuid().toString();
-
-        PhosphorPlacement::WindowTrackingService::PendingRestore entry;
-        entry.zoneIds = {oldZoneId};
-        entry.screenId = QString();
-        entry.layoutId = m_testLayout->id().toString();
-        entry.zoneNumbers = {2};
-
-        QHash<QString, QList<PhosphorPlacement::WindowTrackingService::PendingRestore>> queues;
-        queues[appId] = {entry};
-        m_service->setPendingRestoreQueues(queues);
-
-        SnapResult result = m_engine->calculateRestoreFromSession(QStringLiteral("firefox|99999"), QString(), false);
-        Q_UNUSED(result);
-
-        QVERIFY(m_service->pendingRestoreQueues().contains(appId));
-        QCOMPARE(m_service->pendingRestoreQueues().value(appId).first().zoneNumbers, QList<int>{2});
-    }
-
-    void testRestore_floatingWindowSkipsRestore()
-    {
-        QString appId = QStringLiteral("firefox");
-        QString windowId = QStringLiteral("firefox|12345");
-
-        PhosphorPlacement::WindowTrackingService::PendingRestore entry;
-        entry.zoneIds = {m_zoneIds[0]};
-
-        QHash<QString, QList<PhosphorPlacement::WindowTrackingService::PendingRestore>> queues;
-        queues[appId] = {entry};
-        m_service->setPendingRestoreQueues(queues);
-
-        QSet<QString> floating;
-        floating.insert(appId);
-        m_service->setFloatingWindows(floating);
-
-        SnapResult result = m_engine->calculateRestoreFromSession(windowId, QString(), false);
-        QVERIFY(!result.shouldSnap);
-    }
+    // Session zone-restore is now served by the unified WindowPlacementStore
+    // (see test_window_placement_store + test_wta_convenience). The legacy
+    // calculateRestoreFromSession / PendingRestoreQueues tests were removed with
+    // that mechanism.
 
     // =====================================================================
     // P1: Clear Stale Pending
@@ -270,8 +173,56 @@ private Q_SLOTS:
         m_service->onLayoutChanged();
 
         QVector<ZoneAssignmentEntry> resnap = m_engine->calculateResnapFromPreviousLayout();
+        // The previously-assigned windows are mapped into the new layout's zones:
+        // the first call yields restore entries, each for one of the assigned windows
+        // targeting a real zone.
+        QVERIFY(!resnap.isEmpty());
+        const QSet<QString> sources = {window1, window2, window3};
+        for (const ZoneAssignmentEntry& e : resnap) {
+            QVERIFY(sources.contains(e.windowId));
+            QVERIFY(!e.targetZoneId.isEmpty());
+        }
+
         QVector<ZoneAssignmentEntry> secondCall = m_engine->calculateResnapFromPreviousLayout();
         QVERIFY(secondCall.isEmpty()); // Buffer consumed on first call
+    }
+
+    // Regression: daemon off->on while in autotile, then swap to snapping. The
+    // window's snap zones live ONLY in the durable WindowPlacement record after a
+    // restart — the live m_snapState map is cold. populateResnapBufferForAllScreens
+    // must still resnap it from the durable record; otherwise it emits no geometry,
+    // the effect never marks the window snapped, and the per-mode snapping border /
+    // title-bar appearance is never applied.
+    void testResnapBuffer_durableRecordWhenLiveSnapMapCold()
+    {
+        const QString windowId = QStringLiteral("app1|111");
+
+        // Durable snapped record, but NO live assignWindowToZone (cold live map).
+        PhosphorEngine::WindowPlacement rec;
+        rec.windowId = windowId;
+        rec.appId = PhosphorIdentity::WindowId::extractAppId(windowId);
+        rec.screenId = QStringLiteral("DP-1");
+        rec.virtualDesktop = 0;
+        PhosphorEngine::EngineSlot snapSlot;
+        snapSlot.state = PhosphorEngine::WindowPlacement::stateSnapped();
+        snapSlot.zoneIds = QStringList{m_zoneIds[0]};
+        rec.engines.insert(PhosphorEngine::WindowPlacement::snapEngineId(), snapSlot);
+        m_service->placementStore().record(rec);
+
+        QVERIFY(m_service->zonesForWindow(windowId).isEmpty()); // live map is cold
+
+        // autotile->snapping swap on DP-1 (no autotile screens excluded).
+        m_service->populateResnapBufferForAllScreens({}, {QStringLiteral("DP-1")});
+
+        const QVector<PhosphorEngine::ResnapEntry> buf = m_service->takeResnapBuffer();
+        bool found = false;
+        for (const PhosphorEngine::ResnapEntry& e : buf) {
+            if (e.windowId == windowId) {
+                found = true;
+                QVERIFY(e.zonePosition > 0);
+            }
+        }
+        QVERIFY2(found, "durable-recorded snap window must enter the resnap buffer when the live map is cold");
     }
 
     // =====================================================================
@@ -289,8 +240,32 @@ private Q_SLOTS:
         QVector<ZoneAssignmentEntry> cw = m_engine->calculateRotation(true);
         QVector<ZoneAssignmentEntry> ccw = m_engine->calculateRotation(false);
 
-        Q_UNUSED(cw);
-        Q_UNUSED(ccw);
+        // Rotation target geometry needs a resolvable screen; in the headless
+        // harness the zone-geometry lookup may yield no entries. Only assert the
+        // rotation *semantics* when entries were produced — otherwise we'd be
+        // pinning harness screen availability rather than the rotation logic.
+        if (cw.isEmpty() && ccw.isEmpty()) {
+            QSKIP("rotation produced no geometry in headless harness — screen unavailable");
+        }
+
+        QCOMPARE(cw.size(), ccw.size());
+
+        // Clockwise (+1) and counter-clockwise (-1) must send the same window to
+        // DIFFERENT target zones in a 3-zone layout, and the source must be the
+        // window's current assignment.
+        const auto targetFor = [](const QVector<ZoneAssignmentEntry>& v, const QString& w) -> QString {
+            for (const auto& e : v) {
+                if (e.windowId == w) {
+                    return e.targetZoneId;
+                }
+            }
+            return QString();
+        };
+        const QString cwTarget = targetFor(cw, window1);
+        const QString ccwTarget = targetFor(ccw, window1);
+        QVERIFY(!cwTarget.isEmpty());
+        QVERIFY(!ccwTarget.isEmpty());
+        QVERIFY(cwTarget != ccwTarget);
     }
 
     // =====================================================================
@@ -314,10 +289,12 @@ private Q_SLOTS:
     }
 
     // =====================================================================
-    // P0: Restore wrong display (multi-monitor)
+    // P0: PendingRestore round-trip preserves screenId
+    // (wrong-display restore *resolution* is covered by test_window_placement_store
+    //  / test_wta_convenience; this only pins the persistence round-trip)
     // =====================================================================
 
-    void testRestore_wrongDisplay_multiMonitor()
+    void testPendingRestore_preservesScreenId()
     {
         QString appId = QStringLiteral("app");
 
@@ -330,26 +307,6 @@ private Q_SLOTS:
         m_service->setPendingRestoreQueues(queues);
 
         QCOMPARE(m_service->pendingRestoreQueues().value(appId).first().screenId, QStringLiteral("HDMI-2"));
-    }
-
-    void testRestore_savedScreenDisconnected()
-    {
-        QString appId = QStringLiteral("app");
-        QString windowId = QStringLiteral("app|12345");
-
-        PhosphorPlacement::WindowTrackingService::PendingRestore entry;
-        entry.zoneIds = {m_zoneIds[0]};
-        entry.screenId = QStringLiteral("DISCONNECTED-99");
-        entry.layoutId = m_testLayout->id().toString();
-
-        QHash<QString, QList<PhosphorPlacement::WindowTrackingService::PendingRestore>> queues;
-        queues[appId] = {entry};
-        m_service->setPendingRestoreQueues(queues);
-
-        SnapResult result = m_engine->calculateRestoreFromSession(windowId, QStringLiteral("DP-1"), false);
-        if (result.shouldSnap) {
-            QVERIFY(result.geometry.isValid());
-        }
     }
 
     // =====================================================================
@@ -390,88 +347,17 @@ private Q_SLOTS:
     }
 
     // =====================================================================
-    // P0: WindowKind gate on PendingRestore consume
+    // P0: PendingRestore round-trip preserves zoneNumbers
+    // (UUID-collision regeneration on import is covered elsewhere; this only
+    //  pins that zoneNumbers survive the persistence round-trip)
     // =====================================================================
 
-    void testKindGate_rejectsMismatch_entryPreserved()
-    {
-        QString appId = QStringLiteral("steam");
-        QString windowId = QStringLiteral("steam|12345");
-
-        PhosphorPlacement::WindowTrackingService::PendingRestore entry;
-        entry.zoneIds = {m_zoneIds[0]};
-        entry.layoutId = m_testLayout->id().toString();
-        entry.zoneNumbers = {1};
-        entry.windowKind = PhosphorEngine::WindowKind::Normal;
-
-        QHash<QString, QList<PhosphorPlacement::WindowTrackingService::PendingRestore>> queues;
-        queues[appId] = {entry};
-        m_service->setPendingRestoreQueues(queues);
-
-        SnapResult result =
-            m_engine->calculateRestoreFromSession(windowId, QString(), false, PhosphorEngine::WindowKind::Transient);
-        QVERIFY(!result.shouldSnap);
-        QVERIFY(m_service->pendingRestoreQueues().contains(appId));
-        QCOMPARE(m_service->pendingRestoreQueues().value(appId).size(), 1);
-        QCOMPARE(m_service->pendingRestoreQueues().value(appId).first().windowKind, PhosphorEngine::WindowKind::Normal);
-    }
-
-    void testKindGate_acceptsMatch_doesNotShortCircuit()
-    {
-        QString appId = QStringLiteral("firefox");
-        QString windowId = QStringLiteral("firefox|12345");
-
-        PhosphorPlacement::WindowTrackingService::PendingRestore entry;
-        entry.zoneIds = {m_zoneIds[0]};
-        entry.layoutId = m_testLayout->id().toString();
-        entry.zoneNumbers = {1};
-        entry.windowKind = PhosphorEngine::WindowKind::Normal;
-
-        QHash<QString, QList<PhosphorPlacement::WindowTrackingService::PendingRestore>> queues;
-        queues[appId] = {entry};
-        m_service->setPendingRestoreQueues(queues);
-
-        SnapResult result =
-            m_engine->calculateRestoreFromSession(windowId, QString(), false, PhosphorEngine::WindowKind::Normal);
-        Q_UNUSED(result);
-        QVERIFY(m_service->pendingRestoreQueues().contains(appId));
-    }
-
-    void testKindGate_unknownEntry_doesNotShortCircuit()
-    {
-        QString appId = QStringLiteral("legacy-app");
-        QString windowId = QStringLiteral("legacy-app|12345");
-
-        PhosphorPlacement::WindowTrackingService::PendingRestore entry;
-        entry.zoneIds = {m_zoneIds[0]};
-        entry.layoutId = m_testLayout->id().toString();
-        entry.zoneNumbers = {1};
-        QCOMPARE(entry.windowKind, PhosphorEngine::WindowKind::Unknown);
-
-        QHash<QString, QList<PhosphorPlacement::WindowTrackingService::PendingRestore>> queues;
-        queues[appId] = {entry};
-        m_service->setPendingRestoreQueues(queues);
-
-        SnapResult result =
-            m_engine->calculateRestoreFromSession(windowId, QString(), false, PhosphorEngine::WindowKind::Transient);
-        Q_UNUSED(result);
-        QVERIFY(m_service->pendingRestoreQueues().contains(appId));
-        QCOMPARE(m_service->pendingRestoreQueues().value(appId).first().windowKind,
-                 PhosphorEngine::WindowKind::Unknown);
-    }
-
-    // =====================================================================
-    // P0: PhosphorZones::Layout Import UUID Collision
-    // =====================================================================
-
-    void testLayoutImport_uuidCollision_regeneratesIds()
+    void testPendingRestore_preservesZoneNumbers()
     {
         QString appId = QStringLiteral("app");
-        QString bogusUuid = QUuid::createUuid().toString();
 
         PhosphorPlacement::WindowTrackingService::PendingRestore entry;
-        entry.zoneIds = {bogusUuid};
-        entry.layoutId = m_testLayout->id().toString();
+        entry.zoneIds = {m_zoneIds[0]};
         entry.zoneNumbers = {1};
 
         QHash<QString, QList<PhosphorPlacement::WindowTrackingService::PendingRestore>> queues;

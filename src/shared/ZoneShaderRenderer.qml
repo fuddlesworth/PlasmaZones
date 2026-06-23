@@ -14,8 +14,7 @@ Item {
 
     required property var config
     // Default to empty object when config is null (callers may not always pass valid config)
-    readonly property var safeConfig: config || ({
-    })
+    readonly property var safeConfig: config || ({})
     property alias status: zoneShaderItem.status
     property alias errorLog: zoneShaderItem.errorLog
 
@@ -47,8 +46,10 @@ Item {
         bufferWrap: root.safeConfig.bufferWrap || "clamp"
         zones: root.safeConfig.zones || []
         hoveredZoneIndex: root.safeConfig.hoveredZoneIndex ?? -1
-        shaderParams: root.safeConfig.shaderParams || {
-        }
+        shaderParams: root.safeConfig.shaderParams || {}
+        // T1.1 (zone): generated `#define p_<id> ...` block the node splices
+        // after #version so packs read params by name. Empty = no-op.
+        paramPreamble: root.safeConfig.paramPreamble || ""
         iTime: root.safeConfig.iTime ?? 0
         iTimeDelta: root.safeConfig.iTimeDelta ?? 0
         iFrame: root.safeConfig.iFrame ?? 0
@@ -62,7 +63,6 @@ Item {
         onStatusChanged: {
             if (status === ZoneShaderItem.Error)
                 root.shaderError(errorLog);
-
         }
     }
 
@@ -91,5 +91,4 @@ Item {
         value: root.safeConfig.wallpaperTexture
         when: root.safeConfig.wallpaperTexture !== undefined && root.safeConfig.wallpaperTexture !== null
     }
-
 }

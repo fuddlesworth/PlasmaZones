@@ -1,0 +1,267 @@
+<!-- SPDX-FileCopyrightText: 2026 fuddlesworth -->
+<!-- SPDX-License-Identifier: GPL-3.0-or-later -->
+
+# Writing custom tiling algorithms in Luau
+
+PlasmaZones autotiling layouts are [Luau](https://luau.org/) scripts. A script
+takes the current window count and screen area and returns a list of zones
+(rectangles) to place windows into. The 25 built-in layouts (columns, dwindle,
+master-stack, …) are written with the exact same API documented here, so the
+bundled `data/algorithms/*.luau` files are the best reference once you know the
+shape.
+
+> **Why Luau?** It is a small, fast, gradually-typed Lua dialect that runs in a
+> read-only sandbox — your script cannot touch the filesystem, network, or the
+> rest of the daemon. See [ADR-0001](adr/0001-luau-shell-scripting-language.md).
+
+---
+
+## 1. Where algorithms live
+
+| | Path |
+|---|---|
+| **Your algorithms** | `~/.local/share/plasmazones/algorithms/*.luau` |
+| **Bundled (read-only)** | `/usr/share/plasmazones/algorithms/*.luau` |
+| **`pluau` type stubs** | `/usr/share/plasmazones/pluau.d.luau` |
+
+Each `*.luau` file in the user directory is one algorithm. The file name (minus
+extension) is the fallback id; `metadata.id` overrides it. User algorithms
+override a bundled one with the same id. The daemon **hot-reloads** the
+directory — save the file and the algorithm list refreshes; no restart needed.
+The settings app's *Algorithms* page can also create, duplicate, and edit them.
+
+---
+
+## 2. Quick start
+
+Save this as `~/.local/share/plasmazones/algorithms/my-columns.luau`:
+
+```lua
+local pluau = pluau
+
+return pluau.algorithm {
+    metadata = {
+        name = "My Columns",
+        id = "my-columns",
+        description = "Equal-width vertical columns",
+        defaultMaxWindows = 4,
+        minimumWindows = 1,
+    },
+
+    tile = function(ctx)
+        if ctx.windowCount <= 0 then
+            return {}
+        end
+        -- Split the screen area into N equal, gap-aware columns.
+        return ctx.area:columns(ctx.windowCount, ctx.innerGap)
+    end,
+}
+```
+
+That is a complete algorithm. `pluau.algorithm{…}` wraps the table and returns it
+(it adapts `ctx.area` to a `Rect` for your `tile` function); `pluau` is a pre-loaded,
+**frozen** global (do not reassign it).
+
+---
+
+## 3. The algorithm table
+
+`pluau.algorithm{}` takes a table with these keys:
+
+| Key | Required | Type | Purpose |
+|---|---|---|---|
+| `metadata` | yes | table | Display name, capabilities, defaults (§4) |
+| `tile` | yes | `(ctx) -> {Zone}` | Computes the zones (§5) |
+| `onWindowAdded` | no | `(state, index) -> ()` | Memory-aware hook (§8) |
+| `onWindowRemoved` | no | `(state, index) -> ()` | Memory-aware hook (§8) |
+
+---
+
+## 4. `metadata`
+
+All fields are optional except where your UI needs them. Unset fields fall back
+to sensible defaults.
+
+| Field | Type | Meaning |
+|---|---|---|
+| `name` | string | Display name in the settings UI |
+| `id` | string | Stable identifier (defaults to the file name) |
+| `description` | string | One-line description |
+| `defaultMaxWindows` | number | Default window cap shown in the UI (0 = unset) |
+| `minimumWindows` | number | Smallest window count the layout supports |
+| `supportsMasterCount` | boolean | Exposes the “master count” control; sets `ctx.masterCount` |
+| `supportsSplitRatio` | boolean | Exposes the split-ratio slider; sets `ctx.splitRatio` |
+| `defaultSplitRatio` | number | Initial split ratio (0.1–0.9) |
+| `supportsMinSizes` | boolean | Honours per-window minimum sizes (default `true`) |
+| `supportsMemory` | boolean | Uses the persistent split tree + hooks (§8) |
+| `producesOverlappingZones` | boolean | Zones may overlap (e.g. stacked/deck layouts) |
+| `centerLayout` | boolean | Layout is centered rather than filling the screen |
+| `masterZoneIndex` | number | Index of the “master” zone (for highlighting); `-1` = none |
+| `zoneNumberDisplay` | string | `"all"`, `"last"`, `"firstAndLast"`, or `"none"` (omit to let the renderer decide) |
+| `customParams` | list | User-tunable parameters (§7) |
+
+---
+
+## 5. `tile(ctx)` — the context
+
+`tile` receives one `Context` table and returns a list of `Zone`s. Useful
+fields:
+
+| Field | Type | Notes |
+|---|---|---|
+| `windowCount` / `count` | number | Windows to place (same value, two names) |
+| `area` | `Rect` | Screen work area, in **absolute pixels**, with split helpers (§6) |
+| `innerGap` / `gap` | number | Pixels between adjacent zones |
+| `masterCount` | number | Master windows (when `supportsMasterCount`) |
+| `splitRatio` | number | Master/stack split 0.1–0.9 (when `supportsSplitRatio`) |
+| `minSizes` | `{ {w, h} }` | Per-window minimum sizes, 1-indexed |
+| `focusedIndex` | number | Index of the focused window |
+| `windows` | `{ {appId, focused} }?` | Per-window info, when available |
+| `screen` | `{id, portrait, aspectRatio}?` | Output info |
+| `tree` | `SplitNode?` | Persistent split tree (memory algorithms only) |
+| `custom` | `{[string]: any}?` | Your `customParams` values, keyed by name |
+
+A `Zone` is a plain table of **absolute pixel** coordinates:
+
+```lua
+{ x = 0, y = 0, width = 960, height = 1080 }
+```
+
+Return `{}` for `windowCount <= 0`. Guard tiny areas — when the work area is
+smaller than `pluau.MIN_ZONE_SIZE` on either axis, fall back to `pluau.fillArea`.
+
+---
+
+## 6. The `pluau` standard library
+
+### `Rect` (what `ctx.area` is)
+
+Gap-aware split helpers. Each `split*` returns the **named side first**, then the
+remainder; `columns`/`rows` return a list.
+
+```lua
+local left, rest   = ctx.area:splitLeft(0.6, ctx.innerGap)   -- 60% on the left
+local top,  rest2  = rest:splitTop(0.5, ctx.innerGap)
+local cols         = ctx.area:columns(3, ctx.innerGap)        -- { Rect, Rect, Rect }
+local rows         = ctx.area:rows(2, ctx.innerGap)
+```
+
+`Rect` also has the plain fields `x`, `y`, `width`, `height`. A `Rect` is a valid
+`Zone`, so you can return them directly.
+
+### Constants
+
+`pluau.MIN_ZONE_SIZE` (50), `pluau.MIN_SPLIT` (0.1), `pluau.MAX_SPLIT` (0.9),
+`pluau.MAX_TREE_DEPTH` (50).
+
+### High-level layout helpers
+
+These build a full `{Zone}` list for common patterns (the same ones the built-in
+algorithms use):
+
+```
+pluau.fillArea(area, count)
+pluau.equalColumnsLayout(area, count, gap, minSizes)
+pluau.masterStackLayout(area, count, gap, splitRatio, masterCount, minSizes, horizontal)
+pluau.deckLayout(area, count, focusedFraction, horizontal)
+pluau.lShapeLayout(area, count, gap, splitRatio, distribute, bottomWidth, rightHeight)
+pluau.dwindleLayout(area, count, splitRatio, innerGap, minSizes)
+pluau.threeColumnLayout(area, count, gap, splitRatio, masterCount, minSizes)
+pluau.applyTreeGeometry(node, rect, gap)   -- memory algorithms
+```
+
+### Utilities
+
+`pluau.rect(x, y, w, h)`, `pluau.join(...lists)`, `pluau.clampSplitRatio(r)`, and the
+distribution/min-size primitives (`pluau.distributeWithGaps`,
+`pluau.distributeWithMinSizes`, `pluau.extractMinWidths`, …). Full signatures are in
+the type stubs (`pluau.d.luau`) and `data/algorithms/*.luau`.
+
+---
+
+## 7. Custom parameters
+
+Expose user-tunable knobs via `metadata.customParams`; read them from
+`ctx.custom`:
+
+```lua
+metadata = {
+    name = "Cluster",
+    customParams = {
+        { name = "focusBoost", type = "number", default = 0.2, min = 0.0, max = 0.5,
+          description = "Extra width given to the focused cluster" },
+        { name = "horizontal", type = "bool", default = false,
+          description = "Stack horizontally" },
+        { name = "mode", type = "enum", default = "even",
+          options = { "even", "weighted" }, description = "Distribution mode" },
+    },
+},
+
+tile = function(ctx)
+    local boost = (ctx.custom and ctx.custom.focusBoost) or 0.2
+    -- …
+end,
+```
+
+Supported `type`s: `"number"` (with `min`/`max`), `"bool"`, `"enum"` (with
+`options`). The settings UI renders a control for each and stores the value the
+daemon passes back in `ctx.custom`.
+
+---
+
+## 8. Memory-aware algorithms (advanced)
+
+Set `metadata.supportsMemory = true` to receive a persistent `ctx.tree`
+(`SplitNode`) that survives across window add/remove events, and implement
+`onWindowAdded(state, index)` / `onWindowRemoved(state, index)` to mutate it.
+Use `pluau.applyTreeGeometry(ctx.tree, ctx.area, ctx.innerGap)` in `tile` to turn
+the tree into zones. See `data/algorithms/dwindle-memory.luau` for a full
+example. Most layouts are stateless and don't need this.
+
+---
+
+## 9. Editor support & validation
+
+Drop a `.luaurc` next to your algorithms so [luau-lsp](https://github.com/JohnnyMorganz/luau-lsp)
+autocomplete and `luau-analyze` know about the injected `pluau` global:
+
+```jsonc
+// ~/.local/share/plasmazones/algorithms/.luaurc
+{
+    "languageMode": "nonstrict",
+    "lint": { "*": true },
+    "lintErrors": false,
+    "globals": ["pluau"]
+}
+```
+
+For full `pluau.*` type information, point your editor at the shipped stubs
+(`/usr/share/plasmazones/pluau.d.luau`) — e.g. copy them next to your scripts, or
+add them to your luau-lsp definitions.
+
+Type-check before relying on a layout (CI runs exactly this over the bundled
+set):
+
+```bash
+luau-analyze ~/.local/share/plasmazones/algorithms/my-columns.luau
+```
+
+A parse or type error means the daemon will skip the algorithm, so a clean
+`luau-analyze` run is the quickest way to know a script will load.
+
+---
+
+## 10. Sandbox & limits
+
+- `pluau` and the standard library are **frozen** before your script runs — you
+  cannot monkey-patch them or reach outside the sandbox (no `io`, `os.execute`,
+  filesystem, or network).
+- A long-running or infinite-looping `tile` is **interrupted** by a watchdog, so
+  a runaway script can't hang the compositor.
+- Each script's heap is **capped** (default 64 MiB, enforced once the sandbox is
+  active). A runaway allocation surfaces as a catchable Luau out-of-memory error
+  rather than exhausting the compositor — the script fails, the daemon keeps
+  running.
+- Keep `tile` pure and fast: it runs on every relevant layout change. Return
+  early for `windowCount <= 0`, and guard against tiny areas with
+  `pluau.MIN_ZONE_SIZE`.

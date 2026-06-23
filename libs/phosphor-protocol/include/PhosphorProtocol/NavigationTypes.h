@@ -77,7 +77,7 @@ struct CycleTargetResult
     QString screenName;
 };
 
-/// D-Bus struct for swap navigation result: (bssiiiissiiiissss)
+/// D-Bus struct for swap navigation result: (bssiiiissiiiisssss)
 struct SwapTargetResult
 {
     bool success = false;
@@ -97,6 +97,12 @@ struct SwapTargetResult
     QString screenName;
     QString sourceZoneId;
     QString targetZoneId;
+    // Per-window target screen for window2. Empty for in-surface swaps (both
+    // windows share screenName); set only on a cross-output swap, where window1
+    // crosses to the neighbour output (screenName) and window2 returns to the
+    // source output (screenName2). Appended last so the aggregate swapResult()
+    // helper and its existing call sites keep compiling via default-init.
+    QString screenName2;
 };
 
 /// D-Bus struct for restore navigation result: (bbiiii)

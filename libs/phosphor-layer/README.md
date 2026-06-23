@@ -29,7 +29,7 @@ has one of these well-known roles."
   knows its current screen, exposes show / hide.
 - **SurfaceFactory** (`SurfaceFactory`): stateless builder that turns a
   `SurfaceConfig` + injected dependencies into a live `Surface`. One
-  factory per process; one `Surface` per `create()` call.
+  factory per process, and one `Surface` per `create()` call.
 - **Per-screen registry** (`ScreenSurfaceRegistry<T>`): templated bag
   that owns one `Surface` (or subclass) per screen for surfaces with
   AllScreens affinity.
@@ -47,7 +47,7 @@ has one of these well-known roles."
   layer-shell internals.
 - **Layer-shell transport** (`ILayerShellTransport`): the seam between
   this library and the Wayland binding. Default impl is
-  `PhosphorWaylandTransport`; tests use a mock.
+  `PhosphorWaylandTransport`, and tests use a mock.
 
 ## Key types
 
@@ -83,7 +83,10 @@ using namespace PhosphorLayer;
 
 auto transport = std::make_unique<PhosphorWaylandTransport>();
 auto screens   = std::make_unique<DefaultScreenProvider>();
-SurfaceFactory factory(transport.get(), engineProvider, screens.get(), animator);
+SurfaceFactory factory(SurfaceFactory::Deps{.transport = transport.get(),
+                                            .screens = screens.get(),
+                                            .engineProvider = engineProvider,
+                                            .animator = animator});
 
 SurfaceConfig cfg;
 // Role is a plain value type. Construct one directly or use a recipe from
@@ -95,11 +98,11 @@ cfg.role       = Role{Layer::Overlay,
                       KeyboardInteractivity::None,
                       QMargins(),
                       QStringLiteral("zone-outline")};
-cfg.screenId   = "output-1";
-cfg.qmlSource  = QUrl(QStringLiteral("qrc:/overlays/ZoneOutline.qml"));
+cfg.screen     = targetScreen;  // QScreen*; nullptr resolves to the provider's primary()
+cfg.contentUrl = QUrl(QStringLiteral("qrc:/overlays/ZoneOutline.qml"));
 cfg.contextProperties.insert(QStringLiteral("zones"), QVariant::fromValue(zoneList));
 
-Surface *s = factory.create(cfg, /*parent*/ this);
+Surface *s = factory.create(std::move(cfg), /*parent*/ this);
 s->show();
 // Later:
 s->hide();
@@ -108,7 +111,7 @@ s->hide();
 ## Design notes
 
 - **Role identity is the scope prefix.** Two `Role` values with the
-  same scope prefix refer to the same logical surface kind; the
+  same scope prefix refer to the same logical surface kind, and the
   per-screen registry uses that to collapse duplicates. Consumers
   compose their roles by taking a pattern from
   `phosphor-shell-patterns` and stamping their own scope prefix on top.
@@ -117,7 +120,7 @@ s->hide();
   factory asked the transport to change anchor to Top+Right without a
   live Wayland compositor.
 - **Animator is optional.** Surfaces without an animator show and hide
-  with no transition; attach an `ISurfaceAnimator` to get fade, slide,
+  with no transition. Attach an `ISurfaceAnimator` to get fade, slide,
   or scale.
 - **`defaults/` lives next to the interfaces.** Each `I*` interface ships
   with a bundled implementation under `PhosphorLayer/defaults/` so

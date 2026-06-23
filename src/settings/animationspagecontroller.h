@@ -3,6 +3,7 @@
 
 #pragma once
 
+#include <PhosphorControl/PageController.h>
 #include <QByteArray>
 #include <QHash>
 #include <QObject>
@@ -56,7 +57,7 @@ class MotionSetStore;
 /// (motion-set CRUD). Their signals are forwarded to the controller's
 /// own signals via `connect()` so QML rebinds without poking at the
 /// sub-services directly.
-class AnimationsPageController : public QObject
+class AnimationsPageController : public PhosphorControl::PageController
 {
     Q_OBJECT
 
@@ -74,6 +75,14 @@ public:
     explicit AnimationsPageController(PhosphorAnimationShaders::AnimationShaderRegistry* shaderRegistry = nullptr,
                                       ISettings* settings = nullptr, QObject* parent = nullptr);
     ~AnimationsPageController() override;
+
+    /// PhosphorControl::StagingDomain contract. The animations page's
+    /// own pendingChanges API is the per-page staging — wire it through.
+    /// dirtyChanged() (inherited from StagingDomain) is emitted alongside
+    /// pendingChangesChanged() so ApplicationController can react.
+    bool isDirty() const override;
+    void apply() override;
+    void discard() override;
 
     qreal springOmegaMin() const
     {
@@ -211,9 +220,24 @@ public:
     Q_INVOKABLE bool supportsShaderLeg(const QString& path) const;
 
     /// Installed `AnimationShaderEffect`s flattened to a QML-friendly list.
-    /// Each row: id / name / description / author / version / category /
-    /// isUserEffect / parameters (QVariantList of ParameterInfo maps).
+    /// Each row mirrors `animations_controller_detail::effectToMap`:
+    /// id / name / description / author / version / category / appliesTo
+    /// (QStringList of event-class tokens, empty = universal) / isUserEffect /
+    /// previewPath / parameters (QVariantList of ParameterInfo maps).
     Q_INVOKABLE QVariantList availableShaderEffects() const;
+
+    /// Path-aware variant of @c availableShaderEffects: the same rows, each
+    /// additionally carrying `dimmed` (bool) and `dimReason` (string) for
+    /// the event @p path. An effect whose declared `appliesTo` class can't
+    /// drive @p path (e.g. the geometry-only window-morph on a window.open
+    /// row) comes back `dimmed: true` with a human-readable reason. The
+    /// per-event shader picker feeds this straight to the cascading
+    /// category menu, which renders dimmed items with a warning tooltip —
+    /// the same affordance the window-rule action picker uses for actions
+    /// that can't fire against the current match. Mirrors that pattern:
+    /// dimmed items stay SELECTABLE; the UI surfaces the consequence rather
+    /// than hard-blocking the choice.
+    Q_INVOKABLE QVariantList availableShaderEffectsForPath(const QString& path) const;
 
     /// Single-effect lookup. Empty map when @p effectId is unknown.
     Q_INVOKABLE QVariantMap shaderEffectInfo(const QString& effectId) const;
@@ -305,56 +329,6 @@ public:
     /// overrides count, mirroring the existing tree-walk semantics.
     Q_INVOKABLE QVariantList shaderEffectUsages(const QString& effectId) const;
 
-    // ── AnimationAppRule list (Phase 3) ──────────────────────────────
-    //
-    // Per-window-class shader/timing override list — mutators write
-    // through `Settings::setAnimationAppRules` and emit
-    // `appRulesChanged()` (forwarded from
-    // `ISettings::animationAppRulesChanged`). The QML rules page binds
-    // to `appRules()` and calls `add/remove/move/setAppRule` for
-    // mutations, mirroring the shader-tree pattern: there is no
-    // file-snapshot path for rules — they ride the standard
-    // Settings::load() Q_PROPERTY re-emit on Discard.
-
-    /// Snapshot of the rule list as a QVariantList of QVariantMaps,
-    /// each in the same JSON shape `AnimationAppRule::toJson()`
-    /// produces. Empty when no rules are configured.
-    Q_INVOKABLE QVariantList appRules() const;
-
-    /// Append @p rule to the list. The map must carry at least
-    /// `classPattern`, `eventPath`, and `kind` (`"shader"` or
-    /// `"timing"`); empty pattern / event / unknown kind are rejected.
-    /// Shader-kind rules accept `effectId` (may be empty for the
-    /// "block default for matching windows" sentinel) and a
-    /// `shaderParams` map. Timing-kind rules accept `curve` and
-    /// `durationMs`. Returns true on success.
-    Q_INVOKABLE bool addAppRule(const QVariantMap& rule);
-
-    /// Replace the rule at @p index with @p rule. Same validation
-    /// rules as `addAppRule`. Returns false on out-of-range index or
-    /// invalid rule. Returns true and is a no-op when the new rule
-    /// equals the current entry at @p index, so a QML two-way binding
-    /// rebinding the same value doesn't cycle the dirty bit.
-    Q_INVOKABLE bool setAppRule(int index, const QVariantMap& rule);
-
-    /// Remove the rule at @p index. Returns false on out-of-range index.
-    Q_INVOKABLE bool removeAppRule(int index);
-
-    /// Move the rule from @p from to @p to (drag-reorder). Returns
-    /// false only on out-of-range indices. Same-index moves and moves
-    /// that yield an identical sequence (e.g. swapping adjacent
-    /// duplicates) return true and are no-ops — neither flips the
-    /// dirty bit nor emits a change signal, matching the no-op
-    /// semantics of `setAppRule`.
-    Q_INVOKABLE bool moveAppRule(int from, int to);
-
-    /// Window-event paths suitable for the `AnimationAppRule.eventPath`
-    /// dropdown. Returns the `window.*` subset of `eventSections()`
-    /// (rules apply per window-class — popup / osd events have no
-    /// window-class to match against). Each entry:
-    /// `{ path: QString, label: QString }`.
-    Q_INVOKABLE QVariantList animationAppRuleEvents() const;
-
     /// Test hook: redirect file I/O to @p dir instead of the XDG default.
     /// Pass an empty string to restore the default. Not Q_INVOKABLE — QML
     /// callers must not redirect persistence.
@@ -382,17 +356,17 @@ Q_SIGNALS:
     /// Emitted on any successful add/removeMotionSet or apply.
     void motionSetsChanged();
 
-    /// Emitted on any successful add/remove/move/setAppRule AND on
-    /// any full settings reload (`ISettings::animationAppRulesChanged`).
-    /// Path-agnostic since the rule list is a single Q_PROPERTY blob —
-    /// QML pages refresh their full rule view on this signal.
-    void appRulesChanged();
-
     /// Emitted whenever `hasPendingChanges()` may have flipped. The
     /// SettingsController's slot calls `setNeedsSave(true)` when there
     /// are pending changes; emits with `false`-equivalent state on
     /// commit/revert too so the slot can re-evaluate.
     void pendingChangesChanged();
+
+    /// User-facing transient notification request. QML chrome wires
+    /// this to `window.showToast()` so a failed shader-pack install
+    /// (or a mutator refused mid-discard) surfaces the underlying
+    /// reason instead of returning false silently.
+    void toastRequested(const QString& text);
 
 public:
     // ── Save / Discard integration (Phase 8) ─────────────────────────
@@ -419,6 +393,17 @@ public:
     /// retained in the snapshot so a subsequent revert can retry.
     void revertPending();
 
+    /// Async sibling of revertPending — runs the QSaveFile restore
+    /// loop on a QtConcurrent worker so a Discard with dozens of
+    /// snapshotted profile paths doesn't stall the GUI thread for
+    /// dozens of disk round-trips. Emits the inherited
+    /// `discardResult(ok, error)` signal on completion (back on the
+    /// GUI thread) so a future chrome footer can surface
+    /// "discarding..." state. Same retain-on-failure semantics as
+    /// revertPending — partial failures stay in m_pendingFileSnapshots
+    /// for a subsequent retry.
+    Q_INVOKABLE void asyncRevertPending();
+
 private:
     QString userProfilesDir() const;
     QString userMotionSetsDir() const;
@@ -429,14 +414,6 @@ private:
     /// crafted `path` (e.g. `"../etc/passwd"`) cannot escape the
     /// profiles directory.
     bool isValidEventPath(const QString& path) const;
-
-    /// Stricter gate for `AnimationAppRule::eventPath`. Returns true
-    /// only for window-leaf paths (`window.open`, `window.close`,
-    /// etc.) — the same set `animationAppRuleEvents()` surfaces in
-    /// the QML dropdown. Rejects non-window events and the bare
-    /// `"window"` parent (the cascade resolver does exact-match, so
-    /// the parent path can never fire).
-    bool isValidAppRuleEventPath(const QString& path) const;
 
     /// Capture @p filePath's current content into the snapshot if not
     /// already snapshotted. Called by every file-mutating method just
@@ -453,6 +430,9 @@ private:
     ISettings* m_settings = nullptr;
     QString m_userProfilesDirOverride; ///< Empty = use XDG default
 
+    // Sub-services owned via QObject-parent: both are constructed with
+    // `this` as parent so ~AnimationsPageController tears them down
+    // automatically. No manual delete; no QPointer needed.
     AnimationPresetLibrary* m_presets = nullptr;
     MotionSetStore* m_motionSets = nullptr;
 
@@ -460,15 +440,52 @@ private:
     /// means "the file did not exist before this session." Mutated only
     /// from the GUI thread. Shader-tree edits don't go through this
     /// snapshot — they ride the standard Settings::load() Q_PROPERTY
-    /// re-emit path like every other settings page.
+    /// re-emit path like every other settings page. During a worker
+    /// run, two copies exist briefly (live + captured): the worker
+    /// owns a value-captured snapshot, while this member continues to
+    /// reflect GUI-thread state. Never alias them by reference —
+    /// merging is done by key set in the worker's finished handler.
     QHash<QString, std::optional<QByteArray>> m_pendingFileSnapshots;
     bool m_shaderTreeDirty = false;
-    /// Symmetric with `m_shaderTreeDirty`. Mutators set this true on
-    /// every actual write; `commitPending` and `revertPending` reset
-    /// it. `hasPendingChanges()` ORs this with the other dirty signals
-    /// so the SettingsController save/discard gate flips correctly
-    /// when the only edit was an app-rule mutation.
-    bool m_appRulesDirty = false;
+    /// In-flight guard for asyncRevertPending — set true on dispatch
+    /// and cleared in the QFutureWatcher::finished handler. A second
+    /// asyncRevertPending invocation while a worker is running would
+    /// run on stale captured state AND the second worker would
+    /// overwrite the first's retained map, producing inconsistent
+    /// disk state. Mirrors ApplicationController::m_applying.
+    bool m_asyncRevertInFlight = false;
+    /// Monotonic generation counter bumped on every asyncRevertPending
+    /// dispatch. The shaderProfileTreeChanged DirectConnection lambda
+    /// captures the value at connect time of each invocation — when an
+    /// external reload (Settings::load() chasing discard()) fires
+    /// shaderProfileTreeChanged mid-worker, the lambda's captured
+    /// generation no longer matches and it MUST skip clearing
+    /// `m_shaderTreeDirty`. The worker's finished handler then clears
+    /// the dirty bit as part of its terminal sequence.
+    quint64 m_asyncRevertGeneration = 0;
+    /// Last observed value of hasPendingChanges() seen by the
+    /// pendingChangesChanged → dirtyChanged forwarder. CLAUDE.md:
+    /// "Only emit signals when value actually changes". Several call
+    /// sites emit pendingChangesChanged unconditionally; gating the
+    /// forward on this cached state keeps the framework's dirty
+    /// Q_PROPERTY NOTIFY contract honest.
+    bool m_lastHadPendingChanges = false;
+    /// Set to true while a controller-owned setter is mutating the
+    /// shader profile tree on m_settings. The shaderProfileTreeChanged
+    /// handler checks `m_mutatingShaderTree > 0` to distinguish our own
+    /// writes (which keep m_shaderTreeDirty true) from external reloads
+    /// (which should clear it). Counter, not bool: a nested re-entrant
+    /// write inside the same setShaderProfileTree call chain must not
+    /// prematurely clear the outer scope's protection.
+    int m_mutatingShaderTree = 0;
+    /// Memoised eventSections() result — taxonomy is static for the
+    /// process lifetime so subsequent QML rebinds reuse the same list.
+    /// Populated lazily on first call. NOTE: if `ProfilePaths::
+    /// allBuiltInPaths()` ever becomes dynamic (e.g. plugin-discovered
+    /// event paths), this cache needs a clear() trigger — currently
+    /// there's nothing to invalidate it because the source is
+    /// compile-time static.
+    mutable QVariantList m_eventSectionsCache;
 };
 
 } // namespace PlasmaZones

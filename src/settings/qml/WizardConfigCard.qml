@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 import QtQuick
+import QtQuick.Window
 import QtQuick.Layouts
 import "WizardUtils.js" as WizardUtils
 import org.kde.kirigami as Kirigami
@@ -21,7 +22,7 @@ Rectangle {
     implicitHeight: innerColumn.implicitHeight + Kirigami.Units.largeSpacing * 2
     radius: Kirigami.Units.smallSpacing * 2
     color: _colors.subtleBg
-    border.width: Math.round(Kirigami.Units.devicePixelRatio)
+    border.width: Math.round(Screen.devicePixelRatio)
     border.color: _colors.subtleBorder
 
     ColumnLayout {
@@ -33,5 +34,4 @@ Rectangle {
         anchors.margins: Kirigami.Units.largeSpacing
         spacing: Kirigami.Units.largeSpacing
     }
-
 }

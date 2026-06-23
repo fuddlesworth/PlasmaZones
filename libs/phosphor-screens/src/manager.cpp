@@ -20,7 +20,7 @@
 
 using PhosphorWayland::LayerSurface;
 
-namespace Phosphor::Screens {
+namespace PhosphorScreens {
 
 ScreenManager::ScreenManager(ScreenManagerConfig cfg, QObject* parent)
     : QObject(parent)
@@ -522,9 +522,12 @@ QRect ScreenManager::actualAvailableGeometry(const PhysicalScreen& screen) const
     }
     const QString screenKey = screen.name;
     if (m_availableGeometryCache.contains(screenKey)) {
-        const QRect cached = m_availableGeometryCache.value(screenKey);
-        qCDebug(lcPhosphorScreens) << "actualAvailableGeometry: screen=" << screenKey << "cached=" << cached;
-        return cached;
+        // No qCDebug on cache hits — this is a hot read path called from
+        // every overlay-window geometry update; per-call logging floods
+        // logs when QT_LOGGING_RULES=*=true is set during debug. The
+        // cache-miss path below stays informational (qCInfo) since it
+        // only fires once per screen at first access.
+        return m_availableGeometryCache.value(screenKey);
     }
     // No cached value — fall back to Qt's availableGeometry, with full
     // screen geometry as a final fallback. A synthetic screen (no QScreen)
@@ -774,4 +777,4 @@ void ScreenManager::onProviderScreenGeometryChanged(const PhysicalScreen& screen
     Q_EMIT screenGeometryChanged(screen);
 }
 
-} // namespace Phosphor::Screens
+} // namespace PhosphorScreens

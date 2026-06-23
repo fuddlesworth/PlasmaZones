@@ -35,7 +35,7 @@ namespace PhosphorTiles {
 ///
 /// Caches previews keyed on (algorithmId, windowCount) so repeated
 /// queries (typical for the layout-picker UI) don't re-execute scripted
-/// (JS) algorithms. The cache is invalidated on the registry's unified
+/// (Luau) algorithms. The cache is invalidated on the registry's unified
 /// @c ILayoutSourceRegistry::contentsChanged signal (covering algorithm
 /// register/unregister and preview-params changes), at which point the
 /// source also emits @c contentsChanged.

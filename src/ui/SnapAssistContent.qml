@@ -10,7 +10,7 @@ import org.phosphor.animation
  * Snap Assist content body — Aero-Snap-style window picker rendered as
  * an Item inside the unified PassiveOverlayShell.
  *
- * Pre-shell (PzRoles::SnapAssist surface): a standalone Window with
+ * Pre-shell (PhosphorRoles::SnapAssist surface): a standalone Window with
  * `KeyboardInteractivity::Exclusive` that received Escape via QML
  * `Shortcut`. Post-shell: an Item slot in the per-screen passive shell
  * (`KeyboardInteractivity::None`); Escape is routed via the daemon's
@@ -56,7 +56,7 @@ Item {
     /// Forwarded from card click.
     signal windowSelected(string windowId, string zoneId, string geometryJson)
     /// Backdrop click / dismiss request — host side animates slot hide.
-    signal dismissRequested()
+    signal dismissRequested
 
     anchors.fill: parent
 
@@ -71,7 +71,6 @@ Item {
             Accessible.name: i18n("Dismiss snap assist overlay")
             Accessible.role: Accessible.Button
         }
-
     }
 
     // Each zone shows all candidates; user picks any window to snap to any zone.
@@ -209,7 +208,6 @@ Item {
                                     visible: !(candidate && candidate.thumbnail)
                                     source: candidate ? (candidate.icon || "application-x-executable") : "application-x-executable"
                                 }
-
                             }
 
                             Label {
@@ -224,7 +222,6 @@ Item {
                                 font.pixelSize: candidateFlow.fontPixelSize
                                 color: Kirigami.Theme.textColor
                             }
-
                         }
 
                         MouseArea {
@@ -239,7 +236,7 @@ Item {
                                 const zoneId = zoneContainer.zone ? (zoneContainer.zone.zoneId || "") : "";
                                 if (!zoneContainer.zone || !wId || !zoneId) {
                                     root.dismissRequested();
-                                    return ;
+                                    return;
                                 }
                                 const z = zoneContainer.zone;
                                 const geo = z && z.x !== undefined && z.y !== undefined ? JSON.stringify({
@@ -251,15 +248,9 @@ Item {
                                 root.windowSelected(wId, zoneId, geo);
                             }
                         }
-
                     }
-
                 }
-
             }
-
         }
-
     }
-
 }

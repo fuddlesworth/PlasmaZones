@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 #include "zoneshaderitem.h"
+#include "zoneentryscaffold.h"
 #include "zoneshadernoderhi.h"
 
 #include <PhosphorRendering/ZoneShaderCommon.h>
@@ -17,9 +18,13 @@
 #include <QDir>
 #include <QFile>
 #include <QFileInfo>
+#include <QImage>
+#include <QMetaType>
 #include <QMutexLocker>
 #include <QStandardPaths>
 #include <QVariantMap>
+
+#include <mutex>
 
 // Lock the assumption made in updatePaintNode() that the base
 // ShaderEffect's syncBasePropertiesToNode covers all 4 user-texture
@@ -60,6 +65,20 @@ ZoneShaderItem::ZoneShaderItem(QQuickItem* parent)
     : PhosphorRendering::ShaderEffect(parent)
     , m_zoneExtension(std::make_shared<PhosphorRendering::ZoneUniformExtension>())
 {
+    // Register the labels payload metatype + a QImage→ZoneLabelTexture converter
+    // once per process. The daemon overlay path assigns a sparse payload
+    // directly, but the editor/settings shader previews still hand a full QImage
+    // to the (now ZoneLabelTexture-typed) labelsTexture property; the converter
+    // wraps such an image as a single full-size tile so those paths keep working
+    // unchanged. Done here so any process that uses ZoneShaderItem gets it
+    // without touching its main().
+    static std::once_flag labelTypeOnce;
+    std::call_once(labelTypeOnce, [] {
+        qRegisterMetaType<PhosphorRendering::ZoneLabelTexture>();
+        QMetaType::registerConverter<QImage, PhosphorRendering::ZoneLabelTexture>(
+            &PhosphorRendering::ZoneLabelTexture::fromImage);
+    });
+
     // Install our ZoneUniformExtension on the base class. We call the
     // qualified base setter to bypass our own setUniformExtension() override
     // (which rejects caller-supplied extensions). Thereafter, every
@@ -93,9 +112,9 @@ ZoneShaderItem::ZoneShaderItem(QQuickItem* parent)
 
 ZoneShaderItem::~ZoneShaderItem()
 {
-    // The parent destructor handles invalidateItem() on the render node.
-    // We just need to clear our zone-specific tracking pointer.
-    m_zoneRenderNode = nullptr;
+    // Nothing to do: the scene graph owns the render node and the zero-size
+    // branch in updatePaintNode severs its back-pointer (invalidateItem) before
+    // deleting it. ZoneShaderItem holds no owning node pointer of its own.
 }
 
 // ============================================================================
@@ -294,11 +313,10 @@ QSGNode* ZoneShaderItem::updatePaintNode(QSGNode* oldNode, UpdatePaintNodeData* 
 
     if (width() <= 0 || height() <= 0) {
         if (oldNode) {
-            // Mirror the parent ShaderEffect's zero-size branch: invalidate
-            // both our zone-specific pointer AND the base m_renderNode before
-            // deleting. Without the parent's nullification, a subsequent
-            // syncBasePropertiesToNode would walk a dangling pointer.
-            m_zoneRenderNode = nullptr;
+            // Mirror the parent ShaderEffect's zero-size branch: sever the
+            // node's back-pointer to this item via invalidateItem() before
+            // deleting it, so any in-flight render-thread access fails safe
+            // instead of walking a freed item.
             if (auto* rhiNode = static_cast<PhosphorRendering::ZoneShaderNodeRhi*>(oldNode)) {
                 rhiNode->invalidateItem();
             }
@@ -307,6 +325,9 @@ QSGNode* ZoneShaderItem::updatePaintNode(QSGNode* oldNode, UpdatePaintNodeData* 
         return nullptr;
     }
 
+    // freshNode covers SG-deletion + first-call: a brand-new node has no shader
+    // baked, so it must trigger a load even when nothing is dirty.
+    bool freshNode = false;
     auto* node = static_cast<PhosphorRendering::ZoneShaderNodeRhi*>(oldNode);
     if (!node) {
         // Scene graph deleted the previous node, or first call. Route node
@@ -315,14 +336,12 @@ QSGNode* ZoneShaderItem::updatePaintNode(QSGNode* oldNode, UpdatePaintNodeData* 
         // RenderEffect) follow the same factory pattern — and a future
         // refactor to delegate updatePaintNode to the parent picks up the
         // right node type for free.
-        m_zoneRenderNode = nullptr;
         node = static_cast<PhosphorRendering::ZoneShaderNodeRhi*>(createShaderNode());
-        m_zoneRenderNode = node;
-        qCInfo(PlasmaZones::lcOverlay) << "updatePaintNode: created NEW ZoneShaderNodeRhi (oldNode was null)";
-    } else {
-        qCDebug(PlasmaZones::lcOverlay) << "updatePaintNode: reusing existing node, shaderReady:"
-                                        << node->isShaderReady();
+        freshNode = true;
+        qCDebug(PlasmaZones::lcOverlay) << "updatePaintNode: created NEW ZoneShaderNodeRhi (oldNode was null)";
     }
+    // No per-frame log on the reuse path: updatePaintNode runs on every rendered
+    // frame, so logging here floods the journal at the repaint rate.
 
     // ── Sync base properties (time, params, colors, audio, multipass, depth, wallpaper) ──
     // syncBasePropertiesToNode now also pushes m_uniformExtension down to the
@@ -340,15 +359,19 @@ QSGNode* ZoneShaderItem::updatePaintNode(QSGNode* oldNode, UpdatePaintNodeData* 
     }
 
     // ── Sync shader source ───────────────────────────────────────────
-    // Consume the parent's atomic dirty flag so runtime setShaderSource /
-    // setShaderIncludePaths / reloadShader() calls actually trigger a reload —
-    // without this, only status transitions reached the reload branch.
+    // Reload only on an actual dirty flag (runtime setShaderSource /
+    // setShaderIncludePaths / reloadShader, or device-loss via
+    // sceneGraphAboutToStop) or a freshly created node. This mirrors
+    // ShaderEffect::updatePaintNode and its warning: do NOT reload on
+    // !node->isShaderReady() — a permanent load/compile failure leaves the node
+    // un-ready forever, so reloading on it re-runs the loader + glslang bake on
+    // EVERY frame (hard CPU spike + journal flood). A transient failure retries
+    // on the next genuine shaderSource/param change, which sets the dirty flag.
     const bool wasDirty = consumeShaderDirty();
-    const bool needLoad = !node->isShaderReady();
+    const bool needLoad = wasDirty || freshNode;
     const bool shaderSourceValid = shaderSource().isValid() && !shaderSource().isEmpty();
-    const bool statusIsLoading = (status() == Status::Loading);
 
-    if (wasDirty || statusIsLoading || needLoad) {
+    if (needLoad) {
         if (shaderSourceValid) {
             QString fragPath = shaderSource().toLocalFile();
             if (shaderSource().scheme() == QLatin1String("qrc")) {
@@ -374,6 +397,19 @@ QSGNode* ZoneShaderItem::updatePaintNode(QSGNode* oldNode, UpdatePaintNodeData* 
             }
 
             node->setShaderIncludePaths(shaderIncludePaths());
+            // T1.4: install the zone entry-point scaffold so a pack authored as
+            // just `vec4 pZone(ZoneCtx)` / `pImage(vec2)` (no main()) is
+            // assembled — prologue prepended, generated main() appended — before
+            // include expansion. A traditional pack with its own main() is left
+            // untouched. Must match the warm-bake scaffold (daemon.cpp) so the
+            // bake-cache key agrees.
+            node->setEntryScaffold(zoneEntryPrologue(), zoneEntryCandidates());
+            // T1.1 (zone): push the generated `#define p_<id> ...` preamble
+            // (set on this item via the paramPreamble Q_PROPERTY by the overlay)
+            // so loadFragmentShader splices it and keys the bake cache on it.
+            // Empty when the pack declares no params, or for a pack not yet
+            // migrated to p_ names — a no-op either way.
+            node->setParamPreamble(paramPreamble());
             qCDebug(PlasmaZones::lcOverlay)
                 << "Shader include paths:" << shaderIncludePaths() << "vertPath:" << vertPath;
 

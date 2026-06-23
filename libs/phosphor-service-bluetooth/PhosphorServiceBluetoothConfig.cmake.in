@@ -1,0 +1,14 @@
+# SPDX-FileCopyrightText: 2026 fuddlesworth
+# SPDX-License-Identifier: LGPL-2.1-or-later
+
+@PACKAGE_INIT@
+
+include(CMakeFindDependencyMacro)
+
+# Mirror the PUBLIC link set in CMakeLists.txt. PhosphorDBus is a PRIVATE
+# link (used only in the .cpp), so it is intentionally absent here.
+find_dependency(Qt6 6.6 COMPONENTS Core Qml DBus)
+
+include("${CMAKE_CURRENT_LIST_DIR}/PhosphorServiceBluetoothTargets.cmake")
+
+check_required_components(PhosphorServiceBluetooth)

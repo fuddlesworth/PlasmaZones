@@ -36,14 +36,22 @@ function(ps_add_test _name)
 endfunction()
 
 ps_add_test(ps_test_virtualscreen test_virtualscreen.cpp)
+ps_add_test(ps_test_screeninfo_variantlist test_screeninfo_variantlist.cpp)
 ps_add_test(ps_test_inmemoryconfigstore test_inmemoryconfigstore.cpp)
 ps_add_test(ps_test_swapper test_swapper.cpp)
 ps_add_test(ps_test_screenidentity_variants test_screenidentity_variants.cpp)
+ps_add_test(ps_test_screeninfo_variant test_screeninfo_variant.cpp)
 ps_add_test(ps_test_manager_lifecycle test_manager_lifecycle.cpp)
 ps_add_test(ps_test_screenmanager_geometry test_screenmanager_geometry.cpp FakeScreenProvider.cpp FakeScreenProvider.h)
 ps_add_test(ps_test_resolver test_resolver.cpp)
 ps_add_test(ps_test_plasma_panel_source test_plasma_panel_source.cpp)
 ps_add_test(ps_test_dbusscreenadaptor test_dbusscreenadaptor.cpp)
+
+# These construct/exercise ScreenManager, which lives in the Runtime target
+# (its geometry sensors need PhosphorWayland); the pure-POD Core no longer
+# carries ScreenManager. Runtime re-exports Core, so the POD types stay available.
+target_link_libraries(ps_test_manager_lifecycle PRIVATE PhosphorScreens::Runtime)
+target_link_libraries(ps_test_screenmanager_geometry PRIVATE PhosphorScreens::Runtime)
 
 # These exercise the D-Bus surface (DBusScreenAdaptor, PlasmaPanelSource,
 # Resolver), so they link the full PhosphorScreens target rather than the

@@ -12,7 +12,7 @@ Q_LOGGING_CATEGORY(lcSettingsConfigStore, "plasmazones.settingsconfigstore")
 namespace PlasmaZones {
 
 SettingsConfigStore::SettingsConfigStore(Settings* settings, QObject* parent)
-    : Phosphor::Screens::IConfigStore(parent)
+    : PhosphorScreens::IConfigStore(parent)
     , m_settings(settings)
 {
     // Real null-guard (not Q_ASSERT — NDEBUG compiles it out and the
@@ -28,10 +28,10 @@ SettingsConfigStore::SettingsConfigStore(Settings* settings, QObject* parent)
     // wire to IConfigStore::changed(). The connection captures a raw
     // pointer to settings; the QPointer guards against post-destruction
     // calls but the connect itself is lifetimed by `this`.
-    connect(settings, &Settings::virtualScreenConfigsChanged, this, &Phosphor::Screens::IConfigStore::changed);
+    connect(settings, &Settings::virtualScreenConfigsChanged, this, &PhosphorScreens::IConfigStore::changed);
 }
 
-QHash<QString, Phosphor::Screens::VirtualScreenConfig> SettingsConfigStore::loadAll() const
+QHash<QString, PhosphorScreens::VirtualScreenConfig> SettingsConfigStore::loadAll() const
 {
     if (!m_settings) {
         return {};
@@ -39,7 +39,7 @@ QHash<QString, Phosphor::Screens::VirtualScreenConfig> SettingsConfigStore::load
     return m_settings->virtualScreenConfigs();
 }
 
-Phosphor::Screens::VirtualScreenConfig SettingsConfigStore::get(const QString& physicalScreenId) const
+PhosphorScreens::VirtualScreenConfig SettingsConfigStore::get(const QString& physicalScreenId) const
 {
     if (!m_settings) {
         return {};
@@ -47,7 +47,7 @@ Phosphor::Screens::VirtualScreenConfig SettingsConfigStore::get(const QString& p
     return m_settings->virtualScreenConfig(physicalScreenId);
 }
 
-bool SettingsConfigStore::save(const QString& physicalScreenId, const Phosphor::Screens::VirtualScreenConfig& config)
+bool SettingsConfigStore::save(const QString& physicalScreenId, const PhosphorScreens::VirtualScreenConfig& config)
 {
     if (!m_settings) {
         return false;
@@ -60,10 +60,10 @@ bool SettingsConfigStore::remove(const QString& physicalScreenId)
     if (!m_settings) {
         return false;
     }
-    // Settings treats an empty Phosphor::Screens::VirtualScreenConfig as a removal request
-    // (see Phosphor::Screens::VirtualScreenConfig::isValid). We never need to send a
+    // Settings treats an empty PhosphorScreens::VirtualScreenConfig as a removal request
+    // (see PhosphorScreens::VirtualScreenConfig::isValid). We never need to send a
     // synthetic "delete" payload.
-    return m_settings->setVirtualScreenConfig(physicalScreenId, Phosphor::Screens::VirtualScreenConfig{});
+    return m_settings->setVirtualScreenConfig(physicalScreenId, PhosphorScreens::VirtualScreenConfig{});
 }
 
 } // namespace PlasmaZones

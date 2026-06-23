@@ -1,0 +1,38 @@
+<!DOCTYPE node PUBLIC "-//freedesktop//DTD D-Bus Object Introspection 1.0//EN"
+"http://www.freedesktop.org/standards/dbus/1.0/introspect.dtd">
+<!--
+SPDX-FileCopyrightText: 2026 fuddlesworth
+SPDX-License-Identifier: LGPL-2.1-or-later
+
+org.kde.StatusNotifierWatcher: session-bus service that tray items and
+shell hosts both look up. Items call RegisterStatusNotifierItem; hosts
+call RegisterStatusNotifierHost and read the items list. Spec:
+https://www.freedesktop.org/wiki/Specifications/StatusNotifierItem/
+-->
+<node>
+    <interface name="org.kde.StatusNotifierWatcher">
+        <!-- Items: a tray icon registers itself with either its bus name
+             (":1.42") or a full object path on its own connection. The
+             Watcher canonicalises the entry to "service/path" and
+             rebroadcasts via the RegisteredStatusNotifierItems property. -->
+        <method name="RegisterStatusNotifierItem">
+            <arg name="service" type="s" direction="in"/>
+        </method>
+        <method name="RegisterStatusNotifierHost">
+            <arg name="service" type="s" direction="in"/>
+        </method>
+
+        <property name="RegisteredStatusNotifierItems" type="as" access="read"/>
+        <property name="IsStatusNotifierHostRegistered" type="b" access="read"/>
+        <property name="ProtocolVersion" type="i" access="read"/>
+
+        <signal name="StatusNotifierItemRegistered">
+            <arg name="service" type="s"/>
+        </signal>
+        <signal name="StatusNotifierItemUnregistered">
+            <arg name="service" type="s"/>
+        </signal>
+        <signal name="StatusNotifierHostRegistered"/>
+        <signal name="StatusNotifierHostUnregistered"/>
+    </interface>
+</node>

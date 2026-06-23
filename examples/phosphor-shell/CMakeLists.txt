@@ -22,11 +22,25 @@ cmake_minimum_required(VERSION 3.16)
 
 find_package(Qt6 6.10 REQUIRED COMPONENTS Quick Qml)
 
+if(COMMAND qt_policy)
+    qt_policy(SET QTP0001 NEW)
+endif()
+
 # qt_add_qml_module's metatype generation walks AUTOMOC-produced
 # json files. Without AUTOMOC the call fails inside qt6_extract_metatypes
 # even for a pure-QML module that ships no C++ types — the macro emits
 # the registration TU unconditionally.
 set(CMAKE_AUTOMOC ON)
+
+# Suppress -Wmissing-include-dirs for the targets generated below by
+# qt_add_qml_module (main module + qmlplugin + qmltyperegistration). Qt
+# adds `<target>_autogen/include` to each sub-target's -I list, but this
+# example carries no Q_OBJECT declarations, so AUTOMOC produces nothing
+# and the include dir is either empty or — after `--clean-first` —
+# missing entirely. cc1plus then fires the warning before AUTOMOC has a
+# chance to recreate the path. See src/shared/CMakeLists.txt for the
+# same workaround applied to the shared QML module.
+set_property(DIRECTORY APPEND PROPERTY COMPILE_OPTIONS "-Wno-missing-include-dirs")
 
 qt_add_qml_module(phosphor_shell_example
     URI Phosphor.Shell.Example
@@ -53,6 +67,7 @@ qt_add_qml_module(phosphor_shell_example
         MprisPlayerState.qml
         MprisWidget.qml
         TrayMenuPopup.qml
+        SessionLockCoordinator.qml
     RESOURCES
         shaders/frosted_glass.frag
         shaders/gradient.frag

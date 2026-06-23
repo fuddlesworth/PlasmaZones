@@ -25,10 +25,46 @@
 #include <PhosphorZones/LayoutRegistry.h>
 #include "config/configbackends.h"
 #include <PhosphorZones/Zone.h>
+#include <PhosphorZones/ZoneJsonKeys.h>
 #include "../helpers/IsolatedConfigGuard.h"
+#include "../helpers/LayoutRegistryTestHelpers.h"
+
+#include <PhosphorTiles/AlgorithmRegistry.h>
+#include <PhosphorTiles/TilingAlgorithm.h>
+#include <PhosphorTiles/TilingParams.h>
+#include <PhosphorLayoutApi/LayoutId.h>
+
+#include <QJsonArray>
+#include <QJsonDocument>
+#include <QJsonObject>
 
 using namespace PlasmaZones;
 using PlasmaZones::TestHelpers::IsolatedConfigGuard;
+
+namespace {
+// Minimal stub algorithm producing two side-by-side zones. Lets the
+// autotile getLayout() path run end-to-end without depending on the Luau
+// engine (whose geometry is independently covered by test_luau_parity); this
+// test pins the *serialization contract* getLayout() owes the editor.
+class TwoColumnStubAlgorithm : public PhosphorTiles::TilingAlgorithm
+{
+public:
+    QString name() const override
+    {
+        return QStringLiteral("Two Column Stub");
+    }
+    QString description() const override
+    {
+        return QStringLiteral("Test stub");
+    }
+    QVector<QRect> calculateZones(const PhosphorTiles::TilingParams& params) const override
+    {
+        const QRect a = params.screenGeometry;
+        const int halfW = a.width() / 2;
+        return {QRect(a.x(), a.y(), halfW, a.height()), QRect(a.x() + halfW, a.y(), a.width() - halfW, a.height())};
+    }
+};
+} // namespace
 
 class TestLayoutAdaptorSignals : public QObject
 {
@@ -39,8 +75,7 @@ private Q_SLOTS:
     {
         m_guard = std::make_unique<IsolatedConfigGuard>();
         m_parent = new QObject(nullptr);
-        m_layoutManager = new PhosphorZones::LayoutRegistry(PlasmaZones::createAssignmentsBackend(),
-                                                            QStringLiteral("plasmazones/layouts"), m_parent);
+        m_layoutManager = PlasmaZones::TestHelpers::makeLayoutRegistry(QStringLiteral("plasmazones/layouts"), m_parent);
         auto* layout = new PhosphorZones::Layout(QStringLiteral("SignalTestLayout"));
         for (int i = 0; i < 2; ++i) {
             auto* zone = new PhosphorZones::Zone(QRectF(0.5 * i, 0.0, 0.5, 1.0));
@@ -220,6 +255,51 @@ private Q_SLOTS:
         QSignalSpy propertyChanged(m_adaptor, &LayoutAdaptor::layoutPropertyChanged);
         m_adaptor->setLayoutAspectRatioClass(m_layoutId, 2);
         QCOMPARE(propertyChanged.count(), 0);
+    }
+
+    // Regression guard: getLayout() is the editor's load endpoint
+    // (DBusLayoutService::loadLayout → getLayout). Its sole consumer parses
+    // the canonical Layout schema — top-level `name`, and each zone's geometry
+    // nested under `relativeGeometry`. The autotile branch must emit that
+    // schema, NOT the flat preview schema (zones[].x/width at top level) used
+    // by getLayoutPreview*/OSD. Emitting the flat shape silently parsed every
+    // editor zone to (0,0,0,0) — a blank canvas in preview mode.
+    void testGetLayout_autotile_emitsLayoutSchemaNotPreviewSchema()
+    {
+        namespace K = ::PhosphorZones::ZoneJsonKeys;
+
+        PhosphorTiles::AlgorithmRegistry registry;
+        registry.registerAlgorithm(QStringLiteral("twocol"), new TwoColumnStubAlgorithm);
+        m_adaptor->setAlgorithmRegistry(&registry);
+
+        const QString autotileId = PhosphorLayout::LayoutId::makeAutotileId(QStringLiteral("twocol"));
+        const QString jsonStr = m_adaptor->getLayout(autotileId);
+        QVERIFY2(!jsonStr.isEmpty(), "getLayout returned empty JSON for a registered autotile algorithm");
+
+        const QJsonObject obj = QJsonDocument::fromJson(jsonStr.toUtf8()).object();
+        QCOMPARE(obj.value(K::Id).toString(), autotileId);
+        // Editor reads the layout title from `name`, not the preview's `displayName`.
+        QCOMPARE(obj.value(K::Name).toString(), QStringLiteral("Two Column Stub"));
+
+        const QJsonArray zones = obj.value(K::Zones).toArray();
+        QCOMPARE(zones.size(), 2);
+
+        const QJsonObject zone0 = zones.at(0).toObject();
+        // Must be the nested Layout schema...
+        QVERIFY2(zone0.contains(K::RelativeGeometry), "zone missing relativeGeometry — editor would parse (0,0,0,0)");
+        // ...and NOT the flat preview schema the bug emitted.
+        QVERIFY2(!zone0.contains(K::Width), "zone leaked flat preview-schema width key");
+        QVERIFY2(!zone0.contains(K::X), "zone leaked flat preview-schema x key");
+
+        const QJsonObject relGeo = zone0.value(K::RelativeGeometry).toObject();
+        QVERIFY(relGeo.value(K::Width).toDouble() > 0.0);
+        QVERIFY(relGeo.value(K::Height).toDouble() > 0.0);
+        QCOMPARE(relGeo.value(K::Width).toDouble(), 0.5);
+        QCOMPARE(zone0.value(K::ZoneNumber).toInt(), 1);
+        QVERIFY2(!zone0.value(K::Id).toString().isEmpty(), "zone needs a stable id (editor keys zones by id)");
+
+        // Clear the dangling local-registry pointer before it goes out of scope.
+        m_adaptor->setAlgorithmRegistry(nullptr);
     }
 
 private:

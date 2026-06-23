@@ -18,6 +18,7 @@
 #include <PhosphorWorkspaces/VirtualDesktopManager.h>
 #include <PhosphorWorkspaces/ActivityManager.h>
 #include <PhosphorZones/LayoutRegistry.h>
+#include <PhosphorZones/ZoneJsonKeys.h>
 #include "../core/logging.h"
 #include "../core/shaderregistry.h"
 #include <PhosphorScreens/Manager.h>
@@ -32,8 +33,51 @@
 #include <QScreen>
 #include <QThread>
 #include <PhosphorScreens/ScreenIdentity.h>
+#include <QUuid>
 
 namespace PlasmaZones {
+
+namespace {
+
+// `getLayout` is contractually a *Layout*-schema endpoint: its sole consumer
+// (the editor's loadLayout parser, DBusLayoutService::loadLayout → getLayout)
+// reads the layout name under `name` and each zone's geometry nested under
+// `relativeGeometry`. Autotile "layouts" are synthesized on the fly from a
+// LayoutPreview, whose own wire shape (PlasmaZones::toJson) is the *flat*
+// preview schema consumed by the layout picker / OSD (getLayoutPreview*).
+// Returning that flat shape from getLayout left the editor parsing every zone
+// to a (0,0,0,0) rect — a blank canvas in preview mode. Project the preview
+// into the Layout schema the editor expects instead.
+QJsonObject autotilePreviewToLayoutJson(const PhosphorLayout::LayoutPreview& preview)
+{
+    QJsonObject layout;
+    layout[::PhosphorZones::ZoneJsonKeys::Id] = preview.id;
+    layout[::PhosphorZones::ZoneJsonKeys::Name] = preview.displayName;
+
+    QJsonArray zones;
+    for (int i = 0; i < preview.zones.size(); ++i) {
+        const QRectF& r = preview.zones.at(i);
+        QJsonObject relGeo;
+        relGeo[::PhosphorZones::ZoneJsonKeys::X] = r.x();
+        relGeo[::PhosphorZones::ZoneJsonKeys::Y] = r.y();
+        relGeo[::PhosphorZones::ZoneJsonKeys::Width] = r.width();
+        relGeo[::PhosphorZones::ZoneJsonKeys::Height] = r.height();
+
+        QJsonObject zone;
+        // Synthetic per-zone id: autotile previews are read-only in the editor
+        // (previewMode is forced for autotile ids), but the editor's zone model
+        // and QML key zones by id, never index — so each needs a stable id.
+        zone[::PhosphorZones::ZoneJsonKeys::Id] = QUuid::createUuid().toString();
+        zone[::PhosphorZones::ZoneJsonKeys::ZoneNumber] =
+            (i < preview.zoneNumbers.size()) ? preview.zoneNumbers.at(i) : (i + 1);
+        zone[::PhosphorZones::ZoneJsonKeys::RelativeGeometry] = relGeo;
+        zones.append(zone);
+    }
+    layout[::PhosphorZones::ZoneJsonKeys::Zones] = zones;
+    return layout;
+}
+
+} // namespace
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // Constructor and Signal Setup
@@ -58,7 +102,7 @@ LayoutAdaptor::LayoutAdaptor(PhosphorZones::LayoutRegistry* manager, QObject* pa
 }
 
 LayoutAdaptor::LayoutAdaptor(PhosphorZones::LayoutRegistry* manager, PhosphorWorkspaces::VirtualDesktopManager* vdm,
-                             Phosphor::Screens::ScreenManager* screenManager, QObject* parent)
+                             PhosphorScreens::ScreenManager* screenManager, QObject* parent)
     : QDBusAbstractAdaptor(parent)
     , m_layoutManager(manager)
     , m_virtualDesktopManager(vdm)
@@ -259,8 +303,7 @@ QStringList LayoutAdaptor::getLayoutList()
 
         // Enrich manual-layout entries with Layout-specific fields that
         // LayoutPreview doesn't carry (hasSystemOrigin, hiddenFromSelector,
-        // defaultOrder, allow-lists). Autotile entries have no Layout to
-        // look up so they skip this block.
+        // defaultOrder, allow-lists).
         auto uuidOpt = Utils::parseUuid(entry.id);
         if (uuidOpt) {
             PhosphorZones::Layout* layout = m_layoutManager->layoutById(*uuidOpt);
@@ -274,6 +317,17 @@ QStringList LayoutAdaptor::getLayoutList()
                 // Include allow-lists so KCM can show the filter badge
                 PhosphorZones::LayoutUtils::serializeAllowLists(json, layout->allowedScreens(),
                                                                 layout->allowedDesktops(), layout->allowedActivities());
+            }
+        } else if (PhosphorLayout::LayoutId::isAutotile(entry.id)) {
+            // Autotile entries have no Layout object; their hiddenFromSelector
+            // (curated-picker state) lives in the unified sidecar keyed by
+            // "autotile:<id>". Surface it so the settings list shows the eye
+            // toggle's true state.
+            const QString algoId = PhosphorLayout::LayoutId::extractAlgorithmId(entry.id);
+            if (!algoId.isEmpty()) {
+                const QJsonObject overrides = m_layoutManager->loadAutotileOverrides(algoId);
+                json[QStringLiteral("hiddenFromSelector")] =
+                    overrides.value(PhosphorZones::ZoneJsonKeys::HiddenFromSelector).toBool(false);
             }
         }
 
@@ -298,7 +352,9 @@ QString LayoutAdaptor::getLayout(const QString& id)
         // non-positive windowCount, so no adapter helper is needed here.
         PhosphorLayout::LayoutPreview preview =
             PhosphorTiles::previewFromAlgorithm(algoId, algo, -1, m_algorithmRegistry);
-        QJsonObject json = PlasmaZones::toJson(preview);
+        // getLayout returns a Layout-schema document (editor parser contract);
+        // the flat preview schema belongs to getLayoutPreview*, not here.
+        QJsonObject json = autotilePreviewToLayoutJson(preview);
         // Apply stored per-algorithm overrides (gaps, visibility, shader)
         QJsonObject overrides = m_layoutManager->loadAutotileOverrides(algoId);
         for (auto it = overrides.constBegin(); it != overrides.constEnd(); ++it) {
@@ -354,6 +410,36 @@ const QString kPropAspectRatioClass = QStringLiteral("aspectRatioClass");
 
 void LayoutAdaptor::setLayoutHidden(const QString& layoutId, bool hidden)
 {
+    // Autotile algorithms have no backing Layout object — their per-id settings
+    // (here, hiddenFromSelector for the curated picker) live in the unified
+    // layout-settings.json sidecar keyed by "autotile:<id>".
+    if (PhosphorLayout::LayoutId::isAutotile(layoutId)) {
+        const QString algoId = PhosphorLayout::LayoutId::extractAlgorithmId(layoutId);
+        // A bare "autotile:" id yields an empty algorithm key; writing under it
+        // would create an orphan sidecar entry no algorithm maps to. Mirror
+        // updateLayout's guard and reject it.
+        if (algoId.isEmpty()) {
+            qCWarning(lcDbusLayout) << "setLayoutHidden: autotile id with empty algorithm id rejected:" << layoutId;
+            return;
+        }
+        const QString hiddenKey = PhosphorZones::ZoneJsonKeys::HiddenFromSelector;
+        QJsonObject overrides = m_layoutManager->loadAutotileOverrides(algoId);
+        if (overrides.value(hiddenKey).toBool(false) == hidden) {
+            return;
+        }
+        // Persist only the hiding state; drop the key on re-show so the entry
+        // collapses back to the algorithm default instead of storing "false".
+        if (hidden) {
+            overrides.insert(hiddenKey, true);
+        } else {
+            overrides.remove(hiddenKey);
+        }
+        m_layoutManager->saveAutotileOverrides(algoId, overrides);
+        qCInfo(lcDbusLayout) << "Set autotile" << layoutId << "hidden:" << hidden;
+        Q_EMIT layoutPropertyChanged(layoutId, kPropHidden, QDBusVariant(hidden));
+        return;
+    }
+
     auto* layout = getValidatedLayout(layoutId, QStringLiteral("set layout hidden"));
     if (!layout) {
         return;
@@ -439,7 +525,7 @@ void LayoutAdaptor::setActiveLayout(const QString& id)
 
 void LayoutAdaptor::applyQuickLayout(int number, const QString& screenId)
 {
-    m_layoutManager->applyQuickLayout(number, Phosphor::Screens::ScreenIdentity::idForName(screenId));
+    m_layoutManager->applyQuickLayout(number, PhosphorScreens::ScreenIdentity::idForName(screenId));
 }
 
 QString LayoutAdaptor::createLayout(const QString& name, const QString& type)
@@ -459,7 +545,7 @@ QString LayoutAdaptor::createLayout(const QString& name, const QString& type)
     // Auto-detect aspect ratio class from the primary screen (virtual-screen-aware)
     QScreen* screen = Utils::primaryScreen();
     if (screen) {
-        const QString primaryId = Phosphor::Screens::ScreenIdentity::identifierFor(screen);
+        const QString primaryId = PhosphorScreens::ScreenIdentity::identifierFor(screen);
         auto* mgr = m_screenManager;
         QRect geo =
             (mgr && mgr->screenGeometry(primaryId).isValid()) ? mgr->screenGeometry(primaryId) : screen->geometry();
@@ -716,36 +802,6 @@ QString LayoutAdaptor::getLayoutPreview(const QString& id, int windowCount)
         return QStringLiteral("{}");
     }
     return QString::fromUtf8(QJsonDocument(PlasmaZones::toJson(preview)).toJson(QJsonDocument::Compact));
-}
-
-// ═══════════════════════════════════════════════════════════════════════════════
-// Screen PhosphorZones::Layout Lock
-// ═══════════════════════════════════════════════════════════════════════════════
-
-void LayoutAdaptor::toggleScreenLock(const QString& screenId)
-{
-    toggleContextLock(screenId, 0, QString());
-}
-
-bool LayoutAdaptor::isScreenLocked(const QString& screenId)
-{
-    return isContextLocked(screenId, 0, QString());
-}
-
-void LayoutAdaptor::toggleContextLock(const QString& screenId, int virtualDesktop, const QString& activity)
-{
-    if (!m_settings)
-        return;
-    bool locked = m_settings->isContextLocked(screenId, virtualDesktop, activity);
-    m_settings->setContextLocked(screenId, virtualDesktop, activity, !locked);
-    m_settings->save();
-}
-
-bool LayoutAdaptor::isContextLocked(const QString& screenId, int virtualDesktop, const QString& activity)
-{
-    if (!m_settings)
-        return false;
-    return m_settings->isContextLocked(screenId, virtualDesktop, activity);
 }
 
 } // namespace PlasmaZones

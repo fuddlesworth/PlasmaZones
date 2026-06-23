@@ -19,8 +19,8 @@
 #include "../daemon/rendering/zoneshaderitem.h"
 #include "../daemon/vulkan_support.h"
 
+#include <QApplication>
 #include <QFile>
-#include <QGuiApplication>
 #include <QLibrary>
 #include <QScopeGuard>
 #include <QQmlApplicationEngine>
@@ -30,8 +30,8 @@
 #include <QQuickWindow>
 #include <QObject>
 
-#include "pz_i18n.h"
-#include "pz_qml_i18n.h"
+#include "phosphor_i18n.h"
+#include "phosphor_qml_i18n.h"
 #include <QtQml/qqml.h>
 
 using namespace PlasmaZones;
@@ -81,10 +81,10 @@ int main(int argc, char* argv[])
     qunsetenv("MANGOHUD");
     qputenv("DISABLE_MANGOHUD", "1");
 
-    // Register our layer-shell QPA plugin before QGuiApplication
+    // Register our layer-shell QPA plugin before QApplication
     PhosphorWayland::registerLayerShellPlugin();
 
-    // Read rendering backend preference and set graphics API BEFORE QGuiApplication.
+    // Read rendering backend preference and set graphics API BEFORE QApplication.
     // Must match daemon's backend so shader previews render identically.
     bool useVulkan = false;
 #if QT_CONFIG(vulkan)
@@ -95,7 +95,13 @@ int main(int argc, char* argv[])
         useVulkan = PlasmaZones::probeAndSetGraphicsApi(backend);
     }
 
-    QGuiApplication app(argc, argv);
+    // QApplication (not QGuiApplication): the org.kde.desktop QtQuick Controls
+    // style (qqc2-desktop-style) renders every control through a QtWidgets
+    // QStyle via KQuickStyleItem. That path calls qApp->style(), which requires
+    // a QApplication — under a plain QGuiApplication it operates in a degenerate
+    // context that fragile third-party QStyle plugins (e.g. Darkly) dereference
+    // into a crash on the first paint frame. See discussion #262.
+    QApplication app(argc, argv);
     PlasmaZones::loadTranslations(&app);
 
     // Create and store QVulkanInstance for shader preview windows (same as daemon)
@@ -104,7 +110,9 @@ int main(int argc, char* argv[])
     if (useVulkan) {
         if (!PlasmaZones::createAndRegisterVulkanInstance(vulkanInstance, app)) {
             qCCritical(PlasmaZones::lcEditor)
-                << "Failed to create Vulkan instance — falling back to OpenGL for shader preview.";
+                << "Vulkan unavailable (instance creation failed or no enumerable GPU) —"
+                << "falling back to OpenGL for shader preview. If a GPU driver was upgraded,"
+                << "a reboot may be needed to match the kernel module to the userspace driver.";
             useVulkan = false;
         }
     }
@@ -131,17 +139,17 @@ int main(int argc, char* argv[])
 
     // Command line options
     QCommandLineParser parser;
-    parser.setApplicationDescription(PzI18n::tr("Visual layout editor for PlasmaZones"));
+    parser.setApplicationDescription(PhosphorI18n::tr("Visual layout editor for PlasmaZones"));
     parser.addHelpOption();
     parser.addVersionOption();
 
     QCommandLineOption layoutIdOption(QStringList{QStringLiteral("l"), QStringLiteral("layout")},
-                                      PzI18n::tr("Layout ID to edit"), QStringLiteral("uuid"));
+                                      PhosphorI18n::tr("Layout ID to edit"), QStringLiteral("uuid"));
     QCommandLineOption screenOption(QStringList{QStringLiteral("s"), QStringLiteral("screen")},
-                                    PzI18n::tr("Target screen name"), QStringLiteral("name"));
+                                    PhosphorI18n::tr("Target screen name"), QStringLiteral("name"));
     QCommandLineOption newLayoutOption(QStringList{QStringLiteral("n"), QStringLiteral("new")},
-                                       PzI18n::tr("Create new layout"));
-    QCommandLineOption previewOption(QStringLiteral("preview"), PzI18n::tr("Open in read-only preview mode"));
+                                       PhosphorI18n::tr("Create new layout"));
+    QCommandLineOption previewOption(QStringLiteral("preview"), PhosphorI18n::tr("Open in read-only preview mode"));
 
     parser.addOptions({layoutIdOption, screenOption, newLayoutOption, previewOption});
     parser.process(app);
@@ -164,7 +172,7 @@ int main(int argc, char* argv[])
     // ScreenResolver wraps the daemon call + QGuiApplication::screenAt fallback
     // so we don't have to duplicate the virtual-screen-aware lookup here.
     QString targetScreen = parser.isSet(screenOption) ? parser.value(screenOption)
-                                                      : Phosphor::Screens::ScreenResolver::effectiveScreenAtCursor();
+                                                      : PhosphorScreens::ScreenResolver::effectiveScreenAtCursor();
 
     // Warn about mutually exclusive flags
     if (parser.isSet(previewOption) && parser.isSet(newLayoutOption)) {
@@ -251,7 +259,7 @@ int main(int argc, char* argv[])
     QQmlApplicationEngine engine;
 
     // Set up i18n for QML (makes i18n() available in QML)
-    auto* localizedContext = new PzLocalizedContext(&engine);
+    auto* localizedContext = new PhosphorLocalizedContext(&engine);
     engine.rootContext()->setContextObject(localizedContext);
 
     // Expose controller to QML

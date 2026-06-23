@@ -11,38 +11,16 @@
 #include <effect/effectwindow.h>
 #include <window.h>
 
+#include <QDBusPendingCall>
+#include <QDBusPendingCallWatcher>
+#include <QDBusPendingReply>
 #include <QLoggingCategory>
-#include <QStringList>
-#include <QTimer>
-
-#include <functional>
-#include <memory>
+#include <QPointer>
+#include <QScopeGuard>
 
 namespace PlasmaZones {
 
 Q_DECLARE_LOGGING_CATEGORY(lcEffect)
-
-bool AutotileHandler::transferPreAutotileGeometry(const QString& windowId, const QString& fromScreenId,
-                                                  const QString& toScreenId)
-{
-    auto fromIt = m_preAutotileGeometries.find(fromScreenId);
-    if (fromIt == m_preAutotileGeometries.end()) {
-        return false;
-    }
-    const QString savedKey = AutotileStateHelpers::findSavedGeometryKey(fromIt.value(), windowId);
-    if (savedKey.isEmpty()) {
-        return false;
-    }
-    QRectF geo = fromIt->take(savedKey);
-    if (fromIt->isEmpty()) {
-        m_preAutotileGeometries.erase(fromIt);
-    }
-    if (!geo.isValid()) {
-        return false;
-    }
-    m_preAutotileGeometries[toScreenId][savedKey] = geo;
-    return true;
-}
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // Monocle helpers
@@ -85,104 +63,51 @@ void AutotileHandler::restoreAllMonocleMaximized()
     m_monocleMaximizedWindows.clear();
 }
 
-void AutotileHandler::restoreAllBorderless()
+void AutotileHandler::clearTiledTracking()
 {
-    // Snapshot first (setWindowBorderless mutates the buckets under us).
-    const auto pairs = AutotileStateHelpers::allBorderlessPairs(m_border);
-    for (const auto& p : pairs) {
-        KWin::EffectWindow* w = m_effect->findWindowById(p.first);
-        if (w) {
-            setWindowBorderless(w, p.first, false, p.second);
-        }
-    }
-    // Clear all border tracking (orphans included)
-    m_border.borderlessWindowsByScreen.clear();
+    // Bookkeeping only. Physical title-bar restores are the
+    // DecorationManager's job — teardown callers pair this with
+    // DecorationManager::restoreAll().
     m_border.tiledWindowsByScreen.clear();
-    m_border.zoneGeometries.clear();
 }
 
-void AutotileHandler::drainPendingBorderlessRestore()
+bool AutotileHandler::updateHideTitleBarsSetting(bool enabled)
 {
-    if (m_pendingBorderlessRestore.isEmpty()) {
-        return;
+    if (m_border.hideTitleBars == enabled) {
+        return false;
     }
-    if (m_pendingBorderlessFallback) {
-        m_pendingBorderlessFallback->stop();
-        m_pendingBorderlessFallback->deleteLater();
-        m_pendingBorderlessFallback = nullptr;
-    }
-    // Snapshot and clear first so reentrant drain calls (fallback timer
-    // racing with onComplete, or a second mode toggle mid-drain) start a
-    // fresh chain instead of mutating the one in flight.
-    auto pending = std::make_shared<QList<QString>>(m_pendingBorderlessRestore.values());
-    m_pendingBorderlessRestore.clear();
-
-    // Process one window per event-loop tick. setNoBorder(false) blocks the
-    // main thread for 30-120 ms per window (Wayland decoration round-trip);
-    // doing all four in a tight loop here drops frames from the concurrent
-    // OSD show animation (500 ms) and snap animation (300 ms) that started
-    // when applyGeometriesBatch dispatched. Yielding between calls lets kwin
-    // render frames in between — total wall time goes up (~300 ms vs ~64 ms
-    // batched) but the user-visible animations stay smooth.
-    //
-    // shared_ptr<function> + self-capture forms a chain that holds itself
-    // alive across QTimer reschedules; on the empty branch we stop
-    // rescheduling and the captures naturally unwind.
-    auto step = std::make_shared<std::function<void()>>();
-    *step = [this, pending, step]() {
-        if (pending->isEmpty()) {
-            m_effect->updateAllBorders();
-            return;
-        }
-        const QString windowId = pending->takeFirst();
-        KWin::EffectWindow* w = m_effect->findWindowById(windowId);
-        // Skip the restore if autotile has been re-enabled on this window's
-        // current screen between stash and chunk-execution time. The new
-        // toggle's setWindowBorderless(true) is now authoritative; clearing
-        // it would flash the title bar and discard tracking the re-tile just
-        // added. Realistic trigger: user rapid-cycles through layouts and
-        // lands back on an autotile layout within the chain's ~300 ms
-        // lifetime. The original synchronous code was immune because no
-        // other slot could interleave between stash and clear.
-        if (w && m_autotileScreens.contains(m_effect->getWindowScreenId(w))) {
-            QTimer::singleShot(0, this, *step);
-            return;
-        }
-        restoreWindowBorders(w, windowId);
-        QTimer::singleShot(0, this, *step);
-    };
-    (*step)();
-}
-
-void AutotileHandler::updateHideTitleBarsSetting(bool enabled)
-{
-    const bool wasEnabled = m_border.hideTitleBars;
     m_border.hideTitleBars = enabled;
-    if (wasEnabled && !enabled) {
-        // Turning OFF — restore title bars for all borderless windows
-        m_border.zoneGeometries.clear();
-        const auto pairs = AutotileStateHelpers::allBorderlessPairs(m_border);
-        for (const auto& p : pairs) {
-            KWin::EffectWindow* win = m_effect->findWindowById(p.first);
-            if (win) {
-                setWindowBorderless(win, p.first, false, p.second);
-            }
-        }
-    } else if (!wasEnabled && enabled) {
-        // Turning ON — hide title bars for all currently tiled windows
+    if (!enabled) {
+        // Turning OFF — release every autotile ownership; the manager
+        // restores each title bar no other owner still claims. Deferred +
+        // an immediate drain: each restore is a 30-120 ms synchronous
+        // Wayland round-trip, so the drain runs them one per event-loop
+        // tick instead of stalling the compositor for the whole batch.
+        m_effect->decorationManager()->releaseAllOfKind(DecorationManager::OwnerKind::Autotile,
+                                                        DecorationManager::Restore::Deferred);
+        m_effect->decorationManager()->drainPendingRestores();
+    } else {
+        // Turning ON — hide title bars for all currently tiled windows. The
+        // windows are already placed in their zones, so the AlreadyPlaced
+        // sequence re-asserts the zone rect across the decoration change
+        // (KWin holds the client size constant, which would otherwise leave
+        // a title-bar-height gap).
         const auto pairs = AutotileStateHelpers::allTiledPairs(m_border);
         for (const auto& p : pairs) {
-            KWin::EffectWindow* win = m_effect->findWindowById(p.first);
-            if (win) {
-                setWindowBorderless(win, p.first, true, p.second);
-            }
+            m_effect->decorationManager()->acquire(p.first, DecorationManager::autotile(p.second),
+                                                   DecorationManager::Placement::AlreadyPlaced);
         }
     }
+    return true;
 }
 
-void AutotileHandler::updateShowBorderSetting(bool enabled)
+bool AutotileHandler::updateShowBorderSetting(bool enabled)
 {
+    if (m_border.showBorder == enabled) {
+        return false;
+    }
     m_border.showBorder = enabled;
+    return true;
 }
 
 void AutotileHandler::setFocusFollowsMouse(bool enabled)
@@ -190,24 +115,32 @@ void AutotileHandler::setFocusFollowsMouse(bool enabled)
     m_focusFollowsMouse = enabled;
 }
 
-bool AutotileHandler::saveAndRecordPreAutotileGeometry(const QString& windowId, const QString& screenId,
+void AutotileHandler::saveAndRecordPreAutotileGeometry(const QString& windowId, const QString& screenId,
                                                        const QRectF& frame, bool knownFreeFloating)
 {
     if (windowId.isEmpty() || screenId.isEmpty()) {
-        return false;
+        qCDebug(lcEffect) << "Skipped pre-autotile geometry save: empty id" << windowId << screenId;
+        return;
     }
     if (!frame.isValid() || frame.width() <= 0 || frame.height() <= 0) {
-        return false;
+        qCDebug(lcEffect) << "Skipped pre-autotile geometry save: invalid frame" << frame << "for" << windowId;
+        return;
     }
-    auto& screenGeometries = m_preAutotileGeometries[screenId];
-    // Use EXACT windowId match only — NOT stableId fallback.
-    // Multiple instances of the same app (e.g., 3 Dolphin windows) share a stableId.
-    // hasSavedGeometryForWindow's stableId fallback would return true after the first
-    // instance is saved, preventing all other instances from saving their own geometry.
-    // On restore, all instances would get the first instance's geometry — scrambling
-    // window positions on every autotile ↔ snapping toggle.
-    if (screenGeometries.contains(windowId)) {
-        return false;
+    // Use EXACT windowId match only — NOT an appId/stableId fallback.
+    // Multiple instances of the same app (e.g., 3 Dolphin windows) share an
+    // appId; a fuzzy contains-check would return true after the first
+    // instance is saved, preventing all other instances from saving their own
+    // geometry. On restore, all instances would get the first instance's
+    // geometry — scrambling window positions on every autotile ↔ snapping toggle.
+    //
+    // Use a CONST lookup for the contains-check so a guard-bail below never inserts an
+    // empty per-screen bucket (operator[] would); the bucket is created only at the
+    // genuine insertion point (below).
+    {
+        const auto screenIt = m_preAutotileGeometries.constFind(screenId);
+        if (screenIt != m_preAutotileGeometries.constEnd() && screenIt->contains(windowId)) {
+            return;
+        }
     }
     // Only save geometry for floating windows — snapped/tiled windows have zone
     // dimensions in frameGeometry(), not the original free-floating size. Storing
@@ -219,76 +152,112 @@ bool AutotileHandler::saveAndRecordPreAutotileGeometry(const QString& windowId, 
     // window pass knownFreeFloating=true to bypass the guard. Without that bypass,
     // the save is silently dropped and every later float-restore for this window
     // falls through to stale cross-session data (or, with exact-only lookups, nothing).
+    // A snap-managed window's frame IS its zone rect, never a free-floating
+    // position — this holds EVEN on the knownFreeFloating fast path, which fires
+    // when a window is re-added to autotile on a snap→autotile toggle. Storing the
+    // zone rect as the pre-autotile float-back is the per-mode leak: a later
+    // float-in-autotile then teleports the window to the snap zone instead of its
+    // genuine pre-snap free position. isWindowFloating() below misses this because
+    // knownFreeFloating bypasses it, so check the snap-managed state explicitly and
+    // unconditionally.
+    if (m_effect->isWindowMarkedSnapped(windowId)) {
+        qCDebug(lcEffect) << "Skipped pre-autotile geometry for snap-managed window (frame is zone rect)" << windowId
+                          << "on" << screenId;
+        return;
+    }
     if (!knownFreeFloating && !m_effect->isWindowFloating(windowId)) {
         qCDebug(lcEffect) << "Skipped pre-autotile geometry for snapped window" << windowId << "on" << screenId;
-        return true;
+        return;
     }
-    screenGeometries[windowId] = frame;
+    m_preAutotileGeometries[screenId][windowId] = frame;
     qCDebug(lcEffect) << "Saved pre-autotile geometry for" << windowId << "on" << screenId << ":" << frame;
     if (m_effect->m_daemonServiceRegistered) {
-        // overwrite=true: the isWindowFloating() guard above already skipped
-        // this path for snapped windows, so when we reach here the frame is
-        // the window's authoritative free-floating geometry for THIS session.
-        // The daemon persists pre-tile entries across window close/reopen
-        // (keyed by appId for session restore), so a stale entry from a
-        // prior session would otherwise block the fresh capture and leave
-        // float-restore teleporting the window to ancient coordinates.
+        // overwrite=knownFreeFloating: only the window-opened spawn paths
+        // (the sole callers passing true) may clobber a persisted daemon
+        // entry — the spawn frame IS the authoritative free-floating
+        // geometry, and a stale appId-keyed entry from a prior session
+        // would otherwise block the fresh capture and leave float-restore
+        // teleporting the window to ancient coordinates.
+        // Every other caller (autotile toggle, unminimize-unfloat,
+        // cross-screen transfer) pushes non-destructively: an
+        // overflow-floated window can pass the isWindowFloating() guard
+        // while its frame still sits at the TILED position, and an
+        // overwrite there would destroy the daemon's correct free-position
+        // entry — exactly what the toggle path's explicit overwrite=false
+        // back-fill exists to preserve.
+        // qRound, not truncation: fractional-scale sub-pixel residue (see the
+        // toRect() geometry-capture convention in window_lifecycle.cpp).
         PhosphorProtocol::ClientHelpers::fireAndForget(
             m_effect, PhosphorProtocol::Service::Interface::WindowTracking, QStringLiteral("storePreTileGeometry"),
-            {windowId, static_cast<int>(frame.x()), static_cast<int>(frame.y()), static_cast<int>(frame.width()),
-             static_cast<int>(frame.height()), screenId, true},
+            {windowId, qRound(frame.x()), qRound(frame.y()), qRound(frame.width()), qRound(frame.height()), screenId,
+             knownFreeFloating},
             QStringLiteral("storePreTileGeometry"));
     }
-    return true;
 }
 
-// ═══════════════════════════════════════════════════════════════════════════════
-// Borderless / title bar management
-// ═══════════════════════════════════════════════════════════════════════════════
-
-void AutotileHandler::setWindowBorderless(KWin::EffectWindow* w, const QString& windowId, bool borderless,
-                                          const QString& screenId)
+void AutotileHandler::requestDaemonPreTileRestore(KWin::EffectWindow* w, const QString& windowId)
 {
-    if (!w) {
-        return;
-    }
-    if (screenId.isEmpty()) {
-        qCWarning(lcEffect) << "setWindowBorderless: empty screenId for" << windowId << "(borderless=" << borderless
-                            << ") — bucket tracking will drift";
-    }
-    KWin::Window* kw = w->window();
-    if (!kw) {
-        return;
-    }
-    if (borderless) {
-        // Skip CSD windows (GTK/Electron) — hasDecoration() is false for them.
-        if (!w->hasDecoration()) {
+    QPointer<KWin::EffectWindow> safeW = w;
+    auto* watcher = new QDBusPendingCallWatcher(
+        PhosphorProtocol::ClientHelpers::asyncCall(PhosphorProtocol::Service::Interface::WindowTracking,
+                                                   QStringLiteral("getValidatedPreTileGeometry"), {windowId}),
+        this);
+    connect(watcher, &QDBusPendingCallWatcher::finished, this, [this, safeW, windowId](QDBusPendingCallWatcher* pw) {
+        pw->deleteLater();
+        QDBusPendingReply<bool, int, int, int, int> reply = *pw;
+        if (!reply.isValid() || reply.count() < 5 || !reply.argumentAt<0>()) {
             return;
         }
-        // Add to the screen-scoped bucket. "Was it already borderless
-        // anywhere?" is what determines whether we call setNoBorder(true)
-        // on the compositor — once the flag is set we don't re-set it.
-        const bool wasBorderlessAnywhere = AutotileStateHelpers::isBorderlessWindow(m_border, windowId);
-        AutotileStateHelpers::addBorderlessOnScreen(m_border, screenId, windowId);
-        if (!wasBorderlessAnywhere) {
-            kw->setNoBorder(true);
-            qCDebug(lcEffect) << "Autotile: hid title bar for" << windowId << "(screen:" << screenId << ")";
-        }
-    } else {
-        // Remove from the specific screen's bucket. Only actually restore
-        // the title bar if the window is no longer tracked as borderless
-        // on ANY screen — otherwise a sibling VS's retile still owns it.
-        const bool removedHere = AutotileStateHelpers::removeBorderlessOnScreen(m_border, screenId, windowId);
-        if (!removedHere) {
+        const int rw = reply.argumentAt<3>();
+        const int rh = reply.argumentAt<4>();
+        if (rw <= 0 || rh <= 0 || !safeW || safeW->isDeleted()) {
             return;
         }
-        if (!AutotileStateHelpers::isBorderlessWindow(m_border, windowId)) {
-            m_border.zoneGeometries.remove(windowId);
-            kw->setNoBorder(false);
-            qCDebug(lcEffect) << "Autotile: restored title bar for" << windowId << "(was on screen:" << screenId << ")";
-            m_effect->removeWindowBorder(windowId);
+        // Anything that took (back) ownership of the window during the
+        // round-trip supersedes this orphan restore: another desktop
+        // switch, a re-tile (re-notified), the screen re-entering
+        // autotile, a snap commit, a float toggle, or the user actively
+        // moving/resizing it.
+        if (!safeW->isOnCurrentDesktop() || m_notifiedWindows.contains(windowId)
+            || m_autotileScreens.contains(m_effect->getWindowScreenId(safeW))
+            || m_effect->isWindowMarkedSnapped(windowId) || m_effect->isWindowFloating(windowId) || safeW->isUserMove()
+            || safeW->isUserResize()) {
+            return;
         }
+        // Suppress the VS-crossing detectors across the synchronous
+        // frameGeometryChanged this apply emits — same rationale as the
+        // local-bucket restore path in slotScreensChanged.
+        m_effect->m_inDaemonGeometryApply = true;
+        const auto geomGuard = qScopeGuard([this] {
+            m_effect->m_inDaemonGeometryApply = false;
+        });
+        // Clear any lingering KWin maximize flag first or KWin re-asserts
+        // the maximize-area rect and defeats the restore (discussion #461).
+        if (KWin::Window* kw = safeW->window(); kw && kw->maximizeMode() != KWin::MaximizeRestore) {
+            ++m_suppressMaximizeChanged;
+            kw->maximize(KWin::MaximizeRestore);
+            --m_suppressMaximizeChanged;
+        }
+        m_effect->applyWindowGeometry(safeW, QRect(reply.argumentAt<1>(), reply.argumentAt<2>(), rw, rh));
+        qCInfo(lcEffect) << "Desktop switch: restored pre-snap geometry from daemon for orphaned window" << windowId;
+    });
+}
+
+QRectF AutotileHandler::findPreAutotileGeometry(const QString& windowId, QString* bucketScreenId) const
+{
+    for (auto sgIt = m_preAutotileGeometries.constBegin(); sgIt != m_preAutotileGeometries.constEnd(); ++sgIt) {
+        const QRectF rect = sgIt->value(windowId);
+        if (rect.isValid()) {
+            if (bucketScreenId) {
+                *bucketScreenId = sgIt.key();
+            }
+            return rect;
+        }
+        // Found-but-invalid entry: keep scanning. A valid rect may still be
+        // stored under another screen's bucket from a mid-session
+        // autotile-screen transfer.
     }
+    return QRectF();
 }
 
 bool AutotileHandler::isAutotileScreen(const QString& screenId) const
@@ -296,28 +265,33 @@ bool AutotileHandler::isAutotileScreen(const QString& screenId) const
     return m_autotileScreens.contains(screenId);
 }
 
-void AutotileHandler::savePreAutotileForDesktopMove(const QString& windowId, const QString& screenId)
+void AutotileHandler::savePreAutotileForDesktopMove(const QString& windowId)
 {
     // Preserve the window's pre-autotile geometry before onWindowClosed clears it.
     // When the window is re-added on the target desktop, this geometry is restored
     // so that float-restore returns to the original position, not the tiled frame.
     //
-    // Stamped with the source screen so the restore path can detect a
-    // cross-screen desktop move and decline to apply a saved rect that
-    // belongs to a different monitor's coordinate space.
-    if (m_preAutotileGeometries.contains(screenId)) {
-        const auto& screenGeometries = m_preAutotileGeometries[screenId];
-        const QString savedKey = AutotileStateHelpers::findSavedGeometryKey(screenGeometries, windowId);
-        if (!savedKey.isEmpty()) {
-            m_savedPreAutotileForDesktopMove[windowId] = {screenId, screenGeometries.value(savedKey)};
-            qCDebug(lcEffect) << "Preserved pre-autotile geometry for desktop move:" << windowId << "on" << screenId
-                              << "rect=" << m_savedPreAutotileForDesktopMove[windowId].second;
-        }
+    // Stamped with the BUCKET's screen (not the caller's) so the restore
+    // path can detect a cross-screen desktop move and decline a saved rect
+    // from a different monitor's coordinate space.
+    QString bucketScreenId;
+    const QRectF rect = findPreAutotileGeometry(windowId, &bucketScreenId);
+    if (rect.isValid()) {
+        m_savedPreAutotileForDesktopMove[windowId] = {bucketScreenId, rect};
+        qCDebug(lcEffect) << "Preserved pre-autotile geometry for desktop move:" << windowId << "bucket"
+                          << bucketScreenId << "rect=" << rect;
     }
 }
 
 bool AutotileHandler::isEligibleForAutotileNotify(KWin::EffectWindow* w) const
 {
+    // Close-grabbed dying windows survive in the stacking order for the
+    // close-animation duration; announcing one as opened would insert an
+    // orphan into the tiling tree (shrinking live tiles) until a later
+    // retile cleans it up.
+    if (w && w->isDeleted()) {
+        return false;
+    }
     // Early-out: KWin internal surfaces (overlay QQuickViews, zone overlays, etc.)
     // are never eligible for autotile notification. KWin's InternalWindow::minSize()
     // segfaults when the backing QWindow is null. See discussion #511.
@@ -336,6 +310,17 @@ bool AutotileHandler::isEligibleForAutotileNotify(KWin::EffectWindow* w) const
     }
     if (w->isMinimized()) {
         qCDebug(lcEffect) << "isEligibleForAutotileNotify: rejected (minimized)" << m_effect->getWindowId(w);
+        return false;
+    }
+    // A window that is fullscreen at first contact (opened fullscreen, or
+    // present-fullscreen when autotile is enabled / the daemon restarts):
+    // KWin owns its geometry and re-asserts the fullscreen frame, so
+    // announcing it would (a) push the fullscreen frame as free geometry
+    // with overwrite=true and (b) make the daemon try to tile a window KWin
+    // won't let move. The exit-fullscreen slot re-announces it via
+    // notifyWindowAdded once it returns to a normal frame.
+    if (w->isFullScreen()) {
+        qCDebug(lcEffect) << "isEligibleForAutotileNotify: rejected (fullscreen)" << m_effect->getWindowId(w);
         return false;
     }
     if (!w->isOnCurrentDesktop() || !w->isOnCurrentActivity()) {
@@ -363,28 +348,10 @@ bool AutotileHandler::isEligibleForAutotileNotify(KWin::EffectWindow* w) const
 void AutotileHandler::applyFloatCleanup(const QString& windowId)
 {
     m_effect->m_navigationHandler->setWindowFloating(windowId, true);
-    // A floating window is no longer tile-managed on any screen — remove
-    // its tracking from every screen bucket. If it was borderless anywhere,
-    // strip the compositor-side noBorder too by calling setWindowBorderless
-    // for each screen that held it.
-    KWin::EffectWindow* w = m_effect->findWindowById(windowId);
-    QStringList screensOwningBorderless;
-    for (auto it = m_border.borderlessWindowsByScreen.constBegin(); it != m_border.borderlessWindowsByScreen.constEnd();
-         ++it) {
-        if (it.value().contains(windowId)) {
-            screensOwningBorderless.append(it.key());
-        }
-    }
-    for (const QString& screenId : std::as_const(screensOwningBorderless)) {
-        if (w) {
-            setWindowBorderless(w, windowId, false, screenId);
-        } else {
-            AutotileStateHelpers::removeBorderlessOnScreen(m_border, screenId, windowId);
-        }
-    }
-    // Clear tiled tracking on every screen regardless (tiled is a superset of
-    // borderless, but a window can be tiled without borderless if hideTitleBars
-    // was off when it was tiled).
+    // A floating window is no longer tile-managed on any screen — release
+    // autotile's decoration ownership (the manager restores the title bar
+    // unless another owner still claims it) and clear tiled tracking.
+    m_effect->decorationManager()->releaseKind(windowId, DecorationManager::OwnerKind::Autotile);
     AutotileStateHelpers::removeFromAllScreens(m_border, windowId);
     // Drop centering/target tracking too — a floated window isn't being
     // tiled anymore so a stale entry here would trigger centering on the

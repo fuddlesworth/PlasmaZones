@@ -147,4 +147,35 @@ bool ShaderProfileTree::operator==(const ShaderProfileTree& other) const
     return true;
 }
 
+ShaderProfile resolveShaderWithDefault(const ShaderProfileTree& tree, const QString& path)
+{
+    ShaderProfile resolved = tree.resolve(path);
+    // A real shader resolved — a direct override or an inherited NON-EMPTY
+    // ancestor (e.g. "window" → slide). Inheritance of a chosen shader wins.
+    if (!resolved.effectiveEffectId().isEmpty()) {
+        return resolved;
+    }
+    // Empty effectId. Apply the built-in per-event default UNLESS the user
+    // CHOSE a shader for THIS exact event — including an explicit engaged-empty
+    // "None". The gate is the leaf's own `effectId` engagement, not merely
+    // `hasOverride(path)`: a params-only override (parameters set, effectId
+    // unset) is "no shader chosen", so the default still applies and the user's
+    // params overlay onto it.
+    //
+    // Deliberately checks only the leaf, not ancestors: an ancestor "None"
+    // (e.g. a category-level "window" → "") means "no shader chosen for the
+    // category", which must NOT suppress a built-in default for a specific
+    // event like a snap/move. (An ancestor that chose a real shader was
+    // already returned above; only an ancestor "None" reaches here, and it
+    // should not win over the event default.) A per-event "None" still wins.
+    if (tree.directOverride(path).effectId.has_value()) {
+        return resolved;
+    }
+    const QString def = PhosphorAnimation::ProfilePaths::defaultShaderEffectIdForPath(path);
+    if (!def.isEmpty()) {
+        resolved.effectId = def;
+    }
+    return resolved;
+}
+
 } // namespace PhosphorAnimationShaders

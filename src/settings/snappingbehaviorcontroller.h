@@ -3,12 +3,13 @@
 
 #pragma once
 
+#include <PhosphorControl/PageController.h>
 #include <QObject>
 #include <QVariantList>
 
 namespace PlasmaZones {
 
-class Settings;
+class ISettings;
 
 /// Q_PROPERTY surface for the "Snapping → Behavior" settings page.
 ///
@@ -28,7 +29,14 @@ class Settings;
 /// therefore only needs to forward NOTIFY signals to QML — no additional
 /// `changed()` bridging (the editor-page case needed it because its
 /// properties are NOT Q_PROPERTY on Settings).
-class SnappingBehaviorController : public QObject
+///
+/// `alwaysActivateOnDrag` is DERIVED from the trigger list (the
+/// AlwaysActive sentinel modifier is the master-toggle proxy). The
+/// WRITE setter routes through `m_settings->setDragActivationTriggers`
+/// — a Q_PROPERTY — so the meta-loop still catches the dirty flip
+/// even though `alwaysActivateOnDrag` itself isn't a Q_PROPERTY on
+/// Settings. Same trick for TilingBehaviorController::alwaysReinsertIntoStack.
+class SnappingBehaviorController : public PhosphorControl::PageController
 {
     Q_OBJECT
 
@@ -47,7 +55,18 @@ class SnappingBehaviorController : public QObject
     Q_PROPERTY(int adjacentThresholdMax READ adjacentThresholdMax CONSTANT)
 
 public:
-    explicit SnappingBehaviorController(Settings* settings, QObject* parent = nullptr);
+    explicit SnappingBehaviorController(ISettings& settings, QObject* parent = nullptr);
+
+    bool isDirty() const override
+    {
+        return false;
+    }
+    void apply() override
+    {
+    }
+    void discard() override
+    {
+    }
 
     bool alwaysActivateOnDrag() const;
     QVariantList dragActivationTriggers() const;
@@ -72,12 +91,18 @@ Q_SIGNALS:
     void snapAssistTriggersChanged();
 
 private:
-    Settings* m_settings = nullptr;
+    ISettings* m_settings = nullptr;
     /// Cached alwaysActivateOnDrag state, so the
     /// `dragActivationTriggersChanged → alwaysActivateOnDragChanged` forwarder
     /// only fires when the derived boolean actually flips (CLAUDE.md:
     /// "Only emit signals when value actually changes").
     bool m_lastAlwaysActiveOnDrag = false;
+    /// Cached AlwaysActive-stripped trigger list. Same rationale: toggling
+    /// only the master `alwaysActivateOnDrag` flag flips the sentinel
+    /// modifier but leaves the QML-facing stripped list identical, so we
+    /// only emit `dragActivationTriggersChanged` when the stripped form
+    /// actually differs.
+    QVariantList m_lastDragActivationTriggers;
 };
 
 } // namespace PlasmaZones

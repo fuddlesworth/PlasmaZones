@@ -98,10 +98,14 @@ static constexpr int kDefaultSvgRasteriseSize = 1024;
 // in-tree example of that pattern.
 //
 // The QuadVertices buffer (see internal.h) emits positions in clip space
-// (-1..1) so a pass-through is sufficient. We deliberately avoid binding
-// the UBO here: SRB binding 0 is registered for both stages in the
-// pipeline, but glslang strips the unused declaration during SPIR-V bake,
-// keeping the default stage independent of any consumer-side UBO layout.
+// (-1..1) so a pass-through is sufficient. We bind the UBO at binding 0 as a
+// single-field view (`mat4 qt_Matrix` at offset 0), layout-compatible with the
+// full BaseUniforms block the fragment stage declares (qt_Matrix is its first
+// member). qt_Matrix carries the per-backend NDC Y-orientation correction
+// (identity on Y-down-NDC backends like Vulkan, a Y-flip on Y-up-NDC backends
+// like OpenGL) — without applying it the fixed-NDC fullscreen quad presents
+// upside down on OpenGL when rendered direct-to-window (the daemon animation
+// path). ShaderNodeRhi sets this value (see shadernoderhiuniforms.cpp).
 //
 // Stored as `static const QString` (not QLatin1String) so the conversion
 // to QString happens once at static-init. Previously a per-paint
@@ -113,9 +117,13 @@ layout(location = 0) in vec2 position;
 layout(location = 1) in vec2 texCoord;
 layout(location = 0) out vec2 vTexCoord;
 
+layout(std140, binding = 0) uniform DefaultVertexUniforms {
+    mat4 qt_Matrix;
+};
+
 void main() {
     vTexCoord = texCoord;
-    gl_Position = vec4(position, 0.0, 1.0);
+    gl_Position = qt_Matrix * vec4(position, 0.0, 1.0);
 }
 )");
 
@@ -1205,6 +1213,45 @@ void ShaderEffect::setUseDepthBuffer(bool use)
 // Shader Include Paths
 // ============================================================================
 
+void ShaderEffect::setParamPreamble(const QString& preamble)
+{
+    if (m_paramPreamble == preamble) {
+        return;
+    }
+    m_paramPreamble = preamble;
+    Q_EMIT paramPreambleChanged();
+    // Same reload requirement as setShaderIncludePaths: the preamble is spliced
+    // inside the node's loadFragmentShader and the expanded+spliced source is
+    // cached, so a pure re-bake would carry the OLD defines. Force a full
+    // reload (not just a dirty flag) so the node re-splices. Inlined rather
+    // than calling reloadShader() to keep a statusChanged binding from looping
+    // back through this setter.
+    if (m_shaderSource.isValid() && !m_shaderSource.isEmpty()) {
+        setStatus(Status::Loading);
+    }
+    m_shaderDirty = true;
+    update();
+}
+
+void ShaderEffect::setEntryScaffold(const QString& prologue, const QList<PhosphorShaders::EntryCandidate>& candidates)
+{
+    if (m_entryPrologue == prologue && m_entryCandidates == candidates) {
+        return;
+    }
+    m_entryPrologue = prologue;
+    m_entryCandidates = candidates;
+    // Same reload requirement as setParamPreamble: the scaffold is applied
+    // inside the node's loadFragmentShader and the assembled+expanded source is
+    // cached, so a pure re-bake would carry the OLD scaffold. Force a full
+    // reload; inlined (not reloadShader()) to keep a statusChanged binding from
+    // looping back through this setter.
+    if (m_shaderSource.isValid() && !m_shaderSource.isEmpty()) {
+        setStatus(Status::Loading);
+    }
+    m_shaderDirty = true;
+    update();
+}
+
 void ShaderEffect::setShaderIncludePaths(const QStringList& paths)
 {
     if (m_shaderIncludePaths == paths) {
@@ -1315,7 +1362,15 @@ void ShaderEffect::syncBasePropertiesToNode(ShaderNodeRhi* node)
     }
     node->setResolution(static_cast<float>(m_iResolution.width() * dpr),
                         static_cast<float>(m_iResolution.height() * dpr));
-    node->setMousePosition(m_iMouse);
+    // Scale the mouse by the SAME dpr as the resolution so iMouse.xy (pixels)
+    // and iMouse.zw (normalised by the node's width/height) stay in the
+    // device-pixel space of iResolution / fragCoord. Without this, on a scaled
+    // display a mouse-position shader lands at 1/dpr of the cursor (up-left).
+    // The Q_PROPERTY itself stays logical — QML callers bind logical units,
+    // exactly as they do for iResolution; only the GPU-bound value is scaled.
+    // The off-region sentinel (-1,-1) becomes (-dpr,-dpr): still negative, so
+    // any `iMouse.x < 0` region check still reads it as "cursor outside".
+    node->setMousePosition(QPointF(m_iMouse.x() * dpr, m_iMouse.y() * dpr));
 
     // ── Custom parameters (indexed API) ──────────────────────────────
     for (int i = 0; i < kMaxCustomParams; ++i)
@@ -1438,6 +1493,13 @@ QSGNode* ShaderEffect::updatePaintNode(QSGNode* oldNode, UpdatePaintNodeData* da
 
             if (!fragPath.isEmpty()) {
                 node->setShaderIncludePaths(m_shaderIncludePaths);
+                // Push the generated named-param preamble (T1.1) before the
+                // load so loadFragmentShader splices it and keys the bake cache
+                // on it. Empty (the default / zone-shader path) is a no-op.
+                node->setParamPreamble(m_paramPreamble);
+                // Push the T1.4 entry-point scaffold so an entry-only fragment
+                // is assembled before expansion. Empty (animation path) no-op.
+                node->setEntryScaffold(m_entryPrologue, m_entryCandidates);
                 bool vertLoaded = false;
                 if (m_vertexShaderUrl.isValid() && !m_vertexShaderUrl.isEmpty()) {
                     const QString vertPath = localPathFromShaderUrl(m_vertexShaderUrl);

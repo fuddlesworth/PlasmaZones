@@ -3,24 +3,22 @@
 
 #include "generalpagecontroller.h"
 
-#include "../config/settings.h"
-#include "../pz_i18n.h"
+#include "../core/isettings.h"
+#include "../phosphor_i18n.h"
 
 namespace PlasmaZones {
 
-GeneralPageController::GeneralPageController(Settings* settings, QObject* parent)
-    : QObject(parent)
+GeneralPageController::GeneralPageController(ISettings& settings, QObject* parent)
+    : PhosphorControl::PageController(QStringLiteral("general"), parent)
 {
-    Q_ASSERT(settings);
-
     // Translate rendering backend display names once at construction.
     for (const auto& name : ConfigDefaults::renderingBackendDisplayNames()) {
-        m_renderingBackendDisplayNames.append(PzI18n::tr(name.toUtf8().constData()));
+        m_renderingBackendDisplayNames.append(PhosphorI18n::tr(name.toUtf8().constData()));
     }
 
     // Snapshot current backend so the QML "restart required" message
     // survives page recreation.
-    m_startupRenderingBackend = settings->renderingBackend();
+    m_startupRenderingBackend = settings.renderingBackend();
 }
 
 } // namespace PlasmaZones

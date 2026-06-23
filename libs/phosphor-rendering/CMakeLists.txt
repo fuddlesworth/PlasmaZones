@@ -45,6 +45,7 @@ set(phosphorrendering_SRCS
     src/shadernoderhiuniforms.cpp
     src/shadernoderhisetters.cpp
     src/shadereffect.cpp
+    src/zonelabeltexture.cpp
     src/zoneshadernoderhi.cpp
 )
 
@@ -54,6 +55,7 @@ set(phosphorrendering_public_HDRS
     include/PhosphorRendering/ShaderEffect.h
     include/PhosphorRendering/ZoneShaderCommon.h
     include/PhosphorRendering/ZoneUniformExtension.h
+    include/PhosphorRendering/ZoneLabelTexture.h
     include/PhosphorRendering/ZoneShaderNodeRhi.h
 )
 
@@ -94,7 +96,7 @@ target_include_directories(PhosphorRendering
 
 # C++20 as a PUBLIC target feature: CMAKE_CXX_STANDARD is only set by the
 # `if(NOT PROJECT_VERSION)` block above — i.e. only when PhosphorRendering
-# is the top-level project. When built as a subdirectory of PlasmaZones (or
+# is the top-level project. When built as a subdirectory of Phosphor (or
 # any other parent) consumers inherit whatever standard the parent picked.
 # Declare the requirement on the target so find_package(PhosphorRendering)
 # consumers get the right compile-feature propagation regardless of build

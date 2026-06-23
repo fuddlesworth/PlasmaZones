@@ -37,7 +37,7 @@ private Q_SLOTS:
 
     void initTestCase()
     {
-        QVERIFY(m_scriptSetup.init(QStringLiteral(PZ_SOURCE_DIR)));
+        QVERIFY(m_scriptSetup.init(QStringLiteral(P_SOURCE_DIR)));
     }
 
     // =========================================================================
@@ -99,6 +99,195 @@ private Q_SLOTS:
 
         QVERIFY(engine.isEnabled());
         QCOMPARE(spy.count(), 3);
+    }
+
+    // =========================================================================
+    // autotileScreensChanged emission on identical-set desktop switches
+    // (discussion #219)
+    // =========================================================================
+
+    void testScreensChanged_desktopSwitchSameSet_emitsDesktopSwitchSignal()
+    {
+        AutotileEngine engine(nullptr, nullptr, nullptr, PlasmaZones::TestHelpers::testRegistry());
+        QSignalSpy spy(&engine, &AutotileEngine::autotileScreensChanged);
+
+        const QSet<QString> screens{QStringLiteral("HDMI-1")};
+        // Daemon startup push — establishes the desktop context, never a switch.
+        engine.setCurrentDesktop(1);
+        engine.setAutotileScreens(screens);
+        QCOMPARE(spy.count(), 1);
+        QCOMPARE(spy.at(0).at(1).toBool(), false);
+
+        // Desktop switch where the new desktop resolves to the SAME set: the
+        // engine must re-emit flagged as a desktop switch so the effect's
+        // catch-scan runs for windows moved here while the user was away.
+        engine.setCurrentDesktop(2);
+        engine.setAutotileScreens(screens);
+        QCOMPARE(spy.count(), 2);
+        QCOMPARE(spy.at(1).at(0).toStringList(), QStringList{QStringLiteral("HDMI-1")});
+        QCOMPARE(spy.at(1).at(1).toBool(), true);
+    }
+
+    void testScreensChanged_initialDesktopPushIsNotASwitch()
+    {
+        AutotileEngine engine(nullptr, nullptr, nullptr, PlasmaZones::TestHelpers::testRegistry());
+        QSignalSpy screensSpy(&engine, &AutotileEngine::autotileScreensChanged);
+        QSignalSpy enabledSpy(&engine, &AutotileEngine::enabledChanged);
+
+        // Daemon startup while the user sits on desktop 5: the very first
+        // context push must NOT read as a desktop switch — login with
+        // autotile enabled needs the genuine enabledChanged +
+        // isDesktopSwitch=false sequence so the effect initializes window
+        // tracking instead of treating it as a desktop return.
+        engine.setCurrentDesktop(5);
+        engine.setAutotileScreens({QStringLiteral("HDMI-1")});
+        QCOMPARE(enabledSpy.count(), 1);
+        QCOMPARE(enabledSpy.at(0).at(0).toBool(), true);
+        QCOMPARE(screensSpy.count(), 1);
+        QCOMPARE(screensSpy.at(0).at(1).toBool(), false);
+    }
+
+    void testScreensChanged_sameSetNoDesktopSwitch_noSignal()
+    {
+        AutotileEngine engine(nullptr, nullptr, nullptr, PlasmaZones::TestHelpers::testRegistry());
+        QSignalSpy spy(&engine, &AutotileEngine::autotileScreensChanged);
+
+        const QSet<QString> screens{QStringLiteral("HDMI-1")};
+        engine.setAutotileScreens(screens);
+        // Same-set recompute outside a desktop/activity switch (settings
+        // change, layout reassignment) must stay silent.
+        engine.setAutotileScreens(screens);
+
+        QCOMPARE(spy.count(), 1);
+    }
+
+    void testScreensChanged_desktopSwitchSameSet_flagConsumedForNextToggle()
+    {
+        AutotileEngine engine(nullptr, nullptr, nullptr, PlasmaZones::TestHelpers::testRegistry());
+        QSignalSpy spy(&engine, &AutotileEngine::autotileScreensChanged);
+
+        const QSet<QString> screens{QStringLiteral("HDMI-1")};
+        engine.setCurrentDesktop(1); // startup push — establishes context
+        engine.setAutotileScreens(screens);
+        engine.setCurrentDesktop(2);
+        engine.setAutotileScreens(screens);
+        QCOMPARE(spy.count(), 2);
+
+        // The identical-set early return consumed the desktop-switch flag, so
+        // a later genuine toggle OFF must report isDesktopSwitch=false — the
+        // effect relies on that to run its geometry/border restore.
+        engine.setAutotileScreens({});
+        QCOMPARE(spy.count(), 3);
+        QCOMPARE(spy.at(2).at(0).toStringList(), QStringList());
+        QCOMPARE(spy.at(2).at(1).toBool(), false);
+    }
+
+    void testScreensChanged_desktopSwitchEmptySet_noSignal()
+    {
+        AutotileEngine engine(nullptr, nullptr, nullptr, PlasmaZones::TestHelpers::testRegistry());
+        QSignalSpy spy(&engine, &AutotileEngine::autotileScreensChanged);
+
+        // Both desktops resolve to an empty set: no screen autotiles anywhere,
+        // so there is nothing for the effect's catch-scan to do — no wakeup.
+        engine.setCurrentDesktop(1); // startup push — establishes context
+        engine.setCurrentDesktop(2);
+        engine.setAutotileScreens({});
+        QCOMPARE(spy.count(), 0);
+
+        // The flag was still consumed: a following enable is a genuine toggle.
+        engine.setAutotileScreens({QStringLiteral("HDMI-1")});
+        QCOMPARE(spy.count(), 1);
+        QCOMPARE(spy.at(0).at(1).toBool(), false);
+    }
+
+    void testScreensChanged_activitySwitchSameSet_emitsDesktopSwitchSignal()
+    {
+        AutotileEngine engine(nullptr, nullptr, nullptr, PlasmaZones::TestHelpers::testRegistry());
+        QSignalSpy spy(&engine, &AutotileEngine::autotileScreensChanged);
+
+        const QSet<QString> screens{QStringLiteral("HDMI-1")};
+        // First non-empty activity push is initialization, NOT a switch —
+        // same established-context arming as the desktop side.
+        engine.setCurrentActivity(QStringLiteral("activity-a"));
+        engine.setAutotileScreens(screens);
+        QCOMPARE(spy.count(), 1);
+        QCOMPARE(spy.at(0).at(1).toBool(), false);
+
+        // A genuine activity→activity switch with an identical set must arm
+        // the flag and re-emit, same wire contract as the desktop case.
+        engine.setCurrentActivity(QStringLiteral("activity-b"));
+        engine.setAutotileScreens(screens);
+        QCOMPARE(spy.count(), 2);
+        QCOMPARE(spy.at(1).at(0).toStringList(), QStringList{QStringLiteral("HDMI-1")});
+        QCOMPARE(spy.at(1).at(1).toBool(), true);
+    }
+
+    void testWindowFocused_contextOnlyDelta_defersAndRevalidates()
+    {
+        AutotileEngine engine(nullptr, nullptr, nullptr, PlasmaZones::TestHelpers::testRegistry());
+        const QString screen = QStringLiteral("HDMI-1");
+        const QString win = QStringLiteral("w|1");
+        engine.setCurrentDesktop(1);
+        engine.setAutotileScreens({screen});
+        engine.windowOpened(win, screen);
+        QCoreApplication::processEvents();
+        QVERIFY(engine.tilingStateForScreen(screen)->containsWindow(win));
+
+        // Focus event against a STALE engine context (alt-tab race: the
+        // focus D-Bus call outran the daemon's desktop push). The
+        // context-only key delta must DEFER — and when the push "arrives"
+        // before the queued re-check runs, nothing migrates: the window
+        // stays in its rightful desktop-1 state.
+        engine.setCurrentDesktop(2);
+        engine.windowFocused(win, screen);
+        engine.setCurrentDesktop(1);
+        QCoreApplication::processEvents();
+        QVERIFY(engine.tilingStateForScreen(screen)->containsWindow(win));
+
+        // A PERSISTING mismatch (the window genuinely lives in the new
+        // context now): the deferred re-check migrates it into the current
+        // desktop's state and out of the old one.
+        engine.setCurrentDesktop(2);
+        engine.windowFocused(win, screen);
+        QCoreApplication::processEvents();
+        QVERIFY(engine.tilingStateForScreen(screen)->containsWindow(win)); // desktop-2 state
+        engine.setCurrentDesktop(1);
+        QVERIFY(!engine.tilingStateForScreen(screen)->containsWindow(win)); // gone from desktop-1
+    }
+
+    void testWindowFocused_activityOnlyDelta_defersAndRevalidates()
+    {
+        // Activity flavor of the context-only deferral: the key delta is in
+        // the activity dimension instead of the desktop one. Same contract —
+        // a push arriving before the queued re-check means no migration; a
+        // persisting mismatch migrates into the current activity's state.
+        AutotileEngine engine(nullptr, nullptr, nullptr, PlasmaZones::TestHelpers::testRegistry());
+        const QString screen = QStringLiteral("HDMI-1");
+        const QString win = QStringLiteral("w|1");
+        const QString actA = QStringLiteral("activity-a");
+        const QString actB = QStringLiteral("activity-b");
+        engine.setCurrentActivity(actA);
+        engine.setAutotileScreens({screen});
+        engine.windowOpened(win, screen);
+        QCoreApplication::processEvents();
+        QVERIFY(engine.tilingStateForScreen(screen)->containsWindow(win));
+
+        // Focus outran the activity push, push arrives before the re-check:
+        // the window stays in activity-a's state.
+        engine.setCurrentActivity(actB);
+        engine.windowFocused(win, screen);
+        engine.setCurrentActivity(actA);
+        QCoreApplication::processEvents();
+        QVERIFY(engine.tilingStateForScreen(screen)->containsWindow(win));
+
+        // Persisting mismatch: the deferred re-check migrates the window
+        // into activity-b's state and out of activity-a's.
+        engine.setCurrentActivity(actB);
+        engine.windowFocused(win, screen);
+        QCoreApplication::processEvents();
+        QVERIFY(engine.tilingStateForScreen(screen)->containsWindow(win)); // activity-b state
+        engine.setCurrentActivity(actA);
+        QVERIFY(!engine.tilingStateForScreen(screen)->containsWindow(win)); // gone from activity-a
     }
 
     // =========================================================================

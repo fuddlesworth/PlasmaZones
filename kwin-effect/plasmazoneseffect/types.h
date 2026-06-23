@@ -75,6 +75,12 @@ struct CachedShader
     int iAnchorSizeLoc = -1;
     int iAnchorPosInFboLoc = -1;
     int iAnchorRectInTextureLoc = -1;
+    /// `iWindowOpacity` location — -1 when the shader never reads
+    /// `surfaceColor()` (so the GLSL linker dropped the uniform). paintWindow
+    /// pushes the rule-resolved opacity here every frame so a SetOpacity rule
+    /// dims the surface throughout the transition; the MapTexture-only shader
+    /// can't see `data.opacity()`.
+    int iWindowOpacityLoc = -1;
     // Slot counts sourced from AnimationShaderContract so a future change to
     // the contract (e.g. growing the customParams budget) can't silently
     // desync this cache from the translation + upload sites in
@@ -109,6 +115,16 @@ struct CachedShader
             a.fill(-1);
             return a;
         }();
+    /// Geometry-morph uniform locations. The window moves instantly via
+    /// `moveResize`; the morph shader animates the visual transition by
+    /// interpolating the window quad from its old frame (`iFromRect`) to its
+    /// new frame (`iToRect`) by `iTime`, cross-fading a captured snapshot of
+    /// the old content (`uOldWindow`) into the live new content (`uTexture0`).
+    /// -1 when the shader doesn't read the uniform (linker dropped it) — a
+    /// non-morph shader leaves all three at -1 and pays nothing.
+    int iFromRectLoc = -1;
+    int iToRectLoc = -1;
+    int iOldWindowLoc = -1;
 };
 
 /// Per-window in-flight shader transition.
@@ -132,7 +148,7 @@ struct ShaderTransition
     ///   no `m_windowAnimator` animation to ride.
     /// • `durationMs == 0`: animator-driven — paintWindow reads progress
     ///   from `m_windowAnimator->animationFor(w)->state().value`. Used by
-    ///   zone.* events that flow through `applySnapGeometry` and inherit
+    ///   zone.* events that flow through `applyWindowGeometry` and inherit
     ///   the geometry animation's timeline.
     qint64 startTimeMs = 0;
     int durationMs = 0;
@@ -161,6 +177,15 @@ struct ShaderTransition
     /// Anchor-extent transitions (the default) keep the window-sized
     /// quad and uniforms.
     bool surfaceExtent = false;
+    /// Per-axis quad subdivision count for vertex-stage geometry
+    /// deformation, copied from the effect's `geometryGrid` metadata.
+    /// 0 (default) means `apply()` emits the single output-spanning
+    /// surface quad; > 0 means it emits an NxN grid of `WindowQuad` cells
+    /// over the window's destination rect so a custom vertex shader has
+    /// interior vertices to displace — the `flow` window-move effect lags
+    /// trailing grid rows behind the leading edge. Only honoured when
+    /// `surfaceExtent` is also true.
+    int gridSubdivisions = 0;
     /// Per-leg frame counter. Bumped each paintWindow tick where this
     /// transition feeds the shader; reset to 0 on every fresh
     /// beginShaderTransition install (or supersession). Mirrors the daemon's
@@ -235,19 +260,53 @@ struct ShaderTransition
     /// unconditionally — clearing the role on a window with no
     /// pending built-in open animation is a no-op.
     bool addedGrabHeld = false;
-};
-
-/// Pre-computed snap restore target for a pending app
-/// (appId → geometry + saved screen).
-/// Fetched once from daemon on ready; consumed in slotWindowAdded for
-/// instant teleport (no D-Bus round-trip visible flash). The screenId
-/// lets the effect tell "cached saved zone is on snap-mode screen X" from
-/// "current KWin placement is autotile screen Y" — we trust the saved
-/// screen, not the placement, so cross-VS / cross-monitor restores work.
-struct CachedSnapRestore
-{
-    QRect geometry;
-    QString screenId;
+    /// Cached texcoord handedness derived from the first quad of the source
+    /// list at the first `apply()` call. The handedness depends on KWin's
+    /// WindowQuad texcoord convention which doesn't change between frames,
+    /// so recomputing the (top/bottom/left/right) vertex search per frame
+    /// per surface-extent transition is wasted hot-path work — bounce,
+    /// fly-in, broken-glass, morph all hit this path on every frame for
+    /// the transition's lifetime.
+    ///
+    /// `handednessCached == false` means "not yet computed"; the first
+    /// `apply()` populates the four `*At*` slots and flips the bool.
+    /// Cleared on every fresh `beginShaderTransition` install for the same
+    /// window (transitions are torn down + reinstalled when the underlying
+    /// shader changes), so a follow-up install starts with a fresh probe.
+    bool handednessCached = false;
+    double uAtLeft = 0.0;
+    double uAtRight = 1.0;
+    double vAtTop = 0.0;
+    double vAtBottom = 1.0;
+    /// ── Geometry-morph state (cross-fade old→new on snap/move/resize) ──
+    /// `fromGeometry` is the window's frame rect BEFORE the instant
+    /// `moveResize`; `toGeometry` is the destination rect (the live
+    /// `frameGeometry` once the configure lands). The morph shader
+    /// interpolates between them by progress, so daemon-driven geometry
+    /// changes animate via shader instead of the C++ `WindowAnimator`
+    /// translate+scale. Both invalid (default QRectF) for non-morph
+    /// transitions (window.open/close/etc.), which signals paintWindow to
+    /// skip the morph uniforms.
+    QRectF fromGeometry;
+    QRectF toGeometry;
+    /// Set true when a morph transition begins (wired in applyWindowGeometry);
+    /// the first morph paint captures the still-old window content into
+    /// `oldSnapshot` and clears this. The window content is captured before
+    /// the moveResize configure round-trips, so it holds the OLD frame.
+    bool needsSnapshot = false;
+    /// Snapshot of the window's OLD content, bound as `uOldWindow` so the
+    /// shader can cross-fade the old content out while the live new content
+    /// fades in. Captured on the first morph paint AFTER the instant
+    /// `moveResize` — so it is sized to the window's current (post-moveResize)
+    /// `expandedGeometry`, but the buffer it holds is still the OLD content
+    /// because the client has not yet re-rendered for the configure. (The
+    /// matching new-geometry sub-rect `iAnchorRectInTexture` therefore maps
+    /// card-space uv into it correctly, same as for the live `uTexture0`.)
+    /// Owned per-transition (unique per capture, not path-keyed like
+    /// `userTextures`) and freed when the transition ends. Null when capture
+    /// was not requested or failed — paintWindow then binds a transparent
+    /// fallback (or the shader falls back to a non-cross-fade morph).
+    std::unique_ptr<KWin::GLTexture> oldSnapshot;
 };
 
 /// First-frame suppression bookkeeping for a window that is about to be
@@ -269,7 +328,7 @@ struct RestoreSuppression
     /// live geometry leaves this point — i.e. the repositioning configure
     /// has landed.
     QRectF spawnGeometry;
-    /// The resolved snap / tile rect, stamped by `applySnapGeometry` once
+    /// The resolved snap / tile rect, stamped by `applyWindowGeometry` once
     /// the window is actually being repositioned. Invalid until then:
     /// while invalid a geometry change is NOT treated as "settled" — it is
     /// just the client's own initial size negotiation — so suppression
@@ -289,7 +348,7 @@ struct RestoreSuppression
 /// definitions; the effect fetches them via D-Bus and resolves positions.
 ///
 /// Named `EffectVirtualScreenDef` to avoid collision with the daemon's
-/// `Phosphor::Screens::VirtualScreenDef` (which has many more fields).
+/// `PhosphorScreens::VirtualScreenDef` (which has many more fields).
 struct EffectVirtualScreenDef
 {
     QString id; ///< e.g., "Dell:U2722D:115107/vs:0"

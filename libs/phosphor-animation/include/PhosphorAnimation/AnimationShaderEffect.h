@@ -61,6 +61,23 @@ struct PHOSPHORANIMATION_EXPORT AnimationShaderEffect
     /// Category for settings-UI grouping (e.g. "Fade", "Geometric", "Glitch").
     QString category;
 
+    /// Event-class tokens this effect is meaningful on. Each token is one
+    /// of `PhosphorAnimation::ProfilePaths::EventClassAppearance`
+    /// ("appearance" — open/close/minimize/focus + OSD/popup show/hide) or
+    /// `EventClassGeometry` ("geometry" — move/resize/snap*/layoutSwitch/
+    /// maximize). EMPTY (the default) means "universal" — the effect applies
+    /// to every event class, which is the right answer for the bulk of
+    /// transitions (fade, glitch, dissolve …) that operate on a single
+    /// surface and need no before/after geometry.
+    ///
+    /// A geometry-only effect like `window-morph` cross-fades an old rect
+    /// into a new rect (`iFromRect → iToRect`); that pair only exists on
+    /// geometry legs, so on an appearance event it would render nothing.
+    /// Declaring `["geometry"]` lets the settings picker dim the effect on
+    /// appearance rows with an explanatory tooltip instead of letting a
+    /// user assign a silent no-op. See `shaderEffectAppliesToEventPath`.
+    QStringList appliesTo;
+
     /// Path to the fragment shader (relative to the effect dir). The same
     /// source is used on both QtQuick and KWin paths — ShaderNodeRhi
     /// handles backend differences at the RHI level.
@@ -156,6 +173,20 @@ struct PHOSPHORANIMATION_EXPORT AnimationShaderEffect
     };
     FboExtentKind fboExtentKind = FboExtentKind::Anchor;
 
+    /// Per-axis subdivision count for geometry shaders that deform the
+    /// drawn quad in the vertex stage (e.g. the `flow` window-move
+    /// effect, whose grid rows lag behind the leading edge so the
+    /// window streams into its destination zone). 0 (the default) keeps
+    /// the single output-spanning quad every other surface-extent
+    /// shader uses. A value of N tells the kwin-effect's `apply()` to
+    /// emit an N×N grid of quad cells over the window's destination rect
+    /// so the vertex shader has interior vertices to displace. Only
+    /// meaningful together with
+    /// `fboExtent: "surface"`; ignored otherwise. JSON key
+    /// `"geometryGrid"`, omitted from `toJson` when 0 to keep authored
+    /// metadata terse, same idiom as `fboExtent` / `multipass`.
+    int geometryGridSubdivisions = 0;
+
     /// Lower / upper bounds on `bufferScale` (multipass FBO downscale
     /// factor). 0.125 means a 1/8 downscale on each axis (1/64 area —
     /// the lowest cost-floor that still gives Shadertoy-style buffer
@@ -246,6 +277,23 @@ struct PHOSPHORANIMATION_EXPORT AnimationShaderEffect
         return !(*this == other);
     }
 };
+
+/// True iff @p effect may meaningfully run on event @p path.
+///
+/// An effect with an empty `appliesTo` is universal and always returns
+/// true. Otherwise the predicate maps @p path to its event class via
+/// `PhosphorAnimation::ProfilePaths::eventClassForPath` and checks
+/// membership. A path with no determinable class (a mixed ancestor like
+/// `window`, or a non-window/overlay path) also returns true — the
+/// predicate only reports false when it can PROVE a mismatch, so it never
+/// over-restricts a row whose class is ambiguous.
+///
+/// This is the (effect × path) analogue of
+/// `PlasmaZones::eventPathSupportsShaderLeg(path)`, which gates whether a
+/// path can run ANY shader. Both the settings picker (to dim incompatible
+/// effects) and any future runtime verification consult this one predicate
+/// so the policy has a single source of truth.
+PHOSPHORANIMATION_EXPORT bool shaderEffectAppliesToEventPath(const AnimationShaderEffect& effect, const QString& path);
 
 } // namespace PhosphorAnimationShaders
 

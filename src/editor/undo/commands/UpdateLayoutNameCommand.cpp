@@ -4,13 +4,13 @@
 #include "UpdateLayoutNameCommand.h"
 #include "../../EditorController.h"
 #include "CommandId.h"
-#include "pz_i18n.h"
+#include "phosphor_i18n.h"
 
 using namespace PlasmaZones;
 
 UpdateLayoutNameCommand::UpdateLayoutNameCommand(QPointer<EditorController> editorController, const QString& oldName,
                                                  const QString& newName, const QString& text, QUndoCommand* parent)
-    : QUndoCommand(text.isEmpty() ? PzI18n::tr("Rename Layout", "@action") : text, parent)
+    : QUndoCommand(text.isEmpty() ? PhosphorI18n::tr("Rename Layout", "@action") : text, parent)
     , m_editorController(editorController)
     , m_oldName(oldName)
     , m_newName(newName)

@@ -29,17 +29,19 @@ using PhosphorEngine::StickyWindowHandling;
 // Auto-Snap Logic
 // ═══════════════════════════════════════════════════════════════════════════════
 
-SnapResult SnapEngine::calculateSnapToAppRule(const QString& windowId, const QString& windowScreenName,
-                                              bool isSticky) const
+SnapResult SnapEngine::calculateSnapToPlacementRule(const QString& windowId, const QString& windowScreenName,
+                                                    bool isSticky) const
 {
-    // Check if window was floating - floating windows should NOT be auto-snapped
-    if (m_windowTracker->isWindowFloating(windowId)) {
-        return SnapResult::noSnap();
-    }
+    // NOTE: deliberately NO isWindowFloating() guard here. A SnapToZone rule is an
+    // explicit "this app belongs in these zones" directive that outranks float
+    // state — both on open (it overrides a remembered floated position) and on a
+    // Meta+F un-float (the rule is the authoritative un-float target). The old
+    // per-layout app-rule path skipped floating windows; the rule-driven path
+    // intentionally does not.
 
     // Check sticky window handling
     if (auto* s = snapSettings(); isSticky && s) {
-        auto handling = s->stickyWindowHandling();
+        auto handling = s->snappingStickyWindowHandling();
         if (handling == PhosphorEngine::StickyWindowHandling::IgnoreAll) {
             return SnapResult::noSnap();
         }
@@ -49,119 +51,67 @@ SnapResult SnapEngine::calculateSnapToAppRule(const QString& windowId, const QSt
         return SnapResult::noSnap();
     }
 
-    QString windowClass = m_windowTracker->currentAppIdFor(windowId);
-    if (windowClass.isEmpty()) {
+    // The placement resolver is the daemon's SnapToZone window-rule evaluation —
+    // the engine never reads the rule store directly (LGPL boundary). It returns
+    // the 1-based zone ordinals to snap into, or an empty list when no SnapToZone
+    // rule matched this window. Unset resolver (unit tests) ⇒ no rule snapping.
+    if (!m_placementZonesResolver) {
+        return SnapResult::noSnap();
+    }
+    const QList<int> ordinals = m_placementZonesResolver(windowId, windowScreenName);
+    if (ordinals.isEmpty()) {
         return SnapResult::noSnap();
     }
 
-    auto* screenManager = m_windowTracker->screenManager();
+    // Ordinals are layout-agnostic: resolve them against whatever layout is active
+    // on the window's CURRENT screen. Legacy per-layout app rules could target a
+    // different screen; that cross-screen routing is retired — a SnapToZone rule
+    // resolves on the window's current screen, and a user can scope it to a screen
+    // with a ScreenId match leaf, so there is no cross-screen scan here.
+    PhosphorZones::Layout* layout = m_layoutManager->resolveLayoutForScreen(windowScreenName);
+    if (!layout) {
+        qCDebug(PhosphorSnapEngine::lcSnapEngine)
+            << "calculateSnapToPlacementRule: no layout for screen" << windowScreenName;
+        return SnapResult::noSnap();
+    }
 
-    // Helper: given a match and a resolved screen name, build the SnapResult
-    auto buildResult = [&](const PhosphorZones::AppRuleMatch& match, const QString& resolvedScreen) -> SnapResult {
-        // Determine which screen to resolve the zone on
-        QString effectiveScreen = match.targetScreen.isEmpty() ? resolvedScreen : match.targetScreen;
-
-        if (!screenManager) {
-            qCWarning(PhosphorSnapEngine::lcSnapEngine)
-                << "App rule: no screen manager, falling back to primary screen for" << windowClass;
-        }
-        const bool screenFound = screenManager ? screenManager->physicalScreenFor(effectiveScreen).isValid()
-                                               : (QGuiApplication::primaryScreen() != nullptr);
-        if (!screenFound) {
-            qCInfo(PhosphorSnapEngine::lcSnapEngine)
-                << "App rule: screen" << effectiveScreen << "not found for" << windowClass
-                << (match.targetScreen.isEmpty() ? "(current screen)" : "(target screen)") << ", skipping";
-            return SnapResult::noSnap();
-        }
-
-        // Get the layout for the effective screen to find the zone
-        PhosphorZones::Layout* targetLayout = m_layoutManager->resolveLayoutForScreen(effectiveScreen);
-        if (!targetLayout) {
-            return SnapResult::noSnap();
-        }
-
-        PhosphorZones::Zone* zone = targetLayout->zoneByNumber(match.zoneNumber);
+    // Resolve each ordinal to its zone id (an ordinal naming a zone the active
+    // layout lacks is skipped — a span rule is layout-agnostic and may reference
+    // a zone count this layout does not have).
+    QStringList zoneIds;
+    for (const int ordinal : ordinals) {
+        PhosphorZones::Zone* zone = layout->zoneByNumber(ordinal);
         if (!zone) {
-            return SnapResult::noSnap();
-        }
-
-        QString zoneId = zone->id().toString();
-        QRect geo = m_windowTracker->zoneGeometry(zoneId, effectiveScreen);
-        if (!geo.isValid()) {
-            return SnapResult::noSnap();
-        }
-
-        qCInfo(PhosphorSnapEngine::lcSnapEngine) << "App rule matched:" << windowClass << "-> zone" << match.zoneNumber
-                                                 << "on screen" << effectiveScreen << "(" << zoneId << ")";
-
-        SnapResult result;
-        result.shouldSnap = true;
-        result.geometry = geo;
-        result.zoneId = zoneId;
-        result.zoneIds = QStringList{zoneId};
-        result.screenId = effectiveScreen;
-        return result;
-    };
-
-    // Phase 1: Check the current screen's layout first (preserves existing behavior)
-    PhosphorZones::Layout* currentLayout = m_layoutManager->resolveLayoutForScreen(windowScreenName);
-    if (currentLayout) {
-        PhosphorZones::AppRuleMatch match = currentLayout->matchAppRule(windowClass);
-        if (match.matched()) {
-            SnapResult result = buildResult(match, windowScreenName);
-            if (result.isValid()) {
-                return result;
-            }
-        } else {
             qCDebug(PhosphorSnapEngine::lcSnapEngine)
-                << "calculateSnapToAppRule:" << windowClass << "no match in layout" << currentLayout->name() << "("
-                << currentLayout->appRules().size() << "rules)";
-        }
-    } else {
-        qCDebug(PhosphorSnapEngine::lcSnapEngine) << "calculateSnapToAppRule: no layout for screen" << windowScreenName;
-    }
-
-    // Phase 2: Scan other screens' layouts for cross-screen rules
-    // Only accept matches that have targetScreen set (rules without targetScreen
-    // are local to their layout's screen and shouldn't fire from other screens)
-    QSet<QUuid> checkedLayouts;
-    if (currentLayout) {
-        checkedLayouts.insert(currentLayout->id());
-    }
-
-    // Build a unified list of screen IDs from either effective screens (includes
-    // virtual screens) or physical screens as fallback, then use a single loop.
-    QStringList screenIds;
-    if (screenManager) {
-        screenIds = screenManager->effectiveScreenIds();
-    } else {
-        const auto screens = QGuiApplication::screens();
-        for (auto* s : screens) {
-            screenIds.append(Phosphor::Screens::ScreenIdentity::identifierFor(s));
-        }
-    }
-
-    for (const QString& screenId : std::as_const(screenIds)) {
-        if (Phosphor::Screens::ScreenIdentity::screensMatch(screenId, windowScreenName)) {
+                << "calculateSnapToPlacementRule: zone ordinal" << ordinal << "absent in layout" << layout->name();
             continue;
         }
-
-        PhosphorZones::Layout* layout = m_layoutManager->resolveLayoutForScreen(screenId);
-        if (!layout || checkedLayouts.contains(layout->id())) {
-            continue;
-        }
-        checkedLayouts.insert(layout->id());
-
-        PhosphorZones::AppRuleMatch match = layout->matchAppRule(windowClass);
-        if (match.matched() && !match.targetScreen.isEmpty()) {
-            SnapResult result = buildResult(match, screenId);
-            if (result.isValid()) {
-                return result;
-            }
-        }
+        zoneIds.append(zone->id().toString());
+    }
+    if (zoneIds.isEmpty()) {
+        return SnapResult::noSnap();
     }
 
-    return SnapResult::noSnap();
+    // Union via resolveZoneGeometry so the span uses the SAME QRectF-union-then-
+    // align rounding the float-back poison guard uses (WTA::captureWindowPlacement
+    // → resolveZoneGeometry). A per-QRect union here would diverge by a pixel at
+    // fractional scaling, so a window floated off the span without moving would
+    // leak the snap rect into its float-back geometry.
+    const QRect unionGeo = m_windowTracker->resolveZoneGeometry(zoneIds, windowScreenName);
+    if (!unionGeo.isValid()) {
+        return SnapResult::noSnap();
+    }
+
+    qCInfo(PhosphorSnapEngine::lcSnapEngine) << "calculateSnapToPlacementRule: snapping" << windowId << "to zones"
+                                             << ordinals << "on screen" << windowScreenName;
+
+    SnapResult result;
+    result.shouldSnap = true;
+    result.geometry = unionGeo;
+    result.zoneId = zoneIds.first();
+    result.zoneIds = zoneIds;
+    result.screenId = windowScreenName;
+    return result;
 }
 
 SnapResult SnapEngine::calculateSnapToLastZone(const QString& windowId, const QString& windowScreenId,
@@ -182,7 +132,7 @@ SnapResult SnapEngine::calculateSnapToLastZone(const QString& windowId, const QS
 
     // Check sticky window handling
     if (isSticky) {
-        auto handling = s->stickyWindowHandling();
+        auto handling = s->snappingStickyWindowHandling();
         if (handling == PhosphorEngine::StickyWindowHandling::IgnoreAll
             || handling == PhosphorEngine::StickyWindowHandling::RestoreOnly) {
             return SnapResult::noSnap();
@@ -208,14 +158,14 @@ SnapResult SnapEngine::calculateSnapToLastZone(const QString& windowId, const QS
 
     // Don't cross-screen snap
     if (!windowScreenId.isEmpty() && !effectiveScreenId.isEmpty()
-        && !Phosphor::Screens::ScreenIdentity::screensMatch(windowScreenId, effectiveScreenId)) {
+        && !PhosphorScreens::ScreenIdentity::screensMatch(windowScreenId, effectiveScreenId)) {
         return SnapResult::noSnap();
     }
 
     // Check virtual desktop match (unless sticky or desktop 0 = all)
     const int lastUsedDesktop = m_snapState->lastUsedDesktop();
     if (!isSticky && m_virtualDesktopManager && lastUsedDesktop > 0) {
-        int currentDesktop = m_virtualDesktopManager->currentDesktop();
+        int currentDesktop = currentVirtualDesktopForScreen(windowScreenId);
         if (currentDesktop != lastUsedDesktop) {
             return SnapResult::noSnap();
         }
@@ -246,7 +196,7 @@ SnapResult SnapEngine::calculateSnapToEmptyZone(const QString& windowId, const Q
 
     // Check sticky window handling (auto-assign is an auto-snap, not a restore)
     if (auto* s = snapSettings(); isSticky && s) {
-        auto handling = s->stickyWindowHandling();
+        auto handling = s->snappingStickyWindowHandling();
         if (handling == PhosphorEngine::StickyWindowHandling::IgnoreAll
             || handling == PhosphorEngine::StickyWindowHandling::RestoreOnly) {
             qCDebug(PhosphorSnapEngine::lcSnapEngine)
@@ -278,7 +228,7 @@ SnapResult SnapEngine::calculateSnapToEmptyZone(const QString& windowId, const Q
     // Reuse findEmptyZoneInLayout() with already-resolved layout to avoid double resolution.
     // Filter occupancy by the current virtual desktop so windows parked on other desktops
     // don't prevent auto-snap placement on the current desktop.
-    const int desktopFilter = m_virtualDesktopManager ? m_virtualDesktopManager->currentDesktop() : 0;
+    const int desktopFilter = currentVirtualDesktopForScreen(windowScreenId);
     QString emptyZoneId = m_windowTracker->findEmptyZoneInLayout(layout, windowScreenId, desktopFilter);
     if (emptyZoneId.isEmpty()) {
         qCDebug(PhosphorSnapEngine::lcSnapEngine) << "snapToEmptyZone: no empty zone on" << windowScreenId;
@@ -292,201 +242,6 @@ SnapResult SnapEngine::calculateSnapToEmptyZone(const QString& windowId, const Q
     }
 
     return {true, geo, emptyZoneId, {emptyZoneId}, windowScreenId};
-}
-
-SnapResult SnapEngine::calculateRestoreFromSession(const QString& windowId, const QString& screenId, bool isSticky,
-                                                   PhosphorEngine::WindowKind kind) const
-{
-    QString appId = m_windowTracker->currentAppIdFor(windowId);
-
-    // Check if window was floating - floating windows should NOT be auto-snapped
-    // They should remain floating when reopened
-    if (m_windowTracker->isWindowFloating(windowId)) {
-        qCDebug(PhosphorSnapEngine::lcSnapEngine) << "sessionRestore:" << windowId << "was floating, skipping";
-        return SnapResult::noSnap();
-    }
-
-    // Check sticky window handling
-    if (auto* s = snapSettings(); isSticky && s) {
-        auto handling = s->stickyWindowHandling();
-        if (handling == PhosphorEngine::StickyWindowHandling::IgnoreAll) {
-            return SnapResult::noSnap();
-        }
-    }
-
-    // Check consumption queue
-    const auto& pendingQueues = m_windowTracker->pendingRestoreQueues();
-    auto queueIt = pendingQueues.constFind(appId);
-    if (queueIt == pendingQueues.constEnd() || queueIt->isEmpty()) {
-        return SnapResult::noSnap();
-    }
-
-    // Guard against wrong-instance restore for multi-instance apps.
-    // After daemon-only restart (KWin still running), m_windowZoneAssignments is
-    // loaded with full windowIds (appId|uuid). If another instance of this app
-    // already has an exact full-ID match AND the effect has confirmed that sibling
-    // is live, that instance owns the pending entry — this window should not
-    // consume it. Only confirmed-live siblings block; stale entries from KWin
-    // restarts (where UUIDs changed and no window will ever match) are ignored.
-    const auto& zoneAssignments = m_windowTracker->zoneAssignments();
-    const auto& effectReported = effectReportedWindows();
-    if (appId != windowId) { // windowId contains UUID (full format)
-        for (auto it = zoneAssignments.constBegin(); it != zoneAssignments.constEnd(); ++it) {
-            if (it.key() != windowId && m_windowTracker->currentAppIdFor(it.key()) == appId
-                && effectReported.contains(it.key())) {
-                qCDebug(PhosphorSnapEngine::lcSnapEngine)
-                    << "sessionRestore:" << windowId << "skipped — live sibling" << it.key() << "has exact assignment";
-                return SnapResult::noSnap();
-            }
-        }
-    }
-
-    // Take the first entry (FIFO — mirrors KWin's takeSessionInfo pattern)
-    const PendingRestore& entry = queueIt->first();
-
-    // Kind-match gate (discussion #461 follow-up). When both sides report a
-    // concrete kind, refuse to assign a saved entry to a window of a
-    // different structural kind on reopen. The entry is left intact so the
-    // next-opening window of the right kind can consume it. `Unknown` on
-    // either side is permissive — legacy entries that lack a stored kind
-    // (loaded from a pre-fix on-disk session) and callers that have not
-    // yet been wired to forward a kind fall through to the original
-    // appId-only matching.
-    if (kind != PhosphorEngine::WindowKind::Unknown && entry.windowKind != PhosphorEngine::WindowKind::Unknown
-        && kind != entry.windowKind) {
-        qCDebug(PhosphorSnapEngine::lcSnapEngine)
-            << "sessionRestore:" << appId << "kind mismatch — saved kind:" << static_cast<int>(entry.windowKind)
-            << "live kind:" << static_cast<int>(kind) << "— refusing restore, entry preserved";
-        return SnapResult::noSnap();
-    }
-
-    QStringList zoneIds = entry.zoneIds;
-    if (zoneIds.isEmpty()) {
-        return SnapResult::noSnap();
-    }
-    QString zoneId = zoneIds.first(); // Primary zone for validation
-    // Use stored screen from the pending restore entry, falling back to the caller's
-    // screenId. If both are empty, resolveEffectiveScreenId returns it unchanged and
-    // downstream resolveZoneGeometry falls back to the primary screen via
-    // Phosphor::Screens::ScreenManager::resolvePhysicalScreen.
-    QString savedScreen = entry.screenId.isEmpty() ? screenId : entry.screenId;
-
-    // E7: Validate virtual screen still exists — configuration may have changed since save.
-    // Fall back to physical screen ID if the virtual screen was removed.
-    savedScreen = m_windowTracker->resolveEffectiveScreenId(savedScreen);
-
-    // If the saved zone's screen is currently in autotile mode, this path is the
-    // wrong owner — autotile on that screen will claim the window via its own
-    // windowOpened flow. Return noSnap WITHOUT consuming the pending entry:
-    // autotile might push the window back into our queue on next close, and
-    // another snap-mode screen's context could legitimately claim this entry.
-    if (m_layoutManager) {
-        int modeDesktop = entry.virtualDesktop;
-        if (modeDesktop <= 0 && m_virtualDesktopManager) {
-            modeDesktop = m_virtualDesktopManager->currentDesktop();
-        }
-        if (m_layoutManager->modeForScreen(savedScreen, modeDesktop, m_layoutManager->currentActivity())
-            != PhosphorZones::AssignmentEntry::Mode::Snapping) {
-            qCDebug(PhosphorSnapEngine::lcSnapEngine) << "sessionRestore:" << appId << "saved screen" << savedScreen
-                                                      << "is now in autotile mode — deferring to autotile engine";
-            return SnapResult::noSnap();
-        }
-    }
-
-    // BUG FIX: Verify layout context matches before restoring
-    // Without this check, windows would restore even if the current layout is different
-    // from the layout that was active when the window was saved
-
-    // Check if the current layout matches the saved layout
-    // Use layoutForScreen() for proper multi-screen support - each screen can have
-    // a different layout assigned, so we compare against the layout for the saved screen/desktop
-    QString savedLayoutId = entry.layoutId;
-    if (!savedLayoutId.isEmpty() && m_layoutManager) {
-        int savedDesktop = entry.virtualDesktop;
-
-        // Get the layout for the saved screen/desktop context (not just activeLayout)
-        PhosphorZones::Layout* currentLayout =
-            m_layoutManager->layoutForScreen(savedScreen, savedDesktop, m_layoutManager->currentActivity());
-        if (!currentLayout) {
-            // Fallback to active layout if no screen-specific assignment
-            currentLayout = m_layoutManager->activeLayout();
-        }
-
-        if (!currentLayout) {
-            // No layout available at all - cannot validate, skip restore to be safe
-            qCDebug(PhosphorSnapEngine::lcSnapEngine) << "sessionRestore:" << appId << "no current layout, skipping";
-            return SnapResult::noSnap();
-        }
-
-        // Use QUuid comparison to avoid string format issues (with/without braces)
-        QUuid savedUuid = QUuid::fromString(savedLayoutId);
-        if (!savedUuid.isNull() && currentLayout->id() != savedUuid) {
-            qCInfo(PhosphorSnapEngine::lcSnapEngine)
-                << "sessionRestore:" << appId << "saved layout" << savedLayoutId << "but current layout for screen"
-                << savedScreen << "desktop" << savedDesktop << "is" << currentLayout->id().toString() << ", skipping";
-            return SnapResult::noSnap();
-        }
-    }
-
-    // Check virtual desktop match (unless sticky or desktop 0 = all)
-    // This mirrors the check in calculateSnapToLastZone() for consistency
-    int savedDesktop = entry.virtualDesktop;
-    if (!isSticky && m_virtualDesktopManager && savedDesktop > 0) {
-        int currentDesktop = m_virtualDesktopManager->currentDesktop();
-        if (currentDesktop != savedDesktop) {
-            qCDebug(PhosphorSnapEngine::lcSnapEngine)
-                << "sessionRestore:" << appId << "saved on desktop" << savedDesktop << "but current is"
-                << currentDesktop << ", skipping";
-            return SnapResult::noSnap();
-        }
-    }
-
-    // Calculate geometry (use combined geometry for multi-zone)
-    QRect geo = m_windowTracker->resolveZoneGeometry(zoneIds, savedScreen);
-
-    // PhosphorZones::Zone-number fallback: zone UUIDs may have changed after layout edit.
-    // Re-resolve layout for this screen and look up by zone number instead.
-    if (!geo.isValid() && !savedLayoutId.isEmpty()) {
-        QList<int> savedNumbers = entry.zoneNumbers;
-        if (!savedNumbers.isEmpty()) {
-            PhosphorZones::Layout* fallbackLayout =
-                m_layoutManager ? m_layoutManager->resolveLayoutForScreen(savedScreen) : nullptr;
-            if (fallbackLayout) {
-                QStringList fallbackIds;
-                for (int num : savedNumbers) {
-                    PhosphorZones::Zone* z = fallbackLayout->zoneByNumber(num);
-                    if (z)
-                        fallbackIds.append(z->id().toString());
-                }
-                if (!fallbackIds.isEmpty()) {
-                    geo = m_windowTracker->resolveZoneGeometry(fallbackIds, savedScreen);
-                    if (geo.isValid()) {
-                        zoneId = fallbackIds.first();
-                        zoneIds = fallbackIds;
-                        if (fallbackIds.size() < savedNumbers.size()) {
-                            qCWarning(PhosphorSnapEngine::lcSnapEngine)
-                                << "zone-number fallback:" << appId << "partial match, requested" << savedNumbers.size()
-                                << "zones, matched" << fallbackIds.size();
-                        }
-                        qCInfo(PhosphorSnapEngine::lcSnapEngine)
-                            << "Zone-number fallback for" << appId << "numbers:" << savedNumbers << "->" << fallbackIds;
-                    }
-                }
-            }
-        }
-    }
-
-    if (!geo.isValid()) {
-        return SnapResult::noSnap();
-    }
-
-    SnapResult result;
-    result.shouldSnap = true;
-    result.geometry = geo;
-    result.zoneId = zoneId;
-    result.zoneIds = zoneIds;
-    result.screenId = savedScreen;
-    return result;
 }
 
 } // namespace PhosphorSnapEngine

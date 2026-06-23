@@ -1,7 +1,7 @@
 {
     "id": "crosshatch",
     "name": "Crosshatch",
-    "description": "Crosshatch reveal — random diagonal threshold with radial falloff from center.",
+    "description": "A crosshatch reveal using a random diagonal threshold with radial falloff from the center.",
     "author": "PlasmaZones (ported from liixini/shaders, https://github.com/liixini/shaders)",
     "version": "1.0",
     "category": "Tile",

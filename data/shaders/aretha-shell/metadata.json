@@ -12,7 +12,6 @@
             "name": "Animation Speed",
             "group": "Animation",
             "type": "float",
-            "slot": 0,
             "default": 0.08,
             "min": 0.01,
             "max": 0.5
@@ -22,7 +21,6 @@
             "name": "Color Grade Intensity",
             "group": "Color Grading",
             "type": "float",
-            "slot": 1,
             "default": 0.25,
             "min": 0.0,
             "max": 1.0
@@ -32,7 +30,6 @@
             "name": "Grade Saturation",
             "group": "Color Grading",
             "type": "float",
-            "slot": 2,
             "default": 1.08,
             "min": 0.5,
             "max": 2.0
@@ -42,7 +39,6 @@
             "name": "Shimmer Intensity",
             "group": "Color Grading",
             "type": "float",
-            "slot": 3,
             "default": 0.02,
             "min": 0.0,
             "max": 0.2
@@ -52,7 +48,6 @@
             "name": "Hex Pixel Size",
             "group": "Hex Grid",
             "type": "float",
-            "slot": 4,
             "default": 35.0,
             "min": 10.0,
             "max": 100.0
@@ -62,7 +57,6 @@
             "name": "Hex Line Thickness",
             "group": "Hex Grid",
             "type": "float",
-            "slot": 5,
             "default": 0.05,
             "min": 0.01,
             "max": 0.2
@@ -72,7 +66,6 @@
             "name": "Hex Grid Opacity",
             "group": "Hex Grid",
             "type": "float",
-            "slot": 6,
             "default": 0.18,
             "min": 0.0,
             "max": 0.5
@@ -82,7 +75,6 @@
             "name": "Hex Pulse Speed",
             "group": "Hex Grid",
             "type": "float",
-            "slot": 7,
             "default": 1.5,
             "min": 0.0,
             "max": 5.0
@@ -92,7 +84,6 @@
             "name": "Hex Scan Speed",
             "group": "Hex Grid",
             "type": "float",
-            "slot": 8,
             "default": 1.0,
             "min": 0.0,
             "max": 5.0
@@ -102,7 +93,6 @@
             "name": "Stream Columns",
             "group": "Data Streams",
             "type": "int",
-            "slot": 9,
             "default": 35,
             "min": 5,
             "max": 100
@@ -112,7 +102,6 @@
             "name": "Stream Opacity",
             "group": "Data Streams",
             "type": "float",
-            "slot": 10,
             "default": 0.15,
             "min": 0.0,
             "max": 0.5
@@ -122,7 +111,6 @@
             "name": "Stream Speed",
             "group": "Data Streams",
             "type": "float",
-            "slot": 11,
             "default": 0.8,
             "min": 0.1,
             "max": 3.0
@@ -132,7 +120,6 @@
             "name": "Trail Length",
             "group": "Data Streams",
             "type": "float",
-            "slot": 12,
             "default": 0.2,
             "min": 0.05,
             "max": 0.5
@@ -142,7 +129,6 @@
             "name": "Audio Sensitivity",
             "group": "Audio",
             "type": "float",
-            "slot": 13,
             "default": 1.0,
             "min": 0.0,
             "max": 2.0
@@ -152,7 +138,6 @@
             "name": "Fill Opacity",
             "group": "Appearance",
             "type": "float",
-            "slot": 14,
             "default": 0.95,
             "min": 0.4,
             "max": 1.0
@@ -162,7 +147,6 @@
             "name": "Data Surge Intensity",
             "group": "Audio",
             "type": "float",
-            "slot": 15,
             "default": 1.0,
             "min": 0.0,
             "max": 3.0
@@ -172,7 +156,6 @@
             "name": "Triangle Edge Width",
             "group": "Tri-Hex",
             "type": "float",
-            "slot": 16,
             "default": 0.03,
             "min": 0.01,
             "max": 0.15
@@ -182,7 +165,6 @@
             "name": "Triangle Edge Opacity",
             "group": "Tri-Hex",
             "type": "float",
-            "slot": 17,
             "default": 0.25,
             "min": 0.0,
             "max": 1.0
@@ -192,7 +174,6 @@
             "name": "Wedge Fill Opacity",
             "group": "Tri-Hex",
             "type": "float",
-            "slot": 18,
             "default": 0.12,
             "min": 0.0,
             "max": 0.5
@@ -202,7 +183,6 @@
             "name": "Wedge Pulse Speed",
             "group": "Tri-Hex",
             "type": "float",
-            "slot": 19,
             "default": 2.0,
             "min": 0.0,
             "max": 8.0
@@ -212,7 +192,6 @@
             "name": "Wedge Rotation Speed",
             "group": "Tri-Hex",
             "type": "float",
-            "slot": 20,
             "default": 0.4,
             "min": 0.0,
             "max": 3.0
@@ -222,7 +201,6 @@
             "name": "Wedge Color Mix",
             "group": "Tri-Hex",
             "type": "float",
-            "slot": 21,
             "default": 0.5,
             "min": 0.0,
             "max": 1.0
@@ -232,7 +210,6 @@
             "name": "Glitch Outline Spread",
             "group": "Labels",
             "type": "float",
-            "slot": 22,
             "default": 2.5,
             "min": 1.0,
             "max": 5.0
@@ -242,7 +219,6 @@
             "name": "Scanline Brightness",
             "group": "Labels",
             "type": "float",
-            "slot": 23,
             "default": 2.0,
             "min": 1.0,
             "max": 4.0
@@ -252,7 +228,6 @@
             "name": "Data Surge Reactivity",
             "group": "Labels",
             "type": "float",
-            "slot": 24,
             "default": 1.0,
             "min": 0.0,
             "max": 2.0
@@ -262,7 +237,6 @@
             "name": "Glitch Frequency",
             "group": "Animation",
             "type": "float",
-            "slot": 25,
             "default": 0.5,
             "min": 0.1,
             "max": 2.0
@@ -272,7 +246,6 @@
             "name": "Show Labels",
             "group": "Labels",
             "type": "bool",
-            "slot": 26,
             "default": true
         },
         {
@@ -280,7 +253,6 @@
             "name": "Edge & Glow",
             "group": "Colors",
             "type": "color",
-            "slot": 0,
             "default": "#55aaff"
         },
         {
@@ -288,7 +260,6 @@
             "name": "Warm Accent",
             "group": "Colors",
             "type": "color",
-            "slot": 1,
             "default": "#ff557f"
         },
         {
@@ -296,7 +267,6 @@
             "name": "Stream Color",
             "group": "Colors",
             "type": "color",
-            "slot": 2,
             "default": "#009ebd"
         },
         {
@@ -304,7 +274,6 @@
             "name": "Cycle Accent",
             "group": "Colors",
             "type": "color",
-            "slot": 3,
             "default": "#5555ff"
         },
         {
@@ -312,7 +281,6 @@
             "name": "Background Color",
             "group": "Colors",
             "type": "color",
-            "slot": 4,
             "default": "#192742"
         },
         {
@@ -320,7 +288,6 @@
             "name": "Wedge Primary",
             "group": "Tri-Hex",
             "type": "color",
-            "slot": 5,
             "default": "#ff3388"
         },
         {
@@ -328,7 +295,6 @@
             "name": "Wedge Secondary",
             "group": "Tri-Hex",
             "type": "color",
-            "slot": 6,
             "default": "#ff734d"
         },
         {
@@ -336,7 +302,6 @@
             "name": "Triangle Edge Color",
             "group": "Tri-Hex",
             "type": "color",
-            "slot": 7,
             "default": "#e626b3"
         }
     ]

@@ -3,7 +3,7 @@
 
 #include "UpdateVisibilityCommand.h"
 
-#include "pz_i18n.h"
+#include "phosphor_i18n.h"
 
 #include "../../EditorController.h"
 
@@ -14,7 +14,7 @@ UpdateVisibilityCommand::UpdateVisibilityCommand(QPointer<EditorController> edit
                                                  const QList<int>& oldDesktops, const QList<int>& newDesktops,
                                                  const QStringList& oldActivities, const QStringList& newActivities,
                                                  const QString& text, QUndoCommand* parent)
-    : QUndoCommand(text.isEmpty() ? PzI18n::tr("Change Zone Visibility", "@action") : text, parent)
+    : QUndoCommand(text.isEmpty() ? PhosphorI18n::tr("Change Zone Visibility", "@action") : text, parent)
     , m_editorController(editorController)
     , m_oldScreens(oldScreens)
     , m_newScreens(newScreens)

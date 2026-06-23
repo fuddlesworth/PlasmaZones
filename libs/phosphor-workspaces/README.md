@@ -9,7 +9,7 @@
 ## Responsibility
 
 Tracks the active virtual desktop and current Activity, with change
-signals on switch. Independent of the PlasmaZones daemon — consumers
+signals on switch. It is independent of the Phosphor daemon, so consumers
 that need workspace awareness link this library directly.
 
 ## Key types
@@ -43,5 +43,5 @@ activities.start();
 - `QtCore`, `QtDBus`
 - KActivities / PlasmaActivities (optional, detected at CMake time;
   `ActivityManager::isAvailable()` returns false when absent and
-  activity queries return empty results — virtual desktop tracking
+  activity queries return empty results, while virtual desktop tracking
   works regardless).

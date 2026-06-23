@@ -4,7 +4,7 @@
 #include "internal.h"
 #include "../overlayservice.h"
 #include "../../core/logging.h"
-#include "pz_slot_keys.h"
+#include "phosphor_slot_keys.h"
 #include <PhosphorOverlay/ShellHost.h>
 #include <PhosphorSurfaces/SurfaceManager.h>
 #include <PhosphorZones/Layout.h>
@@ -25,7 +25,7 @@
 #include <QVector>
 
 #include <PhosphorLayer/Surface.h>
-#include "pz_roles.h"
+#include "phosphor_roles.h"
 #include <PhosphorScreens/ScreenIdentity.h>
 
 namespace PlasmaZones {
@@ -50,7 +50,7 @@ void OverlayService::showZoneSelector(const QString& targetScreenId)
     QScreen* targetScreen = nullptr;
     if (!targetScreenId.isEmpty()) {
         targetScreen = mgr ? mgr->physicalScreenFor(targetScreenId).qscreen
-                           : Phosphor::Screens::ScreenIdentity::findByIdOrName(targetScreenId);
+                           : PhosphorScreens::ScreenIdentity::findByIdOrName(targetScreenId);
     }
 
     const QStringList effectiveIds = mgr ? mgr->effectiveScreenIds() : QStringList();
@@ -78,7 +78,7 @@ void OverlayService::showZoneSelector(const QString& targetScreenId)
             state->shell->shellSurface()->show();
         }
         slot->setVisible(true);
-        m_surfaceAnimator->beginShow(state->shell->shellSurface(), slot, PzRoles::ZoneSelector, []() { });
+        m_surfaceAnimator->beginShow(state->shell->shellSurface(), slot, PhosphorRoles::ZoneSelector, []() { });
         // Zone selector is purely visual during a drag (KWin owns the
         // drag stream and pushes cursor coords via D-Bus
         // updateSelectorPosition). Sync the input region so a stale
@@ -96,7 +96,7 @@ void OverlayService::showZoneSelector(const QString& targetScreenId)
                 continue;
             }
             if (isContextDisabled(m_settings, PhosphorZones::AssignmentEntry::Snapping, screenId,
-                                  m_currentVirtualDesktop, m_currentActivity)) {
+                                  currentVirtualDesktopForScreen(screenId), m_currentActivity)) {
                 continue;
             }
             if (m_excludedScreens.contains(screenId)) {
@@ -111,9 +111,9 @@ void OverlayService::showZoneSelector(const QString& targetScreenId)
             if (targetScreen && screen != targetScreen) {
                 continue;
             }
-            QString screenId = Phosphor::Screens::ScreenIdentity::identifierFor(screen);
+            QString screenId = PhosphorScreens::ScreenIdentity::identifierFor(screen);
             if (isContextDisabled(m_settings, PhosphorZones::AssignmentEntry::Snapping, screenId,
-                                  m_currentVirtualDesktop, m_currentActivity)) {
+                                  currentVirtualDesktopForScreen(screenId), m_currentActivity)) {
                 continue;
             }
             if (m_excludedScreens.contains(screenId)) {
@@ -157,7 +157,7 @@ void OverlayService::hideZoneSelector()
             continue;
         }
         QMetaObject::invokeMethod(slot, "resetCursorState");
-        m_shellHost->hideSlot(screenId, PzSlotKeys::ZoneSelector(), [this, screenId]() {
+        m_shellHost->hideSlot(screenId, PhosphorSlotKeys::ZoneSelector(), [this, screenId]() {
             onZoneSelectorSlotHideCompleted(screenId);
         });
     }
@@ -361,11 +361,12 @@ void OverlayService::updateSelectorPosition(int cursorX, int cursorY)
                 QVariantMap layoutMap = layouts[i].toMap();
                 QString layoutId = layoutMap[QStringLiteral("id")].toString();
 
-                // Skip non-active layouts when screen is locked (either mode)
+                // Skip non-active layouts when screen is locked — a LockContext
+                // rule (checked first) or a manual lock on either mode.
                 if (m_settings && m_layoutManager) {
-                    int curDesktop = m_layoutManager->currentVirtualDesktop();
+                    int curDesktop = currentVirtualDesktopForScreen(cursorScreenId);
                     QString curActivity = m_layoutManager->currentActivity();
-                    bool locked = isAnyModeLocked(m_settings, cursorScreenId, curDesktop, curActivity);
+                    bool locked = isAnyModeLocked(m_settings, m_layoutManager, cursorScreenId, curDesktop, curActivity);
                     if (locked) {
                         // Only allow zone selection from the active layout
                         PhosphorZones::Layout* activeLayout = m_layoutManager->resolveLayoutForScreen(cursorScreenId);
@@ -448,7 +449,7 @@ void OverlayService::updateSelectorPosition(int cursorX, int cursorY)
 
 void OverlayService::createZoneSelectorWindow(const QString& screenId, QScreen* physScreen, const QRect& geom)
 {
-    // Post-shell-migration: the per-VS PzRoles::ZoneSelector wl_surface
+    // Post-shell-migration: the per-VS PhosphorRoles::ZoneSelector wl_surface
     // is replaced by an Item slot inside the per-screen passive shell.
     // This function is now a thin alias for ensurePassiveShellFor +
     // initial property push; the showZoneSelector show-loop already
@@ -473,7 +474,10 @@ void OverlayService::createZoneSelectorWindow(const QString& screenId, QScreen* 
     writeQmlProperty(slot, QStringLiteral("screenAspectRatio"), aspectRatio);
     writeQmlProperty(slot, QStringLiteral("screenWidth"), screenGeom.width());
     if (m_settings) {
-        writeQmlProperty(slot, QStringLiteral("zonePadding"), m_settings->zonePadding());
+        // Zone padding honors per-screen overrides (per-screen → global →
+        // default); border width/radius are global-only (no per-screen key).
+        writeQmlProperty(slot, QStringLiteral("zonePadding"),
+                         GeometryUtils::getEffectiveZonePadding(nullptr, m_settings, screenId));
         writeQmlProperty(slot, QStringLiteral("zoneBorderWidth"), m_settings->borderWidth());
         writeQmlProperty(slot, QStringLiteral("zoneBorderRadius"), m_settings->borderRadius());
     }
@@ -541,7 +545,7 @@ void OverlayService::hideZoneSelectorSlotOnScreen(const QString& effectiveId)
     // while it fades out. PZ-specific QML invocation; the animator-leg
     // mechanism itself routes through ShellHost::hideSlot.
     QMetaObject::invokeMethod(slot, "resetCursorState");
-    m_shellHost->hideSlot(effectiveId, PzSlotKeys::ZoneSelector(), [this, effectiveId]() {
+    m_shellHost->hideSlot(effectiveId, PhosphorSlotKeys::ZoneSelector(), [this, effectiveId]() {
         onZoneSelectorSlotHideCompleted(effectiveId);
     });
 }
@@ -586,7 +590,7 @@ void OverlayService::showZoneSelectorSlotOnScreen(const QString& effectiveId, QS
         state->shell->shellSurface()->show();
     }
     slot->setVisible(true);
-    m_surfaceAnimator->beginShow(state->shell->shellSurface(), slot, PzRoles::ZoneSelector, []() { });
+    m_surfaceAnimator->beginShow(state->shell->shellSurface(), slot, PhosphorRoles::ZoneSelector, []() { });
     syncPassiveShellSurfaceState(effectiveId);
 }
 
@@ -646,9 +650,9 @@ QRect OverlayService::getSelectedZoneGeometry(const QString& screenId) const
     }
 
     auto* mgr = m_screenManager;
-    const Phosphor::Screens::PhysicalScreen physInfo =
-        mgr ? mgr->physicalScreenFor(screenId) : Phosphor::Screens::PhysicalScreen{};
-    QScreen* physScreen = mgr ? physInfo.qscreen : Phosphor::Screens::ScreenIdentity::findByIdOrName(screenId);
+    const PhosphorScreens::PhysicalScreen physInfo =
+        mgr ? mgr->physicalScreenFor(screenId) : PhosphorScreens::PhysicalScreen{};
+    QScreen* physScreen = mgr ? physInfo.qscreen : PhosphorScreens::ScreenIdentity::findByIdOrName(screenId);
 
     // Primary path: use layout/zone geometry pipeline with virtual screen bounds
     if (m_layoutManager && !m_selectedLayoutId.isEmpty()) {
@@ -658,7 +662,7 @@ QRect OverlayService::getSelectedZoneGeometry(const QString& screenId) const
             PhosphorZones::Zone* zone = selectedLayout->zones().at(m_selectedZoneIndex);
             if (zone) {
                 QRect result = GeometryUtils::getZoneGeometryForScreen(m_screenManager, zone, physScreen, screenId,
-                                                                       selectedLayout, m_settings);
+                                                                       selectedLayout, m_settings, m_layoutManager);
                 if (result.isValid()) {
                     return result;
                 }

@@ -1,14 +1,9 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-#version 450
-
-layout(location = 0) in vec2 vTexCoord;
-layout(location = 1) in vec2 vFragCoord;
-
-layout(location = 0) out vec4 fragColor;
-
-#include <common.glsl>
+// The harness supplies #version, <common.glsl> (zone UBO + ZoneCtx + helpers),
+// the vTexCoord/vFragCoord ins, the fragColor out, and the per-zone dispatch
+// main(). audio.glsl is pack-specific, so it stays here.
 #include <audio.glsl>
 
 /*
@@ -34,9 +29,9 @@ layout(location = 0) out vec4 fragColor;
  *   [1].w = fillOpacity      — zone fill alpha
  *
  * Colors:
- *   customColors[0] = primary (default: cyan)
- *   customColors[1] = accent  (default: pink)
- *   customColors[2] = bass    (default: orange)
+ *   p_primaryColor = primary (default: cyan)
+ *   p_accentColor = accent  (default: pink)
+ *   p_bassColor = bass    (default: orange)
  */
 
 
@@ -51,18 +46,18 @@ vec4 renderZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor,
     float borderWidth  = max(params.y, 2.5);
 
     // Parameters with defaults
-    float reactivity    = customParams[0].x >= 0.0 ? customParams[0].x : 1.5;
-    float ringCount     = customParams[0].y >= 0.0 ? customParams[0].y : 24.0;
-    float ringSpeed     = customParams[0].w >= 0.0 ? customParams[0].w : 1.0;
-    float rotSpeed      = customParams[1].x >= 0.0 ? customParams[1].x : 0.15;
-    float idleAnim      = customParams[1].y >= 0.0 ? customParams[1].y : 1.0;
-    float glowIntensity = customParams[1].z >= 0.0 ? customParams[1].z : 2.0;
-    float fillOpacity   = customParams[1].w >= 0.0 ? customParams[1].w : 0.88;
+    float reactivity    = p_reactivity >= 0.0 ? p_reactivity : 1.5;
+    float ringCount     = p_ringCount >= 0.0 ? p_ringCount : 24.0;
+    float ringSpeed     = p_ringSpeed >= 0.0 ? p_ringSpeed : 1.0;
+    float rotSpeed      = p_rotationSpeed >= 0.0 ? p_rotationSpeed : 0.15;
+    float idleAnim      = p_idleAnimation >= 0.0 ? p_idleAnimation : 1.0;
+    float glowIntensity = p_glowIntensity >= 0.0 ? p_glowIntensity : 2.0;
+    float fillOpacity   = p_fillOpacity >= 0.0 ? p_fillOpacity : 0.88;
 
     // Colors
-    vec3 primary  = colorWithFallback(customColors[0].rgb, vec3(0.0, 0.8, 1.0));
-    vec3 accent   = colorWithFallback(customColors[1].rgb, vec3(1.0, 0.2, 0.6));
-    vec3 bassCol  = colorWithFallback(customColors[2].rgb, vec3(1.0, 0.4, 0.0));
+    vec3 primary  = colorWithFallback(p_primaryColor.rgb, vec3(0.0, 0.8, 1.0));
+    vec3 accent   = colorWithFallback(p_accentColor.rgb, vec3(1.0, 0.2, 0.6));
+    vec3 bassCol  = colorWithFallback(p_bassColor.rgb, vec3(1.0, 0.4, 0.0));
 
     // ── Highlighted vs dormant ──────────────────────────────
     // Highlighted zones are fully alive; non-highlighted are subdued/dormant.
@@ -201,7 +196,7 @@ vec4 renderZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor,
         // Audio drives the warp intensity, color, and flow speed.
 
         // Nebula UV — flows at its own pace without bass-driven warping
-        float nebScale = customParams[3].x >= 0.0 ? customParams[3].x : 8.0;
+        float nebScale = p_nebulaScale >= 0.0 ? p_nebulaScale : 8.0;
         vec2 nebUV = globalUV * (nebScale / 3.2);
 
         // Multi-octave noise for the nebula pattern
@@ -328,14 +323,14 @@ vec4 renderZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor,
         result.rgb += primary * innerGlow;
 
         // ── Zone label: Resonance Lens ───────────────────────
-        if (customParams[3].y > 0.5) {
+        if (p_showLabels > 0.5) {
             vec2 labelUv = fragCoord / max(iResolution, vec2(0.001));
             vec2 texel = 1.0 / max(iResolution, vec2(1.0));
             vec4 labelSample = texture(uZoneLabels, labelUv);
             float labelAlpha = labelSample.a;
-            float labelGlowSpread = customParams[2].x >= 0.0 ? customParams[2].x : 3.0;
-            float labelBrightness = customParams[2].y >= 0.0 ? customParams[2].y : 2.0;
-            float labelAudioMul = customParams[2].z >= 0.0 ? customParams[2].z : 1.0;
+            float labelGlowSpread = p_resonanceSpread >= 0.0 ? p_resonanceSpread : 3.0;
+            float labelBrightness = p_ringIntensity >= 0.0 ? p_ringIntensity : 2.0;
+            float labelAudioMul = p_waveReact >= 0.0 ? p_waveReact : 1.0;
 
             // Gaussian halo for ring emission zone
             float halo = 0.0;
@@ -443,33 +438,16 @@ vec4 renderZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor,
 
 // ─── Main ───────────────────────────────────────────────────────
 
-void main() {
-    vec2 fragCoord = vFragCoord;
-    vec4 color = vec4(0.0);
-
-    if (zoneCount == 0) {
-        fragColor = vec4(0.0);
-        return;
-    }
-
-    // Audio analysis (computed once for all zones)
-    bool  hasAudio = iAudioSpectrumSize > 0;
-    float bass    = getBassSoft();
-    float mids    = getMidsSoft();
-    float treble  = getTrebleSoft();
-    float overall = getOverallSoft();
-
-    for (int i = 0; i < zoneCount && i < 64; i++) {
-        vec4 rect = zoneRects[i];
-        if (rect.z <= 0.0 || rect.w <= 0.0) continue;
-
-        vec4 zoneColor = renderZone(fragCoord, rect, zoneFillColors[i],
-            zoneBorderColors[i], zoneParams[i], zoneParams[i].z > 0.5,
-            bass, mids, treble, overall, hasAudio);
-
-        color = blendOver(color, zoneColor);
-    }
-
-    // Labels are composited per-zone inside renderZone() — no separate pass needed
-    fragColor = clampFragColor(color);
+// Per-zone body. The harness generates the dispatch — the zoneCount guard, the
+// bounded loop with the degenerate-rect skip, the blendOver accumulate, and the
+// final clampFragColor — and labels are composited per-zone inside renderZone()
+// (no whole-frame pass), so this is a clean pZone.
+//
+// The audio helpers used to be hoisted once before the loop; here they are read
+// inside pZone (per zone). They return the same per-frame value for every zone,
+// so the output is identical — just a few extra cheap reads.
+vec4 pZone(ZoneCtx z) {
+    bool hasAudio = iAudioSpectrumSize > 0;
+    return renderZone(z.fragCoord, z.rect, z.fillColor, z.borderColor, z.params, z.isHighlighted,
+                      getBassSoft(), getMidsSoft(), getTrebleSoft(), getOverallSoft(), hasAudio);
 }

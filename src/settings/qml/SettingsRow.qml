@@ -5,6 +5,7 @@ import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
 import org.kde.kirigami as Kirigami
+import "SearchAnchorHelpers.js" as SearchAnchors
 
 /**
  * @brief Two-line setting row with title, description, and a right-aligned control.
@@ -24,7 +25,19 @@ Item {
     // ── Public API ──────────────────────────────────────────────────────
     property string title: ""
     property string description: ""
+    /// Deep-link reveal anchor id for this row. Empty = not addressable.
+    /// See SettingsFlickable.revealAnchor.
+    property string searchAnchor: ""
     default property alias content: controlContainer.data
+
+    // A disabled row is hidden rather than shown super-dimmed: when a setting
+    // can't apply in the current state there's nothing actionable in it, so it
+    // collapses out of the layout instead of leaving dead, greyed space. This
+    // tracks `enabled` directly, so a row disabled by an ancestor (e.g. a
+    // card-level master toggle) hides too. Consumers that set their own
+    // `visible` binding override this default (those rows manage their own
+    // show/hide).
+    visible: enabled
 
     Layout.fillWidth: true
     implicitWidth: rowLayout.implicitWidth
@@ -32,6 +45,30 @@ Item {
     Accessible.name: root.title
     Accessible.description: root.description
     Accessible.role: Accessible.Row
+
+    Component.onCompleted: {
+        if (root.searchAnchor.length > 0)
+            Qt.callLater(root._registerSearchAnchor);
+    }
+    Component.onDestruction: {
+        if (root.searchAnchor.length > 0)
+            root._unregisterSearchAnchor();
+    }
+
+    // Register this row's reveal anchor with the hosting page, resolving the
+    // page + collapsible card via the shared walk-up helpers. Deferred via
+    // callLater because SettingsCard reparents its contentItem — the parent
+    // chain to the page is only complete after construction settles.
+    function _registerSearchAnchor() {
+        var pg = SearchAnchors.pageFor(root);
+        if (pg)
+            pg.registerSearchAnchor(root.searchAnchor, root, SearchAnchors.cardFor(root));
+    }
+    function _unregisterSearchAnchor() {
+        var pg = SearchAnchors.pageFor(root);
+        if (pg)
+            pg.unregisterSearchAnchor(root.searchAnchor);
+    }
 
     RowLayout {
         id: rowLayout
@@ -64,7 +101,6 @@ Item {
                 maximumLineCount: 3
                 elide: Text.ElideRight
             }
-
         }
 
         // Right side: control widget (default children)
@@ -75,7 +111,5 @@ Item {
             Layout.maximumWidth: rowLayout.width * 0.45
             spacing: Kirigami.Units.smallSpacing
         }
-
     }
-
 }

@@ -31,7 +31,7 @@ A second pair of types specialises the base node for the **zone-overlay**
 case: `ZoneShaderNodeRhi` adds a labels texture binding and zone counts
 in the base UBO, and `ZoneUniformExtension` writes zone rects, fill /
 border colours, and per-zone parameters into the UBO tail. They are
-optional — non-zone shader effects use `ShaderEffect` + `ShaderNodeRhi`
+optional. Non-zone shader effects use `ShaderEffect` + `ShaderNodeRhi`
 directly.
 
 ## Key types
@@ -47,25 +47,35 @@ directly.
 
 ## Typical use
 
-In QML:
+This library does not ship a QML module. A consumer registers
+`ShaderEffect` (and any subclass) with `qmlRegisterType()` under its own
+module URI, then instantiates it in QML:
+
+```cpp
+qmlRegisterType<PhosphorRendering::ShaderEffect>("MyApp.Shaders", 1, 0, "ShaderEffect");
+```
 
 ```qml
-import PhosphorRendering 1.0
+import MyApp.Shaders 1.0
 
 ShaderEffect {
     anchors.fill: parent
-    fragmentShader: "qrc:/shaders/neon-city/effect.frag"
+    shaderSource: "qrc:/shaders/neon-city/effect.frag"
     bufferShaderPaths: [
         "qrc:/shaders/neon-city/buffer.frag"
     ]
 
-    customParams: [0.7, 1.0, 0.35, 0.0]   // packed into UBO
-    customColors: ["#3B82F6", "#A855F7"]
-
-    // Optional: a uniform extension feeds per-zone data into the UBO tail
-    uniformExtension: ZoneUniformExtension { zones: view.zones }
+    // Numbered vec4 / color slots packed into the UBO (customParams1..8,
+    // customColor1..16):
+    customParams1: Qt.vector4d(0.7, 1.0, 0.35, 0.0)
+    customColor1: "#3B82F6"
+    customColor2: "#A855F7"
 }
 ```
+
+A `setUniformExtension()` method (C++ side) attaches an
+`IUniformExtension` such as `ZoneUniformExtension` to feed per-zone data
+into the UBO tail.
 
 ## Design notes
 
@@ -80,9 +90,9 @@ ShaderEffect {
   runs on OpenGL, Vulkan, and Metal backends. Shaders are authored in
   Vulkan-flavor GLSL 450.
 - **UBO is `BaseUniforms` + extension.** The base layout from
-  [`phosphor-shaders`](../phosphor-shaders/README.md) is Shadertoy-compatible;
-  consumers attach an `IUniformExtension` to append application-specific
-  data. Zone rendering uses `ZoneUniformExtension`; animations use a
+  [`phosphor-shaders`](../phosphor-shaders/README.md) is Shadertoy-compatible,
+  and consumers attach an `IUniformExtension` to append application-specific
+  data. Zone rendering uses `ZoneUniformExtension`, and animations use a
   different one declared in [`phosphor-animation`](../phosphor-animation/README.md).
 
 ## Dependencies

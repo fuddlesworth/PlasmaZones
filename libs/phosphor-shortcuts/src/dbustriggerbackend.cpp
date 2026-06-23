@@ -6,7 +6,7 @@
 
 #include <QDBusConnection>
 
-namespace Phosphor::Shortcuts {
+namespace PhosphorShortcuts {
 
 DBusTriggerBackend::DBusTriggerBackend(QObject* parent)
     : IBackend(parent)
@@ -64,4 +64,4 @@ void DBusTriggerBackend::TriggerAction(const QString& id)
     Q_EMIT activated(id);
 }
 
-} // namespace Phosphor::Shortcuts
+} // namespace PhosphorShortcuts

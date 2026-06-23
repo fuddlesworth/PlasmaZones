@@ -23,21 +23,22 @@ pure-compute consumers:
 
 | CMake target | Links | Linked by |
 |--------------|-------|-----------|
-| `PhosphorScreens::Core`            | `Qt6::Core` + `Qt6::Gui` | Domain libraries (zones, snap/tile engines, placement) that need topology + identity but never touch the bus. |
-| `PhosphorScreens::PhosphorScreens` | `::Core` + `Qt6::DBus` + `PhosphorProtocol::Types` | The daemon and anything that needs the D-Bus surface (`DBusScreenAdaptor`, `PlasmaPanelSource`, `ScreenResolver`). |
+| `PhosphorScreens::Core`            | `Qt6::Core` + `Qt6::Gui` | Domain libraries (zones, snap/tile engines, placement) that need POD topology types + identity but never touch the bus or the live manager. |
+| `PhosphorScreens::Runtime`         | `::Core` + `Qt6::Core` + `Qt6::Gui` (+ `PhosphorWayland` privately) | Consumers that need the live `ScreenManager` (physical-screen tracking via Wayland). |
+| `PhosphorScreens::PhosphorScreens` | `::Runtime` + `Qt6::DBus` + `PhosphorProtocol::Types` | The daemon and anything that needs the D-Bus surface (`DBusScreenAdaptor`, `PlasmaPanelSource`, `ScreenResolver`). |
 
 ## Key types
 
 | Type | Purpose |
 |------|---------|
-| `Phosphor::Screens::ScreenManager`      | Physical + virtual topology state with change signals as screens come and go. |
-| `Phosphor::Screens::ScreenResolver`     | Point-to-screen lookup; accepts an optional D-Bus endpoint override. |
-| `Phosphor::Screens::IPanelSource`       | Pluggable panel-reservation source per desktop (Plasma, GNOME, wlr). |
-| `Phosphor::Screens::PlasmaPanelSource`  | Bundled `IPanelSource` for `org.kde.plasmashell` reservations. |
-| `Phosphor::Screens::VirtualScreenDef`   | One rectangular sub-region of a physical screen with its own screen ID. |
-| `Phosphor::Screens::VirtualScreenSwapper` | D-Bus-addressable directional virtual-screen swaps (`left`, `right`, `up`, `down`). |
-| `Phosphor::Screens::DBusScreenAdaptor`  | Canonical `org.plasmazones.Screen` D-Bus surface. |
-| `Phosphor::Screens::IConfigStore`       | Persisted virtual-screen configuration. `InMemoryConfigStore` is the default for tests. |
+| `PhosphorScreens::ScreenManager`      | Physical + virtual topology state with change signals as screens come and go. |
+| `PhosphorScreens::ScreenResolver`     | Point-to-screen lookup that accepts an optional D-Bus endpoint override. |
+| `PhosphorScreens::IPanelSource`       | Pluggable panel-reservation source per desktop (Plasma, GNOME, wlr). |
+| `PhosphorScreens::PlasmaPanelSource`  | Bundled `IPanelSource` for `org.kde.plasmashell` reservations. |
+| `PhosphorScreens::VirtualScreenDef`   | One rectangular sub-region of a physical screen with its own screen ID. |
+| `PhosphorScreens::VirtualScreenSwapper` | D-Bus-addressable directional virtual-screen swaps (`left`, `right`, `up`, `down`). |
+| `PhosphorScreens::DBusScreenAdaptor`  | Canonical `org.plasmazones.Screen` D-Bus surface. |
+| `PhosphorScreens::IConfigStore`       | Persisted virtual-screen configuration. `InMemoryConfigStore` is the default for tests. |
 
 ## Design notes
 
@@ -45,21 +46,26 @@ pure-compute consumers:
   screen ID, layout assignments, autotile state, and overlay windows.
   Everything downstream treats them exactly like physical screens.
 - **Panel source is pluggable.** Plasma exposes reservations via
-  `org.kde.plasmashell`; GNOME via `org.gnome.Mutter`; sway and Hyprland
-  via wlr-foreign-toplevel. The manager core stays compositor-agnostic
-  by delegating to an `IPanelSource` owned by the consumer.
+  `org.kde.plasmashell`, GNOME via `org.gnome.Mutter`, and sway and
+  Hyprland via wlr-foreign-toplevel. The manager core stays
+  compositor-agnostic by delegating to an `IPanelSource` owned by the
+  consumer.
 - **Direction tokens match the wire format.** `Direction::Left` /
   `Right` / `Up` / `Down` are the same lower-case ASCII strings the
   D-Bus `swapVirtualScreenInDirection` method accepts, so adaptors can
   pass user strings through verbatim.
 - **The D-Bus surface is a separate target.** `DBusScreenAdaptor`, the
-  Plasma panel source, and the resolver live in `PhosphorScreens`; the
-  topology core lives in `PhosphorScreens::Core`. A snap or tiling engine
-  links `::Core` and never pulls QtDBus in to reason about screens.
+  Plasma panel source, and the resolver live in `PhosphorScreens`. The
+  live `ScreenManager` lives in `PhosphorScreens::Runtime`, and the POD
+  topology types live in `PhosphorScreens::Core`. A snap or tiling
+  engine links `::Core` and never pulls QtDBus in to reason about
+  screens.
 
 ## Dependencies
 
 - `PhosphorScreens::Core` — `QtCore`, `QtGui`
+- `PhosphorScreens::Runtime` — additionally `phosphor-wayland` (private)
+  for the live `ScreenManager`
 - `PhosphorScreens` — additionally `QtDBus` and `PhosphorProtocol::Types`
   (for the `org.plasmazones.Screen` service constants)
 - [`phosphor-identity`](../phosphor-identity/README.md) — `VirtualScreenId` format helpers

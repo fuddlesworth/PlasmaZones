@@ -34,7 +34,7 @@ namespace PhosphorLayout {
 /// Sources are expected to be cheap to query — the layout-picker UI may
 /// call @c availableLayouts after every layout-set change, and
 /// @c previewAt once per visible row. Sources that need expensive work
-/// (e.g. running a JS algorithm) are expected to cache results internally
+/// (e.g. running a scripted algorithm) are expected to cache results internally
 /// and emit @c contentsChanged when their cached output becomes stale.
 ///
 /// @note Per-source contract details:

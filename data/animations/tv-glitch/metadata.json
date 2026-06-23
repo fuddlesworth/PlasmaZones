@@ -1,7 +1,7 @@
 {
     "id": "tv-glitch",
     "name": "TV Glitch",
-    "description": "Analog glitch artifacts — RGB shift, scanlines, and noise tear across the surface as it collapses.",
+    "description": "Analog glitch artifacts. RGB shift, scanlines, and noise tear across the surface as it collapses.",
     "author": "PlasmaZones (ported from Burn-My-Windows by Simon Schneegans, https://github.com/Schneegans/Burn-My-Windows)",
     "version": "1.0",
     "category": "Glitch",

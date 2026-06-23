@@ -10,6 +10,7 @@
 #include <effect/effect.h>
 
 #include "dragtracker.h"
+#include "snaphandler.h"
 #include "windowanimator.h"
 
 namespace PlasmaZones {
@@ -49,7 +50,7 @@ void PlasmaZonesEffect::reconfigure(ReconfigureFlags flags)
 
 bool PlasmaZonesEffect::isActive() const
 {
-    // Critical: include `!m_shaderManager.m_shaderTransitions.empty()` here. KWin calls
+    // Critical: include `!m_shaderManager.empty()` here. KWin calls
     // isActive() before each paint cycle and EXCLUDES the effect from
     // the chain when it returns false — meaning prePaintScreen and
     // paintWindow are never called, so a shader transition installed
@@ -63,8 +64,24 @@ bool PlasmaZonesEffect::isActive() const
     // maximize/resize) installs a shader transition only — without this
     // clause those events would resolve cleanly, redirect the window,
     // and then sit unrendered until the timer-driven teardown fired.
-    return m_dragTracker->isDragging() || m_windowAnimator->hasActiveAnimations()
-        || !m_shaderManager.m_shaderTransitions.empty();
+    //
+    // `m_shaderManager.hasOpacityRules()` is included for the same
+    // chain-exclusion reason, but the failure mode is the opposite of a
+    // one-shot transition: a SetOpacity rule is a PERSISTENT per-window
+    // appearance change that prePaintWindow/paintWindow must apply on
+    // every frame the matched window is painted. The transient triggers
+    // above only hold isActive() true while a drag/animation/transition
+    // is in flight; the instant they settle KWin drops the effect from
+    // the chain and `data.setOpacity()` stops running, so the window
+    // snaps back to full opacity until the next interaction spins a
+    // transition back up. Gating on hasOpacityRules() keeps the effect
+    // in the chain for as long as any enabled opacity rule exists, so
+    // the dim survives idle. This does not force continuous repaints —
+    // KWin still only composites on damage; isActive() merely keeps the
+    // effect consulted (and the window composited rather than
+    // direct-scanned-out) when a frame is produced.
+    return m_dragTracker->isDragging() || m_windowAnimator->hasActiveAnimations() || !m_shaderManager.empty()
+        || m_shaderManager.hasOpacityRules();
 }
 
 void PlasmaZonesEffect::grabbedKeyboardEvent(QKeyEvent* e)
@@ -75,7 +92,7 @@ void PlasmaZonesEffect::grabbedKeyboardEvent(QKeyEvent* e)
         // hides the overlay and sets snapCancelled; the drag continues as
         // a plain window move without zone snapping.
         qCInfo(lcEffect) << "Drag escape: overlay hidden, drag continues";
-        callCancelSnap();
+        m_snapHandler->callCancelSnap();
     }
     // All other keys are silently consumed by the grab. Modifier state is
     // unaffected because mouseChanged reads xkb state directly.

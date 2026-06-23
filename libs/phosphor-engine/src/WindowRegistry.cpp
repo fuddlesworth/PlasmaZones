@@ -137,6 +137,30 @@ void WindowRegistry::releaseCanonical(const QString& anyWindowId)
     m_canonicalByInstance.remove(instanceId);
 }
 
+int WindowRegistry::pruneStaleInstances(const QSet<QString>& aliveInstanceIds)
+{
+    // Union of both maps' keys — a window may carry a canonical entry without
+    // a metadata record (or vice versa) depending on which signals it received
+    // before dying. Collect first, then mutate (remove() invalidates iterators
+    // and fires windowDisappeared, which subscribers may react to re-entrantly).
+    QSet<QString> stale;
+    for (auto it = m_records.constBegin(); it != m_records.constEnd(); ++it) {
+        if (!aliveInstanceIds.contains(it.key())) {
+            stale.insert(it.key());
+        }
+    }
+    for (auto it = m_canonicalByInstance.constBegin(); it != m_canonicalByInstance.constEnd(); ++it) {
+        if (!aliveInstanceIds.contains(it.key())) {
+            stale.insert(it.key());
+        }
+    }
+    for (const QString& instanceId : std::as_const(stale)) {
+        remove(instanceId); // fires windowDisappeared + drops m_records / appId index
+        m_canonicalByInstance.remove(instanceId);
+    }
+    return stale.size();
+}
+
 void WindowRegistry::indexInsert(const QString& instanceId, const QString& appId)
 {
     if (appId.isEmpty()) {

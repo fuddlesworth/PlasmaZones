@@ -5,6 +5,7 @@
 
 #include <PhosphorEngine/IPlacementState.h>
 #include <PhosphorEngine/NavigationContext.h>
+#include <PhosphorEngine/WindowPlacement.h>
 
 #include <QJsonArray>
 #include <QJsonObject>
@@ -16,10 +17,13 @@
 #include <QVariantMap>
 
 #include <functional>
+#include <optional>
 
 class QObject;
 
 namespace PhosphorEngine {
+
+class ICrossSurfaceResolver;
 
 /// Unified placement engine interface.
 ///
@@ -153,6 +157,71 @@ public:
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
+    // OPTIONAL: Window-appearance re-application (compositor reconnect)
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    /// Re-drive the compositor's per-window appearance (border, hidden title
+    /// bar) for every window this engine currently manages, WITHOUT recomputing
+    /// the layout — windows keep their current zones/positions. The compositor
+    /// derives each window's chrome from the geometry/state this re-emits.
+    ///
+    /// Called by the daemon when the compositor bridge (re)registers: on a
+    /// daemon or effect restart the compositor drops its per-window appearance
+    /// state, so it must be re-driven from the daemon's authoritative placement
+    /// state. Distinct from reapplyLayout(), which is a user navigation action
+    /// that recomputes the layout and may move windows. Default is a no-op for
+    /// engines that don't manage compositor-side window chrome.
+    virtual void reapplyManagedWindowAppearance()
+    {
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // OPTIONAL: Unified placement capture/restore (engine-agnostic restore model)
+    //
+    // The single seam for the unified WindowPlacement restore model. An engine
+    // implements exactly these two methods to participate in save+restore; a new
+    // engine (e.g. a future scrolling engine) needs no core/schema change — it keys
+    // its own EngineSlot (state token + slot reference) under its engineId() in the
+    // single per-window record and reads/writes the shared freeGeometryByScreen.
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    /// Report @p windowId's CURRENT placement for persistence, or nullopt if this
+    /// engine does not manage it. Fill the engine's EngineSlot — `state` from its
+    /// token vocabulary (free/floating/snapped/tiled/...) plus its slot reference
+    /// (zone IDs / tile order) — under engines[engineId()], and the screen/desktop/
+    /// activity context. Do NOT set freeGeometryByScreen: the capture orchestrator
+    /// fills the shared free/float geometry from the live frame, and only when the
+    /// state is free/floating, so a managed rect never becomes the float-back.
+    ///
+    /// This is the polymorphic capture seam the common layer drives — the WTA close
+    /// hook and the save-time snapshot call it for every window.
+    virtual std::optional<WindowPlacement> capturePlacement(const QString& windowId) const
+    {
+        Q_UNUSED(windowId)
+        return std::nullopt;
+    }
+
+    /// Apply @p placement to a (re)opening window on @p screenId. Return true if
+    /// this engine claimed and applied it. Dispatch on placement.slotFor(engineId())
+    /// .state, reading the engine's slot reference and the shared freeGeometryByScreen.
+    ///
+    /// Contract pair of capturePlacement() and the engine-agnostic entry point for a
+    /// new engine. NOTE: the built-in snap and autotile engines do NOT route through
+    /// this method — they apply restore inline in their own open paths
+    /// (SnapEngine::resolveWindowRestore consults the store and returns a SnapResult
+    /// to the effect; AutotileEngine::insertWindow take()s the record and inserts at
+    /// position) because those paths carry engine-specific policy (snap's auto-snap
+    /// fallback chain; autotile's burst-insert coalescing) that a single
+    /// apply-this-record call cannot express. A minimal future engine may instead
+    /// implement only this method and have its own open path invoke it directly.
+    virtual bool restorePlacement(const WindowPlacement& placement, const QString& screenId)
+    {
+        Q_UNUSED(placement)
+        Q_UNUSED(screenId)
+        return false;
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
     // OPTIONAL: Window ordering (override if engine maintains stacking order)
     // ═══════════════════════════════════════════════════════════════════════════
 
@@ -199,17 +268,6 @@ public:
     {
         Q_UNUSED(windowId)
     }
-    virtual bool restoreSavedModeFloat(const QString& windowId)
-    {
-        Q_UNUSED(windowId)
-        return false;
-    }
-    /// Remove saved floating state for the given windows (per-window, not bulk clear).
-    virtual void clearSavedFloatingForWindows(const QStringList& windowIds)
-    {
-        Q_UNUSED(windowIds)
-    }
-
     // ═══════════════════════════════════════════════════════════════════════════
     // OPTIONAL: Drag insert preview (override if engine supports drag-to-insert)
     // ═══════════════════════════════════════════════════════════════════════════
@@ -275,6 +333,24 @@ public:
         return {};
     }
 
+    /// Notify the engine that a tracked window finished an interactive resize.
+    ///
+    /// The daemon's WindowTracking adaptor forwards the compositor's
+    /// interactive-resize-finished event here so an engine can reflow the rest
+    /// of its layout to absorb the change (autotile fills the freed gap;
+    /// GitHub #652). @p oldFrame / @p newFrame are the window's frame geometry
+    /// before and after the resize; @p screenId is the screen the daemon
+    /// resolved the window to. Default is a no-op for engines (e.g. snap) that
+    /// have no neighbour-reflow model.
+    virtual void onWindowResized(const QString& windowId, const QRect& oldFrame, const QRect& newFrame,
+                                 const QString& screenId)
+    {
+        Q_UNUSED(windowId)
+        Q_UNUSED(oldFrame)
+        Q_UNUSED(newFrame)
+        Q_UNUSED(screenId)
+    }
+
     // ═══════════════════════════════════════════════════════════════════════════
     // Cross-engine handoff
     //
@@ -297,9 +373,8 @@ public:
     // Engines that don't currently distinguish ownership across screens can
     // leave both as no-ops; the defaults are safe.
     //
-    // The verbs are prefixed `handoff*` to keep them distinct from
-    // PlacementEngineBase::releaseWindow (which is part of the base FSM
-    // lifecycle and means "this window is no longer engine-managed at all"
+    // The verbs are prefixed `handoff*` to keep them distinct from an engine
+    // dropping a window entirely (the window is no longer engine-managed at all
     // — a different concept from "transferring ownership to another engine").
     // ═══════════════════════════════════════════════════════════════════════════
 
@@ -311,10 +386,21 @@ public:
         QString windowId;
         QString fromEngineId; ///< source engine identity ("snap" / "autotile" / "")
         QString toScreenId; ///< destination screen (must be owned by `to` engine)
+        int toDesktop = 0; ///< destination virtual desktop (1-based); 0 = current
+                           ///< desktop (drag-drop / same-desktop monitor crossing).
+                           ///< Set for a cross-VIRTUAL-DESKTOP handoff so the
+                           ///< receiver places the window in the target desktop's
+                           ///< state/layout, not the currently-visible one.
         QPoint dropPos; ///< cursor position at drop, or invalid for non-drag handoffs
         QRect sourceGeometry; ///< window's frame at handoff time (for size preservation)
         QStringList sourceZoneIds; ///< zones the window held at source (empty if not snapped)
         bool wasFloating = false; ///< window was floating in source engine
+        int insertIndex = -1; ///< autotile target: raw window-order index (position
+                              ///< in windowOrder(), counting floats — NOT the
+                              ///< tiled-only index) to insert at. -1 = insertion-order
+                              ///< policy. Used by a cross-mode SWAP so the arriving
+                              ///< window takes the departed partner's exact slot.
+                              ///< Ignored by snap targets.
     };
 
     /// Receive ownership of a window from another engine.
@@ -408,9 +494,34 @@ public:
     {
         Q_UNUSED(desktop)
     }
+    /// Set a single screen's current virtual desktop (Plasma 6.7 "switch desktops
+    /// independently for each screen"). A PURE context swap — it selects which
+    /// per-(screen, desktop) tiling state is current for this screen; it does NOT
+    /// migrate windows between desktop states (the other desktop's state must stay
+    /// put so it reappears when that screen returns). Default no-op for engines
+    /// that are not per-screen-desktop-aware.
+    virtual void setCurrentDesktopForScreen(const QString& screenId, int desktop)
+    {
+        Q_UNUSED(screenId)
+        Q_UNUSED(desktop)
+    }
+    /// Drop a screen's per-output desktop, reverting it to the global current.
+    virtual void clearCurrentDesktopForScreen(const QString& screenId)
+    {
+        Q_UNUSED(screenId)
+    }
     virtual void setCurrentActivity(const QString& activity)
     {
         Q_UNUSED(activity)
+    }
+    /// Inject the cross-surface resolver used to find a neighbouring output /
+    /// desktop when directional navigation reaches a surface boundary. The
+    /// resolver is borrowed, not owned; the caller must keep it alive for the
+    /// engine's lifetime (in the daemon it outlives both engines by member
+    /// order). Engines that don't support cross-surface navigation ignore it.
+    virtual void setCrossSurfaceResolver(ICrossSurfaceResolver* resolver)
+    {
+        Q_UNUSED(resolver)
     }
     virtual void updateStickyScreenPins(const std::function<bool(const QString&)>& isWindowSticky)
     {
@@ -468,44 +579,24 @@ public:
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
-    // OPTIONAL: Float origin (override if engine persists float state across mode switches)
+    // OPTIONAL: Mode-specific float MARKER (runtime discriminator, NOT persistence)
+    //
+    // Distinguishes a USER float in this engine's mode from an incidental float
+    // (e.g. autotile overflow). It is live runtime state the capture funnel reads
+    // to decide whether a float should persist into the record — there is no
+    // parallel "saved floats" store; the WindowPlacement record is the single
+    // source of truth for cross-mode float state.
     // ═══════════════════════════════════════════════════════════════════════════
 
     virtual void markModeSpecificFloated(const QString& windowId)
     {
         Q_UNUSED(windowId)
     }
-    virtual void clearAllSavedFloating()
-    {
-    }
-    virtual void saveModeFloat(const QString& windowId)
-    {
-        Q_UNUSED(windowId)
-    }
-    virtual void clearSavedModeFloating()
-    {
-    }
 
-    // ═══════════════════════════════════════════════════════════════════════════
-    // OPTIONAL: Serialization (override if engine has persistent state)
-    // ═══════════════════════════════════════════════════════════════════════════
-
-    virtual QJsonArray serializeWindowOrders() const
-    {
-        return {};
-    }
-    virtual void deserializeWindowOrders(const QJsonArray& orders)
-    {
-        Q_UNUSED(orders)
-    }
-    virtual QJsonObject serializePendingRestores() const
-    {
-        return {};
-    }
-    virtual void deserializePendingRestores(const QJsonObject& obj)
-    {
-        Q_UNUSED(obj)
-    }
+    // Per-window restore persistence is unified: engines implement
+    // capturePlacement()/restorePlacement() (below) and the common
+    // WindowPlacementStore handles capture timing, serialization, and the single
+    // WindowPlacements config key. No engine-specific serialize/deserialize hooks.
 
     // ═══════════════════════════════════════════════════════════════════════════
     // OPTIONAL: Init hooks (override to receive shared services)
@@ -518,12 +609,6 @@ public:
     {
         Q_UNUSED(registry)
     }
-    /// @param fn Callback; must remain valid for this engine's lifetime.
-    virtual void setIsWindowFloatingFn(std::function<bool(const QString&)> fn)
-    {
-        Q_UNUSED(fn)
-    }
-
     // ═══════════════════════════════════════════════════════════════════════════
     // OPTIONAL: Master operations (autotile-specific, no-op on snap engine)
     // ═══════════════════════════════════════════════════════════════════════════
@@ -575,7 +660,7 @@ public:
 
     /// Per-screen state object for the given screen. May return nullptr
     /// if the engine does not manage the screen OR if per-screen state
-    /// ownership has not yet been wired (e.g., SnapEngine before PR 2).
+    /// ownership has not yet been wired for that engine.
     /// Callers must not use a non-null return as a proxy for "engine
     /// manages this screen" — use isActiveOnScreen() for that check.
     virtual IPlacementState* stateForScreen(const QString& screenId) = 0;

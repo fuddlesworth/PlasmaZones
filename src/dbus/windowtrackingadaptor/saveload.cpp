@@ -8,6 +8,7 @@
 #include "../../config/configbackends.h"
 #include "../../core/interfaces.h"
 #include "../../core/screenmoderouter.h"
+#include <PhosphorContext/ContextResolver.h>
 #include <PhosphorScreens/VirtualScreen.h>
 #include <PhosphorZones/LayoutRegistry.h>
 #include <PhosphorZones/Layout.h>
@@ -27,33 +28,6 @@
 namespace PlasmaZones {
 using namespace WindowTrackingInternal;
 
-static QHash<QString, QStringList> parseZoneListMap(const QString& json)
-{
-    QHash<QString, QStringList> result;
-    if (json.isEmpty()) {
-        return result;
-    }
-    QJsonDocument doc = QJsonDocument::fromJson(json.toUtf8());
-    if (!doc.isObject()) {
-        return result;
-    }
-    QJsonObject obj = doc.object();
-    for (auto it = obj.constBegin(); it != obj.constEnd(); ++it) {
-        if (it.value().isArray()) {
-            QStringList zones;
-            for (const QJsonValue& v : it.value().toArray()) {
-                if (v.isString() && !v.toString().isEmpty()) {
-                    zones.append(v.toString());
-                }
-            }
-            if (!zones.isEmpty()) {
-                result[it.key()] = zones;
-            }
-        }
-    }
-    return result;
-}
-
 bool WindowTrackingAdaptor::isPersistedContextDisabled(const QString& screenId, int virtualDesktop,
                                                        const QString& activity) const
 {
@@ -61,26 +35,33 @@ bool WindowTrackingAdaptor::isPersistedContextDisabled(const QString& screenId, 
     // snap entries pre-multi-monitor, sticky windows, etc.). Loading and
     // keeping them is the historical default — the alternative drops snap
     // state on every windowless desktop session.
-    //
-    // m_screenModeRouter is wired post-construction by the daemon; the very
-    // first call site is loadState() (invoked from this adaptor's own ctor
-    // before the daemon calls setScreenModeRouter), where it is still null.
-    // Snap-side consumers (WindowZoneAssignmentsFull, PendingRestoreQueues,
-    // PreFloat* maps) and snap's ShouldTrackPredicate route through here and
-    // get the Snapping fallback. Autotile's ShouldPersistRestorePredicate also
-    // routes through here and supplies its own activity tag — `modeFor` picks
-    // up the screen's current Autotile mode whenever the router is wired.
     if (screenId.isEmpty()) {
         return false;
     }
-    const PhosphorZones::AssignmentEntry::Mode mode =
-        m_screenModeRouter ? m_screenModeRouter->modeFor(screenId) : PhosphorZones::AssignmentEntry::Snapping;
-    return isContextDisabled(m_settings, mode, screenId, virtualDesktop, activity);
+    if (!m_contextResolver) {
+        // Pre-`setContextResolver` path — the first call lands from
+        // this adaptor's ctor (loadState()) before Daemon hands the
+        // resolver over. Returns "nothing is disabled" so the
+        // historical "load everything when no settings backend is
+        // wired" behaviour is preserved.
+        return false;
+    }
+    // Routes through `handleForPersisted` which resolves the screen's
+    // mode via the bound IModeProvider — every consumer (snap-side
+    // ShouldTrackPredicate, the WindowPlacementStore serialize keep-predicate,
+    // and the save/load filters) ends up applying the cascade keyed on
+    // the mode the screen is actually running.
+    return m_contextResolver->isDisabled(m_contextResolver->handleForPersisted(screenId, virtualDesktop, activity));
 }
 
 void WindowTrackingAdaptor::saveState()
 {
     using D = PhosphorPlacement::WindowTrackingService;
+    // Refresh open floating windows' live geometry into the unified store BEFORE
+    // snapshotting the dirty mask, so a dragged floated window persists its
+    // current position (no per-move capture hook fires). This may set
+    // DirtyWindowPlacements, which takeDirty() then picks up below.
+    refreshOpenWindowPlacements();
     // Snapshot the dirty mask — after this call the service is clean
     // from our perspective. If the write fails, the persistence worker's
     // writeCompleted(success=false) handler re-marks the same bits on
@@ -108,88 +89,12 @@ void WindowTrackingAdaptor::saveState()
         tracking->writeString(ConfigKeys::activeLayoutIdKey(), m_layoutManager->activeLayout()->id().toString());
     }
 
-    // Save zone assignments with full windowIds (appId|uuid) to preserve multi-instance
-    // distinction. On daemon-only restart (KWin still running), UUIDs are stable so
-    // exact matching prevents restoring the wrong instance of a multi-instance app.
-    QJsonArray fullAssignments;
-    if (dirty & D::DirtyZoneAssignments) {
-        for (auto it = m_service->zoneAssignments().constBegin(); it != m_service->zoneAssignments().constEnd(); ++it) {
-            const QString assignedScreen = m_service->screenAssignments().value(it.key());
-            const int desktop = m_service->desktopAssignments().value(it.key(), 0);
-            // Disabled-context filter (discussion #461 item 2). A window that
-            // crossed onto a now-disabled monitor (e.g. user disabled snapping
-            // on their secondary) should not have its zone assignment
-            // re-persisted — that's the entry that resurfaces and yanks the
-            // window back on the next session. The runtime in-memory map keeps
-            // the assignment; only persistence is suppressed.
-            if (isPersistedContextDisabled(assignedScreen, desktop)) {
-                continue;
-            }
-            QJsonObject entry;
-            entry[QLatin1String("windowId")] = it.key();
-            entry[QLatin1String("zoneIds")] = toJsonArray(it.value());
-            entry[QLatin1String("screen")] = PhosphorIdentity::VirtualScreenId::isVirtual(assignedScreen)
-                ? assignedScreen
-                : Phosphor::Screens::ScreenIdentity::idForName(assignedScreen);
-            entry[QLatin1String("desktop")] = desktop;
-            fullAssignments.append(entry);
-        }
-        tracking->writeString(ConfigKeys::windowZoneAssignmentsFullKey(),
-                              QString::fromUtf8(QJsonDocument(fullAssignments).toJson(QJsonDocument::Compact)));
-    }
-
-    // Save pending restore queues as JSON: appId -> array of entry objects
-    // Each entry: {zoneIds: [...], screen: "...", desktop: N, layout: "...", zoneNumbers: [...]}
-    QJsonObject pendingQueuesObj;
-    if (dirty & D::DirtyPendingRestores) {
-        for (auto it = m_service->pendingRestoreQueues().constBegin();
-             it != m_service->pendingRestoreQueues().constEnd(); ++it) {
-            QJsonArray entryArray;
-            for (const auto& entry : it.value()) {
-                // Disabled-context filter (discussion #461 item 2). The Tier-A
-                // write gate in lifecycle.cpp covers new closes, but the
-                // in-memory queue may still hold pre-fix entries from before
-                // the user disabled the screen. Filtering here keeps them out
-                // of the on-disk session.
-                if (isPersistedContextDisabled(entry.screenId, entry.virtualDesktop)) {
-                    continue;
-                }
-                QJsonObject entryObj;
-                entryObj[QLatin1String("zoneIds")] = toJsonArray(entry.zoneIds);
-                if (!entry.screenId.isEmpty()) {
-                    entryObj[QLatin1String("screen")] = PhosphorIdentity::VirtualScreenId::isVirtual(entry.screenId)
-                        ? entry.screenId
-                        : Phosphor::Screens::ScreenIdentity::idForName(entry.screenId);
-                }
-                if (entry.virtualDesktop > 0) {
-                    entryObj[QLatin1String("desktop")] = entry.virtualDesktop;
-                }
-                if (!entry.layoutId.isEmpty()) {
-                    entryObj[QLatin1String("layout")] = entry.layoutId;
-                }
-                if (!entry.zoneNumbers.isEmpty()) {
-                    QJsonArray numArray;
-                    for (int num : entry.zoneNumbers) {
-                        numArray.append(num);
-                    }
-                    entryObj[QLatin1String("zoneNumbers")] = numArray;
-                }
-                // Persist windowKind only when concrete. `Unknown` is the
-                // wire default and re-loads identically from a missing key,
-                // so omitting it keeps pre-fix on-disk sessions byte-stable
-                // for the common case (no kind plumbed yet).
-                if (entry.windowKind != PhosphorEngine::WindowKind::Unknown) {
-                    entryObj[QLatin1String("windowKind")] = static_cast<int>(entry.windowKind);
-                }
-                entryArray.append(entryObj);
-            }
-            if (!entryArray.isEmpty()) {
-                pendingQueuesObj[it.key()] = entryArray;
-            }
-        }
-        tracking->writeString(ConfigKeys::pendingRestoreQueuesKey(),
-                              QString::fromUtf8(QJsonDocument(pendingQueuesObj).toJson(QJsonDocument::Compact)));
-    }
+    // Snap zone assignments and pending-restore queues are no longer persisted
+    // as separate keys — a snapped window's restore state is one WindowPlacement
+    // record (state="snapped", engineData.zoneIds). The runtime SnapState maps are
+    // re-populated by resolveWindowRestore re-committing from the store on open.
+    tracking->deleteKey(ConfigKeys::windowZoneAssignmentsFullKey());
+    tracking->deleteKey(ConfigKeys::pendingRestoreQueuesKey());
 
     // Clean up obsolete keys from old formats. Reached only when at
     // least one dirty bit is set (the DirtyNone early-return above
@@ -204,34 +109,24 @@ void WindowTrackingAdaptor::saveState()
     tracking->deleteKey(ConfigKeys::obsoleteWindowScreenAssignmentsKey());
     tracking->deleteKey(ConfigKeys::obsoleteWindowDesktopAssignmentsKey());
 
-    // Save pre-tile geometries so float-toggle restores to the correct position
-    // even after daemon restart (windows stay at their zone positions across restarts).
-    // Save full windowId format for daemon-only restarts (UUIDs stable, multi-instance distinction).
-    // Save appId format as fallback for KWin restarts (UUIDs change).
-    //
-    // Disabled-context filter (discussion #461 item 2): drop entries whose
-    // screenId is on the disabled-monitor list. Without this, float-restore
-    // on the next session would place the window at coordinates the user
-    // disabled snapping on (and after a screen-disconnect they may even be
-    // off-screen). Mirrors the WindowZoneAssignmentsFull filter above.
-    if ((dirty & D::DirtyPreTileGeometries) && m_snapEngine) {
-        QHash<QString, PhosphorEngine::PlacementEngineBase::UnmanagedEntry> filteredGeoms;
-        const auto& allGeoms = m_snapEngine->unmanagedGeometries();
-        filteredGeoms.reserve(allGeoms.size());
-        for (auto it = allGeoms.constBegin(); it != allGeoms.constEnd(); ++it) {
-            if (isPersistedContextDisabled(it.value().screenId, 0)) {
-                continue;
-            }
-            filteredGeoms.insert(it.key(), it.value());
-        }
-        tracking->writeString(ConfigKeys::preTileGeometriesFullKey(), serializeGeometryMapFull(filteredGeoms));
-        tracking->writeString(ConfigKeys::preTileGeometriesKey(), serializeGeometryMap(filteredGeoms, m_service));
-    }
+    // Pre-tile (float-back) geometry is no longer persisted separately — it lives
+    // in the unified WindowPlacement record's shared freeGeometryByScreen (the single
+    // float-back store). Drop the obsolete keys.
+    tracking->deleteKey(ConfigKeys::preTileGeometriesFullKey());
+    tracking->deleteKey(ConfigKeys::preTileGeometriesKey());
 
     // Save last used zone info (from service)
     if (dirty & D::DirtyLastUsedZone) {
         tracking->writeString(ConfigKeys::lastUsedZoneIdKey(), m_service->lastUsedZoneId());
-        // Note: Other last-used fields would need accessors in service
+        // lastUsedZoneClass, lastUsedScreenName, and lastUsedDesktop are
+        // exposed on PhosphorPlacement::WindowTrackingService but are
+        // intentionally NOT persisted here: each is a transient hint used
+        // during the current session's snap-restore lookup and is
+        // recomputed from the live zone topology on the next snap event.
+        // Persisting them would lock-in stale state across config changes
+        // (zone added / removed / renamed). The matching loadState read (the
+        // lastUsedZoneId block below) only restores the id and threads the
+        // live companions through unchanged to avoid blanking them.
     }
 
     // Float state is ephemeral (session-only) — do NOT persist across restarts.
@@ -245,53 +140,11 @@ void WindowTrackingAdaptor::saveState()
     // 0 and the monitor-disabled list is the load-bearing check anyway.
     // Build the set of dropped appIds from the screen map so the zone map
     // can drop its paired entries without re-doing the screen lookup.
-    QSet<QString> droppedPreFloatAppIds;
-    for (auto it = m_service->preFloatScreenAssignments().constBegin();
-         it != m_service->preFloatScreenAssignments().constEnd(); ++it) {
-        if (isPersistedContextDisabled(it.value(), 0)) {
-            const QString key = m_service->currentAppIdFor(it.key());
-            if (!key.isEmpty()) {
-                droppedPreFloatAppIds.insert(key);
-            }
-        }
-    }
-
-    // Save pre-float zone assignments (for unfloating after session restore).
-    // Runtime keys are full window IDs; convert to the CURRENT app class so
-    // that a window which renamed mid-session persists under the live class.
-    QJsonObject preFloatZonesObj;
-    if (dirty & D::DirtyPreFloatZones) {
-        for (auto it = m_service->preFloatZoneAssignments().constBegin();
-             it != m_service->preFloatZoneAssignments().constEnd(); ++it) {
-            QString key = m_service->currentAppIdFor(it.key());
-            if (key.isEmpty() || droppedPreFloatAppIds.contains(key)) {
-                continue;
-            }
-            preFloatZonesObj[key] = toJsonArray(it.value());
-        }
-        tracking->writeString(ConfigKeys::preFloatZoneAssignmentsKey(),
-                              QString::fromUtf8(QJsonDocument(preFloatZonesObj).toJson(QJsonDocument::Compact)));
-    }
-
-    // Save pre-float screen assignments (for unfloating to correct monitor).
-    // Same current-class conversion as above, plus translate to screen IDs.
-    // Disabled-context drop is funnelled through droppedPreFloatAppIds
-    // (built above) so the screen and zone loops use a single decision.
-    if (dirty & D::DirtyPreFloatScreens) {
-        QJsonObject preFloatScreensObj;
-        for (auto it = m_service->preFloatScreenAssignments().constBegin();
-             it != m_service->preFloatScreenAssignments().constEnd(); ++it) {
-            QString key = m_service->currentAppIdFor(it.key());
-            if (key.isEmpty() || droppedPreFloatAppIds.contains(key)) {
-                continue;
-            }
-            preFloatScreensObj[key] = PhosphorIdentity::VirtualScreenId::isVirtual(it.value())
-                ? it.value()
-                : Phosphor::Screens::ScreenIdentity::idForName(it.value());
-        }
-        tracking->writeString(ConfigKeys::preFloatScreenAssignmentsKey(),
-                              QString::fromUtf8(QJsonDocument(preFloatScreensObj).toJson(QJsonDocument::Compact)));
-    }
+    // Pre-float zone/screen assignments are no longer persisted separately — a
+    // floated window's pre-float zones live in its WindowPlacement record
+    // (engineData.preFloatZones), restored into SnapState on reopen.
+    tracking->deleteKey(ConfigKeys::preFloatZoneAssignmentsKey());
+    tracking->deleteKey(ConfigKeys::preFloatScreenAssignmentsKey());
 
     // Save user-snapped classes
     QJsonArray userSnappedArray;
@@ -303,38 +156,39 @@ void WindowTrackingAdaptor::saveState()
                               QString::fromUtf8(QJsonDocument(userSnappedArray).toJson(QJsonDocument::Compact)));
     }
 
-    // Save autotile per-context window orders (analogous to WindowZoneAssignmentsFull
-    // for snap mode). masterCount/splitRatio are NOT saved here — Settings owns those
-    // via AutotileScreen:<id> per-screen overrides.
-    if (dirty & D::DirtyAutotileOrders) {
-        if (m_serializeTilingStatesFn) {
-            const QJsonArray autotileOrders = m_serializeTilingStatesFn();
-            if (!autotileOrders.isEmpty()) {
-                tracking->writeString(ConfigKeys::autotileWindowOrdersKey(),
-                                      QString::fromUtf8(QJsonDocument(autotileOrders).toJson(QJsonDocument::Compact)));
-            } else {
-                tracking->deleteKey(ConfigKeys::autotileWindowOrdersKey());
-            }
-        } else {
-            // No serialize delegate — clean up any stale key from a prior session
-            // where autotile was enabled. Prevents restoring orphaned window orders.
-            tracking->deleteKey(ConfigKeys::autotileWindowOrdersKey());
-        }
-    }
+    // Autotile window orders and pending restores are no longer persisted as
+    // separate keys — an autotiled window's position is one WindowPlacement record
+    // (state="autotiled", engineData.position), captured by the common save-time
+    // snapshot and close hook, exactly like snap. Drop the obsolete keys.
+    tracking->deleteKey(ConfigKeys::autotileWindowOrdersKey());
+    tracking->deleteKey(ConfigKeys::autotilePendingRestoresKey());
 
-    // Save autotile pending restore queues (close/reopen window preservation).
-    // Separate key from window orders to keep the orders array homogeneous.
-    if (dirty & D::DirtyAutotilePending) {
-        if (m_serializePendingRestoresFn) {
-            const QJsonObject pendingRestores = m_serializePendingRestoresFn();
-            if (!pendingRestores.isEmpty()) {
-                tracking->writeString(ConfigKeys::autotilePendingRestoresKey(),
-                                      QString::fromUtf8(QJsonDocument(pendingRestores).toJson(QJsonDocument::Compact)));
-            } else {
-                tracking->deleteKey(ConfigKeys::autotilePendingRestoresKey());
-            }
+    // Obsolete float-restore queue — replaced by the unified WindowPlacementStore.
+    // Drop any stale key left by an older build.
+    tracking->deleteKey(ConfigKeys::floatRestoreQueuesKey());
+
+    // Unified WindowPlacementStore — the single source of truth for per-window
+    // restore state (snapped / floated). The keep predicate reuses the single
+    // disabled-context gate, so a record on a disabled monitor/desktop never
+    // persists. refreshOpenWindowPlacements() (top of saveState) has already
+    // re-captured open floating windows' live geometry into the store.
+    if (dirty & D::DirtyWindowPlacements) {
+        const QJsonObject placements =
+            m_service->placementStore().serialize([this](const PhosphorEngine::WindowPlacement& p) {
+                // Persist only records with something to restore. A contentless
+                // {floating, no geometry, no zones} residue carries nothing yet and,
+                // at MaxPerApp per app, would crowd out a real placement in the next
+                // session's FIFO — so it must never reach disk. (refreshOpenWindowPlacements
+                // above re-captures live geometry, so an actually-floating window is
+                // content-bearing here.)
+                return p.hasRestorableContent()
+                    && !isPersistedContextDisabled(p.screenId, p.virtualDesktop, p.activity);
+            });
+        if (!placements.isEmpty()) {
+            tracking->writeString(ConfigKeys::windowPlacementsKey(),
+                                  QString::fromUtf8(QJsonDocument(placements).toJson(QJsonDocument::Compact)));
         } else {
-            tracking->deleteKey(ConfigKeys::autotilePendingRestoresKey());
+            tracking->deleteKey(ConfigKeys::windowPlacementsKey());
         }
     }
 
@@ -358,30 +212,30 @@ void WindowTrackingAdaptor::saveState()
     } else {
         // Fallback synchronous path.
         //
-        // This branch is only reachable when m_sessionBackend is not a
-        // PhosphorConfig::JsonBackend — i.e. tests that wire a memory-only backend.
-        // The production daemon always uses PhosphorConfig::JsonBackend, so the
-        // async/retry path above is the only one exercised outside of
-        // the test harness.
+        // Reachable in two cases:
+        //   1. m_sessionBackend is not a PhosphorConfig::JsonBackend —
+        //      tests that wire a memory-only backend.
+        //   2. The production shutdown path: `saveStateOnShutdown` resets
+        //      `m_persistenceWorker` before calling `saveState()`, so the
+        //      async branch is unavailable on the very last save.
         //
         // sync() returns void, so we have no way to detect a failed
         // write and re-mark the committed bits for retry. The mask has
         // already been taken (above), which means a silent failure here
         // silently loses the committed bits — same behavior as
-        // pre-Phase-3 code, and acceptable only because this path is
-        // test-only. Log a one-time warning on first hit so any future
-        // production regression is obvious in logs.
+        // pre-Phase-3 code. Log a one-time warning on first hit so any
+        // unexpected production regression (steady-state saves landing
+        // here instead of the shutdown one-shot) is obvious in logs.
         if (!m_syncFallbackWarned) {
             qCWarning(lcDbusWindow) << "saveState: using synchronous fallback backend; failed writes cannot be retried "
-                                       "(expected only in unit tests)";
+                                       "(expected for the one shutdown save and for unit tests with a memory backend)";
             m_syncFallbackWarned = true;
         }
         m_sessionBackend->sync();
     }
-    qCInfo(lcDbusWindow) << "Saved state: dirty=" << Qt::hex << dirty << Qt::dec << "zones=" << fullAssignments.size()
-                         << "pending=" << pendingQueuesObj.size()
-                         << "preTile=" << (m_snapEngine ? m_snapEngine->unmanagedGeometries().size() : 0)
-                         << "preFloat=" << preFloatZonesObj.size() << "userSnapped=" << userSnappedArray.size();
+    qCInfo(lcDbusWindow) << "Saved state: dirty=" << Qt::hex << dirty << Qt::dec
+                         << "placements=" << m_service->placementStore().size()
+                         << "userSnapped=" << userSnappedArray.size();
 }
 
 void WindowTrackingAdaptor::requestReapplyWindowGeometries()
@@ -433,381 +287,34 @@ void WindowTrackingAdaptor::loadState()
     auto readVal = [&](const QString& key, const QString& def = QString()) -> QString {
         return tracking->readString(key, def);
     };
-    auto readIntVal = [&](const QString& key, int def = 0) -> int {
-        return tracking->readInt(key, def);
-    };
 
-    // Build pending restore queues from:
-    // 1. Active zone assignments — windows still open at daemon shutdown
-    // 2. Pending restore queues (PendingRestoreQueues) — windows closed before shutdown
-    //
-    // If full windowId format is available (WindowZoneAssignmentsFull), load exact
-    // assignments into m_windowZoneAssignments for precise instance matching after
-    // daemon-only restart (KWin still running, UUIDs stable). Also build appId-keyed
-    // pending queues as fallback for KWin restarts (UUIDs change).
+    // Snap zone assignments and pending-restore queues are no longer loaded from
+    // disk — the unified WindowPlacementStore (loaded below) is the sole source of
+    // per-window restore state. resolveWindowRestore re-commits snapped records into
+    // SnapState as each window reopens.
 
-    QHash<QString, QList<PhosphorEngine::PendingRestore>> pendingQueues;
-
-    // Pending entries derived from active assignments (fallback for KWin restarts where
-    // UUIDs change). Collected separately from persisted pending queues so we can do
-    // count-based merging — prevents exponential growth while preserving multi-instance entries.
-    QHash<QString, QList<PhosphorEngine::PendingRestore>> activePending;
-
-    // Try full-windowId format first (preserves multi-instance distinction)
-    QHash<QString, QStringList> fullZones;
-    QHash<QString, QString> fullScreens;
-    QHash<QString, int> fullDesktops;
-
-    QString fullJson = readVal(ConfigKeys::windowZoneAssignmentsFullKey(), QString());
-    if (!fullJson.isEmpty()) {
-        QJsonDocument doc = QJsonDocument::fromJson(fullJson.toUtf8());
-        if (doc.isArray()) {
-            for (const QJsonValue& val : doc.array()) {
-                if (!val.isObject()) {
-                    continue;
-                }
-                QJsonObject entry = val.toObject();
-                QString windowId = entry[QLatin1String("windowId")].toString();
-                if (windowId.isEmpty()) {
-                    continue;
-                }
-                QStringList zoneIds;
-                for (const QJsonValue& v : entry[QLatin1String("zoneIds")].toArray()) {
-                    if (v.isString() && !v.toString().isEmpty()) {
-                        zoneIds.append(v.toString());
-                    }
-                }
-                if (zoneIds.isEmpty()) {
-                    continue;
-                }
-                QString screen = entry[QLatin1String("screen")].toString();
-                int desktop = entry[QLatin1String("desktop")].toInt(0);
-
-                // Disabled-context filter (discussion #461 item 2). A session
-                // saved before the user disabled this monitor/desktop carries
-                // assignments that would otherwise resurface and yank the
-                // window back into a zone the user told us to leave alone.
-                // Drop them on load — the matching autotile cleanup in
-                // pruneStaleRestores fires automatically when active screens
-                // are recomputed; this is the snap-side equivalent.
-                if (isPersistedContextDisabled(screen, desktop)) {
-                    qCInfo(lcDbusWindow) << "loadState: dropping zone assignment for" << windowId
-                                         << "on disabled context — screen:" << screen << "desktop:" << desktop;
-                    continue;
-                }
-
-                fullZones[windowId] = zoneIds;
-                fullScreens[windowId] = screen;
-                fullDesktops[windowId] = desktop;
-
-                // Also build appId-keyed pending entries as fallback for KWin restarts
-                // (UUIDs change, so exact matches won't work). For daemon-only restarts,
-                // calculateRestoreFromSession() guards against wrong-instance consumption.
-                // Collected separately — merged after loading persisted queues to prevent duplication.
-                // Registry is typically empty during load, so currentAppIdFor
-                // falls back to string parsing — same behavior as the old code
-                // but consistent with the rest of the codebase.
-                QString appId = m_service->currentAppIdFor(windowId);
-                // Skip a corrupt appId for the same reason the persisted-queue
-                // loop below does: currentAppIdFor falls back to string parsing
-                // here (the registry is empty during load), so a pre-3.0
-                // windowId yields a whitespace-bearing key no live window
-                // matches. Without this gate the merge would reintroduce the
-                // corrupt key the persisted-queue gate set out to drop.
-                if (!PhosphorIdentity::WindowId::isValidAppId(appId)) {
-                    continue;
-                }
-                PhosphorEngine::PendingRestore pending;
-                pending.zoneIds = zoneIds;
-                pending.screenId = screen;
-                pending.virtualDesktop = desktop;
-                activePending[appId].append(pending);
-            }
-        }
+    // Load last used zone info. Only the id is persisted by saveState
+    // (lastUsedZoneClass/Screen/Desktop are intentionally session-local —
+    // see the DirtyLastUsedZone save block above). Skip the setLastUsedZone call entirely
+    // when the id key is absent — calling it with empty id + empty
+    // companions would destructively overwrite any live values the
+    // service holds. The service's own write paths populate the
+    // companions at runtime as the user snaps windows; restoring the
+    // id alone is sufficient for the cross-session "last used zone"
+    // intent.
+    const QString lastZoneId = readVal(ConfigKeys::lastUsedZoneIdKey(), QString());
+    if (!lastZoneId.isEmpty()) {
+        // Pass through the current service state for the companions so
+        // a same-session reload doesn't blank them.
+        m_service->setLastUsedZone(lastZoneId, m_service->lastUsedScreenName(), m_service->lastUsedZoneClass(),
+                                   m_service->lastUsedDesktop());
     }
-
-    // Load exact assignments so isWindowSnapped() returns true for daemon-only restarts.
-    // calculateRestoreFromSession() checks for exact-match siblings before allowing
-    // FIFO consumption, preventing wrong-instance restore for multi-instance apps.
-    m_service->setActiveAssignments(fullZones, fullScreens, fullDesktops);
-
-    // Load persisted pending restore queues (appId -> array of entry objects).
-    // These go directly into pendingQueues. Persisted entries are richer than
-    // active-derived ones (they include layoutId and zoneNumbers).
-    QString pendingQueuesJson = readVal(ConfigKeys::pendingRestoreQueuesKey(), QString());
-    if (!pendingQueuesJson.isEmpty()) {
-        QJsonDocument doc = QJsonDocument::fromJson(pendingQueuesJson.toUtf8());
-        if (doc.isObject()) {
-            QJsonObject obj = doc.object();
-            for (auto it = obj.constBegin(); it != obj.constEnd(); ++it) {
-                if (!it.value().isArray()) {
-                    continue;
-                }
-                // Drop entries under a corrupt key — blank " " keys and the
-                // pre-3.0 "resourceName resourceClass" composites that survive
-                // an upgrade (session state outlives a ~/.config wipe).
-                // Loading them verbatim lets them be consumed by unrelated
-                // windows on reopen. See WindowId::isValidAppId.
-                if (!PhosphorIdentity::WindowId::isValidAppId(it.key())) {
-                    qCInfo(lcDbusWindow) << "Dropping pending-restore entries under corrupt appId key:" << it.key();
-                    continue;
-                }
-                for (const QJsonValue& entryVal : it.value().toArray()) {
-                    if (!entryVal.isObject()) {
-                        continue;
-                    }
-                    QJsonObject entryObj = entryVal.toObject();
-                    PhosphorEngine::PendingRestore entry;
-                    // Parse zoneIds
-                    for (const QJsonValue& v : entryObj[QLatin1String("zoneIds")].toArray()) {
-                        if (v.isString() && !v.toString().isEmpty()) {
-                            entry.zoneIds.append(v.toString());
-                        }
-                    }
-                    if (entry.zoneIds.isEmpty()) {
-                        continue;
-                    }
-                    entry.screenId = entryObj[QLatin1String("screen")].toString();
-                    entry.virtualDesktop = entryObj[QLatin1String("desktop")].toInt(0);
-                    entry.layoutId = entryObj[QLatin1String("layout")].toString();
-                    for (const QJsonValue& v : entryObj[QLatin1String("zoneNumbers")].toArray()) {
-                        if (v.isDouble()) {
-                            entry.zoneNumbers.append(v.toInt());
-                        }
-                    }
-                    // windowKind defaults to Unknown when missing (legacy on-disk
-                    // session predates the kind gate). Out-of-range integers
-                    // are clamped to Unknown for the same reason adaptor-side
-                    // wire ints are clamped: never reinterpret a corrupt value
-                    // as a concrete enum.
-                    const int kindInt = entryObj[QLatin1String("windowKind")].toInt(0);
-                    entry.windowKind = (kindInt == static_cast<int>(PhosphorEngine::WindowKind::Normal))
-                        ? PhosphorEngine::WindowKind::Normal
-                        : (kindInt == static_cast<int>(PhosphorEngine::WindowKind::Transient))
-                        ? PhosphorEngine::WindowKind::Transient
-                        : PhosphorEngine::WindowKind::Unknown;
-                    // Disabled-context filter (discussion #461 item 2).
-                    // Pre-fix sessions may contain restore entries for a
-                    // monitor / desktop the user has since disabled snapping
-                    // on; drop those on load so they never get replayed.
-                    if (isPersistedContextDisabled(entry.screenId, entry.virtualDesktop)) {
-                        qCInfo(lcDbusWindow)
-                            << "loadState: dropping pending restore for" << it.key()
-                            << "on disabled context — screen:" << entry.screenId << "desktop:" << entry.virtualDesktop;
-                        continue;
-                    }
-                    pendingQueues[it.key()].append(entry);
-                }
-            }
-        }
-    }
-
-    // Merge active-derived entries with persisted pending queues.
-    //
-    // Active entries represent windows that were alive and snapped at the time of
-    // daemon shutdown — they are the MOST RECENT state. Persisted pending entries
-    // may include older entries from windows that were closed in previous sessions.
-    //
-    // FIFO ordering invariant: active entries must come FIRST so that when N windows
-    // reopen, each consumes the entry matching its last-known state. Without this,
-    // stale persisted entries from a previous session (e.g., a second Firefox window
-    // on VS2 that no longer exists) could be consumed before the current VS1 entry,
-    // causing the window to restore to the wrong virtual screen.
-    //
-    // When an active entry matches a persisted entry (same fingerprint), the persisted
-    // version is used because it contains richer data (layoutId, zoneNumbers).
-    // Unmatched persisted entries (from previously-closed windows) are appended AFTER
-    // all active entries. This correctly handles multi-instance apps and prevents
-    // entry doubling on every daemon restart.
-    for (auto activeIt = activePending.constBegin(); activeIt != activePending.constEnd(); ++activeIt) {
-        const QString& appId = activeIt.key();
-        QList<PhosphorEngine::PendingRestore> persistedList = pendingQueues.value(appId);
-        QVector<bool> persistedUsed(persistedList.size(), false);
-
-        // Phase 1: For each active entry, find a matching persisted entry to enrich it.
-        // Active entries go to the front of the queue (most recent state first).
-        QList<PhosphorEngine::PendingRestore> activeEnriched;
-        for (const auto& activeEntry : activeIt.value()) {
-            bool matched = false;
-            for (int i = 0; i < persistedList.size(); ++i) {
-                if (!persistedUsed[i] && persistedList[i].zoneIds == activeEntry.zoneIds
-                    && persistedList[i].screenId == activeEntry.screenId
-                    && persistedList[i].virtualDesktop == activeEntry.virtualDesktop) {
-                    // Use persisted entry (has layoutId and zoneNumbers)
-                    activeEnriched.append(persistedList[i]);
-                    persistedUsed[i] = true;
-                    matched = true;
-                    break;
-                }
-            }
-            if (!matched) {
-                // New window snapped since last save — no persisted match
-                activeEnriched.append(activeEntry);
-            }
-        }
-
-        // Phase 2: Collect unmatched persisted entries (from previously-closed windows).
-        QList<PhosphorEngine::PendingRestore> unmatchedPersisted;
-        for (int i = 0; i < persistedList.size(); ++i) {
-            if (!persistedUsed[i]) {
-                unmatchedPersisted.append(persistedList[i]);
-            }
-        }
-
-        // Rebuild queue: active entries first, then stale entries from older sessions.
-        QList<PhosphorEngine::PendingRestore> merged;
-        merged.reserve(activeEnriched.size() + unmatchedPersisted.size());
-        merged.append(activeEnriched);
-        merged.append(unmatchedPersisted);
-
-        if (merged.isEmpty()) {
-            pendingQueues.remove(appId);
-        } else {
-            pendingQueues[appId] = merged;
-        }
-    }
-
-    m_service->setPendingRestoreQueues(pendingQueues);
-
-    // Load pre-tile geometries into the engine's unmanaged-geometry store.
-    // Disabled-context filter mirrors saveState: drop entries whose stored
-    // screen is on the user's disabled-monitor list, so a session saved
-    // before the fix doesn't replay leaked entries on the next start.
-    using UnmanagedEntry = PhosphorEngine::PlacementEngineBase::UnmanagedEntry;
-    QHash<QString, UnmanagedEntry> unmanagedGeometries;
-    auto loadGeometries = [this](const QString& json, QHash<QString, UnmanagedEntry>& out) {
-        if (json.isEmpty()) {
-            return;
-        }
-        QJsonDocument doc = QJsonDocument::fromJson(json.toUtf8());
-        if (!doc.isObject()) {
-            return;
-        }
-        QJsonObject obj = doc.object();
-        for (auto it = obj.constBegin(); it != obj.constEnd(); ++it) {
-            if (it.value().isObject()) {
-                QJsonObject geomObj = it.value().toObject();
-                QRect geom(geomObj[QLatin1String("x")].toInt(), geomObj[QLatin1String("y")].toInt(),
-                           geomObj[QLatin1String("width")].toInt(), geomObj[QLatin1String("height")].toInt());
-                if (geom.width() > 0 && geom.height() > 0) {
-                    QString screen = geomObj[QLatin1String("screen")].toString();
-                    if (isPersistedContextDisabled(screen, 0)) {
-                        continue;
-                    }
-                    out[it.key()] = UnmanagedEntry{geom, screen};
-                }
-            }
-        }
-    };
-
-    // Load full windowId format (per-runtime-instance data from a daemon-only
-    // restart where KWin UUIDs are still valid). These are instance-scoped —
-    // deliberately NOT mirrored to the appId key on load.
-    QString fullTileJson = readVal(ConfigKeys::preTileGeometriesFullKey(), QString());
-    if (!fullTileJson.isEmpty()) {
-        QJsonDocument doc = QJsonDocument::fromJson(fullTileJson.toUtf8());
-        if (doc.isArray()) {
-            for (const QJsonValue& val : doc.array()) {
-                if (!val.isObject()) {
-                    continue;
-                }
-                QJsonObject entry = val.toObject();
-                QString windowId = entry[QLatin1String("windowId")].toString();
-                if (windowId.isEmpty()) {
-                    continue;
-                }
-                QRect geom(entry[QLatin1String("x")].toInt(), entry[QLatin1String("y")].toInt(),
-                           entry[QLatin1String("width")].toInt(), entry[QLatin1String("height")].toInt());
-                if (geom.width() > 0 && geom.height() > 0) {
-                    QString screen = entry[QLatin1String("screen")].toString();
-                    if (isPersistedContextDisabled(screen, 0)) {
-                        continue;
-                    }
-                    unmanagedGeometries[windowId] = UnmanagedEntry{geom, screen};
-                }
-            }
-        }
-    }
-
-    // Load appId-keyed format (cross-session baseline).
-    QString tileJson = readVal(ConfigKeys::preTileGeometriesKey(), QString());
-    if (!tileJson.isEmpty()) {
-        QHash<QString, UnmanagedEntry> appIdGeometries;
-        loadGeometries(tileJson, appIdGeometries);
-        for (auto it = appIdGeometries.constBegin(); it != appIdGeometries.constEnd(); ++it) {
-            if (!unmanagedGeometries.contains(it.key())) {
-                unmanagedGeometries[it.key()] = it.value();
-            }
-        }
-    }
-    if (m_snapEngine) {
-        m_snapEngine->setUnmanagedGeometries(unmanagedGeometries);
-    }
-
-    // Load last used zone info
-    QString lastZoneId = readVal(ConfigKeys::lastUsedZoneIdKey(), QString());
-    QString lastScreenId = readVal(ConfigKeys::lastUsedScreenNameKey(), QString());
-    QString lastZoneClass = readVal(ConfigKeys::lastUsedZoneClassKey(), QString());
-    int lastDesktop = readIntVal(ConfigKeys::lastUsedDesktopKey(), 0);
-    m_service->setLastUsedZone(lastZoneId, lastScreenId, lastZoneClass, lastDesktop);
 
     // Float state is ephemeral (session-only) — skip loading.
     // Any stale FloatingWindows entries from older versions are cleaned up in saveState().
 
-    // Load pre-float zone assignments (for unfloating after session restore).
-    // Supports both old format (string) and new format (JSON array) for
-    // backward compat. The disabled-context filter for these entries needs
-    // the paired screen, so the zone-keyed drop-set is built below from the
-    // screen-load loop and then applied to the parsed zones map.
-    QHash<QString, QStringList> preFloatZones =
-        parseZoneListMap(readVal(ConfigKeys::preFloatZoneAssignmentsKey(), QString()));
-
-    // Load pre-float screen assignments (for unfloating to correct monitor).
-    // Values may be screen IDs (new) or connector names (legacy) — resolve to
-    // current connector name. Disabled-context filter (discussion #461 item 2):
-    // drop entries whose stored screen is on the user's disabled-monitor list
-    // before they reach the in-memory map. PreFloat has no desktop dimension,
-    // so we pass desktop=0 — the helper short-circuits the desktop gate and
-    // monitor-disabled is the load-bearing check.
-    QHash<QString, QString> preFloatScreens;
-    QSet<QString> droppedPreFloatAppIds;
-    QString preFloatScreensJson = readVal(ConfigKeys::preFloatScreenAssignmentsKey(), QString());
-    if (!preFloatScreensJson.isEmpty()) {
-        QJsonDocument doc = QJsonDocument::fromJson(preFloatScreensJson.toUtf8());
-        if (doc.isObject()) {
-            QJsonObject obj = doc.object();
-            for (auto it = obj.constBegin(); it != obj.constEnd(); ++it) {
-                if (it.value().isString()) {
-                    QString storedScreen = it.value().toString();
-                    if (isPersistedContextDisabled(storedScreen, 0)) {
-                        qCInfo(lcDbusWindow) << "loadState: dropping pre-float screen entry for" << it.key()
-                                             << "on disabled context — screen:" << storedScreen;
-                        droppedPreFloatAppIds.insert(it.key());
-                        continue;
-                    }
-                    // Virtual screen IDs are stored as-is — no connector/ID translation
-                    if (!PhosphorIdentity::VirtualScreenId::isVirtual(storedScreen)) {
-                        if (!Phosphor::Screens::ScreenIdentity::isConnectorName(storedScreen)) {
-                            QString connectorName = Phosphor::Screens::ScreenIdentity::nameForId(storedScreen);
-                            if (!connectorName.isEmpty()) {
-                                storedScreen = connectorName;
-                            }
-                        }
-                    }
-                    preFloatScreens[it.key()] = storedScreen;
-                }
-            }
-        }
-    }
-
-    // Strip paired zone entries for any appId whose screen entry was dropped
-    // above — keeping a zone-only entry would unfloat to the wrong screen.
-    for (const QString& appId : std::as_const(droppedPreFloatAppIds)) {
-        preFloatZones.remove(appId);
-    }
-
-    m_service->setPreFloatZoneAssignments(preFloatZones);
-    m_service->setPreFloatScreenAssignments(preFloatScreens);
+    // Pre-float zone/screen assignments are no longer loaded — a floated window's
+    // pre-float zones are restored from its WindowPlacement record on reopen.
 
     // Load user-snapped classes
     QSet<QString> userSnappedClasses;
@@ -825,34 +332,29 @@ void WindowTrackingAdaptor::loadState()
     }
     m_service->setUserSnappedClasses(userSnappedClasses);
 
-    // Restore autotile per-context window orders (analogous to WindowZoneAssignmentsFull)
-    if (m_deserializeTilingStatesFn) {
-        const QString autotileOrdersStr = readVal(ConfigKeys::autotileWindowOrdersKey(), QString());
-        if (!autotileOrdersStr.isEmpty()) {
+    // Autotile window orders / pending restores are no longer loaded — autotiled
+    // windows reopen at their saved position from the unified store (insertWindow
+    // consumes the record); within-session context-switch order is runtime state.
+
+    // Restore the unified WindowPlacementStore — the single source of truth for
+    // per-window restore state.
+    {
+        const QString placementsStr = readVal(ConfigKeys::windowPlacementsKey(), QString());
+        if (!placementsStr.isEmpty()) {
             QJsonParseError parseError;
-            const QJsonDocument doc = QJsonDocument::fromJson(autotileOrdersStr.toUtf8(), &parseError);
-            if (parseError.error == QJsonParseError::NoError && doc.isArray()) {
-                m_deserializeTilingStatesFn(doc.array());
+            const QJsonDocument doc = QJsonDocument::fromJson(placementsStr.toUtf8(), &parseError);
+            if (parseError.error == QJsonParseError::NoError && doc.isObject()) {
+                m_service->placementStore().deserialize(doc.object());
             } else {
-                qCWarning(lcDbusWindow) << "Failed to parse saved autotile window orders:" << parseError.errorString();
+                qCWarning(lcDbusWindow) << "Failed to parse saved window placements:" << parseError.errorString();
             }
         }
     }
 
-    // Restore autotile pending restore queues (close/reopen window preservation)
-    if (m_deserializePendingRestoresFn) {
-        const QString pendingRestoresStr = readVal(ConfigKeys::autotilePendingRestoresKey(), QString());
-        if (!pendingRestoresStr.isEmpty()) {
-            QJsonParseError parseError;
-            const QJsonDocument doc = QJsonDocument::fromJson(pendingRestoresStr.toUtf8(), &parseError);
-            if (parseError.error == QJsonParseError::NoError && doc.isObject()) {
-                m_deserializePendingRestoresFn(doc.object());
-            } else {
-                qCWarning(lcDbusWindow) << "Failed to parse saved autotile pending restores:"
-                                        << parseError.errorString();
-            }
-        }
-    }
+    // No engine float-back cache to re-seed: the unified record's freeGeometryByScreen
+    // IS the single float-back store and is loaded directly above (deserialize), and
+    // validatedUnmanagedGeometry reads it. (The per-engine m_unmanagedGeometries store
+    // was removed.)
 
     // Restore active layout from previous session so that previousLayout() is correct
     // on the next layout switch. Without this, the daemon starts with defaultLayout()
@@ -880,16 +382,9 @@ void WindowTrackingAdaptor::loadState()
         }
     }
 
-    int totalPendingEntries = 0;
-    for (auto it = pendingQueues.constBegin(); it != pendingQueues.constEnd(); ++it) {
-        totalPendingEntries += it.value().size();
-        for (const auto& entry : it.value()) {
-            qCInfo(lcDbusWindow) << "  pending snap: app=" << it.key() << "zone=" << entry.zoneIds;
-        }
-    }
-    qCInfo(lcDbusWindow) << "Loaded state from KConfig: pendingApps=" << pendingQueues.size()
-                         << "totalEntries=" << totalPendingEntries;
-    if (!pendingQueues.isEmpty()) {
+    const int placementCount = m_service ? m_service->placementStore().size() : 0;
+    qCInfo(lcDbusWindow) << "Loaded state from KConfig: windowPlacements=" << placementCount;
+    if (placementCount > 0) {
         m_hasPendingRestores = true;
         tryEmitPendingRestoresAvailable();
     }

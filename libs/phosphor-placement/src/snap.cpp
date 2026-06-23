@@ -31,6 +31,9 @@ namespace PhosphorPlacement {
 void WindowTrackingService::recordSnapIntent(const QString& windowId, bool wasUserInitiated)
 {
     Q_ASSERT(m_snapState);
+    if (!m_snapState) {
+        return;
+    }
     if (wasUserInitiated) {
         QString windowClass = currentAppIdFor(windowId);
         if (!windowClass.isEmpty()) {
@@ -44,6 +47,9 @@ void WindowTrackingService::updateLastUsedZone(const QString& zoneId, const QStr
                                                const QString& windowClass, int virtualDesktop)
 {
     Q_ASSERT(m_snapState);
+    if (!m_snapState) {
+        return;
+    }
     m_snapState->updateLastUsedZone(zoneId, screenId, windowClass, virtualDesktop);
     markDirty(DirtyLastUsedZone);
 }
@@ -63,20 +69,27 @@ void WindowTrackingService::updateLastUsedZone(const QString& zoneId, const QStr
 void WindowTrackingService::markAsAutoSnapped(const QString& windowId)
 {
     Q_ASSERT(m_snapState);
-    if (!windowId.isEmpty()) {
-        m_snapState->markAsAutoSnapped(windowId);
+    if (!m_snapState || windowId.isEmpty()) {
+        return;
     }
+    m_snapState->markAsAutoSnapped(windowId);
 }
 
 bool WindowTrackingService::isAutoSnapped(const QString& windowId) const
 {
     Q_ASSERT(m_snapState);
+    if (!m_snapState) {
+        return false;
+    }
     return m_snapState->isAutoSnapped(windowId);
 }
 
 bool WindowTrackingService::clearAutoSnapped(const QString& windowId)
 {
     Q_ASSERT(m_snapState);
+    if (!m_snapState) {
+        return false;
+    }
     return m_snapState->clearAutoSnapped(windowId);
 }
 
@@ -92,46 +105,13 @@ bool WindowTrackingService::consumePendingAssignment(const QString& windowId)
         return false;
     }
     it->removeFirst();
+    const int remaining = it->size();
     if (it->isEmpty()) {
         m_pendingRestoreQueues.erase(it);
     }
-    qCDebug(lcPlacement) << "Consumed pending assignment for" << appId
-                         << "remaining:" << m_pendingRestoreQueues.value(appId).size();
+    qCDebug(lcPlacement) << "Consumed pending assignment for" << appId << "remaining:" << remaining;
     markDirty(DirtyPendingRestores);
     return true;
-}
-
-int WindowTrackingService::pruneExcludedPendingRestores(const QStringList& exclusionPatterns)
-{
-    if (exclusionPatterns.isEmpty() || m_pendingRestoreQueues.isEmpty()) {
-        return 0;
-    }
-    int removed = 0;
-    for (auto it = m_pendingRestoreQueues.begin(); it != m_pendingRestoreQueues.end();) {
-        const QString& appId = it.key();
-        bool matched = false;
-        for (const QString& pattern : exclusionPatterns) {
-            if (pattern.isEmpty()) {
-                continue;
-            }
-            if (PhosphorIdentity::WindowId::appIdMatches(appId, pattern)) {
-                matched = true;
-                break;
-            }
-        }
-        if (matched) {
-            qCInfo(lcPlacement) << "Pruning pending-restore queue for excluded appId:" << appId << "("
-                                << it.value().size() << "entries)";
-            it = m_pendingRestoreQueues.erase(it);
-            ++removed;
-        } else {
-            ++it;
-        }
-    }
-    if (removed > 0) {
-        markDirty(DirtyPendingRestores);
-    }
-    return removed;
 }
 
 } // namespace PhosphorPlacement

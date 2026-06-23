@@ -35,12 +35,54 @@
 #include <PhosphorZones/Layout.h>
 #include <PhosphorZones/Zone.h>
 #include <PhosphorWorkspaces/VirtualDesktopManager.h>
+#include <PhosphorEngine/ICrossSurfaceResolver.h>
+#include <PhosphorEngine/NavigationContext.h>
+#include <PhosphorSnapEngine/IZoneAdjacencyResolver.h>
+#include <PhosphorZones/AssignmentEntry.h>
 #include "core/utils.h"
 #include "../helpers/IsolatedConfigGuard.h"
+#include "../helpers/LayoutRegistryTestHelpers.h"
 
 using namespace PlasmaZones;
 using PhosphorEngine::ZoneAssignmentEntry;
 using namespace PhosphorSnapEngine;
+
+namespace {
+
+/// Minimal cross-surface resolver: maps a direction to a neighbour desktop,
+/// reports no neighbour OUTPUT (so cross-output swap fails and the engine falls
+/// through to the cross-desktop path).
+class FakeCrossSurfaceQueries : public PhosphorEngine::ICrossSurfaceResolver
+{
+public:
+    int desktopRight = 0;
+    QString outputRight; // neighbour OUTPUT to the right (empty = none)
+    QString neighborOutputInDirection(const QString&, const QString& dir) const override
+    {
+        return dir == QLatin1String("right") ? outputRight : QString();
+    }
+    int neighborDesktopInDirection(int, const QString& dir) const override
+    {
+        return dir == QLatin1String("right") ? desktopRight : 0;
+    }
+};
+
+/// Minimal zone-adjacency resolver: no adjacent zone on any output (forces the
+/// no_adjacent_zone boundary), no first-in-direction zone.
+class FakeAdjacencyQueries : public PhosphorSnapEngine::IZoneAdjacencyResolver
+{
+public:
+    QString getAdjacentZone(const QString&, const QString&, const QString&) const override
+    {
+        return QString();
+    }
+    QString getFirstZoneInDirection(const QString&, const QString&) const override
+    {
+        return QString();
+    }
+};
+
+} // namespace
 using PlasmaZones::TestHelpers::IsolatedConfigGuard;
 
 // =========================================================================
@@ -48,80 +90,17 @@ using PlasmaZones::TestHelpers::IsolatedConfigGuard;
 // =========================================================================
 
 #include "../helpers/StubSettings.h"
+#include "../helpers/StubZoneDetector.h"
 
 using StubSettingsQueries = StubSettings;
 
 // =========================================================================
-// Stub PhosphorZones::Zone Detector
+// Stub PhosphorZones::Zone Detector + createTestLayout come from the shared
+// helper (StubZoneDetector.h). No local Q_OBJECT subclass is needed — see the
+// rationale in that header.
 // =========================================================================
 
-class StubZoneDetectorQueries : public PhosphorZones::IZoneDetector
-{
-    Q_OBJECT
-public:
-    explicit StubZoneDetectorQueries(QObject* parent = nullptr)
-        : PhosphorZones::IZoneDetector(parent)
-    {
-    }
-    PhosphorZones::Layout* layout() const override
-    {
-        return m_layout;
-    }
-    void setLayout(PhosphorZones::Layout* layout) override
-    {
-        m_layout = layout;
-    }
-    PhosphorZones::ZoneDetectionResult detectZone(const QPointF&) const override
-    {
-        return {};
-    }
-    PhosphorZones::ZoneDetectionResult detectMultiZone(const QPointF&) const override
-    {
-        return {};
-    }
-    PhosphorZones::Zone* zoneAtPoint(const QPointF&) const override
-    {
-        return nullptr;
-    }
-    PhosphorZones::Zone* nearestZone(const QPointF&) const override
-    {
-        return nullptr;
-    }
-    QVector<PhosphorZones::Zone*> expandPaintedZonesToRect(const QVector<PhosphorZones::Zone*>&) const override
-    {
-        return {};
-    }
-    void highlightZone(PhosphorZones::Zone*) override
-    {
-    }
-    void highlightZones(const QVector<PhosphorZones::Zone*>&) override
-    {
-    }
-    void clearHighlights() override
-    {
-    }
-
-private:
-    PhosphorZones::Layout* m_layout = nullptr;
-};
-
-// =========================================================================
-// Helper
-// =========================================================================
-
-static PhosphorZones::Layout* createTestLayout(int zoneCount, QObject* parent)
-{
-    auto* layout = new PhosphorZones::Layout(QStringLiteral("TestLayout"), parent);
-    for (int i = 0; i < zoneCount; ++i) {
-        auto* zone = new PhosphorZones::Zone(layout);
-        qreal x = static_cast<qreal>(i) / zoneCount;
-        qreal w = 1.0 / zoneCount;
-        zone->setRelativeGeometry(QRectF(x, 0.0, w, 1.0));
-        zone->setZoneNumber(i + 1);
-        layout->addZone(zone);
-    }
-    return layout;
-}
+using StubZoneDetectorQueries = StubZoneDetector;
 
 // =========================================================================
 // Test Class
@@ -135,8 +114,7 @@ private Q_SLOTS:
     void init()
     {
         m_guard = std::make_unique<IsolatedConfigGuard>();
-        m_layoutManager = new PhosphorZones::LayoutRegistry(PlasmaZones::createAssignmentsBackend(),
-                                                            QStringLiteral("plasmazones/layouts"));
+        m_layoutManager = PlasmaZones::TestHelpers::makeLayoutRegistry(QStringLiteral("plasmazones/layouts"));
         m_settings = new StubSettingsQueries(nullptr);
         m_zoneDetector = new StubZoneDetectorQueries(nullptr);
         m_service = new PhosphorPlacement::WindowTrackingService(m_layoutManager, m_zoneDetector, nullptr, nullptr);
@@ -273,15 +251,23 @@ private Q_SLOTS:
 
     void testCalculateSnapAllWindows_fillsEmptyZones()
     {
-        QStringList unsnappedWindows = {
+        const QStringList unsnappedWindows = {
             QStringLiteral("new1:win:111"),
             QStringLiteral("new2:win:222"),
         };
 
         QVector<ZoneAssignmentEntry> entries = m_engine->calculateSnapAllWindowEntries(unsnappedWindows, QString());
 
-        // In headless mode, result is empty (no screen -> no geometry)
-        Q_UNUSED(entries);
+        // The two unsnapped windows fill two of the three empty zones: one entry per
+        // input window, distinct target zones, no spurious windows.
+        QCOMPARE(entries.size(), 2);
+        QVERIFY(entries[0].targetZoneId != entries[1].targetZoneId);
+        QSet<QString> placed;
+        for (const ZoneAssignmentEntry& e : entries) {
+            QVERIFY(unsnappedWindows.contains(e.windowId));
+            placed.insert(e.windowId);
+        }
+        QCOMPARE(placed.size(), 2);
     }
 
     // =====================================================================
@@ -290,10 +276,25 @@ private Q_SLOTS:
 
     void testMultiZoneGeometry_unionOfZones()
     {
-        QStringList multiZones = {m_zoneIds[0], m_zoneIds[1]};
-        QRect geo = m_service->multiZoneGeometry(multiZones, QString());
-        // In headless mode geo is invalid. The method should not crash.
-        Q_UNUSED(geo);
+        const QStringList multiZones = {m_zoneIds[0], m_zoneIds[1]};
+        const QRect geo = m_service->multiZoneGeometry(multiZones, QString());
+        const QRect zone0 = m_service->zoneGeometry(m_zoneIds[0], QString());
+        const QRect zone1 = m_service->zoneGeometry(m_zoneIds[1], QString());
+        QVERIFY(zone0.isValid());
+        QVERIFY(zone1.isValid());
+        // The multi-zone geometry must be the TIGHT bounding union of the two
+        // zones — not merely a rect that happens to contain both (which the whole
+        // screen would also satisfy). multiZoneGeometry computes the bounds with
+        // QRectF-style exclusive extents, so each edge may sit up to 1px beyond
+        // QRect::united's inclusive convention; assert tightness within that 1px.
+        const QRect expectedUnion = zone0.united(zone1);
+        QVERIFY(geo.isValid());
+        QVERIFY(geo.contains(zone0));
+        QVERIFY(geo.contains(zone1));
+        QVERIFY(qAbs(geo.left() - expectedUnion.left()) <= 1);
+        QVERIFY(qAbs(geo.top() - expectedUnion.top()) <= 1);
+        QVERIFY(qAbs(geo.right() - expectedUnion.right()) <= 1);
+        QVERIFY(qAbs(geo.bottom() - expectedUnion.bottom()) <= 1);
     }
 
     // =====================================================================
@@ -313,15 +314,237 @@ private Q_SLOTS:
         QVERIFY(m_service->isWindowFloating(windowIdNew));
     }
 
-    void testPreSnapGeometry_stableIdFallback()
+    // ── Cross-desktop re-snap (Phase 1): SnapEngine::resolveCrossDesktopZone maps
+    //    a window's zone onto the target desktop's layout so a snap→snap
+    //    cross-desktop move lands snapped in the equivalent zone, not floating. ──
+    void testCrossDesktopZone_sharedLayout_resolvesEquivalentZone()
     {
-        QString appId = QStringLiteral("dolphin");
-        QString windowId = QStringLiteral("dolphin|a1b2c3d4-0000-0000-0000-000088888888");
+        // layoutForScreen(screen, desktop, activity) falls back to defaultLayout()
+        // when the target (screen,desktop) has no explicit assignment — point the
+        // default at the test layout so desktop 2 resolves to the same layout.
+        const QString layoutId = m_testLayout->id().toString();
+        m_layoutManager->setDefaultLayoutIdProvider([layoutId]() {
+            return layoutId;
+        });
 
-        m_engine->storeUnmanagedGeometry(appId, QRect(50, 100, 640, 480), QString());
-        QVERIFY(m_engine->hasUnmanagedGeometry(appId));
-        QCOMPARE(m_engine->unmanagedGeometry(appId).width(), 640);
+        // Shared layout → the middle zone maps back to itself (1-based position
+        // round-trips), and the pixel geometry resolves (QTEST_MAIN primary screen).
+        const auto [zoneId, geo] = m_engine->resolveCrossDesktopZone(m_zoneIds.at(1), QStringLiteral("DP-1"), 2);
+        QCOMPARE(zoneId, m_zoneIds.at(1));
+        QVERIFY(geo.isValid());
+
+        // An unknown source zone has no position → no equivalent zone resolvable.
+        const auto [missZone, missGeo] =
+            m_engine->resolveCrossDesktopZone(QStringLiteral("not-a-zone"), QStringLiteral("DP-1"), 2);
+        QVERIFY(missZone.isEmpty());
     }
+
+    // ── Swap does NOT cross virtual desktops: exchanging with a window on a
+    //    desktop you can't see is meaningless (move owns cross-desktop
+    //    relocation). A swap at a desktop boundary is a clean no-op. ──
+    void testCrossDesktopSwap_isNoOp_doesNotRelocate()
+    {
+        const QString layoutId = m_testLayout->id().toString();
+        m_layoutManager->setDefaultLayoutIdProvider([layoutId]() {
+            return layoutId;
+        });
+
+        // No neighbour output; desktop 2 lies to the right; no in-surface adjacent
+        // zone — so the only crossing available is to the adjacent desktop.
+        FakeCrossSurfaceQueries cross;
+        cross.desktopRight = 2;
+        FakeAdjacencyQueries adj;
+        m_engine->setZoneAdjacencyResolver(&adj);
+        m_engine->setCrossSurfaceResolver(&cross);
+
+        const QString f = QStringLiteral("appF:win:1");
+        SnapState* snap = m_engine->snapState();
+        snap->assignWindowToZone(f, m_zoneIds.at(2), QStringLiteral("DP-1"), 0);
+
+        QSignalSpy desktopSpy(m_engine, &SnapEngine::windowDesktopMoveRequested);
+        QSignalSpy geoSpy(m_engine, &SnapEngine::applyGeometryRequested);
+
+        PhosphorEngine::NavigationContext ctx;
+        ctx.windowId = f;
+        ctx.screenId = QStringLiteral("DP-1");
+        m_engine->swapFocusedInDirection(QStringLiteral("right"), ctx);
+
+        // The window does not relocate and is not re-geometried — swap stops at
+        // the desktop boundary.
+        QCOMPARE(desktopSpy.count(), 0);
+        QCOMPARE(geoSpy.count(), 0);
+        QCOMPARE(snap->windowsOnScreenAndDesktop(QStringLiteral("DP-1"), 0), QStringList{f});
+
+        m_engine->setCrossSurfaceResolver(nullptr);
+        m_engine->setZoneAdjacencyResolver(nullptr);
+    }
+
+    // ── Cross-mode swap (Phase 4c): swapping a snapped window toward an AUTOTILE
+    //    neighbour output defers to the daemon via crossModeSwapRequested (the
+    //    two-way exchange), rather than snapping onto the tiled screen. ──
+    void testCrossModeSwap_autotileNeighbourOutput_emitsCrossModeSwapRequested()
+    {
+        const QString layoutId = m_testLayout->id().toString();
+        m_layoutManager->setDefaultLayoutIdProvider([layoutId]() {
+            return layoutId;
+        });
+        // DP-2 is an AUTOTILE neighbour to the right (current desktop 0).
+        PhosphorZones::AssignmentEntry autotileEntry;
+        autotileEntry.mode = PhosphorZones::AssignmentEntry::Autotile;
+        m_layoutManager->setAssignmentEntryDirect(QStringLiteral("DP-2"), 0, QString(), autotileEntry);
+
+        FakeCrossSurfaceQueries cross;
+        cross.outputRight = QStringLiteral("DP-2");
+        FakeAdjacencyQueries adj; // no in-surface adjacent zone → boundary
+        m_engine->setZoneAdjacencyResolver(&adj);
+        m_engine->setCrossSurfaceResolver(&cross);
+
+        // Focused window snapped in the last zone on DP-1 (current desktop 0).
+        const QString f = QStringLiteral("appF:win:1");
+        m_engine->snapState()->assignWindowToZone(f, m_zoneIds.at(2), QStringLiteral("DP-1"), 0);
+
+        QSignalSpy swapSpy(m_engine, &SnapEngine::crossModeSwapRequested);
+
+        PhosphorEngine::NavigationContext ctx;
+        ctx.windowId = f;
+        ctx.screenId = QStringLiteral("DP-1");
+        m_engine->swapFocusedInDirection(QStringLiteral("right"), ctx);
+
+        QCOMPARE(swapSpy.count(), 1);
+        const QList<QVariant> args = swapSpy.takeFirst();
+        QCOMPARE(args.at(0).toString(), f);
+        QCOMPARE(args.at(1).toString(), QStringLiteral("DP-2"));
+        QCOMPARE(args.at(2).toInt(), 0); // monitor crossing, current desktop
+        QCOMPARE(args.at(3).toString(), QStringLiteral("right"));
+
+        m_engine->setCrossSurfaceResolver(nullptr);
+        m_engine->setZoneAdjacencyResolver(nullptr);
+    }
+
+    // ── Cross-mode MOVE (Phase 3): moving a snapped window toward an AUTOTILE
+    //    neighbour output defers to the daemon via crossModeMoveRequested (the
+    //    one-way insert), rather than snapping onto the tiled screen. ──
+    void testCrossModeMove_autotileNeighbourOutput_emitsCrossModeMoveRequested()
+    {
+        const QString layoutId = m_testLayout->id().toString();
+        m_layoutManager->setDefaultLayoutIdProvider([layoutId]() {
+            return layoutId;
+        });
+        PhosphorZones::AssignmentEntry autotileEntry;
+        autotileEntry.mode = PhosphorZones::AssignmentEntry::Autotile;
+        m_layoutManager->setAssignmentEntryDirect(QStringLiteral("DP-2"), 0, QString(), autotileEntry);
+
+        FakeCrossSurfaceQueries cross;
+        cross.outputRight = QStringLiteral("DP-2");
+        FakeAdjacencyQueries adj;
+        m_engine->setZoneAdjacencyResolver(&adj);
+        m_engine->setCrossSurfaceResolver(&cross);
+
+        const QString f = QStringLiteral("appF:win:1");
+        m_engine->snapState()->assignWindowToZone(f, m_zoneIds.at(2), QStringLiteral("DP-1"), 0);
+
+        QSignalSpy moveSpy(m_engine, &SnapEngine::crossModeMoveRequested);
+
+        PhosphorEngine::NavigationContext ctx;
+        ctx.windowId = f;
+        ctx.screenId = QStringLiteral("DP-1");
+        m_engine->moveFocusedInDirection(QStringLiteral("right"), ctx);
+
+        QCOMPARE(moveSpy.count(), 1);
+        const QList<QVariant> args = moveSpy.takeFirst();
+        QCOMPARE(args.at(0).toString(), f);
+        QCOMPARE(args.at(1).toString(), QStringLiteral("DP-2"));
+        QCOMPARE(args.at(2).toInt(), 0); // monitor crossing, current desktop
+        QCOMPARE(args.at(3).toString(), QStringLiteral("right"));
+
+        m_engine->setCrossSurfaceResolver(nullptr);
+        m_engine->setZoneAdjacencyResolver(nullptr);
+    }
+
+    // ── A SNAP (non-autotile) neighbour output with no entry zone is a genuine
+    //    boundary: the engine must NOT emit a cross-mode handoff (no
+    //    crossModeSwapRequested) — it reports the boundary instead. ──
+    void testCrossModeSwap_snapNeighbourOutput_doesNotEmit()
+    {
+        const QString layoutId = m_testLayout->id().toString();
+        m_layoutManager->setDefaultLayoutIdProvider([layoutId]() {
+            return layoutId;
+        });
+        // DP-2 has NO assignment → defaults to Snapping mode (not autotile).
+        FakeCrossSurfaceQueries cross;
+        cross.outputRight = QStringLiteral("DP-2");
+        FakeAdjacencyQueries adj; // getFirstZoneInDirection empty → no entry zone
+        m_engine->setZoneAdjacencyResolver(&adj);
+        m_engine->setCrossSurfaceResolver(&cross);
+
+        const QString f = QStringLiteral("appF:win:1");
+        m_engine->snapState()->assignWindowToZone(f, m_zoneIds.at(2), QStringLiteral("DP-1"), 0);
+
+        QSignalSpy swapSpy(m_engine, &SnapEngine::crossModeSwapRequested);
+        QSignalSpy feedbackSpy(m_engine, &SnapEngine::navigationFeedback);
+
+        PhosphorEngine::NavigationContext ctx;
+        ctx.windowId = f;
+        ctx.screenId = QStringLiteral("DP-1");
+        m_engine->swapFocusedInDirection(QStringLiteral("right"), ctx);
+
+        QCOMPARE(swapSpy.count(), 0); // snap neighbour → no cross-mode handoff
+        // The boundary is reported (a failure feedback for the swap action).
+        QVERIFY(feedbackSpy.count() >= 1);
+        const QList<QVariant> fb = feedbackSpy.takeLast();
+        QCOMPARE(fb.at(0).toBool(), false);
+        QCOMPARE(fb.at(2).toString(), QStringLiteral("no_adjacent_zone"));
+
+        m_engine->setCrossSurfaceResolver(nullptr);
+        m_engine->setZoneAdjacencyResolver(nullptr);
+    }
+
+    // ── Cross-mode cross-DESKTOP MOVE: moving a snapped window to an adjacent
+    //    desktop whose layout is AUTOTILE defers to the daemon via
+    //    crossModeMoveRequested with the target desktop (not 0). ──
+    void testCrossModeMove_autotileTargetDesktop_emitsCrossModeMoveRequested()
+    {
+        const QString layoutId = m_testLayout->id().toString();
+        m_layoutManager->setDefaultLayoutIdProvider([layoutId]() {
+            return layoutId;
+        });
+        // DP-1's desktop 2 is autotile mode (the current desktop, 0, stays snap).
+        PhosphorZones::AssignmentEntry autotileEntry;
+        autotileEntry.mode = PhosphorZones::AssignmentEntry::Autotile;
+        m_layoutManager->setAssignmentEntryDirect(QStringLiteral("DP-1"), 2, QString(), autotileEntry);
+
+        // No neighbour output; desktop 2 lies to the right; no in-surface adjacent.
+        FakeCrossSurfaceQueries cross;
+        cross.desktopRight = 2;
+        FakeAdjacencyQueries adj;
+        m_engine->setZoneAdjacencyResolver(&adj);
+        m_engine->setCrossSurfaceResolver(&cross);
+
+        const QString f = QStringLiteral("appF:win:1");
+        m_engine->snapState()->assignWindowToZone(f, m_zoneIds.at(2), QStringLiteral("DP-1"), 0);
+
+        QSignalSpy moveSpy(m_engine, &SnapEngine::crossModeMoveRequested);
+
+        PhosphorEngine::NavigationContext ctx;
+        ctx.windowId = f;
+        ctx.screenId = QStringLiteral("DP-1");
+        m_engine->moveFocusedInDirection(QStringLiteral("right"), ctx);
+
+        QCOMPARE(moveSpy.count(), 1);
+        const QList<QVariant> args = moveSpy.takeFirst();
+        QCOMPARE(args.at(0).toString(), f);
+        QCOMPARE(args.at(1).toString(), QStringLiteral("DP-1")); // same screen, target desktop
+        QCOMPARE(args.at(2).toInt(), 2); // the autotile target desktop
+        QCOMPARE(args.at(3).toString(), QStringLiteral("right"));
+
+        m_engine->setCrossSurfaceResolver(nullptr);
+        m_engine->setZoneAdjacencyResolver(nullptr);
+    }
+
+    // testPreSnapGeometry_stableIdFallback removed: the per-engine unmanaged-geometry
+    // store was collapsed into the unified WindowPlacementStore. The appId-fallback
+    // lookup for float-back geometry is now exercised by the WindowPlacementStore
+    // peek/take appId-FIFO tests.
 
 private:
     std::unique_ptr<IsolatedConfigGuard> m_guard;

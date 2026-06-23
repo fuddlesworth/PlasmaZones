@@ -15,6 +15,7 @@
 #include "../core/utils.h"
 
 #include <PhosphorAnimation/CurveRegistry.h>
+#include <PhosphorWindowRules/ContextRuleBridge.h>
 
 #include <QGuiApplication>
 #include <QMetaMethod>
@@ -47,10 +48,15 @@ std::unique_ptr<PhosphorConfig::IBackend> migrateAndCreateOwnedBackend()
 }
 } // namespace
 
-Settings::Settings(PhosphorConfig::IBackend* backend, PhosphorAnimation::CurveRegistry* curveRegistry, QObject* parent)
+Settings::Settings(PhosphorConfig::IBackend* backend, PhosphorAnimation::CurveRegistry* curveRegistry,
+                   PhosphorWindowRules::WindowRuleStore* windowRuleStore, QObject* parent)
     : ISettings(parent)
     , m_configBackend(backend)
     , m_store(std::make_unique<PhosphorConfig::Store>(backend, buildSettingsSchema(), this))
+    , m_ownedWindowRuleStore(windowRuleStore ? nullptr
+                                             : std::make_unique<PhosphorWindowRules::WindowRuleStore>(
+                                                   ConfigDefaults::windowRulesFilePath(), this))
+    , m_windowRuleStore(windowRuleStore ? windowRuleStore : m_ownedWindowRuleStore.get())
     , m_curveRegistry(curveRegistry)
 {
     // Contract: @p backend MUST already be pointing at a migrated config
@@ -78,6 +84,9 @@ Settings::Settings(QObject* parent)
     , m_ownedBackend(migrateAndCreateOwnedBackend())
     , m_configBackend(m_ownedBackend.get())
     , m_store(std::make_unique<PhosphorConfig::Store>(m_configBackend, buildSettingsSchema(), this))
+    , m_ownedWindowRuleStore(
+          std::make_unique<PhosphorWindowRules::WindowRuleStore>(ConfigDefaults::windowRulesFilePath(), this))
+    , m_windowRuleStore(m_ownedWindowRuleStore.get())
 {
     // m_curveRegistry is left null; `animationProfile()` /
     // `setAnimationEasingCurve()` fall back to `fallbackCurveRegistry()`.
@@ -89,6 +98,27 @@ Settings::Settings(QObject* parent)
     // never going to survive anyway, so this is the expected path.
     // qCDebug rather than qCWarning to avoid log-spam on every test
     // fixture and standalone-settings launch.
+    qCDebug(lcConfig) << "Settings constructed without explicit CurveRegistry — using process-static fallback.";
+    load();
+}
+
+Settings::Settings(PhosphorWindowRules::WindowRuleStore* windowRuleStore, QObject* parent)
+    : ISettings(parent)
+    , m_ownedBackend(migrateAndCreateOwnedBackend())
+    , m_configBackend(m_ownedBackend.get())
+    , m_store(std::make_unique<PhosphorConfig::Store>(m_configBackend, buildSettingsSchema(), this))
+    // Borrow the caller's store when provided; degrade to owning one when null
+    // (mirrors the backend-injecting ctor's defensive borrow-or-own so a stray
+    // null still yields a usable store rather than a null deref).
+    , m_ownedWindowRuleStore(windowRuleStore ? nullptr
+                                             : std::make_unique<PhosphorWindowRules::WindowRuleStore>(
+                                                   ConfigDefaults::windowRulesFilePath(), this))
+    , m_windowRuleStore(windowRuleStore ? windowRuleStore : m_ownedWindowRuleStore.get())
+{
+    // Standalone backend + process-static curve fallback (m_curveRegistry left
+    // null), exactly like Settings(QObject*); the only difference is the
+    // borrowed window-rule store. See that ctor's note on why identity is not
+    // preserved across the Settings ↔ daemon boundary in this configuration.
     qCDebug(lcConfig) << "Settings constructed without explicit CurveRegistry — using process-static fallback.";
     load();
 }
@@ -149,28 +179,73 @@ void Settings::load()
     // changes a list. Without this, QML consumers bound through the bridge
     // never see cross-process disable-state changes until the page is
     // re-rendered.
+    // Per-mode disable-list snapshots — captured per Mode so the post-reload
+    // re-emission below can fire one signal per mode that actually changed.
+    // Iterating PhosphorZones::allModes() keeps the snapshot in lockstep
+    // with the enum: adding a future mode automatically gets snapshotted +
+    // re-emitted without touching this block.
     using Mode = PhosphorZones::AssignmentEntry::Mode;
-    const QStringList snapMonitorsBefore = disabledMonitors(Mode::Snapping);
-    const QStringList autotileMonitorsBefore = disabledMonitors(Mode::Autotile);
-    const QStringList snapDesktopsBefore = disabledDesktops(Mode::Snapping);
-    const QStringList autotileDesktopsBefore = disabledDesktops(Mode::Autotile);
-    const QStringList snapActivitiesBefore = disabledActivities(Mode::Snapping);
-    const QStringList autotileActivitiesBefore = disabledActivities(Mode::Autotile);
+    QHash<Mode, QStringList> monitorsBefore;
+    QHash<Mode, QStringList> desktopsBefore;
+    QHash<Mode, QStringList> activitiesBefore;
+    for (const Mode mode : PhosphorZones::allModes()) {
+        monitorsBefore.insert(mode, disabledMonitors(mode));
+        desktopsBefore.insert(mode, disabledDesktops(mode));
+        activitiesBefore.insert(mode, disabledActivities(mode));
+    }
 
     m_configBackend->reparseConfiguration();
+
+    // Per-mode disable lists live in windowrules.json, a separate file the
+    // config backend's reparseConfiguration() does not touch. Reload the
+    // rule store explicitly so a cross-process write (daemon shortcut, KCM
+    // D-Bus call) surfaces — the per-mode signal re-emission below compares
+    // against the pre-reload snapshot taken above.
+    //
+    // Only reload when WE own the store. When the store is borrowed (the
+    // daemon shares its single store with us, or the settings app's
+    // SettingsController owns it and lends it here), the OWNER is the writer
+    // and a load() here would clobber unflushed in-memory edits — exactly the
+    // dual-store race this borrow pattern exists to avoid. The borrowed-store
+    // path relies on the owner to drive reloads (the daemon via its on-startup
+    // load + WindowRuleAdaptor; the settings app via
+    // SettingsController::reloadLocalRuleStore on the daemon's rulesChanged
+    // D-Bus signal and on Discard, plus a WindowRuleStoreWatcher that reloads
+    // on external file writes when no daemon is running).
+    if (m_ownedWindowRuleStore) {
+        m_ownedWindowRuleStore->load();
+    }
 
     // Store-backed groups (Shaders, Appearance, Ordering, Animations,
     // Rendering, Performance, ZoneGeometry, Shortcuts, Editor, Exclusions,
     // Display, ZoneSelector, Activation, Behavior, Autotiling) don't need
     // explicit load calls — their getters read through m_store on demand.
+    // Per-screen override maps are not Q_PROPERTYs, so the snapshot loop above
+    // doesn't cover them. Capture them around the reload so settingsChanged()
+    // can fire when a reload (e.g. the daemon's reloadSettings after a Save)
+    // brings in new per-screen gap / selector overrides. Without this the
+    // daemon reloads the maps but its settingsChanged-driven retile never runs,
+    // so per-monitor gaps never take effect on save (discussion #661).
+    const QHash<QString, QVariantMap> perScreenZoneSelectorBefore = m_perScreenZoneSelectorSettings;
+    const QHash<QString, QVariantMap> perScreenAutotileBefore = m_perScreenAutotileSettings;
+    const QHash<QString, QVariantMap> perScreenSnappingBefore = m_perScreenSnappingSettings;
+
     loadPerScreenOverrides(m_configBackend);
     loadVirtualScreenConfigs(m_configBackend);
+
+    const bool perScreenZoneSelectorChanged = perScreenZoneSelectorBefore != m_perScreenZoneSelectorSettings;
+    const bool perScreenAutotileChanged = perScreenAutotileBefore != m_perScreenAutotileSettings;
+    const bool perScreenSnappingChanged = perScreenSnappingBefore != m_perScreenSnappingSettings;
+    const bool perScreenChanged = perScreenZoneSelectorChanged || perScreenAutotileChanged || perScreenSnappingChanged;
 
     if (useSystemColors()) {
         applySystemColorScheme();
     }
     if (autotileUseSystemBorderColors()) {
         applyAutotileBorderSystemColor();
+    }
+    if (snappingUseSystemBorderColors()) {
+        applySnappingBorderSystemColor();
     }
 
     qCInfo(lcConfig) << "Settings loaded";
@@ -191,38 +266,63 @@ void Settings::load()
         }
     }
 
-    // Per-mode disable lists: emit each signal once if its list changed.
+    // Per-mode disable lists: emit one signal per Mode whose list changed.
     // Mirrors the Q_PROPERTY loop above but keyed by (signal, mode) instead
-    // of by property index.
-    if (disabledMonitors(Mode::Snapping) != snapMonitorsBefore)
-        Q_EMIT disabledMonitorsChanged(Mode::Snapping);
-    if (disabledMonitors(Mode::Autotile) != autotileMonitorsBefore)
-        Q_EMIT disabledMonitorsChanged(Mode::Autotile);
-    if (disabledDesktops(Mode::Snapping) != snapDesktopsBefore)
-        Q_EMIT disabledDesktopsChanged(Mode::Snapping);
-    if (disabledDesktops(Mode::Autotile) != autotileDesktopsBefore)
-        Q_EMIT disabledDesktopsChanged(Mode::Autotile);
-    if (disabledActivities(Mode::Snapping) != snapActivitiesBefore)
-        Q_EMIT disabledActivitiesChanged(Mode::Snapping);
-    if (disabledActivities(Mode::Autotile) != autotileActivitiesBefore)
-        Q_EMIT disabledActivitiesChanged(Mode::Autotile);
+    // of by property index. Iterates allModes so future enum extensions
+    // automatically participate without touching this block.
+    bool anyDisableChanged = false;
+    for (const Mode mode : PhosphorZones::allModes()) {
+        if (disabledMonitors(mode) != monitorsBefore.value(mode)) {
+            Q_EMIT disabledMonitorsChanged(mode);
+            anyDisableChanged = true;
+        }
+        if (disabledDesktops(mode) != desktopsBefore.value(mode)) {
+            Q_EMIT disabledDesktopsChanged(mode);
+            anyDisableChanged = true;
+        }
+        if (disabledActivities(mode) != activitiesBefore.value(mode)) {
+            Q_EMIT disabledActivitiesChanged(mode);
+            anyDisableChanged = true;
+        }
+    }
 
-    if (anyChanged)
+    // Aggregate signal — fires when ANY property OR ANY per-mode
+    // disable list changed. Without `anyDisableChanged` in the
+    // predicate, a cross-process write (daemon shortcut, KCM D-Bus
+    // call) that updates only a disable list would emit the per-mode
+    // signals but NOT the aggregate — inconsistent with the direct
+    // setter path (`writeDisableEntries` emits `settingsChanged()`
+    // whenever persistence succeeds).
+    // Per-screen override maps are not Q_PROPERTYs, so the NOTIFY loop above
+    // doesn't cover them. Emit their change signals here, gated on the
+    // before/after comparison, so QML per-screen helpers refresh on Discard /
+    // Reset and the daemon resnaps on a per-screen gap change — without firing
+    // on reloads that left the maps untouched.
+    if (perScreenZoneSelectorChanged)
+        Q_EMIT perScreenZoneSelectorSettingsChanged();
+    if (perScreenAutotileChanged)
+        Q_EMIT perScreenAutotileSettingsChanged();
+    if (perScreenSnappingChanged)
+        Q_EMIT perScreenSnappingSettingsChanged();
+
+    if (anyChanged || anyDisableChanged || perScreenChanged)
         Q_EMIT settingsChanged();
 }
 
 // ── save() dispatcher ────────────────────────────────────────────────────────
 
-// Groups that save() writes exhaustively — shared by reset().
-// Does NOT include unmanaged groups (TilingQuickLayoutSlots, Updates) which are
-// written independently and must survive a normal save.
+// Groups that reset() deletes exhaustively. NOT used by save() — save()
+// iterates the schema and lets purgeStaleKeys() handle cleanup. Does NOT
+// include unmanaged groups (TilingQuickLayoutSlots, Updates) which are
+// written independently and must survive a forced default-restore.
 QStringList Settings::managedGroupNames()
 {
     return {
         ConfigDefaults::generalGroup(), // "General"
         ConfigDefaults::snappingGroup(), // "Snapping"
         ConfigDefaults::tilingGroup(), // "Tiling"
-        ConfigDefaults::displayGroup(), // "Display" — mode-neutral, holds per-mode disable lists (v3+)
+        ConfigDefaults::displayGroup(), // "Display" — dead in v4 (per-mode disable lists moved to windowrules.json);
+                                        // listed so reset() drops any partial-v3 migration husk left in this group
         ConfigDefaults::exclusionsGroup(), // "Exclusions"
         ConfigDefaults::performanceGroup(), // "Performance"
         ConfigDefaults::renderingGroup(), // "Rendering"
@@ -256,24 +356,42 @@ void Settings::deletePerScreenGroups(PhosphorConfig::IBackend* backend)
 void Settings::purgeStaleKeys()
 {
     // Root-level groups that must survive a save() cycle — written
-    // independently of Settings::save(). Assignment:* and QuickLayouts
-    // live in assignments.json and aren't seen here.
+    // independently of Settings::save(). Assignment rules live in
+    // windowrules.json (rule-store sidecar) and QuickLayout slots live
+    // in quicklayouts.json (separate sidecar) — neither is visible to
+    // this purge after the v4 migration retired assignments.json.
     //
     // "General" is preserved because JsonBackend uses it as the default
     // rootGroupName for writeRootString/readRootString — any caller
     // that persists a root-level key (current or future: KCM metadata,
     // first-run markers, etc.) lands there. Wiping it on every save
     // would silently destroy those values.
+    // Mixed list of (a) root-level GROUP names that must survive Pass 2's
+    // blanket-delete loop ("General", "TilingQuickLayoutSlots", "Updates")
+    // and (b) root-level KEYS holding stash data — `_v4DisableStash`,
+    // `_v4ExclusionStash` and `_v4AnimationExclusionStash` are JSON
+    // OBJECTS and survive Pass 2 via `preservedGroups.contains(topLevel)`
+    // membership in the loop body below (without that short-circuit Pass
+    // 2's group iteration WOULD delete them); the `_v4AnimationRulesStash`
+    // is a JSON ARRAY and is additionally preserved by Pass 2 NOT
+    // enumerating non-object root values (jsonbackend's `groupList()`
+    // filter), so the listing here is defence-in-depth for that case
+    // against future Pass 2 restructuring. All four stashes feed the v4
+    // chain-stall retry path in configmigration.cpp::finalizeV4Conversion.
     const QStringList preservedGroups = {
         ConfigDefaults::generalGroup(),
         ConfigDefaults::tilingQuickLayoutSlotsGroup(),
         ConfigDefaults::updatesGroup(),
+        ConfigKeys::Legacy::v4DisableStashKey(),
+        ConfigKeys::Legacy::v4AnimationRulesStashKey(),
+        ConfigKeys::Legacy::v4ExclusionStashKey(),
+        ConfigKeys::Legacy::v4AnimationExclusionStashKey(),
     };
 
     // Compute the set of paths the Store claims. These must not be
     // blanket-deleted because Store::write has already persisted authoritative
     // values and no subsequent save*Config call will rewrite them. Their
-    // ancestor paths ("Snapping" for "Snapping.Appearance.Colors") must also
+    // ancestor paths ("Snapping" for "Snapping.Zones.Colors") must also
     // survive as intermediate JSON nodes.
     //
     // `storeKeyPathPrefixes` covers schema keys that hold OBJECT values
@@ -317,7 +435,7 @@ void Settings::purgeStaleKeys()
     // (evicts stale leftovers from renamed / removed keys).
     //
     // Store ancestor groups (e.g. "Snapping" when the schema declares
-    // "Snapping.Appearance.Colors"): declared set is empty, so every scalar
+    // "Snapping.Zones.Colors"): declared set is empty, so every scalar
     // leaf key gets deleted. save*Config will rewrite valid scalars a moment
     // later; sub-objects (the actual Store-claimed descendants) are preserved
     // because we only touch non-object children.
@@ -495,24 +613,26 @@ void Settings::setAudioSpectrumBarCount(int count)
 //
 // These are local to settings.cpp and #undef'd at the bottom of the file.
 
-#define PZ_STORE_GET(retType, fn, group, key, readType)                                                                \
+#define P_STORE_GET(retType, fn, group, key, readType)                                                                 \
     retType Settings::fn() const                                                                                       \
     {                                                                                                                  \
         return m_store->read<readType>(ConfigDefaults::group(), ConfigDefaults::key());                                \
     }
 
-#define PZ_STORE_SET_BOOL(fn, group, key, signal)                                                                      \
+#define P_STORE_SET_BOOL(fn, group, key, signal)                                                                       \
     void Settings::fn(bool value)                                                                                      \
     {                                                                                                                  \
-        if (m_store->read<bool>(ConfigDefaults::group(), ConfigDefaults::key()) == value) {                            \
+        const bool before = m_store->read<bool>(ConfigDefaults::group(), ConfigDefaults::key());                       \
+        m_store->write(ConfigDefaults::group(), ConfigDefaults::key(), value);                                         \
+        const bool after = m_store->read<bool>(ConfigDefaults::group(), ConfigDefaults::key());                        \
+        if (after == before) {                                                                                         \
             return;                                                                                                    \
         }                                                                                                              \
-        m_store->write(ConfigDefaults::group(), ConfigDefaults::key(), value);                                         \
         Q_EMIT signal();                                                                                               \
         Q_EMIT settingsChanged();                                                                                      \
     }
 
-#define PZ_STORE_SET_INT(fn, group, key, signal)                                                                       \
+#define P_STORE_SET_INT(fn, group, key, signal)                                                                        \
     void Settings::fn(int value)                                                                                       \
     {                                                                                                                  \
         const int before = m_store->read<int>(ConfigDefaults::group(), ConfigDefaults::key());                         \
@@ -525,7 +645,7 @@ void Settings::setAudioSpectrumBarCount(int count)
         Q_EMIT settingsChanged();                                                                                      \
     }
 
-#define PZ_STORE_SET_DOUBLE(fn, group, key, signal)                                                                    \
+#define P_STORE_SET_DOUBLE(fn, group, key, signal)                                                                     \
     void Settings::fn(qreal value)                                                                                     \
     {                                                                                                                  \
         const qreal before = m_store->read<double>(ConfigDefaults::group(), ConfigDefaults::key());                    \
@@ -538,81 +658,85 @@ void Settings::setAudioSpectrumBarCount(int count)
         Q_EMIT settingsChanged();                                                                                      \
     }
 
-#define PZ_STORE_SET_COLOR(fn, group, key, signal)                                                                     \
+#define P_STORE_SET_COLOR(fn, group, key, signal)                                                                      \
     void Settings::fn(const QColor& value)                                                                             \
     {                                                                                                                  \
-        if (m_store->read<QColor>(ConfigDefaults::group(), ConfigDefaults::key()) == value) {                          \
+        const QColor before = m_store->read<QColor>(ConfigDefaults::group(), ConfigDefaults::key());                   \
+        m_store->write(ConfigDefaults::group(), ConfigDefaults::key(), value);                                         \
+        const QColor after = m_store->read<QColor>(ConfigDefaults::group(), ConfigDefaults::key());                    \
+        if (after == before) {                                                                                         \
             return;                                                                                                    \
         }                                                                                                              \
-        m_store->write(ConfigDefaults::group(), ConfigDefaults::key(), value);                                         \
         Q_EMIT signal();                                                                                               \
         Q_EMIT settingsChanged();                                                                                      \
     }
 
-#define PZ_STORE_SET_STRING(fn, group, key, signal)                                                                    \
+#define P_STORE_SET_STRING(fn, group, key, signal)                                                                     \
     void Settings::fn(const QString& value)                                                                            \
     {                                                                                                                  \
-        if (m_store->read<QString>(ConfigDefaults::group(), ConfigDefaults::key()) == value) {                         \
+        const QString before = m_store->read<QString>(ConfigDefaults::group(), ConfigDefaults::key());                 \
+        m_store->write(ConfigDefaults::group(), ConfigDefaults::key(), value);                                         \
+        const QString after = m_store->read<QString>(ConfigDefaults::group(), ConfigDefaults::key());                  \
+        if (after == before) {                                                                                         \
             return;                                                                                                    \
         }                                                                                                              \
-        m_store->write(ConfigDefaults::group(), ConfigDefaults::key(), value);                                         \
         Q_EMIT signal();                                                                                               \
         Q_EMIT settingsChanged();                                                                                      \
     }
 
 // ── Appearance (PhosphorConfig::Store-backed) ───────────────────────────────
 // Colors group
-PZ_STORE_GET(bool, useSystemColors, snappingAppearanceColorsGroup, useSystemKey, bool)
+P_STORE_GET(bool, useSystemColors, snappingZonesColorsGroup, useSystemKey, bool)
 void Settings::setUseSystemColors(bool use)
 {
     if (useSystemColors() == use) {
         return;
     }
-    m_store->write(ConfigDefaults::snappingAppearanceColorsGroup(), ConfigDefaults::useSystemKey(), use);
+    m_store->write(ConfigDefaults::snappingZonesColorsGroup(), ConfigDefaults::useSystemKey(), use);
     if (use) {
         applySystemColorScheme();
     }
     Q_EMIT useSystemColorsChanged();
     Q_EMIT settingsChanged();
 }
-PZ_STORE_GET(QColor, highlightColor, snappingAppearanceColorsGroup, highlightKey, QColor)
-PZ_STORE_SET_COLOR(setHighlightColor, snappingAppearanceColorsGroup, highlightKey, highlightColorChanged)
-PZ_STORE_GET(QColor, inactiveColor, snappingAppearanceColorsGroup, inactiveKey, QColor)
-PZ_STORE_SET_COLOR(setInactiveColor, snappingAppearanceColorsGroup, inactiveKey, inactiveColorChanged)
-PZ_STORE_GET(QColor, borderColor, snappingAppearanceColorsGroup, borderKey, QColor)
-PZ_STORE_SET_COLOR(setBorderColor, snappingAppearanceColorsGroup, borderKey, borderColorChanged)
+P_STORE_GET(QColor, highlightColor, snappingZonesColorsGroup, highlightKey, QColor)
+P_STORE_SET_COLOR(setHighlightColor, snappingZonesColorsGroup, highlightKey, highlightColorChanged)
+P_STORE_GET(QColor, inactiveColor, snappingZonesColorsGroup, inactiveKey, QColor)
+P_STORE_SET_COLOR(setInactiveColor, snappingZonesColorsGroup, inactiveKey, inactiveColorChanged)
+P_STORE_GET(QColor, borderColor, snappingZonesColorsGroup, borderKey, QColor)
+P_STORE_SET_COLOR(setBorderColor, snappingZonesColorsGroup, borderKey, borderColorChanged)
 
 // Labels group
-PZ_STORE_GET(QColor, labelFontColor, snappingAppearanceLabelsGroup, fontColorKey, QColor)
-PZ_STORE_SET_COLOR(setLabelFontColor, snappingAppearanceLabelsGroup, fontColorKey, labelFontColorChanged)
-PZ_STORE_GET(QString, labelFontFamily, snappingAppearanceLabelsGroup, fontFamilyKey, QString)
-PZ_STORE_SET_STRING(setLabelFontFamily, snappingAppearanceLabelsGroup, fontFamilyKey, labelFontFamilyChanged)
-PZ_STORE_GET(qreal, labelFontSizeScale, snappingAppearanceLabelsGroup, fontSizeScaleKey, double)
-PZ_STORE_SET_DOUBLE(setLabelFontSizeScale, snappingAppearanceLabelsGroup, fontSizeScaleKey, labelFontSizeScaleChanged)
-PZ_STORE_GET(int, labelFontWeight, snappingAppearanceLabelsGroup, fontWeightKey, int)
-PZ_STORE_SET_INT(setLabelFontWeight, snappingAppearanceLabelsGroup, fontWeightKey, labelFontWeightChanged)
-PZ_STORE_GET(bool, labelFontItalic, snappingAppearanceLabelsGroup, fontItalicKey, bool)
-PZ_STORE_SET_BOOL(setLabelFontItalic, snappingAppearanceLabelsGroup, fontItalicKey, labelFontItalicChanged)
-PZ_STORE_GET(bool, labelFontUnderline, snappingAppearanceLabelsGroup, fontUnderlineKey, bool)
-PZ_STORE_SET_BOOL(setLabelFontUnderline, snappingAppearanceLabelsGroup, fontUnderlineKey, labelFontUnderlineChanged)
-PZ_STORE_GET(bool, labelFontStrikeout, snappingAppearanceLabelsGroup, fontStrikeoutKey, bool)
-PZ_STORE_SET_BOOL(setLabelFontStrikeout, snappingAppearanceLabelsGroup, fontStrikeoutKey, labelFontStrikeoutChanged)
+P_STORE_GET(QColor, labelFontColor, snappingZonesLabelsGroup, fontColorKey, QColor)
+P_STORE_SET_COLOR(setLabelFontColor, snappingZonesLabelsGroup, fontColorKey, labelFontColorChanged)
+P_STORE_GET(QString, labelFontFamily, snappingZonesLabelsGroup, fontFamilyKey, QString)
+P_STORE_SET_STRING(setLabelFontFamily, snappingZonesLabelsGroup, fontFamilyKey, labelFontFamilyChanged)
+P_STORE_GET(qreal, labelFontSizeScale, snappingZonesLabelsGroup, fontSizeScaleKey, double)
+P_STORE_SET_DOUBLE(setLabelFontSizeScale, snappingZonesLabelsGroup, fontSizeScaleKey, labelFontSizeScaleChanged)
+P_STORE_GET(int, labelFontWeight, snappingZonesLabelsGroup, fontWeightKey, int)
+P_STORE_SET_INT(setLabelFontWeight, snappingZonesLabelsGroup, fontWeightKey, labelFontWeightChanged)
+P_STORE_GET(bool, labelFontItalic, snappingZonesLabelsGroup, fontItalicKey, bool)
+P_STORE_SET_BOOL(setLabelFontItalic, snappingZonesLabelsGroup, fontItalicKey, labelFontItalicChanged)
+P_STORE_GET(bool, labelFontUnderline, snappingZonesLabelsGroup, fontUnderlineKey, bool)
+P_STORE_SET_BOOL(setLabelFontUnderline, snappingZonesLabelsGroup, fontUnderlineKey, labelFontUnderlineChanged)
+P_STORE_GET(bool, labelFontStrikeout, snappingZonesLabelsGroup, fontStrikeoutKey, bool)
+P_STORE_SET_BOOL(setLabelFontStrikeout, snappingZonesLabelsGroup, fontStrikeoutKey, labelFontStrikeoutChanged)
 
 // Opacity group
-PZ_STORE_GET(qreal, activeOpacity, snappingAppearanceOpacityGroup, activeKey, double)
-PZ_STORE_SET_DOUBLE(setActiveOpacity, snappingAppearanceOpacityGroup, activeKey, activeOpacityChanged)
-PZ_STORE_GET(qreal, inactiveOpacity, snappingAppearanceOpacityGroup, inactiveKey, double)
-PZ_STORE_SET_DOUBLE(setInactiveOpacity, snappingAppearanceOpacityGroup, inactiveKey, inactiveOpacityChanged)
+P_STORE_GET(qreal, activeOpacity, snappingZonesOpacityGroup, activeKey, double)
+P_STORE_SET_DOUBLE(setActiveOpacity, snappingZonesOpacityGroup, activeKey, activeOpacityChanged)
+P_STORE_GET(qreal, inactiveOpacity, snappingZonesOpacityGroup, inactiveKey, double)
+P_STORE_SET_DOUBLE(setInactiveOpacity, snappingZonesOpacityGroup, inactiveKey, inactiveOpacityChanged)
 
 // Border group
-PZ_STORE_GET(int, borderWidth, snappingAppearanceBorderGroup, widthKey, int)
-PZ_STORE_SET_INT(setBorderWidth, snappingAppearanceBorderGroup, widthKey, borderWidthChanged)
-PZ_STORE_GET(int, borderRadius, snappingAppearanceBorderGroup, radiusKey, int)
-PZ_STORE_SET_INT(setBorderRadius, snappingAppearanceBorderGroup, radiusKey, borderRadiusChanged)
+P_STORE_GET(int, borderWidth, snappingZonesBorderGroup, widthKey, int)
+P_STORE_SET_INT(setBorderWidth, snappingZonesBorderGroup, widthKey, borderWidthChanged)
+P_STORE_GET(int, borderRadius, snappingZonesBorderGroup, radiusKey, int)
+P_STORE_SET_INT(setBorderRadius, snappingZonesBorderGroup, radiusKey, borderRadiusChanged)
 
 // Effects group (blur lives here for historical reasons)
-PZ_STORE_GET(bool, enableBlur, snappingEffectsGroup, blurKey, bool)
-PZ_STORE_SET_BOOL(setEnableBlur, snappingEffectsGroup, blurKey, enableBlurChanged)
+P_STORE_GET(bool, enableBlur, snappingEffectsGroup, blurKey, bool)
+P_STORE_SET_BOOL(setEnableBlur, snappingEffectsGroup, blurKey, enableBlurChanged)
 
 // ── Ordering (PhosphorConfig::Store-backed) ─────────────────────────────────
 // On disk: comma-joined QString. In API: QStringList. The schema validator
@@ -695,8 +819,8 @@ void Settings::setTilingAlgorithmOrder(const QStringList& order)
 // `animationsEnabled` stays as a standalone bool — it's an orthogonal
 // on/off toggle rather than part of the Profile concept.
 
-PZ_STORE_GET(bool, animationsEnabled, animationsGroup, enabledKey, bool)
-PZ_STORE_SET_BOOL(setAnimationsEnabled, animationsGroup, enabledKey, animationsEnabledChanged)
+P_STORE_GET(bool, animationsEnabled, animationsGroup, enabledKey, bool)
+P_STORE_SET_BOOL(setAnimationsEnabled, animationsGroup, enabledKey, animationsEnabledChanged)
 
 // Process-wide fallback registry for standalone Settings instances
 // constructed without an injected CurveRegistry (tests, settings-app
@@ -810,16 +934,19 @@ void Settings::setAnimationProfile(const PhosphorAnimation::Profile& profile)
     // will return before vs. after the write.
     const PhosphorAnimation::Profile prev = animationProfile();
     const int prevDuration = qRound(prev.effectiveDuration());
-    const QString prevCurveWire = prev.curve ? prev.curve->toString() : ConfigDefaults::animationEasingCurve();
+    // Read the pre-write curve directly off the on-disk blob via the
+    // same path the live `animationEasingCurve()` getter takes. Going
+    // through `prev.curve->toString()` would null-fall-back to the
+    // ConfigDefaults default whenever `CurveRegistry::tryCreate`
+    // failed to resolve the stored spec — comparing that fallback
+    // against the unchanged on-disk value below would always flag a
+    // difference and fire a spurious `animationEasingCurveChanged`.
+    const QString prevCurveWire = animationEasingCurve();
     const int prevMinDistance = prev.effectiveMinDistance();
     const int prevSequenceMode = static_cast<int>(prev.effectiveSequenceMode());
     const int prevStaggerInterval = prev.effectiveStaggerInterval();
 
     writeProfileObject(*m_store, merged);
-
-    // Aggregate first — consumers that want to observe the Profile
-    // atomically (the daemon's fan-out hook) get one signal per call.
-    Q_EMIT animationProfileChanged();
 
     // Per-field: only emit when the post-write OBSERVABLE differs from
     // the pre-write observable. Compare against `animationProfile()`
@@ -831,6 +958,11 @@ void Settings::setAnimationProfile(const PhosphorAnimation::Profile& profile)
     // signals even though the on-disk value is unchanged. Cache the
     // post-write Profile in one read instead of paying a JSON parse +
     // CurveRegistry resolve per field.
+    //
+    // Per-field signals are emitted BEFORE the aggregate, matching
+    // `patchProfileField`'s ordering so QML consumers binding to both
+    // a per-field setter and the aggregate observe a consistent
+    // emission order regardless of which code path mutated the Profile.
     const auto next = animationProfile();
     if (qRound(next.effectiveDuration()) != prevDuration) {
         Q_EMIT animationDurationChanged();
@@ -854,6 +986,10 @@ void Settings::setAnimationProfile(const PhosphorAnimation::Profile& profile)
         Q_EMIT animationStaggerIntervalChanged();
     }
 
+    // Aggregate last — consumers that want to observe the Profile
+    // atomically (the daemon's fan-out hook) get one signal per call,
+    // after every per-field signal has fired.
+    Q_EMIT animationProfileChanged();
     Q_EMIT settingsChanged();
 }
 
@@ -1081,123 +1217,44 @@ void Settings::setShaderProfileTreeJson(const QString& json)
     setShaderProfileTree(PhosphorAnimationShaders::ShaderProfileTree::fromJson(doc.object()));
 }
 
-PhosphorAnimationShaders::AnimationAppRuleList Settings::animationAppRules() const
-{
-    const auto raw =
-        m_store->read<QVariantList>(ConfigDefaults::animationsGroup(), ConfigDefaults::animationAppRulesKey());
-    QJsonArray arr;
-    for (const auto& v : raw) {
-        // Stored entries arrive as `QVariantMap`s when the JSON backend
-        // round-trips. Convert each back into `QJsonObject` for the
-        // typed `fromJson` consumer; non-map entries are dropped here.
-        // Use the strict `typeId()` check rather than `canConvert<>`
-        // because `canConvert<QVariantMap>()` returns true for plain
-        // QStrings too — `toMap()` would then build an empty
-        // QVariantMap and we'd round-trip that into an empty
-        // QJsonObject for the rule loader to drop at its own gate.
-        // The strict check skips the wasted QJsonObject construction.
-        if (v.typeId() == QMetaType::QVariantMap) {
-            arr.append(QJsonObject::fromVariantMap(v.toMap()));
-        }
-    }
-    return PhosphorAnimationShaders::AnimationAppRuleList::fromJson(arr);
-}
-
-void Settings::setAnimationAppRules(const PhosphorAnimationShaders::AnimationAppRuleList& rules)
-{
-    // Mirror the canonicalisation pattern used by `setShaderProfileTree`
-    // — compare the on-disk RAW form against the canonical
-    // round-tripped form. Catches two cases the simple "previous == rules"
-    // shortcut misses:
-    //
-    //   1. Hand-edited / corrupted on-disk entries that
-    //      `AnimationAppRule::fromJson` silently drops at read time. The
-    //      in-memory `previous` would then equal `rules` even though the
-    //      on-disk file still contains the bogus entry — so the simple
-    //      compare leaves stale junk on disk forever instead of cleaning
-    //      it up on the next save (asymmetric with `setShaderProfileTree`
-    //      which prunes-and-compares on both sides).
-    //
-    //   2. Schema-version drifts where `toJson()` emits the same logical
-    //      list in a slightly different on-disk shape (e.g. key ordering,
-    //      omitted-empty-fields convention) — the canonical-vs-raw
-    //      compare detects that delta and rewrites the file once,
-    //      whereas the simple compare would miss it.
-    //
-    // Build the canonical raw form once and reuse it for both the
-    // change-detection compare AND the actual write — no double-encode.
-    QVariantList canonical;
-    const auto arr = rules.toJson();
-    canonical.reserve(arr.size());
-    for (const auto& v : arr) {
-        canonical.append(v.toObject().toVariantMap());
-    }
-    const auto storedRaw =
-        m_store->read<QVariantList>(ConfigDefaults::animationsGroup(), ConfigDefaults::animationAppRulesKey());
-    if (storedRaw == canonical)
-        return;
-    m_store->write(ConfigDefaults::animationsGroup(), ConfigDefaults::animationAppRulesKey(), canonical);
-    Q_EMIT animationAppRulesChanged();
-    Q_EMIT settingsChanged();
-}
-
-QString Settings::animationAppRulesJson() const
-{
-    return QString::fromUtf8(QJsonDocument(animationAppRules().toJson()).toJson(QJsonDocument::Compact));
-}
-
-void Settings::setAnimationAppRulesJson(const QString& json)
-{
-    if (json.isEmpty()) {
-        setAnimationAppRules(PhosphorAnimationShaders::AnimationAppRuleList{});
-        return;
-    }
-    const QJsonDocument doc = QJsonDocument::fromJson(json.toUtf8());
-    if (!doc.isArray()) {
-        qCWarning(lcConfig) << "setAnimationAppRulesJson: malformed JSON (expected array), ignoring";
-        return;
-    }
-    setAnimationAppRules(PhosphorAnimationShaders::AnimationAppRuleList::fromJson(doc.array()));
-}
-
 // ── Rendering (PhosphorConfig::Store-backed) ────────────────────────────────
 // Validator (normalizeRenderingBackend in the schema) coerces unknown values
 // to a known backend, so a hand-edited "Rendering.Backend = foobar" reads
 // back as the default on next load.
 
-PZ_STORE_GET(QString, renderingBackend, renderingGroup, backendKey, QString)
-PZ_STORE_SET_STRING(setRenderingBackend, renderingGroup, backendKey, renderingBackendChanged)
+P_STORE_GET(QString, renderingBackend, renderingGroup, backendKey, QString)
+P_STORE_SET_STRING(setRenderingBackend, renderingGroup, backendKey, renderingBackendChanged)
 
 // ── Performance (PhosphorConfig::Store-backed) ──────────────────────────────
 
-PZ_STORE_GET(int, pollIntervalMs, performanceGroup, pollIntervalMsKey, int)
-PZ_STORE_SET_INT(setPollIntervalMs, performanceGroup, pollIntervalMsKey, pollIntervalMsChanged)
-PZ_STORE_GET(int, minimumZoneSizePx, performanceGroup, minimumZoneSizePxKey, int)
-PZ_STORE_SET_INT(setMinimumZoneSizePx, performanceGroup, minimumZoneSizePxKey, minimumZoneSizePxChanged)
-PZ_STORE_GET(int, minimumZoneDisplaySizePx, performanceGroup, minimumZoneDisplaySizePxKey, int)
-PZ_STORE_SET_INT(setMinimumZoneDisplaySizePx, performanceGroup, minimumZoneDisplaySizePxKey,
-                 minimumZoneDisplaySizePxChanged)
+P_STORE_GET(int, pollIntervalMs, performanceGroup, pollIntervalMsKey, int)
+P_STORE_SET_INT(setPollIntervalMs, performanceGroup, pollIntervalMsKey, pollIntervalMsChanged)
+P_STORE_GET(int, minimumZoneSizePx, performanceGroup, minimumZoneSizePxKey, int)
+P_STORE_SET_INT(setMinimumZoneSizePx, performanceGroup, minimumZoneSizePxKey, minimumZoneSizePxChanged)
+P_STORE_GET(int, minimumZoneDisplaySizePx, performanceGroup, minimumZoneDisplaySizePxKey, int)
+P_STORE_SET_INT(setMinimumZoneDisplaySizePx, performanceGroup, minimumZoneDisplaySizePxKey,
+                minimumZoneDisplaySizePxChanged)
 
 // ── PhosphorZones::Zone geometry (PhosphorConfig::Store-backed) ────────────────────────────
 // Inner/outer gaps (uniform + per-side) plus adjacency threshold. Schema
 // clampInt validators enforce the same ranges readValidatedInt used to.
 
-PZ_STORE_GET(int, zonePadding, snappingGapsGroup, innerKey, int)
-PZ_STORE_SET_INT(setZonePadding, snappingGapsGroup, innerKey, zonePaddingChanged)
-PZ_STORE_GET(int, outerGap, snappingGapsGroup, outerKey, int)
-PZ_STORE_SET_INT(setOuterGap, snappingGapsGroup, outerKey, outerGapChanged)
-PZ_STORE_GET(bool, usePerSideOuterGap, snappingGapsGroup, usePerSideKey, bool)
-PZ_STORE_SET_BOOL(setUsePerSideOuterGap, snappingGapsGroup, usePerSideKey, usePerSideOuterGapChanged)
-PZ_STORE_GET(int, outerGapTop, snappingGapsGroup, topKey, int)
-PZ_STORE_SET_INT(setOuterGapTop, snappingGapsGroup, topKey, outerGapTopChanged)
-PZ_STORE_GET(int, outerGapBottom, snappingGapsGroup, bottomKey, int)
-PZ_STORE_SET_INT(setOuterGapBottom, snappingGapsGroup, bottomKey, outerGapBottomChanged)
-PZ_STORE_GET(int, outerGapLeft, snappingGapsGroup, leftKey, int)
-PZ_STORE_SET_INT(setOuterGapLeft, snappingGapsGroup, leftKey, outerGapLeftChanged)
-PZ_STORE_GET(int, outerGapRight, snappingGapsGroup, rightKey, int)
-PZ_STORE_SET_INT(setOuterGapRight, snappingGapsGroup, rightKey, outerGapRightChanged)
-PZ_STORE_GET(int, adjacentThreshold, snappingGapsGroup, adjacentThresholdKey, int)
-PZ_STORE_SET_INT(setAdjacentThreshold, snappingGapsGroup, adjacentThresholdKey, adjacentThresholdChanged)
+P_STORE_GET(int, zonePadding, snappingGapsGroup, innerKey, int)
+P_STORE_SET_INT(setZonePadding, snappingGapsGroup, innerKey, zonePaddingChanged)
+P_STORE_GET(int, outerGap, snappingGapsGroup, outerKey, int)
+P_STORE_SET_INT(setOuterGap, snappingGapsGroup, outerKey, outerGapChanged)
+P_STORE_GET(bool, usePerSideOuterGap, snappingGapsGroup, usePerSideKey, bool)
+P_STORE_SET_BOOL(setUsePerSideOuterGap, snappingGapsGroup, usePerSideKey, usePerSideOuterGapChanged)
+P_STORE_GET(int, outerGapTop, snappingGapsGroup, topKey, int)
+P_STORE_SET_INT(setOuterGapTop, snappingGapsGroup, topKey, outerGapTopChanged)
+P_STORE_GET(int, outerGapBottom, snappingGapsGroup, bottomKey, int)
+P_STORE_SET_INT(setOuterGapBottom, snappingGapsGroup, bottomKey, outerGapBottomChanged)
+P_STORE_GET(int, outerGapLeft, snappingGapsGroup, leftKey, int)
+P_STORE_SET_INT(setOuterGapLeft, snappingGapsGroup, leftKey, outerGapLeftChanged)
+P_STORE_GET(int, outerGapRight, snappingGapsGroup, rightKey, int)
+P_STORE_SET_INT(setOuterGapRight, snappingGapsGroup, rightKey, outerGapRightChanged)
+P_STORE_GET(int, adjacentThreshold, snappingGapsGroup, adjacentThresholdKey, int)
+P_STORE_SET_INT(setAdjacentThreshold, snappingGapsGroup, adjacentThresholdKey, adjacentThresholdChanged)
 
 // ── Display (PhosphorConfig::Store-backed) ──────────────────────────────────
 // Display.* keys live in snappingBehaviorDisplayGroup; OSD + Effects keys
@@ -1205,50 +1262,266 @@ PZ_STORE_SET_INT(setAdjacentThreshold, snappingGapsGroup, adjacentThresholdKey, 
 // QStringList keys go over the wire as comma-joined strings; the getters
 // parse back via parseCommaList (defined above in the Ordering section).
 
-PZ_STORE_GET(bool, showZonesOnAllMonitors, snappingBehaviorDisplayGroup, showOnAllMonitorsKey, bool)
-PZ_STORE_SET_BOOL(setShowZonesOnAllMonitors, snappingBehaviorDisplayGroup, showOnAllMonitorsKey,
-                  showZonesOnAllMonitorsChanged)
+P_STORE_GET(bool, showZonesOnAllMonitors, snappingBehaviorDisplayGroup, showOnAllMonitorsKey, bool)
+P_STORE_SET_BOOL(setShowZonesOnAllMonitors, snappingBehaviorDisplayGroup, showOnAllMonitorsKey,
+                 showZonesOnAllMonitorsChanged)
 
-// Per-mode disable lists. Storage is `Display.{Snapping,Autotile}Disabled*`
-// — pick the right key from `mode`. The connector-name resolution stays
-// PZ-side so consumers always see canonical screen ids.
+// ── Per-mode disable lists — rule-backed (Phase 3b) ─────────────────────────
+//
+// Per-mode disable entries are `DisableEngine` context rules in the unified
+// WindowRule store (windowrules.json), NOT config.json keys. A disable rule
+// pins exactly the context dimensions of its axis:
+//   - monitor  : ScreenId only
+//   - desktop  : ScreenId + VirtualDesktop
+//   - activity : ScreenId + Activity
+// and carries one `DisableEngine` action whose `mode` param ("snapping" /
+// "autotile") scopes which engine it gates. The deterministic shape lets the
+// getters enumerate the store and the setters replace a whole (axis, mode)
+// family without touching the other axes / the other mode.
+
 namespace {
-QString disabledMonitorsKeyFor(PhosphorZones::AssignmentEntry::Mode mode)
+
+// Disable-axis enum mirrors the persisted (axis, mode) family layout. Distinct
+// from `ContextRuleBridge::ContextAxis` only because the bridge enum also
+// carries `CatchAll` and `Combined` — the disable list classifies a tuple as
+// Activity-axis whether or not it also pins a desktop (mirroring the historic
+// per-activity disable family), so we project the bridge axis through here.
+enum class DisableAxis {
+    Monitor,
+    Desktop,
+    Activity
+};
+
+// Classify a context rule's pinned-dimension shape into a disable axis.
+// Returns nullopt for a catch-all or a shape that pins no screen — those are
+// not valid disable rules. Delegates to the bridge so the cascade-axis
+// formula lives in one place.
+std::optional<DisableAxis> axisOf(const QString& screenId, int virtualDesktop, const QString& activity)
 {
-    return mode == PhosphorZones::AssignmentEntry::Autotile ? ConfigDefaults::autotileDisabledMonitorsKey()
-                                                            : ConfigDefaults::snappingDisabledMonitorsKey();
+    namespace CRB = PhosphorWindowRules::ContextRuleBridge;
+    switch (CRB::contextAxisOf(screenId, virtualDesktop, activity)) {
+    case CRB::ContextAxis::Monitor:
+        return DisableAxis::Monitor;
+    case CRB::ContextAxis::Desktop:
+        return DisableAxis::Desktop;
+    case CRB::ContextAxis::Activity:
+    case CRB::ContextAxis::Combined:
+        // A combined (screen+desktop+activity) tuple is treated as
+        // Activity-axis for disable-list purposes — mirrors the legacy
+        // classifier which only checked the activity dimension.
+        return DisableAxis::Activity;
+    case CRB::ContextAxis::CatchAll:
+        return std::nullopt;
+    }
+    return std::nullopt;
 }
-QString disabledDesktopsKeyFor(PhosphorZones::AssignmentEntry::Mode mode)
-{
-    return mode == PhosphorZones::AssignmentEntry::Autotile ? ConfigDefaults::autotileDisabledDesktopsKey()
-                                                            : ConfigDefaults::snappingDisabledDesktopsKey();
-}
-QString disabledActivitiesKeyFor(PhosphorZones::AssignmentEntry::Mode mode)
-{
-    return mode == PhosphorZones::AssignmentEntry::Autotile ? ConfigDefaults::autotileDisabledActivitiesKey()
-                                                            : ConfigDefaults::snappingDisabledActivitiesKey();
-}
+
 } // namespace
 
-QStringList Settings::readDisableList(const QString& key) const
+QStringList Settings::disableEntriesFor(PhosphorZones::AssignmentEntry::Mode mode, int axisInt) const
 {
-    return parseCommaList(m_store->read<QString>(ConfigDefaults::displayGroup(), key));
+    namespace CRB = PhosphorWindowRules::ContextRuleBridge;
+    const auto axis = static_cast<DisableAxis>(axisInt);
+    const QString wantToken = PhosphorZones::modeToWireString(mode);
+    QStringList out;
+    for (const PhosphorWindowRules::WindowRule& rule : m_windowRuleStore->ruleSet().rules()) {
+        const auto ruleToken = CRB::disableRuleMode(rule);
+        if (!ruleToken || *ruleToken != wantToken) {
+            continue; // not a disable rule, or scoped to a different mode
+        }
+        QString screenId;
+        int desktop = 0;
+        QString activity;
+        CRB::contextDimsOf(rule.match, screenId, desktop, activity);
+        const auto ruleAxis = axisOf(screenId, desktop, activity);
+        if (!ruleAxis || *ruleAxis != axis) {
+            continue;
+        }
+        switch (axis) {
+        case DisableAxis::Monitor:
+            out.append(screenId);
+            break;
+        case DisableAxis::Desktop:
+            out.append(screenId + QLatin1Char('/') + QString::number(desktop));
+            break;
+        case DisableAxis::Activity:
+            out.append(screenId + QLatin1Char('/') + activity);
+            break;
+        }
+    }
+    return out;
 }
 
-void Settings::writeDisableList(const QString& key, const QStringList& entries,
-                                PhosphorZones::AssignmentEntry::Mode mode, DisableModeSignalFn signalFn)
+void Settings::writeDisableEntries(PhosphorZones::AssignmentEntry::Mode mode, int axisInt, const QStringList& entries,
+                                   DisableModeSignalFn signalFn)
 {
-    // Post-write compare — the canonicalCommaList validator normalises
-    // whitespace/duplicates on write, so a caller passing e.g. "DP-1, HDMI-1 "
-    // against a stored "DP-1,HDMI-1" would fail the pre-write equality check
-    // and fire a spurious changed signal even though the canonical form is
-    // identical.
-    const QString before = m_store->read<QString>(ConfigDefaults::displayGroup(), key);
-    m_store->write(ConfigDefaults::displayGroup(), key, entries.join(QLatin1Char(',')));
-    const QString after = m_store->read<QString>(ConfigDefaults::displayGroup(), key);
+    namespace CRB = PhosphorWindowRules::ContextRuleBridge;
+    const auto axis = static_cast<DisableAxis>(axisInt);
+    const QString modeToken = PhosphorZones::modeToWireString(mode);
+
+    // Snapshot the current entries for this (axis, mode) so a no-op write
+    // does not fire a spurious changed signal. Compare canonically — both
+    // sides are de-duplicated, whitespace-trimmed sets. The Monitor axis
+    // additionally resolves connector names → stable screen ids so the
+    // comparison matches the public getter (disabledMonitors), which always
+    // resolves on read: without this, re-saving a list that stores a
+    // connector name where the getter reports the canonical id would look
+    // like a change and misfire the changed signal.
+    // Resolve the SCREEN segment of any composite entry to its canonical id.
+    // For Monitor axis the entry IS the screen id; for Desktop/Activity the
+    // entry is `screenId/desktop` or `screenId/activity` and the leading
+    // segment needs the same resolution. Without this, a write that mixes
+    // connector-name and canonical-id forms produces two separate WindowRules
+    // (different UUIDs via disableRuleIdFor) covering the same logical
+    // context, and the no-op short-circuit below misfires because the
+    // pre/post sets look different.
+    const auto canonical = [axis](const QStringList& list) {
+        const auto resolveScreen = [](const QString& screen) {
+            if (PhosphorScreens::ScreenIdentity::isConnectorName(screen)) {
+                const QString resolved = PhosphorScreens::ScreenIdentity::idForName(screen);
+                if (resolved != screen) {
+                    return resolved;
+                }
+            }
+            return screen;
+        };
+        QStringList c;
+        for (const QString& raw : list) {
+            QString value = raw.trimmed();
+            if (axis == DisableAxis::Monitor) {
+                value = resolveScreen(value);
+            } else if (axis == DisableAxis::Desktop || axis == DisableAxis::Activity) {
+                // Composite entry: split on the LAST '/' so a screen id
+                // that happens to contain a '/' (rare but legal in the
+                // disambiguated `Manuf:Model:Serial/CONNECTOR` shape)
+                // doesn't truncate.
+                const int slash = value.lastIndexOf(QLatin1Char('/'));
+                if (slash > 0 && slash < value.size() - 1) {
+                    const QString screen = resolveScreen(value.left(slash));
+                    value = screen + QLatin1Char('/') + value.mid(slash + 1);
+                }
+            }
+            if (!value.isEmpty() && !c.contains(value)) {
+                c.append(value);
+            }
+        }
+        c.sort();
+        return c;
+    };
+    const QStringList before = canonical(disableEntriesFor(mode, axisInt));
+    const QStringList after = canonical(entries);
+
+    // No-op guard: when the canonical disable sets are equal there is nothing
+    // to persist. Skip the kept-rebuild + setAllRules walk entirely — the
+    // rebuild would produce a structurally identical rule list
+    // (makeDisableRule is deterministic via disableRuleIdFor's createUuidV5
+    // over (screenId, desktop, activity, modeToken), so the ids match
+    // byte-for-byte and setAllRules would correctly detect "no change"),
+    // but walking every rule in the store and allocating fresh WindowRule
+    // copies just to discover that is wasted work. Pure micro-optimisation,
+    // not a correctness guard against UUID churn.
     if (before == after) {
         return;
     }
+
+    // Rebuild the rule list: keep every rule that is NOT a disable rule of
+    // this exact (axis, mode) family, then append the new entries.
+    QList<PhosphorWindowRules::WindowRule> kept;
+    for (const PhosphorWindowRules::WindowRule& rule : m_windowRuleStore->ruleSet().rules()) {
+        const auto ruleToken = CRB::disableRuleMode(rule);
+        if (ruleToken && *ruleToken == modeToken) {
+            QString screenId;
+            int desktop = 0;
+            QString activity;
+            CRB::contextDimsOf(rule.match, screenId, desktop, activity);
+            const auto ruleAxis = axisOf(screenId, desktop, activity);
+            if (ruleAxis && *ruleAxis == axis) {
+                continue; // drop — replaced below
+            }
+        }
+        kept.append(rule);
+    }
+
+    for (const QString& canonicalEntry : after) {
+        QString screenId;
+        int desktop = 0;
+        QString activity;
+        switch (axis) {
+        case DisableAxis::Monitor:
+            screenId = canonicalEntry;
+            break;
+        case DisableAxis::Desktop: {
+            const int slash = canonicalEntry.lastIndexOf(QLatin1Char('/'));
+            if (slash <= 0 || slash == canonicalEntry.size() - 1) {
+                qCWarning(lcConfig) << "Skipping malformed desktop disable entry:" << canonicalEntry;
+                continue;
+            }
+            bool ok = false;
+            desktop = canonicalEntry.mid(slash + 1).toInt(&ok);
+            if (!ok || desktop <= 0) {
+                qCWarning(lcConfig) << "Skipping malformed desktop disable entry:" << canonicalEntry;
+                continue;
+            }
+            screenId = canonicalEntry.left(slash);
+            break;
+        }
+        case DisableAxis::Activity: {
+            // Use lastIndexOf so a disambiguated screen ID
+            // (`Manuf:Model:Serial/CONNECTOR`, see
+            // libs/phosphor-screens/include/PhosphorScreens/ScreenIdentity.h)
+            // splits at the activity boundary, not at the connector
+            // boundary inside the screen ID. Activity UUIDs are
+            // canonical and never contain `/`, so the trailing segment
+            // is unambiguous. Mirrors the Desktop axis above.
+            const int slash = canonicalEntry.lastIndexOf(QLatin1Char('/'));
+            if (slash <= 0 || slash == canonicalEntry.size() - 1) {
+                qCWarning(lcConfig) << "Skipping malformed activity disable entry:" << canonicalEntry;
+                continue;
+            }
+            screenId = canonicalEntry.left(slash);
+            activity = canonicalEntry.mid(slash + 1);
+            break;
+        }
+        }
+        // Compose the rule name with the same axis suffix the v3→v4
+        // migration uses (see `configmigration.cpp::disableRuleForDesktop`
+        // / `disableRuleForActivity`). Without the suffix, a runtime-
+        // authored desktop or activity disable rule shows up in the rule
+        // editor as the bare monitor-prefix label (`"Snapping off · DP-1"`),
+        // visually indistinguishable from a monitor-axis rule for the same
+        // screen — even though the underlying `(screen, desktop, activity)`
+        // tuple is what `disableRuleIdFor` keys the v5 UUID off. Two
+        // different rules with the same display name confuses the editor's
+        // dedup-on-name heuristic and obscures the actual scope.
+        QString name = disableRulePrefixFor(mode) + screenId;
+        if (axis == DisableAxis::Desktop) {
+            name += disableRuleDesktopSuffix(desktop);
+        } else if (axis == DisableAxis::Activity) {
+            name += disableRuleActivitySuffix();
+        }
+        kept.append(CRB::makeDisableRule(name, screenId, desktop, activity, modeToken));
+    }
+
+    if (!m_windowRuleStore->setAllRules(kept)) {
+        // Persistence failed — the in-memory rule set still advanced,
+        // so consumers wired to `rulesChanged(persisted=false)` already
+        // know. Surface it on the settings-side log too so users
+        // grepping `lcConfig` see the failure, and skip the aggregate
+        // `settingsChanged()` emit so dirty-state trackers don't
+        // believe the write made it to disk. Roll the in-memory store
+        // back to its on-disk state (mirrors the reset() rollback
+        // below) so subsequent reads through this Settings instance
+        // return the same view as cross-process consumers reading the
+        // unmodified file — without this, the in-memory state would
+        // diverge from disk indefinitely until the next save/load
+        // cycle.
+        qCWarning(lcConfig) << "writeDisableEntries: failed to persist window-rule store for mode" << mode << "axis"
+                            << axisInt;
+        m_windowRuleStore->load();
+        Q_EMIT(this->*signalFn)(mode);
+        return;
+    }
+
     Q_EMIT(this->*signalFn)(mode);
     Q_EMIT settingsChanged();
 }
@@ -1261,10 +1534,10 @@ QStringList Settings::disabledMonitors(PhosphorZones::AssignmentEntry::Mode mode
     // their composite keys (`screenId/desktop`, `screenId/activity`) embed
     // the screen id in a non-isolatable way; the connector↔id matching is
     // done at lookup time inside isDesktopDisabled / isActivityDisabled.
-    QStringList entries = readDisableList(disabledMonitorsKeyFor(mode));
+    QStringList entries = disableEntriesFor(mode, static_cast<int>(DisableAxis::Monitor));
     for (auto& name : entries) {
-        if (Phosphor::Screens::ScreenIdentity::isConnectorName(name)) {
-            const QString resolved = Phosphor::Screens::ScreenIdentity::idForName(name);
+        if (PhosphorScreens::ScreenIdentity::isConnectorName(name)) {
+            const QString resolved = PhosphorScreens::ScreenIdentity::idForName(name);
             if (resolved != name) {
                 name = resolved;
             }
@@ -1275,13 +1548,14 @@ QStringList Settings::disabledMonitors(PhosphorZones::AssignmentEntry::Mode mode
 
 void Settings::setDisabledMonitors(PhosphorZones::AssignmentEntry::Mode mode, const QStringList& screenIdOrNames)
 {
-    writeDisableList(disabledMonitorsKeyFor(mode), screenIdOrNames, mode, &Settings::disabledMonitorsChanged);
+    writeDisableEntries(mode, static_cast<int>(DisableAxis::Monitor), screenIdOrNames,
+                        &Settings::disabledMonitorsChanged);
 }
 
 bool Settings::isMonitorDisabled(PhosphorZones::AssignmentEntry::Mode mode, const QString& screenIdOrName) const
 {
     const QStringList entries = disabledMonitors(mode);
-    for (const QString& name : Phosphor::Screens::ScreenIdentity::variantsFor(screenIdOrName)) {
+    for (const QString& name : PhosphorScreens::ScreenIdentity::variantsFor(screenIdOrName)) {
         if (entries.contains(name)) {
             return true;
         }
@@ -1294,12 +1568,12 @@ bool Settings::isMonitorDisabled(PhosphorZones::AssignmentEntry::Mode mode, cons
 // composite and match either the connector or the resolved id segment.
 QStringList Settings::disabledDesktops(PhosphorZones::AssignmentEntry::Mode mode) const
 {
-    return readDisableList(disabledDesktopsKeyFor(mode));
+    return disableEntriesFor(mode, static_cast<int>(DisableAxis::Desktop));
 }
 
 void Settings::setDisabledDesktops(PhosphorZones::AssignmentEntry::Mode mode, const QStringList& entries)
 {
-    writeDisableList(disabledDesktopsKeyFor(mode), entries, mode, &Settings::disabledDesktopsChanged);
+    writeDisableEntries(mode, static_cast<int>(DisableAxis::Desktop), entries, &Settings::disabledDesktopsChanged);
 }
 
 bool Settings::isDesktopDisabled(PhosphorZones::AssignmentEntry::Mode mode, const QString& screenIdOrName,
@@ -1309,7 +1583,7 @@ bool Settings::isDesktopDisabled(PhosphorZones::AssignmentEntry::Mode mode, cons
         return false;
     }
     const QStringList entries = disabledDesktops(mode);
-    const QStringList namesToCheck = Phosphor::Screens::ScreenIdentity::variantsFor(screenIdOrName);
+    const QStringList namesToCheck = PhosphorScreens::ScreenIdentity::variantsFor(screenIdOrName);
     const QString desktopStr = QString::number(desktop);
     for (const QString& name : namesToCheck) {
         if (entries.contains(name + QLatin1Char('/') + desktopStr)) {
@@ -1324,12 +1598,12 @@ bool Settings::isDesktopDisabled(PhosphorZones::AssignmentEntry::Mode mode, cons
 // to isActivityDisabled rather than applied per-read here.
 QStringList Settings::disabledActivities(PhosphorZones::AssignmentEntry::Mode mode) const
 {
-    return readDisableList(disabledActivitiesKeyFor(mode));
+    return disableEntriesFor(mode, static_cast<int>(DisableAxis::Activity));
 }
 
 void Settings::setDisabledActivities(PhosphorZones::AssignmentEntry::Mode mode, const QStringList& entries)
 {
-    writeDisableList(disabledActivitiesKeyFor(mode), entries, mode, &Settings::disabledActivitiesChanged);
+    writeDisableEntries(mode, static_cast<int>(DisableAxis::Activity), entries, &Settings::disabledActivitiesChanged);
 }
 
 bool Settings::isActivityDisabled(PhosphorZones::AssignmentEntry::Mode mode, const QString& screenIdOrName,
@@ -1339,7 +1613,7 @@ bool Settings::isActivityDisabled(PhosphorZones::AssignmentEntry::Mode mode, con
         return false;
     }
     const QStringList entries = disabledActivities(mode);
-    const QStringList namesToCheck = Phosphor::Screens::ScreenIdentity::variantsFor(screenIdOrName);
+    const QStringList namesToCheck = PhosphorScreens::ScreenIdentity::variantsFor(screenIdOrName);
     for (const QString& name : namesToCheck) {
         if (entries.contains(name + QLatin1Char('/') + activityId)) {
             return true;
@@ -1348,16 +1622,16 @@ bool Settings::isActivityDisabled(PhosphorZones::AssignmentEntry::Mode mode, con
     return false;
 }
 
-PZ_STORE_GET(bool, showZoneNumbers, snappingEffectsGroup, showNumbersKey, bool)
-PZ_STORE_SET_BOOL(setShowZoneNumbers, snappingEffectsGroup, showNumbersKey, showZoneNumbersChanged)
-PZ_STORE_GET(bool, flashZonesOnSwitch, snappingEffectsGroup, flashOnSwitchKey, bool)
-PZ_STORE_SET_BOOL(setFlashZonesOnSwitch, snappingEffectsGroup, flashOnSwitchKey, flashZonesOnSwitchChanged)
-PZ_STORE_GET(bool, showOsdOnLayoutSwitch, snappingEffectsGroup, osdOnLayoutSwitchKey, bool)
-PZ_STORE_SET_BOOL(setShowOsdOnLayoutSwitch, snappingEffectsGroup, osdOnLayoutSwitchKey, showOsdOnLayoutSwitchChanged)
-PZ_STORE_GET(bool, showOsdOnDesktopSwitch, snappingEffectsGroup, osdOnDesktopSwitchKey, bool)
-PZ_STORE_SET_BOOL(setShowOsdOnDesktopSwitch, snappingEffectsGroup, osdOnDesktopSwitchKey, showOsdOnDesktopSwitchChanged)
-PZ_STORE_GET(bool, showNavigationOsd, snappingEffectsGroup, navigationOsdKey, bool)
-PZ_STORE_SET_BOOL(setShowNavigationOsd, snappingEffectsGroup, navigationOsdKey, showNavigationOsdChanged)
+P_STORE_GET(bool, showZoneNumbers, snappingEffectsGroup, showNumbersKey, bool)
+P_STORE_SET_BOOL(setShowZoneNumbers, snappingEffectsGroup, showNumbersKey, showZoneNumbersChanged)
+P_STORE_GET(bool, flashZonesOnSwitch, snappingEffectsGroup, flashOnSwitchKey, bool)
+P_STORE_SET_BOOL(setFlashZonesOnSwitch, snappingEffectsGroup, flashOnSwitchKey, flashZonesOnSwitchChanged)
+P_STORE_GET(bool, showOsdOnLayoutSwitch, snappingEffectsGroup, osdOnLayoutSwitchKey, bool)
+P_STORE_SET_BOOL(setShowOsdOnLayoutSwitch, snappingEffectsGroup, osdOnLayoutSwitchKey, showOsdOnLayoutSwitchChanged)
+P_STORE_GET(bool, showOsdOnDesktopSwitch, snappingEffectsGroup, osdOnDesktopSwitchKey, bool)
+P_STORE_SET_BOOL(setShowOsdOnDesktopSwitch, snappingEffectsGroup, osdOnDesktopSwitchKey, showOsdOnDesktopSwitchChanged)
+P_STORE_GET(bool, showNavigationOsd, snappingEffectsGroup, navigationOsdKey, bool)
+P_STORE_SET_BOOL(setShowNavigationOsd, snappingEffectsGroup, navigationOsdKey, showNavigationOsdChanged)
 
 // Enum setters: stored as int, exposed via the enum-typed getter/setter and
 // also via the int adapters QML uses (osdStyleInt / overlayDisplayModeInt).
@@ -1421,213 +1695,74 @@ void Settings::setOverlayDisplayModeInt(int mode)
 
 // filterLayoutsByAspectRatio sits in snappingBehaviorDisplayGroup with the
 // other display settings — NOTIFY signal is filterLayoutsByAspectRatioChanged.
-PZ_STORE_GET(bool, filterLayoutsByAspectRatio, snappingBehaviorDisplayGroup, filterByAspectRatioKey, bool)
-PZ_STORE_SET_BOOL(setFilterLayoutsByAspectRatio, snappingBehaviorDisplayGroup, filterByAspectRatioKey,
-                  filterLayoutsByAspectRatioChanged)
+P_STORE_GET(bool, filterLayoutsByAspectRatio, snappingBehaviorDisplayGroup, filterByAspectRatioKey, bool)
+P_STORE_SET_BOOL(setFilterLayoutsByAspectRatio, snappingBehaviorDisplayGroup, filterByAspectRatioKey,
+                 filterLayoutsByAspectRatioChanged)
 
-// ── Exclusions (PhosphorConfig::Store-backed) ───────────────────────────────
+// ── Global exclusion knobs (PhosphorConfig::Store-backed) ──────────────────
+//
+// Three global behavioural knobs survive in the `Exclusions` group:
+// `excludeTransientWindows` (boolean), `minimumWindowWidth` (int px),
+// `minimumWindowHeight` (int px). Per-app / per-class exclusion lists
+// retired in v4 — the migration in src/config/configmigration.cpp drains
+// the legacy lists into Application-subject WindowRules, and runtime
+// evaluators in SnapEngine, the KWin effect, and the WTA
+// pending-restore prune route through `PhosphorWindowRules::ExclusionRules`
+// over the unified store.
+//
+// The on-disk group name `"Exclusions"` is INTENTIONALLY kept after the
+// UI moved these knobs into a card relabeled "Window filtering" on the
+// General page (see src/settings/qml/GeneralPage.qml). Renaming the
+// group would require a v4→v5 schema migration to remap every existing
+// user config without losing the three preserved knobs — disproportionate
+// for a label change. The accessor name `exclusionsGroup()` keeps the
+// disk shape, and the runtime UI label is independent.
 
-QStringList Settings::excludedApplications() const
-{
-    return parseCommaList(m_store->read<QString>(ConfigDefaults::exclusionsGroup(), ConfigDefaults::applicationsKey()));
-}
-
-void Settings::setExcludedApplications(const QStringList& apps)
-{
-    // Post-write compare — see setDisabledMonitors for the canonicalisation
-    // rationale. Callers like addExcludedApplication rely on this setter not
-    // firing the changed signal when the de-duplicated / trimmed form
-    // already matches storage.
-    const QString before = m_store->read<QString>(ConfigDefaults::exclusionsGroup(), ConfigDefaults::applicationsKey());
-    m_store->write(ConfigDefaults::exclusionsGroup(), ConfigDefaults::applicationsKey(), apps.join(QLatin1Char(',')));
-    const QString after = m_store->read<QString>(ConfigDefaults::exclusionsGroup(), ConfigDefaults::applicationsKey());
-    if (before == after) {
-        return;
-    }
-    Q_EMIT excludedApplicationsChanged();
-    Q_EMIT settingsChanged();
-}
-
-void Settings::addExcludedApplication(const QString& app)
-{
-    const QString trimmed = app.trimmed();
-    if (trimmed.isEmpty()) {
-        return;
-    }
-    QStringList list = excludedApplications();
-    if (list.contains(trimmed)) {
-        return;
-    }
-    list.append(trimmed);
-    setExcludedApplications(list);
-}
-
-void Settings::removeExcludedApplicationAt(int index)
-{
-    QStringList list = excludedApplications();
-    if (index < 0 || index >= list.size()) {
-        return;
-    }
-    list.removeAt(index);
-    setExcludedApplications(list);
-}
-
-QStringList Settings::excludedWindowClasses() const
-{
-    return parseCommaList(
-        m_store->read<QString>(ConfigDefaults::exclusionsGroup(), ConfigDefaults::windowClassesKey()));
-}
-
-void Settings::setExcludedWindowClasses(const QStringList& classes)
-{
-    // Post-write compare — see setDisabledMonitors for the canonicalisation
-    // rationale.
-    const QString before =
-        m_store->read<QString>(ConfigDefaults::exclusionsGroup(), ConfigDefaults::windowClassesKey());
-    m_store->write(ConfigDefaults::exclusionsGroup(), ConfigDefaults::windowClassesKey(),
-                   classes.join(QLatin1Char(',')));
-    const QString after = m_store->read<QString>(ConfigDefaults::exclusionsGroup(), ConfigDefaults::windowClassesKey());
-    if (before == after) {
-        return;
-    }
-    Q_EMIT excludedWindowClassesChanged();
-    Q_EMIT settingsChanged();
-}
-
-void Settings::addExcludedWindowClass(const QString& cls)
-{
-    const QString trimmed = cls.trimmed();
-    if (trimmed.isEmpty()) {
-        return;
-    }
-    QStringList list = excludedWindowClasses();
-    if (list.contains(trimmed)) {
-        return;
-    }
-    list.append(trimmed);
-    setExcludedWindowClasses(list);
-}
-
-void Settings::removeExcludedWindowClassAt(int index)
-{
-    QStringList list = excludedWindowClasses();
-    if (index < 0 || index >= list.size()) {
-        return;
-    }
-    list.removeAt(index);
-    setExcludedWindowClasses(list);
-}
-
-PZ_STORE_GET(bool, excludeTransientWindows, exclusionsGroup, transientWindowsKey, bool)
-PZ_STORE_SET_BOOL(setExcludeTransientWindows, exclusionsGroup, transientWindowsKey, excludeTransientWindowsChanged)
-PZ_STORE_GET(int, minimumWindowWidth, exclusionsGroup, minimumWindowWidthKey, int)
-PZ_STORE_SET_INT(setMinimumWindowWidth, exclusionsGroup, minimumWindowWidthKey, minimumWindowWidthChanged)
-PZ_STORE_GET(int, minimumWindowHeight, exclusionsGroup, minimumWindowHeightKey, int)
-PZ_STORE_SET_INT(setMinimumWindowHeight, exclusionsGroup, minimumWindowHeightKey, minimumWindowHeightChanged)
+P_STORE_GET(bool, excludeTransientWindows, exclusionsGroup, transientWindowsKey, bool)
+P_STORE_SET_BOOL(setExcludeTransientWindows, exclusionsGroup, transientWindowsKey, excludeTransientWindowsChanged)
+P_STORE_GET(int, minimumWindowWidth, exclusionsGroup, minimumWindowWidthKey, int)
+P_STORE_SET_INT(setMinimumWindowWidth, exclusionsGroup, minimumWindowWidthKey, minimumWindowWidthChanged)
+P_STORE_GET(int, minimumWindowHeight, exclusionsGroup, minimumWindowHeightKey, int)
+P_STORE_SET_INT(setMinimumWindowHeight, exclusionsGroup, minimumWindowHeightKey, minimumWindowHeightChanged)
 
 // ── Animation Window Filtering (PhosphorConfig::Store-backed) ──────────────
 //
-// Mirrors the Exclusions block above but lives in
-// `Animations.WindowFiltering` so animation-time filtering is independent
-// of snapping/tiling exclusions. Scalar accessors use the same macro
-// pattern; the QStringList accessors mirror the comma-list canonicalisation
-// trick from `setExcludedApplications` (post-write read-back so addX /
-// removeXAt don't fire spurious signals on no-op writes).
+// Four global animation-filtering knobs in `Animations.WindowFiltering`:
+// `animationExcludeTransientWindows`, `animationExcludeNotificationsAndOsd`,
+// `animationMinimumWindowWidth`, `animationMinimumWindowHeight`. Mirrors
+// the Exclusions block above (plus a NotificationsAndOsd knob), stored
+// independently so a user can disable animations for an app while still
+// snapping it (or vice versa). Per-app / per-class animation exclusion
+// lists retired in v4 — they fold into ExcludeAnimations WindowRules.
 
-PZ_STORE_GET(bool, animationExcludeTransientWindows, animationsWindowFilteringGroup, transientWindowsKey, bool)
-PZ_STORE_SET_BOOL(setAnimationExcludeTransientWindows, animationsWindowFilteringGroup, transientWindowsKey,
-                  animationExcludeTransientWindowsChanged)
-PZ_STORE_GET(bool, animationExcludeNotificationsAndOsd, animationsWindowFilteringGroup, notificationsAndOsdKey, bool)
-PZ_STORE_SET_BOOL(setAnimationExcludeNotificationsAndOsd, animationsWindowFilteringGroup, notificationsAndOsdKey,
-                  animationExcludeNotificationsAndOsdChanged)
-PZ_STORE_GET(int, animationMinimumWindowWidth, animationsWindowFilteringGroup, minimumWindowWidthKey, int)
-PZ_STORE_SET_INT(setAnimationMinimumWindowWidth, animationsWindowFilteringGroup, minimumWindowWidthKey,
-                 animationMinimumWindowWidthChanged)
-PZ_STORE_GET(int, animationMinimumWindowHeight, animationsWindowFilteringGroup, minimumWindowHeightKey, int)
-PZ_STORE_SET_INT(setAnimationMinimumWindowHeight, animationsWindowFilteringGroup, minimumWindowHeightKey,
-                 animationMinimumWindowHeightChanged)
+P_STORE_GET(bool, animationExcludeTransientWindows, animationsWindowFilteringGroup, transientWindowsKey, bool)
+P_STORE_SET_BOOL(setAnimationExcludeTransientWindows, animationsWindowFilteringGroup, transientWindowsKey,
+                 animationExcludeTransientWindowsChanged)
+P_STORE_GET(bool, animationExcludeNotificationsAndOsd, animationsWindowFilteringGroup, notificationsAndOsdKey, bool)
+P_STORE_SET_BOOL(setAnimationExcludeNotificationsAndOsd, animationsWindowFilteringGroup, notificationsAndOsdKey,
+                 animationExcludeNotificationsAndOsdChanged)
+P_STORE_GET(int, animationMinimumWindowWidth, animationsWindowFilteringGroup, minimumWindowWidthKey, int)
+P_STORE_SET_INT(setAnimationMinimumWindowWidth, animationsWindowFilteringGroup, minimumWindowWidthKey,
+                animationMinimumWindowWidthChanged)
+P_STORE_GET(int, animationMinimumWindowHeight, animationsWindowFilteringGroup, minimumWindowHeightKey, int)
+P_STORE_SET_INT(setAnimationMinimumWindowHeight, animationsWindowFilteringGroup, minimumWindowHeightKey,
+                animationMinimumWindowHeightChanged)
 
-QStringList Settings::animationExcludedApplications() const
-{
-    return parseCommaList(
-        m_store->read<QString>(ConfigDefaults::animationsWindowFilteringGroup(), ConfigDefaults::applicationsKey()));
-}
-
-void Settings::setAnimationExcludedApplications(const QStringList& apps)
-{
-    writeCommaList(ConfigDefaults::animationsWindowFilteringGroup(), ConfigDefaults::applicationsKey(), apps,
-                   &Settings::animationExcludedApplicationsChanged);
-}
-
-void Settings::addAnimationExcludedApplication(const QString& app)
-{
-    const QString trimmed = app.trimmed();
-    if (trimmed.isEmpty()) {
-        return;
-    }
-    QStringList list = animationExcludedApplications();
-    if (list.contains(trimmed)) {
-        return;
-    }
-    list.append(trimmed);
-    setAnimationExcludedApplications(list);
-}
-
-void Settings::removeAnimationExcludedApplicationAt(int index)
-{
-    QStringList list = animationExcludedApplications();
-    if (index < 0 || index >= list.size()) {
-        return;
-    }
-    list.removeAt(index);
-    setAnimationExcludedApplications(list);
-}
-
-QStringList Settings::animationExcludedWindowClasses() const
-{
-    return parseCommaList(
-        m_store->read<QString>(ConfigDefaults::animationsWindowFilteringGroup(), ConfigDefaults::windowClassesKey()));
-}
-
-void Settings::setAnimationExcludedWindowClasses(const QStringList& classes)
-{
-    writeCommaList(ConfigDefaults::animationsWindowFilteringGroup(), ConfigDefaults::windowClassesKey(), classes,
-                   &Settings::animationExcludedWindowClassesChanged);
-}
-
-void Settings::addAnimationExcludedWindowClass(const QString& cls)
-{
-    const QString trimmed = cls.trimmed();
-    if (trimmed.isEmpty()) {
-        return;
-    }
-    QStringList list = animationExcludedWindowClasses();
-    if (list.contains(trimmed)) {
-        return;
-    }
-    list.append(trimmed);
-    setAnimationExcludedWindowClasses(list);
-}
-
-void Settings::removeAnimationExcludedWindowClassAt(int index)
-{
-    QStringList list = animationExcludedWindowClasses();
-    if (index < 0 || index >= list.size()) {
-        return;
-    }
-    list.removeAt(index);
-    setAnimationExcludedWindowClasses(list);
-}
+// animationExcludedApplications / animationExcludedWindowClasses (+ their
+// add*/remove* convenience methods) retired in v4 — the v4 migration drains
+// the Animations.WindowFiltering group's Applications / WindowClasses leaves
+// into `ExcludeAnimations` WindowRules. The settings accessors had no
+// consumers after the KWin effect rewired off the loadSettingAsync fetches.
 
 // ── PhosphorZones::Zone Selector (PhosphorConfig::Store-backed) ────────────────────────────
 // Three enum-ints exposed via both the typed setter and an Int adapter for
 // QML binding. Stored as int, the schema clamps the range.
 
-PZ_STORE_GET(bool, zoneSelectorEnabled, snappingZoneSelectorGroup, enabledKey, bool)
-PZ_STORE_SET_BOOL(setZoneSelectorEnabled, snappingZoneSelectorGroup, enabledKey, zoneSelectorEnabledChanged)
-PZ_STORE_GET(int, zoneSelectorTriggerDistance, snappingZoneSelectorGroup, triggerDistanceKey, int)
-PZ_STORE_SET_INT(setZoneSelectorTriggerDistance, snappingZoneSelectorGroup, triggerDistanceKey,
-                 zoneSelectorTriggerDistanceChanged)
+P_STORE_GET(bool, zoneSelectorEnabled, snappingZoneSelectorGroup, enabledKey, bool)
+P_STORE_SET_BOOL(setZoneSelectorEnabled, snappingZoneSelectorGroup, enabledKey, zoneSelectorEnabledChanged)
+P_STORE_GET(int, zoneSelectorTriggerDistance, snappingZoneSelectorGroup, triggerDistanceKey, int)
+P_STORE_SET_INT(setZoneSelectorTriggerDistance, snappingZoneSelectorGroup, triggerDistanceKey,
+                zoneSelectorTriggerDistanceChanged)
 
 ZoneSelectorPosition Settings::zoneSelectorPosition() const
 {
@@ -1684,17 +1819,17 @@ void Settings::setZoneSelectorLayoutModeInt(int value)
     }
 }
 
-PZ_STORE_GET(int, zoneSelectorPreviewWidth, snappingZoneSelectorGroup, previewWidthKey, int)
-PZ_STORE_SET_INT(setZoneSelectorPreviewWidth, snappingZoneSelectorGroup, previewWidthKey,
-                 zoneSelectorPreviewWidthChanged)
-PZ_STORE_GET(int, zoneSelectorPreviewHeight, snappingZoneSelectorGroup, previewHeightKey, int)
-PZ_STORE_SET_INT(setZoneSelectorPreviewHeight, snappingZoneSelectorGroup, previewHeightKey,
-                 zoneSelectorPreviewHeightChanged)
-PZ_STORE_GET(bool, zoneSelectorPreviewLockAspect, snappingZoneSelectorGroup, previewLockAspectKey, bool)
-PZ_STORE_SET_BOOL(setZoneSelectorPreviewLockAspect, snappingZoneSelectorGroup, previewLockAspectKey,
-                  zoneSelectorPreviewLockAspectChanged)
-PZ_STORE_GET(int, zoneSelectorGridColumns, snappingZoneSelectorGroup, gridColumnsKey, int)
-PZ_STORE_SET_INT(setZoneSelectorGridColumns, snappingZoneSelectorGroup, gridColumnsKey, zoneSelectorGridColumnsChanged)
+P_STORE_GET(int, zoneSelectorPreviewWidth, snappingZoneSelectorGroup, previewWidthKey, int)
+P_STORE_SET_INT(setZoneSelectorPreviewWidth, snappingZoneSelectorGroup, previewWidthKey,
+                zoneSelectorPreviewWidthChanged)
+P_STORE_GET(int, zoneSelectorPreviewHeight, snappingZoneSelectorGroup, previewHeightKey, int)
+P_STORE_SET_INT(setZoneSelectorPreviewHeight, snappingZoneSelectorGroup, previewHeightKey,
+                zoneSelectorPreviewHeightChanged)
+P_STORE_GET(bool, zoneSelectorPreviewLockAspect, snappingZoneSelectorGroup, previewLockAspectKey, bool)
+P_STORE_SET_BOOL(setZoneSelectorPreviewLockAspect, snappingZoneSelectorGroup, previewLockAspectKey,
+                 zoneSelectorPreviewLockAspectChanged)
+P_STORE_GET(int, zoneSelectorGridColumns, snappingZoneSelectorGroup, gridColumnsKey, int)
+P_STORE_SET_INT(setZoneSelectorGridColumns, snappingZoneSelectorGroup, gridColumnsKey, zoneSelectorGridColumnsChanged)
 
 ZoneSelectorSizeMode Settings::zoneSelectorSizeMode() const
 {
@@ -1723,8 +1858,8 @@ void Settings::setZoneSelectorSizeModeInt(int value)
     }
 }
 
-PZ_STORE_GET(int, zoneSelectorMaxRows, snappingZoneSelectorGroup, maxRowsKey, int)
-PZ_STORE_SET_INT(setZoneSelectorMaxRows, snappingZoneSelectorGroup, maxRowsKey, zoneSelectorMaxRowsChanged)
+P_STORE_GET(int, zoneSelectorMaxRows, snappingZoneSelectorGroup, maxRowsKey, int)
+P_STORE_SET_INT(setZoneSelectorMaxRows, snappingZoneSelectorGroup, maxRowsKey, zoneSelectorMaxRowsChanged)
 
 // ── Activation + Behavior (PhosphorConfig::Store-backed) ────────────────────
 
@@ -1744,10 +1879,12 @@ static_assert(Settings::MaxTriggersPerAction == ConfigDefaults::maxTriggersPerAc
               "Settings::MaxTriggersPerAction must equal ConfigDefaults::maxTriggersPerAction — "
               "single source of truth lives in ConfigDefaults.");
 
-PZ_STORE_GET(bool, snappingEnabled, snappingGroup, enabledKey, bool)
-PZ_STORE_SET_BOOL(setSnappingEnabled, snappingGroup, enabledKey, snappingEnabledChanged)
-PZ_STORE_GET(bool, toggleActivation, snappingBehaviorGroup, toggleActivationKey, bool)
-PZ_STORE_SET_BOOL(setToggleActivation, snappingBehaviorGroup, toggleActivationKey, toggleActivationChanged)
+P_STORE_GET(bool, snappingEnabled, snappingGroup, enabledKey, bool)
+P_STORE_SET_BOOL(setSnappingEnabled, snappingGroup, enabledKey, snappingEnabledChanged)
+P_STORE_GET(bool, toggleActivation, snappingBehaviorGroup, toggleActivationKey, bool)
+P_STORE_SET_BOOL(setToggleActivation, snappingBehaviorGroup, toggleActivationKey, toggleActivationChanged)
+P_STORE_GET(bool, zoneSpanToggleMode, snappingBehaviorZoneSpanGroup, toggleActivationKey, bool)
+P_STORE_SET_BOOL(setZoneSpanToggleMode, snappingBehaviorZoneSpanGroup, toggleActivationKey, zoneSpanToggleModeChanged)
 
 // Shared helper for the three "plain" trigger-list setters (activation,
 // snap-assist, autotile-insert). Post-write compare — the schema's
@@ -1769,29 +1906,6 @@ void Settings::writeTriggerList(const QString& group, const QString& key, const 
     Q_EMIT settingsChanged();
 }
 
-void Settings::writeCommaList(const QString& group, const QString& key, const QStringList& list,
-                              CommaListSignalFn specificSignal)
-{
-    // Pre-write snapshot + post-write read-back. The schema's
-    // `canonicalCommaList` validator may trim / dedupe the joined
-    // string, so two writes that look different in memory can
-    // canonicalise to the same on-disk value — emitting in that case
-    // would dirty the page on a no-op. Pre-write equality alone would
-    // miss canonicalisation no-ops; post-write equality alone would
-    // miss the case where the list ends up identical because the
-    // validator collapsed it. Compare both sides of the round-trip so
-    // the signal fires only when the persisted value actually
-    // changed.
-    const QString before = m_store->read<QString>(group, key);
-    m_store->write(group, key, list.join(QLatin1Char(',')));
-    const QString after = m_store->read<QString>(group, key);
-    if (before == after) {
-        return;
-    }
-    Q_EMIT(this->*specificSignal)();
-    Q_EMIT settingsChanged();
-}
-
 QVariantList Settings::dragActivationTriggers() const
 {
     return m_store->readVariant(ConfigDefaults::snappingBehaviorGroup(), ConfigDefaults::triggersKey()).toList();
@@ -1802,8 +1916,8 @@ void Settings::setDragActivationTriggers(const QVariantList& triggers)
                      &Settings::dragActivationTriggersChanged);
 }
 
-PZ_STORE_GET(bool, zoneSpanEnabled, snappingBehaviorZoneSpanGroup, enabledKey, bool)
-PZ_STORE_SET_BOOL(setZoneSpanEnabled, snappingBehaviorZoneSpanGroup, enabledKey, zoneSpanEnabledChanged)
+P_STORE_GET(bool, zoneSpanEnabled, snappingBehaviorZoneSpanGroup, enabledKey, bool)
+P_STORE_SET_BOOL(setZoneSpanEnabled, snappingBehaviorZoneSpanGroup, enabledKey, zoneSpanEnabledChanged)
 
 DragModifier Settings::zoneSpanModifier() const
 {
@@ -1942,27 +2056,27 @@ void Settings::setZoneSpanTriggers(const QVariantList& triggers)
 
 // Behavior: WindowHandling + SnapAssist.
 
-PZ_STORE_GET(bool, keepWindowsInZonesOnResolutionChange, snappingBehaviorWindowHandlingGroup, keepOnResolutionChangeKey,
-             bool)
-PZ_STORE_SET_BOOL(setKeepWindowsInZonesOnResolutionChange, snappingBehaviorWindowHandlingGroup,
-                  keepOnResolutionChangeKey, keepWindowsInZonesOnResolutionChangeChanged)
-PZ_STORE_GET(bool, moveNewWindowsToLastZone, snappingBehaviorWindowHandlingGroup, moveNewToLastZoneKey, bool)
-PZ_STORE_SET_BOOL(setMoveNewWindowsToLastZone, snappingBehaviorWindowHandlingGroup, moveNewToLastZoneKey,
-                  moveNewWindowsToLastZoneChanged)
-PZ_STORE_GET(bool, restoreOriginalSizeOnUnsnap, snappingBehaviorWindowHandlingGroup, restoreOnUnsnapKey, bool)
-PZ_STORE_SET_BOOL(setRestoreOriginalSizeOnUnsnap, snappingBehaviorWindowHandlingGroup, restoreOnUnsnapKey,
-                  restoreOriginalSizeOnUnsnapChanged)
+P_STORE_GET(bool, keepWindowsInZonesOnResolutionChange, snappingBehaviorWindowHandlingGroup, keepOnResolutionChangeKey,
+            bool)
+P_STORE_SET_BOOL(setKeepWindowsInZonesOnResolutionChange, snappingBehaviorWindowHandlingGroup,
+                 keepOnResolutionChangeKey, keepWindowsInZonesOnResolutionChangeChanged)
+P_STORE_GET(bool, moveNewWindowsToLastZone, snappingBehaviorWindowHandlingGroup, moveNewToLastZoneKey, bool)
+P_STORE_SET_BOOL(setMoveNewWindowsToLastZone, snappingBehaviorWindowHandlingGroup, moveNewToLastZoneKey,
+                 moveNewWindowsToLastZoneChanged)
+P_STORE_GET(bool, restoreOriginalSizeOnUnsnap, snappingBehaviorWindowHandlingGroup, restoreOnUnsnapKey, bool)
+P_STORE_SET_BOOL(setRestoreOriginalSizeOnUnsnap, snappingBehaviorWindowHandlingGroup, restoreOnUnsnapKey,
+                 restoreOriginalSizeOnUnsnapChanged)
 
-StickyWindowHandling Settings::stickyWindowHandling() const
+StickyWindowHandling Settings::snappingStickyWindowHandling() const
 {
     return static_cast<StickyWindowHandling>(m_store->read<int>(ConfigDefaults::snappingBehaviorWindowHandlingGroup(),
                                                                 ConfigDefaults::stickyWindowHandlingKey()));
 }
-int Settings::stickyWindowHandlingInt() const
+int Settings::snappingStickyWindowHandlingInt() const
 {
-    return static_cast<int>(stickyWindowHandling());
+    return static_cast<int>(snappingStickyWindowHandling());
 }
-void Settings::setStickyWindowHandling(StickyWindowHandling handling)
+void Settings::setSnappingStickyWindowHandling(StickyWindowHandling handling)
 {
     const int before = m_store->read<int>(ConfigDefaults::snappingBehaviorWindowHandlingGroup(),
                                           ConfigDefaults::stickyWindowHandlingKey());
@@ -1973,23 +2087,37 @@ void Settings::setStickyWindowHandling(StickyWindowHandling handling)
     if (after == before) {
         return;
     }
-    Q_EMIT stickyWindowHandlingChanged();
+    Q_EMIT snappingStickyWindowHandlingChanged();
     Q_EMIT settingsChanged();
 }
-void Settings::setStickyWindowHandlingInt(int handling)
+void Settings::setSnappingStickyWindowHandlingInt(int handling)
 {
     if (handling >= static_cast<int>(StickyWindowHandling::TreatAsNormal)
         && handling <= static_cast<int>(StickyWindowHandling::IgnoreAll)) {
-        setStickyWindowHandling(static_cast<StickyWindowHandling>(handling));
+        setSnappingStickyWindowHandling(static_cast<StickyWindowHandling>(handling));
     }
 }
 
-PZ_STORE_GET(bool, restoreWindowsToZonesOnLogin, snappingBehaviorWindowHandlingGroup, restoreOnLoginKey, bool)
-PZ_STORE_SET_BOOL(setRestoreWindowsToZonesOnLogin, snappingBehaviorWindowHandlingGroup, restoreOnLoginKey,
-                  restoreWindowsToZonesOnLoginChanged)
-PZ_STORE_GET(bool, autoAssignAllLayouts, snappingBehaviorWindowHandlingGroup, autoAssignAllLayoutsKey, bool)
-PZ_STORE_SET_BOOL(setAutoAssignAllLayouts, snappingBehaviorWindowHandlingGroup, autoAssignAllLayoutsKey,
-                  autoAssignAllLayoutsChanged)
+P_STORE_GET(bool, restoreWindowsToZonesOnLogin, snappingBehaviorWindowHandlingGroup, restoreOnLoginKey, bool)
+P_STORE_SET_BOOL(setRestoreWindowsToZonesOnLogin, snappingBehaviorWindowHandlingGroup, restoreOnLoginKey,
+                 restoreWindowsToZonesOnLoginChanged)
+P_STORE_GET(bool, snappingRestoreFloatedWindowsOnLogin, snappingBehaviorWindowHandlingGroup, restoreFloatedOnLoginKey,
+            bool)
+P_STORE_SET_BOOL(setSnappingRestoreFloatedWindowsOnLogin, snappingBehaviorWindowHandlingGroup, restoreFloatedOnLoginKey,
+                 snappingRestoreFloatedWindowsOnLoginChanged)
+P_STORE_GET(bool, autotileRestoreFloatedWindowsOnLogin, tilingBehaviorGroup, restoreFloatedOnLoginKey, bool)
+P_STORE_SET_BOOL(setAutotileRestoreFloatedWindowsOnLogin, tilingBehaviorGroup, restoreFloatedOnLoginKey,
+                 autotileRestoreFloatedWindowsOnLoginChanged)
+P_STORE_GET(bool, snapUnfloatFallbackToZone, snappingBehaviorWindowHandlingGroup, unfloatFallbackToZoneKey, bool)
+P_STORE_SET_BOOL(setSnapUnfloatFallbackToZone, snappingBehaviorWindowHandlingGroup, unfloatFallbackToZoneKey,
+                 snapUnfloatFallbackToZoneChanged)
+P_STORE_GET(bool, autoAssignAllLayouts, snappingBehaviorWindowHandlingGroup, autoAssignAllLayoutsKey, bool)
+P_STORE_SET_BOOL(setAutoAssignAllLayouts, snappingBehaviorWindowHandlingGroup, autoAssignAllLayoutsKey,
+                 autoAssignAllLayoutsChanged)
+P_STORE_GET(bool, suppressDefaultLayoutAssignment, snappingBehaviorWindowHandlingGroup,
+            suppressDefaultLayoutAssignmentKey, bool)
+P_STORE_SET_BOOL(setSuppressDefaultLayoutAssignment, snappingBehaviorWindowHandlingGroup,
+                 suppressDefaultLayoutAssignmentKey, suppressDefaultLayoutAssignmentChanged)
 
 QString Settings::defaultLayoutId() const
 {
@@ -1999,6 +2127,14 @@ QString Settings::defaultLayoutId() const
 void Settings::setDefaultLayoutId(const QString& layoutId)
 {
     const QString normalized = normalizeUuidString(layoutId);
+    // A non-empty input that normalised to empty is a malformed UUID
+    // (the normaliser logs a warning at that point). Treat as a no-op
+    // rather than silently clearing a previously-valid stored value —
+    // a typo in the KCM picker should not wipe the user's configured
+    // default layout.
+    if (normalized.isEmpty() && !layoutId.isEmpty()) {
+        return;
+    }
     if (defaultLayoutId() == normalized) {
         return;
     }
@@ -2008,11 +2144,11 @@ void Settings::setDefaultLayoutId(const QString& layoutId)
     Q_EMIT settingsChanged();
 }
 
-PZ_STORE_GET(bool, snapAssistFeatureEnabled, snappingBehaviorSnapAssistGroup, featureEnabledKey, bool)
-PZ_STORE_SET_BOOL(setSnapAssistFeatureEnabled, snappingBehaviorSnapAssistGroup, featureEnabledKey,
-                  snapAssistFeatureEnabledChanged)
-PZ_STORE_GET(bool, snapAssistEnabled, snappingBehaviorSnapAssistGroup, enabledKey, bool)
-PZ_STORE_SET_BOOL(setSnapAssistEnabled, snappingBehaviorSnapAssistGroup, enabledKey, snapAssistEnabledChanged)
+P_STORE_GET(bool, snapAssistFeatureEnabled, snappingBehaviorSnapAssistGroup, featureEnabledKey, bool)
+P_STORE_SET_BOOL(setSnapAssistFeatureEnabled, snappingBehaviorSnapAssistGroup, featureEnabledKey,
+                 snapAssistFeatureEnabledChanged)
+P_STORE_GET(bool, snapAssistEnabled, snappingBehaviorSnapAssistGroup, enabledKey, bool)
+P_STORE_SET_BOOL(setSnapAssistEnabled, snappingBehaviorSnapAssistGroup, enabledKey, snapAssistEnabledChanged)
 
 QVariantList Settings::snapAssistTriggers() const
 {
@@ -2030,8 +2166,8 @@ void Settings::setSnapAssistTriggers(const QVariantList& triggers)
 // PhosphorTiles::AlgorithmRegistry for validation; per-algorithm settings round-trip as a
 // JSON string and sanitize via AutotileConfig::perAlgoFromVariantMap.
 
-PZ_STORE_GET(bool, autotileEnabled, tilingGroup, enabledKey, bool)
-PZ_STORE_SET_BOOL(setAutotileEnabled, tilingGroup, enabledKey, autotileEnabledChanged)
+P_STORE_GET(bool, autotileEnabled, tilingGroup, enabledKey, bool)
+P_STORE_SET_BOOL(setAutotileEnabled, tilingGroup, enabledKey, autotileEnabledChanged)
 
 QString Settings::defaultAutotileAlgorithm() const
 {
@@ -2054,14 +2190,14 @@ void Settings::setDefaultAutotileAlgorithm(const QString& algorithm)
     Q_EMIT settingsChanged();
 }
 
-PZ_STORE_GET(qreal, autotileSplitRatio, tilingAlgorithmGroup, splitRatioKey, double)
-PZ_STORE_SET_DOUBLE(setAutotileSplitRatio, tilingAlgorithmGroup, splitRatioKey, autotileSplitRatioChanged)
-PZ_STORE_GET(qreal, autotileSplitRatioStep, tilingAlgorithmGroup, splitRatioStepKey, double)
-PZ_STORE_SET_DOUBLE(setAutotileSplitRatioStep, tilingAlgorithmGroup, splitRatioStepKey, autotileSplitRatioStepChanged)
-PZ_STORE_GET(int, autotileMasterCount, tilingAlgorithmGroup, masterCountKey, int)
-PZ_STORE_SET_INT(setAutotileMasterCount, tilingAlgorithmGroup, masterCountKey, autotileMasterCountChanged)
-PZ_STORE_GET(int, autotileMaxWindows, tilingAlgorithmGroup, maxWindowsKey, int)
-PZ_STORE_SET_INT(setAutotileMaxWindows, tilingAlgorithmGroup, maxWindowsKey, autotileMaxWindowsChanged)
+P_STORE_GET(qreal, autotileSplitRatio, tilingAlgorithmGroup, splitRatioKey, double)
+P_STORE_SET_DOUBLE(setAutotileSplitRatio, tilingAlgorithmGroup, splitRatioKey, autotileSplitRatioChanged)
+P_STORE_GET(qreal, autotileSplitRatioStep, tilingAlgorithmGroup, splitRatioStepKey, double)
+P_STORE_SET_DOUBLE(setAutotileSplitRatioStep, tilingAlgorithmGroup, splitRatioStepKey, autotileSplitRatioStepChanged)
+P_STORE_GET(int, autotileMasterCount, tilingAlgorithmGroup, masterCountKey, int)
+P_STORE_SET_INT(setAutotileMasterCount, tilingAlgorithmGroup, masterCountKey, autotileMasterCountChanged)
+P_STORE_GET(int, autotileMaxWindows, tilingAlgorithmGroup, maxWindowsKey, int)
+P_STORE_SET_INT(setAutotileMaxWindows, tilingAlgorithmGroup, maxWindowsKey, autotileMaxWindowsChanged)
 
 QVariantMap Settings::autotilePerAlgorithmSettings() const
 {
@@ -2090,32 +2226,48 @@ void Settings::setAutotilePerAlgorithmSettings(const QVariantMap& value)
 }
 
 // Tiling.Gaps
-PZ_STORE_GET(int, autotileInnerGap, tilingGapsGroup, innerKey, int)
-PZ_STORE_SET_INT(setAutotileInnerGap, tilingGapsGroup, innerKey, autotileInnerGapChanged)
-PZ_STORE_GET(int, autotileOuterGap, tilingGapsGroup, outerKey, int)
-PZ_STORE_SET_INT(setAutotileOuterGap, tilingGapsGroup, outerKey, autotileOuterGapChanged)
-PZ_STORE_GET(bool, autotileUsePerSideOuterGap, tilingGapsGroup, usePerSideKey, bool)
-PZ_STORE_SET_BOOL(setAutotileUsePerSideOuterGap, tilingGapsGroup, usePerSideKey, autotileUsePerSideOuterGapChanged)
-PZ_STORE_GET(int, autotileOuterGapTop, tilingGapsGroup, topKey, int)
-PZ_STORE_SET_INT(setAutotileOuterGapTop, tilingGapsGroup, topKey, autotileOuterGapTopChanged)
-PZ_STORE_GET(int, autotileOuterGapBottom, tilingGapsGroup, bottomKey, int)
-PZ_STORE_SET_INT(setAutotileOuterGapBottom, tilingGapsGroup, bottomKey, autotileOuterGapBottomChanged)
-PZ_STORE_GET(int, autotileOuterGapLeft, tilingGapsGroup, leftKey, int)
-PZ_STORE_SET_INT(setAutotileOuterGapLeft, tilingGapsGroup, leftKey, autotileOuterGapLeftChanged)
-PZ_STORE_GET(int, autotileOuterGapRight, tilingGapsGroup, rightKey, int)
-PZ_STORE_SET_INT(setAutotileOuterGapRight, tilingGapsGroup, rightKey, autotileOuterGapRightChanged)
-PZ_STORE_GET(bool, autotileSmartGaps, tilingGapsGroup, smartGapsKey, bool)
-PZ_STORE_SET_BOOL(setAutotileSmartGaps, tilingGapsGroup, smartGapsKey, autotileSmartGapsChanged)
+P_STORE_GET(int, autotileInnerGap, tilingGapsGroup, innerKey, int)
+P_STORE_SET_INT(setAutotileInnerGap, tilingGapsGroup, innerKey, autotileInnerGapChanged)
+P_STORE_GET(int, autotileOuterGap, tilingGapsGroup, outerKey, int)
+P_STORE_SET_INT(setAutotileOuterGap, tilingGapsGroup, outerKey, autotileOuterGapChanged)
+P_STORE_GET(bool, autotileUsePerSideOuterGap, tilingGapsGroup, usePerSideKey, bool)
+P_STORE_SET_BOOL(setAutotileUsePerSideOuterGap, tilingGapsGroup, usePerSideKey, autotileUsePerSideOuterGapChanged)
+P_STORE_GET(int, autotileOuterGapTop, tilingGapsGroup, topKey, int)
+P_STORE_SET_INT(setAutotileOuterGapTop, tilingGapsGroup, topKey, autotileOuterGapTopChanged)
+P_STORE_GET(int, autotileOuterGapBottom, tilingGapsGroup, bottomKey, int)
+P_STORE_SET_INT(setAutotileOuterGapBottom, tilingGapsGroup, bottomKey, autotileOuterGapBottomChanged)
+P_STORE_GET(int, autotileOuterGapLeft, tilingGapsGroup, leftKey, int)
+P_STORE_SET_INT(setAutotileOuterGapLeft, tilingGapsGroup, leftKey, autotileOuterGapLeftChanged)
+P_STORE_GET(int, autotileOuterGapRight, tilingGapsGroup, rightKey, int)
+P_STORE_SET_INT(setAutotileOuterGapRight, tilingGapsGroup, rightKey, autotileOuterGapRightChanged)
+P_STORE_GET(bool, autotileSmartGaps, tilingGapsGroup, smartGapsKey, bool)
+P_STORE_SET_BOOL(setAutotileSmartGaps, tilingGapsGroup, smartGapsKey, autotileSmartGapsChanged)
 
 // Tiling.Behavior
-PZ_STORE_GET(bool, autotileFocusNewWindows, tilingBehaviorGroup, focusNewWindowsKey, bool)
-PZ_STORE_SET_BOOL(setAutotileFocusNewWindows, tilingBehaviorGroup, focusNewWindowsKey, autotileFocusNewWindowsChanged)
-PZ_STORE_GET(bool, autotileFocusFollowsMouse, tilingBehaviorGroup, focusFollowsMouseKey, bool)
-PZ_STORE_SET_BOOL(setAutotileFocusFollowsMouse, tilingBehaviorGroup, focusFollowsMouseKey,
-                  autotileFocusFollowsMouseChanged)
-PZ_STORE_GET(bool, autotileRespectMinimumSize, tilingBehaviorGroup, respectMinimumSizeKey, bool)
-PZ_STORE_SET_BOOL(setAutotileRespectMinimumSize, tilingBehaviorGroup, respectMinimumSizeKey,
-                  autotileRespectMinimumSizeChanged)
+P_STORE_GET(bool, autotileFocusNewWindows, tilingBehaviorGroup, focusNewWindowsKey, bool)
+P_STORE_SET_BOOL(setAutotileFocusNewWindows, tilingBehaviorGroup, focusNewWindowsKey, autotileFocusNewWindowsChanged)
+P_STORE_GET(bool, autotileFocusFollowsMouse, tilingBehaviorGroup, focusFollowsMouseKey, bool)
+P_STORE_SET_BOOL(setAutotileFocusFollowsMouse, tilingBehaviorGroup, focusFollowsMouseKey,
+                 autotileFocusFollowsMouseChanged)
+P_STORE_GET(bool, snappingFocusNewWindows, snappingBehaviorGroup, focusNewWindowsKey, bool)
+P_STORE_SET_BOOL(setSnappingFocusNewWindows, snappingBehaviorGroup, focusNewWindowsKey, snappingFocusNewWindowsChanged)
+P_STORE_GET(bool, snappingFocusFollowsMouse, snappingBehaviorGroup, focusFollowsMouseKey, bool)
+P_STORE_SET_BOOL(setSnappingFocusFollowsMouse, snappingBehaviorGroup, focusFollowsMouseKey,
+                 snappingFocusFollowsMouseChanged)
+
+// ISnapSettings hook for the snap engine — same Snapping.Behavior value, surfaced
+// under the interface name the engine consults on AutoRestored commits.
+bool Settings::focusNewWindows() const
+{
+    return snappingFocusNewWindows();
+}
+bool Settings::unfloatFallbackToZone() const
+{
+    return snapUnfloatFallbackToZone();
+}
+P_STORE_GET(bool, autotileRespectMinimumSize, tilingBehaviorGroup, respectMinimumSizeKey, bool)
+P_STORE_SET_BOOL(setAutotileRespectMinimumSize, tilingBehaviorGroup, respectMinimumSizeKey,
+                 autotileRespectMinimumSizeChanged)
 
 Settings::AutotileInsertPosition Settings::autotileInsertPosition() const
 {
@@ -2242,7 +2394,7 @@ QStringList Settings::lockedScreens() const
 }
 void Settings::setLockedScreens(const QStringList& screens)
 {
-    // Post-write compare — see setDisabledMonitors for the canonicalisation
+    // Post-write compare — see writeDisableEntries for the canonicalisation
     // rationale.
     const QString before =
         m_store->read<QString>(ConfigDefaults::tilingBehaviorGroup(), ConfigDefaults::lockedScreensKey());
@@ -2269,7 +2421,7 @@ void Settings::setScreenLocked(const QString& screenIdOrName, bool locked)
 bool Settings::isContextLocked(const QString& screenIdOrName, int virtualDesktop, const QString& activity) const
 {
     const QStringList locked = lockedScreens();
-    const QStringList namesToCheck = Phosphor::Screens::ScreenIdentity::variantsFor(screenIdOrName);
+    const QStringList namesToCheck = PhosphorScreens::ScreenIdentity::variantsFor(screenIdOrName);
     for (const QString& name : namesToCheck) {
         if (virtualDesktop > 0 && !activity.isEmpty()) {
             const QString k =
@@ -2293,6 +2445,23 @@ bool Settings::isContextLocked(const QString& screenIdOrName, int virtualDesktop
 
 void Settings::setContextLocked(const QString& screenIdOrName, int virtualDesktop, const QString& activity, bool locked)
 {
+    // Composite-key format mirrors isContextLocked():
+    //   name                          → per-screen lock
+    //   name:<desktop>                → per-(screen,desktop) lock
+    //   name:<desktop>:<activity>     → per-(screen,desktop,activity) lock
+    //
+    // (screen, 0, "activity") has no representable form in the current
+    // schema. Silently composing just `name` would land the caller on a
+    // whole-screen lock while their intent was activity-scoped — that's
+    // data loss masquerading as success. Reject loudly at the boundary so
+    // the caller can either supply a desktop or accept the screen scope
+    // explicitly with an empty activity.
+    if (virtualDesktop <= 0 && !activity.isEmpty()) {
+        qCWarning(lcConfig) << "Settings::setContextLocked: activity supplied without a virtual desktop —"
+                            << "(screen, 0, activity) cannot be expressed in the lockedScreens schema."
+                            << "Refusing to write a whole-screen lock that would silently drop the activity.";
+        return;
+    }
     QString key = screenIdOrName;
     if (virtualDesktop > 0) {
         key += QStringLiteral(":") + QString::number(virtualDesktop);
@@ -2319,18 +2488,17 @@ void Settings::setAutotileDragInsertTriggers(const QVariantList& triggers)
                      &Settings::autotileDragInsertTriggersChanged);
 }
 
-PZ_STORE_GET(bool, autotileDragInsertToggle, tilingBehaviorGroup, toggleActivationKey, bool)
-PZ_STORE_SET_BOOL(setAutotileDragInsertToggle, tilingBehaviorGroup, toggleActivationKey,
-                  autotileDragInsertToggleChanged)
+P_STORE_GET(bool, autotileDragInsertToggle, tilingBehaviorGroup, toggleActivationKey, bool)
+P_STORE_SET_BOOL(setAutotileDragInsertToggle, tilingBehaviorGroup, toggleActivationKey, autotileDragInsertToggleChanged)
 
 // Tiling.Appearance
-PZ_STORE_GET(QColor, autotileBorderColor, tilingAppearanceColorsGroup, activeKey, QColor)
-PZ_STORE_SET_COLOR(setAutotileBorderColor, tilingAppearanceColorsGroup, activeKey, autotileBorderColorChanged)
-PZ_STORE_GET(QColor, autotileInactiveBorderColor, tilingAppearanceColorsGroup, inactiveKey, QColor)
-PZ_STORE_SET_COLOR(setAutotileInactiveBorderColor, tilingAppearanceColorsGroup, inactiveKey,
-                   autotileInactiveBorderColorChanged)
+P_STORE_GET(QColor, autotileBorderColor, tilingAppearanceColorsGroup, activeKey, QColor)
+P_STORE_SET_COLOR(setAutotileBorderColor, tilingAppearanceColorsGroup, activeKey, autotileBorderColorChanged)
+P_STORE_GET(QColor, autotileInactiveBorderColor, tilingAppearanceColorsGroup, inactiveKey, QColor)
+P_STORE_SET_COLOR(setAutotileInactiveBorderColor, tilingAppearanceColorsGroup, inactiveKey,
+                  autotileInactiveBorderColorChanged)
 
-PZ_STORE_GET(bool, autotileUseSystemBorderColors, tilingAppearanceColorsGroup, useSystemKey, bool)
+P_STORE_GET(bool, autotileUseSystemBorderColors, tilingAppearanceColorsGroup, useSystemKey, bool)
 void Settings::setAutotileUseSystemBorderColors(bool use)
 {
     if (autotileUseSystemBorderColors() == use) {
@@ -2344,15 +2512,47 @@ void Settings::setAutotileUseSystemBorderColors(bool use)
     Q_EMIT settingsChanged();
 }
 
-PZ_STORE_GET(bool, autotileHideTitleBars, tilingAppearanceDecorationsGroup, hideTitleBarsKey, bool)
-PZ_STORE_SET_BOOL(setAutotileHideTitleBars, tilingAppearanceDecorationsGroup, hideTitleBarsKey,
-                  autotileHideTitleBarsChanged)
-PZ_STORE_GET(bool, autotileShowBorder, tilingAppearanceBordersGroup, showBorderKey, bool)
-PZ_STORE_SET_BOOL(setAutotileShowBorder, tilingAppearanceBordersGroup, showBorderKey, autotileShowBorderChanged)
-PZ_STORE_GET(int, autotileBorderWidth, tilingAppearanceBordersGroup, widthKey, int)
-PZ_STORE_SET_INT(setAutotileBorderWidth, tilingAppearanceBordersGroup, widthKey, autotileBorderWidthChanged)
-PZ_STORE_GET(int, autotileBorderRadius, tilingAppearanceBordersGroup, radiusKey, int)
-PZ_STORE_SET_INT(setAutotileBorderRadius, tilingAppearanceBordersGroup, radiusKey, autotileBorderRadiusChanged)
+P_STORE_GET(bool, autotileHideTitleBars, tilingAppearanceDecorationsGroup, hideTitleBarsKey, bool)
+P_STORE_SET_BOOL(setAutotileHideTitleBars, tilingAppearanceDecorationsGroup, hideTitleBarsKey,
+                 autotileHideTitleBarsChanged)
+P_STORE_GET(bool, autotileShowBorder, tilingAppearanceBordersGroup, showBorderKey, bool)
+P_STORE_SET_BOOL(setAutotileShowBorder, tilingAppearanceBordersGroup, showBorderKey, autotileShowBorderChanged)
+P_STORE_GET(int, autotileBorderWidth, tilingAppearanceBordersGroup, widthKey, int)
+P_STORE_SET_INT(setAutotileBorderWidth, tilingAppearanceBordersGroup, widthKey, autotileBorderWidthChanged)
+P_STORE_GET(int, autotileBorderRadius, tilingAppearanceBordersGroup, radiusKey, int)
+P_STORE_SET_INT(setAutotileBorderRadius, tilingAppearanceBordersGroup, radiusKey, autotileBorderRadiusChanged)
+
+// Snapping.Appearance — the snapped window's border / title-bar (parallel to
+// Tiling.Appearance above; distinct from the Snapping.Zones.* drag overlay).
+P_STORE_GET(QColor, snappingBorderColor, snappingAppearanceColorsGroup, activeKey, QColor)
+P_STORE_SET_COLOR(setSnappingBorderColor, snappingAppearanceColorsGroup, activeKey, snappingBorderColorChanged)
+P_STORE_GET(QColor, snappingInactiveBorderColor, snappingAppearanceColorsGroup, inactiveKey, QColor)
+P_STORE_SET_COLOR(setSnappingInactiveBorderColor, snappingAppearanceColorsGroup, inactiveKey,
+                  snappingInactiveBorderColorChanged)
+
+P_STORE_GET(bool, snappingUseSystemBorderColors, snappingAppearanceColorsGroup, useSystemKey, bool)
+void Settings::setSnappingUseSystemBorderColors(bool use)
+{
+    if (snappingUseSystemBorderColors() == use) {
+        return;
+    }
+    m_store->write(ConfigDefaults::snappingAppearanceColorsGroup(), ConfigDefaults::useSystemKey(), use);
+    if (use) {
+        applySnappingBorderSystemColor();
+    }
+    Q_EMIT snappingUseSystemBorderColorsChanged();
+    Q_EMIT settingsChanged();
+}
+
+P_STORE_GET(bool, snappingHideTitleBars, snappingAppearanceDecorationsGroup, hideTitleBarsKey, bool)
+P_STORE_SET_BOOL(setSnappingHideTitleBars, snappingAppearanceDecorationsGroup, hideTitleBarsKey,
+                 snappingHideTitleBarsChanged)
+P_STORE_GET(bool, snappingShowBorder, snappingAppearanceBordersGroup, showBorderKey, bool)
+P_STORE_SET_BOOL(setSnappingShowBorder, snappingAppearanceBordersGroup, showBorderKey, snappingShowBorderChanged)
+P_STORE_GET(int, snappingBorderWidth, snappingAppearanceBordersGroup, widthKey, int)
+P_STORE_SET_INT(setSnappingBorderWidth, snappingAppearanceBordersGroup, widthKey, snappingBorderWidthChanged)
+P_STORE_GET(int, snappingBorderRadius, snappingAppearanceBordersGroup, radiusKey, int)
+P_STORE_SET_INT(setSnappingBorderRadius, snappingAppearanceBordersGroup, radiusKey, snappingBorderRadiusChanged)
 
 // ── reset / color helpers ────────────────────────────────────────────────────
 
@@ -2369,29 +2569,115 @@ void Settings::reset()
     }
     deletePerScreenGroups(m_configBackend);
     m_configBackend->sync();
+
+    // Per-mode disable lists live in windowrules.json as DisableEngine
+    // context rules — drop every such rule from the store (assignment /
+    // animation / exclude rules are untouched: reset() only owns the
+    // settings surface). The store persists on setAllRules, so the final
+    // load() below re-reads the now-cleared file.
+    //
+    // load()'s own per-mode change-detection snapshots the six disable lists
+    // from the *live* store; clearing the store before load() runs would
+    // leave that snapshot empty, so the per-mode disabled*Changed signals
+    // would never fire even when reset() actually removed disable rules.
+    // Snapshot the six lists here — before the clear — and re-emit the
+    // per-mode signals ourselves after load(), comparing against this
+    // pre-clear state.
+    // See the matching block in load(): snapshot the six pre-clear disable
+    // lists keyed by Mode so the per-mode re-emit loop after load() can fire
+    // exactly one signal per Mode whose list actually changed. Iterating
+    // PhosphorZones::allModes() keeps this lockstep with the enum.
+    using Mode = PhosphorZones::AssignmentEntry::Mode;
+    QHash<Mode, QStringList> resetMonitorsBefore;
+    QHash<Mode, QStringList> resetDesktopsBefore;
+    QHash<Mode, QStringList> resetActivitiesBefore;
+    for (const Mode mode : PhosphorZones::allModes()) {
+        resetMonitorsBefore.insert(mode, disabledMonitors(mode));
+        resetDesktopsBefore.insert(mode, disabledDesktops(mode));
+        resetActivitiesBefore.insert(mode, disabledActivities(mode));
+    }
+    {
+        namespace CRB = PhosphorWindowRules::ContextRuleBridge;
+        QList<PhosphorWindowRules::WindowRule> kept;
+        for (const PhosphorWindowRules::WindowRule& rule : m_windowRuleStore->ruleSet().rules()) {
+            if (!CRB::disableRuleMode(rule)) {
+                kept.append(rule); // not a DisableEngine rule — preserve
+            }
+        }
+        if (kept.size() != m_windowRuleStore->count()) {
+            if (!m_windowRuleStore->setAllRules(kept)) {
+                // Persistence failed — the in-memory store advanced but the
+                // on-disk file is stale. Roll back the in-memory state by
+                // reloading from disk so the per-mode re-emit loop below
+                // doesn't fire `disabled*Changed` for changes that didn't
+                // land. The owned-store path falls through to load()
+                // (which reloads its own copy); the borrowed-store path
+                // (daemon) skips reloading the rules in load() and would
+                // otherwise leave the in-memory store advanced — explicitly
+                // reload via the store's own load() to roll back. The
+                // settings load() below also re-snapshots disable rules
+                // from the post-rollback store, so a follow-up flag was
+                // unnecessary.
+                qCWarning(lcConfig)
+                    << "reset: failed to persist window-rule store — rolling back in-memory state; disable "
+                       "rules will reappear on next launch";
+                m_windowRuleStore->load();
+            }
+        }
+    }
+
     load();
+
+    // Re-emit per-mode disable signals against the pre-clear snapshot taken
+    // above. load()'s internal snapshot saw the already-cleared store, so it
+    // could not detect that reset() removed disable rules — this loop covers
+    // the gap. All six lists are empty post-clear, so any non-empty pre-clear
+    // list fires exactly once. Track aggregate change so the same
+    // `settingsChanged()` invariant load() enforces (any disable change → fire
+    // aggregate) also holds for the reset path; otherwise a reset that only
+    // cleared disable rules would fire the per-mode signals but not the
+    // aggregate.
+    bool anyDisableChanged = false;
+    for (const Mode mode : PhosphorZones::allModes()) {
+        if (disabledMonitors(mode) != resetMonitorsBefore.value(mode)) {
+            Q_EMIT disabledMonitorsChanged(mode);
+            anyDisableChanged = true;
+        }
+        if (disabledDesktops(mode) != resetDesktopsBefore.value(mode)) {
+            Q_EMIT disabledDesktopsChanged(mode);
+            anyDisableChanged = true;
+        }
+        if (disabledActivities(mode) != resetActivitiesBefore.value(mode)) {
+            Q_EMIT disabledActivitiesChanged(mode);
+            anyDisableChanged = true;
+        }
+    }
+    if (anyDisableChanged) {
+        Q_EMIT settingsChanged();
+    }
+
     qCInfo(lcConfig) << "Settings reset to defaults";
 }
 
 // ── Shortcuts (PhosphorConfig::Store-backed) ────────────────────────────────
 // Every shortcut is a flat string; schema registers them without validators.
-// Change-detection goes through the PZ_STORE_SET_STRING macro.
+// Change-detection goes through the P_STORE_SET_STRING macro.
 
 // Global shortcuts — meta actions, zone navigation, snap-to-zone numbered,
 // layout rotation, virtual-screen swap/rotate.
-PZ_STORE_GET(QString, openEditorShortcut, shortcutsGlobalGroup, openEditorKey, QString)
-PZ_STORE_SET_STRING(setOpenEditorShortcut, shortcutsGlobalGroup, openEditorKey, openEditorShortcutChanged)
-PZ_STORE_GET(QString, openSettingsShortcut, shortcutsGlobalGroup, openSettingsKey, QString)
-PZ_STORE_SET_STRING(setOpenSettingsShortcut, shortcutsGlobalGroup, openSettingsKey, openSettingsShortcutChanged)
-PZ_STORE_GET(QString, previousLayoutShortcut, shortcutsGlobalGroup, previousLayoutKey, QString)
-PZ_STORE_SET_STRING(setPreviousLayoutShortcut, shortcutsGlobalGroup, previousLayoutKey, previousLayoutShortcutChanged)
-PZ_STORE_GET(QString, nextLayoutShortcut, shortcutsGlobalGroup, nextLayoutKey, QString)
-PZ_STORE_SET_STRING(setNextLayoutShortcut, shortcutsGlobalGroup, nextLayoutKey, nextLayoutShortcutChanged)
+P_STORE_GET(QString, openEditorShortcut, shortcutsGlobalGroup, openEditorKey, QString)
+P_STORE_SET_STRING(setOpenEditorShortcut, shortcutsGlobalGroup, openEditorKey, openEditorShortcutChanged)
+P_STORE_GET(QString, openSettingsShortcut, shortcutsGlobalGroup, openSettingsKey, QString)
+P_STORE_SET_STRING(setOpenSettingsShortcut, shortcutsGlobalGroup, openSettingsKey, openSettingsShortcutChanged)
+P_STORE_GET(QString, previousLayoutShortcut, shortcutsGlobalGroup, previousLayoutKey, QString)
+P_STORE_SET_STRING(setPreviousLayoutShortcut, shortcutsGlobalGroup, previousLayoutKey, previousLayoutShortcutChanged)
+P_STORE_GET(QString, nextLayoutShortcut, shortcutsGlobalGroup, nextLayoutKey, QString)
+P_STORE_SET_STRING(setNextLayoutShortcut, shortcutsGlobalGroup, nextLayoutKey, nextLayoutShortcutChanged)
 
 // quickLayoutN and snapToZoneN arrays — dispatch to per-index key.
 // Each wrapper reads/writes the same store using ConfigDefaults::quickLayoutKey(n).
 
-#define PZ_QUICK_LAYOUT(N)                                                                                             \
+#define P_QUICK_LAYOUT(N)                                                                                              \
     QString Settings::quickLayout##N##Shortcut() const                                                                 \
     {                                                                                                                  \
         return m_store->read<QString>(ConfigDefaults::shortcutsGlobalGroup(), ConfigDefaults::quickLayoutKey(N));      \
@@ -2401,16 +2687,16 @@ PZ_STORE_SET_STRING(setNextLayoutShortcut, shortcutsGlobalGroup, nextLayoutKey, 
         setQuickLayoutShortcut(N - 1, shortcut);                                                                       \
     }
 
-PZ_QUICK_LAYOUT(1)
-PZ_QUICK_LAYOUT(2)
-PZ_QUICK_LAYOUT(3)
-PZ_QUICK_LAYOUT(4)
-PZ_QUICK_LAYOUT(5)
-PZ_QUICK_LAYOUT(6)
-PZ_QUICK_LAYOUT(7)
-PZ_QUICK_LAYOUT(8)
-PZ_QUICK_LAYOUT(9)
-#undef PZ_QUICK_LAYOUT
+P_QUICK_LAYOUT(1)
+P_QUICK_LAYOUT(2)
+P_QUICK_LAYOUT(3)
+P_QUICK_LAYOUT(4)
+P_QUICK_LAYOUT(5)
+P_QUICK_LAYOUT(6)
+P_QUICK_LAYOUT(7)
+P_QUICK_LAYOUT(8)
+P_QUICK_LAYOUT(9)
+#undef P_QUICK_LAYOUT
 
 QString Settings::quickLayoutShortcut(int index) const
 {
@@ -2443,44 +2729,41 @@ void Settings::setQuickLayoutShortcut(int index, const QString& shortcut)
 }
 
 // Navigation shortcuts.
-PZ_STORE_GET(QString, moveWindowLeftShortcut, shortcutsGlobalGroup, moveWindowLeftKey, QString)
-PZ_STORE_SET_STRING(setMoveWindowLeftShortcut, shortcutsGlobalGroup, moveWindowLeftKey, moveWindowLeftShortcutChanged)
-PZ_STORE_GET(QString, moveWindowRightShortcut, shortcutsGlobalGroup, moveWindowRightKey, QString)
-PZ_STORE_SET_STRING(setMoveWindowRightShortcut, shortcutsGlobalGroup, moveWindowRightKey,
-                    moveWindowRightShortcutChanged)
-PZ_STORE_GET(QString, moveWindowUpShortcut, shortcutsGlobalGroup, moveWindowUpKey, QString)
-PZ_STORE_SET_STRING(setMoveWindowUpShortcut, shortcutsGlobalGroup, moveWindowUpKey, moveWindowUpShortcutChanged)
-PZ_STORE_GET(QString, moveWindowDownShortcut, shortcutsGlobalGroup, moveWindowDownKey, QString)
-PZ_STORE_SET_STRING(setMoveWindowDownShortcut, shortcutsGlobalGroup, moveWindowDownKey, moveWindowDownShortcutChanged)
-PZ_STORE_GET(QString, focusZoneLeftShortcut, shortcutsGlobalGroup, focusZoneLeftKey, QString)
-PZ_STORE_SET_STRING(setFocusZoneLeftShortcut, shortcutsGlobalGroup, focusZoneLeftKey, focusZoneLeftShortcutChanged)
-PZ_STORE_GET(QString, focusZoneRightShortcut, shortcutsGlobalGroup, focusZoneRightKey, QString)
-PZ_STORE_SET_STRING(setFocusZoneRightShortcut, shortcutsGlobalGroup, focusZoneRightKey, focusZoneRightShortcutChanged)
-PZ_STORE_GET(QString, focusZoneUpShortcut, shortcutsGlobalGroup, focusZoneUpKey, QString)
-PZ_STORE_SET_STRING(setFocusZoneUpShortcut, shortcutsGlobalGroup, focusZoneUpKey, focusZoneUpShortcutChanged)
-PZ_STORE_GET(QString, focusZoneDownShortcut, shortcutsGlobalGroup, focusZoneDownKey, QString)
-PZ_STORE_SET_STRING(setFocusZoneDownShortcut, shortcutsGlobalGroup, focusZoneDownKey, focusZoneDownShortcutChanged)
-PZ_STORE_GET(QString, pushToEmptyZoneShortcut, shortcutsGlobalGroup, pushToEmptyZoneKey, QString)
-PZ_STORE_SET_STRING(setPushToEmptyZoneShortcut, shortcutsGlobalGroup, pushToEmptyZoneKey,
-                    pushToEmptyZoneShortcutChanged)
-PZ_STORE_GET(QString, restoreWindowSizeShortcut, shortcutsGlobalGroup, restoreWindowSizeKey, QString)
-PZ_STORE_SET_STRING(setRestoreWindowSizeShortcut, shortcutsGlobalGroup, restoreWindowSizeKey,
-                    restoreWindowSizeShortcutChanged)
-PZ_STORE_GET(QString, toggleWindowFloatShortcut, shortcutsGlobalGroup, toggleWindowFloatKey, QString)
-PZ_STORE_SET_STRING(setToggleWindowFloatShortcut, shortcutsGlobalGroup, toggleWindowFloatKey,
-                    toggleWindowFloatShortcutChanged)
-PZ_STORE_GET(QString, swapWindowLeftShortcut, shortcutsGlobalGroup, swapWindowLeftKey, QString)
-PZ_STORE_SET_STRING(setSwapWindowLeftShortcut, shortcutsGlobalGroup, swapWindowLeftKey, swapWindowLeftShortcutChanged)
-PZ_STORE_GET(QString, swapWindowRightShortcut, shortcutsGlobalGroup, swapWindowRightKey, QString)
-PZ_STORE_SET_STRING(setSwapWindowRightShortcut, shortcutsGlobalGroup, swapWindowRightKey,
-                    swapWindowRightShortcutChanged)
-PZ_STORE_GET(QString, swapWindowUpShortcut, shortcutsGlobalGroup, swapWindowUpKey, QString)
-PZ_STORE_SET_STRING(setSwapWindowUpShortcut, shortcutsGlobalGroup, swapWindowUpKey, swapWindowUpShortcutChanged)
-PZ_STORE_GET(QString, swapWindowDownShortcut, shortcutsGlobalGroup, swapWindowDownKey, QString)
-PZ_STORE_SET_STRING(setSwapWindowDownShortcut, shortcutsGlobalGroup, swapWindowDownKey, swapWindowDownShortcutChanged)
+P_STORE_GET(QString, moveWindowLeftShortcut, shortcutsGlobalGroup, moveWindowLeftKey, QString)
+P_STORE_SET_STRING(setMoveWindowLeftShortcut, shortcutsGlobalGroup, moveWindowLeftKey, moveWindowLeftShortcutChanged)
+P_STORE_GET(QString, moveWindowRightShortcut, shortcutsGlobalGroup, moveWindowRightKey, QString)
+P_STORE_SET_STRING(setMoveWindowRightShortcut, shortcutsGlobalGroup, moveWindowRightKey, moveWindowRightShortcutChanged)
+P_STORE_GET(QString, moveWindowUpShortcut, shortcutsGlobalGroup, moveWindowUpKey, QString)
+P_STORE_SET_STRING(setMoveWindowUpShortcut, shortcutsGlobalGroup, moveWindowUpKey, moveWindowUpShortcutChanged)
+P_STORE_GET(QString, moveWindowDownShortcut, shortcutsGlobalGroup, moveWindowDownKey, QString)
+P_STORE_SET_STRING(setMoveWindowDownShortcut, shortcutsGlobalGroup, moveWindowDownKey, moveWindowDownShortcutChanged)
+P_STORE_GET(QString, focusZoneLeftShortcut, shortcutsGlobalGroup, focusZoneLeftKey, QString)
+P_STORE_SET_STRING(setFocusZoneLeftShortcut, shortcutsGlobalGroup, focusZoneLeftKey, focusZoneLeftShortcutChanged)
+P_STORE_GET(QString, focusZoneRightShortcut, shortcutsGlobalGroup, focusZoneRightKey, QString)
+P_STORE_SET_STRING(setFocusZoneRightShortcut, shortcutsGlobalGroup, focusZoneRightKey, focusZoneRightShortcutChanged)
+P_STORE_GET(QString, focusZoneUpShortcut, shortcutsGlobalGroup, focusZoneUpKey, QString)
+P_STORE_SET_STRING(setFocusZoneUpShortcut, shortcutsGlobalGroup, focusZoneUpKey, focusZoneUpShortcutChanged)
+P_STORE_GET(QString, focusZoneDownShortcut, shortcutsGlobalGroup, focusZoneDownKey, QString)
+P_STORE_SET_STRING(setFocusZoneDownShortcut, shortcutsGlobalGroup, focusZoneDownKey, focusZoneDownShortcutChanged)
+P_STORE_GET(QString, pushToEmptyZoneShortcut, shortcutsGlobalGroup, pushToEmptyZoneKey, QString)
+P_STORE_SET_STRING(setPushToEmptyZoneShortcut, shortcutsGlobalGroup, pushToEmptyZoneKey, pushToEmptyZoneShortcutChanged)
+P_STORE_GET(QString, restoreWindowSizeShortcut, shortcutsGlobalGroup, restoreWindowSizeKey, QString)
+P_STORE_SET_STRING(setRestoreWindowSizeShortcut, shortcutsGlobalGroup, restoreWindowSizeKey,
+                   restoreWindowSizeShortcutChanged)
+P_STORE_GET(QString, toggleWindowFloatShortcut, shortcutsGlobalGroup, toggleWindowFloatKey, QString)
+P_STORE_SET_STRING(setToggleWindowFloatShortcut, shortcutsGlobalGroup, toggleWindowFloatKey,
+                   toggleWindowFloatShortcutChanged)
+P_STORE_GET(QString, swapWindowLeftShortcut, shortcutsGlobalGroup, swapWindowLeftKey, QString)
+P_STORE_SET_STRING(setSwapWindowLeftShortcut, shortcutsGlobalGroup, swapWindowLeftKey, swapWindowLeftShortcutChanged)
+P_STORE_GET(QString, swapWindowRightShortcut, shortcutsGlobalGroup, swapWindowRightKey, QString)
+P_STORE_SET_STRING(setSwapWindowRightShortcut, shortcutsGlobalGroup, swapWindowRightKey, swapWindowRightShortcutChanged)
+P_STORE_GET(QString, swapWindowUpShortcut, shortcutsGlobalGroup, swapWindowUpKey, QString)
+P_STORE_SET_STRING(setSwapWindowUpShortcut, shortcutsGlobalGroup, swapWindowUpKey, swapWindowUpShortcutChanged)
+P_STORE_GET(QString, swapWindowDownShortcut, shortcutsGlobalGroup, swapWindowDownKey, QString)
+P_STORE_SET_STRING(setSwapWindowDownShortcut, shortcutsGlobalGroup, swapWindowDownKey, swapWindowDownShortcutChanged)
 
 // snapToZone1..9 — same dispatch pattern as quickLayout.
-#define PZ_SNAP_TO_ZONE(N)                                                                                             \
+#define P_SNAP_TO_ZONE(N)                                                                                              \
     QString Settings::snapToZone##N##Shortcut() const                                                                  \
     {                                                                                                                  \
         return m_store->read<QString>(ConfigDefaults::shortcutsGlobalGroup(), ConfigDefaults::snapToZoneKey(N));       \
@@ -2490,16 +2773,16 @@ PZ_STORE_SET_STRING(setSwapWindowDownShortcut, shortcutsGlobalGroup, swapWindowD
         setSnapToZoneShortcut(N - 1, shortcut);                                                                        \
     }
 
-PZ_SNAP_TO_ZONE(1)
-PZ_SNAP_TO_ZONE(2)
-PZ_SNAP_TO_ZONE(3)
-PZ_SNAP_TO_ZONE(4)
-PZ_SNAP_TO_ZONE(5)
-PZ_SNAP_TO_ZONE(6)
-PZ_SNAP_TO_ZONE(7)
-PZ_SNAP_TO_ZONE(8)
-PZ_SNAP_TO_ZONE(9)
-#undef PZ_SNAP_TO_ZONE
+P_SNAP_TO_ZONE(1)
+P_SNAP_TO_ZONE(2)
+P_SNAP_TO_ZONE(3)
+P_SNAP_TO_ZONE(4)
+P_SNAP_TO_ZONE(5)
+P_SNAP_TO_ZONE(6)
+P_SNAP_TO_ZONE(7)
+P_SNAP_TO_ZONE(8)
+P_SNAP_TO_ZONE(9)
+#undef P_SNAP_TO_ZONE
 
 QString Settings::snapToZoneShortcut(int index) const
 {
@@ -2530,102 +2813,102 @@ void Settings::setSnapToZoneShortcut(int index, const QString& shortcut)
     Q_EMIT settingsChanged();
 }
 
-PZ_STORE_GET(QString, rotateWindowsClockwiseShortcut, shortcutsGlobalGroup, rotateWindowsClockwiseKey, QString)
-PZ_STORE_SET_STRING(setRotateWindowsClockwiseShortcut, shortcutsGlobalGroup, rotateWindowsClockwiseKey,
-                    rotateWindowsClockwiseShortcutChanged)
-PZ_STORE_GET(QString, rotateWindowsCounterclockwiseShortcut, shortcutsGlobalGroup, rotateWindowsCounterclockwiseKey,
-             QString)
-PZ_STORE_SET_STRING(setRotateWindowsCounterclockwiseShortcut, shortcutsGlobalGroup, rotateWindowsCounterclockwiseKey,
-                    rotateWindowsCounterclockwiseShortcutChanged)
-PZ_STORE_GET(QString, cycleWindowForwardShortcut, shortcutsGlobalGroup, cycleWindowForwardKey, QString)
-PZ_STORE_SET_STRING(setCycleWindowForwardShortcut, shortcutsGlobalGroup, cycleWindowForwardKey,
-                    cycleWindowForwardShortcutChanged)
-PZ_STORE_GET(QString, cycleWindowBackwardShortcut, shortcutsGlobalGroup, cycleWindowBackwardKey, QString)
-PZ_STORE_SET_STRING(setCycleWindowBackwardShortcut, shortcutsGlobalGroup, cycleWindowBackwardKey,
-                    cycleWindowBackwardShortcutChanged)
-PZ_STORE_GET(QString, resnapToNewLayoutShortcut, shortcutsGlobalGroup, resnapToNewLayoutKey, QString)
-PZ_STORE_SET_STRING(setResnapToNewLayoutShortcut, shortcutsGlobalGroup, resnapToNewLayoutKey,
-                    resnapToNewLayoutShortcutChanged)
-PZ_STORE_GET(QString, snapAllWindowsShortcut, shortcutsGlobalGroup, snapAllWindowsKey, QString)
-PZ_STORE_SET_STRING(setSnapAllWindowsShortcut, shortcutsGlobalGroup, snapAllWindowsKey, snapAllWindowsShortcutChanged)
-PZ_STORE_GET(QString, layoutPickerShortcut, shortcutsGlobalGroup, layoutPickerKey, QString)
-PZ_STORE_SET_STRING(setLayoutPickerShortcut, shortcutsGlobalGroup, layoutPickerKey, layoutPickerShortcutChanged)
-PZ_STORE_GET(QString, toggleLayoutLockShortcut, shortcutsGlobalGroup, toggleLayoutLockKey, QString)
-PZ_STORE_SET_STRING(setToggleLayoutLockShortcut, shortcutsGlobalGroup, toggleLayoutLockKey,
-                    toggleLayoutLockShortcutChanged)
-PZ_STORE_GET(QString, swapVirtualScreenLeftShortcut, shortcutsGlobalGroup, swapVirtualScreenLeftKey, QString)
-PZ_STORE_SET_STRING(setSwapVirtualScreenLeftShortcut, shortcutsGlobalGroup, swapVirtualScreenLeftKey,
-                    swapVirtualScreenLeftShortcutChanged)
-PZ_STORE_GET(QString, swapVirtualScreenRightShortcut, shortcutsGlobalGroup, swapVirtualScreenRightKey, QString)
-PZ_STORE_SET_STRING(setSwapVirtualScreenRightShortcut, shortcutsGlobalGroup, swapVirtualScreenRightKey,
-                    swapVirtualScreenRightShortcutChanged)
-PZ_STORE_GET(QString, swapVirtualScreenUpShortcut, shortcutsGlobalGroup, swapVirtualScreenUpKey, QString)
-PZ_STORE_SET_STRING(setSwapVirtualScreenUpShortcut, shortcutsGlobalGroup, swapVirtualScreenUpKey,
-                    swapVirtualScreenUpShortcutChanged)
-PZ_STORE_GET(QString, swapVirtualScreenDownShortcut, shortcutsGlobalGroup, swapVirtualScreenDownKey, QString)
-PZ_STORE_SET_STRING(setSwapVirtualScreenDownShortcut, shortcutsGlobalGroup, swapVirtualScreenDownKey,
-                    swapVirtualScreenDownShortcutChanged)
-PZ_STORE_GET(QString, rotateVirtualScreensClockwiseShortcut, shortcutsGlobalGroup, rotateVirtualScreensClockwiseKey,
-             QString)
-PZ_STORE_SET_STRING(setRotateVirtualScreensClockwiseShortcut, shortcutsGlobalGroup, rotateVirtualScreensClockwiseKey,
-                    rotateVirtualScreensClockwiseShortcutChanged)
-PZ_STORE_GET(QString, rotateVirtualScreensCounterclockwiseShortcut, shortcutsGlobalGroup,
-             rotateVirtualScreensCounterclockwiseKey, QString)
-PZ_STORE_SET_STRING(setRotateVirtualScreensCounterclockwiseShortcut, shortcutsGlobalGroup,
-                    rotateVirtualScreensCounterclockwiseKey, rotateVirtualScreensCounterclockwiseShortcutChanged)
+P_STORE_GET(QString, rotateWindowsClockwiseShortcut, shortcutsGlobalGroup, rotateWindowsClockwiseKey, QString)
+P_STORE_SET_STRING(setRotateWindowsClockwiseShortcut, shortcutsGlobalGroup, rotateWindowsClockwiseKey,
+                   rotateWindowsClockwiseShortcutChanged)
+P_STORE_GET(QString, rotateWindowsCounterclockwiseShortcut, shortcutsGlobalGroup, rotateWindowsCounterclockwiseKey,
+            QString)
+P_STORE_SET_STRING(setRotateWindowsCounterclockwiseShortcut, shortcutsGlobalGroup, rotateWindowsCounterclockwiseKey,
+                   rotateWindowsCounterclockwiseShortcutChanged)
+P_STORE_GET(QString, cycleWindowForwardShortcut, shortcutsGlobalGroup, cycleWindowForwardKey, QString)
+P_STORE_SET_STRING(setCycleWindowForwardShortcut, shortcutsGlobalGroup, cycleWindowForwardKey,
+                   cycleWindowForwardShortcutChanged)
+P_STORE_GET(QString, cycleWindowBackwardShortcut, shortcutsGlobalGroup, cycleWindowBackwardKey, QString)
+P_STORE_SET_STRING(setCycleWindowBackwardShortcut, shortcutsGlobalGroup, cycleWindowBackwardKey,
+                   cycleWindowBackwardShortcutChanged)
+P_STORE_GET(QString, resnapToNewLayoutShortcut, shortcutsGlobalGroup, resnapToNewLayoutKey, QString)
+P_STORE_SET_STRING(setResnapToNewLayoutShortcut, shortcutsGlobalGroup, resnapToNewLayoutKey,
+                   resnapToNewLayoutShortcutChanged)
+P_STORE_GET(QString, snapAllWindowsShortcut, shortcutsGlobalGroup, snapAllWindowsKey, QString)
+P_STORE_SET_STRING(setSnapAllWindowsShortcut, shortcutsGlobalGroup, snapAllWindowsKey, snapAllWindowsShortcutChanged)
+P_STORE_GET(QString, layoutPickerShortcut, shortcutsGlobalGroup, layoutPickerKey, QString)
+P_STORE_SET_STRING(setLayoutPickerShortcut, shortcutsGlobalGroup, layoutPickerKey, layoutPickerShortcutChanged)
+P_STORE_GET(QString, toggleLayoutLockShortcut, shortcutsGlobalGroup, toggleLayoutLockKey, QString)
+P_STORE_SET_STRING(setToggleLayoutLockShortcut, shortcutsGlobalGroup, toggleLayoutLockKey,
+                   toggleLayoutLockShortcutChanged)
+P_STORE_GET(QString, swapVirtualScreenLeftShortcut, shortcutsGlobalGroup, swapVirtualScreenLeftKey, QString)
+P_STORE_SET_STRING(setSwapVirtualScreenLeftShortcut, shortcutsGlobalGroup, swapVirtualScreenLeftKey,
+                   swapVirtualScreenLeftShortcutChanged)
+P_STORE_GET(QString, swapVirtualScreenRightShortcut, shortcutsGlobalGroup, swapVirtualScreenRightKey, QString)
+P_STORE_SET_STRING(setSwapVirtualScreenRightShortcut, shortcutsGlobalGroup, swapVirtualScreenRightKey,
+                   swapVirtualScreenRightShortcutChanged)
+P_STORE_GET(QString, swapVirtualScreenUpShortcut, shortcutsGlobalGroup, swapVirtualScreenUpKey, QString)
+P_STORE_SET_STRING(setSwapVirtualScreenUpShortcut, shortcutsGlobalGroup, swapVirtualScreenUpKey,
+                   swapVirtualScreenUpShortcutChanged)
+P_STORE_GET(QString, swapVirtualScreenDownShortcut, shortcutsGlobalGroup, swapVirtualScreenDownKey, QString)
+P_STORE_SET_STRING(setSwapVirtualScreenDownShortcut, shortcutsGlobalGroup, swapVirtualScreenDownKey,
+                   swapVirtualScreenDownShortcutChanged)
+P_STORE_GET(QString, rotateVirtualScreensClockwiseShortcut, shortcutsGlobalGroup, rotateVirtualScreensClockwiseKey,
+            QString)
+P_STORE_SET_STRING(setRotateVirtualScreensClockwiseShortcut, shortcutsGlobalGroup, rotateVirtualScreensClockwiseKey,
+                   rotateVirtualScreensClockwiseShortcutChanged)
+P_STORE_GET(QString, rotateVirtualScreensCounterclockwiseShortcut, shortcutsGlobalGroup,
+            rotateVirtualScreensCounterclockwiseKey, QString)
+P_STORE_SET_STRING(setRotateVirtualScreensCounterclockwiseShortcut, shortcutsGlobalGroup,
+                   rotateVirtualScreensCounterclockwiseKey, rotateVirtualScreensCounterclockwiseShortcutChanged)
 
 // Tiling shortcuts.
-PZ_STORE_GET(QString, autotileToggleShortcut, shortcutsTilingGroup, toggleKey, QString)
-PZ_STORE_SET_STRING(setAutotileToggleShortcut, shortcutsTilingGroup, toggleKey, autotileToggleShortcutChanged)
-PZ_STORE_GET(QString, autotileFocusMasterShortcut, shortcutsTilingGroup, focusMasterKey, QString)
-PZ_STORE_SET_STRING(setAutotileFocusMasterShortcut, shortcutsTilingGroup, focusMasterKey,
-                    autotileFocusMasterShortcutChanged)
-PZ_STORE_GET(QString, autotileSwapMasterShortcut, shortcutsTilingGroup, swapMasterKey, QString)
-PZ_STORE_SET_STRING(setAutotileSwapMasterShortcut, shortcutsTilingGroup, swapMasterKey,
-                    autotileSwapMasterShortcutChanged)
-PZ_STORE_GET(QString, autotileIncMasterRatioShortcut, shortcutsTilingGroup, incMasterRatioKey, QString)
-PZ_STORE_SET_STRING(setAutotileIncMasterRatioShortcut, shortcutsTilingGroup, incMasterRatioKey,
-                    autotileIncMasterRatioShortcutChanged)
-PZ_STORE_GET(QString, autotileDecMasterRatioShortcut, shortcutsTilingGroup, decMasterRatioKey, QString)
-PZ_STORE_SET_STRING(setAutotileDecMasterRatioShortcut, shortcutsTilingGroup, decMasterRatioKey,
-                    autotileDecMasterRatioShortcutChanged)
-PZ_STORE_GET(QString, autotileIncMasterCountShortcut, shortcutsTilingGroup, incMasterCountKey, QString)
-PZ_STORE_SET_STRING(setAutotileIncMasterCountShortcut, shortcutsTilingGroup, incMasterCountKey,
-                    autotileIncMasterCountShortcutChanged)
-PZ_STORE_GET(QString, autotileDecMasterCountShortcut, shortcutsTilingGroup, decMasterCountKey, QString)
-PZ_STORE_SET_STRING(setAutotileDecMasterCountShortcut, shortcutsTilingGroup, decMasterCountKey,
-                    autotileDecMasterCountShortcutChanged)
-PZ_STORE_GET(QString, autotileRetileShortcut, shortcutsTilingGroup, retileKey, QString)
-PZ_STORE_SET_STRING(setAutotileRetileShortcut, shortcutsTilingGroup, retileKey, autotileRetileShortcutChanged)
+P_STORE_GET(QString, autotileToggleShortcut, shortcutsTilingGroup, toggleKey, QString)
+P_STORE_SET_STRING(setAutotileToggleShortcut, shortcutsTilingGroup, toggleKey, autotileToggleShortcutChanged)
+P_STORE_GET(QString, autotileFocusMasterShortcut, shortcutsTilingGroup, focusMasterKey, QString)
+P_STORE_SET_STRING(setAutotileFocusMasterShortcut, shortcutsTilingGroup, focusMasterKey,
+                   autotileFocusMasterShortcutChanged)
+P_STORE_GET(QString, autotileSwapMasterShortcut, shortcutsTilingGroup, swapMasterKey, QString)
+P_STORE_SET_STRING(setAutotileSwapMasterShortcut, shortcutsTilingGroup, swapMasterKey,
+                   autotileSwapMasterShortcutChanged)
+P_STORE_GET(QString, autotileIncMasterRatioShortcut, shortcutsTilingGroup, incMasterRatioKey, QString)
+P_STORE_SET_STRING(setAutotileIncMasterRatioShortcut, shortcutsTilingGroup, incMasterRatioKey,
+                   autotileIncMasterRatioShortcutChanged)
+P_STORE_GET(QString, autotileDecMasterRatioShortcut, shortcutsTilingGroup, decMasterRatioKey, QString)
+P_STORE_SET_STRING(setAutotileDecMasterRatioShortcut, shortcutsTilingGroup, decMasterRatioKey,
+                   autotileDecMasterRatioShortcutChanged)
+P_STORE_GET(QString, autotileIncMasterCountShortcut, shortcutsTilingGroup, incMasterCountKey, QString)
+P_STORE_SET_STRING(setAutotileIncMasterCountShortcut, shortcutsTilingGroup, incMasterCountKey,
+                   autotileIncMasterCountShortcutChanged)
+P_STORE_GET(QString, autotileDecMasterCountShortcut, shortcutsTilingGroup, decMasterCountKey, QString)
+P_STORE_SET_STRING(setAutotileDecMasterCountShortcut, shortcutsTilingGroup, decMasterCountKey,
+                   autotileDecMasterCountShortcutChanged)
+P_STORE_GET(QString, autotileRetileShortcut, shortcutsTilingGroup, retileKey, QString)
+P_STORE_SET_STRING(setAutotileRetileShortcut, shortcutsTilingGroup, retileKey, autotileRetileShortcutChanged)
 
 // Editor shortcuts.
-PZ_STORE_GET(QString, editorDuplicateShortcut, editorShortcutsGroup, duplicateKey, QString)
-PZ_STORE_SET_STRING(setEditorDuplicateShortcut, editorShortcutsGroup, duplicateKey, editorDuplicateShortcutChanged)
-PZ_STORE_GET(QString, editorSplitHorizontalShortcut, editorShortcutsGroup, splitHorizontalKey, QString)
-PZ_STORE_SET_STRING(setEditorSplitHorizontalShortcut, editorShortcutsGroup, splitHorizontalKey,
-                    editorSplitHorizontalShortcutChanged)
-PZ_STORE_GET(QString, editorSplitVerticalShortcut, editorShortcutsGroup, splitVerticalKey, QString)
-PZ_STORE_SET_STRING(setEditorSplitVerticalShortcut, editorShortcutsGroup, splitVerticalKey,
-                    editorSplitVerticalShortcutChanged)
-PZ_STORE_GET(QString, editorFillShortcut, editorShortcutsGroup, fillKey, QString)
-PZ_STORE_SET_STRING(setEditorFillShortcut, editorShortcutsGroup, fillKey, editorFillShortcutChanged)
+P_STORE_GET(QString, editorDuplicateShortcut, editorShortcutsGroup, duplicateKey, QString)
+P_STORE_SET_STRING(setEditorDuplicateShortcut, editorShortcutsGroup, duplicateKey, editorDuplicateShortcutChanged)
+P_STORE_GET(QString, editorSplitHorizontalShortcut, editorShortcutsGroup, splitHorizontalKey, QString)
+P_STORE_SET_STRING(setEditorSplitHorizontalShortcut, editorShortcutsGroup, splitHorizontalKey,
+                   editorSplitHorizontalShortcutChanged)
+P_STORE_GET(QString, editorSplitVerticalShortcut, editorShortcutsGroup, splitVerticalKey, QString)
+P_STORE_SET_STRING(setEditorSplitVerticalShortcut, editorShortcutsGroup, splitVerticalKey,
+                   editorSplitVerticalShortcutChanged)
+P_STORE_GET(QString, editorFillShortcut, editorShortcutsGroup, fillKey, QString)
+P_STORE_SET_STRING(setEditorFillShortcut, editorShortcutsGroup, fillKey, editorFillShortcutChanged)
 
 // Editor snapping + fill-on-drop toggles.
-PZ_STORE_GET(bool, editorGridSnappingEnabled, editorSnappingGroup, gridEnabledKey, bool)
-PZ_STORE_SET_BOOL(setEditorGridSnappingEnabled, editorSnappingGroup, gridEnabledKey, editorGridSnappingEnabledChanged)
-PZ_STORE_GET(bool, editorEdgeSnappingEnabled, editorSnappingGroup, edgeEnabledKey, bool)
-PZ_STORE_SET_BOOL(setEditorEdgeSnappingEnabled, editorSnappingGroup, edgeEnabledKey, editorEdgeSnappingEnabledChanged)
-PZ_STORE_GET(qreal, editorSnapIntervalX, editorSnappingGroup, intervalXKey, double)
-PZ_STORE_SET_DOUBLE(setEditorSnapIntervalX, editorSnappingGroup, intervalXKey, editorSnapIntervalXChanged)
-PZ_STORE_GET(qreal, editorSnapIntervalY, editorSnappingGroup, intervalYKey, double)
-PZ_STORE_SET_DOUBLE(setEditorSnapIntervalY, editorSnappingGroup, intervalYKey, editorSnapIntervalYChanged)
-PZ_STORE_GET(int, editorSnapOverrideModifier, editorSnappingGroup, overrideModifierKey, int)
-PZ_STORE_SET_INT(setEditorSnapOverrideModifier, editorSnappingGroup, overrideModifierKey,
-                 editorSnapOverrideModifierChanged)
-PZ_STORE_GET(bool, fillOnDropEnabled, editorFillOnDropGroup, enabledKey, bool)
-PZ_STORE_SET_BOOL(setFillOnDropEnabled, editorFillOnDropGroup, enabledKey, fillOnDropEnabledChanged)
-PZ_STORE_GET(int, fillOnDropModifier, editorFillOnDropGroup, modifierKey, int)
-PZ_STORE_SET_INT(setFillOnDropModifier, editorFillOnDropGroup, modifierKey, fillOnDropModifierChanged)
+P_STORE_GET(bool, editorGridSnappingEnabled, editorSnappingGroup, gridEnabledKey, bool)
+P_STORE_SET_BOOL(setEditorGridSnappingEnabled, editorSnappingGroup, gridEnabledKey, editorGridSnappingEnabledChanged)
+P_STORE_GET(bool, editorEdgeSnappingEnabled, editorSnappingGroup, edgeEnabledKey, bool)
+P_STORE_SET_BOOL(setEditorEdgeSnappingEnabled, editorSnappingGroup, edgeEnabledKey, editorEdgeSnappingEnabledChanged)
+P_STORE_GET(qreal, editorSnapIntervalX, editorSnappingGroup, intervalXKey, double)
+P_STORE_SET_DOUBLE(setEditorSnapIntervalX, editorSnappingGroup, intervalXKey, editorSnapIntervalXChanged)
+P_STORE_GET(qreal, editorSnapIntervalY, editorSnappingGroup, intervalYKey, double)
+P_STORE_SET_DOUBLE(setEditorSnapIntervalY, editorSnappingGroup, intervalYKey, editorSnapIntervalYChanged)
+P_STORE_GET(int, editorSnapOverrideModifier, editorSnappingGroup, overrideModifierKey, int)
+P_STORE_SET_INT(setEditorSnapOverrideModifier, editorSnappingGroup, overrideModifierKey,
+                editorSnapOverrideModifierChanged)
+P_STORE_GET(bool, fillOnDropEnabled, editorFillOnDropGroup, enabledKey, bool)
+P_STORE_SET_BOOL(setFillOnDropEnabled, editorFillOnDropGroup, enabledKey, fillOnDropEnabledChanged)
+P_STORE_GET(int, fillOnDropModifier, editorFillOnDropGroup, modifierKey, int)
+P_STORE_SET_INT(setFillOnDropModifier, editorFillOnDropGroup, modifierKey, fillOnDropModifierChanged)
 
 // ── TilingQuickLayoutSlots helpers ───────────────────────────────────────────
 
@@ -2645,11 +2928,6 @@ void Settings::writeTilingQuickLayoutSlot(int slotNumber, const QString& layoutI
         return;
     auto group = m_configBackend->group(ConfigDefaults::tilingQuickLayoutSlotsGroup());
     group->writeString(QString::number(slotNumber), layoutId);
-}
-
-void Settings::syncConfig()
-{
-    m_configBackend->sync();
 }
 
 // ── Color helpers ────────────────────────────────────────────────────────────
@@ -2701,11 +2979,21 @@ void Settings::applyAutotileBorderSystemColor()
     setAutotileInactiveBorderColor(inactiveColor());
 }
 
-#undef PZ_STORE_GET
-#undef PZ_STORE_SET_BOOL
-#undef PZ_STORE_SET_INT
-#undef PZ_STORE_SET_DOUBLE
-#undef PZ_STORE_SET_COLOR
-#undef PZ_STORE_SET_STRING
+void Settings::applySnappingBorderSystemColor()
+{
+    // Mirror applyAutotileBorderSystemColor: adopt the zone highlight/inactive
+    // colors (which themselves track the system accent) so the snapped-window
+    // border follows the system accent. Route through the setters so the Store
+    // stays the source of truth and NOTIFY signals fire.
+    setSnappingBorderColor(highlightColor());
+    setSnappingInactiveBorderColor(inactiveColor());
+}
+
+#undef P_STORE_GET
+#undef P_STORE_SET_BOOL
+#undef P_STORE_SET_INT
+#undef P_STORE_SET_DOUBLE
+#undef P_STORE_SET_COLOR
+#undef P_STORE_SET_STRING
 
 } // namespace PlasmaZones

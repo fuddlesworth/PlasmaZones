@@ -15,6 +15,36 @@ SnapState::SnapState(const QString& screenId, QObject* parent)
 
 SnapState::~SnapState() = default;
 
+// ── Window-id canonicalization ──────────────────────────────────────────────
+//
+// The KWin effect freezes a window's composite id `appId|instanceId` at first
+// observation, but that freeze is per effect process. If the effect restarts
+// while a window's WM_CLASS mutated during downtime (Electron/CEF apps rename
+// their class after mapping), the restarted effect re-derives a DIFFERENT
+// composite (`appId'|instanceId`) for the same window, while the daemon's snap
+// stores still hold the old `appId|instanceId`. Canonicalizing every store key
+// through the shared registry (instanceId → first-seen composite) re-unifies the
+// two: the stable instanceId never changes, so both composites resolve to the
+// first-seen one. Mirrors AutotileEngine, which already does this for tiling
+// state (issue #628).
+//
+// SnapState only ever LOOKS UP (never seeds): the daemon seeds the canonical
+// mapping once per window in WindowTrackingAdaptor::setWindowMetadata (the
+// universal window-open choke point), so by the time any snap accessor runs the
+// window already has a canonical entry. Looking up (rather than seeding) here is
+// also what keeps the appId-alias writes safe — the pre-float session-restore
+// fallback passes a BARE appId (no instance id) to addPreFloat*/clearPreFloatZone,
+// and a no-seed lookup returns it verbatim instead of polluting the registry's
+// instance map with an appId-keyed entry that would never be released.
+
+QString SnapState::canonicalizeForLookup(const QString& rawWindowId) const
+{
+    if (m_windowRegistry) {
+        return m_windowRegistry->canonicalizeForLookup(rawWindowId);
+    }
+    return rawWindowId;
+}
+
 // ── IPlacementState ─────────────────────────────────────────────────────────
 
 QString SnapState::screenId() const
@@ -35,13 +65,15 @@ QStringList SnapState::managedWindows() const
     return list;
 }
 
-bool SnapState::containsWindow(const QString& windowId) const
+bool SnapState::containsWindow(const QString& rawWindowId) const
 {
+    const QString windowId = canonicalizeForLookup(rawWindowId);
     return m_windowZoneAssignments.contains(windowId) || m_floatingWindows.contains(windowId);
 }
 
-bool SnapState::isFloating(const QString& windowId) const
+bool SnapState::isFloating(const QString& rawWindowId) const
 {
+    const QString windowId = canonicalizeForLookup(rawWindowId);
     return m_floatingWindows.contains(windowId);
 }
 
@@ -52,8 +84,9 @@ QStringList SnapState::floatingWindows() const
     return list;
 }
 
-QString SnapState::placementIdForWindow(const QString& windowId) const
+QString SnapState::placementIdForWindow(const QString& rawWindowId) const
 {
+    const QString windowId = canonicalizeForLookup(rawWindowId);
     if (m_floatingWindows.contains(windowId)) {
         return {};
     }
@@ -133,9 +166,10 @@ QJsonObject SnapState::toJson() const
 
 // ── Zone Assignment CRUD ────────────────────────────────────────────────────
 
-void SnapState::assignWindowToZone(const QString& windowId, const QString& zoneId, const QString& screenId,
+void SnapState::assignWindowToZone(const QString& rawWindowId, const QString& zoneId, const QString& screenId,
                                    int virtualDesktop)
 {
+    const QString windowId = canonicalizeForLookup(rawWindowId);
     if (zoneId.isEmpty()) {
         unassignWindow(windowId);
         return;
@@ -143,9 +177,10 @@ void SnapState::assignWindowToZone(const QString& windowId, const QString& zoneI
     assignWindowToZones(windowId, {zoneId}, screenId, virtualDesktop);
 }
 
-void SnapState::assignWindowToZones(const QString& windowId, const QStringList& zoneIds, const QString& screenId,
+void SnapState::assignWindowToZones(const QString& rawWindowId, const QStringList& zoneIds, const QString& screenId,
                                     int virtualDesktop)
 {
+    const QString windowId = canonicalizeForLookup(rawWindowId);
     if (windowId.isEmpty()) {
         return;
     }
@@ -182,13 +217,14 @@ void SnapState::assignWindowToZones(const QString& windowId, const QStringList& 
     }
 }
 
-SnapState::UnassignResult SnapState::unassignWindow(const QString& windowId)
+SnapState::UnassignResult SnapState::unassignWindow(const QString& rawWindowId)
 {
-    return clearZoneAssignment(windowId, /*preserveScreenAndDesktop=*/false);
+    return clearZoneAssignment(canonicalizeForLookup(rawWindowId), /*preserveScreenAndDesktop=*/false);
 }
 
-SnapState::UnassignResult SnapState::clearZoneAssignment(const QString& windowId, bool preserveScreenAndDesktop)
+SnapState::UnassignResult SnapState::clearZoneAssignment(const QString& rawWindowId, bool preserveScreenAndDesktop)
 {
+    const QString windowId = canonicalizeForLookup(rawWindowId);
     UnassignResult result;
     QStringList previousZones = m_windowZoneAssignments.value(windowId);
     if (!m_windowZoneAssignments.remove(windowId)) {
@@ -211,18 +247,53 @@ SnapState::UnassignResult SnapState::clearZoneAssignment(const QString& windowId
     return result;
 }
 
-QString SnapState::screenForWindow(const QString& windowId) const
+QString SnapState::screenForWindow(const QString& rawWindowId) const
 {
+    const QString windowId = canonicalizeForLookup(rawWindowId);
     return m_windowScreenAssignments.value(windowId);
 }
 
-int SnapState::desktopForWindow(const QString& windowId) const
+int SnapState::desktopForWindow(const QString& rawWindowId) const
 {
+    const QString windowId = canonicalizeForLookup(rawWindowId);
     return m_windowDesktopAssignments.value(windowId, 0);
 }
 
-QString SnapState::zoneForWindow(const QString& windowId) const
+bool SnapState::reassignDesktop(const QString& rawWindowId, int virtualDesktop)
 {
+    const QString windowId = canonicalizeForLookup(rawWindowId);
+    // Only re-stamp a window that is actually assigned (has a zone); the
+    // desktop attribute alone is meaningless without a snap slot.
+    if (!m_windowZoneAssignments.contains(windowId)) {
+        return false;
+    }
+    if (m_windowDesktopAssignments.value(windowId, 0) == virtualDesktop) {
+        return false;
+    }
+    m_windowDesktopAssignments[windowId] = virtualDesktop;
+    Q_EMIT stateChanged();
+    return true;
+}
+
+QStringList SnapState::windowsOnScreenAndDesktop(const QString& screenId, int virtualDesktop) const
+{
+    QStringList result;
+    for (auto it = m_windowDesktopAssignments.constBegin(); it != m_windowDesktopAssignments.constEnd(); ++it) {
+        if (it.value() != virtualDesktop) {
+            continue;
+        }
+        if (m_windowScreenAssignments.value(it.key()) != screenId) {
+            continue;
+        }
+        result.append(it.key());
+    }
+    result.sort();
+    return result;
+}
+
+QString SnapState::zoneForWindow(const QString& rawWindowId) const
+{
+    const QString windowId = canonicalizeForLookup(rawWindowId);
     const auto it = m_windowZoneAssignments.constFind(windowId);
     if (it == m_windowZoneAssignments.constEnd() || it->isEmpty()) {
         return {};
@@ -230,8 +301,9 @@ QString SnapState::zoneForWindow(const QString& windowId) const
     return it->first();
 }
 
-QStringList SnapState::zonesForWindow(const QString& windowId) const
+QStringList SnapState::zonesForWindow(const QString& rawWindowId) const
 {
+    const QString windowId = canonicalizeForLookup(rawWindowId);
     return m_windowZoneAssignments.value(windowId);
 }
 
@@ -256,15 +328,17 @@ QStringList SnapState::snappedWindows() const
     return result;
 }
 
-bool SnapState::isWindowSnapped(const QString& windowId) const
+bool SnapState::isWindowSnapped(const QString& rawWindowId) const
 {
+    const QString windowId = canonicalizeForLookup(rawWindowId);
     return m_windowZoneAssignments.contains(windowId);
 }
 
 // ── Floating State ──────────────────────────────────────────────────────────
 
-void SnapState::setFloating(const QString& windowId, bool floating)
+void SnapState::setFloating(const QString& rawWindowId, bool floating)
 {
+    const QString windowId = canonicalizeForLookup(rawWindowId);
     bool changed = false;
     if (floating) {
         if (!m_floatingWindows.contains(windowId)) {
@@ -280,8 +354,9 @@ void SnapState::setFloating(const QString& windowId, bool floating)
     }
 }
 
-void SnapState::setFloatingOnScreen(const QString& windowId, const QString& screenId, int virtualDesktop)
+void SnapState::setFloatingOnScreen(const QString& rawWindowId, const QString& screenId, int virtualDesktop)
 {
+    const QString windowId = canonicalizeForLookup(rawWindowId);
     if (windowId.isEmpty() || screenId.isEmpty()) {
         return;
     }
@@ -304,8 +379,9 @@ void SnapState::setFloatingOnScreen(const QString& windowId, const QString& scre
     }
 }
 
-SnapState::UnassignResult SnapState::unsnapForFloat(const QString& windowId)
+SnapState::UnassignResult SnapState::unsnapForFloat(const QString& rawWindowId)
 {
+    const QString windowId = canonicalizeForLookup(rawWindowId);
     const auto zones = zonesForWindow(windowId);
     if (!zones.isEmpty()) {
         m_preFloatZoneAssignments[windowId] = zones;
@@ -327,30 +403,35 @@ SnapState::UnassignResult SnapState::unsnapForFloat(const QString& windowId)
     return clearZoneAssignment(windowId, /*preserveScreenAndDesktop=*/true);
 }
 
-QString SnapState::preFloatScreen(const QString& windowId) const
+QString SnapState::preFloatScreen(const QString& rawWindowId) const
 {
+    const QString windowId = canonicalizeForLookup(rawWindowId);
     return m_preFloatScreenAssignments.value(windowId);
 }
 
-QString SnapState::preFloatZone(const QString& windowId) const
+QString SnapState::preFloatZone(const QString& rawWindowId) const
 {
+    const QString windowId = canonicalizeForLookup(rawWindowId);
     const auto zones = m_preFloatZoneAssignments.value(windowId);
     return zones.isEmpty() ? QString() : zones.first();
 }
 
-QStringList SnapState::preFloatZones(const QString& windowId) const
+QStringList SnapState::preFloatZones(const QString& rawWindowId) const
 {
+    const QString windowId = canonicalizeForLookup(rawWindowId);
     return m_preFloatZoneAssignments.value(windowId);
 }
 
-void SnapState::clearPreFloatZone(const QString& windowId)
+void SnapState::clearPreFloatZone(const QString& rawWindowId)
 {
+    const QString windowId = canonicalizeForLookup(rawWindowId);
     m_preFloatZoneAssignments.remove(windowId);
     m_preFloatScreenAssignments.remove(windowId);
 }
 
-void SnapState::addPreFloatZone(const QString& windowId, const QStringList& zoneIds)
+void SnapState::addPreFloatZone(const QString& rawWindowId, const QStringList& zoneIds)
 {
+    const QString windowId = canonicalizeForLookup(rawWindowId);
     if (m_preFloatZoneAssignments.value(windowId) == zoneIds) {
         return;
     }
@@ -358,8 +439,9 @@ void SnapState::addPreFloatZone(const QString& windowId, const QStringList& zone
     Q_EMIT stateChanged();
 }
 
-void SnapState::addPreFloatScreen(const QString& windowId, const QString& screenId)
+void SnapState::addPreFloatScreen(const QString& rawWindowId, const QString& screenId)
 {
+    const QString windowId = canonicalizeForLookup(rawWindowId);
     if (m_preFloatScreenAssignments.value(windowId) == screenId) {
         return;
     }
@@ -369,8 +451,9 @@ void SnapState::addPreFloatScreen(const QString& windowId, const QString& screen
 
 // ── Window Lifecycle ────────────────────────────────────────────────────────
 
-bool SnapState::removeWindowData(const QString& windowId)
+bool SnapState::removeWindowData(const QString& rawWindowId)
 {
+    const QString windowId = canonicalizeForLookup(rawWindowId);
     bool removed = false;
     removed |= m_windowZoneAssignments.remove(windowId);
     removed |= m_windowScreenAssignments.remove(windowId);
@@ -382,9 +465,9 @@ bool SnapState::removeWindowData(const QString& windowId)
     return removed;
 }
 
-void SnapState::windowClosed(const QString& windowId)
+void SnapState::windowClosed(const QString& rawWindowId)
 {
-    if (removeWindowData(windowId)) {
+    if (removeWindowData(canonicalizeForLookup(rawWindowId))) {
         Q_EMIT stateChanged();
     }
 }
@@ -518,8 +601,9 @@ void SnapState::recordSnapIntent(const QString& windowClass, bool wasUserInitiat
     }
 }
 
-void SnapState::markAsAutoSnapped(const QString& windowId)
+void SnapState::markAsAutoSnapped(const QString& rawWindowId)
 {
+    const QString windowId = canonicalizeForLookup(rawWindowId);
     if (m_autoSnappedWindows.contains(windowId)) {
         return;
     }
@@ -527,13 +611,15 @@ void SnapState::markAsAutoSnapped(const QString& windowId)
     Q_EMIT stateChanged();
 }
 
-bool SnapState::isAutoSnapped(const QString& windowId) const
+bool SnapState::isAutoSnapped(const QString& rawWindowId) const
 {
+    const QString windowId = canonicalizeForLookup(rawWindowId);
     return m_autoSnappedWindows.contains(windowId);
 }
 
-bool SnapState::clearAutoSnapped(const QString& windowId)
+bool SnapState::clearAutoSnapped(const QString& rawWindowId)
 {
+    const QString windowId = canonicalizeForLookup(rawWindowId);
     if (m_autoSnappedWindows.remove(windowId)) {
         Q_EMIT stateChanged();
         return true;
@@ -566,8 +652,19 @@ QSet<QString> SnapState::buildOccupiedZoneSet(const QString& screenFilter, int d
     return occupied;
 }
 
-int SnapState::pruneStaleAssignments(const QSet<QString>& aliveWindowIds)
+int SnapState::pruneStaleAssignments(const QSet<QString>& rawAliveWindowIds)
 {
+    // The stores are keyed by the canonical (first-seen) composite, so the alive
+    // set must be canonicalized to compare like-for-like — otherwise a window
+    // still alive under a mutated-class composite would be pruned just because
+    // its stored key is the first-seen one. canonicalizeForLookup (const, no
+    // seed) is correct: a stale window must not gain a fresh canonical entry.
+    QSet<QString> aliveWindowIds;
+    aliveWindowIds.reserve(rawAliveWindowIds.size());
+    for (const QString& id : rawAliveWindowIds) {
+        aliveWindowIds.insert(canonicalizeForLookup(id));
+    }
+
     QSet<QString> allTracked;
     for (auto it = m_windowZoneAssignments.constBegin(); it != m_windowZoneAssignments.constEnd(); ++it) {
         allTracked.insert(it.key());

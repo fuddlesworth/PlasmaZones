@@ -3,21 +3,25 @@
 
 #include "screenprovider.h"
 #include "dbusutils.h"
+#include "../core/logging.h"
+#include <QDBusConnection>
 #include <QGuiApplication>
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QScreen>
-#include "../../src/config/settings.h"
-#include "../../src/core/constants.h"
-#include "../../src/core/utils.h"
-#include <PhosphorScreens/VirtualScreen.h>
+#include "../core/constants.h"
+#include "../core/isettings.h"
+#include <PhosphorIdentity/VirtualScreenId.h>
+#include <PhosphorProtocol/ServiceConstants.h>
 #include <PhosphorScreens/ScreenIdentity.h>
 
 namespace PlasmaZones {
 
-QList<ScreenInfo> fetchScreens()
+QList<PhosphorScreens::ScreenInfo> fetchScreens(bool* daemonUnavailable)
 {
-    QList<ScreenInfo> result;
+    QList<PhosphorScreens::ScreenInfo> result;
+    if (daemonUnavailable)
+        *daemonUnavailable = false;
 
     // Get primary screen name from daemon
     QString primaryScreenName;
@@ -31,11 +35,18 @@ QList<ScreenInfo> fetchScreens()
     QDBusMessage screenReply =
         DaemonDBus::callDaemon(QString(PhosphorProtocol::Service::Interface::Screen), QStringLiteral("getScreens"));
 
+    // Track whether ANY per-screen getScreenInfo() reply succeeded. If every
+    // per-screen probe fails (daemon up enough to answer getScreens but
+    // unable to answer getScreenInfo — transient mid-startup or partial
+    // crash), `result` would otherwise be populated with zero-geometry
+    // entries that mislead the picker UI. Falling back to Qt's screen list
+    // in that case yields a useful (even if D-Bus-poor) view.
+    bool anyInfoReplySucceeded = false;
     if (screenReply.type() == QDBusMessage::ReplyMessage && !screenReply.arguments().isEmpty()) {
         const QStringList screenNames = screenReply.arguments().first().toStringList();
 
         for (const QString& screenName : screenNames) {
-            ScreenInfo info;
+            PhosphorScreens::ScreenInfo info;
             info.name = screenName;
             // Compare physical parent for virtual screens (primary is always a physical ID)
             QString physName = PhosphorIdentity::VirtualScreenId::extractPhysicalId(screenName);
@@ -52,6 +63,7 @@ QList<ScreenInfo> fetchScreens()
                                                             QStringLiteral("getScreenInfo"), {screenName});
 
             if (infoReply.type() == QDBusMessage::ReplyMessage && !infoReply.arguments().isEmpty()) {
+                anyInfoReplySucceeded = true;
                 QString infoJson = infoReply.arguments().first().toString();
                 QJsonDocument doc = QJsonDocument::fromJson(infoJson.toUtf8());
                 if (!doc.isNull() && doc.isObject()) {
@@ -69,13 +81,47 @@ QList<ScreenInfo> fetchScreens()
                         QJsonObject geom = jsonObj[JsonKeys::Geometry].toObject();
                         info.width = geom[::PhosphorZones::ZoneJsonKeys::Width].toInt();
                         info.height = geom[::PhosphorZones::ZoneJsonKeys::Height].toInt();
+                        // Position (top-left in the compositor's global space)
+                        // drives the proportional multi-monitor map. 0 is a
+                        // valid coordinate, so no sentinel check here.
+                        info.x = geom[::PhosphorZones::ZoneJsonKeys::X].toInt();
+                        info.y = geom[::PhosphorZones::ZoneJsonKeys::Y].toInt();
                     }
+                    // Surface a corrupted reply so it doesn't silently produce a
+                    // 0×0 picker tile. width/height stay 0 when the geometry
+                    // object — or the whole key — is absent (QJsonValue::toInt()
+                    // of an absent key is 0); a legitimately-0 dimension would
+                    // mean a dimensionless screen, which the daemon never
+                    // reports. Runs whether or not the key was present so an
+                    // entirely missing `geometry` is caught too.
+                    if (info.width <= 0 || info.height <= 0) {
+                        qCWarning(lcConfig) << "ScreenProvider: daemon screen" << screenName
+                                            << "returned non-positive geometry width=" << info.width
+                                            << "height=" << info.height << "— picker tile will render as 0×0";
+                    }
+                    // Connector name is optional (the label falls back to
+                    // vendor/model or the raw id), so unlike geometry/virtual-id
+                    // a missing key is not warned.
                     if (jsonObj.contains(::PhosphorZones::ZoneJsonKeys::Name))
                         info.connectorName = jsonObj[::PhosphorZones::ZoneJsonKeys::Name].toString();
                     if (jsonObj.value(JsonKeys::IsVirtualScreen).toBool()) {
-                        info.isVirtualScreen = true;
-                        info.virtualIndex = PhosphorIdentity::VirtualScreenId::extractIndex(screenName);
-                        info.virtualDisplayName = jsonObj.value(JsonKeys::VirtualDisplayName).toString();
+                        const int idx = PhosphorIdentity::VirtualScreenId::extractIndex(screenName);
+                        // Daemon claimed virtual but the screenName isn't a
+                        // parseable virtual id — treat as physical rather
+                        // than persisting a sentinel index that would render
+                        // as garbage in the picker.
+                        if (idx >= 0) {
+                            info.isVirtualScreen = true;
+                            info.virtualIndex = idx;
+                            info.virtualDisplayName = jsonObj.value(JsonKeys::VirtualDisplayName).toString();
+                        } else {
+                            // Symmetric warning to the non-positive-geometry
+                            // branch above so wire-format drift surfaces in
+                            // the journal instead of silently dropping
+                            // virtual-screen identity.
+                            qCWarning(lcConfig) << "ScreenProvider: daemon claimed virtual but screenName" << screenName
+                                                << "is not a parseable virtual id — demoting to physical";
+                        }
                     }
                 } else {
                     info.screenId = screenName;
@@ -88,19 +134,34 @@ QList<ScreenInfo> fetchScreens()
         }
     }
 
-    // Fallback: if no screens from daemon, get from Qt
-    if (result.isEmpty()) {
+    // Fallback: if no screens from daemon (getScreens returned empty or
+    // errored), OR every per-screen getScreenInfo() call failed (we have
+    // names but no usable metadata), get from Qt. The second arm catches
+    // a partial-daemon-failure where surfacing zero-geometry entries would
+    // mislead the picker.
+    if (result.isEmpty() || !anyInfoReplySucceeded) {
+        // Surface the degraded-fallback state to callers so a settings UI
+        // can render a banner explaining why screen metadata (EDID,
+        // virtual-screen subdivisions, etc.) is missing. Without this hint,
+        // the picker silently shows a Qt-only view that the user can't
+        // tell apart from a daemon-served view that happens to have less
+        // metadata than usual.
+        if (daemonUnavailable)
+            *daemonUnavailable = true;
+        result.clear();
         QScreen* primaryScreen = QGuiApplication::primaryScreen();
         for (QScreen* screen : QGuiApplication::screens()) {
-            ScreenInfo info;
+            PhosphorScreens::ScreenInfo info;
             info.name = screen->name();
             info.isPrimary = (screen == primaryScreen);
             info.manufacturer = screen->manufacturer();
             info.model = screen->model();
             info.width = screen->geometry().width();
             info.height = screen->geometry().height();
+            info.x = screen->geometry().x();
+            info.y = screen->geometry().y();
             info.connectorName = screen->name();
-            info.screenId = Phosphor::Screens::ScreenIdentity::identifierFor(screen);
+            info.screenId = PhosphorScreens::ScreenIdentity::identifierFor(screen);
             result.append(info);
         }
     }
@@ -108,87 +169,49 @@ QList<ScreenInfo> fetchScreens()
     return result;
 }
 
-QVariantList screenInfoListToVariantList(const QList<ScreenInfo>& screens)
-{
-    QVariantList list;
-    list.reserve(screens.size());
-
-    for (const ScreenInfo& s : screens) {
-        QVariantMap map;
-        map[QStringLiteral("name")] = s.name;
-        map[QStringLiteral("isPrimary")] = s.isPrimary;
-        if (!s.manufacturer.isEmpty())
-            map[QStringLiteral("manufacturer")] = s.manufacturer;
-        if (!s.model.isEmpty())
-            map[QStringLiteral("model")] = s.model;
-        if (s.width > 0 && s.height > 0) {
-            map[QStringLiteral("resolution")] = QStringLiteral("%1\u00d7%2").arg(s.width).arg(s.height);
-            map[QStringLiteral("width")] = s.width;
-            map[QStringLiteral("height")] = s.height;
-        }
-        if (!s.screenId.isEmpty())
-            map[QStringLiteral("screenId")] = s.screenId;
-        if (s.isVirtualScreen) {
-            map[QStringLiteral("isVirtualScreen")] = true;
-            map[QStringLiteral("virtualIndex")] = s.virtualIndex;
-            if (!s.virtualDisplayName.isEmpty())
-                map[QStringLiteral("virtualDisplayName")] = s.virtualDisplayName;
-        }
-        if (!s.connectorName.isEmpty())
-            map[QStringLiteral("connectorName")] = s.connectorName;
-
-        // Pre-computed display label for QML consumers (context menus, selectors, etc.).
-        // Single source of truth — avoids duplicating label-building logic in QML.
-        {
-            QString label;
-            if (s.isVirtualScreen) {
-                QString vsName = s.virtualDisplayName.isEmpty() ? QStringLiteral("VS%1").arg(s.virtualIndex + 1)
-                                                                : s.virtualDisplayName;
-                QStringList parts;
-                if (!s.manufacturer.isEmpty())
-                    parts.append(s.manufacturer);
-                if (!s.model.isEmpty())
-                    parts.append(s.model);
-                QString monitorName = parts.isEmpty() ? s.connectorName : parts.join(QLatin1Char(' '));
-                label = monitorName.isEmpty() ? vsName : vsName + QStringLiteral(" \u2014 ") + monitorName;
-            } else {
-                QStringList parts;
-                if (!s.manufacturer.isEmpty())
-                    parts.append(s.manufacturer);
-                if (!s.model.isEmpty())
-                    parts.append(s.model);
-                label = parts.isEmpty() ? s.name : parts.join(QLatin1Char(' '));
-            }
-            if (s.width > 0 && s.height > 0) {
-                label += QStringLiteral(" (%1\u00d7%2)").arg(s.width).arg(s.height);
-            }
-            map[QStringLiteral("displayLabel")] = label;
-        }
-
-        list.append(map);
-    }
-
-    return list;
-}
-
-bool isMonitorDisabledFor(const Settings* settings, PhosphorZones::AssignmentEntry::Mode mode,
+bool isMonitorDisabledFor(const ISettings* settings, PhosphorZones::AssignmentEntry::Mode mode,
                           const QString& screenName)
 {
     return settings && settings->isMonitorDisabled(mode, screenName);
 }
 
-void setMonitorDisabledFor(Settings* settings, PhosphorZones::AssignmentEntry::Mode mode, const QString& screenName,
+bool setMonitorDisabledFor(ISettings* settings, PhosphorZones::AssignmentEntry::Mode mode, const QString& screenName,
                            bool disabled, const std::function<void()>& onChanged)
 {
-    if (!settings || screenName.isEmpty())
-        return;
+    if (!settings || screenName.isEmpty()) {
+        qCWarning(lcConfig) << "setMonitorDisabledFor: refusing to act —"
+                            << "settings null:" << (settings == nullptr) << "screenName empty:" << screenName.isEmpty();
+        return false;
+    }
 
-    QString id = Phosphor::Screens::ScreenIdentity::idForName(screenName);
+    QString id = PhosphorScreens::ScreenIdentity::idForName(screenName);
+    // Empty id means the connector name couldn't be canonicalised — bail
+    // rather than inserting an empty string into the disabled list (which
+    // would never round-trip back to a real screen). Symmetric to the
+    // warnings emitted by fetchScreens() above so a stale screenName
+    // (referring to a screen that's since been unplugged, or never existed)
+    // surfaces in the journal instead of silently no-op'ing — the QML
+    // toggle should revert its visual state when this returns false.
+    if (id.isEmpty()) {
+        qCWarning(lcConfig) << "setMonitorDisabledFor: unknown screen name" << screenName
+                            << "— could not canonicalise to a screen id, refusing to write empty entry";
+        return false;
+    }
     QStringList list = settings->disabledMonitors(mode);
 
     if (disabled) {
+        bool changed = false;
+        // A monitor can be referenced by either its connector name or its
+        // canonical screen id; drop any entry under the connector form so a
+        // user toggling disable/enable on the same row doesn't end up with the
+        // monitor listed twice under both identifier forms.
+        if (id != screenName)
+            changed = list.removeAll(screenName) > 0;
         if (!list.contains(id)) {
             list.append(id);
+            changed = true;
+        }
+        if (changed) {
             settings->setDisabledMonitors(mode, list);
             if (onChanged)
                 onChanged();
@@ -204,6 +227,24 @@ void setMonitorDisabledFor(Settings* settings, PhosphorZones::AssignmentEntry::M
                 onChanged();
         }
     }
+    return true;
+}
+
+bool connectScreenChangeSignals(QObject* receiver)
+{
+    auto bus = QDBusConnection::sessionBus();
+    const bool a = bus.connect(QString(PhosphorProtocol::Service::Name), QString(PhosphorProtocol::Service::ObjectPath),
+                               QString(PhosphorProtocol::Service::Interface::Screen), QStringLiteral("screenAdded"),
+                               receiver, SLOT(refreshScreens()));
+    const bool b = bus.connect(QString(PhosphorProtocol::Service::Name), QString(PhosphorProtocol::Service::ObjectPath),
+                               QString(PhosphorProtocol::Service::Interface::Screen), QStringLiteral("screenRemoved"),
+                               receiver, SLOT(refreshScreens()));
+    if (!a || !b) {
+        qCWarning(lcConfig) << "connectScreenChangeSignals: failed to subscribe to screen change broadcasts —"
+                            << "screenAdded:" << a << "screenRemoved:" << b
+                            << "— screen list will not auto-refresh on hot-plug";
+    }
+    return a && b;
 }
 
 } // namespace PlasmaZones

@@ -1,7 +1,7 @@
 {
     "id": "fire",
     "name": "Fire",
-    "description": "BMW's flagship fire effect — animated procedural fire texture eats the surface from top to bottom.",
+    "description": "BMW's flagship fire effect. An animated procedural fire texture eats the surface from top to bottom.",
     "author": "PlasmaZones (ported from Burn-My-Windows by Simon Schneegans, https://github.com/Schneegans/Burn-My-Windows)",
     "version": "1.0",
     "category": "Particle",

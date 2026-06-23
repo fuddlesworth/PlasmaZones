@@ -27,10 +27,10 @@
 #include <cmath>
 #include <limits>
 
-namespace Phosphor::Screens {
+namespace PhosphorScreens {
 
 namespace {
-// JSON key constants matching the existing PlasmaZones wire format so
+// JSON key constants matching the existing Phosphor wire format so
 // the KCM / settings app continue to deserialise what the adaptor sends.
 // Promoted to lib-internal constants here (vs. the daemon's JsonKeys::*)
 // so the lib is self-contained.
@@ -167,45 +167,46 @@ void DBusScreenAdaptor::wireQGuiApplicationSignals()
             });
         }
 
-        // Lambdas recompute identifierFor(screen) at call time rather than
-        // capturing it here. When a same-model sibling joins/leaves later,
-        // identifierFor's output flips between bare and "/CONNECTOR"-
-        // suffixed forms for this screen. Capturing the value at add-time
-        // would leave the lambdas retracting under a stale id after a
-        // disambiguation flip, breaking the D-Bus signal stream for
-        // consumers that track the live id.
-        connect(screen, &QScreen::geometryChanged, screen, [this, screen]() {
-            handleScreenGeometryChanged(screen, ScreenIdentity::identifierFor(screen));
-        });
+        // Per-screen geometryChanged + screenRemoved lambdas. Extracted to a
+        // shared lambda so the screenAdded handler (above) and the
+        // existing-screens loop (below) can't drift on the wiring details.
+        wirePerScreenSignals(screen);
 
         if (m_screenManager && m_screenManager->hasVirtualScreens(physId)) {
             m_cachedEffectiveIdsPerScreen[physId] = m_screenManager->virtualScreenIdsFor(physId);
         }
-
-        connect(qGuiApp, &QGuiApplication::screenRemoved, screen, [this, screen](QScreen* removedScreen) {
-            // identifierFor is safe to call pre-destruction of @p screen —
-            // it reads QScreen name/manufacturer/model/serialNumber before
-            // Qt tears the object down. The screen-removed signal fires
-            // while the QScreen is still a live object; only the underlying
-            // output is gone.
-            handleScreenRemoved(removedScreen, screen, ScreenIdentity::identifierFor(screen));
-        });
     });
 
     // Wire per-screen signals for currently-connected screens. Cache priming
     // keyed on m_screenManager happens in setScreenManager() — the manager
     // may not be wired yet when the constructor runs this loop. The
     // screen-removed lambda is still installed here so consumer-visible
-    // retraction works from the moment the adaptor exists. See the same-
-    // reasoning note above: lambdas recompute identifierFor at call time.
+    // retraction works from the moment the adaptor exists.
     for (QScreen* screen : QGuiApplication::screens()) {
-        connect(screen, &QScreen::geometryChanged, screen, [this, screen]() {
-            handleScreenGeometryChanged(screen, ScreenIdentity::identifierFor(screen));
-        });
-        connect(qGuiApp, &QGuiApplication::screenRemoved, screen, [this, screen](QScreen* removedScreen) {
-            handleScreenRemoved(removedScreen, screen, ScreenIdentity::identifierFor(screen));
-        });
+        wirePerScreenSignals(screen);
     }
+}
+
+void DBusScreenAdaptor::wirePerScreenSignals(QScreen* screen)
+{
+    // Lambdas recompute identifierFor(screen) at call time rather than
+    // capturing it here. When a same-model sibling joins/leaves later,
+    // identifierFor's output flips between bare and "/CONNECTOR"-
+    // suffixed forms for this screen. Capturing the value at add-time
+    // would leave the lambdas retracting under a stale id after a
+    // disambiguation flip, breaking the D-Bus signal stream for
+    // consumers that track the live id.
+    connect(screen, &QScreen::geometryChanged, screen, [this, screen]() {
+        handleScreenGeometryChanged(screen, ScreenIdentity::identifierFor(screen));
+    });
+    connect(qGuiApp, &QGuiApplication::screenRemoved, screen, [this, screen](QScreen* removedScreen) {
+        // identifierFor is safe to call pre-destruction of @p screen —
+        // it reads QScreen name/manufacturer/model/serialNumber before
+        // Qt tears the object down. The screen-removed signal fires
+        // while the QScreen is still a live object; only the underlying
+        // output is gone.
+        handleScreenRemoved(removedScreen, screen, ScreenIdentity::identifierFor(screen));
+    });
 }
 
 void DBusScreenAdaptor::connectScreenManagerSignals(ScreenManager* mgr)
@@ -716,7 +717,7 @@ QString DBusScreenAdaptor::swapVirtualScreenInDirection(const QString& currentVi
 {
     if (!m_configStore) {
         qCWarning(lcPhosphorScreens) << "swapVirtualScreenInDirection: no IConfigStore wired";
-        return VirtualScreenSwapper::reasonString(VirtualScreenSwapper::Result::SettingsRejected);
+        return VirtualScreenSwapper::reasonString(VirtualScreenSwapper::Result::NoConfigStore);
     }
 
     // Direction + id validation is delegated to VirtualScreenSwapper, which
@@ -737,7 +738,7 @@ QString DBusScreenAdaptor::rotateVirtualScreens(const QString& physicalScreenId,
 {
     if (!m_configStore) {
         qCWarning(lcPhosphorScreens) << "rotateVirtualScreens: no IConfigStore wired";
-        return VirtualScreenSwapper::reasonString(VirtualScreenSwapper::Result::SettingsRejected);
+        return VirtualScreenSwapper::reasonString(VirtualScreenSwapper::Result::NoConfigStore);
     }
 
     VirtualScreenSwapper swapper(m_configStore);
@@ -747,4 +748,4 @@ QString DBusScreenAdaptor::rotateVirtualScreens(const QString& physicalScreenId,
     return reason;
 }
 
-} // namespace Phosphor::Screens
+} // namespace PhosphorScreens

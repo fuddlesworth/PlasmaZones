@@ -38,7 +38,7 @@ private:
 private Q_SLOTS:
     void initTestCase()
     {
-        QVERIFY(m_scriptSetup.init(QStringLiteral(PZ_SOURCE_DIR)));
+        QVERIFY(m_scriptSetup.init(QStringLiteral(P_SOURCE_DIR)));
     }
 
     // =========================================================================
@@ -215,7 +215,7 @@ private Q_SLOTS:
     {
         auto* registry = m_scriptSetup.registry();
         const QStringList expectedIds = {
-            // 15 original C++-to-JS converted algorithms
+            // 15 original built-in tiling algorithms
             QLatin1String("bsp"),
             QLatin1String("cascade"),
             QLatin1String("centered-master"),
@@ -231,7 +231,7 @@ private Q_SLOTS:
             QLatin1String("stair"),
             QLatin1String("three-column"),
             QLatin1String("wide"),
-            // 9 JS-native algorithms (shipped with PR #256)
+            // 10 additional bundled algorithms (originally added in PR #256)
             QLatin1String("corner-master"),
             QLatin1String("quadrant-priority"),
             QLatin1String("deck"),
@@ -241,6 +241,7 @@ private Q_SLOTS:
             QLatin1String("floating-center"),
             QLatin1String("paper"),
             QLatin1String("tatami"),
+            QLatin1String("cluster"),
         };
         for (const auto& id : expectedIds) {
             QVERIFY2(registry->hasAlgorithm(id), qPrintable(QStringLiteral("Missing algorithm: ") + id));
@@ -347,34 +348,20 @@ private Q_SLOTS:
     }
 
     // =========================================================================
-    // Frozen globals validation — JS sandbox integrity
+    // Frozen globals validation — Luau sandbox integrity
     // =========================================================================
 
-    void testFrozenGlobals_jsReassignmentBlocked()
+    void testFrozenGlobals_reassignmentBlocked()
     {
-        // TODO: The current test infrastructure does not expose a way to evaluate
-        // arbitrary JS code in the sandboxed QJSEngine of a PhosphorTiles::ScriptedAlgorithm.
-        // The engine is private to each PhosphorTiles::ScriptedAlgorithm instance, and there is
-        // no public evaluateJs() method.
-        //
-        // What should be tested:
-        //   1. Load any algorithm (e.g., "zen")
-        //   2. In its sandbox, evaluate:
-        //        try { PZ_MIN_ZONE_SIZE = 999; } catch(e) {}
-        //        try { PZ_MIN_SPLIT = 999; } catch(e) {}
-        //        try { PZ_MAX_SPLIT = 999; } catch(e) {}
-        //        try { MAX_TREE_DEPTH = 999; } catch(e) {}
-        //        try { distributeWithGaps = function() { return []; }; } catch(e) {}
-        //        try { solveTwoPart = function() { return [0,0]; }; } catch(e) {}
-        //   3. Verify each global still holds its original value
-        //
-        // Indirect validation: the determinism test in test_tiling_algo_edge_cases.cpp
-        // (testFrozenGlobals_allAlgorithmsDeterministic) confirms that calling the
-        // same algorithm twice produces identical results, which would fail if
-        // globals were mutated between calls.
-
-        // Verify determinism as an indirect frozen-globals check: two identical
-        // calls must produce identical output.
+        // The pluau standard library is frozen via luaL_sandbox before any algorithm
+        // script runs, so a script cannot reassign pluau.* constants or helpers.
+        // Direct mutation can't be probed from here — the lua_State is private to
+        // each LuauTileAlgorithm and there is no public script-eval hook — so this
+        // validates the guarantee indirectly: two identical calls must produce
+        // identical output, which would fail if a prior call had mutated a shared
+        // global. (test_tiling_algo_edge_cases.cpp's
+        // testFrozenGlobals_allAlgorithmsDeterministic covers the same property
+        // across every algorithm.)
         auto* registry = m_scriptSetup.registry();
         PhosphorTiles::TilingState state(QStringLiteral("test"));
         state.setSplitRatio(0.5);

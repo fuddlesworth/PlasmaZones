@@ -8,7 +8,7 @@
 #include <QString>
 #include <QVector>
 
-namespace Phosphor::Screens {
+namespace PhosphorScreens {
 
 /**
  * @brief Test IScreenProvider — synthesizes outputs with arbitrary geometry.
@@ -55,4 +55,4 @@ private:
     QString m_primaryName;
 };
 
-} // namespace Phosphor::Screens
+} // namespace PhosphorScreens

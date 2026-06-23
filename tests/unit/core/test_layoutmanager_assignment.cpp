@@ -22,9 +22,14 @@
 #include <PhosphorZones/LayoutRegistry.h>
 #include <PhosphorZones/Layout.h>
 #include <PhosphorZones/Zone.h>
+#include <PhosphorWindowRules/ContextRuleBridge.h>
+#include <PhosphorWindowRules/RuleAction.h>
+#include <PhosphorWindowRules/WindowRule.h>
+#include <PhosphorWindowRules/WindowRuleStore.h>
 #include "core/constants.h"
 #include "../helpers/StubSettings.h"
 #include "../helpers/IsolatedConfigGuard.h"
+#include "../helpers/LayoutRegistryTestHelpers.h"
 
 using namespace PlasmaZones;
 using PlasmaZones::TestHelpers::IsolatedConfigGuard;
@@ -46,12 +51,51 @@ private:
     PhosphorZones::LayoutRegistry* createManager(QObject* parent = nullptr)
     {
         m_guards.emplace_back(std::make_unique<IsolatedConfigGuard>());
-        auto* mgr = new PhosphorZones::LayoutRegistry(PlasmaZones::createAssignmentsBackend(),
-                                                      QStringLiteral("plasmazones/layouts"), parent);
+        auto* mgr = PlasmaZones::TestHelpers::makeLayoutRegistry(QStringLiteral("plasmazones/layouts"), parent);
         QString layoutDir = m_guards.back()->dataPath() + QStringLiteral("/plasmazones/layouts");
         QDir().mkpath(layoutDir);
         mgr->setLayoutDirectory(layoutDir);
         return mgr;
+    }
+
+    /// Author a per-context DefaultLayoutAssignment override rule into the
+    /// registry's owned rule store. @p allow true forces the synthesized default
+    /// through for the context; false suppresses it. Mirrors the shape
+    /// ContextRuleBridge::makeDisableRule produces for the per-mode disable case.
+    void addDefaultAssignmentRule(PhosphorZones::LayoutRegistry* mgr, const QString& screenId, int virtualDesktop,
+                                  const QString& activity, bool allow)
+    {
+        namespace PWR = PhosphorWindowRules;
+        auto* store = mgr->findChild<PWR::WindowRuleStore*>();
+        QVERIFY(store != nullptr);
+
+        PWR::WindowRule rule;
+        rule.id = QUuid::createUuid();
+        rule.name = QStringLiteral("test-default-assignment");
+        rule.enabled = true;
+        rule.priority =
+            PWR::ContextRuleBridge::contextPriority(!screenId.isEmpty(), virtualDesktop > 0, !activity.isEmpty());
+        rule.match = PWR::ContextRuleBridge::makeContextMatch(screenId, virtualDesktop, activity);
+
+        PWR::RuleAction action;
+        action.type = QString(PWR::ActionType::DefaultLayoutAssignment);
+        action.params.insert(PWR::ActionParam::Value, allow);
+        rule.actions.append(action);
+
+        QVERIFY(store->addRule(rule));
+    }
+
+    /// Author a PINNED engine-mode assignment rule (no layout) — the shape a user
+    /// gets from "set this monitor to snapping/autotile" without picking a layout.
+    void addEngineModeRule(PhosphorZones::LayoutRegistry* mgr, const QString& screenId, int virtualDesktop,
+                           const QString& activity, const QString& modeToken)
+    {
+        namespace PWR = PhosphorWindowRules;
+        auto* store = mgr->findChild<PWR::WindowRuleStore*>();
+        QVERIFY(store != nullptr);
+        const PWR::WindowRule rule = PWR::ContextRuleBridge::makeAssignmentRule(
+            QStringLiteral("test-mode"), screenId, virtualDesktop, activity, modeToken, QString(), QString());
+        QVERIFY(store->addRule(rule));
     }
 
     std::vector<std::unique_ptr<IsolatedConfigGuard>> m_guards;
@@ -61,6 +105,108 @@ private Q_SLOTS:
     void cleanup()
     {
         m_guards.clear();
+    }
+
+    // ─── Combined batch API ──────────────────────────────────────────────
+    //
+    // setAllCombinedAssignments / combinedAssignments are the triple-axis
+    // sibling of the Desktop / Activity batches. Pin the round-trip: a
+    // Combined rule survives, gets its enabled flag preserved, and its
+    // edit isolation from pure-Activity / pure-Desktop / Monitor rules.
+    void testCombinedBatchRoundTrip()
+    {
+        QScopedPointer<PhosphorZones::LayoutRegistry> mgr(createManager());
+        auto* layoutA = createTestLayout(QStringLiteral("LayoutA"));
+        mgr->addLayout(layoutA);
+        auto* layoutB = createTestLayout(QStringLiteral("LayoutB"));
+        mgr->addLayout(layoutB);
+
+        // Seed: one Combined, one pure-Activity, one pure-Desktop. The
+        // batch must touch ONLY the Combined.
+        mgr->assignLayout(QStringLiteral("DP-1"), 3, QStringLiteral("work"), layoutA);
+        mgr->assignLayout(QStringLiteral("DP-1"), 0, QStringLiteral("work"), layoutB);
+        mgr->assignLayout(QStringLiteral("DP-1"), 5, QString(), layoutB);
+
+        // Reader returns only the Combined rule.
+        const auto combined = mgr->combinedAssignments();
+        QCOMPARE(combined.size(), 1);
+        PhosphorZones::CombinedAssignmentKey key{QStringLiteral("DP-1"), 3, QStringLiteral("work")};
+        QVERIFY(combined.contains(key));
+        QCOMPARE(combined.value(key), layoutA->id().toString());
+
+        // Round-trip: re-assign the same hash → state must be byte-identical.
+        mgr->setAllCombinedAssignments(combined);
+        const auto roundTripped = mgr->combinedAssignments();
+        QCOMPARE(roundTripped, combined);
+
+        // Cascade-resolution check: the rebuilt Combined rule must resolve
+        // through the live cascade at its (screen, desktop, activity) tuple.
+        // A regression that mis-builds the rule with a transposed-arg
+        // signature would still produce a hash-equal projection (because
+        // the reader re-reads from the same wrong tuple); this assertion
+        // catches that class of bug.
+        QCOMPARE(mgr->layoutForScreen(QStringLiteral("DP-1"), 3, QStringLiteral("work"))->name(),
+                 QStringLiteral("LayoutA"));
+
+        // The pure-Activity rule survives untouched.
+        QCOMPARE(mgr->layoutForScreen(QStringLiteral("DP-1"), 1, QStringLiteral("work"))->name(),
+                 QStringLiteral("LayoutB"));
+        // The pure-Desktop rule survives untouched.
+        QCOMPARE(mgr->layoutForScreen(QStringLiteral("DP-1"), 5, QString())->name(), QStringLiteral("LayoutB"));
+    }
+
+    // NOTE on enabled-flag preservation: setAllCombinedAssignments mirrors
+    // applyBatchAssignments's OldEntrySnapshot capture (Pass 1 P2 audit
+    // finding), so disabled→enabled regression is structurally shared with
+    // the Activity / Desktop / Screen batches. A dedicated test would need
+    // a public WindowRuleStore accessor on LayoutRegistry to flip the
+    // rule's enabled flag — none exists today, and adding one solely for
+    // test scaffolding would be an SRP violation. The shared
+    // applyBatchAssignments + OldEntrySnapshot path covers the four
+    // sibling APIs uniformly.
+
+    // ─── Combined-rule preservation regression ───────────────────────────
+    //
+    // setAllActivityAssignments / activityAssignments operate on a
+    // (screen, activity) hash key with no desktop dimension. Combined
+    // rules (screen+desktop+activity) used to be matched by both the
+    // batch reader and the family classifier — which meant a Combined
+    // rule was read into the (screen, activity) hash (silently
+    // overwriting any pure-Activity entry on the same pair), then on
+    // round-trip rebuilt at desktop=0, permanently losing its desktop
+    // pin. The fix narrows both reader and family classifier to STRICT
+    // per-Activity (Activity-only, no Combined), so Combined rules
+    // survive untouched in the rule store across an Activity-batch
+    // round-trip.
+    void testCombinedRulesSurviveActivityBatchRoundTrip()
+    {
+        QScopedPointer<PhosphorZones::LayoutRegistry> mgr(createManager());
+        auto* activityLayout = createTestLayout(QStringLiteral("ActivityLayout"));
+        mgr->addLayout(activityLayout);
+        auto* combinedLayout = createTestLayout(QStringLiteral("CombinedLayout"));
+        mgr->addLayout(combinedLayout);
+
+        const QString screen = QStringLiteral("DP-1");
+        const QString activity = QStringLiteral("activity-work");
+
+        // Pure-Activity rule and a Combined rule (same screen+activity but
+        // pinned to desktop 3). Pre-fix: the Activity batch reader would
+        // see both, key them under the same (screen, activity) pair, and
+        // the QHash insert order would silently drop one.
+        mgr->assignLayout(screen, 0, activity, activityLayout);
+        mgr->assignLayout(screen, 3, activity, combinedLayout);
+
+        // Reader sees ONLY the pure-Activity rule.
+        const auto projection = mgr->activityAssignments();
+        QCOMPARE(projection.size(), 1);
+        QVERIFY(projection.contains(qMakePair(screen, activity)));
+
+        // Round-trip the projection back through setAllActivityAssignments.
+        // The Combined rule must still be reachable on desktop 3, untouched
+        // by the Activity batch family classifier.
+        mgr->setAllActivityAssignments(projection);
+        QCOMPARE(mgr->layoutForScreen(screen, 3, activity)->name(), QStringLiteral("CombinedLayout"));
+        QCOMPARE(mgr->layoutForScreen(screen, 1, activity)->name(), QStringLiteral("ActivityLayout"));
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
@@ -203,7 +349,7 @@ private Q_SLOTS:
 
         QCOMPARE(mgr->defaultLayout()->name(), QStringLiteral("First"));
 
-        settings->setTestDefaultLayoutId(second->id().toString());
+        settings->setDefaultLayoutId(second->id().toString());
         QCOMPARE(mgr->defaultLayout()->name(), QStringLiteral("Second"));
     }
 
@@ -218,10 +364,10 @@ private Q_SLOTS:
         auto* layout = createTestLayout(QStringLiteral("OnlyLayout"));
         mgr->addLayout(layout);
 
-        settings->setTestDefaultLayoutId(QUuid::createUuid().toString());
+        settings->setDefaultLayoutId(QUuid::createUuid().toString());
         QCOMPARE(mgr->defaultLayout()->name(), QStringLiteral("OnlyLayout"));
 
-        settings->setTestDefaultLayoutId(QString());
+        settings->setDefaultLayoutId(QString());
         QCOMPARE(mgr->defaultLayout()->name(), QStringLiteral("OnlyLayout"));
     }
 
@@ -449,8 +595,8 @@ private Q_SLOTS:
         mgr->saveAssignments();
 
         // Create a new manager and load — same config file sees the data
-        QScopedPointer<PhosphorZones::LayoutRegistry> mgr2(new PhosphorZones::LayoutRegistry(
-            PlasmaZones::createAssignmentsBackend(), QStringLiteral("plasmazones/layouts")));
+        QScopedPointer<PhosphorZones::LayoutRegistry> mgr2(
+            PlasmaZones::TestHelpers::makeLayoutRegistry(QStringLiteral("plasmazones/layouts")));
         mgr2->addLayout(createTestLayout(QStringLiteral("LayoutA")));
         mgr2->addLayout(createTestLayout(QStringLiteral("LayoutB")));
         QString layoutDir2 = m_guards.back()->dataPath() + QStringLiteral("/plasmazones/layouts2");
@@ -665,6 +811,224 @@ private Q_SLOTS:
         QCOMPARE(entry.mode, PhosphorZones::AssignmentEntry::Snapping);
         QCOMPARE(entry.snappingLayout, layoutId);
         QCOMPARE(mgr->assignmentIdForScreen(QStringLiteral("DP-1"), 4), layoutId);
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // Suppress default layout assignment — the global gate + per-context override.
+    //
+    // The global setDefaultAssignmentSuppressedProvider gate makes an unassigned
+    // context resolve to NO active layout (the same empty-entry state as having no
+    // providers). A per-context DefaultLayoutAssignment rule overrides the global
+    // baseline either way: false suppresses one context even when global allows,
+    // true forces the default through even when global suppresses. Explicit
+    // assignments are never affected — suppression only gates the synthesized
+    // default.
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    void testSuppressDefault_globalOn_suppressesSynthesizedDefault()
+    {
+        QScopedPointer<PhosphorZones::LayoutRegistry> mgr(createManager());
+        auto* layout = createTestLayout(QStringLiteral("Snap"));
+        mgr->addLayout(layout);
+
+        const QString layoutId = layout->id().toString();
+        mgr->setDefaultLayoutIdProvider([layoutId]() {
+            return layoutId;
+        });
+        // Global suppress on — the snap default must NOT be synthesized.
+        mgr->setDefaultAssignmentSuppressedProvider([]() {
+            return true;
+        });
+
+        const auto entry = mgr->assignmentEntryForScreen(QStringLiteral("DP-1"), 4);
+        QVERIFY(!entry.isValid());
+        QVERIFY(mgr->assignmentIdForScreen(QStringLiteral("DP-1"), 4).isEmpty());
+    }
+
+    void testSuppressDefault_globalOff_synthesizesAsBefore()
+    {
+        QScopedPointer<PhosphorZones::LayoutRegistry> mgr(createManager());
+        auto* layout = createTestLayout(QStringLiteral("Snap"));
+        mgr->addLayout(layout);
+
+        const QString layoutId = layout->id().toString();
+        mgr->setDefaultLayoutIdProvider([layoutId]() {
+            return layoutId;
+        });
+        // Provider wired but reports off — behaviour is unchanged from today.
+        mgr->setDefaultAssignmentSuppressedProvider([]() {
+            return false;
+        });
+
+        const auto entry = mgr->assignmentEntryForScreen(QStringLiteral("DP-1"), 4);
+        QCOMPARE(entry.snappingLayout, layoutId);
+        QCOMPARE(mgr->assignmentIdForScreen(QStringLiteral("DP-1"), 4), layoutId);
+    }
+
+    void testSuppressDefault_perContextSuppress_overridesGlobalAllow()
+    {
+        QScopedPointer<PhosphorZones::LayoutRegistry> mgr(createManager());
+        auto* layout = createTestLayout(QStringLiteral("Snap"));
+        mgr->addLayout(layout);
+
+        const QString layoutId = layout->id().toString();
+        mgr->setDefaultLayoutIdProvider([layoutId]() {
+            return layoutId;
+        });
+        // Global allows the default (off). A per-context rule suppresses DP-1.
+        mgr->setDefaultAssignmentSuppressedProvider([]() {
+            return false;
+        });
+        addDefaultAssignmentRule(mgr.data(), QStringLiteral("DP-1"), 0, QString(), /*allow=*/false);
+
+        // DP-1 is suppressed by its rule.
+        QVERIFY(!mgr->assignmentEntryForScreen(QStringLiteral("DP-1"), 4).isValid());
+        QVERIFY(mgr->assignmentIdForScreen(QStringLiteral("DP-1"), 4).isEmpty());
+        // DP-2 (no rule) still gets the global default.
+        QCOMPARE(mgr->assignmentIdForScreen(QStringLiteral("DP-2"), 4), layoutId);
+    }
+
+    void testSuppressDefault_perContextAllow_overridesGlobalSuppress()
+    {
+        QScopedPointer<PhosphorZones::LayoutRegistry> mgr(createManager());
+        auto* layout = createTestLayout(QStringLiteral("Snap"));
+        mgr->addLayout(layout);
+
+        const QString layoutId = layout->id().toString();
+        mgr->setDefaultLayoutIdProvider([layoutId]() {
+            return layoutId;
+        });
+        // Global suppresses everywhere. A per-context rule re-enables DP-1.
+        mgr->setDefaultAssignmentSuppressedProvider([]() {
+            return true;
+        });
+        addDefaultAssignmentRule(mgr.data(), QStringLiteral("DP-1"), 0, QString(), /*allow=*/true);
+
+        // DP-1 forces the default through.
+        QCOMPARE(mgr->assignmentIdForScreen(QStringLiteral("DP-1"), 4), layoutId);
+        // DP-2 (no rule) stays suppressed by the global setting.
+        QVERIFY(mgr->assignmentIdForScreen(QStringLiteral("DP-2"), 4).isEmpty());
+    }
+
+    void testSuppressDefault_explicitAssignmentUnaffected()
+    {
+        QScopedPointer<PhosphorZones::LayoutRegistry> mgr(createManager());
+        auto* layout = createTestLayout(QStringLiteral("Manual"));
+        mgr->addLayout(layout);
+
+        // Global suppress on, but the user has an explicit assignment on DP-1.
+        mgr->setDefaultAssignmentSuppressedProvider([]() {
+            return true;
+        });
+        mgr->assignLayout(QStringLiteral("DP-1"), 0, QString(), layout);
+
+        // The explicit assignment wins — suppression only gates the synthesized
+        // default, never a stored assignment.
+        const auto entry = mgr->assignmentEntryForScreen(QStringLiteral("DP-1"), 0);
+        QCOMPARE(entry.snappingLayout, layout->id().toString());
+        QCOMPARE(entry.activeLayoutId(), layout->id().toString());
+    }
+
+    // isContextActiveLayoutSuppressed — the daemon's "no active layout because of
+    // suppression" gate. Must fire ONLY when suppression is the cause, never for
+    // other empty-assignment states (e.g. snapping enabled with no default id),
+    // so the daemon's defaultLayout() fallbacks are preserved there.
+
+    void testIsContextSuppressed_globalOn_unassigned_true()
+    {
+        QScopedPointer<PhosphorZones::LayoutRegistry> mgr(createManager());
+        auto* layout = createTestLayout(QStringLiteral("Snap"));
+        mgr->addLayout(layout);
+        const QString layoutId = layout->id().toString();
+        mgr->setDefaultLayoutIdProvider([layoutId]() {
+            return layoutId;
+        });
+        mgr->setDefaultAssignmentSuppressedProvider([]() {
+            return true;
+        });
+        QVERIFY(mgr->isContextActiveLayoutSuppressed(QStringLiteral("DP-1"), 4));
+    }
+
+    void testIsContextSuppressed_globalOff_noDefault_false()
+    {
+        // Regression guard: no providers wired (no default configured) is NOT
+        // suppression — the daemon must keep its defaultLayout() fallback here.
+        QScopedPointer<PhosphorZones::LayoutRegistry> mgr(createManager());
+        mgr->setDefaultAssignmentSuppressedProvider([]() {
+            return false;
+        });
+        QVERIFY(mgr->assignmentIdForScreen(QStringLiteral("DP-1"), 4).isEmpty());
+        QVERIFY(!mgr->isContextActiveLayoutSuppressed(QStringLiteral("DP-1"), 4));
+    }
+
+    void testIsContextSuppressed_explicitAssignment_false()
+    {
+        QScopedPointer<PhosphorZones::LayoutRegistry> mgr(createManager());
+        auto* layout = createTestLayout(QStringLiteral("Manual"));
+        mgr->addLayout(layout);
+        mgr->setDefaultAssignmentSuppressedProvider([]() {
+            return true;
+        });
+        mgr->assignLayout(QStringLiteral("DP-1"), 0, QString(), layout);
+        QVERIFY(!mgr->isContextActiveLayoutSuppressed(QStringLiteral("DP-1"), 0));
+    }
+
+    void testIsContextSuppressed_perContextOverrides()
+    {
+        QScopedPointer<PhosphorZones::LayoutRegistry> mgr(createManager());
+        auto* layout = createTestLayout(QStringLiteral("Snap"));
+        mgr->addLayout(layout);
+        const QString layoutId = layout->id().toString();
+        mgr->setDefaultLayoutIdProvider([layoutId]() {
+            return layoutId;
+        });
+        // Global off, but a per-context suppress rule on DP-1.
+        mgr->setDefaultAssignmentSuppressedProvider([]() {
+            return false;
+        });
+        addDefaultAssignmentRule(mgr.data(), QStringLiteral("DP-1"), 0, QString(), /*allow=*/false);
+        QVERIFY(mgr->isContextActiveLayoutSuppressed(QStringLiteral("DP-1"), 4));
+        // DP-2 (no rule) follows the global off → not suppressed.
+        QVERIFY(!mgr->isContextActiveLayoutSuppressed(QStringLiteral("DP-2"), 4));
+    }
+
+    void testIsContextSuppressed_pinnedModeOnlyRule_overridesGlobalSuppress()
+    {
+        // A window rule that sets only the engine mode (no layout) on a monitor
+        // must override the global suppress setting — the context stays active so
+        // the overlay / zone selector show and the layout falls back to default.
+        QScopedPointer<PhosphorZones::LayoutRegistry> mgr(createManager());
+        auto* layout = createTestLayout(QStringLiteral("Snap"));
+        mgr->addLayout(layout);
+        mgr->setDefaultAssignmentSuppressedProvider([]() {
+            return true;
+        });
+        addEngineModeRule(mgr.data(), QStringLiteral("DP-1"), 2, QString(), QStringLiteral("snapping"));
+        // DP-1 has a pinned mode rule → not suppressed despite global suppress.
+        QVERIFY(!mgr->isContextActiveLayoutSuppressed(QStringLiteral("DP-1"), 2));
+        // DP-2 (no rule) → still suppressed by the global setting.
+        QVERIFY(mgr->isContextActiveLayoutSuppressed(QStringLiteral("DP-2"), 2));
+    }
+
+    void testDefaultSuppressedForContext_bareAutotileModeRule_stillSuppressed()
+    {
+        // The autotile gate's primitive. A mode-only autotile rule sets the mode
+        // but draws its algorithm from the suppressed global default. So the
+        // context is NOT "active-layout-suppressed" (the mode rule covers it),
+        // yet its DEFAULT *is* suppressed — which is what the autotile activation
+        // gate checks to refuse tiling a bare "autotile:" context.
+        QScopedPointer<PhosphorZones::LayoutRegistry> mgr(createManager());
+        mgr->setDefaultAssignmentSuppressedProvider([]() {
+            return true;
+        });
+        addEngineModeRule(mgr.data(), QStringLiteral("DP-1"), 2, QString(), QStringLiteral("autotile"));
+        // The mode rule covers the context → not active-layout-suppressed.
+        QVERIFY(!mgr->isContextActiveLayoutSuppressed(QStringLiteral("DP-1"), 2));
+        // But the synthesized default IS suppressed → bare autotile must not tile.
+        QVERIFY(mgr->isDefaultAssignmentSuppressedForContext(QStringLiteral("DP-1"), 2));
+        // A per-context allow override flips it back on.
+        addDefaultAssignmentRule(mgr.data(), QStringLiteral("DP-1"), 2, QString(), /*allow=*/true);
+        QVERIFY(!mgr->isDefaultAssignmentSuppressedForContext(QStringLiteral("DP-1"), 2));
     }
 
     void testLevel1Default_storedEntryTakesPrecedence()
@@ -926,359 +1290,6 @@ private Q_SLOTS:
         QCOMPARE(entry2.mode, PhosphorZones::AssignmentEntry::Autotile);
         QCOMPARE(entry2.tilingAlgorithm, QStringLiteral("wide"));
         QCOMPARE(entry2.snappingLayout, QStringLiteral("{some-uuid}")); // preserved
-    }
-    // ═══════════════════════════════════════════════════════════════════════════
-    // PR #501: partial-update / promote semantics
-    // ═══════════════════════════════════════════════════════════════════════════
-
-    // PreservingMode on a slot with NO existing entry: seeds from the cascade
-    // (display default) and writes the new snap, keeping mode + opposite field.
-    void testSetSnappingLayoutPreservingMode_noEntry_seedsFromCascade()
-    {
-        QScopedPointer<PhosphorZones::LayoutRegistry> mgr(createManager());
-        auto* layoutA = createTestLayout(QStringLiteral("LayoutA"));
-        mgr->addLayout(layoutA);
-        auto* layoutB = createTestLayout(QStringLiteral("LayoutB"));
-        mgr->addLayout(layoutB);
-
-        // Set a base entry on the screen so the cascade resolves to something.
-        mgr->assignLayout(QStringLiteral("DP-1"), 0, QString(), layoutA);
-
-        // Now write a per-desktop snap preference. Slot (DP-1, vd=3, "") has
-        // no local entry; seed should come from the screen-only cascade.
-        mgr->setSnappingLayoutPreservingMode(QStringLiteral("DP-1"), 3, QString(), layoutB->id().toString());
-
-        QVERIFY(mgr->hasExplicitAssignment(QStringLiteral("DP-1"), 3, QString()));
-        auto entry = mgr->assignmentEntryForScreen(QStringLiteral("DP-1"), 3, QString());
-        QCOMPARE(entry.mode, PhosphorZones::AssignmentEntry::Snapping);
-        QCOMPARE(entry.snappingLayout, layoutB->id().toString());
-    }
-
-    // PR #501 regression: when the slot has a local entry whose
-    // activeLayoutId() happens to be empty (e.g. {mode=Snapping, snap="",
-    // tile="cluster"}), a partial snap update must NOT cascade-seed and
-    // drop the locally-stored opposite-field value. seedForPartialUpdate
-    // used to gate on `!activeLayoutId().isEmpty()` and clobber the tile.
-    void testSetSnappingLayoutPreservingMode_preservesLocalOppositeFieldWhenActiveIdEmpty()
-    {
-        QScopedPointer<PhosphorZones::LayoutRegistry> mgr(createManager());
-        auto* layoutA = createTestLayout(QStringLiteral("LayoutA"));
-        mgr->addLayout(layoutA);
-        auto* layoutB = createTestLayout(QStringLiteral("LayoutB"));
-        mgr->addLayout(layoutB);
-
-        // Seed a different cascade winner at a higher level (per-desktop)
-        // so that if seedForPartialUpdate falls back to the cascade it
-        // would pick this entry up.
-        mgr->assignLayout(QStringLiteral("DP-1"), 1, QString(), layoutA);
-
-        // Place a local entry at (DP-1, 0, "") that has mode=Snapping but
-        // empty snap (only a tile preference). activeLayoutId() == "".
-        PhosphorZones::AssignmentEntry tileOnly;
-        tileOnly.mode = PhosphorZones::AssignmentEntry::Snapping;
-        tileOnly.snappingLayout = QString();
-        tileOnly.tilingAlgorithm = QStringLiteral("cluster");
-        mgr->setAssignmentEntryDirect(QStringLiteral("DP-1"), 0, QString(), tileOnly);
-
-        // Partial snap update at THIS slot — must preserve local tile,
-        // not pick up cascade winner's data.
-        mgr->setSnappingLayoutPreservingMode(QStringLiteral("DP-1"), 0, QString(), layoutB->id().toString());
-
-        auto entry = mgr->assignmentEntryForScreen(QStringLiteral("DP-1"), 0, QString());
-        QCOMPARE(entry.snappingLayout, layoutB->id().toString());
-        QCOMPARE(entry.tilingAlgorithm, QStringLiteral("cluster")); // preserved!
-    }
-
-    // PreservingMode with empty layoutId removes the entry when both
-    // fields end up empty, and leaves OTHER entries on the screen alone.
-    void testSetSnappingLayoutPreservingMode_emptyClear_removesOnlyTargetSlot()
-    {
-        QScopedPointer<PhosphorZones::LayoutRegistry> mgr(createManager());
-        auto* layoutA = createTestLayout(QStringLiteral("LayoutA"));
-        mgr->addLayout(layoutA);
-        auto* layoutB = createTestLayout(QStringLiteral("LayoutB"));
-        mgr->addLayout(layoutB);
-
-        // Per-desktop entry the user cares about — must survive a
-        // monitor-row clear.
-        mgr->assignLayout(QStringLiteral("DP-1"), 2, QString(), layoutA);
-        // Monitor-row entry (snap-only) — target of the clear.
-        mgr->assignLayout(QStringLiteral("DP-1"), 0, QString(), layoutB);
-
-        mgr->setSnappingLayoutPreservingMode(QStringLiteral("DP-1"), 0, QString(), QString());
-
-        QVERIFY(!mgr->hasExplicitAssignment(QStringLiteral("DP-1"), 0, QString()));
-        // Per-desktop entry MUST still be present (this is the regression
-        // for the destructive-clear bug — promote would have wiped it).
-        QVERIFY(mgr->hasExplicitAssignment(QStringLiteral("DP-1"), 2, QString()));
-        auto entry = mgr->assignmentEntryForScreen(QStringLiteral("DP-1"), 2, QString());
-        QCOMPARE(entry.snappingLayout, layoutA->id().toString());
-    }
-
-    // Promoting on the Monitor row (vd=0, activity="") wipes ALL other
-    // entries on the screen (and its VS variants) — this is intentional,
-    // it's the cascade-winner promotion semantics. Pin behavior so the
-    // shadow-clear rule doesn't regress.
-    void testSetSnappingLayoutPromoting_monitorRow_wipesAllShadows()
-    {
-        QScopedPointer<PhosphorZones::LayoutRegistry> mgr(createManager());
-        auto* layoutA = createTestLayout(QStringLiteral("LayoutA"));
-        mgr->addLayout(layoutA);
-        auto* layoutB = createTestLayout(QStringLiteral("LayoutB"));
-        mgr->addLayout(layoutB);
-        auto* layoutC = createTestLayout(QStringLiteral("LayoutC"));
-        mgr->addLayout(layoutC);
-
-        mgr->assignLayout(QStringLiteral("DP-1"), 1, QString(), layoutA);
-        mgr->assignLayout(QStringLiteral("DP-1"), 0, QStringLiteral("activity-x"), layoutB);
-        mgr->assignLayout(QStringLiteral("DP-1"), 3, QStringLiteral("activity-y"), layoutC);
-
-        mgr->setSnappingLayoutPromoting(QStringLiteral("DP-1"), 0, QString(), layoutA->id().toString());
-
-        // The target slot is set + every shadow on the same screen gone.
-        QVERIFY(mgr->hasExplicitAssignment(QStringLiteral("DP-1"), 0, QString()));
-        QVERIFY(!mgr->hasExplicitAssignment(QStringLiteral("DP-1"), 1, QString()));
-        QVERIFY(!mgr->hasExplicitAssignment(QStringLiteral("DP-1"), 0, QStringLiteral("activity-x")));
-        QVERIFY(!mgr->hasExplicitAssignment(QStringLiteral("DP-1"), 3, QStringLiteral("activity-y")));
-    }
-
-    // Promoting on a per-desktop slot (vd>0, activity="") wipes BOTH
-    // same-desktop shadows AND per-activity shadows. Per-activity entries
-    // (vd=0, activity!="") shadow the per-desktop slot at cascade L2 for
-    // any context with a matching activity — leaving them intact would
-    // let the activity-keyed entry continue to win whenever that
-    // activity is current.
-    void testSetSnappingLayoutPromoting_perDesktop_wipesSameDesktopAndPerActivityShadows()
-    {
-        QScopedPointer<PhosphorZones::LayoutRegistry> mgr(createManager());
-        auto* layoutA = createTestLayout(QStringLiteral("LayoutA"));
-        mgr->addLayout(layoutA);
-        auto* layoutB = createTestLayout(QStringLiteral("LayoutB"));
-        mgr->addLayout(layoutB);
-        auto* layoutC = createTestLayout(QStringLiteral("LayoutC"));
-        mgr->addLayout(layoutC);
-
-        // Screen-level — must survive.
-        mgr->assignLayout(QStringLiteral("DP-1"), 0, QString(), layoutA);
-        // Another desktop — must survive.
-        mgr->assignLayout(QStringLiteral("DP-1"), 2, QString(), layoutB);
-        // Same desktop + activity — shadows the target at L1, must be wiped.
-        mgr->assignLayout(QStringLiteral("DP-1"), 1, QStringLiteral("activity-x"), layoutC);
-        // Per-activity (vd=0, activity-y) — shadows the target at L2 for
-        // any context with activity-y, must be wiped.
-        mgr->assignLayout(QStringLiteral("DP-1"), 0, QStringLiteral("activity-y"), layoutC);
-        // Different desktop + activity — does NOT shadow (different desktop),
-        // must survive.
-        mgr->assignLayout(QStringLiteral("DP-1"), 2, QStringLiteral("activity-z"), layoutC);
-
-        mgr->setSnappingLayoutPromoting(QStringLiteral("DP-1"), 1, QString(), layoutA->id().toString());
-
-        QVERIFY(mgr->hasExplicitAssignment(QStringLiteral("DP-1"), 0, QString()));
-        QVERIFY(mgr->hasExplicitAssignment(QStringLiteral("DP-1"), 2, QString()));
-        QVERIFY(!mgr->hasExplicitAssignment(QStringLiteral("DP-1"), 1, QStringLiteral("activity-x")));
-        QVERIFY(!mgr->hasExplicitAssignment(QStringLiteral("DP-1"), 0, QStringLiteral("activity-y")));
-        QVERIFY(mgr->hasExplicitAssignment(QStringLiteral("DP-1"), 2, QStringLiteral("activity-z")));
-    }
-
-    // Promoting on a per-activity slot (vd=0, activity!="") only wipes
-    // entries with the same activity.
-    void testSetSnappingLayoutPromoting_perActivity_wipesOnlySameActivityShadows()
-    {
-        QScopedPointer<PhosphorZones::LayoutRegistry> mgr(createManager());
-        auto* layoutA = createTestLayout(QStringLiteral("LayoutA"));
-        mgr->addLayout(layoutA);
-        auto* layoutB = createTestLayout(QStringLiteral("LayoutB"));
-        mgr->addLayout(layoutB);
-        auto* layoutC = createTestLayout(QStringLiteral("LayoutC"));
-        mgr->addLayout(layoutC);
-
-        // Screen-level — must survive.
-        mgr->assignLayout(QStringLiteral("DP-1"), 0, QString(), layoutA);
-        // Per-desktop, no activity — must survive.
-        mgr->assignLayout(QStringLiteral("DP-1"), 1, QString(), layoutB);
-        // Same activity, any desktop — shadows the target, must be wiped.
-        mgr->assignLayout(QStringLiteral("DP-1"), 2, QStringLiteral("activity-x"), layoutC);
-        // Different activity — must survive.
-        mgr->assignLayout(QStringLiteral("DP-1"), 3, QStringLiteral("activity-y"), layoutC);
-
-        mgr->setSnappingLayoutPromoting(QStringLiteral("DP-1"), 0, QStringLiteral("activity-x"),
-                                        layoutA->id().toString());
-
-        QVERIFY(mgr->hasExplicitAssignment(QStringLiteral("DP-1"), 0, QString()));
-        QVERIFY(mgr->hasExplicitAssignment(QStringLiteral("DP-1"), 1, QString()));
-        QVERIFY(!mgr->hasExplicitAssignment(QStringLiteral("DP-1"), 2, QStringLiteral("activity-x")));
-        QVERIFY(mgr->hasExplicitAssignment(QStringLiteral("DP-1"), 3, QStringLiteral("activity-y")));
-    }
-
-    // Promoting on a fully-specific slot (vd>0, activity!="") doesn't wipe
-    // anything — no other entry can shadow it in the cascade. AND the
-    // target slot itself receives the new value.
-    void testSetSnappingLayoutPromoting_specificSlot_writesTargetAndPreservesOthers()
-    {
-        QScopedPointer<PhosphorZones::LayoutRegistry> mgr(createManager());
-        auto* layoutA = createTestLayout(QStringLiteral("LayoutA"));
-        mgr->addLayout(layoutA);
-        auto* layoutB = createTestLayout(QStringLiteral("LayoutB"));
-        mgr->addLayout(layoutB);
-
-        mgr->assignLayout(QStringLiteral("DP-1"), 0, QString(), layoutA);
-        mgr->assignLayout(QStringLiteral("DP-1"), 1, QString(), layoutB);
-        mgr->assignLayout(QStringLiteral("DP-1"), 0, QStringLiteral("activity-x"), layoutB);
-
-        mgr->setSnappingLayoutPromoting(QStringLiteral("DP-1"), 1, QStringLiteral("activity-x"),
-                                        layoutA->id().toString());
-
-        QVERIFY(mgr->hasExplicitAssignment(QStringLiteral("DP-1"), 0, QString()));
-        QVERIFY(mgr->hasExplicitAssignment(QStringLiteral("DP-1"), 1, QString()));
-        QVERIFY(mgr->hasExplicitAssignment(QStringLiteral("DP-1"), 0, QStringLiteral("activity-x")));
-        QVERIFY(mgr->hasExplicitAssignment(QStringLiteral("DP-1"), 1, QStringLiteral("activity-x")));
-        // Target slot itself MUST hold the new layout id — a regression
-        // that wiped shadows but failed to write the target would still
-        // pass the four hasExplicitAssignment checks above.
-        const auto target = mgr->assignmentEntryForScreen(QStringLiteral("DP-1"), 1, QStringLiteral("activity-x"));
-        QCOMPARE(target.mode, PhosphorZones::AssignmentEntry::Snapping);
-        QCOMPARE(target.snappingLayout, layoutA->id().toString());
-    }
-
-    // Tile-promoting forces mode=Autotile and writes the tile field.
-    void testSetTilingAlgorithmPromoting_forcesAutotileMode()
-    {
-        QScopedPointer<PhosphorZones::LayoutRegistry> mgr(createManager());
-        auto* layoutA = createTestLayout(QStringLiteral("LayoutA"));
-        mgr->addLayout(layoutA);
-
-        mgr->assignLayout(QStringLiteral("DP-1"), 0, QString(), layoutA);
-
-        mgr->setTilingAlgorithmPromoting(QStringLiteral("DP-1"), 0, QString(), QStringLiteral("cluster"));
-
-        auto entry = mgr->assignmentEntryForScreen(QStringLiteral("DP-1"), 0, QString());
-        QCOMPARE(entry.mode, PhosphorZones::AssignmentEntry::Autotile);
-        QCOMPARE(entry.tilingAlgorithm, QStringLiteral("cluster"));
-        QCOMPARE(entry.snappingLayout, layoutA->id().toString()); // preserved
-    }
-
-    // Symmetric tile-promote shadow-clear tests (snap had 4 promote
-    // shape tests; tile only had the mode-flip test). Pin behavior so
-    // a tile-side regression doesn't silently slip through.
-    void testSetTilingAlgorithmPromoting_monitorRow_wipesAllShadows()
-    {
-        QScopedPointer<PhosphorZones::LayoutRegistry> mgr(createManager());
-        auto* layoutA = createTestLayout(QStringLiteral("LayoutA"));
-        mgr->addLayout(layoutA);
-
-        mgr->assignLayout(QStringLiteral("DP-1"), 1, QString(), layoutA);
-        mgr->assignLayout(QStringLiteral("DP-1"), 0, QStringLiteral("activity-x"), layoutA);
-        mgr->assignLayout(QStringLiteral("DP-1"), 3, QStringLiteral("activity-y"), layoutA);
-
-        mgr->setTilingAlgorithmPromoting(QStringLiteral("DP-1"), 0, QString(), QStringLiteral("cluster"));
-
-        QVERIFY(mgr->hasExplicitAssignment(QStringLiteral("DP-1"), 0, QString()));
-        QVERIFY(!mgr->hasExplicitAssignment(QStringLiteral("DP-1"), 1, QString()));
-        QVERIFY(!mgr->hasExplicitAssignment(QStringLiteral("DP-1"), 0, QStringLiteral("activity-x")));
-        QVERIFY(!mgr->hasExplicitAssignment(QStringLiteral("DP-1"), 3, QStringLiteral("activity-y")));
-        // Target slot holds the new algo.
-        const auto target = mgr->assignmentEntryForScreen(QStringLiteral("DP-1"), 0, QString());
-        QCOMPARE(target.mode, PhosphorZones::AssignmentEntry::Autotile);
-        QCOMPARE(target.tilingAlgorithm, QStringLiteral("cluster"));
-    }
-
-    void testSetTilingAlgorithmPromoting_perDesktop_wipesSameDesktopAndPerActivityShadows()
-    {
-        QScopedPointer<PhosphorZones::LayoutRegistry> mgr(createManager());
-        auto* layoutA = createTestLayout(QStringLiteral("LayoutA"));
-        mgr->addLayout(layoutA);
-
-        mgr->assignLayout(QStringLiteral("DP-1"), 0, QString(), layoutA);
-        mgr->assignLayout(QStringLiteral("DP-1"), 2, QString(), layoutA);
-        mgr->assignLayout(QStringLiteral("DP-1"), 1, QStringLiteral("activity-x"), layoutA);
-        mgr->assignLayout(QStringLiteral("DP-1"), 0, QStringLiteral("activity-y"), layoutA);
-        mgr->assignLayout(QStringLiteral("DP-1"), 2, QStringLiteral("activity-z"), layoutA);
-
-        mgr->setTilingAlgorithmPromoting(QStringLiteral("DP-1"), 1, QString(), QStringLiteral("cluster"));
-
-        QVERIFY(mgr->hasExplicitAssignment(QStringLiteral("DP-1"), 0, QString()));
-        QVERIFY(mgr->hasExplicitAssignment(QStringLiteral("DP-1"), 2, QString()));
-        QVERIFY(!mgr->hasExplicitAssignment(QStringLiteral("DP-1"), 1, QStringLiteral("activity-x")));
-        // Per-activity entry (vd=0, activity-y) shadows the promoted
-        // per-desktop slot for any context with activity-y → wiped.
-        QVERIFY(!mgr->hasExplicitAssignment(QStringLiteral("DP-1"), 0, QStringLiteral("activity-y")));
-        QVERIFY(mgr->hasExplicitAssignment(QStringLiteral("DP-1"), 2, QStringLiteral("activity-z")));
-    }
-
-    void testSetTilingAlgorithmPromoting_perActivity_wipesOnlySameActivityShadows()
-    {
-        QScopedPointer<PhosphorZones::LayoutRegistry> mgr(createManager());
-        auto* layoutA = createTestLayout(QStringLiteral("LayoutA"));
-        mgr->addLayout(layoutA);
-
-        mgr->assignLayout(QStringLiteral("DP-1"), 0, QString(), layoutA);
-        mgr->assignLayout(QStringLiteral("DP-1"), 1, QString(), layoutA);
-        mgr->assignLayout(QStringLiteral("DP-1"), 2, QStringLiteral("activity-x"), layoutA);
-        mgr->assignLayout(QStringLiteral("DP-1"), 3, QStringLiteral("activity-y"), layoutA);
-
-        mgr->setTilingAlgorithmPromoting(QStringLiteral("DP-1"), 0, QStringLiteral("activity-x"),
-                                         QStringLiteral("cluster"));
-
-        QVERIFY(mgr->hasExplicitAssignment(QStringLiteral("DP-1"), 0, QString()));
-        QVERIFY(mgr->hasExplicitAssignment(QStringLiteral("DP-1"), 1, QString()));
-        QVERIFY(!mgr->hasExplicitAssignment(QStringLiteral("DP-1"), 2, QStringLiteral("activity-x")));
-        QVERIFY(mgr->hasExplicitAssignment(QStringLiteral("DP-1"), 3, QStringLiteral("activity-y")));
-    }
-
-    // VS-variant cleanup: promoting on a physical-screen slot must
-    // also wipe any per-VS assignment that would re-shadow it via the
-    // cascade's VS→physical fallback (level 6 in walkCascade).
-    void testSetSnappingLayoutPromoting_monitorRow_wipesVirtualScreenVariants()
-    {
-        QScopedPointer<PhosphorZones::LayoutRegistry> mgr(createManager());
-        auto* layoutA = createTestLayout(QStringLiteral("LayoutA"));
-        mgr->addLayout(layoutA);
-        auto* layoutB = createTestLayout(QStringLiteral("LayoutB"));
-        mgr->addLayout(layoutB);
-
-        const QString physId = QStringLiteral("DP-1");
-        // VS id format: "<physId>/vs:<index>" — see PhosphorIdentity::VirtualScreenId.
-        const QString vsId = physId + QStringLiteral("/vs:0");
-        mgr->assignLayout(vsId, 0, QString(), layoutB);
-
-        mgr->setSnappingLayoutPromoting(physId, 0, QString(), layoutA->id().toString());
-
-        // Physical slot was written.
-        QVERIFY(mgr->hasExplicitAssignment(physId, 0, QString()));
-        // VS-variant was wiped — would otherwise re-shadow the physical
-        // when the cascade walks VS→physical at level 6.
-        QVERIFY(!mgr->hasExplicitAssignment(vsId, 0, QString()));
-    }
-
-    // Regression for the "remove only when BOTH fields end up empty"
-    // semantic in applyPartialOrPromote: clearing the snap field on an
-    // entry whose tile field is non-empty MUST keep the entry around
-    // (with snap="" and the existing tile intact).
-    void testSetSnappingLayoutPreservingMode_clearSnapKeepsEntryWhenTileNonEmpty()
-    {
-        QScopedPointer<PhosphorZones::LayoutRegistry> mgr(createManager());
-        auto* layoutA = createTestLayout(QStringLiteral("LayoutA"));
-        mgr->addLayout(layoutA);
-
-        // Existing entry has both fields set, mode=Snapping.
-        PhosphorZones::AssignmentEntry both;
-        both.mode = PhosphorZones::AssignmentEntry::Snapping;
-        both.snappingLayout = layoutA->id().toString();
-        both.tilingAlgorithm = QStringLiteral("cluster");
-        mgr->setAssignmentEntryDirect(QStringLiteral("DP-1"), 0, QString(), both);
-
-        // Clear the snap field — tile must remain.
-        mgr->setSnappingLayoutPreservingMode(QStringLiteral("DP-1"), 0, QString(), QString());
-
-        // Entry record still exists.
-        QVERIFY(mgr->hasExplicitAssignment(QStringLiteral("DP-1"), 0, QString()));
-        // Per-field readers see the cleared snap and the preserved tile.
-        // (assignmentEntryForScreen rejects entries with empty
-        // activeLayoutId() via its cascade visitor and would fall through
-        // to a synthesized default — that's pre-PR behavior; use the
-        // per-field accessors instead to verify the actual stored state.)
-        QCOMPARE(mgr->snappingLayoutForScreen(QStringLiteral("DP-1"), 0, QString()), QString());
-        QCOMPARE(mgr->tilingAlgorithmForScreen(QStringLiteral("DP-1"), 0, QString()), QStringLiteral("cluster"));
     }
 };
 

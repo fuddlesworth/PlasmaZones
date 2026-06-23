@@ -3,7 +3,7 @@
 
 #include "UpdateGapOverrideCommand.h"
 
-#include "pz_i18n.h"
+#include "phosphor_i18n.h"
 
 #include "../../EditorController.h"
 
@@ -12,14 +12,14 @@ using namespace PlasmaZones;
 UpdateGapOverrideCommand::UpdateGapOverrideCommand(QPointer<EditorController> editorController, GapType type,
                                                    int oldValue, int newValue, const QString& text,
                                                    QUndoCommand* parent)
-    : QUndoCommand(text.isEmpty()
-                       ? (type == GapType::ZonePadding ? PzI18n::tr("Change Zone Padding", "@action")
-                                                       : (type == GapType::UsePerSideOuterGap
-                                                              ? PzI18n::tr("Toggle Per-Side Edge Gap", "@action")
-                                                              : (type == GapType::OverlayDisplayMode
-                                                                     ? PzI18n::tr("Change Overlay Style", "@action")
-                                                                     : PzI18n::tr("Change Edge Gap", "@action"))))
-                       : text,
+    : QUndoCommand(text.isEmpty() ? (type == GapType::ZonePadding
+                                         ? PhosphorI18n::tr("Change Zone Padding", "@action")
+                                         : (type == GapType::UsePerSideOuterGap
+                                                ? PhosphorI18n::tr("Toggle Per-Side Edge Gap", "@action")
+                                                : (type == GapType::OverlayDisplayMode
+                                                       ? PhosphorI18n::tr("Change Overlay Style", "@action")
+                                                       : PhosphorI18n::tr("Change Edge Gap", "@action"))))
+                                  : text,
                    parent)
     , m_editorController(editorController)
     , m_type(type)

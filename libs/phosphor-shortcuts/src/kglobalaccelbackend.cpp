@@ -9,7 +9,7 @@
 #include <QCoreApplication>
 #include <QHash>
 
-namespace Phosphor::Shortcuts {
+namespace PhosphorShortcuts {
 
 // KGlobalAccel's C++ API trafficks exclusively in QAction*. We hide that
 // behind the id-based IBackend interface by owning one QAction per id —
@@ -233,4 +233,4 @@ void KGlobalAccelBackend::flush()
     Q_EMIT ready();
 }
 
-} // namespace Phosphor::Shortcuts
+} // namespace PhosphorShortcuts

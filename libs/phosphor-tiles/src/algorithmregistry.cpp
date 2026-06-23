@@ -6,23 +6,24 @@
 #include <PhosphorTiles/TilingAlgorithm.h>
 #include "tileslogging.h"
 
+#include <PhosphorRegistry/IFactoryBase.h>
+#include <PhosphorRegistry/Registry.h>
+
 #include <QCoreApplication>
 #include <QDebug>
 #include <QEvent>
 #include <QMutex>
 #include <QMutexLocker>
 #include <QThread>
+
 #include <algorithm>
+#include <memory>
 #include <vector>
 
 namespace {
-/// Library-owned recommended default algorithm.
-/// Stored as a static const QString rather than a raw C-string so the
-/// id-string is constructed once at first-use rather than rebuilt on
-/// every defaultAlgorithmId() call. Library is self-contained — no
-/// PlasmaZones config-layer dependency. Application config layers may
-/// surface their own user-facing default (which today happens to also
-/// be "bsp"); the two are intentionally independent.
+/// Library-owned recommended default algorithm. Self-contained — no
+/// Phosphor config-layer dependency. Application config layers may surface
+/// their own user-facing default (today also "bsp"); the two are independent.
 const QString& recommendedDefaultAlgorithmId()
 {
     static const QString id = QStringLiteral("bsp");
@@ -32,6 +33,77 @@ const QString& recommendedDefaultAlgorithmId()
 
 namespace PhosphorTiles {
 
+// ═══════════════════════════════════════════════════════════════════════════════
+// Decomposed storage: a PhosphorRegistry::Registry entry that OWNS one algorithm
+// ═══════════════════════════════════════════════════════════════════════════════
+
+namespace {
+
+/// Wrap a freshly-constructed TilingAlgorithm in a shared_ptr whose deleter
+/// DEFERS destruction via deleteLater() while Qt is alive. This is what makes
+/// dropping an entry safe even though consumers may still hold a cached
+/// algorithm pointer when the unregister signal fires — the object outlives the
+/// current call stack and is destroyed on the next event-loop turn. Without an
+/// event loop (unit tests with no QCoreApplication) it deletes directly, since
+/// deleteLater would never be drained. Replaces the old setParent + manual
+/// deleteLater + m_pendingDeletes bookkeeping.
+std::shared_ptr<TilingAlgorithm> ownAlgorithm(TilingAlgorithm* raw)
+{
+    return std::shared_ptr<TilingAlgorithm>(raw, [](TilingAlgorithm* a) {
+        if (!a) {
+            return;
+        }
+        if (QCoreApplication::instance()) {
+            a->deleteLater();
+        } else {
+            delete a;
+        }
+    });
+}
+
+/// Registry entry: a discovered/registered algorithm as a PhosphorRegistry
+/// factory. The Registry<TileAlgorithmEntry> keys on id() (the algorithm's
+/// registryId); displayName() is the algorithm's name. Owns the algorithm via
+/// the deferred-delete shared_ptr above — so the registry IS the algorithm's
+/// owner, retiring the old QObject-parent + safeDeleteAlgorithm scheme.
+class TileAlgorithmEntry final : public PhosphorRegistry::IFactoryBase
+{
+public:
+    explicit TileAlgorithmEntry(std::shared_ptr<TilingAlgorithm> algorithm)
+        : m_algorithm(std::move(algorithm))
+    {
+    }
+    [[nodiscard]] QString id() const override
+    {
+        return m_algorithm ? m_algorithm->registryId() : QString();
+    }
+    [[nodiscard]] QString displayName() const override
+    {
+        return m_algorithm ? m_algorithm->name() : QString();
+    }
+    [[nodiscard]] TilingAlgorithm* algorithm() const
+    {
+        return m_algorithm.get();
+    }
+
+private:
+    std::shared_ptr<TilingAlgorithm> m_algorithm;
+};
+
+} // namespace
+
+class AlgorithmRegistry::Impl
+{
+public:
+    // The id-keyed catalogue (storage + lookup + thread-safety). The
+    // ITileAlgorithmRegistry change signals are still emitted explicitly from
+    // the mutation methods (the deliberate single-contentsChanged-per-mutation
+    // design), so the registry's own notifier is intentionally not bridged.
+    PhosphorRegistry::Registry<TileAlgorithmEntry> registry;
+    // Preview-param config — NOT registry storage, just a sibling field.
+    AlgorithmPreviewParams previewParams;
+};
+
 bool AlgorithmPreviewParams::operator==(const AlgorithmPreviewParams& other) const
 {
     return algorithmId == other.algorithmId && maxWindows == other.maxWindows && masterCount == other.masterCount
@@ -39,8 +111,8 @@ bool AlgorithmPreviewParams::operator==(const AlgorithmPreviewParams& other) con
         && savedAlgorithmSettings == other.savedAlgorithmSettings;
 }
 
-// Global pending registrations list - shared by all AlgorithmRegistrar instantiations.
-// See header note: callers MUST hold pendingAlgorithmRegistrationsMutex().
+// Global pending registrations list — shared by all AlgorithmRegistrar
+// instantiations. See header note: callers MUST hold the mutex.
 QList<PendingAlgorithmRegistration>& pendingAlgorithmRegistrations()
 {
     static QList<PendingAlgorithmRegistration> s_pending;
@@ -55,119 +127,105 @@ QMutex& pendingAlgorithmRegistrationsMutex()
 
 AlgorithmRegistry::AlgorithmRegistry(QObject* parent)
     : ITileAlgorithmRegistry(parent)
+    , m_impl(std::make_unique<Impl>())
 {
     registerBuiltInAlgorithms();
 
-    // Connect cleanup to aboutToQuit — safe here because the constructor
-    // runs exactly once under the C++11 static-init guarantee.
+    // Destroy the registry's algorithms (LuauTileAlgorithm lua_State internals)
+    // while Qt is still alive. Safe to connect here — the ctor runs once.
     if (QCoreApplication::instance()) {
         QObject::connect(QCoreApplication::instance(), &QCoreApplication::aboutToQuit, this,
                          &AlgorithmRegistry::cleanup);
     }
 
-    // contentsChanged is emitted EXPLICITLY from the mutation methods
-    // (registerAlgorithm, unregisterAlgorithm, setPreviewParams) rather
-    // than bridged from the three finer-grained mutation signals.
-    //
-    // The previous signal-bridging design worked correctly on the happy
-    // path but had two sharp edges:
-    //
-    //  1. Replacement pairs fire algorithmUnregistered(id, replacing=true)
-    //     then algorithmRegistered(id). A "suppress on replacing=true"
-    //     bridge collapsed those into one contentsChanged emit — but only
-    //     if both emits completed. A handler of algorithmUnregistered
-    //     that threw (or otherwise unwound the stack) would skip the
-    //     matching algorithmRegistered emit, leaving every consumer's
-    //     preview cache permanently stale for that id.
-    //  2. The flag-based suppression forced anyone reading the registry
-    //     code to walk three connect() calls to reconstruct the actual
-    //     emission sequence.
-    //
-    // Emitting contentsChanged directly at the end of each mutation
-    // method gives exactly one emit per logical mutation, preserves the
-    // observable order (specific signal → contentsChanged), and removes
-    // the throw-between-emit hazard. Consumers that need discrimination
-    // still connect to the specific signals directly.
+    // contentsChanged is emitted EXPLICITLY at the end of each mutation method
+    // (registerAlgorithm, unregisterAlgorithm, setPreviewParams) — exactly one
+    // emit per logical mutation, in the observable order (specific signal →
+    // contentsChanged), with no throw-between-emit hazard. Consumers needing
+    // discrimination connect to the specific signals directly.
 }
 
 AlgorithmRegistry::~AlgorithmRegistry()
 {
-    // Ensure algorithms are destroyed before ~QObject() runs.
-    // Normally cleanup() has already been called via aboutToQuit(),
-    // but guard against the case where it was not (e.g. no QCoreApplication).
+    // Ensure algorithms are destroyed before ~QObject(). Normally cleanup()
+    // already ran via aboutToQuit; guard the no-QCoreApplication case.
     cleanup();
 }
 
 void AlgorithmRegistry::cleanup()
 {
-    // Drain only THIS registry's own pending deferred-delete events.
-    // The previous implementation called sendPostedEvents(nullptr, ...)
-    // which drains the process-wide QEvent::DeferredDelete queue —
-    // safe under the old singleton, but dangerous after PR #343 where
-    // multiple registries (daemon, editor, settings) each connect to
-    // aboutToQuit and would each force-delete pending deleteLater()
-    // events for unrelated subsystems whose owners have not yet run
-    // their teardown. Iterating m_pendingDeletes and posting per-algo
-    // narrows the drain to objects this registry actually owned. The
-    // QPointer auto-clears when Qt processes the event, so a no-op
-    // path after a normal drain is the common case.
+    // Snapshot the owned algorithms, drop all entries (each schedules its
+    // algorithm's deleteLater via the entry's deleter), then flush ONLY these
+    // algorithms' deferred deletes so lua_State-holding ones die while Qt is
+    // still alive — WITHOUT draining the process-wide DeferredDelete queue
+    // (which would step on sibling registries' / subsystems' pending deletes,
+    // the hazard the old per-object m_pendingDeletes drain guarded against).
+    QList<TilingAlgorithm*> owned;
+    m_impl->registry.forEach([&owned](const std::shared_ptr<TileAlgorithmEntry>& entry) {
+        if (entry && entry->algorithm()) {
+            owned.append(entry->algorithm());
+        }
+    });
+    m_impl->registry.clear();
     if (QCoreApplication::instance()) {
-        for (auto& weak : m_pendingDeletes) {
-            if (TilingAlgorithm* alive = weak.data()) {
-                QCoreApplication::sendPostedEvents(alive, QEvent::DeferredDelete);
-            }
+        for (TilingAlgorithm* algo : std::as_const(owned)) {
+            QCoreApplication::sendPostedEvents(algo, QEvent::DeferredDelete);
         }
     }
-    m_pendingDeletes.clear();
-
-    if (m_algorithms.isEmpty()) {
-        return; // Already cleaned up (e.g., aboutToQuit already ran)
-    }
-
-    // Explicitly delete all algorithm children while Qt is still alive.
-    // This prevents crashes when the registry is destroyed after
-    // QCoreApplication during static destruction (ScriptedAlgorithm
-    // instances hold QJSEngine internals that require a live Qt runtime).
-    // Use direct delete instead of deleteLater() — this runs during shutdown
-    // where the event loop may not drain the deferred-delete queue before
-    // ~QObject() tries to destroy remaining children (double-free risk).
-    for (auto* algo : std::as_const(m_algorithms)) {
-        algo->setParent(nullptr);
-        delete algo;
-    }
-    m_algorithms.clear();
-    m_registrationOrder.clear();
 }
 
 void AlgorithmRegistry::registerAlgorithm(const QString& id, TilingAlgorithm* algorithm)
 {
     Q_ASSERT(!QCoreApplication::instance() || QThread::currentThread() == QCoreApplication::instance()->thread());
 
-    // Validate inputs - take ownership and delete on failure to prevent leaks
-    if (id.isEmpty()) {
-        delete algorithm;
-        return;
-    }
     if (!algorithm) {
         return;
     }
 
-    // Reserved namespace: "autotile:" is the prefix LayoutId uses to
-    // wrap algorithm ids into composite LayoutPreview ids. An algorithm
-    // self-naming with that prefix would round-trip as
-    // "autotile:autotile:foo" — extractAlgorithmId still works, but the
-    // doubled prefix is a foot-gun for anyone parsing ids by hand.
+    // Double-ownership guard — MUST run BEFORE the id-validation deletes below.
+    // If THIS exact algorithm object is already owned by the registry,
+    // re-registering it would wrap the already-owned raw pointer in a SECOND
+    // shared_ptr + deferred-delete deleter — and the Replace below would drop
+    // the first owner, scheduling a deleteLater() on a pointer the new entry
+    // still owns → double-free when the new entry later drops. Reject WITHOUT
+    // deleting (it stays owned under its existing id). Positioned first so an
+    // already-owned pointer re-registered under an INVALID id is never deleted
+    // out from under its live entry by the validation paths.
+    // This covers a different id (a real misuse — warn) AND a redundant
+    // re-register under the SAME id (a no-op). A genuine replacement — same id
+    // but a DIFFERENT pointer (the hot-reload case) — has
+    // existing->algorithm() != algorithm and proceeds to Replace normally.
+    const QString existingId = algorithm->registryId();
+    if (!existingId.isEmpty()) {
+        const auto existing = m_impl->registry.factory(existingId);
+        if (existing && existing->algorithm() == algorithm) {
+            if (existingId != id) {
+                qCWarning(PhosphorTiles::lcTilesLib)
+                    << "AlgorithmRegistry: algorithm" << algorithm->name() << "is already registered as" << existingId
+                    << "- cannot register as" << id;
+            }
+            return;
+        }
+    }
+
+    // From here `algorithm` is NOT already owned by the registry, so deleting it
+    // on a validation-failure path is safe (prevents leaks, matching the prior
+    // contract).
+    if (id.isEmpty()) {
+        delete algorithm;
+        return;
+    }
+    // Reserved namespace: "autotile:" is the prefix LayoutId uses to wrap
+    // algorithm ids into composite LayoutPreview ids.
     if (id.startsWith(QLatin1String("autotile:"))) {
         qCWarning(PhosphorTiles::lcTilesLib)
             << "AlgorithmRegistry: refusing algorithm id with reserved 'autotile:' prefix" << id;
         delete algorithm;
         return;
     }
-    // IDs flow into LayoutPreview::id ("autotile:<id>"), JSON keys, D-Bus
-    // method arguments, and QML model roles. Reject characters that would
-    // break any downstream parser before they reach those boundaries.
-    // Allowed: ASCII letters, digits, '-', '_', '.', ':' (':' enables
-    // namespacing like "script:foo" used by ScriptedAlgorithmLoader).
+    // IDs flow into LayoutPreview::id, JSON keys, D-Bus args, QML model roles.
+    // Reject characters that would break a downstream parser. Allowed:
+    // [A-Za-z0-9._:-] (':' enables "script:foo" namespacing).
     for (QChar c : id) {
         const ushort u = c.unicode();
         const bool ok = (u >= 'a' && u <= 'z') || (u >= 'A' && u <= 'Z') || (u >= '0' && u <= '9') || u == '-'
@@ -180,135 +238,96 @@ void AlgorithmRegistry::registerAlgorithm(const QString& id, TilingAlgorithm* al
         }
     }
 
-    // Check if this algorithm pointer is already registered under a different ID
-    // to prevent double-free issues. Don't delete - it's still owned under the original ID.
-    const QString existingId = algorithm->registryId();
-    if (!existingId.isEmpty() && existingId != id && m_algorithms.value(existingId) == algorithm) {
-        qCWarning(PhosphorTiles::lcTilesLib)
-            << "AlgorithmRegistry: algorithm" << algorithm->name() << "is already registered as" << existingId
-            << "- cannot register as" << id;
-        // Note: NOT deleting because it's still registered under existingId
-        return;
+    const auto oldEntry = m_impl->registry.factory(id);
+    const bool replacing = oldEntry != nullptr;
+    if (replacing) {
+        // Clear the OLD algorithm's registry id before the entry is dropped —
+        // its deferred delete keeps it alive past the signals below, and a
+        // handler holding a cached pointer must observe the unregistered state
+        // via an empty registryId() (TilingAlgorithm's contract; the
+        // previewFromAlgorithm guard). The double-ownership guard above ensures
+        // the old algorithm is a different object than `algorithm`.
+        if (auto* oldAlgo = oldEntry->algorithm()) {
+            oldAlgo->setRegistryId(QString());
+        }
     }
-
-    // Remove existing algorithm with same ID (replacement case)
-    // Preserve registration order position so replacements don't shift to the end
-    int oldIndex = m_registrationOrder.indexOf(id);
-    auto* old = removeAlgorithmInternal(id);
-
-    // Register the new algorithm BEFORE emitting signals so that signal handlers
-    // querying the registry see the new algorithm already in place.
-    algorithm->setParent(this);
     algorithm->setRegistryId(id);
-    m_algorithms.insert(id, algorithm);
-    if (oldIndex >= 0) {
-        m_registrationOrder.insert(oldIndex, id);
-    } else {
-        m_registrationOrder.append(id);
-    }
+    // Replace: the prior entry at `id` is dropped here, deferring the old
+    // algorithm's deletion past the signals below (the entry's deleter), with
+    // the NEW algorithm already queryable when handlers run.
+    m_impl->registry.registerFactory(std::make_shared<TileAlgorithmEntry>(ownAlgorithm(algorithm)), QString(),
+                                     PhosphorRegistry::DuplicatePolicy::Replace);
 
-    if (old && old != algorithm) {
-        // Emit unregistered then registered so listeners see the full replacement
-        // sequence with the new algorithm already queryable.
+    if (replacing) {
         Q_EMIT algorithmUnregistered(id, true);
         Q_EMIT algorithmRegistered(id);
-
-        safeDeleteAlgorithm(old);
     } else {
         Q_EMIT algorithmRegistered(id);
     }
-    // One unified notification at the end of the successful mutation.
-    // Replaces the former signal-bridge design — see the rationale in the
-    // constructor body. Fires exactly once per logical mutation regardless
-    // of whether this call was a replacement or a fresh add.
     Q_EMIT contentsChanged();
-}
-
-TilingAlgorithm* AlgorithmRegistry::removeAlgorithmInternal(const QString& id)
-{
-    if (!m_algorithms.contains(id)) {
-        return nullptr;
-    }
-    auto* algorithm = m_algorithms.take(id);
-    m_registrationOrder.removeOne(id);
-    return algorithm;
 }
 
 bool AlgorithmRegistry::unregisterAlgorithm(const QString& id)
 {
     Q_ASSERT(!QCoreApplication::instance() || QThread::currentThread() == QCoreApplication::instance()->thread());
 
-    auto* algorithm = removeAlgorithmInternal(id);
-    if (!algorithm) {
+    const auto entry = m_impl->registry.factory(id);
+    if (!entry) {
         return false;
     }
-
-    // Emit before delete so signal handlers can safely reference the id
-    // without risk of use-after-free on any cached algorithm pointers.
-    Q_EMIT algorithmUnregistered(id, false);
-    // Explicit unified notification — replaces the former signal-bridge
-    // design (see constructor body).
-    Q_EMIT contentsChanged();
-
-    safeDeleteAlgorithm(algorithm);
-    return true;
-}
-
-void AlgorithmRegistry::safeDeleteAlgorithm(TilingAlgorithm* algo)
-{
-    if (!algo) {
-        return;
+    // Clear the removed algorithm's registry id BEFORE dropping the entry. The
+    // entry's deferred delete keeps the object alive past these signals, so a
+    // handler holding a cached pointer must observe the unregistered state via
+    // an empty registryId() (TilingAlgorithm's contract; the
+    // previewFromAlgorithm guard) — not the stale id.
+    if (auto* algo = entry->algorithm()) {
+        algo->setRegistryId(QString());
     }
-    // Use deleteLater() to avoid re-entrancy: signal handlers connected to
-    // algorithmUnregistered may call back into the registry. Synchronous
-    // delete during signal emission would risk use-after-free if a handler
-    // holds a pointer to the algorithm.
-    //
-    // setParent(nullptr) detaches from the registry's QObject tree so the
-    // registry destructor doesn't double-delete. This is safe because:
-    //   1. The algorithm was already removed from m_algorithms by
-    //      removeAlgorithmInternal(), so cleanup() won't see it.
-    //   2. deleteLater() ensures the QObject event loop handles final deletion.
-    //
-    // Tracked in m_pendingDeletes so cleanup() can drain only this
-    // registry's own deferred-delete events (instead of the global queue,
-    // which would step on other registries' subsystems — see cleanup()).
-    algo->setRegistryId(QString());
-    algo->setParent(nullptr);
-    m_pendingDeletes.append(QPointer<TilingAlgorithm>(algo));
-    algo->deleteLater();
+    m_impl->registry.unregisterFactory(id);
+    // The entry was dropped above, deferring the algorithm's deletion (the
+    // entry's deleteLater deleter) past these signals — so a handler holding a
+    // cached algorithm pointer can still safely reference it; algorithm(id)
+    // already returns nullptr.
+    Q_EMIT algorithmUnregistered(id, false);
+    Q_EMIT contentsChanged();
+    return true;
 }
 
 TilingAlgorithm* AlgorithmRegistry::algorithm(const QString& id) const
 {
-    return m_algorithms.value(id, nullptr);
+    const auto entry = m_impl->registry.factory(id);
+    return entry ? entry->algorithm() : nullptr;
 }
 
 QStringList AlgorithmRegistry::availableAlgorithms() const
 {
-    return m_registrationOrder;
+    // Sorted for a stable, deterministic order. The registry stores in
+    // registration (insertion) order; we re-sort alphabetically so the result
+    // is independent of registration sequence (which varies with priority /
+    // scan order across composition roots). The prior registration-order was a
+    // UI nicety, not a contract: consumers iterate to build a preview list and
+    // tests assert membership / count, never a specific order.
+    QStringList ids = m_impl->registry.ids();
+    std::sort(ids.begin(), ids.end());
+    return ids;
 }
 
 QList<TilingAlgorithm*> AlgorithmRegistry::allAlgorithms() const
 {
+    const QStringList ids = availableAlgorithms();
     QList<TilingAlgorithm*> result;
-    result.reserve(m_registrationOrder.size());
-
-    for (const QString& id : m_registrationOrder) {
-        if (auto* algo = m_algorithms.value(id)) {
+    result.reserve(ids.size());
+    for (const QString& id : ids) {
+        if (auto* algo = algorithm(id)) {
             result.append(algo);
-        } else {
-            qCWarning(PhosphorTiles::lcTilesLib) << "Algorithm ID in registration order not found in map:" << id
-                                                 << "- possible registration/unregistration bug";
         }
     }
-
     return result;
 }
 
 bool AlgorithmRegistry::hasAlgorithm(const QString& id) const
 {
-    return m_algorithms.contains(id);
+    return m_impl->registry.factory(id) != nullptr;
 }
 
 QString AlgorithmRegistry::staticDefaultAlgorithmId()
@@ -319,35 +338,26 @@ QString AlgorithmRegistry::staticDefaultAlgorithmId()
 TilingAlgorithm* AlgorithmRegistry::defaultAlgorithm() const
 {
     auto* algo = algorithm(staticDefaultAlgorithmId());
-    if (!algo && !m_algorithms.isEmpty() && !m_registrationOrder.isEmpty()) {
+    if (!algo) {
         // Configured default not registered (e.g. BSP script failed to load).
-        // Fall back to the first available algorithm so callers never get nullptr
-        // when algorithms are registered.
-        algo = m_algorithms.value(m_registrationOrder.first(), nullptr);
+        // Fall back to the first available (sorted) so callers never get
+        // nullptr when algorithms exist.
+        const QStringList ids = availableAlgorithms();
+        if (!ids.isEmpty()) {
+            algo = algorithm(ids.first());
+        }
     }
     return algo;
 }
 
 void AlgorithmRegistry::registerBuiltInAlgorithms()
 {
-    // Process all pending registrations from AlgorithmRegistrar instances.
-    // Each algorithm registers itself via static initialization in its
-    // .cpp file. The pending list is the canonical snapshot of every
-    // statically-known built-in; we iterate without draining so multiple
-    // AlgorithmRegistry instances (daemon, editor, settings, tests) each
-    // get their own freshly-constructed copy of every built-in. The
-    // factory returns a `new T()` per call, so each registry owns its
-    // own algorithm instances — no sharing.
-    //
-    // Snapshot into a local vector before sorting so concurrent registry
-    // constructions (e.g. daemon + settings in the same test process)
-    // don't race on the global list's underlying storage. The list is
-    // append-only at static-init time (stable once main() runs), but
-    // std::sort mutates container order — two constructors running on
-    // different threads would otherwise trip over each other's swaps.
-    // Hold the registrations mutex across the snapshot so a concurrent
-    // AlgorithmRegistrar ctor on a worker thread (Qt plugin loader,
-    // parallel test binaries) cannot append while we copy.
+    // Snapshot the static-init registrations under the mutex (a concurrent
+    // AlgorithmRegistrar ctor on a worker thread, or parallel test binaries,
+    // could otherwise race the global list), then sort by priority (lower
+    // first), tie-break on id for deterministic order across TUs. Each
+    // registry constructs its own algorithm instances (factory returns a
+    // fresh `new T()` per call), so multiple registries don't share objects.
     std::vector<PendingAlgorithmRegistration> snapshot;
     {
         QMutexLocker locker(&pendingAlgorithmRegistrationsMutex());
@@ -358,12 +368,6 @@ void AlgorithmRegistry::registerBuiltInAlgorithms()
         }
     }
 
-    // Sort the local copy by priority (lower = first); tie-break on id for
-    // deterministic registration order across translation units. Static-init
-    // order across TUs is implementation-defined, so shared-priority
-    // AlgorithmRegistrar instances would otherwise produce platform-
-    // dependent registration order (and, with it, availableAlgorithms()
-    // iteration and defaultAlgorithm() fallback selection).
     std::sort(snapshot.begin(), snapshot.end(), [](const auto& a, const auto& b) {
         if (a.priority != b.priority) {
             return a.priority < b.priority;
@@ -378,19 +382,17 @@ void AlgorithmRegistry::registerBuiltInAlgorithms()
 
 void AlgorithmRegistry::setPreviewParams(const AlgorithmPreviewParams& params)
 {
-    if (m_previewParams == params) {
+    if (m_impl->previewParams == params) {
         return;
     }
-    m_previewParams = params;
+    m_impl->previewParams = params;
     Q_EMIT previewParamsChanged();
-    // Explicit unified notification — replaces the former signal-bridge
-    // design (see constructor body).
     Q_EMIT contentsChanged();
 }
 
 const AlgorithmPreviewParams& AlgorithmRegistry::previewParams() const noexcept
 {
-    return m_previewParams;
+    return m_impl->previewParams;
 }
 
 } // namespace PhosphorTiles

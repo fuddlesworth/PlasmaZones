@@ -242,10 +242,6 @@ jobs:
   # ═══════════════════════════════════════════════════════════════════════════
   build-rpm-opensuse:
     name: Build .rpm (openSUSE Tumbleweed)
-    # Disabled: openSUSE Tumbleweed still ships KWin 6.6.5, so the kwin-effect's
-    # find_package(KWin 6.7) fails to configure. Re-enable (and add back to the
-    # `release` job's `needs`) once Tumbleweed ships Plasma/KWin 6.7.
-    if: ${{ false }}
     needs: version
     runs-on: ubuntu-latest
     container:
@@ -591,29 +587,12 @@ jobs:
           echo "Expected version: $VERSION"
           ./result/bin/plasmazonesd --version || true
 
-      - name: Generate release package.nix
-        run: |
-          # Delegate to the versioned script — keeps the awk pattern in
-          # one place and adds a `nix-instantiate --parse` smoke check.
-          bash packaging/nix/generate-release-nix.sh "${{ needs.version.outputs.version }}"
-          echo "=== Generated plasmazones.nix ==="
-          cat plasmazones.nix
-
-      - name: Upload Nix package artifact
-        uses: actions/upload-artifact@v7
-        with:
-          name: nix-package
-          path: plasmazones.nix
-          retention-days: 30
-
   # ═══════════════════════════════════════════════════════════════════════════
   # Create GitHub Release
   # ═══════════════════════════════════════════════════════════════════════════
   release:
     name: Create GitHub Release
-    # build-rpm-opensuse is intentionally absent: it is disabled until openSUSE
-    # Tumbleweed ships KWin 6.7 (see that job). Re-add it here when re-enabled.
-    needs: [version, build-deb, build-rpm, build-arch, build-generic, build-nix]
+    needs: [version, build-deb, build-rpm, build-rpm-opensuse, build-arch, build-generic, build-nix]
     runs-on: ubuntu-latest
     # No `if:` — the implicit success() gate is intentional. If any
     # package build fails, the release is NOT cut: we don't ship a
@@ -698,12 +677,14 @@ jobs:
             echo "programs.plasmazones.enable = true;"
             echo '```'
             echo ""
-            echo "**NixOS (standalone):**"
-            echo "Download \`plasmazones.nix\` from the release assets, then:"
+            echo "**NixOS (without flakes):**"
+            echo "Build this tag's source against your host's pkgs (no release asset needed):"
             echo '```nix'
             echo "# configuration.nix"
             echo "environment.systemPackages = ["
-            echo "  (pkgs.callPackage ./plasmazones.nix {})"
+            echo "  (pkgs.callPackage"
+            echo "    \"\${builtins.fetchTarball \"https://github.com/fuddlesworth/PlasmaZones/archive/v${VERSION}.tar.gz\"}/packaging/nix/package.nix\""
+            echo "    { version = \"${VERSION}\"; })"
             echo "];"
             echo '```'
             echo ""
@@ -739,7 +720,7 @@ jobs:
           ASSETS=()
           while IFS= read -r f; do
             ASSETS+=("$f")
-          done < <(find artifacts -type f \( -name '*.deb' -o -name '*.ddeb' -o -name '*.rpm' -o -name '*.pkg.tar.zst' -o -name '*linux-x86_64.tar.gz' -o -name 'plasmazones.nix' \))
+          done < <(find artifacts -type f \( -name '*.deb' -o -name '*.ddeb' -o -name '*.rpm' -o -name '*.pkg.tar.zst' -o -name '*linux-x86_64.tar.gz' \))
 
           echo "Uploading ${#ASSETS[@]} assets:"
           printf '  %s\n' "${ASSETS[@]}"
@@ -990,9 +971,9 @@ jobs:
   publish-obs:
     name: Publish to openSUSE OBS
     # Gating on `release` blocks publish if the GitHub release itself fails.
-    # (The in-CI build-rpm-opensuse smoke build is currently disabled until
-    # Tumbleweed ships KWin 6.7, so it no longer pre-gates this; OBS still
-    # rebuilds the submitted spec automatically once Tumbleweed has 6.7.)
+    # `release` now needs build-rpm-opensuse, so the in-CI Tumbleweed smoke
+    # build transitively pre-gates this publish again. OBS then rebuilds the
+    # submitted spec on its own infrastructure.
     # Same shape as publish-aur so the two run as parallel siblings.
     needs: [version, release]
     runs-on: ubuntu-latest

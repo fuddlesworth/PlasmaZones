@@ -10,7 +10,7 @@
 
 ## Responsibility
 
-The render node in `phosphor-rendering` is generic — it owns the QRhi
+The render node in `phosphor-rendering` is generic. It owns the QRhi
 pipeline and a UBO of unspecified shape. `phosphor-shaders` ships the
 *shape*: the std140 base UBO every shader effect inherits, the
 extension contract that lets a consumer append application-specific
@@ -22,20 +22,20 @@ Consumed by
 UBO, calls `IUniformExtension::write()` for the remainder),
 [`phosphor-animation`](../phosphor-animation/README.md) (whose
 `AnimationShaderRegistry` reuses `MetadataPackRegistryBase`), and the
-PlasmaZones overlay (hosts `ShaderEffect` items in QML).
+Phosphor overlay (hosts `ShaderEffect` items in QML).
 
 ## Key types
 
 | Type | Purpose |
 |------|---------|
 | `PhosphorShaders::BaseUniforms`           | std140 base UBO layout. Shadertoy-compatible block + two `appField` ints for cheap consumer-defined state |
-| `PhosphorShaders::IUniformExtension`      | Contract for appending custom uniform data after `BaseUniforms`; `extensionSize()` is fixed for the lifetime of the instance |
+| `PhosphorShaders::IUniformExtension`      | Contract for appending custom uniform data after `BaseUniforms`, where `extensionSize()` is fixed for the lifetime of the instance |
 | `PhosphorShaders::CustomParamsKey`        | Canonical key format (`customParams<N>_<x|y|z|w>`) for the per-effect parameter sub-slots in `BaseUniforms` |
-| `PhosphorShaders::ShaderRegistry`         | Discovers shader effects from search paths via metadata-pack scanning; per-process instance, no singleton |
+| `PhosphorShaders::ShaderRegistry`         | Discovers shader effects from search paths via metadata-pack scanning. Per-process instance, no singleton |
 | `PhosphorShaders::ShaderRegistry::ParameterInfo` | Parameter declaration: name, type, default, range, UBO uniform name |
 | `PhosphorShaders::ShaderIncludeResolver`  | `#include "path"` / `#include <path>` expansion with depth limit |
 | `PhosphorShaders::IWallpaperProvider`     | Abstract source for the active desktop wallpaper image path |
-| `PhosphorShaders::createWallpaperProvider`| Factory; auto-detects KDE / Hyprland / Sway / GNOME |
+| `PhosphorShaders::createWallpaperProvider`| Factory that auto-detects KDE / Hyprland / Sway / GNOME |
 
 ## Typical use
 
@@ -76,26 +76,26 @@ private:
 
 - **No library-level singleton.** Composition roots own a per-process
   `ShaderRegistry` instance and register search paths explicitly.
-  Tests construct a per-fixture registry; downstream consumers do the
+  Tests construct a per-fixture registry, and downstream consumers do the
   same.
 - **`extensionSize()` is fixed for the instance lifetime.** The render
   node sizes the UBO and staging buffer once when an extension is
   installed via `setUniformExtension()` and reuses both across
-  frames. To resize, install a fresh extension instance — that
+  frames. To resize, install a fresh extension instance, which
   triggers UBO recreation.
 - **`appField0 / appField1` exist regardless of use.** They fill the
   std140 alignment slot between `iResolution` (vec2) and `iMouse`
-  (vec4); removing them would break the layout. Repurpose them for
+  (vec4), and removing them would break the layout. Repurpose them for
   small (≤2 ints) frequently-updated state that needs to live inside
   `BaseUniforms` rather than the extension region.
 - **GUI-thread only for reads and mutations.** The shader map lives
   inside the strategy and is rebuilt on the GUI thread inside the
-  rescan; the public lookup methods (`availableShaders`, `shader`,
+  rescan. The public lookup methods (`availableShaders`, `shader`,
   `shaderInfo`, `shaderUrl`) read it without synchronisation.
   `searchPaths()` returns a by-value snapshot suitable for handing to
   worker threads (the shader-warming path).
 - **Inherits `MetadataPackRegistryBase`.** Search-path management is
-  in `phosphor-fsloader`; `ShaderRegistry` adds only the
+  in `phosphor-fsloader`, and `ShaderRegistry` adds only the
   shader-specific lookup surface.
 
 ## Dependencies

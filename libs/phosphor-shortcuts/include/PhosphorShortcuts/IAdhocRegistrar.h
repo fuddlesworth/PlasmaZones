@@ -8,7 +8,7 @@
 
 #include <functional>
 
-namespace Phosphor::Shortcuts::Integration {
+namespace PhosphorShortcutsIntegration {
 
 /**
  * Reduced-surface registrar interface for subsystems that need to bind a
@@ -16,14 +16,14 @@ namespace Phosphor::Shortcuts::Integration {
  * cancel grab held only during a window drag) without taking a hard
  * dependency on the concrete shortcut-manager type that owns the Registry.
  *
- * Lives in the `Integration` sub-namespace rather than directly under
- * `Phosphor::Shortcuts` to make the split explicit: the library (Registry,
- * IBackend, the concrete backends) is the shortcut machinery itself;
- * `Integration` is the set of contracts consumers *implement* to plug
- * their own glue into that machinery. The library provides no
+ * Lives in a sibling namespace (`PhosphorShortcutsIntegration`) rather than
+ * directly under `PhosphorShortcuts` to make the split explicit: the library
+ * (Registry, IBackend, the concrete backends) is the shortcut machinery
+ * itself; the integration namespace is the set of contracts consumers
+ * *implement* to plug their own glue into that machinery. The library provides no
  * implementation of IAdhocRegistrar — each consumer wires its own
  * "shortcut manager" object to the underlying Registry, with whatever
- * bind-flow + flush ordering its app needs (the PlasmaZones
+ * bind-flow + flush ordering its app needs (the Phosphor
  * implementation, for example, queues adhoc registrations that arrive
  * during the initial settings-driven batch and drains them once the
  * Portal BindShortcuts Response lands).
@@ -59,4 +59,4 @@ public:
     virtual void unregisterAdhocShortcut(const QString& id) = 0;
 };
 
-} // namespace Phosphor::Shortcuts::Integration
+} // namespace PhosphorShortcutsIntegration

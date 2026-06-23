@@ -1,7 +1,7 @@
 {
     "id": "snap",
     "name": "Snap",
-    "description": "Thanos-style snap — the surface shatters into 10 randomized layers that fly toward a vanishing point. Asymmetric direction and re-form curves.",
+    "description": "A Thanos-style snap. The surface shatters into 10 randomized layers that fly toward a vanishing point, with different direction and re-form curves.",
     "author": "PlasmaZones (ported from liixini/shaders, https://github.com/liixini/shaders)",
     "version": "1.0",
     "category": "Particle",

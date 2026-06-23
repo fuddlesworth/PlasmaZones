@@ -20,7 +20,7 @@
 namespace PlasmaZones {
 
 AutotileAdaptor::AutotileAdaptor(PhosphorTileEngine::AutotileEngine* engine,
-                                 Phosphor::Screens::ScreenManager* screenManager,
+                                 PhosphorScreens::ScreenManager* screenManager,
                                  PhosphorTiles::ITileAlgorithmRegistry* algorithmRegistry, QObject* parent)
     : QDBusAbstractAdaptor(parent)
     , m_engine(engine)
@@ -213,7 +213,7 @@ void AutotileAdaptor::dispatchWindowOpened(const PhosphorProtocol::WindowOpenedE
 
 bool AutotileAdaptor::deferUntilPanelReady()
 {
-    // Fast path: panel geometry already known, or no Phosphor::Screens::ScreenManager at all (tests
+    // Fast path: panel geometry already known, or no PhosphorScreens::ScreenManager at all (tests
     // without a singleton fall through and proceed with whatever geometry exists).
     if (!m_screenManager || (m_screenManager && m_screenManager->isPanelGeometryReady())) {
         return false;
@@ -224,9 +224,9 @@ bool AutotileAdaptor::deferUntilPanelReady()
     // watcher's finished callback runs on the main thread, same as us), so there
     // is no posted-event reentrancy. Leaving the connection installed for the
     // session is fine — panelGeometryReady is a one-shot signal (see
-    // Phosphor::Screens::ScreenManager::queryKdePlasmaPanels).
+    // PhosphorScreens::ScreenManager::queryKdePlasmaPanels).
     if (!m_pendingOpensListenerInstalled) {
-        connect(m_screenManager, &Phosphor::Screens::ScreenManager::panelGeometryReady, this,
+        connect(m_screenManager, &PhosphorScreens::ScreenManager::panelGeometryReady, this,
                 &AutotileAdaptor::flushPendingWindowOpens);
         m_pendingOpensListenerInstalled = true;
     }
@@ -269,7 +269,7 @@ void AutotileAdaptor::windowOpened(const QString& windowId, const QString& scree
     }
     // Non-blocking startup gate: if the first panel D-Bus query has not completed
     // yet, queue this entry and return. Processing immediately would compute zones
-    // against the unreserved full-screen rect (Phosphor::Screens::ScreenManager's availability cache
+    // against the unreserved full-screen rect (PhosphorScreens::ScreenManager's availability cache
     // is empty until the sensor windows and Plasma D-Bus panel query finish), and
     // the daemon would emit a visible correction a frame later. Flushing happens in
     // flushPendingWindowOpens() when panelGeometryReady fires.

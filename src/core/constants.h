@@ -76,7 +76,7 @@ constexpr int MinimumZoneDisplaySizePx = 10; // Minimum zone size for display (c
 // reference them qualified directly — no aliases here.
 
 /**
- * @brief XDG-relative subdirectory for scripted tiling algorithm JS files.
+ * @brief XDG-relative subdirectory for scripted tiling algorithm Luau files.
  *
  * Used by every in-tree @c PhosphorTiles::ScriptedAlgorithmLoader constructor
  * (daemon, editor, settings) and by the settings-side helpers that resolve

@@ -1,7 +1,7 @@
 {
     "id": "pixelfade-wave",
     "name": "Pixelfade Wave",
-    "description": "Wave-front pixelation — block size pulses along a diagonal wave that sweeps across the surface.",
+    "description": "Wave-front pixelation where block size pulses along a diagonal wave that sweeps across the surface.",
     "author": "PlasmaZones (ported from liixini/shaders, https://github.com/liixini/shaders)",
     "version": "1.0",
     "category": "Pixelation",

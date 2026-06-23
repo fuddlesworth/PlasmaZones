@@ -3,12 +3,13 @@
 
 #pragma once
 
+#include <PhosphorControl/PageController.h>
 #include <QObject>
 #include <QVariantList>
 
 namespace PlasmaZones {
 
-class Settings;
+class ISettings;
 
 /// Q_PROPERTY surface for the "Tiling → Behavior" settings page.
 ///
@@ -23,7 +24,7 @@ class Settings;
 /// already wires the NOTIFY to `onSettingsPropertyChanged()`. This class
 /// just forwards the NOTIFY to QML and caches the derived boolean so it
 /// only fires when it actually flips.
-class TilingBehaviorController : public QObject
+class TilingBehaviorController : public PhosphorControl::PageController
 {
     Q_OBJECT
 
@@ -34,7 +35,18 @@ class TilingBehaviorController : public QObject
     Q_PROPERTY(QVariantList defaultAutotileDragInsertTriggers READ defaultAutotileDragInsertTriggers CONSTANT)
 
 public:
-    explicit TilingBehaviorController(Settings* settings, QObject* parent = nullptr);
+    explicit TilingBehaviorController(ISettings& settings, QObject* parent = nullptr);
+
+    bool isDirty() const override
+    {
+        return false;
+    }
+    void apply() override
+    {
+    }
+    void discard() override
+    {
+    }
 
     bool alwaysReinsertIntoStack() const;
     QVariantList autotileDragInsertTriggers() const;
@@ -48,11 +60,17 @@ Q_SIGNALS:
     void autotileDragInsertTriggersChanged();
 
 private:
-    Settings* m_settings = nullptr;
+    ISettings* m_settings = nullptr;
     /// Cached alwaysReinsertIntoStack state so the
     /// `autotileDragInsertTriggersChanged → alwaysReinsertIntoStackChanged`
     /// forwarder only fires when the derived boolean actually flips.
     bool m_lastAlwaysReinsertIntoStack = false;
+    /// Cached AlwaysActive-stripped trigger list. Toggling only the
+    /// master `alwaysReinsertIntoStack` flag flips the sentinel
+    /// modifier but leaves the QML-facing stripped list identical,
+    /// so we only emit `autotileDragInsertTriggersChanged` when the
+    /// stripped form actually differs.
+    QVariantList m_lastAutotileDragInsertTriggers;
 };
 
 } // namespace PlasmaZones

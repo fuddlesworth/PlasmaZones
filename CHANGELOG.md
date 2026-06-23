@@ -7,17 +7,80 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [3.1.0] - 2026-06-23
+
+### Added
+
+- **Window Rules**: a new unified settings page replaces the old Snapping Assignments, Tiling Assignments, Animations App Rules, and per-mode "disabled apps" lists. Rules are browsed, added, edited, drag-reordered, duplicated, and disabled from one place. Matching composes class, title, role, app-id, virtual desktop, activity, and screen predicates with AND/OR/NOT. A rule's actions cover snapping/tiling assignment, animation-curve and shader overrides, and exclusion from snapping, autotile, and effects, the four surfaces that previously each had their own editor.
+- **`org.plasmazones.WindowRules` D-Bus interface** (`dbus/org.plasmazones.WindowRules.xml`): `getAllRules`, `setAllRules`, `addRule`, `removeRule`, and related lifecycle methods for programmatic rule management.
+- **`phosphor-window-rules`** LGPL-2.1+ library housing the rule model, parser, and `RuleEvaluator`, so third parties can link the matcher without inheriting GPL.
+- **Snapping focus behavior**: two new opt-in toggles on Snapping → Window → Behavior (both default off). *focus new windows* auto-activates a window when it is auto-placed into a zone on open, and *focus follows mouse* activates the snapped window under the cursor. Brings snapping to parity with the existing autotile focus options.
+- **Zone span toggle mode** ([#563](https://github.com/fuddlesworth/PlasmaZones/issues/563)): an opt-in switch in the Zone Span card so the span modifier can be tapped to start/stop spanning instead of held down for the whole drag (default off, motivated by accessibility).
+- **Restore floated window positions on login** ([#606](https://github.com/fuddlesworth/PlasmaZones/pull/606)): floated windows are now restored to the monitor and position they closed on after a KWin session restore (previously only *snapped* windows were restored cross-screen). Parallel per-engine toggles (both default **on**), *restore unsnapped windows* under Snapping → Window → Behavior and *restore untiled windows* under Tiling → Behavior, plus an engine-neutral per-window `RestorePosition` rule action let specific windows opt in or out for either mode.
+- **Per-window appearance for snapping**: snapping gains its own border, corner-radius, hide-title-bar, and accent-color settings, mirroring tiling, and the former "Snapping → Appearance" page is renamed **Zones**. Window restore state across daemon restart and logout/login is now backed by a single `WindowPlacementStore` instead of several overlapping mechanisms.
+- **New window-rule actions** for window chrome: per-window border, title-bar, corner-radius, accent-color, gap/padding, and opacity overrides, applied to snapped or floating windows (e.g. "floating windows on monitor 2 → no title bar + red border", "activity Gaming → zero gaps").
+- **New window-rule match conditions**: `IsTransient`, `IsNotification`, `Width`, `Height`, and `IsFocused`, plus a built-in **"Don't animate small windows"** template. `IsFocused` lets any action be focus-scoped (e.g. "WHEN NOT focused → dim").
+- **Collapsible settings sidebar categories** with smart-expand of the active page's category and animated chevrons, cutting clicks to reach deep pages.
+- **Per-monitor scope map**: per-monitor settings cards carry a scope chip that opens a spatial map of the real monitor arrangement to switch outputs, replacing the tall repeated monitor-selector block. The scope choice persists across pages.
+- **Shader-driven window-move/resize morph** (`window-morph`): window move, resize, snap, and layout-switch transitions animate as a smooth shader cross-fade geometry morph instead of a plain C++ paint transform, the default for window-move and overridable per event. Overlay show/hide (OSD, zone selector, layout picker, snap assist) now defaults to the shader-based `fade` effect.
+- **In-app live shader preview**: the Snapping → Shaders browser gains an animated, interactive preview with mouse and audio input, shader **presets** (load/save, shared with the editor), and an in-app compile-error banner.
+- **Shader authoring API**: authors write only the effect body and read parameters by name (`p_<id>`) instead of decoding UBO slots, with a generated preamble and entry-point conventions, plus a `plasmazones-shader-validate` CLI (with `--animation` / `--overlay` modes and did-you-mean diagnostics) wired into CI to catch broken packs offline.
+- **dma-buf zero-copy window-preview transport** for snap-assist thumbnails (opt-in via the `PLASMAZONES_DMABUF_THUMBNAILS` env var, with default builds unchanged), the foundation for live window previews.
+- **Phosphor SDK groundwork**: the reusable LGPL Phosphor library line gains a Phase 1 foundation tier (`phosphor-theme`, `phosphor-popout`, `phosphor-registry`, `phosphor-ipc` + the `phosphorctl` driver, `phosphor-shell` per-screen helper) and a Phase 2 system-service tier (`phosphor-service-{pipewire,network,bluetooth,brightness,notifications,polkit,idle,clipboard,lock,session,upower,mpris,icontheme,sni}`). All of it is gated behind `BUILD_PHOSPHOR_SHELL` (default off) and driveable only from standalone examples/CLIs. It is groundwork for the standalone Phosphor shell direction and is **not** part of the shipping PlasmaZones tiler.
+- **Resize-aware tiling** ([#666](https://github.com/fuddlesworth/PlasmaZones/pull/666)): six split-ratio algorithms (master-stack, wide, focus-sidebar, zen, deck, and horizontal-deck) now reflow on interactive resize. Dragging the master or boundary edge updates the split ratio for that desktop the same way a master-ratio keystroke does, without bleeding into other screens or the global default. The Layouts page shows a per-algorithm **Reflows** badge and can group algorithms by it.
+- **Suppress default layout assignment** ([#676](https://github.com/fuddlesworth/PlasmaZones/pull/676)): a new setting, with a matching `DefaultLayoutAssignment` window-rule action, stops a context from falling back to the synthesized default layout. A suppressed context shows no snapping overlay or zone selector, reports no layout, and shows a "No layout assigned" OSD. Switching it into autotile sets the mode without applying the global default algorithm until a concrete one is assigned.
+- **Layouts page rebuilt** as a searchable, card-based catalogue with collapsible capability groups, per-layout deep links, and global-search reveal, matching the shader browser and Window Rules. Tiling algorithms expose a **Script State** capability (filter, group-by, and a card badge) alongside the reflow and persistent-memory badges, layout and algorithm cards show their description on hover, and bundled snapping layouts open in a text editor.
+
+### Changed
+
+- **Single rule format**: window assignments, per-mode disable lists, animation App Rules, and effect exclusion lists are unified into one rule list stored in `~/.config/plasmazones/windowrules.json`. The KWin effect now consults the same `RuleEvaluator` as the daemon for animation App-Rule resolution and exclusion checks, so the two cannot drift.
+- **`LayoutRegistry::walkCascade` removed**, replaced by `RuleEvaluator`. The old per-axis cascade (context-keyed assignments vs window-property matching) no longer exists. All matching goes through the evaluator.
+- **`org.plasmazones.WindowTracking.setWindowMetadata`** widened from 4 to 9 arguments to carry the additional fields the evaluator needs (role, app-id, desktop, activity, screen). The KWin effect and daemon must be installed and running as a matched pair. `MinPeerApiVersion` bumped 3 → 4, and either side refuses to register a mismatched peer rather than silently degrading. Packagers must rebuild and ship both binaries together.
+- **`org.plasmazones.Layout.assignmentChangesApplied`** signal dropped its second argument (the per-key field tag). Subscribers that depended on that field must update or they will receive the wrong arity.
+- **Scripted autotiling moved from QJSEngine (JavaScript) to an embedded, sandboxed Luau VM** (`phosphor-scripting`). The 25 bundled algorithms were ported `*.js` → `*.luau`, written against a new frozen `pz` standard library, with a per-engine CPU-time watchdog and a 64 MiB heap cap. The `TilingAlgorithm` contract, daemon, editor, and settings are unchanged. **Breaking for custom algorithms**: the loader now discovers only `*.luau` files, so user scripts in `~/.local/share/plasmazones/algorithms/` written in the old JavaScript form are no longer loaded and must be rewritten in Luau (see `docs/architecture/luau-algorithm-authoring.md`).
+- **Snapping and Tiling settings aligned for parity.** Tiling gains a dedicated Focus card. Section and label naming is unified across both modes ("Inner gap" / "Outer gap", "Window Handling", parallel quick-shortcut labels), and the placement settings are reorganized into a consistent Overlay / Window / Configuration shape with gaps moved into Window → Appearance and per-monitor gap selectors. User settings are preserved (C++ symbol renames only).
+- **Performance.** Daemon peak heap is down ~58% (149 → 63 MB) and idle CPU drops from ~25% to ~0. The overlay and snap-assist release their full-screen image buffers when dismissed (≈33 MB per shader-enabled 4K screen, ≈6 MB of thumbnail cache), and a content-addressed on-disk shader cache speeds warm launches. Settings pages that were slow on first visit now open fast via a page-instance cache, background compile-warming, and viewport virtualization of the animation-event card lists.
+- **Settings app rebuilt on the reusable `phosphor-control` library** (extracted from the in-app settings chrome, formerly named `phosphor-settings-ui`), reducing the app to a thin consumer with visual parity.
+- **Internal `pz` → `p` symbol-prefix debrand** across shader params, classes, macros, CMake helpers, and the Luau tiling global (`pz` → `phosphor_luau`). The user-facing `PlasmaZones` brand and the global-shortcut ID namespace are deliberately unchanged. All ad-hoc registries (shaders, animation, curves, tiles algorithms, layout sources) are unified onto a single thread-safe `Registry<T>` primitive with public APIs preserved.
+- **Nix flake restructured around a single package definition.** The 312-line `flake.nix` is now thin wiring, and the build recipe and the KWin-IID rationale live in `packaging/nix/{package,overlays,module,hm-module,devShell,formatter}.nix`. The package is defined once in `overlays.nix` (`final.callPackage`) and every output (`packages`, `devShells`, `checks`, `formatter`) derives from `legacyPackages.<system>.extend overlay`, replacing five independent build call sites that each had to remember to build against the right pkgs. The version is parsed once from the top-level `project(PlasmaZones VERSION …)` in `CMakeLists.txt` inside `flake.nix` (where the flake `self` is a store path, so the read is pure) and threaded to the package as an argument. Reading it inside `package.nix` forced an import-from-derivation when nixpkgs builds from a `fetchFromGitHub` src. LTO is now opt-in (`enableLTO`, default off) instead of forced, since every module/overlay consumer rebuilds against host pkgs with no cache reuse. The build source is `lib.fileset`-scoped so editing docs/CI/flake files no longer invalidates it. `nix fmt` now formats Nix, C++, and QML (reusing the in-tree `.clang-format`), and the NixOS module declares the `plasmazones` systemd user service with autostart opt-in (default off, preserving the per-user "enable it yourself" policy).
+- **Autotiling is on by default** ([#671](https://github.com/fuddlesworth/PlasmaZones/pull/671)): tiling now works out of the box so PlasmaZones behaves like a dynamic tiler with no setup. The companion behaviors (focus new windows, smart gaps, respect minimum size, exclude transient windows, and insert at the stack end) were already on by default, and the default algorithm (bsp) and gaps are unchanged. Only fresh installs are affected, and existing saved configs keep their current value.
+- **Settings UI polish** across the Layouts and listing pages: a curated default picker shows a starter set of layouts and algorithms with the rest one eye-toggle away, a shared filter menu now drives the Layouts, Window Rules, and Shaders lists, and the sidebar, global search field, About credits, and virtual-screen preview labels got alignment and spacing fixes.
+
+### Removed
+
+- Legacy `Display.SnappingDisabled*` and `Display.AutotileDisabled*` config keys (auto-migrated into rules).
+- **QJSEngine-based scripted-tiling path** (the `ScriptedAlgorithm` runtime, its JS builtins, and the bundled `*.js` algorithms), along with the `Qt6::Qml` dependency in `phosphor-tiles`. Replaced by the Luau path above.
+- `setSnappingLayoutEntry`, `setTilingAlgorithmEntry`, and related per-field `Settings`-side `Q_INVOKABLE`s that the legacy KCM Assignments pages used. There is no QML replacement. Use the Window Rules page.
+- Legacy Snapping Assignments, Tiling Assignments, and Animations App Rules settings pages (replaced by Window Rules).
+- **Per-release `plasmazones.nix` asset and its `generate-release-nix.sh` generator.** The asset was a source-pinned build *recipe* (not a binary), so it saved no build time and only served non-flake Nix users, who can instead build any tag against their host's pkgs with `pkgs.callPackage "${builtins.fetchTarball "https://github.com/fuddlesworth/PlasmaZones/archive/v<VERSION>.tar.gz"}/packaging/nix/package.nix" { version = "<VERSION>"; }`. The release notes' standalone-install section now shows that form, and the `build-nix` release job is reduced to a `nix build` smoke gate. Flake users are unaffected.
+- **Stray `develop.nix`**: an unrelated dev flake (for "canaanepperson.com", `nodejs_24`) that had no connection to PlasmaZones. The dev environment lives in the flake's `devShells.default`.
+
+### Migration
+
+- **Config schema bumped v3 → v4.** On first launch after upgrade, `~/.config/plasmazones/assignments.json` is automatically converted into `~/.config/plasmazones/windowrules.json`, and the legacy `Display.SnappingDisabled*` / `Display.AutotileDisabled*` keys in `config.json` are folded into the same rule set. The migration is lossless and runs without user interaction.
+- **Backout**: the source file is renamed `assignments.json.migrated` (not deleted), so a downgrade can restore the previous schema by manually renaming it back and starting an older daemon.
+- **Recovery**: if migration aborts because the source is malformed, the original file is renamed to `~/.config/plasmazones/assignments.json.corrupt.bak`, the schema version stays at v3, and `windowrules.json` is not created. The daemon does not silently flush the old assignments to an empty rule set. The user can inspect / repair the quarantined file and rename it back to `assignments.json`, and the next launch then retries the v3→v4 conversion.
+- **`hiddenFromSelector` now relocates out of layout files** during the v3→v4 layout-settings conversion. A v3 user who hid a layout previously kept the key embedded in the slimmed layout file instead of having it moved to the `layout-settings.json` sidecar. The migration now carries it across with the other relocated keys. Autotile per-algorithm overrides also fold into `layout-settings.json`, and the standalone `autotile-overrides.json` is retired by a one-time self-deleting migration on load.
+
+### Fixed
+
+- **Layouts rendered stretched / ultrawide when editing on a 16:9 or 4K screen** ([#593](https://github.com/fuddlesworth/PlasmaZones/issues/593)): the editor canvas used a fixed-zone bounding box as its aspect reference, so editing an existing layout could distort it while creating a new one rendered correctly. The canvas now references the live screen unless fixed zones genuinely overflow it.
+- **A zone-spanning window blew up to fullscreen when switching layouts** ([#575](https://github.com/fuddlesworth/PlasmaZones/pull/575)): switching to a layout where the previously-spanned zones are non-contiguous (e.g. Grid 2×2 left column → Master+Stack) unioned them into a screen-sized bounding box. Non-contiguous mapped spans now collapse to the primary zone instead.
+- **KWin effect plugin silently never installed under Nix.** `packaging/nix/package.nix` set `KDE_INSTALL_QTPLUGINDIR` to an absolute path *inside the read-only `qtbase` store output* (`${qt6.qtbase}/lib/qt6/plugins`). A derivation may only write under its own `$out`, so the effect dropped out of the package closure entirely. The daemon ran but zone overlays never appeared on Nix installs. The plugin now installs into the package's own `$out/${qt6.qtbase.qtPluginPrefix}` (the canonical NixOS `lib/qt-6/plugins` layout), where the running KWin discovers it via the system profile's aggregated `QT_PLUGIN_PATH`.
+- **Toggling from autotile back to snapping left windows stuck in their tiled positions** instead of returning to where they were before tiling. The transition fell through to a stale current-assignment resnap that re-pinned the tiled geometry and suppressed the float-back. Windows now float back to their pre-tile positions.
+- **Master-ratio and master-count adjustments bled into the global default** ([#666](https://github.com/fuddlesworth/PlasmaZones/pull/666)): the increase/decrease ratio and master-count shortcuts wrote the new value into the global config whenever a screen had no per-screen override, so the tweak propagated to sibling screens and new states on the next algorithm switch or settings refresh. The adjustment now stays local to the active screen, desktop, and activity, and resets only on an algorithm switch or an explicit ratio/count change in settings.
+
 ## [3.0.17] - 2026-06-18
 
 ### Fixed
 
-- **PlasmaZones held back KWin upgrades, stranding Plasma in a half-upgraded state**: the native packages pinned KWin to the *exact* version PlasmaZones was built against (to guarantee the KWin effect plugin's IID matched the running KWin). On distros that ship KWin and PlasmaZones from separate repos (e.g. Fedora KWin from the distro, PlasmaZones from COPR), a newer KWin landing before a matching PlasmaZones rebuild could not satisfy the exact pin, so the package manager held KWin back. That left KWin out of sync with the rest of Plasma, which surfaced as "No KScreen backend found" and, at worst, a black screen at login (reported on Fedora 44 / Plasma 6.7). The runtime dependency is now a minimum (`kwin >= 6.7.0`) across the RPM, Debian, and Arch (source/bin/git) packages instead of an exact pin, so a newer KWin no longer blocks the upgrade. A mismatched effect is harmless — KWin reads the IID from plugin metadata and never loads a non-matching effect, so the plugin stays inert and only the drag overlay is missing until PlasmaZones is rebuilt; core tiling (daemon + layer-shell QPA plugin) is unaffected. Nix is unchanged: it has no install-time pin and rebuilds the whole system, so it cannot strand the desktop.
+- **PlasmaZones held back KWin upgrades, stranding Plasma in a half-upgraded state**: the native packages pinned KWin to the *exact* version PlasmaZones was built against (to guarantee the KWin effect plugin's IID matched the running KWin). On distros that ship KWin and PlasmaZones from separate repos (e.g. Fedora KWin from the distro, PlasmaZones from COPR), a newer KWin landing before a matching PlasmaZones rebuild could not satisfy the exact pin, so the package manager held KWin back. That left KWin out of sync with the rest of Plasma, which surfaced as "No KScreen backend found" and, at worst, a black screen at login (reported on Fedora 44 / Plasma 6.7). The runtime dependency is now a minimum (`kwin >= 6.7.0`) across the RPM, Debian, and Arch (source/bin/git) packages instead of an exact pin, so a newer KWin no longer blocks the upgrade. A mismatched effect is harmless. KWin reads the IID from plugin metadata and never loads a non-matching effect, so the plugin stays inert and only the drag overlay is missing until PlasmaZones is rebuilt. Core tiling (daemon and layer-shell QPA plugin) is unaffected. Nix is unchanged, because it has no install-time pin and rebuilds the whole system, so it cannot strand the desktop.
 
 ## [3.0.16] - 2026-06-18
 
 ### Changed
 
-- **Support KDE Plasma 6.7** ([#638](https://github.com/fuddlesworth/PlasmaZones/pull/638)): the build baseline moves to the Plasma 6.7 stack — KDE Frameworks 6.26, Qt 6.10, and KWin 6.7 — and the KWin C++ effect is ported to the 6.7 effect API. Notable upstream changes handled: `prePaintScreen`/`prePaintWindow` dropped their `presentTime` argument (the effect now self-sources frame time from a steady clock, matching KWin's own effects), `EffectWindow::frameGeometry()` and `EffectsHandler::clientArea()` now return `KWin::RectF`, the `clientArea` per-desktop overload was removed, `addRepaint()` gained `RectF`/`Rect`/`Region` overloads, and `GLShader::isValid()` was removed. Plasma 6.6 is no longer supported.
+- **Support KDE Plasma 6.7** ([#638](https://github.com/fuddlesworth/PlasmaZones/pull/638)): the build baseline moves to the Plasma 6.7 stack (KDE Frameworks 6.26, Qt 6.10, and KWin 6.7), and the KWin C++ effect is ported to the 6.7 effect API. Notable upstream changes were handled. `prePaintScreen`/`prePaintWindow` dropped their `presentTime` argument (the effect now self-sources frame time from a steady clock, matching KWin's own effects), `EffectWindow::frameGeometry()` and `EffectsHandler::clientArea()` now return `KWin::RectF`, the `clientArea` per-desktop overload was removed, `addRepaint()` gained `RectF`/`Rect`/`Region` overloads, and `GLShader::isValid()` was removed. Plasma 6.6 is no longer supported.
 
 ### Fixed
 
@@ -27,47 +90,47 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
-- **Zone-selector popup at the screen edge switched the active layout on hover, resnapping every tiled window** ([#542](https://github.com/fuddlesworth/PlasmaZones/pull/542)): the zone-selector slot was supposed to be input-transparent during drag — cursor coordinates come in via the D-Bus `updateSelectorPosition` path and the snap commits at drag-end via `drop.cpp`, never via a Qt hover event. But the slot's QML `MouseArea`s still fired `zoneSelected` on every pointer-enter, and once snap-assist became visible the shared shell surface flipped to input-grabbing (`anyInputGrabbing = isVisible(snapAssistSlot) || isVisible(layoutPickerSlot)` in `syncPassiveShellSurfaceState`) — those leaked hover events committed `manualLayoutSelected`, which immediately resnapped every other tiled window into the new layout's zones. Visible as "my layout changes to one with more or fewer windows whenever I drag windows up". The QML hover commit path is gone (`ZoneSelectorContent` is now `interactive: false` and the daemon's `manualLayoutSelected` handler / signal are removed); cross-layout switching on drop still works because `WindowDragAdaptor::dragStopped` reads `m_selectedLayoutId` from the C++ hit-test and applies the layout when the user actually releases the drag on a zone in a different layout.
+- **Zone-selector popup at the screen edge switched the active layout on hover, resnapping every tiled window** ([#542](https://github.com/fuddlesworth/PlasmaZones/pull/542)): the zone-selector slot was supposed to be input-transparent during drag, because cursor coordinates come in via the D-Bus `updateSelectorPosition` path and the snap commits at drag-end via `drop.cpp`, never via a Qt hover event. But the slot's QML `MouseArea`s still fired `zoneSelected` on every pointer-enter, and once snap-assist became visible the shared shell surface flipped to input-grabbing (`anyInputGrabbing = isVisible(snapAssistSlot) || isVisible(layoutPickerSlot)` in `syncPassiveShellSurfaceState`). Those leaked hover events committed `manualLayoutSelected`, which immediately resnapped every other tiled window into the new layout's zones. Visible as "my layout changes to one with more or fewer windows whenever I drag windows up". The QML hover commit path is gone (`ZoneSelectorContent` is now `interactive: false` and the daemon's `manualLayoutSelected` handler / signal are removed), and cross-layout switching on drop still works because `WindowDragAdaptor::dragStopped` reads `m_selectedLayoutId` from the C++ hit-test and applies the layout when the user actually releases the drag on a zone in a different layout.
 
 ### Removed
 
-- **Switching the autotile algorithm by hovering an autotile preview in the zone-selector popup** ([#542](https://github.com/fuddlesworth/PlasmaZones/pull/542)): the autotile-hover commit path went away with the input-contract fix above (`drop.cpp` resolves the selected id as a UUID and skips non-UUID autotile ids, so the hover path was the only commit point for autotile-via-zone-selector). Algorithm swaps still work through the existing on-by-default routes: `NextLayout` / `PreviousLayout`, `QuickLayout1`–`QuickLayout9`, and the Layout Picker (`Meta+Alt+Space` by default). The `IOverlayService::autotileLayoutSelected` signal and its daemon handler were removed as dead code.
+- **Switching the autotile algorithm by hovering an autotile preview in the zone-selector popup** ([#542](https://github.com/fuddlesworth/PlasmaZones/pull/542)): the autotile-hover commit path went away with the input-contract fix above (`drop.cpp` resolves the selected id as a UUID and skips non-UUID autotile ids, so the hover path was the only commit point for autotile-via-zone-selector). Algorithm swaps still work through the existing on-by-default routes such as `NextLayout` / `PreviousLayout`, `QuickLayout1`–`QuickLayout9`, and the Layout Picker (`Meta+Alt+Space` by default). The `IOverlayService::autotileLayoutSelected` signal and its daemon handler were removed as dead code.
 
 ## [3.0.14] - 2026-05-27
 
 ### Fixed
 
-- **DPMS-wake autotile orphan reassignment still triggered intermittently** ([#527](https://github.com/fuddlesworth/PlasmaZones/discussions/527), [#536](https://github.com/fuddlesworth/PlasmaZones/pull/536)): 3.0.13 closed the dropped-monitor case but missed the dual-monitor wake-up where the second output coming back simply shifts the first output's x-offset. With no output actually removed, `oldScreenStillConnected` stayed true, and `isScreenChangeInProgress()` hadn't flipped on yet because KWin emits the per-window `outputChanged` *before* the `virtualScreenGeometryChanged` that the screen-change debounce listens for — the orphan reached the autotile-delegation guard with both legs of the check false. `screenAdded` and `screenRemoved` are now also wired into the screen-change handler, latching the pending-change flag at the earliest point KWin tells us the output set is changing. The settle path that runs once `virtualScreenGeometryChanged` catches up is unchanged.
+- **DPMS-wake autotile orphan reassignment still triggered intermittently** ([#527](https://github.com/fuddlesworth/PlasmaZones/discussions/527), [#536](https://github.com/fuddlesworth/PlasmaZones/pull/536)): 3.0.13 closed the dropped-monitor case but missed the dual-monitor wake-up where the second output coming back simply shifts the first output's x-offset. With no output actually removed, `oldScreenStillConnected` stayed true, and `isScreenChangeInProgress()` hadn't flipped on yet because KWin emits the per-window `outputChanged` *before* the `virtualScreenGeometryChanged` that the screen-change debounce listens for, so the orphan reached the autotile-delegation guard with both legs of the check false. `screenAdded` and `screenRemoved` are now also wired into the screen-change handler, latching the pending-change flag at the earliest point KWin tells us the output set is changing. The settle path that runs once `virtualScreenGeometryChanged` catches up is unchanged.
 
 ## [3.0.13] - 2026-05-26
 
 ### Fixed
 
-- **Windows from disabled monitors got pulled into the active autotile zone after DPMS sleep** ([#527](https://github.com/fuddlesworth/PlasmaZones/discussions/527), [#528](https://github.com/fuddlesworth/PlasmaZones/pull/528)): with one monitor autotile-disabled, waiting for that monitor to power off and then moving the mouse to wake the active monitor would cause windows from the disabled monitor to be tiled into the active zone. KWin reassigns orphaned windows from a dropped-out monitor to a remaining output and fires `outputChanged` for each, indistinguishable from a deliberate cross-screen move. The snapping D-Bus path already guarded for this with `oldScreenStillConnected && !isScreenChangeInProgress()`, but the autotile delegation immediately above ran unconditionally — so the orphan reassignment was mistaken for the window genuinely entering autotile. The disconnect check now feeds both paths via a shared `involuntaryMove` flag; recovery is owned by the daemon's `virtualScreensReconfigured` handler once the screen change has stopped chattering.
+- **Windows from disabled monitors got pulled into the active autotile zone after DPMS sleep** ([#527](https://github.com/fuddlesworth/PlasmaZones/discussions/527), [#528](https://github.com/fuddlesworth/PlasmaZones/pull/528)): with one monitor autotile-disabled, waiting for that monitor to power off and then moving the mouse to wake the active monitor would cause windows from the disabled monitor to be tiled into the active zone. KWin reassigns orphaned windows from a dropped-out monitor to a remaining output and fires `outputChanged` for each, indistinguishable from a deliberate cross-screen move. The snapping D-Bus path already guarded for this with `oldScreenStillConnected && !isScreenChangeInProgress()`, but the autotile delegation immediately above ran unconditionally, so the orphan reassignment was mistaken for the window genuinely entering autotile. The disconnect check now feeds both paths via a shared `involuntaryMove` flag, and recovery is owned by the daemon's `virtualScreensReconfigured` handler once the screen change has stopped chattering.
 
 ## [3.0.12] - 2026-05-25
 
 ### Fixed
 
-- **Focus-follows-mouse stole focus from active floating and overflow windows** ([#461](https://github.com/fuddlesworth/PlasmaZones/discussions/461), [#525](https://github.com/fuddlesworth/PlasmaZones/pull/525)): the 3.0.11 FFM pause fixed the case where an excluded window (emoji picker, notification popup, krunner) was active, but the symmetric case for floating windows still regressed. A manually-floated window, or an overflow window the daemon auto-floats when window count exceeds the `maxWindows` cap, sits on top of the tiled stack while the user works in it; moving the cursor across an underlying tiled window's visible edge still activated that tiled window and sent the floating one to the background. `handleCursorMoved`'s active-window guard now also bails when `isWindowFloating()` returns true for the focused window. `FloatingCache` covers both code paths (user-toggled float and overflow auto-float via `applyFloatCleanup`), so one predicate handles both scenarios. Resumes naturally on the next cursor move once a tiled window becomes active.
+- **Focus-follows-mouse stole focus from active floating and overflow windows** ([#461](https://github.com/fuddlesworth/PlasmaZones/discussions/461), [#525](https://github.com/fuddlesworth/PlasmaZones/pull/525)): the 3.0.11 FFM pause fixed the case where an excluded window (emoji picker, notification popup, krunner) was active, but the symmetric case for floating windows still regressed. A manually-floated window, or an overflow window the daemon auto-floats when window count exceeds the `maxWindows` cap, sits on top of the tiled stack while the user works in it. Moving the cursor across an underlying tiled window's visible edge still activated that tiled window and sent the floating one to the background. `handleCursorMoved`'s active-window guard now also bails when `isWindowFloating()` returns true for the focused window. `FloatingCache` covers both code paths (user-toggled float and overflow auto-float via `applyFloatCleanup`), so one predicate handles both scenarios. Resumes naturally on the next cursor move once a tiled window becomes active.
 
 ## [3.0.11] - 2026-05-24
 
 ### Changed
 
-- **Layer-shell state setters skip unchanged values across configure events** ([#522](https://github.com/fuddlesworth/PlasmaZones/pull/522)): KWin re-emits `zwlr_layer_surface_v1` configure events on every virtual-desktop switch, and `applyProperties` was unconditionally re-sending the full layer-shell state (anchor, layer, exclusive zone, keyboard interactivity, margin, size, exclusive edge) — six to seven protocol messages per surface per configure. The applied state is now cached per surface and each setter only fires when its source property has actually changed.
+- **Layer-shell state setters skip unchanged values across configure events** ([#522](https://github.com/fuddlesworth/PlasmaZones/pull/522)): KWin re-emits `zwlr_layer_surface_v1` configure events on every virtual-desktop switch, and `applyProperties` was unconditionally re-sending the full layer-shell state (anchor, layer, exclusive zone, keyboard interactivity, margin, size, exclusive edge), which is six to seven protocol messages per surface per configure. The applied state is now cached per surface and each setter only fires when its source property has actually changed.
 
 ### Fixed
 
-- **Focus-follows-mouse activated tiled windows underneath an active popup** ([#461](https://github.com/fuddlesworth/PlasmaZones/discussions/461), [#521](https://github.com/fuddlesworth/PlasmaZones/pull/521)): the 3.0.10 FFM fix made auto-focus-follow-mouse consistent for the common case but missed the case where an excluded or untracked window (emoji picker, notification popup, krunner) was active inside a zone. Moving the cursor across the underlying tiled window's visible area still activated that tiled window, sending the just-opened popup straight to the background. `handleCursorMoved` now also checks the currently active window — if it is an excluded app, dialog, popup, keep-above overlay, or below the min-size threshold, FFM pauses on the cursor's screen until a tileable window becomes active.
+- **Focus-follows-mouse activated tiled windows underneath an active popup** ([#461](https://github.com/fuddlesworth/PlasmaZones/discussions/461), [#521](https://github.com/fuddlesworth/PlasmaZones/pull/521)): the 3.0.10 FFM fix made auto-focus-follow-mouse consistent for the common case but missed the case where an excluded or untracked window (emoji picker, notification popup, krunner) was active inside a zone. Moving the cursor across the underlying tiled window's visible area still activated that tiled window, sending the just-opened popup straight to the background. `handleCursorMoved` now also checks the currently active window. If it is an excluded app, dialog, popup, keep-above overlay, or below the min-size threshold, FFM pauses on the cursor's screen until a tileable window becomes active.
 - **Stale pending-restore entries for excluded apps grew session.json and logged on every daemon start** ([#461](https://github.com/fuddlesworth/PlasmaZones/discussions/461), [#521](https://github.com/fuddlesworth/PlasmaZones/pull/521)): runtime gates already refused to honor pending restores for excluded apps, but the dead entries persisted on disk in `PendingRestoreQueues` and `AutotilePendingRestores` and reappeared on every restart. Both engines now prune their on-disk queues against the current exclusion lists at startup and whenever the lists change.
-- **Drag artifacts, post-snap flicker, and a gray decoration ring during snap drags** ([#516](https://github.com/fuddlesworth/PlasmaZones/issues/516), [#523](https://github.com/fuddlesworth/PlasmaZones/pull/523)): the zone-preview `PassiveShell` mapped on the Overlay layer fullscreen during a drag, masking KWin's Translucency-while-moving effect. On hybrid Intel+NVIDIA setups (CachyOS, Plasma 6.6.5, NVIDIA 595) this also forced a slower compositional path that produced the visible drag artifacts and post-snap flicker. The PassiveShell role is now downgraded to the Top layer — the same layer KDE's own panels live on — which coexists with the translucency effect. Fullscreen apps on Overlay still draw above the zone preview correctly.
+- **Drag artifacts, post-snap flicker, and a gray decoration ring during snap drags** ([#516](https://github.com/fuddlesworth/PlasmaZones/issues/516), [#523](https://github.com/fuddlesworth/PlasmaZones/pull/523)): the zone-preview `PassiveShell` mapped on the Overlay layer fullscreen during a drag, masking KWin's Translucency-while-moving effect. On hybrid Intel+NVIDIA setups (CachyOS, Plasma 6.6.5, NVIDIA 595) this also forced a slower compositional path that produced the visible drag artifacts and post-snap flicker. The PassiveShell role is now downgraded to the Top layer, the same layer KDE's own panels live on, which coexists with the translucency effect. Fullscreen apps on Overlay still draw above the zone preview correctly.
 
 ## [3.0.10] - 2026-05-23
 
 ### Fixed
 
-- **Focus-follows-mouse stopped working after any overlay appeared** ([#461](https://github.com/fuddlesworth/PlasmaZones/discussions/461), [#517](https://github.com/fuddlesworth/PlasmaZones/pull/517)): the focus-follows-mouse stacking-order walk treated the daemon's own full-screen overlay layer-shell surface as a blocking occluder, so once any OSD, snap preview, or layout picker had been shown on an autotile monitor FFM gave up and never resumed. The walk now looks through `plasmazonesd` and `plasmazones-editor` surfaces to the real window beneath; real overlays (emoji picker, Spectacle, xdg-desktop-portal) still trip the existing guard.
+- **Focus-follows-mouse stopped working after any overlay appeared** ([#461](https://github.com/fuddlesworth/PlasmaZones/discussions/461), [#517](https://github.com/fuddlesworth/PlasmaZones/pull/517)): the focus-follows-mouse stacking-order walk treated the daemon's own full-screen overlay layer-shell surface as a blocking occluder, so once any OSD, snap preview, or layout picker had been shown on an autotile monitor FFM gave up and never resumed. The walk now looks through `plasmazonesd` and `plasmazones-editor` surfaces to the real window beneath. Real overlays (emoji picker, Spectacle, xdg-desktop-portal) still trip the existing guard.
 - **Popups and dialogs could consume the main window's saved zone on reopen** ([#461](https://github.com/fuddlesworth/PlasmaZones/discussions/461), [#518](https://github.com/fuddlesworth/PlasmaZones/pull/518)): the `PendingRestore` queue was keyed by appId only, so opening any popup or dialog of an app whose main window had previously closed-with-a-zone-assignment consumed the queue's head entry and snapped the popup into that zone. The closing window's structural kind (normal vs transient) is now recorded on each entry, and the consume path refuses to assign an entry to a window of a different kind, leaving it for the next-opening window that does match. Pre-fix on-disk sessions reload with kind=Unknown and the gate stays permissive for them. Steam-class apps whose popups misreport as normal windows still need a separate title-regex follow-up.
 - **Passive overlay shell stayed mapped and prewarmed with effects disabled** ([#515](https://github.com/fuddlesworth/PlasmaZones/discussions/515), [#519](https://github.com/fuddlesworth/PlasmaZones/pull/519)): the passive overlay's `wl_surface` was kept mapped even when no overlay slot was live, and the prewarm path did not respect the effects-enabled toggle, leaking compositor work for users who had turned effects off. The shell now unmaps when idle and prewarm is gated on the effects-enabled setting.
 - **Animation shader pattern features scaled inconsistently across monitor sizes** ([#520](https://github.com/fuddlesworth/PlasmaZones/pull/520)): sparkle, streak, and smoke feature density was tied to an arbitrary 800px reference, so pattern density drifted across screen sizes. Features now scale by `iSurfaceScreenPos.zw` (anchor size) for constant per-pixel pitch.
@@ -76,7 +139,7 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
-- **Per-virtual-desktop and per-activity assignment toggles could not be re-enabled once disabled** ([#461](https://github.com/fuddlesworth/PlasmaZones/discussions/461), [#514](https://github.com/fuddlesworth/PlasmaZones/pull/514)): the 3.0.8 fix kept the per-desktop and per-activity disable Switch's `checked` binding live across controller emissions, but the Switch was declared inside `AssignmentRow.middleContent` and Qt's `Item.enabled` cascade carried the row's disabled state down to the nested Switch — leaving no clickable control to flip the context back on. `AssignmentRow` now exposes a `contentEnabled` property that gates only the combo and clear button, so the Switch in `middleContent` stays clickable while the assignment controls grey out as before. The top-monitor Switch was unaffected because it had always been a sibling of its combo rather than a descendant.
+- **Per-virtual-desktop and per-activity assignment toggles could not be re-enabled once disabled** ([#461](https://github.com/fuddlesworth/PlasmaZones/discussions/461), [#514](https://github.com/fuddlesworth/PlasmaZones/pull/514)): the 3.0.8 fix kept the per-desktop and per-activity disable Switch's `checked` binding live across controller emissions, but the Switch was declared inside `AssignmentRow.middleContent` and Qt's `Item.enabled` cascade carried the row's disabled state down to the nested Switch, leaving no clickable control to flip the context back on. `AssignmentRow` now exposes a `contentEnabled` property that gates only the combo and clear button, so the Switch in `middleContent` stays clickable while the assignment controls grey out as before. The top-monitor Switch was unaffected because it had always been a sibling of its combo rather than a descendant.
 
 ## [3.0.8] - 2026-05-22
 
@@ -95,14 +158,14 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 
-- **`bounce` drops the window in from above its frame** ([#475](https://github.com/fuddlesworth/PlasmaZones/pull/475)): `bounce` previously revealed the window from its own top edge downward, clipped to the window box. Animation shaders can now opt into a full-surface render mode that gives them room to draw past the window, and `bounce` uses it to play niri's original drop-from-above motion — the window travels in from above its frame.
+- **`bounce` drops the window in from above its frame** ([#475](https://github.com/fuddlesworth/PlasmaZones/pull/475)): `bounce` previously revealed the window from its own top edge downward, clipped to the window box. Animation shaders can now opt into a full-surface render mode that gives them room to draw past the window, and `bounce` uses it to play niri's original drop-from-above motion, so the window travels in from above its frame.
 - **Overlay cards unified on one shared frame** ([#475](https://github.com/fuddlesworth/PlasmaZones/pull/475)): the layout OSD, navigation OSD, layout picker, and zone selector each hand-rolled their card background, border, and glow. They now share a single `PopupFrame` component, so all four read as the same surface and the soft glow is captured into the transition and animates with the card rather than being clipped away for the duration. The layout picker and zone selector pick up the same glow the OSDs use.
 - **`wave-warp` gained a `frontSpeed` parameter** ([#475](https://github.com/fuddlesworth/PlasmaZones/pull/475)): `wave-warp` and the former `crosswarp` ran the identical moving-edge warp, differing only in a front-speed dial. That dial is now `wave-warp`'s `frontSpeed` parameter (default `1.0`).
 
 ### Removed
 
 - **`crosswarp` transition** ([#475](https://github.com/fuddlesworth/PlasmaZones/pull/475)): it was `wave-warp` with a fixed front speed. Use `wave-warp` with its new `frontSpeed` parameter instead.
-- **`plasma-flow` transition** ([#475](https://github.com/fuddlesworth/PlasmaZones/pull/475)): it was a re-skin of `soft-warp-fade` — the same noise-driven UV warp and fade, differing only in trivial constants.
+- **`plasma-flow` transition** ([#475](https://github.com/fuddlesworth/PlasmaZones/pull/475)): it was a re-skin of `soft-warp-fade`, the same noise-driven UV warp and fade, differing only in trivial constants.
 
 ### Fixed
 
@@ -110,22 +173,22 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - **New windows flashed at their spawn position before animating into place** ([#475](https://github.com/fuddlesworth/PlasmaZones/pull/475)): KWin places a new window (centered or smart) before the effect sees it, and the reposition into a zone or tile is asynchronous on Wayland, so a snap-restored or autotiled window visibly flickered at the centered spawn position for one to three frames. New-window pixels are now withheld until the reposition lands (with a 250 ms safety deadline), so the window first becomes visible already animating into its zone.
 - **Snap-restored windows played their open animation from the screen center** ([#475](https://github.com/fuddlesworth/PlasmaZones/pull/475)): a snap-restored window ran its `bounce` / `fly-in` open animation from the centered spawn position and then jumped to the zone once KWin's asynchronous move landed. The in-flight open transition is now pinned to the resolved zone, so the effect plays into the zone from the first frame.
 - **OSD glow popped in at the end of a transition** ([#475](https://github.com/fuddlesworth/PlasmaZones/pull/475)): the soft glow behind the layout and navigation OSDs was clipped away for the duration of a show / hide animation and snapped back into place when the animation ended. The glow is now captured together with the card so it scales and moves with it throughout the transition.
-- **Faint grey halo around daemon OSDs during `bounce` / `fly-in`** ([#475](https://github.com/fuddlesworth/PlasmaZones/pull/475)): both effects painted a faint grey border around the OSD while animating — the effect's edge feather fell just outside the captured texture and tinted its clamped edge pixels. The edge crop is now a sub-pixel, edge-aligned antialias band, so the border is gone and the edge stays crisp.
+- **Faint grey halo around daemon OSDs during `bounce` / `fly-in`** ([#475](https://github.com/fuddlesworth/PlasmaZones/pull/475)): both effects painted a faint grey border around the OSD while animating, because the effect's edge feather fell just outside the captured texture and tinted its clamped edge pixels. The edge crop is now a sub-pixel, edge-aligned antialias band, so the border is gone and the edge stays crisp.
 
 ## [3.0.6] - 2026-05-20
 
 ### Fixed
 
-- **Settings window (and any 5th+ window) left tiled on autotile→snap** ([#504](https://github.com/fuddlesworth/PlasmaZones/pull/504)): `calculateResnapFromAutotileOrder` capped both passes at `min(windowCount, zoneCount)`, silently dropping windows past the new layout's zone count even when their pre-autotile zone was unique and still available. With 5 autotiled windows resnapping into a 4-zone layout, the 5th was always left tiled — in practice usually the settings window (last in focus order). The first pass (restore-original-zone) now iterates ALL windows; the positional fallback iterates all windows but breaks once every zone is claimed. `claimedZoneIndices` still prevents double-booking.
-- **250+ ms stall before windows start moving on autotile→snap** ([#504](https://github.com/fuddlesworth/PlasmaZones/pull/504)): `slotScreensChanged` ran a synchronous `setNoBorder(false)` loop on autotile disable. Each call is a Wayland decoration round-trip (30–120 ms per window) and the loop blocked kwin's main thread long enough that the queued `applyGeometriesBatch("resnap")` D-Bus signal couldn't dispatch. The affected window IDs are now stashed and drained from `slotApplyGeometriesBatch`'s `onComplete` once the resnap has been dispatched — windows start animating to their snap positions within ~2 ms of the daemon emit instead of 250+ ms. The drain processes one window per event-loop tick so frames render between calls, keeping the concurrent OSD show animation smooth. A chunk-time check against `m_autotileScreens` skips the restore if the user rapid-cycles back into autotile mid-drain (the new toggle's `setWindowBorderless(true)` is now authoritative).
-- **Focus follows mouse not re-focusing after focus steal** ([#461](https://github.com/fuddlesworth/PlasmaZones/discussions/461), [#503](https://github.com/fuddlesworth/PlasmaZones/pull/503)): `AutotileHandler::handleCursorMoved` short-circuited against `m_lastFocusFollowsMouseWindowId`, a local cache of the window it had most recently auto-focused. The cache was only invalidated by `setFocusFollowsMouse(false)`, `onWindowClosed` for the cached ID, and `slotScreensChanged` — not by Alt-Tab, a click, a daemon-driven activate, or a new window stealing focus. After any of those, the cache pointed at a window the compositor was no longer focusing on, and the next cursor pass-over matched the stale cache and skipped `activateWindow` — focus stayed wherever it had drifted to. The cache is replaced with a live read against `KWin::effects->activeWindow()`, so the no-op gate fires only when the cursor window actually still holds focus.
-- **Tiling assignments saved on the settings page silently dropped** ([#497](https://github.com/fuddlesworth/PlasmaZones/discussions/497), [#499](https://github.com/fuddlesworth/PlasmaZones/pull/499)): `LayoutAdaptor::m_algorithmRegistry` was never wired up after the DI refactor — the daemon's composition root set it on `OverlayService`, `ZoneSelectorController`, etc., but missed `LayoutAdaptor`. Every per-monitor / per-activity tiling-mode assignment hit `setAssignmentEntry`'s validation branch (`!m_algorithmRegistry`), logged `unknown tiling algorithm: "<id>"`, and was dropped before being stored. The cascade fell back to the global default, which read like "my changes reverted." Snapping assignments persisted; only tiling assignments vanished. The registry is now injected.
+- **Settings window (and any 5th+ window) left tiled on autotile→snap** ([#504](https://github.com/fuddlesworth/PlasmaZones/pull/504)): `calculateResnapFromAutotileOrder` capped both passes at `min(windowCount, zoneCount)`, silently dropping windows past the new layout's zone count even when their pre-autotile zone was unique and still available. With 5 autotiled windows resnapping into a 4-zone layout, the 5th was always left tiled, in practice usually the settings window (last in focus order). The first pass (restore-original-zone) now iterates ALL windows, and the positional fallback iterates all windows but breaks once every zone is claimed. `claimedZoneIndices` still prevents double-booking.
+- **250+ ms stall before windows start moving on autotile→snap** ([#504](https://github.com/fuddlesworth/PlasmaZones/pull/504)): `slotScreensChanged` ran a synchronous `setNoBorder(false)` loop on autotile disable. Each call is a Wayland decoration round-trip (30–120 ms per window) and the loop blocked kwin's main thread long enough that the queued `applyGeometriesBatch("resnap")` D-Bus signal couldn't dispatch. The affected window IDs are now stashed and drained from `slotApplyGeometriesBatch`'s `onComplete` once the resnap has been dispatched, so windows start animating to their snap positions within ~2 ms of the daemon emit instead of 250+ ms. The drain processes one window per event-loop tick so frames render between calls, keeping the concurrent OSD show animation smooth. A chunk-time check against `m_autotileScreens` skips the restore if the user rapid-cycles back into autotile mid-drain (the new toggle's `setWindowBorderless(true)` is now authoritative).
+- **Focus follows mouse not re-focusing after focus steal** ([#461](https://github.com/fuddlesworth/PlasmaZones/discussions/461), [#503](https://github.com/fuddlesworth/PlasmaZones/pull/503)): `AutotileHandler::handleCursorMoved` short-circuited against `m_lastFocusFollowsMouseWindowId`, a local cache of the window it had most recently auto-focused. The cache was only invalidated by `setFocusFollowsMouse(false)`, `onWindowClosed` for the cached ID, and `slotScreensChanged`, not by Alt-Tab, a click, a daemon-driven activate, or a new window stealing focus. After any of those, the cache pointed at a window the compositor was no longer focusing on, and the next cursor pass-over matched the stale cache and skipped `activateWindow`, so focus stayed wherever it had drifted to. The cache is replaced with a live read against `KWin::effects->activeWindow()`, so the no-op gate fires only when the cursor window actually still holds focus.
+- **Tiling assignments saved on the settings page silently dropped** ([#497](https://github.com/fuddlesworth/PlasmaZones/discussions/497), [#499](https://github.com/fuddlesworth/PlasmaZones/pull/499)): `LayoutAdaptor::m_algorithmRegistry` was never wired up after the DI refactor. The daemon's composition root set it on `OverlayService`, `ZoneSelectorController`, etc., but missed `LayoutAdaptor`. Every per-monitor / per-activity tiling-mode assignment hit `setAssignmentEntry`'s validation branch (`!m_algorithmRegistry`), logged `unknown tiling algorithm: "<id>"`, and was dropped before being stored. The cascade fell back to the global default, which read like "my changes reverted." Snapping assignments persisted, and only tiling assignments vanished. The registry is now injected.
 - **Daemon toggle re-enabling itself after disable** ([#497](https://github.com/fuddlesworth/PlasmaZones/discussions/497), [#499](https://github.com/fuddlesworth/PlasmaZones/pull/499)): `setEnabled(false)` ran `systemctl --user disable`, which only blocks boot-time autostart. The installed `/usr/share/dbus-1/services/org.plasmazones.service` file pins `SystemdService=plasmazones.service`, so any subsequent D-Bus call from the KWin effect (window-lifecycle callbacks like `setWindowMetadata`, `windowClosed`) routed through systemd and started the unit, and the toggle flipped back on within seconds. Switched to `systemctl --user mask`, which blocks both autostart and D-Bus-routed activation. Re-enable chains `unmask` → `enable`.
-- **Snapping Assignments Monitor row reverted to old value after Save** ([#497](https://github.com/fuddlesworth/PlasmaZones/discussions/497), [#501](https://github.com/fuddlesworth/PlasmaZones/pull/501)): `SettingsController::getLayoutForScreen` (snapping side) called the daemon's contextual `getLayoutForScreen` D-Bus method, which walks the current-desktop / current-activity cascade. The tiling counterpart already queried the explicit screen-level slot. The mismatch let a stored per-desktop or per-activity entry shadow the screen-level slot the user just wrote — the Monitor row's own re-read pulled the higher-priority entry's old value and the combo snapped back. The snapping path now mirrors `getTilingLayoutForScreen`'s slot-level shape.
-- **OSD announced the wrong layout name after editing a non-current-context slot** ([#497](https://github.com/fuddlesworth/PlasmaZones/discussions/497), [#501](https://github.com/fuddlesworth/PlasmaZones/pull/501)): the OSD callback on `applyAssignmentChanges` resolved the layout via `layoutForScreen(screen, currentDesktop, currentActivity)`, the same cascade as the Monitor-row bug. Editing a non-current-context slot (e.g. a screen-level row while a `Desktop:1:Activity:X` entry held the visible context) produced an OSD that announced the cascade winner — the unchanged OLD layout — as if it were the change. The `assignmentChangesApplied` signal now carries the full `(screenId, virtualDesktop, activity)` of every modified slot, and the OSD resolves the layout at that exact slot.
+- **Snapping Assignments Monitor row reverted to old value after Save** ([#497](https://github.com/fuddlesworth/PlasmaZones/discussions/497), [#501](https://github.com/fuddlesworth/PlasmaZones/pull/501)): `SettingsController::getLayoutForScreen` (snapping side) called the daemon's contextual `getLayoutForScreen` D-Bus method, which walks the current-desktop / current-activity cascade. The tiling counterpart already queried the explicit screen-level slot. The mismatch let a stored per-desktop or per-activity entry shadow the screen-level slot the user just wrote, so the Monitor row's own re-read pulled the higher-priority entry's old value and the combo snapped back. The snapping path now mirrors `getTilingLayoutForScreen`'s slot-level shape.
+- **OSD announced the wrong layout name after editing a non-current-context slot** ([#497](https://github.com/fuddlesworth/PlasmaZones/discussions/497), [#501](https://github.com/fuddlesworth/PlasmaZones/pull/501)): the OSD callback on `applyAssignmentChanges` resolved the layout via `layoutForScreen(screen, currentDesktop, currentActivity)`, the same cascade as the Monitor-row bug. Editing a non-current-context slot (e.g. a screen-level row while a `Desktop:1:Activity:X` entry held the visible context) produced an OSD that announced the cascade winner, the unchanged OLD layout, as if it were the change. The `assignmentChangesApplied` signal now carries the full `(screenId, virtualDesktop, activity)` of every modified slot, and the OSD resolves the layout at that exact slot.
 - **Windows on disabled monitors / desktops still tracked and resurrected after restart** ([#461](https://github.com/fuddlesworth/PlasmaZones/discussions/461), [#498](https://github.com/fuddlesworth/PlasmaZones/pull/498)): a window closing on a monitor or desktop the user had disabled snap/autotile on still got a `PendingRestore` recorded, then resurfaced when the same app reopened or KWin rehomed it after the disabled screen slept. The persisted `WindowZoneAssignmentsFull`, `PendingRestoreQueues`, and `AutotilePendingRestores` are now filtered on both load and save against the current disable lists, and `WindowTrackingService` takes an injected `ShouldTrackPredicate` so live closes on disabled contexts never write the entry in the first place. The autotile engine matches via an injected `ShouldPersistRestorePredicate` at three filter sites (live, save, load), so future engine changes can't drift from the snap side ([#502](https://github.com/fuddlesworth/PlasmaZones/pull/502)).
 - **Re-enabling a disabled virtual desktop sometimes silently failing** ([#461](https://github.com/fuddlesworth/PlasmaZones/discussions/461), [#498](https://github.com/fuddlesworth/PlasmaZones/pull/498)): `setDesktopDisabled`/`setActivityDisabled` did an exact-string remove using the screen-name form QML supplied, but the read-side check resolved both connector-name and screen-ID forms. After a screen redetect, the re-enable removed zero entries and the desktop stayed disabled. Both setters now try every variant on remove.
-- **Popup menus and Steam image previews snapped to weird zones** ([#461](https://github.com/fuddlesworth/PlasmaZones/discussions/461), [#498](https://github.com/fuddlesworth/PlasmaZones/pull/498)): `isTileableWindow` rejected PopupMenu / DropdownMenu / Menu / Tooltip / keep-above windows; `shouldHandleWindow` did not. The asymmetry let a window KWin classifies as e.g. PopupMenu (Steam's chat image-preview popup, on a steamwebhelper class with no `transientFor`) pass the snap-side filter while autotile rejected it — surfacing as "snapped to a zone in snap mode" depending on the screen's current assignment. Both filters now reject the same window types.
+- **Popup menus and Steam image previews snapped to weird zones** ([#461](https://github.com/fuddlesworth/PlasmaZones/discussions/461), [#498](https://github.com/fuddlesworth/PlasmaZones/pull/498)): `isTileableWindow` rejected PopupMenu / DropdownMenu / Menu / Tooltip / keep-above windows, but `shouldHandleWindow` did not. The asymmetry let a window KWin classifies as e.g. PopupMenu (Steam's chat image-preview popup, on a steamwebhelper class with no `transientFor`) pass the snap-side filter while autotile rejected it, surfacing as "snapped to a zone in snap mode" depending on the screen's current assignment. Both filters now reject the same window types.
 - **Stale snap assignments from deleted layouts lingering across first-launch** ([#500](https://github.com/fuddlesworth/PlasmaZones/pull/500)): `SnapEngine::onLayoutChanged()`'s `if (!prevLayout) return;` early-out skipped the stale-assignment cleanup on first launch, so session-restored windows whose zone IDs referenced a deleted layout stayed in `m_snapState` forever. The cleanup also kept multi-zone windows when *any* zone survived, leaving dangling zone IDs in the assignment list that downstream `multiZoneGeometry`/`zonesForWindow` would iterate. The cleanup now runs unconditionally on layout change and rebuilds multi-zone assignments to the surviving subset.
 - **Critical-notification windows triggering focus tracking and appearing in the app picker** ([#500](https://github.com/fuddlesworth/PlasmaZones/pull/500)): `notifyWindowActivated` and the app-picker enumeration rejected `isNotification` but not `isCriticalNotification`. KWin treats them as distinct window types, so a critical-notification could fire the focus shader or show up in the KCM exclusion-list picker. Both sites now reject both types.
 - **`m_shuttingDown` flag not reset on daemon restart** ([#500](https://github.com/fuddlesworth/PlasmaZones/pull/500)): `stop()` set the flag and nothing else cleared it, so any `stop()→start()` cycle (programmatic restart, tests) left every shutdown-guarded code path silenced on the second run. `start()` now resets the flag.
@@ -139,32 +202,32 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
-- **Shader picker dropdown disabled in the layout editor** ([#494](https://github.com/fuddlesworth/PlasmaZones/pull/494)): checking "Enable shader effect" left the dropdown disabled and unable to select a shader because the editor's shader list arrived empty. The `availableShaders` D-Bus call returns the list as an `av` (array of variant); unlike `a{sv}`, QtDBus does not auto-demarshal a bare `av` into a `QVariantList` — it hands the reply back wrapped in a `QDBusArgument`, so `.toList()` silently produced an empty list and every shader was dropped. The reply is now routed through `DBusVariantUtils::convertDbusArgument` first, exactly as the sibling `shaderInfo` and `translateShaderParams` queries already did.
-- **Auto-snap-on-open ignored the global snapping toggle** ([#461](https://github.com/fuddlesworth/PlasmaZones/discussions/461), [#492](https://github.com/fuddlesworth/PlasmaZones/pull/492)): with `Snapping.Enabled=false`, newly-opened windows still got auto-snapped to empty or last zones. `SnapEngine::resolveWindowRestore` gated its empty-zone and last-zone fallbacks only on `modeForScreen() == Snapping`, but `modeForScreen` returns the screen's assigned layout mode — independent of the global Snapping toggle. The `snapTo*`, `restoreToPersistedZone`, and `resolveWindowRestore` D-Bus slots and the shared `applySnapResult` gate never checked the global toggle either; only `dragStarted` did. Both chokepoints now consult `snappingEnabled()`.
+- **Shader picker dropdown disabled in the layout editor** ([#494](https://github.com/fuddlesworth/PlasmaZones/pull/494)): checking "Enable shader effect" left the dropdown disabled and unable to select a shader because the editor's shader list arrived empty. The `availableShaders` D-Bus call returns the list as an `av` (array of variant). Unlike `a{sv}`, QtDBus does not auto-demarshal a bare `av` into a `QVariantList`. It hands the reply back wrapped in a `QDBusArgument`, so `.toList()` silently produced an empty list and every shader was dropped. The reply is now routed through `DBusVariantUtils::convertDbusArgument` first, exactly as the sibling `shaderInfo` and `translateShaderParams` queries already did.
+- **Auto-snap-on-open ignored the global snapping toggle** ([#461](https://github.com/fuddlesworth/PlasmaZones/discussions/461), [#492](https://github.com/fuddlesworth/PlasmaZones/pull/492)): with `Snapping.Enabled=false`, newly-opened windows still got auto-snapped to empty or last zones. `SnapEngine::resolveWindowRestore` gated its empty-zone and last-zone fallbacks only on `modeForScreen() == Snapping`, but `modeForScreen` returns the screen's assigned layout mode, independent of the global Snapping toggle. The `snapTo*`, `restoreToPersistedZone`, and `resolveWindowRestore` D-Bus slots and the shared `applySnapResult` gate never checked the global toggle either. Only `dragStarted` did. Both chokepoints now consult `snappingEnabled()`.
 - **Keyboard snap-to-zone shortcuts fired with snapping globally off** ([#461](https://github.com/fuddlesworth/PlasmaZones/discussions/461), [#492](https://github.com/fuddlesworth/PlasmaZones/pull/492)): `IPlacementEngine::isEnabled()` defaulted to `false` and `SnapEngine` never overrode it, so the shared keyboard-shortcut dispatcher had no usable gate for snap-mode shortcuts (autotile shortcuts were already gated on `AutotileEngine::isEnabled()`). `SnapEngine::isEnabled()` now mirrors `AutotileEngine` and reports `snappingEnabled()`, and the navigator dispatcher skips any shortcut whose resolved engine is disabled. Together with the auto-snap fix, `Snapping.Enabled=false` is now a total kill-switch at parity with autotiling.
-- **Transient child surfaces snapped to zones** ([#461](https://github.com/fuddlesworth/PlasmaZones/discussions/461), [#492](https://github.com/fuddlesworth/PlasmaZones/pull/492)): the effect's `shouldHandleWindow()` filtered dialogs, utilities, splashes, notifications, OSDs, modals, and popups, but never consulted `w->transientFor()` — despite the comment claiming it skipped transient windows. Sibling filters in the same file (`shouldAnimateWindow`, `isTileableWindow`) already had the transient-parent check. Electron/CEF apps (Steam image previews, Discord popups, VS Code dialogs) spawn child surfaces that frequently fail to report an accurate KWin window type but always set `transientFor`, so they passed the filter and got snapped to a zone. Transient children are now excluded.
-- **Generic "effect not running" message hid the real cause on bridge timeout** ([#481](https://github.com/fuddlesworth/PlasmaZones/discussions/481), [#485](https://github.com/fuddlesworth/PlasmaZones/pull/485)): the KWin effect plugin's IID embeds KWin's exact upstream version, and KWin's effect loader silently rejects any plugin whose IID does not match the running compositor — even across patch releases. On bridge watchdog timeout the daemon now reads the installed effect plugin's embedded IID via `QPluginLoader::metaData()`, asynchronously queries the running KWin's `supportInformation()`, and names the exact build-vs-running versions and the remediation in the log and desktop notification. The version probe is non-blocking, so the degraded startup path no longer freezes the daemon event loop for the duration of the round-trip.
-- **Nix flake hardened to keep PlasmaZones in sync with the host's KWin** ([#481](https://github.com/fuddlesworth/PlasmaZones/discussions/481), [#489](https://github.com/fuddlesworth/PlasmaZones/pull/489)): expanded module documentation, a new `overlays.default` output, and explicit guidance steer users toward the NixOS module, Home Manager module, and overlay (which build against the consumer's pkgs) and away from `nix profile install` / `packages.default` (which pins to the flake's own nixpkgs and breaks silently when the host's KWin moves past `flake.lock`). The `develop.nix` shell adds debugging tools.
+- **Transient child surfaces snapped to zones** ([#461](https://github.com/fuddlesworth/PlasmaZones/discussions/461), [#492](https://github.com/fuddlesworth/PlasmaZones/pull/492)): the effect's `shouldHandleWindow()` filtered dialogs, utilities, splashes, notifications, OSDs, modals, and popups, but never consulted `w->transientFor()`, despite the comment claiming it skipped transient windows. Sibling filters in the same file (`shouldAnimateWindow`, `isTileableWindow`) already had the transient-parent check. Electron/CEF apps (Steam image previews, Discord popups, VS Code dialogs) spawn child surfaces that frequently fail to report an accurate KWin window type but always set `transientFor`, so they passed the filter and got snapped to a zone. Transient children are now excluded.
+- **Generic "effect not running" message hid the real cause on bridge timeout** ([#481](https://github.com/fuddlesworth/PlasmaZones/discussions/481), [#485](https://github.com/fuddlesworth/PlasmaZones/pull/485)): the KWin effect plugin's IID embeds KWin's exact upstream version, and KWin's effect loader silently rejects any plugin whose IID does not match the running compositor, even across patch releases. On bridge watchdog timeout the daemon now reads the installed effect plugin's embedded IID via `QPluginLoader::metaData()`, asynchronously queries the running KWin's `supportInformation()`, and names the exact build-vs-running versions and the remediation in the log and desktop notification. The version probe is non-blocking, so the degraded startup path no longer freezes the daemon event loop for the duration of the round-trip.
+- **Nix flake hardened to keep PlasmaZones in sync with the host's KWin** ([#481](https://github.com/fuddlesworth/PlasmaZones/discussions/481), [#489](https://github.com/fuddlesworth/PlasmaZones/pull/489)): expanded module documentation, a new `overlays.default` output, and explicit guidance steer users toward the NixOS module, Home Manager module, and overlay (which build against the consumer's pkgs) and away from `nix profile install` / `packages.default` (which pins to the flake's own nixpkgs and breaks silently when the host's KWin moves past `flake.lock`).
 
 ## [3.0.4] - 2026-05-18
 
 ### Fixed
 
-- **Blank-class windows restored into each other's saved zones** ([#461](https://github.com/fuddlesworth/PlasmaZones/discussions/461)): a window with a blank or whitespace-only KWin class produced a `" "` app identifier that became a live key in the snap restore queue, so unrelated blank-class windows consumed each other's saved zones. App identifiers are now normalized and validated — corrupt keys are rejected at the persist site and dropped by the session loader, which also discards pre-3.0 `"resourceName resourceClass"` keys left over from an upgrade.
+- **Blank-class windows restored into each other's saved zones** ([#461](https://github.com/fuddlesworth/PlasmaZones/discussions/461)): a window with a blank or whitespace-only KWin class produced a `" "` app identifier that became a live key in the snap restore queue, so unrelated blank-class windows consumed each other's saved zones. App identifiers are now normalized and validated, and corrupt keys are rejected at the persist site and dropped by the session loader, which also discards pre-3.0 `"resourceName resourceClass"` keys left over from an upgrade.
 - **Maximized windows ballooning when autotiled** ([#461](https://github.com/fuddlesworth/PlasmaZones/discussions/461)): a user-maximized window kept its `MaximizeFull` state through the autotile `moveResize`, so KWin re-asserted the maximized geometry and the reactive centering loop compounded it into runaway growth. The tile path now clears maximize state before placing the window, and the desktop-switch restore path clears it too.
-- **Per-context disable ignored by auto-snap and keyboard snap** ([#461](https://github.com/fuddlesworth/PlasmaZones/discussions/461)): the interactive drag and autotile paths honored the per-monitor, per-desktop, and per-activity disable lists, but snap-on-open and the keyboard snap-to-zone shortcut did not, so windows still snapped on contexts the user had disabled. Both paths — and the float toggle — now gate on the disable lists.
+- **Per-context disable ignored by auto-snap and keyboard snap** ([#461](https://github.com/fuddlesworth/PlasmaZones/discussions/461)): the interactive drag and autotile paths honored the per-monitor, per-desktop, and per-activity disable lists, but snap-on-open and the keyboard snap-to-zone shortcut did not, so windows still snapped on contexts the user had disabled. Both paths, and the float toggle, now gate on the disable lists.
 - **Windows stayed tiled after switching to an autotile-disabled desktop**: the desktop-switch handler never restored windows on the desktop being switched *to*, so arriving on an autotile-disabled desktop left its windows tiled and borderless. The handler now runs a per-window restore pass for the arrived-at desktop.
-- **Confusing new-window placement toggle labels** ([#461](https://github.com/fuddlesworth/PlasmaZones/discussions/461)): disabling "New windows to last zone" did not stop windows returning to zones — that behavior is governed by "Restore zones on login", whose title implied it applied only at login. Both toggles were retitled to describe what they actually do.
+- **Confusing new-window placement toggle labels** ([#461](https://github.com/fuddlesworth/PlasmaZones/discussions/461)): disabling "New windows to last zone" did not stop windows returning to zones. That behavior is governed by "Restore zones on login", whose title implied it applied only at login. Both toggles were retitled to describe what they actually do.
 - **Zone geometry not clamped to the screen** ([#461](https://github.com/fuddlesworth/PlasmaZones/discussions/461)): gap math could produce a zone rectangle extending past the screen edge when fed malformed layout data. `applyGapsToZoneGeometry` now clamps the gapped rectangle to the screen, and resolved snap placements are logged at INFO so geometry reports are diagnosable.
-- **KWin effect missing on NixOS** ([#481](https://github.com/fuddlesworth/PlasmaZones/discussions/481)): the KWin effect plugin's IID embeds KWin's exact upstream version, and KWin refuses to load an effect whose IID does not match the running compositor — even across patch releases. The flake's `nixosModules`, `homeManagerModules`, and `overlay` built PlasmaZones against the flake's own pinned `nixpkgs`, so on a rolling NixOS system whose KWin had moved past `flake.lock` the effect's IID no longer matched and KWin silently dropped it, leaving PlasmaZones absent from System Settings → Desktop Effects. The module and overlay now build against the consumer's nixpkgs, so the effect is always compiled against the KWin the user actually runs — matching the exact-version pinning the RPM, Debian, and Arch packages already do.
-- **Support report crashed on Qt 6.11+** ([#481](https://github.com/fuddlesworth/PlasmaZones/discussions/481)): qttools' `qdbus`/`qdbus6` segfaults at process exit on Qt 6.11+ (a static-destruction-order crash in `registerComplexDBusType`'s `QMetaType` cleanup) when introspecting an object that exposes complex D-Bus types, which `/PlasmaZones` does. The crash could discard the buffered support report before it was printed. `plasmazones-report` now prefers `busctl` — unaffected, and present on every systemd distro — over `qdbus`, and the bug-report template recommends the `busctl` invocation instead of `qdbus6`.
+- **KWin effect missing on NixOS** ([#481](https://github.com/fuddlesworth/PlasmaZones/discussions/481)): the KWin effect plugin's IID embeds KWin's exact upstream version, and KWin refuses to load an effect whose IID does not match the running compositor, even across patch releases. The flake's `nixosModules`, `homeManagerModules`, and `overlay` built PlasmaZones against the flake's own pinned `nixpkgs`, so on a rolling NixOS system whose KWin had moved past `flake.lock` the effect's IID no longer matched and KWin silently dropped it, leaving PlasmaZones absent from System Settings → Desktop Effects. The module and overlay now build against the consumer's nixpkgs, so the effect is always compiled against the KWin the user actually runs, matching the exact-version pinning the RPM, Debian, and Arch packages already do.
+- **Support report crashed on Qt 6.11+** ([#481](https://github.com/fuddlesworth/PlasmaZones/discussions/481)): qttools' `qdbus`/`qdbus6` segfaults at process exit on Qt 6.11+ (a static-destruction-order crash in `registerComplexDBusType`'s `QMetaType` cleanup) when introspecting an object that exposes complex D-Bus types, which `/PlasmaZones` does. The crash could discard the buffered support report before it was printed. `plasmazones-report` now prefers `busctl`, which is unaffected and present on every systemd distro, over `qdbus`, and the bug-report template recommends the `busctl` invocation instead of `qdbus6`.
 
 ## [3.0.3] - 2026-05-17
 
 ### Fixed
 
-- **Zones sliding under a top panel** ([#461](https://github.com/fuddlesworth/PlasmaZones/discussions/461), [#472](https://github.com/fuddlesworth/PlasmaZones/pull/472)): with a top panel, zones slid *under* the panel and the bottom edge was over-reserved. The available-geometry heuristic could only guess which screen edge a panel's strut belonged to, and guessed wrong when the plasmashell panel query returned no panels. The KWin effect now reports the compositor's authoritative work area (`clientArea`), which carries correct per-edge strut attribution and auto-hide handling; the heuristic remains the fallback for sessions where the effect is not loaded.
-- **openSUSE Build Service packaging**: cleared the remaining issues blocking a clean OBS build — a missing `wayland-scanner` build dependency, missing transitive KWin `find_package` dependencies, unowned directories, development files leaking into the runtime package, actionable rpmlint warnings, and changelog macros expanding inside spec-file comments.
+- **Zones sliding under a top panel** ([#461](https://github.com/fuddlesworth/PlasmaZones/discussions/461), [#472](https://github.com/fuddlesworth/PlasmaZones/pull/472)): with a top panel, zones slid *under* the panel and the bottom edge was over-reserved. The available-geometry heuristic could only guess which screen edge a panel's strut belonged to, and guessed wrong when the plasmashell panel query returned no panels. The KWin effect now reports the compositor's authoritative work area (`clientArea`), which carries correct per-edge strut attribution and auto-hide handling, and the heuristic remains the fallback for sessions where the effect is not loaded.
+- **openSUSE Build Service packaging**: cleared the remaining issues blocking a clean OBS build: a missing `wayland-scanner` build dependency, missing transitive KWin `find_package` dependencies, unowned directories, development files leaking into the runtime package, actionable rpmlint warnings, and changelog macros expanding inside spec-file comments.
 
 ## [3.0.2] - 2026-05-17
 
@@ -175,7 +238,7 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 
-- **ScreenManager decoupled from `QScreen`**: the screen add, remove, move, and resize lifecycle moved behind an injectable `IScreenProvider` seam so it can be regression-tested without a live display. This is an internal refactor with no user-visible behavior change; it adds regression coverage for the multi-monitor geometry path.
+- **ScreenManager decoupled from `QScreen`**: the screen add, remove, move, and resize lifecycle moved behind an injectable `IScreenProvider` seam so it can be regression-tested without a live display. This is an internal refactor with no user-visible behavior change. It adds regression coverage for the multi-monitor geometry path.
 
 ### Fixed
 
@@ -188,7 +251,7 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ### Fixed
 
 - **AUR `plasmazones-bin` package**: ship `LICENSE` and `COPYING.LESSER` in the release tarball. The binary package installs its licenses from the tarball root and was failing in `package()` because those files were never staged into it.
-- **COPR builds**: the `kwin_version` spec macro expanded to a multi-line string when `kwin-devel` was absent — as in COPR's minimal SRPM-build chroot — which injected a newline into every `Requires: kwin = ...` and aborted the build with `Unknown tag: 6.6.0`. The macro now always resolves to a single version token.
+- **COPR builds**: the `kwin_version` spec macro expanded to a multi-line string when `kwin-devel` was absent, as in COPR's minimal SRPM-build chroot, which injected a newline into every `Requires: kwin = ...` and aborted the build with `Unknown tag: 6.6.0`. The macro now always resolves to a single version token.
 - **Debian package**: version the `libplasmazones_rendering` shared library so it installs with a SONAME, consistent with every other shipped library and silencing a `dpkg-shlibdeps` warning.
 
 ## [3.0.0] - 2026-05-16
@@ -230,7 +293,7 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ## [2.8.8] - 2026-05-13
 
 ### Fixed
-- **KWin effect plugin fails to load after a KWin patch update**: The kwin-effect plugin's IID embeds KWin's exact upstream version string (`KWIN_PLUGIN_VERSION_STRING` in `config-kwin.h`). KWin refuses to load any effect whose IID doesn't match its own version, even across patch releases (e.g. 6.6.4 to 6.6.5). All 2.8.7 packages were built against KWin 6.6.4 and stopped loading the moment distros shipped 6.6.5. Package metadata now pins KWin to the exact upstream patch version captured at build time (RPM `Requires: kwin = %{kwin_version}`, Debian `kwin-common (= ${kwin:Version})`, Arch `kwin=$_kwin_ver`). Packages now refuse to install on a mismatched KWin instead of installing silently broken; users get a clean dependency error and CI rebuilds against each KWin patch release.
+- **KWin effect plugin fails to load after a KWin patch update**: The kwin-effect plugin's IID embeds KWin's exact upstream version string (`KWIN_PLUGIN_VERSION_STRING` in `config-kwin.h`). KWin refuses to load any effect whose IID doesn't match its own version, even across patch releases (e.g. 6.6.4 to 6.6.5). All 2.8.7 packages were built against KWin 6.6.4 and stopped loading the moment distros shipped 6.6.5. Package metadata now pins KWin to the exact upstream patch version captured at build time (RPM `Requires: kwin = %{kwin_version}`, Debian `kwin-common (= ${kwin:Version})`, Arch `kwin=$_kwin_ver`). Packages now refuse to install on a mismatched KWin instead of installing silently broken, and users get a clean dependency error and CI rebuilds against each KWin patch release.
 
 ## [2.8.7] - 2026-04-14
 
@@ -238,23 +301,23 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - **`BUILD_KWIN_EFFECT` CMake option** ([#321](https://github.com/fuddlesworth/PlasmaZones/pull/321)): The `kwin-effect` subdirectory hard-requires `find_package(KWin 6.6 REQUIRED)`, which aborted the entire configure step on distros shipping older KWin (Debian 13 / KWin 6.3.6, Ubuntu 24.04, Fedora 40) even though the daemon, editor, KCM, settings app, and QPA plugin build cleanly there. The new `BUILD_KWIN_EFFECT` option (default `ON`) lets packagers pass `-DBUILD_KWIN_EFFECT=OFF` to build everything except the C++ effect plugin. Thanks @iubayb.
 
 ### Fixed
-- **Qt 6.9 `QWaylandWindow::updateExposure()` compile error on Qt 6.8** ([#321](https://github.com/fuddlesworth/PlasmaZones/pull/321)): `layershellwindow.cpp` called a private method added in Qt 6.9, breaking the build on Qt 6.8.x. Guarded the call with `QT_VERSION_CHECK(6, 9, 0)` and fell back to the underlying public QPA mechanism (`QWindowSystemInterface::handleExposeEvent`) on older Qt — same visible effect, same expose-event delivery. Thanks @iubayb.
+- **Qt 6.9 `QWaylandWindow::updateExposure()` compile error on Qt 6.8** ([#321](https://github.com/fuddlesworth/PlasmaZones/pull/321)): `layershellwindow.cpp` called a private method added in Qt 6.9, breaking the build on Qt 6.8.x. Guarded the call with `QT_VERSION_CHECK(6, 9, 0)` and fell back to the underlying public QPA mechanism (`QWindowSystemInterface::handleExposeEvent`) on older Qt. Same visible effect, same expose-event delivery. Thanks @iubayb.
 
 ## [2.8.6] - 2026-04-11
 
 ### Fixed
-- **Emby and other Electron/CEF apps silently break after class rename** ([#271](https://github.com/fuddlesworth/PlasmaZones/discussions/271)): The daemon's runtime primary key was `"appId|uuid"` — a composite that baked a mutable attribute into the identity used for every per-window map. Emby opens as `emby-beta`, gets tracked, then KWin rebroadcasts it as `media.emby.client.beta`; every subsequent lookup under the new composite missed, so `toggleWindowFloat`, focus navigation, and snap operations silently failed until a mode toggle rebuilt state from scratch. Introduced `WindowRegistry` as the single source of truth for live-window metadata keyed by the stable KWin instance id; the kwin-effect pushes class/desktop-file/title on `windowAdded` and on every `windowClassChanged` / `desktopFileNameChanged` / `captionChanged` so the daemon always reads the live class instead of parsing a frozen first-seen composite. Session persistence uses `currentAppIdFor()` at save time so a renamed window lands under its live class on disk.
+- **Emby and other Electron/CEF apps silently break after class rename** ([#271](https://github.com/fuddlesworth/PlasmaZones/discussions/271)): The daemon's runtime primary key was `"appId|uuid"`, a composite that baked a mutable attribute into the identity used for every per-window map. Emby opens as `emby-beta`, gets tracked, then KWin rebroadcasts it as `media.emby.client.beta`. Every subsequent lookup under the new composite missed, so `toggleWindowFloat`, focus navigation, and snap operations silently failed until a mode toggle rebuilt state from scratch. Introduced `WindowRegistry` as the single source of truth for live-window metadata keyed by the stable KWin instance id. The kwin-effect pushes class/desktop-file/title on `windowAdded` and on every `windowClassChanged` / `desktopFileNameChanged` / `captionChanged` so the daemon always reads the live class instead of parsing a frozen first-seen composite. Session persistence uses `currentAppIdFor()` at save time so a renamed window lands under its live class on disk.
 
 ## [2.8.5] - 2026-04-10
 
 ### Fixed
-- **Master window balloons to 100% on notifications** ([#271](https://github.com/fuddlesworth/PlasmaZones/discussions/271)): KWin transiently flipped a tiled window's `isMinimized()` state to true and back within ~1-2ms whenever a plasmashell notification popup rearranged stacking. The autotile engine recalculated with N-1 windows, tiling the surviving master to the full screen, before unfloating ~ms later. Users saw the master briefly balloon to 100% on every notification; in the worst reported log, the stack window cycled float/unfloat 34 times in a single day with no user interaction. Fixed with two layers of defense: (1) a class-based filter for Plasma shell layer-shell surfaces (`plasmashell`, `plasma.emojier`, `plasma.notifications`, `krunner`) that don't reliably set `isNotification()`/`isPopupWindow()` on Wayland — 508 stray tracking events a day, gone; (2) a 75ms debounce on the minimize→float commit that coalesces spurious minimize/unminimize cycles to zero D-Bus calls. Real user minimizes always last longer than 75ms so they commit normally.
-- **Cannot re-enable PlasmaZones from settings after killing a terminal-run daemon** ([#271](https://github.com/fuddlesworth/PlasmaZones/discussions/271)): When users ran `plasmazonesd` manually for log collection, systemd's managed instance lost the D-Bus name race and exited; `Restart=on-failure` retried until `StartLimitBurst` was exhausted, leaving the unit wedged in `failed` state. `systemctl --user start` then silently did nothing until logout. `DaemonController::startDaemon` now chains `reset-failed` → `start` so the settings toggle recovers the unit automatically.
+- **Master window balloons to 100% on notifications** ([#271](https://github.com/fuddlesworth/PlasmaZones/discussions/271)): KWin transiently flipped a tiled window's `isMinimized()` state to true and back within ~1-2ms whenever a plasmashell notification popup rearranged stacking. The autotile engine recalculated with N-1 windows, tiling the surviving master to the full screen, before unfloating ~ms later. Users saw the master briefly balloon to 100% on every notification. In the worst reported log, the stack window cycled float/unfloat 34 times in a single day with no user interaction. Fixed with two layers of defense: (1) a class-based filter for Plasma shell layer-shell surfaces (`plasmashell`, `plasma.emojier`, `plasma.notifications`, `krunner`) that don't reliably set `isNotification()`/`isPopupWindow()` on Wayland, removing 508 stray tracking events a day, and (2) a 75ms debounce on the minimize→float commit that coalesces spurious minimize/unminimize cycles to zero D-Bus calls. Real user minimizes always last longer than 75ms so they commit normally.
+- **Cannot re-enable PlasmaZones from settings after killing a terminal-run daemon** ([#271](https://github.com/fuddlesworth/PlasmaZones/discussions/271)): When users ran `plasmazonesd` manually for log collection, systemd's managed instance lost the D-Bus name race and exited. `Restart=on-failure` retried until `StartLimitBurst` was exhausted, leaving the unit wedged in `failed` state. `systemctl --user start` then silently did nothing until logout. `DaemonController::startDaemon` now chains `reset-failed` → `start` so the settings toggle recovers the unit automatically.
 
 ## [2.8.4] - 2026-04-09
 
 ### Fixed
-- **Ephemeral windows entering autotile tree** ([#271](https://github.com/fuddlesworth/PlasmaZones/discussions/271)): The KWin effect's minimum window size filter initialized to 0x0 and was only populated after an async D-Bus settings load. During that startup race window, all windows — including Steam splash screens and Electron notification popups — bypassed the size check and entered the tiling tree. The cache now initializes to 200x150 (matching daemon defaults) so the filter is active from effect load.
+- **Ephemeral windows entering autotile tree** ([#271](https://github.com/fuddlesworth/PlasmaZones/discussions/271)): The KWin effect's minimum window size filter initialized to 0x0 and was only populated after an async D-Bus settings load. During that startup race window, all windows, including Steam splash screens and Electron notification popups, bypassed the size check and entered the tiling tree. The cache now initializes to 200x150 (matching daemon defaults) so the filter is active from effect load.
 
 ### Added
 - **`--log-file` flag for daemon**: `plasmazonesd --log-file /tmp/pz.log` redirects all log output to a file (append mode, thread-safe). Combines with `--debug` for easy bug report capture without piping or `journalctl`.
@@ -271,11 +334,11 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ## [2.8.2] - 2026-04-08
 
 ### Fixed
-- **Autotile windows pushed off-screen on retile** ([#271](https://github.com/fuddlesworth/PlasmaZones/discussions/271)): When a window's minimum size exceeded its assigned zone (common with browsers on ultrawide monitors), the Wayland centering code centered the oversized window within the zone — pushing it to a negative x/y position, literally off the left edge of the screen. Oversized windows are now left/top-aligned in their zone instead of centered, staying on-screen while the daemon adjusts zone sizes.
-- **Min-size clearing regression from 2.8.1**: Removed the indiscriminate `m_windowMinSizes` clearing in `onScreenGeometryChanged()` added in 2.8.1. The min-size feedback loop it guarded against was already eliminated by removing the `targetZone.width()` fallback, so the clearing just forced windows through unnecessary centering discovery cycles — triggering the off-screen push above.
+- **Autotile windows pushed off-screen on retile** ([#271](https://github.com/fuddlesworth/PlasmaZones/discussions/271)): When a window's minimum size exceeded its assigned zone (common with browsers on ultrawide monitors), the Wayland centering code centered the oversized window within the zone, pushing it to a negative x/y position, literally off the left edge of the screen. Oversized windows are now left/top-aligned in their zone instead of centered, staying on-screen while the daemon adjusts zone sizes.
+- **Min-size clearing regression from 2.8.1**: Removed the indiscriminate `m_windowMinSizes` clearing in `onScreenGeometryChanged()` added in 2.8.1. The min-size feedback loop it guarded against was already eliminated by removing the `targetZone.width()` fallback, so the clearing just forced windows through unnecessary centering discovery cycles, triggering the off-screen push above.
 
 ### Improved
-- **Autotile diagnostic logging**: Added logging to key autotile paths — window open/remove events now log IDs and min-sizes, `recalculateLayout` logs zone geometries and split ratios, screen geometry changes are logged, and window eligibility rejections now include the reason. This makes autotile ratio issues diagnosable from `journalctl` without code changes.
+- **Autotile diagnostic logging**: Added logging to key autotile paths. Window open/remove events now log IDs and min-sizes, `recalculateLayout` logs zone geometries and split ratios, screen geometry changes are logged, and window eligibility rejections now include the reason. This makes autotile ratio issues diagnosable from `journalctl` without code changes.
 
 ## [2.8.1] - 2026-04-08
 
@@ -287,8 +350,8 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 - **Support report generator** ([#302]): `plasmazones-report` script collects daemon logs, config, and data directory into a tar.gz archive for bug reports and discussions.
-- **Autotile window preservation** ([#301]): Autotiled windows now survive layout switches, mode toggles, and daemon restarts — matching the preservation behavior that snapped windows already had.
-- **Disabled-context OSD** ([#297]): Visual feedback when toggling PlasmaZones on a disabled desktop, activity, or screen — shows why nothing happened and where to change it.
+- **Autotile window preservation** ([#301]): Autotiled windows now survive layout switches, mode toggles, and daemon restarts, matching the preservation behavior that snapped windows already had.
+- **Disabled-context OSD** ([#297]): Visual feedback when toggling PlasmaZones on a disabled desktop, activity, or screen. Shows why nothing happened and where to change it.
 - **Config v2 nested schema** ([#295]): `config.json` restructured from flat keys to a nested hierarchy mirroring the settings UI. Existing v1 configs are migrated automatically.
 - **Systemd service autostart**: Enabling the daemon toggle now also enables the systemd user service so PlasmaZones starts on login.
 
@@ -300,7 +363,7 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 - **Assignment persistence across restart** ([#303]): Layout assignments and tiling window order now survive daemon restarts and mode-cycle toggling.
-- **Autotile ratio retry** ([#299]): Bounded retry for transient geometry failures during autotile layout; stale min-size overrides are cleared after resize settles.
+- **Autotile ratio retry** ([#299]): Bounded retry for transient geometry failures during autotile layout. Stale min-size overrides are cleared after resize settles.
 - **Config purge unknown keys** ([#300]): Unknown root-level groups are removed on save, preventing config pollution from obsolete or misspelled keys.
 - **Window restore after config v2 migration** ([#295]): `loadState` was bypassing `IConfigBackend` group API after the schema change, breaking window restore on first launch.
 - **Watcher double-delete guard** ([#302]): Fixed a use-after-free race in the file watcher teardown path.
@@ -309,13 +372,13 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ## [2.7.1] - 2026-04-06
 
 ### Added
-- **Custom algorithm parameter UI** ([#294]): Scripted algorithms declaring `@param` metadata now get auto-generated controls in the Tiling settings page — sliders for numbers, switches for bools, and combo boxes for enums.
+- **Custom algorithm parameter UI** ([#294]): Scripted algorithms declaring `@param` metadata now get auto-generated controls in the Tiling settings page. Sliders for numbers, switches for bools, and combo boxes for enums.
 - **Ratio step size slider** ([#292]): Configurable step size for master ratio keyboard shortcut adjustments.
 
 ### Fixed
 - **Per-screen master ratio and count** ([#292]): Per-screen overrides for master ratio and count were not persisted correctly. Fixed key constants, slider bindings, and race conditions in the per-screen config path.
 - **Reset to defaults clears per-algorithm settings** ([#292]): Resetting to defaults now properly clears saved per-algorithm autotile settings.
-- **OSD shown at ratio bounds** ([#292]): Master ratio OSD was suppressed when the value hit min/max; now always shown on shortcut press.
+- **OSD shown at ratio bounds** ([#292]): Master ratio OSD was suppressed when the value hit min/max. Now always shown on shortcut press.
 - **Shader dark band at adjacent zone edges**: Eliminated a visible seam in the Aretha Shell shader where neighboring zones shared an edge.
 - **Shader category duplication in settings**: Fixed duplicate shader categories and easing preview binding errors.
 - **Editor shader error box**: Restored the shader compilation error display in the layout editor preview.
@@ -383,7 +446,7 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - **Layout popup algorithm previews**: Algorithm previews in the zone selector and layout picker popup now respect algorithm metadata (zone number display mode, producesOverlappingZones, master indicator dots) like the settings app does.
 - **Window picker exclusion lists**: WindowPickerDialog was shadowing the `appSettings` context property, causing addExcludedApplication/addExcludedWindowClass to silently fail. Now routes through settingsController.settings.
 - **Autotile split ratio state corruption**: Reset suspiciously high split ratios (> max - 0.05) on state load to prevent layouts from being stuck with unusable splits.
-- **Autotile cursor hover focus**: The hover-to-focus check in AutotileHandler was using the old `shouldHandleWindow` method; now uses `isTileableWindow` for consistency.
+- **Autotile cursor hover focus**: The hover-to-focus check in AutotileHandler was using the old `shouldHandleWindow` method. It now uses `isTileableWindow` for consistency.
 
 ## [2.5.1] - 2026-03-30
 
@@ -391,7 +454,7 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - **Independent autotile sticky window handling**: Separate setting for how autotiling handles sticky windows (on all desktops), independent from the snapping setting. Configurable in Tiling > Behavior.
 
 ### Fixed
-- **Editor shader crash**: Null pointer dereference in `ZoneShaderNodeRhi::render()` when switching between multipass shaders — missing null check on `m_multiBufferTextures[i]`.
+- **Editor shader crash**: Null pointer dereference in `ZoneShaderNodeRhi::render()` when switching between multipass shaders, from a missing null check on `m_multiBufferTextures[i]`.
 - **Editor undo crash**: Guard `m_undoController` dereferences in `setCurrentShaderParams()`, `setShaderParameter()`, `resetShaderParameters()`, and `switchShader()` to match existing pattern.
 - **Arch packaging**: PKGBUILDs referenced `kbuildsycoca.hook` and `plasmazones-refresh-sycoca` as standalone source files instead of using in-tree paths, causing `makepkg` to fail with "cannot stat" errors.
 
@@ -399,7 +462,7 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 - **Scripted tiling algorithms** ([#256], [#259]): All 24 tiling algorithms are now JavaScript, running in a sandboxed QJSEngine with hot-reload. The 15 former C++ algorithms have been converted to JS with identical behavior. Six new algorithms added: Cascade, Corner Master, Floating Center, Horizontal Deck, Paper, and Stair. Custom user algorithms are loaded from `~/.local/share/plasmazones/algorithms/`.
-- **Dwindle (Memory) algorithm**: Dwindle variant with a persistent split tree — resizing one tile does not affect others. Split positions survive window close/reopen.
+- **Dwindle (Memory) algorithm**: Dwindle variant with a persistent split tree, where resizing one tile does not affect others. Split positions survive window close/reopen.
 - **Multi-compositor support** ([#261]): Custom `pz-layer-shell` QPA plugin replaces the `LayerShellQt` dependency. PlasmaZones now works on any Wayland compositor with `zwlr_layer_shell_v1` support (Hyprland, Sway, Wayfire, niri, COSMIC, river, labwc).
 - **Vulkan rendering backend** ([#264]): Optional Vulkan backend for zone overlay rendering with automatic fallback to OpenGL on unsupported hardware or driver crash. User-selectable in **Settings → General**.
 - **New Layout / New Algorithm wizards** ([#263]): Guided dialogs for creating zone layouts from templates and tiling algorithms from a starter script, accessible from the settings app.
@@ -407,7 +470,7 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - **Disable per virtual desktop / activity** ([#260]): Disable PlasmaZones on specific virtual desktops or activities per screen. Overlay hides automatically on disabled contexts.
 - **Settings UX polish** ([#268], [#269]): Two-line description rows, collapsible card sections, consolidated footer bar with Apply/Reset/Defaults, sidebar page badges, inline toggle switches replacing disable checkboxes.
 - **Single-instance settings app** ([#270]): `plasmazones-settings` is now single-instance via D-Bus. Launching it again raises the existing window and navigates to the requested page (`--page <name>` / `-p <name>`).
-- **Unsaved changes confirmation**: Settings app prompts before closing with unsaved changes; Reset and Defaults buttons require confirmation.
+- **Unsaved changes confirmation**: Settings app prompts before closing with unsaved changes. Reset and Defaults buttons require confirmation.
 - **Master indicator dots**: Algorithm grid cards show dots indicating which zones are master positions.
 - **Memory indicator icon**: Stateful algorithms (Dwindle Memory) show a persistence icon in the algorithm selector.
 - **Per-algorithm settings storage**: Split ratio, master count, and other parameters are saved per-algorithm rather than globally.
@@ -417,13 +480,13 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 - **LayerShellQt replaced**: Custom `pz-layer-shell` QPA plugin is now the sole layer-shell backend. Packagers: drop `layer-shell-qt` build dependency, add `qt6-wayland` and `wayland-scanner`.
-- **Config keys centralized** ([#266]): All config group names and key strings extracted to `ConfigDefaults` accessors — no more inline string literals in settings code.
+- **Config keys centralized** ([#266]): All config group names and key strings extracted to `ConfigDefaults` accessors. No more inline string literals in settings code.
 - **Settings page IDs renamed**: `snap-*` / `tile-*` page IDs renamed to `snapping-*` / `tiling-*` for consistency.
 - **Algorithm registry**: Hardcoded algorithm ID constants replaced with a data-driven registry. Algorithm metadata (name, capabilities, flags) comes from JS `@tag` annotations.
 - **README streamlined**: Detailed algorithm table, shader table, D-Bus API reference, and project structure moved to the wiki. README reduced from 742 to 593 lines with summary + wiki links.
 
 ### Removed
-- **LayerShellQt dependency**: No longer required — replaced by `pz-layer-shell` QPA plugin.
+- **LayerShellQt dependency**: No longer required. Replaced by `pz-layer-shell` QPA plugin.
 - **C++ tiling algorithm implementations**: All algorithms are now JavaScript. The C++ implementations have been removed.
 - **Legacy migration code**: Removed all config key migration and backward-compatibility shims from settings save/load paths.
 - **kcfg/kcfgc schema files**: Unused KConfig schema files removed.
@@ -440,7 +503,7 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - **CAVA crash suppression**: Suppress misleading "CAVA Crashed" error message caused by process-group SIGTERM during daemon shutdown.
 - **Shader preview bindings**: Restore reactive label and wallpaper texture bindings in the editor shader preview.
 - **Settings dirty flag on navigation**: Prevent spurious unsaved-changes prompts when switching between settings pages.
-- **Slider snap-back bug**: Fix master count control snapping back to previous value; replace SpinBox with SettingsSlider.
+- **Slider snap-back bug**: Fix master count control snapping back to previous value, replacing SpinBox with SettingsSlider.
 - **Aspect ratio menu**: Replace flat menu items with nested submenu for aspect ratio presets.
 - **Layer-shell window recovery**: Recover shader preview when the Wayland `LayerSurface` is unexpectedly destroyed.
 
@@ -453,10 +516,10 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ## [2.4.7] - 2026-03-27
 
 ### Added
-- **Center-distance zone selection for overlapping zones** ([#258]): When zones overlap (e.g. quadrants + halves + fullscreen), the zone whose center is closest to the cursor now wins instead of always picking the smallest zone. This lets users reach background zones by dragging toward their center — matching the FancyZones behavior. The multi-zone span path is unaffected, preserving the [#211] fix.
+- **Center-distance zone selection for overlapping zones** ([#258]): When zones overlap (e.g. quadrants + halves + fullscreen), the zone whose center is closest to the cursor now wins instead of always picking the smallest zone. This lets users reach background zones by dragging toward their center, matching the FancyZones behavior. The multi-zone span path is unaffected, preserving the [#211] fix.
 
 ### Fixed
-- **Window picker inserts unmatchable values** ([#251]): "Pick from running windows" in App Rules and Exclusions inserted raw X11 window class format (e.g. `"signal signal"`) instead of the normalized form used for matching (`"signal"`). Manually typing the name worked; using the picker did not.
+- **Window picker inserts unmatchable values** ([#251]): "Pick from running windows" in App Rules and Exclusions inserted raw X11 window class format (e.g. `"signal signal"`) instead of the normalized form used for matching (`"signal"`). Manually typing the name worked. Using the picker did not.
 - **Keyboard shortcuts move excluded windows** ([#251]): Move, Push, and Swap keyboard shortcuts ignored exclusion rules, moving the window behind an excluded app instead of doing nothing. All navigation shortcuts now check exclusions consistently.
 - **Drag-out unsnap doesn't clear persisted zone** ([#251]): Dragging a window out of its zone and closing it would still persist the zone, causing the window to snap back on reopen. The floating state flag was not always set due to an overly strict guard condition.
 - **D-Bus zone detection missing geometry recalculation**: `detectMultiZoneAtPosition` did not call `recalculateZoneGeometries` before detection, potentially using stale zone coordinates.
@@ -467,7 +530,7 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - **Plasma Sigil shader**: Animated energy sigil based on the PlasmaZones icon with glowing rune effects.
 
 ### Fixed
-- **System Settings crash when opening PlasmaZones KCM**: The KCM linked the entire `plasmazones_core` library (with layer-shell QPA plugin, PlasmaActivities, 21 static initializers) just to read a version string. When the daemon was not running this caused heap corruption and SIGABRT during QML binding creation. Replaced with a compile-time version define — the KCM no longer loads the core library at all.
+- **System Settings crash when opening PlasmaZones KCM**: The KCM linked the entire `plasmazones_core` library (with layer-shell QPA plugin, PlasmaActivities, 21 static initializers) just to read a version string. When the daemon was not running this caused heap corruption and SIGABRT during QML binding creation. Replaced with a compile-time version define so the KCM no longer loads the core library at all.
 - **Editor context menu crash on zone updates**: Use shared context menu to prevent QQmlData use-after-free crash when zones update while the menu is open.
 
 ## [2.4.5] - 2026-03-26
@@ -484,14 +547,14 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 - **Identical monitors showing as duplicates in settings** ([#252]): Two monitors with the same EDID (manufacturer/model/serial) got the same screen ID, causing the settings UI to show the primary monitor twice and tiling/snapping to only work on one monitor. Screen IDs now append `/ConnectorName` when duplicates are detected, with backward-compatible fallback matching for saved configs.
-- **App-to-Zone rules not working** ([#254]): Rule matching used raw substring comparison that failed when appId format differed from user input (e.g. "firefox" vs "org.mozilla.firefox"). Replaced with `appIdMatches()` — segment-aware dot-boundary matching that handles both directions and partial last-segment prefixes.
+- **App-to-Zone rules not working** ([#254]): Rule matching used raw substring comparison that failed when appId format differed from user input (e.g. "firefox" vs "org.mozilla.firefox"). Replaced with `appIdMatches()`, segment-aware dot-boundary matching that handles both directions and partial last-segment prefixes.
 - **Exclusions ignored by auto-snap and keyboard shortcuts** ([#254]): The exclusion settings interface existed but was never checked. Added exclusion gates in both the auto-snap chain (`resolveWindowRestore`) and keyboard shortcut path (`snapToZoneByNumber`).
 - **Unsnapped windows re-snap on reopen** ([#254]): Manually unsnapping a window didn't clear its pending restore entry, so closing and reopening it snapped it back. Now consumes the pending entry on unsnap (multi-instance safe).
 - **Drag-out unsnap doesn't restore window size** ([#254]): The geometry validation path didn't pass the release screen ID, causing cross-screen coordinate validation to fail silently. Also fixed premature pre-tile geometry cleanup that prevented later float-toggle restore.
 - **Render node use-after-free during hot-reload**: The scene graph render thread could dereference a dangling `QQuickItem` pointer after shader hot-reload when `bufferFeedback` (ping-pong) was active. Added atomic invalidation flag with acquire/release ordering.
 
 ### Added
-- **Ember Trace shader**: Fractal fire patterns via ping-pong feedback buffer — the first shader to use the `bufferFeedback` feature. Zone borders emit flames that spiral inward via feedback zoom, with 7 layered visual systems including reaction-diffusion-like dynamics, curl-noise advection, and per-band audio (bass eruption shockwaves, mids feedback phase shift, treble turbulent mixing).
+- **Ember Trace shader**: Fractal fire patterns via ping-pong feedback buffer, the first shader to use the `bufferFeedback` feature. Zone borders emit flames that spiral inward via feedback zoom, with 7 layered visual systems including reaction-diffusion-like dynamics, curl-noise advection, and per-band audio (bass eruption shockwaves, mids feedback phase shift, treble turbulent mixing).
 - **Neon Phantom shader**: Neon-lit cyberpunk zone overlay.
 
 ## [2.4.2] - 2026-03-25
@@ -509,7 +572,7 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - **Retile shortcut conflicts with Spectacle**: Changed default from Meta+Shift+R (Spectacle rectangular region capture) to Meta+Ctrl+R.
 
 ### Changed
-- **ConfigDefaults is now the single source of truth** for all setting defaults, min/max bounds, and shortcut defaults. Previously duplicated across `configdefaults.h`, `settings.h`, `setters.cpp`, `loadsave.cpp`, `perscreen.cpp`, QML pages, `.kcfg`, and tests — now every consumer references `ConfigDefaults`. Changing a bound or default requires editing exactly one place.
+- **ConfigDefaults is now the single source of truth** for all setting defaults, min/max bounds, and shortcut defaults. Previously duplicated across `configdefaults.h`, `settings.h`, `setters.cpp`, `loadsave.cpp`, `perscreen.cpp`, QML pages, `.kcfg`, and tests. Now every consumer references `ConfigDefaults`. Changing a bound or default requires editing exactly one place.
 - **Settings bounds exposed to QML** via `SettingsController` constant Q_PROPERTYs. All QML `from:`/`to:` values reference the controller instead of hardcoded literals.
 - **Removed dead code**: Unused `ZoneSelectorCard.qml`.
 - **Added `FilterLayoutsByAspectRatio` to `.kcfg`**: Was implemented in code but missing from the schema.
@@ -529,7 +592,7 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 - **KWin effect reduced to thin interface layer** ([PR #245]): Effect code is now a minimal bridge between KWin and the daemon over D-Bus. All tiling/snapping logic lives in the daemon.
-- **Removed unused `LayoutType` enum**: Cleaned up `Layout` model — the `type` field was never used.
+- **Removed unused `LayoutType` enum**: Cleaned up `Layout` model. The `type` field was never used.
 - **Dropped `IConfigBackend` interface indirection**: `QSettingsConfigBackend` used directly after KConfig removal stabilized.
 - **Removed KConfig dependency from test suite**: Tests use the standalone config backend.
 - **Removed daemon toggle from KCM**: Moved `DaemonController` to `src/common`.
@@ -549,7 +612,7 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ## [2.3.16] - 2026-03-21
 
 ### Fixed
-- **Layout card button flicker on hover** ([#235]): The Auto-assign and Visibility toggle buttons flickered when hovered. Two cooperating causes: (1) the right-anchored Row reflowed leftward when buttons toggled `visible:`, shifting button positions and destabilizing hover; (2) `ToolTip.visible: hovered` with no delay opened a popup that stole pointer focus on some compositors. Wrapped each ToolButton in a fixed-size Item to eliminate geometry reflow and added `ToolTip.delay` to break the feedback loop.
+- **Layout card button flicker on hover** ([#235]): The Auto-assign and Visibility toggle buttons flickered when hovered. There were two cooperating causes. First, the right-anchored Row reflowed leftward when buttons toggled `visible:`, shifting button positions and destabilizing hover. Second, `ToolTip.visible: hovered` with no delay opened a popup that stole pointer focus on some compositors. Wrapped each ToolButton in a fixed-size Item to eliminate geometry reflow and added `ToolTip.delay` to break the feedback loop.
 - **Zone selector grid ignoring columns/rows at fixed preview sizes**: The `maxRows` setting was only applied when preview size was "Auto". Fixed to apply for all size modes in Grid layout.
 
 ### Changed
@@ -564,7 +627,7 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - **Layout card button flicker at fractional DPI**: The Auto-assign and Visibility toggle buttons flickered when hovered at 125% display scaling. The `visible:` property toggling caused Row geometry reflow that shifted button positions by sub-pixel amounts, creating a hover feedback loop. Replaced `visible:` with `opacity:`/`enabled:` and added `ToolTip.delay`.
 
 ### Changed
-- **Enhanced label effects for branded shaders**: CachyOS, Fedora, Neon, and NixOS Drift shaders had label text bodies that appeared solid white. Text fill patterns used screen-space UV which barely varied within characters, and `smoothstep(0.3, 0.9, labels.a)` washed to white. Rewrote all four with pixel-space patterns, edge rim detection, and `x/(0.6+x)` tonemapping. Each shader gets a unique style: digital shatter (CachyOS), frost crystalline (Fedora), neon tube flicker (Neon), hash grid verification (NixOS).
+- **Enhanced label effects for branded shaders**: CachyOS, Fedora, Neon, and NixOS Drift shaders had label text bodies that appeared solid white. Text fill patterns used screen-space UV which barely varied within characters, and `smoothstep(0.3, 0.9, labels.a)` washed to white. Rewrote all four with pixel-space patterns, edge rim detection, and `x/(0.6+x)` tonemapping. Each shader gets a unique style. Digital shatter (CachyOS), frost crystalline (Fedora), neon tube flicker (Neon), hash grid verification (NixOS).
 
 ## [2.3.14] - 2026-03-21
 
@@ -635,7 +698,7 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ## [2.3.5] - 2026-03-19
 
 ### Fixed
-- **KCM assignment save rewrites modes**: The KCM decomposed per-screen AssignmentEntry (mode + snappingLayout + tilingAlgorithm) into two flat maps and merged them on save — losing mode information, reverting layouts after Apply, and corrupting autotile/snapping mode when editing the other mode's field. Replaced with per-entry D-Bus writes via new `setAssignmentEntry` method that preserves all fields independently.
+- **KCM assignment save rewrites modes**: The KCM decomposed per-screen AssignmentEntry (mode + snappingLayout + tilingAlgorithm) into two flat maps and merged them on save, losing mode information, reverting layouts after Apply, and corrupting autotile/snapping mode when editing the other mode's field. Replaced with per-entry D-Bus writes via new `setAssignmentEntry` method that preserves all fields independently.
 - **Clearing per-desktop override inherits base autotile mode**: Setting a per-desktop layout to "Use default" removed the entire entry, inheriting the base screen's mode (often autotile). Now keeps a mode-only marker entry that preserves the desktop's mode while cascading layout resolution to the parent scope.
 - **Monitor-level layout changes revert after Apply**: The batch `setAllScreenAssignments` D-Bus method used `fromLayoutId(id, existing)` which preserved the old mode instead of setting it from the layout ID type. Combined with the merge logic sending the wrong mode's ID, screens appeared to revert.
 - **KCM combo shows resolved layout instead of "Use default"**: After clearing a per-desktop assignment, the combo showed the inherited layout name instead of "Use default" because the D-Bus echo signal overwrote the KCM cache with the cascaded base layout. Added `setSaveBatchMode` to suppress `screenLayoutChanged` signals during the entire save batch.
@@ -647,14 +710,14 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - **Synchronous notifyReload**: KCM-to-daemon settings reload is now synchronous with `m_ignoreNextSettingsChanged` flag, preventing race conditions where the daemon's queued `settingsChanged` signal would trigger a spurious reload that reverts just-saved assignments.
 
 ### Changed
-- **Assignment edits never change mode**: Selecting a snapping layout or tiling algorithm in the KCM only updates that field — mode is controlled exclusively by the daemon through global snapping/autotile toggle, not by individual assignment edits.
+- **Assignment edits never change mode**: Selecting a snapping layout or tiling algorithm in the KCM only updates that field. Mode is controlled exclusively by the daemon through global snapping/autotile toggle, not by individual assignment edits.
 - **Full AssignmentEntry tracking in KCM**: Replaced redundant flat pending maps (`m_pendingDesktopAssignments`, `m_pendingActivityAssignments`) with full `AssignmentEntry` pending maps that track mode + snappingLayout + tilingAlgorithm per context.
 - **Field-level clearing**: Clearing a snapping layout only clears the `snappingLayout` field, preserving mode and `tilingAlgorithm`. Prevents unintended mode inheritance from parent scopes.
 
 ## [2.3.3] - 2026-03-17
 
 ### Fixed
-- **Autotile not activating when snapping disabled first**: When users disabled snapping (Apply) then enabled autotiling (Apply) in separate steps, per-screen autotile assignments were never created — the activation guard required both changes in the same settings event. Windows fell through to fullscreen stacking instead of tiling. Now also fires when autotile is toggled on while snapping is already off.
+- **Autotile not activating when snapping disabled first**: When users disabled snapping (Apply) then enabled autotiling (Apply) in separate steps, per-screen autotile assignments were never created because the activation guard required both changes in the same settings event. Windows fell through to fullscreen stacking instead of tiling. Now also fires when autotile is toggled on while snapping is already off.
 
 ## [2.3.2] - 2026-03-17
 
@@ -664,7 +727,7 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ## [2.3.1] - 2026-03-17
 
 ### Fixed
-- **Window state lost on daemon reload**: Zone assignments were purged during `loadState()` when the saved active layout differed from the default layout. Restoring the active layout emitted `activeLayoutChanged` before `currentVirtualDesktop` was set, causing `onLayoutChanged()` to resolve effective layouts against the wrong desktop and fall back to `defaultLayout()` — whose zones didn't match the saved assignments. Fixed by suppressing the signal during state restoration.
+- **Window state lost on daemon reload**: Zone assignments were purged during `loadState()` when the saved active layout differed from the default layout. Restoring the active layout emitted `activeLayoutChanged` before `currentVirtualDesktop` was set, causing `onLayoutChanged()` to resolve effective layouts against the wrong desktop and fall back to `defaultLayout()`, whose zones didn't match the saved assignments. Fixed by suppressing the signal during state restoration.
 - **Screen not found on Wayland (hex serial mismatch)**: The daemon's `screenIdentifier()` used `QScreen::serialNumber()` as-is, but on KDE Plasma Wayland this returns the EDID header serial in hex (e.g., `"0x0001C1A3"`). The KWin effect already normalized to decimal (`"115107"`), causing screen ID mismatches across the D-Bus boundary. Both sides now produce identical decimal serials.
 - **Screen not found from KCM queries ([#223])**: `getScreenInfo()` only matched screens by connector name (`"eDP-1"`), but `getScreens()` returns EDID-based screen IDs (`"Sharp Corporation:LQ134N1JW53"`). Every KCM screen info query failed, causing autotile assignments to revert and persistent "screen not found" errors on multi-monitor setups. Now accepts both connector names and screen IDs.
 - **Autotile window order lost on rapid mode toggle**: When `setInitialWindowOrder()` was called twice for the same screen, the first call's 10-second safety timer would fire and remove the second call's pending order. Added a generation counter so stale timers from superseded calls become no-ops.
@@ -674,9 +737,9 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 - **Stable EDID-based screen identifiers**: All screen identification now uses stable EDID-based IDs (e.g., `LG Electronics:LG Ultra HD:115107`) instead of connector names (`DP-2`). Monitors survive replug/reboot without losing layout assignments.
-- **Per-screen layout filtering**: Layout cycle shortcuts, layout picker popup, and zone selector now filter layouts based on the focused screen's mode. Snapping screens only show zone layouts; autotile screens only show tiling algorithms.
+- **Per-screen layout filtering**: Layout cycle shortcuts, layout picker popup, and zone selector now filter layouts based on the focused screen's mode. Snapping screens only show zone layouts. Autotile screens only show tiling algorithms.
 - **Per-screen layout locking**: Lock the current layout or tiling algorithm per screen/desktop/activity context. Prevents accidental changes from layout cycling, zone selector, or keyboard shortcuts. Toggle with `Meta+Ctrl+L` shortcut. OSD notification shows lock/unlock state.
-- **Per-mode context-aware locking**: Locking is mode-aware — locking on a snapping screen locks the zone layout, locking on an autotile screen locks the tiling algorithm. Each screen/desktop combination has independent lock state.
+- **Per-mode context-aware locking**: Locking is mode-aware. Locking on a snapping screen locks the zone layout, and locking on an autotile screen locks the tiling algorithm. Each screen/desktop combination has independent lock state.
 - **Shader parameter locking**: Lock individual shader parameters in the editor to preserve their values during randomize. Locked parameters show a lock icon and are excluded from random generation.
 - **Quick Layout slot labels**: KCM now shows "Quick Layout 1" / "Quick Tiling 1" instead of raw shortcut keys (`Meta+Alt+1`). Shortcut key shown as secondary text.
 - **Hot reload for shaders**: System and user shaders reload automatically on file changes.
@@ -690,7 +753,7 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 - **Screen ID migration**: 34+ files refactored to use EDID-based screen IDs consistently across the entire effect↔daemon D-Bus boundary, autotile engine, snap engine, and window tracking service.
-- **Shader categories from metadata**: Removed hardcoded category translations — category names come directly from shader `metadata.json`.
+- **Shader categories from metadata**: Removed hardcoded category translations. Category names come directly from shader `metadata.json`.
 - **German translations**: All three domains 100% complete (KCM: 529, Editor: 449, Daemon: 61).
 
 ## [2.2.1] - 2026-03-14
@@ -745,7 +808,7 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 - **Missing `retileAllScreens` D-Bus slot**: KWin effect called `retileAllScreens` but the adaptor only exposed `retile(screenName)`, causing D-Bus errors on border width changes and other bulk retile triggers
-- **Negative zone geometries from constraint solver**: When window minimum sizes exceed available space, the constraint solver could produce non-positive zone dimensions — now clamped to minimum 1x1 after layout calculation
+- **Negative zone geometries from constraint solver**: When window minimum sizes exceed available space, the constraint solver could produce non-positive zone dimensions, now clamped to minimum 1x1 after layout calculation
 
 ### Changed
 - **Generic tarball built on Arch Linux**: Switched the release pipeline's generic tarball build from Fedora 43 to Arch Linux, eliminating lib64/lib path mismatches at the source instead of working around them post-build
@@ -754,8 +817,8 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 - **Arch lib64 file conflict with generic tarball** (fixes [#203](https://github.com/fuddlesworth/PlasmaZones/discussions/203)): Force `CMAKE_INSTALL_LIBDIR=lib` in the generic tarball build so it doesn't inherit Fedora's `lib64` default, which conflicts with Arch's `filesystem` package owning `/usr/lib64` as a symlink
-- **Global show-zone-numbers toggle ignored when layout active** (fixes [#208](https://github.com/fuddlesworth/PlasmaZones/discussions/208)): Changed zone number visibility so the global toggle is a master switch — per-layout setting can only further restrict, not override it
-- **Easing preset dropdown UX** (fixes [#207](https://github.com/fuddlesworth/PlasmaZones/discussions/207)): Replaced single 30+ item flat dropdown with two-dropdown Style + Direction selector; clamped elastic/bounce preview animation to prevent overshoot overflow
+- **Global show-zone-numbers toggle ignored when layout active** (fixes [#208](https://github.com/fuddlesworth/PlasmaZones/discussions/208)): Changed zone number visibility so the global toggle is a master switch. Per-layout setting can only further restrict, not override it
+- **Easing preset dropdown UX** (fixes [#207](https://github.com/fuddlesworth/PlasmaZones/discussions/207)): Replaced single 30+ item flat dropdown with two-dropdown Style + Direction selector, and clamped elastic/bounce preview animation to prevent overshoot overflow
 - **Modifier key capture silently broken by qmlformat** (fixes [#205](https://github.com/fuddlesworth/PlasmaZones/discussions/205)): Replaced large Qt::KeyboardModifier integer literals with bit-shift expressions (`1 << 25` etc.) that qmlformat cannot mangle into lossy scientific notation
 - **Fedora COPR repo name case sensitivity**: Fixed COPR repo reference to use correct casing
 
@@ -819,7 +882,7 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ## [1.15.13] - 2026-03-08
 
 ### Fixed
-- **Login freeze with many shortcuts** (fixes [#200](https://github.com/fuddlesworth/PlasmaZones/discussions/200)): Replaced blocking `KGlobalAccel::setGlobalShortcut()` with a two-step approach — `setDefaultShortcut()` registers all shortcuts without key grabs, then async D-Bus calls activate key grabs in parallel without blocking the event loop. Eliminates 20-40s hangs during login when kglobalacceld is under contention.
+- **Login freeze with many shortcuts** (fixes [#200](https://github.com/fuddlesworth/PlasmaZones/discussions/200)): Replaced blocking `KGlobalAccel::setGlobalShortcut()` with a two-step approach where `setDefaultShortcut()` registers all shortcuts without key grabs, then async D-Bus calls activate key grabs in parallel without blocking the event loop. Eliminates 20-40s hangs during login when kglobalacceld is under contention.
 
 ## [1.15.12] - 2026-03-08
 
@@ -834,7 +897,7 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ## [1.15.10] - 2026-03-08
 
 ### Fixed
-- **Login freeze persisted despite v1.15.9 batching** (fixes [#200](https://github.com/fuddlesworth/PlasmaZones/discussions/200)): The v1.15.9 deferred batch approach still blocked because each batch made synchronous D-Bus round-trips whose replies stalled for ~25s while kglobalaccel processed key grabs (QTBUG-34698). Replaced with true async D-Bus: `setDefaultShortcut()` registers actions synchronously (fast — no key grabbing), then `setShortcutKeys` calls fire via `QDBusPendingCallWatcher` so the event loop never blocks on key grabbing.
+- **Login freeze persisted despite v1.15.9 batching** (fixes [#200](https://github.com/fuddlesworth/PlasmaZones/discussions/200)): The v1.15.9 deferred batch approach still blocked because each batch made synchronous D-Bus round-trips whose replies stalled for ~25s while kglobalaccel processed key grabs (QTBUG-34698). Replaced with true async D-Bus. `setDefaultShortcut()` registers actions synchronously (fast, no key grabbing), then `setShortcutKeys` calls fire via `QDBusPendingCallWatcher` so the event loop never blocks on key grabbing.
 
 ## [1.15.9] - 2026-03-08
 
@@ -845,12 +908,12 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ## [1.15.8] - 2026-03-08
 
 ### Fixed
-- **RPM: remove exact KWin version pin** (fixes [#199](https://github.com/fuddlesworth/PlasmaZones/discussions/199)): RPM package required `kwin = <build-version>` which blocked installation when KWin received patch updates (e.g. 6.6.1 -> 6.6.2). Changed to `kwin >= 6.6.0`; soname-level deps handle ABI safety automatically.
+- **RPM: remove exact KWin version pin** (fixes [#199](https://github.com/fuddlesworth/PlasmaZones/discussions/199)): RPM package required `kwin = <build-version>` which blocked installation when KWin received patch updates (e.g. 6.6.1 -> 6.6.2). Changed to `kwin >= 6.6.0`. Soname-level deps handle ABI safety automatically.
 
 ## [1.15.7] - 2026-03-06
 
 ### Fixed
-- **KWin 6.6.2 compatibility**: Rebuild for KWin 6.6.2 minor release; effect plugin is version-locked and requires exact KWin version match to load.
+- **KWin 6.6.2 compatibility**: Rebuild for KWin 6.6.2 minor release. Effect plugin is version-locked and requires exact KWin version match to load.
 
 ## [1.15.6] - 2026-02-28
 
@@ -865,13 +928,13 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ## [1.15.4] - 2026-02-26
 
 ### Fixed
-- **Overlapping zone multi-zone cascade**: Placing cursor on a zone fully inside a larger zone no longer highlights all zones. Fixed detectMultiZone to separate overlapping zones (cursor inside) from edge-adjacent zones (cursor near edge); only edge-adjacent zones trigger multi-zone snap. Replaced bounding-rect expansion with edge-adjacency flood-fill that skips zones spatially overlapping the seed. Removed duplicated smallest-area loop in paint-to-span.
+- **Overlapping zone multi-zone cascade**: Placing cursor on a zone fully inside a larger zone no longer highlights all zones. Fixed detectMultiZone to separate overlapping zones (cursor inside) from edge-adjacent zones (cursor near edge). Only edge-adjacent zones trigger multi-zone snap. Replaced bounding-rect expansion with edge-adjacency flood-fill that skips zones spatially overlapping the seed. Removed duplicated smallest-area loop in paint-to-span.
 - **Edge tolerance now respects settings**: Zone-to-zone edge detection uses the user's adjacentThreshold setting instead of a hardcoded 5px value, so manually-gapped layouts work correctly with the configured proximity.
 
 ## [1.15.3] - 2026-02-26
 
 ### Fixed
-- **KWin effect plugin version lock**: Effect plugin embeds EffectPluginFactory version in its IID; it only loads when runtime KWin matches. Added build-time version visibility in CMake and RPM spec now requires exact KWin version match, preventing 6.6.0-built plugins from installing on 6.6.1 systems where they fail to load.
+- **KWin effect plugin version lock**: Effect plugin embeds EffectPluginFactory version in its IID. It only loads when runtime KWin matches. Added build-time version visibility in CMake and RPM spec now requires exact KWin version match, preventing 6.6.0-built plugins from installing on 6.6.1 systems where they fail to load.
 
 ## [1.15.2] - 2026-02-22
 
@@ -888,7 +951,7 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ### Added
 - **Mosaic Pulse shader**: Audio-reactive stained glass mosaic with colorful tiles, pulsing shapes (circles, diamonds, squares), sparkles, and dithered posterization. Bass drives shape pulse, mids shift hue, treble triggers sparkles. 12 configurable parameters across 6 groups.
 - **User-supplied image textures**: Shader effects can now sample up to 4 user-provided images (bindings 7-10) with configurable wrap modes.
-- **Shared GLSL utilities**: Extracted `common.glsl`, `audio.glsl`, `textures.glsl`, and `multipass.glsl` as shared includes — all shaders updated to use common helpers (hash, noise, SDF, blending, audio bands).
+- **Shared GLSL utilities**: Extracted `common.glsl`, `audio.glsl`, `textures.glsl`, and `multipass.glsl` as shared includes. All shaders updated to use common helpers (hash, noise, SDF, blending, audio bands).
 
 ### Fixed
 - **System layout restore**: Deleting a user layout override from KCM now correctly restores the system-provided layout instead of leaving a blank state.
@@ -908,16 +971,16 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ## [1.14.0] - 2026-02-21
 
 ### Added
-- **Per-side edge gaps**: Independent top/bottom/left/right outer gap values instead of a single uniform gap — useful for transparent panels or asymmetric screen setups. Global toggle in KCM with per-layout overrides in the editor. Full undo/redo support. ([#187], [#188])
+- **Per-side edge gaps**: Independent top/bottom/left/right outer gap values instead of a single uniform gap, useful for transparent panels or asymmetric screen setups. Global toggle in KCM with per-layout overrides in the editor. Full undo/redo support. ([#187], [#188])
 - **Per-zone fixed pixel geometry**: Zones can now use absolute pixel coordinates instead of relative 0.0-1.0 values, enabling precise pixel-perfect layouts that don't scale with resolution. Per-zone toggle between Relative and Fixed modes in the editor. ([#180], [#182])
 - **Full screen geometry toggle**: Per-layout option to use the full screen area (ignoring panels/taskbars) for zone calculations, allowing zones to extend behind auto-hide or transparent panels. ([#179], [#181])
-- **AlwaysActive zone activation**: New activation mode that shows zones on every window drag without requiring a modifier key or mouse button — configurable in KCM Zones tab. ([#185], [#186])
+- **AlwaysActive zone activation**: New activation mode that shows zones on every window drag without requiring a modifier key or mouse button. Configurable in KCM Zones tab. ([#185], [#186])
 
 ### Changed
 - **Copy-on-write layout saving**: Layouts are only written to disk when actually modified, with per-layout dirty tracking to avoid unnecessary I/O during bulk operations.
 
 ### Fixed
-- Hardcoded 1920x1080 fallback removed from D-Bus zone detection — uses actual screen geometry.
+- Hardcoded 1920x1080 fallback removed from D-Bus zone detection. Uses actual screen geometry.
 - Fixed preview rendering for fixed-geometry zones in KCM new layout dialog.
 - All layouts recalculated on startup and screen changes to prevent stale geometry.
 - Per-side edge gap: -1 sentinel no longer leaks into geometry calculations when settings are unavailable.
@@ -932,7 +995,7 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - **Snap Assist after resnap**: Snap Assist now triggers after resnapping windows when switching layouts via the layout picker, offering to fill any empty zones.
 
 ### Fixed
-- **Zone activation broken when Zone Selector disabled** ([#175]): Disabling the Zone Selector popup caused the zone activation hotkey (e.g. Alt+drag) to stop working entirely. Root cause: D-Bus deserialization of trigger settings could silently fail (Qt delivering `QDBusArgument` instead of native `QVariantList<QVariantMap>`), but this was masked when `zoneSelectorEnabled=true` because a bypass gate let all drag events through regardless. Added robust `QDBusArgument` unwrapping, a permissive `m_triggersLoaded` flag that allows drags through until triggers are confirmed loaded, and diagnostic logging for trigger load failures.
+- **Zone activation broken when Zone Selector disabled** ([#175]): Disabling the Zone Selector popup caused the zone activation hotkey (e.g. Alt+drag) to stop working entirely. The root cause was that D-Bus deserialization of trigger settings could silently fail (Qt delivering `QDBusArgument` instead of native `QVariantList<QVariantMap>`), but this was masked when `zoneSelectorEnabled=true` because a bypass gate let all drag events through regardless. Added robust `QDBusArgument` unwrapping, a permissive `m_triggersLoaded` flag that allows drags through until triggers are confirmed loaded, and diagnostic logging for trigger load failures.
 - **Layout Picker double-trigger**: Rapidly pressing the layout picker shortcut could create multiple overlay windows with competing `KeyboardInteractivityExclusive` keyboard grabs on Wayland, causing shortcuts to stop working. Replaced toggle guard with a simple existence guard that prevents re-triggering while any picker window exists.
 
 ## [1.12.2] - 2026-02-19
@@ -958,23 +1021,23 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ### Added
 - **Reapply window geometries after geometry updates**: When zones or panel geometry change (e.g. after closing the KDE panel editor), the daemon requests the KWin effect to reapply snapped window positions so windows stay correctly placed in zones.
 - **D-Bus**: `reapplyWindowGeometriesRequested` signal and `getUpdatedWindowGeometries` method on WindowTracking for the effect to fetch and apply geometries.
-- **ScreenManager**: `delayedPanelRequeryCompleted` signal when the delayed panel requery finishes (used for documentation; reapply path is unified).
+- **ScreenManager**: `delayedPanelRequeryCompleted` signal when the delayed panel requery finishes (used for documentation, and the reapply path is unified).
 
 ### Fixed
 - **Panel editor / geometry**: Zones and snapped windows no longer shift incorrectly after editing the KDE panel and closing the panel editor. Geometry debounce (400ms), delayed panel requery (400ms), and immediate reapply (0ms) after each geometry batch keep overlay and window positions correct.
-- **Multiple windows in same zone**: Reapply now updates every snapped window; previously only one window per zone (same app) was updated due to stableId-only lookup. Effect now maps by full window ID with stableId fallback.
-- **Effect reapply safety**: Reapply-in-progress guard prevents overlapping async reapply runs; QPointer in async callback avoids use-after-free if the effect is unloaded during reapply.
-- **Effect JSON**: Robust validation and skip of invalid geometry entries; QLatin1String for JSON keys (Qt6); single-pass window map.
+- **Multiple windows in same zone**: Reapply now updates every snapped window. Previously only one window per zone (same app) was updated due to stableId-only lookup. Effect now maps by full window ID with stableId fallback.
+- **Effect reapply safety**: Reapply-in-progress guard prevents overlapping async reapply runs. QPointer in async callback avoids use-after-free if the effect is unloaded during reapply.
+- **Effect JSON**: Robust validation and skip of invalid geometry entries. QLatin1String for JSON keys (Qt6). Single-pass window map.
 
 ### Changed
-- **Reapply timing**: Reapply runs after every geometry batch (0ms delay). Removed redundant 1100ms/450ms reapply path; delayed panel requery still triggers the same debounce → processPendingGeometryUpdates → reapply flow.
-- **Daemon**: Reapply timer stopped in `stop()`; named constants for geometry and panel delays.
+- **Reapply timing**: Reapply runs after every geometry batch (0ms delay). Removed redundant 1100ms/450ms reapply path. Delayed panel requery still triggers the same debounce → processPendingGeometryUpdates → reapply flow.
+- **Daemon**: Reapply timer stopped in `stop()`. Named constants for geometry and panel delays.
 - **Nix**: Build asserts layer-shell QPA plugin compatibility and fails with a clear message when nixpkgs provides the 6.5 stack. Nix CI and release Nix build/artifact disabled until nixpkgs has Plasma 6.6.
 
 ## [1.11.8] - 2026-02-16
 
 ### Performance
-- **Signal-driven drag detection**: Replaced the QTimer-based poll loop (32ms stacking-order scans during drag) with KWin's per-window `windowStartUserMovedResized` / `windowFinishUserMovedResized` signals for zero-cost, event-driven drag start/end detection. Eliminates the `m_pollTimer` entirely — no more periodic stacking-order iteration on the compositor thread, even as a safety net ([#167])
+- **Signal-driven drag detection**: Replaced the QTimer-based poll loop (32ms stacking-order scans during drag) with KWin's per-window `windowStartUserMovedResized` / `windowFinishUserMovedResized` signals for zero-cost, event-driven drag start/end detection. Eliminates the `m_pollTimer` entirely, with no more periodic stacking-order iteration on the compositor thread, even as a safety net ([#167])
 
 ## [1.11.7] - 2026-02-16
 
@@ -989,7 +1052,7 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ### Performance
 - **Dynamic poll timer**: Poll rate switches from 500ms (idle) to 32ms (~30Hz) only when LMB is pressed, eliminating continuous 60Hz stacking-order scans on the compositor thread when no drag is active ([#167])
 - **Early-exit idle polls**: `DragTracker::pollWindowMoves()` skips the full stacking-order iteration when no drag is active and no button is held
-- **Reduced D-Bus traffic during drag**: Active-drag poll rate lowered from 16ms (60Hz) to 32ms (30Hz) — zone detection doesn't need sub-33ms updates, and halving D-Bus message serialization on the compositor thread reduces frame-time jitter on high-refresh-rate displays ([#167])
+- **Reduced D-Bus traffic during drag**: Active-drag poll rate lowered from 16ms (60Hz) to 32ms (30Hz) because zone detection doesn't need sub-33ms updates, and halving D-Bus message serialization on the compositor thread reduces frame-time jitter on high-refresh-rate displays ([#167])
 - **Guard redundant daemon work**: `hideOverlayAndClearZoneState()` now short-circuits when overlay is already hidden and zone state is clear, preventing 30Hz `clearHighlights()`/`clearHighlight()` calls that could congest the daemon event loop and create D-Bus back-pressure ([#167])
 
 ## [1.11.5] - 2026-02-16
@@ -1009,8 +1072,8 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ## [1.11.3] - 2026-02-16
 
 ### Added
-- **Master toggle for zone span**: New checkbox to fully enable/disable paint-to-span zone selection. Defaults to on; when off, modifier and threshold controls are greyed out.
-- **Master toggle for snap assist**: New checkbox to fully enable/disable the snap assist (window picker) feature. Defaults to on; when off, all snap assist sub-options are greyed out.
+- **Master toggle for zone span**: New checkbox to fully enable/disable paint-to-span zone selection. Defaults to on. When off, modifier and threshold controls are greyed out.
+- **Master toggle for snap assist**: New checkbox to fully enable/disable the snap assist (window picker) feature. Defaults to on. When off, all snap assist sub-options are greyed out.
 
 ### Fixed
 - **Nix flake evaluation error**: `lib.mkPackageOption` received a derivation instead of an attribute path, causing evaluation failures when `package` was not explicitly specified. Users can now use `programs.plasmazones.enable = true` without setting `package`.
@@ -1021,11 +1084,11 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - **Snap Assist trigger override** ([#166]): When "Always show" is off, hold a configurable modifier or mouse button when releasing a window to enable Snap Assist for that snap only. Uses the same multi-trigger widget as zone activation and zone span.
 
 ### Changed
-- **Snap Assist UI**: "Always show" checkbox; when off, configure hold-to-enable trigger via ModifierAndMouseCheckBoxes (shown disabled when always-on).
+- **Snap Assist UI**: "Always show" checkbox. When off, configure hold-to-enable trigger via ModifierAndMouseCheckBoxes (shown disabled when always-on).
 - **D-Bus breaking**: `org.plasmazones.WindowDrag.dragStopped` now requires `modifiers` and `mouseButtons` at release (for Snap Assist triggers). KWin effect and daemon must be from the same PlasmaZones version.
 
 ### Fixed
-- **KCM UX consistency**: Section titles added for all groups in Zones tab cards — Appearance (Colors, Border), Effects (Visual Effects), Activation (Triggers) — so every section has a consistent heading
+- **KCM UX consistency**: Section titles added for all groups in Zones tab cards: Appearance (Colors, Border), Effects (Visual Effects), Activation (Triggers), so every section has a consistent heading
 
 ## [1.11.1] - 2026-02-15
 
@@ -1054,10 +1117,10 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ## [1.10.6] - 2026-02-14
 
 ### Added
-- **Toggle activation mode**: Zone activation modifier can be toggled on/off with a single press instead of requiring hold — useful for trackpad and accessibility users ([#159])
+- **Toggle activation mode**: Zone activation modifier can be toggled on/off with a single press instead of requiring hold. Useful for trackpad and accessibility users ([#159])
 
 ### Changed
-- **Proximity snap always active**: Removed the multi-zone modifier setting entirely — adjacent zone detection now always works during drag with no modifier required
+- **Proximity snap always active**: Removed the multi-zone modifier setting entirely. Adjacent zone detection now always works during drag with no modifier required
 - **Zone span default changed to Ctrl**: Paint-to-span modifier defaults to Ctrl instead of Meta, avoiding conflict with KDE's Meta shortcut in toggle activation mode
 - CI: Replaced DeterminateSystems/FlakeHub Nix actions with cachix/install-nix-action
 
@@ -1073,31 +1136,31 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ## [1.10.4] - 2026-02-13
 
 ### Fixed
-- Session restore places windows on wrong display in multi-monitor setups — active screen and desktop assignments were lost on daemon restart ([#156])
-- Escape during drag now dismisses overlay without cancelling the drag; re-pressing the activation trigger re-shows the overlay
+- Session restore places windows on wrong display in multi-monitor setups. Active screen and desktop assignments were lost on daemon restart ([#156])
+- Escape during drag now dismisses overlay without cancelling the drag. Re-pressing the activation trigger re-shows the overlay
 - Keyboard grab released in effect destructor to prevent input loss if effect unloads mid-drag
 
 ## [1.10.3] - 2026-02-13
 
 ### Fixed
 - CAVA audio visualizer not starting without daemon restart after enabling in KCM ([#150])
-- Shader effects toggle, frame rate, and spectrum bar count changes also required restart — same root cause
-- No default layout selected on fresh install — Columns (2) now gets the star badge out of the box
+- Shader effects toggle, frame rate, and spectrum bar count changes also required restart, from the same root cause
+- No default layout selected on fresh install. Columns (2) now gets the star badge out of the box
 - `defaults()` uses `defaultOrder` from layout metadata instead of hardcoded name match
 
 ## [1.10.2] - 2026-02-13
 
 ### Fixed
 - Release workflow: delete pre-existing GitHub release before recreating with build assets (fixes HTTP 422 on asset upload)
-- RPM spec and Debian changelog no longer manually maintained — CI generates both from CHANGELOG.md via `generate-changelog.sh`
+- RPM spec and Debian changelog no longer manually maintained. CI generates both from CHANGELOG.md via `generate-changelog.sh`
 - RPM spec Version field uses `0.0.0` placeholder (CI replaces from git tag)
 - Avoid literal `%changelog` in spec header comments (broke `sed` in changelog generator)
 
 ## [1.10.0] - 2026-02-13
 
 ### Added
-- **Multiple binds per action**: Configure up to 4 independent triggers for zone activation, proximity snap, and paint-to-span — e.g. Alt key + Right mouse button as separate triggers for different input devices ([#150])
-- Click-to-edit existing triggers in the KCM — click a trigger label to replace it in-place
+- **Multiple binds per action**: Configure up to 4 independent triggers for zone activation, proximity snap, and paint-to-span, e.g. Alt key + Right mouse button as separate triggers for different input devices ([#150])
+- Click-to-edit existing triggers in the KCM. Click a trigger label to replace it in-place
 - AND semantics for combined modifier+button triggers (both must be held)
 - Conflict detection warns when the same trigger is used across multiple actions
 
@@ -1105,11 +1168,11 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Multi-zone threshold setting not applied correctly ([#147])
 - Modifier shortcuts now exclude the activation key to prevent conflicts
 - Legacy config keys cleaned up on save (stale DragActivationModifier, mouse button keys removed)
-- Empty trigger list prevented — at least one trigger is always required per action
+- Empty trigger list prevented. At least one trigger is always required per action
 
 ### Changed
 - Settings stored as JSON trigger lists (automatic migration from single-value format)
-- KWin effect simplified — daemon handles all trigger matching via `anyTriggerHeld()`
+- KWin effect simplified. The daemon handles all trigger matching via `anyTriggerHeld()`
 - D-Bus API: new `dragActivationTriggers`, `multiZoneTriggers`, `zoneSpanTriggers` list properties replace individual modifier/mouse button getters
 
 ## [1.9.5] - 2026-02-13
@@ -1122,7 +1185,7 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ### Fixed
 - **Compositor freeze**: Remove `processEvents()` calls that deadlock with Wayland compositor during drag ([#152])
 - **Compositor stall on layout change**: Hide overlay/zone selector before layout switch in zone selector drop path, skip heavy QML updates for hidden windows
-- **Snap assist Escape not working**: Keep KGlobalAccel Escape shortcut registered through snap assist phase; add `snapAssistDismissed` signal for proper cleanup
+- **Snap assist Escape not working**: Keep KGlobalAccel Escape shortcut registered through snap assist phase. Add `snapAssistDismissed` signal for proper cleanup
 - **Snap assist not dismissing**: Dismiss snap assist on any window zone change (navigation, snap, unsnap, float toggle)
 - **Snap assist wrong window**: Use full windowId (not stableId) for per-instance floating/geometry tracking
 - Snap assist Escape handling, dismiss on new drag, zone selector layout sync
@@ -1139,13 +1202,13 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ## [1.9.3] - 2026-02-12
 
 ### Fixed
-- Proximity snap "always on" no longer bypasses overlay activation — it now only enables proximity snap when the overlay is already open via the activation key
+- Proximity snap "always on" no longer bypasses overlay activation. It now only enables proximity snap when the overlay is already open via the activation key
 
 ## [1.9.2] - 2026-02-12
 
 ### Added
-- KCM: "Proximity snap always on" checkbox — enables always-on proximity snap without holding the modifier (per [#143])
-- Escape key cancels overlay during window drag — overlay stays hidden until the next drag of a stationary window
+- KCM: "Proximity snap always on" checkbox enables always-on proximity snap without holding the modifier (per [#143])
+- Escape key cancels overlay during window drag. Overlay stays hidden until the next drag of a stationary window
 
 ## [1.9.1] - 2026-02-12
 
@@ -1157,11 +1220,11 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ### Fixed
 - Zone padding and outer gap in individual layout settings now persist correctly when saving ([#145])
 - Default layouts no longer include redundant zone padding override (use global setting by default)
-- Snap Assist: overlay zone appearance matches zone colors and borders; thumbnail caching across continuation
+- Snap Assist: overlay zone appearance matches zone colors and borders. Thumbnail caching across continuation
 - Snap Assist: KWin effect default for snapAssistEnabled until D-Bus loaded (avoids race)
 
 ### Changed
-- Packaging: add env.d to RPM %files; remove redundant Snap Assist message from Arch install
+- Packaging: add env.d to RPM %files. Remove redundant Snap Assist message from Arch install
 
 ## [1.8.4] - 2026-02-11
 
@@ -1172,7 +1235,7 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 - Overlay follows cursor when dragging to another monitor ([#136])
-- Defer window resize until drag release; keep restore-to-float on unsnap
+- Defer window resize until drag release. Keep restore-to-float on unsnap
 - Hide shader preview overlay when dialogs open or app loses focus
 - PR review feedback for shader preview
 
@@ -1251,7 +1314,7 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Editor: defer window destroy during mid-session screen switch
 - Unfloat: fall back when saved pre-float screen no longer exists
 - Remove misleading shortcut hint from zone overlay
-- WrapVulkanHeaders noise in feature summary; ColorUtils.js QML warning
+- WrapVulkanHeaders noise in feature summary. ColorUtils.js QML warning
 
 ## [1.7.0] - 2026-02-06
 
@@ -1334,7 +1397,7 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ### Fixed
 - Buffer pass alpha blending in RHI renderer (SrcAlpha darkened output on RGBA-cleared textures)
 - Duplicate zone IDs and use-after-free in editor undo system
-- Help dialog redesigned; fullscreen exit button repositioned
+- Help dialog redesigned. Fullscreen exit button repositioned
 - Update check button layout shift when status message appears
 
 ## [1.3.4] - 2026-02-03
@@ -1357,7 +1420,7 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Shortcut consolidation: merged redundant key bindings
 
 ### Changed
-- Build/install only installs files; packaging (postinst, RPM %post) handles sycoca refresh and daemon enable
+- Build/install only installs files. Packaging (postinst, RPM %post) handles sycoca refresh and daemon enable
 
 ### Fixed
 - Logging alignment issues
@@ -1457,7 +1520,8 @@ Initial packaged release. Wayland-only (X11 support removed). Requires KDE Plasm
 - Session restoration and rotation after login ([#66])
 - Window tracking: snap/restore behavior, zone clearing, startup timing, rotation zone ID matching, floating window exclusion ([#67])
 
-[Unreleased]: https://github.com/fuddlesworth/PlasmaZones/compare/v3.0.17...HEAD
+[Unreleased]: https://github.com/fuddlesworth/PlasmaZones/compare/v3.1.0...HEAD
+[3.1.0]: https://github.com/fuddlesworth/PlasmaZones/compare/v3.0.17...v3.1.0
 [3.0.17]: https://github.com/fuddlesworth/PlasmaZones/compare/v3.0.16...v3.0.17
 [3.0.16]: https://github.com/fuddlesworth/PlasmaZones/compare/v3.0.15...v3.0.16
 [3.0.15]: https://github.com/fuddlesworth/PlasmaZones/compare/v3.0.14...v3.0.15

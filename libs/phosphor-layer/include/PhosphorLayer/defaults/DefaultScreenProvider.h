@@ -16,7 +16,7 @@ namespace PhosphorLayer {
  * @brief IScreenProvider backed by QGuiApplication::screens().
  *
  * Standalone consumers (panel applets, notification daemons, lockscreens)
- * use this directly. PlasmaZones injects a virtual-screen-aware provider
+ * use this directly. Phosphor injects a virtual-screen-aware provider
  * in its place.
  *
  * @par focused() behaviour

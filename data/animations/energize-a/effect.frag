@@ -36,21 +36,13 @@
 // particle emission additively — particles emit their own light
 // over and around the window silhouette.
 
-#version 450
-
-#include <animation_uniforms.glsl>
 #include <noise.glsl>
 
 // metadata.json declaration order:
-//   color  → customColors[0]  (particleColor — only `.rgb` used; alpha
+//   color  → customColors[0]  (p_particleColor — only `.rgb` used; alpha
 //                              ignored, the effect drives its own emission
 //                              alpha from the particle envelopes below)
-//   float  → customParams[0]  (particleScale)
-#define particleColor customColors[0]
-#define particleScale customParams[0].x
-
-layout(location = 0) in vec2 vTexCoord;
-layout(location = 0) out vec4 fragColor;
+//   float  → customParams[0]  (p_particleScale)
 
 // 2D simplex noise — MIT-licensed (Inigo Quilez,
 // https://www.shadertoy.com/view/Msf3WH). Used for the per-pixel
@@ -58,13 +50,12 @@ layout(location = 0) out vec4 fragColor;
 // into the input UV instead of a third axis. Definitions in
 // shared/noise.glsl.
 
-void main()
+vec4 pTransition(vec2 uv, float t)
 {
-    vec3 effectColor = particleColor.rgb;
-    float pScale     = max(particleScale, 0.05);
+    vec3 effectColor = p_particleColor.rgb;
+    float pScale     = max(p_particleScale, 0.05);
 
-    vec2 uv = vTexCoord;
-    float v = clamp(iTime, 0.0, 1.0);
+    float v = clamp(t, 0.0, 1.0);
 
     // ----- Envelopes ------------------------------------------------------
 
@@ -184,7 +175,7 @@ void main()
     float particleA    = clamp(sparkles * particleMask, 0.0, 1.0);
     vec3  particleRgb  = effectColor * particleA;
 
-    fragColor = vec4(
+    return vec4(
         sampled.rgb + particleRgb,
         clamp(sampled.a + particleA, 0.0, 1.0)
     );

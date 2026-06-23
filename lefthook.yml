@@ -13,8 +13,31 @@ pre-commit:
       stage_fixed: true
     qmlformat:
       glob: "*.qml"
-      run: qmlformat -i {staged_files}
+      # Resolve qmlformat robustly. The Qt6 binary is named `qmlformat` but is
+      # often not on PATH (Arch ships it under /usr/lib/qt6/bin), and some
+      # distros suffix it `qmlformat6` / `qmlformat-qt6`. Try PATH names first,
+      # then the Qt6 install-bins dir reported by qtpaths6 / qmake6, then a
+      # known Arch path; fail with a clear message if none resolve. Without
+      # this, a stale/absent PATH entry makes every QML commit abort with an
+      # opaque "command not found".
+      run: >
+        sh -c 'for c in qmlformat6 qmlformat-qt6 qmlformat; do command -v "$c" >/dev/null 2>&1 && exec "$c" -i "$@"; done;
+        bins=$(qtpaths6 --query QT_INSTALL_BINS 2>/dev/null || qmake6 -query QT_INSTALL_BINS 2>/dev/null);
+        for p in "$bins/qmlformat" /usr/lib/qt6/bin/qmlformat; do [ -x "$p" ] && exec "$p" -i "$@"; done;
+        echo "qmlformat not found on PATH or under the Qt6 install bins; install the Qt6 declarative tools" >&2; exit 1' sh {staged_files}
       stage_fixed: true
+    shader-validate:
+      glob: "data/shaders/**/*.{frag,vert,glsl,json}"
+      # When any bundled zone-shader file is staged, validate the whole pack set
+      # (metadata parse + headless glslang bake of every stage) via T1.2's
+      # plasmazones-shader-validate, so a broken p_<id>/preamble/include never
+      # lands. --quiet prints only failing packs. Best-effort: the hook can't
+      # build the binary, so if it isn't built yet it skips (with a note) rather
+      # than blocking the commit; CI's shader_validate_bundled is the hard gate.
+      run: >
+        sh -c 'bin=build/bin/plasmazones-shader-validate;
+        if [ -x "$bin" ]; then exec "$bin" --quiet data/shaders;
+        else echo "plasmazones-shader-validate not built (build/bin/) — skipping shader validation; build the target to enable this local gate" >&2; fi'
 
 commit-msg:
   commands:

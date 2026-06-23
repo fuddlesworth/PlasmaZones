@@ -7,18 +7,14 @@
  *
  * Tests verify that ConfigDefaults accessors return the expected values and
  * that all numeric defaults fall within their declared min/max bounds.
- *
- * CMake target (not yet added to CMakeLists.txt):
- *   add_executable(test_configdefaults test_configdefaults.cpp)
- *   target_link_libraries(test_configdefaults PRIVATE Qt6::Test Qt6::Core KF6::ConfigCore plasmazones_core)
- *   add_test(NAME ConfigDefaults COMMAND test_configdefaults)
- *   set_tests_properties(ConfigDefaults PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
  */
 
 #include <QTest>
 
 #include "../../../src/config/configdefaults.h"
-#include "../../../src/core/constants.h"
+#include "../../../src/core/settings_interfaces.h" // ZoneSelectorConfig struct tripwire
+
+#include <PhosphorCompositor/DecorationDefaults.h>
 
 using namespace PlasmaZones;
 
@@ -107,8 +103,8 @@ private Q_SLOTS:
         QVERIFY(ConfigDefaults::minimumZoneDisplaySizePx() <= ConfigDefaults::minimumZoneDisplaySizePxMax());
 
         // Behavior
-        QVERIFY(ConfigDefaults::stickyWindowHandling() >= 0);
-        QVERIFY(ConfigDefaults::stickyWindowHandling() <= 2);
+        QVERIFY(ConfigDefaults::snappingStickyWindowHandling() >= 0);
+        QVERIFY(ConfigDefaults::snappingStickyWindowHandling() <= 2);
         QVERIFY(ConfigDefaults::minimumWindowWidth() >= ConfigDefaults::minimumWindowWidthMin());
         QVERIFY(ConfigDefaults::minimumWindowWidth() <= ConfigDefaults::minimumWindowWidthMax());
         QVERIFY(ConfigDefaults::minimumWindowHeight() >= ConfigDefaults::minimumWindowHeightMin());
@@ -156,6 +152,10 @@ private Q_SLOTS:
         QVERIFY(ConfigDefaults::autotileBorderWidth() <= ConfigDefaults::autotileBorderWidthMax());
         QVERIFY(ConfigDefaults::autotileBorderRadius() >= ConfigDefaults::autotileBorderRadiusMin());
         QVERIFY(ConfigDefaults::autotileBorderRadius() <= ConfigDefaults::autotileBorderRadiusMax());
+        QVERIFY(ConfigDefaults::snappingBorderWidth() >= ConfigDefaults::snappingBorderWidthMin());
+        QVERIFY(ConfigDefaults::snappingBorderWidth() <= ConfigDefaults::snappingBorderWidthMax());
+        QVERIFY(ConfigDefaults::snappingBorderRadius() >= ConfigDefaults::snappingBorderRadiusMin());
+        QVERIFY(ConfigDefaults::snappingBorderRadius() <= ConfigDefaults::snappingBorderRadiusMax());
         QVERIFY(ConfigDefaults::autotileOuterGapTop() >= ConfigDefaults::autotileOuterGapTopMin());
         QVERIFY(ConfigDefaults::autotileOuterGapTop() <= ConfigDefaults::autotileOuterGapTopMax());
         QVERIFY(ConfigDefaults::autotileOuterGapBottom() >= ConfigDefaults::autotileOuterGapBottomMin());
@@ -191,7 +191,80 @@ private Q_SLOTS:
     {
         QCOMPARE(ConfigDefaults::autotileMasterCount(), 1);
     }
+
+    /**
+     * Zone span toggle mode (#563) is opt-in: the default must be false so the
+     * span modifier keeps its hold-to-span behaviour unless the user enables it.
+     */
+    void testZoneSpanToggleMode_default_isFalse()
+    {
+        QCOMPARE(ConfigDefaults::zoneSpanToggleMode(), false);
+    }
+
+    /**
+     * Snapped-window appearance defaults must be IDENTICAL to the autotile*
+     * window appearance defaults — the two modes start a window from the same
+     * chrome (every snapping* default delegates to its autotile* counterpart).
+     * Assert each pair is equal rather than pinning literals so a single change
+     * to an autotile default moves both in lockstep without staling this test.
+     * The concrete shipped values are pinned separately below.
+     */
+    void testSnappingWindowAppearance_defaults()
+    {
+        QCOMPARE(ConfigDefaults::snappingHideTitleBars(), ConfigDefaults::autotileHideTitleBars());
+        QCOMPARE(ConfigDefaults::snappingShowBorder(), ConfigDefaults::autotileShowBorder());
+        QCOMPARE(ConfigDefaults::snappingUseSystemBorderColors(), ConfigDefaults::autotileUseSystemBorderColors());
+        QCOMPARE(ConfigDefaults::snappingBorderColor(), ConfigDefaults::autotileBorderColor());
+        QCOMPARE(ConfigDefaults::snappingInactiveBorderColor(), ConfigDefaults::autotileInactiveBorderColor());
+        QCOMPARE(ConfigDefaults::snappingBorderWidth(), ConfigDefaults::autotileBorderWidth());
+        QCOMPARE(ConfigDefaults::snappingBorderRadius(), ConfigDefaults::autotileBorderRadius());
+
+        // Pin the concrete shipped defaults (shared by both modes) against the
+        // shared DecorationDefaults constants — the same symbols the effect's
+        // BorderState member-initializers use. This is the drift tripwire: if
+        // either side stops delegating, pre-settings-load rendering in the
+        // effect diverges from the daemon's persisted defaults. Colors are
+        // compared against the zone color accessors so a palette change can't
+        // stale the test.
+        QCOMPARE(ConfigDefaults::snappingHideTitleBars(), ::PhosphorCompositor::DecorationDefaults::HideTitleBars);
+        QCOMPARE(ConfigDefaults::snappingShowBorder(), ::PhosphorCompositor::DecorationDefaults::ShowBorder);
+        QCOMPARE(ConfigDefaults::snappingBorderColor(), ConfigDefaults::highlightColor());
+        QCOMPARE(ConfigDefaults::snappingInactiveBorderColor(), ConfigDefaults::inactiveColor());
+        QCOMPARE(ConfigDefaults::snappingBorderWidth(), ::PhosphorCompositor::DecorationDefaults::BorderWidth);
+        QCOMPARE(ConfigDefaults::snappingBorderRadius(), ::PhosphorCompositor::DecorationDefaults::BorderRadius);
+        QCOMPARE(ConfigDefaults::autotileBorderWidthMin(), ::PhosphorCompositor::DecorationDefaults::BorderWidthMin);
+        QCOMPARE(ConfigDefaults::autotileBorderWidthMax(), ::PhosphorCompositor::DecorationDefaults::BorderWidthMax);
+        QCOMPARE(ConfigDefaults::autotileBorderRadiusMin(), ::PhosphorCompositor::DecorationDefaults::BorderRadiusMin);
+        QCOMPARE(ConfigDefaults::autotileBorderRadiusMax(), ::PhosphorCompositor::DecorationDefaults::BorderRadiusMax);
+        // The snapping bounds must track the same shared constants — without
+        // these four they could drift independently while everything above
+        // stays green.
+        QCOMPARE(ConfigDefaults::snappingBorderWidthMin(), ::PhosphorCompositor::DecorationDefaults::BorderWidthMin);
+        QCOMPARE(ConfigDefaults::snappingBorderWidthMax(), ::PhosphorCompositor::DecorationDefaults::BorderWidthMax);
+        QCOMPARE(ConfigDefaults::snappingBorderRadiusMin(), ::PhosphorCompositor::DecorationDefaults::BorderRadiusMin);
+        QCOMPARE(ConfigDefaults::snappingBorderRadiusMax(), ::PhosphorCompositor::DecorationDefaults::BorderRadiusMax);
+    }
+
+    /**
+     * ZoneSelectorConfig's in-struct fallback defaults duplicate the
+     * ConfigDefaults accessors by value (core cannot include the config layer
+     * to delegate). This tripwire keeps a retuned ConfigDefault from silently
+     * diverging from the struct fallback the overlay falls back to.
+     */
+    void testZoneSelectorConfigStructDefaultsMatchAccessors()
+    {
+        const ZoneSelectorConfig cfg;
+        QCOMPARE(cfg.position, ConfigDefaults::position());
+        QCOMPARE(cfg.layoutMode, ConfigDefaults::layoutMode());
+        QCOMPARE(cfg.sizeMode, ConfigDefaults::sizeMode());
+        QCOMPARE(cfg.maxRows, ConfigDefaults::maxRows());
+        QCOMPARE(cfg.previewWidth, ConfigDefaults::previewWidth());
+        QCOMPARE(cfg.previewHeight, ConfigDefaults::previewHeight());
+        QCOMPARE(cfg.previewLockAspect, ConfigDefaults::previewLockAspect());
+        QCOMPARE(cfg.gridColumns, ConfigDefaults::gridColumns());
+        QCOMPARE(cfg.triggerDistance, ConfigDefaults::triggerDistance());
+    }
 };
 
-QTEST_MAIN(TestConfigDefaults)
+QTEST_GUILESS_MAIN(TestConfigDefaults)
 #include "test_configdefaults.moc"

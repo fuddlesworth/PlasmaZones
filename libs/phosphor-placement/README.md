@@ -3,7 +3,7 @@
 
 # phosphor-placement
 
-> Window placement state tracking — zone assignments, floating state,
+> Window placement state tracking: zone assignments, floating state,
 > auto-snap, resnap, rotation, and empty-zone queries.
 
 ## Responsibility

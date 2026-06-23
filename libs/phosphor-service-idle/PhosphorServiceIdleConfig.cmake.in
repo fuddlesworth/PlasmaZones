@@ -1,0 +1,15 @@
+# SPDX-FileCopyrightText: 2026 fuddlesworth
+# SPDX-License-Identifier: LGPL-2.1-or-later
+
+@PACKAGE_INIT@
+
+include(CMakeFindDependencyMacro)
+
+# Mirror the PUBLIC link set in CMakeLists.txt. (PhosphorWayland is a PRIVATE
+# link: the foundation idle clients are used inside the .cpp and never appear in
+# the public headers, so consumers neither include nor link it.)
+find_dependency(Qt6 6.6 COMPONENTS Core Qml)
+
+include("${CMAKE_CURRENT_LIST_DIR}/PhosphorServiceIdleTargets.cmake")
+
+check_required_components(PhosphorServiceIdle)

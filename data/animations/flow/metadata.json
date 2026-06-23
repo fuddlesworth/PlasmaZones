@@ -1,0 +1,14 @@
+{
+    "id": "flow",
+    "name": "Flow",
+    "description": "Geometry move and resize transition where the window streams into its destination zone instead of sliding across rigidly. The edge facing the target arrives first and the trailing rows lag and catch up, so the window looks like it is being poured into the slot, with the old frame cross-fading into the live content as each region settles.",
+    "author": "PlasmaZones",
+    "version": "1.0",
+    "category": "Geometry",
+    "appliesTo": ["geometry"],
+    "fragmentShader": "effect.frag",
+    "vertexShader": "effect.vert",
+    "fboExtent": "surface",
+    "geometryGrid": 40,
+    "parameters": []
+}

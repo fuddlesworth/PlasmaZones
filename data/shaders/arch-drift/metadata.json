@@ -2,7 +2,7 @@
     "id": "arch-drift",
     "name": "Arch Drift",
     "category": "Branded",
-    "description": "Procedural Arch Linux mountain logo as 95-vertex SDF geometry drifting through scrolling terminal rain, isometric chevron grid, traveling data packets, and CRT scan lines. Logo interior features roiling cloud flow, lightning flashes, rain streaks, animated energy contour waves, summit beacon, and traveling edge pulses with dense per-band audio reactivity",
+    "description": "A procedural Arch Linux mountain logo built as 95-vertex SDF geometry drifts through scrolling terminal rain, an isometric chevron grid, traveling data packets, and CRT scan lines. The logo interior shows roiling cloud flow, lightning flashes, rain streaks, animated energy contour waves, a summit beacon, and traveling edge pulses with dense per-band audio reactivity",
     "author": "PlasmaZones",
     "version": "2.0",
     "fragmentShader": "effect.frag",
@@ -12,7 +12,6 @@
             "name": "Animation Speed",
             "group": "Animation",
             "type": "float",
-            "slot": 0,
             "default": 0.1,
             "min": 0.01,
             "max": 0.5
@@ -22,7 +21,6 @@
             "name": "Scroll Speed",
             "group": "Animation",
             "type": "float",
-            "slot": 1,
             "default": 0.2,
             "min": 0.05,
             "max": 1.0
@@ -32,7 +30,6 @@
             "name": "Terminal Density",
             "group": "Terminal",
             "type": "float",
-            "slot": 2,
             "default": 3.5,
             "min": 1.0,
             "max": 10.0
@@ -42,7 +39,6 @@
             "name": "Interior Detail",
             "group": "Interior",
             "type": "int",
-            "slot": 3,
             "default": 6,
             "min": 2,
             "max": 8
@@ -52,7 +48,6 @@
             "name": "Grid Scale",
             "group": "Grid",
             "type": "float",
-            "slot": 4,
             "default": 5.0,
             "min": 1.0,
             "max": 12.0
@@ -62,7 +57,6 @@
             "name": "Grid Strength",
             "group": "Grid",
             "type": "float",
-            "slot": 5,
             "default": 0.2,
             "min": 0.0,
             "max": 0.5
@@ -72,7 +66,6 @@
             "name": "Brightness",
             "group": "Colors",
             "type": "float",
-            "slot": 6,
             "default": 0.7,
             "min": 0.2,
             "max": 1.0
@@ -82,7 +75,6 @@
             "name": "Contrast",
             "group": "Colors",
             "type": "float",
-            "slot": 7,
             "default": 0.9,
             "min": 0.5,
             "max": 1.5
@@ -92,7 +84,6 @@
             "name": "Fill Opacity",
             "group": "Zone",
             "type": "float",
-            "slot": 8,
             "default": 0.85,
             "min": 0.5,
             "max": 1.0
@@ -102,7 +93,6 @@
             "name": "Border Glow",
             "group": "Zone",
             "type": "float",
-            "slot": 9,
             "default": 0.35,
             "min": 0.0,
             "max": 1.0
@@ -112,7 +102,6 @@
             "name": "Edge Fade Start",
             "group": "Zone",
             "type": "float",
-            "slot": 10,
             "default": 30.0,
             "min": 5.0,
             "max": 60.0
@@ -122,7 +111,6 @@
             "name": "Border Brightness",
             "group": "Zone",
             "type": "float",
-            "slot": 11,
             "default": 1.4,
             "min": 0.8,
             "max": 2.0
@@ -132,7 +120,6 @@
             "name": "Audio Reactivity",
             "group": "Audio",
             "type": "float",
-            "slot": 12,
             "default": 1.0,
             "min": 0.0,
             "max": 2.0
@@ -142,7 +129,6 @@
             "name": "Packet Brightness",
             "group": "Effects",
             "type": "float",
-            "slot": 13,
             "default": 0.4,
             "min": 0.0,
             "max": 1.0
@@ -152,7 +138,6 @@
             "name": "Inner Glow Strength",
             "group": "Appearance",
             "type": "float",
-            "slot": 14,
             "default": 0.35,
             "min": 0.0,
             "max": 0.8
@@ -162,7 +147,6 @@
             "name": "Spark Intensity",
             "group": "Audio",
             "type": "float",
-            "slot": 15,
             "default": 2.0,
             "min": 0.0,
             "max": 5.0
@@ -172,7 +156,6 @@
             "name": "Label Halo Spread",
             "group": "Labels",
             "type": "float",
-            "slot": 16,
             "default": 3.0,
             "min": 1.0,
             "max": 6.0
@@ -182,7 +165,6 @@
             "name": "Label Brightness",
             "group": "Labels",
             "type": "float",
-            "slot": 17,
             "default": 2.5,
             "min": 1.0,
             "max": 4.0
@@ -192,7 +174,6 @@
             "name": "Label Reactivity",
             "group": "Labels",
             "type": "float",
-            "slot": 18,
             "default": 1.0,
             "min": 0.0,
             "max": 2.0
@@ -202,7 +183,6 @@
             "name": "Grid Angle",
             "group": "Grid",
             "type": "float",
-            "slot": 19,
             "default": 0.6,
             "min": 0.0,
             "max": 1.57
@@ -212,7 +192,6 @@
             "name": "Packet Direction",
             "group": "Effects",
             "type": "float",
-            "slot": 20,
             "default": 0.25,
             "min": 0.0,
             "max": 1.0
@@ -222,7 +201,6 @@
             "name": "Logo Scale",
             "group": "Logo",
             "type": "float",
-            "slot": 21,
             "default": 0.5,
             "min": 0.1,
             "max": 1.0
@@ -232,7 +210,6 @@
             "name": "Logo Intensity",
             "group": "Logo",
             "type": "float",
-            "slot": 22,
             "default": 0.75,
             "min": 0.0,
             "max": 1.5
@@ -242,7 +219,6 @@
             "name": "Logo Bass Pulse",
             "group": "Logo",
             "type": "float",
-            "slot": 23,
             "default": 0.8,
             "min": 0.0,
             "max": 2.0
@@ -252,7 +228,6 @@
             "name": "Logo Count",
             "group": "Logo",
             "type": "int",
-            "slot": 24,
             "default": 3,
             "min": 1,
             "max": 8
@@ -262,7 +237,6 @@
             "name": "Logo Size Min",
             "group": "Logo",
             "type": "float",
-            "slot": 25,
             "default": 0.4,
             "min": 0.1,
             "max": 1.0
@@ -272,7 +246,6 @@
             "name": "Logo Size Max",
             "group": "Logo",
             "type": "float",
-            "slot": 26,
             "default": 1.0,
             "min": 0.3,
             "max": 1.5
@@ -282,7 +255,6 @@
             "name": "Rain Focal X",
             "group": "Terminal",
             "type": "float",
-            "slot": 27,
             "default": 0.5,
             "min": -1.0,
             "max": 2.0
@@ -292,7 +264,6 @@
             "name": "Rain Focal Y",
             "group": "Terminal",
             "type": "float",
-            "slot": 28,
             "default": 0.5,
             "min": -1.0,
             "max": 2.0
@@ -302,7 +273,6 @@
             "name": "Show Labels",
             "group": "Labels",
             "type": "bool",
-            "slot": 29,
             "default": true
         },
         {
@@ -310,7 +280,6 @@
             "name": "Logo Wobble",
             "group": "Logo",
             "type": "float",
-            "slot": 30,
             "default": 0.12,
             "min": 0.0,
             "max": 0.5
@@ -320,7 +289,6 @@
             "name": "Idle Animation",
             "group": "Animation",
             "type": "float",
-            "slot": 31,
             "default": 0.5,
             "min": 0.0,
             "max": 1.0
@@ -330,7 +298,6 @@
             "name": "Primary (Arch Blue)",
             "group": "Palette",
             "type": "color",
-            "slot": 0,
             "default": "#1793D1"
         },
         {
@@ -338,7 +305,6 @@
             "name": "Secondary (Deep Blue)",
             "group": "Palette",
             "type": "color",
-            "slot": 1,
             "default": "#0F5F8A"
         },
         {
@@ -346,7 +312,6 @@
             "name": "Accent (Ice Cyan)",
             "group": "Palette",
             "type": "color",
-            "slot": 2,
             "default": "#4FC3F7"
         },
         {
@@ -354,7 +319,6 @@
             "name": "Glow (Bright White-Blue)",
             "group": "Palette",
             "type": "color",
-            "slot": 3,
             "default": "#B3E5FC"
         }
     ]

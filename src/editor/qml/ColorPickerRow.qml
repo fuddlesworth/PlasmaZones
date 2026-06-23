@@ -44,7 +44,7 @@ RowLayout {
     /**
      * @brief Emitted when the color button is clicked
      */
-    signal colorButtonClicked()
+    signal colorButtonClicked
 
     spacing: Kirigami.Units.smallSpacing
 
@@ -70,7 +70,6 @@ RowLayout {
             hoverEnabled: true
             onClicked: colorPickerRow.colorButtonClicked()
         }
-
     }
 
     Label {
@@ -82,9 +81,8 @@ RowLayout {
 
     Label {
         visible: !colorPickerRow.isMultiMode
-        text: colorPickerRow.baseColor.a > 0 ? colorPickerRow.baseColor.toString().toUpperCase() : ""
+        text: colorPickerRow.baseColor.a > 0 ? ColorUtils.colorToArgbHex(colorPickerRow.baseColor) : ""
         font: Kirigami.Theme.fixedWidthFont
         Accessible.name: i18nc("@info:accessibility", "Color hex code")
     }
-
 }

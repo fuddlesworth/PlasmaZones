@@ -1,0 +1,157 @@
+<!-- SPDX-FileCopyrightText: 2026 fuddlesworth -->
+<!-- SPDX-License-Identifier: GPL-3.0-or-later -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 720" font-family="Inter, system-ui, sans-serif">
+  <defs>
+    <linearGradient id="wp" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#0B1730"/>
+      <stop offset=".55" stop-color="#070F22"/>
+      <stop offset="1" stop-color="#050916"/>
+    </linearGradient>
+    <filter id="ambient" x="-40%" y="-40%" width="180%" height="180%"><feGaussianBlur stdDeviation="70"/></filter>
+    <filter id="glow" x="-60%" y="-60%" width="220%" height="220%"><feGaussianBlur stdDeviation="5"/></filter>
+    <symbol id="i-pip" viewBox="0 0 14 14">
+      <rect x="1" y="2" width="12" height="8" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.3"/>
+      <line x1="5" y1="12" x2="9" y2="12" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/>
+    </symbol>
+    <symbol id="i-all" viewBox="0 0 20 18">
+      <rect x="4" y="1" width="14" height="9" rx="1.6" fill="none" stroke="currentColor" stroke-width="1.4"/>
+      <rect x="1" y="5" width="14" height="9" rx="1.6" fill="#0B1730" stroke="currentColor" stroke-width="1.4"/>
+    </symbol>
+  </defs>
+
+  <rect width="1280" height="720" fill="url(#wp)"/>
+  <g opacity=".30" filter="url(#ambient)">
+    <circle cx="60" cy="80" r="180" fill="#22D3EE"/>
+    <circle cx="1240" cy="700" r="200" fill="#A855F7"/>
+  </g>
+
+  <!-- window -->
+  <rect x="40" y="36" width="1200" height="580" rx="16" fill="#070F22" stroke="#1E293B"/>
+  <path d="M 276 36 H 1224 A 16 16 0 0 1 1240 52 V 600 A 16 16 0 0 1 1224 616 H 276 Z" fill="#0B1730"/>
+  <line x1="276" y1="36" x2="276" y2="616" stroke="#1E293B"/>
+
+  <!-- sidebar -->
+  <g transform="translate(64 70)">
+    <rect x="-2" y="-14" width="22" height="22" rx="6" fill="#3B82F6"/>
+    <rect x="3" y="-9" width="12" height="12" rx="3" fill="#22D3EE" opacity=".9"/>
+    <text x="32" y="3" fill="#E6EDFF" font-size="15" font-weight="700">PlasmaZones</text>
+  </g>
+  <g transform="translate(56 116)" font-size="12.5">
+    <g transform="translate(0 0)"><text x="16" y="20" fill="#94A3B8">Layouts</text></g>
+    <g transform="translate(0 36)">
+      <rect x="-4" y="0" width="208" height="32" rx="9" fill="#3B82F6"/>
+      <text x="16" y="21" fill="#F0F9FF" font-weight="600">Tiling · Appearance</text>
+      <g transform="translate(182 9)" color="#F0F9FF" opacity=".9"><use href="#i-pip" width="14" height="14"/></g>
+    </g>
+    <g transform="translate(0 76)"><text x="16" y="20" fill="#94A3B8">Tiling · Algorithm</text>
+      <g transform="translate(182 5)" color="#3B82F6"><use href="#i-pip" width="14" height="14"/></g></g>
+    <g transform="translate(0 112)"><text x="16" y="20" fill="#94A3B8">Snapping · Appearance</text>
+      <g transform="translate(182 5)" color="#3B82F6"><use href="#i-pip" width="14" height="14"/></g></g>
+    <g transform="translate(0 148)"><text x="16" y="20" fill="#94A3B8">Virtual Screens</text>
+      <g transform="translate(182 5)" color="#3B82F6"><use href="#i-pip" width="14" height="14"/></g></g>
+    <g transform="translate(0 184)"><text x="16" y="20" fill="#94A3B8">Shortcuts</text></g>
+    <g transform="translate(0 220)"><text x="16" y="20" fill="#94A3B8">General</text></g>
+    <g transform="translate(0 372)" font-size="10.5">
+      <g transform="translate(0 -2)" color="#3B82F6"><use href="#i-pip" width="14" height="14"/></g>
+      <text x="22" y="9" fill="#94A3B8">= has a per‑monitor group</text>
+    </g>
+  </g>
+
+  <!-- ───────── content ───────── -->
+  <text x="304" y="80" fill="#E6EDFF" font-size="16" font-weight="700">Tiling · Appearance</text>
+
+  <!-- Global cards (collapsed) -->
+  <g font-size="13">
+    <g><rect x="304" y="100" width="908" height="44" rx="12" fill="#101A36" stroke="#1E293B"/>
+      <text x="324" y="127" fill="#E6EDFF" font-weight="600">Colors</text>
+      <text x="1150" y="127" fill="#475569" font-size="10.5">global</text>
+      <text x="1188" y="127" fill="#94A3B8">›</text></g>
+    <g><rect x="304" y="152" width="908" height="44" rx="12" fill="#101A36" stroke="#1E293B"/>
+      <text x="324" y="179" fill="#E6EDFF" font-weight="600">Decorations</text>
+      <text x="1150" y="179" fill="#475569" font-size="10.5">global</text>
+      <text x="1188" y="179" fill="#94A3B8">›</text></g>
+    <!-- Borders (expanded, global) -->
+    <g><rect x="304" y="204" width="908" height="112" rx="12" fill="#101A36" stroke="#1E293B"/>
+      <text x="324" y="231" fill="#E6EDFF" font-weight="600">Borders</text>
+      <text x="1150" y="231" fill="#475569" font-size="10.5">global</text>
+      <line x1="320" y1="246" x2="1196" y2="246" stroke="#1E293B" opacity=".5"/>
+      <text x="324" y="276" fill="#E6EDFF">Border width</text>
+      <g transform="translate(1132 258)"><rect width="64" height="30" rx="8" fill="#070F22" stroke="#1E293B"/><text x="20" y="20" fill="#E6EDFF">2</text></g>
+      <text x="324" y="306" fill="#E6EDFF">Corner radius <tspan fill="#94A3B8" font-size="11">(roundness)</tspan></text>
+      <g transform="translate(1132 290)"><rect width="64" height="30" rx="8" fill="#070F22" stroke="#1E293B"/><text x="20" y="20" fill="#E6EDFF">8</text></g></g>
+  </g>
+
+  <!-- ───────── per-monitor GROUP ───────── -->
+  <g>
+    <rect x="304" y="336" width="908" height="248" rx="14" fill="#0B1730" stroke="#3B82F6" stroke-width="1.5" opacity=".98"/>
+    <rect x="304" y="336" width="908" height="248" rx="14" fill="#3B82F6" opacity=".04"/>
+    <path d="M 304 350 A 14 14 0 0 1 318 336 V 584 A 14 14 0 0 1 304 570 Z" fill="#3B82F6"/>
+
+    <text x="332" y="366" fill="#3B82F6" font-size="10.5" letter-spacing="1.5" font-weight="600">PER‑MONITOR</text>
+    <text x="446" y="366" fill="#94A3B8" font-size="11">· these settings can differ per display</text>
+
+    <!-- scope map (same shared selection used on every page) -->
+    <g transform="translate(332 378)">
+      <rect width="116" height="58" rx="12" fill="#101A36" stroke="#1E293B"/>
+      <g transform="translate(16 18)" color="#94A3B8"><use href="#i-all" width="20" height="18"/></g>
+      <text x="46" y="27" fill="#94A3B8" font-size="12" font-weight="600">All</text>
+      <text x="46" y="43" fill="#94A3B8" font-size="10.5">Monitors</text>
+    </g>
+    <line x1="462" y1="384" x2="462" y2="430" stroke="#1E293B"/>
+    <g transform="translate(482 378)">
+      <rect x="-4" y="-4" width="112" height="66" rx="11" fill="#3B82F6" opacity=".28" filter="url(#glow)"/>
+      <rect width="104" height="58" rx="9" fill="#101A36" stroke="#3B82F6" stroke-width="2"/>
+      <rect width="104" height="58" rx="9" fill="#3B82F6" opacity=".10"/>
+      <text x="52" y="27" text-anchor="middle" fill="#E6EDFF" font-size="13" font-weight="700">DP‑2</text>
+      <g transform="translate(30 35)"><rect width="44" height="16" rx="8" fill="#10B981" opacity=".18"/><text x="22" y="12" text-anchor="middle" fill="#34D399" font-size="9" font-weight="600">Primary</text></g>
+      <circle cx="92" cy="12" r="5" fill="#22D3EE" stroke="#070F22" stroke-width="1.5"/>
+    </g>
+    <g transform="translate(598 378)">
+      <rect width="104" height="58" rx="9" fill="#101A36" stroke="#1E293B"/>
+      <text x="52" y="27" text-anchor="middle" fill="#94A3B8" font-size="13" font-weight="600">DP‑3</text>
+      <text x="52" y="44" text-anchor="middle" fill="#475569" font-size="9.5">no overrides</text>
+    </g>
+    <!-- status + reset -->
+    <g transform="translate(742 396)">
+      <circle cx="6" cy="8" r="5" fill="#22D3EE"/>
+      <text x="20" y="12" fill="#E6EDFF" font-size="11.5" font-weight="600">Custom settings · DP‑2</text>
+    </g>
+    <g transform="translate(1088 392)"><rect width="108" height="30" rx="9" fill="#101A36" stroke="#1E293B"/><text x="54" y="20" text-anchor="middle" fill="#94A3B8" font-size="11.5">↺  Reset</text></g>
+
+    <line x1="320" y1="448" x2="1196" y2="448" stroke="#1E293B"/>
+
+    <!-- gaps rows (the only scoped cards, inside the group) -->
+    <g font-size="13">
+      <text x="332" y="476" fill="#E6EDFF" font-weight="600">Inner gap</text>
+      <text x="332" y="492" fill="#94A3B8" font-size="11">Space between tiled windows</text>
+      <g transform="translate(1132 464)"><rect width="64" height="30" rx="8" fill="#070F22" stroke="#1E293B"/><text x="20" y="20" fill="#E6EDFF">8</text></g>
+      <line x1="320" y1="508" x2="1196" y2="508" stroke="#1E293B" opacity=".4"/>
+      <text x="332" y="534" fill="#E6EDFF" font-weight="600">Outer gap</text>
+      <text x="332" y="550" fill="#94A3B8" font-size="11">Space from screen edges to tiled windows</text>
+      <g transform="translate(1132 522)"><rect width="64" height="30" rx="8" fill="#070F22" stroke="#1E293B"/><text x="20" y="20" fill="#E6EDFF">8</text></g>
+    </g>
+  </g>
+
+  <!-- callout -->
+  <g font-size="11">
+    <line x1="706" y1="500" x2="320" y2="430" stroke="#3B82F6" stroke-dasharray="3 4" opacity=".5"/>
+    <g transform="translate(700 466)">
+      <rect width="360" height="92" rx="10" fill="#070F22" stroke="#3B82F6" opacity=".97"/>
+      <text x="14" y="22" font-weight="700" fill="#3B82F6">Reusable per‑monitor group</text>
+      <text x="14" y="40" fill="#94A3B8">Its border IS the scope boundary. Per‑monitor</text>
+      <text x="14" y="55" fill="#94A3B8">cards live inside; global cards (Colors, Borders)</text>
+      <text x="14" y="70" fill="#94A3B8">stay outside. The component owns placement —</text>
+      <text x="14" y="85" fill="#94A3B8">a page physically can't wedge the band wrong.</text>
+    </g>
+  </g>
+
+  <text x="640" y="648" text-anchor="middle" fill="#E6EDFF" font-size="14" font-weight="600">
+    Option 1 — Per‑monitor group · scope header repeats per page, heading only what it controls
+  </text>
+  <text x="640" y="668" text-anchor="middle" fill="#94A3B8" font-size="11">
+    Global cards stay outside a bounded group; the group carries the scope map and wraps only the per‑monitor cards. Scope is unambiguous by position.
+  </text>
+  <text x="640" y="686" text-anchor="middle" fill="#94A3B8" font-size="9" opacity=".7">
+    Shared scope state → DP‑2 stays selected on Snapping, Algorithm, etc. · Theme: phosphor‑works.github.io/palette
+  </text>
+</svg>

@@ -1,0 +1,6 @@
+{
+    "id": "null-factory-plugin",
+    "displayName": "Fake Plugin (null factory)",
+    "abi": @PHOSPHOR_PLUGIN_ABI_VERSION@,
+    "capabilities": ["bar.widget"]
+}

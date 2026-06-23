@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 import QtQuick
+import QtQuick.Window
 import QtQuick.Controls
 import QtQuick.Layouts
 import "ThemeHelpers.js" as Theme
@@ -45,7 +46,7 @@ Rectangle {
     opacity: 0
     color: Theme.withAlpha(Kirigami.Theme.backgroundColor, Theme.panelAlpha)
     border.color: accentColor
-    border.width: Math.round(Kirigami.Units.devicePixelRatio * Theme.focusBorderWidth)
+    border.width: Math.round(Screen.devicePixelRatio * Theme.focusBorderWidth)
     radius: Kirigami.Units.smallSpacing * Theme.radiusMultiplier
     z: 200
     Accessible.name: accessibleRoleName
@@ -91,9 +92,7 @@ Rectangle {
                 Accessible.name: i18nc("@action:button", "Dismiss notification")
                 Accessible.role: Accessible.Button
             }
-
         }
-
     }
 
     Timer {
@@ -121,7 +120,6 @@ Rectangle {
             profile: "popup"
             durationOverride: Theme.animDuration
         }
-
     }
 
     ParallelAnimation {
@@ -142,7 +140,6 @@ Rectangle {
             profile: "widget.fadeOut"
             durationOverride: Theme.animDuration
         }
-
     }
 
     transform: Translate {
@@ -150,5 +147,4 @@ Rectangle {
 
         y: Kirigami.Units.smallSpacing
     }
-
 }

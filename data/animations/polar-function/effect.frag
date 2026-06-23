@@ -19,27 +19,19 @@
 // `texture(uTexture0, uv)` samples directly. `texture2D` (GLSL ES) is
 // rewritten to `texture` (GLSL 4.50 core) inline.
 
-#version 450
+// metadata.json declaration order → customParams[0] sub-slots:
+// p_segmentsParam (customParams[0].x).
 
-#include <animation_uniforms.glsl>
-
-// metadata.json declaration order → customParams[0] sub-slots
-#define segmentsParam customParams[0].x
-
-layout(location = 0) in vec2 vTexCoord;
-layout(location = 0) out vec4 fragColor;
-
-void main() {
+vec4 pTransition(vec2 uv, float t) {
     // ── niri OPEN body (handles both legs via runtime iTime flip) ──
     float p = clamp(iTime, 0.0, 1.0);
-    vec2 uv = vTexCoord;
     vec4 win = surfaceColor(uv);
 
-    int segments = int(segmentsParam);
+    int segments = int(p_segmentsParam);
     float angle = atan(uv.y - 0.5, uv.x - 0.5);
     float radius = (cos(float(segments) * angle) + 4.0) / 4.0;
     float difference = length(uv - vec2(0.5, 0.5));
     float reveal = step(difference, radius * p);
 
-    fragColor = win * reveal;
+    return win * reveal;
 }

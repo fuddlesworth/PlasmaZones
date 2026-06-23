@@ -32,7 +32,7 @@ Item {
         // Toggle off if the requested kind is already open.
         if (currentKind === kind) {
             _closeAll();
-            return ;
+            return;
         }
         // If something else is open — OR a switch is already in flight —
         // queue and close. `currentKind` flips to "none" synchronously
@@ -44,7 +44,7 @@ Item {
             _pendingKind = kind;
             _closeAll();
             switchTimer.restart();
-            return ;
+            return;
         }
         // Nothing open and no switch pending — open immediately.
         _pendingKind = "";
@@ -68,10 +68,10 @@ Item {
 
     function _maybeOpenPending() {
         if (_pendingKind === "")
-            return ;
+            return;
 
         if (currentKind !== "none")
-            return ;
+            return;
 
         const next = _pendingKind;
         _pendingKind = "";
@@ -122,7 +122,6 @@ Item {
             active: calendarPopup.popupVisible
             shellState: host.shellState
         }
-
     }
 
     PanelPopup {
@@ -136,10 +135,8 @@ Item {
         content: MprisContent {
             anchors.fill: parent
             active: mediaPopup.popupVisible
-            shellState: host.shellState
             currentPlayer: host.topPanel.mediaPlayer
         }
-
     }
 
     PanelPopup {
@@ -155,7 +152,5 @@ Item {
             active: menuPopup.popupVisible
             shellState: host.shellState
         }
-
     }
-
 }

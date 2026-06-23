@@ -10,15 +10,13 @@ SettingsFlickable {
     id: root
 
     readonly property var settingsBridge: settingsController.tilingAlgorithmPage
-    readonly property int gapMax: root.settingsBridge.autotileGapMax
     readonly property int algorithmPreviewWidth: Kirigami.Units.gridUnit * 18
     readonly property int algorithmPreviewHeight: Kirigami.Units.gridUnit * 10
-    // Per-screen override helper
-    property alias selectedScreenName: psHelper.selectedScreenName
-    readonly property alias isPerScreen: psHelper.isPerScreen
-    readonly property alias hasOverrides: psHelper.hasOverrides
-    // m-13: Cache availableAlgorithms() to avoid calling it on every binding re-evaluation
-    property var _cachedAlgos: settingsController.availableAlgorithms()
+    // Per-screen override helper (shared app-wide scope, bound below).
+    // m-13: Cache the availableAlgorithms PROPERTY (read, not call — it is both a
+    // Q_PROPERTY and a same-named Q_INVOKABLE, so the `()` form errors with
+    // "is not a function"). Refreshed via the Connections below on its NOTIFY.
+    property var _cachedAlgos: settingsController.availableAlgorithms || []
     readonly property string effectiveAlgorithm: settingValue("Algorithm", appSettings.defaultAutotileAlgorithm)
     // Derive algorithm ID from the combo's current selection (tracks UI immediately,
     // not delayed by D-Bus round-trip to daemon)
@@ -42,7 +40,6 @@ SettingsFlickable {
         for (let i = 0; i < algos.length; i++) {
             if (algos[i].id === algoId)
                 return algos[i];
-
         }
         return null;
     }
@@ -64,31 +61,6 @@ SettingsFlickable {
     // Check capabilities map first (for future extensibility via scripted algorithm metadata),
     // falling back to hardcoded IDs for built-in algorithms. See PR #256 / M13.
     readonly property bool algoCenterLayout: algoCapabilities ? (algoCapabilities.centerLayout === true) : (root.selectedAlgorithm === "three-column" || root.selectedAlgorithm === "centered-master")
-    // Live split ratio — trackable by QML's binding engine (unlike the old
-    // savedAlgoSetting JS function whose conditional branches hid dependencies).
-    readonly property real currentSplitRatio: {
-        if (root.selectedAlgorithm === root.effectiveAlgorithm)
-            return root.settingValue("SplitRatio", appSettings.autotileSplitRatio);
-
-        let perAlgo = appSettings.autotilePerAlgorithmSettings;
-        let entry = perAlgo ? perAlgo[root.selectedAlgorithm] : null;
-        if (entry && entry["splitRatio"] !== undefined)
-            return entry["splitRatio"];
-
-        return root.algoCapabilities ? root.algoCapabilities.defaultSplitRatio : appSettings.autotileSplitRatio;
-    }
-    // Live master count — same pattern as above.
-    readonly property int currentMasterCount: {
-        if (root.selectedAlgorithm === root.effectiveAlgorithm)
-            return root.settingValue("MasterCount", appSettings.autotileMasterCount);
-
-        let perAlgo = appSettings.autotilePerAlgorithmSettings;
-        let entry = perAlgo ? perAlgo[root.selectedAlgorithm] : null;
-        if (entry && entry["masterCount"] !== undefined)
-            return entry["masterCount"];
-
-        return appSettings.autotileMasterCount;
-    }
 
     function settingValue(key, globalValue) {
         return psHelper.settingValue(key, globalValue);
@@ -98,12 +70,24 @@ SettingsFlickable {
         psHelper.writeSetting(key, value, globalSetter);
     }
 
+    // Default max-windows for an algorithm id, looked up from the cached
+    // capabilities list. Returns -1 when the id is unknown so the caller can
+    // preserve the current value rather than guess.
+    function _defaultMaxWindowsFor(algoId) {
+        var algos = root._cachedAlgos;
+        for (var i = 0; i < algos.length; i++) {
+            if (algos[i].id === algoId)
+                return algos[i].defaultMaxWindows;
+        }
+        return -1;
+    }
+
     contentHeight: content.implicitHeight
     clip: true
 
     Connections {
         function onAvailableAlgorithmsChanged() {
-            root._cachedAlgos = settingsController.availableAlgorithms();
+            root._cachedAlgos = settingsController.availableAlgorithms || [];
         }
 
         target: settingsController
@@ -113,9 +97,11 @@ SettingsFlickable {
         id: psHelper
 
         appSettings: settingsController
+        // Shared app-wide scope — a monitor picked on any per-monitor page
+        // stays picked here.
+        selectedScreenName: settingsController.scopeScreenName
         getterMethod: "getPerScreenAutotileSettings"
         setterMethod: "setPerScreenAutotileSetting"
-        clearerMethod: "clearPerScreenAutotileSettings"
     }
 
     ColumnLayout {
@@ -125,81 +111,19 @@ SettingsFlickable {
         spacing: Kirigami.Units.largeSpacing
 
         // =================================================================
-        // Monitor Selector (per-screen overrides)
-        // =================================================================
-        MonitorSelectorSection {
-            Layout.fillWidth: true
-            appSettings: settingsController
-            selectedScreenName: root.selectedScreenName
-            hasOverrides: root.hasOverrides
-            onSelectedScreenNameChanged: root.selectedScreenName = selectedScreenName
-            onResetClicked: psHelper.clearOverrides()
-        }
-
-        // =================================================================
-        // Gaps Card (per-monitor)
-        // =================================================================
-        GapsSettingsCard {
-            Layout.fillWidth: true
-            gapMax: root.gapMax
-            gapMin: root.settingsBridge.autotileGapMin
-            innerGapValue: root.settingValue("InnerGap", appSettings.autotileInnerGap)
-            outerGapValue: root.settingValue("OuterGap", appSettings.autotileOuterGap)
-            usePerSideOuterGap: root.settingValue("UsePerSideOuterGap", appSettings.autotileUsePerSideOuterGap)
-            smartGapsValue: root.settingValue("SmartGaps", appSettings.autotileSmartGaps)
-            outerGapTopValue: root.settingValue("OuterGapTop", appSettings.autotileOuterGapTop)
-            outerGapBottomValue: root.settingValue("OuterGapBottom", appSettings.autotileOuterGapBottom)
-            outerGapLeftValue: root.settingValue("OuterGapLeft", appSettings.autotileOuterGapLeft)
-            outerGapRightValue: root.settingValue("OuterGapRight", appSettings.autotileOuterGapRight)
-            onInnerGapModified: (value) => {
-                return root.writeSetting("InnerGap", value, function(v) {
-                    appSettings.autotileInnerGap = v;
-                });
-            }
-            onOuterGapModified: (value) => {
-                return root.writeSetting("OuterGap", value, function(v) {
-                    appSettings.autotileOuterGap = v;
-                });
-            }
-            onUsePerSideOuterGapToggled: (checked) => {
-                return root.writeSetting("UsePerSideOuterGap", checked, function(v) {
-                    appSettings.autotileUsePerSideOuterGap = v;
-                });
-            }
-            onOuterGapTopModified: (value) => {
-                return root.writeSetting("OuterGapTop", value, function(v) {
-                    appSettings.autotileOuterGapTop = v;
-                });
-            }
-            onOuterGapBottomModified: (value) => {
-                return root.writeSetting("OuterGapBottom", value, function(v) {
-                    appSettings.autotileOuterGapBottom = v;
-                });
-            }
-            onOuterGapLeftModified: (value) => {
-                return root.writeSetting("OuterGapLeft", value, function(v) {
-                    appSettings.autotileOuterGapLeft = v;
-                });
-            }
-            onOuterGapRightModified: (value) => {
-                return root.writeSetting("OuterGapRight", value, function(v) {
-                    appSettings.autotileOuterGapRight = v;
-                });
-            }
-            onSmartGapsToggled: (checked) => {
-                return root.writeSetting("SmartGaps", checked, function(v) {
-                    appSettings.autotileSmartGaps = v;
-                });
-            }
-        }
-
-        // =================================================================
-        // Algorithm Card (per-monitor)
+        // Algorithm Card (per-monitor) — opts into the header scope chip.
         // =================================================================
         SettingsCard {
             Layout.fillWidth: true
             headerText: i18n("Algorithm")
+            searchAnchor: "algorithm"
             collapsible: true
+            scopeEnabled: true
+            scopeAppSettings: settingsController
+            // Algorithm sub-domain only — must not report/reset the Gaps card's
+            // per-monitor overrides (shared autotile map, disjoint key subsets).
+            scopeHasOverridesMethod: "hasPerScreenAutotileAlgorithmSettings"
+            scopeClearerMethod: "clearPerScreenAutotileAlgorithmSettings"
 
             contentItem: ColumnLayout {
                 spacing: Kirigami.Units.smallSpacing
@@ -211,8 +135,6 @@ SettingsFlickable {
 
                     // Preview container
                     Item {
-                        id: algorithmPreviewContainer
-
                         anchors.horizontalCenter: parent.horizontalCenter
                         anchors.top: parent.top
                         width: root.algorithmPreviewWidth
@@ -232,12 +154,13 @@ SettingsFlickable {
                                 showLabel: false
                                 algorithmId: root.selectedAlgorithm
                                 algorithmName: root.algoCapabilities ? (root.algoCapabilities.name || "") : ""
-                                windowCount: root.algoCapabilities ? root.algoCapabilities.defaultMaxWindows : 4
+                                // Track the live Max-windows slider so the diagram and the
+                                // "Max N windows" caption below always show the same count.
+                                windowCount: previewWindowSlider.slider.value
                                 splitRatio: root.algoCapabilities ? root.algoCapabilities.defaultSplitRatio : 0.6
                                 masterCount: (root.algoCapabilities && root.algoCapabilities.supportsMasterCount) ? 1 : 0
                                 zoneNumberDisplay: root.algoCapabilities ? (root.algoCapabilities.zoneNumberDisplay || "all") : "all"
                             }
-
                         }
 
                         // Window count label below preview
@@ -249,9 +172,7 @@ SettingsFlickable {
                             font: Kirigami.Theme.fixedWidthFont
                             opacity: 0.7
                         }
-
                     }
-
                 }
 
                 // Algorithm description (from script metadata)
@@ -271,7 +192,10 @@ SettingsFlickable {
                 ColumnLayout {
                     Layout.alignment: Qt.AlignHCenter
                     spacing: Kirigami.Units.smallSpacing
-                    Layout.maximumWidth: Math.min(Kirigami.Units.gridUnit * 25, parent.width)
+                    // Constant cap (not bound to parent.width) — binding a layout
+                    // child's max width to its enclosing layout's width feeds the
+                    // child size back into the same layout pass (recursive rearrange).
+                    Layout.maximumWidth: Kirigami.Units.gridUnit * 25
 
                     LayoutComboBox {
                         id: algorithmCombo
@@ -291,34 +215,49 @@ SettingsFlickable {
                                 selectedId = appSettings.defaultAutotileAlgorithm;
                             else if (selectedId.startsWith("autotile:"))
                                 selectedId = selectedId.substring(9);
-                            root.writeSetting("Algorithm", selectedId, function(v) {
+                            // Decide BEFORE the switch whether max-windows should
+                            // follow the new algorithm's default. Mirror the
+                            // daemon (AutotileEngine::resetMaxWindowsForAlgorithmSwitch):
+                            // only reset when the user never customized it, i.e. the
+                            // current value still equals the OLD algorithm's default.
+                            // effectiveAlgorithm/settingValue still read the old
+                            // state here (the write below hasn't landed yet).
+                            // Without this guard, switching algorithm would clobber a
+                            // customized value and — when scoped to a monitor — force a
+                            // per-screen MaxWindows override the user never set.
+                            var oldDefaultMax = root._defaultMaxWindowsFor(root.effectiveAlgorithm);
+                            var currentMax = root.settingValue("MaxWindows", appSettings.autotileMaxWindows);
+                            var resetMax = oldDefaultMax >= 0 && currentMax === oldDefaultMax;
+                            root.writeSetting("Algorithm", selectedId, function (v) {
                                 appSettings.defaultAutotileAlgorithm = v;
                             });
+                            if (!resetMax)
+                                return;
                             // Reset maxWindows to the new algorithm's default.
                             // Use Qt.callLater so algoCapabilities binding has
                             // re-evaluated with the newly selected algorithm.
-                            Qt.callLater(function() {
-                                if (root.algoCapabilities) {
-                                    var newDefault = root.algoCapabilities.defaultMaxWindows || 6;
-                                    if (previewWindowSlider) {
-                                        previewWindowSlider.slider.value = newDefault;
-                                        root.writeSetting("MaxWindows", newDefault, function(v) {
-                                            appSettings.autotileMaxWindows = v;
-                                        });
-                                    }
-                                }
+                            Qt.callLater(function () {
+                                if (!root.algoCapabilities)
+                                    return;
+                                var newDefault = root.algoCapabilities.defaultMaxWindows || 6;
+                                // Writing the setting moves the slider via its
+                                // value binding (settingValue → SettingsSlider);
+                                // an imperative slider write here would just be
+                                // reasserted by that binding, so don't.
+                                root.writeSetting("MaxWindows", newDefault, function (v) {
+                                    appSettings.autotileMaxWindows = v;
+                                });
                             });
                         }
                     }
-
                 }
 
-                SettingsSeparator {
-                }
+                SettingsSeparator {}
 
                 // Max windows
                 SettingsRow {
                     title: i18n("Max windows")
+                    searchAnchor: "maxWindows"
                     description: i18n("Maximum number of windows to tile on this screen")
 
                     SettingsSlider {
@@ -326,19 +265,18 @@ SettingsFlickable {
 
                         Accessible.name: i18n("Maximum windows")
                         from: root.settingsBridge.autotileMaxWindowsMin
-                        to: 12
+                        to: root.settingsBridge.autotileMaxWindowsMax
                         stepSize: 1
                         value: root.settingValue("MaxWindows", appSettings.autotileMaxWindows)
-                        formatValue: function(v) {
+                        formatValue: function (v) {
                             return Math.round(v).toString();
                         }
-                        onMoved: (value) => {
-                            return root.writeSetting("MaxWindows", Math.round(value), function(v) {
+                        onMoved: value => {
+                            return root.writeSetting("MaxWindows", Math.round(value), function (v) {
                                 appSettings.autotileMaxWindows = v;
                             });
                         }
                     }
-
                 }
 
                 // Algorithm-specific settings (master-stack, three-column, centered-master)
@@ -349,51 +287,47 @@ SettingsFlickable {
                 SettingsRow {
                     visible: root.algoSupportsSplitRatio
                     title: root.algoCenterLayout ? i18n("Center ratio") : i18n("Master ratio")
+                    searchAnchor: "masterRatio"
                     description: root.algoCenterLayout ? i18n("Width proportion allocated to the center column") : i18n("Width proportion allocated to the master area")
 
                     SettingsSlider {
-                        id: splitRatioSlider
-
                         Accessible.name: root.algoCenterLayout ? i18n("Center ratio") : i18n("Master ratio")
                         from: root.settingsBridge.autotileSplitRatioMin
-                        to: 0.9
+                        to: root.settingsBridge.autotileSplitRatioMax
                         stepSize: 0.05
                         value: root.settingValue("SplitRatio", appSettings.autotileSplitRatio)
-                        formatValue: function(v) {
+                        formatValue: function (v) {
                             return Math.round(v * 100) + "%";
                         }
-                        onMoved: (value) => {
-                            root.writeSetting("SplitRatio", value, function(v) {
+                        onMoved: value => {
+                            root.writeSetting("SplitRatio", value, function (v) {
                                 appSettings.autotileSplitRatio = v;
                             });
                         }
                     }
-
                 }
 
                 SettingsRow {
                     visible: root.algoSupportsSplitRatio
                     title: i18n("Ratio step size")
+                    searchAnchor: "ratioStepSize"
                     description: i18n("Amount the ratio changes per keyboard shortcut press")
 
                     SettingsSlider {
-                        id: splitRatioStepSlider
-
                         Accessible.name: i18n("Ratio step size")
                         from: root.settingsBridge.autotileSplitRatioStepMin
                         to: root.settingsBridge.autotileSplitRatioStepMax
                         stepSize: 0.01
                         value: root.settingValue("SplitRatioStep", appSettings.autotileSplitRatioStep)
-                        formatValue: function(v) {
+                        formatValue: function (v) {
                             return Math.round(v * 100) + "%";
                         }
-                        onMoved: (value) => {
-                            root.writeSetting("SplitRatioStep", value, function(v) {
+                        onMoved: value => {
+                            root.writeSetting("SplitRatioStep", value, function (v) {
                                 appSettings.autotileSplitRatioStep = v;
                             });
                         }
                     }
-
                 }
 
                 SettingsSeparator {
@@ -403,26 +337,24 @@ SettingsFlickable {
                 SettingsRow {
                     visible: root.algoSupportsMasterCount
                     title: root.algoCenterLayout ? i18n("Center count") : i18n("Master count")
+                    searchAnchor: "masterCount"
                     description: root.algoCenterLayout ? i18n("Number of windows in the center column") : i18n("Number of windows in the master area")
 
                     SettingsSlider {
-                        id: masterCountSlider
-
                         Accessible.name: root.algoCenterLayout ? i18n("Center count") : i18n("Master count")
                         from: root.settingsBridge.autotileMasterCountMin
-                        to: 5
+                        to: root.settingsBridge.autotileMasterCountMax
                         stepSize: 1
                         value: root.settingValue("MasterCount", appSettings.autotileMasterCount)
-                        formatValue: function(v) {
+                        formatValue: function (v) {
                             return Math.round(v).toString();
                         }
-                        onMoved: (value) => {
-                            root.writeSetting("MasterCount", Math.round(value), function(v) {
+                        onMoved: value => {
+                            root.writeSetting("MasterCount", Math.round(value), function (v) {
                                 appSettings.autotileMasterCount = v;
                             });
                         }
                     }
-
                 }
 
                 // =============================================================
@@ -449,8 +381,7 @@ SettingsFlickable {
                         Layout.fillWidth: true
                         spacing: 0
 
-                        SettingsSeparator {
-                        }
+                        SettingsSeparator {}
 
                         SettingsRow {
                             Layout.fillWidth: true
@@ -473,7 +404,7 @@ SettingsFlickable {
                                     return 1;
                                 }
                                 value: paramValue
-                                formatValue: function(v) {
+                                formatValue: function (v) {
                                     if (paramRange <= 1)
                                         return Math.round(v * 100) + "%";
 
@@ -482,7 +413,7 @@ SettingsFlickable {
 
                                     return Math.round(v).toString();
                                 }
-                                onMoved: (value) => {
+                                onMoved: value => {
                                     root.settingsBridge.setCustomParam(root.selectedAlgorithm, modelData.name, value);
                                 }
                             }
@@ -517,17 +448,10 @@ SettingsFlickable {
                                     root.settingsBridge.setCustomParam(root.selectedAlgorithm, modelData.name, currentText);
                                 }
                             }
-
                         }
-
                     }
-
                 }
-
             }
-
         }
-
     }
-
 }

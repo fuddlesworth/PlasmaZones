@@ -1,14 +1,6 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-#version 450
-
-layout(location = 0) in vec2 vTexCoord;
-layout(location = 1) in vec2 vFragCoord;
-
-layout(location = 0) out vec4 fragColor;
-
-#include <common.glsl>
 #include <audio.glsl>
 
 // CHROME PROTOCOL — 3D Stacked Targeting Array
@@ -753,8 +745,8 @@ vec4 renderZoneChrome(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColo
                       vec4 zParams, vec3 sceneCol, GlobalParams g, bool isHighlighted) {
     float borderRadius = max(zParams.x, 6.0);
     float borderWidth  = max(zParams.y, 2.5);
-    float fillOpacity  = customParams[4].y;
-    float edgeGlow     = customParams[3].z;
+    float fillOpacity  = p_fillOpacity;
+    float edgeGlow     = p_edgeGlow;
 
     vec2 rectPos  = zoneRectPos(rect);
     vec2 rectSize = zoneRectSize(rect);
@@ -826,7 +818,7 @@ vec4 renderZoneChrome(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColo
 // Main — render the scene once in screen-space, then loop zones for chrome
 // ──
 
-void main() {
+vec4 pImage(vec2 fragCoord) {
     bool hasAudio = iAudioSpectrumSize > 0;
     float bass    = getBassSoft();
     float mids    = getMidsSoft();
@@ -834,24 +826,24 @@ void main() {
     float overall = getOverallSoft();
 
     GlobalParams g;
-    g.chromeCol    = colorWithFallback(customColors[0].rgb, vec3(0.776, 0.831, 0.890));
-    g.dataCol      = colorWithFallback(customColors[1].rgb, vec3(0.129, 0.784, 1.000));
-    g.scanCol      = colorWithFallback(customColors[2].rgb, vec3(0.918, 0.965, 1.000));
-    g.bgCol        = colorWithFallback(customColors[3].rgb, vec3(0.027, 0.043, 0.071));
-    g.ringScale    = customParams[0].x;
-    g.thickPulse   = customParams[0].w;
-    g.audioReact   = customParams[1].x;
-    g.bassBreath   = customParams[1].y;
-    g.trebleGlitch = customParams[1].z;
-    g.surgeThresh  = customParams[1].w;
-    g.hudBright    = customParams[2].x;
-    g.spectrumOn   = customParams[2].y;
-    g.showOverlay  = customParams[2].z;
-    g.staticAmt    = customParams[3].x;
-    g.scanDensity  = customParams[3].y;
-    g.bgStrength   = customParams[3].w;
-    g.mouseInfStr  = customParams[4].x;
-    g.stepCount    = int(max(customParams[4].z, 16.0));
+    g.chromeCol    = colorWithFallback(p_chromeColor.rgb, vec3(0.776, 0.831, 0.890));
+    g.dataCol      = colorWithFallback(p_dataColor.rgb, vec3(0.129, 0.784, 1.000));
+    g.scanCol      = colorWithFallback(p_scanColor.rgb, vec3(0.918, 0.965, 1.000));
+    g.bgCol        = colorWithFallback(p_bgColor.rgb, vec3(0.027, 0.043, 0.071));
+    g.ringScale    = p_ringScale;
+    g.thickPulse   = p_thicknessPulse;
+    g.audioReact   = p_audioReactivity;
+    g.bassBreath   = p_bassBreath;
+    g.trebleGlitch = p_trebleGlitch;
+    g.surgeThresh  = p_surgeThreshold;
+    g.hudBright    = p_hudBrightness;
+    g.spectrumOn   = p_spectrumBars;
+    g.showOverlay  = p_showOverlay;
+    g.staticAmt    = p_staticNoise;
+    g.scanDensity  = p_scanlineDensity;
+    g.bgStrength   = p_bgGridStrength;
+    g.mouseInfStr  = p_mouseTargeting;
+    g.stepCount    = int(max(p_rayStepCount, 16.0));
     g.hasAudio     = hasAudio;
     g.aBass   = hasAudio ? bass    * g.audioReact : 0.0;
     g.aMids   = hasAudio ? mids    * g.audioReact : 0.0;
@@ -873,15 +865,15 @@ void main() {
     // so chrome/data tinting actually survives — labelBright scales glow
     // intensity, not body saturation (a labelBright of 2.4 applied to the
     // body pushed everything past the tonemap ceiling and bleached it white).
-    bool showLabels = customParams[5].w > 0.5;
+    bool showLabels = p_showLabels > 0.5;
     if (showLabels) {
-        float labelSpread = customParams[5].x;
-        float labelBright = customParams[5].y;
-        float labelReact  = customParams[5].z;
+        float labelSpread = p_labelGlowSpread;
+        float labelBright = p_labelBrightness;
+        float labelReact  = p_labelAudioReact;
 
-        vec3 lChromeCol = colorWithFallback(customColors[0].rgb, vec3(0.776, 0.831, 0.890));
-        vec3 lDataCol   = colorWithFallback(customColors[1].rgb, vec3(0.129, 0.784, 1.000));
-        vec3 lScanCol   = colorWithFallback(customColors[2].rgb, vec3(0.918, 0.965, 1.000));
+        vec3 lChromeCol = colorWithFallback(p_chromeColor.rgb, vec3(0.776, 0.831, 0.890));
+        vec3 lDataCol   = colorWithFallback(p_dataColor.rgb, vec3(0.129, 0.784, 1.000));
+        vec3 lScanCol   = colorWithFallback(p_scanColor.rgb, vec3(0.918, 0.965, 1.000));
 
         vec2 luv = labelsUv(vFragCoord);
         vec2 texPx = 1.0 / max(iResolution, vec2(1.0));
@@ -939,5 +931,5 @@ void main() {
         }
     }
 
-    fragColor = clampFragColor(result);
+    return result;
 }

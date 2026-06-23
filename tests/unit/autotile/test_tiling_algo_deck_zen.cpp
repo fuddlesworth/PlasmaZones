@@ -64,7 +64,7 @@ private:
 private Q_SLOTS:
     void initTestCase()
     {
-        QVERIFY(m_scriptSetup.init(QStringLiteral(PZ_SOURCE_DIR)));
+        QVERIFY(m_scriptSetup.init(QStringLiteral(P_SOURCE_DIR)));
         QVERIFY(deck() != nullptr);
         QVERIFY(hDeck() != nullptr);
         QVERIFY(zen() != nullptr);

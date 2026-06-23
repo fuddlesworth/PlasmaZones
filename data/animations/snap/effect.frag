@@ -9,11 +9,10 @@
 // Niri's snap ships asymmetric close.glsl/open.glsl — close blows
 // pixels OUT toward `target = vec2(1.0, 0.0)` driven by `p` (loop
 // progresses 0→1), open snaps pixels BACK FROM target driven by
-// `rp = 1.0 - p` (loop progresses 1→0). Branch on iIsReversed;
-// PlasmaZones flips iTime on the close leg, so the niri close branch's
-// `p = niri_clamped_progress` becomes `p = 1.0 - clamp(iTime, 0.0, 1.0)`
-// and open's `p = niri_clamped_progress` becomes
-// `p = clamp(iTime, 0.0, 1.0)` (per translation rules).
+// `rp = 1.0 - p` (loop progresses 1→0). This is a pIn/pOut pair: the
+// harness feeds forward 0→1 `t` to both legs (so each branch's niri `p`
+// is just `t`) and dispatches the matching body by leg direction
+// (`windowFadingIn`).
 //
 // niri's `niri_geo_to_tex` is the identity mat3 in PlasmaZones (geometry
 // == texture coords here), so the matrix multiply is dropped and
@@ -21,54 +20,47 @@
 // rewritten to `texture` (GLSL 4.50 core) inline. niri's
 // `niri_random_seed` is replaced by `surfaceSeed()` from `<noise.glsl>`.
 
-#version 450
-
-#include <animation_uniforms.glsl>
+// The harness supplies #version, <animation_uniforms.glsl>, the in/out,
+// and main(). noise.glsl is pack-specific, so it stays here.
 #include <noise.glsl>
 
-// metadata.json declaration order → customParams[0] sub-slots. Both
-// iIsReversed branches share the same params. `layerSpread` controls
-// the per-layer x-jitter range (default 0.16 reproduces niri's
-// `-0.08 + lh * 0.16`, with the y range scaled to half to preserve
-// niri's 2:1 x:y ratio). The 10-iteration loop bound is intentionally
-// kept as a literal — GLSL requires the for-loop bound to be a constant
-// expression and the matching `floor(... * num_layers)` step needs to
-// agree, so `num_layers` cannot be exposed as a runtime parameter.
-#define targetX      customParams[0].x
-#define targetY      customParams[0].y
-#define layerSpread  customParams[0].z
-#define layerStagger customParams[0].w
+// p_targetX / p_targetY / p_layerSpread / p_layerStagger
+// (customParams[0].xyzw) are generated from metadata.json. Both legs share
+// the same params. `p_layerSpread` controls the per-layer x-jitter range
+// (default 0.16 reproduces niri's `-0.08 + lh * 0.16`, y scaled to half for
+// niri's 2:1 x:y ratio). The 10-iteration loop bound stays a literal — GLSL
+// requires a constant for-loop bound and the matching `floor(... * num_layers)`
+// step must agree, so num_layers cannot be a runtime parameter.
 
-layout(location = 0) in vec2 vTexCoord;
-layout(location = 0) out vec4 fragColor;
-
-void main() {
+// `uv` is vTexCoord; `t` is the forward 0→1 leg progress (the harness applies
+// legProgress()); `windowFadingIn` selects the niri open vs close body. The
+// per-layer convergence ease uses `tt` (named to avoid shadowing `t`).
+vec4 snapBody(vec2 uv, float t, bool windowFadingIn) {
     vec4 result;
-    if (iIsReversed != 0) {
-        // ── niri close.glsl body ──
-        float p = 1.0 - clamp(iTime, 0.0, 1.0);
-        vec2 uv = vTexCoord;
+    if (!windowFadingIn) {
+        // ── niri close.glsl body (forward progress p = t) ──
+        float p = t;
         float seed = surfaceSeed() * 100.0;
 
         float num_layers = 10.0;
         float pixel_layer = floor(niriHash(floor(uv * max(iAnchorSize, vec2(1.0))) + seed) * num_layers);
 
         vec4 inner = vec4(0.0);
-        vec2 target = vec2(targetX, targetY);
+        vec2 target = vec2(p_targetX, p_targetY);
 
         for (int i = 0; i < 10; i++) {
             float layer = float(i);
-            float layer_delay = layer * layerStagger;
+            float layer_delay = layer * p_layerStagger;
             float layer_p = clamp((p - layer_delay) / (1.0 - layer_delay * 0.5), 0.0, 1.0);
 
-            float t = layer_p * layer_p;
+            float tt = layer_p * layer_p;
 
             float layer_alpha = 1.0 - smoothstep(0.3, 0.85, layer_p);
 
             float lh = niriHash(vec2(layer + 0.5, seed));
-            vec2 layer_target = target + vec2((-0.5 + lh) * layerSpread, (-0.5 + lh) * layerSpread * 0.5);
+            vec2 layer_target = target + vec2((-0.5 + lh) * p_layerSpread, (-0.5 + lh) * p_layerSpread * 0.5);
 
-            float converge = t * 0.92;
+            float converge = tt * 0.92;
             vec2 sample_uv = (uv - layer_target * converge) / (1.0 - converge);
 
             // boundaryMask: see noise.glsl. Crops off-window samples to transparent.
@@ -85,9 +77,8 @@ void main() {
 
         result = base_color * base_alpha + inner * (1.0 - base_alpha);
     } else {
-        // ── niri open.glsl body ──
-        float p = clamp(iTime, 0.0, 1.0);
-        vec2 uv = vTexCoord;
+        // ── niri open.glsl body (forward progress p = t) ──
+        float p = t;
         float seed = surfaceSeed() * 100.0;
         float rp = 1.0 - p;
 
@@ -95,21 +86,21 @@ void main() {
         float pixel_layer = floor(niriHash(floor(uv * max(iAnchorSize, vec2(1.0))) + seed) * num_layers);
 
         vec4 inner = vec4(0.0);
-        vec2 target = vec2(targetX, targetY);
+        vec2 target = vec2(p_targetX, p_targetY);
 
         for (int i = 0; i < 10; i++) {
             float layer = float(i);
-            float layer_delay = layer * layerStagger;
+            float layer_delay = layer * p_layerStagger;
             float layer_p = clamp((rp - layer_delay) / (1.0 - layer_delay * 0.5), 0.0, 1.0);
 
-            float t = layer_p * layer_p;
+            float tt = layer_p * layer_p;
 
             float layer_alpha = 1.0 - smoothstep(0.3, 0.85, layer_p);
 
             float lh = niriHash(vec2(layer + 0.5, seed));
-            vec2 layer_target = target + vec2((-0.5 + lh) * layerSpread, (-0.5 + lh) * layerSpread * 0.5);
+            vec2 layer_target = target + vec2((-0.5 + lh) * p_layerSpread, (-0.5 + lh) * p_layerSpread * 0.5);
 
-            float converge = t * 0.92;
+            float converge = tt * 0.92;
             vec2 sample_uv = (uv - layer_target * converge) / (1.0 - converge);
 
             // boundaryMask: see noise.glsl. Crops off-window samples to transparent.
@@ -126,5 +117,8 @@ void main() {
 
         result = base_color * base_alpha + inner * (1.0 - base_alpha);
     }
-    fragColor = result;
+    return result;
 }
+
+vec4 pIn(vec2 uv, float t)  { return snapBody(uv, t, true);  }
+vec4 pOut(vec2 uv, float t) { return snapBody(uv, t, false); }

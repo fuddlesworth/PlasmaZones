@@ -1,0 +1,261 @@
+<!-- SPDX-FileCopyrightText: 2026 fuddlesworth -->
+<!-- SPDX-License-Identifier: GPL-3.0-or-later -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 720" font-family="Inter, system-ui, sans-serif">
+  <defs>
+    <linearGradient id="wp" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#0B1730"/>
+      <stop offset=".55" stop-color="#070F22"/>
+      <stop offset="1" stop-color="#050916"/>
+    </linearGradient>
+    <filter id="blur" x="-20%" y="-20%" width="140%" height="140%">
+      <feGaussianBlur stdDeviation="60"/>
+    </filter>
+    <symbol id="i-net" viewBox="0 0 18 18">
+      <g fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round">
+        <path d="M 2 8 A 7 7 0 0 1 16 8"/>
+        <path d="M 5 11 A 4 4 0 0 1 13 11"/>
+      </g>
+      <circle cx="9" cy="14" r="1.4" fill="currentColor"/>
+    </symbol>
+    <symbol id="i-bt" viewBox="0 0 18 18">
+      <path d="M 7 3 L 13 9 L 7 15 V 3 L 13 9 L 7 9" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/>
+    </symbol>
+    <symbol id="i-moon" viewBox="0 0 18 18">
+      <path d="M 14 11 A 6 6 0 1 1 7 4 A 5 5 0 0 0 14 11 Z" fill="currentColor"/>
+    </symbol>
+    <symbol id="i-sun" viewBox="0 0 18 18">
+      <circle cx="9" cy="9" r="3.4" fill="currentColor"/>
+      <g stroke="currentColor" stroke-width="1.4" stroke-linecap="round">
+        <line x1="9" y1="1.5" x2="9" y2="3.5"/>
+        <line x1="9" y1="14.5" x2="9" y2="16.5"/>
+        <line x1="1.5" y1="9" x2="3.5" y2="9"/>
+        <line x1="14.5" y1="9" x2="16.5" y2="9"/>
+        <line x1="3.4" y1="3.4" x2="4.8" y2="4.8"/>
+        <line x1="13.2" y1="13.2" x2="14.6" y2="14.6"/>
+        <line x1="3.4" y1="14.6" x2="4.8" y2="13.2"/>
+        <line x1="13.2" y1="4.8" x2="14.6" y2="3.4"/>
+      </g>
+    </symbol>
+    <symbol id="i-coffee" viewBox="0 0 18 18">
+      <path d="M 3 6 H 14 V 11 A 4 4 0 0 1 10 15 H 7 A 4 4 0 0 1 3 11 Z" fill="currentColor"/>
+      <path d="M 14 7 H 16 A 2 2 0 0 1 16 11 H 14" fill="none" stroke="currentColor" stroke-width="1.4"/>
+    </symbol>
+    <symbol id="i-bolt" viewBox="0 0 18 18">
+      <path d="M 11 1 L 4 10 H 9 L 7 17 L 14 8 H 9 Z" fill="currentColor"/>
+    </symbol>
+  </defs>
+
+  <rect width="1280" height="720" fill="url(#wp)"/>
+  <g opacity=".4" filter="url(#blur)">
+    <circle cx="1080" cy="180" r="220" fill="#A855F7"/>
+    <circle cx="220" cy="540" r="220" fill="#22D3EE"/>
+  </g>
+  <g opacity=".12">
+    <rect x="120" y="180" width="660" height="380" rx="14" fill="#E6EDFF"/>
+  </g>
+
+  <!-- ─── Connected-corner: Bar + right-side Control Center popout ─── -->
+  <!-- The d attribute animates between CLOSED (popout collapsed to bar bottom y=68)
+       and OPEN (popout grown to y=540). Both states share identical command structure
+       so SMIL can interpolate cleanly. Static fallback = OPEN. -->
+  <path d="M 38 24 H 1242 A 14 14 0 0 1 1256 38 V 526 A 14 14 0 0 1 1242 540 H 944 A 14 14 0 0 1 930 526 V 82 A 14 14 0 0 0 916 68 H 38 A 14 14 0 0 1 24 54 V 38 A 14 14 0 0 1 38 24 Z"
+    fill="#0B1730" stroke="#1E293B">
+    <animate attributeName="d"
+      values="M 38 24 H 1242 A 14 14 0 0 1 1256 38 V 54 A 14 14 0 0 1 1242 68 H 944 A 14 14 0 0 1 930 68 V 68 A 14 14 0 0 0 916 68 H 38 A 14 14 0 0 1 24 54 V 38 A 14 14 0 0 1 38 24 Z;
+              M 38 24 H 1242 A 14 14 0 0 1 1256 38 V 54 A 14 14 0 0 1 1242 68 H 944 A 14 14 0 0 1 930 68 V 68 A 14 14 0 0 0 916 68 H 38 A 14 14 0 0 1 24 54 V 38 A 14 14 0 0 1 38 24 Z;
+              M 38 24 H 1242 A 14 14 0 0 1 1256 38 V 526 A 14 14 0 0 1 1242 540 H 944 A 14 14 0 0 1 930 526 V 82 A 14 14 0 0 0 916 68 H 38 A 14 14 0 0 1 24 54 V 38 A 14 14 0 0 1 38 24 Z;
+              M 38 24 H 1242 A 14 14 0 0 1 1256 38 V 526 A 14 14 0 0 1 1242 540 H 944 A 14 14 0 0 1 930 526 V 82 A 14 14 0 0 0 916 68 H 38 A 14 14 0 0 1 24 54 V 38 A 14 14 0 0 1 38 24 Z;
+              M 38 24 H 1242 A 14 14 0 0 1 1256 38 V 54 A 14 14 0 0 1 1242 68 H 944 A 14 14 0 0 1 930 68 V 68 A 14 14 0 0 0 916 68 H 38 A 14 14 0 0 1 24 54 V 38 A 14 14 0 0 1 38 24 Z"
+      keyTimes="0; 0.12; 0.3; 0.8; 1"
+      calcMode="spline"
+      keySplines="0.42 0 0.58 1; 0.4 0 0.2 1; 0.42 0 0.58 1; 0.4 0 0.2 1"
+      dur="6s" repeatCount="indefinite"/>
+  </path>
+
+  <!-- Bar contents -->
+  <g>
+    <g transform="translate(44 38)">
+      <rect x="0"  y="0" width="22" height="14" rx="7" fill="#3B82F6"/>
+      <circle cx="36" cy="7" r="4" fill="#101A36" stroke="#1E293B"/>
+      <circle cx="56" cy="7" r="4" fill="#101A36" stroke="#1E293B"/>
+      <circle cx="76" cy="7" r="4" fill="#101A36" stroke="#1E293B"/>
+      <circle cx="96" cy="7" r="4" fill="#101A36" stroke="#1E293B"/>
+      <rect x="120" y="-3" width="20" height="20" rx="5" fill="#A855F7"/>
+      <text x="148" y="11" fill="#E6EDFF" font-size="12">kate · phosphor‑shell.md</text>
+    </g>
+    <g transform="translate(480 46)" text-anchor="middle" font-variant-numeric="tabular-nums">
+      <text fill="#E6EDFF" font-size="13" font-weight="600">14:32</text>
+      <text x="56" fill="#94A3B8" font-size="11">Sun 24 May</text>
+    </g>
+    <!-- Active CC button, pulses to indicate it's the source of the popout -->
+    <g transform="translate(884 38)" color="#0B1730">
+      <rect x="-2" y="-2" width="22" height="22" rx="6" fill="#3B82F6">
+        <animate attributeName="opacity" values="1;0.78;1" dur="2.4s" repeatCount="indefinite"/>
+      </rect>
+      <use href="#i-net" x="0" y="0" width="18" height="18"/>
+    </g>
+  </g>
+
+  <!-- ─── Control Center body ─── -->
+  <!-- Contents fade in/out synchronized with the path morph above.
+       Static fallback opacity=1 so non-SMIL renderers still see the popout. -->
+  <g transform="translate(950 92)" font-size="11" opacity="1">
+    <animate attributeName="opacity"
+      values="0; 0; 1; 1; 0; 0"
+      keyTimes="0; 0.24; 0.34; 0.78; 0.84; 1"
+      dur="6s" repeatCount="indefinite"/>
+    <text fill="#E6EDFF" font-weight="600" font-size="13">Control Center</text>
+    <text x="286" y="0" text-anchor="end" fill="#94A3B8" font-size="11">DP‑1</text>
+
+    <g transform="translate(0 22)" fill="#E6EDFF">
+      <!-- WiFi (active) -->
+      <g>
+        <rect width="138" height="64" rx="14" fill="#3B82F6"/>
+        <g transform="translate(12 12)" color="#0B1730">
+          <use href="#i-net" width="18" height="18"/>
+        </g>
+        <text x="40" y="28" fill="#F0F9FF" font-weight="600">Wi‑Fi</text>
+        <text x="40" y="46" fill="#F0F9FF" opacity=".85">Crow’s Nest 5G</text>
+      </g>
+      <!-- Bluetooth -->
+      <g transform="translate(148 0)">
+        <rect width="138" height="64" rx="14" fill="#101A36" stroke="#1E293B"/>
+        <g transform="translate(12 12)" color="#3B82F6">
+          <use href="#i-bt" width="18" height="18"/>
+        </g>
+        <text x="40" y="28" font-weight="600">Bluetooth</text>
+        <text x="40" y="46" fill="#94A3B8">2 connected</text>
+      </g>
+      <!-- Night light -->
+      <g transform="translate(0 74)">
+        <rect width="138" height="64" rx="14" fill="#101A36" stroke="#1E293B"/>
+        <g transform="translate(12 12)" color="#FBBF24">
+          <use href="#i-sun" width="18" height="18"/>
+        </g>
+        <text x="40" y="28" font-weight="600">Night Light</text>
+        <text x="40" y="46" fill="#94A3B8">Auto · 4200K</text>
+      </g>
+      <!-- Dark mode -->
+      <g transform="translate(148 74)">
+        <rect width="138" height="64" rx="14" fill="#101A36" stroke="#1E293B"/>
+        <g transform="translate(12 12)" color="#A855F7">
+          <use href="#i-moon" width="18" height="18"/>
+        </g>
+        <text x="40" y="28" font-weight="600">Dark</text>
+        <text x="40" y="46" fill="#94A3B8">Sunset → Sunrise</text>
+      </g>
+      <!-- Keep awake -->
+      <g transform="translate(0 148)">
+        <rect width="138" height="64" rx="14" fill="#101A36" stroke="#1E293B"/>
+        <g transform="translate(12 12)" color="#22D3EE">
+          <use href="#i-coffee" width="18" height="18"/>
+        </g>
+        <text x="40" y="28" font-weight="600">Keep Awake</text>
+        <text x="40" y="46" fill="#94A3B8">Off</text>
+      </g>
+      <!-- Power profile -->
+      <g transform="translate(148 148)">
+        <rect width="138" height="64" rx="14" fill="#101A36" stroke="#1E293B"/>
+        <g transform="translate(12 12)" color="#FBBF24">
+          <use href="#i-bolt" width="18" height="18"/>
+        </g>
+        <text x="40" y="28" font-weight="600">Balanced</text>
+        <text x="40" y="46" fill="#94A3B8">tap to cycle</text>
+      </g>
+    </g>
+
+    <!-- Sliders -->
+    <g transform="translate(0 244)" fill="#E6EDFF">
+      <text fill="#94A3B8" font-size="10">VOLUME · 62</text>
+      <g transform="translate(0 14)">
+        <rect width="286" height="6" rx="3" fill="#1E293B"/>
+        <rect width="178" height="6" rx="3" fill="#3B82F6">
+          <animate attributeName="width" values="178;192;178" dur="3.6s" repeatCount="indefinite"/>
+        </rect>
+        <circle cx="178" cy="3" r="9" fill="#3B82F6" stroke="#050916" stroke-width="2">
+          <animate attributeName="cx" values="178;192;178" dur="3.6s" repeatCount="indefinite"/>
+        </circle>
+      </g>
+      <text y="52" fill="#94A3B8" font-size="10">BRIGHTNESS · 78</text>
+      <g transform="translate(0 60)">
+        <rect width="286" height="6" rx="3" fill="#1E293B"/>
+        <rect width="222" height="6" rx="3" fill="#A855F7"/>
+        <circle cx="222" cy="3" r="9" fill="#A855F7" stroke="#050916" stroke-width="2"/>
+      </g>
+    </g>
+
+    <g transform="translate(0 328)">
+      <rect width="286" height="40" rx="12" fill="#070F22" stroke="#1E293B"/>
+      <text x="14" y="25" fill="#94A3B8" font-size="11">▾ tap a tile to expand details</text>
+    </g>
+
+    <g transform="translate(0 380)" font-size="10" fill="#E6EDFF">
+      <g>
+        <rect width="86" height="26" rx="13" fill="#101A36" stroke="#1E293B"/>
+        <text x="43" y="17" text-anchor="middle">Airplane</text>
+      </g>
+      <g transform="translate(94 0)">
+        <rect width="86" height="26" rx="13" fill="#101A36" stroke="#1E293B"/>
+        <text x="43" y="17" text-anchor="middle">VPN</text>
+      </g>
+      <g transform="translate(188 0)">
+        <rect width="98" height="26" rx="13" fill="#101A36" stroke="#1E293B"/>
+        <text x="49" y="17" text-anchor="middle">Wallpaper…</text>
+      </g>
+    </g>
+  </g>
+
+  <!-- Inverted-corner highlight + annotation (visible only during OPEN state of cycle) -->
+  <g opacity="1">
+    <animate attributeName="opacity"
+      values="0; 0; 1; 1; 0; 0"
+      keyTimes="0; 0.24; 0.34; 0.78; 0.84; 1"
+      dur="6s" repeatCount="indefinite"/>
+    <circle cx="930" cy="68" r="9" fill="none" stroke="#22D3EE" stroke-width="1.5">
+      <animate attributeName="r" values="9;14;9" dur="2.2s" repeatCount="indefinite"/>
+    </circle>
+    <line x1="930" y1="68" x2="780" y2="170" stroke="#22D3EE" stroke-dasharray="3 3" opacity=".6"/>
+    <g transform="translate(540 180)">
+      <rect width="240" height="60" rx="8" fill="#070F22" stroke="#22D3EE" opacity=".96"/>
+      <text x="14" y="22" font-size="11" font-weight="600" fill="#22D3EE">Inverted (concave) corner</text>
+      <text x="14" y="38" font-size="11" fill="#94A3B8">Bar bottom dips down to meet</text>
+      <text x="14" y="52" font-size="11" fill="#94A3B8">CC's left edge, one painted Shape.</text>
+    </g>
+  </g>
+
+  <g font-size="11">
+    <g transform="translate(80 280)">
+      <rect width="240" height="76" rx="8" fill="#070F22" stroke="#3B82F6" opacity=".96"/>
+      <text x="14" y="22" font-weight="600" fill="#3B82F6">PopoutService grew the bar</text>
+      <text x="14" y="38" fill="#94A3B8">CC button pushed a right‑edge</text>
+      <text x="14" y="52" fill="#94A3B8">socket; BarCanvas re‑shaped via</text>
+      <text x="14" y="66" fill="#94A3B8">Behavior on sockets binding.</text>
+    </g>
+
+    <g transform="translate(80 400)">
+      <rect width="240" height="76" rx="8" fill="#070F22" stroke="#A855F7" opacity=".96"/>
+      <text x="14" y="22" font-weight="600" fill="#A855F7">Expandable tile detail</text>
+      <text x="14" y="38" fill="#94A3B8">Tap Wi‑Fi → tile grows to fill the</text>
+      <text x="14" y="52" fill="#94A3B8">popout with networks list. Detail</text>
+      <text x="14" y="66" fill="#94A3B8">view = sibling QML, same width.</text>
+    </g>
+
+    <g transform="translate(80 520)">
+      <rect width="240" height="76" rx="8" fill="#070F22" stroke="#22D3EE" opacity=".96"/>
+      <text x="14" y="22" font-weight="600" fill="#22D3EE">Sliders → live services</text>
+      <text x="14" y="38" fill="#94A3B8">Volume → phosphor‑pipewire</text>
+      <text x="14" y="52" fill="#94A3B8">(libpipewire). Brightness →</text>
+      <text x="14" y="66" fill="#94A3B8">phosphor‑brightness.</text>
+    </g>
+  </g>
+
+  <text x="640" y="640" text-anchor="middle" fill="#E6EDFF" font-size="14" font-weight="600">
+    Phosphor, Control Center popping out of the bar (live animation · default theme)
+  </text>
+  <text x="640" y="658" text-anchor="middle" fill="#94A3B8" font-size="11">
+    6s cycle: bar dips → popout grows downward → 3s hold → contents fade → bar pulls back to a pill
+  </text>
+  <text x="640" y="676" text-anchor="middle" fill="#94A3B8" font-size="9" opacity=".7">
+    Path interpolates between CLOSED and OPEN states (identical command structure) · Theme: phosphor‑works.github.io/palette
+  </text>
+</svg>

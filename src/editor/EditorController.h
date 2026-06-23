@@ -13,19 +13,15 @@
 #include <QScreen>
 #include <QQuickWindow>
 #include <QSize>
-#include <QVector>
 #include "../config/configbackends.h"
 #include "../core/constants.h"
 #include <PhosphorZones/LayoutRegistry.h>
 #include "../core/logging.h"
 #include "undo/UndoController.h"
+#include "../shaderpreview/ishaderpreviewbackend.h"
 #include <PhosphorLayoutApi/LayoutSourceBundle.h>
 
 #include <memory>
-
-namespace PhosphorAudio {
-class IAudioSpectrumProvider;
-}
 
 namespace PhosphorTiles {
 class AlgorithmRegistry;
@@ -36,10 +32,18 @@ namespace PhosphorZones {
 class Layout;
 }
 
+namespace PhosphorWindowRules {
+// Forward-declared for the std::unique_ptr<WindowRuleStoreWatcher> member.
+// (The complete WindowRuleStore type is pulled in transitively via
+// PhosphorZones/LayoutRegistry.h; the .cpp includes WindowRuleStore.h directly.)
+class WindowRuleStoreWatcher;
+}
+
 namespace PlasmaZones {
 
 class ILayoutService;
 class ZoneManager;
+class ShaderPreviewController;
 class SnappingService;
 class TemplateService;
 
@@ -49,7 +53,7 @@ class TemplateService;
  * Manages zone editing operations and communicates with the daemon via D-Bus.
  * Exposed to QML for the editor UI.
  */
-class EditorController : public QObject
+class EditorController : public QObject, public IShaderPreviewBackend
 {
     Q_OBJECT
 
@@ -248,7 +252,7 @@ public:
     int globalOverlayDisplayMode() const;
     bool useFullScreenGeometry() const;
     int aspectRatioClass() const;
-    QSize targetScreenSize() const;
+    QSize targetScreenSize() const override; // also satisfies IShaderPreviewBackend
     QRect virtualScreenRect() const
     {
         return m_virtualScreenRect;
@@ -445,7 +449,7 @@ public:
     Q_INVOKABLE void refreshAvailableShaders();
 
     /**
-     * @brief Convert current zones to format expected by ZoneShaderItem for preview
+     * @brief Convert current zones to the format the ZoneShaderRenderer preview consumes
      * @param width Preview width in pixels
      * @param height Preview height in pixels
      * @return PhosphorZones::Zone data with pixel coords, fillR/G/B/A, borderR/G/B/A, etc.
@@ -453,7 +457,7 @@ public:
     Q_INVOKABLE QVariantList zonesForShaderPreview(int width, int height) const;
 
     /**
-     * @brief Translate shader params from param IDs to uniform names for ZoneShaderItem
+     * @brief Translate shader params from param IDs to the uniform names the renderer reads
      * @param shaderId Shader UUID
      * @param params Map of param IDs to values (e.g. {"intensity": 0.5})
      * @return Map of uniform names to values (e.g. {"customParams1_x": 0.5})
@@ -466,6 +470,19 @@ public:
      * @return Shader metadata as QVariantMap, or empty map if not found
      */
     Q_INVOKABLE QVariantMap getShaderInfo(const QString& shaderId) const;
+
+    /**
+     * Build the generated `#define p_<id> ...` preamble (T1.1) for a shader, so
+     * the editor's live preview compiles a pack that reads parameters by name.
+     * Mirrors what the daemon overlay splices via ShaderRegistry::paramPreamble;
+     * the per-param `slot` comes from the same D-Bus shaderInfo the daemon's
+     * registry produced (auto-assigned), so the preview's preamble and its
+     * translateShaderParams uploads agree on every lane. Empty if the shader
+     * declares no parameters.
+     * @param shaderId Shader ID to query
+     * @return The preamble block, spliced after the shader's #version at load.
+     */
+    Q_INVOKABLE QString shaderParamPreamble(const QString& shaderId) const;
 
     /**
      * @brief Build a labels texture (zone numbers) for shader preview
@@ -696,7 +713,7 @@ public Q_SLOTS:
     Q_INVOKABLE bool saveShaderPreset(const QString& filePath, const QString& shaderId, const QVariantMap& shaderParams,
                                       const QString& presetName);
     Q_INVOKABLE QVariantMap loadShaderPreset(const QString& filePath);
-    Q_INVOKABLE QString shaderPresetDirectory();
+    Q_INVOKABLE QString shaderPresetDirectory() const;
 
     /// Look up a metadata-defined preset for @p shaderId by @p presetName.
     /// Returns the preset's parameter map, or an empty map when the
@@ -929,6 +946,17 @@ private:
     //   3. ~m_localLayoutManager, ~m_localAlgorithmRegistry.
     // Do not reorder without revisiting every borrower's destructor.
     std::unique_ptr<PhosphorTiles::AlgorithmRegistry> m_localAlgorithmRegistry;
+    /// Owned WindowRule store backing the in-process LayoutRegistry's
+    /// assignment cascade. Declared before m_localLayoutManager so it
+    /// outlives the registry that borrows it (members destruct in reverse
+    /// declaration order). Points at the shared windowrules.json so the
+    /// editor's local registry sees the same rule set the daemon writes.
+    std::unique_ptr<PhosphorWindowRules::WindowRuleStore> m_localRuleStore;
+    /// Opt-in cross-process auto-reload of m_localRuleStore. The editor has no
+    /// daemon D-Bus rules-reload path, so this watcher is its only way to pick
+    /// up another process's windowrules.json writes while it is open. Declared
+    /// after the store it borrows so it tears down first.
+    std::unique_ptr<PhosphorWindowRules::WindowRuleStoreWatcher> m_localRuleStoreWatcher;
     std::unique_ptr<PhosphorZones::LayoutRegistry> m_localLayoutManager;
     PhosphorLayout::LayoutSourceBundle m_localSources;
     /// Owned here (not parented to `this`) so destruction runs via the
@@ -1019,9 +1047,19 @@ private:
     QString m_currentShaderId; // Empty = no shader effect
     QVariantMap m_currentShaderParams;
 
-    // Audio spectrum (phosphor-audio) for shader preview
-    PhosphorAudio::IAudioSpectrumProvider* m_audioProvider = nullptr;
-    QVector<float> m_audioSpectrum;
+    // IShaderPreviewBackend — the editor's preview data source: shader metadata
+    // via D-Bus to the daemon registry, the live edited layout's zones, and the
+    // audio-visualizer config. Consumed by m_shaderPreview; the QML-facing
+    // preview methods delegate to it. (targetScreenSize() above is the sixth.)
+    QVariantMap shaderInfo(const QString& shaderId) const override;
+    QVariantMap translateParams(const QString& shaderId, const QVariantMap& params) const override;
+    QVariantList previewZones() const override;
+    bool audioVisualizerEnabled() const override;
+    int audioBarCount() const override;
+
+    // Shared zone-shader preview feed (owns the CAVA capture + texture/preamble
+    // helpers). EditorController is its backend; the preview methods delegate.
+    ShaderPreviewController* m_shaderPreview = nullptr;
 
     // Cache for current shader's parameter definitions (avoids repeated D-Bus calls)
     // Updated when shader selection changes

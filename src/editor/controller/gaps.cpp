@@ -21,7 +21,7 @@
 #include <QDBusPendingCallWatcher>
 #include <QDBusPendingReply>
 
-#include "pz_i18n.h"
+#include "phosphor_i18n.h"
 #include <QGuiApplication>
 #include <QPointer>
 #include <QScreen>
@@ -329,7 +329,7 @@ void EditorController::clearOuterGapOverride()
 
     // Snapshot current state for undo, then push a macro command that resets all gap overrides.
     // Uses beginMacro/endMacro so the entire clear is one undo step.
-    m_undoController->beginMacro(PzI18n::tr("Clear Edge Gap Override", "@action"));
+    m_undoController->beginMacro(PhosphorI18n::tr("Clear Edge Gap Override", "@action"));
     if (m_outerGap != -1) {
         m_undoController->push(
             new UpdateGapOverrideCommand(this, UpdateGapOverrideCommand::GapType::OuterGap, m_outerGap, -1));
@@ -401,7 +401,7 @@ static QScreen* findTargetScreen(const QString& targetScreen)
 {
     if (!targetScreen.isEmpty()) {
         for (QScreen* screen : QGuiApplication::screens()) {
-            if (Phosphor::Screens::ScreenIdentity::identifierFor(screen) == targetScreen
+            if (PhosphorScreens::ScreenIdentity::identifierFor(screen) == targetScreen
                 || screen->name() == targetScreen) {
                 return screen;
             }
@@ -475,11 +475,11 @@ void EditorController::refreshUsableAreaInsets()
             return;
         }
         fullGeom = screen->geometry();
-        screenId = Phosphor::Screens::ScreenIdentity::identifierFor(screen);
+        screenId = PhosphorScreens::ScreenIdentity::identifierFor(screen);
     }
 
     // Query the daemon for both full and available geometry via D-Bus.
-    // The daemon's Phosphor::Screens::ScreenManager handles VS IDs natively.
+    // The daemon's PhosphorScreens::ScreenManager handles VS IDs natively.
     QDBusMessage geoMsg = QDBusMessage::createMethodCall(
         QString(PhosphorProtocol::Service::Name), QString(PhosphorProtocol::Service::ObjectPath),
         QString(PhosphorProtocol::Service::Interface::Screen), QStringLiteral("getScreenGeometry"));

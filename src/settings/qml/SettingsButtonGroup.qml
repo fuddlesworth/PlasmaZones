@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 import QtQuick
+import QtQuick.Window
 import QtQuick.Controls
 import QtQuick.Layouts
 import org.kde.kirigami as Kirigami
@@ -52,7 +53,7 @@ Row {
 
                 return Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.04);
             }
-            border.width: Math.round(Kirigami.Units.devicePixelRatio)
+            border.width: Math.round(Screen.devicePixelRatio)
             border.color: isActive ? Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g, Kirigami.Theme.highlightColor.b, 0.4) : Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.08)
             Accessible.role: Accessible.RadioButton
             Accessible.name: optionDelegate.modelData
@@ -75,9 +76,7 @@ Row {
                         profile: "widget.press"
                         durationOverride: 150
                     }
-
                 }
-
             }
 
             MouseArea {
@@ -99,7 +98,6 @@ Row {
                     profile: "widget.press"
                     durationOverride: 150
                 }
-
             }
 
             Behavior on border.color {
@@ -107,11 +105,7 @@ Row {
                     profile: "widget.press"
                     durationOverride: 150
                 }
-
             }
-
         }
-
     }
-
 }

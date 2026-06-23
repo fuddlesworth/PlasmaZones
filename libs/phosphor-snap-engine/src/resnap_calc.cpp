@@ -5,24 +5,18 @@
 // Part of SnapEngine — split into its own translation unit for SRP.
 
 #include <PhosphorSnapEngine/SnapEngine.h>
-#include <PhosphorSnapEngine/SnapState.h>
 #include <PhosphorZones/Layout.h>
 #include <PhosphorZones/Zone.h>
 #include <PhosphorZones/LayoutRegistry.h>
 #include <PhosphorScreens/Manager.h>
 #include <PhosphorScreens/ScreenIdentity.h>
-#include <PhosphorScreens/VirtualScreen.h>
 #include <PhosphorIdentity/VirtualScreenId.h>
 #include <PhosphorZones/LayoutUtils.h>
-#include <PhosphorEngine/PerScreenKeys.h>
 #include <PhosphorZones/GeometryUtils.h>
-#include <PhosphorSnapEngine/ISnapSettings.h>
 #include "snapenginelogging.h"
 #include <QGuiApplication>
 #include <QScreen>
 #include <QUuid>
-#include <algorithm>
-#include <tuple>
 
 namespace PhosphorSnapEngine {
 
@@ -78,61 +72,40 @@ QVector<ZoneAssignmentEntry> SnapEngine::calculateResnapFromPreviousLayout()
         const int newZoneCount = newZones.size();
 
         for (const ResnapEntry* entry : screenIt.value()) {
-            // Multi-zone windows: map zone positions to the new layout.
-            // Only include positions that exist in the new layout — don't cycle
-            // excess positions (e.g. zone 3 shouldn't map to zone 1 when going
-            // from a 3-zone to a 2-zone layout).
-            if (entry->allZonePositions.size() > 1) {
-                QStringList targetZoneIds;
-                for (int pos : entry->allZonePositions) {
-                    if (pos > newZoneCount)
-                        continue; // skip positions beyond new layout
-                    PhosphorZones::Zone* z = newZones.value(pos - 1, nullptr);
-                    if (z)
-                        targetZoneIds.append(z->id().toString());
-                }
-                if (!targetZoneIds.isEmpty()) {
-                    QRect geo = m_windowTracker->resolveZoneGeometry(targetZoneIds, screenId);
-                    if (geo.isValid()) {
-                        ZoneAssignmentEntry assignEntry;
-                        assignEntry.windowId = entry->windowId;
-                        assignEntry.sourceZoneId = QString();
-                        assignEntry.targetZoneId = targetZoneIds.first();
-                        if (targetZoneIds.size() > 1)
-                            assignEntry.targetZoneIds = targetZoneIds;
-                        assignEntry.targetGeometry = geo;
-                        result.append(assignEntry);
-                    }
-                } else {
-                    // ALL zone positions exceed the new layout — restore to pre-tile geometry.
-                    tryAppendRestore(entry);
-                }
-            } else {
-                // Single-zone: map 1:1 by position (1->1, 2->2).
-                // Windows whose position exceeds the new zone count are restored to
-                // their pre-tile geometry — a window snapped to zone 3 should go back
-                // to its original size when switching to a 2-zone layout.
-                if (entry->zonePosition > newZoneCount) {
-                    tryAppendRestore(entry);
-                    continue;
-                }
-                PhosphorZones::Zone* targetZone = newZones.value(entry->zonePosition - 1, nullptr);
-                if (!targetZone) {
-                    continue;
-                }
-
-                QRect geo = m_windowTracker->zoneGeometry(targetZone->id().toString(), entry->screenId);
-                if (!geo.isValid()) {
-                    continue;
-                }
-
-                ZoneAssignmentEntry assignEntry;
-                assignEntry.windowId = entry->windowId;
-                assignEntry.sourceZoneId = QString();
-                assignEntry.targetZoneId = targetZone->id().toString();
-                assignEntry.targetGeometry = geo;
-                result.append(assignEntry);
+            // Map the window's primary zone position 1:1 into the new layout
+            // (1->1, 2->2). A multi-zone span is specific to the layout it was
+            // made in, so on a layout switch a spanning window collapses to its
+            // primary zone rather than trying to reconstruct the span across a
+            // different zone arrangement. Windows whose primary position exceeds
+            // the new zone count are restored to their pre-tile geometry — a
+            // window snapped to zone 3 should go back to its original size when
+            // switching to a 2-zone layout.
+            if (entry->zonePosition > newZoneCount) {
+                tryAppendRestore(entry);
+                continue;
             }
+            PhosphorZones::Zone* targetZone = newZones.value(entry->zonePosition - 1, nullptr);
+            if (!targetZone) {
+                continue;
+            }
+
+            // Use the loop's `screenId` (the entries-by-screen group key) rather
+            // than `entry->screenId`. The two are equal at entry time because we
+            // bucketed by entry->screenId above, but the loop already uses
+            // `screenId` for layout resolution — keep this call symmetric so a
+            // future change to the grouping key (e.g. canonical screen-id form)
+            // doesn't silently leave it against a stale field.
+            QRect geo = m_windowTracker->zoneGeometry(targetZone->id().toString(), screenId);
+            if (!geo.isValid()) {
+                continue;
+            }
+
+            ZoneAssignmentEntry assignEntry;
+            assignEntry.windowId = entry->windowId;
+            assignEntry.sourceZoneId = QString();
+            assignEntry.targetZoneId = targetZone->id().toString();
+            assignEntry.targetGeometry = geo;
+            result.append(assignEntry);
         }
     }
 
@@ -167,8 +140,8 @@ QVector<ZoneAssignmentEntry> SnapEngine::calculateResnapFromCurrentAssignments(c
             // match windows stored on that physical screen OR on any of its
             // virtual children — belongsToPhysicalScreen handles both cases.
             const bool match = PhosphorIdentity::VirtualScreenId::isVirtual(screenFilter)
-                ? Phosphor::Screens::ScreenIdentity::screensMatch(screenId, screenFilter)
-                : Phosphor::Screens::ScreenIdentity::belongsToPhysicalScreen(screenId, screenFilter);
+                ? PhosphorScreens::ScreenIdentity::screensMatch(screenId, screenFilter)
+                : PhosphorScreens::ScreenIdentity::belongsToPhysicalScreen(screenId, screenFilter);
             if (!match) {
                 continue;
             }
@@ -205,8 +178,8 @@ QVector<ZoneAssignmentEntry> SnapEngine::calculateResnapFromCurrentAssignments(c
             if (screenFilter.isEmpty())
                 return true;
             return PhosphorIdentity::VirtualScreenId::isVirtual(screenFilter)
-                ? Phosphor::Screens::ScreenIdentity::screensMatch(screen, screenFilter)
-                : Phosphor::Screens::ScreenIdentity::belongsToPhysicalScreen(screen, screenFilter);
+                ? PhosphorScreens::ScreenIdentity::screensMatch(screen, screenFilter)
+                : PhosphorScreens::ScreenIdentity::belongsToPhysicalScreen(screen, screenFilter);
         };
         for (auto it = zoneAssignments.constBegin(); it != zoneAssignments.constEnd(); ++it) {
             QString screen = screenAssignments.value(it.key());
@@ -221,7 +194,8 @@ QVector<ZoneAssignmentEntry> SnapEngine::calculateResnapFromCurrentAssignments(c
 }
 
 QVector<ZoneAssignmentEntry> SnapEngine::calculateResnapFromAutotileOrder(const QStringList& autotileWindowOrder,
-                                                                          const QString& screenId) const
+                                                                          const QString& screenId,
+                                                                          const QStringList& preClaimedZoneIds) const
 {
     QVector<ZoneAssignmentEntry> result;
 
@@ -248,29 +222,52 @@ QVector<ZoneAssignmentEntry> SnapEngine::calculateResnapFromAutotileOrder(const 
         zoneById[z->id().toString()] = z;
     }
 
-    // Track which zones have been claimed by original-assignment restoration
-    // so positional fallback doesn't double-assign.
+    // Zones occupied so far — pass-2's positional fallback avoids these so a
+    // never-snapped window never STEALS a zone. Pass-1 (recorded-zone restoration)
+    // deliberately does NOT consult this set: snapping supports MULTIPLE windows per
+    // zone, so two windows that each RECORDED the same zone both restore to it
+    // (stacked). The set only gates the positional fallback, which has no recorded
+    // intent and must not pile an arbitrary window onto an occupied zone.
     QSet<int> claimedZoneIndices;
+    // Seed with zones already reserved by OTHER restore producers in this same batch
+    // (the daemon's windowsReleased snap-zone restores for windows floated-in-autotile,
+    // which are absent from this window order). This keeps pass-2 from handing a
+    // reserved zone to a never-snapped window. Pass-1 still stacks a window onto a
+    // reserved zone when that window ALSO recorded it (legitimate multi-window-per-zone).
+    for (const QString& zid : preClaimedZoneIds) {
+        PhosphorZones::Zone* z = zoneById.value(zid);
+        if (!z)
+            continue;
+        const int idx = zones.indexOf(z);
+        if (idx >= 0)
+            claimedZoneIndices.insert(idx);
+    }
     // Track windows placed in the first pass for O(1) lookup in the second pass
     QSet<QString> placedWindowIds;
 
-    const auto& zoneAssignments = m_windowTracker->zoneAssignments();
-
     // First pass: restore windows to their ORIGINAL zone assignment (pre-autotile).
-    // m_windowZoneAssignments preserves zone IDs from before autotile was activated.
+    // Each window's recorded zone comes from recordedSnapZones() — the LIVE snap
+    // assignment when present, else the DURABLE placement-record snap slot. The
+    // durable fallback is what makes autotile→snap restore work after a daemon
+    // restart (or any handoffRelease), when the live zone cache is cold and a
+    // live-only read would treat every snapped window as never-snapped.
     // Iterate ALL windows (not min(windowCount, zoneCount)) — a window past the
     // zoneCount cutoff in autotile order can still have a saved zone that is
     // unique in the new layout, and capping the loop would silently drop its
-    // restoration. The claimedZoneIndices set still prevents double-booking.
+    // restoration. A window restores to its recorded zone even when another window
+    // already occupies it — multiple windows per zone is a supported snap feature.
     for (int i = 0; i < windowCount; ++i) {
         const QString& windowId = autotileWindowOrder.at(i);
-        const QStringList& savedZones = zoneAssignments.value(windowId);
+        const QStringList savedZones = m_windowTracker->recordedSnapZones(windowId);
 
         if (savedZones.isEmpty())
             continue;
 
         // Restore to ALL saved zone assignments (supports multi-zone spans).
-        // Verify all zones still exist in the restored layout.
+        // Verify all zones still exist in the restored layout. Do NOT skip a zone
+        // that is already occupied — stacking onto a window's OWN recorded zone is
+        // intentional (multi-window-per-zone); only the positional fallback below
+        // avoids occupied zones.
         QStringList validZoneIds;
         QList<int> validZoneIndices;
         for (const QString& zid : savedZones) {
@@ -278,7 +275,7 @@ QVector<ZoneAssignmentEntry> SnapEngine::calculateResnapFromAutotileOrder(const 
             if (!z)
                 continue;
             int idx = zones.indexOf(z);
-            if (idx < 0 || claimedZoneIndices.contains(idx))
+            if (idx < 0)
                 continue;
             validZoneIds.append(zid);
             validZoneIndices.append(idx);
@@ -369,7 +366,7 @@ QVector<ZoneAssignmentEntry> SnapEngine::calculateSnapAllWindowEntries(const QSt
 
     // Filter occupancy by the current virtual desktop so windows parked on other
     // desktops don't make zones appear occupied on the current-desktop batch snap.
-    const int desktopFilter = m_virtualDesktopManager ? m_virtualDesktopManager->currentDesktop() : 0;
+    const int desktopFilter = currentVirtualDesktopForScreen(screenId);
     QSet<QUuid> occupiedZoneIds = m_windowTracker->buildOccupiedZoneSet(screenId, desktopFilter);
 
     // Resolve physical screen for zone geometry calculation
@@ -383,7 +380,7 @@ QVector<ZoneAssignmentEntry> SnapEngine::calculateSnapAllWindowEntries(const QSt
     // Track zones we're assigning in this batch (to avoid double-assigning)
     QSet<QUuid> batchOccupied = occupiedZoneIds;
 
-    auto [gapZonePadding, gapOuterGaps] = resolveGapParams();
+    auto [gapZonePadding, gapOuterGaps] = resolveGapParams(screenId, layout);
 
     for (const QString& windowId : windowIds) {
         // Find the first unoccupied zone
@@ -438,7 +435,7 @@ QVector<ZoneAssignmentEntry> SnapEngine::calculateRotation(bool clockwise, const
         QString screenId = screenAssignments.value(it.key());
 
         // When a screen filter is set, only include windows on that screen
-        if (!screenFilter.isEmpty() && !Phosphor::Screens::ScreenIdentity::screensMatch(screenId, screenFilter)) {
+        if (!screenFilter.isEmpty() && !PhosphorScreens::ScreenIdentity::screensMatch(screenId, screenFilter)) {
             continue;
         }
 
@@ -505,7 +502,7 @@ QVector<ZoneAssignmentEntry> SnapEngine::calculateRotation(bool clockwise, const
             continue;
         }
 
-        auto [rotGapPadding, rotGapOuter] = resolveGapParams();
+        auto [rotGapPadding, rotGapOuter] = resolveGapParams(screenId, layout);
 
         // Calculate rotated positions within this screen's zones
         for (const auto& pair : windowZoneIndices) {

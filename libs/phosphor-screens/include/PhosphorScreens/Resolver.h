@@ -11,12 +11,12 @@
 
 class QPoint;
 
-namespace Phosphor::Screens {
+namespace PhosphorScreens {
 
 /**
  * @brief D-Bus endpoint that ScreenResolver queries.
  *
- * Defaults match the PlasmaZones daemon's canonical `org.plasmazones.Screen`
+ * Defaults match the Phosphor daemon's canonical `org.plasmazones.Screen`
  * interface (sourced from `PhosphorProtocol::Service::*`). A consumer that
  * runs against a different service overrides them per call.
  *
@@ -74,7 +74,7 @@ public:
      *
      * @param pos          Position in global screen coordinates.
      * @param endpoint     D-Bus endpoint to query. Defaults to the
-     *                     PlasmaZones daemon.
+     *                     Phosphor daemon.
      * @param timeoutMs    D-Bus call timeout in milliseconds. Keep this
      *                     short — the caller is typically blocking the
      *                     user's shortcut keypress.
@@ -87,4 +87,4 @@ public:
                                            int timeoutMs = PhosphorProtocol::Service::SyncCallTimeoutMs);
 };
 
-} // namespace Phosphor::Screens
+} // namespace PhosphorScreens

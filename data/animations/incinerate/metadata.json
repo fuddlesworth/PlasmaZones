@@ -1,7 +1,7 @@
 {
     "id": "incinerate",
     "name": "Incinerate",
-    "description": "Incineration — heat-driven dissolve with embers and chromatic distortion.",
+    "description": "A heat-driven dissolve with embers and chromatic distortion.",
     "author": "PlasmaZones (ported from Burn-My-Windows by Simon Schneegans, https://github.com/Schneegans/Burn-My-Windows)",
     "version": "1.0",
     "category": "Particle",

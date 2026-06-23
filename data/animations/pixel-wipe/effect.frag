@@ -23,17 +23,10 @@
 // invert one direction since the spatial wavefront can only
 // move outward in one direction of a single function-of-iTime.
 
-#version 450
-
-#include <animation_uniforms.glsl>
 #include <noise.glsl>
 
-#define maxPixelSize customParams[0].x
-#define originX      customParams[0].y
-#define originY      customParams[0].z
-
-layout(location = 0) in vec2 vTexCoord;
-layout(location = 0) out vec4 fragColor;
+// `p_maxPixelSize` / `p_originX` / `p_originY` are generated from
+// metadata.json (the customParams[0] sub-slots) by the harness.
 
 const float FADE_WIDTH = 1.0;
 
@@ -43,10 +36,9 @@ float easeOutQuad(float x) { return -1.0 * x * (x - 2.0); }
 // 4-octave fractal simplex gives the chunky "burn pattern" for the
 // dissolve threshold randomness rather than a smooth gradient.
 
-void main()
+vec4 pTransition(vec2 uv, float t)
 {
-    vec2 uv = vTexCoord;
-    vec2 origin = vec2(originX, originY);
+    vec2 origin = vec2(p_originX, p_originY);
 
     // Per-pixel distance from the origin. Window-corner case: max
     // distance is sqrt(2) ≈ 1.414 (diagonal of unit square).
@@ -65,7 +57,7 @@ void main()
     // regions stay at their natural pixel size. The max(.., 1.0)
     // defends against a metadata-bypass that pushes maxPixelSize
     // negative; matches sibling pixelate's defence at line 50.
-    float pixelSize = max(ceil(maxPixelSize * dissolve + 1.0), 1.0);
+    float pixelSize = max(ceil(p_maxPixelSize * dissolve + 1.0), 1.0);
     // Floor iResolution so an early-frame zero-sized surface doesn't
     // divide-by-zero into an infinite pixelGrid.
     vec2 pixelGrid  = vec2(pixelSize) / max(iResolution, vec2(1.0));
@@ -86,5 +78,5 @@ void main()
         sampled *= max(0.0, 1.0 - (dissolve - random) * 10.0);
     }
 
-    fragColor = sampled;
+    return sampled;
 }

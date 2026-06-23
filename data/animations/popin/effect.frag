@@ -6,24 +6,13 @@
 // stub that emitted a flat white mask; now scales the actual surface
 // from `scaleFrom` up through `1 + overshoot` and settles at 1.0.
 
-#version 450
-
-#include <animation_uniforms.glsl>
 #include <noise.glsl>
 
-// metadata.json declaration order → customParams[0] sub-slots
-#define scaleFrom customParams[0].x
-#define overshoot customParams[0].y
+// `p_scaleFrom` / `p_overshoot` are generated from metadata.json
+// (the customParams[0] sub-slots) by the harness.
 
-layout(location = 0) in vec2 vTexCoord;
-layout(location = 0) out vec4 fragColor;
-
-void main()
+vec4 pTransition(vec2 uv, float t)
 {
-    // UV from the vertex stage; gl_FragCoord/iResolution overshoots [0,1]
-    // by DPR on high-DPI displays.
-    vec2 uv = vTexCoord;
-
     // Visibility drives the scale curve. iTime is the per-leg [0,1]
     // progress driven by SurfaceAnimator's shaderTime AnimatedValue.
     // SurfaceAnimator runs iTime 0→1 on show and 1→0 on hide, so the
@@ -38,9 +27,9 @@ void main()
     // visible "bounce out" reverse of the show-leg arc.
     float scale;
     if (visibility < 0.7) {
-        scale = mix(scaleFrom, 1.0 + overshoot, visibility / 0.7);
+        scale = mix(p_scaleFrom, 1.0 + p_overshoot, visibility / 0.7);
     } else {
-        scale = mix(1.0 + overshoot, 1.0, (visibility - 0.7) / 0.3);
+        scale = mix(1.0 + p_overshoot, 1.0, (visibility - 0.7) / 0.3);
     }
 
     vec2 center = vec2(0.5);
@@ -51,5 +40,5 @@ void main()
     vec2 sampleUv = (uv - center) / max(scale, 0.001) + center;
 
     // boundaryMask: see noise.glsl. Crops off-window samples to transparent.
-    fragColor = surfaceColor(sampleUv) * boundaryMask(sampleUv);
+    return surfaceColor(sampleUv) * boundaryMask(sampleUv);
 }

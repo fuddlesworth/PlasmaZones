@@ -11,7 +11,7 @@ namespace PhosphorAnimationShaders {
 
 /// Cross-runtime named-uniform contract for **animation/transition shaders**.
 ///
-/// PlasmaZones has two distinct shader registries:
+/// Phosphor has two distinct shader registries:
 ///
 ///   1. **Animation/transition shaders** — `AnimationShaderRegistry`,
 ///      sourced from `data/animations/*/`. Short-lived transitions
@@ -33,7 +33,7 @@ namespace PhosphorAnimationShaders {
 ///     events (`window.open`, `window.move`, `window.snapIn`, …).
 ///
 ///   • **Daemon (overlay-surface) execution** — `SurfaceAnimator::runLeg`
-///     in the PlasmaZones daemon. Uses Qt RHI via
+///     in the Phosphor daemon. Uses Qt RHI via
 ///     `PhosphorRendering::ShaderEffect` → `ShaderNodeRhi`. Animates
 ///     daemon-owned overlay surfaces (snap-assist popup, OSD
 ///     notification, layout-picker, zone-selector show/hide).
@@ -58,7 +58,7 @@ namespace PhosphorAnimationShaders {
 ///   • Default branch (daemon path): `layout(std140, binding = 0) uniform
 ///     AnimationUniforms { ... };` — std140-aligned with
 ///     `PhosphorShaders::BaseUniforms` covering its full footprint
-///     (currently 688 bytes; pinned by BaseUniforms.h's static_asserts),
+///     (currently 672 bytes; pinned by BaseUniforms.h's static_asserts),
 ///     populated by Qt-RHI's binding=0 upload.
 ///
 ///   • `#ifdef PLASMAZONES_KWIN` branch (compositor path): plain
@@ -307,6 +307,44 @@ inline constexpr const char* kIAnchorPosInFbo = "iAnchorPosInFbo";
 /// `AnimationUniformExtension` (UBO offset 704). kwin-effect: pushed
 /// via classic-GL `setUniform`.
 inline constexpr const char* kIAnchorRectInTexture = "iAnchorRectInTexture";
+
+/// `vec4 iFromRect` / `vec4 iToRect` — geometry-morph endpoints in
+/// logical screen pixels `(x, y, width, height)`. Used by the window
+/// move/resize morph: the window jumps to its destination instantly via
+/// `moveResize`, and the shader animates the visual transition by
+/// interpolating the drawn quad from `iFromRect` (old frame) to `iToRect`
+/// (new frame) by `iTime`, cross-fading the captured old content
+/// (`uOldWindow`) into the live new content. Both default to `(0,0,0,0)`
+/// for non-morph transitions (window.open/close/etc.), which a shader can
+/// treat as "no morph". kwin-effect: pushed via classic-GL `setUniform`;
+/// daemon: reserved in the UBO contract for source parity (the morph runs
+/// compositor-side, but the shared header declares them on both branches).
+inline constexpr const char* kIFromRect = "iFromRect";
+inline constexpr const char* kIToRect = "iToRect";
+
+/// `sampler2D uOldWindow` — snapshot of the window's content captured at
+/// the old frame size just before the instant `moveResize`. The morph
+/// shader cross-fades this (alpha `1 - iTime`) against the live new
+/// content in `uTexture0` (alpha `iTime`), each mapped at native aspect,
+/// so an aspect-ratio-changing resize doesn't stretch the content. Bound
+/// to a dedicated texture unit on the kwin path; a transparent 1×1
+/// fallback is bound when no snapshot was captured.
+inline constexpr const char* kUOldWindow = "uOldWindow";
+
+/// `float iWindowOpacity` — the window's effective rule-resolved opacity
+/// in [0.0, 1.0], COMPOSITOR PATH ONLY. A `SetOpacity` window rule must
+/// dim the window for the whole duration of a transition, but the custom
+/// transition shader is compiled `MapTexture`-only (no `Modulate` trait),
+/// so KWin never applies `data.opacity()` to it — `surfaceColor()`
+/// multiplies the premultiplied surface sample by this uniform instead.
+/// The kwin-effect pushes it every frame via classic-GL `setUniform`,
+/// defaulting to `1.0` for windows with no matching rule (a no-op dim).
+///
+/// Absent on the daemon path: overlay-surface animations have no
+/// window-rule opacity (`SetOpacity` is a compositor window-rule feature),
+/// so the canonical header declares this uniform — and folds it into
+/// `surfaceColor()` — only inside the `#ifdef PLASMAZONES_KWIN` branch.
+inline constexpr const char* kIWindowOpacity = "iWindowOpacity";
 
 /// Maximum number of user-declared textures per animation effect.
 ///

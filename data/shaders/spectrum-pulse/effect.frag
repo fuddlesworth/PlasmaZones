@@ -1,14 +1,9 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-#version 450
-
-layout(location = 0) in vec2 vTexCoord;
-layout(location = 1) in vec2 vFragCoord;
-
-layout(location = 0) out vec4 fragColor;
-
-#include <common.glsl>
+// The harness supplies #version, <common.glsl> (zone UBO + ZoneCtx + helpers),
+// the vTexCoord/vFragCoord ins, the fragColor out, and the pImage entry-point
+// dispatch. audio.glsl is pack-specific, so it stays here.
 #include <audio.glsl>
 
 /*
@@ -33,10 +28,10 @@ layout(location = 0) out vec4 fragColor;
  *   [2].w = fillOpacity      — zone interior fill opacity (0–1)
  *
  * Colors:
- *   customColors[0] = primary neon (default: cyan)
- *   customColors[1] = accent glow (default: magenta)
- *   customColors[2] = bass color (default: orange)
- *   customColors[3] = spark color (default: white)
+ *   p_primaryColor = primary neon (default: cyan)
+ *   p_accentColor = accent glow (default: magenta)
+ *   p_bassColor = bass color (default: orange)
+ *   p_sparkColor = spark color (default: white)
  */
 
 // ─── Quintic C2 noise (eliminates visible lattice artifacts) ─────
@@ -94,19 +89,19 @@ vec4 renderZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor,
     float borderWidth  = max(params.y, 2.5);
 
     // Parameters with defaults (sentinel: -1.0 = unset → use default)
-    float glowIntensity = customParams[0].x >= 0.0 ? customParams[0].x : 2.5;
-    float reactivity    = customParams[0].y >= 0.0 ? customParams[0].y : 1.5;
-    float waveHeight    = customParams[0].z >= 0.0 ? customParams[0].z : 0.15;
-    float bassExpand    = customParams[0].w >= 0.0 ? customParams[0].w : 1.5;
-    float flowSpeed     = customParams[1].x >= 0.0 ? customParams[1].x : 2.0;
-    float plasmaDetail  = customParams[1].y >= 0.0 ? customParams[1].y : 0.8;
-    float colorMix      = customParams[1].z >= 0.0 ? customParams[1].z : 0.5;
-    float idleAnim      = customParams[1].w >= 0.0 ? customParams[1].w : 1.0;
-    float veinIntensity = customParams[2].x >= 0.0 ? customParams[2].x : 0.5;
+    float glowIntensity = p_glowIntensity >= 0.0 ? p_glowIntensity : 2.5;
+    float reactivity    = p_reactivity >= 0.0 ? p_reactivity : 1.5;
+    float waveHeight    = p_waveHeight >= 0.0 ? p_waveHeight : 0.15;
+    float bassExpand    = p_bassExpand >= 0.0 ? p_bassExpand : 1.5;
+    float flowSpeed     = p_flowSpeed >= 0.0 ? p_flowSpeed : 2.0;
+    float plasmaDetail  = p_plasmaDetail >= 0.0 ? p_plasmaDetail : 0.8;
+    float colorMix      = p_colorMix >= 0.0 ? p_colorMix : 0.5;
+    float idleAnim      = p_idleAnimation >= 0.0 ? p_idleAnimation : 1.0;
+    float veinIntensity = p_veinIntensity >= 0.0 ? p_veinIntensity : 0.5;
     float radialWaveStr = customParams[2].y >= 0.0 ? customParams[2].y : 1.0;
-    float gridOpacity   = customParams[2].z >= 0.0 ? customParams[2].z : 0.15;
-    float fillOpacity   = customParams[2].w >= 0.0 ? customParams[2].w : 0.85;
-    float gridRes       = customParams[3].w >= 0.0 ? customParams[3].w : 20.0;
+    float gridOpacity   = p_gridOpacity >= 0.0 ? p_gridOpacity : 0.15;
+    float fillOpacity   = p_fillOpacity >= 0.0 ? p_fillOpacity : 0.85;
+    float gridRes       = p_gridResolution >= 0.0 ? p_gridResolution : 20.0;
 
     // Zone geometry
     vec2 rectPos  = zoneRectPos(rect);
@@ -124,11 +119,11 @@ vec4 renderZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor,
     float angle = atan(sp.x, -sp.y) / TAU + 0.5;
 
     // Colors
-    vec3 primary  = colorWithFallback(customColors[0].rgb, fillColor.rgb);
+    vec3 primary  = colorWithFallback(p_primaryColor.rgb, fillColor.rgb);
     primary       = colorWithFallback(primary, vec3(0.0, 1.0, 1.0));
-    vec3 accent   = colorWithFallback(customColors[1].rgb, vec3(1.0, 0.0, 1.0));
-    vec3 bassCol  = colorWithFallback(customColors[2].rgb, vec3(1.0, 0.4, 0.0));
-    vec3 sparkCol = colorWithFallback(customColors[3].rgb, vec3(1.0, 1.0, 1.0));
+    vec3 accent   = colorWithFallback(p_accentColor.rgb, vec3(1.0, 0.0, 1.0));
+    vec3 bassCol  = colorWithFallback(p_bassColor.rgb, vec3(1.0, 0.4, 0.0));
+    vec3 sparkCol = colorWithFallback(p_sparkColor.rgb, vec3(1.0, 1.0, 1.0));
 
     float vitality = zoneVitality(isHighlighted);
     primary = vitalityDesaturate(primary, vitality);
@@ -347,14 +342,14 @@ vec4 compositeNeonLabels(vec4 color, vec2 fragCoord,
     vec2 px = 1.0 / max(iResolution, vec2(1.0));
     vec4 labels = texture(uZoneLabels, uv);
 
-    float labelGlowSpread = customParams[3].x >= 0.0 ? customParams[3].x : 1.5;
-    float labelBrightness = customParams[3].y >= 0.0 ? customParams[3].y : 2.0;
-    float labelAudioReact = customParams[3].z >= 0.0 ? customParams[3].z : 1.0;
+    float labelGlowSpread = p_neonSpread >= 0.0 ? p_neonSpread : 1.5;
+    float labelBrightness = p_neonIntensity >= 0.0 ? p_neonIntensity : 2.0;
+    float labelAudioReact = p_electricReact >= 0.0 ? p_electricReact : 1.0;
 
-    vec3 primary  = colorWithFallback(customColors[0].rgb, vec3(0.0, 1.0, 1.0));
-    vec3 accent   = colorWithFallback(customColors[1].rgb, vec3(1.0, 0.0, 1.0));
-    vec3 bassCol  = colorWithFallback(customColors[2].rgb, vec3(1.0, 0.4, 0.0));
-    vec3 sparkCol = colorWithFallback(customColors[3].rgb, vec3(1.0, 1.0, 1.0));
+    vec3 primary  = colorWithFallback(p_primaryColor.rgb, vec3(0.0, 1.0, 1.0));
+    vec3 accent   = colorWithFallback(p_accentColor.rgb, vec3(1.0, 0.0, 1.0));
+    vec3 bassCol  = colorWithFallback(p_bassColor.rgb, vec3(1.0, 0.4, 0.0));
+    vec3 sparkCol = colorWithFallback(p_sparkColor.rgb, vec3(1.0, 1.0, 1.0));
 
     // Dual-layer Gaussian halo: inner (tight) and outer (wide)
     float innerHalo = 0.0;
@@ -411,13 +406,11 @@ vec4 compositeNeonLabels(vec4 color, vec2 fragCoord,
 
 // ─── Main ─────────────────────────────────────────────────────────
 
-void main() {
-    vec2 fragCoord = vFragCoord;
+vec4 pImage(vec2 fragCoord) {
     vec4 color = vec4(0.0);
 
     if (zoneCount == 0) {
-        fragColor = vec4(0.0);
-        return;
+        return vec4(0.0);
     }
 
     // Audio analysis (soft variants for noise-floor gating)
@@ -438,7 +431,7 @@ void main() {
         color = blendOver(color, zoneColor);
     }
 
-    if (customParams[4].x > 0.5)
+    if (p_showLabels > 0.5)
         color = compositeNeonLabels(color, fragCoord, bass, treble, overall, hasAudio);
-    fragColor = clampFragColor(color);
+    return color;
 }

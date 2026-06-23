@@ -83,6 +83,18 @@ public:
      */
     QString urlFor(const QString& compositorHandle) const;
 
+    /**
+     * @brief Drop every cached thumbnail, releasing their pixel buffers.
+     *
+     * The cache is already hard-capped and LRU-evicting, but after the final
+     * snap-assist of a session its (≈6 MB worst-case) images would otherwise
+     * sit resident until daemon exit. OverlayService calls this on a short
+     * idle-grace timer after snap-assist stays dismissed, so rapid
+     * continuations keep the warm cache while a genuine end-of-use reclaims
+     * it; the next snap-assist repopulates from fresh kwin-effect captures.
+     */
+    void clear();
+
 private:
     /// Cache entry — image plus the URL that names this generation. Storing
     /// the URL inside the entry means LRU eviction reclaims the URL state

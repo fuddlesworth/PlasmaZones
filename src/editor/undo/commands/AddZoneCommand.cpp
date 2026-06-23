@@ -5,7 +5,7 @@
 #include "../../services/ZoneManager.h"
 #include "../../../core/constants.h"
 #include "../../../core/logging.h"
-#include "pz_i18n.h"
+#include "phosphor_i18n.h"
 
 using namespace PlasmaZones;
 
@@ -13,7 +13,7 @@ namespace PlasmaZones {
 
 AddZoneCommand::AddZoneCommand(QPointer<ZoneManager> zoneManager, const QString& zoneId, const QVariantMap& zoneData,
                                const QString& text, QUndoCommand* parent)
-    : BaseZoneCommand(zoneManager, text.isEmpty() ? PzI18n::tr("Add Zone", "@action") : text, parent)
+    : BaseZoneCommand(zoneManager, text.isEmpty() ? PhosphorI18n::tr("Add Zone", "@action") : text, parent)
     , m_zoneId(zoneId)
     , m_zoneData(zoneData)
 {

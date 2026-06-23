@@ -15,10 +15,35 @@ namespace PhosphorZones {
 class LayoutRegistry;
 }
 
+namespace PhosphorEngine {
+class ICrossSurfaceResolver;
+}
+
 namespace PhosphorSnapEngine {
 
 class ISettings;
 class IZoneAdjacencyResolver;
+
+/// The edge a neighbour surface is entered from when crossing in @p direction:
+/// crossing "right" lands on the neighbour's LEFT edge, "down" on its TOP, etc.
+/// Empty for an unknown token. Shared by the resolver's cross-output entry/swap
+/// targets and SnapEngine::entryZoneForCrossing so the mapping lives in one place.
+inline QString oppositeCrossingDirection(const QString& direction)
+{
+    if (direction == QLatin1String("left")) {
+        return QStringLiteral("right");
+    }
+    if (direction == QLatin1String("right")) {
+        return QStringLiteral("left");
+    }
+    if (direction == QLatin1String("up")) {
+        return QStringLiteral("down");
+    }
+    if (direction == QLatin1String("down")) {
+        return QStringLiteral("up");
+    }
+    return {};
+}
 
 /**
  * @brief Pure snap-mode navigation target resolver.
@@ -78,6 +103,23 @@ public:
     /// it becomes available.
     void setZoneAdjacencyResolver(IZoneAdjacencyResolver* resolver);
 
+    /// Late setter for the cross-surface resolver (neighbour output / desktop
+    /// lookup). When set, a navigation that finds no adjacent zone on the
+    /// current output crosses to the entry zone of the adjacent output instead
+    /// of failing. May be nullptr.
+    void setCrossSurfaceResolver(PhosphorEngine::ICrossSurfaceResolver* resolver);
+
+    /// Reports whether a neighbour OUTPUT is in autotile mode, evaluated in the
+    /// engine's current (desktop, activity) context — which the resolver itself
+    /// lacks. When set, the MOVE and SWAP cross-output paths skip an autotile
+    /// neighbour (deferring to the engine's cross-mode handoff) instead of
+    /// snapping the window onto a tiled screen. May be empty, in which case no
+    /// gating happens and every neighbour is treated as snap-mode (the
+    /// pre-provider behaviour). The FOCUS cross-output path is never gated — it
+    /// may still cross to an autotile screen.
+    using NeighbourAutotileFn = std::function<bool(const QString& screenId)>;
+    void setNeighbourAutotileProvider(NeighbourAutotileFn fn);
+
     PhosphorProtocol::MoveTargetResult getMoveTargetForWindow(const QString& windowId, const QString& direction,
                                                               const QString& screenId);
 
@@ -110,10 +152,49 @@ private:
         }
     }
 
+    /// Cross-output entry target on a no-adjacent-zone boundary, or a
+    /// non-success MoveTargetResult when there's no neighbour output / entry
+    /// zone. Shared by the move and focus paths; the caller emits feedback so
+    /// the move/focus tag stays correct.
+    /// @param requireSnapNeighbour when true (move/swap), an autotile neighbour
+    /// output yields a non-success result so the caller defers to the cross-mode
+    /// handoff; when false (focus), the neighbour's mode is not gated.
+    PhosphorProtocol::MoveTargetResult crossOutputEntryTarget(const QString& currentZoneId, const QString& direction,
+                                                              const QString& sourceScreenId,
+                                                              bool requireSnapNeighbour) const;
+
+    /// Cross-output swap target on a no-adjacent-zone boundary: the focused
+    /// window (@p windowId, in @p currentZoneId on @p sourceScreenId) crosses to
+    /// the neighbour output's entry zone, trading places with that zone's
+    /// occupant. window1 lands on the neighbour (screenName), window2 returns to
+    /// the source output (screenName2). An empty entry zone degrades to a
+    /// move-to-empty crossing (no window2). Returns a non-success result when
+    /// there's no neighbour output / entry zone / valid geometry; the caller
+    /// emits feedback so the swap tag stays correct.
+    PhosphorProtocol::SwapTargetResult crossOutputSwapTarget(const QString& windowId, const QString& currentZoneId,
+                                                             const QString& direction,
+                                                             const QString& sourceScreenId) const;
+
+    /// Windows snapped to @p zoneId whose stored screen is @p screenName, in
+    /// windowsInZone() iteration order.
+    /// windowsInZone() is screen-agnostic — the same zone UUID is shared by
+    /// every output the layout is assigned to (zones resolve by UUID across all
+    /// layouts), so a bare windowsInZone(zoneId) can include windows on the
+    /// WRONG output when one layout drives multiple monitors. Filtering by the
+    /// daemon's screen assignment pins the set to the intended output.
+    QStringList windowsInZoneOnScreen(const QString& zoneId, const QString& screenName) const;
+
+    /// A window snapped to @p zoneId whose stored screen is @p screenName, or
+    /// empty if none (first in windowsInZoneOnScreen() order — deterministic per
+    /// process, not a visual ordering).
+    QString firstWindowInZoneOnScreen(const QString& zoneId, const QString& screenName) const;
+
     PhosphorEngine::IWindowTrackingService* m_service = nullptr;
     PhosphorZones::LayoutRegistry* m_layoutManager = nullptr;
     IZoneAdjacencyResolver* m_zoneAdjacency = nullptr;
+    PhosphorEngine::ICrossSurfaceResolver* m_crossSurface = nullptr;
     FeedbackFn m_feedback;
+    NeighbourAutotileFn m_neighbourIsAutotile;
 };
 
 } // namespace PhosphorSnapEngine

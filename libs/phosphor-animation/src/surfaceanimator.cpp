@@ -479,6 +479,21 @@ void applyEffectStaticConfig(PhosphorRendering::ShaderEffect* shaderItem,
         shaderItem->setShaderIncludePaths(shaderIncludePaths);
     }
     shaderItem->setShaderSource(QUrl::fromLocalFile(effect.fragmentShaderPath));
+    // T1.1: generate the named-param preamble (`#define p_<id> ...`) from the
+    // effect's declared parameters and hand it to the shader item, which splices
+    // it after `#version` at bake time. The slot allocation mirrors
+    // translateAnimationParams exactly, so `p_<id>` resolves to the same UBO
+    // lane the per-leg setShaderParams uploads to. Empty when the effect declares
+    // no parameters — a no-op splice, so legacy packs that hand-write their own
+    // `#define`s are unaffected (distinct `p_`-prefixed names, no collision).
+    shaderItem->setParamPreamble(PhosphorAnimationShaders::AnimationShaderRegistry::paramPreamble(effect));
+    // T1.5: install the animation entry-point scaffold so a pack authored as
+    // pTransition (symmetric) or pIn/pOut (asymmetric) — no main(), no
+    // direction code — is assembled before expansion. A traditional main() pack
+    // is left untouched. Must match the kwin-effect + warm-bake scaffold so the
+    // bake-cache key agrees across paths.
+    shaderItem->setEntryScaffold(PhosphorAnimationShaders::AnimationShaderRegistry::animationEntryPrologue(),
+                                 PhosphorAnimationShaders::AnimationShaderRegistry::animationEntryCandidates());
     if (!effect.vertexShaderPath.isEmpty()) {
         shaderItem->setVertexShaderUrl(QUrl::fromLocalFile(effect.vertexShaderPath));
     }
@@ -1326,7 +1341,7 @@ public:
     /// surface roles via withScopePrefix("base-{screenId}") and
     /// register configs against the unsuffixed base, so a bare find()
     /// would always miss. Match boundary is '-' or end-of-string so
-    /// "plasmazones-layout" doesn't collide with "plasmazones-layout-
+    /// "phosphor-layout" doesn't collide with "phosphor-layout-
     /// picker-..." when both are registered.
     Config configFor(const PhosphorLayer::Role& role) const
     {
@@ -2103,7 +2118,7 @@ public:
     /// update batches under rapid show/hide toggling.
     std::unordered_map<TrackKey, PendingReuseShader, TrackKeyHash> m_pendingReuse;
     /// Per-surface destroyed-signal connections, keyed by raw Surface*
-    /// pointer. Replaces the earlier `pz_surfaceAnimatorCleanupConnected`
+    /// pointer. Replaces the earlier `p_surfaceAnimatorCleanupConnected`
     /// dynamic-property gate which leaked across animator instances —
     /// a fresh animator that re-encountered the same Surface would skip
     /// wiring its own cleanup, leaking its m_pendingReuse entries on

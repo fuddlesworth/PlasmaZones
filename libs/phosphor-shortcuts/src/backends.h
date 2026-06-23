@@ -17,7 +17,7 @@ class QDBusPendingCallWatcher;
 class QDBusObjectPath;
 class QDBusMessage;
 
-namespace Phosphor::Shortcuts {
+namespace PhosphorShortcuts {
 
 // ─── D-Bus trigger fallback ──────────────────────────────────────────────────
 
@@ -160,4 +160,4 @@ private:
 
 #endif // PHOSPHORSHORTCUTS_HAVE_KGLOBALACCEL
 
-} // namespace Phosphor::Shortcuts
+} // namespace PhosphorShortcuts

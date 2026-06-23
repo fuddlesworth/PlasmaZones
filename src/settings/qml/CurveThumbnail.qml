@@ -3,6 +3,7 @@
 
 import "EasingCurve.js" as Easing
 import QtQuick
+import QtQuick.Window
 import QtQuick.Controls
 import "SpringPhysics.js" as Spring
 import org.kde.kirigami as Kirigami
@@ -30,14 +31,14 @@ Rectangle {
     // here — the surrounding UI sets duration explicitly when it matters.
     readonly property real _settleEpsilon: 0.005
 
-    signal clicked()
+    signal clicked
 
     implicitWidth: Kirigami.Units.gridUnit * 5
     implicitHeight: Kirigami.Units.gridUnit * 3
     radius: Kirigami.Units.smallSpacing
     color: Kirigami.Theme.backgroundColor
     border.color: hoverArea.containsMouse ? Kirigami.Theme.highlightColor : (Kirigami.Theme.separatorColor !== undefined ? Kirigami.Theme.separatorColor : Kirigami.Theme.disabledTextColor)
-    border.width: Math.max(1, Math.round(Kirigami.Units.devicePixelRatio))
+    border.width: Math.max(1, Math.round(Screen.devicePixelRatio))
     Accessible.name: i18n("Curve preview")
     Accessible.role: Accessible.Button
     // Repaint when inputs change or when component is ready (theme available)
@@ -68,7 +69,7 @@ Rectangle {
             var ctx = getContext("2d");
             ctx.clearRect(0, 0, width, height);
             if (!_strokeColor)
-                return ;
+                return;
 
             var w = width;
             var h = height;
@@ -88,7 +89,6 @@ Rectangle {
 
                     if (sv > yMax)
                         yMax = sv;
-
                 }
                 // Add padding to Y range
                 var yRange = Math.max(yMax - yMin, 0.01);
@@ -96,7 +96,7 @@ Rectangle {
                 yMax += yRange * 0.08;
                 yRange = yMax - yMin;
                 ctx.strokeStyle = _strokeColor;
-                ctx.lineWidth = Math.max(1, Math.round(Kirigami.Units.devicePixelRatio));
+                ctx.lineWidth = Math.max(1, Math.round(Screen.devicePixelRatio));
                 ctx.beginPath();
                 for (var i = 0; i <= steps; i++) {
                     var px = pad + (i / steps) * drawW;
@@ -126,14 +126,13 @@ Rectangle {
 
                     if (sy > spMax)
                         spMax = sy;
-
                 }
                 var spRange = Math.max(spMax - spMin, 0.01);
                 spMin -= spRange * 0.08;
                 spMax += spRange * 0.08;
                 spRange = spMax - spMin;
                 ctx.strokeStyle = _strokeColor;
-                ctx.lineWidth = Math.max(1, Math.round(Kirigami.Units.devicePixelRatio));
+                ctx.lineWidth = Math.max(1, Math.round(Screen.devicePixelRatio));
                 ctx.beginPath();
                 for (var sj = 0; sj <= spSteps; sj++) {
                     var spx = pad + (sj / spSteps) * drawW;
@@ -155,7 +154,6 @@ Rectangle {
 
             target: Kirigami.Theme
         }
-
     }
 
     MouseArea {
@@ -166,5 +164,4 @@ Rectangle {
         cursorShape: Qt.PointingHandCursor
         onClicked: root.clicked()
     }
-
 }

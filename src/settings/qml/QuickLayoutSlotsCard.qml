@@ -27,7 +27,8 @@ SettingsCard {
             appSettings.setQuickLayoutSlot(slotNumber, value);
     }
 
-    headerText: root.viewMode === 1 ? i18n("Tiling Quick Shortcuts") : i18n("Quick Layout Shortcuts")
+    headerText: root.viewMode === 1 ? i18n("Tiling Quick Shortcuts") : i18n("Snapping Quick Shortcuts")
+    searchAnchor: "quickShortcuts"
     collapsible: true
 
     contentItem: ColumnLayout {
@@ -67,7 +68,7 @@ SettingsCard {
                         spacing: Kirigami.Units.smallSpacing / 2
 
                         Label {
-                            text: root.viewMode === 1 ? i18n("Quick Tiling %1", slotDelegate.slotNumber) : i18n("Quick Layout %1", slotDelegate.slotNumber)
+                            text: root.viewMode === 1 ? i18n("Quick Tiling %1", slotDelegate.slotNumber) : i18n("Quick Snapping %1", slotDelegate.slotNumber)
                             Layout.fillWidth: true
                             elide: Text.ElideRight
                         }
@@ -79,13 +80,17 @@ SettingsCard {
                             font: Kirigami.Theme.smallFont
                             opacity: slotDelegate.shortcutText !== "" ? 0.6 : 0.35
                         }
-
                     }
 
-                    // Right: layout combo + clear button
+                    // Right: layout combo + clear button. Use a CONSTANT preferred
+                    // width — binding the width to any enclosing layout's width (the
+                    // row above or the delegate) feeds this child's size back into
+                    // that layout mid-pass, which is the "recursive rearrange" Qt
+                    // Quick Layouts aborts on. The left column is fillWidth and takes
+                    // the remaining space.
                     RowLayout {
                         Layout.alignment: Qt.AlignVCenter | Qt.AlignRight
-                        Layout.maximumWidth: parent.width * 0.45
+                        Layout.preferredWidth: Kirigami.Units.gridUnit * 16
                         spacing: Kirigami.Units.smallSpacing
 
                         LayoutComboBox {
@@ -95,7 +100,7 @@ SettingsCard {
                             Layout.minimumWidth: Kirigami.Units.gridUnit * 10
                             appSettings: root.appSettings
                             noneText: i18n("None")
-                            showPreview: root.viewMode === 0
+                            showPreview: true
                             layoutFilter: root.viewMode === 1 ? 1 : 0
                             resolvedDefaultId: ""
                             currentLayoutId: {
@@ -107,17 +112,17 @@ SettingsCard {
                             }
 
                             Connections {
+                                // Fires on EXTERNAL (daemon) snapping/zone quick-layout-slot
+                                // changes — the daemon emits quickLayoutSlotsChanged only for
+                                // those. Tiling slots are config-only (no external-change
+                                // signal), so the bump is a no-op in viewMode 1; that's fine —
+                                // there is no separate tilingQuickLayoutSlotsChanged signal.
                                 function onQuickLayoutSlotsChanged() {
-                                    slotDelegate._slotRevision++;
-                                }
-
-                                function onTilingQuickLayoutSlotsChanged() {
                                     slotDelegate._slotRevision++;
                                 }
 
                                 target: root.appSettings
                             }
-
                         }
 
                         ToolButton {
@@ -130,15 +135,9 @@ SettingsCard {
                             ToolTip.text: i18n("Clear shortcut")
                             Accessible.name: i18n("Clear shortcut %1", slotDelegate.slotNumber)
                         }
-
                     }
-
                 }
-
             }
-
         }
-
     }
-
 }

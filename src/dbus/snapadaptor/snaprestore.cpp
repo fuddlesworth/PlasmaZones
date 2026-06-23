@@ -8,7 +8,7 @@
 #include <PhosphorPlacement/WindowTrackingService.h>
 #include <PhosphorScreens/Manager.h>
 #include "../../core/isettings.h"
-#include "../../core/screenmoderouter.h"
+#include <PhosphorContext/ContextResolver.h>
 #include <PhosphorSnapEngine/SnapEngine.h>
 
 namespace PlasmaZones {
@@ -17,7 +17,7 @@ namespace {
 // Non-blocking startup gate shared by all synchronous snap D-Bus methods.
 //
 // Rationale: these slots return zone geometry synchronously to the KWin effect.
-// Before the first panel D-Bus query completes, Phosphor::Screens::ScreenManager's availability cache
+// Before the first panel D-Bus query completes, PhosphorScreens::ScreenManager's availability cache
 // is empty and zones would be computed against the unreserved full-screen rect —
 // handing the effect coordinates that place the window partially behind the panel.
 //
@@ -53,6 +53,14 @@ void SnapAdaptor::snapToLastZone(const QString& windowId, const QString& windowS
 {
     snapX = snapY = snapWidth = snapHeight = 0;
     shouldSnap = false;
+
+    // Empty windowId is a precondition violation that the sibling slots
+    // (snapToAppRule, snapToEmptyZone, resolveWindowRestore) all guard;
+    // mirror their early-return so the input contract is symmetric across
+    // the snap-restore family.
+    if (windowId.isEmpty()) {
+        return;
+    }
 
     if (!m_adaptor || !m_adaptor->service()) {
         return;
@@ -99,7 +107,7 @@ void SnapAdaptor::snapToAppRule(const QString& windowId, const QString& windowSc
         return;
     }
 
-    SnapResult result = m_engine->calculateSnapToAppRule(windowId, windowScreenName, sticky);
+    SnapResult result = m_engine->calculateSnapToPlacementRule(windowId, windowScreenName, sticky);
     if (!result.shouldSnap) {
         return;
     }
@@ -107,7 +115,7 @@ void SnapAdaptor::snapToAppRule(const QString& windowId, const QString& windowSc
     if (!applySnapResult(result, windowId, snapX, snapY, snapWidth, snapHeight, shouldSnap)) {
         return;
     }
-    qCInfo(lcDbusWindow) << "App rule snapping window" << windowId << "to zone" << result.zoneId;
+    qCInfo(lcDbusWindow) << "Placement rule snapping window" << windowId << "to zone" << result.zoneId;
 }
 
 void SnapAdaptor::snapToEmptyZone(const QString& windowId, const QString& windowScreenId, bool sticky, int& snapX,
@@ -145,45 +153,9 @@ void SnapAdaptor::snapToEmptyZone(const QString& windowId, const QString& window
     qCInfo(lcDbusWindow) << "Auto-assign snapping window" << windowId << "to empty zone" << result.zoneId;
 }
 
-void SnapAdaptor::restoreToPersistedZone(const QString& windowId, const QString& screenId, bool sticky, int& snapX,
-                                         int& snapY, int& snapWidth, int& snapHeight, bool& shouldRestore)
-{
-    snapX = snapY = snapWidth = snapHeight = 0;
-    shouldRestore = false;
-
-    if (!m_adaptor || !m_adaptor->service()) {
-        return;
-    }
-
-    if (m_settings && !m_settings->restoreWindowsToZonesOnLogin()) {
-        qCDebug(lcDbusWindow) << "Session zone restoration disabled by setting";
-        return;
-    }
-
-    if (windowId.isEmpty()) {
-        return;
-    }
-
-    if (!isSnapReadyOrWarn(m_adaptor->service(), "restoreToPersistedZone")) {
-        return;
-    }
-
-    if (!m_engine) {
-        return;
-    }
-
-    SnapResult result = m_engine->calculateRestoreFromSession(windowId, screenId, sticky);
-    if (!result.shouldSnap) {
-        return;
-    }
-
-    if (!applySnapResult(result, windowId, snapX, snapY, snapWidth, snapHeight, shouldRestore)) {
-        return;
-    }
-    // Consume the pending assignment so other windows of the same class won't restore to this zone
-    m_adaptor->service()->consumePendingAssignment(windowId);
-    qCInfo(lcDbusWindow) << "Restoring window" << windowId << "to zone(s)" << result.zoneIds;
-}
+// restoreToPersistedZone removed — session zone restoration is served by the
+// unified WindowPlacementStore via resolveWindowRestore. The old D-Bus slot had
+// no remaining caller (the effect uses resolveWindowRestore).
 
 void SnapAdaptor::resolveWindowRestore(const QString& windowId, const QString& screenId, bool sticky, int windowKind,
                                        int& snapX, int& snapY, int& snapWidth, int& snapHeight, bool& shouldSnap)
@@ -208,12 +180,7 @@ void SnapAdaptor::resolveWindowRestore(const QString& windowId, const QString& s
         return;
     }
 
-    // Clamp unknown wire values to WindowKind::Unknown.
-    const PhosphorEngine::WindowKind kind = (windowKind == static_cast<int>(PhosphorEngine::WindowKind::Normal))
-        ? PhosphorEngine::WindowKind::Normal
-        : (windowKind == static_cast<int>(PhosphorEngine::WindowKind::Transient))
-        ? PhosphorEngine::WindowKind::Transient
-        : PhosphorEngine::WindowKind::Unknown;
+    const PhosphorEngine::WindowKind kind = PhosphorEngine::clampWindowKindFromWire(windowKind);
     SnapResult result = m_engine->resolveWindowRestore(windowId, screenId, sticky, kind);
     if (!result.shouldSnap) {
         return;
@@ -236,7 +203,7 @@ bool SnapAdaptor::applySnapResult(const SnapResult& result, const QString& windo
     }
 
     // Global snapping kill-switch — see discussion #461 item 2. Every snapTo*
-    // / restoreToPersistedZone / resolveWindowRestore D-Bus slot funnels
+    // / resolveWindowRestore D-Bus slot funnels
     // through here, so a single gate suppresses all auto-snap-on-open paths
     // when the user has turned snapping off entirely. Mirrors the
     // engine-internal gate in SnapEngine::resolveWindowRestore.
@@ -255,23 +222,25 @@ bool SnapAdaptor::applySnapResult(const SnapResult& result, const QString& windo
     // entry points in one place.
     if (m_settings && !result.screenId.isEmpty()) {
         // Gate against the DESTINATION screen's actual mode. A restore result
-        // can cross-screen-migrate (app rule / session restore) onto a screen
+        // can cross-screen-migrate (placement rule / session restore) onto a screen
         // whose mode differs from the caller's, so the disable list to consult
         // is the one for result.screenId's mode — not a hard-coded Snapping.
         //
         // currentVirtualDesktop()/currentActivity() are the precise destination
         // context here, not an approximation: a restore only ever targets the
         // current desktop. Every calculator feeding this path either snaps a
-        // window opening now on the current desktop (calculateSnapToAppRule /
+        // window opening now on the current desktop (calculateSnapToPlacementRule /
         // calculateSnapToEmptyZone) or refuses outright when the saved desktop
-        // is not the current one — calculateRestoreFromSession and
-        // calculateSnapToLastZone both return noSnap on a desktop mismatch. A
+        // is not the current one — the WindowPlacementStore restore block gates
+        // on screen and disabled-context (restoring onto the current desktop),
+        // and calculateSnapToLastZone returns noSnap on a desktop mismatch. A
         // restored window therefore lands on the current desktop/activity.
-        const PhosphorZones::AssignmentEntry::Mode mode = m_screenModeRouter
-            ? m_screenModeRouter->modeFor(result.screenId)
-            : PhosphorZones::AssignmentEntry::Snapping;
-        if (isContextDisabled(m_settings, mode, result.screenId, m_engine->currentVirtualDesktop(),
-                              m_engine->currentActivity())) {
+        // Resolver's handleFor pulls (currentVirtualDesktop, currentActivity)
+        // from the daemon's VDM/AM — same values the snap engine sees on
+        // its own state surface — and routes the screen through the mode
+        // provider, collapsing the 3-step `(modeFor + currentVirtualDesktop
+        // + currentActivity)` cascade rebuild to one snapshot call.
+        if (m_contextResolver && m_contextResolver->isDisabled(m_contextResolver->handleFor(result.screenId))) {
             qCInfo(lcDbusWindow) << "applySnapResult: refusing auto-snap of" << windowId
                                  << "— PlasmaZones is disabled for screen" << result.screenId;
             return false;
@@ -296,6 +265,9 @@ bool SnapAdaptor::applySnapResult(const SnapResult& result, const QString& windo
     } else {
         m_engine->commitSnap(windowId, zoneIds.first(), result.screenId, SnapIntent::AutoRestored);
     }
+    // Focus-new-windows is handled inside SnapEngine::commitSnapImpl on the
+    // AutoRestored path (mirrors AutotileEngine), so it covers every auto-snap-on-open
+    // entry point in one place — not just this D-Bus facade.
     return true;
 }
 

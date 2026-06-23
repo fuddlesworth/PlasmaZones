@@ -1,7 +1,7 @@
 {
     "id": "{e5fa6b7c-b08d-4c2f-ea4d-708b1c3e5f7a}",
     "name": "Ultrawide 4-Column",
-    "description": "Four equal columns for 21:9 monitors — each column is roughly 16:9 proportioned",
+    "description": "Four equal columns for 21:9 monitors, each roughly 16:9 proportioned",
     "type": 5,
     "isBuiltIn": true,
     "showZoneNumbers": true,

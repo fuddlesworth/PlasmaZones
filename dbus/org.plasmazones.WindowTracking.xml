@@ -1,50 +1,17 @@
 <!DOCTYPE node PUBLIC "-//freedesktop//DTD D-BUS Object Introspection 1.0//EN"
     "http://www.freedesktop.org/standards/dbus/1.0/introspect.dtd">
+<!--
+SPDX-FileCopyrightText: 2026 fuddlesworth
+SPDX-License-Identifier: GPL-3.0-or-later
+-->
 <node>
     <!-- Window Tracking Interface -->
     <interface name="org.plasmazones.WindowTracking">
-        <annotation name="org.gtk.GDBus.DocString" value="Window-to-zone tracking: snap/unsnap notifications, pre-snap geometry for restore, floating state, zone geometry, auto-snap to last zone, restore to persisted zone, resolution-change handling, and keyboard-navigation feedback."/>
-        <method name="windowSnapped">
-            <annotation name="org.gtk.GDBus.DocString" value="Record that a window was snapped to a zone."/>
-            <arg name="windowId" type="s" direction="in">
-                <annotation name="org.gtk.GDBus.DocString" value="Window identifier."/>
-            </arg>
-            <arg name="zoneId" type="s" direction="in">
-                <annotation name="org.gtk.GDBus.DocString" value="Zone UUID."/>
-            </arg>
-            <arg name="screenId" type="s" direction="in">
-                <annotation name="org.gtk.GDBus.DocString" value="Screen where window was snapped (empty to auto-detect)."/>
-            </arg>
-        </method>
-        <method name="windowSnappedMultiZone">
-            <annotation name="org.gtk.GDBus.DocString" value="Record that a window was snapped to multiple zones."/>
-            <arg name="windowId" type="s" direction="in">
-                <annotation name="org.gtk.GDBus.DocString" value="Window identifier."/>
-            </arg>
-            <arg name="zoneIds" type="as" direction="in">
-                <annotation name="org.gtk.GDBus.DocString" value="List of zone UUIDs (first is primary)."/>
-            </arg>
-            <arg name="screenId" type="s" direction="in">
-                <annotation name="org.gtk.GDBus.DocString" value="Screen where window was snapped (empty to auto-detect)."/>
-            </arg>
-        </method>
-        <method name="windowUnsnapped">
-            <annotation name="org.gtk.GDBus.DocString" value="Record that a window was unsnapped."/>
-            <arg name="windowId" type="s" direction="in">
-                <annotation name="org.gtk.GDBus.DocString" value="Window identifier."/>
-            </arg>
-        </method>
+        <annotation name="org.gtk.GDBus.DocString" value="Window-to-zone tracking: pre-snap geometry for restore, floating state, zone geometry, drag-out unsnap, resolution-change handling, keyboard-navigation feedback, and window-metadata registration. Snap commits, snap-restore fallback chains, and daemon-driven navigation targets live on the org.plasmazones.Snap adaptor."/>
         <method name="notifyDragOutUnsnap">
             <annotation name="org.gtk.GDBus.DocString" value="Notify that a snapped window was dragged without the activation trigger. Saves pre-float zone, marks floating, and clears zone assignment so the window does not auto-restore to the zone on close/reopen."/>
             <arg name="windowId" type="s" direction="in">
                 <annotation name="org.gtk.GDBus.DocString" value="Window ID from the effect."/>
-            </arg>
-        </method>
-        <method name="windowsSnappedBatch">
-            <annotation name="org.gtk.GDBus.DocString" value="Batch snap confirmations: process multiple windowSnapped/windowUnsnapped in one D-Bus call. Used by the KWin effect after resnap stagger completes. Array of (windowId, zoneId, screenId, isRestore)."/>
-            <arg name="entries" type="a(sssb)" direction="in">
-                <annotation name="org.qtproject.QtDBus.QtTypeName.In0" value="PhosphorProtocol::SnapConfirmationList"/>
-                <annotation name="org.gtk.GDBus.DocString" value="Array of snap confirmation structs."/>
             </arg>
         </method>
         <method name="getZoneForWindow">
@@ -87,7 +54,7 @@
             </arg>
         </method>
         <method name="getEmptyZones">
-            <annotation name="org.gtk.GDBus.DocString" value="Return typed list of empty zones for Snap Assist continuation. Same format as emptyZones from dragStopped."/>
+            <annotation name="org.gtk.GDBus.DocString" value="Return typed list of empty zones for Snap Assist continuation. Same EmptyZoneEntry format as the WindowDrag interface's snapAssistReady signal."/>
             <arg name="screenId" type="s" direction="in">
                 <annotation name="org.gtk.GDBus.DocString" value="Screen identifier (e.g. Dell:U2722D:115107 or Dell:U2722D:115107/vs:0)."/>
             </arg>
@@ -186,12 +153,6 @@
                 <annotation name="org.gtk.GDBus.DocString" value="Floating window IDs."/>
             </arg>
         </method>
-        <method name="windowUnsnappedForFloat">
-            <annotation name="org.gtk.GDBus.DocString" value="Unsnap for float toggle; saves zone for later restore."/>
-            <arg name="windowId" type="s" direction="in">
-                <annotation name="org.gtk.GDBus.DocString" value="Window identifier."/>
-            </arg>
-        </method>
         <method name="getPreFloatZone">
             <annotation name="org.gtk.GDBus.DocString" value="Return the zone to restore to when unfloating (if any)."/>
             <arg name="windowId" type="s" direction="in">
@@ -208,19 +169,6 @@
             <annotation name="org.gtk.GDBus.DocString" value="Clear saved pre-float zone for the window."/>
             <arg name="windowId" type="s" direction="in">
                 <annotation name="org.gtk.GDBus.DocString" value="Window identifier."/>
-            </arg>
-        </method>
-        <method name="calculateUnfloatRestore">
-            <annotation name="org.gtk.GDBus.DocString" value="Calculate unfloat restore geometry and zone IDs in one call. Supports multi-zone: combined geometry of all pre-float zones."/>
-            <arg name="windowId" type="s" direction="in">
-                <annotation name="org.gtk.GDBus.DocString" value="Window identifier."/>
-            </arg>
-            <arg name="screenId" type="s" direction="in">
-                <annotation name="org.gtk.GDBus.DocString" value="Screen identifier for geometry calculation (e.g. Dell:U2722D:115107)."/>
-            </arg>
-            <arg name="result" type="(bassiiii)" direction="out">
-                <annotation name="org.gtk.GDBus.DocString" value="UnfloatRestoreResult: (found, zoneIds, screenName, x, y, width, height)."/>
-                <annotation name="org.qtproject.QtDBus.QtTypeName.Out0" value="PhosphorProtocol::UnfloatRestoreResult"/>
             </arg>
         </method>
         <method name="getZoneGeometry">
@@ -246,149 +194,11 @@
                 <annotation name="org.qtproject.QtDBus.QtTypeName.Out0" value="PhosphorProtocol::ZoneGeometryRect"/>
             </arg>
         </method>
-        <method name="snapToAppRule">
-            <annotation name="org.gtk.GDBus.DocString" value="Snap a window to its app-rule-defined zone (highest priority auto-snap). Returns geometry and shouldSnap."/>
-            <arg name="windowId" type="s" direction="in">
-                <annotation name="org.gtk.GDBus.DocString" value="Window to snap."/>
-            </arg>
-            <arg name="windowScreenName" type="s" direction="in">
-                <annotation name="org.gtk.GDBus.DocString" value="Window's current screen identifier (e.g. Dell:U2722D:115107)."/>
-            </arg>
-            <arg name="sticky" type="b" direction="in">
-                <annotation name="org.gtk.GDBus.DocString" value="True if window is on all desktops."/>
-            </arg>
-            <arg name="snapX" type="i" direction="out">
-                <annotation name="org.gtk.GDBus.DocString" value="Snap X (if shouldSnap)."/>
-            </arg>
-            <arg name="snapY" type="i" direction="out">
-                <annotation name="org.gtk.GDBus.DocString" value="Snap Y (if shouldSnap)."/>
-            </arg>
-            <arg name="snapWidth" type="i" direction="out">
-                <annotation name="org.gtk.GDBus.DocString" value="Snap width (if shouldSnap)."/>
-            </arg>
-            <arg name="snapHeight" type="i" direction="out">
-                <annotation name="org.gtk.GDBus.DocString" value="Snap height (if shouldSnap)."/>
-            </arg>
-            <arg name="shouldSnap" type="b" direction="out">
-                <annotation name="org.gtk.GDBus.DocString" value="True if an app rule matched and window should be snapped."/>
-            </arg>
-        </method>
-        <method name="snapToLastZone">
-            <annotation name="org.gtk.GDBus.DocString" value="Compute snap geometry for auto-snap to last used zone. Respects moveNewWindowsToLastZone setting. Returns geometry and shouldSnap."/>
-            <arg name="windowId" type="s" direction="in">
-                <annotation name="org.gtk.GDBus.DocString" value="Window to snap."/>
-            </arg>
-            <arg name="windowScreenName" type="s" direction="in">
-                <annotation name="org.gtk.GDBus.DocString" value="Window's current screen identifier (e.g. Dell:U2722D:115107)."/>
-            </arg>
-            <arg name="sticky" type="b" direction="in">
-                <annotation name="org.gtk.GDBus.DocString" value="True if window is on all desktops."/>
-            </arg>
-            <arg name="snapX" type="i" direction="out">
-                <annotation name="org.gtk.GDBus.DocString" value="Snap X (if shouldSnap)."/>
-            </arg>
-            <arg name="snapY" type="i" direction="out">
-                <annotation name="org.gtk.GDBus.DocString" value="Snap Y (if shouldSnap)."/>
-            </arg>
-            <arg name="snapWidth" type="i" direction="out">
-                <annotation name="org.gtk.GDBus.DocString" value="Snap width (if shouldSnap)."/>
-            </arg>
-            <arg name="snapHeight" type="i" direction="out">
-                <annotation name="org.gtk.GDBus.DocString" value="Snap height (if shouldSnap)."/>
-            </arg>
-            <arg name="shouldSnap" type="b" direction="out">
-                <annotation name="org.gtk.GDBus.DocString" value="True if caller should apply the geometry."/>
-            </arg>
-        </method>
-        <method name="snapToEmptyZone">
-            <annotation name="org.gtk.GDBus.DocString" value="Snap window to first empty zone (auto-assign). Only fires if layout has autoAssign enabled."/>
-            <arg name="windowId" type="s" direction="in">
-                <annotation name="org.gtk.GDBus.DocString" value="Window to snap."/>
-            </arg>
-            <arg name="windowScreenName" type="s" direction="in">
-                <annotation name="org.gtk.GDBus.DocString" value="Window's current screen identifier (e.g. Dell:U2722D:115107)."/>
-            </arg>
-            <arg name="sticky" type="b" direction="in">
-                <annotation name="org.gtk.GDBus.DocString" value="True if window is on all desktops."/>
-            </arg>
-            <arg name="snapX" type="i" direction="out">
-                <annotation name="org.gtk.GDBus.DocString" value="Snap X (if shouldSnap)."/>
-            </arg>
-            <arg name="snapY" type="i" direction="out">
-                <annotation name="org.gtk.GDBus.DocString" value="Snap Y (if shouldSnap)."/>
-            </arg>
-            <arg name="snapWidth" type="i" direction="out">
-                <annotation name="org.gtk.GDBus.DocString" value="Snap width (if shouldSnap)."/>
-            </arg>
-            <arg name="snapHeight" type="i" direction="out">
-                <annotation name="org.gtk.GDBus.DocString" value="Snap height (if shouldSnap)."/>
-            </arg>
-            <arg name="shouldSnap" type="b" direction="out">
-                <annotation name="org.gtk.GDBus.DocString" value="True if auto-assign matched and window should be snapped."/>
-            </arg>
-        </method>
-        <method name="restoreToPersistedZone">
-            <annotation name="org.gtk.GDBus.DocString" value="Restore window to its persisted zone (remembered from last close or previous session). Returns geometry and shouldRestore."/>
-            <arg name="windowId" type="s" direction="in">
-                <annotation name="org.gtk.GDBus.DocString" value="Window to restore."/>
-            </arg>
-            <arg name="screenId" type="s" direction="in">
-                <annotation name="org.gtk.GDBus.DocString" value="Window's screen identifier (e.g. Dell:U2722D:115107)."/>
-            </arg>
-            <arg name="sticky" type="b" direction="in">
-                <annotation name="org.gtk.GDBus.DocString" value="True if window is on all desktops."/>
-            </arg>
-            <arg name="snapX" type="i" direction="out">
-                <annotation name="org.gtk.GDBus.DocString" value="Restore X (if shouldRestore)."/>
-            </arg>
-            <arg name="snapY" type="i" direction="out">
-                <annotation name="org.gtk.GDBus.DocString" value="Restore Y (if shouldRestore)."/>
-            </arg>
-            <arg name="snapWidth" type="i" direction="out">
-                <annotation name="org.gtk.GDBus.DocString" value="Restore width (if shouldRestore)."/>
-            </arg>
-            <arg name="snapHeight" type="i" direction="out">
-                <annotation name="org.gtk.GDBus.DocString" value="Restore height (if shouldRestore)."/>
-            </arg>
-            <arg name="shouldRestore" type="b" direction="out">
-                <annotation name="org.gtk.GDBus.DocString" value="True if caller should apply the geometry."/>
-            </arg>
-        </method>
-        <method name="resolveWindowRestore">
-            <annotation name="org.gtk.GDBus.DocString" value="Run the full 4-level snap-restore fallback chain server-side in one call: appRule → persisted → emptyZone → lastZone. Returns geometry and shouldSnap on first match."/>
-            <arg name="windowId" type="s" direction="in">
-                <annotation name="org.gtk.GDBus.DocString" value="Window to restore."/>
-            </arg>
-            <arg name="screenId" type="s" direction="in">
-                <annotation name="org.gtk.GDBus.DocString" value="Window's current screen identifier (e.g. Dell:U2722D:115107)."/>
-            </arg>
-            <arg name="sticky" type="b" direction="in">
-                <annotation name="org.gtk.GDBus.DocString" value="True if window is on all desktops."/>
-            </arg>
-            <arg name="windowKind" type="i" direction="in">
-                <annotation name="org.gtk.GDBus.DocString" value="Structural kind of the opening window (0=Unknown, 1=Normal, 2=Transient). The daemon compares this against the kind recorded for the matching PendingRestore entry and refuses to restore when both sides are concrete and disagree. Pass 0 to opt out of the gate (legacy callers)."/>
-            </arg>
-            <arg name="snapX" type="i" direction="out">
-                <annotation name="org.gtk.GDBus.DocString" value="Snap X (if shouldSnap)."/>
-            </arg>
-            <arg name="snapY" type="i" direction="out">
-                <annotation name="org.gtk.GDBus.DocString" value="Snap Y (if shouldSnap)."/>
-            </arg>
-            <arg name="snapWidth" type="i" direction="out">
-                <annotation name="org.gtk.GDBus.DocString" value="Snap width (if shouldSnap)."/>
-            </arg>
-            <arg name="snapHeight" type="i" direction="out">
-                <annotation name="org.gtk.GDBus.DocString" value="Snap height (if shouldSnap)."/>
-            </arg>
-            <arg name="shouldSnap" type="b" direction="out">
-                <annotation name="org.gtk.GDBus.DocString" value="True if any strategy matched and window should be snapped."/>
-            </arg>
-        </method>
         <method name="getUpdatedWindowGeometries">
             <annotation name="org.gtk.GDBus.DocString" value="Return updated window geometries after resolution change."/>
-            <arg name="geometries" type="a(siiii)" direction="out">
+            <arg name="geometries" type="a(siiiis)" direction="out">
                 <annotation name="org.qtproject.QtDBus.QtTypeName.Out0" value="PhosphorProtocol::WindowGeometryList"/>
-                <annotation name="org.gtk.GDBus.DocString" value="Array of (windowId, x, y, width, height)."/>
+                <annotation name="org.gtk.GDBus.DocString" value="Array of (windowId, x, y, width, height, screenId). Matches the marshalling format in libs/phosphor-protocol/src/marshalling.cpp — the trailing screenId field was added alongside applyGeometriesBatch's (siiiis) signature so the effect can route the geometry to the correct screen on multi-monitor setups."/>
             </arg>
         </method>
         <method name="getPendingRestoreGeometries">
@@ -466,16 +276,6 @@
                 <annotation name="org.gtk.GDBus.DocString" value="Screen where the window is located."/>
             </arg>
         </signal>
-
-        <method name="toggleFloatForWindow">
-            <annotation name="org.gtk.GDBus.DocString" value="Daemon-driven float toggle. KWin calls this with the active window; daemon does the logic and emits applyGeometryRequested."/>
-            <arg name="windowId" type="s" direction="in">
-                <annotation name="org.gtk.GDBus.DocString" value="Window identifier (from KWin)."/>
-            </arg>
-            <arg name="screenId" type="s" direction="in">
-                <annotation name="org.gtk.GDBus.DocString" value="Screen where window is located."/>
-            </arg>
-        </method>
         <method name="setWindowFloatingForScreen">
             <annotation name="org.gtk.GDBus.DocString" value="Set a window's floating state explicitly (directional, not toggle). Routes to autotile engine for autotile screens, handles snap mode locally. Used by minimize/unminimize, drag-to-float, and monocle unmaximize."/>
             <arg name="windowId" type="s" direction="in">
@@ -505,6 +305,24 @@
                 <annotation name="org.gtk.GDBus.DocString" value="Window to activate."/>
             </arg>
         </signal>
+        <signal name="windowDesktopMoveRequested">
+            <annotation name="org.gtk.GDBus.DocString" value="Daemon requests KWin to move a window to a virtual desktop. Used by cross-desktop directional move; the effect calls windowToDesktops."/>
+            <arg name="windowId" type="s">
+                <annotation name="org.gtk.GDBus.DocString" value="Window to move."/>
+            </arg>
+            <arg name="desktop" type="i">
+                <annotation name="org.gtk.GDBus.DocString" value="Target virtual desktop (1-based)."/>
+            </arg>
+        </signal>
+        <signal name="windowOutputMoveExpected">
+            <annotation name="org.gtk.GDBus.DocString" value="Daemon-initiated cross-output move: the daemon already migrated its tiling state for the window onto targetScreenId and reflowed both outputs. The window's resulting outputChanged is expected; the effect updates bookkeeping and decoration only, without re-issuing windowClosed/windowOpened. User-drag cross-output moves carry no marker."/>
+            <arg name="windowId" type="s">
+                <annotation name="org.gtk.GDBus.DocString" value="Window the daemon moved across outputs."/>
+            </arg>
+            <arg name="targetScreenId" type="s">
+                <annotation name="org.gtk.GDBus.DocString" value="Destination screen the daemon migrated the window onto."/>
+            </arg>
+        </signal>
         <signal name="applyGeometriesBatch">
             <annotation name="org.gtk.GDBus.DocString" value="Daemon requests compositor to apply geometries for a batch of windows."/>
             <arg name="geometries" type="a(siiiis)">
@@ -512,7 +330,7 @@
                 <annotation name="org.gtk.GDBus.DocString" value="Array of (windowId, x, y, width, height, screenId). screenId is the daemon-authoritative target screen — compositor uses it to seed its tracked-screen cache without re-deriving from geometry. Empty screenId means no authoritative answer (fall back to geometry-based resolution)."/>
             </arg>
             <arg name="action" type="s">
-                <annotation name="org.gtk.GDBus.DocString" value="Navigation action type (rotate, resnap, snap_all) for feedback."/>
+                <annotation name="org.gtk.GDBus.DocString" value="Navigation action type (rotate, resnap, vs_reconfigure) for feedback."/>
             </arg>
         </signal>
         <signal name="raiseWindowsRequested">
@@ -521,19 +339,52 @@
                 <annotation name="org.gtk.GDBus.DocString" value="Ordered list of window IDs (bottom-to-top)."/>
             </arg>
         </signal>
-        <method name="recordSnapIntent">
-            <annotation name="org.gtk.GDBus.DocString" value="Record whether the last snap was user-initiated (for snap-to-last-zone filtering)."/>
-            <arg name="windowId" type="s" direction="in">
-                <annotation name="org.gtk.GDBus.DocString" value="Window identifier."/>
-            </arg>
-            <arg name="wasUserInitiated" type="b" direction="in">
-                <annotation name="org.gtk.GDBus.DocString" value="True if user performed the snap (drag or shortcut), false if auto-snapped."/>
-            </arg>
-        </method>
         <method name="cursorScreenChanged">
             <annotation name="org.gtk.GDBus.DocString" value="Report that the cursor has moved to a different screen. Called by KWin effect when cursor crosses monitor boundaries."/>
             <arg name="screenId" type="s" direction="in">
                 <annotation name="org.gtk.GDBus.DocString" value="Screen identifier the cursor is now on (e.g. Dell:U2722D:115107 or Dell:U2722D:115107/vs:0)."/>
+            </arg>
+        </method>
+        <method name="screenDesktopChanged">
+            <annotation name="org.gtk.GDBus.DocString" value="Report a screen's current virtual desktop (Plasma 6.7 per-output virtual desktops). Called by the KWin effect on KWin::EffectsHandler::desktopChanged with the per-output desktop. KWin's own D-Bus interface only exposes the global current desktop, so per-screen data arrives this way."/>
+            <arg name="screenId" type="s" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="Physical screen identifier whose desktop changed (NOT virtual-screen-suffixed; per-output desktops belong to the physical output)."/>
+            </arg>
+            <arg name="desktop" type="i" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="The screen's current virtual desktop, 1-based (x11DesktopNumber)."/>
+            </arg>
+        </method>
+        <method name="setWindowMetadata">
+            <annotation name="org.gtk.GDBus.DocString" value="Register or update metadata for a live window. Called by the compositor bridge on window-added and on every mutation of the window's app class, desktop file, caption, virtual desktop, activity, or role. Idempotent — safe to call on every observation; a no-op if metadata is unchanged."/>
+            <arg name="instanceId" type="s" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="Opaque compositor handle, stable for the window lifetime (KWin internalId)."/>
+            </arg>
+            <arg name="appId" type="s" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="Current app class (mutable)."/>
+            </arg>
+            <arg name="desktopFile" type="s" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="Current desktop file name (mutable, may be empty)."/>
+            </arg>
+            <arg name="title" type="s" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="Current caption (mutable, may be empty)."/>
+            </arg>
+            <arg name="windowRole" type="s" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="X11 WM_WINDOW_ROLE (empty for Wayland-native windows)."/>
+            </arg>
+            <arg name="pid" type="i" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="Process id (0 = unknown)."/>
+            </arg>
+            <arg name="virtualDesktop" type="i" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="1-based x11 desktop number (0 = all desktops / unknown)."/>
+            </arg>
+            <arg name="activity" type="s" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="Activity UUID (empty = all activities / unknown)."/>
+            </arg>
+            <arg name="windowType" type="i" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="PhosphorProtocol::WindowType underlying value; out-of-range values are clamped to Unknown."/>
+            </arg>
+            <arg name="extended" type="a{sv}" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="Extended window-property snapshot (state flags, geometry, accessory flags, captionNormal) keyed by PhosphorProtocol::Service::WindowMetadataKey. A key is present only when the value is known, so absent keys leave the derived window-rule field disengaged. Lets the daemon's Float/RestorePosition resolvers match the same KWin-property fields the effect path resolves live."/>
             </arg>
         </method>
         <method name="windowClosed">
@@ -543,6 +394,9 @@
             </arg>
             <arg name="windowKind" type="i" direction="in">
                 <annotation name="org.gtk.GDBus.DocString" value="Structural kind of the closing window (0=Unknown, 1=Normal, 2=Transient). Recorded on the PendingRestore entry if one is enqueued. Pass 0 to opt out of the gate (legacy callers)."/>
+            </arg>
+            <arg name="screenId" type="s" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="The window's authoritative current screen at close (KWin's getWindowScreenId). Used by the final placement capture to record the float-back on the screen the window actually closed on, even when a cross-screen move has torn down both engines' tracking. Empty opts out (legacy callers)."/>
             </arg>
         </method>
         <method name="windowActivated">
@@ -564,8 +418,19 @@
             <arg name="width" type="i" direction="in"/>
             <arg name="height" type="i" direction="in"/>
         </method>
-        <method name="resnapToNewLayout">
-            <annotation name="org.gtk.GDBus.DocString" value="Resnap all windows from the previous layout to the current layout. Maps by zone number (1-&gt;1, 2-&gt;2) with cycling when new layout has fewer zones. Call after switching layouts."/>
+        <method name="notifyWindowResized">
+            <annotation name="org.gtk.GDBus.DocString" value="Notify the daemon that a tiled window finished an interactive edge/border resize. The autotile engine reflows neighbouring windows to fill the gap (GitHub #652). Fire-and-forget; the resize is already committed in the compositor. The old/new frames are the window's geometry before and after the resize, supplied by the compositor plugin (the daemon's debounced frame shadow is unreliable as a baseline because it updates during the drag). Floating, untracked, snap-mode, and cross-output windows are ignored daemon-side."/>
+            <arg name="windowId" type="s" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="Window identifier."/>
+            </arg>
+            <arg name="oldX" type="i" direction="in"/>
+            <arg name="oldY" type="i" direction="in"/>
+            <arg name="oldWidth" type="i" direction="in"/>
+            <arg name="oldHeight" type="i" direction="in"/>
+            <arg name="newX" type="i" direction="in"/>
+            <arg name="newY" type="i" direction="in"/>
+            <arg name="newWidth" type="i" direction="in"/>
+            <arg name="newHeight" type="i" direction="in"/>
         </method>
         <method name="setWindowSticky">
             <annotation name="org.gtk.GDBus.DocString" value="Set whether a window is sticky (visible on all virtual desktops)."/>
@@ -576,95 +441,36 @@
                 <annotation name="org.gtk.GDBus.DocString" value="True if window is on all desktops."/>
             </arg>
         </method>
-        <method name="snapAllWindows">
-            <annotation name="org.gtk.GDBus.DocString" value="Trigger snap-all-windows from daemon shortcut. Emits snapAllWindowsRequested signal for the KWin effect to collect unsnapped windows and assign them to zones."/>
-            <arg name="screenId" type="s" direction="in">
-                <annotation name="org.gtk.GDBus.DocString" value="Screen where cursor is located."/>
+        <method name="windowScreenChanged">
+            <annotation name="org.gtk.GDBus.DocString" value="Record that a window moved to a different screen. The daemon compares the new screen against the window's stored snap assignment and unsnaps if they differ — heuristic for distinguishing a user-initiated cross-screen drag from a programmatic resnap (programmatic moves assign the zone first, so the stored screen matches and no unsnap occurs)."/>
+            <arg name="windowId" type="s" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="Window identifier."/>
+            </arg>
+            <arg name="newScreenId" type="s" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="Identifier of the screen the window moved to."/>
             </arg>
         </method>
-        <method name="calculateSnapAllWindows">
-            <annotation name="org.gtk.GDBus.DocString" value="Calculate zone assignments for a list of unsnapped windows. Called by compositor plugin after collecting unsnapped windows on the target screen."/>
-            <arg name="windowIds" type="as" direction="in">
-                <annotation name="org.gtk.GDBus.DocString" value="List of unsnapped window IDs."/>
+        <method name="queryWindowFloating">
+            <annotation name="org.gtk.GDBus.DocString" value="Query the daemon's authoritative floating state for a window. The effect uses this on bringup to reconcile its local cache against persisted state across daemon restarts."/>
+            <arg name="windowId" type="s" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="Window identifier."/>
             </arg>
-            <arg name="screenId" type="s" direction="in">
-                <annotation name="org.gtk.GDBus.DocString" value="Screen for layout/geometry resolution."/>
-            </arg>
-            <arg name="snapResults" type="a(sssiiii)" direction="out">
-                <annotation name="org.qtproject.QtDBus.QtTypeName.Out0" value="PhosphorProtocol::SnapAllResultList"/>
-                <annotation name="org.gtk.GDBus.DocString" value="Array of (windowId, targetZoneId, sourceZoneId, x, y, width, height)."/>
+            <arg name="floating" type="b" direction="out">
+                <annotation name="org.gtk.GDBus.DocString" value="True if the daemon currently has the window marked as floating."/>
             </arg>
         </method>
-        <method name="getMoveTargetForWindow">
-            <annotation name="org.gtk.GDBus.DocString" value="Daemon-driven move: get target zone and geometry for moving a window in a direction."/>
-            <arg name="windowId" type="s" direction="in"/>
-            <arg name="direction" type="s" direction="in"/>
-            <arg name="screenId" type="s" direction="in"/>
-            <arg name="result" type="(bssiiiiss)" direction="out">
-                <annotation name="org.gtk.GDBus.DocString" value="MoveTargetResult: (success, reason, zoneId, x, y, width, height, sourceZoneId, screenName)."/>
-                <annotation name="org.qtproject.QtDBus.QtTypeName.Out0" value="PhosphorProtocol::MoveTargetResult"/>
+        <method name="getPreTileGeometries">
+            <annotation name="org.gtk.GDBus.DocString" value="Return every persisted pre-tile geometry (appId → rect + screen). The effect pre-populates its local cache from this on bringup so it can teleport restoring windows to their pre-tile geometry without a round-trip on every restore. Each entry carries the appId (entries persist across window close/reopen for session restore, so the per-instance windowId is not the key), the geometry rect (x,y,w,h), and the screen the geometry was captured on."/>
+            <arg name="geometries" type="a(siiiis)" direction="out">
+                <annotation name="org.qtproject.QtDBus.QtTypeName.Out0" value="PhosphorProtocol::PreTileGeometryList"/>
+                <annotation name="org.gtk.GDBus.DocString" value="Array of (appId, x, y, width, height, screenId) — the same marshalling shape as applyGeometriesBatch and getUpdatedWindowGeometries."/>
             </arg>
         </method>
-        <method name="getFocusTargetForWindow">
-            <annotation name="org.gtk.GDBus.DocString" value="Daemon-driven focus: get window ID to activate in adjacent zone."/>
-            <arg name="windowId" type="s" direction="in"/>
-            <arg name="direction" type="s" direction="in"/>
-            <arg name="screenId" type="s" direction="in"/>
-            <arg name="result" type="(bsssss)" direction="out">
-                <annotation name="org.gtk.GDBus.DocString" value="FocusTargetResult: (success, reason, windowIdToActivate, sourceZoneId, targetZoneId, screenName)."/>
-                <annotation name="org.qtproject.QtDBus.QtTypeName.Out0" value="PhosphorProtocol::FocusTargetResult"/>
-            </arg>
-        </method>
-        <method name="getRestoreForWindow">
-            <annotation name="org.gtk.GDBus.DocString" value="Daemon-driven restore: get pre-snap geometry for restoring a snapped window."/>
-            <arg name="windowId" type="s" direction="in"/>
-            <arg name="screenId" type="s" direction="in"/>
-            <arg name="result" type="(bbiiii)" direction="out">
-                <annotation name="org.gtk.GDBus.DocString" value="RestoreTargetResult: (success, found, x, y, width, height)."/>
-                <annotation name="org.qtproject.QtDBus.QtTypeName.Out0" value="PhosphorProtocol::RestoreTargetResult"/>
-            </arg>
-        </method>
-        <method name="getCycleTargetForWindow">
-            <annotation name="org.gtk.GDBus.DocString" value="Daemon-driven cycle: get next/prev window in same zone to activate."/>
-            <arg name="windowId" type="s" direction="in"/>
-            <arg name="forward" type="b" direction="in"/>
-            <arg name="screenId" type="s" direction="in"/>
-            <arg name="result" type="(bssss)" direction="out">
-                <annotation name="org.gtk.GDBus.DocString" value="CycleTargetResult: (success, reason, windowIdToActivate, zoneId, screenName)."/>
-                <annotation name="org.qtproject.QtDBus.QtTypeName.Out0" value="PhosphorProtocol::CycleTargetResult"/>
-            </arg>
-        </method>
-        <method name="getSwapTargetForWindow">
-            <annotation name="org.gtk.GDBus.DocString" value="Daemon-driven swap: get geometries and zone IDs for swapping with adjacent zone."/>
-            <arg name="windowId" type="s" direction="in"/>
-            <arg name="direction" type="s" direction="in"/>
-            <arg name="screenId" type="s" direction="in"/>
-            <arg name="result" type="(bssiiiissiiiissss)" direction="out">
-                <annotation name="org.gtk.GDBus.DocString" value="SwapTargetResult: (success, reason, windowId1, x1, y1, w1, h1, zoneId1, windowId2, x2, y2, w2, h2, zoneId2, screenName, sourceZoneId, targetZoneId)."/>
-                <annotation name="org.qtproject.QtDBus.QtTypeName.Out0" value="PhosphorProtocol::SwapTargetResult"/>
-            </arg>
-        </method>
-        <method name="getPushTargetForWindow">
-            <annotation name="org.gtk.GDBus.DocString" value="Daemon-driven push: get empty zone and geometry for pushing window."/>
-            <arg name="windowId" type="s" direction="in"/>
-            <arg name="screenId" type="s" direction="in"/>
-            <arg name="result" type="(bssiiiiss)" direction="out">
-                <annotation name="org.gtk.GDBus.DocString" value="MoveTargetResult: (success, reason, zoneId, x, y, width, height, sourceZoneId, screenName)."/>
-                <annotation name="org.qtproject.QtDBus.QtTypeName.Out0" value="PhosphorProtocol::MoveTargetResult"/>
-            </arg>
-        </method>
-        <method name="getSnapToZoneByNumberTarget">
-            <annotation name="org.gtk.GDBus.DocString" value="Daemon-driven snap: get zone and geometry for snapping to zone by number (1-9)."/>
-            <arg name="windowId" type="s" direction="in"/>
-            <arg name="zoneNumber" type="i" direction="in"/>
-            <arg name="screenId" type="s" direction="in"/>
-            <arg name="result" type="(bssiiiiss)" direction="out">
-                <annotation name="org.gtk.GDBus.DocString" value="MoveTargetResult: (success, reason, zoneId, x, y, width, height, sourceZoneId, screenName)."/>
-                <annotation name="org.qtproject.QtDBus.QtTypeName.Out0" value="PhosphorProtocol::MoveTargetResult"/>
-            </arg>
+        <method name="reapplyWindowAppearance">
+            <annotation name="org.gtk.GDBus.DocString" value="Re-drive each placement engine's per-window decoration inputs (snap border / hidden title bar, autotile border) for every window it manages. The compositor effect calls this after (re)registering its bridge so a freshly-(re)started effect converges on the daemon's authoritative appearance without waiting for the next natural change. Window-rule decoration overrides flow separately via the WindowRules rulesChanged broadcast."/>
         </method>
         <signal name="snapAllWindowsRequested">
-            <annotation name="org.gtk.GDBus.DocString" value="Emitted when snap-all-windows shortcut is triggered. KWin effect should collect unsnapped windows and call calculateSnapAllWindows."/>
+            <annotation name="org.gtk.GDBus.DocString" value="Emitted when snap-all-windows shortcut is triggered. KWin effect should collect unsnapped windows and call calculateSnapAllWindows (on org.plasmazones.Snap)."/>
             <arg name="screenId" type="s">
                 <annotation name="org.gtk.GDBus.DocString" value="Screen to operate on."/>
             </arg>
@@ -678,25 +484,6 @@
             <arg name="width" type="i"/>
             <arg name="height" type="i"/>
         </signal>
-        <!-- Phase 1 Convenience Methods (TUI/CLI support) -->
-        <method name="moveWindowToZone">
-            <annotation name="org.gtk.GDBus.DocString" value="Convenience: snap a window to a specific zone by ID. Resolves geometry, handles bookkeeping, emits applyGeometryRequested."/>
-            <arg name="windowId" type="s" direction="in">
-                <annotation name="org.gtk.GDBus.DocString" value="Window identifier."/>
-            </arg>
-            <arg name="zoneId" type="s" direction="in">
-                <annotation name="org.gtk.GDBus.DocString" value="Target zone UUID."/>
-            </arg>
-        </method>
-        <method name="swapWindowsById">
-            <annotation name="org.gtk.GDBus.DocString" value="Convenience: swap two specific windows by their IDs. Resolves geometries, handles bookkeeping for both, emits applyGeometryRequested for each."/>
-            <arg name="windowId1" type="s" direction="in">
-                <annotation name="org.gtk.GDBus.DocString" value="First window identifier."/>
-            </arg>
-            <arg name="windowId2" type="s" direction="in">
-                <annotation name="org.gtk.GDBus.DocString" value="Second window identifier."/>
-            </arg>
-        </method>
         <method name="getWindowState">
             <annotation name="org.gtk.GDBus.DocString" value="Get comprehensive state for a single window."/>
             <arg name="windowId" type="s" direction="in">

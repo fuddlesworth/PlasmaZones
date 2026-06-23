@@ -18,6 +18,7 @@
 #include <QProcess>
 #include <QStandardPaths>
 #include <QCoreApplication>
+#include <array>
 #include <QFile>
 #include <QScopeGuard>
 
@@ -111,27 +112,35 @@ bool LayoutAdaptor::updateLayout(const QString& layoutJson)
     // Handle autotile layout settings updates (gaps, visibility, shader only)
     if (PhosphorLayout::LayoutId::isAutotile(idStr)) {
         QString algoId = PhosphorLayout::LayoutId::extractAlgorithmId(idStr);
-        QJsonObject overrides;
-        if (obj.contains(::PhosphorZones::ZoneJsonKeys::ZonePadding))
-            overrides[::PhosphorZones::ZoneJsonKeys::ZonePadding] = obj[::PhosphorZones::ZoneJsonKeys::ZonePadding];
-        if (obj.contains(::PhosphorZones::ZoneJsonKeys::OuterGap))
-            overrides[::PhosphorZones::ZoneJsonKeys::OuterGap] = obj[::PhosphorZones::ZoneJsonKeys::OuterGap];
-        if (obj.contains(::PhosphorZones::ZoneJsonKeys::AllowedScreens))
-            overrides[::PhosphorZones::ZoneJsonKeys::AllowedScreens] =
-                obj[::PhosphorZones::ZoneJsonKeys::AllowedScreens];
-        if (obj.contains(::PhosphorZones::ZoneJsonKeys::AllowedDesktops))
-            overrides[::PhosphorZones::ZoneJsonKeys::AllowedDesktops] =
-                obj[::PhosphorZones::ZoneJsonKeys::AllowedDesktops];
-        if (obj.contains(::PhosphorZones::ZoneJsonKeys::AllowedActivities))
-            overrides[::PhosphorZones::ZoneJsonKeys::AllowedActivities] =
-                obj[::PhosphorZones::ZoneJsonKeys::AllowedActivities];
-        if (obj.contains(::PhosphorZones::ZoneJsonKeys::ShaderId))
-            overrides[::PhosphorZones::ZoneJsonKeys::ShaderId] = obj[::PhosphorZones::ZoneJsonKeys::ShaderId];
-        if (obj.contains(::PhosphorZones::ZoneJsonKeys::ShaderParams))
-            overrides[::PhosphorZones::ZoneJsonKeys::ShaderParams] = obj[::PhosphorZones::ZoneJsonKeys::ShaderParams];
-        if (obj.contains(::PhosphorZones::ZoneJsonKeys::OverlayDisplayMode))
-            overrides[::PhosphorZones::ZoneJsonKeys::OverlayDisplayMode] =
-                obj[::PhosphorZones::ZoneJsonKeys::OverlayDisplayMode];
+        // D-Bus boundary: an id of exactly "autotile:" passes isAutotile but
+        // yields an empty algorithm key — saving overrides under it would
+        // create an unreachable settings group.
+        if (algoId.isEmpty()) {
+            qCWarning(lcDbusLayout) << "updateLayout: autotile id with empty algorithm id rejected:" << idStr;
+            return false;
+        }
+        // Start from the stored entry so keys this editor doesn't manage
+        // (notably hiddenFromSelector, written via setLayoutHidden) survive a
+        // gaps/shader/allow-list save — autotile entries now share the unified
+        // layout-settings.json sidecar. Editor-managed keys are set when present
+        // in the incoming object and cleared when absent (reset-to-default).
+        QJsonObject overrides = m_layoutManager->loadAutotileOverrides(algoId);
+        // CTAD deduces the array size from the initializer so the element count
+        // stays in sync automatically (no hand-maintained size). hiddenFromSelector
+        // is intentionally absent — it's owned by setLayoutHidden, not the editor.
+        const std::array editorKeys{
+            ::PhosphorZones::ZoneJsonKeys::ZonePadding,       ::PhosphorZones::ZoneJsonKeys::OuterGap,
+            ::PhosphorZones::ZoneJsonKeys::AllowedScreens,    ::PhosphorZones::ZoneJsonKeys::AllowedDesktops,
+            ::PhosphorZones::ZoneJsonKeys::AllowedActivities, ::PhosphorZones::ZoneJsonKeys::ShaderId,
+            ::PhosphorZones::ZoneJsonKeys::ShaderParams,      ::PhosphorZones::ZoneJsonKeys::OverlayDisplayMode,
+        };
+        for (const QLatin1String key : editorKeys) {
+            if (obj.contains(key)) {
+                overrides[key] = obj.value(key);
+            } else {
+                overrides.remove(key);
+            }
+        }
         m_layoutManager->saveAutotileOverrides(algoId, overrides);
         qCInfo(lcDbusLayout) << "Saved autotile overrides for algorithm:" << algoId;
         // Autotile override save mutates a single autotile preview entry, not
@@ -215,12 +224,6 @@ bool LayoutAdaptor::updateLayout(const QString& layoutJson)
         layout->setAllowedScreens(screens);
         layout->setAllowedDesktops(desktops);
         layout->setAllowedActivities(activities);
-    }
-
-    // Update app-to-zone rules
-    if (obj.contains(::PhosphorZones::ZoneJsonKeys::AppRules)) {
-        layout->setAppRules(
-            PhosphorZones::AppRule::fromJsonArray(obj[::PhosphorZones::ZoneJsonKeys::AppRules].toArray()));
     }
 
     // Clear existing zones and add new ones
@@ -330,11 +333,6 @@ void LayoutAdaptor::openEditorForScreen(const QString& screenId)
     // Intentionally passes the screen ID — the editor process
     // uses it for QScreen::name() matching and geometry lookup.
     launchEditor({QStringLiteral("--screen"), screenId}, QStringLiteral("for screen: %1").arg(screenId));
-}
-
-void LayoutAdaptor::openEditorForLayout(const QString& layoutId)
-{
-    launchEditor({QStringLiteral("--layout"), layoutId}, QStringLiteral("for layout: %1").arg(layoutId));
 }
 
 void LayoutAdaptor::openEditorForLayoutOnScreen(const QString& layoutId, const QString& screenId)

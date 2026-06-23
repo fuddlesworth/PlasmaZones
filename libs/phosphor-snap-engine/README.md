@@ -4,13 +4,13 @@
 # phosphor-snap-engine
 
 > Manual zone-based placement engine. Implements `IPlacementEngine` for
-> screens running a user-drawn layout; handles auto-snap on window open,
+> screens running a user-drawn layout. Handles auto-snap on window open,
 > directional zone navigation, floating, rotation, resnap-on-layout-
 > change, and serialisation through `SnapState`.
 
 ## Responsibility
 
-The PlasmaZones daemon dispatches every window-lifecycle and shortcut
+The Phosphor daemon dispatches every window-lifecycle and shortcut
 event through `PhosphorEngine::IPlacementEngine` so it doesn't have
 to branch on the current placement mode. `phosphor-snap-engine` is the
 manual-mode implementation: when a screen has a zone layout active,
@@ -67,7 +67,7 @@ auto* snap = new SnapEngine(layoutRegistry,
                             zoneDetector,
                             virtualDesktopManager,
                             /*parent*/ daemon);
-snap->setSettings(snapSettingsAdaptor);
+snap->setEngineSettings(snapSettingsAdaptor);
 snap->setNavigationStateProvider(windowTrackingAdaptor);
 snap->setZoneAdjacencyResolver(zoneDetectionAdaptor);
 
@@ -77,17 +77,17 @@ placementEngineRouter.bind("snap", snap);
 
 ## Design notes
 
-- **Inherits `PlacementEngineBase`.** The Unmanaged / EngineOwned /
-  Floated FSM lives once in the base class; this engine only adds
-  the manual-zone-specific decisions (which zone, when to auto-snap,
-  how to navigate).
+- **Inherits `PlacementEngineBase`.** The base provides the shared
+  plumbing (settings injection, stale-window pruning, common signals).
+  This engine only adds the manual-zone-specific decisions (which zone,
+  when to auto-snap, how to navigate).
 - **Typed interfaces, not `QObject*` + invokeMethod.** Daemon dispatch
   uses the narrow `INavigationStateProvider` and `IZoneAdjacencyResolver`
-  contracts — strictly typed, no string method names, no opaque
+  contracts. They are strictly typed, with no string method names and no opaque
   pointers.
 - **State is shared, not owned.** Window-tracking, virtual-desktop,
   layout-registry, and zone-detector all live outside the engine.
-  `SnapState` is the one thing this lib owns mutably; everything else
+  `SnapState` is the one thing this lib owns mutably, and everything else
   is read or commanded.
 - **Cross-engine handoff.** `engineId()`, `handoffReceive`, and
   `handoffRelease` implement the placement-engine handoff protocol
@@ -95,7 +95,7 @@ placementEngineRouter.bind("snap", snap);
   cleanly transitions ownership without the daemon doing the
   bookkeeping.
 - **Auto-assign master toggle.** `autoAssignAllLayouts()` is the
-  process-wide override; effective behaviour is
+  process-wide override, and effective behaviour is
   `globalAutoAssign OR layout->autoAssign()`. Autotile screens are
   short-circuited upstream in `windowOpened` and never reach this
   path.
@@ -106,10 +106,10 @@ placementEngineRouter.bind("snap", snap);
 - [`phosphor-engine`](../phosphor-engine/README.md) — `IPlacementEngine`, `IPlacementState`, `PlacementEngineBase`, `IWindowTrackingService`, `IVirtualDesktopManager`
 - [`phosphor-zones`](../phosphor-zones/README.md) — `LayoutRegistry`, `IZoneDetector`
 - [`phosphor-layout-api`](../phosphor-layout-api/README.md) — `EdgeGaps`
-- [`phosphor-protocol`](../phosphor-protocol/README.md) — navigation result types (`MoveTargetResult`, `FocusTargetResult`, …) via the QtCore-only `PhosphorProtocol::Types` target; this library never links QtDBus
+- [`phosphor-protocol`](../phosphor-protocol/README.md) — navigation result types (`MoveTargetResult`, `FocusTargetResult`, …) via the QtCore-only `PhosphorProtocol::Types` target, and this library never links QtDBus
 - [`phosphor-screens`](../phosphor-screens/README.md) — screen topology (private link)
 - [`phosphor-identity`](../phosphor-identity/README.md) — window IDs (private link)
 
 ## See also
 
-- [`phosphor-tile-engine`](../phosphor-tile-engine/README.md) — sibling autotile engine; both implement the same `IPlacementEngine` contract.
+- [`phosphor-tile-engine`](../phosphor-tile-engine/README.md) — sibling autotile engine. Both implement the same `IPlacementEngine` contract.

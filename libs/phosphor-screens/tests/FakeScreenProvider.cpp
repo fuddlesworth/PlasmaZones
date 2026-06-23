@@ -3,7 +3,7 @@
 
 #include "FakeScreenProvider.h"
 
-namespace Phosphor::Screens {
+namespace PhosphorScreens {
 
 FakeScreenProvider::FakeScreenProvider(QObject* parent)
     : IScreenProvider(parent)
@@ -106,4 +106,4 @@ void FakeScreenProvider::setPrimary(const QString& name)
     qWarning("FakeScreenProvider::setPrimary: connector '%s' not present — primary unchanged", qPrintable(name));
 }
 
-} // namespace Phosphor::Screens
+} // namespace PhosphorScreens

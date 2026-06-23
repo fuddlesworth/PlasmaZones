@@ -6,8 +6,8 @@
 
 #include <QTest>
 
-using Phosphor::Screens::VirtualScreenConfig;
-using Phosphor::Screens::VirtualScreenDef;
+using PhosphorScreens::VirtualScreenConfig;
+using PhosphorScreens::VirtualScreenDef;
 
 namespace {
 

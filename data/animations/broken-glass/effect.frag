@@ -41,20 +41,9 @@
 // calls `getClippedInputColor` instead, which crops samples outside
 // `[0, 1]` to `vec4(0.0)` before delegating to `getInputColor`.
 
-#version 450
-
-#include <animation_uniforms.glsl>
 #include <noise.glsl>
 
-layout(location = 0) in vec2 vTexCoord;
-layout(location = 0) out vec4 fragColor;
-
 #include <bmw_compat.glsl>
-
-// metadata.json declaration order → customParams[0] sub-slots.
-#define uShardScale customParams[0].x
-#define uBlowForce  customParams[0].y
-#define uGravity    customParams[0].z
 
 #include <anchor_remap.glsl>
 
@@ -92,7 +81,7 @@ const float SHARD_LAYERS = 5.0;
 // reach zero, mirroring BMW's effective 2-tiles-across-window default.
 const float kShardTilesAcrossAnchor = 2.0;
 
-void main() {
+vec4 pTransition(vec2 uv, float t) {
   // Per-window pseudo-random seed offset for the shard atlas sampling.
   // BMW pulls a fresh `Math.random()` pair per leg; PlasmaZones has no
   // per-leg random uniform, so we derive a deterministic offset from
@@ -106,9 +95,9 @@ void main() {
   vec2 surfaceHash = hash22(iSurfaceScreenPos.xy + vec2(11.31, 17.71));
 
   // Defence-in-depth on the divisor: metadata declares min 0.2, but a
-  // host that bypasses validation could push uShardScale to zero and
+  // host that bypasses validation could push p_uShardScale to zero and
   // turn the shard-atlas UV math below into NaN.
-  float shardScaleSafe = max(uShardScale, 1e-3);
+  float shardScaleSafe = max(p_uShardScale, 1e-3);
 
   vec4 oColor = vec4(0.0);
 
@@ -129,7 +118,7 @@ void main() {
     coords -= uEpicenter;
 
     // Scale each layer a bit differently.
-    coords /= mix(1.0, 1.0 + uBlowForce * (i + 2.0) / SHARD_LAYERS, progress);
+    coords /= mix(1.0, 1.0 + p_uBlowForce * (i + 2.0) / SHARD_LAYERS, progress);
 
     // Rotate each layer a bit differently.
     float rotation = (mod(i, 2.0) - 0.5) * 0.2 * progress;
@@ -138,7 +127,7 @@ void main() {
 
     // Move down each layer a bit.
     float gravity =
-      (uForOpening ? -1.0 : 1.0) * uGravity * 0.1 * (i + 1.0) * progress * progress;
+      (uForOpening ? -1.0 : 1.0) * p_uGravity * 0.1 * (i + 1.0) * progress * progress;
     coords += vec2(0.0, gravity);
 
     // Restore correct position.
@@ -162,5 +151,5 @@ void main() {
     }
   }
 
-  setOutputColor(oColor);
+  return vec4(oColor.rgb * oColor.a, oColor.a);
 }

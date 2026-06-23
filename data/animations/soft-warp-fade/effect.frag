@@ -20,30 +20,19 @@
 // rewritten to `texture` (GLSL 4.50 core) inline. Niri's `swf_hash` /
 // `swf_noise` helpers come from `<noise.glsl>` as `niriHash` / `niriNoise`.
 
-#version 450
-
-#include <animation_uniforms.glsl>
 #include <noise.glsl>
 
-// metadata.json declaration order → customParams[0] sub-slots
-#define warpStrength customParams[0].x
-#define noiseScale   customParams[0].y
-
-layout(location = 0) in vec2 vTexCoord;
-layout(location = 0) out vec4 fragColor;
-
-void main() {
+vec4 pTransition(vec2 uv, float t) {
     // ── niri OPEN body (handles both legs via runtime iTime flip) ──
     float p = clamp(iTime, 0.0, 1.0);
-    vec2 uv = vTexCoord;
 
-    float strength = sin(p * 3.14159) * warpStrength;
+    float strength = sin(p * 3.14159) * p_warpStrength;
     // `noiseScale` means "noise cycles across the screen": multiplying
     // by iAnchorSize/iSurfaceScreenPos.zw scales the cycle count to
     // the fraction of the screen this surface covers, so warp-noise
     // pixel size stays constant across popup vs. maximized windows.
     // Matches niri's reference on full-screen (multiplier = 1.0 there).
-    vec2 perScreenScale = noiseScale * max(iAnchorSize, vec2(1.0))
+    vec2 perScreenScale = p_noiseScale * max(iAnchorSize, vec2(1.0))
                                      / max(iSurfaceScreenPos.zw, vec2(1.0));
     vec2 warp = vec2(
         niriNoise(uv * perScreenScale + vec2(0.0, p * 0.5)),
@@ -54,7 +43,7 @@ void main() {
     // boundaryMask: see noise.glsl. Crops off-window samples to transparent.
     vec4 win = surfaceColor(warped) * boundaryMask(warped);
 
-    float t = smoothstep(0.05, 0.95, p);
-    t = t * t * (3.0 - 2.0 * t);
-    fragColor = win * t;
+    float tt = smoothstep(0.05, 0.95, p);
+    tt = tt * tt * (3.0 - 2.0 * tt);
+    return win * tt;
 }

@@ -9,6 +9,11 @@ namespace ProfilePaths {
 // Root
 const QString Global = QStringLiteral("global");
 
+// Event-class tokens (see ProfilePaths.h). Kept as QStringLiteral so they
+// compare cheaply against AnimationShaderEffect::appliesTo entries.
+const QString EventClassGeometry = QStringLiteral("geometry");
+const QString EventClassAppearance = QStringLiteral("appearance");
+
 // window.*
 const QString Window = QStringLiteral("window");
 const QString WindowOpen = QStringLiteral("window.open");
@@ -182,6 +187,62 @@ QString parentPath(const QString& path)
         return Global;
     }
     return path.left(dotIdx);
+}
+
+QString eventClassForPath(const QString& path)
+{
+    // Geometry legs carry an old rect and a new rect (move/resize/snap/
+    // tile/layoutSwitch/maximize). Mirrors the geometry set that
+    // defaultShaderEffectIdForPath seeds with window-morph, plus maximize
+    // (a maximize IS a geometry change with a before/after rect — morph can
+    // drive it even though it isn't a built-in default there).
+    if (path == WindowMove || path == WindowResize || path == WindowSnapIn || path == WindowSnapOut
+        || path == WindowSnapResize || path == WindowLayoutSwitch || path == WindowMaximize) {
+        return EventClassGeometry;
+    }
+    // Appearance legs animate a single surface in or out. Window lifecycle
+    // leaves (open/close/minimize/focus) plus every OSD and popup surface —
+    // the osd/popup roots and all their show/hide/pop descendants. A
+    // `startsWith` on the family roots keeps future popup sub-surfaces
+    // classified without touching this list.
+    if (path == WindowOpen || path == WindowClose || path == WindowMinimize || path == WindowFocus) {
+        return EventClassAppearance;
+    }
+    if (path == Osd || path == Popup || path.startsWith(Osd + QLatin1Char('.'))
+        || path.startsWith(Popup + QLatin1Char('.'))) {
+        return EventClassAppearance;
+    }
+    // `window` root (mixed: spans both classes), `global`, and the
+    // editor/panel/widget/cursor/shader families have no single class — the
+    // predicate treats empty as "don't dim" so an ambiguous row never
+    // suppresses a compatible effect.
+    return QString();
+}
+
+QString defaultShaderEffectIdForPath(const QString& path)
+{
+    // Window move/resize events default to the geometry-morph shader so a
+    // window animates via shader cross-fade when it snaps/tiles/reflows.
+    // This is the same geometry leg set `eventClassForPath` classes as
+    // EventClassGeometry, MINUS maximize (maximize is geometry-classed so
+    // morph is selectable there, but it isn't a built-in default) — keep the
+    // two lists in sync if a new geometry leg is added.
+    if (path == WindowMove || path == WindowResize || path == WindowSnapIn || path == WindowSnapOut
+        || path == WindowSnapResize || path == WindowLayoutSwitch) {
+        return QStringLiteral("window-morph");
+    }
+    // Overlay surface show/hide (OSD + popups) default to the fade-and-scale
+    // shader so the daemon animates them via shader instead of the C++
+    // opacity/scale legs in SurfaceAnimator (which stay as the fallback when a
+    // shader is unavailable or the user picks "None"). Per-surface scale feel is
+    // preserved by seeding fade's `scaleAmount` daemon-side (animation_config).
+    if (path == OsdShow || path == OsdHide || path == PopupZoneSelectorShow || path == PopupZoneSelectorHide
+        || path == PopupLayoutPickerShow || path == PopupLayoutPickerHide || path == PopupSnapAssistShow
+        || path == PopupSnapAssistHide) {
+        return QStringLiteral("fade");
+    }
+    // Every other event defaults to no shader.
+    return QString();
 }
 
 } // namespace ProfilePaths

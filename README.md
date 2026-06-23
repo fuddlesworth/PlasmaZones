@@ -36,7 +36,7 @@ Hold **Alt** (or your configured modifier) while dragging a window. Zones light 
 
 - **Drag-to-snap tiling** with a modifier-held overlay and post-snap zone thumbnails for follow-up placement — [Features →](https://phosphor-works.github.io/plasmazones/#features)
 - **26 built-in layouts** (grids, BSP, master+stack, fibonacci, portrait / ultrawide / super-ultrawide variants) plus a visual editor — [Layouts gallery →](https://phosphor-works.github.io/plasmazones/layouts/)
-- **25 JavaScript autotile algorithms** in a sandboxed engine, with hot-reload for custom ones — [Autotile gallery →](https://phosphor-works.github.io/plasmazones/autotile/) · [authoring guide →](https://phosphor-works.github.io/guides/tiling/)
+- **25 Luau autotile algorithms** in a sandboxed engine, with hot-reload for custom ones — [Autotile gallery →](https://phosphor-works.github.io/plasmazones/autotile/) · [authoring guide →](https://phosphor-works.github.io/guides/tiling/)
 - **26 GLSL shader overlays** (audio-reactive, procedural, distro-themed) with up to 4 image textures each — [Shader gallery →](https://phosphor-works.github.io/plasmazones/shaders/) · [authoring guide →](https://phosphor-works.github.io/guides/shaders/)
 - **Per-monitor, per-desktop, and virtual-screen layouts** — subdivide any physical monitor into independent logical workspaces with their own layouts, autotile state, and shortcuts
 - **Coming from FancyZones?** [Feature map →](https://phosphor-works.github.io/plasmazones/from-fancyzones/)

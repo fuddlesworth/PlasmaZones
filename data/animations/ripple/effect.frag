@@ -10,8 +10,9 @@
 // bodies — close uses `intensity = p*p` with `alpha = smoothstep(1.0,
 // 0.5, p)`; open uses `intensity = (1-p)*(1-p)` with
 // `alpha = smoothstep(0.0, 0.3, p)`. The runtime's iTime flip alone
-// can't express both curves, so we branch on iIsReversed to dispatch
-// the matching niri body for each leg.
+// can't express both curves, so this is a pIn/pOut pair: the harness
+// feeds forward 0→1 `t` to both and dispatches the matching niri body by
+// leg direction (`windowFadingIn`).
 //
 // niri's `niri_geo_to_tex` is the identity mat3 in PlasmaZones (geometry
 // == texture coords here), so the matrix multiply is dropped and
@@ -19,36 +20,28 @@
 // rewritten to `texture` (GLSL 4.50 core) inline. niri's
 // `niri_random_seed` is replaced by `surfaceSeed()` from `<noise.glsl>`.
 
-#version 450
-
-#include <animation_uniforms.glsl>
+// The harness supplies #version, <animation_uniforms.glsl>, the in/out,
+// and main(). noise.glsl is pack-specific, so it stays here.
 #include <noise.glsl>
 
-// metadata.json declaration order → customParams[0] sub-slots.
-// Same params drive BOTH open/close legs — the asymmetry lives in
+// p_rippleAmplitude / p_rippleSpeed (customParams[0].xy) are generated from
+// metadata.json. Same params drive BOTH legs — the asymmetry lives in the
 // intensity / alpha curves, not in amplitude or speed.
-#define rippleAmplitude customParams[0].x
-#define rippleSpeed     customParams[0].y
 
-layout(location = 0) in vec2 vTexCoord;
-layout(location = 0) out vec4 fragColor;
-
-void main() {
+// `uv` is vTexCoord; `t` is the forward 0→1 leg progress (the harness applies
+// legProgress()); `windowFadingIn` selects the niri open vs close body.
+vec4 rippleBody(vec2 uv, float t, bool windowFadingIn) {
     vec4 result;
-    if (iIsReversed != 0) {
-        // ── niri close.glsl body ──
-        // close.glsl declares `float p = niri_clamped_progress;`. On the
-        // PlasmaZones close leg, niri_clamped_progress = 1 - iTime, so:
-        //   `float p = 1.0 - clamp(iTime, 0.0, 1.0);`
-        float p = 1.0 - clamp(iTime, 0.0, 1.0);
-        vec2 uv = vTexCoord;
+    if (!windowFadingIn) {
+        // ── niri close.glsl body (forward progress p = t) ──
+        float p = t;
         float seed = surfaceSeed() * 6.28318;
 
         vec2 dir = uv - vec2(0.5);
         float dist = length(dir);
 
         float intensity = p * p;
-        vec2 offset = dir * (sin(p * dist * rippleAmplitude - p * rippleSpeed + seed) + 0.5) / 30.0;
+        vec2 offset = dir * (sin(p * dist * p_rippleAmplitude - p * p_rippleSpeed + seed) + 0.5) / 30.0;
 
         vec2 wuv = uv + offset * intensity;
         // boundaryMask: see noise.glsl. Crops off-window samples to transparent.
@@ -57,19 +50,15 @@ void main() {
         float alpha = smoothstep(1.0, 0.5, p);
         result = color * alpha;
     } else {
-        // ── niri open.glsl body ──
-        // open.glsl declares `float p = niri_clamped_progress;`. On the
-        // open leg, niri_clamped_progress = iTime, so:
-        //   `float p = clamp(iTime, 0.0, 1.0);`
-        float p = clamp(iTime, 0.0, 1.0);
-        vec2 uv = vTexCoord;
+        // ── niri open.glsl body (forward progress p = t) ──
+        float p = t;
         float seed = surfaceSeed() * 6.28318;
 
         vec2 dir = uv - vec2(0.5);
         float dist = length(dir);
 
         float intensity = (1.0 - p) * (1.0 - p);
-        vec2 offset = dir * (sin(p * dist * rippleAmplitude - p * rippleSpeed + seed) + 0.5) / 30.0;
+        vec2 offset = dir * (sin(p * dist * p_rippleAmplitude - p * p_rippleSpeed + seed) + 0.5) / 30.0;
 
         vec2 wuv = uv + offset * intensity;
         // boundaryMask: see noise.glsl. Crops off-window samples to transparent.
@@ -78,5 +67,8 @@ void main() {
         float alpha = smoothstep(0.0, 0.3, p);
         result = color * alpha;
     }
-    fragColor = result;
+    return result;
 }
+
+vec4 pIn(vec2 uv, float t)  { return rippleBody(uv, t, true);  }
+vec4 pOut(vec2 uv, float t) { return rippleBody(uv, t, false); }

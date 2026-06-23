@@ -1,0 +1,14 @@
+{
+    "id": "stretch",
+    "name": "Stretch",
+    "description": "Geometry move and resize transition with an elastic, rubber-band feel. The leading edge springs into the destination zone first while the rest of the window lags and stretches taut behind it, thinning slightly as it travels, then snaps to fit with a single overshoot before settling.",
+    "author": "PlasmaZones",
+    "version": "1.0",
+    "category": "Geometry",
+    "appliesTo": ["geometry"],
+    "fragmentShader": "effect.frag",
+    "vertexShader": "effect.vert",
+    "fboExtent": "surface",
+    "geometryGrid": 40,
+    "parameters": []
+}

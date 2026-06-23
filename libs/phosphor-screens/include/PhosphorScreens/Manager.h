@@ -5,7 +5,7 @@
 
 #include "PhosphorScreens/PhysicalScreen.h"
 #include "VirtualScreen.h"
-#include "phosphorscreenscore_export.h"
+#include "phosphorscreensruntime_export.h"
 
 #include <QHash>
 #include <QMap>
@@ -18,7 +18,7 @@
 class QScreen;
 class QWindow;
 
-namespace Phosphor::Screens {
+namespace PhosphorScreens {
 
 class IConfigStore;
 class IPanelSource;
@@ -68,10 +68,10 @@ struct ScreenManagerConfig
  *     by every PhosphorScreens client)
  *
  * NOT a singleton — the lib never owns process-global state. Consumers
- * that need a process-wide ScreenManager (the PlasmaZones daemon does)
+ * that need a process-wide ScreenManager (the Phosphor daemon does)
  * provide their own thin service-locator outside this class.
  */
-class PHOSPHORSCREENSCORE_EXPORT ScreenManager : public QObject
+class PHOSPHORSCREENSRUNTIME_EXPORT ScreenManager : public QObject
 {
     Q_OBJECT
 public:
@@ -357,4 +357,4 @@ private:
     void propagateIdentifierDrift(const QHash<QString, QString>& oldIds);
 };
 
-} // namespace Phosphor::Screens
+} // namespace PhosphorScreens

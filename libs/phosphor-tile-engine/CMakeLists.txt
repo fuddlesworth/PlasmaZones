@@ -75,9 +75,10 @@ target_link_libraries(PhosphorTileEngine
         # in its API, so downstream consumers need this on their include path.
         PhosphorLayoutApi::PhosphorLayoutApi
     PRIVATE
-        PhosphorScreens::Core
+        PhosphorScreens::Runtime  # AutotileEngine queries screen geometry via ScreenManager
         PhosphorIdentity::PhosphorIdentity
         PhosphorZones::PhosphorZones
+        PhosphorGeometry::PhosphorGeometry  # geometric directional-neighbour selection
 )
 
 # ═══════════════════════════════════════════════════════════════════════════════

@@ -1,0 +1,6 @@
+{
+    "id": "fake-plugin",
+    "displayName": "Fake Plugin",
+    "abi": @PHOSPHOR_PLUGIN_ABI_VERSION@,
+    "capabilities": ["bar.widget"]
+}

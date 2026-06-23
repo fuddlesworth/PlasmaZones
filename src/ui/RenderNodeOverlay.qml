@@ -29,6 +29,7 @@ Window {
     // Properties set from C++ OverlayService — mirror RenderNodeOverlayContent's
     // property surface 1:1 so writeQmlProperty calls land on the matching name.
     property url shaderSource
+    property string paramPreamble: ""
     property string bufferShaderPath: ""
     property var bufferShaderPaths: []
     property bool bufferFeedback: false
@@ -39,8 +40,7 @@ Window {
     property int highlightedCount: 0
     property string highlightedZoneId: ""
     property var highlightedZoneIds: []
-    property var shaderParams: ({
-    })
+    property var shaderParams: ({})
     property int zoneDataVersion: 0
     property real iTime: 0
     property real iTimeDelta: 0
@@ -91,6 +91,7 @@ Window {
 
         anchors.fill: parent
         shaderSource: root.shaderSource
+        paramPreamble: root.paramPreamble
         bufferShaderPath: root.bufferShaderPath
         bufferShaderPaths: root.bufferShaderPaths
         bufferFeedback: root.bufferFeedback
@@ -131,5 +132,4 @@ Window {
         borderWidth: root.borderWidth
         borderRadius: root.borderRadius
     }
-
 }

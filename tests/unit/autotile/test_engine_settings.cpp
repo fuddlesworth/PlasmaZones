@@ -3,7 +3,6 @@
 
 #include <QTest>
 #include <QSignalSpy>
-#include <QTimer>
 
 #include <PhosphorTileEngine/AutotileEngine.h>
 #include "../helpers/AutotileTestHelpers.h"
@@ -11,18 +10,9 @@
 #include <PhosphorTiles/AlgorithmRegistry.h>
 #include <PhosphorTiles/TilingState.h>
 #include "core/constants.h"
-#include "config/configbackends.h"
-#include "config/configdefaults.h"
-#include "config/configkeys.h"
 #include "config/settings.h"
 #include "../helpers/IsolatedConfigGuard.h"
 #include "../helpers/ScriptedAlgoTestSetup.h"
-
-#include <QDir>
-#include <QFileInfo>
-#include <QJsonArray>
-#include <QJsonDocument>
-#include <QJsonObject>
 
 using namespace PlasmaZones;
 using namespace PhosphorTileEngine;
@@ -36,31 +26,11 @@ private:
     std::unique_ptr<IsolatedConfigGuard> m_configGuard;
     PlasmaZones::TestHelpers::ScriptedAlgoTestSetup m_scriptSetup;
 
-    static QJsonObject buildEntry(const QString& screenId, int desktop, const QStringList& windowOrder,
-                                  const QStringList& floatingWindows = {})
-    {
-        QJsonObject entry;
-        entry[QLatin1String("screen")] = screenId;
-        entry[QLatin1String("desktop")] = desktop;
-        entry[QLatin1String("activity")] = QString();
-        QJsonArray orderArray;
-        for (const QString& w : windowOrder)
-            orderArray.append(w);
-        entry[QLatin1String("windowOrder")] = orderArray;
-        if (!floatingWindows.isEmpty()) {
-            QJsonArray floatArray;
-            for (const QString& w : floatingWindows)
-                floatArray.append(w);
-            entry[QLatin1String("floatingWindows")] = floatArray;
-        }
-        return entry;
-    }
-
 private Q_SLOTS:
 
     void initTestCase()
     {
-        QVERIFY(m_scriptSetup.init(QStringLiteral(PZ_SOURCE_DIR)));
+        QVERIFY(m_scriptSetup.init(QStringLiteral(P_SOURCE_DIR)));
     }
 
     void init()
@@ -151,223 +121,6 @@ private Q_SLOTS:
     // Session persistence roundtrip
     // ═══════════════════════════════════════════════════════════════════════════
 
-    void testSerializeWindowOrders_roundTrip()
-    {
-        QJsonArray serialized;
-
-        {
-            AutotileEngine engine(nullptr, nullptr, nullptr, PlasmaZones::TestHelpers::testRegistry());
-
-            PhosphorTiles::TilingState* state = engine.tilingStateForScreen(QStringLiteral("eDP-1"));
-            state->addWindow(QStringLiteral("win1"));
-            state->addWindow(QStringLiteral("win2"));
-
-            PhosphorTiles::TilingState* state2 = engine.tilingStateForScreen(QStringLiteral("HDMI-1"));
-            state2->addWindow(QStringLiteral("win3"));
-
-            serialized = engine.serializeWindowOrders();
-            QCOMPARE(serialized.size(), 2);
-        }
-
-        {
-            AutotileEngine engine(nullptr, nullptr, nullptr, PlasmaZones::TestHelpers::testRegistry());
-            engine.deserializeWindowOrders(serialized);
-
-            QJsonObject entry = serialized[0].toObject();
-            QVERIFY(!entry[QLatin1String("screen")].toString().isEmpty());
-            QVERIFY(entry.contains(QLatin1String("windowOrder")));
-            QVERIFY(entry[QLatin1String("windowOrder")].toArray().size() > 0);
-
-            QVERIFY(!entry.contains(QLatin1String("masterCount")));
-            QVERIFY(!entry.contains(QLatin1String("splitRatio")));
-        }
-    }
-
-    void testDeserializeWindowOrders_emptyArray()
-    {
-        AutotileEngine engine(nullptr, nullptr, nullptr, PlasmaZones::TestHelpers::testRegistry());
-        engine.deserializeWindowOrders(QJsonArray{});
-        QVERIFY(!engine.algorithm().isEmpty());
-    }
-
-    void testSerializeWindowOrders_includesFloating()
-    {
-        AutotileEngine engine(nullptr, nullptr, nullptr, PlasmaZones::TestHelpers::testRegistry());
-
-        PhosphorTiles::TilingState* state = engine.tilingStateForScreen(QStringLiteral("eDP-1"));
-        state->addWindow(QStringLiteral("firefox|{uuid1}"));
-        state->addWindow(QStringLiteral("konsole|{uuid2}"));
-        state->addWindow(QStringLiteral("dolphin|{uuid3}"));
-        state->setFloating(QStringLiteral("konsole|{uuid2}"), true);
-
-        QJsonArray serialized = engine.serializeWindowOrders();
-        QCOMPARE(serialized.size(), 1);
-
-        QJsonObject obj = serialized[0].toObject();
-        QCOMPARE(obj[QLatin1String("screen")].toString(), QStringLiteral("eDP-1"));
-        QVERIFY(obj.contains(QLatin1String("windowOrder")));
-        QVERIFY(obj.contains(QLatin1String("floatingWindows")));
-
-        QJsonArray orderArray = obj[QLatin1String("windowOrder")].toArray();
-        QCOMPARE(orderArray.size(), 3);
-
-        QJsonArray floatArray = obj[QLatin1String("floatingWindows")].toArray();
-        QCOMPARE(floatArray.size(), 1);
-        QCOMPARE(floatArray[0].toString(), QStringLiteral("konsole|{uuid2}"));
-    }
-
-    void testDeserializeWindowOrders_multiDesktop_onlyRestoresCurrentContext()
-    {
-        QJsonArray multiDesktopData;
-        multiDesktopData.append(
-            buildEntry(QStringLiteral("eDP-1"), 1, {QStringLiteral("win1"), QStringLiteral("win2")}));
-        multiDesktopData.append(
-            buildEntry(QStringLiteral("eDP-1"), 2, {QStringLiteral("win3"), QStringLiteral("win4")}));
-
-        AutotileEngine engine(nullptr, nullptr, nullptr, PlasmaZones::TestHelpers::testRegistry());
-        engine.deserializeWindowOrders(multiDesktopData);
-
-        engine.setAutotileScreens({QStringLiteral("eDP-1")});
-        // Open in saved order — advisory positions are honored when arrival
-        // sequence matches the saved sequence.
-        engine.windowOpened(QStringLiteral("win1"), QStringLiteral("eDP-1"), 0, 0);
-        engine.windowOpened(QStringLiteral("win2"), QStringLiteral("eDP-1"), 0, 0);
-        QCoreApplication::processEvents();
-
-        PhosphorTiles::TilingState* state = engine.tilingStateForScreen(QStringLiteral("eDP-1"));
-        QVERIFY(state);
-        const QStringList order = state->windowOrder();
-        QCOMPARE(order.size(), 2);
-        QCOMPARE(order.at(0), QStringLiteral("win1"));
-        QCOMPARE(order.at(1), QStringLiteral("win2"));
-    }
-
-    void testDeserializeWindowOrders_multiDesktop_promotesOnSwitch()
-    {
-        // Saved order is ADVISORY for the deserialize/promote path (cross-session
-        // restore). When windows arrive in saved order, the saved positions are
-        // honored; when they arrive out of saved order, insertPosition takes
-        // over so the user's "After existing" preference applies to new
-        // windows. Strict ordering is reserved for setInitialWindowOrder
-        // (mode-transition seeding by the daemon — see
-        // testSetInitialWindowOrder_* in test_autotile_engine_master.cpp).
-        QJsonArray multiDesktopData;
-        multiDesktopData.append(
-            buildEntry(QStringLiteral("eDP-1"), 1, {QStringLiteral("win1"), QStringLiteral("win2")}));
-        multiDesktopData.append(
-            buildEntry(QStringLiteral("eDP-1"), 2, {QStringLiteral("win3"), QStringLiteral("win4")}));
-
-        AutotileEngine engine(nullptr, nullptr, nullptr, PlasmaZones::TestHelpers::testRegistry());
-        engine.deserializeWindowOrders(multiDesktopData);
-
-        engine.setAutotileScreens({QStringLiteral("eDP-1")});
-        engine.setCurrentDesktop(2);
-        QCoreApplication::processEvents();
-
-        // Open in saved order: positions are honored.
-        engine.windowOpened(QStringLiteral("win3"), QStringLiteral("eDP-1"), 0, 0);
-        engine.windowOpened(QStringLiteral("win4"), QStringLiteral("eDP-1"), 0, 0);
-        QCoreApplication::processEvents();
-
-        PhosphorTiles::TilingState* state = engine.tilingStateForScreen(QStringLiteral("eDP-1"));
-        QVERIFY(state);
-        const QStringList order = state->windowOrder();
-        QCOMPARE(order.size(), 2);
-        QCOMPARE(order.at(0), QStringLiteral("win3"));
-        QCOMPARE(order.at(1), QStringLiteral("win4"));
-    }
-
-    void testDeserializeWindowOrders_exactWindowIdMatch_isStrict()
-    {
-        // Daemon-reload restoration: only the daemon restarted, KWin held the
-        // windows across the gap, so arriving windowIds match saved entries
-        // exactly. Saved positions must be honored even when arrivals are
-        // out of sequence — otherwise the prior layout silently scrambles.
-        // Pinning the inverse of the appId-fallback advisory case below.
-        QJsonArray data;
-        data.append(buildEntry(QStringLiteral("eDP-1"), 1, {QStringLiteral("vesktop"), QStringLiteral("ghostty")}));
-
-        AutotileEngine engine(nullptr, nullptr, nullptr, PlasmaZones::TestHelpers::testRegistry());
-        engine.deserializeWindowOrders(data);
-        engine.setAutotileScreens({QStringLiteral("eDP-1")});
-        QCoreApplication::processEvents();
-
-        // Opens ghostty first (saved pos 1), then vesktop (saved pos 0). Both
-        // windowIds match saved entries exactly — strict path inserts each at
-        // its saved position regardless of arrival sequence. Final order
-        // matches the saved order.
-        engine.windowOpened(QStringLiteral("ghostty"), QStringLiteral("eDP-1"), 0, 0);
-        engine.windowOpened(QStringLiteral("vesktop"), QStringLiteral("eDP-1"), 0, 0);
-        QCoreApplication::processEvents();
-
-        PhosphorTiles::TilingState* state = engine.tilingStateForScreen(QStringLiteral("eDP-1"));
-        QVERIFY(state);
-        const QStringList order = state->windowOrder();
-        QCOMPARE(order.size(), 2);
-        QCOMPARE(order.at(0), QStringLiteral("vesktop"));
-        QCOMPARE(order.at(1), QStringLiteral("ghostty"));
-    }
-
-    void testDeserializeWindowOrders_appIdFallbackOutOfOrder_fallsBackToInsertPosition()
-    {
-        // KWin-restart restoration / new window today: the saved entries hold
-        // stale windowIds (UUID part changed). Arriving windowIds match saved
-        // entries only via the appId fallback. For out-of-order arrivals the
-        // saved position is yesterday's hint, not today's reality — honor the
-        // user's insertPosition setting instead of pushing live entries to
-        // re-create the prior layout.
-        //
-        // windowIds use the canonical "appId|UUID" shape so currentAppIdFor()
-        // can extract a stable appId. Saved entries hold one set of UUIDs;
-        // arrivals carry different UUIDs (simulating KWin's UUID drift).
-        QJsonArray data;
-        data.append(buildEntry(QStringLiteral("eDP-1"), 1,
-                               {QStringLiteral("vesktop|old-uuid-A"), QStringLiteral("ghostty|old-uuid-B")}));
-
-        AutotileEngine engine(nullptr, nullptr, nullptr, PlasmaZones::TestHelpers::testRegistry());
-        engine.deserializeWindowOrders(data);
-        engine.setAutotileScreens({QStringLiteral("eDP-1")});
-        QCoreApplication::processEvents();
-
-        // Open ghostty first with a fresh UUID (saved pos 1 via appId
-        // fallback), then vesktop with a fresh UUID (saved pos 0 via appId
-        // fallback). Advisory path: ghostty appends at tail; vesktop's saved
-        // pos 0 would push ghostty so it falls through to insertPosition
-        // (default End) and appends.
-        engine.windowOpened(QStringLiteral("ghostty|new-uuid-1"), QStringLiteral("eDP-1"), 0, 0);
-        engine.windowOpened(QStringLiteral("vesktop|new-uuid-2"), QStringLiteral("eDP-1"), 0, 0);
-        QCoreApplication::processEvents();
-
-        PhosphorTiles::TilingState* state = engine.tilingStateForScreen(QStringLiteral("eDP-1"));
-        QVERIFY(state);
-        const QStringList order = state->windowOrder();
-        QCOMPARE(order.size(), 2);
-        QCOMPARE(order.at(0), QStringLiteral("ghostty|new-uuid-1"));
-        QCOMPARE(order.at(1), QStringLiteral("vesktop|new-uuid-2"));
-    }
-
-    void testDeserializeWindowOrders_floatingRestoresAllContexts()
-    {
-        QJsonArray data;
-        data.append(buildEntry(QStringLiteral("eDP-1"), 1, {QStringLiteral("win1")}, {QStringLiteral("win1")}));
-        data.append(buildEntry(QStringLiteral("eDP-1"), 2, {QStringLiteral("win2")}, {QStringLiteral("win2")}));
-
-        AutotileEngine engine(nullptr, nullptr, nullptr, PlasmaZones::TestHelpers::testRegistry());
-        engine.deserializeWindowOrders(data);
-
-        engine.setAutotileScreens({QStringLiteral("eDP-1")});
-
-        engine.setCurrentDesktop(2);
-        QCoreApplication::processEvents();
-        engine.windowOpened(QStringLiteral("win2"), QStringLiteral("eDP-1"), 0, 0);
-        QCoreApplication::processEvents();
-
-        PhosphorTiles::TilingState* state = engine.tilingStateForScreen(QStringLiteral("eDP-1"));
-        QVERIFY(state);
-        QVERIFY2(state->isFloating(QStringLiteral("win2")),
-                 "Window on desktop 2 should be restored as floating from saved state");
-    }
-
     void testPersistenceDelegate_noOpWithoutDelegate()
     {
         AutotileEngine engine(nullptr, nullptr, nullptr, PlasmaZones::TestHelpers::testRegistry());
@@ -409,7 +162,7 @@ private Q_SLOTS:
     // Race condition: shortcut adjustment vs refreshConfigFromSettings
     // ═══════════════════════════════════════════════════════════════════════════
 
-    void testRefreshConfig_duringShortcutDebounce_preservesRuntimeRatio()
+    void testRefreshConfig_preservesPerDesktopRatio()
     {
         AutotileEngine engine(nullptr, nullptr, nullptr, PlasmaZones::TestHelpers::testRegistry());
         const QString screen = QStringLiteral("eDP-1");
@@ -440,14 +193,17 @@ private Q_SLOTS:
 
         engine.refreshConfigFromSettings();
 
-        QVERIFY2(qFuzzyCompare(engine.config()->splitRatio, adjustedRatio),
-                 qPrintable(
-                     QStringLiteral("refreshConfigFromSettings overwrote shortcut-adjusted ratio: expected %1, got %2")
-                         .arg(adjustedRatio)
-                         .arg(engine.config()->splitRatio)));
+        // The per-desktop tuned ratio survives the refresh — propagate skips
+        // user-tuned states. The global config tracks the settings default (0.5),
+        // and the adjustment lives in the state, not the global config.
+        QVERIFY2(qFuzzyCompare(state->splitRatio(), adjustedRatio),
+                 qPrintable(QStringLiteral("refresh clobbered per-desktop ratio: expected %1, got %2")
+                                .arg(adjustedRatio)
+                                .arg(state->splitRatio())));
+        QVERIFY(qFuzzyCompare(engine.config()->splitRatio, 0.5));
     }
 
-    void testRefreshConfig_duringShortcutDebounce_preservesRuntimeMasterCount()
+    void testRefreshConfig_preservesPerDesktopMasterCount()
     {
         AutotileEngine engine(nullptr, nullptr, nullptr, PlasmaZones::TestHelpers::testRegistry());
         const QString screen = QStringLiteral("eDP-1");
@@ -478,7 +234,10 @@ private Q_SLOTS:
 
         engine.refreshConfigFromSettings();
 
-        QCOMPARE(engine.config()->masterCount, 2);
+        // The per-desktop tuned master count survives the refresh; the global
+        // config tracks the settings default (1).
+        QCOMPARE(state->masterCount(), 2);
+        QCOMPARE(engine.config()->masterCount, 1);
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
@@ -573,159 +332,10 @@ private Q_SLOTS:
     // Simultaneous desktop+activity switch (coalesced promotion)
     // ═══════════════════════════════════════════════════════════════════════════
 
-    void testSimultaneousDesktopActivitySwitch_promotesCorrectContext()
+    void testShortcutAdjustment_doesNotWriteBackToSettings()
     {
-        const QString activityA = QStringLiteral("activity-aaaa");
-        const QString activityB = QStringLiteral("activity-bbbb");
-
-        QJsonArray data;
-        data.append(buildEntry(QStringLiteral("eDP-1"), 2, {QStringLiteral("winA1"), QStringLiteral("winA2")}));
-        {
-            QJsonObject entry = data[0].toObject();
-            entry[QLatin1String("activity")] = activityA;
-            data[0] = entry;
-        }
-        {
-            QJsonObject entry =
-                buildEntry(QStringLiteral("eDP-1"), 2, {QStringLiteral("winB1"), QStringLiteral("winB2")});
-            entry[QLatin1String("activity")] = activityB;
-            data.append(entry);
-        }
-
-        AutotileEngine engine(nullptr, nullptr, nullptr, PlasmaZones::TestHelpers::testRegistry());
-        engine.setCurrentDesktop(1);
-        engine.setCurrentActivity(activityA);
-        QCoreApplication::processEvents();
-
-        engine.deserializeWindowOrders(data);
-
-        engine.setCurrentDesktop(2);
-        engine.setCurrentActivity(activityB);
-        QCoreApplication::processEvents();
-
-        engine.setAutotileScreens({QStringLiteral("eDP-1")});
-        // Open in saved order — advisory positions are honored when arrival
-        // sequence matches the saved sequence.
-        engine.windowOpened(QStringLiteral("winB1"), QStringLiteral("eDP-1"), 0, 0);
-        engine.windowOpened(QStringLiteral("winB2"), QStringLiteral("eDP-1"), 0, 0);
-        QCoreApplication::processEvents();
-
-        PhosphorTiles::TilingState* state = engine.tilingStateForScreen(QStringLiteral("eDP-1"));
-        QVERIFY(state);
-        const QStringList order = state->windowOrder();
-        QCOMPARE(order.size(), 2);
-        QCOMPARE(order.at(0), QStringLiteral("winB1"));
-        QCOMPARE(order.at(1), QStringLiteral("winB2"));
-    }
-
-    void testSimultaneousSwitch_doesNotConsumeWrongActivityEntry()
-    {
-        const QString activityA = QStringLiteral("activity-aaaa");
-        const QString activityB = QStringLiteral("activity-bbbb");
-
-        QJsonArray data;
-        {
-            QJsonObject entry =
-                buildEntry(QStringLiteral("eDP-1"), 2, {QStringLiteral("winA1"), QStringLiteral("winA2")});
-            entry[QLatin1String("activity")] = activityA;
-            data.append(entry);
-        }
-        {
-            QJsonObject entry =
-                buildEntry(QStringLiteral("eDP-1"), 2, {QStringLiteral("winB1"), QStringLiteral("winB2")});
-            entry[QLatin1String("activity")] = activityB;
-            data.append(entry);
-        }
-
-        AutotileEngine engine(nullptr, nullptr, nullptr, PlasmaZones::TestHelpers::testRegistry());
-        engine.setCurrentDesktop(1);
-        engine.setCurrentActivity(activityA);
-        QCoreApplication::processEvents();
-
-        engine.deserializeWindowOrders(data);
-
-        engine.setCurrentDesktop(2);
-        engine.setCurrentActivity(activityB);
-        QCoreApplication::processEvents();
-
-        engine.setCurrentActivity(activityA);
-        QCoreApplication::processEvents();
-
-        engine.setAutotileScreens({QStringLiteral("eDP-1")});
-        // Open in saved order — advisory positions are honored when arrival
-        // sequence matches the saved sequence.
-        engine.windowOpened(QStringLiteral("winA1"), QStringLiteral("eDP-1"), 0, 0);
-        engine.windowOpened(QStringLiteral("winA2"), QStringLiteral("eDP-1"), 0, 0);
-        QCoreApplication::processEvents();
-
-        PhosphorTiles::TilingState* state = engine.tilingStateForScreen(QStringLiteral("eDP-1"));
-        QVERIFY(state);
-        const QStringList order = state->windowOrder();
-        QCOMPARE(order.size(), 2);
-        QCOMPARE(order.at(0), QStringLiteral("winA1"));
-        QCOMPARE(order.at(1), QStringLiteral("winA2"));
-    }
-
-    // ═══════════════════════════════════════════════════════════════════════════
-    // WTA integration: save/load roundtrip through config backend
-    // ═══════════════════════════════════════════════════════════════════════════
-
-    void testWtaRoundtrip_autotileOrdersSurviveSaveLoad()
-    {
-        QDir().mkpath(QFileInfo(ConfigDefaults::configFilePath()).absolutePath());
-        auto backend = std::make_unique<PhosphorConfig::JsonBackend>(ConfigDefaults::configFilePath());
-
-        AutotileEngine engine(nullptr, nullptr, nullptr, PlasmaZones::TestHelpers::testRegistry());
-        PhosphorTiles::TilingState* state = engine.tilingStateForScreen(QStringLiteral("eDP-1"));
-        state->addWindow(QStringLiteral("firefox|{uuid1}"));
-        state->addWindow(QStringLiteral("konsole|{uuid2}"));
-        state->setFloating(QStringLiteral("konsole|{uuid2}"), true);
-
-        QJsonArray serialized = engine.serializeWindowOrders();
-        QCOMPARE(serialized.size(), 1);
-
-        auto tracking = backend->group(ConfigKeys::windowTrackingGroup());
-        tracking->writeString(ConfigKeys::autotileWindowOrdersKey(),
-                              QString::fromUtf8(QJsonDocument(serialized).toJson(QJsonDocument::Compact)));
-        tracking.reset();
-        backend->sync();
-
-        auto backend2 = std::make_unique<PhosphorConfig::JsonBackend>(ConfigDefaults::configFilePath());
-        backend2->sync();
-        auto tracking2 = backend2->group(ConfigKeys::windowTrackingGroup());
-        QString readBack = tracking2->readString(ConfigKeys::autotileWindowOrdersKey(), QString());
-        QVERIFY(!readBack.isEmpty());
-
-        QJsonDocument doc = QJsonDocument::fromJson(readBack.toUtf8());
-        QVERIFY(doc.isArray());
-
-        AutotileEngine engine2(nullptr, nullptr, nullptr, PlasmaZones::TestHelpers::testRegistry());
-        engine2.deserializeWindowOrders(doc.array());
-
-        engine2.setAutotileScreens({QStringLiteral("eDP-1")});
-        // Open in saved order — advisory positions are honored when arrival
-        // sequence matches the saved sequence.
-        engine2.windowOpened(QStringLiteral("firefox|{uuid1}"), QStringLiteral("eDP-1"), 0, 0);
-        engine2.windowOpened(QStringLiteral("konsole|{uuid2}"), QStringLiteral("eDP-1"), 0, 0);
-        QCoreApplication::processEvents();
-
-        PhosphorTiles::TilingState* state2 = engine2.tilingStateForScreen(QStringLiteral("eDP-1"));
-        QVERIFY(state2);
-
-        const QStringList order = state2->windowOrder();
-        QCOMPARE(order.size(), 2);
-        QCOMPARE(order.at(0), QStringLiteral("firefox|{uuid1}"));
-        QCOMPARE(order.at(1), QStringLiteral("konsole|{uuid2}"));
-
-        QVERIFY(state2->isFloating(QStringLiteral("konsole|{uuid2}")));
-    }
-
-    // ═══════════════════════════════════════════════════════════════════════════
-    // Write-back signal
-    // ═══════════════════════════════════════════════════════════════════════════
-
-    void testSettingsWriteBack_emittedOnShortcutAdjustment()
-    {
+        // A per-desktop ratio tweak via shortcut must stay local: it changes the
+        // active state's ratio but must NOT write the global settings (no bleed).
         AutotileEngine engine(nullptr, nullptr, nullptr, PlasmaZones::TestHelpers::testRegistry());
         const QString screen = QStringLiteral("eDP-1");
         engine.setAutotileScreens({screen});
@@ -738,11 +348,16 @@ private Q_SLOTS:
         engine.windowOpened(QStringLiteral("win2"), screen, 0, 0);
         QCoreApplication::processEvents();
 
+        PhosphorTiles::TilingState* state = engine.tilingStateForScreen(screen);
         const qreal ratioBefore = settings.autotileSplitRatio();
+        const qreal stateBefore = state->splitRatio();
         engine.windowFocused(QStringLiteral("win1"), screen);
         engine.increaseMasterRatio(0.1);
 
-        QVERIFY(settings.autotileSplitRatio() != ratioBefore);
+        // Local effect on the active state...
+        QVERIFY(qFuzzyCompare(state->splitRatio(), stateBefore + 0.1));
+        // ...but the global settings are untouched.
+        QVERIFY(qFuzzyCompare(settings.autotileSplitRatio(), ratioBefore));
     }
 };
 

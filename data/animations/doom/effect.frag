@@ -39,34 +39,23 @@
 // clamp-to-edge sampler smears the bottom edge texel up the
 // column, breaking the "fell off" reading.
 
-#version 450
-
-#include <animation_uniforms.glsl>
 #include <noise.glsl>
-
-#define maxPixelSize    customParams[0].x
-#define horizontalScale customParams[0].y
-#define verticalScale   customParams[0].z
-
-layout(location = 0) in vec2 vTexCoord;
-layout(location = 0) out vec4 fragColor;
 
 // 4-octave fractal simplex (`simplex2DFractal`) hosted in noise.glsl —
 // the fractal layering is what gives adjacent columns differentiated
 // fall speeds; single-octave noise has too much spatial coherence and
 // the columns end up moving together. Same formulation BMW uses.
 
-void main()
+vec4 pTransition(vec2 uv, float t)
 {
-    vec2 uv = vTexCoord;
-    float visibility = clamp(iTime, 0.0, 1.0);
+    float visibility = clamp(t, 0.0, 1.0);
     float progress   = 1.0 - visibility;  // 0 visible, 1 destroyed
 
     // Pixel cell size grows with progress. ceil ensures whole-pixel
     // cells; at progress=0 this is `ceil(0+1) = 1` so pixelation is a
     // no-op — sampleUV sits at the per-pixel grid centre and the
     // sampler returns the exact source texel.
-    float pixelSize = max(1.0, ceil(maxPixelSize * progress + 1.0));
+    float pixelSize = max(1.0, ceil(p_maxPixelSize * progress + 1.0));
     // Floor iResolution so an early-frame surface that hasn't reported
     // its size (iResolution.x or .y == 0) doesn't divide-by-zero into
     // an infinite pixelGrid OR collapse hScale below into a constant
@@ -82,7 +71,7 @@ void main()
     // Per-column noise via 4-octave fractal. `cellUV.x * hScale`
     // fed as `vec2(x, 0)` collapses to 1D variation along x —
     // same column gets the same noise regardless of y.
-    float hScale = horizontalScale * flooredResolution.x * 0.001;
+    float hScale = p_horizontalScale * flooredResolution.x * 0.001;
     float noise  = simplex2DFractal(vec2(cellUV.x * hScale, 0.0)) * 2.0 - 0.5;
 
     // Vertical shift. The `0.00004` constant folds in BMW's
@@ -92,7 +81,7 @@ void main()
     // shift while a few high-noise columns get a small head start.
     // That's the spread that makes adjacent columns separate
     // visibly during the melt.
-    float vScale        = verticalScale * flooredResolution.y * 0.00004;
+    float vScale        = p_verticalScale * flooredResolution.y * 0.00004;
     float shiftProgress = mix(-vScale, 1.0 + vScale, progress);
     float shift         = noise * vScale + shiftProgress;
 
@@ -112,5 +101,5 @@ void main()
 
     // Top/bottom soft edge so the column tops fade rather than pop.
     float edgeFade = smoothstep(0.0, 0.1, uv.y) * smoothstep(0.0, 0.1, 1.0 - uv.y);
-    fragColor = sampled * edgeFade;
+    return sampled * edgeFade;
 }

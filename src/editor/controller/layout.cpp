@@ -16,7 +16,7 @@
 #include "../../core/utils.h"
 #include <PhosphorIdentity/VirtualScreenId.h>
 
-#include "pz_i18n.h"
+#include "phosphor_i18n.h"
 #include <memory>
 #include <QDBusMessage>
 #include <QGuiApplication>
@@ -50,7 +50,7 @@ void EditorController::cacheVirtualScreenGeometry(const QString& screenName)
         if (geo.isValid()) {
             m_virtualScreenSize = geo.size();
             QString physId = PhosphorIdentity::VirtualScreenId::extractPhysicalId(screenName);
-            QScreen* physScreen = Phosphor::Screens::ScreenIdentity::findByIdOrName(physId);
+            QScreen* physScreen = PhosphorScreens::ScreenIdentity::findByIdOrName(physId);
             QPoint physOrigin = physScreen ? physScreen->geometry().topLeft() : QPoint();
             m_virtualScreenRect = QRect(geo.topLeft() - physOrigin, geo.size());
             qCDebug(lcEditor) << "Virtual screen" << screenName << "geometry:" << geo
@@ -67,7 +67,7 @@ QVariantList EditorController::screenModel() const
         // Fallback: use Qt's physical screens (editor opened before daemon responded)
         for (QScreen* screen : QGuiApplication::screens()) {
             QVariantMap entry;
-            entry[QStringLiteral("name")] = Phosphor::Screens::ScreenIdentity::identifierFor(screen);
+            entry[QStringLiteral("name")] = PhosphorScreens::ScreenIdentity::identifierFor(screen);
             entry[QStringLiteral("displayName")] = screen->name();
             model.append(entry);
         }
@@ -110,7 +110,7 @@ QVariantList EditorController::screenModel() const
             entry[QStringLiteral("displayName")] = vsDisplayName;
         } else {
             // Physical screen: use connector name for brevity
-            QScreen* screen = Phosphor::Screens::ScreenIdentity::findByIdOrName(screenId);
+            QScreen* screen = PhosphorScreens::ScreenIdentity::findByIdOrName(screenId);
             entry[QStringLiteral("displayName")] = screen ? screen->name() : screenId;
         }
         model.append(entry);
@@ -215,7 +215,7 @@ void EditorController::showFullScreenOnTargetScreen(QQuickWindow* window)
     EditorWindowPlan plan;
     if (m_virtualScreenRect.isValid()) {
         const QString physId = PhosphorIdentity::VirtualScreenId::extractPhysicalId(m_targetScreen);
-        if (QScreen* physScreen = Phosphor::Screens::ScreenIdentity::findByIdOrName(physId)) {
+        if (QScreen* physScreen = PhosphorScreens::ScreenIdentity::findByIdOrName(physId)) {
             plan.screen = physScreen;
             // Absolute VS coordinates = physical screen origin + VS offset.
             plan.geometry =
@@ -227,7 +227,7 @@ void EditorController::showFullScreenOnTargetScreen(QQuickWindow* window)
     if (!plan.isValid()) {
         // Physical-screen path: match by identifier, take full geometry.
         for (QScreen* screen : QGuiApplication::screens()) {
-            if (Phosphor::Screens::ScreenIdentity::identifierFor(screen) == m_targetScreen
+            if (PhosphorScreens::ScreenIdentity::identifierFor(screen) == m_targetScreen
                 || screen->name() == m_targetScreen) {
                 plan.screen = screen;
                 plan.geometry = screen->geometry();
@@ -312,7 +312,7 @@ void EditorController::createNewLayout()
     m_layoutBoundsOverride = QSize();
 
     m_layoutId = QUuid::createUuid().toString();
-    m_layoutName = PzI18n::tr("New Layout");
+    m_layoutName = PhosphorI18n::tr("New Layout");
     if (m_zoneManager) {
         m_zoneManager->clearAllZones();
     }
@@ -372,12 +372,12 @@ void EditorController::createNewLayout()
 void EditorController::loadLayout(const QString& layoutId)
 {
     if (layoutId.isEmpty()) {
-        Q_EMIT layoutLoadFailed(PzI18n::tr("Layout ID cannot be empty"));
+        Q_EMIT layoutLoadFailed(PhosphorI18n::tr("Layout ID cannot be empty"));
         return;
     }
 
     if (!m_layoutService) {
-        Q_EMIT layoutLoadFailed(PzI18n::tr("Layout service not initialized"));
+        Q_EMIT layoutLoadFailed(PhosphorI18n::tr("Layout service not initialized"));
         return;
     }
 
@@ -407,7 +407,7 @@ void EditorController::loadLayout(const QString& layoutId)
 
     QJsonDocument doc = QJsonDocument::fromJson(jsonLayout.toUtf8());
     if (doc.isNull() || !doc.isObject()) {
-        Q_EMIT layoutLoadFailed(PzI18n::tr("Invalid layout data format"));
+        Q_EMIT layoutLoadFailed(PhosphorI18n::tr("Invalid layout data format"));
         qCWarning(lcEditor) << "Invalid JSON for layout" << layoutId;
         return;
     }
@@ -416,18 +416,34 @@ void EditorController::loadLayout(const QString& layoutId)
     m_layoutId = layoutObj[QLatin1String(::PhosphorZones::ZoneJsonKeys::Id)].toString();
     m_layoutName = layoutObj[QLatin1String(::PhosphorZones::ZoneJsonKeys::Name)].toString();
 
-    // Resolve the final reference size before building zones. Fixed-geometry
-    // layouts normalize against their own zone bounding box (which may differ
-    // from the current screen — e.g. a 3840x2160 layout shown on a 3840x2126
-    // panel-reduced screen). Use a throwaway Layout to ask the canonical
-    // helper rather than re-walking the JSON here. Relative-only layouts
-    // clear the override so targetScreenSize() falls back to the screen
-    // geometry setTargetScreen already cached — no extra D-Bus call.
+    // Resolve the final reference size before building zones. The editor
+    // canvas fills the live screen, and EditorZone scales each fixed zone by
+    // targetScreenSize (fixedPixels / targetScreenSize.width * canvasWidth),
+    // so the reference MUST share the live screen's aspect ratio or fixed
+    // zones stretch. The raw fixed-zone bounding box is the wrong reference
+    // whenever the zones don't span the full screen — a 16:9 layout whose
+    // fixed zones only reach 2560px wide yields a 2560x2160 bbox and renders
+    // 1.5x too wide (discussion #593).
+    //
+    // Clear the override first so targetScreenSize() reports the live
+    // screen/VS size, then re-pin only when the layout's fixed zones
+    // genuinely exceed that size (e.g. a 3840x2160 layout on a 3840x2126
+    // panel-reduced screen). fixedZoneReferenceGeometry() encodes exactly
+    // this "use the recalc geometry unless the bbox overflows it" rule, the
+    // same helper the preview path uses — seed it by recalculating the
+    // throwaway Layout against the live screen first.
     const QSize prevSize = targetScreenSize();
     {
+        m_layoutBoundsOverride = QSize();
+        const QSize screenSize = targetScreenSize();
         std::unique_ptr<PhosphorZones::Layout> tmp(PhosphorZones::Layout::fromJson(layoutObj));
-        const QRectF bbox = tmp ? tmp->fixedZoneBoundingBox() : QRectF();
-        m_layoutBoundsOverride = bbox.isEmpty() ? QSize() : QSize(qRound(bbox.width()), qRound(bbox.height()));
+        if (tmp && screenSize.isValid()) {
+            tmp->recalculateZoneGeometries(QRectF(QPointF(), screenSize));
+            const QRectF refGeo = tmp->fixedZoneReferenceGeometry();
+            if (!refGeo.isEmpty() && refGeo.size().toSize() != screenSize) {
+                m_layoutBoundsOverride = refGeo.size().toSize();
+            }
+        }
     }
     const QSize newSize = targetScreenSize();
     if (newSize != prevSize) {
@@ -706,7 +722,7 @@ void EditorController::loadLayout(const QString& layoutId)
 void EditorController::saveLayout()
 {
     if (!m_layoutService || !m_zoneManager) {
-        Q_EMIT layoutSaveFailed(PzI18n::tr("Services not initialized"));
+        Q_EMIT layoutSaveFailed(PhosphorI18n::tr("Services not initialized"));
         return;
     }
 
@@ -901,14 +917,14 @@ void EditorController::discardChanges()
 void EditorController::importLayout(const QString& filePath)
 {
     if (filePath.isEmpty()) {
-        Q_EMIT layoutLoadFailed(PzI18n::tr("File path cannot be empty"));
+        Q_EMIT layoutLoadFailed(PhosphorI18n::tr("File path cannot be empty"));
         return;
     }
 
     const QDBusMessage reply = PhosphorProtocol::ClientHelpers::syncCall(
         PhosphorProtocol::Service::Interface::LayoutRegistry, QStringLiteral("importLayout"), {filePath});
     if (reply.type() != QDBusMessage::ReplyMessage) {
-        QString error = PzI18n::tr("Failed to import layout: %1").arg(reply.errorMessage());
+        QString error = PhosphorI18n::tr("Failed to import layout: %1").arg(reply.errorMessage());
         qCWarning(lcEditor) << error;
         Q_EMIT layoutLoadFailed(error);
         return;
@@ -916,7 +932,7 @@ void EditorController::importLayout(const QString& filePath)
 
     const QString newLayoutId = reply.arguments().value(0).toString();
     if (newLayoutId.isEmpty()) {
-        QString error = PzI18n::tr("Imported layout but received empty ID");
+        QString error = PhosphorI18n::tr("Imported layout but received empty ID");
         qCWarning(lcEditor) << error;
         Q_EMIT layoutLoadFailed(error);
         return;
@@ -936,19 +952,19 @@ void EditorController::importLayout(const QString& filePath)
 void EditorController::exportLayout(const QString& filePath)
 {
     if (filePath.isEmpty()) {
-        Q_EMIT layoutSaveFailed(PzI18n::tr("File path cannot be empty"));
+        Q_EMIT layoutSaveFailed(PhosphorI18n::tr("File path cannot be empty"));
         return;
     }
 
     if (m_layoutId.isEmpty()) {
-        Q_EMIT layoutSaveFailed(PzI18n::tr("No layout loaded to export"));
+        Q_EMIT layoutSaveFailed(PhosphorI18n::tr("No layout loaded to export"));
         return;
     }
 
     const QDBusMessage reply = PhosphorProtocol::ClientHelpers::syncCall(
         PhosphorProtocol::Service::Interface::LayoutRegistry, QStringLiteral("exportLayout"), {m_layoutId, filePath});
     if (reply.type() != QDBusMessage::ReplyMessage) {
-        QString error = PzI18n::tr("Failed to export layout: %1").arg(reply.errorMessage());
+        QString error = PhosphorI18n::tr("Failed to export layout: %1").arg(reply.errorMessage());
         qCWarning(lcEditor) << error;
         Q_EMIT layoutSaveFailed(error);
         return;

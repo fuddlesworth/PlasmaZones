@@ -4,7 +4,10 @@
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
+import QtQuick.Window
 import org.kde.kirigami as Kirigami
+import org.plasmazones.common as QFZCommon
+import org.phosphor.animation
 
 /**
  * @brief Settings page for virtual screen configuration.
@@ -25,15 +28,22 @@ SettingsFlickable {
     property var _pendingScreens: []
     // Array of {x, y, width, height, displayName} — last-saved virtual screen definitions
     property var _savedScreens: []
-    property int _screenWidth: 1920
-    property int _screenHeight: 1080
+    // Sentinel physical resolution used when no real geometry can be inferred.
+    readonly property int _fallbackScreenWidth: 1920
+    readonly property int _fallbackScreenHeight: 1080
+    property int _screenWidth: _fallbackScreenWidth
+    property int _screenHeight: _fallbackScreenHeight
     // Grid dimensions inferred from pending screens
     property int _columns: 1
     property int _rows: 1
+    // Flips true one tick after the first geometry resolution so the preview
+    // box doesn't animate the initial fallback(16:9)→real-aspect jump on page
+    // open; monitor switches afterwards still animate.
+    property bool _geometrySettled: false
 
     function _refreshConfig() {
         if (_selectedScreen === "")
-            return ;
+            return;
 
         if (settingsController.hasUnsavedVirtualScreenConfig(_selectedScreen))
             _pendingScreens = settingsController.getStagedVirtualScreenConfig(_selectedScreen);
@@ -49,7 +59,7 @@ SettingsFlickable {
 
     function _stageCurrentConfig() {
         if (_selectedScreen === "" || _pendingScreens.length === 0)
-            return ;
+            return;
 
         settingsController.stageVirtualScreenConfig(_selectedScreen, _pendingScreens);
     }
@@ -60,7 +70,7 @@ SettingsFlickable {
         if (_pendingScreens.length <= 1) {
             _columns = 1;
             _rows = 1;
-            return ;
+            return;
         }
         var tol = 0.01;
         var xStarts = [];
@@ -86,7 +96,6 @@ SettingsFlickable {
             }
             if (!foundY)
                 yStarts.push(s.y);
-
         }
         var detectedCols = xStarts.length;
         var detectedRows = yStarts.length;
@@ -145,6 +154,15 @@ SettingsFlickable {
     }
 
     function _updateScreenGeometry() {
+        // Mark geometry settled on the next tick the first time we resolve, so
+        // the initial fallback→real transition lands without animating (the
+        // Behaviors below gate on _geometrySettled). Scheduled here, before the
+        // assignments, so it survives the function's several early returns.
+        if (!root._geometrySettled)
+            Qt.callLater(function () {
+                root._geometrySettled = true;
+            });
+
         var screens = settingsController.screens;
         // First pass: exact name match (physical screen entry)
         for (var i = 0; i < screens.length; i++) {
@@ -154,7 +172,7 @@ SettingsFlickable {
                 if (w && h) {
                     _screenWidth = w;
                     _screenHeight = h;
-                    return ;
+                    return;
                 }
                 break;
             }
@@ -169,15 +187,14 @@ SettingsFlickable {
             var name = screens[j].name || "";
             if (name.indexOf(prefix) === 0 && screens[j].width && screens[j].height)
                 children.push({
-                "w": screens[j].width,
-                "h": screens[j].height
-            });
-
+                    "w": screens[j].width,
+                    "h": screens[j].height
+                });
         }
         if (children.length === 0) {
-            _screenWidth = 1920;
-            _screenHeight = 1080;
-            return ;
+            _screenWidth = _fallbackScreenWidth;
+            _screenHeight = _fallbackScreenHeight;
+            return;
         }
         // Group by pixel height (2px tolerance) to separate rows
         var rowHeights = [];
@@ -197,20 +214,21 @@ SettingsFlickable {
                 rowWidths.push(children[ci].w);
             }
         }
-        // Uniform grid fallback: when all cells have the same height (e.g. 2x2),
-        // grouping merges everything into one "row". Use the grid dimensions
-        // (cols/rows) to split the summed width and infer the correct height.
+        // Uniform grid fallback: when all cells share one height (e.g. 2x2),
+        // height-grouping collapses every row into a single group, so
+        // rowWidths[0] is the summed width of ALL cells = _rows × (one row's
+        // full width). Dividing by _rows recovers one physical row's width;
+        // multiplying the shared cell height by _rows recovers the full height.
         if (rowHeights.length === 1 && _rows > 1 && _columns > 0) {
             _screenWidth = Math.round(rowWidths[0] / _rows);
             _screenHeight = rowHeights[0] * _rows;
-            return ;
+            return;
         }
         // Physical width: any row's total width (should be the same for all rows)
         var maxRowW = 0;
         for (var rw = 0; rw < rowWidths.length; rw++) {
             if (rowWidths[rw] > maxRowW)
                 maxRowW = rowWidths[rw];
-
         }
         // Physical height: sum of all distinct row heights
         var totalH = 0;
@@ -221,15 +239,15 @@ SettingsFlickable {
             _screenWidth = maxRowW;
             _screenHeight = totalH;
         } else {
-            _screenWidth = 1920;
-            _screenHeight = 1080;
+            _screenWidth = _fallbackScreenWidth;
+            _screenHeight = _fallbackScreenHeight;
         }
     }
 
     // Redistribute to equal grid cells at given dimensions.
     function _redistributeGrid(cols, rows) {
         if (cols <= 0 || rows <= 0)
-            return ;
+            return;
 
         var total = cols * rows;
         if (total <= 1) {
@@ -237,10 +255,10 @@ SettingsFlickable {
             _pendingScreens = [];
             _columns = 1;
             _rows = 1;
-            return ;
+            return;
         }
         if (total > _maxVirtualScreens)
-            return ;
+            return;
 
         var screens = [];
         var cw = 1 / cols;
@@ -271,7 +289,7 @@ SettingsFlickable {
     // Adjusts x/width of all cells straddling that column boundary.
     function _moveColumnDivider(colIndex, newXFraction) {
         if (colIndex < 0 || colIndex >= _columns - 1)
-            return ;
+            return;
 
         var screens = _deepCopy(_pendingScreens);
         var minW = 0.05;
@@ -291,11 +309,10 @@ SettingsFlickable {
             screens[rightIdx].x = newDivPos;
             screens[rightIdx].width = newRightWidth;
         }
-        for (var i = 0; i < screens.length; i++) {
-            if (screens[i].width < minW)
-                return ;
-
-        }
+        // The clamp bounds newDivPos to [minX, maxX], so both moved cells keep
+        // width >= minW and unmoved cells are untouched — no post-mutation
+        // re-check is needed (a float-edge one would spuriously reject a
+        // boundary drag).
         _pendingScreens = screens;
         _stageCurrentConfig();
     }
@@ -304,7 +321,7 @@ SettingsFlickable {
     // Adjusts y/height of all cells straddling that row boundary.
     function _moveRowDivider(rowIndex, newYFraction) {
         if (rowIndex < 0 || rowIndex >= _rows - 1)
-            return ;
+            return;
 
         var screens = _deepCopy(_pendingScreens);
         var minH = 0.05;
@@ -324,11 +341,9 @@ SettingsFlickable {
             screens[bottomIdx].y = newDivPos;
             screens[bottomIdx].height = newBottomHeight;
         }
-        for (var i = 0; i < screens.length; i++) {
-            if (screens[i].height < minH)
-                return ;
-
-        }
+        // The clamp bounds newDivPos to [minY, maxY], so both moved cells keep
+        // height >= minH and unmoved cells are untouched — no post-mutation
+        // re-check is needed.
         _pendingScreens = screens;
         _stageCurrentConfig();
     }
@@ -350,15 +365,15 @@ SettingsFlickable {
 
             if (Math.abs(_pendingScreens[i].height - regions[i].height) > 0.01)
                 return false;
-
         }
         return true;
     }
 
     // Strip "/vs:N" suffix to get physical screen ID
     function _toPhysicalId(name) {
-        var vsIdx = name.indexOf("/vs:");
-        return vsIdx >= 0 ? name.substring(0, vsIdx) : name;
+        // Canonical "/vs:" collapse lives in C++ (PhosphorIdentity); don't
+        // re-spell the separator here.
+        return settingsController.physicalScreenId(name);
     }
 
     function _autoSelectScreen() {
@@ -366,12 +381,21 @@ SettingsFlickable {
         for (var i = 0; i < screens.length; i++) {
             if (screens[i].isPrimary) {
                 _selectedScreen = _toPhysicalId(screens[i].name || "");
-                return ;
+                return;
             }
         }
         if (screens.length > 0)
             _selectedScreen = _toPhysicalId(screens[0].name || "");
+    }
 
+    // True if `physId` is still a connected physical output.
+    function _screenStillPresent(physId) {
+        var arr = settingsController.screens || [];
+        for (var i = 0; i < arr.length; i++) {
+            if (root._toPhysicalId(arr[i].name || "") === physId)
+                return true;
+        }
+        return false;
     }
 
     contentHeight: content.implicitHeight
@@ -379,7 +403,6 @@ SettingsFlickable {
     Component.onCompleted: {
         if (!_selectedScreen && settingsController.screens.length > 0)
             _autoSelectScreen();
-
     }
     on_SelectedScreenChanged: {
         _updateScreenGeometry();
@@ -388,22 +411,32 @@ SettingsFlickable {
 
     Connections {
         function onScreensChanged() {
-            root._updateScreenGeometry();
-            root._refreshConfig();
+            // Drop a selection whose physical output was unplugged, then re-pick.
+            // Changing _selectedScreen fires on_SelectedScreenChanged, which
+            // already refreshes geometry + config — so only refresh explicitly
+            // here when the selection did NOT change (e.g. a non-selected output
+            // hot-plugged), avoiding a redundant double refresh.
+            var before = root._selectedScreen;
+            if (before !== "" && !root._screenStillPresent(before))
+                root._selectedScreen = "";
             if (root._selectedScreen === "" && settingsController.screens.length > 0)
                 root._autoSelectScreen();
-
+            if (root._selectedScreen === before) {
+                root._updateScreenGeometry();
+                root._refreshConfig();
+            }
         }
 
         target: settingsController
     }
 
-    // Refresh when global discard resets needsSave to false
+    // Refresh when a global discard resets needsSave to false. The `needsSave`
+    // property's NOTIFY is `dirtyPagesChanged` (there is no `needsSaveChanged`
+    // signal), so the handler must listen to that.
     Connections {
-        function onNeedsSaveChanged() {
+        function onDirtyPagesChanged() {
             if (!settingsController.needsSave)
                 root._refreshConfig();
-
         }
 
         target: settingsController
@@ -422,16 +455,14 @@ SettingsFlickable {
             visible: true
         }
 
-        // Monitor selector (visual icon bar)
-        MonitorSelectorSection {
+        // Monitor picker (spatial map; physical outputs only, no "All")
+        DisplayMap {
             Layout.fillWidth: true
             appSettings: settingsController
-            showAllMonitors: false
+            showAll: false
             physicalOnly: true
             selectedScreenName: root._selectedScreen
-            onSelectedScreenNameChanged: {
-                root._selectedScreen = selectedScreenName;
-            }
+            onScreenPicked: name => root._selectedScreen = name
         }
 
         // Visual preview with draggable dividers
@@ -445,7 +476,8 @@ SettingsFlickable {
                 Label {
                     Layout.leftMargin: Kirigami.Units.largeSpacing
                     text: {
-                        let res = root._screenWidth + " \u00d7 " + root._screenHeight;
+                        let orient = root._screenHeight > root._screenWidth ? i18nc("@label screen orientation", "Portrait") : i18nc("@label screen orientation", "Landscape");
+                        let res = root._screenWidth + " \u00d7 " + root._screenHeight + " \u00b7 " + orient;
                         let count = root._pendingScreens.length;
                         if (count > 1) {
                             if (root._rows > 1)
@@ -464,13 +496,20 @@ SettingsFlickable {
                 VirtualScreenPreview {
                     id: previewRect
 
-                    Layout.fillWidth: true
-                    Layout.maximumWidth: Kirigami.Units.gridUnit * 30
+                    // Fit the screen's real pixel dimensions inside the available
+                    // box so the preview is portrait for portrait monitors and
+                    // landscape for landscape ones — not a fixed horizontal
+                    // rectangle. A single uniform scale drives both width and
+                    // height off the true monitor size (bounded by the card's
+                    // content width and a max height, smaller bound wins), so the
+                    // whole screen always fits; the box is then centred.
+                    readonly property real _availWidth: Math.min(parent.width - Kirigami.Units.largeSpacing * 2, Kirigami.Units.gridUnit * 30)
+                    readonly property real _maxHeight: Kirigami.Units.gridUnit * 16
+                    readonly property real _fitScale: (root._screenWidth > 0 && root._screenHeight > 0) ? Math.min(_availWidth / root._screenWidth, _maxHeight / root._screenHeight) : 0
+
                     Layout.alignment: Qt.AlignHCenter
-                    Layout.preferredHeight: {
-                        var ratio = root._screenHeight / root._screenWidth;
-                        return Math.min(width * ratio, Kirigami.Units.gridUnit * 10);
-                    }
+                    Layout.preferredWidth: _fitScale > 0 ? root._screenWidth * _fitScale : _availWidth
+                    Layout.preferredHeight: _fitScale > 0 ? root._screenHeight * _fitScale : _availWidth * 9 / 16
                     Layout.leftMargin: Kirigami.Units.largeSpacing
                     Layout.rightMargin: Kirigami.Units.largeSpacing
                     Layout.bottomMargin: Kirigami.Units.largeSpacing
@@ -479,16 +518,33 @@ SettingsFlickable {
                     screenHeight: root._screenHeight
                     columns: root._columns
                     rows: root._rows
-                    onColumnDividerMoved: function(colIndex, newFraction) {
+                    onColumnDividerMoved: function (colIndex, newFraction) {
                         root._moveColumnDivider(colIndex, newFraction);
                     }
-                    onRowDividerMoved: function(rowIndex, newFraction) {
+                    onRowDividerMoved: function (rowIndex, newFraction) {
                         root._moveRowDivider(rowIndex, newFraction);
                     }
+
+                    // Smoothly morph the box when switching monitors or changing
+                    // the split — width and height animate independently so a
+                    // landscape→portrait change eases into the new shape.
+                    Behavior on Layout.preferredWidth {
+                        enabled: root._geometrySettled
+                        PhosphorMotionAnimation {
+                            profile: "widget.hover"
+                            durationOverride: Kirigami.Units.longDuration
+                        }
+                    }
+
+                    Behavior on Layout.preferredHeight {
+                        enabled: root._geometrySettled
+                        PhosphorMotionAnimation {
+                            profile: "widget.hover"
+                            durationOverride: Kirigami.Units.longDuration
+                        }
+                    }
                 }
-
             }
-
         }
 
         // Presets
@@ -499,167 +555,200 @@ SettingsFlickable {
             contentItem: ColumnLayout {
                 spacing: Kirigami.Units.largeSpacing
 
-                // Horizontal split presets
-                Label {
-                    Layout.leftMargin: Kirigami.Units.largeSpacing
-                    text: i18n("Horizontal Splits")
-                    font: Kirigami.Theme.smallFont
-                    color: Kirigami.Theme.disabledTextColor
-                }
-
-                GridLayout {
-                    Layout.fillWidth: true
-                    Layout.leftMargin: Kirigami.Units.largeSpacing
-                    Layout.rightMargin: Kirigami.Units.largeSpacing
-                    columns: 2
-                    uniformCellWidths: true
-                    columnSpacing: Kirigami.Units.smallSpacing
-                    rowSpacing: Kirigami.Units.smallSpacing
-
-                    Button {
-                        Layout.fillWidth: true
-                        text: i18n("50 / 50")
-                        enabled: root._selectedScreen !== ""
-                        highlighted: root._matchesPreset(root._horizontalRegions([50, 50], ["", ""]))
-                        onClicked: root._loadPreset(root._horizontalRegions([50, 50], [i18n("Left"), i18n("Right")]))
-                        Accessible.name: i18n("Preset: %1", text)
-                    }
-
-                    Button {
-                        Layout.fillWidth: true
-                        text: i18n("60 / 40")
-                        enabled: root._selectedScreen !== ""
-                        highlighted: root._matchesPreset(root._horizontalRegions([60, 40], ["", ""]))
-                        onClicked: root._loadPreset(root._horizontalRegions([60, 40], [i18n("Main"), i18n("Side")]))
-                        Accessible.name: i18n("Preset: %1", text)
-                    }
-
-                    Button {
-                        Layout.fillWidth: true
-                        text: i18n("33 / 33 / 33")
-                        enabled: root._selectedScreen !== ""
-                        highlighted: root._matchesPreset(root._horizontalRegions([33.3, 33.4, 33.3], ["", "", ""]))
-                        onClicked: root._loadPreset(root._horizontalRegions([33.3, 33.4, 33.3], [i18n("Left"), i18n("Center"), i18n("Right")]))
-                        Accessible.name: i18n("Preset: %1", text)
-                    }
-
-                    Button {
-                        Layout.fillWidth: true
-                        text: i18n("40 / 20 / 40")
-                        enabled: root._selectedScreen !== ""
-                        highlighted: root._matchesPreset(root._horizontalRegions([40, 20, 40], ["", "", ""]))
-                        onClicked: root._loadPreset(root._horizontalRegions([40, 20, 40], [i18n("Left"), i18n("Center"), i18n("Right")]))
-                        Accessible.name: i18n("Preset: %1", text)
-                    }
-
-                }
-
-                // Vertical and grid presets
-                Label {
-                    Layout.leftMargin: Kirigami.Units.largeSpacing
-                    text: i18n("Vertical & Grid")
-                    font: Kirigami.Theme.smallFont
-                    color: Kirigami.Theme.disabledTextColor
-                }
-
+                // Preset card grid. Each card shows a ZonePreview thumbnail + label
+                // and applies the split via _loadPreset(); the active preset is
+                // highlighted via _matchesPreset(). One flat, data-driven grid
+                // replaces the old two groups of plain text buttons. The
+                // builders (_horizontalRegions / _gridRegions) and matcher are
+                // reused unchanged — this is purely the presentation.
                 GridLayout {
                     Layout.fillWidth: true
                     Layout.leftMargin: Kirigami.Units.largeSpacing
                     Layout.rightMargin: Kirigami.Units.largeSpacing
                     Layout.bottomMargin: Kirigami.Units.largeSpacing
-                    columns: 2
+                    columns: 4
                     uniformCellWidths: true
                     columnSpacing: Kirigami.Units.smallSpacing
                     rowSpacing: Kirigami.Units.smallSpacing
 
-                    Button {
-                        Layout.fillWidth: true
-                        text: i18n("50 / 50 Vertical")
-                        enabled: root._selectedScreen !== ""
-                        highlighted: root._matchesPreset(root._gridRegions(1, 2, []))
-                        onClicked: root._loadPreset(root._gridRegions(1, 2, [i18n("Top"), i18n("Bottom")]))
-                        Accessible.name: i18n("Preset: %1", text)
-                    }
+                    Repeater {
+                        model: [
+                            {
+                                "label": i18n("50% / 50%"),
+                                "detail": i18n("Horizontal"),
+                                "regions": root._horizontalRegions([50, 50], [i18n("Left"), i18n("Right")])
+                            },
+                            {
+                                "label": i18n("60% / 40%"),
+                                "detail": i18n("Horizontal"),
+                                "regions": root._horizontalRegions([60, 40], [i18n("Main"), i18n("Side")])
+                            },
+                            {
+                                "label": i18n("33% / 33% / 33%"),
+                                "detail": i18n("Horizontal"),
+                                "regions": root._horizontalRegions([33.3, 33.4, 33.3], [i18n("Left"), i18n("Center"), i18n("Right")])
+                            },
+                            {
+                                "label": i18n("40% / 20% / 40%"),
+                                "detail": i18n("Horizontal"),
+                                "regions": root._horizontalRegions([40, 20, 40], [i18n("Left"), i18n("Center"), i18n("Right")])
+                            },
+                            {
+                                "label": i18n("50% / 50%"),
+                                "detail": i18n("Vertical"),
+                                "regions": root._gridRegions(1, 2, [i18n("Top"), i18n("Bottom")])
+                            },
+                            {
+                                "label": i18n("50% / 50%"),
+                                "detail": i18n("Grid"),
+                                "regions": root._gridRegions(2, 2, [i18n("Top-Left"), i18n("Top-Right"), i18n("Bottom-Left"), i18n("Bottom-Right")])
+                            },
+                            {
+                                "label": i18n("33% / 33% / 33%"),
+                                "detail": i18n("Grid"),
+                                "regions": root._gridRegions(3, 2, [i18n("Top-Left"), i18n("Top-Center"), i18n("Top-Right"), i18n("Bottom-Left"), i18n("Bottom-Center"), i18n("Bottom-Right")])
+                            },
+                            {
+                                "label": i18n("60% / 40%"),
+                                "detail": i18n("Grid"),
+                                "regions": [
+                                    {
+                                        "x": 0,
+                                        "y": 0,
+                                        "width": 0.6,
+                                        "height": 0.5,
+                                        "displayName": i18n("Top-Main")
+                                    },
+                                    {
+                                        "x": 0.6,
+                                        "y": 0,
+                                        "width": 0.4,
+                                        "height": 0.5,
+                                        "displayName": i18n("Top-Side")
+                                    },
+                                    {
+                                        "x": 0,
+                                        "y": 0.5,
+                                        "width": 0.6,
+                                        "height": 0.5,
+                                        "displayName": i18n("Bottom-Main")
+                                    },
+                                    {
+                                        "x": 0.6,
+                                        "y": 0.5,
+                                        "width": 0.4,
+                                        "height": 0.5,
+                                        "displayName": i18n("Bottom-Side")
+                                    }
+                                ]
+                            }
+                        ]
 
-                    Button {
-                        Layout.fillWidth: true
-                        text: i18n("50 / 50 Grid")
-                        enabled: root._selectedScreen !== ""
-                        highlighted: root._matchesPreset(root._gridRegions(2, 2, []))
-                        onClicked: root._loadPreset(root._gridRegions(2, 2, [i18n("Top-Left"), i18n("Top-Right"), i18n("Bottom-Left"), i18n("Bottom-Right")]))
-                        Accessible.name: i18n("Preset: %1", text)
-                    }
+                        delegate: ItemDelegate {
+                            id: presetCard
 
-                    Button {
-                        Layout.fillWidth: true
-                        text: i18n("33 / 33 / 33 Grid")
-                        enabled: root._selectedScreen !== ""
-                        highlighted: root._matchesPreset(root._gridRegions(3, 2, []))
-                        onClicked: root._loadPreset(root._gridRegions(3, 2, [i18n("Top-Left"), i18n("Top-Center"), i18n("Top-Right"), i18n("Bottom-Left"), i18n("Bottom-Center"), i18n("Bottom-Right")]))
-                        Accessible.name: i18n("Preset: %1", text)
-                    }
+                            required property var modelData
+                            required property int index
 
-                    Button {
-                        Layout.fillWidth: true
-                        text: i18n("60 / 40 Grid")
-                        enabled: root._selectedScreen !== ""
-                        highlighted: root._matchesPreset([{
-                            "x": 0,
-                            "y": 0,
-                            "width": 0.6,
-                            "height": 0.5,
-                            "displayName": ""
-                        }, {
-                            "x": 0.6,
-                            "y": 0,
-                            "width": 0.4,
-                            "height": 0.5,
-                            "displayName": ""
-                        }, {
-                            "x": 0,
-                            "y": 0.5,
-                            "width": 0.6,
-                            "height": 0.5,
-                            "displayName": ""
-                        }, {
-                            "x": 0.6,
-                            "y": 0.5,
-                            "width": 0.4,
-                            "height": 0.5,
-                            "displayName": ""
-                        }])
-                        onClicked: root._loadPreset([{
-                            "x": 0,
-                            "y": 0,
-                            "width": 0.6,
-                            "height": 0.5,
-                            "displayName": i18n("Top-Main")
-                        }, {
-                            "x": 0.6,
-                            "y": 0,
-                            "width": 0.4,
-                            "height": 0.5,
-                            "displayName": i18n("Top-Side")
-                        }, {
-                            "x": 0,
-                            "y": 0.5,
-                            "width": 0.6,
-                            "height": 0.5,
-                            "displayName": i18n("Bottom-Main")
-                        }, {
-                            "x": 0.6,
-                            "y": 0.5,
-                            "width": 0.4,
-                            "height": 0.5,
-                            "displayName": i18n("Bottom-Side")
-                        }])
-                        Accessible.name: i18n("Preset: %1", text)
-                    }
+                            readonly property bool active: root._matchesPreset(presetCard.modelData.regions)
 
+                            // Inner padding (card border -> content) applied as a
+                            // margin inside contentItem below, not via the Control's
+                            // padding: the org.kde.desktop ItemDelegate style overrides
+                            // per-side padding, so it would be ignored and the content
+                            // hugged the border. Control padding zeroed.
+                            readonly property real _cardPad: Kirigami.Units.largeSpacing
+
+                            Layout.fillWidth: true
+                            enabled: root._selectedScreen !== ""
+                            hoverEnabled: true
+                            padding: 0
+                            Accessible.name: i18n("Preset: %1 %2", presetCard.modelData.label, presetCard.modelData.detail)
+                            // Deep-copy the preset's regions so divider drags mutate
+                            // _pendingScreens, not the shared model entry.
+                            onClicked: root._loadPreset(presetCard.modelData.regions.map(function (r) {
+                                return {
+                                    "x": r.x,
+                                    "y": r.y,
+                                    "width": r.width,
+                                    "height": r.height,
+                                    "displayName": r.displayName
+                                };
+                            }))
+
+                            // Selection highlight follows the layout-grid convention
+                            // (LayoutGridDelegate): a subtle accent wash + accent
+                            // border, not a full-opacity fill.
+                            background: Rectangle {
+                                radius: Kirigami.Units.smallSpacing * 1.5
+                                color: presetCard.active ? Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g, Kirigami.Theme.highlightColor.b, 0.15) : (presetCard.hovered ? Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.06) : Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.03))
+                                border.width: Math.round(Screen.devicePixelRatio)
+                                border.color: presetCard.active ? Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g, Kirigami.Theme.highlightColor.b, 0.5) : (presetCard.hovered ? Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g, Kirigami.Theme.highlightColor.b, 0.3) : Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.08))
+                            }
+
+                            contentItem: Item {
+                                implicitWidth: presetRow.implicitWidth + presetCard._cardPad * 2
+                                implicitHeight: presetRow.implicitHeight + presetCard._cardPad * 2
+
+                                RowLayout {
+                                    id: presetRow
+
+                                    anchors.fill: parent
+                                    anchors.margins: presetCard._cardPad
+                                    spacing: Kirigami.Units.largeSpacing
+
+                                    // Preview thumbnail (left): fixed 16:9 box using the
+                                    // shared ZonePreview + the same box treatment as
+                                    // LayoutThumbnail (0.08 fill, accent border that
+                                    // thickens when active). Zone numbers off — the split
+                                    // shape is what matters here.
+                                    Rectangle {
+                                        Layout.preferredHeight: Kirigami.Units.gridUnit * 3
+                                        Layout.preferredWidth: Kirigami.Units.gridUnit * 3 * 16 / 9
+                                        Layout.alignment: Qt.AlignVCenter
+                                        radius: Kirigami.Units.smallSpacing
+                                        color: Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.08)
+                                        border.width: presetCard.active ? Math.round(Screen.devicePixelRatio * 2.5) : Math.round(Screen.devicePixelRatio)
+                                        border.color: presetCard.active ? Kirigami.Theme.highlightColor : Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.12)
+
+                                        QFZCommon.ZonePreview {
+                                            anchors.fill: parent
+                                            anchors.margins: Kirigami.Units.smallSpacing
+                                            zones: presetCard.modelData.regions
+                                            isActive: presetCard.active
+                                            zonePadding: Math.round(Kirigami.Units.smallSpacing / 2)
+                                            edgeGap: Math.round(Kirigami.Units.smallSpacing / 2)
+                                            minZoneSize: 6
+                                            showZoneNumbers: false
+                                        }
+                                    }
+
+                                    ColumnLayout {
+                                        Layout.fillWidth: true
+                                        Layout.alignment: Qt.AlignVCenter
+                                        spacing: 0
+
+                                        Label {
+                                            Layout.fillWidth: true
+                                            text: presetCard.modelData.label
+                                            font.weight: Font.Medium
+                                            elide: Text.ElideRight
+                                        }
+
+                                        Label {
+                                            Layout.fillWidth: true
+                                            text: presetCard.modelData.detail
+                                            font: Kirigami.Theme.smallFont
+                                            color: Kirigami.Theme.disabledTextColor
+                                            elide: Text.ElideRight
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
                 }
-
             }
-
         }
 
         // Custom split editor
@@ -707,7 +796,6 @@ SettingsFlickable {
                             }
                             Accessible.name: i18n("Number of columns")
                         }
-
                     }
 
                     RowLayout {
@@ -740,7 +828,6 @@ SettingsFlickable {
                             }
                             Accessible.name: i18n("Number of rows")
                         }
-
                     }
 
                     Item {
@@ -757,7 +844,6 @@ SettingsFlickable {
                         ToolTip.visible: hovered
                         Accessible.name: i18n("Equalize virtual screen sizes")
                     }
-
                 }
 
                 // Sync spinboxes when grid dimensions change
@@ -835,13 +921,10 @@ SettingsFlickable {
                             color: Kirigami.Theme.disabledTextColor
                             font: Kirigami.Theme.smallFont
                         }
-
                     }
-
                 }
 
-                SettingsSeparator {
-                }
+                SettingsSeparator {}
 
                 Button {
                     Layout.leftMargin: Kirigami.Units.largeSpacing
@@ -862,11 +945,7 @@ SettingsFlickable {
                     ToolTip.visible: hovered
                     Accessible.name: i18n("Remove virtual screen subdivisions")
                 }
-
             }
-
         }
-
     }
-
 }

@@ -137,7 +137,9 @@ void OverlayService::setSettings(ISettings* settings)
                 });
             }
 
-            // Eagerly start CAVA at daemon boot so spectrum data is warm when overlay shows
+            // Reconcile CAVA with current settings + visibility. At boot the
+            // overlay is hidden, so this no longer starts CAVA — it spins up on
+            // the first show() and stops (after a grace period) on hide().
             syncCavaState();
         }
     }
@@ -255,6 +257,19 @@ void OverlayService::observeLayoutForLiveEdits(PhosphorZones::Layout* layout)
         // into one refresh.
         QTimer::singleShot(16, this, [this]() {
             m_refreshCoalescePending = false;
+            // A layout shaderId edit can flip a screen between rectangle and
+            // shader overlay modes (none↔shader). refreshVisibleWindows alone
+            // can't apply that flip: updateOverlayWindow's shader-apply branch
+            // is gated on the slot's CURRENT useShader mode, so a newly-enabled
+            // shader is skipped and the overlay keeps drawing rectangles until
+            // a hide/show (or daemon restart) rebuilds the slot. Run the
+            // type-mismatch recreate first — a no-op when no flip is needed —
+            // mirroring the enableShaderEffects setting path so live edits take
+            // effect immediately. Only meaningful while visible; a hidden
+            // overlay rebuilds with the correct type on its next show.
+            if (m_visible) {
+                recreateOverlayWindowsOnTypeMismatch();
+            }
             refreshVisibleWindows();
         });
     });
@@ -293,18 +308,48 @@ void OverlayService::refreshVisibleWindows()
     }
 }
 
+// Grace period after the overlay goes idle before the render loop + CAVA are
+// actually stopped, so rapid drag thrash (modifier release/re-press, quick
+// re-trigger) keeps everything warm and avoids per-show spin-up.
+static constexpr int kIdleQuiesceGraceMs = 5000;
+
+bool OverlayService::isOverlayDisplaying() const
+{
+    const bool previewVisible = m_shaderPreviewWindow && m_shaderPreviewWindow->isVisible();
+    return (m_visible && !m_overlayIdled) || previewVisible;
+}
+
 void OverlayService::syncCavaState()
 {
     if (!m_audioProvider || !m_settings) {
         return;
     }
-    if (m_settings->enableAudioVisualizer()) {
+
+    // CAVA is a continuous audio-capture + FFT child process feeding a per-frame
+    // spectrum; running it while nothing is displayed burns CPU on capture AND
+    // on per-frame overlay repaints. Run it only while audio-viz is enabled AND
+    // the overlay (un-idled) or the editor's shader preview is actually shown.
+    const bool wantRun = m_settings->enableAudioVisualizer() && isOverlayDisplaying();
+
+    if (wantRun) {
+        if (m_idleQuiesceTimer) {
+            m_idleQuiesceTimer->stop(); // cancel any pending grace-period quiesce
+        }
         m_audioProvider->setBarCount(m_settings->audioSpectrumBarCount());
         m_audioProvider->setFramerate(m_settings->shaderFrameRate());
         if (!m_audioProvider->isRunning()) {
             m_audioProvider->start();
         }
-    } else {
+        return;
+    }
+
+    // Audio-viz turned OFF entirely: stop now and clear any stale spectrum from
+    // the surfaces. Merely idle/hidden (still enabled): defer via the grace
+    // timer so a quick re-trigger keeps it warm.
+    if (!m_settings->enableAudioVisualizer()) {
+        if (m_idleQuiesceTimer) {
+            m_idleQuiesceTimer->stop();
+        }
         if (m_audioProvider->isRunning()) {
             m_audioProvider->stop();
             for (auto it_ = m_screenStates.constBegin(); it_ != m_screenStates.constEnd(); ++it_) {
@@ -321,7 +366,39 @@ void OverlayService::syncCavaState()
                                  QVariantList());
             }
         }
+        return;
     }
+    scheduleIdleQuiesce();
+}
+
+void OverlayService::scheduleIdleQuiesce()
+{
+    // Nothing to wind down if neither the render loop nor CAVA is active.
+    const bool shaderTimerActive = m_shaderUpdateTimer && m_shaderUpdateTimer->isActive();
+    const bool cavaActive = m_audioProvider && m_audioProvider->isRunning();
+    if (!shaderTimerActive && !cavaActive) {
+        return;
+    }
+    if (!m_idleQuiesceTimer) {
+        m_idleQuiesceTimer = new QTimer(this);
+        m_idleQuiesceTimer->setSingleShot(true);
+        m_idleQuiesceTimer->setInterval(kIdleQuiesceGraceMs);
+        connect(m_idleQuiesceTimer, &QTimer::timeout, this, [this]() {
+            // Re-check at fire time: a show()/refreshFromIdle() within the grace
+            // window both cancels this timer and resumes, but guard anyway. The
+            // overlay's QQuickWindows are intentionally left alive (NVIDIA
+            // teardown-deadlock avoidance); we only pause the 60 Hz shader
+            // render loop and the CAVA capture.
+            if (isOverlayDisplaying()) {
+                return;
+            }
+            stopShaderAnimation();
+            if (m_audioProvider && m_audioProvider->isRunning()) {
+                m_audioProvider->stop();
+            }
+        });
+    }
+    m_idleQuiesceTimer->start();
 }
 
 } // namespace PlasmaZones

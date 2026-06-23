@@ -5,6 +5,12 @@
 
 #include <PhosphorProtocol/ServiceConstants.h>
 
+// epoxy MUST precede any other GL/EGL include so it can interpose the
+// function pointers. It also pulls in the EGL/GL types and the
+// EGL_MESA_image_dma_buf_export entry points used by exportTextureToDmabuf.
+#include <epoxy/gl.h>
+#include <epoxy/egl.h>
+
 #include <core/region.h>
 #include <core/rendertarget.h>
 #include <core/renderviewport.h>
@@ -15,6 +21,7 @@
 #include <opengl/gltexture.h>
 
 #include <cstring>
+#include <unistd.h>
 
 #include <QByteArray>
 #include <QDBusConnection>
@@ -22,6 +29,7 @@
 #include <QDBusPendingCall>
 #include <QDBusPendingCallWatcher>
 #include <QDBusPendingReply>
+#include <QDBusUnixFileDescriptor>
 #include <QImage>
 #include <QLoggingCategory>
 #include <QPoint>
@@ -44,11 +52,21 @@ constexpr int RENDER_SETTLE_MS = 16;
 /// short enough that the user still sees the thumbnail before the eye
 /// notices the fallback icon.
 constexpr int RENDER_RETRY_MS = 64;
+/// Consecutive dma-buf capture failures (export failure or daemon import
+/// rejection) before the session permanently falls back to the raw-pixel path.
+/// >1 so a single transient bad frame doesn't disable the zero-copy path,
+/// while a genuine capability gap (every frame fails) trips it quickly.
+constexpr int DmabufFailureThreshold = 2;
 } // namespace
 
 SnapAssistThumbnailCapture::SnapAssistThumbnailCapture(QObject* parent)
     : QObject(parent)
+    , m_dmabufEnabled(qEnvironmentVariableIsSet("PLASMAZONES_DMABUF_THUMBNAILS"))
 {
+    if (m_dmabufEnabled) {
+        qCInfo(lcSnapAssistCapture) << "PLASMAZONES_DMABUF_THUMBNAILS set — snap-assist thumbnails will be exported "
+                                       "as dma-bufs (experimental zero-copy path).";
+    }
 }
 
 SnapAssistThumbnailCapture::~SnapAssistThumbnailCapture() = default;
@@ -145,7 +163,7 @@ void SnapAssistThumbnailCapture::bumpRecency(const QUuid& handle)
     // no-op'ing here. Compiles to nothing in release.
     Q_ASSERT_X(m_recentlyPostedSet.contains(handle), "bumpRecency",
                "called for a handle not in the set — set/queue invariant broken");
-    // QQueue::removeOne is O(n) over n=RecentPostedCapacity (24); trivially
+    // QQueue::removeOne is O(n) over n=RecentPostedCapacity; trivially
     // cheap for this cadence. Returns false if @p handle isn't present —
     // in that case skip the enqueue, otherwise we'd add a duplicate and
     // break the set/queue size invariant. (In debug builds the assert above
@@ -216,6 +234,51 @@ QImage SnapAssistThumbnailCapture::grabWindowImage(KWin::EffectWindow* w, QSize 
     return result.convertToFormat(QImage::Format_ARGB32);
 }
 
+KWin::GLTexture* SnapAssistThumbnailCapture::renderWindowToPooledTexture(KWin::EffectWindow* w, QSize box)
+{
+    // Caller guarantees the compositor GL/EGL context is current (the dma-buf
+    // export that follows reads it via eglGetCurrentContext), so unlike
+    // grabWindowImage this neither makes the context current nor releases it.
+    if (!w || box.isEmpty() || !KWin::effects) {
+        return nullptr;
+    }
+    const KWin::RectF wg = w->frameGeometry();
+    if (wg.width() <= 0 || wg.height() <= 0) {
+        return nullptr;
+    }
+    const qreal scale = qMin(qreal(box.width()) / wg.width(), qreal(box.height()) / wg.height());
+    const QSize fbSize(qMax(1, qRound(wg.width() * scale)), qMax(1, qRound(wg.height() * scale)));
+
+    // Round-robin a small pool of persistent textures: the exported dma-buf
+    // aliases the slot's texture, so it must outlive the daemon's async import.
+    // Reusing a slot only TexturePoolSize captures later gives that copy margin
+    // (mirrors the producer-scene pool the OffscreenQuickScene path used).
+    std::unique_ptr<KWin::GLTexture>& slot = m_texturePool[m_poolNext];
+    if (!slot || slot->size() != fbSize) {
+        slot = KWin::GLTexture::allocate(GL_RGBA8, fbSize);
+    }
+    if (!slot) {
+        return nullptr;
+    }
+    KWin::GLTexture* texture = slot.get();
+
+    KWin::GLFramebuffer fbo(texture);
+    KWin::RenderTarget renderTarget(&fbo);
+    KWin::RenderViewport viewport(wg, scale, renderTarget, QPoint());
+
+    KWin::GLFramebuffer::pushFramebuffer(&fbo);
+    glClearColor(0.0f, 0.0f, 0.0f, 0.0f);
+    glClear(GL_COLOR_BUFFER_BIT);
+
+    KWin::WindowPaintData data;
+    KWin::effects->drawWindow(renderTarget, viewport, w, KWin::Effect::PAINT_WINDOW_TRANSFORMED,
+                              KWin::Region::infinite(), data);
+    KWin::GLFramebuffer::popFramebuffer();
+
+    m_poolNext = (m_poolNext + 1) % TexturePoolSize;
+    return texture;
+}
+
 void SnapAssistThumbnailCapture::processNext()
 {
     if (m_queue.isEmpty()) {
@@ -232,8 +295,48 @@ void SnapAssistThumbnailCapture::attemptCapture(Pending p, int delayMs, int retr
     QTimer::singleShot(delayMs, this, [this, p, retriesLeft]() {
         // Resolve the EffectWindow fresh each attempt: the candidate may have
         // closed between queueing and firing, in which case findWindow returns
-        // null and grabWindowImage yields a null image (handled below).
+        // null and the render yields nothing (handled below).
         KWin::EffectWindow* w = KWin::effects ? KWin::effects->findWindow(p.internalId) : nullptr;
+
+        if (m_dmabufEnabled) {
+            // Zero-copy path: render the window into a pooled FBO texture and
+            // export it as a dma-buf. The render and the EGL export must share
+            // one context-current window — renderWindowToPooledTexture assumes
+            // the context is already current and exportTextureToDmabuf reads it
+            // via eglGetCurrentContext — so currency is managed here, around
+            // both.
+            DmabufExport exported;
+            if (w && KWin::effects && KWin::effects->makeOpenGLContextCurrent()) {
+                KWin::GLTexture* texture = renderWindowToPooledTexture(w, p.maxSize);
+                if (texture) {
+                    exported = exportTextureToDmabuf(texture);
+                }
+                KWin::effects->doneOpenGLContextCurrent();
+            }
+            if (!exported.ok && retriesLeft > 0) {
+                attemptCapture(p, RENDER_RETRY_MS, retriesLeft - 1);
+                return;
+            }
+            if (exported.ok) {
+                postThumbnailDmabuf(p, exported);
+            } else {
+                qCDebug(lcSnapAssistCapture)
+                    << "captureCandidates:" << p.internalId.toString() << "dma-buf export failed after retry";
+                // Count export failures toward the session fallback (may
+                // re-enqueue p in pixel mode); the trailing kick below advances
+                // the queue and picks up any re-enqueued candidate.
+                onDmabufRejected(p);
+            }
+            // Advance the queue now — the dma-buf post (if any) is async; we do
+            // not wait for its reply to start the next capture. The reply lambda
+            // has its own guarded kick (only fires when idle) solely to drain a
+            // candidate that onDmabufRejected re-enqueued after the queue had
+            // already emptied. processNext is idempotent on an empty queue, so
+            // the two kick sites never double-dispatch real work.
+            QTimer::singleShot(0, this, &SnapAssistThumbnailCapture::processNext);
+            return;
+        }
+
         QImage image = grabWindowImage(w, p.maxSize);
         if (image.isNull() && retriesLeft > 0) {
             // The window's first compositor frame after mapping is occasionally
@@ -324,6 +427,194 @@ void SnapAssistThumbnailCapture::postThumbnail(const QUuid& internalId, const QI
                          }
                          markRecentlyPosted(internalId);
                      });
+}
+
+SnapAssistThumbnailCapture::DmabufExport
+SnapAssistThumbnailCapture::exportTextureToDmabuf(KWin::GLTexture* texture) const
+{
+    DmabufExport result;
+    if (!texture) {
+        return result;
+    }
+    // EGL display/context of the compositor's current GL backend. EGL_NO_*
+    // means KWin is not on an EGL/GL backend (e.g. a future Vulkan compositor
+    // backend) — there is nothing to export here, so the caller drops the
+    // candidate and snap-assist shows its icon.
+    EGLDisplay dpy = eglGetCurrentDisplay();
+    EGLContext ctx = eglGetCurrentContext();
+    if (dpy == EGL_NO_DISPLAY || ctx == EGL_NO_CONTEXT) {
+        qCDebug(lcSnapAssistCapture) << "exportTextureToDmabuf: no current EGL context (non-EGL backend)";
+        return result;
+    }
+    // Verify the driver actually provides the EGL entry points this path calls
+    // BEFORE calling any of them. With libepoxy a missing entry point resolves
+    // to a stub that abort()s the process rather than returning an error, so
+    // without these guards a driver lacking dma-buf export or native-fence sync
+    // would CRASH the compositor the first time the env-gated path runs —
+    // instead of returning {ok=false} and taking the raw-pixel fallback the
+    // comments below rely on.
+    if (!epoxy_has_egl_extension(dpy, "EGL_KHR_image_base")
+        || !epoxy_has_egl_extension(dpy, "EGL_MESA_image_dma_buf_export")
+        || !epoxy_has_egl_extension(dpy, "EGL_KHR_fence_sync")
+        || !epoxy_has_egl_extension(dpy, "EGL_ANDROID_native_fence_sync")) {
+        qCDebug(lcSnapAssistCapture)
+            << "exportTextureToDmabuf: required EGL dma-buf/fence extensions unavailable — using raw-pixel path";
+        return result;
+    }
+    if (texture->target() != GL_TEXTURE_2D) {
+        qCDebug(lcSnapAssistCapture) << "exportTextureToDmabuf: unexpected texture target" << texture->target();
+        return result;
+    }
+    if (texture->size().isEmpty()) {
+        // A zero-sized FBO texture would export a w=0/h=0 buffer the daemon is
+        // guaranteed to reject — fail early (routes to retry, then fallback)
+        // rather than allocate and ship an EGLImage + fd + fence for nothing.
+        qCDebug(lcSnapAssistCapture) << "exportTextureToDmabuf: zero-sized texture" << texture->size();
+        return result;
+    }
+    // Wrap the GL texture as an EGLImage, then export its backing dma-buf.
+    const EGLImageKHR image =
+        eglCreateImageKHR(dpy, ctx, EGL_GL_TEXTURE_2D_KHR,
+                          reinterpret_cast<EGLClientBuffer>(static_cast<uintptr_t>(texture->texture())), nullptr);
+    if (image == EGL_NO_IMAGE_KHR) {
+        qCDebug(lcSnapAssistCapture) << "exportTextureToDmabuf: eglCreateImageKHR failed";
+        return result;
+    }
+    int fourcc = 0;
+    int numPlanes = 0;
+    EGLuint64KHR modifier = 0;
+    if (!eglExportDMABUFImageQueryMESA(dpy, image, &fourcc, &numPlanes, &modifier) || numPlanes != 1) {
+        qCDebug(lcSnapAssistCapture) << "exportTextureToDmabuf: query failed or unsupported plane count" << numPlanes;
+        eglDestroyImageKHR(dpy, image);
+        return result;
+    }
+    int fd = -1;
+    EGLint stride = 0;
+    EGLint offset = 0;
+    const bool exported = eglExportDMABUFImageMESA(dpy, image, &fd, &stride, &offset);
+    // The exported fd holds its own reference to the underlying buffer, so it
+    // outlives the EGLImage — destroy the image regardless of success.
+    eglDestroyImageKHR(dpy, image);
+    if (!exported || fd < 0) {
+        qCDebug(lcSnapAssistCapture) << "exportTextureToDmabuf: eglExportDMABUFImageMESA failed";
+        if (fd >= 0) {
+            ::close(fd);
+        }
+        return result;
+    }
+    // Mandatory render-completion fence for the dma-buf path: a sync_file that
+    // signals when the GL render into this buffer finishes, so the daemon waits
+    // before sampling (correctness under repeated/live capture). If the driver
+    // can't produce one, fail the export — the capability fallback then switches
+    // the session to the raw-pixel path.
+    //
+    // Ordering: renderWindowToPooledTexture (issued earlier this call) renders
+    // into this texture on the current GL context's command stream. eglCreateSync
+    // with EGL_SYNC_NATIVE_FENCE_ANDROID inserts the fence into that same
+    // stream AFTER those render commands, then glFlush() flushes the stream to
+    // the GPU so the fence is schedulable and eglDupNativeFenceFDANDROID can
+    // return a real sync_file. The fence therefore signals only once the render
+    // it follows has completed — exactly the guarantee the daemon relies on.
+    const EGLSyncKHR sync = eglCreateSyncKHR(dpy, EGL_SYNC_NATIVE_FENCE_ANDROID, nullptr);
+    if (sync == EGL_NO_SYNC_KHR) {
+        qCDebug(lcSnapAssistCapture) << "exportTextureToDmabuf: native fence sync unavailable";
+        ::close(fd);
+        return result;
+    }
+    glFlush(); // flush the stream (render + fence) to the GPU so the fence can signal
+    const int fenceFd = eglDupNativeFenceFDANDROID(dpy, sync);
+    eglDestroySyncKHR(dpy, sync);
+    if (fenceFd < 0) {
+        qCDebug(lcSnapAssistCapture) << "exportTextureToDmabuf: eglDupNativeFenceFDANDROID failed";
+        ::close(fd);
+        return result;
+    }
+    result.ok = true;
+    result.fd = fd;
+    result.fenceFd = fenceFd;
+    result.width = texture->size().width();
+    result.height = texture->size().height();
+    result.fourcc = static_cast<uint32_t>(fourcc);
+    result.modifier = static_cast<uint64_t>(modifier);
+    result.stride = static_cast<uint32_t>(stride);
+    result.offset = static_cast<uint32_t>(offset);
+    return result;
+}
+
+void SnapAssistThumbnailCapture::postThumbnailDmabuf(const Pending& p, const DmabufExport& exported)
+{
+    // The exported dma-buf aliases the pooled FBO texture, so it ships with a
+    // render-completion fence (exported.fenceFd): the daemon waits on it before
+    // sampling, which makes repeated/live capture correct rather than relying on
+    // D-Bus round-trip latency outrunning the GPU. The texture pool
+    // (renderWindowToPooledTexture) gives the daemon's copy-on-import a margin
+    // before a slot is reused.
+    const QString compositorHandle = p.internalId.toString();
+
+    QDBusMessage msg = QDBusMessage::createMethodCall(
+        PhosphorProtocol::Service::Name, PhosphorProtocol::Service::ObjectPath,
+        PhosphorProtocol::Service::Interface::Overlay, QStringLiteral("setWindowThumbnailDmabuf"));
+    // QDBusUnixFileDescriptor dup()s each fd in its constructor; we close our
+    // originals after queuing the call.
+    msg << compositorHandle << exported.width << exported.height << static_cast<uint>(exported.fourcc)
+        << static_cast<qulonglong>(exported.modifier) << static_cast<uint>(exported.stride)
+        << static_cast<uint>(exported.offset) << QVariant::fromValue(QDBusUnixFileDescriptor(exported.fd))
+        << QVariant::fromValue(QDBusUnixFileDescriptor(exported.fenceFd));
+
+    QDBusPendingCall pending =
+        QDBusConnection::sessionBus().asyncCall(msg, PhosphorProtocol::Service::SnapAssistThumbnailPostTimeoutMs);
+    ::close(exported.fd);
+    ::close(exported.fenceFd);
+
+    auto* watcher = new QDBusPendingCallWatcher(pending, this);
+    // Same accepted-gated recently-posted contract as the raw-pixel path: only
+    // mark the handle when the daemon confirms it imported+stored the buffer.
+    // A rejection (or transport error) feeds onDmabufRejected, which counts
+    // toward the session fallback to the raw-pixel path.
+    QObject::connect(watcher, &QDBusPendingCallWatcher::finished, this, [this, p](QDBusPendingCallWatcher* w) {
+        w->deleteLater();
+        const QString handle = p.internalId.toString();
+        QDBusPendingReply<bool> reply = *w;
+        if (reply.isError()) {
+            qCDebug(lcSnapAssistCapture) << "setWindowThumbnailDmabuf D-Bus call failed for" << handle << ":"
+                                         << reply.error().message();
+            onDmabufRejected(p);
+        } else if (!reply.value()) {
+            qCDebug(lcSnapAssistCapture) << "setWindowThumbnailDmabuf rejected by daemon for" << handle;
+            onDmabufRejected(p);
+        } else {
+            m_dmabufConsecutiveFailures = 0;
+            markRecentlyPosted(p.internalId);
+        }
+        // onDmabufRejected may have re-enqueued p (pixel-mode re-capture); if no
+        // capture is in flight, kick the queue so it isn't left stranded.
+        if (!m_busy && !m_queue.isEmpty()) {
+            QTimer::singleShot(0, this, &SnapAssistThumbnailCapture::processNext);
+        }
+    });
+}
+
+void SnapAssistThumbnailCapture::onDmabufRejected(const Pending& p)
+{
+    if (!m_dmabufEnabled) {
+        return; // already fell back to the pixel path this session
+    }
+    ++m_dmabufConsecutiveFailures;
+    if (m_dmabufConsecutiveFailures < DmabufFailureThreshold) {
+        qCDebug(lcSnapAssistCapture) << "dma-buf capture failed (" << m_dmabufConsecutiveFailures
+                                     << "consecutive) — will retry dma-buf on the next candidate";
+        return;
+    }
+    qCWarning(lcSnapAssistCapture)
+        << "dma-buf thumbnails repeatedly unavailable (export or daemon import failing) — falling back to "
+           "raw-pixel thumbnails for the rest of this session.";
+    m_dmabufEnabled = false;
+    m_dmabufConsecutiveFailures = 0;
+    // The mode flip is picked up by the next attemptCapture, which routes
+    // through the raw-pixel grabWindowImage path. The texture pool simply goes
+    // unused from here (freed at destruction) — the pixel path allocates its
+    // own throwaway texture per capture.
+    m_queue.enqueue(p); // re-capture this candidate via the pixel path
 }
 
 } // namespace PlasmaZones

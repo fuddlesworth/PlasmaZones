@@ -3,6 +3,8 @@
 
 #include <PhosphorLayoutApi/LayoutSourceBundle.h>
 
+#include <PhosphorRegistry/Registry.h>
+
 #include <QDebug>
 #include <QMutexLocker>
 #include <QtGlobal>
@@ -12,7 +14,10 @@
 
 namespace PhosphorLayout {
 
-LayoutSourceBundle::LayoutSourceBundle() = default;
+LayoutSourceBundle::LayoutSourceBundle()
+    : m_factoryRegistry(std::make_unique<PhosphorRegistry::Registry<ILayoutSourceFactory>>())
+{
+}
 
 // Hand-written destructor — we drop the composite's borrowed pointers
 // explicitly before m_sources tears down. C++'s reverse-declaration
@@ -50,9 +55,8 @@ LayoutSourceBundle& LayoutSourceBundle::operator=(LayoutSourceBundle&& other) no
         if (m_composite) {
             m_composite->clearSourcesSilent();
         }
-        m_factories = std::move(other.m_factories);
+        m_factoryRegistry = std::move(other.m_factoryRegistry);
         m_sources = std::move(other.m_sources);
-        m_sourceNames = std::move(other.m_sourceNames);
         m_sourceIndex = std::move(other.m_sourceIndex);
         m_composite = std::move(other.m_composite);
         // Post-condition: std::move on unique_ptr leaves `other` empty and
@@ -62,8 +66,7 @@ LayoutSourceBundle& LayoutSourceBundle::operator=(LayoutSourceBundle&& other) no
         // a subtle UAF.
         Q_ASSERT(!other.m_composite);
         Q_ASSERT(other.m_sources.empty());
-        Q_ASSERT(other.m_factories.empty());
-        Q_ASSERT(other.m_sourceNames.empty());
+        Q_ASSERT(!other.m_factoryRegistry);
         Q_ASSERT(other.m_sourceIndex.isEmpty());
     }
     return *this;
@@ -85,13 +88,12 @@ void LayoutSourceBundle::addFactory(std::unique_ptr<ILayoutSourceFactory> factor
         qWarning("LayoutSourceBundle::addFactory: ignoring null factory");
         return;
     }
-    // Reject empty names up front so the duplicate-name first-wins pass in
-    // build() never has to special-case them. An empty name can never be
-    // looked up via source(QString) — the public accessor matches on string
-    // equality, and returning a non-null ILayoutSource* for "" would let
-    // composition roots paper over a misconfigured factory. Matches
-    // FactoryContext::set's fail-safe first-wins discipline on programmer
-    // errors: assert in debug, warn + drop in release.
+    // Reject empty names up front so source(QString) lookups have a stable
+    // identifier and the registry's id-key is non-empty. An empty name can
+    // never be looked up via source(QString), and returning a non-null
+    // ILayoutSource* for "" would let composition roots paper over a
+    // misconfigured factory. Matches FactoryContext::set's fail-safe
+    // discipline on programmer errors: assert in debug, warn + drop in release.
     const QString name = factory->name();
     Q_ASSERT_X(!name.isEmpty(), "LayoutSourceBundle::addFactory",
                "factory must supply a non-empty name — source(QString) lookups and the duplicate-name guard "
@@ -100,7 +102,12 @@ void LayoutSourceBundle::addFactory(std::unique_ptr<ILayoutSourceFactory> factor
         qWarning("LayoutSourceBundle::addFactory: ignoring factory with empty name");
         return;
     }
-    m_factories.push_back(std::move(factory));
+    // Duplicate-name handling is now the registry's job: registerFactory with
+    // the default Reject policy keeps the first registration, drops + warns on
+    // a later same-id factory. This is the same first-wins fail-safe build()
+    // used to implement by hand (the realistic trigger is a future
+    // plugin-loading cycle re-running a provider's static-init). id() == name().
+    m_factoryRegistry->registerFactory(std::shared_ptr<ILayoutSourceFactory>(std::move(factory)));
 }
 
 void LayoutSourceBundle::build()
@@ -117,49 +124,36 @@ void LayoutSourceBundle::build()
         qWarning("LayoutSourceBundle::build: ignoring second call (bundle already built)");
         return;
     }
-    m_sources.reserve(m_factories.size());
-    m_sourceNames.reserve(m_factories.size());
-    m_sourceIndex.reserve(static_cast<int>(m_factories.size()));
+
+    // Iterate the factory catalogue in registration order — Registry::ids()
+    // returns insertion order, so the composite iterates sources in the order
+    // factories were added (which buildFromRegistered feeds in priority order).
+    // This preserves the id-namespace precedence the composite documents. The
+    // registry has already applied first-wins de-duplication, so every id maps
+    // to exactly one factory.
+    const QStringList ids = m_factoryRegistry->ids();
+
+    m_sources.reserve(ids.size());
+    m_sourceIndex.reserve(static_cast<int>(ids.size()));
     QList<ILayoutSource*> raw;
-    raw.reserve(static_cast<int>(m_factories.size()));
-    for (auto& factory : m_factories) {
-        const QString name = factory->name();
-        // Duplicate-name detection: source(name) is an O(1) hash lookup
-        // over m_sourceIndex, so a collision would silently route
-        // composition-root setAutotileLayoutSource (and similar) at the
-        // wrong source. availableLayouts() on the composite would also
-        // return duplicate previews. Fail-safe policy: first-registration
-        // wins, later duplicates warn and skip. Matches
-        // FactoryContext::set's first-wins discipline and
-        // AlgorithmRegistry's system-script dedup. Realistic trigger is a
-        // future plugin-loading cycle (XDG path duplication, dlopen +
-        // static-init re-run) — the warning identifies the offending
-        // provider by name for diagnostics.
-        if (m_sourceIndex.contains(name)) {
-            // Include the duplicate's position in m_factories so plugin
-            // authors looking at the warning can correlate against the
-            // (priority, name) registrar list. The first-wins entry's
-            // position is implicit (lower index) — only the dropped one
-            // needs identifying.
-            qWarning(
-                "LayoutSourceBundle::build: duplicate factory name '%s' at registration index %td — "
-                "skipping later registration (first wins)",
-                qUtf8Printable(name), static_cast<std::ptrdiff_t>(&factory - m_factories.data()));
-            continue;
+    raw.reserve(static_cast<int>(ids.size()));
+    for (const QString& name : std::as_const(ids)) {
+        const auto factory = m_factoryRegistry->factory(name);
+        if (!factory) {
+            continue; // single-shot, GUI thread — a racing unregister is impossible
         }
         auto source = factory->create();
         if (!source) {
-            // A factory returning null is a programmer error (the contract
-            // in ILayoutSourceFactory says create() hands back a fresh
-            // source). Skip rather than pushing a null into m_sources —
-            // doing so would leave m_sourceNames / m_sources out of
-            // index-sync and feed a null into the composite. We already
-            // know the bad factory by name; log and move on.
+            // A factory returning null is a programmer error (the contract in
+            // ILayoutSourceFactory says create() hands back a fresh source).
+            // Skip rather than pushing a null into m_sources — doing so would
+            // leave m_sources / m_sourceIndex out of sync and feed a null
+            // into the composite. We already know the bad factory by name;
+            // log and move on.
             qWarning("LayoutSourceBundle::build: factory '%s' returned null — skipping", qUtf8Printable(name));
             continue;
         }
         const std::size_t idx = m_sources.size();
-        m_sourceNames.push_back(name);
         m_sources.push_back(std::move(source));
         m_sourceIndex.insert(name, idx);
         raw.append(m_sources.back().get());
@@ -186,9 +180,11 @@ void LayoutSourceBundle::buildFromRegistered(const FactoryContext& ctx)
     // Sort by priority (lower first); tie-break on name (lexicographic) for
     // stable ordering across translation units. Static-init order across
     // TUs is implementation-defined, so any registrars sharing a priority
-    // would otherwise produce platform- / toolchain-dependent composite
-    // iteration. Tie-breaking on name makes the output deterministic
-    // regardless of which TU's registrar ran first.
+    // would otherwise produce platform- / toolchain-dependent results.
+    //
+    // The priority sort still decides which provider WINS a duplicate-name
+    // collision (registered first → kept by the registry's first-wins
+    // policy); build() then iterates the de-duplicated catalogue in id order.
     //
     // Snapshot the pending list into a local copy before sorting so
     // concurrent bundles on different threads don't race on the process-
@@ -240,11 +236,10 @@ void LayoutSourceBundle::buildFromRegistered(const FactoryContext& ctx)
 
 ILayoutSource* LayoutSourceBundle::source(const QString& name) const
 {
-    // O(1) hash lookup — build() populates m_sourceIndex alongside
-    // m_sourceNames with duplicate-name skips already applied, so a
-    // hit maps to exactly one valid index into m_sources. Returns
-    // nullptr when no factory with that name has been registered or
-    // when build() has not run yet.
+    // O(1) hash lookup — build() populates m_sourceIndex with duplicate
+    // names already rejected at addFactory time, so a hit maps to exactly
+    // one valid index into m_sources. Returns nullptr when no factory with
+    // that name has been registered or when build() has not run yet.
     const auto it = m_sourceIndex.constFind(name);
     if (it == m_sourceIndex.constEnd()) {
         return nullptr;

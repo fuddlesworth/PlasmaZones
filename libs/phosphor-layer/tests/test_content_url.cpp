@@ -131,7 +131,7 @@ private Q_SLOTS:
 
     void windowRootedQmlIsAdopted()
     {
-        // Many consumers (PlasmaZones' overlays, panel apps, notification
+        // Many consumers (Phosphor's overlays, panel apps, notification
         // daemons) ship QML where the ROOT type is a Window — they manage
         // size/visibility declaratively and expect the C++ side to adopt
         // the window rather than create its own wrapper. Verify PhosphorLayer

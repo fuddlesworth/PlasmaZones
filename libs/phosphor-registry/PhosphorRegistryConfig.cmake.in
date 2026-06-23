@@ -1,0 +1,19 @@
+# SPDX-FileCopyrightText: 2026 fuddlesworth
+# SPDX-License-Identifier: LGPL-2.1-or-later
+
+@PACKAGE_INIT@
+
+include(CMakeFindDependencyMacro)
+
+# The installed package exposes the C++ core
+# (PhosphorRegistry::PhosphorRegistry). The header-only MetadataPackLoader<T>
+# template exposes PhosphorFsLoader types in its public interface, so
+# PhosphorFsLoader is a PUBLIC link dependency consumers need transitively.
+find_dependency(Qt6 6.6 COMPONENTS Core Qml)
+if(NOT TARGET PhosphorFsLoader::PhosphorFsLoader)
+    find_dependency(PhosphorFsLoader)
+endif()
+
+include("${CMAKE_CURRENT_LIST_DIR}/PhosphorRegistryTargets.cmake")
+
+check_required_components(PhosphorRegistry)

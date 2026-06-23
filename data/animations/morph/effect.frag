@@ -11,31 +11,24 @@
 // to its un-warped self as `iTime` reaches the leg endpoints
 // (sin envelope peaks at iTime==0.5).
 
-#version 450
-
-#include <animation_uniforms.glsl>
 #include <noise.glsl>
 
-// metadata.json declaration order → customParams[0] sub-slots
-#define warpStrength  customParams[0].x
-#define warpFrequency customParams[0].y
-
-layout(location = 0) in vec2 vTexCoord;
-layout(location = 0) out vec4 fragColor;
+// `p_warpStrength` / `p_warpFrequency` are generated from metadata.json
+// (the customParams[0] sub-slots) by the harness.
 
 #include <anchor_remap.glsl>
 
-void main()
+vec4 pTransition(vec2 uv, float t)
 {
-    vec2 anchorUv = anchorRemap(vTexCoord);
+    vec2 anchorUv = anchorRemap(uv);
 
     // Envelope peaks at iTime == 0.5 (mid-transition) and returns to
     // 0 at the endpoints. Same shape as glitch; gives both show and
     // hide a "warp peak then settle" feel.
     float visibility = clamp(iTime, 0.0, 1.0);
     float envelope = sin(visibility * 3.14159);
-    float strength = warpStrength * envelope;
-    float freq = max(warpFrequency, 1.0);
+    float strength = p_warpStrength * envelope;
+    float freq = max(p_warpFrequency, 1.0);
 
     vec2 warp = vec2(
         sin(anchorUv.y * freq * 6.28318 + iTime * 6.28318) * strength,
@@ -81,5 +74,5 @@ void main()
     vec2 lo = smoothstep(vec2(-feather), vec2(0.0), anchorUv);
     vec2 hi = vec2(1.0) - smoothstep(vec2(1.0), vec2(1.0) + vec2(feather), anchorUv);
     float mask = lo.x * lo.y * hi.x * hi.y;
-    fragColor = warpedSample * mask;
+    return warpedSample * mask;
 }

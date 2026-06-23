@@ -5,15 +5,16 @@
 
 #include "../autotilehandler.h"
 #include "../dragtracker.h"
-#include "../snapassisthandler.h"
+#include "../navigationhandler.h"
+#include "../snaphandler.h"
 #include "../windowanimator.h"
+#include "shader_resolve.h"
+#include "window_query.h"
 
-#include <PhosphorAnimation/AnimationAppRuleResolver.h>
 #include <PhosphorAnimation/ProfilePaths.h>
 #include <PhosphorProtocol/ClientHelpers.h>
 #include <PhosphorProtocol/ServiceConstants.h>
 #include <PhosphorProtocol/DragMarshalling.h>
-#include <PhosphorProtocol/ZoneMarshalling.h>
 
 #include <effect/effecthandler.h>
 #include <window.h>
@@ -25,22 +26,12 @@
 #include <QDBusPendingReply>
 #include <QLoggingCategory>
 #include <QPointer>
-#include <QTimer>
 
 #include <memory>
 
 namespace PlasmaZones {
 
 Q_DECLARE_LOGGING_CATEGORY(lcEffect)
-
-namespace {
-// Upper bound on how long the effect waits for the daemon's endDrag reply.
-// If the daemon is blocked (layout recompute, overlay teardown, heavy
-// handler), exceeding this budget means the compositor would otherwise
-// stall waiting on a reply that may never come. On expiry the window is
-// left at its release position and a warning is logged.
-constexpr int EndDragTimeoutMs = 500;
-} // namespace
 
 bool PlasmaZonesEffect::borderActivated(KWin::ElectricBorder border)
 {
@@ -52,195 +43,9 @@ bool PlasmaZonesEffect::borderActivated(KWin::ElectricBorder border)
 
 // The kwin-effect no longer calls the legacy dragStarted D-Bus method;
 // beginDrag sets up snap-path state internally on the daemon side, so
-// there's only one code path into the drag state machine.
-
-// The dragMoved lambda sends updateDragCursor directly via
-// ClientHelpers::fireAndForget. Single entry point for hot-path cursor updates.
-
-void PlasmaZonesEffect::callEndDrag(KWin::EffectWindow* window, const QString& windowId, bool cancelled)
-{
-    // Single entry point for drag-end dispatch.
-    // Sends endDrag, receives a PhosphorProtocol::DragOutcome, and applies exactly the
-    // action the daemon decided. Replaces callDragStopped (whose reply
-    // shape was a 9-tuple of out-params) with a typed struct.
-    QPointF cursorAtRelease = m_dragTracker->lastCursorPos();
-
-    QDBusPendingCall pendingCall = PhosphorProtocol::ClientHelpers::asyncCall(
-        PhosphorProtocol::Service::Interface::WindowDrag, QStringLiteral("endDrag"),
-        {windowId, static_cast<int>(cursorAtRelease.x()), static_cast<int>(cursorAtRelease.y()),
-         static_cast<int>(m_currentModifiers), static_cast<int>(m_currentMouseButtons), cancelled});
-
-    QPointer<KWin::EffectWindow> safeWindow = window;
-    auto* watcher = new QDBusPendingCallWatcher(pendingCall, this);
-
-    // Pair the watcher with a timeout. If the daemon is blocked (layout
-    // recompute, overlay teardown, heavy handler), the compositor would
-    // otherwise wait indefinitely for a reply that may never come. The
-    // shared `handled` flag guarantees exactly-once handling: whichever
-    // fires first (reply or timeout) takes the transition, the other path
-    // is a no-op. Deleting the watcher does NOT cancel the underlying
-    // QDBusPendingCall — any late reply is silently discarded by Qt.
-    auto handled = std::make_shared<bool>(false);
-    QTimer* timeoutTimer = new QTimer(this);
-    timeoutTimer->setSingleShot(true);
-    connect(timeoutTimer, &QTimer::timeout, this, [windowId, handled, watcher, timeoutTimer]() {
-        if (*handled) {
-            return;
-        }
-        *handled = true;
-        qCWarning(lcEffect) << "endDrag timed out after" << EndDragTimeoutMs
-                            << "ms; daemon unresponsive. Leaving window" << windowId << "at release position.";
-        watcher->deleteLater();
-        timeoutTimer->deleteLater();
-    });
-    timeoutTimer->start(EndDragTimeoutMs);
-
-    connect(watcher, &QDBusPendingCallWatcher::finished, this,
-            [this, safeWindow, windowId, handled, timeoutTimer](QDBusPendingCallWatcher* w) {
-                w->deleteLater();
-                if (*handled) {
-                    // Timeout already fired; this is a late reply — discard.
-                    return;
-                }
-                *handled = true;
-                timeoutTimer->stop();
-                timeoutTimer->deleteLater();
-
-                QDBusPendingReply<PhosphorProtocol::DragOutcome> reply = *w;
-                if (reply.isError()) {
-                    qCWarning(lcEffect) << "endDrag call failed:" << reply.error().message();
-                    return;
-                }
-                const PhosphorProtocol::DragOutcome outcome = reply.value();
-                if (const QString err = outcome.validationError(); !err.isEmpty()) {
-                    // Garbled outcome — refuse to apply any window transform.
-                    // Better to leave the window where it is than to float/snap
-                    // based on a corrupted payload.
-                    qCWarning(lcEffect) << "endDrag outcome rejected:" << err
-                                        << "— dropping without applying any action for" << windowId;
-                    return;
-                }
-                qCInfo(lcEffect) << "endDrag outcome:" << windowId << "action=" << outcome.action
-                                 << "screen=" << outcome.targetScreenId << "geo=" << outcome.toRect()
-                                 << "snapAssist=" << outcome.requestSnapAssist;
-
-                switch (outcome.action) {
-                case PhosphorProtocol::DragOutcome::NoOp:
-                case PhosphorProtocol::DragOutcome::CancelSnap:
-                case PhosphorProtocol::DragOutcome::NotifyDragOutUnsnap:
-                    // Daemon handled any internal cleanup. Nothing for the
-                    // effect to paint.
-                    break;
-
-                case PhosphorProtocol::DragOutcome::ApplyFloat: {
-                    // Autotile bypass drag ended — float the window at its
-                    // current screen. The plugin-side compositor work
-                    // (handleDragToFloat, setWindowFloatingForScreen) was
-                    // previously inlined in the dragStopped lambda; now it
-                    // fires here off the daemon's authoritative answer.
-                    //
-                    // Cross-VS transitions that happened mid-drag were
-                    // applied by slotDragPolicyChanged at the moment of
-                    // crossing, so by the time we get here the autotile
-                    // handler has the right tracking state.
-                    if (!safeWindow) {
-                        break;
-                    }
-                    const QString dropScreenId = getWindowScreenId(safeWindow);
-                    if (dropScreenId.isEmpty()) {
-                        break;
-                    }
-                    m_autotileHandler->handleDragToFloat(safeWindow, windowId, dropScreenId);
-                    // Note: m_dragFloatedWindowIds is intentionally NOT re-set here.
-                    // See dragStopped handler — the marker is cleared at drag end
-                    // because the daemon's drag-end float path (setWindowFloat →
-                    // windowFloatingStateSynced) never emits applyGeometryForFloat,
-                    // so there's nothing for the marker to suppress.
-                    PhosphorProtocol::ClientHelpers::fireAndForget(
-                        this, PhosphorProtocol::Service::Interface::WindowTracking,
-                        QStringLiteral("setWindowFloatingForScreen"), {windowId, dropScreenId, true},
-                        QStringLiteral("setWindowFloatingForScreen - endDrag ApplyFloat"));
-                    qCInfo(lcEffect) << "endDrag ApplyFloat:" << windowId << "on" << dropScreenId;
-                    break;
-                }
-
-                case PhosphorProtocol::DragOutcome::ApplySnap: {
-                    if (!safeWindow || safeWindow->isFullScreen()) {
-                        break;
-                    }
-                    const QRect snapGeometry = outcome.toRect();
-                    // If the window is still in user-move state because only
-                    // the activation mouse button is held (LMB already
-                    // released), cancel KWin's interactive move so we can
-                    // snap immediately. Without this, applySnapGeometry
-                    // defers (100ms retry) until ALL buttons are released —
-                    // noticeable delay when using a mouse button (RMB) for
-                    // zone activation.
-                    if (safeWindow->isUserMove() && !(m_currentMouseButtons & Qt::LeftButton)) {
-                        if (KWin::Window* kw = safeWindow->window()) {
-                            kw->cancelInteractiveMoveResize();
-                        }
-                    }
-                    applySnapGeometry(safeWindow, snapGeometry);
-                    break;
-                }
-
-                case PhosphorProtocol::DragOutcome::RestoreSize: {
-                    if (!safeWindow || safeWindow->isFullScreen()) {
-                        break;
-                    }
-                    // Drag-to-unsnap: apply pre-snap width/height at current
-                    // position. Skip if slotRestoreSizeDuringDrag already
-                    // applied during the drag (size within 1px).
-                    QRectF frame = safeWindow->frameGeometry();
-                    const QRect geo(static_cast<int>(frame.x()), static_cast<int>(frame.y()), outcome.width,
-                                    outcome.height);
-                    if (qAbs(frame.width() - outcome.width) <= 1 && qAbs(frame.height() - outcome.height) <= 1) {
-                        qCDebug(lcEffect) << "endDrag RestoreSize: already at correct size, skipping";
-                        break;
-                    }
-                    if (safeWindow->isUserMove() && !(m_currentMouseButtons & Qt::LeftButton)) {
-                        if (KWin::Window* kw = safeWindow->window()) {
-                            kw->cancelInteractiveMoveResize();
-                        }
-                    }
-                    // Drag-to-unsnap: window leaves zone-managed sizing, restore pre-snap dimensions.
-                    applySnapGeometry(safeWindow, geo, /*allowDuringDrag=*/false, /*skipAnimation=*/false,
-                                      PhosphorAnimation::ProfilePaths::WindowSnapOut);
-                    break;
-                }
-                }
-
-                // Auto-fill: if window was dropped without snapping to a
-                // zone and wasn't floated, try the first empty zone on the
-                // release screen. Daemon-provided targetScreenId wins over
-                // window's current screen (cross-screen drags).
-                const bool applied = outcome.action == PhosphorProtocol::DragOutcome::ApplySnap
-                    || outcome.action == PhosphorProtocol::DragOutcome::ApplyFloat;
-                if (!applied && safeWindow && !outcome.targetScreenId.isEmpty() && isDaemonReady("auto-fill on drop")) {
-                    const bool sticky = isWindowSticky(safeWindow);
-                    auto onSnapSuccess = [this](const QString&, const QString& snappedScreenId) {
-                        m_snapAssistHandler->showContinuationIfNeeded(snappedScreenId);
-                    };
-                    tryAsyncSnapCall(PhosphorProtocol::Service::Interface::Snap, QStringLiteral("snapToEmptyZone"),
-                                     {windowId, outcome.targetScreenId, sticky}, safeWindow, windowId, true, nullptr,
-                                     onSnapSuccess);
-                }
-
-                // Snap Assist: show the window picker if the daemon
-                // requested it. asyncShow is non-blocking.
-                if (outcome.requestSnapAssist && !outcome.emptyZones.isEmpty() && !outcome.targetScreenId.isEmpty()) {
-                    m_snapAssistHandler->asyncShow(windowId, outcome.targetScreenId, outcome.emptyZones);
-                }
-            });
-}
-
-void PlasmaZonesEffect::callCancelSnap()
-{
-    qCInfo(lcEffect) << "Calling cancelSnap (drag cancelled by Escape or external event)";
-    PhosphorProtocol::ClientHelpers::sendOneWay(PhosphorProtocol::Service::Interface::WindowDrag,
-                                                QStringLiteral("cancelSnap"));
-}
+// there's only one code path into the drag state machine. The dragMoved
+// lambda sends updateDragCursor directly via ClientHelpers::fireAndForget.
+// callEndDrag (the drag-end outcome dispatch) lives in drag_end.cpp.
 
 void PlasmaZonesEffect::tryAsyncSnapCall(const QString& interface, const QString& method, const QList<QVariant>& args,
                                          QPointer<KWin::EffectWindow> window, const QString& windowId,
@@ -250,39 +55,59 @@ void PlasmaZonesEffect::tryAsyncSnapCall(const QString& interface, const QString
 {
     QDBusPendingCall call = PhosphorProtocol::ClientHelpers::asyncCall(interface, method, args);
     auto* watcher = new QDBusPendingCallWatcher(call, this);
-    connect(
-        watcher, &QDBusPendingCallWatcher::finished, this,
-        [this, window, windowId, storePreSnap, method, fallback, onSnapSuccess, args, skipAnimation,
-         onComplete](QDBusPendingCallWatcher* w) {
-            w->deleteLater();
-            QDBusPendingReply<int, int, int, int, bool> reply = *w;
-            if (reply.isError()) {
-                qCDebug(lcEffect) << method << "error:" << reply.error().message();
+    connect(watcher, &QDBusPendingCallWatcher::finished, this,
+            [this, window, windowId, storePreSnap, method, fallback, onSnapSuccess, args, skipAnimation,
+             onComplete](QDBusPendingCallWatcher* w) {
+                w->deleteLater();
+                QDBusPendingReply<int, int, int, int, bool> reply = *w;
+                if (reply.isError()) {
+                    qCDebug(lcEffect) << method << "error:" << reply.error().message();
+                    if (fallback)
+                        fallback();
+                    if (onComplete)
+                        onComplete();
+                    return;
+                }
+                if (reply.argumentAt<4>() && window && !window->isDeleted()) {
+                    QRect geo(reply.argumentAt<0>(), reply.argumentAt<1>(), reply.argumentAt<2>(),
+                              reply.argumentAt<3>());
+                    qCInfo(lcEffect) << method << "snapping" << windowId << "to:" << geo;
+                    if (storePreSnap)
+                        // `window` is non-null inside this branch (guarded by the
+                        // `reply.argumentAt<4>() && window` check above), so the
+                        // ternary fall-through to QRectF() is unreachable.
+                        m_snapHandler->ensurePreSnapGeometryStored(window, windowId, QRectF(window->frameGeometry()));
+                    applyWindowGeometry(window, geo, false, skipAnimation);
+                    // Async snap (keyboard / empty-zone / last-zone / auto-fill)
+                    // committed — record in snapping's border set, but only for
+                    // a resolved snap-mode screen (autotile windows are tracked
+                    // by AutotileHandler; an empty screen is left untracked,
+                    // mirroring the batch path's discriminator).
+                    if (const QString asyncScr = getWindowScreenId(window);
+                        !asyncScr.isEmpty() && !m_autotileHandler->isAutotileScreen(asyncScr)) {
+                        // Defensive stale-float clear — see the drag-drop
+                        // commit path; idempotent vs the daemon broadcast.
+                        m_navigationHandler->setWindowFloating(windowId, false);
+                        m_snapHandler->markWindowSnapped(windowId, asyncScr);
+                    } else {
+                        // Same discriminator epilogue as the other commit
+                        // paths: drop stale snap tracking instead of skipping.
+                        m_snapHandler->clearWindowSnapped(windowId);
+                    }
+                    // args[1] is screenId (e.g. for snapToEmptyZone, snapToLastZone)
+                    if (onSnapSuccess && args.size() >= 2) {
+                        onSnapSuccess(windowId, args[1].toString());
+                    }
+                    if (onComplete)
+                        onComplete();
+                    return;
+                }
                 if (fallback)
                     fallback();
                 if (onComplete)
                     onComplete();
                 return;
-            }
-            if (reply.argumentAt<4>() && window) {
-                QRect geo(reply.argumentAt<0>(), reply.argumentAt<1>(), reply.argumentAt<2>(), reply.argumentAt<3>());
-                qCInfo(lcEffect) << method << "snapping" << windowId << "to:" << geo;
-                if (storePreSnap)
-                    ensurePreSnapGeometryStored(window, windowId, window ? QRectF(window->frameGeometry()) : QRectF());
-                applySnapGeometry(window, geo, false, skipAnimation);
-                // args[1] is screenId (e.g. for snapToEmptyZone, snapToLastZone)
-                if (onSnapSuccess && args.size() >= 2) {
-                    onSnapSuccess(windowId, args[1].toString());
-                }
-                if (onComplete)
-                    onComplete();
-                return;
-            }
-            if (fallback)
-                fallback();
-            if (onComplete)
-                onComplete();
-        });
+            });
 }
 
 void PlasmaZonesEffect::repaintSnapRegions(KWin::EffectWindow* window, const QRectF& oldFrame, const QRect& newGeo)
@@ -302,8 +127,8 @@ void PlasmaZonesEffect::repaintSnapRegions(KWin::EffectWindow* window, const QRe
     }
 }
 
-void PlasmaZonesEffect::applySnapGeometry(KWin::EffectWindow* window, const QRect& geometry, bool allowDuringDrag,
-                                          bool skipAnimation, const QString& profilePath)
+void PlasmaZonesEffect::applyWindowGeometry(KWin::EffectWindow* window, const QRect& geometry, bool allowDuringDrag,
+                                            bool skipAnimation, const QString& profilePath)
 {
     if (!window) {
         qCWarning(lcEffect) << "applyGeometry: window is null";
@@ -365,7 +190,7 @@ void PlasmaZonesEffect::applySnapGeometry(KWin::EffectWindow* window, const QRec
     // restart double-processing).
     //
     // When an animation IS in flight, frameGeometry() already reflects the
-    // committed target from the previous applySnapGeometry's moveResize —
+    // committed target from the previous applyWindowGeometry's moveResize —
     // but the visual position is still mid-transition. A rapid reversal
     // (float → unfloat, rotate → rotate back) legitimately targets the same
     // committed geometry and must NOT be skipped, because the animation needs
@@ -408,7 +233,7 @@ void PlasmaZonesEffect::applySnapGeometry(KWin::EffectWindow* window, const QRec
                         [this, safeWindow, geo, skipAnimation, profilePath, conn](KWin::EffectWindow*) {
                             disconnect(*conn);
                             if (safeWindow && !safeWindow->isDeleted() && !safeWindow->isFullScreen()) {
-                                applySnapGeometry(safeWindow, geo, false, skipAnimation, profilePath);
+                                applyWindowGeometry(safeWindow, geo, false, skipAnimation, profilePath);
                             }
                         });
         return;
@@ -421,10 +246,25 @@ void PlasmaZonesEffect::applySnapGeometry(KWin::EffectWindow* window, const QRec
     //
     // `shouldAnimateWindow` adds the user's per-animation Window
     // Filtering gate (transient / min-size / app / class) and lets a
-    // class-pattern AnimationAppRule override the filter when the
-    // rule's classPattern matches. Falling through to the non-animated
-    // path just runs the moveResize without the snap motion / shader.
-    if (!skipAnimation && !allowDuringDrag && m_windowAnimator->isEnabled() && shouldAnimateWindow(window)) {
+    // WindowRule carrying any OverrideAnimation* action override the
+    // filter when the rule's class matcher matches. Falling through to
+    // the non-animated path just runs the moveResize without the snap
+    // motion / shader.
+    //
+    // First-placement-on-open carve-out: a window moved into its zone/tile
+    // moments after opening still has its window.open shader in flight —
+    // uniquely marked by the held WindowAddedGrabRole (addedGrabHeld, set only
+    // by the slotWindowAdded open path). Installing the snap/tile morph would
+    // supersede it (one transition per window), so the open animation never
+    // plays. Skip the morph and fall through to the plain moveResize: the
+    // first-frame open suppression keeps the window hidden until the move
+    // lands, so the open shader plays into the destination rect. Later moves
+    // (no open shader in flight) morph normally.
+    const auto* inFlightTransition = m_shaderManager.findTransition(window);
+    const bool firstPlacementWithOpenShader = inFlightTransition && inFlightTransition->addedGrabHeld;
+
+    if (!skipAnimation && !allowDuringDrag && !firstPlacementWithOpenShader && m_windowAnimator->isEnabled()
+        && shouldAnimateWindow(window)) {
         const QRectF targetFrame(geo);
 
         // Bail before any work when the in-flight animation already
@@ -447,11 +287,11 @@ void PlasmaZonesEffect::applySnapGeometry(KWin::EffectWindow* window, const QRec
             kw->moveResize(targetFrame);
         }
 
-        // AnimationAppRule motion-cascade: a Timing rule for this
-        // (windowClass, eventPath) replaces the global animator profile's
-        // curve / duration for THIS animation only. No rule → resolver
-        // returns the base profile unchanged and no override is passed,
-        // preserving the historical fast-path. Retarget intentionally does
+        // Per-window animation motion-cascade: a Timing WindowRule for
+        // this (windowClass, eventPath) replaces the global animator
+        // profile's curve / duration for THIS animation only. No rule →
+        // resolver returns the base profile unchanged and no override is
+        // passed, preserving the historical fast-path. Retarget intentionally does
         // not re-apply the cascade — once an animation is in flight, it
         // stays on the curve that started it for visual continuity.
         //
@@ -460,14 +300,22 @@ void PlasmaZonesEffect::applySnapGeometry(KWin::EffectWindow* window, const QRec
         // the resolver call AND the deep `Profile::operator!=` (which
         // walks `curve->equals` virtual + 5 std::optional comparisons)
         // — the cost is paid on every animated snap otherwise.
-        const QString windowClass = window->windowClass();
+        //
+        // Build the full per-window query once and reuse for the shader
+        // resolver call below — matches the shape `shouldAnimateWindow`
+        // uses for its rule-override gate, so a rule that gates the
+        // animation also resolves its curve / timing / shader slots.
+        const PhosphorWindowRules::WindowQuery query = windowRuleQuery(window);
         const auto& baseProfile = m_windowAnimator->profile();
         const PhosphorAnimation::Profile* motionOverridePtr = nullptr;
         PhosphorAnimation::Profile motionProfile;
-        const auto& appRules = m_shaderManager.appRules();
-        if (!appRules.isEmpty()) {
-            motionProfile = PhosphorAnimationShaders::resolveAnimationMotionProfile(appRules, baseProfile, windowClass,
-                                                                                    profilePath, m_curveRegistry);
+        // Empty-rule-set short-circuit: a no-rules user skips both the
+        // resolver call AND the deep `Profile::operator!=`. Resolution routes
+        // through the unified RuleEvaluator via the effect-local shim.
+        if (!m_shaderManager.animationRuleSet().isEmpty()) {
+            motionProfile =
+                PlasmaZones::resolveAnimationMotionProfile(m_shaderManager.animationRuleEvaluator(), baseProfile, query,
+                                                           profilePath, getWindowId(window), m_curveRegistry);
             if (motionProfile != baseProfile)
                 motionOverridePtr = &motionProfile;
         }
@@ -504,19 +352,72 @@ void PlasmaZonesEffect::applySnapGeometry(KWin::EffectWindow* window, const QRec
         if (m_windowAnimator->hasAnimation(window)) {
             // Same cascade as tryBeginShaderForEvent: rule layer wins
             // for matching windows; engaged-empty rule effectId blocks
-            // the tree fallthrough. Reuse the `windowClass` local from
-            // above instead of re-calling `window->windowClass()`.
-            // Note: the snap shader path leaves durationMs at zero on
-            // purpose (see ShaderTransition docstring in types.h:126-136
-            // and paint_pipeline.cpp:155-170) — paintWindow rides the
-            // WindowAnimator's timeline. The Timing-rule duration
-            // override is honoured transitively via `motionProfile`
-            // above (driving the animator's duration), so the shader
-            // still terminates with the rule-overridden snap motion.
-            const auto shaderProfile = PhosphorAnimationShaders::resolveAnimationShaderProfile(
-                appRules, m_shaderManager.profileTree(), windowClass, profilePath);
+            // the tree fallthrough. Reuse the `query` local from the
+            // motion-cascade above instead of rebuilding the WindowQuery.
+            //
+            // Route through `resolveAnimationShaderAndDuration` (which
+            // uses `evaluator.resolveCached(windowId, query)`). The
+            // sister `resolveAnimationMotionProfile` call above already
+            // populated the per-window cache slot for this query, so
+            // this cached read is a hit. The earlier shape called a
+            // standalone uncached shader-profile resolver here, which
+            // paid an extra priority-order walk per snap on every
+            // non-empty rule set — same regression the shim was
+            // introduced to fix for `tryBeginShaderForEvent` (see the
+            // historical-pair note in shader_resolve.cpp).
+            //
+            // The duration field is intentionally discarded: the snap
+            // shader path leaves durationMs at zero on purpose —
+            // paintWindow rides the WindowAnimator's timeline. The
+            // Timing-rule duration override is honoured transitively
+            // via `motionProfile` above (driving the animator's
+            // duration), so the shader still terminates with the
+            // rule-overridden snap motion.
+            const auto resolved = PlasmaZones::resolveAnimationShaderAndDuration(
+                m_shaderManager.animationRuleEvaluator(), m_shaderManager.profileTree(), getWindowId(window), query,
+                profilePath, /*defaultDurationMs=*/0);
+            auto shaderProfile = resolved.profile;
+            if (!resolved.shaderSlotFromRule && shaderProfile.effectiveEffectId().isEmpty()) {
+                // No rule matched and no tree override resolved a shader for
+                // this move event — apply the built-in per-event default
+                // (window-morph for snap/move/resize) via the shared SSOT,
+                // which respects an explicit tree "None". Keeps the default
+                // consistent with what the settings UI shows
+                // (resolvedShaderProfile uses the same helper) without
+                // persisting it into config. Gated on `!shaderSlotFromRule`: a
+                // per-app window rule that set "None" (engaged-empty effectId)
+                // is a deliberate opt-out and must NOT be overridden here.
+                shaderProfile =
+                    PhosphorAnimationShaders::resolveShaderWithDefault(m_shaderManager.profileTree(), profilePath);
+            }
             if (!shaderProfile.effectiveEffectId().isEmpty()) {
                 beginShaderTransition(window, shaderProfile);
+                // If the installed shader is a geometry morph (declares
+                // iFromRect), hand it the old/new frames and request the
+                // old-content snapshot. The morph then owns the visual
+                // geometry animation — it interpolates the drawn rect from
+                // oldFrame to targetFrame and cross-fades the old snapshot
+                // into the live new content — so paintWindow gates off the
+                // C++ WindowAnimator translate+scale for this window. The
+                // WindowAnimator still runs (durationMs == 0) purely to drive
+                // the morph's progress timeline.
+                if (auto* mt = m_shaderManager.findTransition(window);
+                    mt && mt->cached && mt->cached->iFromRectLoc >= 0) {
+                    // Always retarget the morph to the new destination.
+                    mt->toGeometry = targetFrame;
+                    // On a RETARGET mid-morph, beginShaderTransition short-
+                    // circuits (same shader) and keeps the existing transition,
+                    // so its captured snapshot already holds the ORIGINAL old
+                    // content. Preserve it (and fromGeometry) and only redirect
+                    // the destination — re-capturing here would grab the
+                    // mid-morph/new content and collapse the cross-fade. Only a
+                    // fresh morph (no snapshot yet) anchors fromGeometry and
+                    // requests the capture.
+                    if (!mt->oldSnapshot) {
+                        mt->fromGeometry = QRectF(oldFrame);
+                        mt->needsSnapshot = true;
+                    }
+                }
             }
         }
 
@@ -565,29 +466,14 @@ void PlasmaZonesEffect::slotRestoreSizeDuringDrag(const QString& windowId, int w
 
     // Restore-size-only: keep current position, apply pre-snap width/height
     QRectF frame = window->frameGeometry();
-    QRect geometry(static_cast<int>(frame.x()), static_cast<int>(frame.y()), width, height);
+    // qRound, not truncation — fractional-scale sub-pixel residue (see above).
+    QRect geometry(qRound(frame.x()), qRound(frame.y()), width, height);
 
     qCDebug(lcEffect) << "Restoring size during drag:" << windowId << geometry;
     // Live drag-out unsnap: restoring pre-snap dimensions while the user is still dragging.
     // Logically a snap-out (the window is leaving zone-managed sizing).
-    applySnapGeometry(window, geometry, /*allowDuringDrag=*/true, /*skipAnimation=*/false,
-                      PhosphorAnimation::ProfilePaths::WindowSnapOut);
-}
-
-void PlasmaZonesEffect::slotSnapAssistReady(const QString& windowId, const QString& releaseScreenId,
-                                            const PhosphorProtocol::EmptyZoneList& emptyZones)
-{
-    // Discard if a new drag has already started — this signal was from a
-    // prior drop. The daemon defers the compute to after endDrag returns,
-    // so by the time this slot fires the user may already be dragging again.
-    if (m_dragTracker->isDragging()) {
-        qCDebug(lcEffect) << "Discarding snapAssistReady: new drag in progress";
-        return;
-    }
-    if (emptyZones.isEmpty() || releaseScreenId.isEmpty()) {
-        return;
-    }
-    m_snapAssistHandler->asyncShow(windowId, releaseScreenId, emptyZones);
+    applyWindowGeometry(window, geometry, /*allowDuringDrag=*/true, /*skipAnimation=*/false,
+                        PhosphorAnimation::ProfilePaths::WindowSnapOut);
 }
 
 void PlasmaZonesEffect::slotDragPolicyChanged(const QString& windowId, const PhosphorProtocol::DragPolicy& newPolicy)
@@ -640,13 +526,9 @@ void PlasmaZonesEffect::slotDragPolicyChanged(const QString& windowId, const Pho
         // effect-side flip block's "snap→autotile" branch, but driven by
         // daemon truth rather than an effect-cached screen set.
         if (!m_dragBypassedForAutotile) {
-            callCancelSnap();
+            m_snapHandler->callCancelSnap();
             m_dragBypassedForAutotile = true;
             m_dragBypassScreenId = newPolicy.screenId;
-            m_dragStartedSent = false;
-            m_pendingDragWindowId.clear();
-            m_pendingDragGeometry = QRectF();
-            m_snapDragStartScreenId.clear();
         } else {
             // Already in bypass but on a different autotile screen — just
             // update the captured screen id.
@@ -670,10 +552,6 @@ void PlasmaZonesEffect::slotDragPolicyChanged(const QString& windowId, const Pho
         }
         m_dragBypassedForAutotile = false;
         m_dragActivationDetected = false;
-        m_dragStartedSent = false;
-        m_pendingDragWindowId = windowId;
-        m_pendingDragGeometry = dragW ? QRectF(dragW->frameGeometry()) : QRectF();
-        m_snapDragStartScreenId = newPolicy.screenId;
         if (!m_keyboardGrabbed) {
             KWin::effects->grabKeyboard(this);
             m_keyboardGrabbed = true;

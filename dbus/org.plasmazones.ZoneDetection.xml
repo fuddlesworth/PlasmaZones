@@ -1,5 +1,9 @@
 <!DOCTYPE node PUBLIC "-//freedesktop//DTD D-BUS Object Introspection 1.0//EN"
     "http://www.freedesktop.org/standards/dbus/1.0/introspect.dtd">
+<!--
+SPDX-FileCopyrightText: 2026 fuddlesworth
+SPDX-License-Identifier: GPL-3.0-or-later
+-->
 <node>
     <!-- Zone Detection Interface -->
     <interface name="org.plasmazones.ZoneDetection">
@@ -146,7 +150,7 @@
             </arg>
             <arg name="geometry" type="(iiii)">
                 <annotation name="org.gtk.GDBus.DocString" value="Zone geometry struct: (x, y, width, height)."/>
-                <annotation name="org.qtproject.QtDBus.QtTypeName.Out0" value="PhosphorProtocol::ZoneGeometryRect"/>
+                <annotation name="org.qtproject.QtDBus.QtTypeName.Out1" value="PhosphorProtocol::ZoneGeometryRect"/>
             </arg>
         </signal>
     </interface>

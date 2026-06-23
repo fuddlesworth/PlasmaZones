@@ -1,0 +1,60 @@
+<!-- SPDX-FileCopyrightText: 2026 fuddlesworth -->
+<!-- SPDX-License-Identifier: LGPL-2.1-or-later -->
+<!--
+  org.freedesktop.Notifications, the Desktop Notifications Specification 1.3
+  server interface. We OWN this name on the session bus and answer it; this XML
+  drives qt6_add_dbus_adaptor to generate the adaptor that forwards to
+  PhosphorServiceNotifications::NotificationServer. All four methods reply
+  synchronously, so no delayed-reply machinery is needed (cf. the direct
+  ExportAllSlots agent in phosphor-service-bluetooth, which exists only because
+  its callbacks defer their reply).
+-->
+<node>
+  <interface name="org.freedesktop.Notifications">
+    <method name="Notify">
+      <arg type="s"     name="app_name"       direction="in"/>
+      <arg type="u"     name="replaces_id"    direction="in"/>
+      <arg type="s"     name="app_icon"       direction="in"/>
+      <arg type="s"     name="summary"        direction="in"/>
+      <arg type="s"     name="body"           direction="in"/>
+      <arg type="as"    name="actions"        direction="in"/>
+      <arg type="a{sv}" name="hints"          direction="in"/>
+      <arg type="i"     name="expire_timeout" direction="in"/>
+      <arg type="u"     name="id"             direction="out"/>
+      <!-- a{sv} has no built-in qdbusxml2cpp mapping; hints is the 7th in-arg
+           (0-based In6). Map it to QVariantMap so the generated adaptor slot
+           matches NotificationServer::Notify. -->
+      <annotation name="org.qtproject.QtDBus.QtTypeName.In6" value="QVariantMap"/>
+    </method>
+
+    <method name="CloseNotification">
+      <arg type="u" name="id" direction="in"/>
+    </method>
+
+    <method name="GetCapabilities">
+      <arg type="as" name="capabilities" direction="out"/>
+    </method>
+
+    <method name="GetServerInformation">
+      <arg type="s" name="name"         direction="out"/>
+      <arg type="s" name="vendor"       direction="out"/>
+      <arg type="s" name="version"      direction="out"/>
+      <arg type="s" name="spec_version" direction="out"/>
+    </method>
+
+    <signal name="NotificationClosed">
+      <arg type="u" name="id"/>
+      <arg type="u" name="reason"/>
+    </signal>
+
+    <signal name="ActionInvoked">
+      <arg type="u" name="id"/>
+      <arg type="s" name="action_key"/>
+    </signal>
+
+    <signal name="ActivationToken">
+      <arg type="u" name="id"/>
+      <arg type="s" name="activation_token"/>
+    </signal>
+  </interface>
+</node>

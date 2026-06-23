@@ -18,7 +18,7 @@
 #include <QScreen>
 #include <QTimer>
 
-namespace Phosphor::Screens {
+namespace PhosphorScreens {
 
 namespace {
 // Extra wall-clock budget on top of @p timeoutMs before the hard-cap timer
@@ -98,4 +98,4 @@ QString ScreenResolver::effectiveScreenAtCursor(const ResolverEndpoint& endpoint
     return effectiveScreenAt(QCursor::pos(), endpoint, timeoutMs);
 }
 
-} // namespace Phosphor::Screens
+} // namespace PhosphorScreens

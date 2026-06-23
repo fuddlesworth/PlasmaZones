@@ -1,31 +1,28 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-#version 450
-
 // Liquid Canvas -- Final composite pass
 // Pass 0: flow field (displacement map) -> iChannel0
 // Pass 1: texture with flow distortion   -> iChannel1
 // Pass 2: bloom + edge glow              -> iChannel2
 // This pass: zone masking, borders, iridescence, vitality, labels.
+//
+// The harness supplies #version, <common.glsl> (zone UBO + ZoneCtx + helpers),
+// the vTexCoord/vFragCoord ins, and the fragColor out. multipass.glsl and
+// audio.glsl are pack-specific, so they stay here. A whole-frame label
+// composite runs after the per-zone loop, so this is a pImage entry point.
 
-layout(location = 0) in vec2 vTexCoord;
-layout(location = 1) in vec2 vFragCoord;
-
-layout(location = 0) out vec4 fragColor;
-
-#include <common.glsl>
 #include <multipass.glsl>
 #include <audio.glsl>
 
 
 // ---- Parameters ----
 
-float getFillOpacity()  { return customParams[3].x >= 0.0 ? customParams[3].x : 0.92; }
-float getZoneTint()     { return customParams[3].y >= 0.0 ? customParams[3].y : 0.15; }
-float getIridescence()  { return customParams[3].z >= 0.0 ? customParams[3].z : 0.2; }
-float getChannelMix()   { return customParams[3].w >= 0.0 ? customParams[3].w : 0.5; }
-float getAudioReact()   { return customParams[0].w >= 0.0 ? customParams[0].w : 1.0; }
+float getFillOpacity()  { return p_fillOpacity >= 0.0 ? p_fillOpacity : 0.92; }
+float getZoneTint()     { return p_zoneTint >= 0.0 ? p_zoneTint : 0.15; }
+float getIridescence()  { return p_iridescence >= 0.0 ? p_iridescence : 0.2; }
+float getChannelMix()   { return p_channelMix >= 0.0 ? p_channelMix : 0.5; }
+float getAudioReact()   { return p_audioReactivity >= 0.0 ? p_audioReactivity : 1.0; }
 
 
 // Thin-film iridescence approximation
@@ -195,7 +192,7 @@ vec4 renderCanvasZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColo
             spark += exp(-aDist * 8.0) * (0.5 + 0.5 * sin(iTime * sparkSpeed));
         }
         spark = min(spark, 1.0);
-        vec3 sparkClr = colorWithFallback(customColors[2].rgb, vec3(0.4, 0.8, 0.73));
+        vec3 sparkClr = colorWithFallback(p_edgeColor.rgb, vec3(0.4, 0.8, 0.73));
         result.rgb += sparkClr * edgeProx * spark * treble * audioReact * 0.5;
     }
 
@@ -211,9 +208,9 @@ vec4 compositeCanvasLabels(vec4 color, vec2 fragCoord,
     vec2 px = 1.0 / max(iResolution, vec2(1.0));
     vec4 labels = texture(uZoneLabels, uv);
 
-    float labelGlowSpread = customParams[4].x >= 0.0 ? customParams[4].x : 3.0;
-    float labelBrightness = customParams[4].y >= 0.0 ? customParams[4].y : 2.0;
-    float labelAudioReact = customParams[4].z >= 0.0 ? customParams[4].z : 1.0;
+    float labelGlowSpread = p_labelGlowSpread >= 0.0 ? p_labelGlowSpread : 3.0;
+    float labelBrightness = p_labelBrightness >= 0.0 ? p_labelBrightness : 2.0;
+    float labelAudioReact = p_labelAudioReact >= 0.0 ? p_labelAudioReact : 1.0;
 
     // Gaussian halo — sum of exp(-r²*0.3) weights over 5×5 kernel ≈ 9.51
     float halo = 0.0;
@@ -228,12 +225,12 @@ vec4 compositeCanvasLabels(vec4 color, vec2 fragCoord,
     // Flow-tinted halo outline
     if (halo > 0.003) {
         float haloEdge = halo * (1.0 - labels.a);
-        vec3 glowClr = colorWithFallback(customColors[1].rgb, vec3(0.8, 0.4, 0.67));
+        vec3 glowClr = colorWithFallback(p_glowColor.rgb, vec3(0.8, 0.4, 0.67));
 
         // Iridescent label glow: color shifts with position
         float iridPhase = length(uv - 0.5) * 4.0 + iTime * 0.5;
         vec3 iridGlow = iridescent(iridPhase, 1.0);
-        float iridStr = customParams[3].z >= 0.0 ? customParams[3].z : 0.2;
+        float iridStr = p_iridescence >= 0.0 ? p_iridescence : 0.2;
         glowClr = mix(glowClr, iridGlow, iridStr * 0.4);
 
         float haloBright = haloEdge * (0.5 + (hasAudio ? bass * 0.5 * labelAudioReact : 0.0));
@@ -262,13 +259,11 @@ vec4 compositeCanvasLabels(vec4 color, vec2 fragCoord,
 }
 
 
-void main() {
-    vec2 fragCoord = vFragCoord;
+vec4 pImage(vec2 fragCoord) {
     vec4 color = vec4(0.0);
 
     if (zoneCount == 0) {
-        fragColor = vec4(0.0);
-        return;
+        return vec4(0.0);
     }
 
     bool  hasAudio = iAudioSpectrumSize > 0;
@@ -287,7 +282,7 @@ void main() {
         color = blendOver(color, zoneColor);
     }
 
-    if (customParams[4].w > 0.5)
+    if (p_showLabels > 0.5)
         color = compositeCanvasLabels(color, fragCoord, bass, treble, hasAudio);
-    fragColor = clampFragColor(color);
+    return color;
 }

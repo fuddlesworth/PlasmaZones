@@ -29,8 +29,9 @@ PlasmaZones: window tiling + zone management for KDE Plasma. Qt6, KF6, Kirigami,
 ## License
 - SPDX headers on ALL files: `// SPDX-FileCopyrightText: 2026 fuddlesworth`
 - License identifier depends on the tree:
-  - **App / daemon / editor / settings / KCM / tests** (`src/**`, `kcm/**`, `kwin/**`, `tests/**`): `GPL-3.0-or-later`
-  - **Reusable libraries** (`libs/phosphor-*/**`): `LGPL-2.1-or-later`
+  - **App / daemon / editor / settings / KCM / examples / top-level tests** (`src/**`, `kcm/**`, `kwin/**`, `examples/**`, top-level `tests/**`): `GPL-3.0-or-later`
+  - **Reusable libraries, including their own tests** (`libs/phosphor-*/**`, which subsumes `libs/phosphor-*/tests/**`): `LGPL-2.1-or-later`
+  - A library's own `tests/` follow the library (LGPL), NOT the top-level GPL `tests/**` rule: test code that links and ships inside an LGPL lib must not taint that lib's build tree with GPL. The GPL `tests/**` rule means only the top-level app test tree.
   - Rationale: the shell is GPL; libraries are LGPL so third-party plugins / tools can link them without inheriting GPL. Never "fix" a lib header to GPL-3 without understanding the split.
 - `#pragma once` for C++ headers
 
@@ -74,9 +75,20 @@ PlasmaZones: window tiling + zone management for KDE Plasma. Qt6, KF6, Kirigami,
 - Wayland only (custom layer-shell QPA plugin for overlays); XWayland windows handled within Wayland session
 
 ## i18n
-- C++: `PzI18n::tr()` — NEVER `KLocalizedString`/`i18n()`/`i18nc()` in C++
-- QML: `i18n()` / `i18nc()` (via `PzLocalizedContext`)
+- C++: `PhosphorI18n::tr()` — NEVER `KLocalizedString`/`i18n()`/`i18nc()` in C++
+- QML: `i18n()` / `i18nc()` (via `PhosphorLocalizedContext`)
 - Extract: `cmake --build build --target update-ts`
+
+## User-Facing Text (Plain Prose)
+User-facing strings MUST read like plain, human-written prose with no LLM tics. This applies to every surface a user reads: `description`/`name` fields in `data/**/*.json` (animation, shader, layout metadata), `data/whatsnew.json` highlights, `data/algorithms/*.luau` `description` fields, `CHANGELOG.md` entries, and every translatable string (`PhosphorI18n::tr()`, QML `i18n()`/`i18nc()`).
+
+- NEVER use an em-dash (`—`, or the `—` escape) to splice clauses or tack on an appositive. Write two sentences, or join with a plain word (and, with, where, so, because).
+- NEVER use a clause-splicing semicolon to join two independent clauses. Split into sentences or use "and". Semicolons inside backticked code, and semicolons separating genuine comma-bearing list items, are fine.
+- NEVER use a spaced hyphen (` - `) as a stand-in dash. Rewrite the sentence.
+- NEVER use a dramatic "Label: payload" colon for effect. The Keep-a-Changelog `**Term**: description` lead-in and real field labels are fine.
+- AVOID rule-of-three triads and "not just X, but Y" constructions used for flourish.
+- A literal typographic separator between two nouns is acceptable (e.g. the `%1 — %2` Layout/Zone display format) and so are settings-path breadcrumbs (e.g. `Settings → Snapping`).
+- These rules do NOT apply to code comments, log/`qCWarning` messages, or other non-user-facing text.
 
 ## Settings
 
@@ -159,12 +171,12 @@ src/editor/      — Layout editor
 src/settings/    — Standalone settings app
 src/dbus/        — D-Bus adaptors
 src/config/      — Configuration backends
-src/autotile/    — Tiling algorithms (built-in + scripted JS)
+src/autotile/    — Tiling algorithms (scripted Luau via phosphor-tiles)
 kcm/             — System Settings module
 kwin/            — KWin script integration
 tests/           — Unit tests (Qt Test)
 data/layouts/    — Default layout templates (JSON)
-data/algorithms/ — Bundled JS tiling algorithms
+data/algorithms/ — Bundled Luau tiling algorithms
 ```
 
 ## Testing

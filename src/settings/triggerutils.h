@@ -14,6 +14,12 @@ namespace PlasmaZones::TriggerUtils {
 /// Storage stores the modifier as a `DragModifier` enum value; QML reads
 /// it as a Qt::KeyboardModifier-style bitmask. The two are bridged by
 /// `ModifierUtils::dragModifierToBitmask`.
+///
+/// **Input MUST NOT contain the AlwaysActive sentinel** — the bridge is
+/// lossy on `DragModifier::AlwaysActive` (modifier=8 → bitmask=0), so a
+/// sentinel entry round-trips to a phantom "no-modifier, no-mouse-button"
+/// chip in the QML widget. Call `stripAlwaysActiveTrigger` first on any
+/// list that may carry the sentinel.
 QVariantList convertTriggersForQml(const QVariantList& triggers);
 
 /// Inverse of convertTriggersForQml — QML-authored triggers come in as
@@ -45,5 +51,23 @@ QVariantList stripAlwaysActiveTrigger(const QVariantList& triggers);
 /// which would make the always-active toggle quietly fail. Input must NOT
 /// contain the sentinel; call `stripAlwaysActiveTrigger` first if unsure.
 QVariantList mergeAlwaysActiveTrigger(const QVariantList& nonSentinelTriggers);
+
+/// Apply an "Always active" master-toggle change to a stored trigger list.
+/// Strips the sentinel from the current list, then either merges it back
+/// (toggle on), falls back to @p factoryDefault (toggle off with no
+/// non-sentinel triggers left), or returns the bare non-sentinel list
+/// (toggle off with surviving user triggers). Centralises the logic shared
+/// by SnappingBehaviorController::setAlwaysActivateOnDrag and
+/// TilingBehaviorController::setAlwaysReinsertIntoStack — both wrap the
+/// same sentinel-cap + fallback dance around the master-toggle bit.
+QVariantList applyAlwaysActiveToggle(const QVariantList& currentStored, bool enabled,
+                                     const QVariantList& factoryDefault);
+
+/// Normalise a QML-authored explicit trigger edit: strip the sentinel (it
+/// belongs to the master toggle), then re-merge it iff the master toggle
+/// is currently on. Used by setDragActivationTriggers /
+/// setAutotileDragInsertTriggers so a deselect-all in the widget does not
+/// silently un-flip the master.
+QVariantList normaliseExplicitEdit(const QVariantList& fromQml, bool masterToggleOn);
 
 } // namespace PlasmaZones::TriggerUtils

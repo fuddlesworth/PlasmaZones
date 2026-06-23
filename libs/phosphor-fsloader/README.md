@@ -17,32 +17,32 @@ ones with the same ID, and emit one bulk-update signal per scan.
 
 The library factors the work into:
 
-- **`WatchedDirectorySet`** — the base mechanism. Owns the
+- **`WatchedDirectorySet`** is the base mechanism. It owns the
   `QFileSystemWatcher`, debounces rescan triggers (50 ms), promotes
   watches to a parent directory when the target doesn't exist yet,
   guards against rescan-during-rescan races, and re-arms individual
   file watches after a scan.
-- **`IScanStrategy`** — pluggable policy: how to enumerate the
+- **`IScanStrategy`** is the pluggable policy for how to enumerate the
   registered directories, parse each entry, and commit results to the
-  consumer's registry. The base owns *when* to scan; the strategy owns
+  consumer's registry. The base owns *when* to scan, and the strategy owns
   *what scanning means*.
-- **`DirectoryLoader`** — flat `*.json` specialisation that pairs with
+- **`DirectoryLoader`** is the flat `*.json` specialisation that pairs with
   an `IDirectoryLoaderSink` (the schema-specific parse + commit
   strategy). Used by curve and profile loaders.
-- **`MetadataPackScanStrategy<Payload>` + `MetadataPackRegistryBase`** —
-  templated specialisation for "subdirectory-with-metadata-json" packs:
-  one pack per top-level subfolder, validated by a `metadata.json`,
-  payload type chosen by the registry. Used by
+- **`MetadataPackScanStrategy<Payload>` + `MetadataPackRegistryBase`** form the
+  templated specialisation for "subdirectory-with-metadata-json" packs.
+  There is one pack per top-level subfolder, validated by a `metadata.json`,
+  with the payload type chosen by the registry. Used by
   [`phosphor-shaders`](../phosphor-shaders/README.md)' `ShaderRegistry`
   and [`phosphor-animation`](../phosphor-animation/README.md)'s
   `AnimationShaderRegistry`.
-- **`validateJsonEnvelope`** — shared envelope validation: parses the
+- **`validateJsonEnvelope`** is the shared envelope validation. It parses the
   file, checks the `"name"` field is non-empty and matches the
-  filename, returns a `JsonEnvelope` carrying the rest of the JSON
+  filename, and returns a `JsonEnvelope` carrying the rest of the JSON
   object for the sink's schema-specific `fromJson`.
 
 `MetadataPackRegistryBase` is the QObject base every metadata-pack
-registry inherits from; it owns the `WatchedDirectorySet` plus the
+registry inherits from. It owns the `WatchedDirectorySet` plus the
 strategy and provides the search-path management surface
 (`addSearchPath`, `setUserPath`, `refresh`) that every consumer was
 hand-rolling identically.
@@ -55,9 +55,9 @@ hand-rolling identically.
 | `PhosphorFsLoader::IScanStrategy`                 | Pluggable enumerate / parse / commit policy |
 | `PhosphorFsLoader::DirectoryLoader`               | Flat `*.json` specialisation (sink-driven) |
 | `PhosphorFsLoader::IDirectoryLoaderSink`          | Per-schema strategy: `parseFile()` + `commitBatch()` |
-| `PhosphorFsLoader::ParsedEntry`                   | Parse-result value type with source-path metadata; `std::any` payload |
+| `PhosphorFsLoader::ParsedEntry`                   | Parse-result value type with source-path metadata and `std::any` payload |
 | `PhosphorFsLoader::MetadataPackScanStrategy<P>`   | Subdirectory-with-`metadata.json` strategy |
-| `PhosphorFsLoader::MetadataPackRegistryBase`      | QObject base that owns the strategy + watcher; provides the search-path surface |
+| `PhosphorFsLoader::MetadataPackRegistryBase`      | QObject base that owns the strategy + watcher and provides the search-path surface |
 | `PhosphorFsLoader::validateJsonEnvelope`          | Shared `"name"`-field envelope validator returning a `JsonEnvelope` |
 
 ## Typical use
@@ -71,18 +71,19 @@ A profile loader sink (flat `*.json` mode):
 using namespace PhosphorFsLoader;
 
 class CurveLoaderSink : public IDirectoryLoaderSink {
-    std::optional<ParsedEntry> parseFile(const QString& path) override {
+    std::optional<ParsedEntry> parseFile(const QString& filePath) override {
         // parse one curve file; nothing registry-side here.
     }
-    void commitBatch(const QList<ParsedEntry>& all,
-                     const QStringList& removed) override {
+    void commitBatch(const QStringList& removedKeys,
+                     const QList<ParsedEntry>& currentEntries) override {
         // single mutation point; emit one reloadAll() signal here.
     }
 };
 
-DirectoryLoader loader({systemDir, userDir}, DirectoryWatchPolicy::On);
-loader.setSink(new CurveLoaderSink{...});
-loader.rescan();
+CurveLoaderSink sink{...};
+DirectoryLoader loader(sink);  // sink is borrowed for the loader's lifetime
+loader.loadFromDirectories({systemDir, userDir}, LiveReload::On);
+loader.requestRescan();
 ```
 
 A metadata-pack registry (used by shader / animation-shader registries):
@@ -91,7 +92,7 @@ A metadata-pack registry (used by shader / animation-shader registries):
 class MyPackRegistry : public PhosphorFsLoader::MetadataPackRegistryBase {
 public:
     MyPackRegistry()
-        : MetadataPackRegistryBase(makeStrategy()) {}
+        : MetadataPackRegistryBase(myLogCategory(), makeStrategy()) {}
     // … expose payload-typed lookups
 };
 // Composition root then wires:
@@ -102,16 +103,16 @@ registry.refresh();
 
 ## Design notes
 
-- **Watcher is opt-in.** `DirectoryWatchPolicy::On` installs a
+- **Watcher is opt-in.** `LiveReload::On` installs a
   `QFileSystemWatcher` on every scanned directory (or its parent, if
   the target doesn't exist yet, so fresh installs that create the
-  user-data dir later still pick up edits without a restart). `Off`
+  user-data dir later still pick up edits without a restart). `LiveReload::Off`
   disables it for tests.
 - **`commitBatch` is the one mutation point.** The sink only touches
   its target registry inside `commitBatch`, so bulk signals (e.g. a
   QML `reloadAll`) coalesce to one emit per scan.
 - **User wins on collision.** When a system file and a user file share
-  an ID, the user file commits. Search-path order is consumer-chosen;
+  an ID, the user file commits. Search-path order is consumer-chosen, and
   the loader honours it.
 - **Type-erased payloads.** `ParsedEntry::payload` is `std::any` so the
   loader stays schema-agnostic. The sink produces it, the sink

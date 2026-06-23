@@ -1,5 +1,5 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
-// SPDX-License-Identifier: LGPL-2.1-or-later
+// SPDX-License-Identifier: GPL-3.0-or-later
 
 import QtQuick
 import QtQuick.Controls
@@ -44,8 +44,7 @@ Item {
 
     required property var paramData
     required property var currentValues
-    property var lockedParams: ({
-    })
+    property var lockedParams: ({})
     property bool enableLocking: true
     property bool enableImage: true
     /// Compact mode: slider/spinbox/swatch use fixed widths matching the
@@ -127,7 +126,6 @@ Item {
             onMoved: {
                 if (paramDelegate.paramData)
                     paramDelegate.valueChanged(paramDelegate.paramData.id, value);
-
             }
 
             Binding on value {
@@ -147,7 +145,6 @@ Item {
                 when: !floatSlider.pressed && !floatSlider.activeFocus
                 restoreMode: Binding.RestoreNone
             }
-
         }
 
         Label {
@@ -165,16 +162,18 @@ Item {
             visible: paramDelegate.paramType === "int"
             Accessible.name: paramDelegate.paramData ? (paramDelegate.paramData.name || paramDelegate.paramData.id || "") : ""
             // SpinBox.from/to are integers — `_numberOr` validates as a
-            // finite number first, then we round.
+            // finite number first, then we round. The schema's optional
+            // `step` is honoured the same way the float slider honours it
+            // (minimum 1 — a fractional step is meaningless for an int).
             from: paramDelegate.paramData ? Math.round(paramDelegate._numberOr(paramDelegate.paramData.min, 0)) : 0
             to: paramDelegate.paramData ? Math.round(paramDelegate._numberOr(paramDelegate.paramData.max, 100)) : 100
+            stepSize: paramDelegate.paramData ? Math.max(1, Math.round(paramDelegate._numberOr(paramDelegate.paramData.step, 1))) : 1
             ToolTip.text: paramDelegate.paramData ? (paramDelegate.paramData.description || "") : ""
             ToolTip.visible: hovered && paramDelegate.paramData && paramDelegate.paramData.description !== undefined && paramDelegate.paramData.description !== ""
             ToolTip.delay: Kirigami.Units.toolTipDelay
             onValueModified: {
                 if (paramDelegate.paramData)
                     paramDelegate.valueChanged(paramDelegate.paramData.id, value);
-
             }
 
             Binding on value {
@@ -190,7 +189,6 @@ Item {
                 when: !intSpinBox.activeFocus
                 restoreMode: Binding.RestoreNone
             }
-
         }
 
         Item {
@@ -208,7 +206,6 @@ Item {
             onToggled: {
                 if (paramDelegate.paramData)
                     paramDelegate.valueChanged(paramDelegate.paramData.id, checked);
-
             }
 
             Binding on checked {
@@ -222,7 +219,6 @@ Item {
                 when: !boolCheckBox.activeFocus
                 restoreMode: Binding.RestoreNone
             }
-
         }
 
         Item {
@@ -271,7 +267,7 @@ Item {
             Accessible.name: i18nc("@action:button", "Choose %1 color", paramDelegate.paramData ? (paramDelegate.paramData.name || paramDelegate.paramData.id) : "")
             onClicked: {
                 if (!paramDelegate.paramData)
-                    return ;
+                    return;
 
                 paramDelegate.requestColorPicker(paramDelegate.paramData.id, paramDelegate.paramData.name || paramDelegate.paramData.id, colorSwatch.currentColor);
             }
@@ -279,7 +275,10 @@ Item {
             contentItem: Rectangle {
                 radius: Kirigami.Units.smallSpacing
                 color: colorSwatch.currentColor
-                border.width: colorSwatch.activeFocus ? Math.max(2, Math.round(Kirigami.Units.devicePixelRatio * 2)) : Math.max(1, Math.round(Kirigami.Units.devicePixelRatio))
+                // 1 device-independent px (2 when focused) — Qt scales DIPs
+                // to physical pixels itself; multiplying by devicePixelRatio
+                // here would double-scale into a thicker, not crisper, line.
+                border.width: colorSwatch.activeFocus ? 2 : 1
                 border.color: colorSwatch.activeFocus ? Kirigami.Theme.focusColor : Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.3)
 
                 MouseArea {
@@ -287,13 +286,10 @@ Item {
                     cursorShape: Qt.PointingHandCursor
                     acceptedButtons: Qt.NoButton // pass clicks to AbstractButton
                 }
-
             }
 
             // suppress default Button frame
-            background: Item {
-            }
-
+            background: Item {}
         }
 
         Label {
@@ -334,7 +330,6 @@ Item {
             onClicked: {
                 if (paramDelegate.paramData)
                     paramDelegate.requestImagePicker(paramDelegate.paramData.id);
-
             }
         }
 
@@ -346,7 +341,6 @@ Item {
             onClicked: {
                 if (paramDelegate.paramData)
                     paramDelegate.valueChanged(paramDelegate.paramData.id, "");
-
             }
         }
 
@@ -372,7 +366,6 @@ Item {
             onValueModified: {
                 if (paramDelegate.paramData)
                     paramDelegate.valueChanged(paramDelegate.paramData.id + "_svgSize", value);
-
             }
 
             // Mirror the float/int/bool reactivity pattern: Binding-on-value
@@ -389,7 +382,6 @@ Item {
                 when: !svgSizeSpinBox.activeFocus
                 restoreMode: Binding.RestoreNone
             }
-
         }
 
         Item {
@@ -408,16 +400,13 @@ Item {
             opacity: isLocked ? 1 : 0.4
             display: ToolButton.IconOnly
             Accessible.name: isLocked ? i18nc("@action:button", "Unlock %1", paramDelegate.paramData ? (paramDelegate.paramData.name || paramDelegate.paramData.id || "") : "") : i18nc("@action:button", "Lock %1", paramDelegate.paramData ? (paramDelegate.paramData.name || paramDelegate.paramData.id || "") : "")
-            ToolTip.text: isLocked ? i18nc("@info:tooltip", "Locked — preserved during randomize") : i18nc("@info:tooltip", "Unlocked — will be randomized")
+            ToolTip.text: isLocked ? i18nc("@info:tooltip", "Won't be randomized") : i18nc("@info:tooltip", "Will be randomized")
             ToolTip.visible: hovered
             ToolTip.delay: Kirigami.Units.toolTipDelay
             onClicked: {
                 if (paramDelegate.paramData)
                     paramDelegate.lockToggled(paramDelegate.paramData.id, !isLocked);
-
             }
         }
-
     }
-
 }

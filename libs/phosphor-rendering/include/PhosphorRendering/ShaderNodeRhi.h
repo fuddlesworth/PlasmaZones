@@ -7,6 +7,7 @@
 
 #include <PhosphorShaders/BaseUniforms.h>
 #include <PhosphorShaders/IUniformExtension.h>
+#include <PhosphorShaders/ShaderEntryPoint.h>
 
 #include <QColor>
 #include <QImage>
@@ -48,8 +49,8 @@ constexpr int kMaxCustomColors = 16;
 // runtime. Binding 1 is the one "free-in-the-gap" slot; 13..31 are free as
 // well.
 //
-// PlasmaZones uses binding 1 for its zone-labels texture by convention.
-// Other consumers that interoperate with PlasmaZones should pick from
+// Phosphor uses binding 1 for its zone-labels texture by convention.
+// Other consumers that interoperate with Phosphor should pick from
 // 13..kMaxConsumerBinding to avoid a per-instance overwrite.
 constexpr int kFirstFreeConsumerBinding = 1; ///< First slot usable via setExtraBinding()
 /// Highest portable SRB binding. 31 matches Qt RHI's minimum guarantee
@@ -75,7 +76,7 @@ constexpr bool isConsumerBinding(int binding) noexcept
 /**
  * @brief QSGRenderNode for fullscreen-quad shader rendering via Qt RHI (Vulkan / OpenGL)
  *
- * Generalized render node extracted from PlasmaZones' ZoneShaderNodeRhi.
+ * Generalized render node extracted from Phosphor's ZoneShaderNodeRhi.
  * Manages a Shadertoy-compatible UBO (BaseUniforms), multipass buffer system,
  * texture bindings (audio, user, wallpaper, depth), and shader baking.
  *
@@ -242,6 +243,31 @@ public:
     // ── Include Paths ──────────────────────────────────────────────────
     void setShaderIncludePaths(const QStringList& paths);
 
+    // ── Parameter preamble (T1.1: generated `#define p_<id> ...`) ─────
+    /// Set the generated named-parameter preamble that is spliced after the
+    /// fragment shader's `#version` line at load time (via
+    /// `PhosphorShaders::spliceAfterVersion`), so authors read a parameter by
+    /// name instead of hand-decoding a `customParams[N].xyzw` lane. The empty
+    /// default is a no-op splice, so non-adopting shaders bake byte-identically
+    /// to before. The preamble is folded into the bake-cache key, so two
+    /// effects sharing a `.frag` but differing in generated defines never
+    /// collide, and a metadata param edit (which changes the preamble without
+    /// touching the `.frag` mtime) still invalidates the cache.
+    void setParamPreamble(const QString& preamble);
+
+    // ── Entry-point scaffold (T1.4: harness-generated `main()`) ────────
+    /// Install the entry-point scaffold for the fragment stage. When set and
+    /// the loaded fragment source does NOT define `main()`, `loadFragmentShader`
+    /// assembles `prologue + source` and appends the generated `main()` of the
+    /// first @p candidates entry function the source defines (via
+    /// `PhosphorShaders::composeEntryPoint`), BEFORE include expansion — so the
+    /// prologue's `#include` is resolved. A source that defines its own `main()`
+    /// is left untouched (every bundled pack today). The scaffold is folded into
+    /// the bake-cache key, and MUST match what the warm-bake applies for the
+    /// same shader. Empty prologue + empty candidates (the default, e.g. the
+    /// animation path) disables assembly entirely — a strict no-op.
+    void setEntryScaffold(const QString& prologue, const QList<PhosphorShaders::EntryCandidate>& candidates);
+
     /// Normalize wrap mode string to "clamp", "repeat", or "mirror" (static
     /// helper, safe to call from any thread — operates on its arguments only).
     /// Unknown / empty inputs fall back to "clamp" — that fallback is
@@ -326,6 +352,18 @@ private:
 
     // ── Shader Include Paths ───────────────────────────────────────────
     QStringList m_shaderIncludePaths;
+
+    // ── Parameter preamble (generated `#define p_<id> ...`) ───────────
+    /// Spliced after `#version` into the fragment source at load time and
+    /// fingerprinted into the bake-cache key. Empty = no-op.
+    QString m_paramPreamble;
+
+    // ── Entry-point scaffold (T1.4) ────────────────────────────────────
+    /// Prologue prepended (and candidate `main()` appended) to an entry-only
+    /// fragment source before expansion; fingerprinted into the bake-cache key.
+    /// Empty prologue + empty candidates = assembly disabled.
+    QString m_entryPrologue;
+    QList<PhosphorShaders::EntryCandidate> m_entryCandidates;
 
     // ── RHI Core Resources ─────────────────────────────────────────────
     std::unique_ptr<QRhiBuffer> m_vbo;
@@ -536,10 +574,25 @@ struct WarmShaderBakeResult
  * @param vertexPath    Path to the vertex shader file
  * @param fragmentPath  Path to the fragment shader file
  * @param includePaths  Directories to search for #include directives
+ * @param paramPreamble Generated `#define p_<id> ...` block spliced after the
+ *                      fragment shader's `#version` (T1.1). MUST match what the
+ *                      live `ShaderNodeRhi::loadFragmentShader` splices for the
+ *                      same effect, since both compute the same bake-cache key
+ *                      (which is fingerprinted on the preamble) — a mismatch
+ *                      would let this warm entry serve the wrong SPIR-V to the
+ *                      live load. Empty (the default) is a no-op splice.
+ * @param entryPrologue   T1.4 entry-point prologue (`#version`/include/in-out)
+ *                        prepended to an entry-only fragment source before
+ *                        expansion. Empty (default) disables assembly.
+ * @param entryCandidates T1.4 entry functions + their generated `main()`,
+ *                        applied when the fragment defines no `main()`. MUST
+ *                        match what `ShaderNodeRhi::loadFragmentShader` uses for
+ *                        the same shader so warm + live agree on key and source.
  * @return success and error message for UI reporting
  */
-PHOSPHORRENDERING_EXPORT WarmShaderBakeResult warmShaderBakeCacheForPaths(const QString& vertexPath,
-                                                                          const QString& fragmentPath,
-                                                                          const QStringList& includePaths = {});
+PHOSPHORRENDERING_EXPORT WarmShaderBakeResult warmShaderBakeCacheForPaths(
+    const QString& vertexPath, const QString& fragmentPath, const QStringList& includePaths = {},
+    const QString& paramPreamble = {}, const QString& entryPrologue = {},
+    const QList<PhosphorShaders::EntryCandidate>& entryCandidates = {});
 
 } // namespace PhosphorRendering

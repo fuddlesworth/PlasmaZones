@@ -71,6 +71,12 @@ QString SnapAssistThumbnailProvider::urlFor(const QString& compositorHandle) con
     return cached ? cached->url : QString();
 }
 
+void SnapAssistThumbnailProvider::clear()
+{
+    QMutexLocker lock(&m_mutex);
+    m_cache.clear();
+}
+
 QString SnapAssistThumbnailProvider::makeUrl(const QString& handle, quint32 generation)
 {
     return QStringLiteral("image://%1/%2/%3").arg(QString::fromLatin1(ProviderId)).arg(handle).arg(generation);

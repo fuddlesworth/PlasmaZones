@@ -12,7 +12,7 @@
 #
 # Depends on Qt6 Core+Gui (Gui for QImage in the wallpaper cache) and
 # PhosphorFsLoader for WatchedDirectorySet. No QML facade today —
-# downstream PlasmaZones code exposes ShaderRegistry to QML via
+# downstream Phosphor code exposes ShaderRegistry to QML via
 # context properties, so this lib stays C++-only. A `Phosphor.Shaders`
 # QML module can be added (alongside `QML_ELEMENT` annotations on the
 # C++ types) when an out-of-tree consumer needs `import Phosphor.Shaders`
@@ -37,13 +37,24 @@ include(GenerateExportHeader)
 
 find_package(Qt6 6.10 REQUIRED COMPONENTS Core Gui)
 
-# PhosphorFsLoader — shared filesystem-loader scaffolding (used by
-# ShaderRegistry's WatchedDirectorySet + ShaderScanStrategy).
+# PhosphorFsLoader — shared filesystem-loader scaffolding. The on-disk scan now
+# runs inside PhosphorRegistry's MetadataPackLoader<ShaderPack> (which wraps
+# fsloader's MetadataPackScanStrategy internally), but the direct PUBLIC link
+# stays because ShaderRegistry's public addSearchPath[s] API still exposes the
+# PhosphorFsLoader::LiveReload / RegistrationOrder enums in its signatures.
 # find_package is a no-op when building in-tree (parent CMakeLists adds
 # the target first); the explicit lookup lets the lib stand alone
 # against an installed PhosphorFsLoader.
 if(NOT TARGET PhosphorFsLoader::PhosphorFsLoader)
     find_package(PhosphorFsLoader 0.1.0 REQUIRED)
+endif()
+
+# PhosphorRegistry — generic id-keyed storage + notify (Registry<T>) and
+# the content-pack loader (MetadataPackLoader<T>) that ShaderRegistry now
+# composes for shader-pack storage + scan. Publicly exposed via
+# ShaderRegistry.h (ShaderPack : IFactoryBase + the Registry/loader members).
+if(NOT TARGET PhosphorRegistry::PhosphorRegistry)
+    find_package(PhosphorRegistry 0.1.0 REQUIRED)
 endif()
 
 if(NOT DEFINED KDE_INSTALL_INCLUDEDIR)
@@ -61,7 +72,9 @@ set(phosphorshaders_public_HDRS
     include/PhosphorShaders/CustomParamsKey.h
     include/PhosphorShaders/IUniformExtension.h
     include/PhosphorShaders/IWallpaperProvider.h
+    include/PhosphorShaders/ShaderEntryPoint.h
     include/PhosphorShaders/ShaderIncludeResolver.h
+    include/PhosphorShaders/ShaderParamPreamble.h
     include/PhosphorShaders/ShaderRegistry.h
 )
 
@@ -69,12 +82,16 @@ set(phosphorshaders_public_HDRS
 set(phosphorshaders_camelcase_HDRS
     include/PhosphorShaders/IUniformExtension
     include/PhosphorShaders/IWallpaperProvider
+    include/PhosphorShaders/ShaderEntryPoint
     include/PhosphorShaders/ShaderIncludeResolver
+    include/PhosphorShaders/ShaderParamPreamble
     include/PhosphorShaders/ShaderRegistry
 )
 
 set(phosphorshaders_SRCS
+    src/shaderentrypoint.cpp
     src/shaderincluderesolver.cpp
+    src/shaderparampreamble.cpp
     src/shaderregistry.cpp
     src/wallpaperprovider.cpp
 )
@@ -120,6 +137,13 @@ target_link_libraries(PhosphorShaders
     PUBLIC
         Qt6::Core
         Qt6::Gui
+        # PhosphorRegistry is publicly exposed via ShaderRegistry's
+        # ShaderPack : IFactoryBase + the Registry<ShaderPack> /
+        # MetadataPackLoader<ShaderPack> members. It PUBLIC-links
+        # PhosphorFsLoader, so the LiveReload/RegistrationOrder enums in
+        # ShaderRegistry's search-path API arrive transitively; the
+        # explicit fsloader link below is kept for clarity.
+        PhosphorRegistry::PhosphorRegistry
         # PhosphorFsLoader is publicly exposed via ShaderRegistry's
         # `LiveReload` parameter — consumers including
         # `<PhosphorShaders/ShaderRegistry.h>` need its headers on

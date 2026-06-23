@@ -57,59 +57,69 @@ void WindowTrackingService::populateResnapBufferForAllScreens(const QSet<QString
     const QHash<QString, QString>& snapScreens = m_snapState->screenAssignments();
     const QHash<QString, int>& snapDesktops = m_snapState->desktopAssignments();
 
-    for (auto it = snapZones.constBegin(); it != snapZones.constEnd(); ++it) {
-        const QString& windowId = it.key();
-        const QStringList& zoneIds = it.value();
+    // Per-window candidate processing, shared by the live and durable passes below.
+    const auto addCandidate = [&](const QString& windowId, const QStringList& zoneIds, const QString& screenId,
+                                  int virtualDesktop) {
         if (zoneIds.isEmpty() || isWindowFloating(windowId))
-            continue;
-
-        const QString screenId = snapScreens.value(windowId);
+            return;
         if (screenId.isEmpty())
-            continue;
-
+            return;
         // Skip windows on excluded screens (e.g. autotile screens)
         if (excludeScreens.contains(screenId))
-            continue;
-
+            return;
         // When include-filter is set, only process windows on the specified screens
         if (!includeScreens.isEmpty() && !includeScreens.contains(screenId))
-            continue;
-
+            return;
         // Desktop filter: a per-desktop layout change should resnap only the
         // windows on that desktop. virtualDesktop==0 means sticky / unknown
         // (visible on every desktop) so include those regardless of the filter.
-        if (desktopFilter > 0) {
-            const int windowDesktop = snapDesktops.value(windowId, 0);
-            if (windowDesktop != 0 && windowDesktop != desktopFilter)
-                continue;
-        }
+        // Under Plasma 6.7 per-output virtual desktops (#648) the "current desktop"
+        // is per-screen, so when filtering (desktopFilter > 0) compare each window
+        // against ITS screen's current desktop rather than the single global value
+        // the caller passed (falling back to that value when no VDM is wired).
+        const int screenDesktop =
+            m_virtualDesktopManager ? m_virtualDesktopManager->currentDesktopForScreen(screenId) : desktopFilter;
+        if (desktopFilter > 0 && virtualDesktop != 0 && virtualDesktop != screenDesktop)
+            return;
 
         if (addedIds.contains(windowId))
-            continue;
+            return;
         addedIds.insert(windowId);
 
         // Look up the zone position from the global map
         const QString& primaryZoneId = zoneIds.first();
         int position = globalZoneIdToPosition.value(primaryZoneId, 0);
         if (position <= 0)
-            continue;
+            return;
 
         ResnapEntry entry;
         entry.windowId = windowId;
         entry.zonePosition = position;
         entry.screenId = screenId;
-        entry.virtualDesktop = snapDesktops.value(windowId, 0);
-
-        // Multi-zone: collect all positions
-        if (zoneIds.size() > 1) {
-            for (const QString& zid : zoneIds) {
-                int p = globalZoneIdToPosition.value(zid, 0);
-                if (p > 0)
-                    entry.allZonePositions.append(p);
-            }
-        }
-
+        entry.virtualDesktop = virtualDesktop;
         newBuffer.append(entry);
+    };
+
+    // 1. Live snap assignments — this session's snaps (retained while a window is
+    // autotiled, which is why the non-restart autotile→snap swap finds them here).
+    for (auto it = snapZones.constBegin(); it != snapZones.constEnd(); ++it) {
+        addCandidate(it.key(), it.value(), snapScreens.value(it.key()), snapDesktops.value(it.key(), 0));
+    }
+
+    // 2. Restart-robustness: a window snapped in a PRIOR session and then autotiled
+    // has its snap zones only in the durable WindowPlacement record — the live
+    // m_snapState map above is cold after a daemon restart. Without this pass an
+    // autotile→snapping swap right after a restart resnaps nothing (empty buffer →
+    // no applyGeometriesBatch → the effect never marks the windows snapped, so the
+    // per-mode snap border / title-bar appearance is never applied). Mirrors the
+    // live-or-durable fallback in recordedSnapZones().
+    for (const PhosphorEngine::WindowPlacement& rec : m_placementStore.records()) {
+        if (addedIds.contains(rec.windowId))
+            continue;
+        const PhosphorEngine::EngineSlot snapSlot = rec.slotFor(PhosphorEngine::WindowPlacement::snapEngineId());
+        if (snapSlot.state != PhosphorEngine::WindowPlacement::stateSnapped())
+            continue;
+        addCandidate(rec.windowId, snapSlot.zoneIds, rec.screenId, rec.virtualDesktop);
     }
 
     if (!newBuffer.isEmpty()) {
@@ -142,14 +152,31 @@ QStringList WindowTrackingService::buildZoneOrderedWindowList(const QString& scr
     // depending on the code path. Use screensMatch() for format-agnostic comparison.
     const QHash<QString, QString>& snapScreens = m_snapState->screenAssignments();
     const QHash<QString, QStringList>& snapZones = m_snapState->zoneAssignments();
+    const QHash<QString, int>& snapDesktops = m_snapState->desktopAssignments();
+
+    // This list SEEDS the autotile state for (screenId, CURRENT virtual desktop).
+    // Snap assignments are screen-keyed but desktop-agnostic, so the same screen
+    // can hold windows snapped on a DIFFERENT desktop (e.g. screen S snaps on VD1
+    // and autotiles on VD2 via per-desktop rules). Those off-desktop windows must
+    // NOT be pulled into this desktop's autotile state — doing so eagerly inserts
+    // and tiles a window that lives on another desktop, overwriting its snap
+    // geometry there (switching to the autotile desktop would corrupt the snap
+    // desktop's window positions). Scope to the current desktop; desktop==0
+    // (sticky / unknown) stays desktop-agnostic and is kept. Mirrors the
+    // desktopFilter guard in populateResnapBufferForAllScreens (addCandidate).
+    const int currentDesktop = m_virtualDesktopManager ? m_virtualDesktopManager->currentDesktopForScreen(screenId) : 0;
 
     int insertionIdx = 0;
     QVector<std::tuple<int, int, QString>> windowsByZone; // (zoneNum, insertionIdx, windowId)
     for (auto it = snapScreens.constBegin(); it != snapScreens.constEnd(); ++it) {
-        if (!Phosphor::Screens::ScreenIdentity::screensMatch(it.value(), screenId)) {
+        if (!PhosphorScreens::ScreenIdentity::screensMatch(it.value(), screenId)) {
             continue;
         }
         const QString& windowId = it.key();
+        const int windowDesktop = snapDesktops.value(windowId, 0);
+        if (currentDesktop > 0 && windowDesktop != 0 && windowDesktop != currentDesktop) {
+            continue;
+        }
         // Skip floating windows — they should not participate in zone-ordered
         // transitions (the user's manual-mode float choice should be preserved).
         if (isWindowFloating(windowId)) {
@@ -224,61 +251,59 @@ QHash<QString, QRect> WindowTrackingService::updatedWindowGeometries() const
 QHash<QString, WindowTrackingService::PendingRestoreTarget> WindowTrackingService::pendingRestoreGeometries() const
 {
     QHash<QString, PendingRestoreTarget> result;
-    int currentDesktop = m_virtualDesktopManager ? m_virtualDesktopManager->currentDesktop() : 0;
-    QString currentActivity = m_layoutManager ? m_layoutManager->currentActivity() : QString();
 
-    for (auto it = m_pendingRestoreQueues.constBegin(); it != m_pendingRestoreQueues.constEnd(); ++it) {
-        if (it->isEmpty()) {
+    // Source the effect's instant-restore cache from the unified placement store:
+    // one snapped WindowPlacement per appId-keyed window, resolved to its zone
+    // geometry. The async resolveWindowRestore re-validates and corrects, so this
+    // is a best-effort anti-flash fast path (an invalid/stale zone resolves to an
+    // empty rect and is skipped). When an appId has several snapped records (multi
+    // instance), pick the lowest-sequence record (least-recently-recorded; sequence
+    // is re-stamped on every record()) deterministically so a repeated lookup is
+    // stable and matches the FIFO consumption order, rather than depending on
+    // unordered hash iteration.
+    QHash<QString, quint64> chosenSequence;
+    for (const PhosphorEngine::WindowPlacement& p : m_placementStore.records()) {
+        const PhosphorEngine::EngineSlot snapSlot = p.slotFor(PhosphorEngine::WindowPlacement::snapEngineId());
+        if (snapSlot.state != PhosphorEngine::WindowPlacement::stateSnapped()) {
+            continue;
+        }
+        const QStringList zoneIds = snapSlot.zoneIds;
+        if (zoneIds.isEmpty() || p.appId.isEmpty()) {
             continue;
         }
 
-        // Only the first entry per appId (FIFO consumption order)
-        const PendingRestore& entry = it->first();
-        if (entry.zoneIds.isEmpty()) {
-            continue;
-        }
+        const QString screenId = resolveEffectiveScreenId(p.screenId);
+        // Per-output virtual desktops (#648): validate the record against ITS
+        // screen's current desktop, not the global current.
+        const int currentDesktop =
+            m_virtualDesktopManager ? m_virtualDesktopManager->currentDesktopForScreen(screenId) : 0;
 
-        QString screenId = resolveEffectiveScreenId(entry.screenId);
-
-        // Skip entries whose saved screen is currently in autotile mode. The
-        // effect cache is a snap-mode fast path — autotile owns its screens
-        // and will place the window itself when it opens. Populating the
-        // cache for autotile-owned screens would let the effect teleport the
-        // window to a stale snap rect before autotile's tile request lands.
+        // Skip screens currently in autotile mode — autotile owns placement there
+        // and would otherwise fight a stale snap teleport. Both context
+        // dimensions come from the RECORD (mirrors the cross-engine claim
+        // gates, which key desktop AND activity off the record so the
+        // engines reach identical verdicts).
         if (m_layoutManager
-            && m_layoutManager->modeForScreen(screenId, entry.virtualDesktop, currentActivity)
+            && m_layoutManager->modeForScreen(screenId, p.virtualDesktop, p.activity)
                 != PhosphorZones::AssignmentEntry::Mode::Snapping) {
             continue;
         }
 
-        // Validate layout context — same checks as calculateRestoreFromSession.
-        // Without this, the cache could contain geometry for a zone that no longer
-        // exists in the current layout, causing a wrong-position teleport that the
-        // async resolveWindowRestore then rejects (orphaned window at zone position
-        // with no zone assignment).
-        if (!entry.layoutId.isEmpty() && m_layoutManager) {
-            PhosphorZones::Layout* currentLayout =
-                m_layoutManager->layoutForScreen(screenId, entry.virtualDesktop, currentActivity);
-            if (!currentLayout) {
-                currentLayout = m_layoutManager->activeLayout();
-            }
-            if (!currentLayout) {
-                continue;
-            }
-            QUuid savedUuid = QUuid::fromString(entry.layoutId);
-            if (!savedUuid.isNull() && currentLayout->id() != savedUuid) {
-                continue;
-            }
-        }
-
-        // Validate desktop context
-        if (entry.virtualDesktop > 0 && currentDesktop > 0 && entry.virtualDesktop != currentDesktop) {
+        // Validate desktop context.
+        if (p.virtualDesktop > 0 && currentDesktop > 0 && p.virtualDesktop != currentDesktop) {
             continue;
         }
 
-        QRect geo = resolveZoneGeometry(entry.zoneIds, screenId);
+        // Keep only the lowest-sequence (least-recently-recorded) record per appId.
+        const auto seqIt = chosenSequence.constFind(p.appId);
+        if (seqIt != chosenSequence.constEnd() && seqIt.value() <= p.sequence) {
+            continue;
+        }
+
+        const QRect geo = resolveZoneGeometry(zoneIds, screenId);
         if (geo.isValid()) {
-            result.insert(it.key(), PendingRestoreTarget{geo, screenId});
+            result.insert(p.appId, PendingRestoreTarget{geo, screenId});
+            chosenSequence.insert(p.appId, p.sequence);
         }
     }
 

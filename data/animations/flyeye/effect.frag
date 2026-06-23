@@ -17,25 +17,14 @@
 // `texture(uTexture0, uv)` samples directly. `texture2D` (GLSL ES) is
 // rewritten to `texture` (GLSL 4.50 core) inline.
 
-#version 450
-
-#include <animation_uniforms.glsl>
 #include <noise.glsl>
 
-// metadata.json declaration order → customParams[0] sub-slots
-#define displacement    customParams[0].x
-#define facetFrequency  customParams[0].y
-
-layout(location = 0) in vec2 vTexCoord;
-layout(location = 0) out vec4 fragColor;
-
-void main() {
+vec4 pTransition(vec2 uv, float t) {
     // ── niri OPEN body (handles both legs via runtime iTime flip) ──
-    float p = clamp(iTime, 0.0, 1.0);
-    vec2 uv = vTexCoord;
+    float p = clamp(t, 0.0, 1.0);
 
     float inv = 1.0 - p;
-    vec2 disp = displacement * vec2(cos(facetFrequency * uv.x), sin(facetFrequency * uv.y));
+    vec2 disp = p_displacement * vec2(cos(p_facetFrequency * uv.x), sin(p_facetFrequency * uv.y));
     vec2 sample_uv = uv + inv * disp;
 
     // boundaryMask (see noise.glsl) crops samples outside [0, 1] —
@@ -45,5 +34,5 @@ void main() {
     // facet ripple.
     vec4 win = surfaceColor(sample_uv) * boundaryMask(sample_uv);
 
-    fragColor = win * p;
+    return win * p;
 }

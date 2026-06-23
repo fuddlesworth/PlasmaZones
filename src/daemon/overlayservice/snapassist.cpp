@@ -4,7 +4,7 @@
 #include "internal.h"
 #include "../overlayservice.h"
 #include "../../core/logging.h"
-#include "pz_slot_keys.h"
+#include "phosphor_slot_keys.h"
 #include <PhosphorOverlay/ShellHost.h>
 #include <PhosphorSurfaces/SurfaceManager.h>
 #include <PhosphorZones/Layout.h>
@@ -13,6 +13,8 @@
 #include <PhosphorScreens/Manager.h>
 #include <PhosphorScreens/VirtualScreen.h>
 #include "../snapassistthumbnailprovider.h"
+#include "../dmabuftextureprovider.h"
+#include "../dmabuffencewaiter.h"
 #include <QGuiApplication>
 #include <QImage>
 #include <QQuickWindow>
@@ -20,16 +22,25 @@
 #include <QQmlEngine>
 #include <QKeyEvent>
 #include <QTimer>
+
+#include <unistd.h>
 #include <QUrl>
 
 #include <PhosphorLayer/Surface.h>
 #include <PhosphorLayer/ILayerShellTransport.h>
-#include "pz_roles.h"
+#include "phosphor_roles.h"
 #include <PhosphorScreens/ScreenIdentity.h>
 
 namespace PlasmaZones {
 
 namespace {
+
+/// Grace period before a dismissed snap-assist's thumbnail cache is trimmed.
+/// Long enough that any interactive continuation (dismiss → re-trigger,
+/// multi-zone fill, cross-screen move) restarts the timer first and keeps the
+/// warm cache; short enough that the bounded cache doesn't linger for the rest
+/// of the session after the user is done snapping.
+constexpr int SnapAssistCacheTrimDelayMs = 30000;
 
 /// Convert PhosphorProtocol::EmptyZoneList to QVariantList for QML property push
 QVariantList emptyZonesToVariantList(const PhosphorProtocol::EmptyZoneList& zones)
@@ -130,7 +141,7 @@ void OverlayService::showSnapAssist(const QString& screenId, const PhosphorProto
     // If snap-assist is currently shown on a DIFFERENT screen, dismiss
     // it there first - snap-assist is a singleton across all screens.
     // Animator-driven beginHide on (prevSurface, prevSlot,
-    // PzRoles::SnapAssist) keys ONLY the snap-assist track via the
+    // PhosphorRoles::SnapAssist) keys ONLY the snap-assist track via the
     // per-(Surface, target) animator keying - sibling slots on the
     // same shell (OSD, zone-selector) keep animating cleanly.
     if (m_snapAssistVisible && !m_snapAssistScreenId.isEmpty() && m_snapAssistScreenId != screenId) {
@@ -138,7 +149,7 @@ void OverlayService::showSnapAssist(const QString& screenId, const PhosphorProto
         auto prevIt = m_screenStates.find(prevScreenId);
         if (prevIt != m_screenStates.end() && prevIt->shell && prevIt->shell->shellSurface()
             && prevIt->snapAssistSlot()) {
-            m_shellHost->hideSlot(prevScreenId, PzSlotKeys::SnapAssist(), [this, prevScreenId]() {
+            m_shellHost->hideSlot(prevScreenId, PhosphorSlotKeys::SnapAssist(), [this, prevScreenId]() {
                 onSnapAssistSlotHideCompleted(prevScreenId);
             });
         }
@@ -146,6 +157,12 @@ void OverlayService::showSnapAssist(const QString& screenId, const PhosphorProto
 
     m_snapAssistScreenId = screenId;
     m_snapAssistVisible = true;
+
+    // Snap-assist is in active use again - cancel any pending cache trim so
+    // the continuation lookups below (urlFor) hit the warm cache.
+    if (m_snapAssistCacheTrimTimer) {
+        m_snapAssistCacheTrimTimer->stop();
+    }
 
     // Hide the zone selector for the specific virtual screen where snap
     // assist is showing - selectors on adjacent VS of the same physical
@@ -155,13 +172,18 @@ void OverlayService::showSnapAssist(const QString& screenId, const PhosphorProto
 
     // Attach cached thumbnails - kwin-effect posts updates via
     // setSnapAssistThumbnail asynchronously after this returns.
+    //
+    // Hoist the atomic load out of the loop — it's stable across the
+    // single-threaded GUI iteration here, so paying the per-iteration
+    // acquire fence to re-read it was wasted work on a hot path that
+    // can run with dozens of candidates during snap-assist setup.
     QVariantList rebuilt;
     rebuilt.reserve(candidatesList.size());
     int cachedCount = 0;
+    auto* const thumbProvider = m_thumbnailProvider.load(std::memory_order_acquire);
     for (int i = 0; i < candidatesList.size(); ++i) {
         QVariantMap cand = candidatesList[i].toMap();
         const QString compositorHandle = cand.value(QStringLiteral("compositorHandle")).toString();
-        auto* thumbProvider = m_thumbnailProvider.load(std::memory_order_acquire);
         if (!compositorHandle.isEmpty() && thumbProvider) {
             const QString cachedUrl = thumbProvider->urlFor(compositorHandle);
             if (!cachedUrl.isEmpty()) {
@@ -214,7 +236,7 @@ void OverlayService::showSnapAssist(const QString& screenId, const PhosphorProto
         shellSurface->show();
     }
     slot->setVisible(true);
-    m_surfaceAnimator->beginShow(shellSurface, slot, PzRoles::SnapAssist, []() { });
+    m_surfaceAnimator->beginShow(shellSurface, slot, PhosphorRoles::SnapAssist, []() { });
     // Snap-assist is modal - needs input for click-to-select. The
     // sync re-evaluates the input region now that the modal slot is
     // visible so `Qt::WindowTransparentForInput` flips off.
@@ -274,6 +296,76 @@ bool OverlayService::setSnapAssistThumbnail(const QString& compositorHandle, int
     return updateSnapAssistCandidateThumbnail(compositorHandle, std::move(image));
 }
 
+bool OverlayService::setWindowThumbnailDmabuf(const QString& compositorHandle, const DmabufThumbnailDesc& desc)
+{
+    // Experimental zero-copy GPU thumbnail path (Phase-0 spike). Gated behind
+    // an env var so the default build behaves exactly as before: the kwin-
+    // effect only takes the dma-buf path when its own gate is set, and the
+    // daemon refuses it here unless explicitly enabled. Returning false makes
+    // the effect fall back to the raw-pixel setSnapAssistThumbnail path, so a
+    // preview always appears regardless of dma-buf support.
+    static const bool dmabufEnabled = qEnvironmentVariableIsSet("PLASMAZONES_DMABUF_THUMBNAILS");
+    if (!dmabufEnabled) {
+        return false;
+    }
+    auto* provider = m_dmabufTextureProvider.load(std::memory_order_acquire);
+    if (!provider || desc.fd < 0) {
+        return false;
+    }
+    // Store the descriptor (the provider dups the borrowed fd) and resolve the
+    // GPU image:// URL. The actual Vulkan import happens lazily on the render
+    // thread when QML loads that URL through the texture provider.
+    const QString providerUrl = provider->insert(compositorHandle, desc);
+    if (providerUrl.isEmpty()) {
+        return false;
+    }
+    qCDebug(lcOverlay) << "setWindowThumbnailDmabuf: stored dma-buf for" << compositorHandle << desc.width << "x"
+                       << desc.height << "fourcc=0x" << QString::number(desc.fourcc, 16);
+
+    // Reveal-gate on the render-completion fence: only push the URL into the
+    // live candidate list once the producer's GPU render has finished, so QML
+    // never loads (and the render thread never imports) a half-rendered buffer.
+    // The wait is event-driven (DmabufFenceWaiter / QSocketNotifier) — no
+    // busy-poll, no blocked thread.
+    //
+    // No-fence branch: the D-Bus boundary currently requires a valid fence fd
+    // (OverlayAdaptor rejects an invalid one), so fenceFd < 0 only arises for a
+    // hypothetical direct (non-D-Bus) C++ caller; reveal immediately as a
+    // defensive fallback.
+    if (desc.fenceFd < 0) {
+        return applyCandidateThumbnailUrl(compositorHandle, providerUrl);
+    }
+    const int fenceDup = ::dup(desc.fenceFd);
+    if (fenceDup < 0) {
+        // Can't watch the fence — reveal now rather than drop the thumbnail.
+        return applyCandidateThumbnailUrl(compositorHandle, providerUrl);
+    }
+    // 1 s bound: a thumbnail render completes in well under a frame; the cap
+    // only guards against a producer that crashed mid-render. The
+    // DmabufFenceWaiter owns fenceDup and self-deletes on signal or timeout
+    // (so per-candidate waiters live at most ~1 s — bounded, not leaked).
+    //
+    // accepted=true is returned now (deferred-reveal contract: stored, will
+    // reveal when the fence signals), unlike the raw-pixel path which returns
+    // true only after storing. NOTE the divergence from the dedup re-capture
+    // contract: if this fence times out (only on a hung/crashed producer) the
+    // reveal is dropped, yet the producer already saw accepted=true and won't
+    // re-capture until its recently-posted window rolls past. Accepted as a
+    // rare-edge cost of the async reveal. (Unlike the raw-pixel provider, the
+    // dma-buf provider is NOT consulted by showSnapAssist's warm-cache pass —
+    // only m_thumbnailProvider is — so a dropped reveal is recovered only once
+    // the producer re-posts the handle, not from the still-stored descriptor.)
+    auto* waiter = new DmabufFenceWaiter(fenceDup, /*timeoutMs=*/1000, this);
+    // The reveal is matched by handle against the CURRENT candidate list when it
+    // fires (up to ~1 s later): if snap-assist was dismissed, or re-shown for a
+    // different window set that doesn't include this handle, applyCandidate-
+    // ThumbnailUrl is a harmless no-op. Same window → same thumbnail content.
+    connect(waiter, &DmabufFenceWaiter::ready, this, [this, compositorHandle, providerUrl]() {
+        applyCandidateThumbnailUrl(compositorHandle, providerUrl);
+    });
+    return true;
+}
+
 bool OverlayService::updateSnapAssistCandidateThumbnail(const QString& compositorHandle, QImage image)
 {
     auto* thumbProvider = m_thumbnailProvider.load(std::memory_order_acquire);
@@ -284,8 +376,15 @@ bool OverlayService::updateSnapAssistCandidateThumbnail(const QString& composito
     if (providerUrl.isEmpty()) {
         return false;
     }
-    // Cache insert succeeded - handle is held even if snap-assist isn't
-    // currently open. Provider URL stays valid until LRU eviction.
+    return applyCandidateThumbnailUrl(compositorHandle, providerUrl);
+}
+
+bool OverlayService::applyCandidateThumbnailUrl(const QString& compositorHandle, const QString& providerUrl)
+{
+    // Provider insert succeeded - handle is held even if snap-assist isn't
+    // currently open. Provider URL stays valid until eviction. Shared by the
+    // raw-pixel (updateSnapAssistCandidateThumbnail) and dma-buf
+    // (setWindowThumbnailDmabuf) paths.
     if (!m_snapAssistVisible || m_snapAssistScreenId.isEmpty()) {
         return true;
     }
@@ -331,7 +430,7 @@ void OverlayService::hideSnapAssist()
     auto stateIt = m_screenStates.find(screenId);
     if (stateIt != m_screenStates.end() && stateIt->shell && stateIt->shell->shellSurface()
         && stateIt->snapAssistSlot()) {
-        m_shellHost->hideSlot(screenId, PzSlotKeys::SnapAssist(), [this, effectiveId = screenId]() {
+        m_shellHost->hideSlot(screenId, PhosphorSlotKeys::SnapAssist(), [this, effectiveId = screenId]() {
             onSnapAssistSlotHideCompleted(effectiveId);
         });
     }
@@ -344,6 +443,27 @@ void OverlayService::hideSnapAssist()
     // showZoneSelectorSlotOnScreen short-circuit (which checks
     // slot->isVisible() - true mid-animation), risking visible
     // overlap or missed re-shows.
+
+    // Schedule a delayed trim of the thumbnail cache. A rapid re-show
+    // (continuation / multi-zone fill / cross-screen move) restarts this
+    // timer in showSnapAssist before it fires, preserving the warm cache;
+    // a genuine end-of-use lets it fire and release the cached pixels. The
+    // cross-screen handoff path routes through onSnapAssistSlotHideCompleted
+    // (not here), so monitor switches never start the trim.
+    if (!m_snapAssistCacheTrimTimer) {
+        m_snapAssistCacheTrimTimer = new QTimer(this);
+        m_snapAssistCacheTrimTimer->setSingleShot(true);
+        m_snapAssistCacheTrimTimer->setInterval(SnapAssistCacheTrimDelayMs);
+        connect(m_snapAssistCacheTrimTimer, &QTimer::timeout, this, [this]() {
+            if (auto* provider = m_thumbnailProvider.load(std::memory_order_acquire)) {
+                provider->clear();
+            }
+            if (auto* gpuProvider = m_dmabufTextureProvider.load(std::memory_order_acquire)) {
+                gpuProvider->clear();
+            }
+        });
+    }
+    m_snapAssistCacheTrimTimer->start();
 }
 
 bool OverlayService::isSnapAssistVisible() const
@@ -399,7 +519,7 @@ void OverlayService::showLayoutPicker(const QString& screenId)
         return;
     }
 
-    const QString resolvedId = screenId.isEmpty() ? Phosphor::Screens::ScreenIdentity::identifierFor(screen) : screenId;
+    const QString resolvedId = screenId.isEmpty() ? PhosphorScreens::ScreenIdentity::identifierFor(screen) : screenId;
     QRect screenGeom = resolveScreenGeometry(m_screenManager, resolvedId);
     if (!screenGeom.isValid()) {
         screenGeom = screen->geometry();
@@ -451,9 +571,9 @@ void OverlayService::showLayoutPicker(const QString& screenId)
 
     bool locked = false;
     if (m_settings && m_layoutManager) {
-        int curDesktop = m_layoutManager->currentVirtualDesktop();
+        int curDesktop = currentVirtualDesktopForScreen(resolvedId);
         QString curActivity = m_layoutManager->currentActivity();
-        locked = isAnyModeLocked(m_settings, resolvedId, curDesktop, curActivity);
+        locked = isAnyModeLocked(m_settings, m_layoutManager, resolvedId, curDesktop, curActivity);
     }
     writeQmlProperty(slot, QStringLiteral("locked"), locked);
     writeColorSettings(slot, m_settings);
@@ -474,7 +594,7 @@ void OverlayService::showLayoutPicker(const QString& screenId)
         shellSurface->show();
     }
     slot->setVisible(true);
-    m_surfaceAnimator->beginShow(shellSurface, slot, PzRoles::LayoutPicker, []() { });
+    m_surfaceAnimator->beginShow(shellSurface, slot, PhosphorRoles::LayoutPicker, []() { });
     // Layout picker is modal - needs input for click-to-select.
     syncPassiveShellSurfaceStateForSurface(shellSurface);
 
@@ -508,7 +628,7 @@ void OverlayService::hideLayoutPicker()
     auto stateIt = m_screenStates.find(screenId);
     if (stateIt != m_screenStates.end() && stateIt->shell && stateIt->shell->shellSurface()
         && stateIt->layoutPickerSlot()) {
-        m_shellHost->hideSlot(screenId, PzSlotKeys::LayoutPicker(), [this, effectiveId = screenId]() {
+        m_shellHost->hideSlot(screenId, PhosphorSlotKeys::LayoutPicker(), [this, effectiveId = screenId]() {
             onLayoutPickerSlotHideCompleted(effectiveId);
         });
     }

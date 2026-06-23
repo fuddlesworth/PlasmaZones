@@ -798,7 +798,7 @@ private Q_SLOTS:
         QVERIFY(surface != nullptr);
 
         // Explicitly delete the LayerSurface — removes from registry but the
-        // QWindow still carries the _pz_layer_shell property.
+        // QWindow still carries the _p_layer_shell property.
         delete surface;
 
         // get() should detect the stale marker property and refuse to create.

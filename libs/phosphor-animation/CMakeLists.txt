@@ -59,6 +59,12 @@ if(NOT TARGET PhosphorShaders::PhosphorShaders)
     find_package(PhosphorShaders CONFIG REQUIRED)
 endif()
 
+# PhosphorRegistry — AnimationShaderRegistry composes Registry<AnimationPack>
+# + MetadataPackLoader<AnimationPack> (publicly exposed via its header).
+if(NOT TARGET PhosphorRegistry::PhosphorRegistry)
+    find_package(PhosphorRegistry 0.1.0 REQUIRED)
+endif()
+
 # phosphor-layer -- Surface lifecycle (ISurfaceAnimator base).
 if(NOT TARGET PhosphorLayer::PhosphorLayer)
     find_package(PhosphorLayer CONFIG REQUIRED)
@@ -74,8 +80,11 @@ endif()
 option(PHOSPHOR_ANIMATION_QUICK "Build QtQuickClock (requires Qt6::Quick)" OFF)
 
 # Qt 6.5+ resource-prefix policy. NEW = use `:/qt/qml/` as the QML
-# module resource prefix.
-if(POLICY CMP0090 OR COMMAND qt_policy)
+# module resource prefix. Guard on COMMAND qt_policy alone: the prior
+# `POLICY CMP0090 OR ...` disjunct was always true (CMP0090 is a CMake
+# policy present since 3.15), making the qt_policy-existence half dead and
+# fatal-erroring on a toolchain without qt_policy (Qt < 6.5).
+if(COMMAND qt_policy)
     qt_policy(SET QTP0001 NEW)
 endif()
 
@@ -122,8 +131,6 @@ set(phosphoranimation_public_HDRS
     include/PhosphorAnimation/AnimationUniformExtension.h
     include/PhosphorAnimation/ShaderProfile.h
     include/PhosphorAnimation/ShaderProfileTree.h
-    include/PhosphorAnimation/AnimationAppRule.h
-    include/PhosphorAnimation/AnimationAppRuleResolver.h
 
     # Layer animator (ex phosphor-animation-layer)
     include/PhosphorAnimation/PhosphorAnimationLayer.h
@@ -173,8 +180,6 @@ set(phosphoranimation_SRCS
     src/animationshaderregistry.cpp
     src/shaderprofile.cpp
     src/shaderprofiletree.cpp
-    src/animationapprule.cpp
-    src/animationappruleresolver.cpp
     src/contract_pins.cpp
 
     # Layer animator (ex phosphor-animation-layer)
@@ -251,6 +256,7 @@ target_link_libraries(PhosphorAnimation
         Qt6::Quick
         Qt6::QuickPrivate
         Qt6::Qml
+        PhosphorRegistry::PhosphorRegistry
         PhosphorFsLoader::PhosphorFsLoader
         PhosphorShaders::PhosphorShaders
         PhosphorLayer::PhosphorLayer
@@ -270,6 +276,8 @@ endif()
 set_target_properties(PhosphorAnimation PROPERTIES
     VERSION ${PHOSPHORANIMATION_VERSION}
     SOVERSION 0
+    CXX_VISIBILITY_PRESET hidden
+    VISIBILITY_INLINES_HIDDEN ON
 )
 
 # ===============================================================================
@@ -293,9 +301,13 @@ target_include_directories(PhosphorAnimationQml
         $<BUILD_INTERFACE:${CMAKE_CURRENT_BINARY_DIR}>
         $<INSTALL_INTERFACE:${KDE_INSTALL_INCLUDEDIR}>
     PRIVATE
-        # Qt 6.10+ qmltyperegistrar emits the generated *_qmltyperegistrations.cpp
-        # #includes by header basename (e.g. <PhosphorMotionAnimation.h>), so the
-        # header subdirectory must be on the path for those includes to resolve.
+        # The generated <module>_qmltyperegistrations.cpp guards each registered
+        # type with `#if __has_include(<PhosphorCurve.h>)` using the BARE header
+        # name, so the header's own directory must be on the include path for the
+        # registration to resolve it. A non-unity build compiles that generated
+        # TU alone (no batch-mate to declare the type), so without this it fails
+        # with "PhosphorAnimation … not declared". PRIVATE — consumers still use
+        # the <PhosphorAnimation/…> spelling via the PUBLIC include dir above.
         $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include/PhosphorAnimation>
 )
 
@@ -339,8 +351,8 @@ if(PHOSPHOR_ANIMATION_QML_INSTALL)
             $<BUILD_INTERFACE:${CMAKE_CURRENT_BINARY_DIR}>
             $<INSTALL_INTERFACE:${KDE_INSTALL_INCLUDEDIR}>
         PRIVATE
-            # See PhosphorAnimationQml: Qt 6.10+ qmltyperegistrar emits generated
-            # #includes by header basename, so the subdir must be on the path.
+            # Same bare-`__has_include(<PhosphorCurve.h>)` resolution as the
+            # PhosphorAnimationQml target above — see the comment there.
             $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include/PhosphorAnimation>
     )
 

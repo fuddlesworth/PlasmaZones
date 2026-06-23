@@ -4,6 +4,7 @@
 #include "overlayservice/internal.h"
 #include "overlayservice.h"
 #include "snapassistthumbnailprovider.h"
+#include "dmabuftextureprovider.h"
 
 #include <PhosphorAudio/CavaSpectrumProvider.h>
 #include <PhosphorOverlay/ShellHost.h>
@@ -27,6 +28,7 @@
 #include <QDBusConnection>
 #include <QGuiApplication>
 #include <QScreen>
+#include <QByteArrayList>
 #include <QQmlEngine>
 #include <QQmlContext>
 #include <QQuickWindow>
@@ -35,7 +37,7 @@
 #include <QMutexLocker>
 
 #include "../core/logging.h"
-#include "pz_qml_i18n.h"
+#include "phosphor_qml_i18n.h"
 #include "vulkan_support.h"
 
 #include <PhosphorAnimation/PhosphorProfileRegistry.h>
@@ -50,8 +52,8 @@
 #include <PhosphorLayer/defaults/DefaultScreenProvider.h>
 #include <PhosphorLayer/defaults/PhosphorWaylandTransport.h>
 #include <QQuickItem>
-#include "overlayservice/pz_roles.h"
-#include "overlayservice/pz_slot_keys.h"
+#include "overlayservice/phosphor_roles.h"
+#include "overlayservice/phosphor_slot_keys.h"
 #include <PhosphorScreens/ScreenIdentity.h>
 
 namespace PlasmaZones {
@@ -76,27 +78,27 @@ QQuickItem* slotItemOrNull(const OverlayService::PerScreenOverlayState& state, c
 
 QQuickItem* OverlayService::PerScreenOverlayState::osdSlot() const
 {
-    return slotItemOrNull(*this, PzSlotKeys::Osd());
+    return slotItemOrNull(*this, PhosphorSlotKeys::Osd());
 }
 
 QQuickItem* OverlayService::PerScreenOverlayState::snapAssistSlot() const
 {
-    return slotItemOrNull(*this, PzSlotKeys::SnapAssist());
+    return slotItemOrNull(*this, PhosphorSlotKeys::SnapAssist());
 }
 
 QQuickItem* OverlayService::PerScreenOverlayState::layoutPickerSlot() const
 {
-    return slotItemOrNull(*this, PzSlotKeys::LayoutPicker());
+    return slotItemOrNull(*this, PhosphorSlotKeys::LayoutPicker());
 }
 
 QQuickItem* OverlayService::PerScreenOverlayState::zoneSelectorSlot() const
 {
-    return slotItemOrNull(*this, PzSlotKeys::ZoneSelector());
+    return slotItemOrNull(*this, PhosphorSlotKeys::ZoneSelector());
 }
 
 QQuickItem* OverlayService::PerScreenOverlayState::mainOverlaySlot() const
 {
-    return slotItemOrNull(*this, PzSlotKeys::MainOverlay());
+    return slotItemOrNull(*this, PhosphorSlotKeys::MainOverlay());
 }
 
 // Per-role SurfaceAnimator config builders + setupSurfaceAnimator +
@@ -108,7 +110,7 @@ QQuickItem* OverlayService::PerScreenOverlayState::mainOverlaySlot() const
 // overlayservice/priming.cpp to keep this translation unit under the
 // project's <800-line guideline.
 
-OverlayService::OverlayService(Phosphor::Screens::ScreenManager* screenManager, ShaderRegistry* shaderRegistry,
+OverlayService::OverlayService(PhosphorScreens::ScreenManager* screenManager, ShaderRegistry* shaderRegistry,
                                PhosphorAnimation::PhosphorProfileRegistry* profileRegistry, QObject* parent)
     : IOverlayService(parent)
     , m_screenProvider(std::make_unique<PhosphorLayer::DefaultScreenProvider>())
@@ -153,7 +155,7 @@ OverlayService::OverlayService(Phosphor::Screens::ScreenManager* screenManager, 
 
     QVulkanInstance* externalVulkanInstance = nullptr;
 #if QT_CONFIG(vulkan)
-    externalVulkanInstance = qApp->property(PlasmaZones::PzVulkanInstanceProperty).value<QVulkanInstance*>();
+    externalVulkanInstance = qApp->property(PlasmaZones::PVulkanInstanceProperty).value<QVulkanInstance*>();
 #endif
 
     // Construct the thumbnail provider eagerly so the borrowed @c m_thumbnailProvider
@@ -166,11 +168,18 @@ OverlayService::OverlayService(Phosphor::Screens::ScreenManager* screenManager, 
     m_thumbnailProviderOwned = std::make_unique<SnapAssistThumbnailProvider>();
     m_thumbnailProvider.store(m_thumbnailProviderOwned.get(), std::memory_order_release);
 
+    // Same eager-construct + engine-handover pattern for the zero-copy GPU
+    // thumbnail provider (PLASMAZONES_DMABUF_THUMBNAILS). Always constructed so
+    // the borrowed pointer is non-null; it only ever receives descriptors when
+    // the env gate is on and the kwin-effect takes the dma-buf path.
+    m_dmabufTextureProviderOwned = std::make_unique<DmabufTextureProvider>();
+    m_dmabufTextureProvider.store(m_dmabufTextureProviderOwned.get(), std::memory_order_release);
+
     m_surfaceManager = std::make_unique<PhosphorSurfaces::SurfaceManager>(PhosphorSurfaces::SurfaceManagerConfig{
         .surfaceFactory = m_surfaceFactory.get(),
         .engineConfigurator =
             [this](QQmlEngine& engine) {
-                auto* localizedContext = new PzLocalizedContext(&engine);
+                auto* localizedContext = new PhosphorLocalizedContext(&engine);
                 engine.rootContext()->setContextObject(localizedContext);
                 engine.rootContext()->setContextProperty(QStringLiteral("overlayService"), this);
 
@@ -203,13 +212,35 @@ OverlayService::OverlayService(Phosphor::Screens::ScreenManager* screenManager, 
                 }
                 engine.addImageProvider(QString::fromLatin1(SnapAssistThumbnailProvider::ProviderId),
                                         m_thumbnailProviderOwned.release());
+
+                // Mirror for the dma-buf (Texture-type) provider.
+                if (!m_dmabufTextureProviderOwned) {
+                    m_dmabufTextureProviderOwned = std::make_unique<DmabufTextureProvider>();
+                    m_dmabufTextureProvider.store(m_dmabufTextureProviderOwned.get(), std::memory_order_release);
+                }
+                engine.addImageProvider(QString::fromLatin1(DmabufTextureProvider::ProviderId),
+                                        m_dmabufTextureProviderOwned.release());
+
                 QObject::connect(&engine, &QObject::destroyed, this, [this]() {
                     m_thumbnailProvider.store(nullptr, std::memory_order_release);
+                    m_dmabufTextureProvider.store(nullptr, std::memory_order_release);
                 });
             },
         .pipelineCachePath = pipelineCachePath,
         .vulkanInstance = externalVulkanInstance,
-        .vulkanApiVersion = PlasmaZones::PzVulkanApiVersion,
+        .vulkanApiVersion = PlasmaZones::PVulkanApiVersion,
+        // Zero-copy dma-buf thumbnail import (PLASMAZONES_DMABUF_THUMBNAILS)
+        // needs these device extensions enabled on the overlay windows' QRhi
+        // Vulkan device; without them vkGetMemoryFdPropertiesKHR is unavailable
+        // and the import fails. Only requested when the experimental gate is
+        // on, so default builds keep Qt's stock device. Qt enables only the
+        // physically-supported subset.
+        .vulkanDeviceExtensions = qEnvironmentVariableIsSet("PLASMAZONES_DMABUF_THUMBNAILS")
+            ? QByteArrayList{QByteArrayLiteral("VK_KHR_external_memory_fd"),
+                             QByteArrayLiteral("VK_EXT_external_memory_dma_buf"),
+                             QByteArrayLiteral("VK_EXT_image_drm_format_modifier"),
+                             QByteArrayLiteral("VK_KHR_image_format_list")}
+            : QByteArrayList{},
     });
 
     // ShellHost was constructed earlier (before setupSurfaceAnimator)
@@ -217,8 +248,8 @@ OverlayService::OverlayService(Phosphor::Screens::ScreenManager* screenManager, 
     // itself. The remaining callbacks (factory + post/pre-create) need
     // m_surfaceManager to exist, so they're registered here.
     m_shellHost->setSurfaceFactory([this](const QString& screenId, QScreen* physScreen) -> PhosphorLayer::Surface* {
-        const auto role =
-            PzRoles::makePerInstanceRole(PzRoles::PassiveShell, screenId, m_surfaceManager->nextScopeGeneration());
+        const auto role = PhosphorRoles::makePerInstanceRole(PhosphorRoles::PassiveShell, screenId,
+                                                             m_surfaceManager->nextScopeGeneration());
         auto* surface = createWarmedOsdSurface(role, QUrl(QStringLiteral("qrc:/ui/PassiveOverlayShell.qml")),
                                                physScreen, "passive shell", screenId);
         if (!surface) {
@@ -246,13 +277,13 @@ OverlayService::OverlayService(Phosphor::Screens::ScreenManager* screenManager, 
 
     // Connect to virtual screen configuration changes
     if (auto* mgr = m_screenManager) {
-        connect(mgr, &Phosphor::Screens::ScreenManager::virtualScreensChanged, this,
+        connect(mgr, &PhosphorScreens::ScreenManager::virtualScreensChanged, this,
                 &OverlayService::onVirtualScreensChanged);
         // Regions-only changes (swap/rotate/boundary-resize) also need the
         // overlay windows destroyed and recreated with the new VS geometry.
         // The handler is heavy but only runs when overlays are visible
         // (active drag), so the cost is bounded.
-        connect(mgr, &Phosphor::Screens::ScreenManager::virtualScreenRegionsChanged, this,
+        connect(mgr, &PhosphorScreens::ScreenManager::virtualScreenRegionsChanged, this,
                 &OverlayService::onVirtualScreensChanged);
     }
 
@@ -528,14 +559,40 @@ PhosphorZones::Layout* OverlayService::resolveScreenLayout(QScreen* screen) cons
     if (!screen) {
         return m_layout;
     }
-    return resolveScreenLayout(Phosphor::Screens::ScreenIdentity::identifierFor(screen));
+    return resolveScreenLayout(PhosphorScreens::ScreenIdentity::identifierFor(screen));
+}
+
+bool OverlayService::isSnappingContextInactive(const QString& screenId) const
+{
+    const int virtualDesktop = currentVirtualDesktopForScreen(screenId);
+    if (isContextDisabled(m_settings, PhosphorZones::AssignmentEntry::Snapping, screenId, virtualDesktop,
+                          m_currentActivity)) {
+        return true;
+    }
+    if (!m_layoutManager) {
+        return false;
+    }
+    if (m_layoutManager->isContextActiveLayoutSuppressed(screenId, virtualDesktop, m_currentActivity)) {
+        return true;
+    }
+    // The context is in autotile mode — the snapping overlay/selector never
+    // applies there. Active autotile screens are already kept out via
+    // setExcludedScreens(autotileScreens), but a bare/suppressed autotile
+    // context (mode set, no concrete algorithm) is deliberately NOT in that
+    // active set, so without this check the snap overlay would surface on it and
+    // make a screen the user just switched to autotile look like it's still
+    // snapping. Derive the mode from the resolved assignment id (an "autotile:"
+    // id — bare or concrete — means autotile mode).
+    return PhosphorLayout::LayoutId::isAutotile(
+        m_layoutManager->assignmentIdForScreen(screenId, virtualDesktop, m_currentActivity));
 }
 
 PhosphorZones::Layout* OverlayService::resolveScreenLayout(const QString& screenId) const
 {
     PhosphorZones::Layout* screenLayout = nullptr;
     if (m_layoutManager && !screenId.isEmpty()) {
-        screenLayout = m_layoutManager->layoutForScreen(screenId, m_currentVirtualDesktop, m_currentActivity);
+        screenLayout =
+            m_layoutManager->layoutForScreen(screenId, currentVirtualDesktopForScreen(screenId), m_currentActivity);
         if (!screenLayout) {
             screenLayout = m_layoutManager->defaultLayout();
         }
@@ -554,30 +611,33 @@ void OverlayService::hideDisabledAndRefresh()
     // context-toggle); each per-content slot fades out via its
     // configured hide leg. dismissOverlayWindow / hideZoneSelectorSlotOnScreen
     // both clear the per-screen sentinel on completion.
+    // The zone selector / layout picker is gated ONLY by the disabled list (it
+    // is how a layout gets assigned, so suppress must not hide it); the snap
+    // overlay is additionally gated by suppress / autotile mode via
+    // isSnappingContextInactive.
     if (m_settings) {
         const QStringList screenIds = m_screenStates.keys();
         for (const QString& screenId : screenIds) {
-            if (isContextDisabled(m_settings, PhosphorZones::AssignmentEntry::Snapping, screenId,
-                                  m_currentVirtualDesktop, m_currentActivity)) {
+            const bool disabled = isContextDisabled(m_settings, PhosphorZones::AssignmentEntry::Snapping, screenId,
+                                                    currentVirtualDesktopForScreen(screenId), m_currentActivity);
+            if (disabled) {
                 destroyZoneSelectorWindow(screenId);
-                if (m_visible) {
-                    dismissOverlayWindow(screenId);
-                }
+            }
+            if (m_visible && isSnappingContextInactive(screenId)) {
+                dismissOverlayWindow(screenId);
             }
         }
     }
 
-    // Update remaining (non-disabled) zone selector and overlay windows
+    // Update remaining zone selector (disabled-gated) and overlay (suppress-gated) windows.
     for (auto it = m_screenStates.constBegin(); it != m_screenStates.constEnd(); ++it) {
         const QString& screenId = it.key();
-        if (isContextDisabled(m_settings, PhosphorZones::AssignmentEntry::Snapping, screenId, m_currentVirtualDesktop,
-                              m_currentActivity)) {
-            continue;
-        }
-        if (it.value().zoneSelectorSlot()) {
+        const bool disabled = isContextDisabled(m_settings, PhosphorZones::AssignmentEntry::Snapping, screenId,
+                                                currentVirtualDesktopForScreen(screenId), m_currentActivity);
+        if (!disabled && it.value().zoneSelectorSlot()) {
             updateZoneSelectorWindow(screenId);
         }
-        if (m_visible && it.value().overlayPhysScreen) {
+        if (!isSnappingContextInactive(screenId) && m_visible && it.value().overlayPhysScreen) {
             updateOverlayWindow(screenId, it.value().overlayPhysScreen);
         }
     }
@@ -590,6 +650,15 @@ void OverlayService::setCurrentVirtualDesktop(int desktop)
         qCInfo(lcOverlay) << "Virtual desktop changed to" << desktop;
         hideDisabledAndRefresh();
     }
+}
+
+int OverlayService::currentVirtualDesktopForScreen(const QString& screenId) const
+{
+    // Single source of truth: the layout registry owns the per-output desktop
+    // map (#648); OverlayService delegates rather than mirroring it, so overlay
+    // resolution can never drift from layout resolution. Falls back to the
+    // global desktop when no registry is wired.
+    return m_layoutManager ? m_layoutManager->currentVirtualDesktopForScreen(screenId) : m_currentVirtualDesktop;
 }
 
 void OverlayService::setCurrentActivity(const QString& activityId)
@@ -618,14 +687,14 @@ OverlayService::LayoutIncludeFlags OverlayService::resolvePerScreenLayoutInclude
     if (!m_layoutManager) {
         return flags;
     }
-    const QString resolvedId = Phosphor::Screens::ScreenIdentity::isConnectorName(screenId)
-        ? Phosphor::Screens::ScreenIdentity::idForName(screenId)
+    const QString resolvedId = PhosphorScreens::ScreenIdentity::isConnectorName(screenId)
+        ? PhosphorScreens::ScreenIdentity::idForName(screenId)
         : screenId;
     if (resolvedId.isEmpty()) {
         return flags;
     }
-    const QString assignmentId =
-        m_layoutManager->assignmentIdForScreen(resolvedId, m_currentVirtualDesktop, m_currentActivity);
+    const QString assignmentId = m_layoutManager->assignmentIdForScreen(
+        resolvedId, currentVirtualDesktopForScreen(resolvedId), m_currentActivity);
     if (PhosphorLayout::LayoutId::isAutotile(assignmentId)) {
         flags.manual = false;
         flags.autotile = true;
@@ -640,8 +709,8 @@ QVariantList OverlayService::buildLayoutsList(const QString& screenId, QSize aut
 {
     const auto inc = resolvePerScreenLayoutInclude(screenId);
     const auto entries = PhosphorZones::LayoutUtils::buildUnifiedLayoutList(
-        m_layoutManager, m_algorithmRegistry, screenId, m_currentVirtualDesktop, m_currentActivity, inc.manual,
-        inc.autotile, Utils::screenAspectRatio(m_screenManager, screenId),
+        m_layoutManager, m_algorithmRegistry, screenId, currentVirtualDesktopForScreen(screenId), m_currentActivity,
+        inc.manual, inc.autotile, Utils::screenAspectRatio(m_screenManager, screenId),
         m_settings && m_settings->filterLayoutsByAspectRatio(),
         PhosphorZones::LayoutUtils::buildCustomOrder(m_settings, inc.manual, inc.autotile), m_autotileLayoutSource,
         autotilePreviewCanvas);
@@ -676,8 +745,8 @@ int OverlayService::visibleLayoutCount(const QString& screenId) const
     const auto inc = resolvePerScreenLayoutInclude(screenId);
     // Ordering doesn't affect count - skip custom order for performance.
     const auto entries = PhosphorZones::LayoutUtils::buildUnifiedLayoutList(
-        m_layoutManager, m_algorithmRegistry, screenId, m_currentVirtualDesktop, m_currentActivity, inc.manual,
-        inc.autotile, Utils::screenAspectRatio(m_screenManager, screenId),
+        m_layoutManager, m_algorithmRegistry, screenId, currentVirtualDesktopForScreen(screenId), m_currentActivity,
+        inc.manual, inc.autotile, Utils::screenAspectRatio(m_screenManager, screenId),
         m_settings && m_settings->filterLayoutsByAspectRatio(),
         /*customOrder=*/{}, m_autotileLayoutSource);
     return entries.size();

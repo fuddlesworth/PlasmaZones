@@ -174,21 +174,21 @@ vec4 renderMagneticZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderCo
     float borderWidth = max(params.y, 2.0);
 
     // Parameters
-    float fieldStrength = customParams[0].x >= 0.0 ? customParams[0].x : 1.0;
-    float waveSpeed = customParams[0].y >= 0.0 ? customParams[0].y : 1.5;
-    float rippleSize = customParams[0].z >= 0.0 ? customParams[0].z : 0.5;
-    float glowIntensity = customParams[0].w >= 0.0 ? customParams[0].w : 0.6;
+    float fieldStrength = p_fieldStrength >= 0.0 ? p_fieldStrength : 1.0;
+    float waveSpeed = p_waveSpeed >= 0.0 ? p_waveSpeed : 1.5;
+    float rippleSize = p_rippleSize >= 0.0 ? p_rippleSize : 0.5;
+    float glowIntensity = p_glowIntensity >= 0.0 ? p_glowIntensity : 0.6;
 
-    float particleCount = customParams[1].x >= 0.0 ? customParams[1].x : 30.0;
-    float particleSize = customParams[1].y >= 0.0 ? customParams[1].y : 1.5;
-    float distortionAmount = customParams[1].w >= 0.0 ? customParams[1].w : 0.4;
-    float audioReactivity  = customParams[2].x >= 0.0 ? customParams[2].x : 1.0;
-    float nebulaIntensity  = customParams[2].y >= 0.0 ? customParams[2].y : 0.15;
-    float shockwaveStr     = customParams[2].z >= 0.0 ? customParams[2].z : 1.0;
-    float fillOpacity      = customParams[2].w >= 0.0 ? customParams[2].w : 0.85;
+    float particleCount = p_particleCount >= 0.0 ? p_particleCount : 30.0;
+    float particleSize = p_particleSize >= 0.0 ? p_particleSize : 1.5;
+    float distortionAmount = p_distortionAmount >= 0.0 ? p_distortionAmount : 0.4;
+    float audioReactivity  = p_audioReactivity >= 0.0 ? p_audioReactivity : 1.0;
+    float nebulaIntensity  = p_nebulaIntensity >= 0.0 ? p_nebulaIntensity : 0.15;
+    float shockwaveStr     = p_shockwaveStrength >= 0.0 ? p_shockwaveStrength : 1.0;
+    float fillOpacity      = p_fillOpacity >= 0.0 ? p_fillOpacity : 0.85;
 
-    float arcThick = customParams[3].w >= 0.0 ? customParams[3].w : 0.006;
-    float gridFreq = customParams[4].x >= 0.0 ? customParams[4].x : 20.0;
+    float arcThick = p_arcThickness >= 0.0 ? p_arcThickness : 0.006;
+    float gridFreq = p_gridFrequency >= 0.0 ? p_gridFrequency : 20.0;
 
     // ── Identity-native audio: electromagnetic field behavior ─────
 
@@ -229,10 +229,10 @@ vec4 renderMagneticZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderCo
     float d = sdRoundedBox(p, rectSize * 0.5, borderRadius);
 
     // Colors
-    vec3 fieldColor = customColors[0].rgb;
+    vec3 fieldColor = p_fieldColor.rgb;
     if (length(fieldColor) < 0.01) fieldColor = vec3(0.545, 0.361, 0.965);  // Purple #8b5cf6
 
-    vec3 highlightColor = customColors[1].rgb;
+    vec3 highlightColor = p_highlightColor.rgb;
     if (length(highlightColor) < 0.01) highlightColor = vec3(0.98, 0.8, 0.082);  // Yellow #facc15
 
     float vitality = zoneVitality(isHighlighted);
@@ -476,14 +476,14 @@ vec4 compositeMagneticLabels(vec4 color, vec2 fragCoord,
     vec2 px = 1.0 / max(iResolution, vec2(1.0));
     vec4 labels = texture(uZoneLabels, uv);
 
-    vec3 fieldColor = customColors[0].rgb;
+    vec3 fieldColor = p_fieldColor.rgb;
     if (length(fieldColor) < 0.01) fieldColor = vec3(0.545, 0.361, 0.965);
-    vec3 highlightColor = customColors[1].rgb;
+    vec3 highlightColor = p_highlightColor.rgb;
     if (length(highlightColor) < 0.01) highlightColor = vec3(0.98, 0.8, 0.082);
 
-    float labelGlowSpread = customParams[3].x >= 0.0 ? customParams[3].x : 3.5;
-    float labelBrightness = customParams[3].y >= 0.0 ? customParams[3].y : 2.2;
-    float labelAudioReact = customParams[3].z >= 0.0 ? customParams[3].z : 1.0;
+    float labelGlowSpread = p_coronaSpread >= 0.0 ? p_coronaSpread : 3.5;
+    float labelBrightness = p_fieldBright >= 0.0 ? p_fieldBright : 2.2;
+    float labelAudioReact = p_arcReact >= 0.0 ? p_arcReact : 1.0;
 
     // Gaussian halo with EM field tint
     float halo = 0.0;
@@ -557,7 +557,7 @@ void main() {
         color = blendOver(color, zoneColor);
     }
 
-    if (customParams[4].y > 0.5)
+    if (p_showLabels > 0.5)
         color = compositeMagneticLabels(color, fragCoord, bass, treble, hasAudio);
 
     fragColor = clampFragColor(color);

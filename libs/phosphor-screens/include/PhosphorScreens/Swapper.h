@@ -7,14 +7,14 @@
 
 #include <QString>
 
-namespace Phosphor::Screens {
+namespace PhosphorScreens {
 
 class IConfigStore;
 
 /**
  * @brief Canonical direction tokens accepted by VirtualScreenSwapper.
  *
- * Lower-case ASCII matches the D-Bus wire format used by the PlasmaZones
+ * Lower-case ASCII matches the D-Bus wire format used by the Phosphor
  * `org.plasmazones.Screen.swapVirtualScreenInDirection` method, so the
  * adaptor can pass through the user's string verbatim. New callers should
  * prefer constructing direction strings via these constants instead of
@@ -67,6 +67,11 @@ public:
         /// was ever handed to the store — the caller's input is the problem.
         SwapFailed,
         SettingsRejected, ///< IConfigStore::save rejected the mutated config.
+        /// Adaptor / caller didn't wire an IConfigStore* — distinct from
+        /// SettingsRejected so the consumer can tell "store said no" apart
+        /// from "no store to talk to". DBusScreenAdaptor's swap/rotate
+        /// methods surface this when m_configStore is null.
+        NoConfigStore,
     };
 
     explicit VirtualScreenSwapper(IConfigStore* store);
@@ -93,4 +98,4 @@ private:
     IConfigStore* m_store;
 };
 
-} // namespace Phosphor::Screens
+} // namespace PhosphorScreens

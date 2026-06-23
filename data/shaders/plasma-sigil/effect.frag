@@ -1,41 +1,35 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-#version 450
-
 // Plasma Sigil — PlasmaZones icon as animated energy sigil.
 // Five SVG icon rects rendered via SDF with gradient energy flow, racing
 // perimeter pulses, energy bridge connections, and audio reactivity.
 
-layout(location = 0) in vec2 vTexCoord;
-layout(location = 1) in vec2 vFragCoord;
-
-layout(location = 0) out vec4 fragColor;
-
-#include <common.glsl>
+// The harness supplies #version, <common.glsl>, the vTexCoord/vFragCoord ins,
+// the fragColor out, and the pImage() dispatch. audio.glsl is pack-specific.
 #include <audio.glsl>
 
 // ─── Parameters ─────────────────────────────────────────────────────────────
 
-float getIconScale()     { return customParams[0].x >= 0.0 ? customParams[0].x : 0.7; }
-float getStrokeWidth()   { return customParams[0].y >= 0.0 ? customParams[0].y : 0.012; }
-float getGlowIntensity() { return customParams[0].z >= 0.0 ? customParams[0].z : 0.8; }
-float getPulseSpeed()    { return customParams[0].w >= 0.0 ? customParams[0].w : 1.0; }
+float getIconScale()     { return p_iconScale >= 0.0 ? p_iconScale : 0.7; }
+float getStrokeWidth()   { return p_strokeWidth >= 0.0 ? p_strokeWidth : 0.012; }
+float getGlowIntensity() { return p_glowIntensity >= 0.0 ? p_glowIntensity : 0.8; }
+float getPulseSpeed()    { return p_pulseSpeed >= 0.0 ? p_pulseSpeed : 1.0; }
 
-float getGradientSpeed() { return customParams[1].x >= 0.0 ? customParams[1].x : 0.3; }
-float getSparkRate()     { return customParams[1].y >= 0.0 ? customParams[1].y : 0.6; }
-float getAmbientGlow()   { return customParams[1].z >= 0.0 ? customParams[1].z : 0.15; }
-float getAudioReact()    { return customParams[1].w >= 0.0 ? customParams[1].w : 1.0; }
+float getGradientSpeed() { return p_gradientSpeed >= 0.0 ? p_gradientSpeed : 0.3; }
+float getSparkRate()     { return p_sparkRate >= 0.0 ? p_sparkRate : 0.6; }
+float getAmbientGlow()   { return p_ambientGlow >= 0.0 ? p_ambientGlow : 0.15; }
+float getAudioReact()    { return p_audioReactivity >= 0.0 ? p_audioReactivity : 1.0; }
 
-float getFillOpacity()   { return customParams[2].x >= 0.0 ? customParams[2].x : 0.85; }
-float getBloomStr()      { return customParams[2].y >= 0.0 ? customParams[2].y : 0.4; }
+float getFillOpacity()   { return p_fillOpacity >= 0.0 ? p_fillOpacity : 0.85; }
+float getBloomStr()      { return p_bloomStrength >= 0.0 ? p_bloomStrength : 0.4; }
 
-float getLabelGlowSpread() { return customParams[2].z >= 0.0 ? customParams[2].z : 3.0; }
-float getLabelBrightness() { return customParams[2].w >= 0.0 ? customParams[2].w : 2.0; }
+float getLabelGlowSpread() { return p_labelGlowSpread >= 0.0 ? p_labelGlowSpread : 3.0; }
+float getLabelBrightness() { return p_labelBrightness >= 0.0 ? p_labelBrightness : 2.0; }
 
-float getBackgroundStr() { return customParams[3].y >= 0.0 ? customParams[3].y : 0.12; }
-float getVeinStr()       { return customParams[3].z >= 0.0 ? customParams[3].z : 0.07; }
-float getZoneTint()      { return customParams[3].w >= 0.0 ? customParams[3].w : 0.15; }
+float getBackgroundStr() { return p_backgroundIntensity >= 0.0 ? p_backgroundIntensity : 0.12; }
+float getVeinStr()       { return p_veinIntensity >= 0.0 ? p_veinIntensity : 0.07; }
+float getZoneTint()      { return p_zoneTint >= 0.0 ? p_zoneTint : 0.15; }
 
 // ─── Icon geometry ──────────────────────────────────────────────────────────
 // SVG icon rects: centered at origin, normalized by /480. Y-down matches vFragCoord.
@@ -521,19 +515,17 @@ vec4 compositeSigilLabels(vec4 color, vec2 fragCoord,
 
 // ─── Main ───────────────────────────────────────────────────────────────────
 
-void main() {
-    vec2 fragCoord = vFragCoord;
+vec4 pImage(vec2 fragCoord) {
     vec4 color = vec4(0.0);
 
     if (zoneCount == 0) {
-        fragColor = vec4(0.0);
-        return;
+        return vec4(0.0);
     }
 
-    vec3 cyanCol   = colorWithFallback(customColors[0].rgb, vec3(0.133, 0.827, 0.933));
-    vec3 blueCol   = colorWithFallback(customColors[1].rgb, vec3(0.231, 0.510, 0.965));
-    vec3 purpleCol = colorWithFallback(customColors[2].rgb, vec3(0.659, 0.333, 0.969));
-    vec3 roseCol   = colorWithFallback(customColors[3].rgb, vec3(0.957, 0.247, 0.369));
+    vec3 cyanCol   = colorWithFallback(p_cyanColor.rgb, vec3(0.133, 0.827, 0.933));
+    vec3 blueCol   = colorWithFallback(p_blueColor.rgb, vec3(0.231, 0.510, 0.965));
+    vec3 purpleCol = colorWithFallback(p_purpleColor.rgb, vec3(0.659, 0.333, 0.969));
+    vec3 roseCol   = colorWithFallback(p_roseColor.rgb, vec3(0.957, 0.247, 0.369));
 
     bool  hasAudio = iAudioSpectrumSize > 0;
     float bass   = getBassSoft();
@@ -550,9 +542,9 @@ void main() {
         color = blendOver(color, zoneColor);
     }
 
-    if (customParams[3].x > 0.5)
+    if (p_showLabels > 0.5)
         color = compositeSigilLabels(color, fragCoord, cyanCol, purpleCol,
                                      bass, mids, treble, hasAudio);
 
-    fragColor = clampFragColor(color);
+    return color;
 }

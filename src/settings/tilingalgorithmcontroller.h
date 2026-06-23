@@ -3,6 +3,7 @@
 
 #pragma once
 
+#include <PhosphorControl/PageController.h>
 #include <QObject>
 #include <QString>
 #include <QVariant>
@@ -15,7 +16,7 @@ class AlgorithmRegistry;
 
 namespace PlasmaZones {
 
-class Settings;
+class ISettings;
 
 /// Q_PROPERTY surface for the "Tiling → Algorithm" settings page.
 ///
@@ -28,27 +29,44 @@ class Settings;
 /// stay on SettingsController — they're shared across multiple pages /
 /// sub-components (AlgorithmPreview, NewAlgorithmDialog, TilingOrderingPage)
 /// and don't belong to any single page.
-class TilingAlgorithmController : public QObject
+class TilingAlgorithmController : public PhosphorControl::PageController
 {
     Q_OBJECT
 
     Q_PROPERTY(int autotileGapMin READ autotileGapMin CONSTANT)
     Q_PROPERTY(int autotileGapMax READ autotileGapMax CONSTANT)
     Q_PROPERTY(int autotileMaxWindowsMin READ autotileMaxWindowsMin CONSTANT)
+    Q_PROPERTY(int autotileMaxWindowsMax READ autotileMaxWindowsMax CONSTANT)
     Q_PROPERTY(int autotileMasterCountMin READ autotileMasterCountMin CONSTANT)
+    Q_PROPERTY(int autotileMasterCountMax READ autotileMasterCountMax CONSTANT)
     Q_PROPERTY(qreal autotileSplitRatioMin READ autotileSplitRatioMin CONSTANT)
+    Q_PROPERTY(qreal autotileSplitRatioMax READ autotileSplitRatioMax CONSTANT)
     Q_PROPERTY(qreal autotileSplitRatioStepMin READ autotileSplitRatioStepMin CONSTANT)
     Q_PROPERTY(qreal autotileSplitRatioStepMax READ autotileSplitRatioStepMax CONSTANT)
 
 public:
-    explicit TilingAlgorithmController(Settings* settings, PhosphorTiles::AlgorithmRegistry* registry,
+    explicit TilingAlgorithmController(ISettings& settings, PhosphorTiles::AlgorithmRegistry& registry,
                                        QObject* parent = nullptr);
+
+    bool isDirty() const override
+    {
+        return false;
+    }
+    void apply() override
+    {
+    }
+    void discard() override
+    {
+    }
 
     int autotileGapMin() const;
     int autotileGapMax() const;
     int autotileMaxWindowsMin() const;
+    int autotileMaxWindowsMax() const;
     int autotileMasterCountMin() const;
+    int autotileMasterCountMax() const;
     qreal autotileSplitRatioMin() const;
+    qreal autotileSplitRatioMax() const;
     qreal autotileSplitRatioStepMin() const;
     qreal autotileSplitRatioStepMax() const;
 
@@ -73,7 +91,7 @@ Q_SIGNALS:
 private:
     QVariantMap savedCustomParams(const QString& algorithmId) const;
 
-    Settings* m_settings = nullptr;
+    ISettings* m_settings = nullptr;
     PhosphorTiles::AlgorithmRegistry* m_registry = nullptr;
 };
 

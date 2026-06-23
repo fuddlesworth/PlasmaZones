@@ -5,6 +5,8 @@
 
 #include <PhosphorRendering/phosphorrendering_export.h>
 
+#include <PhosphorShaders/ShaderEntryPoint.h>
+
 #include <QColor>
 #include <QImage>
 #include <QMutex>
@@ -88,6 +90,7 @@ class PHOSPHORRENDERING_EXPORT ShaderEffect : public QQuickItem
     Q_PROPERTY(QUrl shaderSource READ shaderSource WRITE setShaderSource NOTIFY shaderSourceChanged FINAL)
     Q_PROPERTY(QUrl vertexShaderUrl READ vertexShaderUrl WRITE setVertexShaderUrl NOTIFY vertexShaderUrlChanged FINAL)
     Q_PROPERTY(QVariantMap shaderParams READ shaderParams WRITE setShaderParams NOTIFY shaderParamsChanged)
+    Q_PROPERTY(QString paramPreamble READ paramPreamble WRITE setParamPreamble NOTIFY paramPreambleChanged)
     Q_PROPERTY(QQuickItem* sourceItem READ sourceItem WRITE setSourceItem NOTIFY sourceItemChanged FINAL)
 
     // ── Multipass ────────────────────────────────────────────────────
@@ -596,6 +599,28 @@ public:
         return m_shaderIncludePaths;
     }
 
+    // ── Parameter preamble (T1.1: generated `#define p_<id> ...`) ─────
+
+    /** Set the generated named-parameter preamble spliced after `#version`
+     *  into the fragment source at load time, so authors read a parameter by
+     *  name (`p_speed`) instead of a `customParams[N].xyzw` lane. Empty (the
+     *  default) is a no-op. Forwarded to the render node and folded into its
+     *  bake-cache key; a change forces a reload so the new defines take. */
+    void setParamPreamble(const QString& preamble);
+    QString paramPreamble() const
+    {
+        return m_paramPreamble;
+    }
+
+    // ── Entry-point scaffold (T1.4: harness-generated `main()`) ────────
+
+    /** Install the entry-point scaffold forwarded to the render node: when the
+     *  fragment source defines no `main()`, the node prepends @p prologue and
+     *  appends the generated `main()` of the first @p candidates entry function
+     *  the source defines. Empty/empty (the default) disables assembly. Forces a
+     *  reload so the new scaffold takes; folded into the node's bake-cache key. */
+    void setEntryScaffold(const QString& prologue, const QList<PhosphorShaders::EntryCandidate>& candidates);
+
     // ── Status ───────────────────────────────────────────────────────
 
     Status status() const
@@ -623,6 +648,7 @@ Q_SIGNALS:
     void shaderSourceChanged();
     void vertexShaderUrlChanged();
     void shaderParamsChanged();
+    void paramPreambleChanged();
     void sourceItemChanged();
     void bufferShaderPathChanged();
     void bufferShaderPathsChanged();
@@ -723,6 +749,9 @@ private:
     QUrl m_vertexShaderUrl;
     QVariantMap m_shaderParams;
     QStringList m_shaderIncludePaths;
+    QString m_paramPreamble; ///< Generated `#define p_<id> ...` block (T1.1); empty = none.
+    QString m_entryPrologue; ///< T1.4 entry-point prologue forwarded to the node; empty = none.
+    QList<PhosphorShaders::EntryCandidate> m_entryCandidates; ///< T1.4 entry candidates; empty = no assembly.
 
     // QPointer because the source item is owned by the QML scene, not
     // the ShaderEffect — a torn-down source must auto-null rather than

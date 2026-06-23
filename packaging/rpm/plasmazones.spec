@@ -23,6 +23,13 @@ License:        GPL-3.0-or-later AND LGPL-2.1-or-later
 URL:            https://github.com/fuddlesworth/PlasmaZones
 Source0:        %{url}/archive/refs/tags/v%{version}/%{name}-%{version}.tar.gz
 
+# Luau is vendored as a committed source tarball (extern/luau-<ver>.tar.gz) and
+# statically linked, so declare the bundled provide per Fedora's bundled-library
+# policy — this lets security tooling track CVEs against the bundled copy. Keep
+# the version in sync with PHOSPHORSCRIPTING_LUAU_VERSION in
+# libs/phosphor-scripting/CMakeLists.txt.
+Provides:       bundled(luau) = 0.723
+
 # Plasma 6 / Wayland only
 ExclusiveArch:  x86_64 aarch64
 
@@ -241,6 +248,9 @@ echo ""
 %files
 %license LICENSE
 %license COPYING.LESSER
+# MIT licence of the vendored Luau runtime (extern/luau), installed by the
+# phosphor-scripting CMake in the default vendored build.
+%license %{_datadir}/licenses/plasmazones/LICENSE.Luau
 %doc README.md
 
 # Executables — globbed by the plasmazones prefix (plasmazonesd plus

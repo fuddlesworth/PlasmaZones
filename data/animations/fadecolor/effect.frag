@@ -19,23 +19,21 @@
 // `texture(uTexture0, uv)` samples directly. `texture2D` (GLSL ES) is
 // rewritten to `texture` (GLSL 4.50 core) inline.
 
-#version 450
+// The harness supplies #version, <animation_uniforms.glsl>, the in/out,
+// and main().
 
-#include <animation_uniforms.glsl>
+// p_colorPhase (customParams[0].x) is generated from metadata.json — no
+// hand-written slot #defines.
 
-// metadata.json declaration order → customParams[0] sub-slots
-#define colorPhase customParams[0].x
-
-layout(location = 0) in vec2 vTexCoord;
-layout(location = 0) out vec4 fragColor;
-
-void main() {
+// Symmetric: a single pTransition. `t` is the leg's iTime, which the runtime
+// flips on the close leg (1→0), so the niri OPEN body auto-mirrors on close
+// with no direction code.
+vec4 pTransition(vec2 uv, float t) {
     // ── niri OPEN body (handles both legs via runtime iTime flip) ──
-    float p = clamp(iTime, 0.0, 1.0);
-    vec2 uv = vTexCoord;
+    float p = clamp(t, 0.0, 1.0);
 
     vec4 win = surfaceColor(uv);
 
-    float reveal = smoothstep(colorPhase, 1.0, p);
-    fragColor = win * reveal;
+    float reveal = smoothstep(p_colorPhase, 1.0, p);
+    return win * reveal;
 }

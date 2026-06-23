@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 #include "UndoController.h"
-#include "pz_i18n.h"
+#include "phosphor_i18n.h"
 
 namespace PlasmaZones {
 

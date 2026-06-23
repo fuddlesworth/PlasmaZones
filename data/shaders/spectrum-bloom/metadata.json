@@ -2,7 +2,7 @@
     "id": "spectrum-bloom",
     "name": "Spectrum Bloom",
     "category": "Audio Visualizer",
-    "description": "Polar spectrum contour \u2014 the zone boundary morphs with the full frequency spectrum. Bass to treble maps around the circle; every bar defines the shape. Best with 256 spectrum bars. Enable CAVA audio visualization in settings.",
+    "description": "A polar spectrum contour where the zone boundary morphs with the full frequency spectrum. Bass to treble maps around the circle, and every bar defines the shape. Works best with 256 spectrum bars. Enable CAVA audio visualization in settings.",
     "author": "PlasmaZones",
     "version": "1.0",
     "fragmentShader": "effect.frag",
@@ -12,7 +12,6 @@
             "name": "Audio Reactivity",
             "group": "Audio",
             "type": "float",
-            "slot": 0,
             "default": 1.5,
             "min": 0.5,
             "max": 3
@@ -22,7 +21,6 @@
             "name": "Contour Scale",
             "group": "Audio",
             "type": "float",
-            "slot": 1,
             "default": 0.4,
             "min": 0.2,
             "max": 0.6
@@ -32,7 +30,6 @@
             "name": "Base Radius",
             "group": "Appearance",
             "type": "float",
-            "slot": 2,
             "default": 0.12,
             "min": 0.05,
             "max": 0.3
@@ -42,7 +39,6 @@
             "name": "Glow Width",
             "group": "Appearance",
             "type": "float",
-            "slot": 3,
             "default": 0.04,
             "min": 0.02,
             "max": 0.1
@@ -52,7 +48,6 @@
             "name": "Idle Animation",
             "group": "Animation",
             "type": "float",
-            "slot": 4,
             "default": 1,
             "min": 0,
             "max": 2
@@ -62,7 +57,6 @@
             "name": "Nebula Intensity",
             "group": "Background",
             "type": "float",
-            "slot": 5,
             "default": 0.2,
             "min": 0.0,
             "max": 0.5
@@ -72,7 +66,6 @@
             "name": "Core Glow",
             "group": "Background",
             "type": "float",
-            "slot": 6,
             "default": 0.2,
             "min": 0.0,
             "max": 0.5
@@ -82,7 +75,6 @@
             "name": "Aurora Intensity",
             "group": "Background",
             "type": "float",
-            "slot": 7,
             "default": 0.15,
             "min": 0.0,
             "max": 0.4
@@ -92,7 +84,6 @@
             "name": "Sparkle Size",
             "group": "Particles",
             "type": "float",
-            "slot": 8,
             "default": 1.0,
             "min": 0.3,
             "max": 2.0
@@ -102,7 +93,6 @@
             "name": "Fill Opacity",
             "group": "Appearance",
             "type": "float",
-            "slot": 9,
             "default": 0.85,
             "min": 0.4,
             "max": 1.0
@@ -112,7 +102,6 @@
             "name": "Rainbow Outline Spread",
             "group": "Labels",
             "type": "float",
-            "slot": 10,
             "default": 2.5,
             "min": 1.0,
             "max": 5.0
@@ -122,7 +111,6 @@
             "name": "Spectrum Core Brightness",
             "group": "Labels",
             "type": "float",
-            "slot": 11,
             "default": 2.2,
             "min": 1.0,
             "max": 4.0
@@ -132,7 +120,6 @@
             "name": "Bass Outline Pulse",
             "group": "Labels",
             "type": "float",
-            "slot": 12,
             "default": 1.0,
             "min": 0.0,
             "max": 2.0
@@ -142,7 +129,6 @@
             "name": "Aurora Ray Count",
             "group": "Background",
             "type": "int",
-            "slot": 13,
             "default": 12,
             "min": 4,
             "max": 24
@@ -152,7 +138,6 @@
             "name": "Show Labels",
             "group": "Labels",
             "type": "bool",
-            "slot": 14,
             "default": true
         },
         {
@@ -160,7 +145,6 @@
             "name": "Primary Color",
             "group": "Colors",
             "type": "color",
-            "slot": 0,
             "default": "#00e6ff"
         },
         {
@@ -168,7 +152,6 @@
             "name": "Accent Color",
             "group": "Colors",
             "type": "color",
-            "slot": 1,
             "default": "#ff3399"
         },
         {
@@ -176,7 +159,6 @@
             "name": "Warm / Bass Color",
             "group": "Colors",
             "type": "color",
-            "slot": 2,
             "default": "#ff9a1a"
         },
         {
@@ -184,7 +166,6 @@
             "name": "Mid Color",
             "group": "Colors",
             "type": "color",
-            "slot": 3,
             "default": "#33ff66"
         },
         {
@@ -192,7 +173,6 @@
             "name": "Cool / Deep Color",
             "group": "Colors",
             "type": "color",
-            "slot": 4,
             "default": "#6622ee"
         }
     ]

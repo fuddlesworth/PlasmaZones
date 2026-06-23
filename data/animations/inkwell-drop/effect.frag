@@ -24,26 +24,13 @@
 // via boundaryMask (see noise.glsl) instead — off-surface stays
 // transparent, no edge-pixel bleed. Same fix as wave-warp / soft-warp-fade.
 
-#version 450
-
-#include <animation_uniforms.glsl>
 #include <noise.glsl>
 
-// metadata.json declaration order → customParams[0] sub-slots
-#define impactX        customParams[0].x
-#define impactY        customParams[0].y
-#define frontSpeed     customParams[0].z
-#define rippleStrength customParams[0].w
-
-layout(location = 0) in vec2 vTexCoord;
-layout(location = 0) out vec4 fragColor;
-
-void main() {
+vec4 pTransition(vec2 uv, float t) {
     // ── niri OPEN body (handles both legs via runtime iTime flip) ──
-    float p = clamp(iTime, 0.0, 1.0);
-    vec2 uv = vTexCoord;
+    float p = clamp(t, 0.0, 1.0);
 
-    vec2 impact = vec2(impactX, impactY);
+    vec2 impact = vec2(p_impactX, p_impactY);
     vec2 c = uv - impact;
     // Aspect-correct horizontal distance so `length(c)` is pixel-isotropic
     // (the impact point reads as a true circle, not an ellipse). Use
@@ -57,11 +44,11 @@ void main() {
     // ellipticity scaling with shadow padding.
     c.x *= iResolution.x / max(iResolution.y, 0.0001);
     float d = length(c);
-    float front = p * frontSpeed;
+    float front = p * p_frontSpeed;
     float ring1 = sin((d - front) * 80.0) * exp(-abs(d - front) * 6.0);
     float ring2 = sin((d - front + 0.08) * 80.0) * exp(-abs(d - front + 0.08) * 8.0) * 0.6;
     float ring3 = sin((d - front + 0.16) * 80.0) * exp(-abs(d - front + 0.16) * 10.0) * 0.4;
-    float ripple = (ring1 + ring2 + ring3) * rippleStrength * (1.0 - p * 0.5);
+    float ripple = (ring1 + ring2 + ring3) * p_rippleStrength * (1.0 - p * 0.5);
     vec2 dir = (d > 0.001) ? normalize(c) : vec2(0.0);
     vec2 distorted = uv + dir * ripple;
 
@@ -71,5 +58,5 @@ void main() {
     vec4 win = surfaceColor(distorted) * boundaryMask(distorted);
 
     float reveal = smoothstep(0.05, -0.02, d - front);
-    fragColor = win * reveal;
+    return win * reveal;
 }

@@ -28,13 +28,7 @@
 // `getMask` and the shadow loop are byte-for-byte from upstream apart
 // from that one-token rename.
 
-#version 450
-
-#include <animation_uniforms.glsl>
 #include <noise.glsl>
-
-layout(location = 0) in vec2 vTexCoord;
-layout(location = 0) out vec4 fragColor;
 
 #include <bmw_compat.glsl>
 
@@ -58,7 +52,7 @@ float getMask(vec2 texCoord, float progress) {
   return step(progress, brush);
 }
 
-void main() {
+vec4 pTransition(vec2 uv, float t) {
 
   vec4 oColor = getInputColor(iTexCoord.st);
 
@@ -94,5 +88,5 @@ void main() {
     }
   }
 
-  setOutputColor(oColor);
+  return vec4(oColor.rgb * oColor.a, oColor.a);
 }

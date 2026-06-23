@@ -1,9 +1,13 @@
 <!DOCTYPE node PUBLIC "-//freedesktop//DTD D-BUS Object Introspection 1.0//EN"
     "http://www.freedesktop.org/standards/dbus/1.0/introspect.dtd">
+<!--
+SPDX-FileCopyrightText: 2026 fuddlesworth
+SPDX-License-Identifier: GPL-3.0-or-later
+-->
 <node>
     <!-- Window Drag Interface (KWin script -> Daemon) -->
     <interface name="org.plasmazones.WindowDrag">
-        <annotation name="org.gtk.GDBus.DocString" value="Window drag handling: KWin script calls dragStarted/dragMoved/dragStopped; daemon returns snap geometry. Uses double for window rect (KWin QML) and int for cursor/modifiers."/>
+        <annotation name="org.gtk.GDBus.DocString" value="Window drag handling: KWin effect calls beginDrag / updateDragCursor / endDrag; daemon returns a DragPolicy and a DragOutcome that drive the compositor's drag streaming, keyboard grab, snap geometry, and snap-assist follow-on. Uses int for cursor / modifier flags and the typed DragPolicy / DragOutcome structs for the typed payloads."/>
         <method name="beginDrag">
             <annotation name="org.gtk.GDBus.DocString" value="Phase 3 drag protocol: daemon-authoritative begin. Returns a DragPolicy that the compositor plugin uses to decide streaming, keyboard grab, and immediate-float behavior. Replaces dragStarted as the canonical drag-begin entry point. Single source of truth — no effect-side cache to go stale after settings reloads."/>
             <arg name="windowId" type="s" direction="in">
@@ -56,12 +60,6 @@
             </arg>
         </method>
 
-        <!-- Legacy dragStarted/dragMoved/dragStopped removed in phase 3f.
-             The canonical drag protocol is beginDrag / updateDragCursor /
-             endDrag. Internal C++ helpers with those names still exist in
-             the adaptor (called from drag_protocol.cpp) but they're no
-             longer exposed to D-Bus. -->
-
         <method name="selectorScrollWheel">
             <annotation name="org.gtk.GDBus.DocString" value="Forward scroll delta to the zone selector during drag. Reserved for future use when KWin exposes pointer axis events to effects."/>
             <arg name="angleDeltaY" type="i" direction="in">
@@ -71,13 +69,6 @@
 
         <method name="cancelSnap">
             <annotation name="org.gtk.GDBus.DocString" value="Cancel the current snap operation (e.g. user pressed Escape)."/>
-        </method>
-
-        <method name="handleWindowClosed">
-            <annotation name="org.gtk.GDBus.DocString" value="Called when a window is closed during or after a drag operation. Cleans up any drag state associated with this window."/>
-            <arg name="windowId" type="s" direction="in">
-                <annotation name="org.gtk.GDBus.DocString" value="Window ID that was closed."/>
-            </arg>
         </method>
 
         <signal name="zoneGeometryDuringDragChanged">
@@ -114,7 +105,7 @@
             <annotation name="org.gtk.GDBus.DocString" value="Phase 3 drag protocol: daemon detected a policy flip mid-drag (typically because the cursor crossed a virtual-screen boundary that changes autotile↔snap routing). Plugin reacts by applying the transition: entering/exiting autotile bypass, canceling snap overlay, calling handleDragToFloat, etc. Replaces the effect-side cross-VS flip loop that used a stale local cache."/>
             <arg name="windowId" type="s"/>
             <arg name="newPolicy" type="(bbbbbss)">
-                <annotation name="org.qtproject.QtDBus.QtTypeName.In1" value="PhosphorProtocol::DragPolicy"/>
+                <annotation name="org.qtproject.QtDBus.QtTypeName.Out1" value="PhosphorProtocol::DragPolicy"/>
             </arg>
         </signal>
         <signal name="snapAssistReady">
@@ -122,7 +113,7 @@
             <arg name="windowId" type="s"/>
             <arg name="releaseScreenId" type="s"/>
             <arg name="emptyZones" type="a(siiiiiibsssdd)">
-                <annotation name="org.qtproject.QtDBus.QtTypeName.In2" value="PhosphorProtocol::EmptyZoneList"/>
+                <annotation name="org.qtproject.QtDBus.QtTypeName.Out2" value="PhosphorProtocol::EmptyZoneList"/>
             </arg>
         </signal>
     </interface>

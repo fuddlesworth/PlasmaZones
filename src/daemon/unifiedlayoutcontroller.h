@@ -9,7 +9,7 @@
 #include <QPointer>
 #include <QString>
 
-namespace Phosphor::Screens {
+namespace PhosphorScreens {
 class ScreenManager;
 }
 
@@ -69,7 +69,7 @@ public:
      *        keeps working in unit tests that stub the engine.
      */
     explicit UnifiedLayoutController(PhosphorZones::LayoutRegistry* layoutManager, Settings* settings,
-                                     Phosphor::Screens::ScreenManager* screenManager,
+                                     PhosphorScreens::ScreenManager* screenManager,
                                      PhosphorTiles::ITileAlgorithmRegistry* algorithmRegistry,
                                      PhosphorEngine::PlacementEngineBase* autotileEngine = nullptr,
                                      QObject* parent = nullptr);
@@ -236,7 +236,7 @@ private:
 
     QPointer<PhosphorZones::LayoutRegistry> m_layoutManager;
     QPointer<Settings> m_settings;
-    QPointer<Phosphor::Screens::ScreenManager> m_screenManager;
+    QPointer<PhosphorScreens::ScreenManager> m_screenManager;
     PhosphorTiles::ITileAlgorithmRegistry* m_algorithmRegistry = nullptr; ///< Borrowed; outlives controller
     QPointer<PhosphorEngine::PlacementEngineBase> m_autotileEngine; ///< Auto-nulls if engine destroyed first
     PhosphorLayout::ILayoutSource* m_autotileLayoutSource = nullptr; ///< Borrowed; outlives controller (optional)

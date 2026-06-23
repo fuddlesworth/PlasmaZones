@@ -10,20 +10,19 @@
 #include <PhosphorPlacement/WindowTrackingService.h>
 #include <PhosphorScreens/Manager.h>
 #include <PhosphorWorkspaces/VirtualDesktopManager.h>
-#include "../core/screenmoderouter.h"
+#include "../core/crosssurfaceresolver.h"
 #include "../core/isettings.h"
+#include "../core/screenmoderouter.h"
 
 namespace PlasmaZones {
 
 EngineSet createEngines(PhosphorZones::LayoutRegistry* layoutManager,
                         PhosphorPlacement::WindowTrackingService* windowTracker,
-                        Phosphor::Screens::ScreenManager* screenManager,
+                        PhosphorScreens::ScreenManager* screenManager,
                         PhosphorTiles::ITileAlgorithmRegistry* algorithmRegistry,
                         PhosphorZones::IZoneDetector* zoneDetector, ISettings* settings,
-                        PhosphorWorkspaces::VirtualDesktopManager* vdm, PhosphorEngine::WindowRegistry* windowRegistry,
-                        QObject* parent)
+                        PhosphorWorkspaces::VirtualDesktopManager* vdm, PhosphorEngine::WindowRegistry* windowRegistry)
 {
-    Q_UNUSED(parent)
     // --- AutotileEngine ---
     auto autotile = std::make_unique<PhosphorTileEngine::AutotileEngine>(layoutManager, windowTracker, screenManager,
                                                                          algorithmRegistry, nullptr);
@@ -39,10 +38,21 @@ EngineSet createEngines(PhosphorZones::LayoutRegistry* layoutManager,
     // isActiveOnScreen routing.
     snap->setAutotileEngine(autotile.get());
 
+    // --- CrossSurfaceResolver ---
+    // One resolver, shared by both engines, resolves neighbour outputs
+    // (geometrically) and neighbour desktops (grid arithmetic) when directional
+    // navigation reaches a layout boundary.
+    auto crossSurfaceResolver = std::make_unique<CrossSurfaceResolver>(screenManager, vdm);
+    autotile->setCrossSurfaceResolver(crossSurfaceResolver.get());
+    snap->setCrossSurfaceResolver(crossSurfaceResolver.get());
+
     // --- ScreenModeRouter ---
     auto router = std::make_unique<ScreenModeRouter>(layoutManager, snap.get(), autotile.get());
 
-    return EngineSet{std::move(autotile), std::move(snap), std::move(router)};
+    return EngineSet{.crossSurfaceResolver = std::move(crossSurfaceResolver),
+                     .autotile = std::move(autotile),
+                     .snap = std::move(snap),
+                     .router = std::move(router)};
 }
 
 } // namespace PlasmaZones

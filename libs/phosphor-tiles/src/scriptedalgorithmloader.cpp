@@ -3,9 +3,11 @@
 
 #include <PhosphorTiles/ScriptedAlgorithmLoader.h>
 #include <PhosphorTiles/ITileAlgorithmRegistry.h>
-#include <PhosphorTiles/ScriptedAlgorithm.h>
-#include <PhosphorTiles/ScriptedAlgorithmWatchdog.h>
+#include <PhosphorTiles/LuauTileAlgorithm.h>
 #include "tileslogging.h"
+
+#include <PhosphorScripting/LuauEngine.h>
+#include <PhosphorScripting/LuauWatchdog.h>
 
 #include <PhosphorFsLoader/IScanStrategy.h>
 #include <PhosphorFsLoader/WatchedDirectorySet.h>
@@ -42,10 +44,10 @@ static constexpr int kMaxScripts = 10'000;
 /// triggered rescans (file edits, parent-watch promotion) reuse the
 /// snapshot from the last `scanAndRegister` and avoid redundantly
 /// re-resolving XDG paths on every inotify wake.
-class ScriptedAlgorithmLoader::JsScanStrategy : public PhosphorFsLoader::IScanStrategy
+class ScriptedAlgorithmLoader::LuauScanStrategy : public PhosphorFsLoader::IScanStrategy
 {
 public:
-    explicit JsScanStrategy(ScriptedAlgorithmLoader& loader)
+    explicit LuauScanStrategy(ScriptedAlgorithmLoader& loader)
         : m_loader(&loader)
     {
     }
@@ -64,8 +66,8 @@ ScriptedAlgorithmLoader::ScriptedAlgorithmLoader(const QString& subdirectory, IT
     : QObject(parent)
     , m_subdirectory(subdirectory)
     , m_registry(registry)
-    , m_watchdog(std::make_shared<ScriptedAlgorithmWatchdog>())
-    , m_strategy(std::make_unique<JsScanStrategy>(*this))
+    , m_watchdog(std::make_shared<PhosphorScripting::LuauWatchdog>())
+    , m_strategy(std::make_unique<LuauScanStrategy>(*this))
     , m_watcher(std::make_unique<PhosphorFsLoader::WatchedDirectorySet>(*m_strategy, this))
 {
     Q_ASSERT(m_registry);
@@ -116,7 +118,7 @@ ScriptedAlgorithmLoader::~ScriptedAlgorithmLoader()
     // which uses deleteLater() — so algorithm dtors run on a later
     // event-loop pass, AFTER this loader's members destruct. The
     // shared_ptr<watchdog> design lets the deferred-delete algorithm
-    // keep the watchdog alive until ~ScriptedAlgorithm finally fires;
+    // keep the watchdog alive until ~LuauTileAlgorithm finally fires;
     // the thread joins when the last shared_ptr (loader's or a
     // deferred algo's) is released. No member-ordering trick required.
     if (!QCoreApplication::instance() || !m_registry)
@@ -286,8 +288,7 @@ QStringList ScriptedAlgorithmLoader::performScan(const QStringList& directoriesI
     // registration-wins yield: user > sys-highest > sys-mid > ... >
     // sys-lowest, which is the actual XDG semantic. `crbegin/crend`
     // matches the strategy-convention used by `JsonScanStrategy` and
-    // `ShaderScanStrategy` and avoids the QStringList copy + std::reverse
-    // the previous shape needed.
+    // avoids the QStringList copy + std::reverse the previous shape needed.
 
     // Resolve the user dir's canonical path ONCE. `loadFromDirectory`
     // takes the canonical form as a parameter so the per-iteration
@@ -382,9 +383,32 @@ QStringList ScriptedAlgorithmLoader::performScan(const QStringList& directoriesI
     return desiredFileWatches;
 }
 
+std::shared_ptr<PhosphorScripting::LuauEngine> ScriptedAlgorithmLoader::ensureSharedEngine()
+{
+    if (m_sharedEngine) {
+        return m_sharedEngine;
+    }
+    // Latch failure: a VM that couldn't init/sandbox once won't succeed on a
+    // later rescan, and retrying would re-log the same error on every inotify
+    // wake. Bundled scripts fall back to their own VMs in that case.
+    if (m_sharedEngineFailed) {
+        return nullptr;
+    }
+    QString error;
+    m_sharedEngine = LuauTileAlgorithm::createSandboxedEngine(m_watchdog, &error);
+    if (!m_sharedEngine) {
+        m_sharedEngineFailed = true;
+        qCWarning(PhosphorTiles::lcTilesLib) << "ScriptedAlgorithmLoader: shared VM setup failed (" << error
+                                             << ") — bundled scripts will each use their own VM";
+        return nullptr;
+    }
+    qCInfo(PhosphorTiles::lcTilesLib) << "ScriptedAlgorithmLoader: created shared VM for bundled algorithms";
+    return m_sharedEngine;
+}
+
 void ScriptedAlgorithmLoader::loadFromDirectory(const QString& dir, bool isUserDir, const QString& canonicalUserDir)
 {
-    const QStringList validFiles = validatedJsFiles(dir, MaxWatchedFilesPerDir);
+    const QStringList validFiles = validatedLuauFiles(dir, MaxWatchedFilesPerDir);
 
     for (const QString& fullPath : validFiles) {
         // Mid-directory bail when the global cap was reached during this
@@ -395,7 +419,7 @@ void ScriptedAlgorithmLoader::loadFromDirectory(const QString& dir, bool isUserD
             return;
         }
         // Two layered checks, intentionally not redundant:
-        //   • `validatedJsFiles` filters by `*.js` extension AND verifies
+        //   • `validatedLuauFiles` filters by `*.luau` extension AND verifies
         //     symlink containment within `dir`'s canonical tree (path-
         //     traversal defense).
         //   • The regex below restricts the BASENAME — the script id is
@@ -409,12 +433,25 @@ void ScriptedAlgorithmLoader::loadFromDirectory(const QString& dir, bool isUserD
             continue;
         }
         // Create with nullptr parent so the registry takes full ownership
-        // via setParent(this) in registerAlgorithm(). If the algo is invalid,
-        // we delete it explicitly below. Pass the watchdog as shared_ptr
-        // so the algorithm keeps it alive across deferred-delete teardown
-        // (registry uses deleteLater(); algorithm dtor can run after the
-        // loader is gone — see ScriptedAlgorithm.h for the contract).
-        auto* algo = new ScriptedAlgorithm(fullPath, m_watchdog, nullptr);
+        // via the deferred-delete shared_ptr inside its TileAlgorithmEntry
+        // (deleteLater() while Qt is alive) in registerAlgorithm(). If the algo
+        // is invalid, we delete it explicitly below. Pass the watchdog as
+        // shared_ptr so the algorithm keeps it alive across deferred-delete
+        // teardown (the algorithm dtor can run after the loader is gone — see
+        // LuauTileAlgorithm.h for the contract).
+        // Trusted bundled scripts share one sandboxed VM (prelude + baseline
+        // paid once); untrusted user scripts each get their own isolated,
+        // per-engine-capped VM. If the shared VM can't be built, bundled
+        // scripts fall back to their own VMs (correct, just less memory-frugal).
+        LuauTileAlgorithm* algo = nullptr;
+        if (!isUserDir) {
+            if (const std::shared_ptr<PhosphorScripting::LuauEngine> shared = ensureSharedEngine()) {
+                algo = new LuauTileAlgorithm(fullPath, shared, m_watchdog, nullptr);
+            }
+        }
+        if (!algo) {
+            algo = new LuauTileAlgorithm(fullPath, m_watchdog, nullptr);
+        }
         if (!algo->isValid()) {
             qCWarning(PhosphorTiles::lcTilesLib) << "Invalid scripted algorithm, skipping:" << fullPath;
             delete algo;
@@ -467,7 +504,7 @@ void ScriptedAlgorithmLoader::loadFromDirectory(const QString& dir, bool isUserD
     }
 }
 
-QStringList ScriptedAlgorithmLoader::validatedJsFiles(const QString& dirPath, int maxFiles) const
+QStringList ScriptedAlgorithmLoader::validatedLuauFiles(const QString& dirPath, int maxFiles) const
 {
     QStringList result;
     QDir dirObj(dirPath);
@@ -483,7 +520,7 @@ QStringList ScriptedAlgorithmLoader::validatedJsFiles(const QString& dirPath, in
     // inside canonicalDir after symlink expansion). Leaving NoSymLinks in the
     // filter would additionally block benign user-local symlinks pointing at
     // read-only system script directories.
-    const QStringList files = dirObj.entryList({QStringLiteral("*.js")}, QDir::Files | QDir::Readable);
+    const QStringList files = dirObj.entryList({QStringLiteral("*.luau")}, QDir::Files | QDir::Readable);
     for (const QString& file : files) {
         if (result.size() >= maxFiles) {
             qCWarning(PhosphorTiles::lcTilesLib) << "Reached max file limit (" << maxFiles

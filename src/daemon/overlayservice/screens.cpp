@@ -29,7 +29,7 @@ void OverlayService::setupForScreen(QScreen* screen)
 {
     // Set up overlay windows for all effective screens on this physical screen
     auto* mgr = m_screenManager;
-    const QString physId = Phosphor::Screens::ScreenIdentity::identifierFor(screen);
+    const QString physId = PhosphorScreens::ScreenIdentity::identifierFor(screen);
     if (mgr && mgr->hasVirtualScreens(physId)) {
         for (const QString& vsId : mgr->virtualScreenIdsFor(physId)) {
             if (!m_screenStates.contains(vsId) || !m_screenStates[vsId].overlayPhysScreen) {
@@ -90,14 +90,16 @@ void OverlayService::handleScreenAdded(QScreen* screen)
         m_visible = true; // transient - initializeOverlay may set it false again
     }
 
-    const QString physScreenId = Phosphor::Screens::ScreenIdentity::identifierFor(screen);
+    const QString physScreenId = PhosphorScreens::ScreenIdentity::identifierFor(screen);
 
     auto* mgr = m_screenManager;
     if (mgr && mgr->hasVirtualScreens(physScreenId)) {
         // Create overlays for each virtual screen on this physical screen
         for (const QString& vsId : mgr->virtualScreenIdsFor(physScreenId)) {
-            if (isContextDisabled(m_settings, PhosphorZones::AssignmentEntry::Snapping, vsId, m_currentVirtualDesktop,
-                                  m_currentActivity)) {
+            // Recreate the snap overlay only on virtual screens that have one —
+            // skip disabled, suppressed-default, and autotile-mode contexts,
+            // matching the overlay activation gate in overlay.cpp.
+            if (isSnappingContextInactive(vsId)) {
                 continue;
             }
             QRect vsGeom = mgr->screenGeometry(vsId);
@@ -187,7 +189,7 @@ void OverlayService::destroyAllWindowsForPhysicalScreen(QScreen* screen)
     // monitor is reconnected (hot-plug cycle) it inherits the stale flag
     // and we silently refuse to recreate the OSD. Matching is prefix-based
     // because virtual-screen ids embed the physical id as the prefix.
-    const QString physId = Phosphor::Screens::ScreenIdentity::identifierFor(screen);
+    const QString physId = PhosphorScreens::ScreenIdentity::identifierFor(screen);
     if (!physId.isEmpty()) {
         const QString vsPrefix = physId + PhosphorIdentity::VirtualScreenId::Separator;
         for (const QString& flagged : m_shellHost->failureScreenIds()) {
@@ -221,7 +223,7 @@ void OverlayService::handleScreenRemoved(QScreen* screen)
 void OverlayService::onVirtualScreensChanged(const QString& physicalScreenId)
 {
     // Destroy old overlays for this physical screen, recreate with new config.
-    QScreen* physScreen = Phosphor::Screens::ScreenIdentity::findByIdOrName(physicalScreenId);
+    QScreen* physScreen = PhosphorScreens::ScreenIdentity::findByIdOrName(physicalScreenId);
     if (!physScreen) {
         // Physical screen removed. Tear down every shell whose key
         // matches the virtual-screen prefix (`physId/vs:N`): this

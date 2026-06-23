@@ -101,7 +101,7 @@ struct PHOSPHORLAYER_EXPORT SurfaceConfig
     ///
     /// Use this for overlays where reattaching the wl_surface (and its
     /// Vulkan swapchain) on every show/hide cycle is too expensive — the
-    /// PlasmaZones layout picker, navigation OSD, and zone selector all
+    /// Phosphor layout picker, navigation OSD, and zone selector all
     /// fall into this category. The Phase-4 LayoutOsd "L3 v2" pattern
     /// pioneered this for OSDs; Phase 5 generalises it into the library.
     ///

@@ -9,8 +9,17 @@
 
 #include <PhosphorSnapEngine/SnapEngine.h>
 #include <PhosphorPlacement/WindowTrackingService.h>
+#include <PhosphorEngine/WindowPlacement.h>
+#include <PhosphorEngine/WindowPlacementStore.h>
+#include <PhosphorZones/AssignmentEntry.h>
 #include <PhosphorZones/LayoutRegistry.h>
 #include <PhosphorSnapEngine/SnapState.h>
+#include <PhosphorSnapEngine/IZoneAdjacencyResolver.h>
+#include <PhosphorWindowRules/MatchExpression.h>
+#include <PhosphorWindowRules/MatchTypes.h>
+#include <PhosphorWindowRules/RuleAction.h>
+#include <PhosphorWindowRules/WindowRule.h>
+#include <PhosphorWindowRules/WindowRuleSet.h>
 #include "config/configbackends.h"
 #include "core/interfaces.h"
 
@@ -25,11 +34,11 @@ using namespace PhosphorSnapEngine;
 #include <PhosphorZones/Zone.h>
 #include <PhosphorWorkspaces/VirtualDesktopManager.h>
 #include "../helpers/IsolatedConfigGuard.h"
+#include "../helpers/LayoutRegistryTestHelpers.h"
 #include "../helpers/StubSettings.h"
 #include "../helpers/StubZoneDetector.h"
 
 using PlasmaZones::TestHelpers::IsolatedConfigGuard;
-using StubSettingsSnap = StubSettings;
 
 class StubZoneDetectorSnap : public PhosphorZones::IZoneDetector
 {
@@ -95,7 +104,7 @@ private:
     // showing up duplicated in the layout picker overlay.
     std::unique_ptr<IsolatedConfigGuard> m_guard;
     PhosphorZones::LayoutRegistry* m_layoutManager = nullptr;
-    StubSettingsSnap* m_settings = nullptr;
+    StubSettings* m_settings = nullptr;
     StubZoneDetectorSnap* m_zoneDetector = nullptr;
     PhosphorPlacement::WindowTrackingService* m_wts = nullptr;
     PhosphorSnapEngine::SnapState* m_snapState = nullptr;
@@ -105,9 +114,8 @@ private Q_SLOTS:
     void init()
     {
         m_guard = std::make_unique<IsolatedConfigGuard>();
-        m_layoutManager = new PhosphorZones::LayoutRegistry(PlasmaZones::createAssignmentsBackend(),
-                                                            QStringLiteral("plasmazones/layouts"));
-        m_settings = new StubSettingsSnap(nullptr);
+        m_layoutManager = PlasmaZones::TestHelpers::makeLayoutRegistry(QStringLiteral("plasmazones/layouts"));
+        m_settings = new StubSettings(nullptr);
         m_zoneDetector = new StubZoneDetectorSnap(nullptr);
         m_wts = new PhosphorPlacement::WindowTrackingService(m_layoutManager, m_zoneDetector, nullptr, nullptr);
         m_snapState = new PhosphorSnapEngine::SnapState(QString(), nullptr);
@@ -331,19 +339,8 @@ private Q_SLOTS:
         QVERIFY(m_snapState->preFloatZone(windowId).isEmpty());
     }
 
-    void testEngineBaseUnmanagedGeometry()
-    {
-        SnapEngine engine(nullptr, m_wts, nullptr, nullptr, nullptr);
-        m_wts->setSnapState(engine.snapState());
-        const QString windowId = QStringLiteral("app|uuid-pretile-sync");
-
-        engine.storeUnmanagedGeometry(windowId, QRect(10, 20, 300, 200), QStringLiteral("DP-1"));
-        QVERIFY(engine.hasUnmanagedGeometry(windowId));
-
-        engine.forgetWindow(windowId);
-        QVERIFY(!engine.hasUnmanagedGeometry(windowId));
-        m_wts->setSnapState(nullptr);
-    }
+    // testEngineBaseUnmanagedGeometry removed: the per-engine unmanaged-geometry store
+    // was collapsed into the unified WindowPlacementStore (shared freeGeometryByScreen).
 
     void testDualStoreSync_windowClosed()
     {
@@ -665,7 +662,7 @@ private Q_SLOTS:
         PhosphorEngine::IPlacementEngine::HandoffContext ctx;
         ctx.windowId = windowId;
         ctx.toScreenId = screen;
-        ctx.fromEngineId = QStringLiteral("autotile");
+        ctx.fromEngineId = PhosphorEngine::WindowPlacement::autotileEngineId();
         ctx.wasFloating = true;
         engine.handoffReceive(ctx);
 
@@ -886,6 +883,78 @@ private Q_SLOTS:
     }
 
     // =========================================================================
+    // focus-new-windows — commitSnapImpl emits activateWindowRequested only for
+    // AutoRestored commits when ISnapSettings::focusNewWindows() is on. Manual
+    // (UserInitiated) commits never request focus, regardless of the setting.
+    // =========================================================================
+
+    void testFocusNewWindows_autoRestored_emitsWhenEnabled()
+    {
+        SnapEngine engine(m_layoutManager, m_wts, nullptr, nullptr, nullptr);
+        engine.setEngineSettings(m_settings);
+        m_wts->setSnapState(engine.snapState());
+        m_settings->setSnappingFocusNewWindows(true);
+
+        QSignalSpy spy(&engine, &SnapEngine::activateWindowRequested);
+        engine.commitSnap(QStringLiteral("win-focus-1"), QStringLiteral("zone-1"), QStringLiteral("DP-1"),
+                          PhosphorEngine::SnapIntent::AutoRestored);
+
+        QCOMPARE(spy.count(), 1);
+        QCOMPARE(spy.first().first().toString(), QStringLiteral("win-focus-1"));
+        m_wts->setSnapState(nullptr);
+    }
+
+    void testFocusNewWindows_autoRestored_silentWhenDisabled()
+    {
+        SnapEngine engine(m_layoutManager, m_wts, nullptr, nullptr, nullptr);
+        engine.setEngineSettings(m_settings);
+        m_wts->setSnapState(engine.snapState());
+        m_settings->setSnappingFocusNewWindows(false);
+
+        QSignalSpy spy(&engine, &SnapEngine::activateWindowRequested);
+        engine.commitSnap(QStringLiteral("win-focus-2"), QStringLiteral("zone-1"), QStringLiteral("DP-1"),
+                          PhosphorEngine::SnapIntent::AutoRestored);
+
+        QCOMPARE(spy.count(), 0);
+        m_wts->setSnapState(nullptr);
+    }
+
+    void testFocusNewWindows_userInitiated_neverEmits()
+    {
+        SnapEngine engine(m_layoutManager, m_wts, nullptr, nullptr, nullptr);
+        engine.setEngineSettings(m_settings);
+        m_wts->setSnapState(engine.snapState());
+        // Even with the setting on, a user-initiated snap (drag, keyboard) must
+        // not steal focus — the window is already where the user put it.
+        m_settings->setSnappingFocusNewWindows(true);
+
+        QSignalSpy spy(&engine, &SnapEngine::activateWindowRequested);
+        engine.commitSnap(QStringLiteral("win-focus-3"), QStringLiteral("zone-1"), QStringLiteral("DP-1"),
+                          PhosphorEngine::SnapIntent::UserInitiated);
+
+        QCOMPARE(spy.count(), 0);
+        m_wts->setSnapState(nullptr);
+    }
+
+    void testFocusNewWindows_multiZone_autoRestored_emitsOnce()
+    {
+        // A multi-zone auto-restore (zone span) routes through the same
+        // commitSnapImpl chokepoint, so it must request focus exactly once.
+        SnapEngine engine(m_layoutManager, m_wts, nullptr, nullptr, nullptr);
+        engine.setEngineSettings(m_settings);
+        m_wts->setSnapState(engine.snapState());
+        m_settings->setSnappingFocusNewWindows(true);
+
+        QSignalSpy spy(&engine, &SnapEngine::activateWindowRequested);
+        engine.commitMultiZoneSnap(QStringLiteral("win-focus-4"), {QStringLiteral("zone-1"), QStringLiteral("zone-2")},
+                                   QStringLiteral("DP-1"), PhosphorEngine::SnapIntent::AutoRestored);
+
+        QCOMPARE(spy.count(), 1);
+        QCOMPARE(spy.first().first().toString(), QStringLiteral("win-focus-4"));
+        m_wts->setSnapState(nullptr);
+    }
+
+    // =========================================================================
     // resolveWindowRestore — disabled-context gate (ShouldRestorePredicate,
     // discussion #461 item 7)
     //
@@ -964,6 +1033,789 @@ private Q_SLOTS:
         QVERIFY2(!lines.join(QLatin1Char('\n')).contains(QStringLiteral("disabled-context gate rejected restore")),
                  "with no predicate the disabled-context gate must never fire");
         m_wts->setSnapState(nullptr);
+    }
+
+    // =========================================================================
+    // resolveWindowRestore — open-floating gate (FloatPredicate)
+    //
+    // The daemon injects a predicate that returns true when a "Float this app"
+    // rule matched the opening window. resolveWindowRestore must then mark the
+    // window floating and refuse the auto-snap chain, logging the distinctive
+    // "floated by rule" line so the test can assert it was THAT branch — not the
+    // no-match default-float terminal, which floats the window in this guiless
+    // fixture too.
+    // =========================================================================
+
+    void testResolveWindowRestore_floatPredicate_floatsMatchedWindow()
+    {
+        SnapEngine engine(m_layoutManager, m_wts, nullptr, nullptr, nullptr);
+        engine.setEngineSettings(m_settings);
+        m_wts->setSnapState(engine.snapState());
+
+        engine.setFloatPredicate([](const QString&) {
+            return true;
+        });
+
+        const QString windowId = QStringLiteral("app|uuid-float-rule");
+        QSignalSpy floatSpy(&engine, &SnapEngine::windowFloatingChanged);
+
+        PhosphorEngine::SnapResult result;
+        const QStringList lines = captureResolveLogs(engine, windowId, QStringLiteral("DP-1"), &result);
+
+        QVERIFY2(!result.shouldSnap, "a rule-floated window must not auto-snap");
+        QVERIFY2(engine.snapState()->isFloating(windowId), "the matched window must be marked floating");
+        QVERIFY2(lines.join(QLatin1Char('\n')).contains(QStringLiteral("floated by rule")),
+                 "the open-floating gate must be the branch that floated the window");
+        QCOMPARE(floatSpy.count(), 1);
+        QCOMPARE(floatSpy.at(0).at(0).toString(), windowId);
+        QCOMPARE(floatSpy.at(0).at(1).toBool(), true);
+        m_wts->setSnapState(nullptr);
+    }
+
+    void testResolveWindowRestore_floatPredicate_unsetOrFalse_gateInactive()
+    {
+        SnapEngine engine(m_layoutManager, m_wts, nullptr, nullptr, nullptr);
+        engine.setEngineSettings(m_settings);
+        m_wts->setSnapState(engine.snapState());
+
+        // Predicate present but returns false — the gate must not fire. (No
+        // predicate at all is the same: m_floatPredicate is empty.)
+        engine.setFloatPredicate([](const QString&) {
+            return false;
+        });
+
+        PhosphorEngine::SnapResult result;
+        const QStringList lines =
+            captureResolveLogs(engine, QStringLiteral("app|uuid-no-float-rule"), QStringLiteral("DP-1"), &result);
+
+        QVERIFY2(!lines.join(QLatin1Char('\n')).contains(QStringLiteral("floated by rule")),
+                 "an unmatched window must not be floated by the open-floating gate");
+        m_wts->setSnapState(nullptr);
+    }
+
+    // =========================================================================
+    // resolveWindowRestore — cross-screen ownership gate (multi-monitor login)
+    //
+    // A window snapped on a SNAP monitor can be reopened by KWin's session
+    // restore on a DIFFERENT monitor that happens to be in autotile mode. The
+    // opening-screen ownership gate must NOT blindly defer such a window to
+    // autotile: its snapped record's RECORDED screen is in snapping mode, so the
+    // restore migrates cross-screen back to that monitor (mirrors main, which
+    // gated the defer on the saved screen). Conversely, a snapped record whose
+    // OWN recorded screen is now autotile-owned must still defer (and must not be
+    // consumed), leaving the record for the autotile engine.
+    // =========================================================================
+
+    void testResolveWindowRestore_crossScreenSnap_doesNotDeferOnAutotileOpeningScreen()
+    {
+        SnapEngine engine(m_layoutManager, m_wts, nullptr, nullptr, nullptr);
+        engine.setEngineSettings(m_settings);
+        m_wts->setSnapState(engine.snapState());
+
+        // DP-2 is an autotile-mode screen; DP-1 stays snapping (the default).
+        PhosphorZones::AssignmentEntry autotile;
+        autotile.mode = PhosphorZones::AssignmentEntry::Autotile;
+        autotile.tilingAlgorithm = QStringLiteral("dwindle");
+        m_layoutManager->setAssignmentEntryDirect(QStringLiteral("DP-2"), 0, QString(), autotile);
+        QCOMPARE(m_layoutManager->modeForScreen(QStringLiteral("DP-2"), 0, QString()),
+                 PhosphorZones::AssignmentEntry::Autotile);
+
+        // A window snapped on the SNAP monitor DP-1 (its recorded screen).
+        PhosphorEngine::WindowPlacement rec;
+        rec.windowId = QStringLiteral("app|orig");
+        rec.appId = QStringLiteral("app");
+        rec.screenId = QStringLiteral("DP-1");
+        PhosphorEngine::EngineSlot slot;
+        slot.state = PhosphorEngine::WindowPlacement::stateSnapped();
+        slot.zoneIds = QStringList{QStringLiteral("z1")};
+        rec.engines.insert(PhosphorEngine::WindowPlacement::snapEngineId(), slot);
+        m_wts->placementStore().record(rec);
+
+        // The session reopens the window (new uuid) on the AUTOTILE monitor DP-2.
+        // The opening-screen ownership gate must NOT defer — the snapped record's
+        // recorded screen (DP-1) is in snapping mode, so the restore migrates
+        // cross-screen. (Geometry can't resolve in this guiless fixture, so we
+        // assert via the absence of the defer log rather than result.shouldSnap.)
+        PhosphorEngine::SnapResult result;
+        const QStringList lines =
+            captureResolveLogs(engine, QStringLiteral("app|new"), QStringLiteral("DP-2"), &result);
+
+        QVERIFY2(!lines.join(QLatin1Char('\n')).contains(QStringLiteral("defers to the owning engine")),
+                 "a pending cross-screen snap restore must NOT be deferred by the opening-screen ownership gate");
+        m_wts->setSnapState(nullptr);
+    }
+
+    void testResolveWindowRestore_sameScreenAutotileRecord_defersAndPreservesRecord()
+    {
+        SnapEngine engine(m_layoutManager, m_wts, nullptr, nullptr, nullptr);
+        engine.setEngineSettings(m_settings);
+        m_wts->setSnapState(engine.snapState());
+
+        // DP-2 is autotile mode AND the recorded screen of the snapped record
+        // (the user switched DP-2 to autotile after snapping there last session).
+        PhosphorZones::AssignmentEntry autotile;
+        autotile.mode = PhosphorZones::AssignmentEntry::Autotile;
+        autotile.tilingAlgorithm = QStringLiteral("dwindle");
+        m_layoutManager->setAssignmentEntryDirect(QStringLiteral("DP-2"), 0, QString(), autotile);
+
+        PhosphorEngine::WindowPlacement rec;
+        rec.windowId = QStringLiteral("app|orig");
+        rec.appId = QStringLiteral("app");
+        rec.screenId = QStringLiteral("DP-2"); // recorded on the now-autotile screen
+        PhosphorEngine::EngineSlot slot;
+        slot.state = PhosphorEngine::WindowPlacement::stateSnapped();
+        slot.zoneIds = QStringList{QStringLiteral("z1")};
+        rec.engines.insert(PhosphorEngine::WindowPlacement::snapEngineId(), slot);
+        m_wts->placementStore().record(rec);
+
+        // Reopen on DP-2. No cross-screen restore is pending (the recorded screen
+        // is autotile), so the gate must defer AND must not consume the record —
+        // autotile still needs it.
+        PhosphorEngine::SnapResult result;
+        const QStringList lines =
+            captureResolveLogs(engine, QStringLiteral("app|new"), QStringLiteral("DP-2"), &result);
+
+        QVERIFY2(!result.shouldSnap, "a window on an autotile screen with no cross-screen snap restore must not snap");
+        QVERIFY2(lines.join(QLatin1Char('\n')).contains(QStringLiteral("defers to the owning engine")),
+                 "the opening-screen ownership gate must defer to autotile");
+        QVERIFY2(m_wts->placementStore().contains(QStringLiteral("app|orig"), QStringLiteral("app")),
+                 "deferring must not consume the snapped record — autotile still needs it");
+        m_wts->setSnapState(nullptr);
+    }
+
+    // =========================================================================
+    // resolveWindowRestore — unsnapped-position restore gate
+    // (RestorePositionPredicate)
+    //
+    // A FREE (never-snapped) or snap-FLOATED window persists its global position
+    // keyed by its recorded screen. Float/free position restore is SAME-MONITOR
+    // ONLY: a record is eligible only when the window reopens on its recorded
+    // screen, and even then the geometry MOVE is gated on the restore-position
+    // predicate (the snappingRestoreFloatedWindowsOnLogin setting / RestorePosition
+    // rule). A record whose recorded screen differs from the opening screen is
+    // NEVER consumed and NEVER moves the window — float restore must not drag a
+    // window across monitors: a stale sibling record on another output would
+    // otherwise teleport a freshly-launched window, and the wrong-monitor capture
+    // that follows would re-cement it into a self-perpetuating jump. KWin's own
+    // placement / session restore owns which monitor the window opens on.
+    // =========================================================================
+
+    void testResolveWindowRestore_freeCrossScreen_inertEvenWithOptIn()
+    {
+        SnapEngine engine(m_layoutManager, m_wts, nullptr, nullptr, nullptr);
+        engine.setEngineSettings(m_settings);
+        m_wts->setSnapState(engine.snapState());
+        engine.setRestorePositionPredicate([](const QString&) {
+            return true;
+        });
+
+        // A genuinely-free window last seen on DP-1 at a recorded global rect.
+        const QRect dp1Geo(120, 80, 800, 600);
+        PhosphorEngine::WindowPlacement rec;
+        rec.windowId = QStringLiteral("app|orig");
+        rec.appId = QStringLiteral("app");
+        rec.screenId = QStringLiteral("DP-1");
+        PhosphorEngine::EngineSlot slot;
+        slot.state = PhosphorEngine::WindowPlacement::stateFree();
+        rec.engines.insert(PhosphorEngine::WindowPlacement::snapEngineId(), slot);
+        rec.freeGeometryByScreen.insert(QStringLiteral("DP-1"), dp1Geo);
+        m_wts->placementStore().record(rec);
+
+        QSignalSpy geoSpy(&engine, &PhosphorEngine::PlacementEngineBase::geometryRestoreRequested);
+
+        // KWin reopens the window (new uuid) on DP-2. Float/free restore is
+        // same-monitor only: even with the opt-in predicate, a record recorded on
+        // DP-1 must NOT move the window to its old monitor, and must NOT be
+        // consumed — it stays available for a later open on DP-1.
+        const PhosphorEngine::SnapResult result =
+            engine.resolveWindowRestore(QStringLiteral("app|new"), QStringLiteral("DP-2"), /*sticky*/ false);
+
+        QVERIFY2(!result.shouldSnap, "a free window is never snapped into a zone");
+        QCOMPARE(geoSpy.count(), 0);
+        QVERIFY2(m_wts->placementStore().contains(QStringLiteral("app|orig"), QStringLiteral("app")),
+                 "a cross-monitor free record is not consumed — float restore never moves across monitors");
+        QVERIFY2(!m_wts->placementStore().contains(QStringLiteral("app|new")),
+                 "nothing is re-recorded under the live id when the cross-monitor record is left untouched");
+        m_wts->setSnapState(nullptr);
+    }
+
+    void testResolveWindowRestore_freeCrossScreen_inertWhenPredicateAbsent()
+    {
+        SnapEngine engine(m_layoutManager, m_wts, nullptr, nullptr, nullptr);
+        engine.setEngineSettings(m_settings);
+        m_wts->setSnapState(engine.snapState());
+        // No restore-position predicate — historical behaviour.
+
+        PhosphorEngine::WindowPlacement rec;
+        rec.windowId = QStringLiteral("app|orig");
+        rec.appId = QStringLiteral("app");
+        rec.screenId = QStringLiteral("DP-1");
+        PhosphorEngine::EngineSlot slot;
+        slot.state = PhosphorEngine::WindowPlacement::stateFree();
+        rec.engines.insert(PhosphorEngine::WindowPlacement::snapEngineId(), slot);
+        rec.freeGeometryByScreen.insert(QStringLiteral("DP-1"), QRect(120, 80, 800, 600));
+        m_wts->placementStore().record(rec);
+
+        QSignalSpy geoSpy(&engine, &PhosphorEngine::PlacementEngineBase::geometryRestoreRequested);
+
+        const PhosphorEngine::SnapResult result =
+            engine.resolveWindowRestore(QStringLiteral("app|new"), QStringLiteral("DP-2"), /*sticky*/ false);
+
+        QVERIFY(!result.shouldSnap);
+        QCOMPARE(geoSpy.count(), 0);
+        QVERIFY2(m_wts->placementStore().contains(QStringLiteral("app|orig"), QStringLiteral("app")),
+                 "without opt-in, a cross-screen free record stays gated on the opening screen and is not consumed");
+        m_wts->setSnapState(nullptr);
+    }
+
+    void testResolveWindowRestore_floatingCrossScreen_doesNotMoveAcrossMonitors()
+    {
+        SnapEngine engine(m_layoutManager, m_wts, nullptr, nullptr, nullptr);
+        engine.setEngineSettings(m_settings);
+        m_wts->setSnapState(engine.snapState());
+        engine.setRestorePositionPredicate([](const QString&) {
+            return true;
+        });
+
+        // A snap-floated window: state floating, carrying its pre-float zone, with
+        // a recorded free position on DP-1.
+        const QRect dp1Geo(200, 150, 640, 480);
+        PhosphorEngine::WindowPlacement rec;
+        rec.windowId = QStringLiteral("app|orig");
+        rec.appId = QStringLiteral("app");
+        rec.screenId = QStringLiteral("DP-1");
+        PhosphorEngine::EngineSlot slot;
+        slot.state = PhosphorEngine::WindowPlacement::stateFloating();
+        slot.zoneIds = QStringList{QStringLiteral("z1")};
+        rec.engines.insert(PhosphorEngine::WindowPlacement::snapEngineId(), slot);
+        rec.freeGeometryByScreen.insert(QStringLiteral("DP-1"), dp1Geo);
+        m_wts->placementStore().record(rec);
+
+        QSignalSpy geoSpy(&engine, &PhosphorEngine::PlacementEngineBase::geometryRestoreRequested);
+
+        // Reopen on DP-2. Same-monitor-only: a floated record recorded on DP-1
+        // must not teleport the window to DP-1, and must not be consumed — it stays
+        // for a later DP-1 open. (This is the konsole/ghastty wrong-monitor bug:
+        // a stale cross-monitor floated record must never drag a fresh window.)
+        const PhosphorEngine::SnapResult result =
+            engine.resolveWindowRestore(QStringLiteral("app|new"), QStringLiteral("DP-2"), /*sticky*/ false);
+
+        QVERIFY2(!result.shouldSnap, "a floated record never snaps into a zone");
+        QVERIFY2(geoSpy.count() == 0, "float restore never moves a window across monitors");
+        QVERIFY2(m_wts->placementStore().contains(QStringLiteral("app|orig"), QStringLiteral("app")),
+                 "the cross-monitor floating record is left intact for a later DP-1 open");
+        QVERIFY2(!m_wts->placementStore().contains(QStringLiteral("app|new")),
+                 "nothing is re-recorded under the live id for a rejected cross-monitor record");
+        m_wts->setSnapState(nullptr);
+    }
+
+    // LEGACY `free` record restored as floating (the retired third state). A `free`
+    // slot persisted by an older build is now treated as floating: the merged branch
+    // marks it floating (windowFloatingChanged true) AND, with the predicate opted
+    // in, re-applies its recorded position on its own screen.
+    void testResolveWindowRestore_legacyFreeSameScreen_restoresAsFloatingWhenPredicateOptsIn()
+    {
+        SnapEngine engine(m_layoutManager, m_wts, nullptr, nullptr, nullptr);
+        engine.setEngineSettings(m_settings);
+        m_wts->setSnapState(engine.snapState());
+        engine.setRestorePositionPredicate([](const QString&) {
+            return true;
+        });
+
+        const QRect dp1Geo(60, 40, 1024, 768);
+        PhosphorEngine::WindowPlacement rec;
+        rec.windowId = QStringLiteral("app|orig");
+        rec.appId = QStringLiteral("app");
+        rec.screenId = QStringLiteral("DP-1");
+        PhosphorEngine::EngineSlot slot;
+        slot.state = PhosphorEngine::WindowPlacement::stateFree(); // legacy token
+        rec.engines.insert(PhosphorEngine::WindowPlacement::snapEngineId(), slot);
+        rec.freeGeometryByScreen.insert(QStringLiteral("DP-1"), dp1Geo);
+        m_wts->placementStore().record(rec);
+
+        QSignalSpy floatSpy(&engine, &PhosphorEngine::PlacementEngineBase::windowFloatingChanged);
+        QSignalSpy geoSpy(&engine, &PhosphorEngine::PlacementEngineBase::geometryRestoreRequested);
+
+        // Reopens on its own recorded screen DP-1.
+        const PhosphorEngine::SnapResult result =
+            engine.resolveWindowRestore(QStringLiteral("app|new"), QStringLiteral("DP-1"), /*sticky*/ false);
+
+        QVERIFY(!result.shouldSnap);
+        // Legacy free now marks floating (the old free branch did NOT).
+        QCOMPARE(floatSpy.count(), 1);
+        QCOMPARE(floatSpy.takeFirst().at(1).toBool(), true);
+        QCOMPARE(geoSpy.count(), 1);
+        const QList<QVariant> args = geoSpy.takeFirst();
+        QCOMPARE(args.at(1).toRect(), dp1Geo);
+        QCOMPARE(args.at(2).toString(), QStringLiteral("DP-1"));
+        m_wts->setSnapState(nullptr);
+    }
+
+    // The predicate's RETURN VALUE is honored (not merely its presence): a free
+    // record reopening on its own screen with the predicate returning false is
+    // still eligible (same-screen) and re-recorded under the live id, but its
+    // position is NOT re-applied. This is the load-bearing re-record-but-gate-move
+    // boundary the free branch documents.
+    void testResolveWindowRestore_freeSameScreen_reRecordsButSkipsMoveWhenPredicateDenies()
+    {
+        SnapEngine engine(m_layoutManager, m_wts, nullptr, nullptr, nullptr);
+        engine.setEngineSettings(m_settings);
+        m_wts->setSnapState(engine.snapState());
+        engine.setRestorePositionPredicate([](const QString&) {
+            return false;
+        });
+
+        PhosphorEngine::WindowPlacement rec;
+        rec.windowId = QStringLiteral("app|orig");
+        rec.appId = QStringLiteral("app");
+        rec.screenId = QStringLiteral("DP-1");
+        PhosphorEngine::EngineSlot slot;
+        slot.state = PhosphorEngine::WindowPlacement::stateFree();
+        rec.engines.insert(PhosphorEngine::WindowPlacement::snapEngineId(), slot);
+        rec.freeGeometryByScreen.insert(QStringLiteral("DP-1"), QRect(60, 40, 1024, 768));
+        m_wts->placementStore().record(rec);
+
+        QSignalSpy geoSpy(&engine, &PhosphorEngine::PlacementEngineBase::geometryRestoreRequested);
+
+        const PhosphorEngine::SnapResult result =
+            engine.resolveWindowRestore(QStringLiteral("app|new"), QStringLiteral("DP-1"), /*sticky*/ false);
+
+        QVERIFY(!result.shouldSnap);
+        // A predicate that denies restore must skip the geometry move.
+        QCOMPARE(geoSpy.count(), 0);
+        // The record is still rebound to the live id (float-back survives) even
+        // though the move is skipped; the stale recorded-uuid entry is gone.
+        QVERIFY2(m_wts->placementStore().contains(QStringLiteral("app|new")),
+                 "a same-screen free record is re-recorded under the live id even when the move is skipped");
+        QVERIFY2(!m_wts->placementStore().contains(QStringLiteral("app|orig")),
+                 "the stale recorded-uuid entry is rebound, not left behind");
+        m_wts->setSnapState(nullptr);
+    }
+
+    // Two-state model: the merged floated-restore branch ALWAYS marks the window
+    // floating (windowFloatingChanged true), but the geometry MOVE is now gated on
+    // the restore-position predicate for ALL floated windows (the
+    // snappingRestoreFloatedWindowsOnLogin setting / RestorePosition rule). When the
+    // predicate DENIES, the window comes back floating but stays where the
+    // compositor placed it — the move is skipped.
+    void testResolveWindowRestore_floatingSameScreen_marksFloatingButSkipsMoveWhenPredicateDenies()
+    {
+        SnapEngine engine(m_layoutManager, m_wts, nullptr, nullptr, nullptr);
+        engine.setEngineSettings(m_settings);
+        m_wts->setSnapState(engine.snapState());
+        engine.setRestorePositionPredicate([](const QString&) {
+            return false;
+        });
+
+        const QRect dp1Geo(200, 150, 640, 480);
+        PhosphorEngine::WindowPlacement rec;
+        rec.windowId = QStringLiteral("app|orig");
+        rec.appId = QStringLiteral("app");
+        rec.screenId = QStringLiteral("DP-1");
+        PhosphorEngine::EngineSlot slot;
+        slot.state = PhosphorEngine::WindowPlacement::stateFloating();
+        slot.zoneIds = QStringList{QStringLiteral("z1")};
+        rec.engines.insert(PhosphorEngine::WindowPlacement::snapEngineId(), slot);
+        rec.freeGeometryByScreen.insert(QStringLiteral("DP-1"), dp1Geo);
+        m_wts->placementStore().record(rec);
+
+        QSignalSpy floatSpy(&engine, &PhosphorEngine::PlacementEngineBase::windowFloatingChanged);
+        QSignalSpy geoSpy(&engine, &PhosphorEngine::PlacementEngineBase::geometryRestoreRequested);
+
+        // Reopens on its own recorded screen DP-1, predicate denying.
+        const PhosphorEngine::SnapResult result =
+            engine.resolveWindowRestore(QStringLiteral("app|new"), QStringLiteral("DP-1"), /*sticky*/ false);
+
+        QVERIFY(!result.shouldSnap);
+        // Marked floating unconditionally...
+        QCOMPARE(floatSpy.count(), 1);
+        const QList<QVariant> floatArgs = floatSpy.takeFirst();
+        QCOMPARE(floatArgs.at(1).toBool(), true);
+        QCOMPARE(floatArgs.at(2).toString(), QStringLiteral("DP-1"));
+        // ...but the geometry move is gated by the predicate (denied → skipped).
+        QVERIFY2(geoSpy.count() == 0, "floated move is gated on the restore-position predicate; denied → no move");
+        m_wts->setSnapState(nullptr);
+    }
+
+    // Same-monitor-only restore rejects a cross-monitor record outright —
+    // regardless of which screen its recorded geometry lives on. Even with the
+    // opt-in predicate and geometry captured on a THIRD screen, the record is
+    // neither moved nor consumed: no anyFreeGeometry() resurrection, no
+    // cross-monitor teleport, and the record is left for a same-monitor open.
+    void testResolveWindowRestore_freeCrossScreen_inertRegardlessOfGeometryScreen()
+    {
+        SnapEngine engine(m_layoutManager, m_wts, nullptr, nullptr, nullptr);
+        engine.setEngineSettings(m_settings);
+        m_wts->setSnapState(engine.snapState());
+        engine.setRestorePositionPredicate([](const QString&) {
+            return true;
+        });
+
+        PhosphorEngine::WindowPlacement rec;
+        rec.windowId = QStringLiteral("app|orig");
+        rec.appId = QStringLiteral("app");
+        rec.screenId = QStringLiteral("DP-1"); // restoreScreen resolves to DP-1
+        PhosphorEngine::EngineSlot slot;
+        slot.state = PhosphorEngine::WindowPlacement::stateFree();
+        rec.engines.insert(PhosphorEngine::WindowPlacement::snapEngineId(), slot);
+        // Geometry recorded on DP-3, NOT on the record's own screen DP-1.
+        rec.freeGeometryByScreen.insert(QStringLiteral("DP-3"), QRect(10, 10, 800, 600));
+        m_wts->placementStore().record(rec);
+
+        QSignalSpy geoSpy(&engine, &PhosphorEngine::PlacementEngineBase::geometryRestoreRequested);
+
+        // KWin reopens on DP-2 (neither the record's screen nor its geometry's screen).
+        const PhosphorEngine::SnapResult result =
+            engine.resolveWindowRestore(QStringLiteral("app|new"), QStringLiteral("DP-2"), /*sticky*/ false);
+
+        QVERIFY(!result.shouldSnap);
+        QVERIFY2(geoSpy.count() == 0, "a cross-monitor record never moves the window");
+        QVERIFY2(m_wts->placementStore().contains(QStringLiteral("app|orig"), QStringLiteral("app")),
+                 "a cross-monitor record is not consumed regardless of where its geometry was captured");
+        QVERIFY2(!m_wts->placementStore().contains(QStringLiteral("app|new")),
+                 "nothing is re-recorded under the live id");
+        m_wts->setSnapState(nullptr);
+    }
+
+    // =========================================================================
+    // Two-state model: snapping has only `snapped` / `floated` — no `free`.
+    // =========================================================================
+
+    // capturePlacement of an unmanaged window (neither snapped nor floating in the
+    // runtime SnapState) records a FLOATING slot — the retired `free` state. An
+    // untracked window has no effective screen, so capturePlacement's snap-mode gate
+    // is bypassed and it reaches the state if/else.
+    void testCapturePlacement_unmanagedWindowRecordsFloating()
+    {
+        SnapEngine engine(m_layoutManager, m_wts, nullptr, nullptr, nullptr);
+        engine.setEngineSettings(m_settings);
+        m_wts->setSnapState(engine.snapState());
+
+        const auto p = engine.capturePlacement(QStringLiteral("app|unmanaged"));
+        QVERIFY(p.has_value());
+        const PhosphorEngine::EngineSlot slot = p->slotFor(PhosphorEngine::WindowPlacement::snapEngineId());
+        QCOMPARE(slot.state, QString(PhosphorEngine::WindowPlacement::stateFloating()));
+        QVERIFY2(slot.state != PhosphorEngine::WindowPlacement::stateFree(),
+                 "the retired `free` state must never be produced");
+        m_wts->setSnapState(nullptr);
+    }
+
+    // A new window that matches no auto-snap rule on a snap-mode screen defaults to
+    // FLOATED (not the retired `free`): resolveWindowRestore marks it floating
+    // (windowFloatingChanged true) and returns noSnap. The guiless fixture wires no
+    // mode providers, so the unconfigured DP-1 resolves to the default Snapping mode
+    // (LayoutRegistry::resolveDefaultAssignmentEntry → default-constructed entry,
+    // Mode::Snapping == 0). The window therefore deterministically reaches the
+    // snap-mode no-match fallthrough; the distinctive log line pins that path.
+    void testResolveWindowRestore_newWindowNoMatch_defaultsToFloating()
+    {
+        SnapEngine engine(m_layoutManager, m_wts, nullptr, nullptr, nullptr);
+        engine.setEngineSettings(m_settings);
+        m_wts->setSnapState(engine.snapState());
+
+        auto* layout = createTestLayout(2, m_layoutManager);
+        m_layoutManager->addLayout(layout);
+        m_layoutManager->setActiveLayout(layout);
+
+        QSignalSpy floatSpy(&engine, &PhosphorEngine::PlacementEngineBase::windowFloatingChanged);
+
+        PhosphorEngine::SnapResult result;
+        const QStringList lines =
+            captureResolveLogs(engine, QStringLiteral("app|brand-new"), QStringLiteral("DP-1"), &result);
+        const QString joined = lines.join(QLatin1Char('\n'));
+
+        QVERIFY(!result.shouldSnap);
+        QVERIFY2(joined.contains(QStringLiteral("defaulting to floated")),
+                 "a no-match window on a snap-mode screen must default to floated");
+        QCOMPARE(floatSpy.count(), 1);
+        QCOMPARE(floatSpy.takeFirst().at(1).toBool(), true);
+        m_wts->setSnapState(nullptr);
+    }
+
+    // The unfloatFallbackToZone setting GATES the fallback: with it off, a window
+    // that has no pre-float zone gets no fallback target (resolveFallbackUnfloatGeometry
+    // returns not-found), so unfloat keeps it floating. (The on-success geometry path
+    // needs a valid zoneGeometry, which this guiless fixture cannot produce — null
+    // QGuiApplication::primaryScreen(); it is covered end-to-end in the QTEST_MAIN
+    // test_snap_unfloat_fallback.cpp instead.)
+    void testResolveFallbackUnfloatGeometry_offReturnsNotFound()
+    {
+        SnapEngine engine(m_layoutManager, m_wts, nullptr, nullptr, nullptr);
+        engine.setEngineSettings(m_settings);
+        m_wts->setSnapState(engine.snapState());
+
+        auto* layout = createTestLayout(2, m_layoutManager);
+        m_layoutManager->addLayout(layout);
+        m_layoutManager->setActiveLayout(layout);
+
+        // A floating window with no pre-float zone, on a known screen.
+        engine.snapState()->setFloatingOnScreen(QStringLiteral("app|nofloatzone"), QStringLiteral("DP-1"), 0);
+
+        // Setting OFF (the StubSettings default) → no fallback, regardless of layout.
+        m_settings->setSnapUnfloatFallbackToZone(false);
+        QVERIFY2(
+            !engine.resolveFallbackUnfloatGeometry(QStringLiteral("app|nofloatzone"), QStringLiteral("DP-1")).found,
+            "unfloatFallbackToZone off → no fallback target");
+        m_wts->setSnapState(nullptr);
+    }
+
+    // Companion to the OFF test: with the setting ON, the resolver runs the full
+    // chain PAST the opt-in gate — effective-screen resolution, layout lookup, and
+    // zone selection (last-used → first-empty → first zone) — and reaches the final
+    // geometry gate. Under QTEST_GUILESS_MAIN there is no QScreen, so zoneGeometry()
+    // returns an invalid QRect and the result is still not-found. This pins that (a)
+    // the post-gate chain executes without crashing on a real layout, and (b) the
+    // headless geometry limitation — not a broken gate — is what produces not-found
+    // here (the on-success geometry path is covered in test_snap_unfloat_fallback.cpp).
+    void testResolveFallbackUnfloatGeometry_onButHeadlessReturnsNotFound()
+    {
+        SnapEngine engine(m_layoutManager, m_wts, nullptr, nullptr, nullptr);
+        engine.setEngineSettings(m_settings);
+        m_wts->setSnapState(engine.snapState());
+
+        auto* layout = createTestLayout(2, m_layoutManager);
+        m_layoutManager->addLayout(layout);
+        m_layoutManager->setActiveLayout(layout);
+
+        engine.snapState()->setFloatingOnScreen(QStringLiteral("app|nofloatzone"), QStringLiteral("DP-1"), 0);
+
+        m_settings->setSnapUnfloatFallbackToZone(true);
+        QVERIFY2(
+            !engine.resolveFallbackUnfloatGeometry(QStringLiteral("app|nofloatzone"), QStringLiteral("DP-1")).found,
+            "unfloatFallbackToZone on, but headless zoneGeometry is invalid → still no fallback target");
+        m_wts->setSnapState(nullptr);
+    }
+
+    // =========================================================================
+    // setExcludeRuleSet + isAppIdExcluded wiring tests
+    //
+    // Daemon owns the filtered Exclude rule set and pushes its address into
+    // SnapEngine via `setExcludeRuleSet`. SnapEngine lazily binds a
+    // `RuleEvaluator` to that set on first `isAppIdExcluded` call and
+    // re-binds it whenever the pointer changes. An in-place edit through
+    // `WindowRuleSet::setRules` bumps the revision counter; the evaluator's
+    // per-revision sort index + match cache invalidate automatically.
+    //
+    // These tests pin the contract the daemon's `refilterExcludeRules`
+    // lambda + `Daemon::stop()` `setExcludeRuleSet(nullptr)` teardown
+    // rely on:
+    //   - nullptr borrow ⇒ isAppIdExcluded == false (early-init fast path)
+    //   - empty set      ⇒ isAppIdExcluded == false (no-exclusions fast path)
+    //   - matching rule  ⇒ isAppIdExcluded == true
+    //   - pointer change ⇒ cached evaluator drops + rebinds against new set
+    //   - in-place edit  ⇒ revision bump invalidates the eval cache
+    // =========================================================================
+
+    void testExcludeWiring_nullptrBorrowReturnsFalse()
+    {
+        SnapEngine engine(nullptr, m_wts, nullptr, nullptr, nullptr);
+        // No setExcludeRuleSet call — m_excludeRuleSet starts nullptr.
+        QVERIFY(!engine.isAppIdExcluded(QStringLiteral("firefox")));
+    }
+
+    void testExcludeWiring_emptySetReturnsFalse()
+    {
+        SnapEngine engine(nullptr, m_wts, nullptr, nullptr, nullptr);
+        PhosphorWindowRules::WindowRuleSet emptySet;
+        engine.setExcludeRuleSet(&emptySet);
+        QVERIFY(!engine.isAppIdExcluded(QStringLiteral("firefox")));
+    }
+
+    void testExcludeWiring_matchingRuleReturnsTrue()
+    {
+        SnapEngine engine(nullptr, m_wts, nullptr, nullptr, nullptr);
+
+        PhosphorWindowRules::WindowRuleSet set;
+        PhosphorWindowRules::WindowRule rule;
+        rule.id = QUuid::createUuid();
+        rule.name = QStringLiteral("exclude-firefox");
+        rule.enabled = true;
+        rule.match = PhosphorWindowRules::MatchExpression::makeLeaf(
+            PhosphorWindowRules::Field::AppId, PhosphorWindowRules::Operator::AppIdMatches, QStringLiteral("firefox"));
+        PhosphorWindowRules::RuleAction action;
+        action.type = QString(PhosphorWindowRules::ActionType::Exclude);
+        rule.actions.append(action);
+        QVERIFY(set.addRule(rule));
+
+        engine.setExcludeRuleSet(&set);
+        QVERIFY(engine.isAppIdExcluded(QStringLiteral("firefox")));
+        // Non-matching appId resolves to not-excluded against the same
+        // bound set — the evaluator differentiates correctly.
+        QVERIFY(!engine.isAppIdExcluded(QStringLiteral("konsole")));
+    }
+
+    void testExcludeWiring_pointerChangeRebindsEvaluator()
+    {
+        SnapEngine engine(nullptr, m_wts, nullptr, nullptr, nullptr);
+
+        PhosphorWindowRules::WindowRuleSet firefoxSet;
+        PhosphorWindowRules::WindowRule firefoxRule;
+        firefoxRule.id = QUuid::createUuid();
+        firefoxRule.enabled = true;
+        firefoxRule.match = PhosphorWindowRules::MatchExpression::makeLeaf(
+            PhosphorWindowRules::Field::AppId, PhosphorWindowRules::Operator::AppIdMatches, QStringLiteral("firefox"));
+        PhosphorWindowRules::RuleAction firefoxAction;
+        firefoxAction.type = QString(PhosphorWindowRules::ActionType::Exclude);
+        firefoxRule.actions.append(firefoxAction);
+        QVERIFY(firefoxSet.addRule(firefoxRule));
+
+        PhosphorWindowRules::WindowRuleSet konsoleSet;
+        PhosphorWindowRules::WindowRule konsoleRule;
+        konsoleRule.id = QUuid::createUuid();
+        konsoleRule.enabled = true;
+        konsoleRule.match = PhosphorWindowRules::MatchExpression::makeLeaf(
+            PhosphorWindowRules::Field::AppId, PhosphorWindowRules::Operator::AppIdMatches, QStringLiteral("konsole"));
+        PhosphorWindowRules::RuleAction konsoleAction;
+        konsoleAction.type = QString(PhosphorWindowRules::ActionType::Exclude);
+        konsoleRule.actions.append(konsoleAction);
+        QVERIFY(konsoleSet.addRule(konsoleRule));
+
+        // Wire the firefox set, prime the cached evaluator.
+        engine.setExcludeRuleSet(&firefoxSet);
+        QVERIFY(engine.isAppIdExcluded(QStringLiteral("firefox")));
+        QVERIFY(!engine.isAppIdExcluded(QStringLiteral("konsole")));
+
+        // Re-wire to the konsole set — the cached evaluator was bound to
+        // firefoxSet by reference; without the pointer-change rebind in
+        // setExcludeRuleSet, this would still resolve "firefox" as
+        // excluded and "konsole" as not.
+        engine.setExcludeRuleSet(&konsoleSet);
+        QVERIFY(!engine.isAppIdExcluded(QStringLiteral("firefox")));
+        QVERIFY(engine.isAppIdExcluded(QStringLiteral("konsole")));
+
+        // Clear: nullptr borrow short-circuits to false again.
+        engine.setExcludeRuleSet(nullptr);
+        QVERIFY(!engine.isAppIdExcluded(QStringLiteral("firefox")));
+        QVERIFY(!engine.isAppIdExcluded(QStringLiteral("konsole")));
+    }
+
+    // Honest scope of this test (renamed from the earlier
+    // `…InvalidatesEvalCache` name): exercises that across in-place
+    // `WindowRuleSet::setRules` edits at the SAME bound pointer, the
+    // evaluator surfaces the post-edit rule set (not stale results
+    // from the pre-edit rule set). `WindowRuleSet::setRules`
+    // unconditionally bumps the revision counter, so the evaluator's
+    // revision-equality guard
+    // (`m_priorityOrderRevision == revision`) catches every transition
+    // here independently of the also-present size guard
+    // (`m_priorityOrderRulesSize == rules.size()`) — the size guard
+    // only fires under a quint64 revision wraparound the production
+    // path effectively never hits (~5.85 billion years of one-per-
+    // second edits, see RuleEvaluator's own commentary). This test
+    // doesn't pin the size guard in isolation; a fixture that did
+    // would need test-only hooks to force a revision collision. The
+    // grow-the-list (1 → 2) step is kept because it makes
+    // false-negative regressions in the priority-order rebuild
+    // visible (cached `[0]` walk would skip rules[1]), even though
+    // the revision guard catches it first in the current code.
+    void testExcludeWiring_inPlaceSetRulesRespectsRevisionBump()
+    {
+        SnapEngine engine(nullptr, m_wts, nullptr, nullptr, nullptr);
+
+        PhosphorWindowRules::WindowRuleSet set;
+        // Wire BEFORE adding rules so the bound pointer doesn't change
+        // when we mutate the set; this is the daemon's actual pattern
+        // (setExcludeRuleSet wired once at init, edits happen via
+        // setRules from the rulesChanged subscription).
+        engine.setExcludeRuleSet(&set);
+
+        const auto excludeRule = [](const QString& pattern) {
+            PhosphorWindowRules::WindowRule r;
+            r.id = QUuid::createUuid();
+            r.enabled = true;
+            r.match = PhosphorWindowRules::MatchExpression::makeLeaf(
+                PhosphorWindowRules::Field::AppId, PhosphorWindowRules::Operator::AppIdMatches, pattern);
+            PhosphorWindowRules::RuleAction a;
+            a.type = QString(PhosphorWindowRules::ActionType::Exclude);
+            r.actions.append(a);
+            return r;
+        };
+
+        // Step 1: rule A exists (size 1). Querying primes the cached
+        // evaluator against the bound set at its current revision; the
+        // resolved priority-order index is `[0]`.
+        set.setRules({excludeRule(QStringLiteral("appA"))});
+        QVERIFY(engine.isAppIdExcluded(QStringLiteral("appA")));
+        QVERIFY(!engine.isAppIdExcluded(QStringLiteral("appB")));
+
+        // Step 2: swap rule A for rule B at the SAME size (1 → 1).
+        // Verifies that the new rule's match is picked up — the
+        // priorityOrder cache happens to remain `[0]` which still
+        // indexes the only post-swap rule, so this step alone does
+        // NOT discriminate revision-bump invalidation from a stale
+        // cache (the broken walk visits rules[0] which IS the new
+        // rule). It does verify that the engine doesn't latch onto
+        // the OLD rule's pattern, which is the load-bearing user-
+        // facing property.
+        set.setRules({excludeRule(QStringLiteral("appB"))});
+        QVERIFY(!engine.isAppIdExcluded(QStringLiteral("appA")));
+        QVERIFY(engine.isAppIdExcluded(QStringLiteral("appB")));
+
+        // Step 3: GROW the list (1 → 2). This is the step that
+        // discriminates a working `priorityOrder()` rebuild from a
+        // broken one. The cached permutation from Step 2 has size 1;
+        // the new set has size 2. Without per-revision invalidation,
+        // the cached `[0]` walk would only visit rules[0] (the
+        // already-known "appB" rule) — rules[1] ("appC") would never
+        // be evaluated and `isAppIdExcluded("appC")` would return
+        // false (false-negative). The pass verdict requires BOTH
+        // pre-existing AND newly-appended rules to resolve correctly.
+        set.setRules({excludeRule(QStringLiteral("appB")), excludeRule(QStringLiteral("appC"))});
+        QVERIFY(engine.isAppIdExcluded(QStringLiteral("appB")));
+        QVERIFY(engine.isAppIdExcluded(QStringLiteral("appC")));
+        QVERIFY(!engine.isAppIdExcluded(QStringLiteral("appA")));
+
+        // Step 4: clear via empty setRules. This goes through the
+        // `isEmpty()` fast path in `SnapEngine::isAppIdExcluded` (not
+        // the evaluator), but verifies the bound pointer survives the
+        // mutation cleanly.
+        set.setRules({});
+        QVERIFY(!engine.isAppIdExcluded(QStringLiteral("appA")));
+        QVERIFY(!engine.isAppIdExcluded(QStringLiteral("appB")));
+        QVERIFY(!engine.isAppIdExcluded(QStringLiteral("appC")));
+    }
+
+    // ── Cross-mode handoff (Phase 3): the entry zone a window enters when it
+    //    crosses onto a snap neighbour is the edge zone facing back toward the
+    //    source (crossing "right" → the neighbour's LEFT-edge zone). ────────────
+    void testEntryZoneForCrossing_facingEdge()
+    {
+        // Minimal adjacency stub: records the (direction, screen) it is asked for
+        // and returns a deterministic zone id so we can assert the opposite-edge
+        // mapping entryZoneForCrossing applies.
+        struct FakeAdjacency : PhosphorSnapEngine::IZoneAdjacencyResolver
+        {
+            mutable QString lastDirection;
+            mutable QString lastScreen;
+            QString getAdjacentZone(const QString&, const QString&, const QString&) const override
+            {
+                return {};
+            }
+            QString getFirstZoneInDirection(const QString& direction, const QString& screenId) const override
+            {
+                lastDirection = direction;
+                lastScreen = screenId;
+                return QStringLiteral("entry:") + direction;
+            }
+        };
+        FakeAdjacency adj;
+        SnapEngine engine(nullptr, m_wts, nullptr, nullptr, nullptr);
+        engine.setZoneAdjacencyResolver(&adj);
+
+        // Crossing RIGHT enters the neighbour from its LEFT edge.
+        QCOMPARE(engine.entryZoneForCrossing(QStringLiteral("right"), QStringLiteral("DP-2")),
+                 QStringLiteral("entry:left"));
+        QCOMPARE(adj.lastDirection, QStringLiteral("left"));
+        QCOMPARE(adj.lastScreen, QStringLiteral("DP-2"));
+        // The other directions invert correctly.
+        QCOMPARE(engine.entryZoneForCrossing(QStringLiteral("left"), QStringLiteral("DP-2")),
+                 QStringLiteral("entry:right"));
+        QCOMPARE(engine.entryZoneForCrossing(QStringLiteral("up"), QStringLiteral("DP-2")),
+                 QStringLiteral("entry:down"));
+        QCOMPARE(engine.entryZoneForCrossing(QStringLiteral("down"), QStringLiteral("DP-2")),
+                 QStringLiteral("entry:up"));
+        // An unknown token yields no entry zone.
+        QVERIFY(engine.entryZoneForCrossing(QStringLiteral("diagonal"), QStringLiteral("DP-2")).isEmpty());
     }
 };
 

@@ -4,18 +4,14 @@
 #include "editorpagecontroller.h"
 
 #include "../config/configdefaults.h"
-#include "../config/settings.h"
-
-#include <QtGlobal>
+#include "../core/isettings.h"
 
 namespace PlasmaZones {
 
-EditorPageController::EditorPageController(Settings* settings, QObject* parent)
-    : QObject(parent)
-    , m_settings(settings)
+EditorPageController::EditorPageController(ISettings& settings, QObject* parent)
+    : PhosphorControl::PageController(QStringLiteral("editor"), parent)
+    , m_settings(&settings)
 {
-    Q_ASSERT(m_settings);
-
     // Forward each Settings NOTIFY to the local Q_PROPERTY NOTIFY + the
     // generic `changed()` signal. The shared Settings instance is the source
     // of truth; the sub-controller is a pure facade. Each forward re-emits
@@ -26,17 +22,17 @@ EditorPageController::EditorPageController(Settings* settings, QObject* parent)
             Q_EMIT changed();
         });
     };
-    forward(&Settings::editorDuplicateShortcutChanged, &EditorPageController::duplicateShortcutChanged);
-    forward(&Settings::editorSplitHorizontalShortcutChanged, &EditorPageController::splitHorizontalShortcutChanged);
-    forward(&Settings::editorSplitVerticalShortcutChanged, &EditorPageController::splitVerticalShortcutChanged);
-    forward(&Settings::editorFillShortcutChanged, &EditorPageController::fillShortcutChanged);
-    forward(&Settings::editorGridSnappingEnabledChanged, &EditorPageController::gridSnappingEnabledChanged);
-    forward(&Settings::editorEdgeSnappingEnabledChanged, &EditorPageController::edgeSnappingEnabledChanged);
-    forward(&Settings::editorSnapIntervalXChanged, &EditorPageController::snapIntervalXChanged);
-    forward(&Settings::editorSnapIntervalYChanged, &EditorPageController::snapIntervalYChanged);
-    forward(&Settings::editorSnapOverrideModifierChanged, &EditorPageController::snapOverrideModifierChanged);
-    forward(&Settings::fillOnDropEnabledChanged, &EditorPageController::fillOnDropEnabledChanged);
-    forward(&Settings::fillOnDropModifierChanged, &EditorPageController::fillOnDropModifierChanged);
+    forward(&ISettings::editorDuplicateShortcutChanged, &EditorPageController::duplicateShortcutChanged);
+    forward(&ISettings::editorSplitHorizontalShortcutChanged, &EditorPageController::splitHorizontalShortcutChanged);
+    forward(&ISettings::editorSplitVerticalShortcutChanged, &EditorPageController::splitVerticalShortcutChanged);
+    forward(&ISettings::editorFillShortcutChanged, &EditorPageController::fillShortcutChanged);
+    forward(&ISettings::editorGridSnappingEnabledChanged, &EditorPageController::gridSnappingEnabledChanged);
+    forward(&ISettings::editorEdgeSnappingEnabledChanged, &EditorPageController::edgeSnappingEnabledChanged);
+    forward(&ISettings::editorSnapIntervalXChanged, &EditorPageController::snapIntervalXChanged);
+    forward(&ISettings::editorSnapIntervalYChanged, &EditorPageController::snapIntervalYChanged);
+    forward(&ISettings::editorSnapOverrideModifierChanged, &EditorPageController::snapOverrideModifierChanged);
+    forward(&ISettings::fillOnDropEnabledChanged, &EditorPageController::fillOnDropEnabledChanged);
+    forward(&ISettings::fillOnDropModifierChanged, &EditorPageController::fillOnDropModifierChanged);
 }
 
 QString EditorPageController::duplicateShortcut() const

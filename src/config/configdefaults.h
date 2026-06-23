@@ -6,6 +6,7 @@
 #include <QColor>
 #include <QHash>
 #include <QRectF>
+#include <QJsonObject>
 #include <QString>
 #include <QStringList>
 #include <QVariantList>
@@ -18,6 +19,7 @@
 #include "plasmazones_export.h"
 // PhosphorTiles::AutotileDefaults lives in PhosphorTiles — config layer delegates to it for
 // the user-facing default accessors.
+#include <PhosphorCompositor/DecorationDefaults.h>
 #include <PhosphorTiles/AutotileConstants.h>
 // Animation duration / stagger UI bounds — generic policy, not autotile-specific.
 #include <PhosphorAnimation/AnimationLimits.h>
@@ -85,11 +87,15 @@ public:
     }
     static int zoneSpanModifier()
     {
-        return 2;
+        return static_cast<int>(DragModifier::Ctrl);
     }
     static QVariantList zoneSpanTriggers()
     {
         return makeSingleTriggerList(zoneSpanModifier());
+    }
+    static bool zoneSpanToggleMode()
+    {
+        return false;
     }
     static QVariantList autotileDragInsertTriggers()
     {
@@ -156,7 +162,7 @@ public:
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
-    // Appearance Settings
+    // Zone Overlay (Snapping.Zones.*) Settings
     // ═══════════════════════════════════════════════════════════════════════════
 
     static bool useSystemColors()
@@ -422,7 +428,7 @@ public:
     {
         return true;
     }
-    static int stickyWindowHandling()
+    static int snappingStickyWindowHandling()
     {
         return 0;
     }
@@ -430,7 +436,30 @@ public:
     {
         return true;
     }
+    // Restore a FLOATED window to its previous position on reopen. Per-engine
+    // (snap-floated vs autotile-floated); snapping delegates to the autotile
+    // canonical so both modes start identical, mirroring the border defaults.
+    static bool autotileRestoreFloatedWindowsOnLogin()
+    {
+        return true;
+    }
+    static bool snappingRestoreFloatedWindowsOnLogin()
+    {
+        return autotileRestoreFloatedWindowsOnLogin();
+    }
+    static bool snapUnfloatFallbackToZone()
+    {
+        return false;
+    }
     static bool autoAssignAllLayouts()
+    {
+        return false;
+    }
+    // Off by default: every context still gets the synthesized level-1 default
+    // layout (today's behavior). When on, no context is assigned an active
+    // snapping or autotiling layout until the user explicitly assigns one —
+    // overridable per context by a DefaultLayoutAssignment window rule.
+    static bool suppressDefaultLayoutAssignment()
     {
         return false;
     }
@@ -592,6 +621,17 @@ public:
     {
         return 400;
     }
+    // Zone-selector preview-size presets (Small / Large). Medium reuses the
+    // default previewWidth() (180). Used by the Small/Medium/Large quick-size
+    // buttons so the widths aren't hard-coded in QML.
+    static constexpr int previewWidthSmall()
+    {
+        return 120;
+    }
+    static constexpr int previewWidthLarge()
+    {
+        return 260;
+    }
     static int previewHeight()
     {
         return 101;
@@ -635,10 +675,32 @@ public:
     // and high-frequency session state saves.
     PLASMAZONES_EXPORT static QString sessionFilePath();
 
-    // Returns the absolute path to assignments.json (layout assignments and
-    // quick layout shortcuts).  Separate from config.json so that Settings
-    // and PhosphorZones::LayoutRegistry have independent ownership of their files.
-    PLASMAZONES_EXPORT static QString assignmentsFilePath();
+    // Returns the absolute path to windowrules.json (the unified WindowRule
+    // store — schema v4). Separate from config.json so frequent daemon-driven
+    // rule writes do not churn the cold user-settings blob. The daemon is the
+    // sole writer; see docs/window-rule-refactor-design.md §5.
+    PLASMAZONES_EXPORT static QString windowRulesFilePath();
+
+    // Returns the absolute path to quicklayouts.json (the numbered quick-layout
+    // shortcut slots 1..9). Quick-layout slots are NOT window rules, so they
+    // sit in a sibling sidecar next to windowrules.json rather than in the
+    // rule store. LayoutRegistry reads/writes this file directly.
+    PLASMAZONES_EXPORT static QString quickLayoutsFilePath();
+
+    // Returns the absolute path to layout-settings.json — the per-layout
+    // settings sidecar (keyed by layout UUID). Per-layout settings are NOT part
+    // of the structural layout definition, so they live in a sibling sidecar
+    // next to windowrules.json rather than inside each layout file.
+    PLASMAZONES_EXPORT static QString layoutSettingsFilePath();
+
+    // Curated default picker visibility, seeded into layout-settings.json on a
+    // fresh install only (LayoutRegistry::seedDefaultLayoutSettingsIfFresh).
+    // Returns an object keyed exactly as layout-settings.json — manual layouts
+    // by bundled UUID (with braces), algorithms by the "autotile:<id>" form —
+    // mapping each non-curated id to `{ "hiddenFromSelector": true }`. Listed
+    // ids start hidden; everything else stays visible. Users re-show any item
+    // via the eye toggle, and existing installs are never reseeded.
+    PLASMAZONES_EXPORT static QJsonObject defaultLayoutVisibilitySettings();
 
     // Returns the absolute path to the legacy plasmazonesrc file (INI format).
     // Used only by the one-time migration module.
@@ -647,12 +709,15 @@ public:
     /**
      * Read the rendering backend from the config file on disk.
      *
-     * QSettings::IniFormat maps ungrouped keys (before any [Section] header) into
-     * the "General" group automatically. The settings app writes RenderingBackend
-     * at the root level, so the default read resolves it via General/ implicitly.
-     * This helper provides a single canonical read used by daemon, editor, and Settings.
+     * Primary path: reads Rendering/Backend from config.json (the
+     * renderingGroup()/backendKey() accessors). Falls back to the legacy
+     * plasmazonesrc INI (v1 key) when the JSON config is absent, unparseable,
+     * or doesn't carry the key — in practice the pre-migration window, since
+     * a successful migration renames the INI away. This helper provides a
+     * single canonical read used by daemon, editor, and Settings.
      *
-     * Safe to call before QCoreApplication exists (uses raw QSettings).
+     * Safe to call before QCoreApplication exists (raw file access, no
+     * config backend construction).
      * Returns the normalized backend string ("auto", "vulkan", or "opengl").
      */
     PLASMAZONES_EXPORT static QString readRenderingBackendFromDisk();
@@ -677,10 +742,16 @@ public:
     // When adding entries, also add the display name to the translation catalog.
     static const QList<RenderingBackendEntry>& renderingBackendEntries()
     {
+        // QT_TRANSLATE_NOOP marks the display names for lupdate
+        // extraction under the project's "plasmazones" context while
+        // keeping the literal as the runtime value — GeneralPageController
+        // resolves the translated form via PhosphorI18n::tr() at display time.
+        // Without the macro, lupdate wouldn't see the source strings
+        // and the .ts catalog would never carry the translations.
         static const QList<RenderingBackendEntry> entries = {
-            {QStringLiteral("auto"), QStringLiteral("Automatic")},
-            {QStringLiteral("vulkan"), QStringLiteral("Vulkan")},
-            {QStringLiteral("opengl"), QStringLiteral("OpenGL")},
+            {QStringLiteral("auto"), QStringLiteral(QT_TRANSLATE_NOOP("plasmazones", "Automatic"))},
+            {QStringLiteral("vulkan"), QStringLiteral(QT_TRANSLATE_NOOP("plasmazones", "Vulkan"))},
+            {QStringLiteral("opengl"), QStringLiteral(QT_TRANSLATE_NOOP("plasmazones", "OpenGL"))},
         };
         return entries;
     }
@@ -697,7 +768,7 @@ public:
     }
 
     // Untranslated display names — use for translation source only.
-    // SettingsController translates these via PzI18n::tr() at runtime.
+    // GeneralPageController translates these via PhosphorI18n::tr() at runtime.
     static QStringList renderingBackendDisplayNames()
     {
         QStringList names;
@@ -757,9 +828,16 @@ public:
     // Autotile Settings
     // ═══════════════════════════════════════════════════════════════════════════
 
+    // Autotiling is on out of the box so PlasmaZones tiles like a dynamic
+    // tiler (krohnkite, dwm, xmonad) without setup. The companion
+    // krohnkite-parity behaviors are already on by default elsewhere here:
+    // autotileFocusNewWindows, autotileSmartGaps (sole window fills the
+    // screen), autotileRespectMinimumSize, and excludeTransientWindows
+    // (dialogs / utility windows float), with new windows inserted at the
+    // stack end rather than as master.
     static bool autotileEnabled()
     {
-        return false;
+        return true;
     }
     static QString defaultAutotileAlgorithm()
     {
@@ -978,17 +1056,18 @@ public:
         return {};
     }
 
-    /// Animation App Rules default — empty array. Persisted as a JSON
-    /// array (top-level QVariantList) so the schema entry can route
-    /// through the same `QVariantList`-typed read/write path the
-    /// existing settings backends already implement for ordered
-    /// arrays. fromJson tolerates an empty list as the no-rules case.
-    static QVariantList animationAppRules()
-    {
-        return {};
-    }
-
     static bool autotileFocusFollowsMouse()
+    {
+        return false;
+    }
+    // Snapping focus behavior. Both default off: snapping is more manual than
+    // autotile, and auto-focusing windows that the daemon places on open (e.g.
+    // a session restore that opens many windows at once) would thrash focus.
+    static bool snappingFocusNewWindows()
+    {
+        return false;
+    }
+    static bool snappingFocusFollowsMouse()
     {
         return false;
     }
@@ -996,37 +1075,48 @@ public:
     {
         return true;
     }
+    // Window-decoration hide/show/width/radius defaults delegate to the
+    // shared PhosphorCompositor::DecorationDefaults constants — the same
+    // symbols the effect's BorderState member-initializers use — so the
+    // daemon's persisted defaults and the effect's pre-settings-load
+    // rendering can't drift. (ZoneDefaults is the zone OVERLAY's constants,
+    // a different visual concept; the old width/radius delegation to it was
+    // an accident of equal values.) The border COLORS below intentionally
+    // remain ZoneDefaults-sourced: DecorationDefaults carries no color
+    // constants because colors are daemon-resolved (system accent) and
+    // pushed via settings — nothing renders pre-load (ShowBorder defaults
+    // false), so there is no drift concern to share symbols over.
     static bool autotileHideTitleBars()
     {
-        return true;
+        return ::PhosphorCompositor::DecorationDefaults::HideTitleBars;
     }
     static bool autotileShowBorder()
     {
-        return true;
+        return ::PhosphorCompositor::DecorationDefaults::ShowBorder;
     }
     static int autotileBorderWidth()
     {
-        return ::PhosphorZones::ZoneDefaults::BorderWidth;
+        return ::PhosphorCompositor::DecorationDefaults::BorderWidth;
     }
     static constexpr int autotileBorderWidthMin()
     {
-        return 0;
+        return ::PhosphorCompositor::DecorationDefaults::BorderWidthMin;
     }
     static constexpr int autotileBorderWidthMax()
     {
-        return 10;
+        return ::PhosphorCompositor::DecorationDefaults::BorderWidthMax;
     }
     static int autotileBorderRadius()
     {
-        return 0;
+        return ::PhosphorCompositor::DecorationDefaults::BorderRadius;
     }
     static constexpr int autotileBorderRadiusMin()
     {
-        return 0;
+        return ::PhosphorCompositor::DecorationDefaults::BorderRadiusMin;
     }
     static constexpr int autotileBorderRadiusMax()
     {
-        return 20;
+        return ::PhosphorCompositor::DecorationDefaults::BorderRadiusMax;
     }
     static QColor autotileBorderColor()
     {
@@ -1039,6 +1129,55 @@ public:
     static bool autotileUseSystemBorderColors()
     {
         return true;
+    }
+
+    // Snapping window appearance — the snapped window's border / title-bar
+    // decoration (stored under Snapping.Appearance.*). Every default delegates to
+    // its autotile* counterpart so the two modes start from identical window
+    // appearance: a single edit to the autotile default moves both in lockstep.
+    static bool snappingHideTitleBars()
+    {
+        return autotileHideTitleBars();
+    }
+    static bool snappingShowBorder()
+    {
+        return autotileShowBorder();
+    }
+    static int snappingBorderWidth()
+    {
+        return autotileBorderWidth();
+    }
+    static constexpr int snappingBorderWidthMin()
+    {
+        return autotileBorderWidthMin();
+    }
+    static constexpr int snappingBorderWidthMax()
+    {
+        return autotileBorderWidthMax();
+    }
+    static int snappingBorderRadius()
+    {
+        return autotileBorderRadius();
+    }
+    static constexpr int snappingBorderRadiusMin()
+    {
+        return autotileBorderRadiusMin();
+    }
+    static constexpr int snappingBorderRadiusMax()
+    {
+        return autotileBorderRadiusMax();
+    }
+    static QColor snappingBorderColor()
+    {
+        return autotileBorderColor();
+    }
+    static QColor snappingInactiveBorderColor()
+    {
+        return autotileInactiveBorderColor();
+    }
+    static bool snappingUseSystemBorderColors()
+    {
+        return autotileUseSystemBorderColors();
     }
     static int autotileStickyWindowHandling()
     {
@@ -1131,11 +1270,16 @@ public:
     /// Per-axis defaults — currently share the same value as editorSnapInterval
     /// but split so future aspect-aware defaults don't require auditing every
     /// call site. Use these from resetDefaults / first-run paths.
-    static double editorSnapIntervalX()
+    ///
+    /// Return type is `qreal` to match `ISettings::editorSnapIntervalX/Y`
+    /// (qreal is `double` on every Qt6-supported target, but the type
+    /// alignment removes a category of "I forgot which one" mistakes in
+    /// callers that take the value `auto`).
+    static qreal editorSnapIntervalX()
     {
         return editorSnapInterval();
     }
-    static double editorSnapIntervalY()
+    static qreal editorSnapIntervalY()
     {
         return editorSnapInterval();
     }

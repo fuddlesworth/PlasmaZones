@@ -5,15 +5,10 @@
 
 #include <phosphortiles_export.h>
 #include "AutotileConstants.h"
-// TilingParams, TilingScreenInfo, WindowInfo, buildWindowInfos, EdgeGaps and
-// the static helper structs (ThreeColumnWidths, CumulativeMinDims) used to be
-// declared inline in this header. They have moved to dedicated headers to
-// keep responsibilities split:
-//   - TilingParams.h           — per-call parameter bundles + WindowInfo builder
-//   - TilingAlgorithmHelpers.h — POD helper result types
-// Both are included here so existing callers that only include
-// <PhosphorTiles/TilingAlgorithm.h> continue to compile unchanged.
-#include "TilingAlgorithmHelpers.h"
+// TilingParams, TilingScreenInfo, WindowInfo, buildWindowInfos and EdgeGaps used
+// to be declared inline in this header. They now live in TilingParams.h
+// (per-call parameter bundles + WindowInfo builder), included here so existing
+// callers that only include <PhosphorTiles/TilingAlgorithm.h> compile unchanged.
 #include "TilingParams.h"
 
 #include <QObject>
@@ -73,8 +68,8 @@ public:
      * @brief Inject a resolver that maps an opaque instance id to its live app class.
      *
      * Used by algorithms that need per-window class info (currently only
-     * ScriptedAlgorithm, which exposes class to user-authored JS). Built-in
-     * geometry algorithms don't care and ignore the resolver.
+     * LuauTileAlgorithm, which exposes it to user-authored Luau scripts).
+     * Built-in geometry algorithms don't care and ignore the resolver.
      *
      * Injected by AutotileEngine::setWindowRegistry() so every algorithm
      * returned from AlgorithmRegistry::algorithm() is seeded with the live
@@ -84,7 +79,7 @@ public:
      *
      * Thread safety: setter must be called from the main thread; the resolver
      * itself is invoked only from algorithm methods that already run on the
-     * main thread (buildJsState / onWindowAdded / etc.).
+     * main thread (buildStateMap / onWindowAdded / etc.).
      */
     void setAppIdResolver(std::function<QString(const QString&)> resolver)
     {
@@ -224,8 +219,8 @@ public:
     // ── noexcept convention for virtual methods ──────────────────────────
     // Methods below are noexcept because they only read cached POD fields.
     // Methods above (supportsMasterCount, supportsSplitRatio, etc.) are NOT
-    // noexcept because ScriptedAlgorithm overrides may allocate QStrings or
-    // invoke cached JS values. When adding new virtuals, use noexcept only
+    // noexcept because LuauTileAlgorithm overrides may allocate QStrings or
+    // marshal cached script values. When adding new virtuals, use noexcept only
     // if the implementation is guaranteed to never allocate or throw.
 
     /**
@@ -252,10 +247,10 @@ public:
     /**
      * @brief Whether this algorithm is a user-provided scripted algorithm
      *
-     * Scripted algorithms are loaded from JavaScript files at runtime.
+     * Scripted algorithms are loaded from Luau (.luau) files at runtime.
      * Used by the UI to group algorithms into "Built-in" vs "Custom" sections.
      *
-     * @return true if this is a ScriptedAlgorithm (default: false)
+     * @return true if this is a LuauTileAlgorithm (default: false)
      */
     virtual bool isScripted() const noexcept;
 
@@ -297,7 +292,7 @@ public:
     /**
      * @brief Whether this scripted algorithm was loaded from a user directory
      *
-     * System-installed scripts (shipped with PlasmaZones) return false.
+     * System-installed scripts (shipped with Phosphor) return false.
      * User-created scripts in ~/.local/share/plasmazones/algorithms/ return true.
      * Non-scripted algorithms always return false.
      *
@@ -353,6 +348,41 @@ public:
      */
     virtual void onWindowRemoved(TilingState* state, int windowIndex);
 
+    /**
+     * @brief Whether this algorithm reacts to interactive window resizes.
+     *
+     * When true, the engine calls @ref onWindowResized for a non-tree algorithm
+     * after the user finishes resizing a tiled window, letting the algorithm
+     * record the adjustment (typically into TilingState::scriptState) before the
+     * follow-up retile. Tree/memory algorithms do not use this — the engine
+     * reflows their SplitTree directly. Default false.
+     */
+    virtual bool supportsResizeHook() const noexcept;
+
+    /**
+     * @brief Called when a tiled window finished an interactive resize.
+     *
+     * Only invoked for non-memory algorithms that return true from
+     * @ref supportsResizeHook. The algorithm may mutate @p state (e.g. write
+     * TilingState::scriptState) so the immediately-following retile lays the
+     * windows out to honour the resize. Default no-op.
+     *
+     * @param state  Mutable tiling state (window list unchanged by the resize)
+     * @param resize Which window/edges moved, with old/new frames
+     */
+    virtual void onWindowResized(TilingState* state, const ResizeEvent& resize);
+
+    /**
+     * @brief Whether this algorithm persists an opaque per-screen script-state
+     * bag (TilingState::scriptState) across retiles and sessions.
+     *
+     * Scripted algorithms opt in via their metadata so the engine sanitizes and
+     * round-trips the bag (e.g. an aligned grid remembering column widths).
+     * Built-in algorithms do not use it. Used by the picker to surface a
+     * "remembers script state" filter/indicator. Default false.
+     */
+    virtual bool supportsScriptState() const noexcept;
+
     // ── Custom Parameters (optional, v2) ──────────────────────────────────
 
     /**
@@ -399,20 +429,6 @@ protected:
     QString m_registryId;
 
     /**
-     * @brief Distribute a total evenly among N parts with pixel-perfect remainder handling
-     *
-     * Helper for algorithms that need to divide screen space evenly. Distributes
-     * remainder pixels to the first parts to ensure the sum equals the total exactly.
-     *
-     * Example: distributeEvenly(100, 3) returns {34, 33, 33}
-     *
-     * @param total Total pixels to distribute
-     * @param count Number of parts to divide into (must be > 0)
-     * @return Vector of sizes, one per part
-     */
-    static QVector<int> distributeEvenly(int total, int count);
-
-    /**
      * @brief Compute the usable area after subtracting uniform outer gap from screen edges
      *
      * @param screenGeometry Full screen rectangle
@@ -429,138 +445,6 @@ protected:
      * @return Inset rectangle (clamped to at least 1x1)
      */
     static QRect innerRect(const QRect& screenGeometry, const EdgeGaps& gaps);
-
-    /**
-     * @brief Distribute total space among count items with gaps between them
-     *
-     * Deducts (count-1) * gap from total, then distributes the remainder
-     * evenly with pixel-perfect remainder handling.
-     *
-     * @param total Total pixels available (including space for gaps)
-     * @param count Number of items to distribute among (must be > 0)
-     * @param gap Gap between adjacent items in pixels
-     * @return Vector of item sizes (caller positions them with gap spacing)
-     */
-    static QVector<int> distributeWithGaps(int total, int count, int gap);
-
-    /**
-     * @brief Distribute total space among count items with gaps, respecting per-item minimums
-     *
-     * Like distributeWithGaps(), but each item can have a minimum dimension. The algorithm:
-     * 1. Deducts gap space: available = total - (count-1) * gap
-     * 2. If all minimums fit, gives each item its minimum + an even share of surplus
-     * 3. If minimums exceed available space, distributes proportionally by minimum weight
-     *
-     * @param total Total pixels available (including space for gaps)
-     * @param count Number of items to distribute among (must be > 0)
-     * @param gap Gap between adjacent items in pixels
-     * @param minDims Per-item minimum dimension (items beyond vector size default to 1px)
-     * @return Vector of item sizes (caller positions them with gap spacing)
-     */
-    static QVector<int> distributeWithMinSizes(int total, int count, int gap, const QVector<int>& minDims);
-
-    /**
-     * @brief Extract minimum width from minSizes at the given index
-     * @return The minimum width (>= 0), or 0 if index is out of range
-     */
-    static int minWidthAt(const QVector<QSize>& minSizes, int index);
-
-    /**
-     * @brief Extract minimum height from minSizes at the given index
-     * @return The minimum height (>= 0), or 0 if index is out of range
-     */
-    static int minHeightAt(const QVector<QSize>& minSizes, int index);
-
-    /**
-     * @brief Solve two-column/two-row dimension distribution with min-size constraints
-     *
-     * When both minimums fit, clamps each to its minimum.
-     * When they don't fit, distributes proportionally by minimum weight.
-     *
-     * @param contentDim Total available dimension (width or height minus gap)
-     * @param firstDim Initial first dimension (modified in place)
-     * @param secondDim Initial second dimension (modified in place)
-     * @param minFirst Minimum for first dimension (0 = unconstrained)
-     * @param minSecond Minimum for second dimension (0 = unconstrained)
-     */
-    static void solveTwoPartMinSizes(int contentDim, int& firstDim, int& secondDim, int minFirst, int minSecond);
-
-    /**
-     * @brief Apply per-window minimum size constraints (used by overlapping algorithms)
-     *
-     * Clamps width and height upward to the minimum from minSizes[index].
-     * No-op if index is out of range or mins are zero.
-     *
-     * @param width Current width (modified in place)
-     * @param height Current height (modified in place)
-     * @param minSizes Per-window minimum sizes vector
-     * @param index Window index into minSizes
-     */
-    static void applyPerWindowMinSize(int& width, int& height, const QVector<QSize>& minSizes, int index);
-
-    /**
-     * @brief Result of solving three-column width distribution
-     *
-     * Aliased from the namespace-level ::PhosphorTiles::ThreeColumnWidths
-     * (see @c TilingAlgorithmHelpers.h) so legacy callers that reference
-     * @c TilingAlgorithm::ThreeColumnWidths keep compiling.
-     */
-    using ThreeColumnWidths = ::PhosphorTiles::ThreeColumnWidths;
-
-    /**
-     * @brief Solve three-column width distribution with ratio and min-size constraints
-     *
-     * Shared by ThreeColumnAlgorithm and CenteredMasterAlgorithm. Computes
-     * left/center/right widths from a center split ratio, applying MinRectSizePx
-     * floor, min-width clamping, and joint min-width proportional fallback.
-     *
-     * @param areaX Left edge X coordinate
-     * @param contentWidth Total width minus two inter-column gaps
-     * @param innerGap Gap between columns
-     * @param splitRatio Center column ratio (0.0-1.0, will be clamped)
-     * @param minLeftWidth Minimum width for left column (0 = unconstrained)
-     * @param minCenterWidth Minimum width for center column (0 = unconstrained)
-     * @param minRightWidth Minimum width for right column (0 = unconstrained)
-     * @return Solved widths and X positions
-     */
-    static ThreeColumnWidths solveThreeColumnWidths(int areaX, int contentWidth, int innerGap, qreal splitRatio,
-                                                    int minLeftWidth, int minCenterWidth, int minRightWidth);
-
-    /**
-     * @brief Result of precomputing cumulative min dimensions for alternating V/H splits
-     *
-     * Aliased from the namespace-level ::PhosphorTiles::CumulativeMinDims
-     * (see @c TilingAlgorithmHelpers.h) so legacy callers that reference
-     * @c TilingAlgorithm::CumulativeMinDims keep compiling.
-     */
-    using CumulativeMinDims = ::PhosphorTiles::CumulativeMinDims;
-
-    /**
-     * @brief Precompute direction-aware cumulative min dimensions for alternating splits
-     *
-     * Shared by Dwindle and Spiral algorithms. Both alternate V/H splits where
-     * splitV = (i % 2 == 0). Accumulates along the split axis and takes max
-     * for the orthogonal axis.
-     */
-    static CumulativeMinDims computeAlternatingCumulativeMinDims(int windowCount, const QVector<QSize>& minSizes,
-                                                                 int innerGap);
-
-    /**
-     * @brief Append graceful degradation zones when remaining area is too small
-     *
-     * Shared by Dwindle and Spiral. Distributes leftover windows evenly within
-     * the remaining rectangle. zones.last() is resized to the first sub-zone.
-     */
-    static void appendGracefulDegradation(QVector<QRect>& zones, const QRect& remaining, int leftover, int innerGap);
-
-    /**
-     * @brief Clamp split ratio to min/max range, or fall back to proportional split
-     *
-     * Shared by BSP for both H and V branches. When minFirstRatio <= maxFirstRatio,
-     * clamps ratio. Otherwise distributes proportionally by minimum weight.
-     */
-    static qreal clampOrProportionalFallback(qreal ratio, qreal minFirstRatio, qreal maxFirstRatio, int firstDim,
-                                             int secondDim);
 
 Q_SIGNALS:
     /**

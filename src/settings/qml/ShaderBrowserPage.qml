@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 import QtQuick
+import QtQuick.Window
 import QtQuick.Controls
 import QtQuick.Layouts
 import org.kde.kirigami as Kirigami
@@ -32,11 +33,11 @@ import org.kde.kirigami as Kirigami
  *   • Optional info banner (`infoBannerText`).
  *   • User shaders card — drop zone for installing user shader packs +
  *     "Open Folder" button.
- *   • Filter bar — text search + per-category multi-select pills +
- *     built-in / user toggles.
- *   • Installed shaders card — packs grouped by category as a card grid;
- *     each section headed with the category name and the count.
- *     Card click opens ShaderBrowserDetailDialog.
+ *   • Search row — text search + a multi-select filter button (source
+ *     toggles + one checkbox per category), modeled on the Layouts page.
+ *   • Per-category sections — each category renders as a collapsible card of
+ *     shader thumbnails (count shown in the header). Card click opens
+ *     ShaderBrowserDetailDialog.
  */
 SettingsFlickable {
     id: root
@@ -54,14 +55,14 @@ SettingsFlickable {
     /// break locales with >2 plural forms (Polish, Russian, Arabic, …)
     /// and would lie about `%n` (it would substitute the wrapper's
     /// hard-coded count instead of `_usages.length`).
-    property var usageHeaderTextFn: function(count) {
+    property var usageHeaderTextFn: function (count) {
         return i18ncp("@info shader usage section header", "Used in %n event", "Used in %n events", count);
     }
     /// Closure plumbed through to each ShaderBrowserCard's footer chip.
     /// Same plural-form / live-count rationale as `usageHeaderTextFn`,
     /// and lets the card chip stay consistent with the dialog header
     /// (animations: "event"; snapping: "layout"; default: generic "use").
-    property var usageChipTextFn: function(count) {
+    property var usageChipTextFn: function (count) {
         return i18ncp("@info shader usage count", "%n use", "%n uses", count);
     }
     // Loaded from a Q_INVOKABLE; Connections below manually refreshes it
@@ -70,16 +71,15 @@ SettingsFlickable {
     property var effectList: bridge ? bridge.availableShaderEffects() : []
     // ── Filter state ────────────────────────────────────────────────────
     property string filterText: ""
-    /// Map of `{ categoryName: true }`. Empty = show all categories.
-    property var selectedCategories: ({
-    })
-    property bool showBuiltIn: true
-    property bool showUser: true
-    readonly property bool _hasActiveFilters: filterText.length > 0 || Object.keys(selectedCategories).length > 0 || !showBuiltIn || !showUser
+    // Source + category filters are multi-select checkboxes in the filter
+    // button (modeled on the Layouts page). These derive its unchecked-key set
+    // into the booleans / predicate the effect filter below consumes:
+    //   "src:builtin" / "src:user" gate source; "cat:<name>" gate a category.
+    readonly property bool showBuiltIn: !shaderFilterButton.isExcluded("src:builtin")
+    readonly property bool showUser: !shaderFilterButton.isExcluded("src:user")
     // ── Derived: category index (sorted, with counts) ───────────────────
     readonly property var _allCategories: {
-        var counts = {
-        };
+        var counts = {};
         for (var i = 0; i < effectList.length; i++) {
             var cat = (effectList[i] && effectList[i].category) ? effectList[i].category : "";
             if (cat.length === 0)
@@ -88,20 +88,20 @@ SettingsFlickable {
             counts[cat] = (counts[cat] || 0) + 1;
         }
         var keys = Object.keys(counts);
-        keys.sort(function(a, b) {
+        keys.sort(function (a, b) {
             return a.localeCompare(b);
         });
         var result = [];
-        for (var k = 0; k < keys.length; k++) result.push({
-            "name": keys[k],
-            "count": counts[keys[k]]
-        })
+        for (var k = 0; k < keys.length; k++)
+            result.push({
+                "name": keys[k],
+                "count": counts[keys[k]]
+            });
         return result;
     }
     // ── Derived: filtered + grouped effects ─────────────────────────────
     readonly property var _filteredEffects: {
         var needle = root.filterText.trim().toLowerCase();
-        var anyCategorySelected = Object.keys(root.selectedCategories).length > 0;
         var out = [];
         for (var i = 0; i < effectList.length; i++) {
             var e = effectList[i];
@@ -115,17 +115,14 @@ SettingsFlickable {
             if (!isUser && !root.showBuiltIn)
                 continue;
 
-            if (anyCategorySelected) {
-                var cat = e.category || "";
-                if (!root.selectedCategories[cat])
-                    continue;
+            var cat = e.category || "";
+            if (cat.length > 0 && shaderFilterButton.isExcluded("cat:" + cat))
+                continue;
 
-            }
             if (needle.length > 0) {
                 var hay = (String(e.name || "") + " " + String(e.id || "") + " " + String(e.description || "") + " " + String(e.category || "") + " " + String(e.author || "")).toLowerCase();
                 if (hay.indexOf(needle) === -1)
                     continue;
-
             }
             out.push(e);
         }
@@ -134,8 +131,7 @@ SettingsFlickable {
     /// `[{category, effects}]` sorted alphabetically by category. Effects
     /// inside each group keep their bridge-emitted order.
     readonly property var _groupedEffects: {
-        var groups = {
-        };
+        var groups = {};
         var order = [];
         var uncategorisedKey = i18nc("@title:group fallback for shaders without a category", "Uncategorised");
         for (var i = 0; i < _filteredEffects.length; i++) {
@@ -147,7 +143,7 @@ SettingsFlickable {
             }
             groups[cat].push(e);
         }
-        order.sort(function(a, b) {
+        order.sort(function (a, b) {
             if (a === uncategorisedKey)
                 return 1;
 
@@ -157,10 +153,11 @@ SettingsFlickable {
             return a.localeCompare(b);
         });
         var result = [];
-        for (var k = 0; k < order.length; k++) result.push({
-            "category": order[k],
-            "effects": groups[order[k]]
-        })
+        for (var k = 0; k < order.length; k++)
+            result.push({
+                "category": order[k],
+                "effects": groups[order[k]]
+            });
         return result;
     }
     // Per-row "Used in:" labels resolve via Q_INVOKABLE. QML can't
@@ -180,11 +177,22 @@ SettingsFlickable {
             ++root._usagesRev;
         }
 
+        // Surface bridge-emitted toast requests through the shell
+        // `window.showToast`. Without this, the controller's
+        // toastRequested signal goes to /dev/null and the install
+        // drop zone falls back to the generic InlineMessage above
+        // (which can't carry the concrete failure reason).
+        function onToastRequested(text) {
+            if (window && window.showToast)
+                window.showToast(text);
+        }
+
         target: root.bridge
         // `ignoreUnknownSignals` is tolerated implicitly by Connections —
-        // bridges that don't expose `shaderProfileChanged` simply never
-        // fire it; the function is still defined so the signal handler
-        // index resolves correctly when present.
+        // bridges that don't expose `shaderProfileChanged` /
+        // `toastRequested` simply never fire them; the functions are
+        // still defined so the signal handler index resolves correctly
+        // when present.
         ignoreUnknownSignals: true
     }
 
@@ -211,12 +219,15 @@ SettingsFlickable {
         SettingsCard {
             Layout.fillWidth: true
             headerText: i18n("User shaders")
+            searchAnchor: "userShaders"
 
             contentItem: ColumnLayout {
                 spacing: Kirigami.Units.smallSpacing
 
                 Label {
                     Layout.fillWidth: true
+                    Layout.leftMargin: Kirigami.Units.largeSpacing
+                    Layout.rightMargin: Kirigami.Units.largeSpacing
                     text: root.userShadersDescription
                     wrapMode: Text.WordWrap
                     color: Kirigami.Theme.disabledTextColor
@@ -228,10 +239,12 @@ SettingsFlickable {
                     readonly property bool _highlight: dropArea.containsDrag
 
                     Layout.fillWidth: true
+                    Layout.leftMargin: Kirigami.Units.largeSpacing
+                    Layout.rightMargin: Kirigami.Units.largeSpacing
                     Layout.preferredHeight: Kirigami.Units.gridUnit * 5
                     radius: Kirigami.Units.smallSpacing
                     color: _highlight ? Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g, Kirigami.Theme.highlightColor.b, 0.12) : Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.04)
-                    border.width: Math.max(1, Math.round(Kirigami.Units.devicePixelRatio))
+                    border.width: Math.max(1, Math.round(Screen.devicePixelRatio))
                     border.color: _highlight ? Kirigami.Theme.highlightColor : Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.25)
 
                     RowLayout {
@@ -250,7 +263,6 @@ SettingsFlickable {
                             color: dropZone._highlight ? Kirigami.Theme.highlightColor : Kirigami.Theme.disabledTextColor
                             font.italic: !dropZone._highlight
                         }
-
                     }
 
                     DropArea {
@@ -258,18 +270,17 @@ SettingsFlickable {
 
                         anchors.fill: parent
                         keys: ["text/uri-list"]
-                        onDropped: function(drop) {
+                        onDropped: function (drop) {
                             var urls = drop.urls;
                             if (!urls || urls.length === 0) {
                                 drop.accepted = false;
-                                return ;
+                                return;
                             }
                             var ok = root.bridge ? root.bridge.installShaderPack(String(urls[0])) : false;
                             installResult.show(ok, urls[0]);
                             drop.accepted = true;
                         }
                     }
-
                 }
 
                 Kirigami.InlineMessage {
@@ -292,6 +303,8 @@ SettingsFlickable {
                     }
 
                     Layout.fillWidth: true
+                    Layout.leftMargin: Kirigami.Units.largeSpacing
+                    Layout.rightMargin: Kirigami.Units.largeSpacing
                     visible: false
                     showCloseButton: true
 
@@ -301,11 +314,12 @@ SettingsFlickable {
                         interval: 6000
                         onTriggered: installResult.visible = false
                     }
-
                 }
 
                 RowLayout {
                     Layout.fillWidth: true
+                    Layout.leftMargin: Kirigami.Units.largeSpacing
+                    Layout.rightMargin: Kirigami.Units.largeSpacing
 
                     Item {
                         Layout.fillWidth: true
@@ -319,235 +333,144 @@ SettingsFlickable {
                         onClicked: {
                             if (root.bridge)
                                 root.bridge.openUserShaderDirectory();
-
                         }
                     }
-
                 }
-
             }
-
         }
 
-        // ── Filter bar ──────────────────────────────────────────────────
+        // ── Search row ──────────────────────────────────────────────────
+        // Full-width search + a multi-select filter button (source +
+        // categories), mirroring the Window Rules page's search row.
         RowLayout {
             Layout.fillWidth: true
             spacing: Kirigami.Units.smallSpacing
 
-            TextField {
+            Kirigami.SearchField {
                 id: searchField
 
-                Layout.preferredWidth: Kirigami.Units.gridUnit * 14
+                Layout.fillWidth: true
                 placeholderText: i18nc("@info:placeholder shader search", "Search shaders…")
-                inputMethodHints: Qt.ImhNoPredictiveText
-                rightPadding: clearSearchButton.visible ? clearSearchButton.width + Kirigami.Units.smallSpacing : Kirigami.Units.smallSpacing
                 Accessible.name: i18n("Search shaders")
                 onTextChanged: searchDebounce.restart()
-
-                ToolButton {
-                    id: clearSearchButton
-
-                    anchors.right: parent.right
-                    anchors.verticalCenter: parent.verticalCenter
-                    visible: searchField.text.length > 0
-                    icon.name: "edit-clear"
-                    icon.width: Kirigami.Units.iconSizes.small
-                    icon.height: Kirigami.Units.iconSizes.small
-                    Accessible.name: i18nc("@action:button", "Clear search")
-                    onClicked: {
-                        searchField.clear();
-                        searchDebounce.stop();
-                        root.filterText = "";
-                    }
-                }
-
             }
 
-            Flow {
-                Layout.fillWidth: true
-                spacing: Kirigami.Units.smallSpacing
+            // One multi-select filter button (source + categories), modeled on
+            // the Layouts page. Source toggles come first, then one checkbox per
+            // discovered category; the button's `excluded` set drives showBuiltIn
+            // / showUser and the per-category predicate above. Reset lives in the
+            // menu; the search field clears via its own affordance.
+            FilterMenuButton {
+                id: shaderFilterButton
 
-                Repeater {
-                    model: root._allCategories
-
-                    delegate: ToolButton {
-                        required property var modelData
-                        readonly property bool isActive: root.selectedCategories[modelData.name] === true
-
-                        text: i18nc("@action:button category filter pill", "%1 (%2)", modelData.name, modelData.count)
-                        checkable: true
-                        checked: isActive
-                        Accessible.name: isActive ? i18nc("@action:button", "Hide %1 shaders", modelData.name) : i18nc("@action:button", "Show only %1 shaders", modelData.name)
-                        onClicked: {
-                            // Replace-the-map mutation pattern — QML reactivity
-                            // requires a new map identity, not in-place edits.
-                            var next = Object.assign({
-                            }, root.selectedCategories);
-                            if (next[modelData.name])
-                                delete next[modelData.name];
-                            else
-                                next[modelData.name] = true;
-                            root.selectedCategories = next;
+                menuTitle: i18nc("@title:menu", "Filter Shaders")
+                // Two groups (source, categories) -> a divider between them,
+                // plus the trailing divider + Reset, mirroring the Layouts menu.
+                groups: {
+                    var source = [
+                        {
+                            "key": "src:builtin",
+                            "label": i18nc("@option:check", "Built-in")
+                        },
+                        {
+                            "key": "src:user",
+                            "label": i18nc("@option:check", "User-installed")
                         }
-                    }
-
-                }
-
-            }
-
-            ToolButton {
-                id: sourceFilterButton
-
-                icon.name: "view-filter"
-                checkable: false
-                checked: !root.showBuiltIn || !root.showUser
-                Accessible.name: (root.showBuiltIn && root.showUser) ? i18nc("@action:button", "Source filter") : i18nc("@action:button", "Source filter (active)")
-                ToolTip.text: Accessible.name
-                ToolTip.visible: hovered
-                ToolTip.delay: Kirigami.Units.toolTipDelay
-                onClicked: sourceFilterMenu.popup()
-
-                Menu {
-                    id: sourceFilterMenu
-
-                    title: i18nc("@title:menu", "Source")
-
-                    MenuItem {
-                        text: i18nc("@option:check", "Built-in")
-                        checkable: true
-                        checked: root.showBuiltIn
-                        onToggled: root.showBuiltIn = checked
-                    }
-
-                    MenuItem {
-                        text: i18nc("@option:check", "User-installed")
-                        checkable: true
-                        checked: root.showUser
-                        onToggled: root.showUser = checked
-                    }
-
-                }
-
-            }
-
-            ToolButton {
-                icon.name: "edit-reset"
-                enabled: root._hasActiveFilters
-                Accessible.name: i18nc("@action:button", "Reset filters")
-                ToolTip.text: Accessible.name
-                ToolTip.visible: hovered
-                ToolTip.delay: Kirigami.Units.toolTipDelay
-                onClicked: {
-                    searchField.clear();
-                    searchDebounce.stop();
-                    root.filterText = "";
-                    root.selectedCategories = ({
-                    });
-                    root.showBuiltIn = true;
-                    root.showUser = true;
+                    ];
+                    var cats = [];
+                    var all = root._allCategories;
+                    for (var i = 0; i < all.length; i++)
+                        cats.push({
+                            "key": "cat:" + all[i].name,
+                            "label": all[i].name,
+                            "count": all[i].count
+                        });
+                    return [source, cats];
                 }
             }
-
         }
 
-        SettingsCard {
+        // ── Empty states ────────────────────────────────────────────────
+        Kirigami.PlaceholderMessage {
             Layout.fillWidth: true
-            headerText: root._hasActiveFilters ? i18nc("@title:group filtered shader catalogue", "Installed shaders (%1 of %2)", root._filteredEffects.length, root.effectList.length) : i18nc("@title:group full shader catalogue", "Installed shaders (%1)", root.effectList.length)
+            Layout.topMargin: Kirigami.Units.gridUnit * 2
+            visible: root.effectList.length === 0
+            icon.name: "image-missing"
+            text: root.emptyCatalogueText
+        }
 
-            contentItem: ColumnLayout {
-                spacing: Kirigami.Units.smallSpacing
+        Kirigami.PlaceholderMessage {
+            Layout.fillWidth: true
+            Layout.topMargin: Kirigami.Units.gridUnit * 2
+            visible: root.effectList.length > 0 && root._filteredEffects.length === 0
+            icon.name: "view-filter"
+            text: i18n("No shaders match the current filter")
+            explanation: i18n("Try a different filter or search term.")
+        }
 
-                Label {
-                    Layout.fillWidth: true
-                    visible: root.effectList.length === 0
-                    text: root.emptyCatalogueText
-                    color: Kirigami.Theme.disabledTextColor
-                    font.italic: true
-                }
+        // ── Grouped shader catalogue ────────────────────────────────────
+        // Each category renders as its own collapsible SettingsCard — the same
+        // grouped-section treatment as the Window Rules page — with the
+        // category as the header and the shader count as the trailing hint.
+        Repeater {
+            model: root._groupedEffects
 
-                Label {
-                    Layout.fillWidth: true
-                    visible: root.effectList.length > 0 && root._filteredEffects.length === 0
-                    text: i18n("No shaders match the current filter.")
-                    color: Kirigami.Theme.disabledTextColor
-                    font.italic: true
-                }
+            delegate: SettingsCard {
+                required property var modelData
 
-                Repeater {
-                    model: root._groupedEffects
+                Layout.fillWidth: true
+                headerText: modelData.category
+                collapsible: true
+                headerTrailingText: i18np("%n shader", "%n shaders", modelData.effects.length)
 
-                    delegate: ColumnLayout {
-                        required property var modelData
+                contentItem: ColumnLayout {
+                    spacing: Kirigami.Units.smallSpacing
+
+                    // Cards in a Flow wrap to the next row when out of
+                    // horizontal space — 3-4 cards per row at typical
+                    // settings-window widths. The inner delegate declares its
+                    // own `required property var modelData` so the section
+                    // delegate's identically-named `modelData` doesn't shadow
+                    // the Repeater's auto-injection.
+                    Flow {
+                        id: shaderFlow
 
                         Layout.fillWidth: true
-                        Layout.topMargin: Kirigami.Units.largeSpacing
-                        spacing: Math.round(Kirigami.Units.smallSpacing / 2)
+                        // Standard card-content inset (matches SettingsRow / the
+                        // section header), so the cards line up with everything
+                        // else rather than hugging the category card edge.
+                        Layout.leftMargin: Kirigami.Units.largeSpacing
+                        Layout.rightMargin: Kirigami.Units.largeSpacing
+                        spacing: Kirigami.Units.smallSpacing
 
-                        RowLayout {
-                            Layout.fillWidth: true
-                            spacing: Kirigami.Units.smallSpacing
+                        // Responsive columns: fit as many cards as the minimum
+                        // card width allows, then stretch each card to fill the
+                        // row evenly so there's no dead gap on the right edge.
+                        readonly property real _minCardWidth: Kirigami.Units.gridUnit * 13
+                        readonly property int _columns: Math.max(1, Math.floor((width + spacing) / (_minCardWidth + spacing)))
+                        readonly property real _cardWidth: (width - spacing * (_columns - 1)) / _columns
 
-                            Label {
-                                text: modelData.category
-                                font.weight: Font.DemiBold
-                            }
+                        Repeater {
+                            model: modelData.effects
 
-                            Label {
-                                text: i18np("%n shader", "%n shaders", modelData.effects.length)
-                                font: Kirigami.Theme.smallFont
-                                color: Kirigami.Theme.disabledTextColor
-                            }
+                            delegate: ShaderBrowserCard {
+                                required property var modelData
 
-                            Rectangle {
-                                Layout.fillWidth: true
-                                Layout.alignment: Qt.AlignVCenter
-                                height: Math.max(1, Math.round(Kirigami.Units.devicePixelRatio))
-                                color: Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.15)
-                            }
-
-                        }
-
-                        // Cards in a Flow wrap to next row when out of
-                        // horizontal space — gives 3-4 cards per row at
-                        // typical settings-window widths. The inner
-                        // delegate wrapper declares its own `required
-                        // property var modelData` so the outer group
-                        // delegate's identically-named `modelData` doesn't
-                        // shadow the Repeater's auto-injection.
-                        Flow {
-                            Layout.fillWidth: true
-                            Layout.leftMargin: Kirigami.Units.smallSpacing
-                            Layout.topMargin: Math.round(Kirigami.Units.smallSpacing / 2)
-                            spacing: Kirigami.Units.smallSpacing
-
-                            Repeater {
-                                model: modelData.effects
-
-                                delegate: ShaderBrowserCard {
-                                    required property var modelData
-
-                                    effect: modelData
-                                    bridge: root.bridge
-                                    usagesRev: root._usagesRev
-                                    usageChipTextFn: root.usageChipTextFn
-                                    onShowDetails: function(e) {
-                                        detailDialog.effect = e;
-                                        detailDialog.open();
-                                    }
+                                width: shaderFlow._cardWidth
+                                effect: modelData
+                                bridge: root.bridge
+                                usagesRev: root._usagesRev
+                                usageChipTextFn: root.usageChipTextFn
+                                onShowDetails: function (e) {
+                                    detailDialog.effect = e;
+                                    detailDialog.open();
                                 }
-
                             }
-
                         }
-
                     }
-
                 }
-
             }
-
         }
-
     }
 
     ShaderBrowserDetailDialog {
@@ -557,5 +480,4 @@ SettingsFlickable {
         usagesRev: root._usagesRev
         usageHeaderTextFn: root.usageHeaderTextFn
     }
-
 }

@@ -2,7 +2,7 @@
     "id": "mosaic-pulse",
     "name": "Mosaic Pulse",
     "category": "Audio Visualizer",
-    "description": "Audio-reactive stained glass mosaic \u2014 colorful tiles with pulsing shapes, sparkles, and dithered posterization. Bass drives shape pulse, mids shift hue, treble triggers sparkles. Enable CAVA audio visualization in settings.",
+    "description": "An audio-reactive stained glass mosaic of colorful tiles with pulsing shapes, sparkles, and dithered posterization. Bass drives the shape pulse, mids shift the hue, and treble triggers sparkles. Enable CAVA audio visualization in settings.",
     "author": "PlasmaZones",
     "version": "1.0",
     "fragmentShader": "effect.frag",
@@ -12,7 +12,6 @@
             "name": "Grid Density",
             "group": "Grid",
             "type": "int",
-            "slot": 0,
             "default": 64,
             "min": 16,
             "max": 128
@@ -22,7 +21,6 @@
             "name": "Edge Softness",
             "group": "Grid",
             "type": "float",
-            "slot": 1,
             "default": 0.18,
             "min": 0.02,
             "max": 0.5
@@ -32,7 +30,6 @@
             "name": "Grid Line Weight",
             "group": "Grid",
             "type": "float",
-            "slot": 2,
             "default": 0.75,
             "min": 0.0,
             "max": 1.0
@@ -42,7 +39,6 @@
             "name": "Posterize Levels",
             "group": "Grid",
             "type": "int",
-            "slot": 3,
             "default": 8,
             "min": 2,
             "max": 32
@@ -52,7 +48,6 @@
             "name": "Shape Chance",
             "group": "Shapes",
             "type": "float",
-            "slot": 4,
             "default": 0.62,
             "min": 0.0,
             "max": 1.0
@@ -62,7 +57,6 @@
             "name": "Shape Size",
             "group": "Shapes",
             "type": "float",
-            "slot": 5,
             "default": 0.26,
             "min": 0.05,
             "max": 0.45
@@ -72,7 +66,6 @@
             "name": "Sparkle Chance",
             "group": "Shapes",
             "type": "float",
-            "slot": 6,
             "default": 0.04,
             "min": 0.0,
             "max": 0.2
@@ -82,7 +75,6 @@
             "name": "Speed",
             "group": "Animation",
             "type": "float",
-            "slot": 7,
             "default": 1.25,
             "min": 0.0,
             "max": 4.0
@@ -92,7 +84,6 @@
             "name": "Audio Reactivity",
             "group": "Audio",
             "type": "float",
-            "slot": 8,
             "default": 1.5,
             "min": 0.0,
             "max": 4.0
@@ -102,7 +93,6 @@
             "name": "Fill Opacity",
             "group": "Appearance",
             "type": "float",
-            "slot": 9,
             "default": 0.9,
             "min": 0.3,
             "max": 1.0
@@ -112,7 +102,6 @@
             "name": "Lead Glow Spread",
             "group": "Labels",
             "type": "float",
-            "slot": 10,
             "default": 2.0,
             "min": 1.0,
             "max": 4.0
@@ -122,7 +111,6 @@
             "name": "Fill Intensity",
             "group": "Labels",
             "type": "float",
-            "slot": 11,
             "default": 0.7,
             "min": 0.3,
             "max": 1.0
@@ -132,7 +120,6 @@
             "name": "Shockwave Reactivity",
             "group": "Labels",
             "type": "float",
-            "slot": 12,
             "default": 1.0,
             "min": 0.0,
             "max": 2.0
@@ -142,7 +129,6 @@
             "name": "Pop Frequency",
             "group": "Audio",
             "type": "float",
-            "slot": 13,
             "default": 4.0,
             "min": 1.0,
             "max": 10.0
@@ -152,7 +138,6 @@
             "name": "Show Labels",
             "group": "Labels",
             "type": "bool",
-            "slot": 14,
             "default": true
         },
         {
@@ -160,7 +145,6 @@
             "name": "Hue Center",
             "group": "Colors",
             "type": "color",
-            "slot": 0,
             "default": "#4099bf"
         },
         {
@@ -168,7 +152,6 @@
             "name": "Shape Tint",
             "group": "Colors",
             "type": "color",
-            "slot": 1,
             "default": "#fffff2"
         },
         {
@@ -176,7 +159,6 @@
             "name": "Lead Border Color",
             "group": "Colors",
             "type": "color",
-            "slot": 2,
             "default": "#403830"
         },
         {
@@ -184,7 +166,6 @@
             "name": "Sparkle Color",
             "group": "Colors",
             "type": "color",
-            "slot": 3,
             "default": "#fff5cc"
         }
     ]

@@ -6,7 +6,7 @@
 #include "../config/configdefaults.h"
 #include "../config/settings.h"
 #include "../core/logging.h"
-#include "pz_i18n.h"
+#include "phosphor_i18n.h"
 
 #include <PhosphorShortcuts/Factory.h>
 #include <PhosphorShortcuts/IBackend.h>
@@ -384,10 +384,10 @@ void ShortcutManager::registerShortcuts()
     // owns lifetime — DON'T also pass `this` as Qt parent, or the
     // backend/registry end up with two owners.
     if (!m_backend) {
-        m_backend = Phosphor::Shortcuts::createBackend(Phosphor::Shortcuts::BackendHint::Auto, nullptr);
+        m_backend = PhosphorShortcuts::createBackend(PhosphorShortcuts::BackendHint::Auto, nullptr);
     }
     if (!m_registry) {
-        m_registry = std::make_unique<Phosphor::Shortcuts::Registry>(m_backend.get(), nullptr);
+        m_registry = std::make_unique<PhosphorShortcuts::Registry>(m_backend.get(), nullptr);
     }
 
     m_registrationInProgress = true;
@@ -403,7 +403,7 @@ void ShortcutManager::registerShortcuts()
     }
 
     connect(
-        m_registry.get(), &Phosphor::Shortcuts::Registry::ready, this,
+        m_registry.get(), &PhosphorShortcuts::Registry::ready, this,
         [this] {
             m_registrationInProgress = false;
             qCInfo(lcShortcuts) << "Registered" << m_entries.size() << "shortcuts";
@@ -569,7 +569,7 @@ void ShortcutManager::buildEntries()
         Entry e;
         e.id = QString::fromLatin1(src.id);
         e.defaultSeq = parseSequence(src.defGetter(), e.id);
-        e.description = PzI18n::tr(src.label);
+        e.description = PhosphorI18n::tr(src.label);
         const auto curGetter = src.curGetter;
         const QString idCopy = e.id;
         e.currentSeq = [s, curGetter, idCopy] {
@@ -589,7 +589,7 @@ void ShortcutManager::buildEntries()
         Entry e;
         e.id = quickLayoutId(i);
         e.defaultSeq = parseSequence(kQuickLayoutDefaults[i](), e.id);
-        e.description = PzI18n::tr("Apply Layout %1").arg(i + 1);
+        e.description = PhosphorI18n::tr("Apply Layout %1").arg(i + 1);
         const QString idCopy = e.id;
         e.currentSeq = [s, i, idCopy] {
             return parseSequence(s->quickLayoutShortcut(i), idCopy);
@@ -607,7 +607,7 @@ void ShortcutManager::buildEntries()
         Entry e;
         e.id = snapToZoneId(i);
         e.defaultSeq = parseSequence(kSnapToZoneDefaults[i](), e.id);
-        e.description = PzI18n::tr("Snap to Zone %1").arg(i + 1);
+        e.description = PhosphorI18n::tr("Snap to Zone %1").arg(i + 1);
         const QString idCopy = e.id;
         e.currentSeq = [s, i, idCopy] {
             return parseSequence(s->snapToZoneShortcut(i), idCopy);

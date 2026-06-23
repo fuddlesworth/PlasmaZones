@@ -26,11 +26,6 @@ PLASMAZONES_EXPORT std::unique_ptr<PhosphorConfig::IBackend> createDefaultConfig
 /// Separate file from config.json to avoid write contention.
 PLASMAZONES_EXPORT std::unique_ptr<PhosphorConfig::IBackend> createSessionBackend();
 
-/// PhosphorZones::Layout assignments and quick-layout shortcuts
-/// (~/.config/plasmazones/assignments.json). PhosphorZones::LayoutRegistry owns its own file
-/// so its persistence is independent from user preferences.
-PLASMAZONES_EXPORT std::unique_ptr<PhosphorConfig::IBackend> createAssignmentsBackend();
-
 /// Legacy plasmazonesrc INI backend. Used only by migration and tests —
 /// runtime code uses the JSON factories above.
 PLASMAZONES_EXPORT std::unique_ptr<PhosphorConfig::QSettingsBackend> createLegacyQSettingsBackend();

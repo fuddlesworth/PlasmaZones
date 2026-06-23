@@ -1,7 +1,7 @@
 {
     "id": "pixel-wheel",
     "name": "Pixel Wheel",
-    "description": "Pixelated clockwise spoke dissolve — pixels fade away in spinning wedge sectors around the window centre",
+    "description": "A pixelated clockwise spoke dissolve. Pixels fade away in spinning wedge sectors around the window centre",
     "author": "PlasmaZones",
     "version": "1.0",
     "category": "Pixelation",

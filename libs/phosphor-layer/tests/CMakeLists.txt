@@ -24,7 +24,7 @@ function(pl_add_test _name)
     add_test(NAME ${_name} COMMAND ${_name})
     # Offscreen QPA so QQuickWindow can construct without a display server.
     # LABELS lets `ctest -L phosphorlayer` select only our tests in a build
-    # that also runs PlasmaZones unit tests; keep in sync with the docs.
+    # that also runs Phosphor unit tests; keep in sync with the docs.
     # Silence debug chatter (qCDebug) but KEEP warnings visible. Several
     # tests (rejectedAttach, jsonStore rejections, isValid rejections)
     # exercise paths that log qCWarning on the validation boundary; a

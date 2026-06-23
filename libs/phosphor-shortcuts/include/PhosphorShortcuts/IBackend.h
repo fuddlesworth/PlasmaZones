@@ -9,7 +9,7 @@
 
 #include "phosphorshortcuts_export.h"
 
-namespace Phosphor::Shortcuts {
+namespace PhosphorShortcuts {
 
 /**
  * Pluggable global shortcut backend.
@@ -39,7 +39,7 @@ public:
      * Register a new shortcut id.
      *
      * @param id          Stable string id. The library imposes no prefix
-     *                    convention — PlasmaZones uses plain snake_case ids
+     *                    convention — Phosphor uses plain snake_case ids
      *                    like "move_window_left" because KGlobalAccel and
      *                    XDG Portal persist the id verbatim; renaming is an
      *                    on-disk rename users pay for. Pick a scheme that
@@ -128,4 +128,4 @@ Q_SIGNALS:
     void ready();
 };
 
-} // namespace Phosphor::Shortcuts
+} // namespace PhosphorShortcuts

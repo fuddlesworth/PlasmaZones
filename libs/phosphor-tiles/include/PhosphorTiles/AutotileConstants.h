@@ -14,13 +14,15 @@
  *
  * This header owns the JSON keys and numeric defaults that the tiling
  * algorithm primitives need to be self-contained.  It intentionally has
- * NO dependency on PlasmaZones config or core layers, so it can move
+ * NO dependency on Phosphor config or core layers, so it can move
  * cleanly into the future libs/phosphor-tiles library without dragging
  * cross-layer headers along.
  *
  * Non-algorithm consumers (`src/dbus/autotileadaptor`, `src/core/geometryutils`,
- * etc.) reach these symbols transparently via `core/constants.h`, which
- * re-includes this header for backward source compatibility.
+ * etc.) that genuinely need these symbols include this header directly. There
+ * is no transitive re-export from `core/constants.h` — that backward-source
+ * compatibility chain was removed so unrelated layers no longer resolve the
+ * PhosphorTiles include path.
  */
 namespace PhosphorTiles {
 
@@ -54,6 +56,12 @@ constexpr int MinGap = 0;
 constexpr int MaxGap = 50;
 constexpr int MinRectSizePx = 50;
 constexpr int GapEdgeThresholdPx = 5;
+/// Minimum pixel movement of a window edge during an interactive resize before
+/// it is treated as an intentional resize (vs. fractional-scale rounding residue
+/// or sub-pixel jitter). A separate constant from GapEdgeThresholdPx (currently
+/// the same value) so it can be tuned for 1.5×/1.75× fractional scaling later
+/// without perturbing gap snapping.
+constexpr int ResizeEdgeMoveThresholdPx = 5;
 constexpr int MinMaxWindows = 1;
 constexpr int MaxMaxWindows = 12;
 // Sentinel returned by PerScreenConfigResolver::effectiveMaxWindows() when the
@@ -63,10 +71,13 @@ constexpr int MaxMaxWindows = 12;
 constexpr int UnlimitedMaxWindowsSentinel = std::numeric_limits<int>::max() / 2;
 constexpr int MaxZones = 256;
 constexpr int MaxRuntimeTreeDepth = 50; ///< Maximum recursion depth for split tree operations
-/// Cap on total node count when converting a SplitTree to a QJSValue object. Each
-/// tiled window occupies one leaf plus at most one internal node, so MaxZones*2
-/// is a safe ceiling that lets the widest valid tree through without truncation.
-constexpr int MaxTreeNodesForJs = MaxZones * 2;
+// Bounds for the opaque per-algorithm script-state bag (TilingState::scriptState).
+// Enforced by TilingState::sanitizeScriptState at every script write-back and on
+// load, so a buggy or hostile algorithm can't bloat the persisted state or stall
+// serialization. A whole bag exceeding the byte cap is dropped (reset to empty).
+constexpr int ScriptStateMaxBytes = 64 * 1024; ///< Max compact-JSON size of the bag
+constexpr int ScriptStateMaxDepth = 16; ///< Max object/array nesting depth
+constexpr int ScriptStateMaxKeys = 4096; ///< Max total object keys across the bag
 constexpr qreal SplitRatioHysteresis = 0.05; ///< Band within which algorithm-switch ratio reset is suppressed
 constexpr int MinMetadataWindows = 1;
 constexpr int MaxMetadataWindows = 100;
@@ -78,11 +89,10 @@ constexpr int MaxInsertPosition = 2;
 // libs/phosphor-animation/include/PhosphorAnimation/AnimationLimits.h
 // (PhosphorAnimation::Limits namespace). Consumers that need them
 // should include that header directly; ConfigDefaults already does.
-/// Watchdog deadline for a single JS evaluation guarded by
-/// ScriptedAlgorithm::guardedCall(). Generous enough for ARM / slow
-/// systems where JS startup and first-call JIT warmup can take tens of
-/// milliseconds. Exposed here so operators tuning for their target
-/// hardware don't need to recompile the scriptedalgorithm TU.
+/// Watchdog deadline for a single Luau call (tile / lifecycle hook) issued via
+/// LuauEngine::callModule. Generous enough for ARM / slow systems where
+/// first-call warmup can take tens of milliseconds. Exposed here so operators
+/// tuning for their target hardware don't need to recompile the binding TU.
 constexpr int ScriptWatchdogTimeoutMs = 100;
 
 /// Returns true if typeId is a numeric QMetaType (Double, Float, Int, UInt, LongLong, ULongLong).
@@ -131,9 +141,8 @@ inline constexpr QLatin1String InsertPosition{"insertPosition"};
 inline constexpr QLatin1String RespectMinimumSize{"respectMinimumSize"};
 inline constexpr QLatin1String MaxWindows{"maxWindows"};
 inline constexpr QLatin1String OverflowBehavior{"overflowBehavior"};
-inline constexpr QLatin1String CenteredMasterSplitRatio{"centeredMasterSplitRatio"};
-inline constexpr QLatin1String CenteredMasterMasterCount{"centeredMasterMasterCount"};
 inline constexpr QLatin1String SplitTreeKey{"splitTree"};
+inline constexpr QLatin1String ScriptStateKey{"scriptState"};
 } // namespace AutotileJsonKeys
 
 /**
@@ -152,19 +161,6 @@ inline constexpr QLatin1String InsertEnd{"end"};
 inline constexpr QLatin1String InsertAfterFocused{"afterFocused"};
 inline constexpr QLatin1String InsertAsMaster{"asMaster"};
 } // namespace AutotileJsonValues
-
-/**
- * @brief Backwards-compat re-exports so existing `using namespace AutotileJsonKeys`
- *        sites (e.g. `src/autotile/AutotileConfig.cpp`) resolve the value names
- *        without a rename cascade. New code should qualify with AutotileJsonValues::.
- */
-namespace AutotileJsonKeys {
-using AutotileJsonValues::InsertAfterFocused;
-using AutotileJsonValues::InsertAsMaster;
-using AutotileJsonValues::InsertEnd;
-using AutotileJsonValues::OverflowFloat;
-using AutotileJsonValues::OverflowUnlimited;
-} // namespace AutotileJsonKeys
 
 enum class AutotileOverflowBehavior {
     Float = 0,

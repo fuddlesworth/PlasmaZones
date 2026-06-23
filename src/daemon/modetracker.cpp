@@ -13,7 +13,7 @@
 namespace PlasmaZones {
 
 ModeTracker::ModeTracker(Settings* settings, PhosphorZones::LayoutRegistry* layoutManager,
-                         Phosphor::Screens::ScreenManager* screenManager, QObject* parent)
+                         PhosphorScreens::ScreenManager* screenManager, QObject* parent)
     : QObject(parent)
     , m_settings(settings)
     , m_layoutManager(layoutManager)

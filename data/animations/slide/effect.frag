@@ -6,33 +6,20 @@
 // surface is sampled through uTexture0; we mask it with a moving
 // edge so it slides into / out of view from the chosen direction.
 
-#version 450
-
-#include <animation_uniforms.glsl>
-
-// metadata.json declaration order → customParams[0] sub-slots.
 // `direction` is metadata-typed `int`; the registry packs ints into
 // the same float slot space, so we read it as a float and round at
-// the use site.
-#define direction customParams[0].x
-#define parallax  customParams[0].y
+// the use site. `p_direction` / `p_parallax` resolve to the
+// customParams[0] sub-slots (declaration order in metadata.json).
 
-layout(location = 0) in vec2 vTexCoord;
-layout(location = 0) out vec4 fragColor;
-
-void main()
+vec4 pTransition(vec2 uv, float t)
 {
-    // UV from the vertex stage; gl_FragCoord/iResolution overshoots [0,1]
-    // by DPR on high-DPI displays.
-    vec2 uv = vTexCoord;
-
-    // Visibility = how revealed the surface is. iTime is per-leg
-    // progress: SurfaceAnimator runs iTime 0→1 on show and 1→0 on
+    // Visibility = how revealed the surface is. `t` is per-leg
+    // progress: SurfaceAnimator runs it 0→1 on show and 1→0 on
     // hide, so the reveal mask grows on show ("slide in") and
     // recedes on hide ("slide out") through the same code path.
-    float visibility = clamp(iTime, 0.0, 1.0);
+    float visibility = clamp(t, 0.0, 1.0);
 
-    int dir = int(clamp(direction, 0.0, 3.0));
+    int dir = int(clamp(p_direction, 0.0, 3.0));
     float coord;
     if (dir == 0) {
         coord = uv.x;            // slide in from the left
@@ -48,12 +35,11 @@ void main()
     // `parallax` > 0, sample with a small per-row offset so the
     // surface appears to "slip" as it slides.
     if (coord > visibility) {
-        fragColor = vec4(0.0);
-        return;
+        return vec4(0.0);
     }
     vec2 sampleUv = uv;
-    if (parallax > 0.0) {
-        float offset = parallax * (visibility - coord);
+    if (p_parallax > 0.0) {
+        float offset = p_parallax * (visibility - coord);
         if (dir == 0)      sampleUv.x += offset;
         else if (dir == 1) sampleUv.x -= offset;
         else if (dir == 2) sampleUv.y += offset;
@@ -65,8 +51,7 @@ void main()
     // matrix's off-window guard, so all sliding shaders have a clean
     // silhouette boundary instead of a 1-pixel edge-bleed band.
     if (sampleUv.x < 0.0 || sampleUv.x > 1.0 || sampleUv.y < 0.0 || sampleUv.y > 1.0) {
-        fragColor = vec4(0.0);
-        return;
+        return vec4(0.0);
     }
-    fragColor = surfaceColor(sampleUv);
+    return surfaceColor(sampleUv);
 }

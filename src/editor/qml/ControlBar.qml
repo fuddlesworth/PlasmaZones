@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 import QtQuick
+import QtQuick.Window
 import QtQuick.Controls
 import QtQuick.Layouts
 import "ThemeHelpers.js" as Theme
@@ -74,63 +75,72 @@ ToolBar {
                 id: templateCombo
 
                 // Template model with preview information
-                property var templateModel: [{
-                    "text": i18nc("@item:inmenu", "Apply Template..."),
-                    "value": "",
-                    "templateType": "",
-                    "columns": 0,
-                    "rows": 0,
-                    "group": ""
-                }, {
-                    "text": i18nc("@item:inmenu", "Grid 2×2"),
-                    "value": "grid:2:2",
-                    "templateType": "grid",
-                    "columns": 2,
-                    "rows": 2,
-                    "group": i18nc("@title:group", "Grid Layouts")
-                }, {
-                    "text": i18nc("@item:inmenu", "Grid 3×2"),
-                    "value": "grid:3:2",
-                    "templateType": "grid",
-                    "columns": 3,
-                    "rows": 2,
-                    "group": i18nc("@title:group", "Grid Layouts")
-                }, {
-                    "text": i18nc("@item:inmenu", "Columns 2"),
-                    "value": "columns:2:1",
-                    "templateType": "columns",
-                    "columns": 2,
-                    "rows": 0,
-                    "group": i18nc("@title:group", "Column Layouts")
-                }, {
-                    "text": i18nc("@item:inmenu", "Columns 3"),
-                    "value": "columns:3:1",
-                    "templateType": "columns",
-                    "columns": 3,
-                    "rows": 0,
-                    "group": i18nc("@title:group", "Column Layouts")
-                }, {
-                    "text": i18nc("@item:inmenu", "Rows 2"),
-                    "value": "rows:1:2",
-                    "templateType": "rows",
-                    "columns": 0,
-                    "rows": 2,
-                    "group": i18nc("@title:group", "Row Layouts")
-                }, {
-                    "text": i18nc("@item:inmenu", "Priority Grid"),
-                    "value": "priority:0:0",
-                    "templateType": "priority",
-                    "columns": 0,
-                    "rows": 0,
-                    "group": i18nc("@title:group", "Special Layouts")
-                }, {
-                    "text": i18nc("@item:inmenu", "Focus"),
-                    "value": "focus:0:0",
-                    "templateType": "focus",
-                    "columns": 0,
-                    "rows": 0,
-                    "group": i18nc("@title:group", "Special Layouts")
-                }]
+                property var templateModel: [
+                    {
+                        "text": i18nc("@item:inmenu", "Apply Template..."),
+                        "value": "",
+                        "templateType": "",
+                        "columns": 0,
+                        "rows": 0,
+                        "group": ""
+                    },
+                    {
+                        "text": i18nc("@item:inmenu", "Grid 2×2"),
+                        "value": "grid:2:2",
+                        "templateType": "grid",
+                        "columns": 2,
+                        "rows": 2,
+                        "group": i18nc("@title:group", "Grid Layouts")
+                    },
+                    {
+                        "text": i18nc("@item:inmenu", "Grid 3×2"),
+                        "value": "grid:3:2",
+                        "templateType": "grid",
+                        "columns": 3,
+                        "rows": 2,
+                        "group": i18nc("@title:group", "Grid Layouts")
+                    },
+                    {
+                        "text": i18nc("@item:inmenu", "Columns 2"),
+                        "value": "columns:2:1",
+                        "templateType": "columns",
+                        "columns": 2,
+                        "rows": 0,
+                        "group": i18nc("@title:group", "Column Layouts")
+                    },
+                    {
+                        "text": i18nc("@item:inmenu", "Columns 3"),
+                        "value": "columns:3:1",
+                        "templateType": "columns",
+                        "columns": 3,
+                        "rows": 0,
+                        "group": i18nc("@title:group", "Column Layouts")
+                    },
+                    {
+                        "text": i18nc("@item:inmenu", "Rows 2"),
+                        "value": "rows:1:2",
+                        "templateType": "rows",
+                        "columns": 0,
+                        "rows": 2,
+                        "group": i18nc("@title:group", "Row Layouts")
+                    },
+                    {
+                        "text": i18nc("@item:inmenu", "Priority Grid"),
+                        "value": "priority:0:0",
+                        "templateType": "priority",
+                        "columns": 0,
+                        "rows": 0,
+                        "group": i18nc("@title:group", "Special Layouts")
+                    },
+                    {
+                        "text": i18nc("@item:inmenu", "Focus"),
+                        "value": "focus:0:0",
+                        "templateType": "focus",
+                        "columns": 0,
+                        "rows": 0,
+                        "group": i18nc("@title:group", "Special Layouts")
+                    }
+                ]
 
                 Layout.preferredWidth: Kirigami.Units.gridUnit * 12
                 Accessible.name: i18nc("@label", "Layout templates")
@@ -175,13 +185,9 @@ ToolBar {
                             Layout.fillWidth: true
                             Layout.alignment: Qt.AlignVCenter
                         }
-
                     }
-
                 }
-
             }
-
         }
 
         // Visual separator
@@ -217,7 +223,6 @@ ToolBar {
                 onToggled: {
                     if (editorController)
                         editorController.edgeSnappingEnabled = checked;
-
                 }
             }
 
@@ -238,7 +243,6 @@ ToolBar {
                 onToggled: {
                     if (editorController)
                         editorController.gridSnappingEnabled = checked;
-
                 }
             }
 
@@ -272,7 +276,6 @@ ToolBar {
                             // Ensure grid snapping is enabled when changing interval
                             if (!editorController.gridSnappingEnabled)
                                 editorController.gridSnappingEnabled = true;
-
                         }
                     }
 
@@ -281,13 +284,11 @@ ToolBar {
                         function onSnapIntervalXChanged() {
                             if (!gridIntervalXSlider.pressed)
                                 gridIntervalXSlider.value = editorController.snapIntervalX || 0.1;
-
                         }
 
                         target: editorController
                         enabled: editorController !== null
                     }
-
                 }
 
                 Label {
@@ -320,7 +321,6 @@ ToolBar {
                             // Ensure grid snapping is enabled when changing interval
                             if (!editorController.gridSnappingEnabled)
                                 editorController.gridSnappingEnabled = true;
-
                         }
                     }
 
@@ -329,13 +329,11 @@ ToolBar {
                         function onSnapIntervalYChanged() {
                             if (!gridIntervalYSlider.pressed)
                                 gridIntervalYSlider.value = editorController.snapIntervalY || 0.1;
-
                         }
 
                         target: editorController
                         enabled: editorController !== null
                     }
-
                 }
 
                 Label {
@@ -344,7 +342,6 @@ ToolBar {
                     horizontalAlignment: Text.AlignRight
                     Accessible.name: i18nc("@info", "Vertical interval: %1%", Math.round(gridIntervalYSlider.value * 100))
                 }
-
             }
 
             // Grid overlay visibility toggle - positioned after grid size controls
@@ -364,10 +361,8 @@ ToolBar {
                 onToggled: {
                     if (editorController)
                         editorController.gridOverlayVisible = checked;
-
                 }
             }
-
         }
 
         Item {
@@ -410,7 +405,6 @@ ToolBar {
                 Accessible.name: text
                 Accessible.role: Accessible.AlertMessage
             }
-
         }
 
         SequentialAnimation {
@@ -438,7 +432,6 @@ ToolBar {
                 to: 1
                 profile: "widget.pulse.fast"
             }
-
         }
 
         // ═══════════════════════════════════════════════════════════════
@@ -479,9 +472,7 @@ ToolBar {
                     editorWindow.close();
                 }
             }
-
         }
-
     }
 
     background: Rectangle {
@@ -491,10 +482,8 @@ ToolBar {
         Rectangle {
             anchors.top: parent.top
             width: parent.width
-            height: Math.round(Kirigami.Units.devicePixelRatio)
+            height: Math.round(Screen.devicePixelRatio)
             color: Theme.withAlpha(Kirigami.Theme.textColor, 0.08)
         }
-
     }
-
 }

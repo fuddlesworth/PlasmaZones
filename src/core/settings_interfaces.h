@@ -5,6 +5,7 @@
 
 #include "plasmazones_export.h"
 #include "enums.h"
+#include <PhosphorAnimation/ShaderProfileTree.h>
 #include <PhosphorEngine/IGeometrySettings.h>
 #include <PhosphorZones/AssignmentEntry.h>
 #include <QString>
@@ -25,6 +26,15 @@ namespace PlasmaZones {
  */
 struct ZoneSelectorConfig
 {
+    // NOTE: these member defaults hand-duplicate the ConfigDefaults
+    // zone-selector default accessors — position(), layoutMode(),
+    // maxRows(), … (unprefixed; core interface headers must not depend on
+    // the config layer, so the values are duplicated rather than included).
+    // They matter only for BARE default construction — every production
+    // path (Settings::resolvedZoneSelectorConfig and the ISettings default
+    // implementation) populates from the accessors, so a retuned
+    // ConfigDefaults value diverges here only for default-constructed
+    // instances no resolver touched.
     int position = 1; // ZoneSelectorPosition enum value (Top)
     int layoutMode = 0; // ZoneSelectorLayoutMode enum value (Grid)
     int sizeMode = 0; // ZoneSelectorSizeMode enum value (Auto)
@@ -39,7 +49,8 @@ struct ZoneSelectorConfig
 /**
  * @brief Config key names for per-screen zone selector overrides
  *
- * Used in KConfig group keys ([ZoneSelector:ScreenName]), QVariantMap
+ * Used in config group keys ([ZoneSelector:ScreenName], stored via the
+ * pluggable PhosphorConfig::IBackend — JSON by default), QVariantMap
  * override storage, and QML writeSetting() calls.
  */
 namespace ZoneSelectorConfigKey {
@@ -56,9 +67,10 @@ inline constexpr const char TriggerDistance[] = "TriggerDistance";
 
 /**
  * Per-screen autotile override key constants.
- * These intentionally differ from the global ConfigKeys accessors (e.g.
- * "AutotileAlgorithm" here vs ConfigKeys::defaultAutotileAlgorithmKey() =
- * "DefaultAutotileAlgorithm") because per-screen overrides replace the default.
+ * These intentionally differ from the global v2 config keys (e.g.
+ * "AutotileAlgorithm" here vs the "Default" key in
+ * ConfigKeys::tilingAlgorithmGroup() = "Tiling.Algorithm") because
+ * per-screen overrides replace the global default.
  */
 namespace PerScreenAutotileKey {
 inline constexpr const char Algorithm[] = "AutotileAlgorithm";
@@ -77,7 +89,6 @@ inline constexpr const char MaxWindows[] = "AutotileMaxWindows";
 inline constexpr const char InsertPosition[] = "AutotileInsertPosition";
 inline constexpr const char FocusFollowsMouse[] = "AutotileFocusFollowsMouse";
 inline constexpr const char RespectMinimumSize[] = "AutotileRespectMinimumSize";
-inline constexpr const char HideTitleBars[] = "AutotileHideTitleBars";
 inline constexpr const char SplitRatioStep[] = "AutotileSplitRatioStep";
 inline constexpr const char AnimationsEnabled[] = "AnimationsEnabled";
 inline constexpr const char AnimationDuration[] = "AnimationDuration";
@@ -94,15 +105,10 @@ using PhosphorEngine::PerScreenSnappingKey::OuterGapTop;
 using PhosphorEngine::PerScreenSnappingKey::UsePerSideOuterGap;
 using PhosphorEngine::PerScreenSnappingKey::ZonePadding;
 
-inline constexpr QLatin1String SnapAssistEnabled{"SnapAssistEnabled"};
-inline constexpr QLatin1String ZoneSelectorEnabled{"ZoneSelectorEnabled"};
-inline constexpr QLatin1String ZoneSelectorTriggerDistance{"ZoneSelectorTriggerDistance"};
-inline constexpr QLatin1String ZoneSelectorPosition{"ZoneSelectorPosition"};
-inline constexpr QLatin1String ZoneSelectorLayoutMode{"ZoneSelectorLayoutMode"};
-inline constexpr QLatin1String ZoneSelectorSizeMode{"ZoneSelectorSizeMode"};
-inline constexpr QLatin1String ZoneSelectorMaxRows{"ZoneSelectorMaxRows"};
-inline constexpr QLatin1String ZoneSelectorPreviewWidth{"ZoneSelectorPreviewWidth"};
-inline constexpr QLatin1String ZoneSelectorPreviewHeight{"ZoneSelectorPreviewHeight"};
+// Only the gap keys above are per-screen. Snap-assist and the zone-selector
+// enable switch are global-only (ISettings::setSnapAssistEnabled /
+// setZoneSelectorEnabled); the per-screen zone-selector config lives in its own
+// map/group keyed by ZoneSelectorConfigKey (see kPerScreenKeys in perscreen.cpp).
 } // namespace PerScreenSnappingKey
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -127,6 +133,8 @@ public:
     virtual void setZoneSpanModifier(DragModifier modifier) = 0;
     virtual QVariantList zoneSpanTriggers() const = 0;
     virtual void setZoneSpanTriggers(const QVariantList& triggers) = 0;
+    virtual bool zoneSpanToggleMode() const = 0;
+    virtual void setZoneSpanToggleMode(bool enable) = 0;
     virtual bool toggleActivation() const = 0;
     virtual void setToggleActivation(bool enable) = 0;
     virtual bool snappingEnabled() const = 0;
@@ -271,10 +279,12 @@ class PLASMAZONES_EXPORT IWindowExclusionSettings
 public:
     virtual ~IWindowExclusionSettings() = default;
 
-    virtual QStringList excludedApplications() const = 0;
-    virtual void setExcludedApplications(const QStringList& apps) = 0;
-    virtual QStringList excludedWindowClasses() const = 0;
-    virtual void setExcludedWindowClasses(const QStringList& classes) = 0;
+    // The per-application / per-class exclusion lists (excludedApplications,
+    // excludedWindowClasses) retired in v4 — the legacy QStringList settings
+    // folded into Application-subject Exclude WindowRules, and all consumers
+    // (snap-engine, KWin effect, WTA pending-restore prune) now route through
+    // PhosphorWindowRules::ExclusionRules over the unified rule store.
+
     virtual bool excludeTransientWindows() const = 0;
     virtual void setExcludeTransientWindows(bool exclude) = 0;
     virtual int minimumWindowWidth() const = 0;
@@ -345,10 +355,28 @@ public:
     virtual void setMoveNewWindowsToLastZone(bool move) = 0;
     virtual bool restoreOriginalSizeOnUnsnap() const = 0;
     virtual void setRestoreOriginalSizeOnUnsnap(bool restore) = 0;
-    virtual StickyWindowHandling stickyWindowHandling() const = 0;
-    virtual void setStickyWindowHandling(StickyWindowHandling handling) = 0;
+    virtual StickyWindowHandling snappingStickyWindowHandling() const = 0;
+    virtual void setSnappingStickyWindowHandling(StickyWindowHandling handling) = 0;
     virtual bool restoreWindowsToZonesOnLogin() const = 0;
     virtual void setRestoreWindowsToZonesOnLogin(bool restore) = 0;
+    /// When true, the daemon restores a FLOATED window to its previous global
+    /// position on reopen/login — including back to the monitor it was on at
+    /// logout, whereas KWin's own session restore may otherwise place it on a
+    /// different output. Parallel per-engine toggles: snap-floated (unsnapped) and
+    /// autotile-floated (untiled) windows are gated independently. The managed
+    /// restore (snapped-to-zone / tiled) is governed separately by
+    /// @ref restoreWindowsToZonesOnLogin. Per-window overrides via the
+    /// engine-neutral RestorePosition window rule.
+    virtual bool snappingRestoreFloatedWindowsOnLogin() const = 0;
+    virtual void setSnappingRestoreFloatedWindowsOnLogin(bool restore) = 0;
+    virtual bool autotileRestoreFloatedWindowsOnLogin() const = 0;
+    virtual void setAutotileRestoreFloatedWindowsOnLogin(bool restore) = 0;
+    /// When a window that was never snapped (no pre-float zone to return to) is
+    /// unfloated (Meta+F), snap it to a fallback zone (last-used → first-empty →
+    /// first zone) instead of leaving it floating. Default off: unfloat with no
+    /// pre-float zone emits OSD feedback and the window stays floating.
+    virtual bool snapUnfloatFallbackToZone() const = 0;
+    virtual void setSnapUnfloatFallbackToZone(bool enabled) = 0;
     virtual bool autoAssignAllLayouts() const = 0;
     virtual void setAutoAssignAllLayouts(bool enabled) = 0;
     virtual bool snapAssistFeatureEnabled() const = 0;
@@ -390,6 +418,64 @@ public:
 
     virtual QString defaultLayoutId() const = 0;
     virtual void setDefaultLayoutId(const QString& layoutId) = 0;
+
+    /// When true, no context is assigned an active snapping or autotiling layout
+    /// by default — the synthesized level-1 default is suppressed and a mode only
+    /// activates for a context the user has explicitly assigned (or a
+    /// DefaultLayoutAssignment window rule has re-enabled). Mode-neutral: governs
+    /// both engines, since the level-1 default is a single mode-carrying entry.
+    /// Off by default (every context gets the default, today's behavior).
+    virtual bool suppressDefaultLayoutAssignment() const = 0;
+    virtual void setSuppressDefaultLayoutAssignment(bool suppress) = 0;
+};
+
+/**
+ * @brief Settings related to window animations and shader profiles
+ *        (global — applies to snapping and autotiling).
+ *
+ * Used by: KWin Effect (via D-Bus), the daemon overlay animator, and
+ * AnimationsPageController.
+ *
+ * NOTE: the matching NOTIFY signals (animationsEnabledChanged,
+ * shaderProfileTreeChanged, …) live on ISettings, the QObject that mixes this
+ * interface in — Qt forbids multiple QObject inheritance, so a consumer that
+ * needs an animation signal still depends on ISettings, not this interface
+ * alone.
+ */
+class PLASMAZONES_EXPORT IAnimationSettings
+{
+public:
+    virtual ~IAnimationSettings() = default;
+
+    virtual bool animationsEnabled() const = 0;
+    virtual void setAnimationsEnabled(bool enabled) = 0;
+    virtual int animationDuration() const = 0;
+    virtual void setAnimationDuration(int duration) = 0;
+    virtual QString animationEasingCurve() const = 0;
+    virtual void setAnimationEasingCurve(const QString& curve) = 0;
+    virtual int animationMinDistance() const = 0;
+    virtual void setAnimationMinDistance(int distance) = 0;
+    virtual int animationSequenceMode() const = 0;
+    virtual void setAnimationSequenceMode(int mode) = 0;
+    virtual int animationStaggerInterval() const = 0;
+    virtual void setAnimationStaggerInterval(int ms) = 0;
+    virtual PhosphorAnimationShaders::ShaderProfileTree shaderProfileTree() const = 0;
+    virtual void setShaderProfileTree(const PhosphorAnimationShaders::ShaderProfileTree& tree) = 0;
+
+    // Animation window filtering — gates animations BEFORE the app-rule
+    // cascade. A class-pattern rule whose pattern matches the window's class
+    // overrides the filter at the resolver layer, so users can re-enable
+    // animations for a specific app even when it'd otherwise be excluded.
+    // Mirrors the snapping/tiling Exclusion settings but lives in its own
+    // namespace so the two filter sets can diverge.
+    virtual bool animationExcludeTransientWindows() const = 0;
+    virtual void setAnimationExcludeTransientWindows(bool exclude) = 0;
+    virtual bool animationExcludeNotificationsAndOsd() const = 0;
+    virtual void setAnimationExcludeNotificationsAndOsd(bool exclude) = 0;
+    virtual int animationMinimumWindowWidth() const = 0;
+    virtual void setAnimationMinimumWindowWidth(int width) = 0;
+    virtual int animationMinimumWindowHeight() const = 0;
+    virtual void setAnimationMinimumWindowHeight(int height) = 0;
 };
 
 /**

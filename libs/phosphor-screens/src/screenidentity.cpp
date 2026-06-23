@@ -15,7 +15,7 @@
 #include <QScreen>
 #include <QThread>
 
-namespace Phosphor::Screens::ScreenIdentity {
+namespace PhosphorScreens::ScreenIdentity {
 
 namespace {
 
@@ -300,6 +300,7 @@ bool screensMatch(const QString& a, const QString& b)
 
 bool belongsToPhysicalScreen(const QString& storedScreenId, const QString& physicalScreenId)
 {
+    PS_SCREEN_IDENTITY_ASSERT_GUI_THREAD();
     if (storedScreenId.isEmpty() || physicalScreenId.isEmpty()) {
         return false;
     }
@@ -312,4 +313,4 @@ bool belongsToPhysicalScreen(const QString& storedScreenId, const QString& physi
     return screensMatch(storedScreenId, physicalScreenId);
 }
 
-} // namespace Phosphor::Screens::ScreenIdentity
+} // namespace PhosphorScreens::ScreenIdentity

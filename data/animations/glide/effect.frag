@@ -22,23 +22,11 @@
 // No `uProgress * uDuration` substitution is needed — the body has no
 // elapsed-seconds idiom.
 
-#version 450
-
-#include <animation_uniforms.glsl>
 #include <noise.glsl>
-
-layout(location = 0) in vec2 vTexCoord;
-layout(location = 0) out vec4 fragColor;
 
 #include <bmw_compat.glsl>
 
-// metadata.json declaration order → customParams[0] sub-slots
-#define uScale  customParams[0].x   // window scale at endpoint, BMW default 0.95
-#define uSquish customParams[0].y   // vertical squish amount, BMW default 0.15
-#define uTilt   customParams[0].z   // x-axis tilt amount, BMW default -0.3
-#define uShift  customParams[0].w   // vertical shift, BMW default -0.05
-
-void main() {
+vec4 pTransition(vec2 uv, float t) {
   // We reverse the progress for window opening.
   float progress = easeOutQuad(uProgress);
   progress       = uForOpening ? 1.0 - progress : progress;
@@ -47,16 +35,16 @@ void main() {
   vec2 coords = iTexCoord.st * 2.0 - 1.0;
 
   // Scale image texture with progress.
-  coords /= mix(1.0, uScale, progress);
+  coords /= mix(1.0, p_uScale, progress);
 
   // Squish image texture vertically.
-  coords.y /= mix(1.0, (1.0 - 0.2 * uSquish), progress);
+  coords.y /= mix(1.0, (1.0 - 0.2 * p_uSquish), progress);
 
   // 'Tilt' image texture around x-axis.
-  coords.x /= mix(1.0, 1.0 - 0.1 * uTilt * coords.y, progress);
+  coords.x /= mix(1.0, 1.0 - 0.1 * p_uTilt * coords.y, progress);
 
   // Move image texture vertically.
-  coords.y += uShift * progress;
+  coords.y += p_uShift * progress;
 
   // Move texture coordinate center to corner again.
   coords = coords * 0.5 + 0.5;
@@ -67,5 +55,5 @@ void main() {
   // Dissolve window.
   oColor.a = oColor.a * (uForOpening ? uProgress : pow(1.0 - uProgress, 2.0));
 
-  setOutputColor(oColor);
+  return vec4(oColor.rgb * oColor.a, oColor.a);
 }

@@ -20,40 +20,6 @@
 namespace PhosphorZones {
 
 /**
- * @brief App-to-zone auto-snap rule
- *
- * Maps a window class pattern to a zone number within a layout.
- * Patterns are case-insensitive substring matches against the window class.
- */
-struct PHOSPHORZONES_EXPORT AppRule
-{
-    QString pattern; // Window class or app name pattern (case-insensitive substring match)
-    int zoneNumber = 0; // 1-based zone number to snap to
-    QString targetScreen; // Optional: snap to zone on this screen instead of current
-
-    // C++20 synthesises operator!= from operator==.
-    bool operator==(const AppRule& other) const = default;
-
-    // Serialization helpers (centralized to avoid DRY violations)
-    QJsonObject toJson() const;
-    static AppRule fromJson(const QJsonObject& obj);
-    static QVector<AppRule> fromJsonArray(const QJsonArray& array);
-};
-
-/**
- * @brief Result of matching a window class against app rules
- */
-struct PHOSPHORZONES_EXPORT AppRuleMatch
-{
-    int zoneNumber = 0;
-    QString targetScreen;
-    bool matched() const
-    {
-        return zoneNumber > 0;
-    }
-};
-
-/**
  * @brief Category for layout type
  *
  * QML Note: Passed as int to QML. Values: 0 = Manual, 1 = Autotile
@@ -96,9 +62,6 @@ class PHOSPHORZONES_EXPORT Layout : public QObject
     Q_PROPERTY(bool isSystemLayout READ isSystemLayout NOTIFY sourcePathChanged)
     Q_PROPERTY(QString shaderId READ shaderId WRITE setShaderId NOTIFY shaderIdChanged)
     Q_PROPERTY(QVariantMap shaderParams READ shaderParams WRITE setShaderParams NOTIFY shaderParamsChanged)
-
-    // App-to-zone rules
-    Q_PROPERTY(QVariantList appRules READ appRulesVariant WRITE setAppRulesVariant NOTIFY appRulesChanged)
 
     // Auto-assign: new windows fill first empty zone
     Q_PROPERTY(bool autoAssign READ autoAssign WRITE setAutoAssign NOTIFY autoAssignChanged)
@@ -316,16 +279,6 @@ public:
     }
     void setAllowedActivities(const QStringList& activities);
 
-    // App-to-zone rules
-    QVector<AppRule> appRules() const
-    {
-        return m_appRules;
-    }
-    void setAppRules(const QVector<AppRule>& rules);
-    QVariantList appRulesVariant() const;
-    void setAppRulesVariant(const QVariantList& rules);
-    AppRuleMatch matchAppRule(const QString& windowClass) const;
-
     // Auto-assign: new windows fill first empty zone
     bool autoAssign() const
     {
@@ -465,7 +418,6 @@ Q_SIGNALS:
     void allowedScreensChanged();
     void allowedDesktopsChanged();
     void allowedActivitiesChanged();
-    void appRulesChanged();
     void autoAssignChanged();
     void useFullScreenGeometryChanged();
     void zonesChanged();
@@ -476,7 +428,7 @@ Q_SIGNALS:
 public:
     /// Recalculate every zone's absolute geometry against @p screenGeometry.
     ///
-    /// The PlasmaZones application enforces its own "only LayoutComputeService
+    /// The Phosphor application enforces its own "only LayoutComputeService
     /// calls this" coalescing discipline via its type system — that
     /// restriction is an application-layer concern, not a library one, so
     /// the method is public here.  Direct callers bypass the service's
@@ -511,9 +463,6 @@ private:
     QString m_systemSourcePath; // Original system path if this is a user override of a system layout
     int m_defaultOrder = 999; // Optional: lower values appear first when choosing default (999 = not set)
     QVector<Zone*> m_zones;
-
-    // App-to-zone rules
-    QVector<AppRule> m_appRules;
 
     // Auto-assign: new windows fill first empty zone
     bool m_autoAssign = false;

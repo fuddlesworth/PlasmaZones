@@ -1,7 +1,7 @@
 {
     "id": "fade",
     "name": "Fade",
-    "description": "Gentle scale-and-fade transition. Open eases scale 0.95→1.0 with smoothstep(0,0.8) fade-in; close eases scale 1.0→0.95 with smoothstep(1.0,0.2) fade-out.",
+    "description": "Gentle scale-and-fade transition. Opening eases scale from 0.95 to 1.0 with a smoothstep(0,0.8) fade-in. Closing eases scale from 1.0 to 0.95 with a smoothstep(1.0,0.2) fade-out.",
     "author": "PlasmaZones (ported from liixini/shaders, https://github.com/liixini/shaders)",
     "version": "1.0",
     "category": "Fade",

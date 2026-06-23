@@ -50,7 +50,7 @@ QString PlasmaZonesEffect::outputScreenId(const KWin::LogicalOutput* output) con
         return *it;
     }
 
-    // Build a screen ID that exactly matches the daemon's Phosphor::Screens::ScreenIdentity::identifierFor().
+    // Build a screen ID that exactly matches the daemon's PhosphorScreens::ScreenIdentity::identifierFor().
     // Uses shared ScreenIdUtils (compositor-common) for hex normalization and sysfs EDID
     // fallback, ensuring byte-identical output across daemon and compositor processes.
     //
@@ -82,6 +82,26 @@ QString PlasmaZonesEffect::outputScreenId(const KWin::LogicalOutput* output) con
     QString result = hasDuplicate ? baseId + QLatin1Char('/') + connectorName : baseId;
     m_screenIdCache.insert(connectorName, result);
     return result;
+}
+
+void PlasmaZonesEffect::reportScreenDesktop(const QString& screenId, int desktop)
+{
+    if (screenId.isEmpty() || desktop < 1) {
+        return;
+    }
+    // Dedup KWin's per-output desktopChanged — only forward a genuine change.
+    // m_lastScreenDesktop is updated even when the daemon service isn't
+    // registered yet; the bringup re-sync (daemon_bringup.cpp) re-pushes every
+    // screen's authoritative desktop after (re)registration, so a missed live
+    // report here is recovered there.
+    if (m_lastScreenDesktop.value(screenId, -1) == desktop) {
+        return;
+    }
+    m_lastScreenDesktop.insert(screenId, desktop);
+    if (m_daemonServiceRegistered) {
+        PhosphorProtocol::ClientHelpers::fireAndForget(this, PhosphorProtocol::Service::Interface::WindowTracking,
+                                                       QStringLiteral("screenDesktopChanged"), {screenId, desktop});
+    }
 }
 
 QString PlasmaZonesEffect::getWindowScreenId(KWin::EffectWindow* w) const
@@ -201,6 +221,19 @@ void PlasmaZonesEffect::fetchVirtualScreenConfig(const QString& physicalScreenId
                 // tally isn't left hanging on the superseded call.
                 const bool isLatest = self->m_vsFetchSeqPerPhysId.value(physicalScreenId) == seq;
 
+                // Live VS-config changes (generation == 0) flip
+                // m_virtualScreensReady = false in onVirtualScreensChanged so
+                // window-screen-crossing detection pauses until the reply
+                // lands. EVERY early-return below must restore the flag for
+                // generation == 0 — otherwise an errored / stale / malformed
+                // reply leaves the gate closed forever and VS crossings
+                // silently stop being detected for that physical screen.
+                const auto restoreReadyIfLive = [self, generation]() {
+                    if (generation == 0) {
+                        self->m_virtualScreensReady = true;
+                    }
+                };
+
                 if (reply.isError()) {
                     qCDebug(lcEffect) << "fetchVirtualScreenConfig: no virtual screens for" << physicalScreenId
                                       << reply.error().message();
@@ -208,11 +241,13 @@ void PlasmaZonesEffect::fetchVirtualScreenConfig(const QString& physicalScreenId
                         self->m_virtualScreenDefs.remove(physicalScreenId);
                     }
                     countdownVsGate();
+                    restoreReadyIfLive();
                     return;
                 }
 
                 if (!isLatest) {
                     countdownVsGate();
+                    restoreReadyIfLive();
                     return;
                 }
 
@@ -221,6 +256,7 @@ void PlasmaZonesEffect::fetchVirtualScreenConfig(const QString& physicalScreenId
                 if (!doc.isObject()) {
                     self->m_virtualScreenDefs.remove(physicalScreenId);
                     countdownVsGate();
+                    restoreReadyIfLive();
                     return;
                 }
 
@@ -301,15 +337,7 @@ void PlasmaZonesEffect::fetchVirtualScreenConfig(const QString& physicalScreenId
                 }
 
                 countdownVsGate();
-
-                // For live VS config changes (generation=0), re-enable VS crossing
-                // detection now that boundary definitions are updated.
-                // countdownVsGate skips for generation=0, so m_virtualScreensReady
-                // must be restored here. For startup fetches (generation>0),
-                // countdownVsGate already sets it when all screens are processed.
-                if (generation == 0) {
-                    self->m_virtualScreensReady = true;
-                }
+                restoreReadyIfLive();
             });
 }
 
@@ -405,6 +433,14 @@ void PlasmaZonesEffect::onScreenRemoved(KWin::LogicalOutput* output)
     if (!output) {
         return;
     }
+
+    // Drop this output's per-screen desktop dedup entry, symmetric with the
+    // daemon's VirtualDesktopManager::removeScreenDesktop (#648): otherwise
+    // reportScreenDesktop's m_lastScreenDesktop cache retains a stale value for
+    // a disconnected connector. Runs before the motion-clock early-return below
+    // so it fires even for an output that never had an animation clock.
+    m_lastScreenDesktop.remove(outputScreenId(output));
+
     // Any in-flight AnimatedValue whose MotionSpec captured this clock's
     // pointer would UAF on its next advance() if we just dropped the
     // unique_ptr. Reap only the animations bound to THIS output's clock

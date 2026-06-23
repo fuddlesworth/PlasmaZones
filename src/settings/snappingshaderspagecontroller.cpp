@@ -5,66 +5,27 @@
 
 #include "../core/logging.h"
 #include "../core/shaderregistry.h"
+#include "../shaderpreview/shaderpreviewcontroller.h"
+#include "shaderpackinstaller.h"
 
 #include <PhosphorShaders/ShaderRegistry.h>
 #include <PhosphorZones/IZoneLayoutRegistry.h>
 #include <PhosphorZones/Layout.h>
 
 #include <QDir>
-#include <QFile>
-#include <QFileInfo>
-#include <QUrl>
 
 #include <algorithm>
 
 namespace PlasmaZones {
 
-namespace snapping_shaders_controller_detail {
-
-/// Recursive directory copy with symlink protection. Mirror of the helper
-/// in `animationspagecontroller.cpp` — same SOLID/security rationale
-/// (drag-drop sources are untrusted; symlinks would let a malicious pack
-/// smuggle arbitrary readable filesystem content under deceptive names).
-/// Kept private to this TU rather than promoted to a shared helper
-/// because each controller's call site has its own pre/post-flight
-/// validation; the bare copy primitive is too small to justify a header
-/// dependency just for DRY.
-static bool copyDirRecursive(const QString& sourcePath, const QString& destPath)
-{
-    QDir sourceDir(sourcePath);
-    if (!sourceDir.exists())
-        return false;
-    if (!QDir().mkpath(destPath))
-        return false;
-
-    const QFileInfoList entries =
-        sourceDir.entryInfoList(QDir::Files | QDir::Dirs | QDir::NoSymLinks | QDir::NoDotAndDotDot);
-    for (const QFileInfo& entry : entries) {
-        if (entry.isSymLink())
-            continue;
-
-        const QString destEntryPath = destPath + QLatin1Char('/') + entry.fileName();
-        if (entry.isDir()) {
-            if (!copyDirRecursive(entry.absoluteFilePath(), destEntryPath))
-                return false;
-        } else if (entry.isFile()) {
-            if (QFile::exists(destEntryPath))
-                QFile::remove(destEntryPath);
-            if (!QFile::copy(entry.absoluteFilePath(), destEntryPath))
-                return false;
-        }
-    }
-    return true;
-}
-
-} // namespace snapping_shaders_controller_detail
-
 SnappingShadersPageController::SnappingShadersPageController(PlasmaZones::ShaderRegistry* shaderRegistry,
                                                              PhosphorZones::IZoneLayoutRegistry* layoutRegistry,
+                                                             ShaderPreviewController* previewController,
                                                              QObject* parent)
-    : QObject(parent)
+    : PhosphorControl::PageController(QStringLiteral("snapping-shaders"), parent)
     , m_shaderRegistry(shaderRegistry)
     , m_layoutRegistry(layoutRegistry)
+    , m_previewController(previewController)
 {
     if (m_shaderRegistry) {
         connect(m_shaderRegistry, &PhosphorShaders::ShaderRegistry::shadersChanged, this,
@@ -87,23 +48,83 @@ SnappingShadersPageController::SnappingShadersPageController(PlasmaZones::Shader
 
 SnappingShadersPageController::~SnappingShadersPageController() = default;
 
+QObject* SnappingShadersPageController::previewController() const
+{
+    return m_previewController;
+}
+
 void SnappingShadersPageController::connectLayoutSignals()
 {
     if (!m_layoutRegistry)
         return;
-    // Per-layout `shaderIdChanged` connections. A second call to this
-    // function (from contentsChanged) re-tries every existing layout; we
-    // route through a member slot so `Qt::UniqueConnection` actually
-    // dedupes — Qt cannot dedupe functor / lambda connections, only
-    // pointer-to-member-function ones, and a lambda would silently
-    // accumulate one fresh edge per refire.
+    // Track which layouts are already wired so the O(N) walk on every
+    // contentsChanged shrinks to O(new-layouts). Qt::UniqueConnection
+    // still guarantees idempotence at the QObject layer, but the
+    // membership check spares the per-call function-prologue cost and,
+    // more importantly, scales sublinearly when contentsChanged fires
+    // repeatedly during a bulk-edit (drag-reorder, import).
+    //
+    // Stale-entry eviction: `m_wiredLayouts` is drained by
+    // `onWiredLayoutDestroyed` (wired below) which assumes "removed from
+    // registry == destroyed". The registry's contract is that layouts
+    // are QObject-parented to it, so removal => destruction in the same
+    // tick. Belt-and-braces: also drop any tracked entry not present in
+    // the current registry snapshot, so a future registry refactor that
+    // detaches without destroying (e.g. cache-eviction) doesn't grow
+    // `m_wiredLayouts` unbounded.
     const QVector<PhosphorZones::Layout*> layouts = m_layoutRegistry->layouts();
+    // Build a live-pointer set keyed as QObject* so the membership
+    // test can be applied to the tracked QObject* entries directly,
+    // sidestepping a qobject_cast on what could theoretically be a
+    // dangling pointer (see the destroyed-eviction note below).
+    QSet<QObject*> live;
+    live.reserve(layouts.size());
+    for (PhosphorZones::Layout* layout : layouts) {
+        if (layout)
+            live.insert(layout);
+    }
+    // Stale-entry eviction. onWiredLayoutDestroyed() drains entries
+    // synchronously from QObject::destroyed (wired below), so under
+    // the current registry contract m_wiredLayouts never carries a
+    // dangling pointer. The live-set guard here keeps disconnect()
+    // calls bounded to objects we KNOW are still alive — defence in
+    // depth against a future registry refactor that detaches without
+    // destroying (cache eviction etc.).
+    for (auto it = m_wiredLayouts.begin(); it != m_wiredLayouts.end();) {
+        QObject* tracked = *it;
+        if (live.contains(tracked)) {
+            ++it;
+            continue;
+        }
+        // Tracked entry no longer in the live registry snapshot. If
+        // it's also been destroyed, onWiredLayoutDestroyed already
+        // removed it earlier in this same event loop turn and this
+        // branch is unreachable. If it's been *detached* (hypothetical
+        // future case), tracked is still alive and we can safely
+        // disconnect — no UB.
+        disconnect(tracked, &QObject::destroyed, this, &SnappingShadersPageController::onWiredLayoutDestroyed);
+        disconnect(tracked, nullptr, this, nullptr);
+        it = m_wiredLayouts.erase(it);
+    }
     for (PhosphorZones::Layout* layout : layouts) {
         if (!layout)
             continue;
+        if (m_wiredLayouts.contains(layout))
+            continue;
         connect(layout, &PhosphorZones::Layout::shaderIdChanged, this,
                 &SnappingShadersPageController::onLayoutShaderIdChanged, Qt::UniqueConnection);
+        // Track destruction so the set stays in sync — without this,
+        // a deleted-then-reused address would skip the connect path
+        // and the new layout's shaderIdChanged would never reach us.
+        connect(layout, &QObject::destroyed, this, &SnappingShadersPageController::onWiredLayoutDestroyed,
+                Qt::UniqueConnection);
+        m_wiredLayouts.insert(layout);
     }
+}
+
+void SnappingShadersPageController::onWiredLayoutDestroyed(QObject* layout)
+{
+    m_wiredLayouts.remove(layout);
 }
 
 void SnappingShadersPageController::onLayoutShaderIdChanged()
@@ -155,62 +176,21 @@ void SnappingShadersPageController::openUserShaderDirectory()
 
 bool SnappingShadersPageController::installShaderPack(const QString& sourceUrl)
 {
-    if (sourceUrl.isEmpty())
-        return false;
-
-    // Accept both `file://...` URLs (drag-drop from a file manager) and
-    // bare paths (programmatic callers).
-    QString sourcePath = sourceUrl;
-    if (sourcePath.startsWith(QLatin1String("file://")))
-        sourcePath = QUrl(sourceUrl).toLocalFile();
-
-    sourcePath = QDir::cleanPath(sourcePath);
-
-    const QFileInfo sourceInfo(sourcePath);
-    if (!sourceInfo.exists() || !sourceInfo.isDir() || sourceInfo.isSymLink()) {
-        qCWarning(lcConfig) << "installShaderPack (overlay): source is not an existing directory:" << sourcePath;
-        return false;
-    }
-    const QString sourceBasename = sourceInfo.fileName();
-    if (sourceBasename.isEmpty()) {
-        qCWarning(lcConfig) << "installShaderPack (overlay): source path has no basename:" << sourcePath;
+    // All validation + copy lives in the shared ShaderPackInstaller
+    // helper. Same logic as the animations-shader page (DRY) and the
+    // security-sensitive bits (symlink rejection, metadata.json
+    // verification, rollback) only need an audit in one place.
+    const auto result = ShaderPackInstaller::install(sourceUrl, userShaderDirectoryPath());
+    if (result != ShaderPackInstaller::Result::Success) {
+        const QString message = ShaderPackInstaller::errorMessage(result);
+        qCWarning(lcConfig) << "installShaderPack (overlay):" << message << "— source:" << sourceUrl;
+        // Surface the reason via the chrome toast — the InlineMessage
+        // in the drop zone is generic; the underlying failure reason
+        // (DestinationExists, MissingMetadata, PackTooLarge…) gives
+        // the user a concrete next step.
+        Q_EMIT toastRequested(message);
         return false;
     }
-
-    // Validate metadata.json — without it the registry won't pick up the
-    // pack, so accepting the drop would silently be a no-op. Reject
-    // symlinked metadata so a malicious pack can't smuggle a non-shader
-    // JSON file's content past validation.
-    const QString metadataPath = sourceInfo.absoluteFilePath() + QLatin1String("/metadata.json");
-    const QFileInfo metadataInfo(metadataPath);
-    if (!metadataInfo.exists() || !metadataInfo.isFile() || metadataInfo.isSymLink()) {
-        qCWarning(lcConfig) << "installShaderPack (overlay): source has no metadata.json:" << sourcePath;
-        return false;
-    }
-
-    const QString userDir = userShaderDirectoryPath();
-    if (userDir.isEmpty()) {
-        qCWarning(lcConfig) << "installShaderPack (overlay): no user shader directory available (registry missing).";
-        return false;
-    }
-    if (!QDir().mkpath(userDir)) {
-        qCWarning(lcConfig) << "installShaderPack (overlay): could not create user shader directory:" << userDir;
-        return false;
-    }
-
-    const QString destDir = userDir + QLatin1Char('/') + sourceBasename;
-    if (QFileInfo::exists(destDir)) {
-        qCWarning(lcConfig) << "installShaderPack (overlay): destination already exists, refusing to overwrite:"
-                            << destDir;
-        return false;
-    }
-
-    if (!snapping_shaders_controller_detail::copyDirRecursive(sourceInfo.absoluteFilePath(), destDir)) {
-        qCWarning(lcConfig) << "installShaderPack (overlay): copy failed; rolling back:" << destDir;
-        QDir(destDir).removeRecursively();
-        return false;
-    }
-
     // The registry's filewatcher rescans on its own — `shadersChanged`
     // fires automatically and reaches QML through this controller's
     // forwarded `shaderEffectsChanged` signal.

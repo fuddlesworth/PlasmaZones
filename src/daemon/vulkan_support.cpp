@@ -6,6 +6,9 @@
 #include <QLibrary>
 #include <QQuickWindow>
 #include <QSGRendererInterface>
+#if QT_CONFIG(vulkan)
+#include <QVulkanFunctions>
+#endif
 
 namespace PlasmaZones {
 
@@ -40,14 +43,36 @@ bool probeAndSetGraphicsApi(const QString& backend)
 #if QT_CONFIG(vulkan)
 bool createAndRegisterVulkanInstance(QVulkanInstance& vulkanInstance, QGuiApplication& app)
 {
-    vulkanInstance.setApiVersion(PzVulkanApiVersion);
+    vulkanInstance.setApiVersion(PVulkanApiVersion);
     vulkanInstance.setExtensions(vulkanInstance.extensions() << QByteArrayLiteral("VK_EXT_swapchain_colorspace"));
-    if (vulkanInstance.create()) {
-        app.setProperty(PzVulkanInstanceProperty, QVariant::fromValue(&vulkanInstance));
-        return true;
+    if (!vulkanInstance.create()) {
+        QQuickWindow::setGraphicsApi(QSGRendererInterface::OpenGL);
+        return false;
     }
-    QQuickWindow::setGraphicsApi(QSGRendererInterface::OpenGL);
-    return false;
+
+    // A successful create() is NOT sufficient: vkCreateInstance only loads the
+    // Vulkan loader + ICD, it does NOT require an enumerable GPU. When the
+    // userspace driver and the loaded kernel module are version-skewed (e.g. an
+    // nvidia-utils upgrade without a reboot), the loader is present and the
+    // instance is created, but vkEnumeratePhysicalDevices returns
+    // VK_ERROR_INITIALIZATION_FAILED / zero devices. If we proceed, QRhi
+    // discovers this only at scenegraph init on the render thread, where
+    // QQuickWindow treats it as a qFatal — aborting the whole process and
+    // crash-looping the daemon under systemd. Probe for a usable physical
+    // device here, while we can still cleanly fall back to OpenGL.
+    QVulkanFunctions* functions = vulkanInstance.functions();
+    uint32_t physicalDeviceCount = 0;
+    const VkResult enumResult = functions
+        ? functions->vkEnumeratePhysicalDevices(vulkanInstance.vkInstance(), &physicalDeviceCount, nullptr)
+        : VK_ERROR_INITIALIZATION_FAILED;
+    if (enumResult != VK_SUCCESS || physicalDeviceCount == 0) {
+        vulkanInstance.destroy();
+        QQuickWindow::setGraphicsApi(QSGRendererInterface::OpenGL);
+        return false;
+    }
+
+    app.setProperty(PVulkanInstanceProperty, QVariant::fromValue(&vulkanInstance));
+    return true;
 }
 #endif
 

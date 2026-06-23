@@ -4,11 +4,19 @@
 #include "../plasmazoneseffect.h"
 #include "../compositorclock.h"
 #include "shader_internal.h"
+#include "shader_resolve.h"
+#include "window_query.h"
 
+#include <core/output.h>
+#include <core/rendertarget.h>
+#include <core/renderviewport.h>
 #include <effect/effecthandler.h>
+#include <opengl/glframebuffer.h>
 #include <opengl/glshader.h>
 #include <opengl/glshadermanager.h>
 #include <opengl/gltexture.h>
+#include <scene/item.h>
+#include <scene/windowitem.h>
 
 #include <QDate>
 #include <QDateTime>
@@ -73,7 +81,7 @@ void PlasmaZonesEffect::prePaintScreen(KWin::ScreenPrePaintData& data)
     // single-digit counts.
     m_windowAnimator->advanceAnimations();
 
-    if (m_windowAnimator->hasActiveAnimations() || !m_shaderManager.m_shaderTransitions.empty()) {
+    if (m_windowAnimator->hasActiveAnimations() || !m_shaderManager.empty()) {
         // Windows have translation transforms that move them outside their
         // frame geometry bounds — force full compositing mode. Shader
         // transitions also need this: without
@@ -99,7 +107,7 @@ void PlasmaZonesEffect::prePaintScreen(KWin::ScreenPrePaintData& data)
     // times across outputs); reading KWin::effects->cursorPos() at every
     // call multiplies up. Caching here also guarantees every transition
     // this frame reads an identical iMouse, eliminating sub-frame jitter.
-    if (KWin::effects && !m_shaderManager.m_shaderTransitions.empty()) {
+    if (KWin::effects && !m_shaderManager.empty()) {
         m_shaderManager.m_cachedCursorGlobal = KWin::effects->cursorPos();
     }
 
@@ -134,9 +142,9 @@ void PlasmaZonesEffect::postPaintScreen()
     // window so the next vsync runs our paint chain. Animator-driven
     // transitions (durationMs == 0) are kept alive by
     // m_windowAnimator->scheduleRepaints above.
-    if (!m_shaderManager.m_shaderTransitions.empty()) {
+    if (!m_shaderManager.empty()) {
         const qint64 now = shaderClockNowMs();
-        for (const auto& [w, transition] : m_shaderManager.m_shaderTransitions) {
+        for (const auto& [w, transition] : m_shaderManager.shaderTransitions()) {
             if (!w || w->isDeleted()) {
                 continue;
             }
@@ -206,26 +214,44 @@ void PlasmaZonesEffect::postPaintScreen()
     // above only iterates `m_shaderManager.m_shaderTransitions`, so
     // suppression-active-but-shader-active windows would lose their
     // surface-extent damage). Screen-level damage avoids the clip entirely.
-    for (auto it = m_restoreSuppress.cbegin(); it != m_restoreSuppress.cend(); ++it) {
-        KWin::EffectWindow* sw = it.key();
-        if (!sw || sw->isDeleted() || !KWin::effects) {
-            continue;
-        }
-        if (const auto* output = sw->screen()) {
-            KWin::effects->addRepaint(output->geometry());
-        } else {
-            KWin::effects->addRepaintFull();
+    if (KWin::effects) {
+        // KWin::effects cannot go null mid-loop (it's a global owned by
+        // KWin's effect system, not by any window we touch), so hoist the
+        // null-check above the loop — the per-iteration test was dead
+        // overhead in a hot path that runs every frame while any window
+        // has a restore-suppression active.
+        for (auto it = m_restoreSuppress.cbegin(); it != m_restoreSuppress.cend(); ++it) {
+            KWin::EffectWindow* sw = it.key();
+            if (!sw || sw->isDeleted()) {
+                continue;
+            }
+            if (const auto* output = sw->screen()) {
+                KWin::effects->addRepaint(output->geometry());
+            } else {
+                KWin::effects->addRepaintFull();
+            }
         }
     }
     KWin::effects->postPaintScreen();
+    // Unpin the per-frame clock. Any paintWindow() invocation outside
+    // the prePaintScreen→postPaintScreen bracket (defensive bootstrap,
+    // future test harness, an unexpected mid-cycle paint) then falls
+    // back to the live `shaderClockNowMs()` via the -1 sentinel branch
+    // in shader_resolve.cpp's resolveShaderClock(), instead of reading
+    // a stale pinned timestamp from this cycle.
+    m_shaderManager.setCurrentFrameClockMs(-1);
+    // Drop the per-frame SetOpacity cache so next frame's prePaintWindow
+    // re-resolves against any rule-set or window-metadata changes that
+    // landed between frames. See ShaderTransitionManager's cache-block
+    // comment for the per-frame contract rationale.
+    m_shaderManager.clearFrameOpacityCache();
 }
 
 void PlasmaZonesEffect::prePaintWindow(KWin::RenderView* view, KWin::EffectWindow* w, KWin::WindowPrePaintData& data)
 {
-    if (w
-        && (m_windowAnimator->hasAnimation(w)
-            || m_shaderManager.m_shaderTransitions.find(w) != m_shaderManager.m_shaderTransitions.end()
-            || m_restoreSuppress.contains(w))) {
+    const bool transformDriven =
+        w && (m_windowAnimator->hasAnimation(w) || m_shaderManager.hasTransition(w) || m_restoreSuppress.contains(w));
+    if (transformDriven) {
         // Mark as transformed so paintWindow applies our translate+scale, and
         // so the OffscreenEffect redirect drives full-window repaints for the
         // shader leg's iTime advance even when the underlying window content
@@ -251,6 +277,37 @@ void PlasmaZonesEffect::prePaintWindow(KWin::RenderView* view, KWin::EffectWindo
         // the whole animation. setTranslucent() clears the opaque region
         // so every frame fully recomposites under the window.
         data.setTranslucent();
+    }
+
+    // Resolve + cache the rule-resolved opacity for ANY window with
+    // SetOpacity rules, independent of whether a transition is in flight.
+    // Two consumers in paintWindow read this cache: the `data.setOpacity()`
+    // path (plain dimmed window) and the shader-transition draw, which
+    // pushes the value into the `iWindowOpacity` uniform so surfaceColor()
+    // dims the surface for the whole animation — a MapTexture-only custom
+    // shader can't see `data.opacity()`. This was previously an `else if`
+    // gated off the transform-driven branch above, so a window mid-
+    // transition never cached its opacity and the transition shader
+    // rendered it fully opaque until the animation settled, then snapped to
+    // the rule opacity. Resolve once per frame and cache (the cascade walk
+    // is the hot-path cost the project tracks); the cache drops at
+    // postPaintScreen.
+    if (w && m_shaderManager.hasOpacityRules()) {
+        const QString winClass = w->windowClass();
+        if (!isOwnOverlayClass(winClass) && !isPlasmaShellSurface(winClass)) {
+            const auto opacity = resolveWindowOpacity(resolveWindowRuleActions(w, getWindowId(w)));
+            m_shaderManager.cacheFrameOpacity(w, opacity);
+            // Clear the deviceOpaque region so KWin recomposites whatever
+            // sits behind a dimmed window — without it, stale background
+            // pixels show through the moment anything behind moves. The
+            // transform-driven branch already did this for windows mid-
+            // transition; only the SetOpacity-only case needs it here.
+            // Geometry is untouched (no setTransformed) — SetOpacity is a
+            // pure alpha change.
+            if (!transformDriven && opacity && *opacity < 1.0) {
+                data.setTranslucent();
+            }
+        }
     }
 
     OffscreenEffect::prePaintWindow(view, w, data);
@@ -299,11 +356,11 @@ void PlasmaZonesEffect::paintWindow(const KWin::RenderTarget& renderTarget, cons
         // visible. Reset `lastPaintTimeMs = -1` for the same reason —
         // the first visible paint computes iTimeDelta = 0 ("first frame"
         // semantics), avoiding a 250ms-stale spike.
-        if (auto sit = m_shaderManager.m_shaderTransitions.find(w); sit != m_shaderManager.m_shaderTransitions.end()) {
-            if (sit->second.durationMs > 0) {
-                sit->second.startTimeMs = frameNowMs;
+        if (auto* st = m_shaderManager.findTransition(w)) {
+            if (st->durationMs > 0) {
+                st->startTimeMs = frameNowMs;
             }
-            sit->second.lastPaintTimeMs = -1;
+            st->lastPaintTimeMs = -1;
         }
         if (frameNowMs < supIt->deadlineMs) {
             return;
@@ -317,20 +374,106 @@ void PlasmaZonesEffect::paintWindow(const KWin::RenderTarget& renderTarget, cons
         m_restoreSuppress.erase(supIt);
     }
 
-    m_windowAnimator->applyTransform(w, data);
+    // SetOpacity rule consumer — sets the window's painted opacity before
+    // downstream transforms run. Absolute set (not multiplyOpacity) because
+    // SetOpacity rules describe a target opacity, not a scale factor —
+    // "make Firefox 80% opaque" should land at 0.8 regardless of whatever
+    // opacity another effect previously composed. Uses the shader-manager's
+    // window-rule evaluator because the SetOpacity action lives in the same
+    // effect-side rule bag as OverrideAnimation{Shader,Curve,Timing} —
+    // sharing the evaluator also shares its per-window cache, so the paint
+    // hot path pays at most one cascade walk per window per rule-set
+    // revision.
+    //
+    // Skip our own overlay/editor/snap-assist surfaces and plasma-shell
+    // panels — a user-authored rule like `WindowClass contains "plasmashell"`
+    // would otherwise dim our own UI or the system panel. This is a
+    // narrower exclusion than `shouldHandleWindow` (which also rejects
+    // xdg-desktop-portal surfaces) — deliberately so. SetOpacity is a
+    // user-visible cosmetic effect that the user opts into by authoring
+    // a class-matching rule; we exclude only the surfaces whose dimming
+    // would feel like a daemon bug (our own UI, panels), and let the
+    // user-authored rule reach everything else the rule explicitly
+    // names.
+    //
+    // Short-circuit on an empty rule set — the common case for users without
+    // any effect-side rules. The animation-cascade sister consumers
+    // (window_filtering.cpp, drag_snap.cpp) follow the same `isEmpty()` gate
+    // to keep default-state cost to two pointer reads; without it, every
+    // paintWindow call churns the rule evaluator's per-window cache for
+    // zero benefit.
+    if (m_shaderManager.hasOpacityRules()) {
+        const QString winClass = w->windowClass();
+        if (!isOwnOverlayClass(winClass) && !isPlasmaShellSurface(winClass)) {
+            // Reuse the per-frame cache populated by prePaintWindow above.
+            // Falls back to a live resolve only when prePaintWindow wasn't
+            // called this frame (defensive bootstrap, test harness — KWin
+            // normally guarantees prePaintWindow→paintWindow ordering).
+            std::optional<qreal> opacity;
+            if (m_shaderManager.frameOpacityCached(w)) {
+                opacity = m_shaderManager.cachedFrameOpacity(w);
+            } else {
+                opacity = resolveWindowOpacity(resolveWindowRuleActions(w, getWindowId(w)));
+                m_shaderManager.cacheFrameOpacity(w, opacity);
+            }
+            if (opacity) {
+                data.setOpacity(*opacity);
+            }
+        }
+    }
 
-    auto sit = m_shaderManager.m_shaderTransitions.find(w);
-    if (sit != m_shaderManager.m_shaderTransitions.end() && sit->second.cached && sit->second.cached->shader) {
+    // Re-entrancy guard: captureOldWindowSnapshot below calls
+    // effects->drawWindow, which walks the chain back through our
+    // OffscreenEffect::drawWindow (to render the raw window into our capture
+    // FBO). Don't apply the C++ transform or any morph processing during that
+    // raw pass — just continue the chain plainly.
+    if (m_capturingSnapshot) {
+        KWin::effects->drawWindow(renderTarget, viewport, w, mask, deviceRegion, data);
+        return;
+    }
+
+    // Apply the C++ translate+scale geometry morph — UNLESS a shader
+    // geometry-morph owns this window's visual transition. A morph shader
+    // (one that declares iFromRect) interpolates the drawn rect itself and
+    // cross-fades old->new content, so letting WindowAnimator::applyTransform
+    // also translate+scale would double-transform the window. The animator's
+    // animation still exists (it drives the morph's progress timeline); we
+    // just skip its paint-data transform here.
+    {
+        const auto* morphSt = m_shaderManager.findTransition(w);
+        const bool shaderOwnsGeometry = morphSt && morphSt->cached && morphSt->cached->iFromRectLoc >= 0;
+        if (!shaderOwnsGeometry) {
+            m_windowAnimator->applyTransform(w, data);
+        }
+    }
+
+    auto* st = m_shaderManager.findTransition(w);
+    if (st && st->cached && st->cached->shader) {
         // Non-const reference because the per-frame book-keeping (`frameCount`,
         // `lastPaintTimeMs`) advances on every paintWindow tick that feeds
         // the transition. Without the mutation, `iFrame` would stay at 0 and
         // `iTimeDelta` would always read 0.
-        auto& transition = sit->second;
+        auto& transition = *st;
+        // Phase 0: capture the OLD window content on the first morph frame,
+        // before the moveResize configure round-trips and the client re-renders
+        // at the new size. Capture-only frame — we render the snapshot into our
+        // own FBO and return WITHOUT drawing the window to screen this frame, so
+        // there is exactly one TOP-LEVEL on-screen effects->drawWindow per outer
+        // paintWindow (the capture's own drawWindow renders only into the
+        // snapshot FBO) — avoiding the chain-iterator re-entrancy that
+        // ghost-trails the surface-extent path.
+        // One skipped frame at the very start of a snap is imperceptible. If
+        // capture fails, needsSnapshot is cleared inside the helper and the
+        // morph shader falls back to no cross-fade.
+        if (transition.needsSnapshot && !transition.oldSnapshot) {
+            captureOldWindowSnapshot(transition, w);
+            return;
+        }
         // Two progress sources, picked by the transition's mode (see
         // ShaderTransition's docstring). Lifecycle events (window.*)
         // started via tryBeginShaderForEvent set durationMs > 0 and drive
         // progress from monotonic steady-clock elapsed; zone.* events flowed
-        // through applySnapGeometry leave durationMs = 0 and ride the
+        // through applyWindowGeometry leave durationMs = 0 and ride the
         // m_windowAnimator timeline so the shader matches the geometry
         // animation.
         qreal progress = 0.0;
@@ -617,6 +760,25 @@ void PlasmaZonesEffect::paintWindow(const KWin::RenderTarget& renderTarget, cons
                     // the daemon's surface-sized-FBO path.
                     shader->setUniform(cached->iAnchorPosInFboLoc, anchorUniforms.anchorPosInFbo);
                 }
+                if (cached->iWindowOpacityLoc >= 0) {
+                    // Feed the rule-resolved opacity so surfaceColor() dims
+                    // the surface for the entire transition. prePaintWindow
+                    // cached it this frame for any window with SetOpacity
+                    // rules; a nullopt entry (or no rules at all) means "no
+                    // rule matched this window" → full opacity. The custom
+                    // shader is compiled MapTexture-only and can't observe
+                    // data.opacity(), so this uniform is the only path that
+                    // applies the dim while the transition runs — without it
+                    // the window flashes fully opaque until the animation
+                    // settles, then snaps to the rule opacity.
+                    float winOpacity = 1.0f;
+                    if (m_shaderManager.frameOpacityCached(w)) {
+                        if (const auto cachedOpacity = m_shaderManager.cachedFrameOpacity(w)) {
+                            winOpacity = static_cast<float>(*cachedOpacity);
+                        }
+                    }
+                    shader->setUniform(cached->iWindowOpacityLoc, winOpacity);
+                }
                 if (cached->iAnchorRectInTextureLoc >= 0) {
                     // The anchor's UV sub-rect within uTexture0 (KWin's
                     // redirected expanded-geometry FBO). surfaceColor()
@@ -640,6 +802,23 @@ void PlasmaZonesEffect::paintWindow(const KWin::RenderTarget& renderTarget, cons
                     if (loc < 0)
                         continue;
                     shader->setUniform(loc, transition.customColorsValues[slot]);
+                }
+                // Geometry-morph endpoints. The window already jumped to its
+                // destination via moveResize; the morph shader animates the
+                // visual transition by interpolating its drawn content from
+                // the old frame (iFromRect) to the new frame (iToRect) by
+                // iTime. Pushed in logical screen pixels (x, y, width, height).
+                // Non-morph transitions leave from/toGeometry default-invalid
+                // → zero vec4s, which morph shaders read as "no morph". Guarded
+                // on loc >= 0 so non-morph shaders (which don't declare these)
+                // pay nothing.
+                if (cached->iFromRectLoc >= 0) {
+                    const QRectF& f = transition.fromGeometry;
+                    shader->setUniform(cached->iFromRectLoc, QVector4D(f.x(), f.y(), f.width(), f.height()));
+                }
+                if (cached->iToRectLoc >= 0) {
+                    const QRectF& t = transition.toGeometry;
+                    shader->setUniform(cached->iToRectLoc, QVector4D(t.x(), t.y(), t.width(), t.height()));
                 }
                 // User textures: bind each cached GLTexture to texture
                 // unit (1 + slot) — TEXTURE0 holds the redirected window
@@ -688,6 +867,21 @@ void PlasmaZonesEffect::paintWindow(const KWin::RenderTarget& renderTarget, cons
                         tex->setWrapMode(wantWrap);
                         entry->lastAppliedWrap = wantWrap;
                     }
+                }
+                // Old-content snapshot (uOldWindow). Bound to a dedicated unit
+                // just past the user-texture slots so the morph shader can
+                // cross-fade the captured old content against the live
+                // redirected content (uTexture0). Wrap mode is set once at
+                // capture time (Phase 0), so no per-frame setWrapMode here.
+                // Only when the shader reads it AND a snapshot was captured;
+                // otherwise the shader's uOldWindow reads unit 0 / transparent
+                // and a morph shader falls back to no cross-fade.
+                if (cached->iOldWindowLoc >= 0 && transition.oldSnapshot) {
+                    constexpr int kOldSnapshotUnit =
+                        1 + PhosphorAnimationShaders::AnimationShaderContract::kMaxUserTextureSlots;
+                    shader->setUniform(cached->iOldWindowLoc, kOldSnapshotUnit);
+                    glActiveTexture(GL_TEXTURE0 + kOldSnapshotUnit);
+                    transition.oldSnapshot->bind();
                 }
                 // Restore TEXTURE0 as the active unit so KWin's
                 // OffscreenData::paint binds the redirected surface
@@ -744,6 +938,15 @@ void PlasmaZonesEffect::paintWindow(const KWin::RenderTarget& renderTarget, cons
                 glActiveTexture(GL_TEXTURE1 + slot);
                 glBindTexture(GL_TEXTURE_2D, 0);
             }
+            // Same hygiene for the old-content snapshot unit (uOldWindow),
+            // bound just past the user-texture slots above for morph
+            // transitions — don't leave it dangling for the next effect.
+            if (cached->iOldWindowLoc >= 0 && transition.oldSnapshot) {
+                constexpr int kOldSnapshotUnit =
+                    1 + PhosphorAnimationShaders::AnimationShaderContract::kMaxUserTextureSlots;
+                glActiveTexture(GL_TEXTURE0 + kOldSnapshotUnit);
+                glBindTexture(GL_TEXTURE_2D, 0);
+            }
             glActiveTexture(GL_TEXTURE0);
             return;
         }
@@ -785,11 +988,12 @@ void PlasmaZonesEffect::paintWindow(const KWin::RenderTarget& renderTarget, cons
             // `endShaderTransition` on the successor and kill it before
             // it ever paints. Mirrors the timer-driven teardown pattern
             // in `tryBeginShaderForEvent`'s post-install QTimer::singleShot.
-            // Iterator `sit` was obtained earlier in this function and no
-            // intervening code mutates m_shaderManager.m_shaderTransitions, so the read is
-            // safe. The assertion documents that contract for future edits.
-            Q_ASSERT(sit != m_shaderManager.m_shaderTransitions.end());
-            const quint64 expiringGeneration = sit->second.generation;
+            // Pointer `st` is provably non-null here: the enclosing
+            // `if (st && st->cached && st->cached->shader)` guard upstream
+            // already gated this branch on `st`, so the read is safe in
+            // both debug and release builds without a redundant Q_ASSERT
+            // (which only documented the contract in debug).
+            const quint64 expiringGeneration = st->generation;
             QMetaObject::invokeMethod(
                 this,
                 [this, safeWindow, rawWindow, expiringGeneration]() {
@@ -804,9 +1008,8 @@ void PlasmaZonesEffect::paintWindow(const KWin::RenderTarget& renderTarget, cons
                     // ended via a different path (synchronous teardown,
                     // windowDeleted, generation-mismatch successor).
                     m_shaderManager.m_pendingShaderExpiryEnd.remove(rawWindow);
-                    auto liveIt = m_shaderManager.m_shaderTransitions.find(safeWindow.data());
-                    if (liveIt != m_shaderManager.m_shaderTransitions.end()
-                        && liveIt->second.generation == expiringGeneration) {
+                    if (const auto* live = m_shaderManager.findTransition(safeWindow.data());
+                        live && live->generation == expiringGeneration) {
                         endShaderTransition(safeWindow.data());
                     }
                     // else: a successor replaced us (last-event-wins) and
@@ -825,17 +1028,106 @@ void PlasmaZonesEffect::paintWindow(const KWin::RenderTarget& renderTarget, cons
     KWin::effects->drawWindow(renderTarget, viewport, w, mask, deviceRegion, data);
 }
 
+void PlasmaZonesEffect::captureOldWindowSnapshot(ShaderTransition& transition, KWin::EffectWindow* window)
+{
+    // Mirrors KWin's OffscreenData::maybeRender (offscreeneffect.cpp): render the
+    // window into an offscreen FBO sized to its expanded geometry × screen scale,
+    // via effects->drawWindow. We temporarily bypass our morph shader so the
+    // captured texture is the RAW old window content (the cross-fade source) —
+    // drawing with the morph shader here would sample an unbound uOldWindow.
+    const KWin::LogicalOutput* const screen = window->screen();
+    const QRectF logicalGeometry = window->expandedGeometry();
+    qreal scale = screen ? screen->scale() : 1.0;
+    // Defensive size cap. The snapshot is sampled by normalised uv, so
+    // downscaling via a reduced capture scale costs only resolution (no
+    // distortion) — it keeps the texture within GL limits and bounds the
+    // transient memory of an oversized window. Normal windows (≤ output size)
+    // never hit this; it's a guard against pathological geometry.
+    constexpr qreal kMaxSnapshotDim = 8192.0;
+    const qreal longestPx = qMax(logicalGeometry.width(), logicalGeometry.height()) * scale;
+    if (longestPx > kMaxSnapshotDim) {
+        scale *= kMaxSnapshotDim / longestPx;
+    }
+    const QSize textureSize = (logicalGeometry.size() * scale).toSize();
+    if (textureSize.isEmpty()) {
+        transition.needsSnapshot = false;
+        return;
+    }
+
+    std::unique_ptr<KWin::GLTexture> tex = KWin::GLTexture::allocate(GL_RGBA8, textureSize);
+    if (!tex) {
+        // Allocation failed — give up on the cross-fade; the morph shader reads
+        // a transparent uOldWindow and falls back to no cross-fade.
+        transition.needsSnapshot = false;
+        return;
+    }
+    tex->setFilter(GL_LINEAR);
+    tex->setWrapMode(GL_CLAMP_TO_EDGE);
+
+    KWin::GLFramebuffer fbo(tex.get());
+    if (!fbo.valid()) {
+        transition.needsSnapshot = false;
+        return;
+    }
+
+    // Bypass the morph shader for the raw capture, restore it afterwards.
+    KWin::GLShader* const morphShader = transition.cached ? transition.cached->shader.get() : nullptr;
+    setShader(window, nullptr);
+
+    m_capturingSnapshot = true;
+    {
+        KWin::RenderTarget renderTarget(&fbo);
+        KWin::RenderViewport viewport(logicalGeometry, scale, renderTarget, QPoint());
+        KWin::GLFramebuffer::pushFramebuffer(&fbo);
+        glClearColor(0.0f, 0.0f, 0.0f, 0.0f);
+        glClear(GL_COLOR_BUFFER_BIT);
+        // Keep the window item renderable for the duration of the capture draw.
+        KWin::ItemEffect keepRenderable(window->windowItem());
+        KWin::WindowPaintData captureData;
+        captureData.setOpacity(1.0);
+        const int captureMask = PAINT_WINDOW_TRANSFORMED | PAINT_WINDOW_TRANSLUCENT;
+        // Route through effects->drawWindow (not OffscreenEffect::drawWindow) so
+        // KWin's draw-chain iterator is advanced correctly — same rationale as
+        // the on-screen draw paths. The re-entrant paintWindow short-circuits on
+        // m_capturingSnapshot and draws the window plainly into this FBO.
+        KWin::effects->drawWindow(renderTarget, viewport, window, captureMask, KWin::Region::infinite(), captureData);
+        KWin::GLFramebuffer::popFramebuffer();
+    }
+    m_capturingSnapshot = false;
+
+    setShader(window, morphShader);
+
+    transition.oldSnapshot = std::move(tex);
+    transition.needsSnapshot = false;
+}
+
 void PlasmaZonesEffect::apply(KWin::EffectWindow* window, int mask, KWin::WindowPaintData& data,
                               KWin::WindowQuadList& quads)
 {
     Q_UNUSED(mask)
     Q_UNUSED(data)
 
+    // During an old-content snapshot capture the window must be drawn with its
+    // natural, undeformed quad (a raw copy). Leave `quads` untouched.
+    if (m_capturingSnapshot) {
+        return;
+    }
+
+    // Defensive: KWin may dispatch a paint to us for a window already
+    // marked deleted (slot ordering vs. our windowDeleted handler). The
+    // expandedGeometry / frameGeometry / screen accessors below would
+    // deref freed Item state for a deleted window. Mirrors the same
+    // guard endShaderTransition applies for the same race.
+    if (!window || window->isDeleted()) {
+        return;
+    }
     // Only surface-extent transitions deform the quad list. Anchor-extent
     // transitions and plain redirected windows are drawn 1:1 over their
-    // own geometry — leave their quads untouched.
-    auto it = m_shaderManager.m_shaderTransitions.find(window);
-    if (it == m_shaderManager.m_shaderTransitions.end() || !it->second.surfaceExtent || quads.isEmpty()) {
+    // own geometry — leave their quads untouched. Non-const handle: the
+    // handedness-cache block below mutates it on the first call, saving a
+    // redundant `findTransition` lookup.
+    auto* st = m_shaderManager.findTransition(window);
+    if (!st || !st->surfaceExtent || quads.isEmpty()) {
         return;
     }
     const auto* output = window->screen();
@@ -868,10 +1160,66 @@ void PlasmaZonesEffect::apply(KWin::EffectWindow* window, int mask, KWin::Window
     // maps the output.
     double qLeft = quads.first().left();
     double qTop = quads.first().top();
-    for (const KWin::WindowQuad& q : quads) {
-        qLeft = qMin(qLeft, q.left());
-        qTop = qMin(qTop, q.top());
+    for (qsizetype i = 1; i < quads.size(); ++i) {
+        qLeft = qMin(qLeft, quads[i].left());
+        qTop = qMin(qTop, quads[i].top());
     }
+
+    // Window-relative grid deformation (e.g. the `flow` window-move
+    // effect). Build an NxN grid over the window's DESTINATION frame rect
+    // — the same rect pushed as iToRect — so the vertex shader can pull
+    // trailing rows back toward iFromRect while the leading edge settles
+    // first. Anchoring the grid to the window (not the output, as the
+    // single-quad path below does) keeps the deformation resolution
+    // constant regardless of how small a zone the window snaps into: every
+    // cell lands on the window. Texcoords are emitted as plain card uv
+    // (0..1, row 0 at the window's top); KWin Y-flips window-quad
+    // texcoords on upload, so the flow vertex stage re-applies the
+    // canonical `1.0 - texCoord.y` flip (same as the shared kwin vertex
+    // stage) to recover card uv with y = 0 at the top. Displaced trailing
+    // vertices reach past the destination rect toward iFromRect;
+    // surface-extent draws with Region::infinite (see paintWindow), so
+    // they are not clipped.
+    if (st->gridSubdivisions > 0) {
+        // Destination frame rect == iToRect. The window already jumped
+        // there via moveResize, so the live frameGeometry is a safe
+        // fallback if a transition somehow lacks a recorded destination.
+        QRectF dst = st->toGeometry;
+        if (!dst.isValid() || dst.isEmpty()) {
+            dst = window->frameGeometry();
+        }
+        if (dst.isEmpty()) {
+            return;
+        }
+        // quad-space <-> screen-space is a pure translation at 1:1 logical
+        // scale; qLeft/qTop is the captured texture's top-left in quad
+        // space and textureGeo its top-left in screen space.
+        const double qOffX = qLeft - textureGeo.x();
+        const double qOffY = qTop - textureGeo.y();
+        const int n = st->gridSubdivisions;
+        quads.clear();
+        quads.reserve(n * n);
+        for (int gy = 0; gy < n; ++gy) {
+            const double v0 = static_cast<double>(gy) / n;
+            const double v1 = static_cast<double>(gy + 1) / n;
+            const double y0 = dst.y() + v0 * dst.height() + qOffY;
+            const double y1 = dst.y() + v1 * dst.height() + qOffY;
+            for (int gx = 0; gx < n; ++gx) {
+                const double u0 = static_cast<double>(gx) / n;
+                const double u1 = static_cast<double>(gx + 1) / n;
+                const double x0 = dst.x() + u0 * dst.width() + qOffX;
+                const double x1 = dst.x() + u1 * dst.width() + qOffX;
+                KWin::WindowQuad cell;
+                cell[0] = KWin::WindowVertex(x0, y0, u0, v0);
+                cell[1] = KWin::WindowVertex(x1, y0, u1, v0);
+                cell[2] = KWin::WindowVertex(x1, y1, u1, v1);
+                cell[3] = KWin::WindowVertex(x0, y1, u0, v1);
+                quads.append(cell);
+            }
+        }
+        return;
+    }
+
     const double ox = qLeft + (outputGeo.x() - textureGeo.x());
     const double oy = qTop + (outputGeo.y() - textureGeo.y());
     const double ow = outputGeo.width();
@@ -890,24 +1238,39 @@ void PlasmaZonesEffect::apply(KWin::EffectWindow* window, int mask, KWin::Window
     // exactly as it does for the window's own quad. Window content is
     // axis-aligned, so u is linear in x and v in y — derive each axis's
     // sign from the source quad's extreme vertices.
-    const KWin::WindowQuad& srcQuad = quads.first();
-    int topIdx = 0, bottomIdx = 0, leftIdx = 0, rightIdx = 0;
-    for (int i = 1; i < 4; ++i) {
-        if (srcQuad[i].y() < srcQuad[topIdx].y())
-            topIdx = i;
-        if (srcQuad[i].y() > srcQuad[bottomIdx].y())
-            bottomIdx = i;
-        if (srcQuad[i].x() < srcQuad[leftIdx].x())
-            leftIdx = i;
-        if (srcQuad[i].x() > srcQuad[rightIdx].x())
-            rightIdx = i;
+    //
+    // Cache the result on the transition: the handedness depends only on
+    // KWin's quad convention, which doesn't shift mid-transition. Without
+    // the cache, every surface-extent shader pays the 3-vertex search +
+    // 4 comparisons per quad per frame for its entire lifetime. `st` is
+    // already known non-null (the early `!st || !st->surfaceExtent` guard at
+    // the top of apply() returned otherwise), so the cache population reuses
+    // that handle instead of paying a second lookup.
+    if (!st->handednessCached) {
+        const KWin::WindowQuad& srcQuad = quads.first();
+        int topIdx = 0, bottomIdx = 0, leftIdx = 0, rightIdx = 0;
+        for (int i = 1; i < 4; ++i) {
+            if (srcQuad[i].y() < srcQuad[topIdx].y())
+                topIdx = i;
+            if (srcQuad[i].y() > srcQuad[bottomIdx].y())
+                bottomIdx = i;
+            if (srcQuad[i].x() < srcQuad[leftIdx].x())
+                leftIdx = i;
+            if (srcQuad[i].x() > srcQuad[rightIdx].x())
+                rightIdx = i;
+        }
+        // The surface quad spans the whole output, so its texcoords are the
+        // full 0..1 range; only the handedness comes from the source quad.
+        st->uAtLeft = (srcQuad[leftIdx].u() <= srcQuad[rightIdx].u()) ? 0.0 : 1.0;
+        st->uAtRight = 1.0 - st->uAtLeft;
+        st->vAtTop = (srcQuad[topIdx].v() <= srcQuad[bottomIdx].v()) ? 0.0 : 1.0;
+        st->vAtBottom = 1.0 - st->vAtTop;
+        st->handednessCached = true;
     }
-    // The surface quad spans the whole output, so its texcoords are the
-    // full 0..1 range; only the handedness comes from the source quad.
-    const double uAtLeft = (srcQuad[leftIdx].u() <= srcQuad[rightIdx].u()) ? 0.0 : 1.0;
-    const double uAtRight = 1.0 - uAtLeft;
-    const double vAtTop = (srcQuad[topIdx].v() <= srcQuad[bottomIdx].v()) ? 0.0 : 1.0;
-    const double vAtBottom = 1.0 - vAtTop;
+    const double uAtLeft = st->uAtLeft;
+    const double uAtRight = st->uAtRight;
+    const double vAtTop = st->vAtTop;
+    const double vAtBottom = st->vAtBottom;
 
     // One quad covering the whole output, clockwise from top-left (the
     // vertex order WindowQuad documents). The shared kwin vertex stage

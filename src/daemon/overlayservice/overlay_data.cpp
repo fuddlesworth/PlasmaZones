@@ -135,14 +135,14 @@ void OverlayService::updateLabelsTextureForWindow(QQuickItem* slot, const QVaria
         return;
     }
 
-    QImage labelsImage = ZoneLabelTextureBuilder::build(patched, size, lfs.fontColor, showNumbers, lfs.backgroundColor,
-                                                        lfs.fontFamily, lfs.fontSizeScale, lfs.fontWeight,
-                                                        lfs.fontItalic, lfs.fontUnderline, lfs.fontStrikeout);
-    if (labelsImage.isNull()) {
-        labelsImage = QImage(1, 1, QImage::Format_ARGB32);
-        labelsImage.fill(Qt::transparent);
-    }
-    slot->setProperty("labelsTexture", QVariant::fromValue(labelsImage));
+    // Sparse glyph-tile payload (a few hundred KB) instead of a full-overlay
+    // image; the render node composites it into the screen-addressed texture.
+    // An empty payload (numbers off / no zones) is fine: the node binds a 1×1
+    // transparent fallback, so no full-screen texture is allocated.
+    const PhosphorRendering::ZoneLabelTexture labels = ZoneLabelTextureBuilder::build(
+        patched, size, lfs.fontColor, showNumbers, lfs.backgroundColor, lfs.fontFamily, lfs.fontSizeScale,
+        lfs.fontWeight, lfs.fontItalic, lfs.fontUnderline, lfs.fontStrikeout);
+    slot->setProperty("labelsTexture", QVariant::fromValue(labels));
     if (state) {
         state->labelsTextureHash = newHash;
     }
@@ -154,7 +154,7 @@ QVariantList OverlayService::buildZonesList(QScreen* screen) const
     // When virtual screens are configured, this delegates to the first VS in config
     // order (virtualScreenIdsFor returns IDs in config order, not hash order).
     // Callers with an explicit virtual screen ID should use the QString overload directly.
-    const QString physId = Phosphor::Screens::ScreenIdentity::identifierFor(screen);
+    const QString physId = PhosphorScreens::ScreenIdentity::identifierFor(screen);
     auto* mgr = m_screenManager;
     if (mgr && mgr->hasVirtualScreens(physId)) {
         const QStringList vsIds = mgr->virtualScreenIdsFor(physId);
@@ -207,7 +207,7 @@ QVariantMap OverlayService::zoneToVariantMap(PhosphorZones::Zone* zone, QScreen*
     // Defensive check: if virtual screens are configured for this physical screen,
     // screen center disambiguation always resolves to the same VS. Callers must
     // use the QString overload instead.
-    const QString physId = Phosphor::Screens::ScreenIdentity::identifierFor(screen);
+    const QString physId = PhosphorScreens::ScreenIdentity::identifierFor(screen);
     auto* mgr = m_screenManager;
     if (mgr && mgr->hasVirtualScreens(physId)) {
         qCWarning(lcOverlay) << "zoneToVariantMap(Zone*, QScreen*, Layout*): physical screen" << physId
@@ -237,8 +237,8 @@ QVariantMap OverlayService::zoneToVariantMap(PhosphorZones::Zone* zone, const QS
     // Uses the layout's geometry preference: available area (excluding panels/taskbars)
     // or full screen geometry depending on useFullScreenGeometry setting.
     // Calculate zone geometry with gaps, auto-resolving virtual screen geometry
-    QRectF geom =
-        GeometryUtils::getZoneGeometryForScreenF(m_screenManager, zone, physScreen, screenId, layout, m_settings);
+    QRectF geom = GeometryUtils::getZoneGeometryForScreenF(m_screenManager, zone, physScreen, screenId, layout,
+                                                           m_settings, m_layoutManager);
 
     // Convert to overlay-local coordinates: virtual screens use the overlay rect origin,
     // physical screens use the QScreen origin
@@ -272,11 +272,16 @@ QVariantMap OverlayService::zoneToVariantMap(PhosphorZones::Zone* zone, const QS
     map[::PhosphorZones::ZoneJsonKeys::BorderRadius] = zone->borderRadius();
 
     // ═══════════════════════════════════════════════════════════════════════════════
-    // Overlay display mode cascade: zone → layout → global
+    // Overlay display mode cascade: zone → context rule → layout → global
     // ═══════════════════════════════════════════════════════════════════════════════
+    // A context overlay-style rule slots between the per-zone override and the
+    // layout value, mirroring the precedence useShaderForScreen applies.
+    const PhosphorZones::ContextOverlayOverride overlayOverride = overlayOverrideForScreen(m_layoutManager, screenId);
     int resolvedDisplayMode = 0; // default: ZoneRectangles
     if (zone->overlayDisplayMode() >= 0) {
         resolvedDisplayMode = zone->overlayDisplayMode();
+    } else if (overlayOverride.style) {
+        resolvedDisplayMode = *overlayOverride.style;
     } else if (layout && layout->overlayDisplayMode() >= 0) {
         resolvedDisplayMode = layout->overlayDisplayMode();
     } else if (m_settings) {

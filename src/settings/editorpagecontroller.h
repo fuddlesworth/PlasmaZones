@@ -3,11 +3,13 @@
 
 #pragma once
 
+#include <PhosphorControl/PageController.h>
 #include <QObject>
+#include <QString>
 
 namespace PlasmaZones {
 
-class Settings;
+class ISettings;
 
 /// Q_PROPERTY surface for the "Editor" settings page.
 ///
@@ -24,7 +26,7 @@ class Settings;
 /// [Editor] group, so SettingsController's meta-object-loop dirty wiring
 /// skips it; this forwarder replaces the explicit connect() list that used
 /// to sit in SettingsController's constructor.
-class EditorPageController : public QObject
+class EditorPageController : public PhosphorControl::PageController
 {
     Q_OBJECT
 
@@ -53,7 +55,22 @@ class EditorPageController : public QObject
         int fillOnDropModifier READ fillOnDropModifier WRITE setFillOnDropModifier NOTIFY fillOnDropModifierChanged)
 
 public:
-    explicit EditorPageController(Settings* settings, QObject* parent = nullptr);
+    /// Reference parameter, not pointer: the Settings instance is required
+    /// for every method on this controller and must not be null. Taking it
+    /// by reference makes the precondition a compile-time guarantee instead
+    /// of a Q_ASSERT that compiles away in release builds.
+    explicit EditorPageController(ISettings& settings, QObject* parent = nullptr);
+
+    bool isDirty() const override
+    {
+        return false;
+    }
+    void apply() override
+    {
+    }
+    void discard() override
+    {
+    }
 
     QString duplicateShortcut() const;
     QString splitHorizontalShortcut() const;
@@ -100,7 +117,7 @@ Q_SIGNALS:
     void changed();
 
 private:
-    Settings* m_settings = nullptr;
+    ISettings* m_settings = nullptr;
 };
 
 } // namespace PlasmaZones

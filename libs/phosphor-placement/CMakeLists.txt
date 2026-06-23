@@ -60,7 +60,7 @@ target_link_libraries(PhosphorPlacement
         PhosphorZones::PhosphorZones
         PhosphorProtocol::Types
     PRIVATE
-        PhosphorScreens::Core
+        PhosphorScreens::Runtime  # WindowTrackingService drives a ScreenManager*
         PhosphorIdentity::PhosphorIdentity
         PhosphorWorkspaces::PhosphorWorkspaces
         PhosphorLayoutApi::PhosphorLayoutApi

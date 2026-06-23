@@ -7,8 +7,14 @@
 #include <QPainterPath>
 #include <QFont>
 #include <QFontMetricsF>
+#include <QImage>
+
+#include <utility>
 
 #include "../../core/constants.h"
+
+using PhosphorRendering::ZoneLabelTexture;
+using PhosphorRendering::ZoneLabelTile;
 
 namespace PlasmaZones {
 
@@ -29,25 +35,25 @@ QColor outlineColorFor(const QColor& textColor, const QColor& backgroundColor)
 
 } // namespace
 
-QImage ZoneLabelTextureBuilder::build(const QVariantList& zones, const QSize& size, const QColor& labelFontColor,
-                                      bool showNumbers, const QColor& backgroundColor, const QString& fontFamily,
-                                      qreal fontSizeScale, int fontWeight, bool fontItalic, bool fontUnderline,
-                                      bool fontStrikeout)
+ZoneLabelTexture ZoneLabelTextureBuilder::build(const QVariantList& zones, const QSize& size,
+                                                const QColor& labelFontColor, bool showNumbers,
+                                                const QColor& backgroundColor, const QString& fontFamily,
+                                                qreal fontSizeScale, int fontWeight, bool fontItalic,
+                                                bool fontUnderline, bool fontStrikeout)
 {
+    ZoneLabelTexture result;
     if (!showNumbers || zones.isEmpty() || size.width() <= 0 || size.height() <= 0) {
-        return QImage();
+        return result; // empty payload
     }
-
-    QImage image(size, QImage::Format_ARGB32_Premultiplied);
-    image.fill(Qt::transparent);
-
-    QPainter painter(&image);
-    painter.setRenderHint(QPainter::Antialiasing);
-    painter.setRenderHint(QPainter::TextAntialiasing);
-    painter.setRenderHint(QPainter::SmoothPixmapTransform);
+    result.size = size;
 
     const QColor outlineColor = outlineColorFor(labelFontColor, backgroundColor);
     const QColor fillColor = labelFontColor;
+    const QRect screenRect(QPoint(0, 0), size);
+
+    // Slack around glyph content so the 2px outline stroke + antialiasing aren't
+    // clipped at a tile's edges.
+    constexpr int kTileMargin = 3;
 
     for (const QVariant& zoneVar : zones) {
         const QVariantMap z = zoneVar.toMap();
@@ -78,14 +84,61 @@ QImage ZoneLabelTextureBuilder::build(const QVariantList& zones, const QSize& si
         QPainterPath path;
         path.addText(0, 0, font, text);
 
-        // Center the text in the zone rect (addText uses baseline at origin)
+        // Center the text in the zone rect (addText uses baseline at origin).
+        // After translate, `path` is in screen coordinates.
         const QRectF textBounds = path.boundingRect();
         const qreal translateX = center.x() - textBounds.center().x();
         const qreal translateY = center.y() - textBounds.center().y();
         path.translate(translateX, translateY);
 
-        // Draw outline (stroke) then fill
+        // QPainterPath::addText only includes glyph outlines, not text
+        // decorations. Compute underline/strikeout rects (screen coords) once,
+        // so they contribute to the tile bounds AND get painted below.
+        QList<QRectF> decoRects;
+        if (fontUnderline || fontStrikeout) {
+            const QFontMetricsF fm(font);
+            const qreal lineThickness = qMax(1.0, fm.lineWidth());
+            const qreal baselineY = translateY; // baseline was at y=0 before translation
+            const qreal lineLeft = textBounds.left() + translateX;
+            const qreal lineWidth = textBounds.width();
+            const auto decoRect = [&](qreal yOffset) {
+                return QRectF(lineLeft, baselineY + yOffset - lineThickness / 2.0, lineWidth, lineThickness);
+            };
+            if (fontUnderline) {
+                decoRects.append(decoRect(fm.underlinePos()));
+            }
+            if (fontStrikeout) {
+                decoRects.append(decoRect(-fm.strikeOutPos()));
+            }
+        }
+
+        // Tile = glyph + decoration bounds, inflated for the outline stroke/AA,
+        // integer-aligned and clamped to the texture. Only this small region is
+        // allocated — the rest of the screen-addressed texture stays transparent.
+        QRectF contentF = path.boundingRect();
+        for (const QRectF& d : decoRects) {
+            contentF = contentF.united(d);
+        }
+        const QRect tileRect = contentF.toAlignedRect()
+                                   .adjusted(-kTileMargin, -kTileMargin, kTileMargin, kTileMargin)
+                                   .intersected(screenRect);
+        if (tileRect.isEmpty()) {
+            continue;
+        }
+
+        QImage tile(tileRect.size(), QImage::Format_ARGB32_Premultiplied);
+        tile.fill(Qt::transparent);
+
+        QPainter painter(&tile);
+        painter.setRenderHint(QPainter::Antialiasing);
+        painter.setRenderHint(QPainter::TextAntialiasing);
+        painter.setRenderHint(QPainter::SmoothPixmapTransform);
+        // Map screen coordinates into this tile's local space.
+        painter.translate(-tileRect.topLeft());
+
         const QPen outlinePen(outlineColor, 2.0, Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin);
+        // Draw outline (stroke) then fill — identical order to the prior
+        // single-image builder, so glyph appearance is byte-for-byte the same.
         painter.setPen(outlinePen);
         painter.setBrush(Qt::NoBrush);
         painter.drawPath(path);
@@ -93,40 +146,26 @@ QImage ZoneLabelTextureBuilder::build(const QVariantList& zones, const QSize& si
         painter.setBrush(fillColor);
         painter.drawPath(path);
 
-        // QPainterPath::addText only includes glyph outlines, not text decorations.
-        // Draw underline/strikeout manually using font metrics.
-        if (fontUnderline || fontStrikeout) {
-            const QFontMetricsF fm(font);
-            const qreal lineThickness = qMax(1.0, fm.lineWidth());
-            // Baseline was at y=0 before translation
-            const qreal baselineY = translateY;
-            const qreal lineLeft = textBounds.left() + translateX;
-            const qreal lineWidth = textBounds.width();
-
-            auto drawDecoration = [&](qreal yOffset) {
-                const QRectF lineRect(lineLeft, baselineY + yOffset - lineThickness / 2.0, lineWidth, lineThickness);
-                QPainterPath lp;
-                lp.addRect(lineRect);
-                painter.setPen(outlinePen);
-                painter.setBrush(Qt::NoBrush);
-                painter.drawPath(lp);
-                painter.setPen(Qt::NoPen);
-                painter.setBrush(fillColor);
-                painter.drawPath(lp);
-            };
-
-            if (fontUnderline) {
-                drawDecoration(fm.underlinePos());
-            }
-            if (fontStrikeout) {
-                drawDecoration(-fm.strikeOutPos());
-            }
+        for (const QRectF& d : decoRects) {
+            QPainterPath lp;
+            lp.addRect(d);
+            painter.setPen(outlinePen);
+            painter.setBrush(Qt::NoBrush);
+            painter.drawPath(lp);
+            painter.setPen(Qt::NoPen);
+            painter.setBrush(fillColor);
+            painter.drawPath(lp);
         }
+        painter.end();
+
+        result.tiles.append(ZoneLabelTile{std::move(tile), tileRect.topLeft()});
     }
 
-    painter.end();
-
-    return image;
+    // All zones degenerate / clipped away ⇒ nothing to show.
+    if (result.tiles.isEmpty()) {
+        return ZoneLabelTexture{};
+    }
+    return result;
 }
 
 } // namespace PlasmaZones

@@ -116,7 +116,7 @@ void EditorController::toggleScreenAllowed(const QString& screenName)
 QString EditorController::screenDisplayName(const QString& screenIdOrName) const
 {
     for (QScreen* screen : QGuiApplication::screens()) {
-        if (Phosphor::Screens::ScreenIdentity::identifierFor(screen) == screenIdOrName
+        if (PhosphorScreens::ScreenIdentity::identifierFor(screen) == screenIdOrName
             || screen->name() == screenIdOrName) {
             QString connectorName = screen->name();
             QString mfr = screen->manufacturer();

@@ -13,13 +13,16 @@
 #include <QStringList>
 #include <QVector>
 
+namespace PhosphorContext {
+class IContextResolver;
+} // namespace PhosphorContext
+
 namespace PhosphorSnapEngine {
 class SnapEngine;
 }
 
 namespace PlasmaZones {
 
-class ScreenModeRouter;
 class WindowTrackingAdaptor;
 class ISettings;
 
@@ -29,8 +32,8 @@ class ISettings;
  * Provides D-Bus interface: org.plasmazones.Snap
  *
  * Owns the snap-specific D-Bus surface: commit/uncommit, snap-restore
- * (appRule / persisted / emptyZone / lastZone / resolveWindowRestore),
- * resnap, calculateSnapAll, windowsSnappedBatch, snap-mode navigation
+ * (placement rule / emptyZone / lastZone / resolveWindowRestore),
+ * resnap, calculateSnapAllWindows, windowsSnappedBatch, snap-mode navigation
  * (move/focus/swap/push/snap-by-number/rotate/cycle/restore),
  * snap-mode convenience (moveWindowToZone, swapWindowsById), and
  * snap-mode float (toggleFloat, setWindowFloat, calculateUnfloatRestore,
@@ -38,7 +41,10 @@ class ISettings;
  *
  * Signal relay from SnapEngine to WindowTrackingAdaptor is also wired
  * here (navigationFeedback, windowFloatingChanged, applyGeometryRequested,
- * resnapToNewLayoutRequested, snapAllWindowsRequested).
+ * snapAllWindowsRequested, applyGeometriesBatch, activateWindowRequested).
+ * SnapEngine::resnapToNewLayoutRequested routes to this adaptor's own
+ * handleBatchedResnap slot (bookkeeping + applyGeometriesBatch emission),
+ * not directly to WTA.
  *
  * @see SnapEngine, WindowTrackingAdaptor
  */
@@ -72,14 +78,15 @@ public:
     void clearEngine();
 
     /**
-     * @brief Set the ScreenModeRouter for resnap screen filtering
+     * @brief Set the frozen-snapshot resolver used by snaprestore's disable
+     *        gate. Late-bound: created post-construction by Daemon::init.
      *
-     * Required for resnapCurrentAssignments and resnapForVirtualScreenReconfigure
-     * to correctly partition screens by mode.
-     *
-     * @param router ScreenModeRouter instance (not owned, must outlive adaptor)
+     * @param resolver IContextResolver instance (not owned, must outlive adaptor)
      */
-    void setScreenModeRouter(ScreenModeRouter* router);
+    void setContextResolver(PhosphorContext::IContextResolver* resolver)
+    {
+        m_contextResolver = resolver;
+    }
 
     /**
      * @brief Access the underlying SnapEngine (for daemon-side callers)
@@ -127,7 +134,7 @@ public Q_SLOTS:
                         int& snapWidth, int& snapHeight, bool& shouldSnap);
 
     /**
-     * @brief Snap a window to its app-rule-defined zone
+     * @brief Snap a window to its SnapToZone-rule-defined zone(s)
      */
     void snapToAppRule(const QString& windowId, const QString& windowScreenName, bool sticky, int& snapX, int& snapY,
                        int& snapWidth, int& snapHeight, bool& shouldSnap);
@@ -139,15 +146,11 @@ public Q_SLOTS:
                          int& snapWidth, int& snapHeight, bool& shouldSnap);
 
     /**
-     * @brief Restore a window to its persisted zone from the previous session
-     */
-    void restoreToPersistedZone(const QString& windowId, const QString& screenId, bool sticky, int& snapX, int& snapY,
-                                int& snapWidth, int& snapHeight, bool& shouldRestore);
-
-    /**
-     * @brief Run the full 4-level snap-restore fallback chain in one call
+     * @brief Run the full snap-restore resolution (WindowPlacementStore restore +
+     *        placement-rule / empty-zone / last-zone fallback chain) in one call
      * @param windowKind Structural kind of the opening window (0=Unknown, 1=Normal, 2=Transient).
-     *                   Forwarded to SnapEngine for the kind-match gate.
+     *                   Forwarded to SnapEngine for protocol compatibility; the unified
+     *                   placement record now carries the kind, so it no longer gates restore.
      */
     void resolveWindowRestore(const QString& windowId, const QString& screenId, bool sticky, int windowKind, int& snapX,
                               int& snapY, int& snapWidth, int& snapHeight, bool& shouldSnap);
@@ -290,8 +293,13 @@ public Q_SLOTS:
      */
     void windowUnsnappedForFloat(const QString& windowId);
 
+public:
     // ═══════════════════════════════════════════════════════════════════════════
-    // Internal (not D-Bus, but callable from daemon C++ code)
+    // Internal — plain `public:` (NOT Q_SLOTS, no Q_INVOKABLE) so
+    // QDBusAbstractAdaptor's introspection does not expose them on the bus.
+    // Every caller is in-process and reaches these via direct C++ invocation
+    // through the daemon (same pattern as
+    // WindowDragAdaptor::handleWindowClosed).
     // ═══════════════════════════════════════════════════════════════════════════
 
     /**
@@ -317,9 +325,10 @@ private:
      *        clear floating state, and track the zone assignment.
      *
      * Returns false (and leaves the out-params at 0 / false) when the snap is
-     * refused — missing dependencies, or the target context is disabled. A
-     * false return means no commit happened; callers must skip any post-snap
-     * work (e.g. consumePendingAssignment, success logging).
+     * refused: missing dependencies, the global `snappingEnabled()` kill-switch
+     * is off, or the target context is disabled by the cascade. A false return
+     * means no commit happened; callers must skip any post-snap work (e.g.
+     * consumePendingAssignment, success logging).
      */
     bool applySnapResult(const SnapResult& result, const QString& windowId, int& snapX, int& snapY, int& snapWidth,
                          int& snapHeight, bool& shouldSnap);
@@ -327,7 +336,9 @@ private:
     PhosphorSnapEngine::SnapEngine* m_engine = nullptr;
     WindowTrackingAdaptor* m_adaptor = nullptr;
     ISettings* m_settings = nullptr;
-    ScreenModeRouter* m_screenModeRouter = nullptr;
+    /// Late-bound by Daemon via setContextResolver — replaces the inline
+    /// `(modeFor → isContextDisabled)` cascade in snaprestore.cpp.
+    PhosphorContext::IContextResolver* m_contextResolver = nullptr;
 
     // Stored handles for the signal relays wired in the constructor so
     // clearEngine() can disconnect exactly the connections this class

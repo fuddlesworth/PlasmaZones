@@ -1,7 +1,7 @@
 {
     "id": "aura-glow",
     "name": "Aura Glow",
-    "description": "Window crops into a colour-shifting glowing orb that fades — square-to-circle gradient with a hue-cycling rim",
+    "description": "The window crops into a colour-shifting glowing orb that fades out, using a square-to-circle gradient with a hue-cycling rim",
     "author": "PlasmaZones",
     "version": "1.0",
     "category": "Fade",

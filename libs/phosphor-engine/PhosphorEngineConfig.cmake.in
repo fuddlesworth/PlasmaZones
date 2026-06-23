@@ -10,6 +10,7 @@ include(CMakeFindDependencyMacro)
 # file can wire transitively.
 find_dependency(Qt6 6.10 COMPONENTS Core Gui)
 find_dependency(PhosphorGeometry)
+find_dependency(PhosphorProtocol)
 
 include("${CMAKE_CURRENT_LIST_DIR}/PhosphorEngineTargets.cmake")
 

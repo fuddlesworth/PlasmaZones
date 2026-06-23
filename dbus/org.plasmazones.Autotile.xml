@@ -1,5 +1,9 @@
 <!DOCTYPE node PUBLIC "-//freedesktop//DTD D-BUS Object Introspection 1.0//EN"
     "http://www.freedesktop.org/standards/dbus/1.0/introspect.dtd">
+<!--
+SPDX-FileCopyrightText: 2026 fuddlesworth
+SPDX-License-Identifier: GPL-3.0-or-later
+-->
 <node>
     <!-- Autotiling Interface for automatic window tiling -->
     <interface name="org.plasmazones.Autotile">
@@ -13,7 +17,7 @@
             <annotation name="org.gtk.GDBus.DocString" value="Whether autotiling is active on any screen (read-only, derived from assignments)."/>
         </property>
         <property name="autotileScreens" type="as" access="read">
-            <annotation name="org.gtk.GDBus.DocString" value="List of screen names currently using autotile."/>
+            <annotation name="org.gtk.GDBus.DocString" value="List of screen IDs currently using autotile."/>
         </property>
         <property name="algorithm" type="s" access="readwrite">
             <annotation name="org.gtk.GDBus.DocString" value="Current tiling algorithm ID (e.g., master-stack, bsp, columns)."/>
@@ -43,13 +47,13 @@
 
         <method name="retile">
             <annotation name="org.gtk.GDBus.DocString" value="Force retiling of windows on a screen, or all screens if empty."/>
-            <arg name="screenName" type="s" direction="in">
+            <arg name="screenId" type="s" direction="in">
                 <annotation name="org.gtk.GDBus.DocString" value="Screen to retile, or empty for all screens."/>
             </arg>
         </method>
 
         <method name="retileAllScreens">
-            <annotation name="org.gtk.GDBus.DocString" value="Force retiling of all autotile screens. Convenience method equivalent to retile with empty screen name."/>
+            <annotation name="org.gtk.GDBus.DocString" value="Force retiling of all autotile screens. Convenience method equivalent to retile with an empty screen ID."/>
         </method>
 
         <method name="swapWindows">
@@ -97,7 +101,7 @@
             <arg name="windowId" type="s" direction="in">
                 <annotation name="org.gtk.GDBus.DocString" value="Window ID that gained focus."/>
             </arg>
-            <arg name="screenName" type="s" direction="in">
+            <arg name="screenId" type="s" direction="in">
                 <annotation name="org.gtk.GDBus.DocString" value="Screen where the window is located (for window-to-screen mapping update)."/>
             </arg>
         </method>
@@ -162,9 +166,9 @@
         </signal>
 
         <signal name="autotileScreensChanged">
-            <annotation name="org.gtk.GDBus.DocString" value="Emitted when the set of screens using autotile changes."/>
-            <arg name="screenNames" type="as">
-                <annotation name="org.gtk.GDBus.DocString" value="List of screen names currently using autotile."/>
+            <annotation name="org.gtk.GDBus.DocString" value="Emitted when the set of screens using autotile changes. Also RE-EMITTED with an unchanged set on a desktop/activity switch between contexts with identical NON-EMPTY autotile sets (isDesktopSwitch=true) so the effect's catch-scan can re-add windows moved here while the user was away — an empty identical set skips the re-emit, and receivers must be idempotent for the same-set case."/>
+            <arg name="screenIds" type="as">
+                <annotation name="org.gtk.GDBus.DocString" value="List of screen IDs currently using autotile."/>
             </arg>
             <arg name="isDesktopSwitch" type="b">
                 <annotation name="org.gtk.GDBus.DocString" value="True if the change is due to desktop/activity switch (effect should skip geometry restore/re-notification)."/>
@@ -180,7 +184,7 @@
 
         <signal name="tilingChanged">
             <annotation name="org.gtk.GDBus.DocString" value="Emitted when tiling layout changes for a screen."/>
-            <arg name="screenName" type="s">
+            <arg name="screenId" type="s">
                 <annotation name="org.gtk.GDBus.DocString" value="Screen that was retiled."/>
             </arg>
         </signal>
@@ -219,7 +223,7 @@
             <arg name="isFloating" type="b">
                 <annotation name="org.gtk.GDBus.DocString" value="Whether the window is now floating."/>
             </arg>
-            <arg name="screenName" type="s">
+            <arg name="screenId" type="s">
                 <annotation name="org.gtk.GDBus.DocString" value="Screen where the window is located."/>
             </arg>
         </signal>
@@ -233,7 +237,7 @@
             <arg name="windowId" type="s" direction="in">
                 <annotation name="org.gtk.GDBus.DocString" value="Window ID from KWin."/>
             </arg>
-            <arg name="screenName" type="s" direction="in">
+            <arg name="screenId" type="s" direction="in">
                 <annotation name="org.gtk.GDBus.DocString" value="Screen where the window appeared."/>
             </arg>
             <arg name="minWidth" type="i" direction="in">
@@ -273,7 +277,8 @@
         </method>
 
         <!-- floatWindow, unfloatWindow, toggleFocusedWindowFloat, toggleWindowFloat removed:
-             all float operations are now routed through the unified WTA methods
-             (toggleFloatForWindow for toggle, setWindowFloatingForScreen for directional) -->
+             all float operations are now routed through the unified methods —
+             org.plasmazones.Snap.toggleFloatForWindow for toggle,
+             org.plasmazones.WindowTracking.setWindowFloatingForScreen for directional -->
     </interface>
 </node>

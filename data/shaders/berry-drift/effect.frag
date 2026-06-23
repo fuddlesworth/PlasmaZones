@@ -1,8 +1,6 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-#version 450
-
 /*
  * BERRY DRIFT - Organic Boo-Berry Metaball Overlay
  *
@@ -46,12 +44,6 @@
  *   Overall: lifts background warmth, widens glow
  */
 
-layout(location = 0) in vec2 vTexCoord;
-layout(location = 1) in vec2 vFragCoord;
-
-layout(location = 0) out vec4 fragColor;
-
-#include <common.glsl>
 #include <audio.glsl>
 
 
@@ -151,30 +143,30 @@ vec4 renderBerryZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor
     float d = sdRoundedBox(p, rectSize * 0.5, borderRadius);
 
     // Parameters (sentinel pattern)
-    float speed        = customParams[0].x >= 0.0 ? customParams[0].x : 0.06;
-    float blobScale    = customParams[0].y >= 0.0 ? customParams[0].y : 10.0;
-    float blobSoftness = customParams[0].z >= 0.0 ? customParams[0].z : 0.4;
-    float glowIntensity= customParams[0].w >= 0.0 ? customParams[0].w : 0.5;
-    float fillOpacity  = customParams[1].x >= 0.0 ? customParams[1].x : 0.90;
-    float sparkleStr   = customParams[1].y >= 0.0 ? customParams[1].y : 0.6;
-    float sparkleSize  = customParams[1].z >= 0.0 ? customParams[1].z : 1.0;
-    float audioSens    = customParams[1].w >= 0.0 ? customParams[1].w : 1.0;
-    float driftSpeed   = customParams[2].x >= 0.0 ? customParams[2].x : 0.8;
-    float mintIntensity= customParams[2].y >= 0.0 ? customParams[2].y : 0.4;
-    float bloomWidth   = customParams[2].z >= 0.0 ? customParams[2].z : 0.06;
-    float vignetteStr  = customParams[2].w >= 0.0 ? customParams[2].w : 0.15;
-    float blobSizeMin  = customParams[3].x >= 0.0 ? customParams[3].x : 0.05;
-    float blobSizeMax  = customParams[3].y >= 0.0 ? customParams[3].y : 0.14;
-    float sparkleGridDensity = customParams[4].y >= 0.0 ? customParams[4].y : 8.0;
-    float rimGlowWidth = customParams[4].z >= 0.0 ? customParams[4].z : 0.025;
+    float speed        = p_speed >= 0.0 ? p_speed : 0.06;
+    float blobScale    = p_blobScale >= 0.0 ? p_blobScale : 10.0;
+    float blobSoftness = p_blobSoftness >= 0.0 ? p_blobSoftness : 0.4;
+    float glowIntensity= p_glowIntensity >= 0.0 ? p_glowIntensity : 0.5;
+    float fillOpacity  = p_fillOpacity >= 0.0 ? p_fillOpacity : 0.90;
+    float sparkleStr   = p_sparkleStr >= 0.0 ? p_sparkleStr : 0.6;
+    float sparkleSize  = p_sparkleSize >= 0.0 ? p_sparkleSize : 1.0;
+    float audioSens    = p_audioSensitivity >= 0.0 ? p_audioSensitivity : 1.0;
+    float driftSpeed   = p_driftSpeed >= 0.0 ? p_driftSpeed : 0.8;
+    float mintIntensity= p_mintIntensity >= 0.0 ? p_mintIntensity : 0.4;
+    float bloomWidth   = p_bloomWidth >= 0.0 ? p_bloomWidth : 0.06;
+    float vignetteStr  = p_vignetteStrength >= 0.0 ? p_vignetteStrength : 0.15;
+    float blobSizeMin  = p_blobSizeMin >= 0.0 ? p_blobSizeMin : 0.05;
+    float blobSizeMax  = p_blobSizeMax >= 0.0 ? p_blobSizeMax : 0.14;
+    float sparkleGridDensity = p_sparkleGrid >= 0.0 ? p_sparkleGrid : 8.0;
+    float rimGlowWidth = p_rimWidth >= 0.0 ? p_rimWidth : 0.025;
 
     // Colors (fallback pattern)
-    vec3 berryPink  = colorWithFallback(customColors[0].rgb, vec3(1.0, 0.42, 0.616));
-    vec3 mintGreen  = colorWithFallback(customColors[1].rgb, vec3(0.498, 1.0, 0.831));
-    vec3 deepViolet = colorWithFallback(customColors[2].rgb, vec3(0.42, 0.13, 0.659));
-    vec3 bubblegum  = colorWithFallback(customColors[3].rgb, vec3(1.0, 0.62, 0.812));
-    vec3 bgColor    = colorWithFallback(customColors[4].rgb, vec3(0.082, 0.051, 0.125));
-    vec3 lavender   = colorWithFallback(customColors[5].rgb, vec3(0.769, 0.71, 0.992));
+    vec3 berryPink  = colorWithFallback(p_berryPink.rgb, vec3(1.0, 0.42, 0.616));
+    vec3 mintGreen  = colorWithFallback(p_mintGreen.rgb, vec3(0.498, 1.0, 0.831));
+    vec3 deepViolet = colorWithFallback(p_deepViolet.rgb, vec3(0.42, 0.13, 0.659));
+    vec3 bubblegum  = colorWithFallback(p_bubblegum.rgb, vec3(1.0, 0.62, 0.812));
+    vec3 bgColor    = colorWithFallback(p_backgroundColor.rgb, vec3(0.082, 0.051, 0.125));
+    vec3 lavender   = colorWithFallback(p_lavender.rgb, vec3(0.769, 0.71, 0.992));
 
     // Audio
     float energy = hasAudio ? overall * audioSens : 0.0;
@@ -425,14 +417,14 @@ vec4 compositeBerryLabels(vec4 color, vec2 fragCoord,
     vec2 px = 1.0 / max(iResolution, vec2(1.0));
     vec4 labels = texture(uZoneLabels, uv);
 
-    float labelGlowSpread = customParams[3].z >= 0.0 ? customParams[3].z : 3.0;
-    float labelBrightness = customParams[3].w >= 0.0 ? customParams[3].w : 2.0;
-    float labelAudioReact = customParams[4].x >= 0.0 ? customParams[4].x : 1.0;
+    float labelGlowSpread = p_haloRadius >= 0.0 ? p_haloRadius : 3.0;
+    float labelBrightness = p_coreGlow >= 0.0 ? p_coreGlow : 2.0;
+    float labelAudioReact = p_sparkleReact >= 0.0 ? p_sparkleReact : 1.0;
 
-    vec3 bPink  = colorWithFallback(customColors[0].rgb, vec3(1.0, 0.42, 0.616));
-    vec3 mint   = colorWithFallback(customColors[1].rgb, vec3(0.498, 1.0, 0.831));
-    vec3 lavndr = colorWithFallback(customColors[5].rgb, vec3(0.769, 0.71, 0.992));
-    vec3 bubble = colorWithFallback(customColors[3].rgb, vec3(1.0, 0.62, 0.812));
+    vec3 bPink  = colorWithFallback(p_berryPink.rgb, vec3(1.0, 0.42, 0.616));
+    vec3 mint   = colorWithFallback(p_mintGreen.rgb, vec3(0.498, 1.0, 0.831));
+    vec3 lavndr = colorWithFallback(p_lavender.rgb, vec3(0.769, 0.71, 0.992));
+    vec3 bubble = colorWithFallback(p_bubblegum.rgb, vec3(1.0, 0.62, 0.812));
 
     // Gaussian-weighted halo — soft organic bleed
     float halo = 0.0;
@@ -472,13 +464,11 @@ vec4 compositeBerryLabels(vec4 color, vec2 fragCoord,
 
 // === MAIN ===
 
-void main() {
-    vec2 fragCoord = vFragCoord;
+vec4 pImage(vec2 fragCoord) {
     vec4 color = vec4(0.0);
 
     if (zoneCount == 0) {
-        fragColor = vec4(0.0);
-        return;
+        return vec4(0.0);
     }
 
     bool hasAudio = iAudioSpectrumSize > 0;
@@ -498,7 +488,7 @@ void main() {
         color = blendOver(color, zoneColor);
     }
 
-    if (customParams[4].w > 0.5)
+    if (p_showLabels > 0.5)
         color = compositeBerryLabels(color, fragCoord, bass, treble, hasAudio);
-    fragColor = clampFragColor(color);
+    return color;
 }

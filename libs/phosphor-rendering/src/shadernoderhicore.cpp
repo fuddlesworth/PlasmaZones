@@ -4,6 +4,7 @@
 #include "internal.h"
 
 #include <PhosphorRendering/ShaderCompiler.h>
+#include <PhosphorShaders/ShaderParamPreamble.h>
 
 #include <QFile>
 #include <QFileInfo>
@@ -12,10 +13,9 @@
 #include <QMutexLocker>
 #include <QQuickWindow>
 #include <QStandardPaths>
+#include <QTextStream>
 #include <QtMath>
 #include <cstring>
-
-#include <rhi/qshaderbaker.h>
 
 namespace PhosphorRendering {
 
@@ -49,7 +49,17 @@ QMutex& filenameShaderCacheMutex()
     return m;
 }
 
-constexpr int kShaderCacheMaxSize = 64;
+// Bound on the final vertex+fragment QShader pairs for actively-rendering
+// shaders. A miss re-bakes via ShaderCompiler, which now hits the persistent
+// on-disk cache (a fast deserialize, not a glslang compile), so a tight bound
+// trades a little disk I/O on shader switches for markedly lower resident memory
+// (each entry is two multi-variant QShaders). Eviction here is arbitrary-order
+// (shaderCacheEvictOne erases an unspecified QHash entry, not the LRU), so the
+// bound must comfortably exceed the live working set — one pair per screen per
+// active shader/animation pass — to avoid evicting a hot entry. 24 covers
+// realistic multi-monitor setups with margin; a disk-backed re-bake is the
+// worst case if it ever overflows.
+constexpr int kShaderCacheMaxSize = 24;
 
 static void shaderCacheEvictOne()
 {
@@ -92,7 +102,8 @@ static QByteArray includeFingerprint(QStringList paths)
 }
 
 static QByteArray shaderCacheKey(const QString& vertPath, qint64 vertMtime, const QByteArray& vertIncludeFp,
-                                 const QString& fragPath, qint64 fragMtime, const QByteArray& fragIncludeFp)
+                                 const QString& fragPath, qint64 fragMtime, const QByteArray& fragIncludeFp,
+                                 const QString& paramPreamble, const QByteArray& entryFp)
 {
     QByteArray key = vertPath.toUtf8();
     key.append(kShaderCacheKeyDelim);
@@ -105,6 +116,22 @@ static QByteArray shaderCacheKey(const QString& vertPath, qint64 vertMtime, cons
     key.append(QByteArray::number(fragMtime));
     key.append(kShaderCacheKeyDelim);
     key.append(fragIncludeFp);
+    key.append(kShaderCacheKeyDelim);
+    // T1.1: the generated named-param preamble is spliced into the fragment
+    // source before baking, so it is part of the compiled SPIR-V and MUST be
+    // part of the key. Without this, a metadata param edit (which rewrites the
+    // preamble but leaves the .frag mtime untouched) would serve stale SPIR-V,
+    // and the live load + warm-bake could disagree on the spliced source while
+    // colliding on the same key. The preamble is small (a handful of #defines)
+    // so appending it verbatim — mirroring how includeFingerprint appends raw
+    // paths — keeps the key honest without a hashing round-trip.
+    key.append(paramPreamble.toUtf8());
+    key.append(kShaderCacheKeyDelim);
+    // T1.4: the entry-point scaffold (prologue + generated main()) is assembled
+    // into the fragment source before baking, so — like the preamble — it is
+    // part of the SPIR-V and must be part of the key. Empty for the
+    // animation / traditional path, so the key is unchanged there.
+    key.append(entryFp);
     return key;
 }
 
@@ -404,8 +431,9 @@ void ShaderNodeRhi::prepare()
 
         const QByteArray vertIncludeFp = includeFingerprint(m_vertexIncludedPaths);
         const QByteArray fragIncludeFp = includeFingerprint(m_fragmentIncludedPaths);
-        const QByteArray cacheKey =
-            shaderCacheKey(m_vertexPath, m_vertexMtime, vertIncludeFp, m_fragmentPath, m_fragmentMtime, fragIncludeFp);
+        const QByteArray entryFp = entryScaffoldFingerprint(m_entryPrologue, m_entryCandidates);
+        const QByteArray cacheKey = shaderCacheKey(m_vertexPath, m_vertexMtime, vertIncludeFp, m_fragmentPath,
+                                                   m_fragmentMtime, fragIncludeFp, m_paramPreamble, entryFp);
         if (!m_vertexPath.isEmpty() && !m_fragmentPath.isEmpty()) {
             QMutexLocker lock(&filenameShaderCacheMutex());
             auto& cache = filenameShaderCache();
@@ -424,10 +452,6 @@ void ShaderNodeRhi::prepare()
         }
 
         if (!m_shaderReady) {
-            const QList<QShaderBaker::GeneratedShader>& targets = ShaderCompiler::bakeTargets();
-            QShaderBaker vertexBaker;
-            vertexBaker.setGeneratedShaderVariants({QShader::StandardShader});
-            vertexBaker.setGeneratedShaders(targets);
             auto vertResult = ShaderCompiler::compile(m_vertexShaderSource.toUtf8(), QShader::VertexStage);
             m_vertexShader = vertResult.shader;
             if (!m_vertexShader.isValid()) {
@@ -533,6 +557,23 @@ void ShaderNodeRhi::prepare()
 
     if (multipassActive) {
         const QColor clearColor(0, 0, 0, 0);
+        // Pin qt_Matrix to identity for the buffer passes. The image pass
+        // carries an NDC Y-flip in qt_Matrix on Y-up-in-NDC backends (see
+        // shadernoderhiuniforms.cpp), but the buffer/multipass FBOs are our
+        // own offscreen targets whose texels the image pass later samples via
+        // channelUv()/iFlipBufferY — that round-trip is already
+        // backend-consistent. Flipping the buffer-write geometry would invert
+        // the stored orientation and double-flip the sampled result. Restore
+        // the flip-carrying value right after the loop, before render() draws.
+        if (m_ubo) {
+            static constexpr float kIdentity4x4[16] = {1.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f, 0.0f, 0.0f,
+                                                       0.0f, 0.0f, 1.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f};
+            QRhiResourceUpdateBatch* identityBatch = rhi->nextResourceUpdateBatch();
+            if (identityBatch) {
+                identityBatch->updateDynamicBuffer(m_ubo.get(), 0, sizeof(kIdentity4x4), kIdentity4x4);
+                cb->resourceUpdate(identityBatch);
+            }
+        }
         if (multiBufferMode) {
             const int n = qMin(m_bufferPaths.size(), kMaxBufferPasses);
             for (int i = 0; i < n; ++i) {
@@ -597,11 +638,15 @@ void ShaderNodeRhi::prepare()
             cb->endPass();
         }
 
-        // Resource flush after buffer passes (Vulkan barrier hint).
+        // Resource flush after buffer passes (Vulkan barrier hint). Doubles as
+        // the restore of the image-pass qt_Matrix (carrying the NDC Y-flip)
+        // that the buffer passes above pinned to identity — render() draws the
+        // image pass against this value. Uploads the full 64-byte qt_Matrix
+        // (offset 0) rather than the prior 4-byte touch.
         if (m_ubo) {
             QRhiResourceUpdateBatch* barrier = rhi->nextResourceUpdateBatch();
             if (barrier) {
-                barrier->updateDynamicBuffer(m_ubo.get(), 0, 4, &m_baseUniforms);
+                barrier->updateDynamicBuffer(m_ubo.get(), 0, 16 * sizeof(float), m_baseUniforms.qt_Matrix);
                 cb->resourceUpdate(barrier);
             }
         }
@@ -740,7 +785,9 @@ void ShaderNodeRhi::releaseResources()
 }
 
 WarmShaderBakeResult warmShaderBakeCacheForPaths(const QString& vertexPath, const QString& fragmentPath,
-                                                 const QStringList& includePaths)
+                                                 const QStringList& includePaths, const QString& paramPreamble,
+                                                 const QString& entryPrologue,
+                                                 const QList<PhosphorShaders::EntryCandidate>& entryCandidates)
 {
     WarmShaderBakeResult result;
     if (vertexPath.isEmpty() || fragmentPath.isEmpty()) {
@@ -761,11 +808,31 @@ WarmShaderBakeResult warmShaderBakeCacheForPaths(const QString& vertexPath, cons
         result.errorMessage = err.isEmpty() ? QStringLiteral("Failed to load vertex shader") : err;
         return result;
     }
-    const QString fragSource = ShaderCompiler::loadAndExpand(fragmentPath, includePaths, &err, &fragIncludedPaths);
+    // Fragment: read raw, apply the T1.4 entry-point assembly, THEN expand —
+    // identical to the live `loadFragmentShader`, so warm + live produce the
+    // same pre-expansion source (and key) for an entry-only pack. For a
+    // traditional pack (or the animation path with no scaffold) this is the
+    // exact equivalent of the old `loadAndExpand(fragmentPath)`.
+    QString fragRaw;
+    {
+        QFile fragFile(fragmentPath);
+        if (!fragFile.open(QIODevice::ReadOnly | QIODevice::Text)) {
+            result.errorMessage = QStringLiteral("Failed to open: ") + fragmentPath;
+            return result;
+        }
+        fragRaw = QTextStream(&fragFile).readAll();
+    }
+    const QString fragAssembled = applyEntryAssembly(fragRaw, entryPrologue, entryCandidates);
+    QString fragSource = ShaderCompiler::expandSource(fragAssembled, QFileInfo(fragmentPath).absolutePath(),
+                                                      includePaths, &err, &fragIncludedPaths);
     if (fragSource.isEmpty()) {
         result.errorMessage = err.isEmpty() ? QStringLiteral("Failed to load fragment shader") : err;
         return result;
     }
+    // Splice the same fragment-stage preamble the live `loadFragmentShader`
+    // path applies (T1.1), so the SPIR-V this warm entry caches is byte-for-byte
+    // what the live load would produce for the same key. Empty = no-op.
+    fragSource = PhosphorShaders::spliceAfterVersion(fragSource, paramPreamble);
 
     auto vertResult = ShaderCompiler::compile(vertSource.toUtf8(), QShader::VertexStage);
     if (!vertResult.shader.isValid()) {
@@ -788,7 +855,9 @@ WarmShaderBakeResult warmShaderBakeCacheForPaths(const QString& vertexPath, cons
     // first frame and erasing the warm-bake's purpose.
     const QByteArray vertIncludeFp = includeFingerprint(vertIncludedPaths);
     const QByteArray fragIncludeFp = includeFingerprint(fragIncludedPaths);
-    const QByteArray key = shaderCacheKey(vertexPath, vertMtime, vertIncludeFp, fragmentPath, fragMtime, fragIncludeFp);
+    const QByteArray entryFp = entryScaffoldFingerprint(entryPrologue, entryCandidates);
+    const QByteArray key = shaderCacheKey(vertexPath, vertMtime, vertIncludeFp, fragmentPath, fragMtime, fragIncludeFp,
+                                          paramPreamble, entryFp);
     QMutexLocker lock(&filenameShaderCacheMutex());
     auto& cache = filenameShaderCache();
     if (cache.size() >= kShaderCacheMaxSize) {

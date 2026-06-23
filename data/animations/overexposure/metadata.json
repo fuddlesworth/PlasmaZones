@@ -1,7 +1,7 @@
 {
     "id": "overexposure",
     "name": "Overexposure",
-    "description": "Brightness-pumped fade — channel intensities lift over a sin-modulated envelope while alpha fades.",
+    "description": "A brightness-pumped fade where channel intensities lift over a sin-modulated envelope while alpha fades.",
     "author": "PlasmaZones (ported from liixini/shaders, https://github.com/liixini/shaders)",
     "version": "1.0",
     "category": "Fade",

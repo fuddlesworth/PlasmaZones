@@ -10,7 +10,7 @@ namespace PlasmaZones {
 /// Install the PhosphorZones::Layout::setScreenIdResolver translator for this
 /// process exactly once. Normalises legacy connector names ("DP-2") to
 /// EDID-based IDs ("LG:Model:Serial") via
-/// Phosphor::Screens::ScreenIdentity::idForName so layouts loaded from disk
+/// PhosphorScreens::ScreenIdentity::idForName so layouts loaded from disk
 /// (including per-screen allowedScreens entries) resolve consistently
 /// regardless of whether the config was authored on the current hardware.
 ///

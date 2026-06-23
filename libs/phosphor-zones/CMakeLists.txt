@@ -13,9 +13,9 @@
 # autotile algorithms (phosphor-tile-algo, future work).
 #
 # Self-contained: depends only on Qt6 + PhosphorLayoutApi (PUBLIC) and
-# PhosphorIdentity (PRIVATE — used by Layout::matchAppRule for
-# composite window-id parsing; the dep doesn't leak through any public
-# PhosphorZones header).
+# PhosphorIdentity (PRIVATE — used for virtual-screen id parsing
+# (VirtualScreenId) in geometryutils / layoutregistry_assignments; the dep
+# doesn't leak through any public PhosphorZones header).
 
 cmake_minimum_required(VERSION 3.16)
 
@@ -38,23 +38,18 @@ find_package(Qt6 6.10 REQUIRED COMPONENTS Core Gui)
 
 # PhosphorLayoutApi provides the LayoutPreview / ILayoutSource contract that
 # this library implements via ZonesLayoutSource (see src/zoneslayoutsource.cpp).
-# Found via add_subdirectory in PZ in-tree builds; falls back to find_package
+# Found via add_subdirectory in Phosphor in-tree builds; falls back to find_package
 # when this library is consumed standalone.
 if(NOT TARGET PhosphorLayoutApi::PhosphorLayoutApi)
     find_package(PhosphorLayoutApi CONFIG REQUIRED)
 endif()
 
-# PhosphorConfig::IBackend is taken by reference in LayoutRegistry's public
-# constructor so callers can wire any persistent-store backend they own.
-# PUBLIC because the type leaks through the header.
-if(NOT TARGET PhosphorConfig::PhosphorConfig)
-    find_package(PhosphorConfig CONFIG REQUIRED)
-endif()
-
-# PhosphorScreens supplies ScreenIdentity (canonical id ↔ connector name)
-# and VirtualScreen helpers used by LayoutRegistry's assignment cascade.
-# PRIVATE because no public header leaks the type.
-if(NOT TARGET PhosphorScreens::Core)
+# PhosphorScreens supplies ScreenIdentity / VirtualScreen (LayoutRegistry's
+# assignment cascade) and ScreenManager geometry queries (GeometryUtils, whose
+# public GeometryUtils.h surfaces a ScreenManager*) — so this links the Runtime
+# target. PRIVATE: callers of the ScreenManager-taking GeometryUtils functions
+# own and link their own PhosphorScreens, so the dep need not propagate.
+if(NOT TARGET PhosphorScreens::Runtime)
     find_package(PhosphorScreens CONFIG REQUIRED)
 endif()
 
@@ -77,6 +72,7 @@ set(phosphorzones_public_HDRS
     include/PhosphorZones/ZoneDefaults.h
     include/PhosphorZones/ZoneJsonKeys.h
     include/PhosphorZones/Layout.h
+    include/PhosphorZones/LayoutSettingsStore.h
     include/PhosphorZones/ZoneDetector.h
     include/PhosphorZones/ZoneHighlighter.h
     include/PhosphorZones/LayoutUtils.h
@@ -95,6 +91,7 @@ set(phosphorzones_public_HDRS
 set(phosphorzones_SRCS
     src/zone.cpp
     src/layout.cpp
+    src/layoutsettingsstore.cpp
     src/layout/factories.cpp
     src/layout/serialization.cpp
     src/zonedetector.cpp
@@ -107,6 +104,9 @@ set(phosphorzones_SRCS
     src/interfaces.cpp
     src/layoutregistry.cpp
     src/layoutregistry_assignments.cpp
+    src/layoutregistry_batch.cpp
+    src/layoutregistry_rulehelpers.cpp
+    src/layoutregistry_overrides.cpp
     src/layoutregistry_persistence.cpp
     src/geometryutils.cpp
     src/layoutfactory.cpp
@@ -150,8 +150,8 @@ target_compile_features(PhosphorZones PUBLIC cxx_std_20)
 # and works correctly on every supported compiler. Scoped PRIVATE so
 # downstream consumers still see the diagnostic on their own code.
 include(CheckCXXCompilerFlag)
-check_cxx_compiler_flag("-Wno-sfinae-incomplete" PZ_HAS_NO_SFINAE_INCOMPLETE)
-if(PZ_HAS_NO_SFINAE_INCOMPLETE)
+check_cxx_compiler_flag("-Wno-sfinae-incomplete" P_HAS_NO_SFINAE_INCOMPLETE)
+if(P_HAS_NO_SFINAE_INCOMPLETE)
     target_compile_options(PhosphorZones PRIVATE -Wno-sfinae-incomplete)
 endif()
 
@@ -161,18 +161,22 @@ target_link_libraries(PhosphorZones
         Qt6::Gui
         PhosphorLayoutApi::PhosphorLayoutApi
         PhosphorGeometry::PhosphorGeometry
-        # LayoutRegistry's public ctor takes a unique_ptr<PhosphorConfig::IBackend>
-        # — type must be visible to callers that include LayoutRegistry.h.
-        PhosphorConfig::PhosphorConfig
+        # LayoutRegistry resolves the assignment cascade through a
+        # WindowRuleStore + RuleEvaluator; the store type is referenced in
+        # the public LayoutRegistry.h ctor signature so the dep is PUBLIC.
+        PhosphorWindowRules::PhosphorWindowRules
     PRIVATE
-        # Layout::matchAppRule uses PhosphorIdentity::WindowId for
-        # composite window-id parsing; PRIVATE because the dep doesn't
-        # leak through any public PhosphorZones header.
+        # Uses PhosphorIdentity::VirtualScreenId for virtual-screen id parsing
+        # (geometryutils / layoutregistry_assignments); PRIVATE because the dep
+        # doesn't leak through any public PhosphorZones header.
         PhosphorIdentity::PhosphorIdentity
-        # LayoutRegistry impl uses ScreenIdentity / VirtualScreen for
-        # the assignment-cascade screen-id normalisation. PRIVATE — no
-        # public header surfaces these types.
-        PhosphorScreens::Core
+        # GeometryUtils calls ScreenManager geometry queries, and LayoutRegistry
+        # uses ScreenIdentity / VirtualScreen for assignment-cascade screen-id
+        # normalisation — so this links the Runtime target (ScreenManager), which
+        # re-exports Core's POD types. PRIVATE: callers of the GeometryUtils
+        # functions that take a ScreenManager* pass one they already own and link
+        # PhosphorScreens themselves, so the dep need not propagate.
+        PhosphorScreens::Runtime
 )
 
 set_target_properties(PhosphorZones PROPERTIES

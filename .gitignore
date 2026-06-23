@@ -90,6 +90,8 @@ kcm_plasmazones
 # Dependency files
 *.d
 *.d.*
+# …but Luau type-definition files (.d.luau) are source, not generated deps.
+!*.d.luau
 
 # -----------------------------------------------------------------------------
 # KDE/Plasma Specific
@@ -255,6 +257,8 @@ docs/latex/
 *.deb
 *.rpm
 *.dmg
+# ...but the vendored Luau source tarball is committed (extracted at build time).
+!extern/*.tar.gz
 *.pkg
 dist/
 *.egg-info/
@@ -330,3 +334,10 @@ logs/
 
 # RuVector (local development)
 ruvector/
+
+# Generated shader autocomplete sidecar (plasmazones-shader-validate
+# --emit-preamble) — an editor-only aid, never committed or shipped.
+p_generated.glsl
+
+# heaptrack memory-profiling captures (local profiling artifacts, never committed)
+heaptrack.*.zst

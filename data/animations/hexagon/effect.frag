@@ -34,27 +34,7 @@
 // multiplied by the window's local alpha so the lines don't
 // extend past the original window silhouette.
 
-#version 450
-
-#include <animation_uniforms.glsl>
 #include <noise.glsl>
-
-// metadata.json declaration order:
-//   bool   → customParams[0].x (additiveBlending)
-//   floats → customParams[0].y/.z/.w + [1].x (seedX, seedY, scale, lineWidth)
-//   colors → customColors[0..1] (glowColor, lineColor — alpha used as
-//                                 the per-layer max strength multiplied
-//                                 by the per-tile shaping below)
-#define additiveBlending customParams[0].x
-#define seedX            customParams[0].y
-#define seedY            customParams[0].z
-#define tileScale        customParams[0].w
-#define lineWidth        customParams[1].x
-#define glowColor        customColors[0]
-#define lineColor        customColors[1]
-
-layout(location = 0) in vec2 vTexCoord;
-layout(location = 0) out vec4 fragColor;
 
 // hash22 + simplex2D hosted in shared/noise.glsl.
 
@@ -81,14 +61,13 @@ vec4 getHexagons(vec2 p) {
     return vec4(cellCoords, dist, glow);
 }
 
-void main()
+vec4 pTransition(vec2 uv, float t)
 {
-    vec2 uv = vTexCoord;
     float visibility = clamp(iTime, 0.0, 1.0);
     float progress   = 1.0 - visibility;
 
     // Per-pixel noise jitter so tiles stagger their transitions.
-    vec2 seed   = vec2(seedX, seedY);
+    vec2 seed   = vec2(p_seedX, p_seedY);
     float noise = simplex2D(uv + seed);
     progress    = clamp(mix(noise - 1.0, noise + 1.0, progress), 0.0, 1.0);
 
@@ -102,7 +81,7 @@ void main()
     // Floor iResolution so an early-frame surface size of 0 doesn't
     // produce a zero-component texScale (which would divide-by-zero in
     // the lookupOffset below).
-    vec2 texScale = 0.1 * max(iResolution, vec2(1.0)) / max(tileScale, 0.05);
+    vec2 texScale = 0.1 * max(iResolution, vec2(1.0)) / max(p_tileScale, 0.05);
     vec4 hex      = getHexagons(uv * texScale);
 
     vec4 oColor = vec4(0.0);
@@ -122,8 +101,8 @@ void main()
         vec2 lookupCoords = uv + lookupOffset;
         oColor = surfaceColor(lookupCoords) * boundaryMask(lookupCoords);
 
-        vec4 glow = glowColor;
-        vec4 line = lineColor;
+        vec4 glow = p_glowColor;
+        vec4 line = p_lineColor;
 
         // Glow shaping: stack of pow-curves on hex.w (squared
         // distance to cell centre) gives a tight bright core with
@@ -140,8 +119,8 @@ void main()
         // function degenerates to a hard step at hex.z==0 — a visible
         // hard line where the user asked for "no line at all". Gate on
         // lineWidth so the no-line case zeros line.a cleanly.
-        if (lineWidth > 0.001) {
-            line.a *= 1.0 - smoothstep(lineWidth * 0.02 * 0.5, lineWidth * 0.02, hex.z);
+        if (p_lineWidth > 0.001) {
+            line.a *= 1.0 - smoothstep(p_lineWidth * 0.02 * 0.5, p_lineWidth * 0.02, hex.z);
         } else {
             line.a = 0.0;
         }
@@ -159,7 +138,7 @@ void main()
         glow.a *= oColor.a;
         line.a *= oColor.a;
 
-        if (additiveBlending > 0.5) {
+        if (p_additiveBlending > 0.5) {
             // Pre-multiplied additive emission.
             oColor.rgb += glow.rgb * glow.a;
             oColor.rgb += line.rgb * line.a;
@@ -174,5 +153,5 @@ void main()
         }
     }
 
-    fragColor = oColor;
+    return oColor;
 }

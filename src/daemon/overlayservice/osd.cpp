@@ -18,8 +18,8 @@
 
 #include <PhosphorLayer/ILayerShellTransport.h>
 #include <PhosphorLayer/Surface.h>
-#include "pz_roles.h"
-#include "pz_slot_keys.h"
+#include "phosphor_roles.h"
+#include "phosphor_slot_keys.h"
 #include <PhosphorScreens/ScreenIdentity.h>
 
 #include <PhosphorAnimation/SurfaceAnimator.h>
@@ -70,7 +70,7 @@ bool OverlayService::prepareLayoutOsdWindow(QQuickWindow*& window, PhosphorLayer
         screenGeom = physScreen->geometry();
     }
 
-    QString effectiveId = screenId.isEmpty() ? Phosphor::Screens::ScreenIdentity::identifierFor(physScreen) : screenId;
+    QString effectiveId = screenId.isEmpty() ? PhosphorScreens::ScreenIdentity::identifierFor(physScreen) : screenId;
 
     auto* state = ensurePassiveShellFor(effectiveId, physScreen);
     if (!state || !state->shell || !state->shell->shellWindow() || !state->shell->shellSurface() || !state->osdSlot()) {
@@ -165,7 +165,7 @@ void OverlayService::showLayoutOsdImpl(PhosphorZones::Layout* layout, const QStr
         surface->show();
     }
     osdSlot->setVisible(true);
-    m_surfaceAnimator->beginShow(surface, osdSlot, PzRoles::Osd, []() { });
+    m_surfaceAnimator->beginShow(surface, osdSlot, PhosphorRoles::Osd, []() { });
     // Surface::show() above unconditionally clears Qt::WindowTransparentForInput.
     // OSD slots don't grab input (they auto-dismiss; keeping the input
     // region active for the OSD's lifetime would block clicks on every
@@ -253,7 +253,7 @@ void OverlayService::showLayoutOsd(const QString& id, const QString& name, const
         surface->show();
     }
     osdSlot->setVisible(true);
-    m_surfaceAnimator->beginShow(surface, osdSlot, PzRoles::Osd, []() { });
+    m_surfaceAnimator->beginShow(surface, osdSlot, PhosphorRoles::Osd, []() { });
     // Surface::show() above unconditionally clears Qt::WindowTransparentForInput.
     // OSD slots don't grab input (they auto-dismiss; keeping the input
     // region active for the OSD's lifetime would block clicks on every
@@ -344,7 +344,7 @@ void OverlayService::showDisabledOsd(const QString& reason, const QString& scree
         surface->show();
     }
     osdSlot->setVisible(true);
-    m_surfaceAnimator->beginShow(surface, osdSlot, PzRoles::Osd, []() { });
+    m_surfaceAnimator->beginShow(surface, osdSlot, PhosphorRoles::Osd, []() { });
     // Surface::show() above unconditionally clears Qt::WindowTransparentForInput.
     // OSD slots don't grab input (they auto-dismiss; keeping the input
     // region active for the OSD's lifetime would block clicks on every
@@ -401,7 +401,7 @@ void OverlayService::onOsdDismissRequested()
     if (!state || !state->shell || !state->shell->shellSurface() || !state->osdSlot()) {
         return;
     }
-    m_shellHost->hideSlot(matchedId, PzSlotKeys::Osd(), [this, effectiveId = matchedId]() {
+    m_shellHost->hideSlot(matchedId, PhosphorSlotKeys::Osd(), [this, effectiveId = matchedId]() {
         onOsdSlotHideCompleted(effectiveId);
     });
 }
@@ -461,7 +461,7 @@ void OverlayService::showNavigationOsd(bool success, const QString& action, cons
         navScreenGeom = physScreen->geometry();
     }
 
-    QString effectiveId = screenId.isEmpty() ? Phosphor::Screens::ScreenIdentity::identifierFor(physScreen) : screenId;
+    QString effectiveId = screenId.isEmpty() ? PhosphorScreens::ScreenIdentity::identifierFor(physScreen) : screenId;
 
     // Deduplicate: Skip if same action+reason+screen within 200ms (prevents duplicate from Qt signal + D-Bus signal).
     // Keyed on effectiveId (resolved from physScreen if the caller passed an
@@ -502,7 +502,7 @@ void OverlayService::showNavigationOsd(bool success, const QString& action, cons
     // Reuse the per-screen passive shell (create only if not in map).
     // The shell stays mapped for the daemon's lifetime; per-show the
     // SurfaceAnimator's beginShow on (shellSurface, osdSlot,
-    // PzRoles::Osd) replays the fade-in, and
+    // PhosphorRoles::Osd) replays the fade-in, and
     // restartDismissTimer extends the auto-hide. Cleanup happens only
     // on screen removal / shutdown via the shell's surface destroy
     // path; the dismiss path is QML → osdDismissRequested → animator
@@ -587,7 +587,7 @@ void OverlayService::showNavigationOsd(bool success, const QString& action, cons
         navSurface->show();
     }
     osdSlot->setVisible(true);
-    m_surfaceAnimator->beginShow(navSurface, osdSlot, PzRoles::Osd, []() { });
+    m_surfaceAnimator->beginShow(navSurface, osdSlot, PhosphorRoles::Osd, []() { });
     // OSDs don't grab input - see the matching syncPassiveShellSurfaceStateForSurface
     // call in showLayoutOsdImpl for the rationale.
     syncPassiveShellSurfaceStateForSurface(navSurface);

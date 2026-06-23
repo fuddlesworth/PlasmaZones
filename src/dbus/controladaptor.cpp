@@ -28,8 +28,8 @@ namespace PlasmaZones {
 ControlAdaptor::ControlAdaptor(WindowTrackingAdaptor* wta, SnapAdaptor* snapAdaptor, LayoutAdaptor* layoutAdaptor,
                                PhosphorZones::LayoutRegistry* layoutManager,
                                PhosphorEngine::IPlacementEngine* autotileEngine,
-                               Phosphor::Screens::ScreenManager* screenManager,
-                               CompositorBridgeAdaptor* compositorBridge, QObject* parent)
+                               PhosphorScreens::ScreenManager* screenManager, CompositorBridgeAdaptor* compositorBridge,
+                               QObject* parent)
     : QDBusAbstractAdaptor(parent)
     , m_wta(wta)
     , m_snapAdaptor(snapAdaptor)

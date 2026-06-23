@@ -7,6 +7,7 @@
 #include "PhosphorScreens/VirtualScreen.h"
 #include "screenslogging.h"
 
+#include <PhosphorGeometry/DirectionalNeighbor.h>
 #include <PhosphorIdentity/VirtualScreenId.h>
 
 #include <QList>
@@ -17,77 +18,14 @@
 
 #include <algorithm>
 #include <cmath>
-#include <limits>
 
-namespace Phosphor::Screens {
+namespace PhosphorScreens {
 
 namespace {
 
 // Match VirtualScreenDef::Tolerance so collinearity detection stays
 // consistent with the rest of the codebase's float comparison policy.
 constexpr qreal kCollinearEpsilon = VirtualScreenDef::Tolerance;
-
-/// Direction-aware nearest-neighbour search inlined into the lib so the
-/// swapper has no cross-library dependency on a separate spatial-adjacency
-/// helper. Mirrors `PlasmaZones::SpatialAdjacency::findAdjacentRect`
-/// (src/core/spatialadjacency.h) — the daemon's other consumer
-/// (ZoneDetectionAdaptor) keeps using that copy for zone-to-zone
-/// navigation, which is out of scope for this library.
-///
-/// @return index into @p candidates, or -1 if no rect qualifies. Rects
-///         that compare equal to @p current (same centre) are skipped.
-int findAdjacentRect(const QRectF& current, const QList<QRectF>& candidates, const QString& direction)
-{
-    const QPointF currentCenter = current.center();
-
-    int bestIndex = -1;
-    qreal bestDistance = std::numeric_limits<qreal>::max();
-
-    for (int i = 0; i < candidates.size(); ++i) {
-        const QRectF& candidate = candidates.at(i);
-        const QPointF candidateCenter = candidate.center();
-
-        if (candidateCenter == currentCenter) {
-            continue;
-        }
-
-        bool valid = false;
-        qreal distance = 0;
-
-        if (direction == Direction::Left) {
-            if (candidateCenter.x() < currentCenter.x()) {
-                valid = true;
-                distance = currentCenter.x() - candidateCenter.x();
-                distance += std::abs(candidateCenter.y() - currentCenter.y()) * 2;
-            }
-        } else if (direction == Direction::Right) {
-            if (candidateCenter.x() > currentCenter.x()) {
-                valid = true;
-                distance = candidateCenter.x() - currentCenter.x();
-                distance += std::abs(candidateCenter.y() - currentCenter.y()) * 2;
-            }
-        } else if (direction == Direction::Up) {
-            if (candidateCenter.y() < currentCenter.y()) {
-                valid = true;
-                distance = currentCenter.y() - candidateCenter.y();
-                distance += std::abs(candidateCenter.x() - currentCenter.x()) * 2;
-            }
-        } else if (direction == Direction::Down) {
-            if (candidateCenter.y() > currentCenter.y()) {
-                valid = true;
-                distance = candidateCenter.y() - currentCenter.y();
-                distance += std::abs(candidateCenter.x() - currentCenter.x()) * 2;
-            }
-        }
-
-        if (valid && distance < bestDistance) {
-            bestDistance = distance;
-            bestIndex = i;
-        }
-    }
-
-    return bestIndex;
-}
 
 /// Build a clockwise ring order for the given virtual screen defs.
 ///
@@ -176,8 +114,12 @@ VirtualScreenSwapper::Result VirtualScreenSwapper::swapInDirection(const QString
                                    << currentVirtualScreenId;
         return Result::NotVirtual;
     }
-    if (direction != Direction::Left && direction != Direction::Right && direction != Direction::Up
-        && direction != Direction::Down) {
+    // Parse + validate the direction through the shared geometry parser (single
+    // source of truth — the same tokens directionalNeighbor consumes). An unknown
+    // token is InvalidDirection, checked here so the error precedence matches the
+    // original (a bad direction is reported before subdivision / membership).
+    const auto dir = PhosphorGeometry::directionFromString(direction);
+    if (!dir.has_value()) {
         qCDebug(lcPhosphorScreens) << "VirtualScreenSwapper::swapInDirection: invalid direction:" << direction;
         return Result::InvalidDirection;
     }
@@ -203,7 +145,13 @@ VirtualScreenSwapper::Result VirtualScreenSwapper::swapInDirection(const QString
         return Result::UnknownVirtualScreen;
     }
 
-    const int targetIndex = findAdjacentRect(regions[currentIndex], regions, direction);
+    // The shared geometric selector (half-plane filter → perpendicular-overlap
+    // preference → nearest edge gap → deterministic tie-break) is the same
+    // primitive zone and autotile-window navigation use, so virtual-screen swap
+    // ranks neighbours identically. directionalNeighbor skips the rect sharing
+    // the focus centre, so passing the full region list (including the current
+    // one) is safe.
+    const int targetIndex = PhosphorGeometry::directionalNeighbor(regions[currentIndex], regions, *dir);
     if (targetIndex < 0) {
         qCDebug(lcPhosphorScreens) << "VirtualScreenSwapper::swapInDirection: no adjacent VS in direction" << direction;
         return Result::NoSiblingInDirection;
@@ -269,8 +217,10 @@ QString VirtualScreenSwapper::reasonString(Result result)
         return QStringLiteral("swap_failed");
     case Result::SettingsRejected:
         return QStringLiteral("settings_rejected");
+    case Result::NoConfigStore:
+        return QStringLiteral("no_config_store");
     }
     return QString();
 }
 
-} // namespace Phosphor::Screens
+} // namespace PhosphorScreens

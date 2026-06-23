@@ -41,6 +41,8 @@
 
 #include "config/configbackends.h"
 
+#include "../helpers/LayoutRegistryTestHelpers.h"
+
 // ─── Fixture sources / factories ────────────────────────────────────────────
 
 namespace {
@@ -506,8 +508,8 @@ private Q_SLOTS:
 
     void testInvariant_layoutManagerSingleQObjectBase()
     {
-        auto mgr = std::make_unique<PhosphorZones::LayoutRegistry>(PlasmaZones::createAssignmentsBackend(),
-                                                                   QStringLiteral("plasmazones/layouts"));
+        std::unique_ptr<PhosphorZones::LayoutRegistry> mgr(
+            PlasmaZones::TestHelpers::makeLayoutRegistry(QStringLiteral("plasmazones/layouts")));
         // Direct concrete → QObject path.
         QObject* directQObject = static_cast<QObject*>(mgr.get());
         // Concrete → IZoneLayoutRegistry → ILayoutSourceRegistry → QObject.

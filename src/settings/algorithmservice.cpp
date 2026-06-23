@@ -6,13 +6,13 @@
 #include "../config/settings.h"
 #include "../core/constants.h"
 #include "../core/logging.h"
-#include "../pz_i18n.h"
+#include "../phosphor_i18n.h"
 
 #include <PhosphorLayoutApi/LayoutId.h>
 #include <PhosphorTiles/AlgorithmRegistry.h>
 #include <PhosphorTiles/AutotileConstants.h>
 #include <PhosphorTiles/ITileAlgorithmRegistry.h>
-#include <PhosphorTiles/ScriptedAlgorithm.h>
+#include <PhosphorTiles/LuauTileAlgorithm.h>
 #include <PhosphorTiles/ScriptedAlgorithmLoader.h>
 #include <PhosphorTiles/TilingAlgorithm.h>
 #include <PhosphorTiles/TilingState.h>
@@ -34,11 +34,21 @@
 #include <QUuid>
 #include <QVector>
 
-#include <cassert>
-
 namespace PlasmaZones {
 
 namespace {
+
+// Strip characters that would let a metadata display string break out of its
+// Luau double-quoted literal, or inject a brace that desyncs the brace-depth
+// template splicer in spliceLuauTemplate().
+QString sanitizeLuauMetadataString(QString value)
+{
+    value.replace(QLatin1Char('\n'), QLatin1Char(' '));
+    value.replace(QLatin1Char('\r'), QLatin1Char(' '));
+    value.replace(QLatin1Char('\\'), QLatin1Char('/'));
+    value.replace(QLatin1Char('"'), QLatin1Char('\''));
+    return value;
+}
 
 QString userAlgorithmsDir()
 {
@@ -48,63 +58,80 @@ QString userAlgorithmsDir()
 
 QString findUniqueAlgorithmPath(const QString& dir, const QString& baseName)
 {
-    QString path = dir + baseName + QStringLiteral(".js");
+    QString path = dir + baseName + QStringLiteral(".luau");
     if (!QFile::exists(path))
         return path;
     for (int i = 1; i <= 999; ++i) {
-        path = dir + baseName + QStringLiteral("-") + QString::number(i) + QStringLiteral(".js");
+        path = dir + baseName + QStringLiteral("-") + QString::number(i) + QStringLiteral(".luau");
         if (!QFile::exists(path))
             return path;
     }
     return QString();
 }
 
-/// Index of the first line AFTER the `};` that closes `var metadata = { ... }`
-/// at file scope in @p lines. Returns -1 if no such declaration exists.
-///
-/// Uses a brace-depth tracker so nested objects / arrays inside metadata
-/// (e.g. `customParams: [{ ... }]`) don't end the block early. String
-/// literals are skipped so stray `{`/`}` inside description values don't
-/// throw the count off. One trailing blank line after the metadata close
-/// is consumed (the convention in every bundled template).
-///
-/// Contract with template authors: `var metadata = ` must appear at file
-/// scope (not inside a function), and its value must be a single object
-/// literal terminated by `};` — which all 25 bundled templates satisfy.
-/// Block and line comments INSIDE the metadata value are not supported
-/// (no bundled template uses them); adding that would require a full
-/// tokeniser.
-int findMetadataBodyStart(const QStringList& lines)
+/// Build a `metadata = { ... }` Luau table block (4-space indented, as it
+/// appears inside `pluau.algorithm{ ... }`). Ends with `},` so it drops in ahead
+/// of the tile field.
+QString buildLuauMetadata(const QString& name, const QString& id, bool overlapping, bool masterCount, bool splitRatio,
+                          bool memory)
 {
-    int depth = 0;
-    bool insideMetadata = false;
-    for (int i = 0; i < lines.size(); ++i) {
-        const QString& line = lines[i];
-        if (!insideMetadata) {
-            if (!line.trimmed().startsWith(QLatin1String("var metadata"))) {
-                continue;
-            }
-            insideMetadata = true;
+    const auto b = [](bool v) {
+        return v ? QStringLiteral("true") : QStringLiteral("false");
+    };
+    QString m;
+    m += QStringLiteral("    metadata = {\n");
+    m += QStringLiteral("        name = \"") + name + QStringLiteral("\",\n");
+    m += QStringLiteral("        id = \"") + id + QStringLiteral("\",\n");
+    m += QStringLiteral("        description = \"Custom tiling algorithm\",\n");
+    m += QStringLiteral("        producesOverlappingZones = ") + b(overlapping) + QStringLiteral(",\n");
+    m += QStringLiteral("        supportsMasterCount = ") + b(masterCount) + QStringLiteral(",\n");
+    m += QStringLiteral("        supportsSplitRatio = ") + b(splitRatio) + QStringLiteral(",\n");
+    m += QStringLiteral("        defaultSplitRatio = 0.5,\n");
+    m += QStringLiteral("        defaultMaxWindows = 6,\n");
+    m += QStringLiteral("        minimumWindows = 1,\n");
+    m += QStringLiteral("        zoneNumberDisplay = \"all\",\n");
+    m += QStringLiteral("        supportsMemory = ") + b(memory) + QStringLiteral(",\n");
+    m += QStringLiteral("    },");
+    return m;
+}
+
+/// Splice a bundled `.luau` template: replace its leading SPDX comment block
+/// with @p newHeader and its `metadata = { ... }` table with @p metadataBlock,
+/// preserving the module locals + tile function. Returns empty on a template
+/// whose `metadata = {` block can't be located (caller falls back to a blank
+/// scaffold). Brace-depth scan; matches the bundled templates' formatting (no
+/// `{`/`}` inside metadata strings).
+QString spliceLuauTemplate(const QString& templateContent, const QString& newHeader, const QString& metadataBlock)
+{
+    const QStringList lines = templateContent.split(QLatin1Char('\n'));
+
+    // Skip the template's own leading comment / blank lines (its SPDX header).
+    int firstCode = 0;
+    while (firstCode < lines.size()) {
+        const QString t = lines[firstCode].trimmed();
+        if (t.isEmpty() || t.startsWith(QLatin1String("--"))) {
+            ++firstCode;
+            continue;
         }
-        bool inString = false;
-        QChar stringQuote;
-        for (int j = 0; j < line.size(); ++j) {
-            const QChar c = line[j];
-            if (inString) {
-                if (c == QLatin1Char('\\') && j + 1 < line.size()) {
-                    ++j; // skip the escaped character
-                    continue;
-                }
-                if (c == stringQuote) {
-                    inString = false;
-                }
-                continue;
-            }
-            if (c == QLatin1Char('"') || c == QLatin1Char('\'')) {
-                inString = true;
-                stringQuote = c;
-                continue;
-            }
+        break;
+    }
+
+    static const QRegularExpression metaRe(QStringLiteral(R"(^\s*metadata\s*=\s*\{)"));
+    int metaStart = -1;
+    for (int i = firstCode; i < lines.size(); ++i) {
+        if (metaRe.match(lines[i]).hasMatch()) {
+            metaStart = i;
+            break;
+        }
+    }
+    if (metaStart < 0) {
+        return QString();
+    }
+
+    int depth = 0;
+    int metaEnd = -1;
+    for (int i = metaStart; i < lines.size(); ++i) {
+        for (const QChar c : lines[i]) {
             if (c == QLatin1Char('{')) {
                 ++depth;
             } else if (c == QLatin1Char('}')) {
@@ -112,14 +139,26 @@ int findMetadataBodyStart(const QStringList& lines)
             }
         }
         if (depth == 0) {
-            int bodyStart = i + 1;
-            if (bodyStart < lines.size() && lines[bodyStart].trimmed().isEmpty()) {
-                ++bodyStart;
-            }
-            return bodyStart;
+            metaEnd = i;
+            break;
         }
     }
-    return -1;
+    if (metaEnd < 0) {
+        return QString();
+    }
+
+    QString out = newHeader + QStringLiteral("\n");
+    for (int i = firstCode; i < metaStart; ++i) {
+        out += lines[i] + QLatin1Char('\n');
+    }
+    out += metadataBlock + QLatin1Char('\n');
+    for (int i = metaEnd + 1; i < lines.size(); ++i) {
+        out += lines[i];
+        if (i < lines.size() - 1) {
+            out += QLatin1Char('\n');
+        }
+    }
+    return out;
 }
 
 } // anonymous namespace
@@ -277,23 +316,57 @@ bool AlgorithmService::importAlgorithm(const QString& filePath)
     if (!source.exists() || !source.isFile())
         return false;
 
-    const QString destDir = QStandardPaths::writableLocation(QStandardPaths::GenericDataLocation) + QLatin1Char('/')
-        + ScriptedAlgorithmSubdir;
+    // The loader only registers `<basename>.luau` files whose basename matches
+    // [A-Za-z0-9_-]+; importing anything else would copy a file the loader
+    // silently ignores, leaving the user with a success toast for an algorithm
+    // that never appears. Reject up front with a clear message instead.
+    if (source.suffix().compare(QLatin1String("luau"), Qt::CaseInsensitive) != 0) {
+        Q_EMIT algorithmOperationFailed(PhosphorI18n::tr("Only Luau algorithm files (.luau) can be imported."));
+        return false;
+    }
+    static const QRegularExpression validBaseName(QStringLiteral("^[A-Za-z0-9_-]+$"));
+    if (!validBaseName.match(source.completeBaseName()).hasMatch()) {
+        Q_EMIT algorithmOperationFailed(
+            PhosphorI18n::tr("Algorithm file names may contain only letters, digits, hyphens, and underscores."));
+        return false;
+    }
+
+    const QString destDir = userAlgorithmsDir();
     QDir dir(destDir);
     if (!dir.exists()) {
         dir.mkpath(QStringLiteral("."));
     }
 
-    const QString destPath = destDir + QLatin1Char('/') + source.fileName();
+    // Land as "<validated-basename>.luau" (lower-case suffix) so the loader's
+    // case-sensitive *.luau glob picks it up regardless of the source suffix case.
+    QString destPath = destDir + source.completeBaseName() + QStringLiteral(".luau");
 
-    // Remove existing file so QFile::copy succeeds (it won't overwrite)
-    if (QFile::exists(destPath)) {
-        QFile::remove(destPath);
+    // Same file (or a symlink to it) already in place: no-op success.
+    const QFileInfo destInfo(destPath);
+    if (destInfo.exists() && source.canonicalFilePath() == destInfo.canonicalFilePath()) {
+        return true;
+    }
+    // A different file owns the name: pick a unique "<name>-N.luau" rather than
+    // clobbering it (no destructive remove-then-copy; matches duplicate/create).
+    if (destInfo.exists()) {
+        destPath = findUniqueAlgorithmPath(destDir, source.completeBaseName());
+        if (destPath.isEmpty()) {
+            Q_EMIT algorithmOperationFailed(
+                PhosphorI18n::tr("Too many algorithms share this name. Remove some and try again."));
+            return false;
+        }
     }
 
-    const bool ok = QFile::copy(filePath, destPath);
-    // PhosphorTiles::ScriptedAlgorithmLoader's QFileSystemWatcher will pick up the new file automatically
-    return ok;
+    if (!QFile::copy(filePath, destPath)) {
+        // Report failure — the QML caller treats a false return as a silent no-op.
+        Q_EMIT algorithmOperationFailed(
+            PhosphorI18n::tr("Could not copy the algorithm file. Check available disk space and permissions."));
+        return false;
+    }
+    // The loader's QFileSystemWatcher picks up the new file and refreshes the list.
+    // No id-keyed watch here: an import registers under its own metadata id (not
+    // necessarily its filename), so a basename watch would false-error.
+    return true;
 }
 
 QString AlgorithmService::scriptedFilePath(const QString& algorithmId) const
@@ -304,7 +377,7 @@ QString AlgorithmService::scriptedFilePath(const QString& algorithmId) const
     PhosphorTiles::TilingAlgorithm* algo = registry->algorithm(algorithmId);
     if (!algo)
         return QString();
-    auto* scripted = qobject_cast<PhosphorTiles::ScriptedAlgorithm*>(algo);
+    auto* scripted = qobject_cast<PhosphorTiles::LuauTileAlgorithm*>(algo);
     if (!scripted)
         return QString();
     const QString path = scripted->filePath();
@@ -351,8 +424,8 @@ void AlgorithmService::watchForAlgorithmRegistration(const QString& expectedId)
         m_algorithmWatchers.erase(it);
         qCWarning(PlasmaZones::lcCore) << "Algorithm registration timed out for:" << expectedId;
         Q_EMIT algorithmOperationFailed(
-            PzI18n::tr("Algorithm was created but not picked up by the registry. "
-                       "Try refreshing or restarting the application."));
+            PhosphorI18n::tr("Algorithm was created but not picked up by the registry. "
+                             "Try refreshing or restarting the application."));
     });
 }
 
@@ -368,8 +441,16 @@ void AlgorithmService::openAlgorithm(const QString& algorithmId)
     // Fallback: try user algorithms dir directly (works right after creation
     // before the registry has picked up the file via QFileSystemWatcher).
     // Uses algorithmId as filename — valid for createNewAlgorithm (returns filename)
-    // and duplicateAlgorithm (watches for the filename-based ID).
-    const QString userPath = userAlgorithmsDir() + algorithmId + QStringLiteral(".js");
+    // and duplicateAlgorithm (watches for the filename-based ID). Validate the id
+    // as a bare basename before interpolating it into a path, so a stray id with
+    // separators / ".." can never escape the user dir (defence in depth — every
+    // producer already sanitizes).
+    static const QRegularExpression safeBaseName(QStringLiteral("^[A-Za-z0-9_-]+$"));
+    if (!safeBaseName.match(algorithmId).hasMatch()) {
+        qCWarning(PlasmaZones::lcCore) << "Cannot open algorithm — unsafe id (not a bare basename):" << algorithmId;
+        return;
+    }
+    const QString userPath = userAlgorithmsDir() + algorithmId + QStringLiteral(".luau");
     if (QFile::exists(userPath)) {
         QDesktopServices::openUrl(QUrl::fromLocalFile(userPath));
         return;
@@ -404,7 +485,7 @@ void AlgorithmService::openLayoutFile(const QString& layoutId)
 bool AlgorithmService::deleteAlgorithm(const QString& algorithmId)
 {
     if (algorithmId.isEmpty()) {
-        Q_EMIT algorithmOperationFailed(PzI18n::tr("Cannot delete algorithm — no algorithm selected."));
+        Q_EMIT algorithmOperationFailed(PhosphorI18n::tr("No algorithm is selected to delete."));
         return false;
     }
 
@@ -412,14 +493,14 @@ bool AlgorithmService::deleteAlgorithm(const QString& algorithmId)
     PhosphorTiles::TilingAlgorithm* algo = registry->algorithm(algorithmId);
     if (!algo || !algo->isUserScript()) {
         qCWarning(PlasmaZones::lcCore) << "Cannot delete algorithm — not a user script:" << algorithmId;
-        Q_EMIT algorithmOperationFailed(PzI18n::tr("Only user-created algorithms can be deleted."));
+        Q_EMIT algorithmOperationFailed(PhosphorI18n::tr("Only user-created algorithms can be deleted."));
         return false;
     }
 
     const QString filePath = scriptedFilePath(algorithmId);
     if (filePath.isEmpty()) {
         qCWarning(PlasmaZones::lcCore) << "Algorithm file not found for:" << algorithmId;
-        Q_EMIT algorithmOperationFailed(PzI18n::tr("Algorithm file not found."));
+        Q_EMIT algorithmOperationFailed(PhosphorI18n::tr("Algorithm file not found."));
         return false;
     }
 
@@ -432,9 +513,9 @@ bool AlgorithmService::deleteAlgorithm(const QString& algorithmId)
     if (rawUserDir.isEmpty() || canonicalPath.isEmpty() || !canonicalPath.startsWith(userDir)) {
         qCWarning(PlasmaZones::lcCore) << "Refusing to delete non-user algorithm file:" << filePath
                                        << "userDir=" << rawUserDir << "canonical=" << canonicalPath;
-        Q_EMIT algorithmOperationFailed(
-            rawUserDir.isEmpty() ? PzI18n::tr("Cannot delete — user algorithms directory does not exist.")
-                                 : PzI18n::tr("Cannot delete — file is outside the user algorithms directory."));
+        Q_EMIT algorithmOperationFailed(rawUserDir.isEmpty()
+                                            ? PhosphorI18n::tr("The user algorithms directory does not exist.")
+                                            : PhosphorI18n::tr("That file is outside the user algorithms directory."));
         return false;
     }
 
@@ -447,7 +528,7 @@ bool AlgorithmService::deleteAlgorithm(const QString& algorithmId)
     const bool ok = QFile::remove(canonicalPath);
     if (!ok) {
         qCWarning(PlasmaZones::lcCore) << "Failed to delete algorithm file:" << canonicalPath;
-        Q_EMIT algorithmOperationFailed(PzI18n::tr("Could not delete algorithm file. Check file permissions."));
+        Q_EMIT algorithmOperationFailed(PhosphorI18n::tr("Could not delete algorithm file. Check file permissions."));
     }
     // QFileSystemWatcher will pick up the deletion and trigger a refresh
     return ok;
@@ -457,14 +538,14 @@ bool AlgorithmService::duplicateAlgorithm(const QString& algorithmId)
 {
     const QString sourcePath = scriptedFilePath(algorithmId);
     if (sourcePath.isEmpty()) {
-        Q_EMIT algorithmOperationFailed(PzI18n::tr("Cannot duplicate — algorithm file not found."));
+        Q_EMIT algorithmOperationFailed(PhosphorI18n::tr("The algorithm file could not be found."));
         return false;
     }
 
     auto* registry = m_registry;
     PhosphorTiles::TilingAlgorithm* algo = registry->algorithm(algorithmId);
     if (!algo) {
-        Q_EMIT algorithmOperationFailed(PzI18n::tr("Cannot duplicate — algorithm is no longer registered."));
+        Q_EMIT algorithmOperationFailed(PhosphorI18n::tr("That algorithm is no longer registered."));
         return false;
     }
 
@@ -473,28 +554,28 @@ bool AlgorithmService::duplicateAlgorithm(const QString& algorithmId)
     if (!dir.exists())
         dir.mkpath(QStringLiteral("."));
 
-    // Generate unique filename: algorithmId-copy.js, algorithmId-copy-2.js, etc.
+    // Generate unique filename: algorithmId-copy.luau, algorithmId-copy-2.luau, etc.
     const QString baseName = algorithmId + QStringLiteral("-copy");
     const QString destPath = findUniqueAlgorithmPath(destDir, baseName);
     if (destPath.isEmpty()) {
         qCWarning(PlasmaZones::lcCore) << "Could not find unique filename for duplicate:" << baseName;
         Q_EMIT algorithmOperationFailed(
-            PzI18n::tr("Could not duplicate algorithm — too many copies exist. "
-                       "Please rename or delete existing copies."));
+            PhosphorI18n::tr("Too many copies of this algorithm already exist. "
+                             "Rename or delete some before duplicating."));
         return false;
     }
 
     // Canonicalize source path to follow symlinks and ensure we read the actual file
     const QString canonicalSource = QFileInfo(sourcePath).canonicalFilePath();
     if (canonicalSource.isEmpty()) {
-        Q_EMIT algorithmOperationFailed(PzI18n::tr("Cannot duplicate — could not resolve algorithm file path."));
+        Q_EMIT algorithmOperationFailed(PhosphorI18n::tr("The algorithm file path could not be resolved."));
         return false;
     }
 
     // Read source, update metadata, write copy
     QFile sourceFile(canonicalSource);
     if (!sourceFile.open(QIODevice::ReadOnly | QIODevice::Text)) {
-        Q_EMIT algorithmOperationFailed(PzI18n::tr("Could not read source algorithm file."));
+        Q_EMIT algorithmOperationFailed(PhosphorI18n::tr("Could not read source algorithm file."));
         return false;
     }
     QString content = QString::fromUtf8(sourceFile.readAll());
@@ -505,13 +586,9 @@ bool AlgorithmService::duplicateAlgorithm(const QString& algorithmId)
     QString baseCopyName = algo->name();
     while (baseCopyName.endsWith(QLatin1String(" (Copy)")))
         baseCopyName.chop(7);
-    QString newName = baseCopyName + QStringLiteral(" (Copy)");
-    // Sanitize to prevent metadata injection
-    newName.replace(QLatin1Char('\n'), QLatin1Char(' '));
-    newName.replace(QLatin1Char('\r'), QLatin1Char(' '));
-    newName.replace(QLatin1Char('\\'), QLatin1Char('/'));
-    newName.replace(QLatin1Char('"'), QLatin1Char('\''));
-    // Replace the first name: and id: values inside the var metadata object.
+    // Sanitize to prevent metadata injection.
+    const QString newName = sanitizeLuauMetadataString(baseCopyName + QStringLiteral(" (Copy)"));
+    // Replace the first name and id values inside the metadata table.
     // Anchored to line start to avoid matching inside algorithm body strings.
     // Capture leading whitespace so the replacement preserves indentation.
     //
@@ -520,9 +597,10 @@ bool AlgorithmService::duplicateAlgorithm(const QString& algorithmId)
     // property-shorthand metadata is unsupported — if either match fails, the
     // duplicate would otherwise be written with the original name + id,
     // colliding with the source in the registry. Bail out instead.
-    static const QRegularExpression nameRe(QStringLiteral(R"(^(\s*)name:\s*"[^"]*")"),
+    static const QRegularExpression nameRe(QStringLiteral(R"(^(\s*)name\s*=\s*"[^"]*")"),
                                            QRegularExpression::MultilineOption);
-    static const QRegularExpression idRe(QStringLiteral(R"(^(\s*)id:\s*"[^"]*")"), QRegularExpression::MultilineOption);
+    static const QRegularExpression idRe(QStringLiteral(R"(^(\s*)id\s*=\s*"[^"]*")"),
+                                         QRegularExpression::MultilineOption);
     const QRegularExpressionMatch nameMatch = nameRe.match(content);
     const QRegularExpressionMatch idMatch = idRe.match(content);
     if (!nameMatch.hasMatch() || !idMatch.hasMatch()) {
@@ -530,28 +608,28 @@ bool AlgorithmService::duplicateAlgorithm(const QString& algorithmId)
                                        << "(nameMatch=" << nameMatch.hasMatch() << "idMatch=" << idMatch.hasMatch()
                                        << ")";
         Q_EMIT algorithmOperationFailed(
-            PzI18n::tr("Could not duplicate algorithm — its metadata format is not recognised. "
-                       "Expected `name: \"...\"` and `id: \"...\"` on separate lines."));
+            PhosphorI18n::tr("Could not duplicate the algorithm. Its metadata format is not recognised. "
+                             "Expected `name = \"...\"` and `id = \"...\"` on separate lines."));
         return false;
     }
     content.replace(nameMatch.capturedStart(), nameMatch.capturedLength(),
-                    nameMatch.captured(1) + QStringLiteral("name: \"") + newName + QStringLiteral("\""));
+                    nameMatch.captured(1) + QStringLiteral("name = \"") + newName + QStringLiteral("\""));
     // idMatch captured positions may have shifted after the name replacement;
     // re-run id match over the updated content so we don't corrupt bytes.
     const QRegularExpressionMatch idMatch2 = idRe.match(content);
     if (!idMatch2.hasMatch()) {
         qCWarning(PlasmaZones::lcCore) << "duplicateAlgorithm: id match disappeared after name replacement";
-        Q_EMIT algorithmOperationFailed(PzI18n::tr("Could not duplicate algorithm — metadata rewrite failed."));
+        Q_EMIT algorithmOperationFailed(PhosphorI18n::tr("Could not rewrite the algorithm's metadata."));
         return false;
     }
     content.replace(idMatch2.capturedStart(), idMatch2.capturedLength(),
-                    idMatch2.captured(1) + QStringLiteral("id: \"") + newFilename + QStringLiteral("\""));
+                    idMatch2.captured(1) + QStringLiteral("id = \"") + newFilename + QStringLiteral("\""));
 
     QFile destFile(destPath);
     if (!destFile.open(QIODevice::WriteOnly | QIODevice::Text)) {
         qCWarning(PlasmaZones::lcCore) << "Failed to write duplicate algorithm file:" << destPath;
         Q_EMIT algorithmOperationFailed(
-            PzI18n::tr("Could not write duplicate algorithm file. Check disk space and permissions."));
+            PhosphorI18n::tr("Could not write duplicate algorithm file. Check disk space and permissions."));
         return false;
     }
     const QByteArray encoded = content.toUtf8();
@@ -562,7 +640,7 @@ bool AlgorithmService::duplicateAlgorithm(const QString& algorithmId)
                                        << "written=" << written << "expected=" << encoded.size();
         QFile::remove(destPath);
         Q_EMIT algorithmOperationFailed(
-            PzI18n::tr("Could not write duplicate algorithm file. Check disk space and permissions."));
+            PhosphorI18n::tr("Could not write duplicate algorithm file. Check disk space and permissions."));
         return false;
     }
 
@@ -574,13 +652,13 @@ bool AlgorithmService::duplicateAlgorithm(const QString& algorithmId)
 bool AlgorithmService::exportAlgorithm(const QString& algorithmId, const QString& destPath)
 {
     if (destPath.isEmpty()) {
-        Q_EMIT algorithmOperationFailed(PzI18n::tr("No export destination specified."));
+        Q_EMIT algorithmOperationFailed(PhosphorI18n::tr("No export destination specified."));
         return false;
     }
 
     const QString sourcePath = scriptedFilePath(algorithmId);
     if (sourcePath.isEmpty()) {
-        Q_EMIT algorithmOperationFailed(PzI18n::tr("Cannot export — algorithm file not found."));
+        Q_EMIT algorithmOperationFailed(PhosphorI18n::tr("The algorithm file could not be found."));
         return false;
     }
 
@@ -595,14 +673,14 @@ bool AlgorithmService::exportAlgorithm(const QString& algorithmId, const QString
     QFile::remove(backupPath);
 
     if (!QFile::copy(sourcePath, tmpPath)) {
-        Q_EMIT algorithmOperationFailed(PzI18n::tr("Could not copy algorithm file for export."));
+        Q_EMIT algorithmOperationFailed(PhosphorI18n::tr("Could not copy algorithm file for export."));
         return false;
     }
 
     const bool destExisted = QFile::exists(destPath);
     if (destExisted && !QFile::rename(destPath, backupPath)) {
         QFile::remove(tmpPath);
-        Q_EMIT algorithmOperationFailed(PzI18n::tr("Could not replace existing file at export destination."));
+        Q_EMIT algorithmOperationFailed(PhosphorI18n::tr("Could not replace existing file at export destination."));
         return false;
     }
 
@@ -614,7 +692,7 @@ bool AlgorithmService::exportAlgorithm(const QString& algorithmId, const QString
                 QFile::rename(backupPath, destPath);
             }
             QFile::remove(tmpPath);
-            Q_EMIT algorithmOperationFailed(PzI18n::tr("Could not write to export destination."));
+            Q_EMIT algorithmOperationFailed(PhosphorI18n::tr("Could not write to export destination."));
             return false;
         }
         if (!QFile::remove(tmpPath)) {
@@ -658,54 +736,33 @@ QString AlgorithmService::createNewAlgorithm(const QString& name, const QString&
         qCWarning(PlasmaZones::lcCore) << "Could not find unique filename for algorithm:" << filename
                                        << "— all 999 slots exhausted";
         Q_EMIT algorithmOperationFailed(
-            PzI18n::tr("Could not create algorithm — too many files with the same name. "
-                       "Please rename or delete existing algorithms."));
+            PhosphorI18n::tr("Too many algorithms already share this name. "
+                             "Rename or delete some before creating another."));
         return QString();
     }
     // Update filename to match the final path (may have -N suffix)
     filename = QFileInfo(destPath).completeBaseName();
 
-    // Build JS content
+    // Build Luau content
     QString content;
 
     // SPDX header — use current year and a placeholder author
     const int currentYear = QDate::currentDate().year();
-    content +=
-        QStringLiteral("// SPDX-FileCopyrightText: ") + QString::number(currentYear) + QStringLiteral(" <your name>\n");
-    content += QStringLiteral("// SPDX-License-Identifier: GPL-3.0-or-later\n\n");
+    const QString header = QStringLiteral("-- SPDX-FileCopyrightText: ") + QString::number(currentYear)
+        + QStringLiteral(" <your name>\n") + QStringLiteral("-- SPDX-License-Identifier: GPL-3.0-or-later\n");
 
-    // Metadata object — strip newlines/quotes to prevent injection
-    QString sanitizedDisplayName = name.trimmed();
-    sanitizedDisplayName.replace(QLatin1Char('\n'), QLatin1Char(' '));
-    sanitizedDisplayName.replace(QLatin1Char('\r'), QLatin1Char(' '));
-    sanitizedDisplayName.replace(QLatin1Char('\\'), QLatin1Char('/'));
-    sanitizedDisplayName.replace(QLatin1Char('"'), QLatin1Char('\''));
-    content += QStringLiteral("var metadata = {\n");
-    content += QStringLiteral("    name: \"") + sanitizedDisplayName + QStringLiteral("\",\n");
-    content += QStringLiteral("    id: \"") + filename + QStringLiteral("\",\n");
-    content += QStringLiteral("    description: \"Custom tiling algorithm\",\n");
-    content += QStringLiteral("    producesOverlappingZones: ")
-        + (producesOverlappingZones ? QStringLiteral("true") : QStringLiteral("false")) + QStringLiteral(",\n");
-    content += QStringLiteral("    supportsMasterCount: ")
-        + (supportsMasterCount ? QStringLiteral("true") : QStringLiteral("false")) + QStringLiteral(",\n");
-    content += QStringLiteral("    supportsSplitRatio: ")
-        + (supportsSplitRatio ? QStringLiteral("true") : QStringLiteral("false")) + QStringLiteral(",\n");
-    content += QStringLiteral("    defaultSplitRatio: 0.5,\n");
-    content += QStringLiteral("    defaultMaxWindows: 6,\n");
-    content += QStringLiteral("    minimumWindows: 1,\n");
-    content += QStringLiteral("    zoneNumberDisplay: \"all\",\n");
-    content += QStringLiteral("    supportsMemory: ")
-        + (supportsMemory ? QStringLiteral("true") : QStringLiteral("false")) + QStringLiteral("\n");
-    content += QStringLiteral("};\n\n");
+    // Metadata table — strip newlines/quotes to prevent injection.
+    const QString sanitizedDisplayName = sanitizeLuauMetadataString(name.trimmed());
+    const QString metadataBlock = buildLuauMetadata(sanitizedDisplayName, filename, producesOverlappingZones,
+                                                    supportsMasterCount, supportsSplitRatio, supportsMemory);
 
-    // Try to read base template body from system algorithm dirs. We emit
-    // our own SPDX + metadata above, then splice in the template's body
-    // (everything AFTER its own `var metadata = { ... };` block).
+    // Start from a base template by reusing its module locals + tile and
+    // swapping in our own SPDX header + metadata table.
     bool foundTemplate = false;
     if (baseTemplate != QLatin1String("blank") && !baseTemplate.isEmpty()) {
         const QString templateFile =
             QStandardPaths::locate(QStandardPaths::GenericDataLocation,
-                                   ScriptedAlgorithmSubdir + QLatin1Char('/') + baseTemplate + QStringLiteral(".js"));
+                                   ScriptedAlgorithmSubdir + QLatin1Char('/') + baseTemplate + QStringLiteral(".luau"));
 
         if (!templateFile.isEmpty()) {
             QFile file(templateFile);
@@ -713,18 +770,13 @@ QString AlgorithmService::createNewAlgorithm(const QString& name, const QString&
                 const QString templateContent = QString::fromUtf8(file.readAll());
                 file.close();
 
-                const QStringList lines = templateContent.split(QLatin1Char('\n'));
-                const int bodyStart = findMetadataBodyStart(lines);
-                if (bodyStart < 0) {
+                const QString spliced = spliceLuauTemplate(templateContent, header, metadataBlock);
+                if (spliced.isEmpty()) {
                     qCWarning(PlasmaZones::lcCore)
                         << "createNewAlgorithm: template" << baseTemplate
-                        << "has no recognisable `var metadata = { ... };` block — using fallback body.";
-                } else if (bodyStart < lines.size()) {
-                    for (int i = bodyStart; i < lines.size(); ++i) {
-                        content += lines[i];
-                        if (i < lines.size() - 1)
-                            content += QLatin1Char('\n');
-                    }
+                        << "has no recognisable `metadata = { ... }` block — using fallback body.";
+                } else {
+                    content = spliced;
                     foundTemplate = true;
                 }
             } else {
@@ -734,17 +786,12 @@ QString AlgorithmService::createNewAlgorithm(const QString& name, const QString&
     }
 
     if (!foundTemplate) {
-        content += QStringLiteral(
-            "/**\n"
-            " * Custom tiling algorithm.\n"
-            " *\n"
-            " * @param {Object} params - Tiling parameters\n"
-            " * @returns {Array<{x: number, y: number, width: number, height: number}>}\n"
-            " */\n"
-            "function calculateZones(params) {\n"
-            "    if (params.windowCount <= 0) return [];\n"
-            "    return fillArea(params.area, params.windowCount);\n"
-            "}\n");
+        // Blank scaffold: a self-contained pluau.algorithm module the user edits.
+        content = header + QStringLiteral("\nlocal pluau = pluau\n\nreturn pluau.algorithm {\n") + metadataBlock
+            + QStringLiteral("\n\n") + QStringLiteral("    tile = function(ctx)\n")
+            + QStringLiteral("        if ctx.windowCount <= 0 then return {} end\n")
+            + QStringLiteral("        return pluau.fillArea(ctx.area, ctx.windowCount)\n")
+            + QStringLiteral("    end,\n}\n");
     }
 
     // Write the file
@@ -752,7 +799,7 @@ QString AlgorithmService::createNewAlgorithm(const QString& name, const QString&
     if (!outFile.open(QIODevice::WriteOnly | QIODevice::Text)) {
         qCWarning(PlasmaZones::lcCore) << "Failed to write algorithm file:" << destPath;
         Q_EMIT algorithmOperationFailed(
-            PzI18n::tr("Could not write algorithm file. Check disk space and permissions."));
+            PhosphorI18n::tr("Could not write algorithm file. Check disk space and permissions."));
         return QString();
     }
     const QByteArray encoded = content.toUtf8();
@@ -763,7 +810,7 @@ QString AlgorithmService::createNewAlgorithm(const QString& name, const QString&
                                        << "expected=" << encoded.size();
         QFile::remove(destPath);
         Q_EMIT algorithmOperationFailed(
-            PzI18n::tr("Could not write algorithm file. Check disk space and permissions."));
+            PhosphorI18n::tr("Could not write algorithm file. Check disk space and permissions."));
         return QString();
     }
 

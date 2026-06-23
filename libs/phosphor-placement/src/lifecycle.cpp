@@ -97,13 +97,13 @@ QString WindowTrackingService::findNearestVirtualScreen(const QStringList& vsIds
     return vsIds[bestIdx];
 }
 
-// Takes an explicit Phosphor::Screens::ScreenManager* parameter rather than using m_screenManager
+// Takes an explicit PhosphorScreens::ScreenManager* parameter rather than using m_screenManager
 // because this method is called during daemon startup (Daemon::start) before the
 // singleton instance may be fully initialized, and the caller already holds a valid
-// Phosphor::Screens::ScreenManager pointer from its own member (m_screenManager.get()).
+// PhosphorScreens::ScreenManager pointer from its own member (m_screenManager.get()).
 void WindowTrackingService::migrateScreenAssignmentsToVirtual(const QString& physicalScreenId,
                                                               const QStringList& virtualScreenIds,
-                                                              Phosphor::Screens::ScreenManager* mgr)
+                                                              PhosphorScreens::ScreenManager* mgr)
 {
     if (virtualScreenIds.isEmpty() || !mgr) {
         return;
@@ -181,7 +181,7 @@ void WindowTrackingService::migrateScreenAssignmentsToVirtual(const QString& phy
             return virtualScreenIds.first();
         }
 
-        const Phosphor::Screens::PhysicalScreen physScreen = mgr->physicalScreenFor(physicalScreenId);
+        const PhosphorScreens::PhysicalScreen physScreen = mgr->physicalScreenFor(physicalScreenId);
         if (!physScreen.isValid()) {
             return virtualScreenIds.first();
         }
@@ -299,23 +299,31 @@ void WindowTrackingService::migrateScreenAssignmentsToVirtual(const QString& phy
         validateLastUsedZone(targetVs);
     }
 
-    // Migrate pre-tile geometry screenId fields from physical (or old virtual) to new virtual.
-    // PlacementEngineBase is the single store — mutate via engine pointer.
-    if (m_snapEngine) {
-        auto geos = m_snapEngine->unmanagedGeometries(); // take a copy
-        bool geosChanged = false;
-        for (auto it = geos.begin(); it != geos.end(); ++it) {
-            if (it->screenId == physicalScreenId || it->screenId.startsWith(prefix)) {
-                QStringList ptZoneIds = zoneAssigns.value(it.key());
-                if (ptZoneIds.isEmpty()) {
-                    continue; // No zone info — keep physical ID, don't guess VS
-                }
-                it->screenId = resolveVirtualScreen(ptZoneIds, it->screenId);
-                geosChanged = true;
+    // Migrate the shared free-geometry screenId KEYS from physical (or old virtual)
+    // to the new virtual screen. The unified WindowPlacementStore is the single
+    // float-back store; rewrite its per-screen keys in place.
+    {
+        const int changed = m_placementStore.transform([&](PhosphorEngine::WindowPlacement& p) {
+            const QStringList ptZoneIds = zoneAssigns.value(p.windowId);
+            if (ptZoneIds.isEmpty()) {
+                return false; // No zone info — keep physical ID, don't guess VS
             }
-        }
-        if (geosChanged) {
-            m_snapEngine->setUnmanagedGeometries(geos);
+            QHash<QString, QRect> remapped;
+            bool any = false;
+            for (auto it = p.freeGeometryByScreen.constBegin(); it != p.freeGeometryByScreen.constEnd(); ++it) {
+                QString screen = it.key();
+                if (screen == physicalScreenId || screen.startsWith(prefix)) {
+                    screen = resolveVirtualScreen(ptZoneIds, screen);
+                    any = true;
+                }
+                remapped.insert(screen, it.value());
+            }
+            if (any) {
+                p.freeGeometryByScreen = remapped;
+            }
+            return any;
+        });
+        if (changed > 0) {
             anyStateMigrated = true;
         }
     }
@@ -351,9 +359,7 @@ void WindowTrackingService::migrateScreenAssignmentsToVirtual(const QString& phy
         for (const QString& wId : windowsToRemove) {
             auto unResult = m_snapState->unassignWindow(wId);
             lastUsedCleared |= unResult.lastUsedZoneCleared;
-            if (m_snapEngine) {
-                m_snapEngine->forgetWindow(wId);
-            }
+            clearFreeGeometry(wId); // drop the record's shared free geometry
             m_snapState->clearPreFloatZone(wId);
             m_windowStickyStates.remove(wId);
             anyStateMigrated = true;
@@ -433,20 +439,31 @@ void WindowTrackingService::migrateScreenAssignmentsFromVirtual(const QString& p
         }
     }
 
-    // B3: Migrate pre-tile geometry screenId fields via engine
-    if (m_snapEngine) {
-        auto geos = m_snapEngine->unmanagedGeometries();
-        bool geosChanged = false;
-        for (auto it = geos.begin(); it != geos.end(); ++it) {
-            if (PhosphorIdentity::VirtualScreenId::isVirtual(it->screenId)
-                && PhosphorIdentity::VirtualScreenId::extractPhysicalId(it->screenId) == physicalScreenId) {
-                it->screenId = physicalScreenId;
-                geosChanged = true;
+    // B3: Migrate the shared free-geometry screenId KEYS from virtual back to
+    // physical (the unified record is the single float-back store).
+    const int freeGeoRemapped = m_placementStore.transform([&](PhosphorEngine::WindowPlacement& p) {
+        QHash<QString, QRect> remapped;
+        bool any = false;
+        for (auto it = p.freeGeometryByScreen.constBegin(); it != p.freeGeometryByScreen.constEnd(); ++it) {
+            QString screen = it.key();
+            if (PhosphorIdentity::VirtualScreenId::isVirtual(screen)
+                && PhosphorIdentity::VirtualScreenId::extractPhysicalId(screen) == physicalScreenId) {
+                screen = physicalScreenId;
+                any = true;
             }
+            remapped.insert(screen, it.value());
         }
-        if (geosChanged) {
-            m_snapEngine->setUnmanagedGeometries(geos);
+        if (any) {
+            p.freeGeometryByScreen = remapped;
         }
+        return any;
+    });
+    // Mirror the migrateScreenAssignmentsToVirtual sibling: a remapped free-geometry
+    // key must trigger a save even when no zone assignment migrated (e.g. a purely
+    // floating window whose only state is a float-back rect), else the rewritten
+    // key is never persisted and the stale virtual key reloads on restart.
+    if (freeGeoRemapped > 0) {
+        anyStateMigrated = true;
     }
 
     // Validate zone assignments against the physical screen's layout.
@@ -478,9 +495,7 @@ void WindowTrackingService::migrateScreenAssignmentsFromVirtual(const QString& p
         for (const QString& wId : windowsToRemove) {
             auto unResult = m_snapState->unassignWindow(wId);
             lastUsedCleared |= unResult.lastUsedZoneCleared;
-            if (m_snapEngine) {
-                m_snapEngine->forgetWindow(wId);
-            }
+            clearFreeGeometry(wId); // drop the record's shared free geometry
             m_snapState->clearPreFloatZone(wId);
             m_windowStickyStates.remove(wId);
             anyStateMigrated = true;
@@ -531,10 +546,9 @@ WindowTrackingService::physicalScreensWithStaleVirtualAssignments(const QSet<QSt
             check(entry.screenId);
         }
     }
-    if (m_snapEngine) {
-        const auto& geos = m_snapEngine->unmanagedGeometries();
-        for (auto it = geos.constBegin(); it != geos.constEnd(); ++it) {
-            check(it.value().screenId);
+    for (const PhosphorEngine::WindowPlacement& p : m_placementStore.records()) {
+        for (auto it = p.freeGeometryByScreen.constBegin(); it != p.freeGeometryByScreen.constEnd(); ++it) {
+            check(it.key());
         }
     }
     return result;
@@ -641,19 +655,16 @@ void WindowTrackingService::windowClosed(const QString& windowId, PhosphorEngine
     // clears them in SnapState. Do not move reads below this line.
     m_snapState->windowClosed(windowId);
 
-    // Convert pre-tile geometry from full windowId to appId for persistence
-    // so that when the window reopens (with a new internal ID), the geometry
-    // can still be found via appId fallback. The engine's storeUnmanagedGeometry
-    // writes both keys, so we just clean up the stale full-windowId entry.
-    if (m_snapEngine && m_snapEngine->hasUnmanagedGeometry(windowId) && appId != windowId) {
-        m_snapEngine->storeUnmanagedGeometry(appId, m_snapEngine->unmanagedGeometry(windowId),
-                                             m_snapEngine->unmanagedScreen(windowId), true);
-        m_snapEngine->forgetWindow(windowId);
-    }
-    // Clear floating state on close — floating is a runtime-only state that
-    // should not carry over when the window is reopened. Without this, closing
-    // a floated window and reopening it would inherit the float state (via appId
-    // fallback), causing a spurious "floated" OSD and preventing auto-snap.
+    // No manual full-windowId→appId float-back copy is needed: the unified record's
+    // freeGeometry rides on the record itself, which is stored in its appId bucket,
+    // so the appId fallback (peek/take) finds it on reopen automatically.
+    // The authoritative engine float bit was already cleared by
+    // m_snapState->windowClosed above (and AutotileEngine::windowClosed clears
+    // its own); here we only clear the LEGACY fallback float set + its appId
+    // aliases — floating is a runtime-only state that must not carry over when
+    // the window is reopened. Without this, closing a floated window and
+    // reopening it would inherit the float state (via appId fallback), causing
+    // a spurious "floated" OSD and preventing auto-snap.
     m_floatingWindows.remove(windowId);
     if (appId != windowId) {
         m_floatingWindows.remove(appId);
@@ -664,8 +675,10 @@ void WindowTrackingService::windowClosed(const QString& windowId, PhosphorEngine
     if (appId != windowId) {
         m_snapState->clearPreFloatZone(appId);
     }
-    // Remove autotile-floated tracking outright — do NOT migrate to appId.
-    m_windowStickyStates.remove(windowId);
+    // Remove sticky-window tracking outright — do NOT migrate to appId. The
+    // sticky map is keyed on the canonical (first-seen) composite, so remove
+    // under it (issue #628).
+    m_windowStickyStates.remove(canonicalizeForLookup(windowId));
 
     scheduleSaveState();
 }
@@ -678,12 +691,15 @@ void WindowTrackingService::onLayoutChanged()
     // Validate zone assignments against new layout.
     // NOTE: Do NOT early-return when the global activeLayout() is null. With virtual
     // screens, individual screens may have per-screen layouts via resolveLayoutForScreen().
-    // The per-window loop below (~line 718) already resolves layouts per-screen, so a
-    // null global layout does not mean "no layouts anywhere".
+    // The per-window stale-assignment loop further down resolves layouts
+    // per-screen via resolveLayoutForScreen(), so a null global layout does not
+    // mean "no layouts anywhere".
     PhosphorZones::Layout* newLayout = m_layoutManager->activeLayout();
 
     // Before removing stale assignments, capture (window, zonePosition) for resnap-to-new-layout.
-    // When user presses the shortcut, we map zone N -> zone N (with cycling when layout has fewer zones).
+    // The resnap maps a window's primary zone N -> zone N in the new layout; a window whose
+    // position exceeds the new layout's zone count is restored to its pre-tile geometry (see
+    // SnapEngine::calculateResnapFromPreviousLayout).
     // Include BOTH m_windowZoneAssignments (tracked) AND m_pendingRestoreQueues (session-restored
     // windows that KWin placed in zones before we got windowSnapped - e.g. after login).
     //
@@ -780,18 +796,9 @@ void WindowTrackingService::onLayoutChanged()
             if (!appId.isEmpty() && appId != windowIdOrStableId) {
                 addedIds.insert(appId);
             }
-            // Collect all zone positions for multi-zone resnap
-            QList<int> allPositions;
-            for (const QString& zid : zoneIdList) {
-                int p = globalZoneIdToPosition.value(zid, 0);
-                if (p > 0)
-                    allPositions.append(p);
-            }
-
             ResnapEntry entry;
             entry.windowId = windowIdOrStableId;
             entry.zonePosition = pos;
-            entry.allZonePositions = allPositions;
             entry.screenId = screenId;
             entry.virtualDesktop = vd;
             newBuffer.append(entry);
@@ -890,7 +897,6 @@ void WindowTrackingService::onLayoutChanged()
     // autotile period so resnapCurrentAssignments() can restore them when tiling is toggled off.
     // Skip windows on OTHER virtual desktops — their zone assignments belong to that
     // desktop's layout and must not be purged when the current desktop's layout changes.
-    const int currentDesktop = m_layoutManager->currentVirtualDesktop();
     const QString currentActivity = m_layoutManager->currentActivity();
 
     // Cache autotile status per screen to avoid redundant lookups (O(screens) instead of O(windows))
@@ -916,12 +922,23 @@ void WindowTrackingService::onLayoutChanged()
 
         // Preserve zone assignments for windows on other desktops. Desktop 0
         // means "all desktops" (pinned window) — always process those.
+        //
+        // Ordering note: this desktop gate is BEFORE the autotile-screen gate
+        // below. Both gates ultimately preserve the assignment (by continuing),
+        // so order is observationally irrelevant — but the intent is "windows
+        // on other desktops are preserved categorically, autotile preservation
+        // is a separate axis that only matters for windows whose desktop is
+        // current." Don't reorder these without checking that the new ordering
+        // still preserves the union {other-desktop OR autotile-screen}.
+        const QString windowScreen = lcScreens.value(it.key());
+        // Per-output virtual desktops (#648): "other desktop" is relative to the
+        // window's OWN screen's current desktop, not the global current.
+        const int currentDesktop = m_layoutManager->currentVirtualDesktopForScreen(windowScreen);
+
         const int windowDesktop = lcDesktops.value(it.key(), 0);
         if (windowDesktop != 0 && windowDesktop != currentDesktop) {
             continue;
         }
-
-        QString windowScreen = lcScreens.value(it.key());
 
         // If this screen's assignment is autotile, preserve zone assignments for resnap
         auto cached = screenIsAutotile.constFind(windowScreen);
@@ -1040,7 +1057,7 @@ bool WindowTrackingService::isGeometryOnScreen(const QRect& geometry) const
         return false;
     }
 
-    // Fallback: physical screens only (no Phosphor::Screens::ScreenManager available)
+    // Fallback: physical screens only (no PhosphorScreens::ScreenManager available)
     for (QScreen* screen : QGuiApplication::screens()) {
         QRect intersection = geometry.intersected(screen->geometry());
         if (intersection.width() >= MinVisibleWidth && intersection.height() >= MinVisibleHeight) {
@@ -1052,7 +1069,7 @@ bool WindowTrackingService::isGeometryOnScreen(const QRect& geometry) const
 
 QRect WindowTrackingService::adjustGeometryToScreen(const QRect& geometry) const
 {
-    // Try virtual/effective screens first via Phosphor::Screens::ScreenManager
+    // Try virtual/effective screens first via PhosphorScreens::ScreenManager
     auto* mgr = m_screenManager;
     if (mgr) {
         const QStringList ids = mgr->effectiveScreenIds();

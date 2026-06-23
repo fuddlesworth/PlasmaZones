@@ -6,7 +6,7 @@
 # Pluggable backends (KGlobalAccel, XDG Portal GlobalShortcuts, D-Bus trigger),
 # consumer-facing Registry with stable string ids, and a reserved extension
 # point for a future standalone Phosphor WM grabber. Built standalone or as a
-# subdirectory of PlasmaZones.
+# subdirectory of Phosphor.
 
 cmake_minimum_required(VERSION 3.16)
 

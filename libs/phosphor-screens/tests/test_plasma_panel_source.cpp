@@ -30,8 +30,8 @@
 #include <QSignalSpy>
 #include <QTest>
 
-using Phosphor::Screens::IPanelSource;
-using Phosphor::Screens::PlasmaPanelSource;
+using PhosphorScreens::IPanelSource;
+using PhosphorScreens::PlasmaPanelSource;
 
 namespace {
 

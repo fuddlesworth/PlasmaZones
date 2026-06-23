@@ -1,0 +1,13 @@
+{
+    "id": "window-morph",
+    "name": "Window Morph",
+    "description": "Geometry move/resize transition. The window jumps to its destination instantly, and this shader cross-fades a snapshot of the old frame into the live new content while interpolating the drawn rect from the old geometry to the new. A snap, tile, or reflow then animates through the shader instead of a C++ scale that stretches content.",
+    "author": "PlasmaZones",
+    "version": "1.0",
+    "category": "Geometry",
+    "appliesTo": ["geometry"],
+    "fragmentShader": "effect.frag",
+    "vertexShader": "effect.vert",
+    "fboExtent": "surface",
+    "parameters": []
+}

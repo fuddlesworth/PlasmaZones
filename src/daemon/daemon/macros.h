@@ -14,6 +14,12 @@
 // adaptors agree on the same dispatch decision.
 //
 // Usage: HANDLE_AUTOTILE_ONLY(FocusMaster, focusMaster())
+//
+// Disable cascade collapsed through PhosphorContext::ContextResolver — was
+// a 3-line `(isContextDisabled + currentDesktop + currentActivity)` chain
+// inside the macro body; now one resolver call with an explicit
+// Autotile-mode handle (the macro is autotile-only by definition, so
+// handleForMode skips the router round-trip).
 #define HANDLE_AUTOTILE_ONLY(name, engineCall)                                                                         \
     void Daemon::handle##name()                                                                                        \
     {                                                                                                                  \
@@ -22,8 +28,7 @@
         const QString screenId = resolveShortcutScreenId(m_screenManager.get(), m_windowTrackingAdaptor);              \
         if (screenId.isEmpty() || !m_screenModeRouter || !m_screenModeRouter->isAutotileMode(screenId))                \
             return;                                                                                                    \
-        if (isContextDisabled(m_settings.get(), PhosphorZones::AssignmentEntry::Autotile, screenId, currentDesktop(),  \
-                              currentActivity()))                                                                      \
+        if (isFocusedContextGatedForMode(screenId, PhosphorZones::AssignmentEntry::Autotile))                          \
             return;                                                                                                    \
         m_autotileEngine->setActiveScreenHint(screenId);                                                               \
         m_autotileEngine->engineCall;                                                                                  \

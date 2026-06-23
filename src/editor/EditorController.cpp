@@ -4,6 +4,7 @@
 #include "EditorController.h"
 
 #include "../config/configbackends.h"
+#include "../config/configdefaults.h"
 #include "services/ILayoutService.h"
 #include "services/DBusLayoutService.h"
 #include "services/ZoneManager.h"
@@ -16,6 +17,8 @@
 #include <PhosphorTiles/AlgorithmRegistry.h>
 #include <PhosphorTiles/ITileAlgorithmRegistry.h>
 #include <PhosphorTiles/ScriptedAlgorithmLoader.h>
+#include <PhosphorWindowRules/WindowRuleStore.h>
+#include <PhosphorWindowRules/WindowRuleStoreWatcher.h>
 #include <PhosphorZones/IZoneLayoutRegistry.h>
 #include "../common/layoutpreviewserialize.h"
 #include "../core/constants.h"
@@ -24,6 +27,7 @@
 #include <PhosphorZones/LayoutComputeService.h>
 #include "../core/logging.h"
 #include "../core/utils.h"
+#include "../shaderpreview/shaderpreviewcontroller.h"
 
 #include <PhosphorLayoutApi/LayoutPreview.h>
 #include <PhosphorZones/Layout.h>
@@ -47,7 +51,9 @@ EditorController::EditorController(QObject* parent)
     , m_templateService(new TemplateService(this))
     , m_undoController(new UndoController(this))
     , m_localAlgorithmRegistry(std::make_unique<PhosphorTiles::AlgorithmRegistry>(nullptr))
-    , m_localLayoutManager(std::make_unique<PhosphorZones::LayoutRegistry>(createAssignmentsBackend(),
+    , m_localRuleStore(std::make_unique<PhosphorWindowRules::WindowRuleStore>(ConfigDefaults::windowRulesFilePath()))
+    , m_localRuleStoreWatcher(std::make_unique<PhosphorWindowRules::WindowRuleStoreWatcher>(*m_localRuleStore))
+    , m_localLayoutManager(std::make_unique<PhosphorZones::LayoutRegistry>(m_localRuleStore.get(),
                                                                            QStringLiteral("plasmazones/layouts")))
 {
     // Install the library-level screen-id resolver before any layout load
@@ -57,6 +63,18 @@ EditorController::EditorController(QObject* parent)
     // matches the daemon's handling.
     ensureScreenIdResolver();
 
+    // The shared zone-shader preview feed. EditorController is its backend
+    // (IShaderPreviewBackend — D-Bus shader metadata + the live edited layout);
+    // the QML-facing preview methods delegate to it. Forward the audio-spectrum
+    // change so existing editor QML bindings on `audioSpectrum` keep firing.
+    m_shaderPreview = new ShaderPreviewController(this, this);
+    connect(m_shaderPreview, &ShaderPreviewController::audioSpectrumChanged, this,
+            &EditorController::audioSpectrumChanged);
+    connect(m_shaderPreview, &ShaderPreviewController::shaderPresetSaveFailed, this,
+            &EditorController::shaderPresetSaveFailed);
+    connect(m_shaderPreview, &ShaderPreviewController::shaderPresetLoadFailed, this,
+            &EditorController::shaderPresetLoadFailed);
+
     // Auto-discovery pattern: every linked provider library has
     // already registered a builder via static-init. The editor just
     // publishes the registries it owns via the shared helper
@@ -65,6 +83,13 @@ EditorController::EditorController(QObject* parent)
     // doesn't require editing this file unless the engine demands a
     // service the editor doesn't already publish.
     buildStandardLayoutSourceBundle(m_localSources, m_localLayoutManager.get(), m_localAlgorithmRegistry.get());
+
+    // Begin watching windowrules.json for external writes. The editor has no
+    // D-Bus rules-reload path, so without this its m_localRuleStore would serve
+    // the snapshot scanned at launch — the assignment cascade would ignore rule
+    // edits the daemon (or settings app) makes while the editor is open. The
+    // store's idempotent load() means a self-write or no-op change emits nothing.
+    m_localRuleStoreWatcher->start();
 
     // Discover + register user-authored scripted algorithms in the editor-
     // owned AlgorithmRegistry so standalone editor launches (daemon down)
