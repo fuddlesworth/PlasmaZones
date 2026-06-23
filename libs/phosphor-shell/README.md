@@ -42,7 +42,7 @@ configs port with minimal rework.
 | `Process`                | Sandboxed subprocess runner exposed to QML. |
 | `FileView`               | Watched-file reader for QML config-driven panels (`/proc`, `/sys`, config files). |
 | `SystemClock`            | Timer-driven clock (hours/minutes/seconds/date) with configurable tick precision. |
-| `WallpaperService`       | Decodes the desktop wallpaper off the GUI thread; reached from QML via `ShellGlobal.wallpaper`. |
+| `WallpaperService`       | Decodes the desktop wallpaper off the GUI thread. Reached from QML via `ShellGlobal.wallpaper`. |
 | `Environment`            | Cross-platform env-var, locale, and runtime-dir helpers. |
 | `ShellGlobal`            | QML context object (`PhosphorShell`) with shell-wide config and runtime state. |
 | `ScreenModel`            | Reactive list of physical screens for per-screen `Variants`. |
@@ -58,7 +58,7 @@ single import:
 - `IdleInhibitor`: surface-bound idle inhibition (from `phosphor-wayland`).
   Session-wide idle detection lives in `Phosphor.Service.Idle`'s `IdleService`.
 - `ForeignToplevel`: one entry of the `Toplevels` window list
-  (uncreatable; vended by `Toplevels`).
+  (uncreatable, vended by `Toplevels`).
 
 ## Dependencies
 

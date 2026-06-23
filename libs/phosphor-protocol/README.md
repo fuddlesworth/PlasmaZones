@@ -14,7 +14,7 @@ that owns the shared `org.plasmazones` wire surface, so magic strings and
 ad-hoc marshallers don't proliferate across every consumer.
 
 It is layered so the value vocabulary does not drag QtDBus into
-pure-compute consumers, and so the generic D-Bus plumbing stays reusable:
+pure-compute consumers, and so the generic D-Bus plumbing stays reusable.
 
 ```
 phosphor-dbus              generic D-Bus client + HasDBusStreaming
@@ -50,13 +50,13 @@ Plus the cross-cutting headers:
 
 | Header | Purpose |
 |--------|---------|
-| `PhosphorProtocol/ServiceConstants.h` | Canonical service name, object path, interface names (`org.plasmazones.Autotile`, `.Screen`, `.Overlay`, …), API version, timeouts. **QtCore only** — shipped by `::Types`. |
-| `PhosphorProtocol/Registration.h`     | `registerWireTypes()` — one-shot metatype registration; call once at startup. |
-| `PhosphorProtocol/ClientHelpers.h`    | `daemonClient()` — a `PhosphorDBus::Client` value bound to the daemon — plus thin `ClientHelpers::` wrappers (`fireAndForget`, `sendOneWay`, `asyncCall`, `syncCall`, `loadSettingAsync`). |
-| `PhosphorProtocol/PhosphorProtocol.h` | Umbrella convenience header that pulls in everything; prefer the per-interface headers. |
+| `PhosphorProtocol/ServiceConstants.h` | Canonical service name, object path, interface names (`org.plasmazones.Autotile`, `.Screen`, `.Overlay`, …), API version, timeouts. **QtCore only**, shipped by `::Types`. |
+| `PhosphorProtocol/Registration.h`     | `registerWireTypes()` does one-shot metatype registration. Call it once at startup. |
+| `PhosphorProtocol/ClientHelpers.h`    | `daemonClient()` returns a `PhosphorDBus::Client` value bound to the daemon, plus thin `ClientHelpers::` wrappers (`fireAndForget`, `sendOneWay`, `asyncCall`, `syncCall`, `loadSettingAsync`). |
+| `PhosphorProtocol/PhosphorProtocol.h` | Umbrella convenience header that pulls in everything. Prefer the per-interface headers. |
 
 A `*Types.h` header is pure value vocabulary (`Q_DECLARE_METATYPE`, no
-QtDBus); the matching `*Marshalling.h` adds the `QDBusArgument` operators
+QtDBus). The matching `*Marshalling.h` adds the `QDBusArgument` operators
 and the `HasDBusStreaming` `static_assert` guard.
 
 ## Design notes
@@ -65,7 +65,7 @@ and the `HasDBusStreaming` `static_assert` guard.
   structs with no QtDBus dependency, so a domain library can name
   `MoveTargetResult` without linking the bus. The `QDBusArgument`
   marshallers are free functions in the matching `*Marshalling.h`,
-  layered on top — the struct never knows it travels over D-Bus.
+  layered on top, and the struct never knows it travels over D-Bus.
 - **One source of truth for interface names.** New compositor
   integrations depend on `ServiceConstants` instead of hand-rolling the
   string.
@@ -75,7 +75,7 @@ and the `HasDBusStreaming` `static_assert` guard.
   rather than failing loudly.
 - **The daemon client is a thin binding.** `daemonClient()` returns a
   `PhosphorDBus::Client` by value, pre-bound to `org.plasmazones` on the
-  session bus. The generic call mechanics live in `phosphor-dbus`; this
+  session bus. The generic call mechanics live in `phosphor-dbus`, and this
   library only supplies the Phosphor endpoint. No singleton.
 - **Build-time marshaller check.** Add a struct to a `*Types.h` and
   forget its `operator<<` / `>>` in the matching `*Marshalling.h`, and the
@@ -91,4 +91,4 @@ and the `HasDBusStreaming` `static_assert` guard.
 ## See also
 
 - [`phosphor-screens`](../phosphor-screens/README.md) — `DBusScreenAdaptor` implements the `.Screen` interface from these constants.
-- [`phosphor-snap-engine`](../phosphor-snap-engine/README.md) — navigation result types (`MoveTargetResult`, `FocusTargetResult`, etc.) come from `NavigationTypes.h` and are linked QtDBus-free via `PhosphorProtocol::Types`.
+- [`phosphor-snap-engine`](../phosphor-snap-engine/README.md): navigation result types (`MoveTargetResult`, `FocusTargetResult`, etc.) come from `NavigationTypes.h` and are linked QtDBus-free via `PhosphorProtocol::Types`.

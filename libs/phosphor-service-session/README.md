@@ -10,11 +10,11 @@ A logind session manager for Phosphor-based desktop shells.
 Surfaces the system session and power actions over `org.freedesktop.login1` and,
 because we own the compositor and the session, manages the logind inhibitor
 locks that let the shell lock before the machine sleeps and own the power / lid
-keys. It is the logind edge of the shell: capabilities, actions, inhibitors, and
-the session + sleep signals. It has no UI of its own and binds no Wayland
-protocols: the logind D-Bus calls are private to the implementation, and the
-public surface is clean Qt/QML types plus an injectable `QDBusConnection` (the
-test / advanced-wiring seam).
+keys. It is the logind edge of the shell, covering capabilities, actions,
+inhibitors, and the session and sleep signals. It has no UI of its own and binds
+no Wayland protocols. The logind D-Bus calls are private to the implementation,
+and the public surface is clean Qt/QML types plus an injectable `QDBusConnection`
+(the test / advanced-wiring seam).
 
 - Read the power capabilities (`CanSuspend` and siblings) up front and keep them
   current.
@@ -26,7 +26,7 @@ test / advanced-wiring seam).
 - Surface logind's `PrepareForSleep` and the session's `Lock` / `Unlock`
   signals.
 
-This is more than a `systemctl` wrapper: a plugin shell (Quickshell / Noctalia)
+This is more than a `systemctl` wrapper. A plugin shell (Quickshell / Noctalia)
 has no logind inhibitor integration, so it cannot lock before an
 externally-initiated suspend (lid, `systemctl suspend`, idle) and races the lock
 surface. Owning the session, we close that race.
@@ -54,7 +54,7 @@ int main(int argc, char** argv)
 ```
 
 QML power menu, plus the lock-before-sleep handshake wired against
-`phosphor-service-lock` (the two services stay independent; the shell wires
+`phosphor-service-lock` (the two services stay independent, and the shell wires
 them):
 
 ```qml
@@ -102,8 +102,8 @@ phosphor-service-session-cli suspend
   `Availability`, and re-reads on `refreshCapabilities()` (the answers move with
   inhibitor locks, lid state, and swap availability).
 - **Inhibitors are the point.** A delay inhibitor on `sleep` drives the
-  lock-before-sleep handshake: on `PrepareForSleep(true)` the host emits
-  `aboutToSleep()` while holding the inhibitor; the shell locks; once the lock
+  lock-before-sleep handshake. On `PrepareForSleep(true)` the host emits
+  `aboutToSleep()` while holding the inhibitor, and the shell locks. Once the lock
   surface is up the shell calls `allowSleep()`, which drops the inhibitor and
   lets suspend proceed with the session already locked. A safety timeout drops it
   anyway if the shell never confirms, so a missing lock cannot wedge suspend past
@@ -116,8 +116,8 @@ phosphor-service-session-cli suspend
   prompts through the in-session polkit agent (`phosphor-service-polkit`) for a
   native experience. The CLI sets `interactive=false` (no agent in a dev shell).
 - **Complementary to `phosphor-service-lock`, not overlapping.** The lock service
-  authenticates and owns the `ext-session-lock-v1` surface; this service owns the
-  logind edge. The shell wires `aboutToSleep` / `lockRequested` to the lock
+  authenticates and owns the `ext-session-lock-v1` surface, and this service owns
+  the logind edge. The shell wires `aboutToSleep` / `lockRequested` to the lock
   service and the lock service's `locked` back to `allowSleep()`. Neither library
   depends on the other.
 - **A single active host, not a model.** Like `phosphor-service-lock` /
@@ -131,7 +131,7 @@ phosphor-service-session-cli suspend
   subscriptions, and the `Inhibit` fd call.
 - Qt6 >= 6.6 (Core, Qml, DBus). The CLI uses Qt6 Core only.
 - A running logind (`org.freedesktop.login1`) on the system bus for the live
-  path; the library loads inert without it (capabilities `Unknown`, actions
+  path. The library loads inert without it (capabilities `Unknown`, actions
   no-op with a warning, inhibitors not taken).
 - `phosphor-service-lock` and `phosphor-service-polkit` are
   collaborators wired in the shell, not link dependencies.
@@ -151,5 +151,5 @@ behaviour test against an in-process fake logind Manager + Session (capability
 parsing, action routing with the interactive flag, capability-gated refusal,
 inhibitor what/mode, the `PrepareForSleep` handshake over the bus, and
 lock / terminate / signal surfacing). The shell wires the handshake to
-`phosphor-service-lock` in `SessionLockCoordinator.qml`; the lock surface itself
+`phosphor-service-lock` in `SessionLockCoordinator.qml`. The lock surface itself
 is the shell's lock screen.

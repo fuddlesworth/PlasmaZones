@@ -23,7 +23,7 @@ consistently.
   machine lives in `PopoutController`. The actual layer-shell surface
   creation is behind `IPopoutTransport`. A future `LayerPopoutTransport`
   will wire to `phosphor-layer::SurfaceFactory` once the shell binary
-  needs popouts; the in-app demo transport ships today as the
+  needs popouts. The in-app demo transport ships today as the
   acceptance harness. Tests inject a fake transport and drive the
   controller as pure logic with no Wayland in sight.
 - **Three exclusivity modes.** Cooperative is the default. One per
@@ -59,8 +59,8 @@ consistently.
 | `open: bool`                  | property | Drives the show/hide animation. The transport sets this true after the surface is parented and false to begin teardown |
 | `dismissOnClickOutside: bool` | property | When true, a click on the backdrop sets `open = false`. The transport wires this from `PopoutRequest.dismissOnFocusLoss` |
 | `backdropColor: color`        | property | Background dim color. The transport binds a scrim for Modal, a lighter dim for Cooperative, transparent for Detached |
-| `dismiss()`                   | function | Content delegates several levels deep can call this to close the popout without walking the parent chain. The transport injects a `_popoutHost` reference on the content; the content calls `_popoutHost.dismiss()` |
-| `dismissed()`                 | signal   | Emitted after the close animation finishes. Fires once per open-then-close cycle, so transports that reuse a single host across many popouts get a fresh dismissed each time. Also fires once on `Component.onDestruction` if the host had ever been opened and is torn down before the close-animation timer emits dismissed itself, so transport bookkeeping never leaks a handle when a popout is destroyed mid-cycle. A host that is constructed and destroyed without ever having `open` driven true does NOT fire dismissed; transports that pre-build and discard surfaces don't see a phantom dismissed in that case. The transport's `dismissed` callback fires through here so the bookkeeping lines up with the visual |
+| `dismiss()`                   | function | Content delegates several levels deep can call this to close the popout without walking the parent chain. The transport injects a `_popoutHost` reference on the content, and the content calls `_popoutHost.dismiss()` |
+| `dismissed()`                 | signal   | Emitted after the close animation finishes. Fires once per open-then-close cycle, so transports that reuse a single host across many popouts get a fresh dismissed each time. Also fires once on `Component.onDestruction` if the host had ever been opened and is torn down before the close-animation timer emits dismissed itself, so transport bookkeeping never leaks a handle when a popout is destroyed mid-cycle. A host that is constructed and destroyed without ever having `open` driven true does NOT fire dismissed, so transports that pre-build and discard surfaces don't see a phantom dismissed in that case. The transport's `dismissed` callback fires through here so the bookkeeping lines up with the visual |
 
 ## Typical use
 
@@ -157,7 +157,7 @@ constructor. Field assignment uses regular property syntax.
 - The QML module target (`PhosphorPopout::PhosphorPopoutQml`) is
   the in-tree linkable artefact. Out-of-tree consumption via
   `find_package(PhosphorPopout)` exposes the C++ core
-  (`PhosphorPopout::PhosphorPopout`) only; installed QML module
+  (`PhosphorPopout::PhosphorPopout`) only. Installed QML module
   deployment lands together with the layer-shell transport in a
   follow-up. In-tree consumers that link `PhosphorPopout::PhosphorPopoutQml`
   pick up the PhosphorTheme QML plugin transitively, so the runtime

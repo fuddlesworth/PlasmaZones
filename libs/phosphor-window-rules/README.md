@@ -28,22 +28,22 @@ permitted).
 `RuleEvaluator::resolve()` walks the rule set in **descending priority**
 (ties broken by list order via a stable sort), and for each matching enabled
 rule accumulates the **first action that fills each slot**. Actions in
-different slots stack; a second action for an already-filled slot is ignored.
+different slots stack, and a second action for an already-filled slot is ignored.
 A matching rule with a terminal `Exclude` action stops the walk.
 
 `ResolvedActions` distinguishes a **slot-unfilled** result (`std::nullopt`)
-from a **slot-filled-with-empty-params** result — the animation engaged-empty
+from a **slot-filled-with-empty-params** result. The animation engaged-empty
 `effectId` sentinel depends on exactly this distinction.
 
-An empty `All{}` match expression is the **always-true catch-all** — the
-migrated provider default.
+An empty `All{}` match expression is the **always-true catch-all**, which is
+the migrated provider default.
 
 ## Serialization
 
 `WindowRuleSet` reads and writes `windowrules.json` at `"_version": 4`.
-`fromJson` **refuses** any other version — schema migration is the config
+`fromJson` **refuses** any other version. Schema migration is the config
 layer's job, never the library's. Loaders follow strict-validation
-discipline: malformed rules/actions are dropped with a logged diagnostic; the
+discipline: malformed rules/actions are dropped with a logged diagnostic, and the
 set still loads.
 
 ## Dependencies
@@ -52,4 +52,4 @@ set still loads.
 - `PhosphorProtocol::Types` — PUBLIC, for `WindowType`
 - `PhosphorIdentity` — PRIVATE, backs the `AppIdMatches` operator
 
-No QObjects, QML, or D-Bus — those belong to the higher-level GPL targets.
+No QObjects, QML, or D-Bus. Those belong to the higher-level GPL targets.

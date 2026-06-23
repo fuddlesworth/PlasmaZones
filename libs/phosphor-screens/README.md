@@ -32,7 +32,7 @@ pure-compute consumers:
 | Type | Purpose |
 |------|---------|
 | `PhosphorScreens::ScreenManager`      | Physical + virtual topology state with change signals as screens come and go. |
-| `PhosphorScreens::ScreenResolver`     | Point-to-screen lookup; accepts an optional D-Bus endpoint override. |
+| `PhosphorScreens::ScreenResolver`     | Point-to-screen lookup that accepts an optional D-Bus endpoint override. |
 | `PhosphorScreens::IPanelSource`       | Pluggable panel-reservation source per desktop (Plasma, GNOME, wlr). |
 | `PhosphorScreens::PlasmaPanelSource`  | Bundled `IPanelSource` for `org.kde.plasmashell` reservations. |
 | `PhosphorScreens::VirtualScreenDef`   | One rectangular sub-region of a physical screen with its own screen ID. |
@@ -46,16 +46,17 @@ pure-compute consumers:
   screen ID, layout assignments, autotile state, and overlay windows.
   Everything downstream treats them exactly like physical screens.
 - **Panel source is pluggable.** Plasma exposes reservations via
-  `org.kde.plasmashell`; GNOME via `org.gnome.Mutter`; sway and Hyprland
-  via wlr-foreign-toplevel. The manager core stays compositor-agnostic
-  by delegating to an `IPanelSource` owned by the consumer.
+  `org.kde.plasmashell`, GNOME via `org.gnome.Mutter`, and sway and
+  Hyprland via wlr-foreign-toplevel. The manager core stays
+  compositor-agnostic by delegating to an `IPanelSource` owned by the
+  consumer.
 - **Direction tokens match the wire format.** `Direction::Left` /
   `Right` / `Up` / `Down` are the same lower-case ASCII strings the
   D-Bus `swapVirtualScreenInDirection` method accepts, so adaptors can
   pass user strings through verbatim.
 - **The D-Bus surface is a separate target.** `DBusScreenAdaptor`, the
-  Plasma panel source, and the resolver live in `PhosphorScreens`; the
-  live `ScreenManager` lives in `PhosphorScreens::Runtime`; the POD
+  Plasma panel source, and the resolver live in `PhosphorScreens`. The
+  live `ScreenManager` lives in `PhosphorScreens::Runtime`, and the POD
   topology types live in `PhosphorScreens::Core`. A snap or tiling
   engine links `::Core` and never pulls QtDBus in to reason about
   screens.

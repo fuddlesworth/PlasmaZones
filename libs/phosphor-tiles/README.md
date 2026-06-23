@@ -12,17 +12,17 @@
 Zones are static layouts the user draws in an editor. Autotiling is the
 *dynamic* counterpart: as windows open and close, a tiling algorithm
 recomputes the zone boundaries automatically. This library owns the
-**algorithm vocabulary** and the **per-screen tiling state**; the
+**algorithm vocabulary** and the **per-screen tiling state**. The
 runtime engine that drives them lives in
 [`phosphor-tile-engine`](../phosphor-tile-engine/README.md), and the generic
 Luau host (sandbox, watchdog, marshalling) lives in
 [`phosphor-scripting`](../phosphor-scripting/README.md).
 
-- **Algorithms.** `TilingAlgorithm` is the base; `LuauTileAlgorithm` is the
-  single concrete implementation — a `TilingAlgorithm` that delegates to a
+- **Algorithms.** `TilingAlgorithm` is the base. `LuauTileAlgorithm` is the
+  single concrete implementation, a `TilingAlgorithm` that delegates to a
   Luau script. Every layout (binary-split, master-stack, columns, spiral, …)
-  ships as a `.luau` script in `data/algorithms/`; there are no hard-coded C++
-  geometry algorithms.
+  ships as a `.luau` script in `data/algorithms/`, and there are no hard-coded
+  C++ geometry algorithms.
 - **`pluau` standard library.** Scripts are written against `pluau`, a Luau table of
   geometry primitives (a `Rect` with gap-aware splits, plus ~25 layout/helper
   functions). It is compiled into the library as a Qt resource (`pluau.luau`),
@@ -30,13 +30,13 @@ Luau host (sandbox, watchdog, marshalling) lives in
   for editors by `pluau.d.luau`.
 - **Sandbox & limits.** These are provided by `phosphor-scripting`'s
   `LuauEngine` (`luaL_sandbox` read-only globals, a per-engine heap cap, and a
-  shared `LuauWatchdog` that aborts runaway scripts at a CPU deadline) — not by
-  this library.
+  shared `LuauWatchdog` that aborts runaway scripts at a CPU deadline). They are
+  not provided by this library.
 - **Loader.** `ScriptedAlgorithmLoader` discovers `*.luau` files from
   consumer-chosen system and user data directories, validates each basename,
   creates a `LuauTileAlgorithm`, and registers it. It hot-reloads via
   `QFileSystemWatcher` with debounced refresh.
-- **Registry.** `ITileAlgorithmRegistry` is the read-side contract;
+- **Registry.** `ITileAlgorithmRegistry` is the read-side contract.
   `AlgorithmRegistry` is the concrete catalogue, mirroring the
   [`phosphor-zones`](../phosphor-zones/README.md) `LayoutRegistry` shape.
 - **State.** `TilingState` tracks per-screen window order, master count,
@@ -66,7 +66,7 @@ Luau host (sandbox, watchdog, marshalling) lives in
 | `PhosphorTiles::AutotilePreviewRender`       | Paint-a-thumbnail helper for the algorithm picker |
 
 The `pluau` standard library (`src/pluau/pluau.luau`) and its type stubs (`src/pluau/pluau.d.luau`)
-are the Luau-side API surface; see
+are the Luau-side API surface. See
 [`docs/architecture/luau-algorithm-authoring.md`](../../docs/architecture/luau-algorithm-authoring.md)
 for the authoring guide.
 
@@ -120,16 +120,16 @@ return pluau.algorithm {
 
 ## Design notes
 
-- **Library is algorithms + state; engine and host live elsewhere.** The
+- **Library is algorithms + state. Engine and host live elsewhere.** The
   runtime engine that drives tiling (window-open / focus / float events) is
-  [`phosphor-tile-engine`](../phosphor-tile-engine/README.md); the generic Luau
+  [`phosphor-tile-engine`](../phosphor-tile-engine/README.md). The generic Luau
   VM host is [`phosphor-scripting`](../phosphor-scripting/README.md). This
   separation keeps a settings-UI preview from linking the engine just to render
   a thumbnail, and keeps the Luau host reusable beyond tiling.
 - **The sandbox is defensive.** `LuauEngine` freezes the global table and the
-  `pluau` stdlib (`luaL_sandbox`) before any untrusted script runs — no `io`,
-  `os.execute`, filesystem, or network — and bounds both CPU time (the
-  watchdog) and heap (the capped allocator).
+  `pluau` stdlib (`luaL_sandbox`) before any untrusted script runs, leaving no
+  `io`, `os.execute`, filesystem, or network access. It bounds both CPU time
+  (the watchdog) and heap (the capped allocator).
 - **Algorithms consume positions, not window IDs.** They take a
   `TilingParams` carrying window count, usable area, inner gap, per-window
   metadata, screen info, and custom params, and return a list of zone

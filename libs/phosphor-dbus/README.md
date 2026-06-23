@@ -59,16 +59,16 @@ static_assert(PhosphorDBus::HasDBusStreaming<MyEntry>::value,
 ## Design notes
 
 - **`Client` is a value object, not a singleton.** It holds a connection
-  handle and two strings — cheap to copy and to construct per call site.
+  handle and two strings, so it is cheap to copy and to construct per call site.
   A project that always targets one daemon wraps construction in a small
-  free-function factory that returns a `Client` by value; no shared
-  global state, no `Q_GLOBAL_STATIC`.
+  free-function factory that returns a `Client` by value, with no shared
+  global state and no `Q_GLOBAL_STATIC`.
 - **No synchronous introspection.** Calls are built with
   `QDBusMessage::createMethodCall`, never `QDBusInterface`, so a call
-  never blocks the calling thread on wire introspection — important for
+  never blocks the calling thread on wire introspection, which matters for
   compositor plugins.
 - **Errors route through a caller-supplied category.** `Client` takes an
-  optional `QLoggingCategory*`; consumers see failures under their own
+  optional `QLoggingCategory*`, so consumers see failures under their own
   category rather than a category buried in this library.
 - **`ObjectManager` stays un-typed.** It hand-demarshals the
   `a{oa{sa{sv}}}` / `a{sa{sv}}` payloads (no nested-container metatype to
@@ -85,5 +85,5 @@ static_assert(PhosphorDBus::HasDBusStreaming<MyEntry>::value,
 ## See also
 
 - [`phosphor-protocol`](../phosphor-protocol/README.md) — the Phosphor
-  contract layer: builds on `Client` and `HasDBusStreaming` with the
+  contract layer. Builds on `Client` and `HasDBusStreaming` with the
   `org.plasmazones` service constants and wire types.

@@ -7,7 +7,7 @@ UPower (`org.freedesktop.UPower`) battery and power-supply readouts for Phosphor
 
 ## Responsibility
 
-Exposes the system bus `org.freedesktop.UPower` surface (the aggregate display device, the per-device list, the `OnBattery` flag) as Qt + QML types. No UI; the shell decides how a battery percentage, charging icon, or low-power warning is rendered.
+Exposes the system bus `org.freedesktop.UPower` surface (the aggregate display device, the per-device list, the `OnBattery` flag) as Qt + QML types. There is no UI. The shell decides how a battery percentage, charging icon, or low-power warning is rendered.
 
 The library is a pure D-Bus client. It does not write to UPower (UPower has no writable surface for the kinds of facts it reports), it only observes.
 
@@ -76,4 +76,4 @@ Repeater {
 
 ## Status
 
-Shipped. Extracted from the original `phosphor-services` umbrella as one of four per-domain siblings; the umbrella is gone, no backwards-compat shim (per `feedback_no_legacy_shims`). The C++ namespace and QML module URI moved (`PhosphorServices::UPower*` → `PhosphorServiceUPower::UPower*`, `Phosphor.Services` → `Phosphor.Service.UPower`). The `DeviceType` enum was extended additively from `MediaPlayer=9` to `BluetoothGeneric=28` to cover the full UPower 1.0 range; existing enumerators kept their original values. The internal `propertiesRefreshed()` signal was removed because `UPowerDeviceModel` now subscribes to per-property `NOTIFY`s (percentage, state, type, iconName, isLaptopBattery); external consumers should bind the specific signal they care about.
+Shipped. Extracted from the original `phosphor-services` umbrella as one of four per-domain siblings. The umbrella is gone, no backwards-compat shim (per `feedback_no_legacy_shims`). The C++ namespace and QML module URI moved (`PhosphorServices::UPower*` → `PhosphorServiceUPower::UPower*`, `Phosphor.Services` → `Phosphor.Service.UPower`). The `DeviceType` enum was extended additively from `MediaPlayer=9` to `BluetoothGeneric=28` to cover the full UPower 1.0 range, and existing enumerators kept their original values. The internal `propertiesRefreshed()` signal was removed because `UPowerDeviceModel` now subscribes to per-property `NOTIFY`s (percentage, state, type, iconName, isLaptopBattery). External consumers should bind the specific signal they care about.

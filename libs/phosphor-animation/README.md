@@ -3,7 +3,7 @@
 
 # phosphor-animation
 
-> Motion runtime (`AnimatedValue<T>` driven by curves / springs /
+> Motion runtime (`AnimatedValue<T>` driven by curves, springs, and
 > easings) and shader-transition runtime (per-event GPU effect
 > selection), plus the JSON-backed `Profile` trees that configure both.
 
@@ -15,12 +15,12 @@ polymorphic curves, and event-keyed profiles that map names like
 
 The library ships two parallel runtimes:
 
-- **Motion** (`PhosphorAnimation`) — `AnimatedValue<T>`, polymorphic
+- **Motion** (`PhosphorAnimation`) covers `AnimatedValue<T>`, polymorphic
   `Curve`s, `IMotionClock`, retarget / snap policy, stagger, and the
   `Profile` / `ProfileTree` / `PhosphorProfileRegistry` system.
-- **Shader transitions** (`PhosphorAnimationShaders`) —
+- **Shader transitions** (`PhosphorAnimationShaders`), where
   `AnimationShaderRegistry` discovers transition shader packs from
-  search paths; the parallel `ShaderProfile` / `ShaderProfileTree` maps
+  search paths. The parallel `ShaderProfile` / `ShaderProfileTree` maps
   the same event names to an effect plus parameter values.
 
 Both profile trees use `std::optional` fields so a leaf can inherit
@@ -29,8 +29,8 @@ share the dot-path event namespace but resolve through separate trees,
 so a user can change the curve without touching the visual effect.
 
 `SurfaceAnimator` implements
-[`phosphor-layer`](../phosphor-layer/README.md)'s `ISurfaceAnimator` and,
-for a given event, asks both registries what to play.
+[`phosphor-layer`](../phosphor-layer/README.md)'s `ISurfaceAnimator`. For
+a given event, it asks both registries what to play.
 
 User-edited curves and profiles hot-reload from the user data dir
 through [`phosphor-fsloader`](../phosphor-fsloader/README.md).
@@ -41,15 +41,15 @@ through [`phosphor-fsloader`](../phosphor-fsloader/README.md).
 
 | Type | Purpose |
 |------|---------|
-| `PhosphorAnimation::AnimatedValue<T>`         | Typed in-flight animation (rect, point, color, scalar). Pull-model: consumer reads `value()` during paint. |
-| `PhosphorAnimation::MotionSpec<T>`            | Runtime call-site bundle: profile, clock, retarget policy, callbacks. |
-| `PhosphorAnimation::IMotionClock`             | Pull-model clock contract; one per output for mixed refresh rates |
+| `PhosphorAnimation::AnimatedValue<T>`         | Typed in-flight animation (rect, point, color, scalar). Uses a pull model where the consumer reads `value()` during paint. |
+| `PhosphorAnimation::MotionSpec<T>`            | Runtime call-site bundle of profile, clock, retarget policy, and callbacks. |
+| `PhosphorAnimation::IMotionClock`             | Pull-model clock contract, one per output for mixed refresh rates |
 | `PhosphorAnimation::QtQuickClock`             | `QQuickWindow`-bound `IMotionClock` (gated on `PHOSPHOR_ANIMATION_QUICK=ON`) |
-| `PhosphorAnimation::Curve`                    | Polymorphic base; every curve family implements `step()` advancing a `CurveState` |
+| `PhosphorAnimation::Curve`                    | Polymorphic base. Every curve family implements `step()` advancing a `CurveState` |
 | `PhosphorAnimation::Easing`                   | Cubic-Bézier curve family (ease-out, ease-in-out, etc.) |
 | `PhosphorAnimation::Spring`                   | Critically-damped spring with configurable tension and friction |
-| `PhosphorAnimation::CurveRegistry`            | Name-to-curve factory; lets profiles reference curves by string |
-| `PhosphorAnimation::Profile`                  | Serialisable bundle of curve + duration + stagger; `optional` fields support inherit/override |
+| `PhosphorAnimation::CurveRegistry`            | Name-to-curve factory that lets profiles reference curves by string |
+| `PhosphorAnimation::Profile`                  | Serialisable bundle of curve + duration + stagger. `optional` fields support inherit/override |
 | `PhosphorAnimation::ProfileTree`              | Hierarchical profile lookup with inheritance (`window.open` inherits from `window`) |
 | `PhosphorAnimation::PhosphorProfileRegistry`  | Process-wide registry that hot-reloads profiles and emits live updates |
 | `PhosphorAnimation::ProfileLoader`            | Sink for [`phosphor-fsloader`](../phosphor-fsloader/README.md) |
@@ -64,7 +64,7 @@ through [`phosphor-fsloader`](../phosphor-fsloader/README.md).
 | Type | Purpose |
 |------|---------|
 | `PhosphorAnimationShaders::AnimationShaderEffect`   | Metadata for one transition (id, shader paths, parameter declarations) |
-| `PhosphorAnimationShaders::AnimationShaderRegistry` | Discovers transition shader packs from search paths; metadata-pack scan strategy from [`phosphor-fsloader`](../phosphor-fsloader/README.md) |
+| `PhosphorAnimationShaders::AnimationShaderRegistry` | Discovers transition shader packs from search paths. Uses the metadata-pack scan strategy from [`phosphor-fsloader`](../phosphor-fsloader/README.md) |
 | `PhosphorAnimationShaders::ShaderProfile`           | Per-event shader effect selection + parameter values |
 | `PhosphorAnimationShaders::ShaderProfileTree`       | Hierarchical lookup matching `ProfileTree`'s shape |
 
@@ -122,19 +122,19 @@ QVariantMap params  = sp.parameters.value_or(QVariantMap{});
 ## Design notes
 
 - **Pull-model clock.** `AnimatedValue<T>::value()` reads `IMotionClock::now()`
-  inside the consumer's paint cycle. No timers; no per-frame Qt signals.
+  inside the consumer's paint cycle. No timers, no per-frame Qt signals.
   One clock per output keeps mixed refresh rates honest.
 - **Polymorphic step contract.** Every `Curve` returns enough state for
   the consumer to act on (current value, velocity, settled flag). The
   `AnimatedValue` doesn't know or care whether the curve is a spring,
   an ease, or a user-defined Bézier.
 - **Profile and ShaderProfile share an event namespace, not a tree.**
-  `window.open` selects a motion profile *and* a transition effect, but
+  `window.open` selects a motion profile and a transition effect, but
   through two independently-resolved trees, so a user can change the
   curve without touching the visual effect (or vice versa).
 - **`optional` means inherit.** `ProfileTree` and `ShaderProfileTree`
   both treat `nullopt` fields as "look at the parent." Engaged fields
-  win. This makes overrides surgical — set one parameter, keep the rest
+  win. This makes overrides surgical. Set one parameter and keep the rest
   of the bundle.
 - **`PHOSPHOR_ANIMATION_QUICK` gates Qt Quick deps.** Headless tools and
   the KWin compositor adapter don't link `Qt6::Quick` because they don't
@@ -151,6 +151,6 @@ QVariantMap params  = sp.parameters.value_or(QVariantMap{});
 
 ## See also
 
-- [`phosphor-fsloader`](../phosphor-fsloader/README.md) — its `MetadataPackScanStrategy` drives the `AnimationShaderRegistry`'s pack discovery (wrapped by [`phosphor-registry`](../phosphor-registry/README.md)'s `MetadataPackLoader<T>` into a `Registry<T>`); profile / curve files come through its `DirectoryLoader`.
+- [`phosphor-fsloader`](../phosphor-fsloader/README.md) — its `MetadataPackScanStrategy` drives the `AnimationShaderRegistry`'s pack discovery (wrapped by [`phosphor-registry`](../phosphor-registry/README.md)'s `MetadataPackLoader<T>` into a `Registry<T>`). Profile and curve files come through its `DirectoryLoader`.
 - [`phosphor-rendering`](../phosphor-rendering/README.md) — host items that consume the chosen effect's compiled shader.
-- [`phosphor-shaders`](../phosphor-shaders/README.md) — overlay shader registry; this lib's animation registry uses the same metadata-pack scan strategy.
+- [`phosphor-shaders`](../phosphor-shaders/README.md) — overlay shader registry. This lib's animation registry uses the same metadata-pack scan strategy.
