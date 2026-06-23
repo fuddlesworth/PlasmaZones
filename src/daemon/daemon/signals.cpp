@@ -465,8 +465,19 @@ void Daemon::initializeAutotile()
                         windowOrder.append(windowId);
                     }
 
-                    QVector<ZoneAssignmentEntry> entries = concreteSnap->calculateResnapEntriesFromAutotileOrder(
-                        windowOrder, resnapScreenId, preClaimedZoneIds);
+                    // Use the raw, no-fallback calculation — NOT
+                    // calculateResnapEntriesFromAutotileOrder, whose "empty order ⇒
+                    // resnap from current assignments" fallback is the global-keyed
+                    // current-assignment resnap the comment above forbids here. When
+                    // windowOrder is empty (every window was never snapped, so the
+                    // filter above dropped them all), that fallback returns the
+                    // windows' stale current zone assignments — their tiled geometry —
+                    // which both re-pins them to the tile positions AND marks them as
+                    // resnapped, suppressing the intended pre-tile float-back in
+                    // buildAutotileRestoreEntries. The raw call returns nothing for an
+                    // empty order, letting those windows correctly float back.
+                    QVector<ZoneAssignmentEntry> entries =
+                        concreteSnap->calculateResnapFromAutotileOrder(windowOrder, resnapScreenId, preClaimedZoneIds);
                     // Derive the exclusion set from the entries actually produced —
                     // not a min(windows, zoneCount) guess. With zones pre-claimed by
                     // branch-b restores, fewer windows get a zone; a window that got
