@@ -751,14 +751,25 @@ void LuauTileAlgorithm::onWindowResized(TilingState* state, const ResizeEvent& r
     //     own. Sanitized at this trust boundary, then stored so the engine's
     //     follow-up retile lays the windows out from the updated state.
     if (out.result.typeId() == QMetaType::QVariantMap) {
-        const QVariantMap result = out.result.toMap();
+        QVariantMap result = out.result.toMap();
 
+        // Apply a finite numeric ratio (setSplitRatio clamps). Require an actual
+        // double — a Luau number marshals to one — and reject non-finite values,
+        // mirroring the strict typing used for every other script-supplied number
+        // (std::clamp would otherwise pass NaN straight through).
         const auto ratioIt = result.constFind(QStringLiteral("splitRatio"));
-        if (ratioIt != result.constEnd() && ratioIt->canConvert<double>()) {
-            state->setSplitRatio(ratioIt->toDouble());
+        if (ratioIt != result.constEnd() && ratioIt->typeId() == QMetaType::Double) {
+            const double ratio = ratioIt->toDouble();
+            if (std::isfinite(ratio)) {
+                state->setSplitRatio(ratio);
+            }
         }
 
         if (m_metadata.supportsScriptState) {
+            // "splitRatio" is a reserved control key, not part of the persistent
+            // bag (see pluau.d.luau) — strip it so it can't round-trip into
+            // ctx.state on the next retile.
+            result.remove(QStringLiteral("splitRatio"));
             const QJsonObject sanitized = TilingState::sanitizeScriptState(QJsonObject::fromVariantMap(result));
             state->setScriptState(sanitized);
         }

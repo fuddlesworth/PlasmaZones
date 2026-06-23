@@ -188,7 +188,10 @@ private Q_SLOTS:
         ev.right = true;
         algo.onWindowResized(&state, ev);
 
-        QVERIFY(state.scriptState().isEmpty()); // bag untouched
+        // The out-of-range hook returns state.scriptState (nil here, since the bag
+        // starts empty and is omitted from the state map), so the write-back is
+        // skipped and the bag stays empty.
+        QVERIFY(state.scriptState().isEmpty());
     }
 };
 

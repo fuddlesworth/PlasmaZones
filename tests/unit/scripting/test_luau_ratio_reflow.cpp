@@ -228,6 +228,108 @@ private Q_SLOTS:
 
         QVERIFY(qFuzzyCompare(1.0 + state.splitRatio(), 1.0 + 0.5));
     }
+
+    // ── focus-sidebar: vertical main/sidebar seam ───────────────────────────────
+
+    void focusSidebar_mainRightEdge_setsRatio()
+    {
+        LuauTileAlgorithm algo(algoPath(QStringLiteral("focus-sidebar.luau")), m_watchdog);
+        QVERIFY(algo.supportsResizeHook());
+        TilingState state(QStringLiteral("s"));
+        state.addWindow(QStringLiteral("w0"));
+        state.addWindow(QStringLiteral("w1"));
+        state.setSplitRatio(0.7);
+
+        const QVector<QRect> z = algo.calculateZones(params(&state, 2));
+        const QRect main = z[0];
+        QVERIFY(main.width() > 0);
+
+        ResizeEvent ev;
+        ev.index = 0;
+        ev.oldRect = main;
+        ev.newRect = QRect(main.x(), main.y(), main.width() + 100, main.height());
+        ev.right = true;
+        algo.onWindowResized(&state, ev);
+
+        const qreal expected = double(main.width() + 100) * 0.7 / main.width();
+        QVERIFY(qAbs(state.splitRatio() - expected) < 0.005);
+        QVERIFY(state.splitRatio() > 0.7);
+    }
+
+    void focusSidebar_sidebarLeftEdge_setsRatio()
+    {
+        LuauTileAlgorithm algo(algoPath(QStringLiteral("focus-sidebar.luau")), m_watchdog);
+        TilingState state(QStringLiteral("s"));
+        state.addWindow(QStringLiteral("w0"));
+        state.addWindow(QStringLiteral("w1"));
+        state.setSplitRatio(0.7);
+
+        const QVector<QRect> z = algo.calculateZones(params(&state, 2));
+        const QRect sidebar = z[1];
+        QVERIFY(sidebar.width() > 0);
+
+        // Drag the sidebar window's left edge 80px left → sidebar grows, main shrinks.
+        ResizeEvent ev;
+        ev.index = 1;
+        ev.oldRect = sidebar;
+        ev.newRect = QRect(sidebar.x() - 80, sidebar.y(), sidebar.width() + 80, sidebar.height());
+        ev.left = true;
+        algo.onWindowResized(&state, ev);
+
+        const qreal expected = 1.0 - double(sidebar.width() + 80) * (1.0 - 0.7) / sidebar.width();
+        QVERIFY(qAbs(state.splitRatio() - expected) < 0.005);
+        QVERIFY(state.splitRatio() < 0.7);
+    }
+
+    // ── horizontal-deck: focused window's bottom edge (height axis) ──────────────
+
+    void horizontalDeck_focusedBottomEdge_setsRatio()
+    {
+        LuauTileAlgorithm algo(algoPath(QStringLiteral("horizontal-deck.luau")), m_watchdog);
+        QVERIFY(algo.supportsResizeHook());
+        TilingState state(QStringLiteral("s"));
+        state.addWindow(QStringLiteral("w0"));
+        state.addWindow(QStringLiteral("w1"));
+        state.setSplitRatio(0.75);
+
+        const QVector<QRect> z = algo.calculateZones(params(&state, 2));
+        const QRect focused = z[0];
+        QVERIFY(focused.height() > 0);
+
+        ResizeEvent ev;
+        ev.index = 0;
+        ev.oldRect = focused;
+        ev.newRect = QRect(focused.x(), focused.y(), focused.width(), focused.height() + 80);
+        ev.bottom = true;
+        algo.onWindowResized(&state, ev);
+
+        const qreal expected = double(focused.height() + 80) * 0.75 / focused.height();
+        QVERIFY(qAbs(state.splitRatio() - expected) < 0.005);
+        QVERIFY(state.splitRatio() > 0.75);
+    }
+
+    // An orthogonal-axis drag (a horizontal-seam algorithm getting a vertical-edge
+    // move) maps to no boundary → no-op.
+    void masterStack_orthogonalEdge_isNoOp()
+    {
+        LuauTileAlgorithm algo(algoPath(QStringLiteral("master-stack.luau")), m_watchdog);
+        TilingState state(QStringLiteral("s"));
+        state.addWindow(QStringLiteral("w0"));
+        state.addWindow(QStringLiteral("w1"));
+        state.setMasterCount(1);
+        state.setSplitRatio(0.5);
+
+        const QVector<QRect> z = algo.calculateZones(params(&state, 2));
+        // master-stack's seam is vertical; a top/bottom edge drag must not move the ratio.
+        ResizeEvent ev;
+        ev.index = 0;
+        ev.oldRect = z[0];
+        ev.newRect = QRect(z[0].x(), z[0].y(), z[0].width(), z[0].height() - 60);
+        ev.bottom = true;
+        algo.onWindowResized(&state, ev);
+
+        QVERIFY(qFuzzyCompare(1.0 + state.splitRatio(), 1.0 + 0.5));
+    }
 };
 
 QTEST_MAIN(TestLuauRatioReflow)

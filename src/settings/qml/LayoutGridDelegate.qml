@@ -391,7 +391,9 @@ Item {
                     source: "code-context-symbolic"
                     implicitWidth: Kirigami.Units.iconSizes.small
                     implicitHeight: Kirigami.Units.iconSizes.small
-                    color: Kirigami.Theme.highlightColor
+                    // Distinct from the reflow badge's highlight colour so the two
+                    // are tellable apart when an algorithm shows both.
+                    color: Kirigami.Theme.neutralTextColor
                     opacity: 0.7
                     Accessible.name: i18n("Persistent script state")
                     ToolTip.delay: Kirigami.Units.toolTipDelay

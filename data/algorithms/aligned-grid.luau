@@ -198,6 +198,9 @@ return pluau.algorithm {
         local edges = resize.edges
 
         -- Column boundary — skip partial-row windows (they aren't column-aligned).
+        -- colFr/rowFr entries are guaranteed > 0 by readFractions (it rejects
+        -- non-positive entries and falls back to uniformFractions), so the
+        -- divisions below cannot divide by zero.
         if not inPartialRow and old.width > 0 then
             local content = old.width / colFr[col + 1]
             if edges.right and col < cols - 1 then

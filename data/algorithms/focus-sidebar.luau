@@ -56,7 +56,10 @@ return pluau.algorithm {
 
     -- Reflow on interactive resize: the main/sidebar boundary maps to the split
     -- ratio. Dragging the main window's right edge (or a sidebar window's left
-    -- edge) returns the new ratio for the engine to apply locally.
+    -- edge) returns the new ratio for the engine to apply locally. tile() offsets
+    -- the seam by -gap/2 (unlike master-stack), so the self-referential
+    -- reconstruction is approximate to within ~gap/2 px; the follow-up re-snap
+    -- absorbs the sub-gap difference.
     onWindowResized = function(state, resize)
         local count = state.windowCount
         if count <= 1 then return nil end

@@ -335,6 +335,8 @@ void AutotileEngine::connectSignals()
                         releaseScreenStateForTeardown(sid, it.value(), releasedWindows,
                                                       /*drainOverflow=*/false);
                         m_configResolver->removeOverridesForScreen(sid);
+                        m_userTunedSplitRatio.remove(it.key());
+                        m_userTunedMasterCount.remove(it.key());
                         it.remove();
                     }
                     for (const QString& sid : std::as_const(orphanedVsIds)) {
@@ -660,6 +662,21 @@ void AutotileEngine::updateStickyScreenPins(const std::function<bool(const QStri
                         m_screenStates.erase(oldIt);
                         m_screenStates.insert(newKey, migratedState);
 
+                        // The migrated state keeps its split ratio / master count, so
+                        // carry its per-key user-tuned flags from oldKey to newKey; if
+                        // it wasn't tuned, ensure newKey isn't left tuned by the
+                        // replaced state deleted above.
+                        if (m_userTunedSplitRatio.remove(oldKey)) {
+                            m_userTunedSplitRatio.insert(newKey);
+                        } else {
+                            m_userTunedSplitRatio.remove(newKey);
+                        }
+                        if (m_userTunedMasterCount.remove(oldKey)) {
+                            m_userTunedMasterCount.insert(newKey);
+                        } else {
+                            m_userTunedMasterCount.remove(newKey);
+                        }
+
                         // Update window-to-key mapping
                         for (auto wit = m_windowToStateKey.begin(); wit != m_windowToStateKey.end(); ++wit) {
                             if (wit.value() == oldKey) {
@@ -827,6 +844,8 @@ void AutotileEngine::setAutotileScreens(const QSet<QString>& screens)
         // orphaned-virtual-screen teardown, which purges both layers because
         // a dead VS id is never reused.
         m_configResolver->removeOverridesForScreen(key.screenId);
+        m_userTunedSplitRatio.remove(key);
+        m_userTunedMasterCount.remove(key);
         it.remove();
     }
     // Clean up m_windowToStateKey entries for released windows BEFORE emitting
@@ -927,8 +946,9 @@ void AutotileEngine::setAlgorithm(const QString& algorithmId)
     }
 
     // Switching algorithms resets ratios/counts to the new algorithm's saved or
-    // default values for every desktop, so per-desktop user tunings no longer
-    // apply — drop them and let the propagate calls below re-seed each state.
+    // default values, so per-desktop user tunings no longer apply — drop them all.
+    // The propagate calls below re-seed the current-context states synchronously;
+    // other desktops re-seed on their own next propagate.
     m_userTunedSplitRatio.clear();
     m_userTunedMasterCount.clear();
 
@@ -1162,6 +1182,10 @@ void AutotileEngine::pruneStatesForDesktop(int removedDesktop)
     while (it.hasNext()) {
         it.next();
         if (it.key().desktop == removedDesktop) {
+            // Drop the per-key user-tuned flags with the state so a reused desktop
+            // number can't inherit a stale "tuned" skip in propagateGlobal*.
+            m_userTunedSplitRatio.remove(it.key());
+            m_userTunedMasterCount.remove(it.key());
             it.value()->deleteLater();
             it.remove();
             ++pruned;
@@ -1210,6 +1234,8 @@ void AutotileEngine::pruneStatesForActivities(const QStringList& validActivities
         it.next();
         const QString& act = it.key().activity;
         if (!act.isEmpty() && !valid.contains(act)) {
+            m_userTunedSplitRatio.remove(it.key());
+            m_userTunedMasterCount.remove(it.key());
             it.value()->deleteLater();
             it.remove();
             ++pruned;
@@ -1823,11 +1849,16 @@ void AutotileEngine::decreaseMasterRatio(qreal delta)
 
 void AutotileEngine::setGlobalSplitRatio(qreal ratio)
 {
+    // An explicit global set overrides any per-desktop tunings, matching the
+    // settings-refresh path — otherwise the next propagate would skip the
+    // just-set value on still-tuned current-desktop states.
+    m_userTunedSplitRatio.clear();
     m_navigation->setGlobalSplitRatio(ratio);
 }
 
 void AutotileEngine::setGlobalMasterCount(int count)
 {
+    m_userTunedMasterCount.clear();
     m_navigation->setGlobalMasterCount(count);
 }
 
@@ -2780,7 +2811,10 @@ void AutotileEngine::onWindowResized(const QString& rawWindowId, const QRect& ol
     }
 
     // Tier A — tree/memory algorithms reflow gap-free by adjusting the split
-    // ratio of the ancestor split that owns each moved edge.
+    // ratio of the ancestor split that owns each moved edge. These persist the
+    // adjustment in the SplitTree (serialized with the state), not state.splitRatio,
+    // so they are intentionally outside the m_userTunedSplitRatio mechanism — no
+    // noteSplitRatioUserTuned here.
     if (algo->supportsMemory()) {
         if (applyTreeResizeReflow(state, windowId, oldFrame, newFrame, resolvedScreen)) {
             retileAfterOperation(resolvedScreen, true);
