@@ -7,7 +7,7 @@ return pluau.algorithm {
     metadata = {
         name = "Focus + Sidebar",
         id = "focus-sidebar",
-        description = "Main window with vertically stacked sidebar; ratio controls main window width",
+        description = "Main window with a vertically stacked sidebar. Ratio controls main window width",
         producesOverlappingZones = false,
         supportsMasterCount = false,
         supportsSplitRatio = true,

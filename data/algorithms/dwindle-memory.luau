@@ -7,7 +7,7 @@ return pluau.algorithm {
     metadata = {
         name = "Dwindle (Memory)",
         id = "dwindle-memory",
-        description = "Remembers split positions — resize one split without affecting others",
+        description = "Remembers split positions, so you can resize one split without affecting others",
         producesOverlappingZones = false,
         supportsMasterCount = false,
         supportsSplitRatio = true,

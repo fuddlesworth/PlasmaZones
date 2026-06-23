@@ -7,7 +7,7 @@ return pluau.algorithm {
     metadata = {
         name = "Horizontal Deck",
         id = "horizontal-deck",
-        description = "Focused window on top; remaining windows peek from the bottom edge",
+        description = "Focused window on top. Remaining windows peek from the bottom edge",
         producesOverlappingZones = true,
         supportsMasterCount = false,
         supportsSplitRatio = true,
