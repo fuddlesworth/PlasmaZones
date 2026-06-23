@@ -404,7 +404,7 @@ RowLayout {
         }
 
         FilterMenuItem {
-            text: i18n("Reflows on Resize")
+            text: i18n("Reflows")
             filterProperty: "showReflowsOnResize"
             checked: root.showReflowsOnResize
         }

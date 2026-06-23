@@ -511,6 +511,26 @@ void SettingsController::openAlgorithm(const QString& algorithmId)
 
 void SettingsController::openLayoutFile(const QString& layoutId)
 {
+    // Resolve the layout's real on-disk path via the registry. Bundled
+    // layouts ship under human-readable filenames (fibonacci.json,
+    // grid-3x2.json, ...), not UUID-named files, so reconstructing the
+    // filename from the id (as openLayoutFile's locate-by-UUID fallback does)
+    // never finds them. Layout::sourcePath() is the authoritative path set
+    // when the registry loaded the file, and is correct for both bundled and
+    // user layouts.
+    const QUuid uuid(layoutId);
+    if (!uuid.isNull() && m_localLayoutManager) {
+        if (PhosphorZones::Layout* layout = m_localLayoutManager->layoutById(uuid)) {
+            const QString path = layout->sourcePath();
+            if (!path.isEmpty() && QFile::exists(path)) {
+                QDesktopServices::openUrl(QUrl::fromLocalFile(path));
+                return;
+            }
+        }
+    }
+
+    // Fallback: UUID-named lookup for a freshly created user layout not yet
+    // reflected in the in-process registry.
     m_algorithmService->openLayoutFile(layoutId);
 }
 

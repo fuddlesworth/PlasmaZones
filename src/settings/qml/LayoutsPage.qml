@@ -83,7 +83,7 @@ SettingsFlickable {
         },
         {
             "key": "reflowsOnResize",
-            "label": i18n("Reflows on Resize"),
+            "label": i18n("Reflows"),
             "order": 5,
             "test": a => {
                 return a.reflowsOnResize === true;

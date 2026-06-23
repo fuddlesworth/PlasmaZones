@@ -193,6 +193,21 @@ Item {
                     fontStrikeout: root.appSettings ? root.appSettings.labelFontStrikeout : false
                     transformOrigin: Item.Center
                     scale: Math.min(1, safeParentWidth / safeImplicitWidth, safeParentHeight / safeImplicitHeight)
+
+                    // Hover the preview to read the layout/algorithm description.
+                    // Scoped to the thumbnail graphic (not the whole card) so it
+                    // never duels with the corner status-icon / toggle tooltips,
+                    // which sit clear of the centred preview. Hidden when the
+                    // model carries no description (user layouts often have none).
+                    readonly property string descriptionText: root.modelData.description !== undefined ? root.modelData.description : ""
+
+                    HoverHandler {
+                        id: thumbnailHover
+                    }
+
+                    ToolTip.delay: Kirigami.Units.toolTipDelay
+                    ToolTip.visible: thumbnailHover.hovered && layoutThumbnail.descriptionText.length > 0
+                    ToolTip.text: layoutThumbnail.descriptionText
                 }
 
                 // Top-left indicator row (default star + restriction badge)
@@ -379,7 +394,7 @@ Item {
                     visible: root.modelData.reflowsOnResize === true
                     source: "transform-scale-symbolic"
                     color: Kirigami.Theme.highlightColor
-                    Accessible.name: i18n("Reflows on resize")
+                    Accessible.name: i18n("Reflows")
                     tooltipText: i18n("Reflows neighbouring windows when you resize a tiled window")
                 }
 
