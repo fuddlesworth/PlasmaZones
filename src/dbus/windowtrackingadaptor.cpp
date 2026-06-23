@@ -937,7 +937,11 @@ void WindowTrackingAdaptor::notifyWindowResized(const QString& windowId, int old
     if (!validateWindowId(windowId, QStringLiteral("reflow after interactive resize"))) {
         return;
     }
-    if (newWidth <= 0 || newHeight <= 0) {
+    // Validate both frames at this untrusted D-Bus boundary. The engine also
+    // requires a valid old frame (it derives the resize delta from it), so a
+    // non-positive old dimension would be rejected one layer down regardless —
+    // reject it here so the boundary's contract is symmetric and explicit.
+    if (oldWidth <= 0 || oldHeight <= 0 || newWidth <= 0 || newHeight <= 0) {
         return;
     }
 

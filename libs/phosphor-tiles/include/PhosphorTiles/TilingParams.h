@@ -52,10 +52,13 @@ struct ResizeEvent
     int index = -1; ///< Tiled index of the resized window (parallel to windowInfos)
     QRect oldRect; ///< Window frame before the resize (drag baseline)
     QRect newRect; ///< Window frame after the resize
-    bool left = false; ///< Left edge moved beyond the threshold
-    bool right = false; ///< Right edge moved
-    bool top = false; ///< Top edge moved
-    bool bottom = false; ///< Bottom edge moved
+    // At most one edge per axis is ever set: left XOR right, top XOR bottom.
+    // Both edges of an axis moving together is a translation (move), not a
+    // resize, and reports neither. Hooks may rely on this mutual exclusion.
+    bool left = false; ///< Left edge moved beyond the threshold (and right did not)
+    bool right = false; ///< Right edge moved (and left did not)
+    bool top = false; ///< Top edge moved (and bottom did not)
+    bool bottom = false; ///< Bottom edge moved (and top did not)
 };
 
 /**
@@ -97,7 +100,9 @@ struct TilingParams
 
     /// Last applied zones (parallel to the window list), exposed to scripts as
     /// ctx.currentGeometries. Advisory: it is the post-enforcement rendered
-    /// layout, not the algorithm's last raw output. Empty on a normal retile.
+    /// layout, not the algorithm's last raw output. Empty only on the first
+    /// tile (before any zones have been calculated); every subsequent retile
+    /// carries the previously applied zones.
     /// (The resize descriptor is delivered to the onWindowResized hook as an
     /// argument, not via ctx, so there is no resize field here.)
     QVector<QRect> currentGeometries;

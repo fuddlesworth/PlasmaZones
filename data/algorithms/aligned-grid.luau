@@ -47,8 +47,8 @@ local function readFractions(arr, n)
     return f
 end
 
--- Distribute `content` pixels across n cells per fractions (sum ~= 1), giving the
--- remainder to the last cell so the sizes sum exactly to content.
+-- Distribute `content` pixels across n cells per fractions (which sum to 1), giving
+-- the remainder to the last cell so the sizes sum exactly to content.
 local function fractionsToSizes(content, fractions, n)
     local sizes = {}
     local used = 0

@@ -2722,8 +2722,9 @@ void AutotileEngine::onWindowResized(const QString& rawWindowId, const QRect& ol
     // authoritative. Resolve the owning state with a pure lookup: stateForWindow
     // never creates state, whereas tilingStateForScreen would insert an empty
     // TilingState for a known-but-stateless screen that then just fails the guards
-    // below. stateForWindow also keys off the window's stored desktop/activity,
-    // which must equal the daemon-supplied screen for a tracked window.
+    // below. stateForWindow returns the state stored for the window's
+    // TilingStateKey; the ownerScreen != resolvedScreen check below then enforces
+    // that the state's screen agrees with the daemon-supplied one.
     const QString resolvedScreen = screenId;
     if (resolvedScreen.isEmpty() || !isAutotileScreen(resolvedScreen)) {
         return;
@@ -2746,8 +2747,18 @@ void AutotileEngine::onWindowResized(const QString& rawWindowId, const QRect& ol
 
     // Cross-output guard: if the resize carried the window's centre off its
     // screen, this is a monitor handoff — let windowScreenChanged own the
-    // reassignment rather than reflowing a layout the window is leaving.
-    const QRect screen = screenGeometry(resolvedScreen);
+    // reassignment rather than reflowing a layout the window is leaving. Use the
+    // full monitor rect, not the strut-inset work area, so a window whose centre
+    // legitimately lands under a panel is not misread as having left the screen.
+    // Virtual screens are region-bounded sub-rects, so keep the virtual-aware
+    // available-geometry resolver for them.
+    QRect screen;
+    if (m_screenManager && !PhosphorIdentity::VirtualScreenId::isVirtual(resolvedScreen)) {
+        screen = m_screenManager->screenGeometry(resolvedScreen);
+    }
+    if (!screen.isValid()) {
+        screen = screenGeometry(resolvedScreen);
+    }
     if (screen.isValid() && !screen.contains(newFrame.center())) {
         return;
     }
@@ -2772,14 +2783,24 @@ void AutotileEngine::onWindowResized(const QString& rawWindowId, const QRect& ol
     // the hook have no reflow model and leave the user's manual geometry as-is.
     if (algo->supportsResizeHook()) {
         const int threshold = PhosphorTiles::AutotileDefaults::ResizeEdgeMoveThresholdPx;
+        const bool leftMoved = std::abs(newFrame.x() - oldFrame.x()) > threshold;
+        const bool rightMoved =
+            std::abs((newFrame.x() + newFrame.width()) - (oldFrame.x() + oldFrame.width())) > threshold;
+        const bool topMoved = std::abs(newFrame.y() - oldFrame.y()) > threshold;
+        const bool bottomMoved =
+            std::abs((newFrame.y() + newFrame.height()) - (oldFrame.y() + oldFrame.height())) > threshold;
         PhosphorTiles::ResizeEvent ev;
         ev.index = state->tiledWindows().indexOf(windowId);
         ev.oldRect = oldFrame;
         ev.newRect = newFrame;
-        ev.left = std::abs(newFrame.x() - oldFrame.x()) > threshold;
-        ev.right = std::abs((newFrame.x() + newFrame.width()) - (oldFrame.x() + oldFrame.width())) > threshold;
-        ev.top = std::abs(newFrame.y() - oldFrame.y()) > threshold;
-        ev.bottom = std::abs((newFrame.y() + newFrame.height()) - (oldFrame.y() + oldFrame.height())) > threshold;
+        // Report at most one edge per axis. When both edges of an axis moved
+        // together that axis translated (a move, not a resize), so neither edge
+        // is reported — mirroring applyTreeResizeReflow and the per-axis
+        // mutual-exclusion the ResizeEvent contract guarantees to scripts.
+        ev.left = leftMoved && !rightMoved;
+        ev.right = rightMoved && !leftMoved;
+        ev.top = topMoved && !bottomMoved;
+        ev.bottom = bottomMoved && !topMoved;
         if (ev.left || ev.right || ev.top || ev.bottom) {
             algo->onWindowResized(state, ev);
             retileAfterOperation(resolvedScreen, true);
@@ -2844,7 +2865,6 @@ bool AutotileEngine::applyTreeResizeReflow(PhosphorTiles::TilingState* state, co
         return false;
     }
 
-    bool changed = false;
     for (const EdgeMove& move : moves) {
         PhosphorTiles::SplitNode* split = tree->splitOwningEdge(windowId, move.edge);
         if (!split) {
@@ -2856,9 +2876,9 @@ bool AutotileEngine::applyTreeResizeReflow(PhosphorTiles::TilingState* state, co
             continue;
         }
 
-        const bool horizontal = (move.edge == Edge::Top || move.edge == Edge::Bottom);
-        const int axisStart = horizontal ? splitRect.y() : splitRect.x();
-        const int content = (horizontal ? splitRect.height() : splitRect.width()) - innerGap;
+        const bool alongY = (move.edge == Edge::Top || move.edge == Edge::Bottom);
+        const int axisStart = alongY ? splitRect.y() : splitRect.x();
+        const int content = (alongY ? splitRect.height() : splitRect.width()) - innerGap;
         if (content <= 0) {
             continue;
         }
@@ -2871,14 +2891,17 @@ bool AutotileEngine::applyTreeResizeReflow(PhosphorTiles::TilingState* state, co
         const int firstSize = secondSide ? (move.newPos - axisStart - innerGap) : (move.newPos - axisStart);
         const qreal ratio = static_cast<qreal>(firstSize) / static_cast<qreal>(content);
 
-        const qreal before = split->splitRatio;
         tree->resizeSplitNode(split, ratio); // clamps to [MinSplitRatio, MaxSplitRatio]
-        if (!qFuzzyCompare(before, split->splitRatio)) {
-            changed = true;
-        }
     }
 
-    return changed;
+    // At least one edge moved past the threshold (moves is non-empty, checked
+    // above), so the compositor has already committed an out-of-tile geometry
+    // for the dragged window. Always retile to re-snap it onto its zone — even
+    // when no split ratio actually changed because the edge was a screen
+    // boundary or was already pinned at Min/MaxSplitRatio. Without this the
+    // window would be stranded at its dragged size until the next incidental
+    // retile.
+    return true;
 }
 
 void AutotileEngine::onScreenGeometryChanged(const QString& screenId)

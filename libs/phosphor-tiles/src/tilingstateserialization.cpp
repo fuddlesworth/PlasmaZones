@@ -89,7 +89,7 @@ QJsonObject TilingState::sanitizeScriptState(const QJsonObject& state)
     }
     // Byte cap is checked on the post-strip object so a bag that only exceeds
     // it via dropped NaN/garbage can still squeak under.
-    const int bytes = QJsonDocument(cleaned).toJson(QJsonDocument::Compact).size();
+    const qsizetype bytes = QJsonDocument(cleaned).toJson(QJsonDocument::Compact).size();
     if (bytes > AutotileDefaults::ScriptStateMaxBytes) {
         qCWarning(PhosphorTiles::lcTilesLib) << "scriptState exceeds" << AutotileDefaults::ScriptStateMaxBytes
                                              << "bytes (" << bytes << ") — dropping bag";
@@ -234,7 +234,7 @@ void TilingState::clear()
     const qreal oldSplitRatio = m_splitRatio;
 
     if (!hadWindows && !hadFocused && m_calculatedZones.isEmpty() && oldMasterCount == DefaultMasterCount
-        && qFuzzyCompare(1.0 + oldSplitRatio, 1.0 + DefaultSplitRatio) && !m_splitTree) {
+        && qFuzzyCompare(1.0 + oldSplitRatio, 1.0 + DefaultSplitRatio) && !m_splitTree && m_scriptState.isEmpty()) {
         return; // Already at defaults, nothing to do
     }
 
@@ -246,6 +246,10 @@ void TilingState::clear()
     m_masterCount = DefaultMasterCount;
     m_splitRatio = DefaultSplitRatio;
     m_splitTree.reset();
+    // The opaque script bag is part of the state's identity — a cleared state
+    // must not retain a scripted algorithm's persistent memory. Reset without a
+    // signal, matching setScriptState's deliberately NOTIFY-free contract.
+    m_scriptState = QJsonObject{};
 
     // Only emit signals for fields that actually changed
     if (hadWindows) {

@@ -725,8 +725,9 @@ void PlasmaZonesEffect::setupWindowConnections(KWin::EffectWindow* w)
             // Report the committed resize to the daemon so it can reflow tiled
             // neighbours (GitHub #652). The daemon ignores floating / untracked
             // windows, so this is harmless for the float case handled just above.
-            // shouldHandleWindow is re-checked here (not latched at start) since
-            // the daemon re-validates membership regardless.
+            // The enclosing shouldHandleWindow(window) is the effect-side gate
+            // (excluded windows never reach here); the daemon then additionally
+            // re-validates membership before reflowing.
             notifyWindowResized(window, m_resizeStartGeometry);
         }
         m_dragTracker->handleWindowFinishMoveResize(window);

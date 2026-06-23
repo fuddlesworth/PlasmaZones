@@ -29,7 +29,7 @@ change: `TilingState` is session state on a separate JSON surface from `config.j
 
 ```
  KWin compositor
-   windowFinishUserMovedResized (window_lifecycle.cpp:689); wasResize latch (m_resizingWindow :673,:690)
+   windowFinishUserMovedResized (window_lifecycle.cpp:697); wasResize latch (m_resizingWindow :677,:698)
    effect-side gate: wasResize (m_resizingWindow latch) && shouldHandleWindow && valid geom && new != old
  → PlasmaZones effect
    fireAndForget notifyWindowResized(windowId, oldRect, newRect)   [daemon owns the tiled-vs-floating decision]
@@ -48,7 +48,7 @@ change: `TilingState` is session state on a separate JSON surface from `config.j
              → subtreeBoundingRect (split extent from rendered zones) → ratio → resizeSplitNode
              → retileAfterOperation(screenId, true)   [SYNCHRONOUS]
    recalculateLayout → prepareTilingState → calculateZones (applyGeometryRecursive, gap-free)
- → applyTiling: zones[i] → windows[i] by index (retile skipped entirely if no ratio changed)
+ → applyTiling: zones[i] → windows[i] by index (retiles whenever an edge moved, re-snapping the dragged window even when no ratio changed)
    emit JSON 'windowsTiled'
  → KWin effect applies geometry (daemon_apply.cpp): neighbors animate; dragged window not re-animated
 ```
@@ -67,10 +67,10 @@ precedence. The resize-finish path uses the **synchronous** `retileAfterOperatio
 ### P1 — Input plumbing
 
 Files:
-- `kwin-effect/plasmazoneseffect/window_lifecycle.cpp:689-718` — new block after the floating-resize
-  block (`:701-717`), before `handleWindowFinishMoveResize` (`:718`). Reuse `wasResize` (`:690`), latch (`:673`).
+- `kwin-effect/plasmazoneseffect/window_lifecycle.cpp:725-731` — new block after the floating-resize
+  block (`:709-724`), before `handleWindowFinishMoveResize` (`:733`). Reuse `wasResize` (`:698`), latch (`:677`).
 - `kwin-effect/plasmazoneseffect/window_filtering.cpp` — reuse `shouldHandleWindow` (`:172`), `isWindowFloating` (`:70`).
-- `dbus/org.plasmazones.WindowTracking.xml` — `notifyWindowResized` after `setFrameGeometry` (after `:419`).
+- `dbus/org.plasmazones.WindowTracking.xml` — `notifyWindowResized` (`:421`) after `setFrameGeometry` (`:411`).
 - `src/dbus/windowtrackingadaptor.{h,cpp}` — slot modeled on `windowClosed` (`:652-686`) and `setFrameGeometry` (`:926-932`).
 - `libs/phosphor-protocol/include/PhosphorProtocol/ClientHelpers.h:52` — reuse `fireAndForget`.
 
@@ -118,7 +118,9 @@ dissolves the F3/R3 reconciliation problem at the root, so no post-clamp reconci
 The ratio is computed position-based: `firstSize = newEdgePos - axisStart` (Right/Bottom) or
 `- innerGap` more (Left/Top); `ratio = firstSize / (axisExtent - innerGap)`, then `resizeSplitNode`
 clamps to `[0.1, 0.9]`. A pure move (both edges of an axis shift together) is rejected per-axis.
-Emit guard: `applyTreeResizeReflow` returns false (no retile) when no ratio actually changed.
+Retile trigger: `applyTreeResizeReflow` returns true whenever an edge moved past the threshold —
+even when no ratio changed (screen-boundary edge, or already pinned at Min/MaxSplitRatio) — so the
+retile always re-snaps the dragged window onto its zone; it returns false only when no edge moved.
 (Dragged-window animation suppression — the `skipAnimation` flag — is deferred; see §9.)
 
 ### P3 — ctx enrichment + onWindowResized hook + persistent state bag
