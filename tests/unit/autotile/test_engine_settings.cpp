@@ -162,7 +162,7 @@ private Q_SLOTS:
     // Race condition: shortcut adjustment vs refreshConfigFromSettings
     // ═══════════════════════════════════════════════════════════════════════════
 
-    void testRefreshConfig_duringShortcutDebounce_preservesRuntimeRatio()
+    void testRefreshConfig_preservesPerDesktopRatio()
     {
         AutotileEngine engine(nullptr, nullptr, nullptr, PlasmaZones::TestHelpers::testRegistry());
         const QString screen = QStringLiteral("eDP-1");
@@ -193,14 +193,17 @@ private Q_SLOTS:
 
         engine.refreshConfigFromSettings();
 
-        QVERIFY2(qFuzzyCompare(engine.config()->splitRatio, adjustedRatio),
-                 qPrintable(
-                     QStringLiteral("refreshConfigFromSettings overwrote shortcut-adjusted ratio: expected %1, got %2")
-                         .arg(adjustedRatio)
-                         .arg(engine.config()->splitRatio)));
+        // The per-desktop tuned ratio survives the refresh — propagate skips
+        // user-tuned states. The global config tracks the settings default (0.5),
+        // and the adjustment lives in the state, not the global config.
+        QVERIFY2(qFuzzyCompare(state->splitRatio(), adjustedRatio),
+                 qPrintable(QStringLiteral("refresh clobbered per-desktop ratio: expected %1, got %2")
+                                .arg(adjustedRatio)
+                                .arg(state->splitRatio())));
+        QVERIFY(qFuzzyCompare(engine.config()->splitRatio, 0.5));
     }
 
-    void testRefreshConfig_duringShortcutDebounce_preservesRuntimeMasterCount()
+    void testRefreshConfig_preservesPerDesktopMasterCount()
     {
         AutotileEngine engine(nullptr, nullptr, nullptr, PlasmaZones::TestHelpers::testRegistry());
         const QString screen = QStringLiteral("eDP-1");
@@ -231,7 +234,10 @@ private Q_SLOTS:
 
         engine.refreshConfigFromSettings();
 
-        QCOMPARE(engine.config()->masterCount, 2);
+        // The per-desktop tuned master count survives the refresh; the global
+        // config tracks the settings default (1).
+        QCOMPARE(state->masterCount(), 2);
+        QCOMPARE(engine.config()->masterCount, 1);
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
@@ -326,8 +332,10 @@ private Q_SLOTS:
     // Simultaneous desktop+activity switch (coalesced promotion)
     // ═══════════════════════════════════════════════════════════════════════════
 
-    void testSettingsWriteBack_emittedOnShortcutAdjustment()
+    void testShortcutAdjustment_doesNotWriteBackToSettings()
     {
+        // A per-desktop ratio tweak via shortcut must stay local: it changes the
+        // active state's ratio but must NOT write the global settings (no bleed).
         AutotileEngine engine(nullptr, nullptr, nullptr, PlasmaZones::TestHelpers::testRegistry());
         const QString screen = QStringLiteral("eDP-1");
         engine.setAutotileScreens({screen});
@@ -340,11 +348,16 @@ private Q_SLOTS:
         engine.windowOpened(QStringLiteral("win2"), screen, 0, 0);
         QCoreApplication::processEvents();
 
+        PhosphorTiles::TilingState* state = engine.tilingStateForScreen(screen);
         const qreal ratioBefore = settings.autotileSplitRatio();
+        const qreal stateBefore = state->splitRatio();
         engine.windowFocused(QStringLiteral("win1"), screen);
         engine.increaseMasterRatio(0.1);
 
-        QVERIFY(settings.autotileSplitRatio() != ratioBefore);
+        // Local effect on the active state...
+        QVERIFY(qFuzzyCompare(state->splitRatio(), stateBefore + 0.1));
+        // ...but the global settings are untouched.
+        QVERIFY(qFuzzyCompare(settings.autotileSplitRatio(), ratioBefore));
     }
 };
 

@@ -383,6 +383,24 @@ public Q_SLOTS:
     void setFrameGeometry(const QString& windowId, int x, int y, int width, int height);
 
     /**
+     * Notify the daemon that a tiled window finished an interactive resize.
+     *
+     * Called by the compositor plugin from windowFinishUserMovedResized when
+     * the interaction was a resize (not a move). Forwards to the autotile
+     * engine so it can reflow neighbouring windows to fill the gap (GitHub
+     * #652). The old/new frames are supplied directly by the plugin (latched at
+     * resize start / read at finish) because the debounced frame shadow updates
+     * mid-drag and can't serve as a reliable baseline. No-op for windows the
+     * autotile engine doesn't track.
+     *
+     * @param windowId Window identifier
+     * @param oldX,oldY,oldWidth,oldHeight Frame geometry before the resize
+     * @param newX,newY,newWidth,newHeight Frame geometry after the resize
+     */
+    void notifyWindowResized(const QString& windowId, int oldX, int oldY, int oldWidth, int oldHeight, int newX,
+                             int newY, int newWidth, int newHeight);
+
+    /**
      * Update cursor screen when cursor crosses to a different monitor
      * Called by the KWin effect's slotMouseChanged when screen changes.
      * @param screenId Name of the screen the cursor is now on

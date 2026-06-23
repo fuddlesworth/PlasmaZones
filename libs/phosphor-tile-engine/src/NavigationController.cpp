@@ -657,13 +657,18 @@ void NavigationController::increaseMasterRatio(qreal delta)
 
     if (changed) {
         if (m_engine->hasPerScreenOverride(screenId, PerScreenKeys::SplitRatio)) {
-            // Update the per-screen override so the value persists across
-            // settings reloads (applyPerScreenConfig uses the stored override).
+            // This screen carries an explicit per-screen ratio override — keep it
+            // in sync so the value persists across settings reloads
+            // (applyPerScreenConfig reads the stored override).
             m_engine->updatePerScreenOverride(screenId, PerScreenKeys::SplitRatio, resultRatio);
         } else {
-            // Update global config so new screens inherit the adjusted ratio.
-            m_engine->config()->splitRatio = resultRatio;
-            m_engine->syncShortcutAdjustmentToSettings();
+            // No override: keep the adjustment local to the active screen+desktop's
+            // TilingState (set above, serialized with the session state). Mark it
+            // user-tuned so propagateGlobalSplitRatio leaves it alone on a settings
+            // refresh, and deliberately do NOT write the global config / settings —
+            // a per-desktop ratio tweak is not a new global default and must not
+            // bleed to sibling screens or other desktops.
+            m_engine->noteSplitRatioUserTuned(screenId);
         }
 
         if (m_engine->isEnabled()) {
@@ -724,10 +729,16 @@ void NavigationController::adjustMasterCount(int delta)
 
     if (changed) {
         if (m_engine->hasPerScreenOverride(screenId, PerScreenKeys::MasterCount)) {
+            // Explicit per-screen override — keep it in sync so it persists across
+            // settings reloads (applyPerScreenConfig reads the stored override).
             m_engine->updatePerScreenOverride(screenId, PerScreenKeys::MasterCount, resultCount);
         } else {
-            m_engine->config()->masterCount = resultCount;
-            m_engine->syncShortcutAdjustmentToSettings();
+            // No override: keep the adjustment local to the active screen+desktop's
+            // TilingState (set above, serialized with the session state). Mark it
+            // user-tuned so propagateGlobalMasterCount leaves it alone on a refresh,
+            // and deliberately do NOT write the global config / settings — a
+            // per-desktop master-count tweak is not a new global default.
+            m_engine->noteMasterCountUserTuned(screenId);
         }
 
         if (m_engine->isEnabled()) {

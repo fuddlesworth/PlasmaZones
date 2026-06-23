@@ -667,10 +667,18 @@ void PlasmaZonesEffect::setupWindowConnections(KWin::EffectWindow* w)
     // DragTracker::updateCursorPosition(), throttled to ~30Hz.
     connect(w, &KWin::EffectWindow::windowStartUserMovedResized, this, [this](KWin::EffectWindow* window) {
         m_dragTracker->handleWindowStartMoveResize(window);
-        // Latch interactive-resize identity for the finish handler (see below):
-        // KWin clears isUserResize() before windowFinishUserMovedResized fires, so
-        // the move-vs-resize discriminator must be captured here, at the start.
+        // Latch interactive-resize identity AND the pre-resize frame for the finish
+        // handler (see below): KWin clears isUserResize() before
+        // windowFinishUserMovedResized fires, so both the move-vs-resize
+        // discriminator and the baseline geometry must be captured here, at the
+        // start. The geometry feeds the neighbour-reflow report (GitHub #652);
+        // m_resizeStartGeometry is only read at finish when this latch identifies a
+        // resize, so a plain move leaves it cleared.
         m_resizingWindow = (window && window->isUserResize()) ? window : nullptr;
+        m_resizeStartGeometry = QRect();
+        if (m_resizingWindow) {
+            m_resizeStartGeometry = window->frameGeometry().toRect();
+        }
         // window.move / window.resize shader transitions: KWin's interactive
         // move/resize is its own animation system (Window::moveResize via
         // pointer drag), but we layer an effect-side shader for visual
@@ -714,6 +722,13 @@ void PlasmaZonesEffect::setupWindowConnections(KWin::EffectWindow* w)
                         QStringLiteral("storePreTileGeometry - float resize"));
                 }
             }
+            // Report the committed resize to the daemon so it can reflow tiled
+            // neighbours (GitHub #652). The daemon ignores floating / untracked
+            // windows, so this is harmless for the float case handled just above.
+            // The enclosing shouldHandleWindow(window) is the effect-side gate
+            // (excluded windows never reach here); the daemon then additionally
+            // re-validates membership before reflowing.
+            notifyWindowResized(window, m_resizeStartGeometry);
         }
         m_dragTracker->handleWindowFinishMoveResize(window);
     });
@@ -856,6 +871,36 @@ void PlasmaZonesEffect::notifyWindowClosed(KWin::EffectWindow* w)
                      << "screen=" << closeScreenId;
     PhosphorProtocol::ClientHelpers::fireAndForget(this, PhosphorProtocol::Service::Interface::WindowTracking,
                                                    QStringLiteral("windowClosed"), {windowId, kindInt, closeScreenId});
+}
+
+void PlasmaZonesEffect::notifyWindowResized(KWin::EffectWindow* w, const QRect& oldGeometry)
+{
+    if (!w) {
+        return;
+    }
+    if (!isDaemonReady("notify windowResized")) {
+        return;
+    }
+
+    const QString windowId = getWindowId(w);
+    if (windowId.isEmpty()) {
+        return;
+    }
+
+    const QRect newGeometry = w->frameGeometry().toRect();
+    if (!oldGeometry.isValid() || newGeometry.width() <= 0 || newGeometry.height() <= 0) {
+        return;
+    }
+    // Cancelled / no-op resize (Escape, or a same-size finish): nothing moved.
+    if (newGeometry == oldGeometry) {
+        return;
+    }
+
+    qCInfo(lcEffect) << "Notifying daemon: windowResized" << windowId << oldGeometry << "->" << newGeometry;
+    PhosphorProtocol::ClientHelpers::fireAndForget(
+        this, PhosphorProtocol::Service::Interface::WindowTracking, QStringLiteral("notifyWindowResized"),
+        {windowId, oldGeometry.x(), oldGeometry.y(), oldGeometry.width(), oldGeometry.height(), newGeometry.x(),
+         newGeometry.y(), newGeometry.width(), newGeometry.height()});
 }
 
 void PlasmaZonesEffect::notifyWindowActivated(KWin::EffectWindow* w)

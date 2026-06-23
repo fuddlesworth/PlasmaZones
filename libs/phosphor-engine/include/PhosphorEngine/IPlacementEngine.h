@@ -333,6 +333,24 @@ public:
         return {};
     }
 
+    /// Notify the engine that a tracked window finished an interactive resize.
+    ///
+    /// The daemon's WindowTracking adaptor forwards the compositor's
+    /// interactive-resize-finished event here so an engine can reflow the rest
+    /// of its layout to absorb the change (autotile fills the freed gap;
+    /// GitHub #652). @p oldFrame / @p newFrame are the window's frame geometry
+    /// before and after the resize; @p screenId is the screen the daemon
+    /// resolved the window to. Default is a no-op for engines (e.g. snap) that
+    /// have no neighbour-reflow model.
+    virtual void onWindowResized(const QString& windowId, const QRect& oldFrame, const QRect& newFrame,
+                                 const QString& screenId)
+    {
+        Q_UNUSED(windowId)
+        Q_UNUSED(oldFrame)
+        Q_UNUSED(newFrame)
+        Q_UNUSED(screenId)
+    }
+
     // ═══════════════════════════════════════════════════════════════════════════
     // Cross-engine handoff
     //

@@ -56,6 +56,12 @@ constexpr int MinGap = 0;
 constexpr int MaxGap = 50;
 constexpr int MinRectSizePx = 50;
 constexpr int GapEdgeThresholdPx = 5;
+/// Minimum pixel movement of a window edge during an interactive resize before
+/// it is treated as an intentional resize (vs. fractional-scale rounding residue
+/// or sub-pixel jitter). A separate constant from GapEdgeThresholdPx (currently
+/// the same value) so it can be tuned for 1.5×/1.75× fractional scaling later
+/// without perturbing gap snapping.
+constexpr int ResizeEdgeMoveThresholdPx = 5;
 constexpr int MinMaxWindows = 1;
 constexpr int MaxMaxWindows = 12;
 // Sentinel returned by PerScreenConfigResolver::effectiveMaxWindows() when the
@@ -65,6 +71,13 @@ constexpr int MaxMaxWindows = 12;
 constexpr int UnlimitedMaxWindowsSentinel = std::numeric_limits<int>::max() / 2;
 constexpr int MaxZones = 256;
 constexpr int MaxRuntimeTreeDepth = 50; ///< Maximum recursion depth for split tree operations
+// Bounds for the opaque per-algorithm script-state bag (TilingState::scriptState).
+// Enforced by TilingState::sanitizeScriptState at every script write-back and on
+// load, so a buggy or hostile algorithm can't bloat the persisted state or stall
+// serialization. A whole bag exceeding the byte cap is dropped (reset to empty).
+constexpr int ScriptStateMaxBytes = 64 * 1024; ///< Max compact-JSON size of the bag
+constexpr int ScriptStateMaxDepth = 16; ///< Max object/array nesting depth
+constexpr int ScriptStateMaxKeys = 4096; ///< Max total object keys across the bag
 constexpr qreal SplitRatioHysteresis = 0.05; ///< Band within which algorithm-switch ratio reset is suppressed
 constexpr int MinMetadataWindows = 1;
 constexpr int MaxMetadataWindows = 100;
@@ -129,6 +142,7 @@ inline constexpr QLatin1String RespectMinimumSize{"respectMinimumSize"};
 inline constexpr QLatin1String MaxWindows{"maxWindows"};
 inline constexpr QLatin1String OverflowBehavior{"overflowBehavior"};
 inline constexpr QLatin1String SplitTreeKey{"splitTree"};
+inline constexpr QLatin1String ScriptStateKey{"scriptState"};
 } // namespace AutotileJsonKeys
 
 /**

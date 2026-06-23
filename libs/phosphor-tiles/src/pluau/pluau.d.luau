@@ -23,8 +23,16 @@ export type Rect = {
 export type Zone = { x: number, y: number, width: number, height: number }
 
 export type MinSize = { w: number, h: number }
-export type WindowInfo = { appId: string, focused: boolean }
+export type WindowInfo = { appId: string, focused: boolean, windowId: string }
 export type ScreenInfo = { id: string, portrait: boolean, aspectRatio: number }
+-- Which edges of a window moved during an interactive resize, plus the before/
+-- after frames. Delivered to the onWindowResized hook (not via Context).
+export type ResizeEvent = {
+    index: number, -- 0-based tiled index of the resized window (NOT Luau-1-based)
+    oldRect: Zone,
+    newRect: Zone,
+    edges: { left: boolean, right: boolean, top: boolean, bottom: boolean },
+}
 export type SplitNode = {
     splitRatio: number,
     splitHorizontal: boolean,
@@ -48,10 +56,12 @@ export type Context = {
     splitRatio: number,
     minSizes: { MinSize },
     windows: { WindowInfo }?,
-    focusedIndex: number,
+    focusedIndex: number, -- 0-based tiled index of the focused window (-1 if none)
     screen: ScreenInfo?,
     tree: SplitNode?, -- present for memory-aware algorithms
     custom: { [string]: any }?,
+    currentGeometries: { Zone }?, -- last applied zones (advisory; post-enforcement)
+    state: { [string]: any }?, -- persistent script-state bag (see supportsScriptState)
 }
 
 export type Metadata = {
@@ -61,13 +71,14 @@ export type Metadata = {
     supportsMasterCount: boolean?,
     supportsSplitRatio: boolean?,
     supportsMemory: boolean?,
+    supportsScriptState: boolean?, -- persists ctx.state across retiles (non-tree memory)
     supportsMinSizes: boolean?,
     producesOverlappingZones: boolean?,
     centerLayout: boolean?,
     defaultSplitRatio: number?,
     defaultMaxWindows: number?,
     minimumWindows: number?,
-    masterZoneIndex: number?,
+    masterZoneIndex: number?, -- 0-based index of the master zone
     zoneNumberDisplay: string?,
     customParams: { any }?,
 }
@@ -75,8 +86,17 @@ export type Metadata = {
 export type Algorithm = {
     metadata: Metadata,
     tile: (ctx: Context) -> { Zone },
+    -- index is the 0-based tiled index (NOT Luau-1-based).
     onWindowAdded: ((state: any, index: number) -> ())?,
     onWindowRemoved: ((state: any, index: number) -> ())?,
+    -- Called after an interactive resize. Return a control table (or nil to do
+    -- nothing). Two optional, independent outputs:
+    --   * splitRatio: number — a new master/split ratio the engine applies to this
+    --     state (clamped); ratio-based algorithms reflow on resize this way. The
+    --     change stays local to the current screen+desktop.
+    --   * any other keys — the new ctx.state bag; persisted only when
+    --     metadata.supportsScriptState is set (see `state` in Context).
+    onWindowResized: ((state: any, resize: ResizeEvent) -> { [string]: any }?)?,
 }
 
 export type Pluau = {

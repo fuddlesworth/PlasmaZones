@@ -36,6 +36,29 @@ struct WindowInfo
 {
     QString appId; ///< Application identifier (e.g., "firefox", "org.kde.dolphin")
     bool focused = false; ///< Whether this window currently has focus
+    QString windowId; ///< Opaque instance id (stable across retiles; lets scripts key persistent state)
+};
+
+/**
+ * @brief Describes an interactive resize that triggered a retile.
+ *
+ * Delivered as the argument to the optional @c onWindowResized algorithm hook
+ * (NOT via @ref TilingParams — see the note on currentGeometries) so resize-aware
+ * algorithms can react to "the user dragged window N's right edge". A non-resize
+ * retile never constructs one.
+ */
+struct ResizeEvent
+{
+    int index = -1; ///< 0-based tiled index of the resized window (parallel to windowInfos)
+    QRect oldRect; ///< Window frame before the resize (drag baseline)
+    QRect newRect; ///< Window frame after the resize
+    // At most one edge per axis is ever set: left XOR right, top XOR bottom.
+    // Both edges of an axis moving together is a translation (move), not a
+    // resize, and reports neither. Hooks may rely on this mutual exclusion.
+    bool left = false; ///< Left edge moved beyond the threshold (and right did not)
+    bool right = false; ///< Right edge moved (and left did not)
+    bool top = false; ///< Top edge moved (and bottom did not)
+    bool bottom = false; ///< Bottom edge moved (and top did not)
 };
 
 /**
@@ -74,6 +97,15 @@ struct TilingParams
     int focusedIndex = -1; ///< Index of focused window in tiled list (-1 = unknown)
     TilingScreenInfo screenInfo; ///< Physical screen metadata
     QVariantMap customParams; ///< Algorithm-declared custom parameters
+
+    /// Last applied zones (parallel to the window list), exposed to scripts as
+    /// ctx.currentGeometries. Advisory: it is the post-enforcement rendered
+    /// layout, not the algorithm's last raw output. Empty only on the first
+    /// tile (before any zones have been calculated); every subsequent retile
+    /// carries the previously applied zones.
+    /// (The resize descriptor is delivered to the onWindowResized hook as an
+    /// argument, not via ctx, so there is no resize field here.)
+    QVector<QRect> currentGeometries;
 
     /// Create minimal params for preview rendering (no per-window/screen context)
     static TilingParams forPreview(int count, const QRect& rect, const TilingState* state)

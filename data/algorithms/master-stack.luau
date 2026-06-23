@@ -25,4 +25,27 @@ return pluau.algorithm {
         return pluau.masterStackLayout(
             ctx.area, ctx.windowCount, ctx.innerGap, ctx.splitRatio, ctx.masterCount, ctx.minSizes, false)
     end,
+
+    -- Reflow on interactive resize: the master/stack column boundary maps to the
+    -- split ratio. Dragging a master window's right edge (or a stack window's left
+    -- edge) returns the new ratio for the engine to apply locally. The gap cancels
+    -- in the fraction, so we reconstruct it self-referentially from the old size.
+    onWindowResized = function(state, resize)
+        local count = state.windowCount
+        local masterCount = state.masterCount or 1
+        if count <= masterCount then return nil end -- no stack column → no seam
+        local oldRatio = state.splitRatio
+        local old, new, edges, idx = resize.oldRect, resize.newRect, resize.edges, resize.index
+        if old.width <= 0 or oldRatio <= 0 or oldRatio >= 1 then return nil end
+        if idx < masterCount then
+            if edges.right then
+                return { splitRatio = new.width * oldRatio / old.width }
+            end
+        else
+            if edges.left then
+                return { splitRatio = 1 - new.width * (1 - oldRatio) / old.width }
+            end
+        end
+        return nil
+    end,
 }

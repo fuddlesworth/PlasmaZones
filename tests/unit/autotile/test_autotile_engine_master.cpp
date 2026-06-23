@@ -62,6 +62,7 @@ private Q_SLOTS:
 
         const qreal initial1 = state1->splitRatio();
         const qreal initial2 = state2->splitRatio();
+        const qreal globalBefore = engine.config()->splitRatio;
 
         // Use windowFocused to properly set m_activeScreen on the engine
         engine.windowFocused(QStringLiteral("win1"), screen1);
@@ -71,6 +72,10 @@ private Q_SLOTS:
         // Only the focused screen's ratio should change
         QVERIFY(qFuzzyCompare(state1->splitRatio(), initial1 + 0.1));
         QVERIFY(qFuzzyCompare(state2->splitRatio(), initial2));
+        // A per-desktop ratio tweak must NOT bleed into the global config (no
+        // override here) — otherwise it broadcasts to sibling screens / new
+        // states on the next propagate.
+        QVERIFY(qFuzzyCompare(engine.config()->splitRatio, globalBefore));
     }
 
     void testDecreaseMasterRatio_updatesFocusedScreenOnly()
@@ -125,12 +130,15 @@ private Q_SLOTS:
         PhosphorTiles::TilingState* state2 = engine.tilingStateForScreen(screen2);
         const int initial1 = state1->masterCount();
         const int initial2 = state2->masterCount();
+        const int globalBefore = engine.config()->masterCount;
 
         engine.windowFocused(QStringLiteral("win1"), screen1);
         engine.increaseMasterCount();
 
         QCOMPARE(state1->masterCount(), initial1 + 1);
         QCOMPARE(state2->masterCount(), initial2);
+        // Per-desktop master-count tweak must NOT bleed into the global config.
+        QCOMPARE(engine.config()->masterCount, globalBefore);
     }
 
     void testDecreaseMasterCount_updatesFocusedScreenOnly()
@@ -176,6 +184,30 @@ private Q_SLOTS:
         engine.decreaseMasterCount();
 
         QCOMPARE(state->masterCount(), 1);
+    }
+
+    // Tuning a ratio records the state's key in the engine's user-tuned set;
+    // pruning that desktop must drop the key with the state (no dangling key, no
+    // crash) so a reused desktop number starts clean.
+    void testPruneTunedDesktop_isCrashSafe()
+    {
+        AutotileEngine engine(nullptr, nullptr, nullptr, PlasmaZones::TestHelpers::testRegistry());
+        const QString screen1 = QStringLiteral("Screen1");
+        engine.setAutotileScreens({screen1});
+
+        engine.windowOpened(QStringLiteral("win1"), screen1, 0, 0);
+        engine.windowOpened(QStringLiteral("win2"), screen1, 0, 0);
+        QCoreApplication::processEvents();
+
+        engine.windowFocused(QStringLiteral("win1"), screen1);
+        engine.increaseMasterRatio(0.1); // tunes the current desktop's state
+
+        engine.pruneStatesForDesktop(engine.currentDesktop());
+
+        // A fresh state on the same screen is created cleanly after the prune.
+        engine.windowOpened(QStringLiteral("win3"), screen1, 0, 0);
+        QCoreApplication::processEvents();
+        QVERIFY(engine.tilingStateForScreen(screen1) != nullptr);
     }
 
     // =========================================================================

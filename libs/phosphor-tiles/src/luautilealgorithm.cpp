@@ -71,6 +71,7 @@ ScriptedHelpers::ScriptMetadata parseMetadata(const QVariantMap& m)
     md.supportsMasterCount = m.value(QStringLiteral("supportsMasterCount")).toBool();
     md.supportsSplitRatio = m.value(QStringLiteral("supportsSplitRatio")).toBool();
     md.supportsMemory = m.value(QStringLiteral("supportsMemory")).toBool();
+    md.supportsScriptState = m.value(QStringLiteral("supportsScriptState")).toBool();
     md.producesOverlappingZones = m.value(QStringLiteral("producesOverlappingZones")).toBool();
     md.centerLayout = m.value(QStringLiteral("centerLayout")).toBool();
     if (m.contains(QStringLiteral("supportsMinSizes"))) {
@@ -144,6 +145,34 @@ QVariantMap splitNodeToVariant(const SplitNode* node, int depth)
     if (node->second) {
         m[QStringLiteral("second")] = splitNodeToVariant(node->second.get(), depth + 1);
     }
+    return m;
+}
+
+QVariantMap rectToVariant(const QRect& r)
+{
+    QVariantMap m;
+    m[QStringLiteral("x")] = r.x();
+    m[QStringLiteral("y")] = r.y();
+    m[QStringLiteral("width")] = r.width();
+    m[QStringLiteral("height")] = r.height();
+    return m;
+}
+
+// Build the resize descriptor passed as the second argument to the onWindowResized
+// hook: { index, oldRect, newRect, edges = {left,right,top,bottom} }. It is NOT
+// exposed on the tile() context — tile() reads only the persisted ctx.state.
+QVariantMap resizeToVariant(const ResizeEvent& ev)
+{
+    QVariantMap m;
+    m[QStringLiteral("index")] = ev.index;
+    m[QStringLiteral("oldRect")] = rectToVariant(ev.oldRect);
+    m[QStringLiteral("newRect")] = rectToVariant(ev.newRect);
+    QVariantMap edges;
+    edges[QStringLiteral("left")] = ev.left;
+    edges[QStringLiteral("right")] = ev.right;
+    edges[QStringLiteral("top")] = ev.top;
+    edges[QStringLiteral("bottom")] = ev.bottom;
+    m[QStringLiteral("edges")] = edges;
     return m;
 }
 
@@ -369,6 +398,7 @@ void LuauTileAlgorithm::cacheMetadataAndOverrides()
 
     m_hasOnWindowAdded = m_engine->hasFunction(m_module, QStringLiteral("onWindowAdded"));
     m_hasOnWindowRemoved = m_engine->hasFunction(m_module, QStringLiteral("onWindowRemoved"));
+    m_hasOnWindowResized = m_engine->hasFunction(m_module, QStringLiteral("onWindowResized"));
 }
 
 QString LuauTileAlgorithm::name() const
@@ -509,11 +539,28 @@ QVariantMap LuauTileAlgorithm::buildContext(const TilingParams& params, const QR
             QVariantMap w;
             w[QStringLiteral("appId")] = params.windowInfos[i].appId;
             w[QStringLiteral("focused")] = params.windowInfos[i].focused;
+            w[QStringLiteral("windowId")] = params.windowInfos[i].windowId;
             windows.append(w);
         }
         ctx[QStringLiteral("windows")] = windows;
     }
     ctx[QStringLiteral("focusedIndex")] = params.focusedIndex;
+
+    // Last applied zones (advisory) — lets scripts read neighbour positions.
+    if (!params.currentGeometries.isEmpty()) {
+        QVariantList geoms;
+        const int gcap = std::min<int>(static_cast<int>(params.currentGeometries.size()), MaxZones);
+        for (int i = 0; i < gcap; ++i) {
+            const QRect& r = params.currentGeometries[i];
+            QVariantMap g;
+            g[QStringLiteral("x")] = r.x();
+            g[QStringLiteral("y")] = r.y();
+            g[QStringLiteral("width")] = r.width();
+            g[QStringLiteral("height")] = r.height();
+            geoms.append(g);
+        }
+        ctx[QStringLiteral("currentGeometries")] = geoms;
+    }
 
     if (!params.screenInfo.id.isEmpty()) {
         QVariantMap screen;
@@ -525,6 +572,18 @@ QVariantMap LuauTileAlgorithm::buildContext(const TilingParams& params, const QR
 
     if (!params.customParams.isEmpty()) {
         ctx[QStringLiteral("custom")] = params.customParams;
+    }
+
+    // Persistent per-algorithm bag (ctx.state) — read view of the script's own
+    // stored state. Only surfaced to algorithms that opt into persistence via
+    // metadata.supportsScriptState, so a non-opted-in algorithm can't read a bag
+    // left behind by a different algorithm on the same TilingState. Scripts write
+    // it back via the onWindowResized hook return.
+    if (m_metadata.supportsScriptState && params.state) {
+        const QJsonObject bag = params.state->scriptState();
+        if (!bag.isEmpty()) {
+            ctx[QStringLiteral("state")] = bag.toVariantMap();
+        }
     }
     return ctx;
 }
@@ -612,10 +671,18 @@ QVariantMap LuauTileAlgorithm::buildStateMap(const TilingState* state, bool incl
         QVariantMap w;
         w[QStringLiteral("appId")] = info.appId;
         w[QStringLiteral("focused")] = info.focused;
+        w[QStringLiteral("windowId")] = info.windowId;
         windows.append(w);
     }
     st[QStringLiteral("windows")] = windows;
     st[QStringLiteral("focusedIndex")] = focusedIndex;
+
+    // Persistent bag, so a hook can read its own prior state (e.g. column widths)
+    // before computing the update it returns.
+    const QJsonObject bag = state->scriptState();
+    if (!bag.isEmpty()) {
+        st[QStringLiteral("scriptState")] = bag.toVariantMap();
+    }
 
     if (includeCountAfterRemoval) {
         st[QStringLiteral("countAfterRemoval")] = qMax(0, state->tiledWindowCount() - 1);
@@ -644,6 +711,70 @@ void LuauTileAlgorithm::onWindowRemoved(TilingState* state, int windowIndex)
     }
     const QVariantMap st = buildStateMap(state, true);
     m_engine->callModule(m_module, QStringLiteral("onWindowRemoved"), {st, windowIndex}, ScriptWatchdogTimeoutMs);
+}
+
+bool LuauTileAlgorithm::supportsResizeHook() const noexcept
+{
+    return m_hasOnWindowResized;
+}
+
+bool LuauTileAlgorithm::supportsScriptState() const noexcept
+{
+    return m_metadata.supportsScriptState;
+}
+
+void LuauTileAlgorithm::onWindowResized(TilingState* state, const ResizeEvent& resize)
+{
+    if (!m_hasOnWindowResized || !state) {
+        return;
+    }
+    const QVariantMap st = buildStateMap(state, false);
+    const QVariantMap resizeMap = resizeToVariant(resize);
+    const auto out =
+        m_engine->callModule(m_module, QStringLiteral("onWindowResized"), {st, resizeMap}, ScriptWatchdogTimeoutMs);
+    if (out.status != LuauEngine::CallStatus::Ok) {
+        qCWarning(PhosphorTiles::lcTilesLib)
+            << "LuauTileAlgorithm: onWindowResized() failed script=" << m_scriptId << ":" << out.message;
+        return;
+    }
+    // The hook returns a control map. Two independent, optional outputs:
+    //
+    //   * "splitRatio" (reserved key): a new master/split ratio for the engine to
+    //     apply to this state — used by the ratio-based algorithms (master-stack,
+    //     deck, …) to reflow on an interactive resize. setSplitRatio clamps to
+    //     [MinSplitRatio, MaxSplitRatio]. The engine marks the state user-tuned
+    //     (per-desktop, survives a settings refresh) only when the value changes.
+    //
+    //   * the persistent state bag: opt-in via metadata.supportsScriptState — a
+    //     script that reacts to resize without declaring it gets no stored bag
+    //     (and no ctx.state, see buildContext), keeping each algorithm's bag its
+    //     own. Sanitized at this trust boundary, then stored so the engine's
+    //     follow-up retile lays the windows out from the updated state.
+    if (out.result.typeId() == QMetaType::QVariantMap) {
+        QVariantMap result = out.result.toMap();
+
+        // Apply a finite numeric ratio (setSplitRatio clamps). Accept any numeric
+        // type (a Luau number marshals to Double for fractional values or LongLong
+        // for a whole number such as an extreme-drag 0.0/1.0 — see luaumarshal.cpp)
+        // while rejecting strings/maps, and guard std::isfinite (std::clamp would
+        // otherwise pass NaN straight through).
+        const auto ratioIt = result.constFind(QStringLiteral("splitRatio"));
+        if (ratioIt != result.constEnd() && AutotileDefaults::isNumericMetaType(ratioIt->typeId())) {
+            const double ratio = ratioIt->toDouble();
+            if (std::isfinite(ratio)) {
+                state->setSplitRatio(ratio);
+            }
+        }
+
+        if (m_metadata.supportsScriptState) {
+            // "splitRatio" is a reserved control key, not part of the persistent
+            // bag (see pluau.d.luau) — strip it so it can't round-trip into
+            // ctx.state on the next retile.
+            result.remove(QStringLiteral("splitRatio"));
+            const QJsonObject sanitized = TilingState::sanitizeScriptState(QJsonObject::fromVariantMap(result));
+            state->setScriptState(sanitized);
+        }
+    }
 }
 
 bool LuauTileAlgorithm::supportsCustomParams() const noexcept
