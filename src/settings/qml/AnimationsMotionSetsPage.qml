@@ -61,7 +61,7 @@ SettingsFlickable {
             Layout.fillWidth: true
             type: Kirigami.MessageType.Information
             visible: true
-            text: i18n("Motion sets bundle your per-event overrides into one shareable JSON file. Applying a set merges into your current overrides; paths it doesn't cover are left unchanged.")
+            text: i18n("Motion sets bundle your per-event overrides into one shareable JSON file. Applying a set merges into your current overrides. Paths it doesn't cover are left unchanged.")
         }
 
         SettingsCard {

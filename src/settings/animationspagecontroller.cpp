@@ -477,7 +477,7 @@ void AnimationsPageController::asyncRevertPending()
             // re-opens together with the flag clear.
             const QString errorMsg = result.retained.isEmpty()
                 ? QString()
-                : PhosphorI18n::tr("Failed to restore %1 profile file(s); they remain pending.")
+                : PhosphorI18n::tr("Failed to restore %1 profile file(s). They remain pending.")
                       .arg(result.retained.size());
             Q_EMIT discardResult(result.retained.isEmpty(), errorMsg);
             m_asyncRevertInFlight = false;

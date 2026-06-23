@@ -96,14 +96,14 @@ QVariantList ruleTemplates()
                      PhosphorI18n::tr("Pick an autotile algorithm to use on one monitor."),
                      QLatin1String("view-list-tree")));
     out.append(entry(QLatin1String("lockLayoutOnMonitor"), PhosphorI18n::tr("Lock the layout on a monitor"),
-                     PhosphorI18n::tr("Pin the active layout on one monitor so it can't be switched — the rule-driven "
-                                      "version of the lock-layout shortcut."),
+                     PhosphorI18n::tr("Pin the active layout on one monitor so it can't be switched. This is the "
+                                      "rule-driven version of the lock-layout shortcut."),
                      QLatin1String("object-locked")));
     out.append(entry(QLatin1String("excludeApp"), PhosphorI18n::tr("Exclude an app from tiling"),
                      PhosphorI18n::tr("Keep one application's windows out of the snap and autotile engines entirely."),
                      QLatin1String("edit-delete-remove")));
     out.append(entry(QLatin1String("excludeSmallFromAnimations"), PhosphorI18n::tr("Don't animate small windows"),
-                     PhosphorI18n::tr("Skip open and close animations for windows narrower than a chosen width — handy "
+                     PhosphorI18n::tr("Skip open and close animations for windows narrower than a chosen width. Handy "
                                       "for tiny popups and tool windows."),
                      QLatin1String("edit-delete-remove")));
     return out;
