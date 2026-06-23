@@ -242,10 +242,6 @@ jobs:
   # ═══════════════════════════════════════════════════════════════════════════
   build-rpm-opensuse:
     name: Build .rpm (openSUSE Tumbleweed)
-    # Disabled: openSUSE Tumbleweed still ships KWin 6.6.5, so the kwin-effect's
-    # find_package(KWin 6.7) fails to configure. Re-enable (and add back to the
-    # `release` job's `needs`) once Tumbleweed ships Plasma/KWin 6.7.
-    if: ${{ false }}
     needs: version
     runs-on: ubuntu-latest
     container:
@@ -596,9 +592,7 @@ jobs:
   # ═══════════════════════════════════════════════════════════════════════════
   release:
     name: Create GitHub Release
-    # build-rpm-opensuse is intentionally absent: it is disabled until openSUSE
-    # Tumbleweed ships KWin 6.7 (see that job). Re-add it here when re-enabled.
-    needs: [version, build-deb, build-rpm, build-arch, build-generic, build-nix]
+    needs: [version, build-deb, build-rpm, build-rpm-opensuse, build-arch, build-generic, build-nix]
     runs-on: ubuntu-latest
     # No `if:` — the implicit success() gate is intentional. If any
     # package build fails, the release is NOT cut: we don't ship a
@@ -977,9 +971,9 @@ jobs:
   publish-obs:
     name: Publish to openSUSE OBS
     # Gating on `release` blocks publish if the GitHub release itself fails.
-    # (The in-CI build-rpm-opensuse smoke build is currently disabled until
-    # Tumbleweed ships KWin 6.7, so it no longer pre-gates this; OBS still
-    # rebuilds the submitted spec automatically once Tumbleweed has 6.7.)
+    # `release` now needs build-rpm-opensuse, so the in-CI Tumbleweed smoke
+    # build transitively pre-gates this publish again. OBS then rebuilds the
+    # submitted spec on its own infrastructure.
     # Same shape as publish-aur so the two run as parallel siblings.
     needs: [version, release]
     runs-on: ubuntu-latest
