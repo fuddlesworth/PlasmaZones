@@ -394,7 +394,7 @@ Item {
                     visible: root.modelData.reflowsOnResize === true
                     source: "transform-scale-symbolic"
                     color: Kirigami.Theme.highlightColor
-                    Accessible.name: i18n("Reflows on resize")
+                    Accessible.name: i18n("Reflows")
                     tooltipText: i18n("Reflows neighbouring windows when you resize a tiled window")
                 }
 
