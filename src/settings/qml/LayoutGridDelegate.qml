@@ -73,7 +73,7 @@ Item {
             pg.unregisterSearchAnchor("layout:" + root.modelData.id);
     }
 
-    Accessible.name: modelData.name || i18n("Unnamed Layout")
+    Accessible.name: modelData.displayName || i18n("Unnamed Layout")
     Accessible.description: i18n("Layout with %1 zones", modelData.zoneCount || 0)
     Accessible.role: Accessible.ListItem
     Keys.onReturnPressed: root.activated(root.modelData.id)
