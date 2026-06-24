@@ -109,9 +109,9 @@ void LayoutRegistry::applyBatchAssignments(const QHash<KeyT, QString>& assignmen
 {
     // Step 1 — snapshot existing exact-context entries AND their `enabled`
     // flag for every incoming key. The flag survives the batch rebuild
-    // below — mirrors the precedent set by `upsertAssignmentRule` (line
-    // 178: `rule.enabled = existing->enabled`). Without this capture,
-    // disabled assignment rules silently flip back to enabled on any KCM
+    // below — mirrors `upsertAssignmentRule`'s `rule.enabled =
+    // existing->enabled` preservation. Without this capture, disabled
+    // assignment rules silently flip back to enabled on any KCM
     // "apply all" call that runs a batch setter.
     struct OldEntrySnapshot
     {
