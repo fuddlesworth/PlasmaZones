@@ -397,21 +397,22 @@ bool StagingService::stagedTilingQuickSlot(int slotNumber, QString& out) const
     return true;
 }
 
-void StagingService::flushTilingQuickSlotsToSettings(Settings& settings)
+void StagingService::flushQuickSlotsToDaemon()
 {
-    for (auto it = m_tilingQuickSlots.constBegin(); it != m_tilingQuickSlots.constEnd(); ++it) {
-        settings.writeTilingQuickLayoutSlot(it.key(), it.value());
-    }
-    m_tilingQuickSlots.clear();
-}
-
-void StagingService::flushSnappingQuickSlotsToDaemon()
-{
-    for (auto it = m_snappingQuickSlots.constBegin(); it != m_snappingQuickSlots.constEnd(); ++it) {
-        DaemonDBus::callDaemon(QString(PhosphorProtocol::Service::Interface::LayoutRegistry),
-                               QStringLiteral("setQuickLayoutSlot"), {it.key(), it.value()});
-    }
-    m_snappingQuickSlots.clear();
+    // Quick slots are mode-keyed in the daemon's LayoutRegistry: snapping
+    // slots hold zone-layout UUIDs, tiling slots hold autotile algorithm IDs.
+    // The wire mode matches AssignmentEntry::Mode (Snapping = 0, Autotile = 1).
+    constexpr int kSnappingMode = 0;
+    constexpr int kAutotileMode = 1;
+    const auto flush = [](int mode, QHash<int, QString>& slots) {
+        for (auto it = slots.constBegin(); it != slots.constEnd(); ++it) {
+            DaemonDBus::callDaemon(QString(PhosphorProtocol::Service::Interface::LayoutRegistry),
+                                   QStringLiteral("setQuickLayoutSlot"), {mode, it.key(), it.value()});
+        }
+        slots.clear();
+    };
+    flush(kSnappingMode, m_snappingQuickSlots);
+    flush(kAutotileMode, m_tilingQuickSlots);
 }
 
 } // namespace PlasmaZones

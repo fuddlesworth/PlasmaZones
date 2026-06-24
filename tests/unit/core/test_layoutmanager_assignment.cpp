@@ -312,21 +312,46 @@ private Q_SLOTS:
         mgr->addLayout(layout);
 
         QString layoutId = layout->id().toString();
+        const auto snapping = PhosphorZones::AssignmentEntry::Snapping;
 
-        mgr->setQuickLayoutSlot(1, layoutId);
-        QVERIFY(mgr->quickLayoutSlots().contains(1));
+        mgr->setQuickLayoutSlot(snapping, 1, layoutId);
+        QVERIFY(mgr->quickLayoutSlots(snapping).contains(1));
 
-        mgr->setQuickLayoutSlot(9, layoutId);
-        QVERIFY(mgr->quickLayoutSlots().contains(9));
+        mgr->setQuickLayoutSlot(snapping, 9, layoutId);
+        QVERIFY(mgr->quickLayoutSlots(snapping).contains(9));
 
-        mgr->setQuickLayoutSlot(0, layoutId);
-        QVERIFY(!mgr->quickLayoutSlots().contains(0));
+        mgr->setQuickLayoutSlot(snapping, 0, layoutId);
+        QVERIFY(!mgr->quickLayoutSlots(snapping).contains(0));
 
-        mgr->setQuickLayoutSlot(10, layoutId);
-        QVERIFY(!mgr->quickLayoutSlots().contains(10));
+        mgr->setQuickLayoutSlot(snapping, 10, layoutId);
+        QVERIFY(!mgr->quickLayoutSlots(snapping).contains(10));
 
-        mgr->setQuickLayoutSlot(1, QString());
-        QVERIFY(!mgr->quickLayoutSlots().contains(1));
+        mgr->setQuickLayoutSlot(snapping, 1, QString());
+        QVERIFY(!mgr->quickLayoutSlots(snapping).contains(1));
+    }
+
+    void testLayoutManager_quickLayoutSlot_perModeIndependent()
+    {
+        QScopedPointer<PhosphorZones::LayoutRegistry> mgr(createManager());
+
+        auto* layout = createTestLayout(QStringLiteral("Quick"));
+        mgr->addLayout(layout);
+        const QString layoutId = layout->id().toString();
+        const auto snapping = PhosphorZones::AssignmentEntry::Snapping;
+        const auto autotile = PhosphorZones::AssignmentEntry::Autotile;
+
+        // Same slot number in each mode holds an independent binding: a manual
+        // layout UUID for snapping, an autotile algorithm ID for tiling.
+        mgr->setQuickLayoutSlot(snapping, 1, layoutId);
+        mgr->setQuickLayoutSlot(autotile, 1, QStringLiteral("autotile:bsp"));
+
+        QCOMPARE(mgr->quickLayoutSlots(snapping).value(1), layoutId);
+        QCOMPARE(mgr->quickLayoutSlots(autotile).value(1), QStringLiteral("autotile:bsp"));
+
+        // Clearing one mode's slot leaves the other mode untouched.
+        mgr->setQuickLayoutSlot(snapping, 1, QString());
+        QVERIFY(!mgr->quickLayoutSlots(snapping).contains(1));
+        QCOMPARE(mgr->quickLayoutSlots(autotile).value(1), QStringLiteral("autotile:bsp"));
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
@@ -589,7 +614,7 @@ private Q_SLOTS:
         mgr->assignLayoutById(QStringLiteral("DP-1"), 0, QStringLiteral("act-123"), QStringLiteral("autotile:tall"));
 
         // Quick layout slot
-        mgr->setQuickLayoutSlot(3, idA);
+        mgr->setQuickLayoutSlot(PhosphorZones::AssignmentEntry::Snapping, 3, idA);
 
         // Save
         mgr->saveAssignments();
@@ -622,7 +647,7 @@ private Q_SLOTS:
         QCOMPARE(act.tilingAlgorithm, QStringLiteral("tall"));
 
         // Verify quick layout slot
-        QCOMPARE(mgr2->quickLayoutSlots().value(3), idA);
+        QCOMPARE(mgr2->quickLayoutSlots(PhosphorZones::AssignmentEntry::Snapping).value(3), idA);
     }
 
     // ═══════════════════════════════════════════════════════════════════════════

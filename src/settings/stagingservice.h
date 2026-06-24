@@ -143,15 +143,11 @@ public:
     bool stagedSnappingQuickSlot(int slotNumber, QString& out) const;
     bool stagedTilingQuickSlot(int slotNumber, QString& out) const;
 
-    /// Persist staged tiling-quick-slot entries to Settings (shared
-    /// config backend). Runs BEFORE `Settings::save()`. Clears the
-    /// staging map on completion.
-    void flushTilingQuickSlotsToSettings(Settings& settings);
-
-    /// Push staged snapping-quick-slot entries to the daemon via D-Bus.
-    /// Runs AFTER `notifyReload` so the daemon has the fresh config.
-    /// Clears the staging map on completion.
-    void flushSnappingQuickSlotsToDaemon();
+    /// Push staged quick-layout slots (both snapping and tiling modes) to the
+    /// daemon's mode-keyed LayoutRegistry via D-Bus. Runs AFTER `notifyReload`
+    /// so the daemon has the fresh config. Clears both staging maps on
+    /// completion.
+    void flushQuickSlotsToDaemon();
 
 private:
     StagedAssignment& assignmentEntry(const QString& screen, int desktop, const QString& activity);

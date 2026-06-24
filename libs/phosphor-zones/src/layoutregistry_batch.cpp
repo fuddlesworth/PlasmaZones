@@ -56,14 +56,11 @@ void LayoutRegistry::clearAutotileAssignments()
         affected.insert(qMakePair(dims.screenId, dims.virtualDesktop));
     }
 
-    // Drop autotile quick-layout slots.
-    for (auto it = m_quickLayoutShortcuts.begin(); it != m_quickLayoutShortcuts.end();) {
-        if (PhosphorLayout::LayoutId::isAutotile(it.value())) {
-            it = m_quickLayoutShortcuts.erase(it);
-            changed = true;
-        } else {
-            ++it;
-        }
+    // Drop autotile quick-layout slots — clearing autotile everywhere
+    // includes the per-mode autotile bindings. Snapping slots are untouched.
+    if (!m_quickLayoutSlots[1].isEmpty()) {
+        m_quickLayoutSlots[1].clear();
+        changed = true;
     }
 
     if (changed) {

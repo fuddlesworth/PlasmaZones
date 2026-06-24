@@ -21,6 +21,12 @@
 
 namespace PhosphorZones {
 
+namespace {
+// quicklayouts.json top-level keys: one nested slot object per tiling mode.
+constexpr QLatin1String kQuickSlotsSnappingKey{"snapping"};
+constexpr QLatin1String kQuickSlotsAutotileKey{"autotile"};
+} // namespace
+
 void LayoutRegistry::loadLayouts()
 {
     ensureLayoutDirectory();
@@ -283,7 +289,8 @@ QString LayoutRegistry::layoutSettingsFilePath() const
 
 void LayoutRegistry::readQuickLayouts()
 {
-    m_quickLayoutShortcuts.clear();
+    m_quickLayoutSlots[0].clear();
+    m_quickLayoutSlots[1].clear();
     QFile file(quickLayoutsFilePath());
     if (!file.open(QIODevice::ReadOnly)) {
         return; // a missing file is not an error
@@ -292,25 +299,47 @@ void LayoutRegistry::readQuickLayouts()
     if (!doc.isObject()) {
         return;
     }
-    const QJsonObject obj = doc.object();
-    for (int i = 1; i <= 9; ++i) {
-        const QString key = QString::number(i);
-        if (obj.contains(key)) {
-            const QString layoutId = obj.value(key).toString();
-            if (!layoutId.isEmpty()) {
-                m_quickLayoutShortcuts[i] = layoutId;
+    const QJsonObject root = doc.object();
+
+    // Reader for one mode's nested slot object ({ "1": id, ... }).
+    const auto readModeSlots = [](const QJsonObject& obj, QHash<int, QString>& out) {
+        for (int i = 1; i <= 9; ++i) {
+            const QString key = QString::number(i);
+            if (obj.contains(key)) {
+                const QString layoutId = obj.value(key).toString();
+                if (!layoutId.isEmpty()) {
+                    out[i] = layoutId;
+                }
             }
         }
+    };
+
+    // Current format is nested by mode. A legacy file is a flat
+    // { "1": uuid, ... } map of snapping (zone-layout) slots — read it as
+    // Snapping so existing bindings survive the upgrade. The nested keys are
+    // absent in legacy files, so presence of either nested key selects the
+    // new format.
+    if (root.value(kQuickSlotsSnappingKey).isObject() || root.value(kQuickSlotsAutotileKey).isObject()) {
+        readModeSlots(root.value(kQuickSlotsSnappingKey).toObject(), m_quickLayoutSlots[0]);
+        readModeSlots(root.value(kQuickSlotsAutotileKey).toObject(), m_quickLayoutSlots[1]);
+    } else {
+        readModeSlots(root, m_quickLayoutSlots[0]);
     }
 }
 
 void LayoutRegistry::writeQuickLayouts()
 {
     QDir().mkpath(QFileInfo(quickLayoutsFilePath()).absolutePath());
+    const auto modeSlotsToJson = [](const QHash<int, QString>& slots) {
+        QJsonObject obj;
+        for (auto it = slots.constBegin(); it != slots.constEnd(); ++it) {
+            obj.insert(QString::number(it.key()), it.value());
+        }
+        return obj;
+    };
     QJsonObject obj;
-    for (auto it = m_quickLayoutShortcuts.constBegin(); it != m_quickLayoutShortcuts.constEnd(); ++it) {
-        obj.insert(QString::number(it.key()), it.value());
-    }
+    obj.insert(kQuickSlotsSnappingKey, modeSlotsToJson(m_quickLayoutSlots[0]));
+    obj.insert(kQuickSlotsAutotileKey, modeSlotsToJson(m_quickLayoutSlots[1]));
     // QSaveFile gives atomic temp-write + rename — a crash mid-write never
     // leaves a truncated quicklayouts.json behind.
     QSaveFile file(quickLayoutsFilePath());
@@ -328,7 +357,8 @@ void LayoutRegistry::writeQuickLayouts()
         qCWarning(lcZonesLib) << "Failed to commit quick layouts:" << file.errorString();
         return;
     }
-    qCInfo(lcZonesLib) << "Saved quickShortcuts=" << m_quickLayoutShortcuts.size();
+    qCInfo(lcZonesLib) << "Saved quickShortcuts: snapping=" << m_quickLayoutSlots[0].size()
+                       << "autotile=" << m_quickLayoutSlots[1].size();
 }
 
 void LayoutRegistry::loadAssignments()
@@ -339,7 +369,8 @@ void LayoutRegistry::loadAssignments()
     readQuickLayouts();
 
     qCInfo(lcZonesLib) << "Loaded windowRules=" << m_ruleStore->count()
-                       << "quickShortcuts=" << m_quickLayoutShortcuts.size();
+                       << "quickShortcuts: snapping=" << m_quickLayoutSlots[0].size()
+                       << "autotile=" << m_quickLayoutSlots[1].size();
 }
 
 void LayoutRegistry::saveAssignments()

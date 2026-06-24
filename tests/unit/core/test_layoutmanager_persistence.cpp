@@ -126,12 +126,12 @@ private Q_SLOTS:
         mgr->assignLayout(QStringLiteral("screen1"), 0, QString(), layout);
         QVERIFY(mgr->hasExplicitAssignment(QStringLiteral("screen1")));
 
-        mgr->setQuickLayoutSlot(1, layout->id().toString());
+        mgr->setQuickLayoutSlot(PhosphorZones::AssignmentEntry::Snapping, 1, layout->id().toString());
 
         mgr->removeLayout(layout);
 
         QVERIFY(!mgr->hasExplicitAssignment(QStringLiteral("screen1")));
-        QVERIFY(!mgr->quickLayoutSlots().contains(1));
+        QVERIFY(!mgr->quickLayoutSlots(PhosphorZones::AssignmentEntry::Snapping).contains(1));
     }
 
     // ═══════════════════════════════════════════════════════════════════════════

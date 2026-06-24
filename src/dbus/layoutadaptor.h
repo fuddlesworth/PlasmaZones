@@ -124,7 +124,7 @@ public Q_SLOTS:
 
     // PhosphorZones::Layout management
     void setActiveLayout(const QString& id);
-    void applyQuickLayout(int number, const QString& screenId);
+    void applyQuickLayout(int mode, int number, const QString& screenId);
     QString createLayout(const QString& name, const QString& type);
     void deleteLayout(const QString& id);
     QString duplicateLayout(const QString& id);
@@ -199,11 +199,11 @@ public Q_SLOTS:
     // rules are not included.
     QVariantMap getAllCombinedAssignments();
 
-    // Quick layout slots (1-9)
-    QString getQuickLayoutSlot(int slotNumber);
-    void setQuickLayoutSlot(int slotNumber, const QString& layoutId);
-    void setAllQuickLayoutSlots(const QVariantMap& slots); // Batch set - saves once
-    QVariantMap getAllQuickLayoutSlots();
+    // Quick layout slots (1-9), keyed by tiling mode (0 = Snapping, 1 = Autotile)
+    QString getQuickLayoutSlot(int mode, int slotNumber);
+    void setQuickLayoutSlot(int mode, int slotNumber, const QString& layoutId);
+    void setAllQuickLayoutSlots(int mode, const QVariantMap& slots); // Batch set - saves once
+    QVariantMap getAllQuickLayoutSlots(int mode);
 
     // ═══════════════════════════════════════════════════════════════════════════════
     // KDE Activities Support

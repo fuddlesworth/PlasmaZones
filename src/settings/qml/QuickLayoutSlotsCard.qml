@@ -112,11 +112,11 @@ SettingsCard {
                             }
 
                             Connections {
-                                // Fires on EXTERNAL (daemon) snapping/zone quick-layout-slot
-                                // changes — the daemon emits quickLayoutSlotsChanged only for
-                                // those. Tiling slots are config-only (no external-change
-                                // signal), so the bump is a no-op in viewMode 1; that's fine —
-                                // there is no separate tilingQuickLayoutSlotsChanged signal.
+                                // Fires on EXTERNAL (daemon) quick-layout-slot changes. Both
+                                // snapping and tiling slots are daemon-backed (mode-keyed
+                                // registry), and the daemon emits quickLayoutSlotsChanged for
+                                // any slot change, so the revision bump refreshes both view
+                                // modes.
                                 function onQuickLayoutSlotsChanged() {
                                     slotDelegate._slotRevision++;
                                 }

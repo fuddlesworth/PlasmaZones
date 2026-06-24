@@ -101,8 +101,9 @@ QString SettingsController::getQuickLayoutSlot(int slotNumber) const
     QString staged;
     if (m_staging.stagedSnappingQuickSlot(slotNumber, staged))
         return staged;
+    // Snapping quick slots use wire mode 0 (AssignmentEntry::Snapping).
     QDBusMessage reply = DaemonDBus::callDaemon(QString(PhosphorProtocol::Service::Interface::LayoutRegistry),
-                                                QStringLiteral("getQuickLayoutSlot"), {slotNumber});
+                                                QStringLiteral("getQuickLayoutSlot"), {0, slotNumber});
     if (reply.type() == QDBusMessage::ReplyMessage && !reply.arguments().isEmpty())
         return reply.arguments().first().toString();
     return {};
@@ -132,7 +133,13 @@ QString SettingsController::getTilingQuickLayoutSlot(int slotNumber) const
     QString staged;
     if (m_staging.stagedTilingQuickSlot(slotNumber, staged))
         return staged;
-    return m_settings.readTilingQuickLayoutSlot(slotNumber);
+    // Tiling quick slots use wire mode 1 (AssignmentEntry::Autotile). They are
+    // daemon-backed (mode-keyed LayoutRegistry), same as snapping slots.
+    QDBusMessage reply = DaemonDBus::callDaemon(QString(PhosphorProtocol::Service::Interface::LayoutRegistry),
+                                                QStringLiteral("getQuickLayoutSlot"), {1, slotNumber});
+    if (reply.type() == QDBusMessage::ReplyMessage && !reply.arguments().isEmpty())
+        return reply.arguments().first().toString();
+    return {};
 }
 
 void SettingsController::setTilingQuickLayoutSlot(int slotNumber, const QString& layoutId)

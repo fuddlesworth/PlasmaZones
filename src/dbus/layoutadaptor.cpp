@@ -39,6 +39,14 @@ namespace PlasmaZones {
 
 namespace {
 
+// Map the D-Bus quick-slot mode wire value (0 = Snapping, 1 = Autotile) to
+// the registry's AssignmentEntry::Mode. Any other value clamps to Snapping.
+PhosphorZones::AssignmentEntry::Mode quickSlotMode(int mode)
+{
+    return mode == PhosphorZones::AssignmentEntry::Autotile ? PhosphorZones::AssignmentEntry::Autotile
+                                                            : PhosphorZones::AssignmentEntry::Snapping;
+}
+
 // `getLayout` is contractually a *Layout*-schema endpoint: its sole consumer
 // (the editor's loadLayout parser, DBusLayoutService::loadLayout → getLayout)
 // reads the layout name under `name` and each zone's geometry nested under
@@ -523,9 +531,10 @@ void LayoutAdaptor::setActiveLayout(const QString& id)
     m_layoutManager->setActiveLayoutById(layout->id());
 }
 
-void LayoutAdaptor::applyQuickLayout(int number, const QString& screenId)
+void LayoutAdaptor::applyQuickLayout(int mode, int number, const QString& screenId)
 {
-    m_layoutManager->applyQuickLayout(number, PhosphorScreens::ScreenIdentity::idForName(screenId));
+    m_layoutManager->applyQuickLayout(quickSlotMode(mode), number,
+                                      PhosphorScreens::ScreenIdentity::idForName(screenId));
 }
 
 QString LayoutAdaptor::createLayout(const QString& name, const QString& type)
@@ -614,7 +623,7 @@ QString LayoutAdaptor::duplicateLayout(const QString& id)
 // Quick PhosphorZones::Layout Slots
 // ═══════════════════════════════════════════════════════════════════════════════
 
-QString LayoutAdaptor::getQuickLayoutSlot(int slotNumber)
+QString LayoutAdaptor::getQuickLayoutSlot(int mode, int slotNumber)
 {
     if (slotNumber < 1 || slotNumber > 9) {
         qCWarning(lcDbusLayout) << "Invalid quick layout slot number:" << slotNumber << "(must be 1-9)";
@@ -622,11 +631,11 @@ QString LayoutAdaptor::getQuickLayoutSlot(int slotNumber)
     }
 
     // Return raw assignment ID (UUID string or autotile ID)
-    auto slots = m_layoutManager->quickLayoutSlots();
+    auto slots = m_layoutManager->quickLayoutSlots(quickSlotMode(mode));
     return slots.value(slotNumber);
 }
 
-void LayoutAdaptor::setQuickLayoutSlot(int slotNumber, const QString& layoutId)
+void LayoutAdaptor::setQuickLayoutSlot(int mode, int slotNumber, const QString& layoutId)
 {
     if (slotNumber < 1 || slotNumber > 9) {
         qCWarning(lcDbusLayout) << "Invalid quick layout slot number:" << slotNumber << "(must be 1-9)";
@@ -641,12 +650,12 @@ void LayoutAdaptor::setQuickLayoutSlot(int slotNumber, const QString& layoutId)
         }
     }
 
-    m_layoutManager->setQuickLayoutSlot(slotNumber, layoutId);
-    qCInfo(lcDbusLayout) << "Set quick layout slot" << slotNumber << "to" << layoutId;
+    m_layoutManager->setQuickLayoutSlot(quickSlotMode(mode), slotNumber, layoutId);
+    qCInfo(lcDbusLayout) << "Set quick layout slot" << slotNumber << "mode" << mode << "to" << layoutId;
     Q_EMIT quickLayoutSlotsChanged();
 }
 
-void LayoutAdaptor::setAllQuickLayoutSlots(const QVariantMap& slots)
+void LayoutAdaptor::setAllQuickLayoutSlots(int mode, const QVariantMap& slots)
 {
     QHash<int, QString> parsedSlots;
 
@@ -668,15 +677,15 @@ void LayoutAdaptor::setAllQuickLayoutSlots(const QVariantMap& slots)
         parsedSlots[slotNumber] = layoutId;
     }
 
-    m_layoutManager->setAllQuickLayoutSlots(parsedSlots);
-    qCInfo(lcDbusLayout) << "Batch set" << parsedSlots.size() << "quick layout slots";
+    m_layoutManager->setAllQuickLayoutSlots(quickSlotMode(mode), parsedSlots);
+    qCInfo(lcDbusLayout) << "Batch set" << parsedSlots.size() << "quick layout slots mode" << mode;
     Q_EMIT quickLayoutSlotsChanged();
 }
 
-QVariantMap LayoutAdaptor::getAllQuickLayoutSlots()
+QVariantMap LayoutAdaptor::getAllQuickLayoutSlots(int mode)
 {
     QVariantMap result;
-    auto slots = m_layoutManager->quickLayoutSlots();
+    auto slots = m_layoutManager->quickLayoutSlots(quickSlotMode(mode));
     for (auto it = slots.begin(); it != slots.end(); ++it) {
         result[QString::number(it.key())] = it.value();
     }

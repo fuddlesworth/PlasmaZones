@@ -54,7 +54,10 @@ SPDX-License-Identifier: GPL-3.0-or-later
             </arg>
         </method>
         <method name="applyQuickLayout">
-            <annotation name="org.gtk.GDBus.DocString" value="Apply quick layout slot (1-9) to the given screen."/>
+            <annotation name="org.gtk.GDBus.DocString" value="Apply quick layout slot (1-9) for the given mode to the given screen."/>
+            <arg name="mode" type="i" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="Tiling mode (0 = snapping, 1 = autotile)."/>
+            </arg>
             <arg name="number" type="i" direction="in">
                 <annotation name="org.gtk.GDBus.DocString" value="Slot number (1-9)."/>
             </arg>
@@ -308,7 +311,10 @@ SPDX-License-Identifier: GPL-3.0-or-later
         </method>
         <!-- Quick Layout Slots (1-9) -->
         <method name="getQuickLayoutSlot">
-            <annotation name="org.gtk.GDBus.DocString" value="Get the layout ID assigned to a quick slot (1-9)."/>
+            <annotation name="org.gtk.GDBus.DocString" value="Get the layout ID assigned to a quick slot (1-9) for the given mode."/>
+            <arg name="mode" type="i" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="Tiling mode (0 = snapping, 1 = autotile)."/>
+            </arg>
             <arg name="slotNumber" type="i" direction="in">
                 <annotation name="org.gtk.GDBus.DocString" value="Slot number (1-9)."/>
             </arg>
@@ -317,7 +323,10 @@ SPDX-License-Identifier: GPL-3.0-or-later
             </arg>
         </method>
         <method name="setQuickLayoutSlot">
-            <annotation name="org.gtk.GDBus.DocString" value="Assign a layout to a quick slot (1-9)."/>
+            <annotation name="org.gtk.GDBus.DocString" value="Assign a layout to a quick slot (1-9) for the given mode."/>
+            <arg name="mode" type="i" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="Tiling mode (0 = snapping, 1 = autotile)."/>
+            </arg>
             <arg name="slotNumber" type="i" direction="in">
                 <annotation name="org.gtk.GDBus.DocString" value="Slot number (1-9)."/>
             </arg>
@@ -326,13 +335,19 @@ SPDX-License-Identifier: GPL-3.0-or-later
             </arg>
         </method>
         <method name="setAllQuickLayoutSlots">
-            <annotation name="org.gtk.GDBus.DocString" value="Batch set all quick layout slots (saves once)."/>
+            <annotation name="org.gtk.GDBus.DocString" value="Batch set all quick layout slots for the given mode (saves once)."/>
+            <arg name="mode" type="i" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="Tiling mode (0 = snapping, 1 = autotile)."/>
+            </arg>
             <arg name="slots" type="a{sv}" direction="in">
                 <annotation name="org.gtk.GDBus.DocString" value="Map of slot number (as string) to layoutId."/>
             </arg>
         </method>
         <method name="getAllQuickLayoutSlots">
-            <annotation name="org.gtk.GDBus.DocString" value="Get all quick layout slot assignments."/>
+            <annotation name="org.gtk.GDBus.DocString" value="Get all quick layout slot assignments for the given mode."/>
+            <arg name="mode" type="i" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="Tiling mode (0 = snapping, 1 = autotile)."/>
+            </arg>
             <arg name="slots" type="a{sv}" direction="out">
                 <annotation name="org.gtk.GDBus.DocString" value="Map of slot number (as string) to layoutId."/>
             </arg>

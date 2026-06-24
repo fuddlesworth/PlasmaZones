@@ -491,14 +491,19 @@ public:
     QHash<CombinedAssignmentKey, QString> combinedAssignments() const;
 
     // ─── Quick-layout slots (1..9) ────────────────────────────────────────
+    //
+    // Quick slots are keyed by tiling mode: Snapping slots hold manual-layout
+    // UUIDs, Autotile slots hold autotile algorithm IDs. The two sets are
+    // independent so the same Meta+Alt+N can map to a zone layout in snapping
+    // mode and an autotile algorithm in autotile mode.
 
-    Q_INVOKABLE Layout* layoutForShortcut(int number) const;
-    Q_INVOKABLE void applyQuickLayout(int number, const QString& screenId);
-    void setQuickLayoutSlot(int number, const QString& layoutId);
-    void setAllQuickLayoutSlots(const QHash<int, QString>& slots);
-    QHash<int, QString> quickLayoutSlots() const
+    Q_INVOKABLE Layout* layoutForShortcut(AssignmentEntry::Mode mode, int number) const;
+    Q_INVOKABLE void applyQuickLayout(AssignmentEntry::Mode mode, int number, const QString& screenId);
+    void setQuickLayoutSlot(AssignmentEntry::Mode mode, int number, const QString& layoutId);
+    void setAllQuickLayoutSlots(AssignmentEntry::Mode mode, const QHash<int, QString>& slots);
+    QHash<int, QString> quickLayoutSlots(AssignmentEntry::Mode mode) const
     {
-        return m_quickLayoutShortcuts;
+        return m_quickLayoutSlots[modeIndex(mode)];
     }
 
     // ─── Layout cycling ───────────────────────────────────────────────────
@@ -599,6 +604,13 @@ private:
     QString layoutSettingsFilePath() const;
     void readQuickLayouts();
     void writeQuickLayouts();
+    /// Map a tiling mode to its @ref m_quickLayoutSlots array index.
+    /// Only Snapping and Autotile carry quick slots; any other value
+    /// clamps to Snapping.
+    static constexpr int modeIndex(AssignmentEntry::Mode mode)
+    {
+        return mode == AssignmentEntry::Autotile ? 1 : 0;
+    }
     Layout* cycleLayoutImpl(const QString& screenId, int direction);
     bool shouldSkipLayoutAssignment(const QString& layoutId, const QString& context) const;
     void emitLayoutAssigned(const QString& screenId, int virtualDesktop, const QString& layoutId);
@@ -892,7 +904,10 @@ private:
     QVector<Layout*> m_layouts;
     Layout* m_activeLayout = nullptr;
     Layout* m_previousLayout = nullptr; ///< Active layout before last setActiveLayout (for resnap)
-    QHash<int, QString> m_quickLayoutShortcuts; ///< slot number (1..9) → layout ID
+    /// Quick-layout slots keyed by mode: index 0 = Snapping (zone-layout
+    /// UUIDs), index 1 = Autotile (autotile algorithm IDs). Each maps slot
+    /// number (1..9) → layout/algorithm ID. See @ref modeIndex.
+    QHash<int, QString> m_quickLayoutSlots[2];
     /// Per-layout settings sidecar (layout-settings.json), keyed by layout UUID.
     /// Settings are split out of the structural layout file on save and merged
     /// back in on load — see layoutregistry_persistence.cpp.
