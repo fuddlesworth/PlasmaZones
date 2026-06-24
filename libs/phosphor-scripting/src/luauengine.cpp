@@ -19,17 +19,26 @@ namespace {
 // Compile/run budget for prelude + module chunks (well-behaved host code).
 constexpr int ChunkTimeoutMs = 1000;
 
-// RAII guard that pins the calling thread's LC_NUMERIC to "C" for its
-// lifetime. luau_compile() lexes number literals through Luau's parser, which
-// converts them with strtod() — and strtod() honours LC_NUMERIC. Under a locale
-// whose decimal separator is not '.' (e.g. de_DE, fr_FR, most non-English
-// European locales use ','), strtod("0.1") parses only "0" and stops at the
-// '.', so Luau rejects the literal as a "Malformed number" and the entire chunk
-// fails to compile. The bundled tiling algorithms and the pluau prelude are all
-// written with '.'-decimal literals, so on a comma-decimal locale every one of
-// them would fail to load and the user would see no algorithms at all. Scoping
-// the override to the compiling thread via uselocale() keeps it off the global
-// process locale, so user-facing number formatting elsewhere is untouched.
+// RAII guard that pins the calling thread's LC_NUMERIC to "C" for its lifetime.
+// The Luau VM assumes a C numeric locale end to end, and both halves of that
+// assumption route through locale-sensitive C library calls:
+//   • Compile: luau_compile() lexes number literals through Luau's parser, which
+//     converts them with strtod(). strtod() honours LC_NUMERIC, so under a
+//     locale whose decimal separator is not '.' (e.g. de_DE, fr_FR, most
+//     non-English European locales use ','), strtod("0.1") parses only "0" and
+//     stops at the '.'. Luau then rejects the literal as a "Malformed number"
+//     and the whole chunk fails to compile. The bundled tiling algorithms and
+//     the pluau prelude are all written with '.'-decimal literals, so on a
+//     comma-decimal locale every one of them would fail to load and the user
+//     would see no algorithms at all.
+//   • Execute: at runtime, tonumber()/string.format("%f", …)/tostring(number)
+//     go through strtod()/snprintf(), which are locale-sensitive too. A script
+//     that round-trips a decimal through a string would silently misparse or
+//     misformat under the same locales.
+// Both luau_compile() and the lua_pcall() that runs script bodies are wrapped in
+// this guard. Scoping the override to the executing thread via uselocale() keeps
+// it off the global process locale, so user-facing number formatting elsewhere
+// is untouched.
 class ScopedCNumericLocale
 {
 public:
@@ -383,7 +392,15 @@ LuauEngine::CallStatus LuauEngine::guardedPcall(int nargs, int nresults, int tim
     // runs outside any pcall. Trusted preludes run before sandbox() and stay
     // unenforced. Not re-entrant — the VM is single-threaded.
     m_memory.enforce = m_sandboxed;
-    const int rc = lua_pcall(m_L, nargs, nresults, 0);
+    int rc = 0;
+    {
+        // Script bodies run number↔string conversions (tonumber, string.format,
+        // tostring) through locale-sensitive C library calls — pin LC_NUMERIC to
+        // "C" for the duration of execution (see ScopedCNumericLocale). Result
+        // marshalling afterward uses binary lua_tonumber, so it needs no guard.
+        const ScopedCNumericLocale cNumeric;
+        rc = lua_pcall(m_L, nargs, nresults, 0);
+    }
     m_memory.enforce = false;
     if (m_watchdog) {
         m_watchdog->disarm(this);

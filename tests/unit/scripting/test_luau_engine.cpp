@@ -10,6 +10,7 @@
 #include <PhosphorScripting/LuauEngine.h>
 #include <PhosphorScripting/LuauWatchdog.h>
 
+#include <cstdio>
 #include <cstdlib>
 #include <locale.h>
 #include <memory>
@@ -37,7 +38,25 @@ private Q_SLOTS:
     void memoryCapEnforcedAndRecovers();
     void memoryCapAllowsNormalWork();
     void compilesFloatLiteralsUnderCommaDecimalLocale();
+    void executesNumberFormattingUnderCommaDecimalLocale();
 };
+
+namespace {
+// Open the first installed comma-decimal locale from a candidate list, or
+// nullptr if none is available. Callers QSKIP on nullptr.
+locale_t openCommaDecimalLocale()
+{
+    static const char* const kCandidates[] = {"de_DE.UTF-8", "fr_FR.UTF-8", "nl_NL.UTF-8", "es_ES.UTF-8",
+                                              "it_IT.UTF-8", "de_DE",       "fr_FR"};
+    for (const char* name : kCandidates) {
+        const locale_t loc = newlocale(LC_NUMERIC_MASK, name, static_cast<locale_t>(nullptr));
+        if (loc != static_cast<locale_t>(nullptr)) {
+            return loc;
+        }
+    }
+    return static_cast<locale_t>(nullptr);
+}
+} // namespace
 
 void TestLuauEngine::happyPathAndMarshalling()
 {
@@ -394,15 +413,7 @@ void TestLuauEngine::compilesFloatLiteralsUnderCommaDecimalLocale()
     // the pluau prelude + every bundled algorithm fail to load. The engine must
     // pin LC_NUMERIC to "C" across the compile so '.'-decimal literals parse
     // regardless of the ambient locale.
-    static const char* const kCandidates[] = {"de_DE.UTF-8", "fr_FR.UTF-8", "nl_NL.UTF-8", "es_ES.UTF-8",
-                                              "it_IT.UTF-8", "de_DE",       "fr_FR"};
-    locale_t commaLocale = static_cast<locale_t>(nullptr);
-    for (const char* name : kCandidates) {
-        commaLocale = newlocale(LC_NUMERIC_MASK, name, static_cast<locale_t>(nullptr));
-        if (commaLocale != static_cast<locale_t>(nullptr)) {
-            break;
-        }
-    }
+    const locale_t commaLocale = openCommaDecimalLocale();
     if (commaLocale == static_cast<locale_t>(nullptr)) {
         QSKIP("No comma-decimal locale installed; cannot exercise the LC_NUMERIC regression");
     }
@@ -435,6 +446,49 @@ void TestLuauEngine::compilesFloatLiteralsUnderCommaDecimalLocale()
     const QVariantMap z = out.result.toList().value(0).toMap();
     QCOMPARE(z.value(QStringLiteral("width")).toDouble(), 0.25);
     QCOMPARE(z.value(QStringLiteral("height")).toDouble(), 0.5);
+    engine.releaseModule(handle);
+}
+
+void TestLuauEngine::executesNumberFormattingUnderCommaDecimalLocale()
+{
+    // Companion to compilesFloatLiteralsUnderCommaDecimalLocale: even after a
+    // chunk compiles, Luau's runtime number→string conversions (string.format,
+    // tostring) go through locale-sensitive snprintf. The engine pins LC_NUMERIC
+    // to "C" across script execution too, so a script that formats a decimal
+    // emits '.'-decimal output regardless of the ambient locale.
+    const locale_t commaLocale = openCommaDecimalLocale();
+    if (commaLocale == static_cast<locale_t>(nullptr)) {
+        QSKIP("No comma-decimal locale installed; cannot exercise the LC_NUMERIC regression");
+    }
+
+    // Compile under the default locale (the compile path has its own test); this
+    // case isolates the runtime-execution path, so the locale only needs to be
+    // comma-decimal while the script body runs below.
+    LuauEngine engine;
+    QVERIFY(engine.init());
+    engine.sandbox();
+    QString err;
+    const int handle = engine.loadModule(QStringLiteral("fmt"),
+                                         "return { fmt = function() return string.format('%.3f', 0.25) end }", &err);
+    QVERIFY2(handle >= 0, qPrintable(err));
+
+    const locale_t previous = uselocale(commaLocale);
+    // Sanity: confirm the C library really formats decimals with ',' under this
+    // locale, so a pass proves the engine's runtime guard rather than a no-op
+    // environment.
+    char buf[16];
+    std::snprintf(buf, sizeof(buf), "%.1f", 0.5);
+    const bool ambientFormatsWithComma = (QByteArray(buf) == "0,5");
+
+    const auto out = engine.callModule(handle, QStringLiteral("fmt"), {}, 200);
+
+    // Restore the thread locale before any QVERIFY can early-return.
+    uselocale(previous);
+    freelocale(commaLocale);
+
+    QVERIFY2(ambientFormatsWithComma, "selected locale is not actually comma-decimal; the test would be a no-op");
+    QCOMPARE(out.status, LuauEngine::CallStatus::Ok);
+    QCOMPARE(out.result.toString(), QStringLiteral("0.250"));
     engine.releaseModule(handle);
 }
 
