@@ -305,7 +305,7 @@ QString paramLabel(const QString& type, const QString& key)
         return PhosphorI18n::tr("Monitor");
     }
     if (type == ActionType::RouteToDesktop && key == ActionParam::TargetDesktop) {
-        return PhosphorI18n::tr("Virtual desktop");
+        return PhosphorI18n::tr("Desktop");
     }
     if (key == ActionParam::Event) {
         return PhosphorI18n::tr("Event");
@@ -519,7 +519,7 @@ QString actionTypeLabelImpl(const QString& type)
         return PhosphorI18n::tr("Open on monitor");
     }
     if (type == ActionType::RouteToDesktop) {
-        return PhosphorI18n::tr("Open on virtual desktop");
+        return PhosphorI18n::tr("Open on desktop");
     }
     return WindowRuleModel::actionTypeFallbackLabel(type);
 }

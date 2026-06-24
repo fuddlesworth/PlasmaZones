@@ -616,8 +616,8 @@ void TestWindowRuleModel::routeActionsRenderFriendlyLabels()
     // No screen lookup wired → the raw canonical id round-trips behind the label.
     QCOMPARE(summaryAt(0), QStringLiteral("Open on monitor: DP-2"));
     QCOMPARE(summaryAt(1), QStringLiteral("Open on monitor"));
-    QCOMPARE(summaryAt(2), QStringLiteral("Open on virtual desktop 2"));
-    QCOMPARE(summaryAt(3), QStringLiteral("Open on virtual desktop"));
+    QCOMPARE(summaryAt(2), QStringLiteral("Open on desktop 2"));
+    QCOMPARE(summaryAt(3), QStringLiteral("Open on desktop"));
 
     // No summary may leak the lowercase wire token — that signals the
     // actionLabel branch fell through to the raw-type fallback.

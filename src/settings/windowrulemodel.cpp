@@ -249,8 +249,7 @@ QString actionLabel(const RuleAction& action, const WindowRuleModel::LabelLookup
     }
     if (action.type == ActionType::RouteToDesktop) {
         const int desktop = action.params.value(PhosphorWindowRules::ActionParam::TargetDesktop).toInt();
-        return desktop >= 1 ? PhosphorI18n::tr("Open on virtual desktop %1").arg(desktop)
-                            : PhosphorI18n::tr("Open on virtual desktop");
+        return desktop >= 1 ? PhosphorI18n::tr("Open on desktop %1").arg(desktop) : PhosphorI18n::tr("Open on desktop");
     }
     if (action.type == ActionType::SetOpacity) {
         // Mirror EVERY resolver reject path (shader_resolve.cpp's

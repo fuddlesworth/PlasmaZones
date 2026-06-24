@@ -433,7 +433,7 @@ RowLayout {
             // A rule may reference a desktop beyond the current count (the desktop
             // was removed). Surface the stored number so the rule stays legible.
             displayText: currentIndex >= 0 ? currentText : (leaf.node.value ? ("" + leaf.node.value) : i18n("Choose a desktop…"))
-            Accessible.name: i18n("Virtual desktop")
+            Accessible.name: i18n("Desktop")
             onActivated: function (index) {
                 if (currentValue !== leaf.node.value)
                     leaf._emit(leaf.node.field, leaf.node.op, currentValue);
