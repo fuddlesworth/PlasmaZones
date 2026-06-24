@@ -522,6 +522,58 @@ void ActionRegistry::registerBuiltins()
         .displayOrder = 0,
     });
 
+    // ── open-routing: send a matched window to a target monitor / desktop ──
+    registerAction(ActionDescriptor{
+        .type = QString(ActionType::RouteToScreen),
+        .slotFor = constantSlot(ActionSlot::RouteScreen),
+        .validate =
+            [](const QJsonObject& p) {
+                // A non-empty canonical screen id (physical or virtual). The id
+                // form is not validated against live screen state here — this lib
+                // has no view of connected outputs, and a rule targeting a
+                // currently-absent monitor is legitimate (it fires when that
+                // monitor returns). The daemon's placement path no-ops a route
+                // whose target screen is not currently resolvable.
+                return hasNonEmptyString(p, ActionParam::TargetScreenId);
+            },
+        .terminal = false,
+        .allowedKeys = {QString(ActionParam::TargetScreenId)},
+        .domain = ActionDomain::Window,
+        .params = {P{.key = QString(ActionParam::TargetScreenId), .kind = QStringLiteral("screenId")}},
+        // No tags: RouteToScreen is daemon open-path routing only, not an
+        // Effect / Border / Animation / Overlay / Gap action.
+        .category = QStringLiteral("windowManagement"),
+        .displayOrder = 1,
+    });
+    registerAction(ActionDescriptor{
+        .type = QString(ActionType::RouteToDesktop),
+        .slotFor = constantSlot(ActionSlot::RouteDesktop),
+        .validate =
+            [](const QJsonObject& p) {
+                // A single 1-based virtual-desktop number. Bound the DOUBLE before
+                // narrowing (a float-to-int cast out of int's range is UB), then
+                // require integrality — mirrors the SnapToZone ordinal check.
+                const QJsonValue v = p.value(ActionParam::TargetDesktop);
+                if (!v.isDouble()) {
+                    return false;
+                }
+                const double d = v.toDouble();
+                if (d < 1.0 || d > MaxVirtualDesktopOrdinal) {
+                    return false;
+                }
+                return static_cast<double>(static_cast<int>(d)) == d;
+            },
+        .terminal = false,
+        .allowedKeys = {QString(ActionParam::TargetDesktop)},
+        .domain = ActionDomain::Window,
+        .params = {P{.key = QString(ActionParam::TargetDesktop),
+                     .kind = QStringLiteral("virtualDesktop"),
+                     .min = 1.0,
+                     .max = static_cast<double>(MaxVirtualDesktopOrdinal)}},
+        .category = QStringLiteral("windowManagement"),
+        .displayOrder = 2,
+    });
+
     // ── animation slots — event-scoped: "anim-shader:<event>" ──
     registerAction(ActionDescriptor{
         .type = QString(ActionType::OverrideAnimationShader),

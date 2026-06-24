@@ -171,7 +171,14 @@ RowLayout {
         source: "dialog-information"
         Layout.preferredWidth: Kirigami.Units.iconSizes.small
         Layout.preferredHeight: Kirigami.Units.iconSizes.small
-        Layout.alignment: Qt.AlignVCenter
+        // Top-align every control in the row so they line up with the value
+        // field's top. The value editor can grow tall (a wrapped operator hint
+        // sits beneath the field); vertically centring the siblings against that
+        // taller column would drop the combos and trash below the field. The icon
+        // is shorter than the field controls, so nudge it down to sit centred on
+        // the first control line rather than at its very top.
+        Layout.alignment: Qt.AlignTop
+        Layout.topMargin: Math.max(0, (fieldCombo.height - height) / 2)
         color: Kirigami.Theme.highlightColor
         // Hover help describing the selected field. An unknown / legacy field
         // (_fieldEntry undefined) yields no text, so the tooltip just doesn't
@@ -194,6 +201,7 @@ RowLayout {
     PZCommon.CategoryMenuButton {
         id: fieldCombo
 
+        Layout.alignment: Qt.AlignTop
         Layout.preferredWidth: Kirigami.Units.gridUnit * 9
         // Map the field metadata to the picker's { id, name, category,
         // categoryOrder } item shape.
@@ -246,6 +254,7 @@ RowLayout {
     WideComboBox {
         id: opCombo
 
+        Layout.alignment: Qt.AlignTop
         // Fixed to the widest operator label across ALL fields' operator sets
         // (plus chrome for the dropdown indicator + padding) instead of the
         // WideComboBox auto-width, which keys off the CURRENT field's operator
@@ -266,13 +275,16 @@ RowLayout {
 
     Loader {
         Layout.fillWidth: true
-        Layout.alignment: Qt.AlignVCenter
+        Layout.alignment: Qt.AlignTop
         sourceComponent: {
             if (leaf._valueKind === "bool")
                 return boolValueEditor;
 
             if (leaf._valueKind === "number")
                 return numberValueEditor;
+
+            if (leaf._valueKind === "virtualDesktop")
+                return virtualDesktopValueEditor;
 
             if (leaf._valueKind === "screen")
                 return screenValueEditor;
@@ -289,7 +301,7 @@ RowLayout {
 
     ToolButton {
         icon.name: "edit-delete"
-        Layout.alignment: Qt.AlignVCenter
+        Layout.alignment: Qt.AlignTop
         ToolTip.text: i18n("Remove condition")
         ToolTip.visible: hovered
         Accessible.name: i18n("Remove this condition")
@@ -379,6 +391,50 @@ RowLayout {
             text: checked ? i18n("True") : i18n("False")
             Accessible.name: i18n("Match value")
             onToggled: leaf._emit(leaf.node.field, leaf.node.op, checked)
+        }
+    }
+
+    // Virtual-desktop picker for the VirtualDesktop condition. The wire value stays
+    // the 1-based desktop NUMBER (so the operator semantics — equals / greater /
+    // less — are unchanged); the user just picks "2: Work" instead of typing a
+    // number. Mirrors the screen picker, and the RouteToDesktop action editor.
+    Component {
+        id: virtualDesktopValueEditor
+
+        WideComboBox {
+            id: desktopCombo
+
+            readonly property int _count: leaf.appSettings && leaf.appSettings.virtualDesktopCount > 0 ? leaf.appSettings.virtualDesktopCount : 1
+            readonly property var _names: leaf.appSettings ? leaf.appSettings.virtualDesktopNames : []
+            model: {
+                var items = [];
+                for (var i = 1; i <= desktopCombo._count; ++i) {
+                    var name = desktopCombo._names.length >= i ? desktopCombo._names[i - 1] : "";
+                    items.push({
+                        "label": name && name.length > 0 ? (i + ": " + name) : ("" + i),
+                        "value": i
+                    });
+                }
+                return items;
+            }
+            textRole: "label"
+            valueRole: "value"
+            currentIndex: {
+                var target = Number(leaf.node.value);
+                for (var i = 0; i < desktopCombo.model.length; ++i) {
+                    if (desktopCombo.model[i].value === target)
+                        return i;
+                }
+                return -1;
+            }
+            // A rule may reference a desktop beyond the current count (the desktop
+            // was removed). Surface the stored number so the rule stays legible.
+            displayText: currentIndex >= 0 ? currentText : (leaf.node.value ? ("" + leaf.node.value) : i18n("Choose a desktop…"))
+            Accessible.name: i18n("Virtual desktop")
+            onActivated: function (index) {
+                if (currentValue !== leaf.node.value)
+                    leaf._emit(leaf.node.field, leaf.node.op, currentValue);
+            }
         }
     }
 

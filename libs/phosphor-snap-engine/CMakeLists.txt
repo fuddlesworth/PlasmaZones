@@ -19,6 +19,7 @@ set(CMAKE_AUTOMOC ON)
 
 add_library(PhosphorSnapEngine SHARED
     include/PhosphorSnapEngine/SnapEngine.h
+    include/PhosphorSnapEngine/PlacementDirective.h
     include/PhosphorSnapEngine/SnapState.h
     include/PhosphorSnapEngine/ISnapSettings.h
     include/PhosphorSnapEngine/INavigationStateProvider.h

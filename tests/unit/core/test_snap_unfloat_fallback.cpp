@@ -245,7 +245,7 @@ private Q_SLOTS:
 
         installLayout(3);
         engine.setPlacementZonesResolver([](const QString&, const QString&) {
-            return QList<int>{2, 3};
+            return PlacementDirective{{2, 3}};
         });
 
         // A remembered FLOATED record on DP-1 carrying the window's free position.
@@ -289,7 +289,7 @@ private Q_SLOTS:
 
         installLayout(3);
         engine.setPlacementZonesResolver([](const QString&, const QString&) {
-            return QList<int>{1};
+            return PlacementDirective{{1}};
         });
 
         const PhosphorEngine::SnapResult result =
@@ -297,6 +297,58 @@ private Q_SLOTS:
 
         QVERIFY2(result.shouldSnap, "a SnapToZone rule must snap a fresh window with no stored record");
         QCOMPARE(result.zoneIds.size(), 1);
+        m_wts->setSnapState(nullptr);
+    }
+
+    // A RouteToScreen directive pins the placement to a different monitor than the
+    // one the window opened on: the snap must resolve on the ROUTED screen, so
+    // result.screenId is the target (the apply path then moves the window there).
+    void testResolveWindowRestore_routeToScreen_resolvesOnTargetScreen()
+    {
+        SnapEngine engine(m_layoutManager, m_wts, nullptr, nullptr, nullptr);
+        engine.setEngineSettings(m_settings);
+        m_wts->setSnapState(engine.snapState());
+
+        installLayout(3);
+        // Window opens on DP-1 but the rule routes it to DP-2 and snaps zone 1.
+        engine.setPlacementZonesResolver([](const QString&, const QString&) {
+            return PlacementDirective{{1}, QStringLiteral("DP-2")};
+        });
+
+        const PhosphorEngine::SnapResult result =
+            engine.resolveWindowRestore(QStringLiteral("fresh|win"), QStringLiteral("DP-1"), /*sticky*/ false);
+
+        QVERIFY2(result.shouldSnap, "RouteToScreen + SnapToZone must snap the window");
+        QCOMPARE(result.zoneIds.size(), 1);
+        QCOMPARE(result.screenId, QStringLiteral("DP-2"));
+        m_wts->setSnapState(nullptr);
+    }
+
+    // A RouteToDesktop directive snaps the window into its zone on the DESTINATION
+    // desktop's layout and stamps that desktop on the result, so the commit records
+    // the assignment on the desktop the window is being moved to (not the one it
+    // momentarily opened on).
+    void testResolveWindowRestore_routeToDesktop_stampsResultDesktop()
+    {
+        SnapEngine engine(m_layoutManager, m_wts, nullptr, nullptr, nullptr);
+        engine.setEngineSettings(m_settings);
+        m_wts->setSnapState(engine.snapState());
+
+        installLayout(3);
+        // Snap zone 1, and route to virtual desktop 2.
+        engine.setPlacementZonesResolver([](const QString&, const QString&) {
+            PlacementDirective d;
+            d.zoneOrdinals = {1};
+            d.targetDesktop = 2;
+            return d;
+        });
+
+        const PhosphorEngine::SnapResult result =
+            engine.resolveWindowRestore(QStringLiteral("fresh|win"), QStringLiteral("DP-1"), /*sticky*/ false);
+
+        QVERIFY2(result.shouldSnap, "SnapToZone + RouteToDesktop must still snap the window");
+        QCOMPARE(result.zoneIds.size(), 1);
+        QCOMPARE(result.virtualDesktop, 2);
         m_wts->setSnapState(nullptr);
     }
 
@@ -310,7 +362,7 @@ private Q_SLOTS:
 
         installLayout(3);
         engine.setPlacementZonesResolver([](const QString&, const QString&) {
-            return QList<int>{};
+            return PlacementDirective{};
         });
 
         const PhosphorEngine::SnapResult result =

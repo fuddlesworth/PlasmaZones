@@ -187,6 +187,26 @@ ColumnLayout {
                 return raw.join(", ");
             return rawStr;
         }
+        if (kind === "screenId") {
+            // Show the friendly monitor label for the stored canonical id; fall
+            // back to the raw id when the monitor isn't currently connected so the
+            // user still sees what the rule pins to.
+            var screens = root.appSettings && root.appSettings.screens ? root.appSettings.screens : [];
+            for (var s = 0; s < screens.length; ++s) {
+                if (screens[s].name === raw)
+                    return screens[s].displayLabel || screens[s].name || rawStr;
+            }
+            return rawStr;
+        }
+        if (kind === "virtualDesktop") {
+            // Render "N: <name>" when KWin reports a name for the 1-based desktop,
+            // else just the number.
+            var names = root.appSettings && root.appSettings.virtualDesktopNames ? root.appSettings.virtualDesktopNames : [];
+            var num = parseInt(raw, 10);
+            if (num >= 1 && names.length >= num && names[num - 1])
+                return num + ": " + names[num - 1];
+            return num > 0 ? String(num) : rawStr;
+        }
         return rawStr;
     }
 

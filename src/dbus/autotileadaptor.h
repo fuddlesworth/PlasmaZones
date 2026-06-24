@@ -28,6 +28,8 @@ class AutotileEngine;
 
 namespace PlasmaZones {
 
+class WindowTrackingAdaptor;
+
 /**
  * @brief D-Bus adaptor for autotiling control
  *
@@ -82,6 +84,14 @@ public:
     explicit AutotileAdaptor(PhosphorTileEngine::AutotileEngine* engine, PhosphorScreens::ScreenManager* screenManager,
                              PhosphorTiles::ITileAlgorithmRegistry* algorithmRegistry, QObject* parent = nullptr);
     ~AutotileAdaptor() override = default;
+
+    /// Wire the WindowTrackingAdaptor (post-construction, to break the
+    /// construction-order cycle) so the autotile open path can resolve
+    /// RouteToScreen / RouteToDesktop window rules. Pass nullptr on shutdown.
+    void setWindowTrackingAdaptor(WindowTrackingAdaptor* wta)
+    {
+        m_windowTrackingAdaptor = wta;
+    }
 
     /**
      * @brief Number of windowOpened entries waiting for panel geometry
@@ -422,6 +432,11 @@ private:
 
     PhosphorTileEngine::AutotileEngine* m_engine = nullptr;
     PhosphorScreens::ScreenManager* m_screenManager = nullptr;
+    /// Borrowed; outlives adaptor. Wired post-construction by the daemon so the
+    /// autotile open path can resolve RouteToScreen / RouteToDesktop window rules
+    /// (the rule store + evaluator live on the WTA). Null in tests / when unset —
+    /// routing is then skipped and windows open on their spawn screen.
+    WindowTrackingAdaptor* m_windowTrackingAdaptor = nullptr;
     PhosphorTiles::ITileAlgorithmRegistry* m_algorithmRegistry = nullptr; ///< Borrowed; outlives adaptor
 
     // Window-opened events received before the first panel D-Bus query completed.

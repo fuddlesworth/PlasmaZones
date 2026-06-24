@@ -13,6 +13,7 @@
 
 #include "../zonedetectionadaptor.h"
 #include "core/isettings.h"
+#include "core/logging.h"
 #include <PhosphorEngine/IPlacementEngine.h>
 #include <PhosphorIdentity/WindowId.h>
 #include <PhosphorSnapEngine/SnapEngine.h>
@@ -203,9 +204,10 @@ void WindowTrackingAdaptor::setEngines(PhosphorEngine::PlacementEngineBase* snap
         // highest-priority restore-chain level), superseding the retired
         // per-layout Layout::appRules. Snap-only — autotile owns placement on
         // its screens, so no resolver is wired into the autotile engine.
-        snap->setPlacementZonesResolver([this](const QString& windowId, const QString& screenId) -> QList<int> {
-            return placementZonesByRule(windowId, screenId);
-        });
+        snap->setPlacementZonesResolver(
+            [this](const QString& windowId, const QString& screenId) -> PhosphorSnapEngine::PlacementDirective {
+                return placementZonesByRule(windowId, screenId);
+            });
 
         // Snap-specific signal: carries PhosphorProtocol::WindowStateEntry which is snap-mode-only.
         // Connected via qobject_cast since the member type is PlacementEngineBase.
@@ -502,10 +504,11 @@ bool WindowTrackingAdaptor::shouldFloatByRule(const QString& windowId)
     return resolved.slot(QString(PhosphorWindowRules::ActionSlot::Float)).has_value();
 }
 
-QList<int> WindowTrackingAdaptor::placementZonesByRule(const QString& windowId, const QString& screenId)
+PhosphorSnapEngine::PlacementDirective WindowTrackingAdaptor::placementZonesByRule(const QString& windowId,
+                                                                                   const QString& screenId)
 {
-    // Placement is purely rule-driven: absent a matching SnapToZone rule there is
-    // nothing to snap, so the answer is an empty list.
+    // Placement is purely rule-driven: absent a matching SnapToZone / RouteToScreen
+    // rule there is nothing to snap or route, so the answer is empty.
     if (!m_windowRuleStore) {
         return {};
     }
@@ -536,25 +539,143 @@ QList<int> WindowTrackingAdaptor::placementZonesByRule(const QString& windowId, 
     // slot, so reading the Placement slot off the same verdict is free. Same open-path
     // lifetime guarantee (resolved once per window lifetime) as the sibling predicates.
     const PhosphorWindowRules::ResolvedActions resolved = m_windowRuleEvaluator->resolveCached(windowId, *query);
+
+    PhosphorSnapEngine::PlacementDirective directive;
+
+    // RouteToScreen target (optional, independent of SnapToZone): pin the placement
+    // to a specific monitor. A non-empty target moves the window there and resolves
+    // its zone on that screen. The id is the canonical screen-id form the picker and
+    // the runtime both use; the snap engine declines the route if the target is not
+    // currently a snapping-mode screen, so an absent / autotile / disabled target is
+    // safe here.
+    if (const auto route = resolved.slot(QString(PhosphorWindowRules::ActionSlot::RouteScreen))) {
+        directive.targetScreenId =
+            route->params.value(QString(PhosphorWindowRules::ActionParam::TargetScreenId)).toString();
+    }
+
+    // RouteToDesktop target (optional): when set, the zones resolve on this
+    // desktop's layout and the snap commits in this desktop's context, so a
+    // combined SnapToZone + RouteToDesktop rule lands the window in the right zone
+    // of the destination desktop. The desktop MOVE itself is emitted separately by
+    // applyOpenDesktopRouting (engine-neutral); this only steers the snap placement.
+    if (const auto route = resolved.slot(QString(PhosphorWindowRules::ActionSlot::RouteDesktop))) {
+        const int desktop = route->params.value(QString(PhosphorWindowRules::ActionParam::TargetDesktop)).toInt(0);
+        if (desktop >= 1) {
+            directive.targetDesktop = desktop;
+        }
+    }
+
     const std::optional<PhosphorWindowRules::RuleAction> action =
         resolved.slot(QString(PhosphorWindowRules::ActionSlot::Placement));
     if (!action) {
-        return {};
+        // No SnapToZone: return the (possibly route-only) directive. With no ordinals
+        // the snap engine treats it as "nothing to snap", so a RouteToScreen WITHOUT
+        // an accompanying SnapToZone is a no-op on this snap path — bare "move to
+        // monitor X" routing is handled by the engine-neutral open-path mover
+        // (alongside RouteToDesktop), not here.
+        return directive;
     }
     // The descriptor validator already guaranteed a non-empty array of in-range
     // 1-based ordinals at load; re-validate defensively against the SAME bound
     // (1..MaxZoneOrdinal) so a future loader change can never feed a bad ordinal
     // into zone resolution.
     const QJsonArray arr = action->params.value(QString(PhosphorWindowRules::ActionParam::Zones)).toArray();
-    QList<int> ordinals;
-    ordinals.reserve(arr.size());
+    directive.zoneOrdinals.reserve(arr.size());
     for (const QJsonValue& v : arr) {
         const int n = v.toInt(0);
         if (n >= 1 && n <= PhosphorWindowRules::MaxZoneOrdinal) {
-            ordinals.append(n);
+            directive.zoneOrdinals.append(n);
         }
     }
-    return ordinals;
+    return directive;
+}
+
+void WindowTrackingAdaptor::emitRouteToDesktopIfMatched(const PhosphorWindowRules::ResolvedActions& resolved,
+                                                        const QString& windowId)
+{
+    const std::optional<PhosphorWindowRules::RuleAction> route =
+        resolved.slot(QString(PhosphorWindowRules::ActionSlot::RouteDesktop));
+    if (!route) {
+        return;
+    }
+    // The descriptor validator already guaranteed a 1-based desktop in range; the
+    // effect-side slot re-guards (rejects < 1, out-of-range, and sticky windows),
+    // so moving to the desktop the window already occupies is a harmless no-op.
+    const int desktop = route->params.value(QString(PhosphorWindowRules::ActionParam::TargetDesktop)).toInt(0);
+    if (desktop >= 1) {
+        qCInfo(lcDbusWindow) << "open-routing: routing" << windowId << "to virtual desktop" << desktop;
+        Q_EMIT windowDesktopMoveRequested(windowId, desktop);
+    }
+}
+
+void WindowTrackingAdaptor::applyOpenDesktopRouting(const QString& windowId, const QString& screenId)
+{
+    // Engine-neutral RouteToDesktop: when a matched rule pins the opening window
+    // to a virtual desktop, ask the compositor to move it there. Independent of
+    // snapping/tiling — the desktop move composes with the window's placement.
+    // Called from the snap open-path facade (the autotile path uses
+    // applyOpenRoutingForAutotile, which also handles the screen redirect).
+    if (!m_windowRuleStore) {
+        return;
+    }
+    std::optional<PhosphorWindowRules::WindowQuery> query = buildRuleQueryForWindow(m_windowRegistry, windowId);
+    if (!query) {
+        return;
+    }
+    // Pin the screen so a ScreenId-scoped rule resolves, mirroring placementZonesByRule.
+    // resolveCached is keyed on windowId (+ rule-set revision), so on the snap open path
+    // this reuses the verdict placementZonesByRule already seeded — no second evaluation.
+    query->screenId = screenId;
+    if (!m_windowRuleEvaluator) {
+        m_windowRuleEvaluator = std::make_unique<PhosphorWindowRules::RuleEvaluator>(m_windowRuleStore->ruleSet());
+    }
+    emitRouteToDesktopIfMatched(m_windowRuleEvaluator->resolveCached(windowId, *query), windowId);
+}
+
+QString WindowTrackingAdaptor::applyOpenRoutingForAutotile(const QString& windowId, const QString& screenId)
+{
+    if (!m_windowRuleStore) {
+        return QString();
+    }
+    std::optional<PhosphorWindowRules::WindowQuery> query = buildRuleQueryForWindow(m_windowRegistry, windowId);
+    if (!query) {
+        return QString();
+    }
+    query->screenId = screenId;
+    if (!m_windowRuleEvaluator) {
+        m_windowRuleEvaluator = std::make_unique<PhosphorWindowRules::RuleEvaluator>(m_windowRuleStore->ruleSet());
+    }
+    const PhosphorWindowRules::ResolvedActions resolved = m_windowRuleEvaluator->resolveCached(windowId, *query);
+
+    // RouteToDesktop is engine-neutral — emit it for autotile windows too.
+    emitRouteToDesktopIfMatched(resolved, windowId);
+
+    // RouteToScreen: redirect the window onto a different AUTOTILE monitor. The
+    // snap open path handles snap-mode targets itself (the placement directive),
+    // so here we only honour a target that is currently in autotile mode — a snap
+    // or disabled target is left to the window's spawn screen (cross-engine
+    // routing is out of scope). Returning the target tells the caller to insert
+    // the window into that screen's tiling state; the output-move marker stops the
+    // effect from re-processing the resulting outputChanged as a fresh open.
+    const std::optional<PhosphorWindowRules::RuleAction> route =
+        resolved.slot(QString(PhosphorWindowRules::ActionSlot::RouteScreen));
+    if (!route) {
+        return QString();
+    }
+    const QString target = route->params.value(QString(PhosphorWindowRules::ActionParam::TargetScreenId)).toString();
+    if (target.isEmpty() || target == screenId || !m_layoutManager) {
+        return QString();
+    }
+    if (m_layoutManager->modeForScreen(target, m_layoutManager->currentVirtualDesktopForScreen(target),
+                                       m_layoutManager->currentActivity())
+        != PhosphorZones::AssignmentEntry::Mode::Autotile) {
+        qCDebug(lcDbusWindow) << "applyOpenRoutingForAutotile: RouteToScreen target" << target
+                              << "is not in autotile mode — not redirecting" << windowId;
+        return QString();
+    }
+    qCInfo(lcDbusWindow) << "applyOpenRoutingForAutotile: routing" << windowId << "to autotile screen" << target;
+    Q_EMIT windowOutputMoveExpected(windowId, target);
+    return target;
 }
 
 void WindowTrackingAdaptor::handleCrossModeMove(const QString& windowId, const QString& targetScreenId,

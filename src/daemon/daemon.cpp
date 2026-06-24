@@ -1533,6 +1533,9 @@ bool Daemon::init()
     m_snapAdaptor = new SnapAdaptor(snapEngine, m_windowTrackingAdaptor, m_settings.get(), this);
     m_snapAdaptor->setContextResolver(m_contextResolver.get());
     m_autotileAdaptor = new AutotileAdaptor(autotileEngine, m_screenManager.get(), m_algorithmRegistry.get(), this);
+    // Wire the WTA so the autotile open path can resolve RouteToScreen /
+    // RouteToDesktop window rules (the rule store + evaluator live on the WTA).
+    m_autotileAdaptor->setWindowTrackingAdaptor(m_windowTrackingAdaptor);
 
     // Control adaptor - high-level convenience API for third-party integrations.
     // Held as a member so stop() can detach() it before the unique_ptr members

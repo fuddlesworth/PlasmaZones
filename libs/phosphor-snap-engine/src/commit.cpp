@@ -16,7 +16,7 @@ using PhosphorEngine::SnapIntent;
 using PhosphorEngine::ZoneAssignmentEntry;
 
 void SnapEngine::commitSnapImpl(const QString& windowId, const QStringList& zoneIds, const QString& screenId,
-                                SnapIntent intent)
+                                SnapIntent intent, int virtualDesktop)
 {
     Q_ASSERT(m_snapState);
     if (!m_snapState) {
@@ -41,7 +41,11 @@ void SnapEngine::commitSnapImpl(const QString& windowId, const QStringList& zone
         }
     }
 
-    const int currentDesktop = currentVirtualDesktopForScreen(screenId);
+    // A RouteToDesktop placement pins the assignment to its destination desktop
+    // (virtualDesktop >= 1); every other commit path records on the window's
+    // current desktop. Tracking the right desktop keeps zone occupancy, snap-assist,
+    // and empty-zone detection correct on both the source and destination desktops.
+    const int currentDesktop = virtualDesktop >= 1 ? virtualDesktop : currentVirtualDesktopForScreen(screenId);
     if (zoneIds.size() > 1) {
         m_windowTracker->assignWindowToZones(windowId, zoneIds, screenId, currentDesktop);
     } else {
@@ -80,23 +84,24 @@ void SnapEngine::commitSnapImpl(const QString& windowId, const QStringList& zone
     }
 }
 
-void SnapEngine::commitSnap(const QString& windowId, const QString& zoneId, const QString& screenId, SnapIntent intent)
+void SnapEngine::commitSnap(const QString& windowId, const QString& zoneId, const QString& screenId, SnapIntent intent,
+                            int virtualDesktop)
 {
     if (windowId.isEmpty() || zoneId.isEmpty()) {
         qCWarning(PhosphorSnapEngine::lcSnapEngine) << "commitSnap: empty windowId or zoneId";
         return;
     }
-    commitSnapImpl(windowId, QStringList{zoneId}, screenId, intent);
+    commitSnapImpl(windowId, QStringList{zoneId}, screenId, intent, virtualDesktop);
 }
 
 void SnapEngine::commitMultiZoneSnap(const QString& windowId, const QStringList& zoneIds, const QString& screenId,
-                                     SnapIntent intent)
+                                     SnapIntent intent, int virtualDesktop)
 {
     if (windowId.isEmpty() || zoneIds.isEmpty() || zoneIds.first().isEmpty()) {
         qCWarning(PhosphorSnapEngine::lcSnapEngine) << "commitMultiZoneSnap: empty windowId or zoneIds";
         return;
     }
-    commitSnapImpl(windowId, zoneIds, screenId, intent);
+    commitSnapImpl(windowId, zoneIds, screenId, intent, virtualDesktop);
 }
 
 void SnapEngine::uncommitSnap(const QString& windowId)

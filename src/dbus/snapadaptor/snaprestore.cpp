@@ -180,6 +180,12 @@ void SnapAdaptor::resolveWindowRestore(const QString& windowId, const QString& s
         return;
     }
 
+    // Engine-neutral RouteToDesktop runs first and unconditionally — a window can
+    // be routed to a desktop whether or not it snaps (and even when it doesn't
+    // match a SnapToZone rule at all), so it must not sit behind the shouldSnap
+    // early-return below.
+    m_adaptor->applyOpenDesktopRouting(windowId, screenId);
+
     const PhosphorEngine::WindowKind kind = PhosphorEngine::clampWindowKindFromWire(windowKind);
     SnapResult result = m_engine->resolveWindowRestore(windowId, screenId, sticky, kind);
     if (!result.shouldSnap) {
@@ -261,9 +267,11 @@ bool SnapAdaptor::applySnapResult(const SnapResult& result, const QString& windo
     m_adaptor->service()->markAsAutoSnapped(windowId);
     const QStringList zoneIds = result.zoneIds.isEmpty() ? QStringList{result.zoneId} : result.zoneIds;
     if (zoneIds.size() > 1) {
-        m_engine->commitMultiZoneSnap(windowId, zoneIds, result.screenId, SnapIntent::AutoRestored);
+        m_engine->commitMultiZoneSnap(windowId, zoneIds, result.screenId, SnapIntent::AutoRestored,
+                                      result.virtualDesktop);
     } else {
-        m_engine->commitSnap(windowId, zoneIds.first(), result.screenId, SnapIntent::AutoRestored);
+        m_engine->commitSnap(windowId, zoneIds.first(), result.screenId, SnapIntent::AutoRestored,
+                             result.virtualDesktop);
     }
     // Focus-new-windows is handled inside SnapEngine::commitSnapImpl on the
     // AutoRestored path (mirrors AutotileEngine), so it covers every auto-snap-on-open

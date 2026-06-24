@@ -10,6 +10,7 @@
 #include <PhosphorEngine/IWindowTrackingService.h>
 #include <PhosphorEngine/PlacementEngineBase.h>
 #include <PhosphorLayoutApi/EdgeGaps.h>
+#include <PhosphorSnapEngine/PlacementDirective.h>
 #include <PhosphorProtocol/NavigationTypes.h>
 #include <PhosphorProtocol/WindowTypes.h>
 #include <PhosphorWindowRules/RuleEvaluator.h>
@@ -262,7 +263,12 @@ public:
      *        Same lifetime contract as setFloatPredicate — clear with `{}` before
      *        destroying any captured state.
      */
-    using PlacementZonesResolver = std::function<QList<int>(const QString& windowId, const QString& screenId)>;
+    /// Resolver yielding the open-placement directive (SnapToZone ordinals plus an
+    /// optional RouteToScreen target) for an opening window. See
+    /// PhosphorSnapEngine::PlacementDirective. Empty ordinals ⇒ no SnapToZone rule
+    /// matched. When UNSET (default) no window is rule-snapped and the engine keeps
+    /// its historical open behaviour (path unit tests rely on this).
+    using PlacementZonesResolver = std::function<PlacementDirective(const QString& windowId, const QString& screenId)>;
 
     void setPlacementZonesResolver(PlacementZonesResolver resolver)
     {
@@ -521,11 +527,17 @@ public:
     // on WindowTrackingService.
     // ═══════════════════════════════════════════════════════════════════════════
 
+    /// @p virtualDesktop pins the assignment to a specific 1-based desktop; 0
+    /// (default) records it on the window's current desktop. Non-zero is used by
+    /// the RouteToDesktop placement path so the zone assignment is tracked on the
+    /// desktop the window is being moved to.
     void commitSnap(const QString& windowId, const QString& zoneId, const QString& screenId,
-                    PhosphorEngine::SnapIntent intent = PhosphorEngine::SnapIntent::UserInitiated);
+                    PhosphorEngine::SnapIntent intent = PhosphorEngine::SnapIntent::UserInitiated,
+                    int virtualDesktop = 0);
 
     void commitMultiZoneSnap(const QString& windowId, const QStringList& zoneIds, const QString& screenId,
-                             PhosphorEngine::SnapIntent intent = PhosphorEngine::SnapIntent::UserInitiated);
+                             PhosphorEngine::SnapIntent intent = PhosphorEngine::SnapIntent::UserInitiated,
+                             int virtualDesktop = 0);
 
     void uncommitSnap(const QString& windowId);
 
@@ -745,7 +757,7 @@ private:
     GapParams resolveGapParams(const QString& screenId, PhosphorZones::Layout* layout) const;
 
     void commitSnapImpl(const QString& windowId, const QStringList& zoneIds, const QString& screenId,
-                        PhosphorEngine::SnapIntent intent);
+                        PhosphorEngine::SnapIntent intent, int virtualDesktop = 0);
 
     /// Resolve an unfloat target screen: take @p primaryScreen if it still exists
     /// (resolving virtual IDs), otherwise fall back to @p fallbackScreen. Returns an

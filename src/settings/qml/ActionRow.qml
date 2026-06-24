@@ -199,6 +199,12 @@ ColumnLayout {
     // (SnapToZone). Stores a JSON array of 1-based ordinals; multiple ordinals
     // span their combined area. Accepts "1, 2", "1;2", "1 2", and ranges "1-3".
     property Component _zoneOrdinalsEditor
+    // Monitor picker for `kind == "screenId"` (RouteToScreen). Drives off
+    // `appSettings.screens`; the wire value is the canonical screen id.
+    property Component _screenIdEditor
+    // Virtual-desktop picker for `kind == "virtualDesktop"` (RouteToDesktop).
+    // Lists 1..virtualDesktopCount; the wire value is the 1-based desktop number.
+    property Component _virtualDesktopEditor
 
     /// Encode a QML color to a `#AARRGGBB` wire string (alpha-first) — the form
     /// the SetBorderColor validator accepts and the consumer parses back via
@@ -417,6 +423,12 @@ ColumnLayout {
 
                     if (modelData.kind === "zoneOrdinals")
                         return row._zoneOrdinalsEditor;
+
+                    if (modelData.kind === "screenId")
+                        return row._screenIdEditor;
+
+                    if (modelData.kind === "virtualDesktop")
+                        return row._virtualDesktopEditor;
 
                     return row._stringParamEditor;
                 }
@@ -666,6 +678,83 @@ ColumnLayout {
             layoutFilter: 0
             showNoneOption: false
             showPreview: true
+            onActivated: function (index) {
+                row.actionEdited(row._withParam(_param.key, currentValue));
+            }
+        }
+    }
+
+    // Monitor picker for RouteToScreen. Mirrors the ScreenId match-condition
+    // editor (MatchLeafEditor's screenValueEditor): the user picks a friendly
+    // label while the wire value stays the canonical screen id. A stored id whose
+    // monitor is offline still surfaces (so the user sees what the rule pins to).
+    _screenIdEditor: Component {
+        WideComboBox {
+            id: screenCombo
+
+            readonly property var _param: parent.modelData
+            readonly property var _screens: row.appSettings ? row.appSettings.screens : []
+            model: _screens.map(function (s) {
+                var label = s.displayLabel || s.name || "";
+                if (s.isPrimary)
+                    label += " · " + i18n("Primary");
+                return {
+                    "label": label,
+                    "name": s.name
+                };
+            })
+            textRole: "label"
+            valueRole: "name"
+            currentIndex: {
+                var target = row.action[_param.key] || "";
+                for (var i = 0; i < screenCombo._screens.length; ++i) {
+                    if (screenCombo._screens[i].name === target)
+                        return i;
+                }
+                return -1;
+            }
+            displayText: currentIndex >= 0 ? currentText : (row.action[_param.key] || i18n("Choose a monitor…"))
+            Accessible.name: _param.label
+            onActivated: function (index) {
+                row.actionEdited(row._withParam(_param.key, currentValue));
+            }
+        }
+    }
+
+    // Virtual-desktop picker for RouteToDesktop. Lists 1..virtualDesktopCount,
+    // labelled with the desktop name when KWin reports one. The wire value is the
+    // 1-based desktop number. A stored desktop beyond the current count still
+    // surfaces its number so the rule's target stays legible.
+    _virtualDesktopEditor: Component {
+        WideComboBox {
+            id: desktopCombo
+
+            readonly property var _param: parent.modelData
+            readonly property int _count: row.appSettings && row.appSettings.virtualDesktopCount > 0 ? row.appSettings.virtualDesktopCount : 1
+            readonly property var _names: row.appSettings ? row.appSettings.virtualDesktopNames : []
+            model: {
+                var items = [];
+                for (var i = 1; i <= desktopCombo._count; ++i) {
+                    var name = desktopCombo._names.length >= i ? desktopCombo._names[i - 1] : "";
+                    items.push({
+                        "label": name && name.length > 0 ? (i + ": " + name) : ("" + i),
+                        "value": i
+                    });
+                }
+                return items;
+            }
+            textRole: "label"
+            valueRole: "value"
+            currentIndex: {
+                var target = row.action[_param.key];
+                for (var i = 0; i < desktopCombo.model.length; ++i) {
+                    if (desktopCombo.model[i].value === target)
+                        return i;
+                }
+                return -1;
+            }
+            displayText: currentIndex >= 0 ? currentText : (row.action[_param.key] ? ("" + row.action[_param.key]) : i18n("Choose a desktop…"))
+            Accessible.name: _param.label
             onActivated: function (index) {
                 row.actionEdited(row._withParam(_param.key, currentValue));
             }

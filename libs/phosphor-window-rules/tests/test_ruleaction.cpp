@@ -57,6 +57,10 @@ const QList<QLatin1StringView> kWindowDomainTypes = {
     ActionType::Exclude,
     ActionType::Float,
     ActionType::SnapToZone,
+    // Open-routing actions are window-domain — resolved per window on the
+    // daemon open path, applicable to any matched window.
+    ActionType::RouteToScreen,
+    ActionType::RouteToDesktop,
     ActionType::OverrideAnimationShader,
     ActionType::OverrideAnimationTiming,
     ActionType::OverrideAnimationCurve,
@@ -164,6 +168,49 @@ private Q_SLOTS:
     {
         QVERIFY(engineModeAction(QStringLiteral("autotile")) == engineModeAction(QStringLiteral("autotile")));
         QVERIFY(engineModeAction(QStringLiteral("autotile")) != engineModeAction(QStringLiteral("snapping")));
+    }
+
+    void testJson_routeToScreen()
+    {
+        QJsonObject o;
+        o.insert(QStringLiteral("type"), QString(ActionType::RouteToScreen));
+        // Missing / empty target screen id is rejected.
+        QVERIFY(!RuleAction::fromJson(o).has_value());
+        o.insert(QString(ActionParam::TargetScreenId), QString());
+        QVERIFY(!RuleAction::fromJson(o).has_value());
+        // A non-empty canonical screen id is accepted (not validated against
+        // live screen state — a route to a currently-absent monitor is legal).
+        o.insert(QString(ActionParam::TargetScreenId), QStringLiteral("LG Electronics:38GN950:688325"));
+        const auto loaded = RuleAction::fromJson(o);
+        QVERIFY(loaded.has_value());
+        QCOMPARE(ActionRegistry::instance().slotFor(*loaded), QString(ActionSlot::RouteScreen));
+        // Unknown param key is rejected by the strict loader.
+        o.insert(QStringLiteral("bogus"), 1);
+        QVERIFY(!RuleAction::fromJson(o).has_value());
+    }
+
+    void testJson_routeToDesktop()
+    {
+        QJsonObject o;
+        o.insert(QStringLiteral("type"), QString(ActionType::RouteToDesktop));
+        // Missing desktop is rejected.
+        QVERIFY(!RuleAction::fromJson(o).has_value());
+        // Desktops are 1-based: 0 and negatives are rejected.
+        o.insert(QString(ActionParam::TargetDesktop), 0);
+        QVERIFY(!RuleAction::fromJson(o).has_value());
+        o.insert(QString(ActionParam::TargetDesktop), -1);
+        QVERIFY(!RuleAction::fromJson(o).has_value());
+        // Non-integral is rejected.
+        o.insert(QString(ActionParam::TargetDesktop), 2.5);
+        QVERIFY(!RuleAction::fromJson(o).has_value());
+        // Out-of-range (above the cap) is rejected.
+        o.insert(QString(ActionParam::TargetDesktop), MaxVirtualDesktopOrdinal + 1);
+        QVERIFY(!RuleAction::fromJson(o).has_value());
+        // A valid 1-based desktop loads and resolves to the route-desktop slot.
+        o.insert(QString(ActionParam::TargetDesktop), 3);
+        const auto loaded = RuleAction::fromJson(o);
+        QVERIFY(loaded.has_value());
+        QCOMPARE(ActionRegistry::instance().slotFor(*loaded), QString(ActionSlot::RouteDesktop));
     }
 
     void testActionDomain_contextActions()

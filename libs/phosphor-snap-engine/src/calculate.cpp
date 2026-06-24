@@ -58,20 +58,56 @@ SnapResult SnapEngine::calculateSnapToPlacementRule(const QString& windowId, con
     if (!m_placementZonesResolver) {
         return SnapResult::noSnap();
     }
-    const QList<int> ordinals = m_placementZonesResolver(windowId, windowScreenName);
-    if (ordinals.isEmpty()) {
+    const PlacementDirective directive = m_placementZonesResolver(windowId, windowScreenName);
+    if (directive.zoneOrdinals.isEmpty()) {
+        return SnapResult::noSnap();
+    }
+    const QList<int>& ordinals = directive.zoneOrdinals;
+
+    // A RouteToScreen action pins the placement to a specific monitor: resolve the
+    // zones on THAT screen and move the window there (the apply path honours
+    // result.screenId — commitSnap, the disabled-context gate, and the returned
+    // geometry all key off it, so cross-screen migration reuses the same machinery
+    // a cross-screen snapped-record restore uses). Empty target ⇒ the window's
+    // opening screen, the historical behaviour (a ScreenId match leaf only SCOPES
+    // such a rule; RouteToScreen is what ROUTES it).
+    const QString placementScreen = directive.targetScreenId.isEmpty() ? windowScreenName : directive.targetScreenId;
+
+    // A RouteToDesktop action snaps the window into its zone on the DESTINATION
+    // desktop's layout, not the one it momentarily opened on: resolve the layout and
+    // gate the mode in that desktop's context, and stamp the result so the commit
+    // records the assignment there too. 0 ⇒ no desktop routing ⇒ the placement
+    // screen's current desktop (the historical behaviour).
+    const int placementDesktop =
+        directive.targetDesktop >= 1 ? directive.targetDesktop : currentVirtualDesktopForScreen(placementScreen);
+
+    // The placement only applies when the (screen, desktop) target is in snapping
+    // mode. An autotile-mode target is owned by the autotile routing hook, and a
+    // disabled / unresolvable target has no layout — decline so the window falls
+    // through to the normal restore chain rather than being stranded. Gate whenever
+    // the target differs from the opening (screen, desktop), so a cross-desktop or
+    // cross-screen route is validated against where the window will actually land.
+    // (No layout manager ⇒ unit-test path: skip the gate; the layout miss below
+    // already yields noSnap.)
+    const bool routed = placementScreen != windowScreenName || directive.targetDesktop >= 1;
+    if (routed && m_layoutManager
+        && m_layoutManager->modeForScreen(placementScreen, placementDesktop, currentActivity())
+            != PhosphorZones::AssignmentEntry::Mode::Snapping) {
+        qCDebug(PhosphorSnapEngine::lcSnapEngine)
+            << "calculateSnapToPlacementRule: route target" << placementScreen << "desktop" << placementDesktop
+            << "is not in snapping mode — declining snap route for" << windowId;
         return SnapResult::noSnap();
     }
 
-    // Ordinals are layout-agnostic: resolve them against whatever layout is active
-    // on the window's CURRENT screen. Legacy per-layout app rules could target a
-    // different screen; that cross-screen routing is retired — a SnapToZone rule
-    // resolves on the window's current screen, and a user can scope it to a screen
-    // with a ScreenId match leaf, so there is no cross-screen scan here.
-    PhosphorZones::Layout* layout = m_layoutManager->resolveLayoutForScreen(windowScreenName);
+    // Ordinals are layout-agnostic: resolve them against the layout active on the
+    // placement (screen, desktop). For a desktop route that is the DESTINATION
+    // desktop's layout; otherwise it is the screen's current-desktop layout.
+    PhosphorZones::Layout* layout = directive.targetDesktop >= 1
+        ? m_layoutManager->layoutForScreen(placementScreen, placementDesktop, currentActivity())
+        : m_layoutManager->resolveLayoutForScreen(placementScreen);
     if (!layout) {
         qCDebug(PhosphorSnapEngine::lcSnapEngine)
-            << "calculateSnapToPlacementRule: no layout for screen" << windowScreenName;
+            << "calculateSnapToPlacementRule: no layout for screen" << placementScreen << "desktop" << placementDesktop;
         return SnapResult::noSnap();
     }
 
@@ -97,20 +133,22 @@ SnapResult SnapEngine::calculateSnapToPlacementRule(const QString& windowId, con
     // → resolveZoneGeometry). A per-QRect union here would diverge by a pixel at
     // fractional scaling, so a window floated off the span without moving would
     // leak the snap rect into its float-back geometry.
-    const QRect unionGeo = m_windowTracker->resolveZoneGeometry(zoneIds, windowScreenName);
+    const QRect unionGeo = m_windowTracker->resolveZoneGeometry(zoneIds, placementScreen);
     if (!unionGeo.isValid()) {
         return SnapResult::noSnap();
     }
 
-    qCInfo(PhosphorSnapEngine::lcSnapEngine) << "calculateSnapToPlacementRule: snapping" << windowId << "to zones"
-                                             << ordinals << "on screen" << windowScreenName;
+    qCInfo(PhosphorSnapEngine::lcSnapEngine)
+        << "calculateSnapToPlacementRule: snapping" << windowId << "to zones" << ordinals << "on screen"
+        << placementScreen << (directive.targetScreenId.isEmpty() ? "(opening screen)" : "(routed)");
 
     SnapResult result;
     result.shouldSnap = true;
     result.geometry = unionGeo;
     result.zoneId = zoneIds.first();
     result.zoneIds = zoneIds;
-    result.screenId = windowScreenName;
+    result.screenId = placementScreen;
+    result.virtualDesktop = directive.targetDesktop; // 0 ⇒ commit on the current desktop
     return result;
 }
 

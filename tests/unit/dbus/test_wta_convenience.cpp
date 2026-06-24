@@ -30,6 +30,14 @@
 #include "dbus/snapadaptor.h"
 #include "dbus/windowtrackingadaptor.h"
 #include <PhosphorSnapEngine/SnapEngine.h>
+#include <PhosphorEngine/WindowRegistry.h>
+#include <PhosphorWindowRules/WindowRuleStore.h>
+#include <PhosphorWindowRules/RuleAction.h>
+#include <PhosphorWindowRules/MatchExpression.h>
+#include <PhosphorWindowRules/MatchTypes.h>
+#include <PhosphorZones/AssignmentEntry.h>
+#include "config/configdefaults.h"
+#include <QUuid>
 #include "../helpers/IsolatedConfigGuard.h"
 #include "../helpers/LayoutRegistryTestHelpers.h"
 
@@ -187,6 +195,100 @@ private Q_SLOTS:
     // =====================================================================
     // moveWindowToZone
     // =====================================================================
+
+    // ── Open routing: RouteToScreen / RouteToDesktop window rules ──
+    void testApplyOpenRoutingForAutotile_routesToAutotileScreenAndDesktop()
+    {
+        // DP-2 is an AUTOTILE screen; DP-1 (the spawn screen) stays snapping (the
+        // registry default).
+        PhosphorZones::AssignmentEntry autotile;
+        autotile.mode = PhosphorZones::AssignmentEntry::Autotile;
+        autotile.tilingAlgorithm = QStringLiteral("dwindle");
+        m_layoutManager->setAssignmentEntryDirect(QStringLiteral("DP-2"), 0, QString(), autotile);
+
+        // Register the opening window's metadata so the rule query resolves its appId.
+        auto* registry = new PhosphorEngine::WindowRegistry(m_parent);
+        m_wta->setWindowRegistry(registry);
+        m_wta->setWindowMetadata(QStringLiteral("inst1"), QStringLiteral("routeapp"), QString(), QString(), QString(),
+                                 0, 0, QString(), 0, QVariantMap());
+
+        // Rule: route "routeapp" onto DP-2 and onto virtual desktop 2.
+        using namespace PhosphorWindowRules;
+        WindowRule rule;
+        rule.id = QUuid::createUuid();
+        rule.enabled = true;
+        rule.match = MatchExpression::makeLeaf(Field::AppId, Operator::AppIdMatches, QStringLiteral("routeapp"));
+        RuleAction route;
+        route.type = QString(ActionType::RouteToScreen);
+        route.params.insert(QString(ActionParam::TargetScreenId), QStringLiteral("DP-2"));
+        RuleAction desk;
+        desk.type = QString(ActionType::RouteToDesktop);
+        desk.params.insert(QString(ActionParam::TargetDesktop), 2);
+        rule.actions = {route, desk};
+
+        WindowRuleStore store(ConfigDefaults::windowRulesFilePath(), m_parent);
+        QVERIFY(store.addRule(rule));
+        m_wta->setWindowRuleStore(&store);
+
+        QSignalSpy outputSpy(m_wta, &WindowTrackingAdaptor::windowOutputMoveExpected);
+        QSignalSpy desktopSpy(m_wta, &WindowTrackingAdaptor::windowDesktopMoveRequested);
+
+        const QString routed =
+            m_wta->applyOpenRoutingForAutotile(QStringLiteral("routeapp|inst1"), QStringLiteral("DP-1"));
+
+        // Redirected to the autotile target, with both the output- and desktop-move
+        // signals emitted for the compositor to act on.
+        QCOMPARE(routed, QStringLiteral("DP-2"));
+        QCOMPARE(outputSpy.count(), 1);
+        QCOMPARE(outputSpy.at(0).at(1).toString(), QStringLiteral("DP-2"));
+        QCOMPARE(desktopSpy.count(), 1);
+        QCOMPARE(desktopSpy.at(0).at(1).toInt(), 2);
+
+        m_wta->setWindowRuleStore(nullptr);
+        m_wta->setWindowRegistry(nullptr);
+    }
+
+    void testApplyOpenRoutingForAutotile_declinesSnapModeTarget()
+    {
+        // DP-2 stays SNAPPING (registry default): autotile must NOT redirect onto a
+        // snap-mode monitor (the snap placement path owns those), but RouteToDesktop
+        // is engine-neutral and still fires.
+        auto* registry = new PhosphorEngine::WindowRegistry(m_parent);
+        m_wta->setWindowRegistry(registry);
+        m_wta->setWindowMetadata(QStringLiteral("inst2"), QStringLiteral("snaproute"), QString(), QString(), QString(),
+                                 0, 0, QString(), 0, QVariantMap());
+
+        using namespace PhosphorWindowRules;
+        WindowRule rule;
+        rule.id = QUuid::createUuid();
+        rule.enabled = true;
+        rule.match = MatchExpression::makeLeaf(Field::AppId, Operator::AppIdMatches, QStringLiteral("snaproute"));
+        RuleAction route;
+        route.type = QString(ActionType::RouteToScreen);
+        route.params.insert(QString(ActionParam::TargetScreenId), QStringLiteral("DP-2"));
+        RuleAction desk;
+        desk.type = QString(ActionType::RouteToDesktop);
+        desk.params.insert(QString(ActionParam::TargetDesktop), 3);
+        rule.actions = {route, desk};
+
+        WindowRuleStore store(ConfigDefaults::windowRulesFilePath(), m_parent);
+        QVERIFY(store.addRule(rule));
+        m_wta->setWindowRuleStore(&store);
+
+        QSignalSpy outputSpy(m_wta, &WindowTrackingAdaptor::windowOutputMoveExpected);
+        QSignalSpy desktopSpy(m_wta, &WindowTrackingAdaptor::windowDesktopMoveRequested);
+
+        const QString routed =
+            m_wta->applyOpenRoutingForAutotile(QStringLiteral("snaproute|inst2"), QStringLiteral("DP-1"));
+
+        QVERIFY2(routed.isEmpty(), "a snap-mode RouteToScreen target must not be an autotile redirect");
+        QCOMPARE(outputSpy.count(), 0);
+        QCOMPARE(desktopSpy.count(), 1); // desktop routing is engine-neutral
+        QCOMPARE(desktopSpy.at(0).at(1).toInt(), 3);
+
+        m_wta->setWindowRuleStore(nullptr);
+        m_wta->setWindowRegistry(nullptr);
+    }
 
     void testMoveWindowToZone_validZone_emitsApplyGeometry()
     {

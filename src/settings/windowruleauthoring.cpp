@@ -301,6 +301,12 @@ QString paramLabel(const QString& type, const QString& key)
     if (type == ActionType::OverrideOverlayStyle && key == ActionParam::Value) {
         return PhosphorI18n::tr("Overlay style");
     }
+    if (type == ActionType::RouteToScreen && key == ActionParam::TargetScreenId) {
+        return PhosphorI18n::tr("Monitor");
+    }
+    if (type == ActionType::RouteToDesktop && key == ActionParam::TargetDesktop) {
+        return PhosphorI18n::tr("Virtual desktop");
+    }
     if (key == ActionParam::Event) {
         return PhosphorI18n::tr("Event");
     }
@@ -509,6 +515,12 @@ QString actionTypeLabelImpl(const QString& type)
     if (type == ActionType::SetOuterGapRight) {
         return PhosphorI18n::tr("Set right gap");
     }
+    if (type == ActionType::RouteToScreen) {
+        return PhosphorI18n::tr("Open on monitor");
+    }
+    if (type == ActionType::RouteToDesktop) {
+        return PhosphorI18n::tr("Open on virtual desktop");
+    }
     return WindowRuleModel::actionTypeFallbackLabel(type);
 }
 
@@ -623,6 +635,12 @@ QVariantList matchFields()
                 options.append(option);
             }
             entry[QStringLiteral("options")] = options;
+        } else if (f == Field::VirtualDesktop) {
+            // Numeric on the wire (a 1-based desktop number), but the QML editor
+            // swaps the bare SpinBox for a desktop-picker ComboBox driven by
+            // `settingsController.virtualDesktopNames`, so the user picks "2: Work"
+            // rather than typing a number. Must precede the generic numeric branch.
+            kind = QStringLiteral("virtualDesktop");
         } else if (PhosphorWindowRules::fieldIsNumeric(f)) {
             kind = QStringLiteral("number");
         } else if (PhosphorWindowRules::fieldIsBool(f)) {
@@ -849,9 +867,14 @@ QVariantMap defaultPayloadFor(const QString& typeWire)
             // passes the validator (non-empty array of positive ordinals) before
             // the user edits the zone list.
             payload[key] = QVariantList{1};
+        } else if (kind == QLatin1String("virtualDesktop")) {
+            // Seed desktop 1 so a fresh RouteToDesktop rule passes the validator
+            // (a 1-based ordinal) before the user picks a desktop.
+            payload[key] = 1;
         } else {
             // Picker kinds (snappingLayout, tilingAlgorithm, animationEvent,
-            // shaderEffect, curveEditor) and plain strings all start empty —
+            // shaderEffect, curveEditor, screenId) and plain strings all start
+            // empty —
             // the user has to choose a value before the rule is savable, and
             // `canSave` surfaces the gap explicitly. Seeding a placeholder
             // here would mask the "user has to pick" state.

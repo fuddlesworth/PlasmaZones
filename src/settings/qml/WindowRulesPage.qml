@@ -76,6 +76,9 @@ SettingsFlickable {
         readonly property var layouts: settingsController.layouts
         readonly property var screens: settingsController.screens
         readonly property var activities: settingsController.activities
+        // Backs the RouteToDesktop action's virtual-desktop picker.
+        readonly property int virtualDesktopCount: settingsController.virtualDesktopCount
+        readonly property var virtualDesktopNames: settingsController.virtualDesktopNames
         // `AnimationsPageController` — exposes `eventSections()` and
         // `availableShaderEffects()` for the animationEvent / shaderEffect
         // picker editors in ActionRow.

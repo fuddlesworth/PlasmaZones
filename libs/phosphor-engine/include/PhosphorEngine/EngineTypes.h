@@ -87,6 +87,12 @@ struct SnapResult
     QString zoneId;
     QStringList zoneIds;
     QString screenId;
+    /// Target virtual desktop the snap should be committed in (1-based). 0 means
+    /// "the window's current desktop" — the historical behaviour. Set non-zero only
+    /// by a placement rule that also routes the window to a desktop (RouteToDesktop),
+    /// so the zone assignment is recorded on the desktop the window ends up on, not
+    /// the one it momentarily opened on.
+    int virtualDesktop = 0;
 
     bool isValid() const
     {

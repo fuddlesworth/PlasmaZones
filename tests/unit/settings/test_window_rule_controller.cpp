@@ -760,7 +760,7 @@ void TestWindowRuleController::authoringMetadata()
         const QString kind = f.value(QStringLiteral("valueKind")).toString();
         QVERIFY(kind == QLatin1String("string") || kind == QLatin1String("number") || kind == QLatin1String("bool")
                 || kind == QLatin1String("screen") || kind == QLatin1String("activity")
-                || kind == QLatin1String("windowType"));
+                || kind == QLatin1String("windowType") || kind == QLatin1String("virtualDesktop"));
         if (kind == QLatin1String("screen")) {
             sawScreenKind = true;
         }

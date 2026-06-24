@@ -15,6 +15,7 @@
 #include <PhosphorWindowRules/IdentityKey.h>
 #include <PhosphorWindowRules/MatchExpression.h>
 #include <PhosphorWindowRules/MatchTypes.h>
+#include <PhosphorIdentity/WindowId.h>
 #include <PhosphorWindowRules/RuleAction.h>
 #include <PhosphorWindowRules/WindowRule.h>
 #include <PhosphorWindowRules/WindowRuleSet.h>
@@ -2323,6 +2324,7 @@ inline const QUuid& snapToZoneMigrationNamespace()
 constexpr QLatin1String kLayoutAppRulesKey{"appRules"};
 constexpr QLatin1String kLayoutAppRulePattern{"pattern"};
 constexpr QLatin1String kLayoutAppRuleZoneNumber{"zoneNumber"};
+constexpr QLatin1String kLayoutAppRuleTargetScreen{"targetScreen"};
 
 // Frozen on-disk keys for the v4 per-layout settings relocation. Local literals
 // (NOT the live `ZoneJsonKeys::` / LayoutSettingsStore accessors) so a future
@@ -2361,25 +2363,35 @@ constexpr std::array<QLatin1String, 14> kLayoutSettingKeys{{
 }};
 
 /// Convert each layout file's legacy per-layout `appRules` into first-class
-/// SnapToZone WindowRules. v3 stored app→zone assignments on the Layout
-/// (`Layout::appRules`: a `{pattern, zoneNumber, targetScreen}` triple, single
-/// zone); v4 unifies them into the window-rule store. Each becomes
-/// `AppId AppIdMatches <pattern> → SnapToZone [zoneNumber]`. AppId / AppIdMatches
-/// mirrors the retired `Layout::matchAppRule` (which matched the pattern against
-/// the window's appId via segment-aware `appIdMatches`) and the daemon placement
-/// path, which resolves the query on appId — WindowClass is not tracked daemon-
-/// side, so a WindowClass leaf would never match.
+/// WindowRules. v3 stored app→zone assignments on the Layout (`Layout::appRules`:
+/// a `{pattern, zoneNumber, targetScreen}` triple, single zone); v4 unifies them
+/// into the window-rule store. Each becomes `AppId AppIdMatches <pattern> →
+/// SnapToZone [zoneNumber]`, plus a `RouteToScreen <targetScreen>` action when the
+/// legacy rule pinned a monitor. AppId / AppIdMatches mirrors the retired
+/// `Layout::matchAppRule` (which matched the pattern against the window's appId via
+/// segment-aware `appIdMatches`) and the daemon placement path, which resolves the
+/// query on appId — WindowClass is not tracked daemon-side, so a WindowClass leaf
+/// would never match.
 ///
-/// The legacy `targetScreen` (a connector name like "DP-1") is intentionally NOT
-/// carried over as a `ScreenId` constraint. v4 resolves a SnapToZone rule on the
-/// window's CURRENT screen, and a `ScreenId Equals` leaf would have to match the
-/// canonical screen-id form the daemon reports at runtime (EDID-form
-/// "Manuf:Model:Serial", what the settings screen-picker also stores), not a
-/// connector name. Translating connector→canonical here would couple this pure
-/// JSON transform to live screen state and make the deterministic rule id depend
-/// on which monitors are connected. So a migrated app snaps to its zone on
-/// whatever screen it opens on (per-monitor pinning is dropped; v3's cross-screen
-/// routing was already retired by this PR).
+/// The pattern is normalized through `WindowId::normalizeAppId` before becoming the
+/// AppId leaf. v3 stored the raw matcher, which for X11 windows was often the
+/// two-token "resourceName resourceClass" form ("chromium chromium"). The v4 daemon
+/// keys rule queries on the SINGLE normalized appId ("chromium"), and
+/// `appIdMatches` treats the embedded space as a literal — so a two-token pattern
+/// matched nothing. Normalizing here (last whitespace token, lowercased — the exact
+/// derivation the runtime applies) makes the migrated rule match the appId the
+/// daemon actually reports.
+///
+/// The legacy `targetScreen` is carried over as a `RouteToScreen` action, which
+/// pins the placement to that monitor on open — restoring the per-monitor
+/// assignment v3 had. The value is copied verbatim: real v3 data already stores the
+/// canonical EDID screen-id form ("Manuf:Model:Serial", what the runtime and the
+/// settings screen-picker use), so this stays a pure JSON transform with no
+/// coupling to live screen state. A legacy connector-name value ("DP-1") simply
+/// won't resolve at runtime and the route is skipped (the snap falls back to the
+/// opening screen) — no worse than the old behaviour, which dropped the pin
+/// entirely. The deterministic rule id folds in the target screen alongside the
+/// pattern and zone so a crash-and-retry conversion stays byte-identical.
 ///
 /// Patterns are deduped across layouts — a SnapToZone ordinal rule fires
 /// regardless of which layout is active, so one pattern can map to only one
@@ -2412,11 +2424,23 @@ void appendLayoutAppRulesAsSnapToZone(QList<PhosphorWindowRules::WindowRule>& ru
                 continue;
             }
             const QJsonObject ar = entry.toObject();
-            const QString pattern = ar.value(kLayoutAppRulePattern).toString().trimmed();
+            const QString rawPattern = ar.value(kLayoutAppRulePattern).toString().trimmed();
             const int zoneNumber = ar.value(kLayoutAppRuleZoneNumber).toInt(0);
-            if (pattern.isEmpty() || zoneNumber < 1) {
+            if (rawPattern.isEmpty() || zoneNumber < 1) {
                 continue;
             }
+            // Normalize the legacy matcher to the single appId token the v4 daemon
+            // keys rule queries on. v3 stored the raw class string, often the X11
+            // "resourceName resourceClass" two-token form ("chromium chromium");
+            // `appIdMatches` treats the embedded space literally, so that pattern
+            // matched nothing once the daemon switched to the normalized appId. Use
+            // the SAME derivation the runtime applies (last whitespace token,
+            // lowercased) so the migrated leaf matches.
+            const QString pattern = PhosphorIdentity::WindowId::normalizeAppId(QString(), rawPattern);
+            if (pattern.isEmpty()) {
+                continue;
+            }
+            const QString targetScreen = ar.value(kLayoutAppRuleTargetScreen).toString().trimmed();
             // The SnapToZone action validator caps ordinals at MaxZoneOrdinal, so a
             // legacy zoneNumber beyond it would be silently dropped by the loader's
             // validator. Skip it here with a visible warning instead of emitting a
@@ -2425,26 +2449,31 @@ void appendLayoutAppRulesAsSnapToZone(QList<PhosphorWindowRules::WindowRule>& ru
                 qWarning(
                     "ConfigMigration: app->zone pattern '%s' targets zone %d beyond the max ordinal (%d) — "
                     "dropping the assignment.",
-                    qPrintable(pattern), zoneNumber, MaxZoneOrdinal);
+                    qPrintable(rawPattern), zoneNumber, MaxZoneOrdinal);
                 continue;
             }
-            const QString patternKey = pattern.toLower();
+            // Dedup on the NORMALIZED appId: two raw patterns that normalize to the
+            // same app ("chromium chromium" and "chromium") are one placement. A
+            // SnapToZone rule fires regardless of the active layout, so a normalized
+            // pattern can map to only one placement — first wins.
+            const QString patternKey = pattern;
             if (seenPatterns.contains(patternKey)) {
                 qWarning(
-                    "ConfigMigration: duplicate app->zone pattern '%s' across layouts — keeping the first, "
-                    "dropping zone %d (a SnapToZone ordinal rule fires regardless of the active layout, so a "
-                    "pattern can map to only one placement).",
-                    qPrintable(pattern), zoneNumber);
+                    "ConfigMigration: duplicate app->zone pattern '%s' (normalized '%s') across layouts — keeping "
+                    "the first, dropping zone %d (a SnapToZone ordinal rule fires regardless of the active layout, "
+                    "so a pattern can map to only one placement).",
+                    qPrintable(rawPattern), qPrintable(pattern), zoneNumber);
                 continue;
             }
             seenPatterns.insert(patternKey);
 
             WindowRule rule;
-            // Deterministic id from (pattern, zone) so a crash-and-retry
-            // conversion yields byte-identical rules.
-            rule.id = QUuid::createUuidV5(snapToZoneMigrationNamespace(),
-                                          Detail::encodeSegment(pattern)
-                                              + Detail::encodeSegment(QString::number(zoneNumber)));
+            // Deterministic id from (normalized pattern, zone, target screen) so a
+            // crash-and-retry conversion yields byte-identical rules.
+            rule.id =
+                QUuid::createUuidV5(snapToZoneMigrationNamespace(),
+                                    Detail::encodeSegment(pattern) + Detail::encodeSegment(QString::number(zoneNumber))
+                                        + Detail::encodeSegment(targetScreen));
             rule.enabled = true;
             // priority 0 mirrors the other migrated rules; the controller
             // renormalizes display order on load and the user can reorder.
@@ -2456,6 +2485,19 @@ void appendLayoutAppRulesAsSnapToZone(QList<PhosphorWindowRules::WindowRule>& ru
             params.insert(QString(ActionParam::Zones), QJsonArray{zoneNumber});
             action.params = params;
             rule.actions.append(action);
+            // Carry the legacy per-monitor pin as a RouteToScreen action so the app
+            // still opens into its zone on the target monitor. Verbatim copy — real
+            // v3 data stores the canonical EDID screen id the runtime matches; a
+            // legacy connector-name value just won't resolve and the route is
+            // skipped (the snap falls back to the opening screen).
+            if (!targetScreen.isEmpty()) {
+                RuleAction route;
+                route.type = QString(ActionType::RouteToScreen);
+                QJsonObject routeParams;
+                routeParams.insert(QString(ActionParam::TargetScreenId), targetScreen);
+                route.params = routeParams;
+                rule.actions.append(route);
+            }
             rules.append(rule);
         }
     }
