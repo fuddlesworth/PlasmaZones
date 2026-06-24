@@ -148,22 +148,55 @@ void SnapEngine::setExcludeRuleSet(const PhosphorWindowRules::WindowRuleSet* rul
     m_excludeEvaluator.reset();
 }
 
-bool SnapEngine::isAppIdExcluded(const QString& appId) const
+bool SnapEngine::evaluateExcludeRules(const PhosphorWindowRules::WindowQuery& query) const
 {
-    // No-wiring fast path: early-init can call isAppIdExcluded before the
-    // daemon hands the rule store over.
-    if (!m_excludeRuleSet) {
+    // No-wiring fast path: early-init can run before the daemon hands the rule
+    // store over; an empty set short-circuits with no evaluator allocation.
+    if (!m_excludeRuleSet || m_excludeRuleSet->isEmpty()) {
         return false;
-    }
-    if (m_excludeRuleSet->isEmpty()) {
-        return false; // no-exclusions fast path
     }
     if (!m_excludeEvaluator) {
         m_excludeEvaluator.emplace(*m_excludeRuleSet);
     }
+    return m_excludeEvaluator->resolve(query).isExcluded();
+}
+
+bool SnapEngine::isAppIdExcluded(const QString& appId) const
+{
     PhosphorWindowRules::WindowQuery query;
     query.appId = appId;
-    return m_excludeEvaluator->resolve(query).isExcluded();
+    return evaluateExcludeRules(query);
+}
+
+bool SnapEngine::isWindowExcluded(const QString& windowId) const
+{
+    // Build the richest query available: the daemon-supplied full attributes
+    // (window class / title / frame size / flags) when the provider is wired,
+    // else the appId-only query — the historical fallback unit tests rely on.
+    std::optional<PhosphorWindowRules::WindowQuery> query;
+    if (m_exclusionQueryProvider) {
+        query = m_exclusionQueryProvider(windowId);
+    }
+    if (!query) {
+        PhosphorWindowRules::WindowQuery q;
+        q.appId = m_windowTracker ? m_windowTracker->currentAppIdFor(windowId) : QString();
+        query = std::move(q);
+    }
+
+    // Minimum-window-size exclusion — only meaningful when the query carries the
+    // frame size (full-query path). Mirrors the autotile eligibility filter, so
+    // a sub-threshold utility window is excluded from auto-snap in both modes.
+    if (auto* s = snapSettings()) {
+        const int minW = s->minimumWindowWidth();
+        const int minH = s->minimumWindowHeight();
+        if ((minW > 0 && query->width && *query->width < minW)
+            || (minH > 0 && query->height && *query->height < minH)) {
+            return true;
+        }
+    }
+
+    // Rule-based exclusion against the full query (no rules → nothing to match).
+    return evaluateExcludeRules(*query);
 }
 
 bool SnapEngine::isWindowExcludedForAction(const QString& windowId, const QString& action, const QString& screenId)
@@ -171,8 +204,8 @@ bool SnapEngine::isWindowExcludedForAction(const QString& windowId, const QStrin
     if (!m_windowTracker) {
         return false;
     }
-    const QString appId = m_windowTracker->currentAppIdFor(windowId);
-    if (isAppIdExcluded(appId)) {
+    if (isWindowExcluded(windowId)) {
+        const QString appId = m_windowTracker->currentAppIdFor(windowId);
         qCInfo(PhosphorSnapEngine::lcSnapEngine) << action << ":" << windowId << "excluded by rule, appId:" << appId;
         Q_EMIT navigationFeedback(false, action, QStringLiteral("excluded"), appId, QString(), screenId);
         return true;

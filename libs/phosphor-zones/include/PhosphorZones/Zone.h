@@ -214,7 +214,6 @@ public:
     Q_INVOKABLE bool containsPoint(const QPointF& point) const;
     Q_INVOKABLE qreal distanceToPoint(const QPointF& point) const;
     Q_INVOKABLE QRectF calculateAbsoluteGeometry(const QRectF& screenGeometry) const;
-    Q_INVOKABLE QRectF applyPadding(int padding) const;
 
     /**
      * @brief Pure helper shared between Zone::calculateAbsoluteGeometry and

@@ -333,8 +333,20 @@ SnapResult SnapEngine::resolveWindowRestore(const QString& windowId, const QStri
             }
 
             if (slot.state == WindowPlacement::stateSnapped()) {
-                // A stored snap is still subject to the disabled-context gate.
-                if (!m_shouldRestorePredicate || m_shouldRestorePredicate(restoreScreen)) {
+                // A stored snap is subject to BOTH the disabled-context gate and
+                // the managed-restore gate (restoreWindowsToZonesOnLogin). Either
+                // veto falls the window through to the normal auto-snap chain
+                // rather than re-applying the recorded zone.
+                const bool contextAllows = !m_shouldRestorePredicate || m_shouldRestorePredicate(restoreScreen);
+                const bool managedAllows = !m_managedRestorePredicate || m_managedRestorePredicate(windowId);
+                if (contextAllows && !managedAllows) {
+                    // Distinct log so the managed gate (restoreWindowsToZonesOnLogin
+                    // off) is identifiable separately from a disabled-context veto.
+                    qCDebug(PhosphorSnapEngine::lcSnapEngine)
+                        << "resolveWindowRestore:" << windowId
+                        << "— managed-restore gate skipped snapped record (restoreWindowsToZonesOnLogin off)";
+                }
+                if (contextAllows && managedAllows) {
                     const QStringList zoneIds = slot.zoneIds;
                     const QRect geo =
                         zoneIds.isEmpty() ? QRect() : m_windowTracker->resolveZoneGeometry(zoneIds, restoreScreen);
@@ -359,8 +371,9 @@ SnapResult SnapEngine::resolveWindowRestore(const QString& windowId, const QStri
                         return SnapResult{true, geo, zoneIds.first(), zoneIds, restoreScreen};
                     }
                 }
-                // Disabled context or zone gone (layout edit) → fall through to
-                // the legacy chain below.
+                // Disabled context, managed-restore opt-out
+                // (restoreWindowsToZonesOnLogin off), or zone gone (layout edit)
+                // → fall through to the legacy chain below.
             } else {
                 // FLOATED restore. Snapping has only two states — snapped (above) or
                 // floated — so any non-snapped record is floated. This also absorbs
@@ -450,11 +463,12 @@ SnapResult SnapEngine::resolveWindowRestore(const QString& windowId, const QStri
     // has already updated (Electron/CEF apps renaming themselves) matches
     // against its CURRENT class, not a stale first-seen one. m_windowTracker
     // is non-null at runtime; production code never reaches this with a null
-    // tracker. isAppIdExcluded resolves through the unified RuleEvaluator
-    // (daemon-flavour AppIdMatches Exclude rules) — the same match model the
-    // effect uses, replacing the hand-rolled appIdMatches loops.
-    if (m_windowTracker && isAppIdExcluded(m_windowTracker->currentAppIdFor(windowId))) {
-        qCInfo(PhosphorSnapEngine::lcSnapEngine) << "resolveWindowRestore:" << windowId << "excluded by rule";
+    // tracker. isWindowExcluded resolves the full WindowQuery (class/title/
+    // frame size) through the unified RuleEvaluator and applies the
+    // minimum-window-size thresholds — the same match model the autotile
+    // engine uses, replacing the hand-rolled appIdMatches loops.
+    if (m_windowTracker && isWindowExcluded(windowId)) {
+        qCInfo(PhosphorSnapEngine::lcSnapEngine) << "resolveWindowRestore:" << windowId << "excluded by rule or size";
         return SnapResult::noSnap();
     }
 
