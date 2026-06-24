@@ -1049,8 +1049,9 @@ private:
     /// first one's ticks are still queued; the older batch's later-firing
     /// timers would then clobber the newer batch's positions, leaving windows
     /// in stale zones. Each batch bumps and captures the epoch for every screen
-    /// it targets; a staggered apply (and the z-order restore) drops itself when
-    /// its screen's epoch has advanced. Per-screen, not global, so a batch on
+    /// it targets. A staggered apply drops itself when its screen's epoch has
+    /// advanced, and the z-order restore drops only when every screen it
+    /// targeted has advanced. Per-screen, not global, so a batch on
     /// one output never strands an in-flight cascade on another — mirrors the
     /// autotile cascade guard (m_autotileStaggerGenByScreen).
     QHash<QString, uint64_t> m_daemonBatchGenByScreen;

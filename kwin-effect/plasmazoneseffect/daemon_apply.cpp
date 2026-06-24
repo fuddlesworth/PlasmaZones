@@ -400,8 +400,10 @@ void PlasmaZonesEffect::slotApplyGeometriesBatch(const PhosphorProtocol::WindowG
             // superseding cascade captured and re-asserts the current stacking
             // order itself; replaying this batch's stale savedStack would
             // shuffle windows into a pre-supersession order. drainPendingRestores
-            // and snap-assist below stay unconditional (no-ops for the
-            // non-mode-toggle batches this guard can affect).
+            // and snap-assist below stay unconditional: for the non-resnap
+            // batches (rotate, vs_reconfigure, snap_all) both are no-ops, and a
+            // superseded resnap is still safe because the superseding resnap
+            // re-drains its own queued restores and re-evaluates snap assist.
             bool fullySuperseded = !genByScreen.isEmpty();
             for (auto it = genByScreen.constBegin(); it != genByScreen.constEnd(); ++it) {
                 if (m_daemonBatchGenByScreen.value(it.key()) == it.value()) {
