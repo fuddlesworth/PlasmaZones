@@ -20,6 +20,7 @@
 
 #include <PhosphorZones/LayoutRegistry.h>
 #include "config/configbackends.h"
+#include "config/configdefaults.h"
 #include <PhosphorZones/Layout.h>
 #include <PhosphorZones/Zone.h>
 #include "../helpers/StubSettings.h"
@@ -243,6 +244,66 @@ private Q_SLOTS:
         QVERIFY(duplicate->allowedScreens().isEmpty());
         QVERIFY(duplicate->allowedDesktops().isEmpty());
         QVERIFY(duplicate->allowedActivities().isEmpty());
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // Quick-layout slot persistence — mode-keyed quicklayouts.json
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    // The current on-disk format nests slots per mode
+    // ({ "snapping": {...}, "autotile": {...} }). Both modes must survive a
+    // save → fresh-load round trip and stay independent.
+    void testLayoutManager_quickLayouts_nestedFormatRoundTrip()
+    {
+        QScopedPointer<PhosphorZones::LayoutRegistry> mgr(createManager());
+
+        auto* layout = createTestLayout(QStringLiteral("RoundTrip"));
+        mgr->addLayout(layout);
+        const QString uuid = layout->id().toString();
+        const auto snapping = PhosphorZones::AssignmentEntry::Snapping;
+        const auto autotile = PhosphorZones::AssignmentEntry::Autotile;
+
+        mgr->setQuickLayoutSlot(snapping, 1, uuid); // each set writes the sidecar
+        mgr->setQuickLayoutSlot(autotile, 2, QStringLiteral("autotile:bsp"));
+
+        // A fresh registry on the SAME guard-isolated dirs reloads the sidecar
+        // (quicklayouts.json lives next to windowrules.json, not in the layout
+        // dir, so no setLayoutDirectory is needed for quick-slot loading).
+        QScopedPointer<PhosphorZones::LayoutRegistry> mgr2(
+            PlasmaZones::TestHelpers::makeLayoutRegistry(QStringLiteral("plasmazones/layouts")));
+        mgr2->loadAssignments();
+
+        QCOMPARE(mgr2->quickLayoutSlots(snapping).value(1), uuid);
+        QCOMPARE(mgr2->quickLayoutSlots(autotile).value(2), QStringLiteral("autotile:bsp"));
+        // Modes stay independent across the round trip.
+        QVERIFY(!mgr2->quickLayoutSlots(snapping).contains(2));
+        QVERIFY(!mgr2->quickLayoutSlots(autotile).contains(1));
+    }
+
+    // A legacy (pre-mode) quicklayouts.json is a flat { "1": uuid, ... } map of
+    // snapping bindings. It must read back as Snapping so existing bindings
+    // survive the upgrade, with the Autotile set starting empty.
+    void testLayoutManager_quickLayouts_legacyFlatReadsAsSnapping()
+    {
+        QScopedPointer<PhosphorZones::LayoutRegistry> mgr(createManager());
+
+        const QString uuid = QUuid::createUuid().toString();
+        const QString path = ConfigDefaults::quickLayoutsFilePath();
+        QDir().mkpath(QFileInfo(path).absolutePath());
+        QJsonObject flat;
+        flat.insert(QStringLiteral("1"), uuid);
+        flat.insert(QStringLiteral("3"), uuid);
+        {
+            QFile f(path);
+            QVERIFY(f.open(QIODevice::WriteOnly));
+            f.write(QJsonDocument(flat).toJson());
+        }
+
+        mgr->loadAssignments(); // re-reads the sidecar we just wrote
+
+        QCOMPARE(mgr->quickLayoutSlots(PhosphorZones::AssignmentEntry::Snapping).value(1), uuid);
+        QCOMPARE(mgr->quickLayoutSlots(PhosphorZones::AssignmentEntry::Snapping).value(3), uuid);
+        QVERIFY(mgr->quickLayoutSlots(PhosphorZones::AssignmentEntry::Autotile).isEmpty());
     }
 };
 

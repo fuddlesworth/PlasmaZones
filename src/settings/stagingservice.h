@@ -23,9 +23,9 @@ class Settings;
 ///   2. **Virtual-screen configurations** — staged virtual screen layouts
 ///      per physical screen, flushed to Settings (for persistence) BEFORE
 ///      `Settings::save()` and to the daemon (via D-Bus) AFTER.
-///   3. **Quick-layout slots** — snapping-quick-slot writes go to the
-///      daemon; tiling-quick-slot writes go to Settings (shared config
-///      backend) and then the daemon sees them via notifyReload.
+///   3. **Quick-layout slots** — both snapping and tiling slot writes go
+///      to the daemon's mode-keyed LayoutRegistry via D-Bus (after
+///      `notifyReload`), flushed together by `flushQuickSlotsToDaemon()`.
 ///
 /// Orchestrated by SettingsController's save lifecycle — callers are
 /// expected to invoke the flush methods in the right order (persistence
