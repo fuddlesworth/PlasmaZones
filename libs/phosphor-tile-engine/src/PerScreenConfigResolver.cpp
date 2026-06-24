@@ -46,13 +46,13 @@ void PerScreenConfigResolver::applyPerScreenConfig(const QString& screenId, cons
     }
 
     // Apply PhosphorTiles::TilingState-level overrides (splitRatio, masterCount)
-    auto it = overrides.constFind(QStringLiteral("SplitRatio"));
+    auto it = overrides.constFind(QString(PerScreenKeys::SplitRatio));
     if (it != overrides.constEnd()) {
         state->setSplitRatio(qBound(PhosphorTiles::AutotileDefaults::MinSplitRatio, it->toDouble(),
                                     PhosphorTiles::AutotileDefaults::MaxSplitRatio));
     }
 
-    it = overrides.constFind(QStringLiteral("MasterCount"));
+    it = overrides.constFind(QString(PerScreenKeys::MasterCount));
     if (it != overrides.constEnd()) {
         state->setMasterCount(qBound(PhosphorTiles::AutotileDefaults::MinMasterCount, it->toInt(),
                                      PhosphorTiles::AutotileDefaults::MaxMasterCount));
@@ -60,13 +60,13 @@ void PerScreenConfigResolver::applyPerScreenConfig(const QString& screenId, cons
 
     // If algorithm changed and split ratio wasn't explicitly overridden,
     // reset to the new algorithm's default (matching setAlgorithm() logic).
-    it = overrides.constFind(QStringLiteral("Algorithm"));
+    it = overrides.constFind(QString(PerScreenKeys::Algorithm));
     if (it != overrides.constEnd()) {
         QString algoId = it->toString();
         auto* registry = m_engine->algorithmRegistry();
         PhosphorTiles::TilingAlgorithm* newAlgo = registry->algorithm(algoId);
         if (newAlgo) {
-            if (!overrides.contains(QStringLiteral("SplitRatio"))) {
+            if (!overrides.contains(QString(PerScreenKeys::SplitRatio))) {
                 state->setSplitRatio(newAlgo->defaultSplitRatio());
             }
         }
@@ -268,14 +268,14 @@ int PerScreenConfigResolver::effectiveOuterGap(const QString& screenId) const
 
 bool PerScreenConfigResolver::effectiveSmartGaps(const QString& screenId) const
 {
-    if (auto v = perScreenOverride(screenId, QStringLiteral("SmartGaps")))
+    if (auto v = perScreenOverride(screenId, QString(PerScreenKeys::SmartGaps)))
         return v->toBool();
     return m_engine->config()->smartGaps;
 }
 
 bool PerScreenConfigResolver::effectiveRespectMinimumSize(const QString& screenId) const
 {
-    if (auto v = perScreenOverride(screenId, QStringLiteral("RespectMinimumSize")))
+    if (auto v = perScreenOverride(screenId, QString(PerScreenKeys::RespectMinimumSize)))
         return v->toBool();
     return m_engine->config()->respectMinimumSize;
 }

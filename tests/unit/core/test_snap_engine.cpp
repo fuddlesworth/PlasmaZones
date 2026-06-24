@@ -1869,6 +1869,15 @@ private Q_SLOTS:
         });
         QVERIFY(!engine.isWindowExcluded(QStringLiteral("app|big")));
 
+        // Exactly AT the threshold → not excluded (the comparison is strict `<`).
+        engine.setExclusionQueryProvider([](const QString&) {
+            PhosphorWindowRules::WindowQuery q;
+            q.width = 200; // == minW
+            q.height = 150; // == minH
+            return std::optional<PhosphorWindowRules::WindowQuery>(q);
+        });
+        QVERIFY(!engine.isWindowExcluded(QStringLiteral("app|exact")));
+
         // OR semantics: width under but height over → excluded (pins that the
         // check is OR, not AND, and that each dimension is evaluated).
         engine.setExclusionQueryProvider([](const QString&) {
