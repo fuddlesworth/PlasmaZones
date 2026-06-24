@@ -189,6 +189,14 @@ void SnapAdaptor::resolveWindowRestore(const QString& windowId, const QString& s
     const PhosphorEngine::WindowKind kind = PhosphorEngine::clampWindowKindFromWire(windowKind);
     SnapResult result = m_engine->resolveWindowRestore(windowId, screenId, sticky, kind);
     if (!result.shouldSnap) {
+        // Nothing snapped this window. A bare RouteToScreen rule (move-to-monitor
+        // with no SnapToZone) takes effect here, deliberately AFTER the snap/float
+        // restore has had its chance: a SnapToZone restore or a remembered snap
+        // already returned shouldSnap=true above (so the route never fights a snap),
+        // and the explicit route wins over a remembered float position (it applies
+        // the final geometry). A route WITH SnapToZone moved+snapped on the target
+        // via the placement directive and never reaches here.
+        m_adaptor->applyOpenScreenRouting(windowId, screenId);
         return;
     }
 

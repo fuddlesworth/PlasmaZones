@@ -16,6 +16,7 @@
 #include "core/logging.h"
 #include <PhosphorEngine/IPlacementEngine.h>
 #include <PhosphorIdentity/WindowId.h>
+#include <PhosphorScreens/Manager.h>
 #include <PhosphorSnapEngine/SnapEngine.h>
 #include <PhosphorSnapEngine/SnapState.h>
 #include <PhosphorTileEngine/AutotileEngine.h>
@@ -570,9 +571,9 @@ PhosphorSnapEngine::PlacementDirective WindowTrackingAdaptor::placementZonesByRu
     if (!action) {
         // No SnapToZone: return the (possibly route-only) directive. With no ordinals
         // the snap engine treats it as "nothing to snap", so a RouteToScreen WITHOUT
-        // an accompanying SnapToZone is a no-op on this snap path — bare "move to
-        // monitor X" routing is handled by the engine-neutral open-path mover
-        // (alongside RouteToDesktop), not here.
+        // an accompanying SnapToZone produces no snap here. The bare "move to monitor
+        // X" is performed by applyOpenScreenRouting on the snap open-path facade (it
+        // runs only when nothing snapped the window), not in this directive builder.
         return directive;
     }
     // The descriptor validator already guaranteed a non-empty array of in-range
@@ -630,6 +631,84 @@ void WindowTrackingAdaptor::applyOpenDesktopRouting(const QString& windowId, con
         m_windowRuleEvaluator = std::make_unique<PhosphorWindowRules::RuleEvaluator>(m_windowRuleStore->ruleSet());
     }
     emitRouteToDesktopIfMatched(m_windowRuleEvaluator->resolveCached(windowId, *query), windowId);
+}
+
+void WindowTrackingAdaptor::applyOpenScreenRouting(const QString& windowId, const QString& screenId)
+{
+    if (!m_windowRuleStore) {
+        return;
+    }
+    std::optional<PhosphorWindowRules::WindowQuery> query = buildRuleQueryForWindow(m_windowRegistry, windowId);
+    if (!query) {
+        return;
+    }
+    // Pin the screen so a ScreenId-scoped rule resolves, mirroring placementZonesByRule.
+    query->screenId = screenId;
+    if (!m_windowRuleEvaluator) {
+        m_windowRuleEvaluator = std::make_unique<PhosphorWindowRules::RuleEvaluator>(m_windowRuleStore->ruleSet());
+    }
+    const PhosphorWindowRules::ResolvedActions resolved = m_windowRuleEvaluator->resolveCached(windowId, *query);
+
+    // Bare RouteToScreen only. A rule that ALSO carries SnapToZone routes AND snaps
+    // via the placement directive (calculateSnapToPlacementRule resolves the zones
+    // ON the target screen and returns shouldSnap, so the facade never reaches the
+    // no-snap branch that calls this); moving here too would double-place the window.
+    if (resolved.slot(QString(PhosphorWindowRules::ActionSlot::Placement))) {
+        return;
+    }
+    const std::optional<PhosphorWindowRules::RuleAction> route =
+        resolved.slot(QString(PhosphorWindowRules::ActionSlot::RouteScreen));
+    if (!route) {
+        return;
+    }
+    const QString target = route->params.value(QString(PhosphorWindowRules::ActionParam::TargetScreenId)).toString();
+    if (target.isEmpty() || target == screenId) {
+        return;
+    }
+    PhosphorScreens::ScreenManager* screens = m_service ? m_service->screenManager() : nullptr;
+    if (!screens) {
+        return;
+    }
+    const QRect dstAvail = screens->screenAvailableGeometry(target);
+    if (!dstAvail.isValid()) {
+        // Target monitor is not currently connected — leave the window on its spawn
+        // screen (the rule fires again when that monitor returns).
+        qCDebug(lcDbusWindow) << "applyOpenScreenRouting: route target" << target
+                              << "is not currently connected — not moving" << windowId;
+        return;
+    }
+    const QRect cur = frameGeometry(windowId);
+    if (!cur.isValid()) {
+        // No geometry pushed yet — nothing to translate onto the target screen.
+        return;
+    }
+
+    // Map the window's position relative to its current screen's available area onto
+    // the target screen's, preserving size, then clamp so the whole frame fits.
+    // Preserves "the same spot on the other monitor" across differing resolutions; an
+    // unknown / degenerate source area falls back to the target's top-left.
+    const QRect srcAvail = screens->screenAvailableGeometry(screenId);
+    const int w = qMin(cur.width(), dstAvail.width());
+    const int h = qMin(cur.height(), dstAvail.height());
+    int x = dstAvail.x();
+    int y = dstAvail.y();
+    if (srcAvail.isValid() && srcAvail.width() > 0 && srcAvail.height() > 0) {
+        const double relX = static_cast<double>(cur.x() - srcAvail.x()) / srcAvail.width();
+        const double relY = static_cast<double>(cur.y() - srcAvail.y()) / srcAvail.height();
+        x = dstAvail.x() + qRound(relX * dstAvail.width());
+        y = dstAvail.y() + qRound(relY * dstAvail.height());
+    }
+    // Clamp the frame fully inside the target available area.
+    x = qBound(dstAvail.left(), x, dstAvail.right() - w + 1);
+    y = qBound(dstAvail.top(), y, dstAvail.bottom() - h + 1);
+
+    qCInfo(lcDbusWindow) << "applyOpenScreenRouting: routing" << windowId << "to monitor" << target << "at"
+                         << QRect(x, y, w, h);
+    // Emit the marker first so the effect treats the resulting outputChanged as an
+    // expected daemon-driven move (bookkeeping + decoration only, no reopen), then
+    // the free placement (empty zone id ⇒ no snap chrome).
+    Q_EMIT windowOutputMoveExpected(windowId, target);
+    Q_EMIT applyGeometryRequested(windowId, x, y, w, h, QString(), target, false);
 }
 
 QString WindowTrackingAdaptor::applyOpenRoutingForAutotile(const QString& windowId, const QString& screenId)

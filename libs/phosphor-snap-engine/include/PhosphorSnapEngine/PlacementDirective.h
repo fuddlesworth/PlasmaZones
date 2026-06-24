@@ -24,16 +24,16 @@ namespace PhosphorSnapEngine {
  *    moved there, restoring the per-monitor pinning the retired per-layout app
  *    rules carried. Empty means resolve on the window's opening screen (a
  *    `ScreenId` match leaf only SCOPES a rule; `RouteToScreen` is what ROUTES it).
+ *  - @c targetDesktop — the `RouteToDesktop` target virtual desktop (1-based;
+ *    0 = no desktop routing). When set the zones resolve against THAT desktop's
+ *    layout for the placement screen and the snap commits in that desktop's
+ *    context, so a combined "snap to zone N + open on desktop M" rule places the
+ *    window into zone N of desktop M's layout (not the desktop it opened on).
  */
 struct PlacementDirective
 {
     QList<int> zoneOrdinals;
     QString targetScreenId;
-    /// The `RouteToDesktop` target virtual desktop (1-based; 0 = no desktop
-    /// routing). When set, the zones resolve against THAT desktop's layout for the
-    /// placement screen and the snap is committed in that desktop's context, so a
-    /// combined "snap to zone N + open on desktop M" rule places the window into
-    /// zone N of desktop M's layout (not the desktop it momentarily opened on).
     int targetDesktop = 0;
 };
 

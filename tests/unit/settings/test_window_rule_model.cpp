@@ -570,8 +570,8 @@ void TestWindowRuleModel::routeActionsRenderFriendlyLabels()
     // summary rather than leaking their raw wire tokens. Both actions are
     // user-authorable (they appear in the action picker), so a missing
     // actionLabel branch would surface "routeToScreen" / "routeToDesktop" in the
-    // rules list while the editor shows "Open on monitor" / "Open on virtual
-    // desktop" — an inconsistency this test guards against. RouteToScreen also
+    // rules list while the editor shows "Open on monitor" / "Open on desktop" — an
+    // inconsistency this test guards against. RouteToScreen also
     // resolves its target through the injected screen lookup, mirroring the
     // ScreenId match-leaf path, and falls back to the raw id when unresolved.
     const auto screenRuleWith = [](const QString& screenId) {

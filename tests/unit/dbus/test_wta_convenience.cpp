@@ -330,6 +330,135 @@ private Q_SLOTS:
         m_wta->setWindowRegistry(nullptr);
     }
 
+    // A BARE RouteToScreen rule (no SnapToZone) must move the opening window to the
+    // target monitor on the snap open path: applyOpenScreenRouting translates the
+    // window's frame onto the target screen's available area and emits the
+    // output-move marker plus a FREE applyGeometryRequested (empty zone id). A local
+    // WTA wired to a deterministic two-screen ScreenManager is used because the
+    // shared fixture has a null ScreenManager.
+    void testApplyOpenScreenRouting_movesBareRouteToTargetMonitor()
+    {
+        PhosphorScreens::FakeScreenProvider fake;
+        fake.addScreen(QStringLiteral("DP-1"), QRect(0, 0, 1920, 1080), QStringLiteral("DP-1"));
+        fake.addScreen(QStringLiteral("DP-2"), QRect(1920, 0, 1920, 1080), QStringLiteral("DP-2"));
+        PhosphorScreens::ScreenManager screenMgr(
+            PhosphorScreens::ScreenManagerConfig{.screenProvider = &fake, .useGeometrySensors = false});
+        screenMgr.start();
+
+        QObject parent;
+        auto* wta = new WindowTrackingAdaptor(m_layoutManager, m_zoneDetector, &screenMgr, m_settings, nullptr, nullptr,
+                                              &parent);
+        auto* snap = new SnapEngine(m_layoutManager, wta->service(), m_zoneDetector, nullptr, nullptr);
+        wta->service()->setSnapState(snap->snapState());
+        wta->service()->setSnapEngine(snap);
+        wta->setEngines(snap, nullptr);
+
+        auto* registry = new PhosphorEngine::WindowRegistry(&parent);
+        wta->setWindowRegistry(registry);
+        wta->setWindowMetadata(QStringLiteral("inst1"), QStringLiteral("routeapp"), QString(), QString(), QString(), 0,
+                               0, QString(), 0, QVariantMap());
+
+        using namespace PhosphorWindowRules;
+        WindowRule rule;
+        rule.id = QUuid::createUuid();
+        rule.enabled = true;
+        rule.match = MatchExpression::makeLeaf(Field::AppId, Operator::AppIdMatches, QStringLiteral("routeapp"));
+        RuleAction route;
+        route.type = QString(ActionType::RouteToScreen);
+        route.params.insert(QString(ActionParam::TargetScreenId), QStringLiteral("DP-2"));
+        rule.actions = {route}; // bare RouteToScreen, NO SnapToZone
+        WindowRuleStore store(ConfigDefaults::windowRulesFilePath(), &parent);
+        QVERIFY(store.addRule(rule));
+        wta->setWindowRuleStore(&store);
+
+        // Window opened on DP-1 at a known frame.
+        const QString w = QStringLiteral("routeapp|inst1");
+        wta->setFrameGeometry(w, 100, 100, 800, 600);
+
+        QSignalSpy outputSpy(wta, &WindowTrackingAdaptor::windowOutputMoveExpected);
+        QSignalSpy geomSpy(wta, &WindowTrackingAdaptor::applyGeometryRequested);
+
+        wta->applyOpenScreenRouting(w, QStringLiteral("DP-1"));
+
+        // Output-move marker for DP-2.
+        QCOMPARE(outputSpy.count(), 1);
+        QCOMPARE(outputSpy.at(0).at(1).toString(), QStringLiteral("DP-2"));
+        // Free placement on DP-2: applyGeometryRequested(windowId, x, y, w, h, zoneId, screenId, sizeOnly).
+        QCOMPARE(geomSpy.count(), 1);
+        const auto args = geomSpy.at(0);
+        QCOMPARE(args.at(0).toString(), w);
+        QVERIFY2(args.at(5).toString().isEmpty(), "a bare route must be a free placement (empty zone id)");
+        QCOMPARE(args.at(6).toString(), QStringLiteral("DP-2"));
+        const int x = args.at(1).toInt();
+        QVERIFY2(x >= 1920 && x < 3840, "the window must land within DP-2's geometry");
+
+        wta->setWindowRuleStore(nullptr);
+        wta->setWindowRegistry(nullptr);
+        wta->service()->setSnapEngine(nullptr);
+        wta->service()->setSnapState(nullptr);
+        delete snap;
+    }
+
+    // A rule carrying BOTH SnapToZone and RouteToScreen must NOT be moved by
+    // applyOpenScreenRouting: the snap placement directive routes AND snaps it on the
+    // target screen, so a free move here would double-place the window. The Placement
+    // slot guard suppresses it even with everything else set up to move.
+    void testApplyOpenScreenRouting_snapToZonePresent_doesNotDoubleMove()
+    {
+        PhosphorScreens::FakeScreenProvider fake;
+        fake.addScreen(QStringLiteral("DP-1"), QRect(0, 0, 1920, 1080), QStringLiteral("DP-1"));
+        fake.addScreen(QStringLiteral("DP-2"), QRect(1920, 0, 1920, 1080), QStringLiteral("DP-2"));
+        PhosphorScreens::ScreenManager screenMgr(
+            PhosphorScreens::ScreenManagerConfig{.screenProvider = &fake, .useGeometrySensors = false});
+        screenMgr.start();
+
+        QObject parent;
+        auto* wta = new WindowTrackingAdaptor(m_layoutManager, m_zoneDetector, &screenMgr, m_settings, nullptr, nullptr,
+                                              &parent);
+        auto* snap = new SnapEngine(m_layoutManager, wta->service(), m_zoneDetector, nullptr, nullptr);
+        wta->service()->setSnapState(snap->snapState());
+        wta->service()->setSnapEngine(snap);
+        wta->setEngines(snap, nullptr);
+
+        auto* registry = new PhosphorEngine::WindowRegistry(&parent);
+        wta->setWindowRegistry(registry);
+        wta->setWindowMetadata(QStringLiteral("inst2"), QStringLiteral("snaproute"), QString(), QString(), QString(), 0,
+                               0, QString(), 0, QVariantMap());
+
+        using namespace PhosphorWindowRules;
+        WindowRule rule;
+        rule.id = QUuid::createUuid();
+        rule.enabled = true;
+        rule.match = MatchExpression::makeLeaf(Field::AppId, Operator::AppIdMatches, QStringLiteral("snaproute"));
+        RuleAction route;
+        route.type = QString(ActionType::RouteToScreen);
+        route.params.insert(QString(ActionParam::TargetScreenId), QStringLiteral("DP-2"));
+        RuleAction snapTo;
+        snapTo.type = QString(ActionType::SnapToZone);
+        snapTo.params.insert(QString(ActionParam::Zones), QJsonArray{1});
+        rule.actions = {route, snapTo};
+        WindowRuleStore store(ConfigDefaults::windowRulesFilePath(), &parent);
+        QVERIFY(store.addRule(rule));
+        wta->setWindowRuleStore(&store);
+
+        const QString w = QStringLiteral("snaproute|inst2");
+        wta->setFrameGeometry(w, 100, 100, 800, 600);
+
+        QSignalSpy outputSpy(wta, &WindowTrackingAdaptor::windowOutputMoveExpected);
+        QSignalSpy geomSpy(wta, &WindowTrackingAdaptor::applyGeometryRequested);
+
+        wta->applyOpenScreenRouting(w, QStringLiteral("DP-1"));
+
+        QVERIFY2(outputSpy.isEmpty(), "a route+snap rule must not free-move via applyOpenScreenRouting");
+        QVERIFY2(geomSpy.isEmpty(), "a route+snap rule must not free-move via applyOpenScreenRouting");
+
+        wta->setWindowRuleStore(nullptr);
+        wta->setWindowRegistry(nullptr);
+        wta->service()->setSnapEngine(nullptr);
+        wta->service()->setSnapState(nullptr);
+        delete snap;
+    }
+
     void testMoveWindowToZone_validZone_emitsApplyGeometry()
     {
         QString windowId = QStringLiteral("firefox|12345");

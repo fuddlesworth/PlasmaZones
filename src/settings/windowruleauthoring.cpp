@@ -863,10 +863,10 @@ QVariantMap defaultPayloadFor(const QString& typeWire)
         } else {
             // Picker kinds (snappingLayout, tilingAlgorithm, animationEvent,
             // shaderEffect, curveEditor, screenId) and plain strings all start
-            // empty —
-            // the user has to choose a value before the rule is savable, and
-            // `canSave` surfaces the gap explicitly. Seeding a placeholder
-            // here would mask the "user has to pick" state.
+            // empty (zoneOrdinals and virtualDesktop are seeded above because their
+            // validators reject an empty value). The user has to choose a value
+            // before the rule is savable, and `canSave` surfaces the gap explicitly.
+            // Seeding a placeholder here would mask the "user has to pick" state.
             payload[key] = QString();
         }
     }
