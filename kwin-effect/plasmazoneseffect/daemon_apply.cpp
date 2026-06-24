@@ -313,10 +313,31 @@ void PlasmaZonesEffect::slotApplyGeometriesBatch(const PhosphorProtocol::WindowG
         ? PhosphorAnimation::ProfilePaths::WindowLayoutSwitch
         : PhosphorAnimation::ProfilePaths::WindowSnapIn;
 
+    // Per-screen supersession epoch (see m_daemonBatchGenByScreen): bump and
+    // snapshot each target screen's counter so this cascade's still-queued
+    // ticks self-cancel if a newer batch lands on the same screen. Float/
+    // restore entries (empty screenId) are independent and never guarded.
+    QHash<QString, uint64_t> genByScreen;
+    for (const auto& p : pending) {
+        if (p.screenId.isEmpty() || genByScreen.contains(p.screenId)) {
+            continue;
+        }
+        genByScreen.insert(p.screenId, ++m_daemonBatchGenByScreen[p.screenId]);
+    }
+
     applyStaggeredOrImmediate(
         pending.size(),
-        [this, pending, batchProfilePath](int i) {
+        [this, pending, batchProfilePath, genByScreen](int i) {
             const auto& p = pending[i];
+            // Drop this apply if a newer daemon batch has superseded this
+            // window's screen: a later-firing tick of this (older) cascade would
+            // otherwise clobber the newer batch's position and strand the window
+            // in a stale zone. Only observable with cascade stagger enabled,
+            // where the per-window moves spread across timer ticks. Empty
+            // screenId (float/restore) is independent and always applies.
+            if (!p.screenId.isEmpty() && m_daemonBatchGenByScreen.value(p.screenId) != genByScreen.value(p.screenId)) {
+                return;
+            }
             // isDeleted too, not just destruction: close-shader grabs (which
             // this effect takes) keep deleted windows alive in the stacking
             // order for the close-animation duration, and the stagger delay
@@ -373,9 +394,22 @@ void PlasmaZonesEffect::slotApplyGeometriesBatch(const PhosphorProtocol::WindowG
                 m_snapHandler->markWindowSnapped(batchWid, p.screenId);
             }
         },
-        [this, savedStack, action]() {
-            // Restore z-order after all geometries applied
-            auto* ws = KWin::Workspace::self();
+        [this, savedStack, action, genByScreen]() {
+            // Restore z-order after all geometries applied — but skip it when a
+            // newer batch has superseded every screen this one targeted. The
+            // superseding cascade captured and re-asserts the current stacking
+            // order itself; replaying this batch's stale savedStack would
+            // shuffle windows into a pre-supersession order. drainPendingRestores
+            // and snap-assist below stay unconditional (no-ops for the
+            // non-mode-toggle batches this guard can affect).
+            bool fullySuperseded = !genByScreen.isEmpty();
+            for (auto it = genByScreen.constBegin(); it != genByScreen.constEnd(); ++it) {
+                if (m_daemonBatchGenByScreen.value(it.key()) == it.value()) {
+                    fullySuperseded = false;
+                    break;
+                }
+            }
+            auto* ws = fullySuperseded ? nullptr : KWin::Workspace::self();
             if (ws) {
                 for (const auto& wPtr : savedStack) {
                     if (wPtr && !wPtr->isDeleted()) {

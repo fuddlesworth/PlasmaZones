@@ -1042,6 +1042,18 @@ private:
     /// authoritative source of the window's intended VS during these applies, so the crossing check
     /// is unsafe and must be skipped.
     bool m_inDaemonGeometryApply = false;
+    /// Per-screen supersession epoch for slotApplyGeometriesBatch cascades.
+    /// When cascade stagger is enabled, a daemon geometry batch spreads its
+    /// per-window moves across QTimer::singleShot ticks. A rapid second batch
+    /// (e.g. holding the rotate shortcut) starts its own cascade while the
+    /// first one's ticks are still queued; the older batch's later-firing
+    /// timers would then clobber the newer batch's positions, leaving windows
+    /// in stale zones. Each batch bumps and captures the epoch for every screen
+    /// it targets; a staggered apply (and the z-order restore) drops itself when
+    /// its screen's epoch has advanced. Per-screen, not global, so a batch on
+    /// one output never strands an in-flight cascade on another — mirrors the
+    /// autotile cascade guard (m_autotileStaggerGenByScreen).
+    QHash<QString, uint64_t> m_daemonBatchGenByScreen;
     int m_pendingVsConfigReplies = 0; ///< countdown for fetchAllVirtualScreenConfigs async replies
     uint64_t m_vsConfigGeneration = 0; ///< generation counter for fetchAllVirtualScreenConfigs
     /// Per-physId fetchVirtualScreenConfig sequence. Every fetch bumps its
