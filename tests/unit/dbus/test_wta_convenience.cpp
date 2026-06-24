@@ -290,6 +290,46 @@ private Q_SLOTS:
         m_wta->setWindowRegistry(nullptr);
     }
 
+    // The snap open path's RouteToDesktop emit (applyOpenDesktopRouting, called from
+    // SnapAdaptor::resolveWindowRestore) emits windowDesktopMoveRequested when a
+    // matched rule pins a desktop, and stays silent otherwise.
+    void testApplyOpenDesktopRouting_emitsDesktopMoveForMatch()
+    {
+        auto* registry = new PhosphorEngine::WindowRegistry(m_parent);
+        m_wta->setWindowRegistry(registry);
+        m_wta->setWindowMetadata(QStringLiteral("inst3"), QStringLiteral("deskapp"), QString(), QString(), QString(), 0,
+                                 0, QString(), 0, QVariantMap());
+
+        using namespace PhosphorWindowRules;
+        WindowRule rule;
+        rule.id = QUuid::createUuid();
+        rule.enabled = true;
+        rule.match = MatchExpression::makeLeaf(Field::AppId, Operator::AppIdMatches, QStringLiteral("deskapp"));
+        RuleAction desk;
+        desk.type = QString(ActionType::RouteToDesktop);
+        desk.params.insert(QString(ActionParam::TargetDesktop), 4);
+        rule.actions = {desk};
+
+        WindowRuleStore store(ConfigDefaults::windowRulesFilePath(), m_parent);
+        QVERIFY(store.addRule(rule));
+        m_wta->setWindowRuleStore(&store);
+
+        QSignalSpy desktopSpy(m_wta, &WindowTrackingAdaptor::windowDesktopMoveRequested);
+        m_wta->applyOpenDesktopRouting(QStringLiteral("deskapp|inst3"), QStringLiteral("DP-1"));
+        QCOMPARE(desktopSpy.count(), 1);
+        QCOMPARE(desktopSpy.at(0).at(1).toInt(), 4);
+
+        // A window with no matching rule emits nothing.
+        m_wta->setWindowMetadata(QStringLiteral("inst4"), QStringLiteral("nomatch"), QString(), QString(), QString(), 0,
+                                 0, QString(), 0, QVariantMap());
+        QSignalSpy quietSpy(m_wta, &WindowTrackingAdaptor::windowDesktopMoveRequested);
+        m_wta->applyOpenDesktopRouting(QStringLiteral("nomatch|inst4"), QStringLiteral("DP-1"));
+        QCOMPARE(quietSpy.count(), 0);
+
+        m_wta->setWindowRuleStore(nullptr);
+        m_wta->setWindowRegistry(nullptr);
+    }
+
     void testMoveWindowToZone_validZone_emitsApplyGeometry()
     {
         QString windowId = QStringLiteral("firefox|12345");

@@ -746,7 +746,7 @@ ColumnLayout {
             textRole: "label"
             valueRole: "value"
             currentIndex: {
-                var target = row.action[_param.key];
+                var target = Number(row.action[_param.key]);
                 for (var i = 0; i < desktopCombo.model.length; ++i) {
                     if (desktopCombo.model[i].value === target)
                         return i;

@@ -666,8 +666,7 @@ QString WindowTrackingAdaptor::applyOpenRoutingForAutotile(const QString& window
     if (target.isEmpty() || target == screenId || !m_layoutManager) {
         return QString();
     }
-    if (m_layoutManager->modeForScreen(target, m_layoutManager->currentVirtualDesktopForScreen(target),
-                                       m_layoutManager->currentActivity())
+    if (m_layoutManager->modeForScreen(target, currentDesktopForScreen(target), m_layoutManager->currentActivity())
         != PhosphorZones::AssignmentEntry::Mode::Autotile) {
         qCDebug(lcDbusWindow) << "applyOpenRoutingForAutotile: RouteToScreen target" << target
                               << "is not in autotile mode — not redirecting" << windowId;

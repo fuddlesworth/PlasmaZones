@@ -46,9 +46,10 @@ namespace PlasmaZones {
 ///     Each layout's retired per-layout `appRules` triple
 ///     (`{pattern, zoneNumber, targetScreen}`) also folds into windowrules.json
 ///     as an `AppId AppIdMatches <pattern> → SnapToZone [zoneNumber]` rule,
-///     deduped by pattern across layouts (the legacy `targetScreen` is dropped —
-///     a migrated app snaps on whatever screen it opens on) — see
-///     appendLayoutAppRulesAsSnapToZone in configmigration.cpp.
+///     deduped by normalized pattern across layouts. A legacy `targetScreen` is
+///     carried over as a companion `RouteToScreen` action so the app reopens on
+///     its pinned monitor. See appendLayoutAppRulesAsSnapToZone in
+///     configmigration.cpp.
 ///     Additionally renames the drag-time zone-overlay groups
 ///     Snapping.Appearance.{Colors,Opacity,Border,Labels} → Snapping.Zones.*,
 ///     freeing the Snapping.Appearance.* namespace for the new per-window

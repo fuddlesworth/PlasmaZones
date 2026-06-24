@@ -67,10 +67,10 @@ inline constexpr int FieldCount = static_cast<int>(Field::Zone) + 1;
 
 /// Value-kind of a field's payload in a WindowQuery.
 enum class FieldType : int {
-    String, ///< QString-valued (operators: Equals/Contains/StartsWith/EndsWith/Regex/In)
+    String, ///< QString-valued (operators: Equals/Contains/StartsWith/EndsWith/Regex)
     Bool, ///< bool-valued (operator: Equals)
     Int, ///< int-valued (operators: Equals/GreaterThan/LessThan)
-    Enum, ///< enum-as-int (WindowType) — Equals/In only
+    Enum, ///< enum-as-int (WindowType) — Equals only
 };
 
 /// Whether a field is a window property or a context attribute.

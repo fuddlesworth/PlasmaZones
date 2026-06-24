@@ -85,7 +85,8 @@ struct PHOSPHORWINDOWRULES_EXPORT RuleAction
  * switch. `kind` is a UI-side hint string (the canonical kinds are
  * `string`, `number`, `percent`, `enum`, `bool`, `color`, plus the
  * picker-aware kinds `snappingLayout`, `tilingAlgorithm`, `animationEvent`,
- * `shaderEffect`, `overlayShader`, `zoneOrdinals`, `curveEditor`); QML loaders dispatch on it. Labels stay in
+ * `shaderEffect`, `overlayShader`, `zoneOrdinals`, `curveEditor`, `screenId`,
+ * `virtualDesktop`); QML loaders dispatch on it. Labels stay in
  * the GPL settings layer because they need translation through PhosphorI18n::tr —
  * the lib only owns the structural part of the schema.
  *

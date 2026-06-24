@@ -87,10 +87,9 @@ SnapResult SnapEngine::calculateSnapToPlacementRule(const QString& windowId, con
     // through to the normal restore chain rather than being stranded. Gate whenever
     // the target differs from the opening (screen, desktop), so a cross-desktop or
     // cross-screen route is validated against where the window will actually land.
-    // (No layout manager ⇒ unit-test path: skip the gate; the layout miss below
-    // already yields noSnap.)
+    // (m_layoutManager is non-null here — the early guard above already returned.)
     const bool routed = placementScreen != windowScreenName || directive.targetDesktop >= 1;
-    if (routed && m_layoutManager
+    if (routed
         && m_layoutManager->modeForScreen(placementScreen, placementDesktop, currentActivity())
             != PhosphorZones::AssignmentEntry::Mode::Snapping) {
         qCDebug(PhosphorSnapEngine::lcSnapEngine)

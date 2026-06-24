@@ -45,17 +45,17 @@ void SnapEngine::commitSnapImpl(const QString& windowId, const QStringList& zone
     // (virtualDesktop >= 1); every other commit path records on the window's
     // current desktop. Tracking the right desktop keeps zone occupancy, snap-assist,
     // and empty-zone detection correct on both the source and destination desktops.
-    const int currentDesktop = virtualDesktop >= 1 ? virtualDesktop : currentVirtualDesktopForScreen(screenId);
+    const int assignmentDesktop = virtualDesktop >= 1 ? virtualDesktop : currentVirtualDesktopForScreen(screenId);
     if (zoneIds.size() > 1) {
-        m_windowTracker->assignWindowToZones(windowId, zoneIds, screenId, currentDesktop);
+        m_windowTracker->assignWindowToZones(windowId, zoneIds, screenId, assignmentDesktop);
     } else {
-        m_windowTracker->assignWindowToZone(windowId, primaryZoneId, screenId, currentDesktop);
+        m_windowTracker->assignWindowToZone(windowId, primaryZoneId, screenId, assignmentDesktop);
     }
 
     if (intent == SnapIntent::UserInitiated && !wasAutoSnapped
         && !primaryZoneId.startsWith(QStringLiteral("zoneselector-"))) {
         const QString windowClass = m_windowTracker->currentAppIdFor(windowId);
-        m_windowTracker->updateLastUsedZone(primaryZoneId, screenId, windowClass, currentDesktop);
+        m_windowTracker->updateLastUsedZone(primaryZoneId, screenId, windowClass, assignmentDesktop);
     }
 
     qCInfo(PhosphorSnapEngine::lcSnapEngine)

@@ -313,8 +313,7 @@ bool MatchExpression::evaluateLeaf(const WindowQuery& query) const
         }
     }
 
-    // ── WindowType — compared by its underlying int (Equals only here;
-    //    In is handled above) ──
+    // ── WindowType — compared by its underlying int (Equals only) ──
     if (m_predicate.field == Field::WindowType) {
         if (op != Operator::Equals) {
             return false;
