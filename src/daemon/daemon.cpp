@@ -1136,6 +1136,46 @@ bool Daemon::init()
     m_snapEngine = std::move(engines.snap);
     m_screenModeRouter = std::move(engines.router);
 
+    // Per-context (window-rule) gap overrides for autotile. Snapping resolves
+    // these as the highest-priority gap layer (GeometryUtils::getEffective*);
+    // without this, a context gap rule was silently ignored on tiled windows.
+    // The closure resolves the screen's CURRENT context here (the engine library
+    // stays settings-agnostic) and adapts ContextGapOverride into the
+    // PerScreenKeys-shaped map the resolver already consumes.
+    if (m_autotileEngine) {
+        m_autotileEngine->setContextGapProvider([this](const QString& screenId) -> QVariantMap {
+            if (!m_layoutManager) {
+                return {};
+            }
+            const PhosphorZones::ContextGapOverride gaps =
+                m_layoutManager->resolveContextGaps(screenId, currentDesktopForScreen(screenId), currentActivity());
+            if (gaps.isEmpty()) {
+                return {};
+            }
+            QVariantMap map;
+            // zonePadding is snapping's inner spacing — the autotile inner gap.
+            if (gaps.zonePadding) {
+                map.insert(QStringLiteral("InnerGap"), *gaps.zonePadding);
+            }
+            if (gaps.outerGap) {
+                map.insert(QStringLiteral("OuterGap"), *gaps.outerGap);
+            }
+            if (gaps.outerGapTop) {
+                map.insert(QStringLiteral("OuterGapTop"), *gaps.outerGapTop);
+            }
+            if (gaps.outerGapBottom) {
+                map.insert(QStringLiteral("OuterGapBottom"), *gaps.outerGapBottom);
+            }
+            if (gaps.outerGapLeft) {
+                map.insert(QStringLiteral("OuterGapLeft"), *gaps.outerGapLeft);
+            }
+            if (gaps.outerGapRight) {
+                map.insert(QStringLiteral("OuterGapRight"), *gaps.outerGapRight);
+            }
+            return map;
+        });
+    }
+
     // Build the PhosphorContext::ContextResolver wiring NOW — after the
     // workspace managers, settings, and router exist; before any D-Bus
     // adaptor or OverlayService method that consumes it runs. Three

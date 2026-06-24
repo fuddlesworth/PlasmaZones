@@ -1501,6 +1501,11 @@ void AutotileEngine::clearPerScreenConfig(const QString& screenId)
     m_configResolver->clearPerScreenConfig(screenId);
 }
 
+void AutotileEngine::setContextGapProvider(std::function<QVariantMap(const QString& screenId)> provider)
+{
+    m_configResolver->setContextGapProvider(std::move(provider));
+}
+
 QVariantMap AutotileEngine::perScreenOverrides(const QString& screenId) const
 {
     return m_configResolver->perScreenOverrides(screenId);

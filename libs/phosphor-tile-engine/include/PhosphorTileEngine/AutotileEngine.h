@@ -535,6 +535,11 @@ public:
     bool hasPerScreenOverride(const QString& screenId, const QString& key) const;
     void updatePerScreenOverride(const QString& screenId, const QString& key, const QVariant& value);
 
+    // Inject the per-context (window-rule) gap-override provider — forwarded to
+    // PerScreenConfigResolver. The daemon supplies the screen's current-context
+    // gap overrides so tiled windows honour context gap rules like snapping does.
+    void setContextGapProvider(std::function<QVariantMap(const QString& screenId)> provider);
+
     // Mark the active (screen, desktop, activity) state's split ratio / master
     // count as user-tuned so propagateGlobalSplitRatio/MasterCount leaves it
     // alone — the adjustment stays local to that desktop instead of bleeding into

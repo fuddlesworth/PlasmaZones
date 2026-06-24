@@ -9,6 +9,7 @@
 #include <QHash>
 #include <QString>
 #include <QVariantMap>
+#include <functional>
 #include <optional>
 
 namespace PhosphorTiles {
@@ -89,6 +90,25 @@ public:
      */
     void removeOverridesForScreen(const QString& screenId);
 
+    /**
+     * @brief Inject a per-context (window-rule) gap-override provider.
+     *
+     * Returns a QVariantMap keyed by the same PerScreenKeys gap keys this
+     * resolver already understands (InnerGap, OuterGap, OuterGap{Top,Bottom,
+     * Left,Right}, UsePerSideOuterGap) for the screen's CURRENT context
+     * (desktop / activity, resolved by the daemon closure). These take
+     * precedence over the static per-screen overrides, matching the snapping
+     * gap pipeline where a context-rule gap override is the highest-priority
+     * layer. Engine library stays settings-agnostic (LGPL boundary): the daemon
+     * adapts its LayoutRegistry::resolveContextGaps result into the map. Empty /
+     * unset → no context override (the historical behaviour).
+     */
+    using ContextGapProvider = std::function<QVariantMap(const QString& screenId)>;
+    void setContextGapProvider(ContextGapProvider provider)
+    {
+        m_contextGapProvider = std::move(provider);
+    }
+
     // ═══════════════════════════════════════════════════════════════════════════
     // Effective per-screen values (per-screen override → global fallback)
     // ═══════════════════════════════════════════════════════════════════════════
@@ -108,6 +128,7 @@ private:
 
     AutotileEngine* m_engine = nullptr;
     QHash<QString, QVariantMap> m_perScreenOverrides;
+    ContextGapProvider m_contextGapProvider{};
 };
 
 } // namespace PhosphorTileEngine

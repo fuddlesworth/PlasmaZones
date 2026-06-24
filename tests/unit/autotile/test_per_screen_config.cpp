@@ -300,6 +300,61 @@ private Q_SLOTS:
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
+    // Context gap provider (per-context window-rule gap overrides) — highest
+    // precedence, matching the snapping gap pipeline.
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    void testPerScreen_contextGapProvider_beatsPerScreenAndGlobal()
+    {
+        AutotileEngine engine(nullptr, nullptr, nullptr, PlasmaZones::TestHelpers::testRegistry());
+        const QString screen = QStringLiteral("DP-1");
+        engine.setAutotileScreens({screen});
+
+        // Global + per-screen gaps (the lower-precedence layers).
+        engine.config()->innerGap = 4;
+        engine.config()->outerGap = 6;
+        QVariantMap overrides;
+        overrides[QStringLiteral("InnerGap")] = 8;
+        overrides[QStringLiteral("OuterGap")] = 10;
+        engine.applyPerScreenConfig(screen, overrides);
+        QCOMPARE(engine.effectiveInnerGap(screen), 8); // per-screen beats global
+        QCOMPARE(engine.effectiveOuterGap(screen), 10);
+
+        // A context gap override for this screen must win over both.
+        engine.setContextGapProvider([screen](const QString& s) -> QVariantMap {
+            if (s != screen) {
+                return {};
+            }
+            QVariantMap m;
+            m.insert(QStringLiteral("InnerGap"), 14);
+            m.insert(QStringLiteral("OuterGap"), 18);
+            return m;
+        });
+        QCOMPARE(engine.effectiveInnerGap(screen), 14);
+        QCOMPARE(engine.effectiveOuterGap(screen), 18);
+
+        // A different screen with no context override still resolves normally.
+        const QString other = QStringLiteral("DP-2");
+        engine.setAutotileScreens({screen, other});
+        QCOMPARE(engine.effectiveInnerGap(other), 4); // global (no per-screen, no context)
+        QCOMPARE(engine.effectiveOuterGap(other), 6);
+    }
+
+    void testPerScreen_contextGapProvider_emptyMapFallsThrough()
+    {
+        AutotileEngine engine(nullptr, nullptr, nullptr, PlasmaZones::TestHelpers::testRegistry());
+        const QString screen = QStringLiteral("DP-1");
+        engine.setAutotileScreens({screen});
+        engine.config()->innerGap = 5;
+
+        // Provider returns an empty map → no context override → global value.
+        engine.setContextGapProvider([](const QString&) -> QVariantMap {
+            return {};
+        });
+        QCOMPARE(engine.effectiveInnerGap(screen), 5);
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
     // Edge cases
     // ═══════════════════════════════════════════════════════════════════════════
 

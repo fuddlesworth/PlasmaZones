@@ -143,6 +143,18 @@ void PerScreenConfigResolver::removeOverridesForScreen(const QString& screenId)
 
 std::optional<QVariant> PerScreenConfigResolver::perScreenOverride(const QString& screenId, const QString& key) const
 {
+    // Highest precedence: a per-context (window-rule) gap override for this
+    // screen's current context, matching the snapping gap pipeline where the
+    // context override is the top layer. Only gap keys appear in the provider's
+    // map, so non-gap lookups (algorithm, split ratio, …) fall straight
+    // through to the static per-screen overrides below.
+    if (m_contextGapProvider) {
+        const QVariantMap ctx = m_contextGapProvider(screenId);
+        auto cit = ctx.constFind(key);
+        if (cit != ctx.constEnd()) {
+            return *cit;
+        }
+    }
     auto it = m_perScreenOverrides.constFind(screenId);
     if (it != m_perScreenOverrides.constEnd()) {
         auto git = it->constFind(key);
