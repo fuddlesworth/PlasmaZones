@@ -204,11 +204,6 @@ QRectF Zone::normalizedGeometry(const QRectF& referenceGeometry) const
     return m_relativeGeometry;
 }
 
-QRectF Zone::applyPadding(int padding) const
-{
-    return m_geometry.adjusted(padding, padding, -padding, -padding);
-}
-
 QJsonObject Zone::toJson(const QRectF& referenceGeometry) const
 {
     using namespace ::PhosphorZones::ZoneJsonKeys;
