@@ -274,7 +274,7 @@ Rectangle {
                     isActive: layoutId === root.activeLayoutId
                     isHovered: layoutId === root.hoveredLayoutId
                     layoutId: modelData.id || ""
-                    layoutName: modelData.name || i18n("Layout %1", index + 1)
+                    layoutName: modelData.displayName || i18n("Layout %1", index + 1)
                     // Show lock overlay on non-active layouts when screen is locked
                     locked: root.locked && !isActive
                     previewHeight: root.previewHeight

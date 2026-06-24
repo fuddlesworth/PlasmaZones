@@ -19,8 +19,7 @@ Item {
     id: root
 
     // Data
-    property var layoutData: ({
-    })
+    property var layoutData: ({})
     property bool isActive: false
     property bool isSelected: false
     property bool isHovered: false
@@ -102,7 +101,7 @@ Item {
     opacity: root.isRecommended ? 1 : 0.65
     // Accessibility
     Accessible.role: Accessible.Pane
-    Accessible.name: root.layoutData.name || ""
+    Accessible.name: root.layoutData.displayName || ""
 
     // Visual constants
     QtObject {
@@ -145,7 +144,6 @@ Item {
                 profile: "widget.hover"
                 durationOverride: root.animationDuration
             }
-
         }
 
         Behavior on border.color {
@@ -153,9 +151,7 @@ Item {
                 profile: "widget.hover"
                 durationOverride: root.animationDuration
             }
-
         }
-
     }
 
     // Preview area — bounding box for the layout preview.
@@ -210,7 +206,6 @@ Item {
                     profile: "widget.hover"
                     durationOverride: root.animationDuration
                 }
-
             }
 
             Behavior on border.color {
@@ -218,7 +213,6 @@ Item {
                     profile: "widget.hover"
                     durationOverride: root.animationDuration
                 }
-
             }
 
             Behavior on border.width {
@@ -226,9 +220,7 @@ Item {
                     profile: "widget.hover"
                     durationOverride: root.shortAnimationDuration
                 }
-
             }
-
         }
 
         // Active checkmark badge (top-right)
@@ -262,7 +254,6 @@ Item {
                     profile: root.isActive ? "widget.badgeShow" : "widget.badgeHide"
                     durationOverride: root.animationDuration
                 }
-
             }
 
             Behavior on height {
@@ -270,7 +261,6 @@ Item {
                     profile: root.isActive ? "widget.badgeShow" : "widget.badgeHide"
                     durationOverride: root.animationDuration
                 }
-
             }
 
             // Opacity must not overshoot — badgeShow's curve has overshoot
@@ -280,9 +270,7 @@ Item {
                     profile: root.isActive ? "widget.fadeIn" : "widget.fadeOut"
                     durationOverride: root.shortAnimationDuration
                 }
-
             }
-
         }
 
         // Zone rectangles — fill the fitted preview background, not the bounding box
@@ -317,11 +305,10 @@ Item {
             fontStrikeout: root.fontStrikeout
             showMasterDot: root.showMasterDot
             animationDuration: root.animationDuration
-            onZoneHovered: function(index) {
+            onZoneHovered: function (index) {
                 root.zoneHovered(index);
             }
         }
-
     }
 
     // Name label row
@@ -340,6 +327,11 @@ Item {
             globalAutoAssign: root.globalAutoAssign
         }
 
+        CapabilityBadgeRow {
+            anchors.verticalCenter: parent.verticalCenter
+            layoutData: root.layoutData
+        }
+
         AspectRatioBadge {
             anchors.verticalCenter: parent.verticalCenter
             aspectRatioClass: root.layoutData.aspectRatioClass || "any"
@@ -349,7 +341,7 @@ Item {
             id: nameLabel
 
             anchors.verticalCenter: parent.verticalCenter
-            text: root.layoutData.name || ""
+            text: root.layoutData.displayName || ""
             font.pixelSize: Kirigami.Theme.smallFont.pixelSize + 1
             font.weight: root.isActive ? Font.Bold : Font.Normal
             color: {
@@ -371,7 +363,6 @@ Item {
                     profile: "widget.tint"
                     durationOverride: root.animationDuration
                 }
-
             }
 
             Behavior on opacity {
@@ -383,11 +374,7 @@ Item {
                     profile: (root.isSelected || root.isHovered || root.isActive) ? "widget.fadeIn" : "widget.fadeOut"
                     durationOverride: root.animationDuration
                 }
-
             }
-
         }
-
     }
-
 }

@@ -37,6 +37,7 @@ qt_add_qml_module(plasmazones_shared_qml
         shared_qml_plugin.cpp
     QML_FILES
         AspectRatioBadge.qml
+        CapabilityBadgeRow.qml
         CategoryBadge.qml
         LayoutCard.qml
         PopupFrame.qml

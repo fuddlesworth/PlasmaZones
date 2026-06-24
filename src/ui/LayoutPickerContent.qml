@@ -295,7 +295,7 @@ Item {
                     width: root.cardWidth
                     height: root.cardHeight
                     Accessible.role: Accessible.Button
-                    Accessible.name: layoutData.name || ""
+                    Accessible.name: layoutData.displayName || ""
                     Accessible.focusable: true
 
                     QFZCommon.LayoutCard {
