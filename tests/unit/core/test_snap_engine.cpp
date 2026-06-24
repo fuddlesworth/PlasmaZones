@@ -1036,6 +1036,117 @@ private Q_SLOTS:
     }
 
     // =========================================================================
+    // resolveWindowRestore — managed (snapped-to-zone) restore gate
+    // (ManagedRestorePredicate, restoreWindowsToZonesOnLogin)
+    //
+    // The daemon injects a predicate wired to restoreWindowsToZonesOnLogin. When
+    // it returns false a window that was SNAPPED last session must NOT be
+    // restored to its recorded zone on reopen — the snapped record is skipped and
+    // the window falls through to the normal chain. The distinctive log isolates
+    // this gate from a disabled-context veto. With no predicate (or one returning
+    // true) the snapped path is taken (it still resolves to noSnap in this guiless
+    // fixture because zone geometry can't resolve, asserted via log absence).
+    // =========================================================================
+
+    void testResolveWindowRestore_managedRestoreGate_rejectsWhenOff()
+    {
+        SnapEngine engine(m_layoutManager, m_wts, nullptr, nullptr, nullptr);
+        engine.setEngineSettings(m_settings);
+        m_wts->setSnapState(engine.snapState());
+
+        // restoreWindowsToZonesOnLogin is OFF.
+        engine.setManagedRestorePredicate([](const QString&) {
+            return false;
+        });
+
+        // A window snapped on DP-1 (its recorded screen, snapping mode).
+        PhosphorEngine::WindowPlacement rec;
+        rec.windowId = QStringLiteral("app|orig");
+        rec.appId = QStringLiteral("app");
+        rec.screenId = QStringLiteral("DP-1");
+        PhosphorEngine::EngineSlot slot;
+        slot.state = PhosphorEngine::WindowPlacement::stateSnapped();
+        slot.zoneIds = QStringList{QStringLiteral("z1")};
+        rec.engines.insert(PhosphorEngine::WindowPlacement::snapEngineId(), slot);
+        m_wts->placementStore().record(rec);
+
+        PhosphorEngine::SnapResult result;
+        const QStringList lines =
+            captureResolveLogs(engine, QStringLiteral("app|new"), QStringLiteral("DP-1"), &result);
+
+        QVERIFY2(!result.shouldSnap, "with managed restore off, a snapped record must not be re-applied");
+        QVERIFY2(lines.join(QLatin1Char('\n')).contains(QStringLiteral("managed-restore gate skipped snapped record")),
+                 "the managed-restore gate must be the branch that skipped the snapped record");
+        m_wts->setSnapState(nullptr);
+    }
+
+    void testResolveWindowRestore_managedRestoreGate_allowsWhenOn()
+    {
+        SnapEngine engine(m_layoutManager, m_wts, nullptr, nullptr, nullptr);
+        engine.setEngineSettings(m_settings);
+        m_wts->setSnapState(engine.snapState());
+
+        // Record that the gate actually CONSULTED the predicate. Geometry can't
+        // resolve in the guiless fixture, so we can't assert a positive snap —
+        // but this flag fails if the managed-restore gate were removed entirely
+        // (a full revert would never call the predicate), which a bare
+        // log-absence assertion would not catch.
+        bool consulted = false;
+        engine.setManagedRestorePredicate([&consulted](const QString&) {
+            consulted = true;
+            return true;
+        });
+
+        PhosphorEngine::WindowPlacement rec;
+        rec.windowId = QStringLiteral("app|orig");
+        rec.appId = QStringLiteral("app");
+        rec.screenId = QStringLiteral("DP-1");
+        PhosphorEngine::EngineSlot slot;
+        slot.state = PhosphorEngine::WindowPlacement::stateSnapped();
+        slot.zoneIds = QStringList{QStringLiteral("z1")};
+        rec.engines.insert(PhosphorEngine::WindowPlacement::snapEngineId(), slot);
+        m_wts->placementStore().record(rec);
+
+        PhosphorEngine::SnapResult result;
+        const QStringList lines =
+            captureResolveLogs(engine, QStringLiteral("app|new"), QStringLiteral("DP-1"), &result);
+
+        QVERIFY2(consulted, "the snapped-record restore path must consult the managed-restore predicate");
+        QVERIFY2(!lines.join(QLatin1Char('\n')).contains(QStringLiteral("managed-restore gate skipped snapped record")),
+                 "with managed restore on, the managed-restore gate must not skip the record");
+        m_wts->setSnapState(nullptr);
+    }
+
+    void testResolveWindowRestore_managedRestoreGate_noPredicateRestores()
+    {
+        SnapEngine engine(m_layoutManager, m_wts, nullptr, nullptr, nullptr);
+        engine.setEngineSettings(m_settings);
+        m_wts->setSnapState(engine.snapState());
+
+        // No predicate injected — the engine must restore snapped records
+        // unconditionally (the historical default). This guards against a
+        // regression that treated a NULL predicate as "block" (skip): the gate
+        // must never fire when no predicate is wired.
+        PhosphorEngine::WindowPlacement rec;
+        rec.windowId = QStringLiteral("app|orig");
+        rec.appId = QStringLiteral("app");
+        rec.screenId = QStringLiteral("DP-1");
+        PhosphorEngine::EngineSlot slot;
+        slot.state = PhosphorEngine::WindowPlacement::stateSnapped();
+        slot.zoneIds = QStringList{QStringLiteral("z1")};
+        rec.engines.insert(PhosphorEngine::WindowPlacement::snapEngineId(), slot);
+        m_wts->placementStore().record(rec);
+
+        PhosphorEngine::SnapResult result;
+        const QStringList lines =
+            captureResolveLogs(engine, QStringLiteral("app|new"), QStringLiteral("DP-1"), &result);
+
+        QVERIFY2(!lines.join(QLatin1Char('\n')).contains(QStringLiteral("managed-restore gate skipped snapped record")),
+                 "with no predicate the managed-restore gate must never fire");
+        m_wts->setSnapState(nullptr);
+    }
+
+    // =========================================================================
     // resolveWindowRestore — open-floating gate (FloatPredicate)
     //
     // The daemon injects a predicate that returns true when a "Float this app"
@@ -1687,6 +1798,159 @@ private Q_SLOTS:
         engine.setExcludeRuleSet(nullptr);
         QVERIFY(!engine.isAppIdExcluded(QStringLiteral("firefox")));
         QVERIFY(!engine.isAppIdExcluded(QStringLiteral("konsole")));
+    }
+
+    // isWindowExcluded — full-query exclusion (parity with autotile)
+    //
+    // With the daemon's exclusion query provider wired, a window's FULL
+    // attributes are evaluated, so an Exclude rule keyed on a non-appId field
+    // (here Title) matches — where the appId-only path silently would not.
+    void testWindowExcluded_fullQueryMatchesNonAppIdRule()
+    {
+        SnapEngine engine(nullptr, m_wts, nullptr, nullptr, nullptr);
+
+        PhosphorWindowRules::WindowRuleSet set;
+        PhosphorWindowRules::WindowRule rule;
+        rule.id = QUuid::createUuid();
+        rule.enabled = true;
+        rule.match = PhosphorWindowRules::MatchExpression::makeLeaf(
+            PhosphorWindowRules::Field::Title, PhosphorWindowRules::Operator::Contains, QStringLiteral("scratch"));
+        PhosphorWindowRules::RuleAction action;
+        action.type = QString(PhosphorWindowRules::ActionType::Exclude);
+        rule.actions.append(action);
+        QVERIFY(set.addRule(rule));
+        engine.setExcludeRuleSet(&set);
+
+        // Without the provider, the appId-only query can't see the title — the
+        // Title rule stays inert (the historical gap).
+        QVERIFY(!engine.isWindowExcluded(QStringLiteral("app|win")));
+
+        // With the provider supplying a full query, the Title rule matches.
+        engine.setExclusionQueryProvider([](const QString&) {
+            PhosphorWindowRules::WindowQuery q;
+            q.appId = QStringLiteral("editor");
+            q.title = QStringLiteral("scratchpad - notes");
+            return std::optional<PhosphorWindowRules::WindowQuery>(q);
+        });
+        QVERIFY(engine.isWindowExcluded(QStringLiteral("app|win")));
+
+        // A non-matching title is not excluded.
+        engine.setExclusionQueryProvider([](const QString&) {
+            PhosphorWindowRules::WindowQuery q;
+            q.title = QStringLiteral("main window");
+            return std::optional<PhosphorWindowRules::WindowQuery>(q);
+        });
+        QVERIFY(!engine.isWindowExcluded(QStringLiteral("app|win")));
+    }
+
+    // isWindowExcluded — minimum-window-size exclusion (parity with autotile)
+    void testWindowExcluded_minimumWindowSize()
+    {
+        SnapEngine engine(nullptr, m_wts, nullptr, nullptr, nullptr);
+        engine.setEngineSettings(m_settings);
+        m_settings->setMinimumWindowWidth(200);
+        m_settings->setMinimumWindowHeight(150);
+
+        // Sub-threshold frame → excluded (when the full query carries the size).
+        engine.setExclusionQueryProvider([](const QString&) {
+            PhosphorWindowRules::WindowQuery q;
+            q.width = 120;
+            q.height = 90;
+            return std::optional<PhosphorWindowRules::WindowQuery>(q);
+        });
+        QVERIFY(engine.isWindowExcluded(QStringLiteral("app|tiny")));
+
+        // At/above threshold → not excluded.
+        engine.setExclusionQueryProvider([](const QString&) {
+            PhosphorWindowRules::WindowQuery q;
+            q.width = 800;
+            q.height = 600;
+            return std::optional<PhosphorWindowRules::WindowQuery>(q);
+        });
+        QVERIFY(!engine.isWindowExcluded(QStringLiteral("app|big")));
+
+        // Exactly AT the threshold → not excluded (the comparison is strict `<`).
+        engine.setExclusionQueryProvider([](const QString&) {
+            PhosphorWindowRules::WindowQuery q;
+            q.width = 200; // == minW
+            q.height = 150; // == minH
+            return std::optional<PhosphorWindowRules::WindowQuery>(q);
+        });
+        QVERIFY(!engine.isWindowExcluded(QStringLiteral("app|exact")));
+
+        // OR semantics: width under but height over → excluded (pins that the
+        // check is OR, not AND, and that each dimension is evaluated).
+        engine.setExclusionQueryProvider([](const QString&) {
+            PhosphorWindowRules::WindowQuery q;
+            q.width = 120; // under 200
+            q.height = 600; // over 150
+            return std::optional<PhosphorWindowRules::WindowQuery>(q);
+        });
+        QVERIFY(engine.isWindowExcluded(QStringLiteral("app|narrow")));
+
+        // Symmetric: height under but width over → excluded.
+        engine.setExclusionQueryProvider([](const QString&) {
+            PhosphorWindowRules::WindowQuery q;
+            q.width = 800; // over 200
+            q.height = 90; // under 150
+            return std::optional<PhosphorWindowRules::WindowQuery>(q);
+        });
+        QVERIFY(engine.isWindowExcluded(QStringLiteral("app|short")));
+
+        // A zero threshold disables that dimension: a 1x1 window is NOT excluded
+        // by size when both thresholds are 0 (guards the `> 0` enable check).
+        m_settings->setMinimumWindowWidth(0);
+        m_settings->setMinimumWindowHeight(0);
+        engine.setExclusionQueryProvider([](const QString&) {
+            PhosphorWindowRules::WindowQuery q;
+            q.width = 1;
+            q.height = 1;
+            return std::optional<PhosphorWindowRules::WindowQuery>(q);
+        });
+        QVERIFY(!engine.isWindowExcluded(QStringLiteral("app|zero-thresh")));
+
+        // No provider → no frame size is known, so the size threshold is not
+        // applied (the appId-only fallback, preserving historical behaviour).
+        m_settings->setMinimumWindowWidth(200);
+        m_settings->setMinimumWindowHeight(150);
+        engine.setExclusionQueryProvider({});
+        QVERIFY(!engine.isWindowExcluded(QStringLiteral("app|unknown")));
+    }
+
+    // resolveWindowRestore — full-query/size exclusion path (parity consumer)
+    //
+    // isWindowExcluded is exercised in isolation above; this pins the production
+    // wiring in resolveWindowRestore (lifecycle.cpp), which switched from the
+    // appId-only isAppIdExcluded to the full-query isWindowExcluded. A window
+    // with no stored record falls through to the legacy chain and must be
+    // refused (noSnap) when its full query is sub-threshold, with the distinct
+    // "excluded by rule or size" log identifying the branch that produced it.
+    void testResolveWindowRestore_excludedBySize_returnsNoSnap()
+    {
+        SnapEngine engine(m_layoutManager, m_wts, nullptr, nullptr, nullptr);
+        engine.setEngineSettings(m_settings);
+        m_wts->setSnapState(engine.snapState());
+
+        m_settings->setMinimumWindowWidth(200);
+        m_settings->setMinimumWindowHeight(150);
+        // Full query carries a sub-threshold frame → isWindowExcluded is true.
+        engine.setExclusionQueryProvider([](const QString&) {
+            PhosphorWindowRules::WindowQuery q;
+            q.width = 80;
+            q.height = 60;
+            return std::optional<PhosphorWindowRules::WindowQuery>(q);
+        });
+
+        // No stored record for this windowId → resolveWindowRestore falls through
+        // to the legacy chain and hits the exclusion check.
+        PhosphorEngine::SnapResult result;
+        const QStringList lines =
+            captureResolveLogs(engine, QStringLiteral("app|tiny-restore"), QStringLiteral("DP-1"), &result);
+
+        QVERIFY2(!result.shouldSnap, "a size-excluded window must not be auto-restored");
+        QVERIFY2(lines.join(QLatin1Char('\n')).contains(QStringLiteral("excluded by rule or size")),
+                 "the exclusion branch (rule or size) must be the one that refused the restore");
+        m_wts->setSnapState(nullptr);
     }
 
     // Honest scope of this test (renamed from the earlier

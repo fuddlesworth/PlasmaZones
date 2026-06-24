@@ -202,6 +202,36 @@ public:
     }
 
     /**
+     * @brief Predicate consulted in `resolveWindowRestore` to decide whether a
+     *        window that was SNAPPED at logout should be restored to its recorded
+     *        zone on reopen/login (the "managed restore").
+     *
+     * This is the snapped-to-zone analogue of @ref RestorePositionPredicate
+     * (which governs FLOATED records). Keyed by the live windowId so the daemon
+     * closure stays settings-agnostic (LGPL boundary) — the engine only asks.
+     * The daemon wires it to the `restoreWindowsToZonesOnLogin` setting.
+     *
+     * When the predicate returns false the stored snap is not re-applied; the
+     * window falls through to the normal auto-snap policy chain, exactly as a
+     * disabled-context rejection does. When UNSET (default) the engine restores
+     * snapped records unconditionally — the historical behaviour unit tests rely
+     * on. This gate is independent of @ref ShouldRestorePredicate (the
+     * disabled-context gate); both must opt in for a managed restore to proceed.
+     */
+    using ManagedRestorePredicate = std::function<bool(const QString& windowId)>;
+
+    /**
+     * @brief Inject the managed (snapped-to-zone) restore gate. See
+     *        ManagedRestorePredicate. Same lifetime contract as
+     *        setRestorePositionPredicate — clear with `{}` before destroying any
+     *        captured state.
+     */
+    void setManagedRestorePredicate(ManagedRestorePredicate predicate)
+    {
+        m_managedRestorePredicate = std::move(predicate);
+    }
+
+    /**
      * @brief Predicate deciding whether an opening window should start FLOATING
      *        because a "Float this app" window rule matched it. Daemon-injected,
      *        keyed by the live windowId, evaluated on the window-open path. When
@@ -611,8 +641,9 @@ public:
     /// navigation_actions.cpp for the lifetime contract — the pointer is
     /// borrowed and the cached evaluator drops on a pointer change.
     ///
-    /// The borrowed rule set MUST outlive every subsequent
-    /// `isAppIdExcluded` call. The Daemon currently guarantees this
+    /// The borrowed rule set MUST outlive every subsequent exclusion
+    /// resolve (`isWindowExcluded` / `evaluateExcludeRules`, and the
+    /// legacy `isAppIdExcluded` seam). The Daemon currently guarantees this
     /// through member-declaration order (`m_excludeRuleSet` is declared
     /// before `m_snapEngine` so reverse-order destruction tears the
     /// engine down first), AND additionally clears the borrow
@@ -627,28 +658,47 @@ public:
     /// translation unit redefine the function and the link fails.
     void setExcludeRuleSet(const PhosphorWindowRules::WindowRuleSet* ruleSet);
 
+    /// Provider that builds the full WindowQuery (window class / title / role /
+    /// frame size / flags) for a live windowId. Daemon-injected, keyed by the
+    /// live windowId — the daemon resolves it from its WindowRegistry (the same
+    /// `buildRuleQueryForWindow` the float / restore predicates use). When set,
+    /// exclusion evaluates a window's FULL attributes (matching the autotile
+    /// engine) instead of appId alone, and the frame size carried in the query
+    /// is checked against the minimum-window-size thresholds. When UNSET
+    /// (default) the engine falls back to the appId-only query — the historical
+    /// behaviour unit tests rely on. A null/empty optional from the provider
+    /// (metadata not yet known) also falls back to appId-only.
+    using ExclusionQueryProvider =
+        std::function<std::optional<PhosphorWindowRules::WindowQuery>(const QString& windowId)>;
+
+    /// Inject the exclusion query provider. See ExclusionQueryProvider. Same
+    /// lifetime contract as setExcludeRuleSet — the caller keeps captured state
+    /// valid for the engine's lifetime; clear with `{}` before destroying it.
+    void setExclusionQueryProvider(ExclusionQueryProvider provider)
+    {
+        m_exclusionQueryProvider = std::move(provider);
+    }
+
     /// True if @p appId matches an enabled `Exclude`-action WindowRule
-    /// whose match leaf targets the `AppId` field. Public so the unit-
-    /// test layer can directly verify the wiring (nullptr borrow,
-    /// empty-set short-circuit, evaluator rebind on pointer change,
-    /// revision-bump invalidation on in-place setRules edits) without
-    /// staging the heavy navigation fixture every public navigation
-    /// method needs. Pure const observer — no side effects beyond the
-    /// `mutable` evaluator cache.
-    ///
-    /// **Limitation:** the engine builds a `WindowQuery` with only
-    /// `query.appId` populated and feeds it to the bound `RuleEvaluator`.
-    /// A user-authored Exclude rule whose match leaf targets a non-
-    /// `AppId` field (`WindowClass Contains "steam"`, `Title Regex …`,
-    /// a composite match) silently evaluates to false here because
-    /// those leaves never resolve against a query that only knows the
-    /// appId. Migration-produced rules are all `AppId AppIdMatches
-    /// <pattern>` so legacy v3 behaviour is preserved exactly; the gap
-    /// only opens for hand-authored rules with broader match leaves.
-    /// A more thorough check would require the caller to pass the full
-    /// `WindowQuery` it can build from the WTS registry's per-window
-    /// attributes, instead of just the appId.
+    /// resolved against an appId-ONLY `WindowQuery`. This is a narrow seam:
+    /// the runtime exclusion path is @ref isWindowExcluded, which evaluates the
+    /// FULL window attributes; this method survives as (a) the early-init /
+    /// no-metadata fallback inside isWindowExcluded and (b) a directly testable
+    /// hook for the rule-set wiring (nullptr borrow, empty-set short-circuit,
+    /// evaluator rebind on pointer change, revision-bump invalidation). An
+    /// Exclude rule keyed on a non-`AppId` field (`WindowClass Contains …`,
+    /// `Title Regex …`) does NOT match here — use isWindowExcluded for that.
+    /// Pure const observer — no side effects beyond the `mutable` evaluator cache.
     bool isAppIdExcluded(const QString& appId) const;
+
+    /// Resolve exclusion for a live windowId using the FULL window attributes
+    /// when the exclusion query provider is wired (matching the autotile
+    /// engine): evaluates the Exclude rule set against the complete WindowQuery
+    /// and applies the minimum-window-size thresholds to the query's frame
+    /// size. Falls back to the appId-only path (@ref isAppIdExcluded's query
+    /// shape) when no provider is set or window metadata is not yet known.
+    /// Public so the unit-test layer can drive the wiring directly.
+    bool isWindowExcluded(const QString& windowId) const;
 
 Q_SIGNALS:
     // ═══════════════════════════════════════════════════════════════════════════
@@ -784,17 +834,22 @@ private:
     /// otherwise.
     bool isWindowExcludedForAction(const QString& windowId, const QString& action, const QString& screenId);
 
-    // `isAppIdExcluded` is declared in the public section above (so the
-    // unit tests can drive the wiring directly); full docstring + the
-    // AppId-only matching limitation live with that declaration.
+    // `isAppIdExcluded` and `isWindowExcluded` are declared in the public
+    // section above (so the unit tests can drive the wiring directly); full
+    // docstrings live with those declarations.
+
+    /// Shared tail of both exclusion entry points: bind the lazy evaluator to
+    /// the current Exclude rule set (empty/null set short-circuits) and resolve
+    /// @p query. Keeps the rule-set/evaluator invariant in one place.
+    bool evaluateExcludeRules(const PhosphorWindowRules::WindowQuery& query) const;
 
     /// Borrowed pointer to the daemon's filtered Exclude rule set. nullptr
     /// in early-init paths (before the daemon wires the store) — the
-    /// `isAppIdExcluded` fast path short-circuits to false in that case.
+    /// `evaluateExcludeRules` fast path short-circuits to false in that case.
     ///
     /// @note Daemon-main-thread-only. Every access path runs on the
     /// daemon's main thread (rulesChanged signal delivery, navigation
-    /// slot dispatch, in-thread isAppIdExcluded calls). `setExcludeRuleSet`
+    /// slot dispatch, in-thread exclusion-resolve calls). `setExcludeRuleSet`
     /// writes the raw pointer non-atomically and the paired
     /// `m_excludeEvaluator` mutates a lazy priority-order index that
     /// must be externally serialised (see RuleEvaluator.h's thread-
@@ -810,6 +865,11 @@ private:
     ///
     /// @note Same daemon-main-thread-only contract as @ref m_excludeRuleSet.
     mutable std::optional<PhosphorWindowRules::RuleEvaluator> m_excludeEvaluator;
+
+    /// Daemon-injected full-query provider for exclusion. Empty until the
+    /// daemon wires it; while empty exclusion uses the appId-only query and the
+    /// minimum-window-size thresholds are not applied. See ExclusionQueryProvider.
+    ExclusionQueryProvider m_exclusionQueryProvider{};
 
     // Persistence delegates (KConfig stays in adaptor layer)
     std::function<void()> m_saveFn;
@@ -832,6 +892,11 @@ private:
     // only on the reopening screen — the historical behaviour unit tests rely on.
     // See RestorePositionPredicate doc above.
     RestorePositionPredicate m_restorePositionPredicate{};
+
+    // Managed (snapped-to-zone) restore gate. Empty until the daemon wires it;
+    // while empty the engine restores snapped records unconditionally — the
+    // historical behaviour unit tests rely on. See ManagedRestorePredicate.
+    ManagedRestorePredicate m_managedRestorePredicate{};
 
     // Rule-driven open-floating gate. Empty until the daemon wires it; while
     // empty no window is rule-floated. See FloatPredicate doc above.

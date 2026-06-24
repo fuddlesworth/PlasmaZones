@@ -446,17 +446,19 @@ public:
     }
     int minimumWindowWidth() const override
     {
-        return 0;
+        return m_minimumWindowWidth;
     }
-    void setMinimumWindowWidth(int) override
+    void setMinimumWindowWidth(int w) override
     {
+        m_minimumWindowWidth = w;
     }
     int minimumWindowHeight() const override
     {
-        return 0;
+        return m_minimumWindowHeight;
     }
-    void setMinimumWindowHeight(int) override
+    void setMinimumWindowHeight(int h) override
     {
+        m_minimumWindowHeight = h;
     }
 
     // Animation window filtering — pure-stub no-op accessors backed by
@@ -1190,6 +1192,8 @@ private:
     QStringList m_snappingLayoutOrder;
     QStringList m_tilingAlgorithmOrder;
     QVariantList m_dragActivationTriggers;
+    int m_minimumWindowWidth = 0;
+    int m_minimumWindowHeight = 0;
     // Animation-filter defaults routed through ConfigDefaults so a future
     // tweak to the production defaults flows into tests automatically — keeps
     // the stub from drifting into "tests pass against a stale baseline".

@@ -102,6 +102,18 @@
 
 namespace PlasmaZones {
 
+// Snapping and autotile gaps are the SAME two quantities under different names:
+// snapping's per-zone "zonePadding" is the full inter-region gap (each zone's
+// interior edge insets by zonePadding/2, so two neighbours leave a zonePadding
+// gap — see GeometryUtils::applyGapsToZoneGeometry), exactly like autotile's
+// "innerGap" (the single gap between two tiles). Snapping "outerGap" and
+// autotile "outerGap" both inset the content area from the screen edge per side.
+// A context gap-override rule must therefore clamp to the same range in both
+// modes; these assertions fail the build if the two ranges ever drift apart.
+// (The defaults may legitimately differ per mode, so only the range is tied.)
+static_assert(Defaults::MaxGap == PhosphorTiles::AutotileDefaults::MaxGap,
+              "Snapping and autotile gap clamp ceilings must match — they are the same gap quantity");
+
 namespace {
 // Debounce interval (ms): coalesce rapid geometry changes (multi-screen, panel editor) into one update.
 // Conceptually distinct from DELAYED_PANEL_REQUERY_MS in autotile.cpp (which schedules a
@@ -1136,6 +1148,58 @@ bool Daemon::init()
     m_snapEngine = std::move(engines.snap);
     m_screenModeRouter = std::move(engines.router);
 
+    // Per-context (window-rule) gap overrides for autotile. Snapping resolves
+    // these as the highest-priority gap layer (GeometryUtils::getEffective*);
+    // without this, a context gap rule was silently ignored on tiled windows.
+    // The closure resolves the screen's CURRENT context here (the engine library
+    // stays settings-agnostic) and adapts ContextGapOverride into the
+    // PerScreenKeys-shaped map the resolver already consumes.
+    // setContextGapProvider is derived-only (AutotileEngine); m_autotileEngine is
+    // held as the base PlacementEngineBase. Use the derived `autotileEngine`
+    // pointer captured above — the std::move into m_autotileEngine transferred
+    // ownership but not the pointee, so it still points at the live engine.
+    if (autotileEngine) {
+        autotileEngine->setContextGapProvider([this](const QString& screenId) -> QVariantMap {
+            if (!m_layoutManager) {
+                return {};
+            }
+            const PhosphorZones::ContextGapOverride gaps =
+                m_layoutManager->resolveContextGaps(screenId, currentDesktopForScreen(screenId), currentActivity());
+            if (gaps.isEmpty()) {
+                return {};
+            }
+            namespace PSK = PhosphorEngine::PerScreenKeys;
+            QVariantMap map;
+            // zonePadding is snapping's inner spacing — the autotile inner gap.
+            if (gaps.zonePadding) {
+                map.insert(QString(PSK::InnerGap), *gaps.zonePadding);
+            }
+            if (gaps.outerGap) {
+                map.insert(QString(PSK::OuterGap), *gaps.outerGap);
+            }
+            // The per-side toggle gates whether the resolver honours the per-side
+            // values below — without it, stale per-side entries (left from when
+            // the rule had per-side enabled) would apply on autotile but not on
+            // snapping, which checks this flag (resolveOuterGapsFromMap).
+            if (gaps.usePerSideOuterGap) {
+                map.insert(QString(PSK::UsePerSideOuterGap), *gaps.usePerSideOuterGap);
+            }
+            if (gaps.outerGapTop) {
+                map.insert(QString(PSK::OuterGapTop), *gaps.outerGapTop);
+            }
+            if (gaps.outerGapBottom) {
+                map.insert(QString(PSK::OuterGapBottom), *gaps.outerGapBottom);
+            }
+            if (gaps.outerGapLeft) {
+                map.insert(QString(PSK::OuterGapLeft), *gaps.outerGapLeft);
+            }
+            if (gaps.outerGapRight) {
+                map.insert(QString(PSK::OuterGapRight), *gaps.outerGapRight);
+            }
+            return map;
+        });
+    }
+
     // Build the PhosphorContext::ContextResolver wiring NOW — after the
     // workspace managers, settings, and router exist; before any D-Bus
     // adaptor or OverlayService method that consumes it runs. Three
@@ -2094,6 +2158,17 @@ void Daemon::stop()
     // grep-discoverable teardown contract as the SnapEngine exclude borrow above.
     if (m_windowTrackingAdaptor) {
         m_windowTrackingAdaptor->setWindowRuleStore(nullptr);
+    }
+
+    // Clear the autotile context-gap provider, which captures `this` (Daemon, via
+    // m_layoutManager / currentDesktopForScreen / currentActivity). No live deref
+    // can occur today — m_autotileEngine is destroyed below while `this` is still
+    // alive — but clearing it keeps the "every `this`-capturing closure is cleared
+    // before teardown" contract complete and grep-discoverable, exactly like the
+    // SnapEngine exclude-rule borrow above. `m_autotileEngine` is base-typed
+    // `PlacementEngineBase*`; setContextGapProvider lives on the concrete engine.
+    if (auto* concreteAutotile = qobject_cast<PhosphorTileEngine::AutotileEngine*>(m_autotileEngine.get())) {
+        concreteAutotile->setContextGapProvider({});
     }
 
     // Destroy engines now (during stop(), before Qt child destruction order).

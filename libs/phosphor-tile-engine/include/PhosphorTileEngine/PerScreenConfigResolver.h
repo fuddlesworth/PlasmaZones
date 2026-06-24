@@ -9,6 +9,7 @@
 #include <QHash>
 #include <QString>
 #include <QVariantMap>
+#include <functional>
 #include <optional>
 
 namespace PhosphorTiles {
@@ -89,6 +90,25 @@ public:
      */
     void removeOverridesForScreen(const QString& screenId);
 
+    /**
+     * @brief Inject a per-context (window-rule) gap-override provider.
+     *
+     * Returns a QVariantMap keyed by the same PerScreenKeys gap keys this
+     * resolver already understands (InnerGap, OuterGap, OuterGap{Top,Bottom,
+     * Left,Right}, UsePerSideOuterGap) for the screen's CURRENT context
+     * (desktop / activity, resolved by the daemon closure). These take
+     * precedence over the static per-screen overrides, matching the snapping
+     * gap pipeline where a context-rule gap override is the highest-priority
+     * layer. Engine library stays settings-agnostic (LGPL boundary): the daemon
+     * adapts its LayoutRegistry::resolveContextGaps result into the map. Empty /
+     * unset → no context override (the historical behaviour).
+     */
+    using ContextGapProvider = std::function<QVariantMap(const QString& screenId)>;
+    void setContextGapProvider(ContextGapProvider provider)
+    {
+        m_contextGapProvider = std::move(provider);
+    }
+
     // ═══════════════════════════════════════════════════════════════════════════
     // Effective per-screen values (per-screen override → global fallback)
     // ═══════════════════════════════════════════════════════════════════════════
@@ -106,8 +126,18 @@ public:
 private:
     std::optional<QVariant> perScreenOverride(const QString& screenId, const QString& key) const;
 
+    /// Clamped per-context override for a single gap key (InnerGap / OuterGap),
+    /// or nullopt when no provider is wired or the context map lacks the key.
+    std::optional<int> contextGap(const QString& screenId, QLatin1String key) const;
+
+    /// Per-context outer-gap override resolved as one atomic layer (per-side
+    /// honoured only when UsePerSideOuterGap is set), mirroring the snapping
+    /// pipeline. nullopt when the context layer carries no outer-gap info.
+    std::optional<::PhosphorLayout::EdgeGaps> contextOuterGaps(const QString& screenId) const;
+
     AutotileEngine* m_engine = nullptr;
     QHash<QString, QVariantMap> m_perScreenOverrides;
+    ContextGapProvider m_contextGapProvider{};
 };
 
 } // namespace PhosphorTileEngine

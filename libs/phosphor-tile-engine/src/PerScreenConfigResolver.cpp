@@ -46,13 +46,13 @@ void PerScreenConfigResolver::applyPerScreenConfig(const QString& screenId, cons
     }
 
     // Apply PhosphorTiles::TilingState-level overrides (splitRatio, masterCount)
-    auto it = overrides.constFind(QStringLiteral("SplitRatio"));
+    auto it = overrides.constFind(QString(PerScreenKeys::SplitRatio));
     if (it != overrides.constEnd()) {
         state->setSplitRatio(qBound(PhosphorTiles::AutotileDefaults::MinSplitRatio, it->toDouble(),
                                     PhosphorTiles::AutotileDefaults::MaxSplitRatio));
     }
 
-    it = overrides.constFind(QStringLiteral("MasterCount"));
+    it = overrides.constFind(QString(PerScreenKeys::MasterCount));
     if (it != overrides.constEnd()) {
         state->setMasterCount(qBound(PhosphorTiles::AutotileDefaults::MinMasterCount, it->toInt(),
                                      PhosphorTiles::AutotileDefaults::MaxMasterCount));
@@ -60,13 +60,13 @@ void PerScreenConfigResolver::applyPerScreenConfig(const QString& screenId, cons
 
     // If algorithm changed and split ratio wasn't explicitly overridden,
     // reset to the new algorithm's default (matching setAlgorithm() logic).
-    it = overrides.constFind(QStringLiteral("Algorithm"));
+    it = overrides.constFind(QString(PerScreenKeys::Algorithm));
     if (it != overrides.constEnd()) {
         QString algoId = it->toString();
         auto* registry = m_engine->algorithmRegistry();
         PhosphorTiles::TilingAlgorithm* newAlgo = registry->algorithm(algoId);
         if (newAlgo) {
-            if (!overrides.contains(QStringLiteral("SplitRatio"))) {
+            if (!overrides.contains(QString(PerScreenKeys::SplitRatio))) {
                 state->setSplitRatio(newAlgo->defaultSplitRatio());
             }
         }
@@ -153,51 +153,110 @@ std::optional<QVariant> PerScreenConfigResolver::perScreenOverride(const QString
     return std::nullopt;
 }
 
+namespace {
+// Clamp a raw gap value to [MinGap, MaxGap]. The ceiling is tied to the
+// snapping side by a static_assert in the daemon; the floor is a fixed 0 on
+// both sides (snapping has no MinGap constant to tie against).
+int clampGap(int v)
+{
+    return qBound(PhosphorTiles::AutotileDefaults::MinGap, v, PhosphorTiles::AutotileDefaults::MaxGap);
+}
+} // namespace
+
+std::optional<int> PerScreenConfigResolver::contextGap(const QString& screenId, QLatin1String key) const
+{
+    if (!m_contextGapProvider) {
+        return std::nullopt;
+    }
+    const QVariantMap ctx = m_contextGapProvider(screenId);
+    const auto it = ctx.constFind(key);
+    if (it == ctx.constEnd()) {
+        return std::nullopt;
+    }
+    return clampGap(it->toInt());
+}
+
+std::optional<::PhosphorLayout::EdgeGaps> PerScreenConfigResolver::contextOuterGaps(const QString& screenId) const
+{
+    // Resolve the per-context (window-rule) outer-gap override as ONE atomic
+    // layer, mirroring the snapping pipeline (GeometryUtils::
+    // resolveOuterGapsFromMap): per-side values are honoured only when the rule
+    // set UsePerSideOuterGap, and if the layer yields any outer gap it wins
+    // wholesale — no per-key blending with the static per-screen layer below.
+    if (!m_contextGapProvider) {
+        return std::nullopt;
+    }
+    const QVariantMap ctx = m_contextGapProvider(screenId);
+    if (ctx.isEmpty()) {
+        return std::nullopt;
+    }
+    const auto uniformIt = ctx.constFind(QString(PerScreenKeys::OuterGap));
+    const bool usePerSide = ctx.value(QString(PerScreenKeys::UsePerSideOuterGap), false).toBool();
+    if (usePerSide) {
+        const auto topIt = ctx.constFind(QString(PerScreenKeys::OuterGapTop));
+        const auto bottomIt = ctx.constFind(QString(PerScreenKeys::OuterGapBottom));
+        const auto leftIt = ctx.constFind(QString(PerScreenKeys::OuterGapLeft));
+        const auto rightIt = ctx.constFind(QString(PerScreenKeys::OuterGapRight));
+        if (topIt != ctx.constEnd() || bottomIt != ctx.constEnd() || leftIt != ctx.constEnd()
+            || rightIt != ctx.constEnd()) {
+            // Missing sides fall back to the layer's own uniform OuterGap, else
+            // the global config — matching resolveOuterGapsFromMap's base.
+            const int base =
+                (uniformIt != ctx.constEnd()) ? clampGap(uniformIt->toInt()) : m_engine->config()->outerGap;
+            return ::PhosphorLayout::EdgeGaps{(topIt != ctx.constEnd()) ? clampGap(topIt->toInt()) : base,
+                                              (bottomIt != ctx.constEnd()) ? clampGap(bottomIt->toInt()) : base,
+                                              (leftIt != ctx.constEnd()) ? clampGap(leftIt->toInt()) : base,
+                                              (rightIt != ctx.constEnd()) ? clampGap(rightIt->toInt()) : base};
+        }
+    }
+    if (uniformIt != ctx.constEnd()) {
+        return ::PhosphorLayout::EdgeGaps::uniform(clampGap(uniformIt->toInt()));
+    }
+    return std::nullopt;
+}
+
 int PerScreenConfigResolver::effectiveInnerGap(const QString& screenId) const
 {
-    if (auto v = perScreenOverride(screenId, QStringLiteral("InnerGap")))
-        return qBound(PhosphorTiles::AutotileDefaults::MinGap, v->toInt(), PhosphorTiles::AutotileDefaults::MaxGap);
+    if (auto ctx = contextGap(screenId, PerScreenKeys::InnerGap))
+        return *ctx;
+    if (auto v = perScreenOverride(screenId, QString(PerScreenKeys::InnerGap)))
+        return clampGap(v->toInt());
     return m_engine->config()->innerGap;
 }
 
 int PerScreenConfigResolver::effectiveOuterGap(const QString& screenId) const
 {
-    if (auto v = perScreenOverride(screenId, QStringLiteral("OuterGap")))
-        return qBound(PhosphorTiles::AutotileDefaults::MinGap, v->toInt(), PhosphorTiles::AutotileDefaults::MaxGap);
+    if (auto ctx = contextGap(screenId, PerScreenKeys::OuterGap))
+        return *ctx;
+    if (auto v = perScreenOverride(screenId, QString(PerScreenKeys::OuterGap)))
+        return clampGap(v->toInt());
     return m_engine->config()->outerGap;
 }
 
 ::PhosphorLayout::EdgeGaps PerScreenConfigResolver::effectiveOuterGaps(const QString& screenId) const
 {
-    // Check per-screen per-side overrides first
-    auto topOv = perScreenOverride(screenId, QStringLiteral("OuterGapTop"));
-    auto bottomOv = perScreenOverride(screenId, QStringLiteral("OuterGapBottom"));
-    auto leftOv = perScreenOverride(screenId, QStringLiteral("OuterGapLeft"));
-    auto rightOv = perScreenOverride(screenId, QStringLiteral("OuterGapRight"));
+    // Highest precedence: the per-context override, resolved as one atomic layer.
+    if (auto ctx = contextOuterGaps(screenId))
+        return *ctx;
+
+    // Per-screen per-side overrides next.
+    auto topOv = perScreenOverride(screenId, QString(PerScreenKeys::OuterGapTop));
+    auto bottomOv = perScreenOverride(screenId, QString(PerScreenKeys::OuterGapBottom));
+    auto leftOv = perScreenOverride(screenId, QString(PerScreenKeys::OuterGapLeft));
+    auto rightOv = perScreenOverride(screenId, QString(PerScreenKeys::OuterGapRight));
 
     // If any per-screen per-side override exists, build from those
     if (topOv || bottomOv || leftOv || rightOv) {
         // Use per-screen uniform gap as base, then per-side overrides on top
         const int base = effectiveOuterGap(screenId);
-        return ::PhosphorLayout::EdgeGaps{topOv ? qBound(PhosphorTiles::AutotileDefaults::MinGap, topOv->toInt(),
-                                                         PhosphorTiles::AutotileDefaults::MaxGap)
-                                                : base,
-                                          bottomOv ? qBound(PhosphorTiles::AutotileDefaults::MinGap, bottomOv->toInt(),
-                                                            PhosphorTiles::AutotileDefaults::MaxGap)
-                                                   : base,
-                                          leftOv ? qBound(PhosphorTiles::AutotileDefaults::MinGap, leftOv->toInt(),
-                                                          PhosphorTiles::AutotileDefaults::MaxGap)
-                                                 : base,
-                                          rightOv ? qBound(PhosphorTiles::AutotileDefaults::MinGap, rightOv->toInt(),
-                                                           PhosphorTiles::AutotileDefaults::MaxGap)
-                                                  : base};
+        return ::PhosphorLayout::EdgeGaps{
+            topOv ? clampGap(topOv->toInt()) : base, bottomOv ? clampGap(bottomOv->toInt()) : base,
+            leftOv ? clampGap(leftOv->toInt()) : base, rightOv ? clampGap(rightOv->toInt()) : base};
     }
 
     // Check per-screen uniform outer gap
-    if (auto v = perScreenOverride(screenId, QStringLiteral("OuterGap"))) {
-        const int gap =
-            qBound(PhosphorTiles::AutotileDefaults::MinGap, v->toInt(), PhosphorTiles::AutotileDefaults::MaxGap);
-        return ::PhosphorLayout::EdgeGaps::uniform(gap);
+    if (auto v = perScreenOverride(screenId, QString(PerScreenKeys::OuterGap))) {
+        return ::PhosphorLayout::EdgeGaps::uniform(clampGap(v->toInt()));
     }
 
     // Fall back to global config
@@ -210,14 +269,14 @@ int PerScreenConfigResolver::effectiveOuterGap(const QString& screenId) const
 
 bool PerScreenConfigResolver::effectiveSmartGaps(const QString& screenId) const
 {
-    if (auto v = perScreenOverride(screenId, QStringLiteral("SmartGaps")))
+    if (auto v = perScreenOverride(screenId, QString(PerScreenKeys::SmartGaps)))
         return v->toBool();
     return m_engine->config()->smartGaps;
 }
 
 bool PerScreenConfigResolver::effectiveRespectMinimumSize(const QString& screenId) const
 {
-    if (auto v = perScreenOverride(screenId, QStringLiteral("RespectMinimumSize")))
+    if (auto v = perScreenOverride(screenId, QString(PerScreenKeys::RespectMinimumSize)))
         return v->toBool();
     return m_engine->config()->respectMinimumSize;
 }
