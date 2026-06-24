@@ -20,6 +20,7 @@
 
 #include <PhosphorZones/LayoutRegistry.h>
 #include "config/configbackends.h"
+#include "config/configdefaults.h"
 #include <PhosphorZones/Layout.h>
 #include <PhosphorZones/Zone.h>
 #include "../helpers/StubSettings.h"
@@ -126,12 +127,12 @@ private Q_SLOTS:
         mgr->assignLayout(QStringLiteral("screen1"), 0, QString(), layout);
         QVERIFY(mgr->hasExplicitAssignment(QStringLiteral("screen1")));
 
-        mgr->setQuickLayoutSlot(1, layout->id().toString());
+        mgr->setQuickLayoutSlot(PhosphorZones::AssignmentEntry::Snapping, 1, layout->id().toString());
 
         mgr->removeLayout(layout);
 
         QVERIFY(!mgr->hasExplicitAssignment(QStringLiteral("screen1")));
-        QVERIFY(!mgr->quickLayoutSlots().contains(1));
+        QVERIFY(!mgr->quickLayoutSlots(PhosphorZones::AssignmentEntry::Snapping).contains(1));
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
@@ -243,6 +244,65 @@ private Q_SLOTS:
         QVERIFY(duplicate->allowedScreens().isEmpty());
         QVERIFY(duplicate->allowedDesktops().isEmpty());
         QVERIFY(duplicate->allowedActivities().isEmpty());
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // Quick-layout slot persistence — mode-keyed quicklayouts.json
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    // The current on-disk format nests slots per mode
+    // ({ "snapping": {...}, "autotile": {...} }). Both modes must survive a
+    // save → fresh-load round trip and stay independent.
+    void testLayoutManager_quickLayouts_nestedFormatRoundTrip()
+    {
+        QScopedPointer<PhosphorZones::LayoutRegistry> mgr(createManager());
+
+        auto* layout = createTestLayout(QStringLiteral("RoundTrip"));
+        mgr->addLayout(layout);
+        const QString uuid = layout->id().toString();
+        const auto snapping = PhosphorZones::AssignmentEntry::Snapping;
+        const auto autotile = PhosphorZones::AssignmentEntry::Autotile;
+
+        mgr->setQuickLayoutSlot(snapping, 1, uuid); // each set writes the sidecar
+        mgr->setQuickLayoutSlot(autotile, 2, QStringLiteral("autotile:bsp"));
+
+        // A fresh registry on the SAME guard-isolated dirs reloads the sidecar
+        // (quicklayouts.json lives next to windowrules.json, not in the layout
+        // dir, so no setLayoutDirectory is needed for quick-slot loading).
+        QScopedPointer<PhosphorZones::LayoutRegistry> mgr2(
+            PlasmaZones::TestHelpers::makeLayoutRegistry(QStringLiteral("plasmazones/layouts")));
+        mgr2->loadAssignments();
+
+        QCOMPARE(mgr2->quickLayoutSlots(snapping).value(1), uuid);
+        QCOMPARE(mgr2->quickLayoutSlots(autotile).value(2), QStringLiteral("autotile:bsp"));
+        // Modes stay independent across the round trip.
+        QVERIFY(!mgr2->quickLayoutSlots(snapping).contains(2));
+        QVERIFY(!mgr2->quickLayoutSlots(autotile).contains(1));
+    }
+
+    // A pre-mode (flat) quicklayouts.json is NOT a supported format: the reader
+    // is nested-only, so a flat file loads as empty (old bindings are dropped,
+    // the user gets defaults). Guards against re-introducing a second read path.
+    void testLayoutManager_quickLayouts_legacyFlatIgnored()
+    {
+        QScopedPointer<PhosphorZones::LayoutRegistry> mgr(createManager());
+
+        const QString uuid = QUuid::createUuid().toString();
+        const QString path = ConfigDefaults::quickLayoutsFilePath();
+        QDir().mkpath(QFileInfo(path).absolutePath());
+        QJsonObject flat;
+        flat.insert(QStringLiteral("1"), uuid);
+        flat.insert(QStringLiteral("3"), uuid);
+        {
+            QFile f(path);
+            QVERIFY(f.open(QIODevice::WriteOnly));
+            f.write(QJsonDocument(flat).toJson());
+        }
+
+        mgr->loadAssignments(); // re-reads the sidecar we just wrote
+
+        QVERIFY(mgr->quickLayoutSlots(PhosphorZones::AssignmentEntry::Snapping).isEmpty());
+        QVERIFY(mgr->quickLayoutSlots(PhosphorZones::AssignmentEntry::Autotile).isEmpty());
     }
 };
 

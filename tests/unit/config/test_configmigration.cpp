@@ -927,7 +927,7 @@ private Q_SLOTS:
         // PerScreen container — resolver-owned) are filtered out.
         //
         // Some root keys live outside the schema by design:
-        //   - TilingQuickLayoutSlots, Updates: managed outside Settings.
+        //   - Updates: managed outside Settings.
         //   - Rendering.Backend: declared in the schema. Verify.
         QSet<QString> produced;
         QStringList stack; // path prefix as dot-path segments
@@ -945,8 +945,7 @@ private Q_SLOTS:
         };
         // Skip reserved root keys and non-schema top-level groups.
         const QSet<QString> skipRoots = {
-            QStringLiteral("_version"), QStringLiteral("PerScreen"),
-            QStringLiteral("General"),  QStringLiteral("TilingQuickLayoutSlots"),
+            QStringLiteral("_version"), QStringLiteral("PerScreen"),      QStringLiteral("General"),
             QStringLiteral("Updates"),  QStringLiteral("WindowTracking"),
         };
         for (auto it = root.constBegin(); it != root.constEnd(); ++it) {

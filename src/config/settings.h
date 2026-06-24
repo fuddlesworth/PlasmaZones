@@ -1124,10 +1124,6 @@ public:
     // Old inline accessors replaced above — kept anchors below so the second
     // half of the replaced region can be collapsed in one edit pass.
 
-    // TilingQuickLayoutSlots — read/write via the shared config backend
-    QString readTilingQuickLayoutSlot(int slotNumber) const;
-    void writeTilingQuickLayoutSlot(int slotNumber, const QString& layoutId);
-
     // Persistence
     void load() override;
     void save() override;

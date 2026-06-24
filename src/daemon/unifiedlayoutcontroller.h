@@ -45,7 +45,7 @@ class Settings;
  * Usage:
  * @code
  * auto *controller = new UnifiedLayoutController(layoutManager, settings, parent);
- * controller->applyLayoutByNumber(1);
+ * controller->applyLayoutById(layoutId);
  * controller->cycleNext();
  * connect(controller, &UnifiedLayoutController::layoutApplied, this, &Daemon::showLayoutOsd);
  * @endcode
@@ -95,14 +95,6 @@ public:
     // ═══════════════════════════════════════════════════════════════════════════
     // PhosphorZones::Layout application
     // ═══════════════════════════════════════════════════════════════════════════
-
-    /**
-     * @brief Apply layout by number (1-based, for Meta+1-9 shortcuts)
-     *
-     * @param number PhosphorZones::Layout number (1 = first layout)
-     * @return true if layout was applied successfully
-     */
-    Q_INVOKABLE bool applyLayoutByNumber(int number);
 
     /**
      * @brief Apply layout by ID

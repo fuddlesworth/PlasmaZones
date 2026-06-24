@@ -56,14 +56,12 @@ void LayoutRegistry::clearAutotileAssignments()
         affected.insert(qMakePair(dims.screenId, dims.virtualDesktop));
     }
 
-    // Drop autotile quick-layout slots.
-    for (auto it = m_quickLayoutShortcuts.begin(); it != m_quickLayoutShortcuts.end();) {
-        if (PhosphorLayout::LayoutId::isAutotile(it.value())) {
-            it = m_quickLayoutShortcuts.erase(it);
-            changed = true;
-        } else {
-            ++it;
-        }
+    // Drop autotile quick-layout slots — clearing autotile everywhere
+    // includes the per-mode autotile bindings. Snapping slots are untouched.
+    auto& autotileSlots = m_quickLayoutSlots[modeIndex(AssignmentEntry::Autotile)];
+    if (!autotileSlots.isEmpty()) {
+        autotileSlots.clear();
+        changed = true;
     }
 
     if (changed) {
@@ -111,9 +109,9 @@ void LayoutRegistry::applyBatchAssignments(const QHash<KeyT, QString>& assignmen
 {
     // Step 1 — snapshot existing exact-context entries AND their `enabled`
     // flag for every incoming key. The flag survives the batch rebuild
-    // below — mirrors the precedent set by `upsertAssignmentRule` (line
-    // 178: `rule.enabled = existing->enabled`). Without this capture,
-    // disabled assignment rules silently flip back to enabled on any KCM
+    // below — mirrors `upsertAssignmentRule`'s `rule.enabled =
+    // existing->enabled` preservation. Without this capture, disabled
+    // assignment rules silently flip back to enabled on any KCM
     // "apply all" call that runs a batch setter.
     struct OldEntrySnapshot
     {

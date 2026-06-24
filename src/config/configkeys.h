@@ -124,7 +124,6 @@ public:
     P_CONFIG_GROUP(editorFillOnDropGroup, "Editor.FillOnDrop")
 
     // Unmanaged groups (not purged by save(), written independently)
-    P_CONFIG_GROUP(tilingQuickLayoutSlotsGroup, "TilingQuickLayoutSlots")
     P_CONFIG_GROUP(windowTrackingGroup, "WindowTracking")
 
     // ═══════════════════════════════════════════════════════════════════════════

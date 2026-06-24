@@ -16,8 +16,15 @@ SettingsCard {
     // 0 = snapping (zone layouts), 1 = tiling (autotile algorithms)
     property int viewMode: 0
 
+    // Bumped on EXTERNAL (daemon) quick-layout-slot changes. Both snapping and
+    // tiling slots are daemon-backed (mode-keyed registry) and the daemon emits
+    // quickLayoutSlotsChanged for any slot change, so a single bump here
+    // re-evaluates every slot delegate's currentLayoutId binding. One Connections
+    // at root, not one per delegate, so an external change fires a single handler.
+    property int slotRevision: 0
+
     function getSlot(slotNumber) {
-        return viewMode === 1 ? (appSettings.getTilingQuickLayoutSlot(slotNumber) || "") : (appSettings.getQuickLayoutSlot(slotNumber) || "");
+        return viewMode === 1 ? appSettings.getTilingQuickLayoutSlot(slotNumber) : appSettings.getQuickLayoutSlot(slotNumber);
     }
 
     function setSlot(slotNumber, value) {
@@ -25,6 +32,14 @@ SettingsCard {
             appSettings.setTilingQuickLayoutSlot(slotNumber, value);
         else
             appSettings.setQuickLayoutSlot(slotNumber, value);
+    }
+
+    Connections {
+        target: root.appSettings
+
+        function onQuickLayoutSlotsChanged() {
+            root.slotRevision++;
+        }
     }
 
     headerText: root.viewMode === 1 ? i18n("Tiling Quick Shortcuts") : i18n("Snapping Quick Shortcuts")
@@ -43,7 +58,6 @@ SettingsCard {
                 required property int index
                 property int slotNumber: index + 1
                 property string shortcutText: root.appSettings.getQuickLayoutShortcut(slotNumber)
-                property int _slotRevision: 0
 
                 Layout.fillWidth: true
                 spacing: 0
@@ -104,24 +118,11 @@ SettingsCard {
                             layoutFilter: root.viewMode === 1 ? 1 : 0
                             resolvedDefaultId: ""
                             currentLayoutId: {
-                                void (slotDelegate._slotRevision);
+                                void (root.slotRevision);
                                 return root.getSlot(slotDelegate.slotNumber);
                             }
                             onActivated: {
                                 root.setSlot(slotDelegate.slotNumber, model[currentIndex].value);
-                            }
-
-                            Connections {
-                                // Fires on EXTERNAL (daemon) snapping/zone quick-layout-slot
-                                // changes — the daemon emits quickLayoutSlotsChanged only for
-                                // those. Tiling slots are config-only (no external-change
-                                // signal), so the bump is a no-op in viewMode 1; that's fine —
-                                // there is no separate tilingQuickLayoutSlotsChanged signal.
-                                function onQuickLayoutSlotsChanged() {
-                                    slotDelegate._slotRevision++;
-                                }
-
-                                target: root.appSettings
                             }
                         }
 

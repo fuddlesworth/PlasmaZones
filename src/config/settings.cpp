@@ -313,8 +313,8 @@ void Settings::load()
 
 // Groups that reset() deletes exhaustively. NOT used by save() — save()
 // iterates the schema and lets purgeStaleKeys() handle cleanup. Does NOT
-// include unmanaged groups (TilingQuickLayoutSlots, Updates) which are
-// written independently and must survive a forced default-restore.
+// include unmanaged groups (Updates) which are written independently and
+// must survive a forced default-restore.
 QStringList Settings::managedGroupNames()
 {
     return {
@@ -367,7 +367,7 @@ void Settings::purgeStaleKeys()
     // first-run markers, etc.) lands there. Wiping it on every save
     // would silently destroy those values.
     // Mixed list of (a) root-level GROUP names that must survive Pass 2's
-    // blanket-delete loop ("General", "TilingQuickLayoutSlots", "Updates")
+    // blanket-delete loop ("General", "Updates")
     // and (b) root-level KEYS holding stash data — `_v4DisableStash`,
     // `_v4ExclusionStash` and `_v4AnimationExclusionStash` are JSON
     // OBJECTS and survive Pass 2 via `preservedGroups.contains(topLevel)`
@@ -380,7 +380,6 @@ void Settings::purgeStaleKeys()
     // chain-stall retry path in configmigration.cpp::finalizeV4Conversion.
     const QStringList preservedGroups = {
         ConfigDefaults::generalGroup(),
-        ConfigDefaults::tilingQuickLayoutSlotsGroup(),
         ConfigDefaults::updatesGroup(),
         ConfigKeys::Legacy::v4DisableStashKey(),
         ConfigKeys::Legacy::v4AnimationRulesStashKey(),
@@ -2563,7 +2562,6 @@ void Settings::reset()
         m_configBackend->deleteGroup(groupName);
     }
     m_configBackend->deleteGroup(ConfigDefaults::updatesGroup());
-    m_configBackend->deleteGroup(ConfigDefaults::tilingQuickLayoutSlotsGroup());
     if (!QFile::remove(ConfigDefaults::sessionFilePath()) && QFile::exists(ConfigDefaults::sessionFilePath())) {
         qCWarning(lcConfig) << "Failed to remove session file:" << ConfigDefaults::sessionFilePath();
     }
@@ -2909,26 +2907,6 @@ P_STORE_GET(bool, fillOnDropEnabled, editorFillOnDropGroup, enabledKey, bool)
 P_STORE_SET_BOOL(setFillOnDropEnabled, editorFillOnDropGroup, enabledKey, fillOnDropEnabledChanged)
 P_STORE_GET(int, fillOnDropModifier, editorFillOnDropGroup, modifierKey, int)
 P_STORE_SET_INT(setFillOnDropModifier, editorFillOnDropGroup, modifierKey, fillOnDropModifierChanged)
-
-// ── TilingQuickLayoutSlots helpers ───────────────────────────────────────────
-
-QString Settings::readTilingQuickLayoutSlot(int slotNumber) const
-{
-    if (slotNumber < 1 || slotNumber > 9)
-        return {};
-    // Config is already current from load() — no reparse needed per read.
-    // The staged value check in getTilingQuickLayoutSlot() handles unsaved changes.
-    auto group = m_configBackend->group(ConfigDefaults::tilingQuickLayoutSlotsGroup());
-    return group->readString(QString::number(slotNumber));
-}
-
-void Settings::writeTilingQuickLayoutSlot(int slotNumber, const QString& layoutId)
-{
-    if (slotNumber < 1 || slotNumber > 9)
-        return;
-    auto group = m_configBackend->group(ConfigDefaults::tilingQuickLayoutSlotsGroup());
-    group->writeString(QString::number(slotNumber), layoutId);
-}
 
 // ── Color helpers ────────────────────────────────────────────────────────────
 

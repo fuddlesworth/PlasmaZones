@@ -683,20 +683,16 @@ private Q_SLOTS:
     }
 
     /**
-     * save() must NOT purge groups it doesn't manage (e.g., TilingQuickLayoutSlots,
-     * Updates) — those are written independently and must survive a settings save.
+     * save() must NOT purge groups it doesn't manage (e.g., Updates) — those
+     * are written independently and must survive a settings save.
      */
     void testSave_preservesUnmanagedGroups()
     {
         IsolatedConfigGuard guard;
 
-        // Write to unmanaged groups
+        // Write to an unmanaged group
         {
             auto backend = PlasmaZones::createDefaultConfigBackend();
-            {
-                auto g = backend->group(QStringLiteral("TilingQuickLayoutSlots"));
-                g->writeString(QStringLiteral("1"), QStringLiteral("some-layout-id"));
-            }
             {
                 auto g = backend->group(QStringLiteral("Updates"));
                 g->writeString(QStringLiteral("DismissedUpdateVersion"), QStringLiteral("2.0.0"));
@@ -708,10 +704,6 @@ private Q_SLOTS:
         settings.save();
 
         auto backend = PlasmaZones::createDefaultConfigBackend();
-        {
-            auto g = backend->group(QStringLiteral("TilingQuickLayoutSlots"));
-            QCOMPARE(g->readString(QStringLiteral("1")), QStringLiteral("some-layout-id"));
-        }
         {
             auto g = backend->group(QStringLiteral("Updates"));
             QCOMPARE(g->readString(QStringLiteral("DismissedUpdateVersion")), QStringLiteral("2.0.0"));
@@ -739,11 +731,14 @@ private Q_SLOTS:
                 auto g = backend->group(QStringLiteral("OldGroupFromV0"));
                 g->writeBool(QStringLiteral("Flag"), true);
             }
-            // Inject valid unmanaged groups to prove they survive
+            // The retired TilingQuickLayoutSlots group is no longer known or
+            // preserved (quick slots moved to the daemon's quicklayouts.json),
+            // so save() must purge any leftover.
             {
                 auto g = backend->group(QStringLiteral("TilingQuickLayoutSlots"));
                 g->writeString(QStringLiteral("1"), QStringLiteral("layout-id"));
             }
+            // Inject a valid unmanaged group to prove it survives
             {
                 auto g = backend->group(QStringLiteral("Updates"));
                 g->writeString(QStringLiteral("LastCheck"), QStringLiteral("2026-04-07"));
@@ -760,20 +755,20 @@ private Q_SLOTS:
         // Unknown groups must be gone
         bool hasObsolete = false;
         bool hasOldGroup = false;
+        bool hasRetiredTilingSlots = false;
         for (const QString& g : groups) {
             if (g == QStringLiteral("ObsoleteFeature"))
                 hasObsolete = true;
             if (g == QStringLiteral("OldGroupFromV0"))
                 hasOldGroup = true;
+            if (g == QStringLiteral("TilingQuickLayoutSlots"))
+                hasRetiredTilingSlots = true;
         }
         QVERIFY2(!hasObsolete, "Unknown root-level group 'ObsoleteFeature' must be purged by save()");
         QVERIFY2(!hasOldGroup, "Unknown root-level group 'OldGroupFromV0' must be purged by save()");
+        QVERIFY2(!hasRetiredTilingSlots, "Retired group 'TilingQuickLayoutSlots' must be purged by save()");
 
         // Unmanaged groups must survive
-        {
-            auto g = backend->group(QStringLiteral("TilingQuickLayoutSlots"));
-            QCOMPARE(g->readString(QStringLiteral("1")), QStringLiteral("layout-id"));
-        }
         {
             auto g = backend->group(QStringLiteral("Updates"));
             QCOMPARE(g->readString(QStringLiteral("LastCheck")), QStringLiteral("2026-04-07"));

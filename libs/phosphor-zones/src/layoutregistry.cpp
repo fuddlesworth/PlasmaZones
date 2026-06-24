@@ -450,13 +450,18 @@ void LayoutRegistry::removeLayout(PhosphorZones::Layout* layout)
         // meaningful remains.
         purgeSnappingLayoutFromAssignments(layoutIdStr);
 
+        // A deleted manual layout's UUID only ever lives in the Snapping
+        // slots, but prune both modes defensively so a stale binding can
+        // never resurrect a deleted layout.
         bool shortcutRemoved = false;
-        for (auto it = m_quickLayoutShortcuts.begin(); it != m_quickLayoutShortcuts.end();) {
-            if (it.value() == layoutIdStr) {
-                it = m_quickLayoutShortcuts.erase(it);
-                shortcutRemoved = true;
-            } else {
-                ++it;
+        for (auto& slots : m_quickLayoutSlots) {
+            for (auto it = slots.begin(); it != slots.end();) {
+                if (it.value() == layoutIdStr) {
+                    it = slots.erase(it);
+                    shortcutRemoved = true;
+                } else {
+                    ++it;
+                }
             }
         }
         if (shortcutRemoved) {
@@ -518,10 +523,11 @@ void LayoutRegistry::setActiveLayoutById(const QUuid& id)
     setActiveLayout(layoutById(id));
 }
 
-PhosphorZones::Layout* LayoutRegistry::layoutForShortcut(int number) const
+PhosphorZones::Layout* LayoutRegistry::layoutForShortcut(AssignmentEntry::Mode mode, int number) const
 {
-    if (m_quickLayoutShortcuts.contains(number)) {
-        const QString& id = m_quickLayoutShortcuts[number];
+    const auto& slots = m_quickLayoutSlots[modeIndex(mode)];
+    if (slots.contains(number)) {
+        const QString& id = slots[number];
         if (PhosphorLayout::LayoutId::isAutotile(id))
             return nullptr;
         return layoutById(QUuid::fromString(id));
@@ -529,17 +535,22 @@ PhosphorZones::Layout* LayoutRegistry::layoutForShortcut(int number) const
     return nullptr;
 }
 
-void LayoutRegistry::applyQuickLayout(int number, const QString& screenId)
+void LayoutRegistry::applyQuickLayout(AssignmentEntry::Mode mode, int number, const QString& screenId)
 {
-    qCInfo(lcZonesLib) << "applyQuickLayout: number=" << number << "screen=" << screenId;
+    qCInfo(lcZonesLib) << "applyQuickLayout: mode=" << mode << "number=" << number << "screen=" << screenId;
 
     // Quick-slot shortcuts are explicit bindings. If the user cleared the
-    // slot (setQuickLayoutSlot(n, "")), pressing the shortcut must be a
+    // slot (setQuickLayoutSlot(mode, n, "")), pressing the shortcut must be a
     // no-op — falling back to m_layouts.at(number-1) silently resurrects
     // a layout the user deliberately unbound.
-    auto layout = layoutForShortcut(number);
+    //
+    // Only manual (Snapping) slots can be applied here: an autotile slot
+    // resolves to an algorithm ID with no Layout*, and switching algorithms
+    // needs the autotile engine, which lives in the daemon. The daemon's
+    // shortcut handler applies autotile slots directly; see daemon/start.cpp.
+    auto layout = layoutForShortcut(mode, number);
     if (!layout) {
-        qCInfo(lcZonesLib) << "Quick slot" << number << "is unset — no-op";
+        qCInfo(lcZonesLib) << "Quick slot" << number << "is unset or not directly applicable — no-op";
         return;
     }
 
@@ -547,20 +558,22 @@ void LayoutRegistry::applyQuickLayout(int number, const QString& screenId)
     applyLayoutToScreen(screenId, layout);
 }
 
-void LayoutRegistry::setQuickLayoutSlot(int number, const QString& layoutId)
+void LayoutRegistry::setQuickLayoutSlot(AssignmentEntry::Mode mode, int number, const QString& layoutId)
 {
     if (number < 1 || number > 9) {
         qCWarning(lcZonesLib) << "Invalid quick layout slot number:" << number << "(must be 1-9)";
         return;
     }
 
+    auto& slots = m_quickLayoutSlots[modeIndex(mode)];
+
     if (layoutId.isEmpty()) {
         // Clear the slot
-        m_quickLayoutShortcuts.remove(number);
-        qCInfo(lcZonesLib) << "Cleared quick layout slot" << number;
+        slots.remove(number);
+        qCInfo(lcZonesLib) << "Cleared quick layout slot" << number << "mode=" << mode;
     } else if (PhosphorLayout::LayoutId::isAutotile(layoutId)) {
         // Autotile IDs have no corresponding Layout* — accept as-is.
-        m_quickLayoutShortcuts[number] = layoutId;
+        slots[number] = layoutId;
         qCInfo(lcZonesLib) << "Assigned autotile layout" << layoutId << "to quick slot" << number;
     } else {
         // Reject non-UUID garbage up front so a bogus string doesn't
@@ -576,7 +589,7 @@ void LayoutRegistry::setQuickLayoutSlot(int number, const QString& layoutId)
             qCWarning(lcZonesLib) << "Cannot assign non-existent layout to quick slot:" << layoutId;
             return;
         }
-        m_quickLayoutShortcuts[number] = layoutId;
+        slots[number] = layoutId;
         qCInfo(lcZonesLib) << "Assigned layout" << layoutId << "to quick slot" << number;
     }
 
@@ -584,10 +597,12 @@ void LayoutRegistry::setQuickLayoutSlot(int number, const QString& layoutId)
     writeQuickLayouts();
 }
 
-void LayoutRegistry::setAllQuickLayoutSlots(const QHash<int, QString>& slots)
+void LayoutRegistry::setAllQuickLayoutSlots(AssignmentEntry::Mode mode, const QHash<int, QString>& slots)
 {
-    // Clear all existing slots first
-    m_quickLayoutShortcuts.clear();
+    auto& target = m_quickLayoutSlots[modeIndex(mode)];
+
+    // Clear all existing slots for this mode first
+    target.clear();
 
     // Set new slots (validate each one)
     for (auto it = slots.begin(); it != slots.end(); ++it) {
@@ -619,13 +634,13 @@ void LayoutRegistry::setAllQuickLayoutSlots(const QHash<int, QString>& slots)
             }
         }
 
-        m_quickLayoutShortcuts[number] = layoutId;
-        qCDebug(lcZonesLib) << "Batch: assigned layout" << layoutId << "to quick slot" << number;
+        target[number] = layoutId;
+        qCDebug(lcZonesLib) << "Batch: assigned layout" << layoutId << "to quick slot" << number << "mode=" << mode;
     }
 
     // Save once at the end
     writeQuickLayouts();
-    qCInfo(lcZonesLib) << "Batch set" << m_quickLayoutShortcuts.size() << "quick layout slots";
+    qCInfo(lcZonesLib) << "Batch set" << target.size() << "quick layout slots for mode=" << mode;
 }
 
 void LayoutRegistry::cycleToPreviousLayout(const QString& screenId)

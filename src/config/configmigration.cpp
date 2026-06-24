@@ -18,6 +18,7 @@
 #include <PhosphorWindowRules/RuleAction.h>
 #include <PhosphorWindowRules/WindowRule.h>
 #include <PhosphorWindowRules/WindowRuleSet.h>
+#include <PhosphorZones/LayoutRegistry.h>
 
 #include <QColor>
 #include <QDir>
@@ -3044,8 +3045,9 @@ bool ConfigMigration::finalizeV4Conversion(const QString& jsonPath)
     // ── Relocate QuickLayouts to the quicklayouts.json sidecar (FIRST) ─────
     // Quick-layout slots are NOT window rules — they belong in the sibling
     // sidecar LayoutRegistry reads (next to windowrules.json), not in the rule
-    // store and not in config.json. The group's shape (slot number → layout
-    // id) already matches the sidecar format verbatim.
+    // store and not in config.json. The v3 slots are all snapping (zone-layout)
+    // bindings, wrapped below under the snapping key of the mode-nested
+    // quicklayouts.json shape — the single format LayoutRegistry reads.
     //
     // Write-order rationale (B4 data-loss fix): the sidecar MUST be durably
     // written BEFORE windowrules.json — windowrules.json is the irreversible
@@ -3077,7 +3079,13 @@ bool ConfigMigration::finalizeV4Conversion(const QString& jsonPath)
         }
         if (!existingIsAuthoritative) {
             QDir().mkpath(QFileInfo(quickLayoutsPath).absolutePath());
-            if (!PhosphorConfig::JsonBackend::writeJsonAtomically(quickLayoutsPath, quickLayoutsToRelocate)) {
+            // Emit the mode-nested shape the reader expects (snapping slots
+            // under the snapping key, autotile empty). There is exactly one
+            // on-disk format — the reader does not accept a bare flat map.
+            QJsonObject nested;
+            nested.insert(PhosphorZones::LayoutRegistry::QuickSlotsSnappingKey, quickLayoutsToRelocate);
+            nested.insert(PhosphorZones::LayoutRegistry::QuickSlotsAutotileKey, QJsonObject{});
+            if (!PhosphorConfig::JsonBackend::writeJsonAtomically(quickLayoutsPath, nested)) {
                 qWarning(
                     "ConfigMigration: failed to write %s — aborting v4 conversion before committing windowrules.json",
                     qPrintable(quickLayoutsPath));

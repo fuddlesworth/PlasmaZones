@@ -913,8 +913,9 @@ private Q_SLOTS:
     // ─── Superseding: QuickLayouts relocated to sidecar ───────────────────
 
     /// QuickLayouts slots are not window rules — the migration relocates them
-    /// to the quicklayouts.json sidecar (the file LayoutRegistry reads), with
-    /// the slot-number → layout-id shape preserved verbatim.
+    /// to the quicklayouts.json sidecar (the file LayoutRegistry reads). The v3
+    /// slots are snapping bindings, written under the snapping key of the single
+    /// mode-nested format (no flat variant).
     void testSupersede_quickLayoutsRelocatedToSidecar()
     {
         IsolatedConfigGuard guard;
@@ -925,7 +926,11 @@ private Q_SLOTS:
         const QString sidecar = ConfigDefaults::quickLayoutsFilePath();
         QVERIFY2(QFile::exists(sidecar), "QuickLayouts must be relocated to quicklayouts.json");
         const QJsonObject slots = readJson(sidecar);
-        QCOMPARE(slots.value(QStringLiteral("3")).toString(), QStringLiteral("{quick-layout-id}"));
+        // Mode-nested format: v3 slots land under "snapping"; "autotile" is present and empty.
+        const QJsonObject snapping = slots.value(QStringLiteral("snapping")).toObject();
+        QCOMPARE(snapping.value(QStringLiteral("3")).toString(), QStringLiteral("{quick-layout-id}"));
+        QVERIFY2(slots.contains(QStringLiteral("autotile")), "the nested format always carries both mode keys");
+        QVERIFY2(!slots.contains(QStringLiteral("3")), "slots must be nested by mode, not written flat");
 
         // The QuickLayouts data must not have leaked into windowrules.json as
         // a rule — it is not a rule.
@@ -1268,7 +1273,8 @@ private Q_SLOTS:
         QVERIFY(QFile::exists(ConfigDefaults::windowRulesFilePath()));
         QVERIFY2(QFile::exists(quickLayoutsPath), "the QuickLayouts sidecar must be populated on the second attempt");
         const QJsonObject slots = readJson(quickLayoutsPath);
-        QCOMPARE(slots.value(QStringLiteral("3")).toString(), QStringLiteral("{quick-layout-id}"));
+        QCOMPARE(slots.value(QStringLiteral("snapping")).toObject().value(QStringLiteral("3")).toString(),
+                 QStringLiteral("{quick-layout-id}"));
         QVERIFY2(!QFile::exists(assignmentsPath()),
                  "assignments.json must be retired once the full conversion completes");
     }

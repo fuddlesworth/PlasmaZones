@@ -436,9 +436,13 @@ void Daemon::connectShortcutSignals()
             m_layoutAdaptor->openEditor();
         }
     });
-    // Quick layout shortcuts (Meta+1-9)
+    // Quick layout shortcuts (Meta+Alt+1-9). Quick slots are per mode: in
+    // snapping mode the slot holds a zone-layout UUID, in autotile mode an
+    // autotile algorithm ID. Resolve the cursor screen's current mode, look up
+    // that mode's slot, and apply the explicitly-bound layout — NOT the Nth
+    // layout in priority order.
     connect(m_shortcutManager.get(), &ShortcutManager::quickLayoutRequested, this, [this](int number) {
-        if (!m_unifiedLayoutController) {
+        if (!m_unifiedLayoutController || !m_layoutManager) {
             return;
         }
         // Screen-targeted (applies a layout to a screen) — resolve
@@ -448,11 +452,32 @@ void Daemon::connectShortcutSignals()
             qCDebug(lcDaemon) << "QuickLayout shortcut: no screen info";
             return;
         }
+        const PhosphorZones::AssignmentEntry::Mode mode = currentModeFor(screenId);
+        const QString slotId = m_layoutManager->quickLayoutSlots(mode).value(number);
+        if (slotId.isEmpty()) {
+            // Explicitly-unbound slot for this mode — a deliberate no-op,
+            // never a fallback to priority order.
+            qCDebug(lcDaemon) << "QuickLayout shortcut: slot" << number << "unset for mode" << mode;
+            return;
+        }
         m_unifiedLayoutController->setCurrentScreenName(screenId);
         if (isScreenLockedForLayoutChange(screenId)) {
             return;
         }
-        if (!m_unifiedLayoutController->applyLayoutByNumber(number)) {
+        // Filter the controller's layout list to the SAME mode we resolved the
+        // slot from, so the bound slot ID (manual UUID in snapping, autotile
+        // algorithm in autotile) is always in scope for applyLayoutById. Deriving
+        // the filter from `mode` here — rather than re-resolving the screen's mode
+        // via updateLayoutFilterForScreen, which reads the assignment cascade —
+        // keeps the slot lookup and the filter on one source of truth
+        // (currentModeFor). The two can otherwise disagree when the live engine is
+        // autotile-active via a per-screen override the cascade doesn't carry,
+        // which would leave applyLayoutById unable to find the autotile slot.
+        // applyLayoutById routes through applyEntry, which handles both manual
+        // assignment and autotile algorithm switching.
+        const bool autotile = (mode == PhosphorZones::AssignmentEntry::Autotile);
+        m_unifiedLayoutController->setLayoutFilter(!autotile, autotile);
+        if (!m_unifiedLayoutController->applyLayoutById(slotId)) {
             return;
         }
         resnapIfManualMode();

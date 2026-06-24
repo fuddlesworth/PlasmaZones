@@ -132,12 +132,6 @@ QVector<PhosphorLayout::LayoutPreview> UnifiedLayoutController::layouts() const
     return m_cachedLayouts;
 }
 
-bool UnifiedLayoutController::applyLayoutByNumber(int number)
-{
-    // Convert 1-based number to 0-based index
-    return applyLayoutByIndex(number - 1);
-}
-
 bool UnifiedLayoutController::applyLayoutById(const QString& layoutId)
 {
     const auto list = layouts();

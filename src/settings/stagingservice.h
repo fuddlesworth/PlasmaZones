@@ -23,9 +23,9 @@ class Settings;
 ///   2. **Virtual-screen configurations** — staged virtual screen layouts
 ///      per physical screen, flushed to Settings (for persistence) BEFORE
 ///      `Settings::save()` and to the daemon (via D-Bus) AFTER.
-///   3. **Quick-layout slots** — snapping-quick-slot writes go to the
-///      daemon; tiling-quick-slot writes go to Settings (shared config
-///      backend) and then the daemon sees them via notifyReload.
+///   3. **Quick-layout slots** — both snapping and tiling slot writes go
+///      to the daemon's mode-keyed LayoutRegistry via D-Bus (after
+///      `notifyReload`), flushed together by `flushQuickSlotsToDaemon()`.
 ///
 /// Orchestrated by SettingsController's save lifecycle — callers are
 /// expected to invoke the flush methods in the right order (persistence
@@ -143,15 +143,11 @@ public:
     bool stagedSnappingQuickSlot(int slotNumber, QString& out) const;
     bool stagedTilingQuickSlot(int slotNumber, QString& out) const;
 
-    /// Persist staged tiling-quick-slot entries to Settings (shared
-    /// config backend). Runs BEFORE `Settings::save()`. Clears the
-    /// staging map on completion.
-    void flushTilingQuickSlotsToSettings(Settings& settings);
-
-    /// Push staged snapping-quick-slot entries to the daemon via D-Bus.
-    /// Runs AFTER `notifyReload` so the daemon has the fresh config.
-    /// Clears the staging map on completion.
-    void flushSnappingQuickSlotsToDaemon();
+    /// Push staged quick-layout slots (both snapping and tiling modes) to the
+    /// daemon's mode-keyed LayoutRegistry via D-Bus. Runs AFTER `notifyReload`
+    /// so the daemon has the fresh config. Clears both staging maps on
+    /// completion.
+    void flushQuickSlotsToDaemon();
 
 private:
     StagedAssignment& assignmentEntry(const QString& screen, int desktop, const QString& activity);

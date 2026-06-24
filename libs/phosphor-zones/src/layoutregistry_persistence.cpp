@@ -283,7 +283,8 @@ QString LayoutRegistry::layoutSettingsFilePath() const
 
 void LayoutRegistry::readQuickLayouts()
 {
-    m_quickLayoutShortcuts.clear();
+    m_quickLayoutSlots[0].clear();
+    m_quickLayoutSlots[1].clear();
     QFile file(quickLayoutsFilePath());
     if (!file.open(QIODevice::ReadOnly)) {
         return; // a missing file is not an error
@@ -292,25 +293,43 @@ void LayoutRegistry::readQuickLayouts()
     if (!doc.isObject()) {
         return;
     }
-    const QJsonObject obj = doc.object();
-    for (int i = 1; i <= 9; ++i) {
-        const QString key = QString::number(i);
-        if (obj.contains(key)) {
-            const QString layoutId = obj.value(key).toString();
-            if (!layoutId.isEmpty()) {
-                m_quickLayoutShortcuts[i] = layoutId;
+    const QJsonObject root = doc.object();
+
+    // Reader for one mode's nested slot object ({ "1": id, ... }).
+    const auto readModeSlots = [](const QJsonObject& obj, QHash<int, QString>& out) {
+        for (int i = 1; i <= 9; ++i) {
+            const QString key = QString::number(i);
+            if (obj.contains(key)) {
+                const QString layoutId = obj.value(key).toString();
+                if (!layoutId.isEmpty()) {
+                    out[i] = layoutId;
+                }
             }
         }
-    }
+    };
+
+    // Slots are nested by mode ({ "snapping": {...}, "autotile": {...} }). This
+    // is the single on-disk format: the writer below and the v3→v4 migration
+    // both emit it. A pre-mode (flat) file has neither key, so both modes stay
+    // empty — no ad-hoc legacy read, matching the config policy that a
+    // restructured store drops old values rather than carrying a second format.
+    readModeSlots(root.value(QuickSlotsSnappingKey).toObject(), m_quickLayoutSlots[0]);
+    readModeSlots(root.value(QuickSlotsAutotileKey).toObject(), m_quickLayoutSlots[1]);
 }
 
 void LayoutRegistry::writeQuickLayouts()
 {
     QDir().mkpath(QFileInfo(quickLayoutsFilePath()).absolutePath());
+    const auto modeSlotsToJson = [](const QHash<int, QString>& slots) {
+        QJsonObject obj;
+        for (auto it = slots.constBegin(); it != slots.constEnd(); ++it) {
+            obj.insert(QString::number(it.key()), it.value());
+        }
+        return obj;
+    };
     QJsonObject obj;
-    for (auto it = m_quickLayoutShortcuts.constBegin(); it != m_quickLayoutShortcuts.constEnd(); ++it) {
-        obj.insert(QString::number(it.key()), it.value());
-    }
+    obj.insert(QuickSlotsSnappingKey, modeSlotsToJson(m_quickLayoutSlots[0]));
+    obj.insert(QuickSlotsAutotileKey, modeSlotsToJson(m_quickLayoutSlots[1]));
     // QSaveFile gives atomic temp-write + rename — a crash mid-write never
     // leaves a truncated quicklayouts.json behind.
     QSaveFile file(quickLayoutsFilePath());
@@ -328,7 +347,8 @@ void LayoutRegistry::writeQuickLayouts()
         qCWarning(lcZonesLib) << "Failed to commit quick layouts:" << file.errorString();
         return;
     }
-    qCInfo(lcZonesLib) << "Saved quickShortcuts=" << m_quickLayoutShortcuts.size();
+    qCInfo(lcZonesLib) << "Saved quickShortcuts: snapping=" << m_quickLayoutSlots[0].size()
+                       << "autotile=" << m_quickLayoutSlots[1].size();
 }
 
 void LayoutRegistry::loadAssignments()
@@ -339,7 +359,8 @@ void LayoutRegistry::loadAssignments()
     readQuickLayouts();
 
     qCInfo(lcZonesLib) << "Loaded windowRules=" << m_ruleStore->count()
-                       << "quickShortcuts=" << m_quickLayoutShortcuts.size();
+                       << "quickShortcuts: snapping=" << m_quickLayoutSlots[0].size()
+                       << "autotile=" << m_quickLayoutSlots[1].size();
 }
 
 void LayoutRegistry::saveAssignments()

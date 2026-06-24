@@ -113,9 +113,9 @@ void SettingsController::save()
     if (hadStagedTile)
         Q_EMIT stagedTilingOrderChanged();
 
-    // Persistence phase (pre-save): staged tiling-quick-slot writes + VS
-    // configs need to be in Settings before the save flushes to disk.
-    m_staging.flushTilingQuickSlotsToSettings(m_settings);
+    // Persistence phase (pre-save): staged VS configs need to be in Settings
+    // before the save flushes to disk. Quick-layout slots (both modes) are
+    // daemon-backed now and flush via D-Bus after notifyReload, below.
     m_staging.flushVirtualScreensToSettings(m_settings);
 
     // Save main settings (includes editor settings + VS configs persisted above)
@@ -146,8 +146,8 @@ void SettingsController::save()
     // Notify daemon to reload KConfig settings (before D-Bus assignment mutations)
     DaemonDBus::notifyReload();
 
-    // Flush staged snapping quick-layout slots via D-Bus (after reload).
-    m_staging.flushSnappingQuickSlotsToDaemon();
+    // Flush staged quick-layout slots (snapping + tiling) via D-Bus (after reload).
+    m_staging.flushQuickSlotsToDaemon();
 
     // Flush staged assignment changes to daemon (same batch protocol as KCM).
     // This must happen AFTER notifyReload so the reload doesn't overwrite
