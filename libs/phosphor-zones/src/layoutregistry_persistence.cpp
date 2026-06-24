@@ -21,12 +21,6 @@
 
 namespace PhosphorZones {
 
-namespace {
-// quicklayouts.json top-level keys: one nested slot object per tiling mode.
-constexpr QLatin1String kQuickSlotsSnappingKey{"snapping"};
-constexpr QLatin1String kQuickSlotsAutotileKey{"autotile"};
-} // namespace
-
 void LayoutRegistry::loadLayouts()
 {
     ensureLayoutDirectory();
@@ -314,17 +308,13 @@ void LayoutRegistry::readQuickLayouts()
         }
     };
 
-    // Current format is nested by mode. A legacy file is a flat
-    // { "1": uuid, ... } map of snapping (zone-layout) slots — read it as
-    // Snapping so existing bindings survive the upgrade. The nested keys are
-    // absent in legacy files, so presence of either nested key selects the
-    // new format.
-    if (root.value(kQuickSlotsSnappingKey).isObject() || root.value(kQuickSlotsAutotileKey).isObject()) {
-        readModeSlots(root.value(kQuickSlotsSnappingKey).toObject(), m_quickLayoutSlots[0]);
-        readModeSlots(root.value(kQuickSlotsAutotileKey).toObject(), m_quickLayoutSlots[1]);
-    } else {
-        readModeSlots(root, m_quickLayoutSlots[0]);
-    }
+    // Slots are nested by mode ({ "snapping": {...}, "autotile": {...} }). This
+    // is the single on-disk format: the writer below and the v3→v4 migration
+    // both emit it. A pre-mode (flat) file has neither key, so both modes stay
+    // empty — no ad-hoc legacy read, matching the config policy that a
+    // restructured store drops old values rather than carrying a second format.
+    readModeSlots(root.value(QuickSlotsSnappingKey).toObject(), m_quickLayoutSlots[0]);
+    readModeSlots(root.value(QuickSlotsAutotileKey).toObject(), m_quickLayoutSlots[1]);
 }
 
 void LayoutRegistry::writeQuickLayouts()
@@ -338,8 +328,8 @@ void LayoutRegistry::writeQuickLayouts()
         return obj;
     };
     QJsonObject obj;
-    obj.insert(kQuickSlotsSnappingKey, modeSlotsToJson(m_quickLayoutSlots[0]));
-    obj.insert(kQuickSlotsAutotileKey, modeSlotsToJson(m_quickLayoutSlots[1]));
+    obj.insert(QuickSlotsSnappingKey, modeSlotsToJson(m_quickLayoutSlots[0]));
+    obj.insert(QuickSlotsAutotileKey, modeSlotsToJson(m_quickLayoutSlots[1]));
     // QSaveFile gives atomic temp-write + rename — a crash mid-write never
     // leaves a truncated quicklayouts.json behind.
     QSaveFile file(quickLayoutsFilePath());

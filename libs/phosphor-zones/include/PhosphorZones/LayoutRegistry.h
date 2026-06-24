@@ -497,6 +497,13 @@ public:
     // independent so the same Meta+Alt+N can map to a zone layout in snapping
     // mode and an autotile algorithm in autotile mode.
 
+    /// quicklayouts.json top-level keys: one nested slot object per tiling
+    /// mode. This is the ONLY on-disk shape — there is no flat legacy variant.
+    /// Shared with the v3→v4 schema migration (configmigration.cpp), which
+    /// writes the same nested format, so reader and migration cannot drift.
+    static constexpr QLatin1String QuickSlotsSnappingKey{"snapping"};
+    static constexpr QLatin1String QuickSlotsAutotileKey{"autotile"};
+
     Q_INVOKABLE Layout* layoutForShortcut(AssignmentEntry::Mode mode, int number) const;
     Q_INVOKABLE void applyQuickLayout(AssignmentEntry::Mode mode, int number, const QString& screenId);
     void setQuickLayoutSlot(AssignmentEntry::Mode mode, int number, const QString& layoutId);

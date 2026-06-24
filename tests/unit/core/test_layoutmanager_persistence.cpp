@@ -280,10 +280,10 @@ private Q_SLOTS:
         QVERIFY(!mgr2->quickLayoutSlots(autotile).contains(1));
     }
 
-    // A legacy (pre-mode) quicklayouts.json is a flat { "1": uuid, ... } map of
-    // snapping bindings. It must read back as Snapping so existing bindings
-    // survive the upgrade, with the Autotile set starting empty.
-    void testLayoutManager_quickLayouts_legacyFlatReadsAsSnapping()
+    // A pre-mode (flat) quicklayouts.json is NOT a supported format: the reader
+    // is nested-only, so a flat file loads as empty (old bindings are dropped,
+    // the user gets defaults). Guards against re-introducing a second read path.
+    void testLayoutManager_quickLayouts_legacyFlatIgnored()
     {
         QScopedPointer<PhosphorZones::LayoutRegistry> mgr(createManager());
 
@@ -301,8 +301,7 @@ private Q_SLOTS:
 
         mgr->loadAssignments(); // re-reads the sidecar we just wrote
 
-        QCOMPARE(mgr->quickLayoutSlots(PhosphorZones::AssignmentEntry::Snapping).value(1), uuid);
-        QCOMPARE(mgr->quickLayoutSlots(PhosphorZones::AssignmentEntry::Snapping).value(3), uuid);
+        QVERIFY(mgr->quickLayoutSlots(PhosphorZones::AssignmentEntry::Snapping).isEmpty());
         QVERIFY(mgr->quickLayoutSlots(PhosphorZones::AssignmentEntry::Autotile).isEmpty());
     }
 };

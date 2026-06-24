@@ -464,11 +464,19 @@ void Daemon::connectShortcutSignals()
         if (isScreenLockedForLayoutChange(screenId)) {
             return;
         }
-        // Align the controller's layout filter with the screen's mode so the
-        // bound slot ID (manual UUID or autotile algorithm) resolves, then
-        // apply by ID. applyLayoutById routes through applyEntry, which handles
-        // both manual assignment and autotile algorithm switching.
-        updateLayoutFilterForScreen(screenId);
+        // Filter the controller's layout list to the SAME mode we resolved the
+        // slot from, so the bound slot ID (manual UUID in snapping, autotile
+        // algorithm in autotile) is always in scope for applyLayoutById. Deriving
+        // the filter from `mode` here — rather than re-resolving the screen's mode
+        // via updateLayoutFilterForScreen, which reads the assignment cascade —
+        // keeps the slot lookup and the filter on one source of truth
+        // (currentModeFor). The two can otherwise disagree when the live engine is
+        // autotile-active via a per-screen override the cascade doesn't carry,
+        // which would leave applyLayoutById unable to find the autotile slot.
+        // applyLayoutById routes through applyEntry, which handles both manual
+        // assignment and autotile algorithm switching.
+        const bool autotile = (mode == PhosphorZones::AssignmentEntry::Autotile);
+        m_unifiedLayoutController->setLayoutFilter(!autotile, autotile);
         if (!m_unifiedLayoutController->applyLayoutById(slotId)) {
             return;
         }
