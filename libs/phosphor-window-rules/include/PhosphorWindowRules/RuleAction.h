@@ -470,8 +470,9 @@ inline constexpr int MaxZoneOrdinal = 64;
 /// Upper bound for a `RouteToDesktop` 1-based virtual-desktop number. KWin tops
 /// out far below this in practice; the cap exists only to reject a grossly
 /// malformed hand-edited payload and to keep the validator's integrality check
-/// from narrowing an out-of-range double to int (UB). Shared by the descriptor
-/// validator and any consumer that re-validates the ordinal.
+/// from narrowing an out-of-range double to int (UB). The descriptor validator
+/// (ruleaction.cpp) enforces the bound once, at load; downstream consumers only
+/// re-check the 1-based lower bound, trusting the load-time upper-bound clamp.
 inline constexpr int MaxVirtualDesktopOrdinal = 1024;
 
 /// Wire tokens for OverrideOverlayStyle's `value` param — the closed vocabulary

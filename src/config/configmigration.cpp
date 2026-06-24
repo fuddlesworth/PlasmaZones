@@ -11,11 +11,11 @@
 #include <PhosphorAnimation/Profile.h>
 #include <PhosphorConfig/MigrationRunner.h>
 #include <PhosphorConfig/Schema.h>
+#include <PhosphorIdentity/WindowId.h>
 #include <PhosphorWindowRules/ContextRuleBridge.h>
 #include <PhosphorWindowRules/IdentityKey.h>
 #include <PhosphorWindowRules/MatchExpression.h>
 #include <PhosphorWindowRules/MatchTypes.h>
-#include <PhosphorIdentity/WindowId.h>
 #include <PhosphorWindowRules/RuleAction.h>
 #include <PhosphorWindowRules/WindowRule.h>
 #include <PhosphorWindowRules/WindowRuleSet.h>
@@ -2434,7 +2434,7 @@ void appendLayoutAppRulesAsSnapToZone(QList<PhosphorWindowRules::WindowRule>& ru
             // "resourceName resourceClass" two-token form ("chromium chromium");
             // `appIdMatches` treats the embedded space literally, so that pattern
             // matched nothing once the daemon switched to the normalized appId. Use
-            // the SAME derivation the runtime applies (last whitespace token,
+            // the SAME derivation the runtime applies (last space-delimited token,
             // lowercased) so the migrated leaf matches.
             const QString pattern = PhosphorIdentity::WindowId::normalizeAppId(QString(), rawPattern);
             if (pattern.isEmpty()) {

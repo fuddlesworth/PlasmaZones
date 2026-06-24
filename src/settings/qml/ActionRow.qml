@@ -716,7 +716,8 @@ ColumnLayout {
             displayText: currentIndex >= 0 ? currentText : (row.action[_param.key] || i18n("Choose a monitor…"))
             Accessible.name: _param.label
             onActivated: function (index) {
-                row.actionEdited(row._withParam(_param.key, currentValue));
+                if (currentValue !== row.action[_param.key])
+                    row.actionEdited(row._withParam(_param.key, currentValue));
             }
         }
     }
@@ -756,7 +757,8 @@ ColumnLayout {
             displayText: currentIndex >= 0 ? currentText : (row.action[_param.key] ? ("" + row.action[_param.key]) : i18n("Choose a desktop…"))
             Accessible.name: _param.label
             onActivated: function (index) {
-                row.actionEdited(row._withParam(_param.key, currentValue));
+                if (currentValue !== row.action[_param.key])
+                    row.actionEdited(row._withParam(_param.key, currentValue));
             }
         }
     }

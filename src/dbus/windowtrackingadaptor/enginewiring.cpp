@@ -666,7 +666,19 @@ QString WindowTrackingAdaptor::applyOpenRoutingForAutotile(const QString& window
     if (target.isEmpty() || target == screenId || !m_layoutManager) {
         return QString();
     }
-    if (m_layoutManager->modeForScreen(target, currentDesktopForScreen(target), m_layoutManager->currentActivity())
+    // When the same rule also pins a target desktop (RouteToDesktop), the window
+    // lands on THAT desktop of the target screen, so gate the autotile-mode check
+    // against the destination desktop — not the target's current desktop. Mirrors
+    // the snap path (calculateSnapToPlacementRule), which gates modeForScreen on the
+    // routed desktop. Absent / 0 ⇒ the target screen's current desktop.
+    int destDesktop = currentDesktopForScreen(target);
+    if (const auto desktopRoute = resolved.slot(QString(PhosphorWindowRules::ActionSlot::RouteDesktop))) {
+        const int d = desktopRoute->params.value(QString(PhosphorWindowRules::ActionParam::TargetDesktop)).toInt(0);
+        if (d >= 1) {
+            destDesktop = d;
+        }
+    }
+    if (m_layoutManager->modeForScreen(target, destDesktop, m_layoutManager->currentActivity())
         != PhosphorZones::AssignmentEntry::Mode::Autotile) {
         qCDebug(lcDbusWindow) << "applyOpenRoutingForAutotile: RouteToScreen target" << target
                               << "is not in autotile mode — not redirecting" << windowId;

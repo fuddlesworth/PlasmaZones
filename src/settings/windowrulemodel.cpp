@@ -176,7 +176,7 @@ QString actionLabel(const RuleAction& action, const WindowRuleModel::LabelLookup
                     const WindowRuleModel::LabelLookup& tilingAlgorithmLookup,
                     const WindowRuleModel::LabelLookup& shaderEffectLookup,
                     const WindowRuleModel::LabelLookup& overlayShaderLookup,
-                    const WindowRuleModel::LabelLookup& curveLookup)
+                    const WindowRuleModel::LabelLookup& curveLookup, const WindowRuleModel::LabelLookup& screenLookup)
 {
     auto resolveWith = [](const QString& wire, const WindowRuleModel::LabelLookup& lookup) {
         if (wire.isEmpty() || !lookup) {
@@ -237,6 +237,20 @@ QString actionLabel(const RuleAction& action, const WindowRuleModel::LabelLookup
             return PhosphorI18n::tr("Snap to zone %1").arg(nums.first());
         }
         return PhosphorI18n::tr("Snap to zones %1").arg(nums.join(QStringLiteral(", ")));
+    }
+    if (action.type == ActionType::RouteToScreen) {
+        // Resolve the canonical target screen id to the same friendly monitor
+        // label the ScreenId match-leaf surfaces (e.g. "LG Ultra HD · DP-2");
+        // fall back to the raw id when no live monitor matches so a rule pinned
+        // to an absent display stays legible.
+        const QString screenId = action.params.value(PhosphorWindowRules::ActionParam::TargetScreenId).toString();
+        return screenId.isEmpty() ? PhosphorI18n::tr("Open on monitor")
+                                  : PhosphorI18n::tr("Open on monitor: %1").arg(resolveWith(screenId, screenLookup));
+    }
+    if (action.type == ActionType::RouteToDesktop) {
+        const int desktop = action.params.value(PhosphorWindowRules::ActionParam::TargetDesktop).toInt();
+        return desktop >= 1 ? PhosphorI18n::tr("Open on virtual desktop %1").arg(desktop)
+                            : PhosphorI18n::tr("Open on virtual desktop");
     }
     if (action.type == ActionType::SetOpacity) {
         // Mirror EVERY resolver reject path (shader_resolve.cpp's
@@ -718,7 +732,7 @@ QString WindowRuleModel::actionSummary(const QList<RuleAction>& actions) const
     QStringList parts;
     for (const RuleAction& a : actions) {
         parts.append(actionLabel(a, m_snappingLayoutLookup, m_tilingAlgorithmLookup, m_shaderEffectLookup,
-                                 m_overlayShaderLookup, m_curveLookup));
+                                 m_overlayShaderLookup, m_curveLookup, m_screenLookup));
     }
     return parts.join(QStringLiteral(" · "));
 }

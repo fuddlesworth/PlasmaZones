@@ -244,7 +244,10 @@ RowLayout {
             // Seed a value of the new field's kind so the leaf is immediately
             // well-typed rather than carrying an empty string a bool/number
             // field would coerce: bool -> false, number -> 0, everything else
-            // (string / screen / activity / windowType picker) -> "".
+            // (string / screen / activity / windowType / virtualDesktop picker)
+            // -> "". The picker kinds (including virtualDesktop) treat "" as the
+            // "no value yet" state and surface their placeholder until the user
+            // picks, mirroring the screen / activity editors.
             var newKind = newFieldEntry !== undefined ? newFieldEntry.valueKind : "string";
             var seedValue = newKind === "bool" ? false : (newKind === "number" ? 0 : "");
             leaf._emit(value, carryOp, seedValue);

@@ -232,24 +232,26 @@ bool SnapAdaptor::applySnapResult(const SnapResult& result, const QString& windo
         // whose mode differs from the caller's, so the disable list to consult
         // is the one for result.screenId's mode — not a hard-coded Snapping.
         //
-        // currentVirtualDesktop()/currentActivity() are the precise destination
-        // context here, not an approximation: a restore only ever targets the
-        // current desktop. Every calculator feeding this path either snaps a
-        // window opening now on the current desktop (calculateSnapToPlacementRule /
-        // calculateSnapToEmptyZone) or refuses outright when the saved desktop
-        // is not the current one — the WindowPlacementStore restore block gates
-        // on screen and disabled-context (restoring onto the current desktop),
-        // and calculateSnapToLastZone returns noSnap on a desktop mismatch. A
-        // restored window therefore lands on the current desktop/activity.
-        // Resolver's handleFor pulls (currentVirtualDesktop, currentActivity)
-        // from the daemon's VDM/AM — same values the snap engine sees on
-        // its own state surface — and routes the screen through the mode
-        // provider, collapsing the 3-step `(modeFor + currentVirtualDesktop
-        // + currentActivity)` cascade rebuild to one snapshot call.
-        if (m_contextResolver && m_contextResolver->isDisabled(m_contextResolver->handleFor(result.screenId))) {
-            qCInfo(lcDbusWindow) << "applySnapResult: refusing auto-snap of" << windowId
-                                 << "— PlasmaZones is disabled for screen" << result.screenId;
-            return false;
+        // The destination DESKTOP is result.virtualDesktop when the result was
+        // routed there (a RouteToDesktop placement, calculateSnapToPlacementRule),
+        // otherwise the current desktop (every other calculator opens the window on
+        // the current desktop, or refuses outright on a saved-desktop mismatch).
+        // For a routed result handleForPersisted composes the explicit destination
+        // desktop, so the disable check keys on the desktop the window will actually
+        // land on rather than the live current desktop; for a non-routed result
+        // (virtualDesktop == 0) handleFor is exact, pulling (currentVirtualDesktop,
+        // currentActivity) from the daemon's VDM/AM — the same values the snap engine
+        // sees — and routing the screen through the mode provider in one snapshot.
+        if (m_contextResolver) {
+            const auto handle = result.virtualDesktop >= 1
+                ? m_contextResolver->handleForPersisted(result.screenId, result.virtualDesktop,
+                                                        m_contextResolver->currentActivity())
+                : m_contextResolver->handleFor(result.screenId);
+            if (m_contextResolver->isDisabled(handle)) {
+                qCInfo(lcDbusWindow) << "applySnapResult: refusing auto-snap of" << windowId
+                                     << "— PlasmaZones is disabled for screen" << result.screenId;
+                return false;
+            }
         }
     }
 

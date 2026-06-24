@@ -352,6 +352,38 @@ private Q_SLOTS:
         m_wts->setSnapState(nullptr);
     }
 
+    // Un-floating a window into a matched SnapToZone + RouteToDesktop rule must
+    // COMMIT the zone assignment on the routed desktop, not the current one. The
+    // rule resolves the zones against the destination desktop's layout, so a
+    // commit that dropped the routed desktop would record those zones under the
+    // current desktop — a cross-desktop assignment mismatch. Mirrors the open
+    // path (resolveWindowRestore → commitSnap forwards result.virtualDesktop).
+    void testUnfloatToZone_routeToDesktop_commitsAssignmentOnRoutedDesktop()
+    {
+        SnapEngine engine(m_layoutManager, m_wts, nullptr, nullptr, nullptr);
+        engine.setEngineSettings(m_settings);
+        m_wts->setSnapState(engine.snapState());
+
+        installLayout(3);
+        // Snap zone 1, and route to virtual desktop 2.
+        engine.setPlacementZonesResolver([](const QString&, const QString&) {
+            PlacementDirective d;
+            d.zoneOrdinals = {1};
+            d.targetDesktop = 2;
+            return d;
+        });
+
+        // Mark the window floating so the public toggle takes the un-float path,
+        // which routes through the private unfloatToZone (the code under test).
+        engine.snapState()->setFloating(QStringLiteral("fresh|win"), true);
+        engine.toggleWindowFloat(QStringLiteral("fresh|win"), QStringLiteral("DP-1"));
+
+        QVERIFY2(!engine.snapState()->zoneForWindow(QStringLiteral("fresh|win")).isEmpty(),
+                 "un-floating into a SnapToZone + RouteToDesktop rule must assign the window to its rule zone");
+        QCOMPARE(engine.snapState()->desktopForWindow(QStringLiteral("fresh|win")), 2);
+        m_wts->setSnapState(nullptr);
+    }
+
     // An empty resolver result (no matching rule) must NOT snap — the window
     // falls through to the normal restore/float path.
     void testResolveWindowRestore_placementRule_emptyResolver_doesNotSnap()

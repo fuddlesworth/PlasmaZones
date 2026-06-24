@@ -2133,6 +2133,15 @@ void Daemon::stop()
         // the symmetric clear (snapadaptor.cpp).
         m_windowTrackingAdaptor->setScreenModeRouter(nullptr);
     }
+    if (m_autotileAdaptor) {
+        // Sever the autotile adaptor's post-construction borrow of the WTA (wired
+        // in start() so the autotile open path can resolve RouteToScreen /
+        // RouteToDesktop rules). The autotile open path no-ops on a null WTA, so
+        // a D-Bus open landing in the teardown gap can't drive routing against
+        // half-torn-down state. Symmetric with the resolver / router clears above
+        // and honours the shutdown-nullptr contract documented in autotileadaptor.h.
+        m_autotileAdaptor->setWindowTrackingAdaptor(nullptr);
+    }
     m_contextResolver.reset();
     m_settingsGateAdapter.reset();
     m_screenModeAdapter.reset();
