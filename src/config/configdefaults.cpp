@@ -59,26 +59,39 @@ QJsonObject ConfigDefaults::defaultLayoutVisibilitySettings()
     // config layer takes no phosphor-zones / phosphor-layout-api dependency.
     const QJsonObject hidden{{QStringLiteral("hiddenFromSelector"), true}};
 
-    // Non-curated standard snapping layouts, by bundled layout UUID.
+    // Non-curated standard snapping layouts, by bundled layout UUID. "Wide" is
+    // curated (visible by default), so the standard set shows an even eight:
+    // BSP, Columns (2), Columns (3), Focus, Grid (2x2), Master + Stack, Rows (2),
+    // and Wide.
     static const QStringList layoutIds{
         QStringLiteral("{b8669c74-947a-4551-ba8b-79b6444439e8}"), // Fibonacci
         QStringLiteral("{a40ad8ca-2d60-4418-92cc-01b83420918e}"), // Grid (3x2)
         QStringLiteral("{0c9585bc-ecae-4e87-a6b8-9d34e9b791f2}"), // Priority Grid
         QStringLiteral("{a11899b1-f0e3-4425-9363-acb71726c566}"), // Split Focus
-        QStringLiteral("{a83addbc-1907-45a8-a3d5-59dedf079030}"), // Wide
     };
 
-    // Non-curated tiling algorithms (visible set: bsp, master-stack, monocle,
-    // columns, dwindle-memory, three-column, grid, deck).
+    // Non-curated tiling algorithms (visible set: aligned-grid, bsp, columns,
+    // deck, dwindle-memory, master-stack, monocle, three-column). The plain
+    // "grid" is hidden by default — "aligned-grid" supersedes it as the curated
+    // grid (equal cells, but resize-aware), so only one grid shows out of the box.
     static const QStringList algorithmIds{
-        QStringLiteral("cascade"),       QStringLiteral("centered-master"),
-        QStringLiteral("cluster"),       QStringLiteral("corner-master"),
-        QStringLiteral("dwindle"),       QStringLiteral("floating-center"),
-        QStringLiteral("focus-sidebar"), QStringLiteral("horizontal-deck"),
-        QStringLiteral("paper"),         QStringLiteral("quadrant-priority"),
-        QStringLiteral("rows"),          QStringLiteral("spiral"),
-        QStringLiteral("spread"),        QStringLiteral("stair"),
-        QStringLiteral("tatami"),        QStringLiteral("wide"),
+        QStringLiteral("cascade"),
+        QStringLiteral("centered-master"),
+        QStringLiteral("cluster"),
+        QStringLiteral("corner-master"),
+        QStringLiteral("dwindle"),
+        QStringLiteral("floating-center"),
+        QStringLiteral("focus-sidebar"),
+        QStringLiteral("grid"),
+        QStringLiteral("horizontal-deck"),
+        QStringLiteral("paper"),
+        QStringLiteral("quadrant-priority"),
+        QStringLiteral("rows"),
+        QStringLiteral("spiral"),
+        QStringLiteral("spread"),
+        QStringLiteral("stair"),
+        QStringLiteral("tatami"),
+        QStringLiteral("wide"),
         QStringLiteral("zen"),
     };
 
