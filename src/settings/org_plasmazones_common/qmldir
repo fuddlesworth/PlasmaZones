@@ -1,5 +1,6 @@
 module org.plasmazones.common
 AspectRatioBadge 1.0 AspectRatioBadge.qml
+CapabilityBadgeRow 1.0 CapabilityBadgeRow.qml
 ZonePreview 1.0 ZonePreview.qml
 CategoryBadge 1.0 CategoryBadge.qml
 CategoryMenuButton 1.0 CategoryMenuButton.qml

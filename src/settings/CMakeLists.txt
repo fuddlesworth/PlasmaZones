@@ -374,6 +374,7 @@ qt_add_resources(plasmazones-settings "shared_common_qml"
     BASE "${CMAKE_SOURCE_DIR}/src/shared"
     FILES
         ${CMAKE_SOURCE_DIR}/src/shared/AspectRatioBadge.qml
+        ${CMAKE_SOURCE_DIR}/src/shared/CapabilityBadgeRow.qml
         ${CMAKE_SOURCE_DIR}/src/shared/ZonePreview.qml
         ${CMAKE_SOURCE_DIR}/src/shared/CategoryBadge.qml
         ${CMAKE_SOURCE_DIR}/src/shared/CategoryMenuButton.qml
