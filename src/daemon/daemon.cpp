@@ -1154,10 +1154,11 @@ bool Daemon::init()
     // The closure resolves the screen's CURRENT context here (the engine library
     // stays settings-agnostic) and adapts ContextGapOverride into the
     // PerScreenKeys-shaped map the resolver already consumes.
-    // setContextGapProvider is derived-only (AutotileEngine), while
-    // m_autotileEngine is held as the base PlacementEngineBase — narrow with a
-    // qobject_cast (same pattern as the snap-engine wiring).
-    if (auto* autotileEngine = qobject_cast<PhosphorTileEngine::AutotileEngine*>(m_autotileEngine.get())) {
+    // setContextGapProvider is derived-only (AutotileEngine); m_autotileEngine is
+    // held as the base PlacementEngineBase. Use the derived `autotileEngine`
+    // pointer captured above — the std::move into m_autotileEngine transferred
+    // ownership but not the pointee, so it still points at the live engine.
+    if (autotileEngine) {
         autotileEngine->setContextGapProvider([this](const QString& screenId) -> QVariantMap {
             if (!m_layoutManager) {
                 return {};
