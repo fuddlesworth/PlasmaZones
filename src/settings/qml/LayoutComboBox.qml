@@ -429,8 +429,12 @@ ComboBox {
 
         // Opaque background prevents the ComboBox's closed-state display text
         // from bleeding through the popup delegate (especially the first item).
+        // Highlight matches the standard subtle tint used everywhere else (e.g.
+        // LayoutGridDelegate): a 0.15-alpha highlightColor wash rather than a
+        // full opaque band, so badges and labels stay legible without having to
+        // recolor to highlightedTextColor.
         background: Rectangle {
-            color: highlighted ? Kirigami.Theme.highlightColor : isCurrentSelection ? Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g, Kirigami.Theme.highlightColor.b, 0.15) : Kirigami.Theme.backgroundColor
+            color: highlighted ? Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g, Kirigami.Theme.highlightColor.b, 0.15) : Kirigami.Theme.backgroundColor
         }
 
         contentItem: RowLayout {
@@ -443,7 +447,7 @@ ComboBox {
                 Layout.alignment: Qt.AlignVCenter
                 source: "checkmark"
                 visible: isCurrentSelection
-                color: highlighted ? Kirigami.Theme.highlightedTextColor : Kirigami.Theme.textColor
+                color: Kirigami.Theme.textColor
             }
 
             // Spacer when no checkmark — keeps text aligned
@@ -505,7 +509,7 @@ ComboBox {
                     Label {
                         text: modelData.text
                         font.weight: (highlighted || isCurrentSelection) ? Font.DemiBold : Font.Normal
-                        color: highlighted ? Kirigami.Theme.highlightedTextColor : Kirigami.Theme.textColor
+                        color: Kirigami.Theme.textColor
                         elide: Text.ElideRight
                         Layout.fillWidth: true
                     }
@@ -545,7 +549,7 @@ ComboBox {
                         }
                     }
                     font: Kirigami.Theme.smallFont
-                    color: highlighted ? Kirigami.Theme.highlightedTextColor : Kirigami.Theme.textColor
+                    color: Kirigami.Theme.textColor
                     opacity: 0.7
                     elide: Text.ElideRight
                     Layout.fillWidth: true
