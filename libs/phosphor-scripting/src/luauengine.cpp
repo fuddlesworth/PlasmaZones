@@ -11,12 +11,50 @@
 #include <luacode.h>
 
 #include <cstdlib>
+#include <locale.h>
 
 namespace PhosphorScripting {
 
 namespace {
 // Compile/run budget for prelude + module chunks (well-behaved host code).
 constexpr int ChunkTimeoutMs = 1000;
+
+// RAII guard that pins the calling thread's LC_NUMERIC to "C" for its
+// lifetime. luau_compile() lexes number literals through Luau's parser, which
+// converts them with strtod() — and strtod() honours LC_NUMERIC. Under a locale
+// whose decimal separator is not '.' (e.g. de_DE, fr_FR, most non-English
+// European locales use ','), strtod("0.1") parses only "0" and stops at the
+// '.', so Luau rejects the literal as a "Malformed number" and the entire chunk
+// fails to compile. The bundled tiling algorithms and the pluau prelude are all
+// written with '.'-decimal literals, so on a comma-decimal locale every one of
+// them would fail to load and the user would see no algorithms at all. Scoping
+// the override to the compiling thread via uselocale() keeps it off the global
+// process locale, so user-facing number formatting elsewhere is untouched.
+class ScopedCNumericLocale
+{
+public:
+    ScopedCNumericLocale()
+    {
+        // Created once and intentionally never freed (process-lifetime). The
+        // locale object is immutable after creation, so sharing the same
+        // handle across threads via uselocale() is safe.
+        static const locale_t s_cLocale = newlocale(LC_NUMERIC_MASK, "C", static_cast<locale_t>(nullptr));
+        if (s_cLocale != static_cast<locale_t>(nullptr)) {
+            m_previous = uselocale(s_cLocale);
+        }
+    }
+    ~ScopedCNumericLocale()
+    {
+        if (m_previous != static_cast<locale_t>(nullptr)) {
+            uselocale(m_previous);
+        }
+    }
+    ScopedCNumericLocale(const ScopedCNumericLocale&) = delete;
+    ScopedCNumericLocale& operator=(const ScopedCNumericLocale&) = delete;
+
+private:
+    locale_t m_previous = static_cast<locale_t>(nullptr);
+};
 
 // Read the error object on the top of the stack as text. Luau leaves a
 // non-string error object (e.g. `error({})`) un-coercible, in which case
@@ -125,7 +163,13 @@ bool LuauEngine::runPrelude(const QString& chunkName, const QByteArray& source, 
     }
 
     size_t bcSize = 0;
-    char* bc = luau_compile(source.constData(), static_cast<size_t>(source.size()), nullptr, &bcSize);
+    char* bc = nullptr;
+    {
+        // Pin LC_NUMERIC to "C" so '.'-decimal literals lex correctly
+        // regardless of the user's locale (see ScopedCNumericLocale).
+        const ScopedCNumericLocale cNumeric;
+        bc = luau_compile(source.constData(), static_cast<size_t>(source.size()), nullptr, &bcSize);
+    }
     // luau_compile allocates the result with its own allocator (outside the VM
     // heap cap) and encodes syntax errors into a non-null blob — a null return
     // means allocation failure, not a syntax error.
@@ -178,7 +222,13 @@ int LuauEngine::loadModule(const QString& chunkName, const QByteArray& source, Q
     }
 
     size_t bcSize = 0;
-    char* bc = luau_compile(source.constData(), static_cast<size_t>(source.size()), nullptr, &bcSize);
+    char* bc = nullptr;
+    {
+        // Pin LC_NUMERIC to "C" so '.'-decimal literals lex correctly
+        // regardless of the user's locale (see ScopedCNumericLocale).
+        const ScopedCNumericLocale cNumeric;
+        bc = luau_compile(source.constData(), static_cast<size_t>(source.size()), nullptr, &bcSize);
+    }
     // See runPrelude: a null blob is an allocation failure, not a syntax error.
     if (!bc) {
         if (error) {
