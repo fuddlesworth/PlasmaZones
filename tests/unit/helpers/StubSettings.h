@@ -1192,11 +1192,11 @@ private:
     QStringList m_snappingLayoutOrder;
     QStringList m_tilingAlgorithmOrder;
     QVariantList m_dragActivationTriggers;
+    int m_minimumWindowWidth = 0;
+    int m_minimumWindowHeight = 0;
     // Animation-filter defaults routed through ConfigDefaults so a future
     // tweak to the production defaults flows into tests automatically — keeps
     // the stub from drifting into "tests pass against a stale baseline".
-    int m_minimumWindowWidth = 0;
-    int m_minimumWindowHeight = 0;
     bool m_animationExcludeTransientWindows = ConfigDefaults::animationExcludeTransientWindows();
     bool m_animationExcludeNotificationsAndOsd = ConfigDefaults::animationExcludeNotificationsAndOsd();
     int m_animationMinimumWindowWidth = ConfigDefaults::animationMinimumWindowWidth();

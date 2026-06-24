@@ -463,9 +463,10 @@ SnapResult SnapEngine::resolveWindowRestore(const QString& windowId, const QStri
     // has already updated (Electron/CEF apps renaming themselves) matches
     // against its CURRENT class, not a stale first-seen one. m_windowTracker
     // is non-null at runtime; production code never reaches this with a null
-    // tracker. isAppIdExcluded resolves through the unified RuleEvaluator
-    // (daemon-flavour AppIdMatches Exclude rules) — the same match model the
-    // effect uses, replacing the hand-rolled appIdMatches loops.
+    // tracker. isWindowExcluded resolves the full WindowQuery (class/title/
+    // frame size) through the unified RuleEvaluator and applies the
+    // minimum-window-size thresholds — the same match model the autotile
+    // engine uses, replacing the hand-rolled appIdMatches loops.
     if (m_windowTracker && isWindowExcluded(windowId)) {
         qCInfo(PhosphorSnapEngine::lcSnapEngine) << "resolveWindowRestore:" << windowId << "excluded by rule or size";
         return SnapResult::noSnap();

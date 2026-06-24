@@ -1917,6 +1917,42 @@ private Q_SLOTS:
         QVERIFY(!engine.isWindowExcluded(QStringLiteral("app|unknown")));
     }
 
+    // resolveWindowRestore — full-query/size exclusion path (parity consumer)
+    //
+    // isWindowExcluded is exercised in isolation above; this pins the production
+    // wiring in resolveWindowRestore (lifecycle.cpp), which switched from the
+    // appId-only isAppIdExcluded to the full-query isWindowExcluded. A window
+    // with no stored record falls through to the legacy chain and must be
+    // refused (noSnap) when its full query is sub-threshold, with the distinct
+    // "excluded by rule or size" log identifying the branch that produced it.
+    void testResolveWindowRestore_excludedBySize_returnsNoSnap()
+    {
+        SnapEngine engine(m_layoutManager, m_wts, nullptr, nullptr, nullptr);
+        engine.setEngineSettings(m_settings);
+        m_wts->setSnapState(engine.snapState());
+
+        m_settings->setMinimumWindowWidth(200);
+        m_settings->setMinimumWindowHeight(150);
+        // Full query carries a sub-threshold frame → isWindowExcluded is true.
+        engine.setExclusionQueryProvider([](const QString&) {
+            PhosphorWindowRules::WindowQuery q;
+            q.width = 80;
+            q.height = 60;
+            return std::optional<PhosphorWindowRules::WindowQuery>(q);
+        });
+
+        // No stored record for this windowId → resolveWindowRestore falls through
+        // to the legacy chain and hits the exclusion check.
+        PhosphorEngine::SnapResult result;
+        const QStringList lines =
+            captureResolveLogs(engine, QStringLiteral("app|tiny-restore"), QStringLiteral("DP-1"), &result);
+
+        QVERIFY2(!result.shouldSnap, "a size-excluded window must not be auto-restored");
+        QVERIFY2(lines.join(QLatin1Char('\n')).contains(QStringLiteral("excluded by rule or size")),
+                 "the exclusion branch (rule or size) must be the one that refused the restore");
+        m_wts->setSnapState(nullptr);
+    }
+
     // Honest scope of this test (renamed from the earlier
     // `…InvalidatesEvalCache` name): exercises that across in-place
     // `WindowRuleSet::setRules` edits at the SAME bound pointer, the

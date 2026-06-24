@@ -2160,6 +2160,17 @@ void Daemon::stop()
         m_windowTrackingAdaptor->setWindowRuleStore(nullptr);
     }
 
+    // Clear the autotile context-gap provider, which captures `this` (Daemon, via
+    // m_layoutManager / currentDesktopForScreen / currentActivity). No live deref
+    // can occur today — m_autotileEngine is destroyed below while `this` is still
+    // alive — but clearing it keeps the "every `this`-capturing closure is cleared
+    // before teardown" contract complete and grep-discoverable, exactly like the
+    // SnapEngine exclude-rule borrow above. `m_autotileEngine` is base-typed
+    // `PlacementEngineBase*`; setContextGapProvider lives on the concrete engine.
+    if (auto* concreteAutotile = qobject_cast<PhosphorTileEngine::AutotileEngine*>(m_autotileEngine.get())) {
+        concreteAutotile->setContextGapProvider({});
+    }
+
     // Destroy engines now (during stop(), before Qt child destruction order).
     m_snapEngine.reset();
     m_autotileEngine.reset();

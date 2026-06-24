@@ -154,8 +154,9 @@ std::optional<QVariant> PerScreenConfigResolver::perScreenOverride(const QString
 }
 
 namespace {
-// Clamp a raw gap value to the shared [MinGap, MaxGap] range — the same range
-// the snapping side clamps to (tied by a static_assert in the daemon).
+// Clamp a raw gap value to [MinGap, MaxGap]. The ceiling is tied to the
+// snapping side by a static_assert in the daemon; the floor is a fixed 0 on
+// both sides (snapping has no MinGap constant to tie against).
 int clampGap(int v)
 {
     return qBound(PhosphorTiles::AutotileDefaults::MinGap, v, PhosphorTiles::AutotileDefaults::MaxGap);

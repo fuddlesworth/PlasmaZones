@@ -641,8 +641,9 @@ public:
     /// navigation_actions.cpp for the lifetime contract — the pointer is
     /// borrowed and the cached evaluator drops on a pointer change.
     ///
-    /// The borrowed rule set MUST outlive every subsequent
-    /// `isAppIdExcluded` call. The Daemon currently guarantees this
+    /// The borrowed rule set MUST outlive every subsequent exclusion
+    /// resolve (`isWindowExcluded` / `evaluateExcludeRules`, and the
+    /// legacy `isAppIdExcluded` seam). The Daemon currently guarantees this
     /// through member-declaration order (`m_excludeRuleSet` is declared
     /// before `m_snapEngine` so reverse-order destruction tears the
     /// engine down first), AND additionally clears the borrow
