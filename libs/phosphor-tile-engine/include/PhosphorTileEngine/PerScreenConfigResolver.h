@@ -126,6 +126,15 @@ public:
 private:
     std::optional<QVariant> perScreenOverride(const QString& screenId, const QString& key) const;
 
+    /// Clamped per-context override for a single gap key (InnerGap / OuterGap),
+    /// or nullopt when no provider is wired or the context map lacks the key.
+    std::optional<int> contextGap(const QString& screenId, QLatin1String key) const;
+
+    /// Per-context outer-gap override resolved as one atomic layer (per-side
+    /// honoured only when UsePerSideOuterGap is set), mirroring the snapping
+    /// pipeline. nullopt when the context layer carries no outer-gap info.
+    std::optional<::PhosphorLayout::EdgeGaps> contextOuterGaps(const QString& screenId) const;
+
     AutotileEngine* m_engine = nullptr;
     QHash<QString, QVariantMap> m_perScreenOverrides;
     ContextGapProvider m_contextGapProvider{};

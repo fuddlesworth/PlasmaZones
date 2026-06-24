@@ -679,35 +679,24 @@ public:
     }
 
     /// True if @p appId matches an enabled `Exclude`-action WindowRule
-    /// whose match leaf targets the `AppId` field. Public so the unit-
-    /// test layer can directly verify the wiring (nullptr borrow,
-    /// empty-set short-circuit, evaluator rebind on pointer change,
-    /// revision-bump invalidation on in-place setRules edits) without
-    /// staging the heavy navigation fixture every public navigation
-    /// method needs. Pure const observer — no side effects beyond the
-    /// `mutable` evaluator cache.
-    ///
-    /// **Limitation:** the engine builds a `WindowQuery` with only
-    /// `query.appId` populated and feeds it to the bound `RuleEvaluator`.
-    /// A user-authored Exclude rule whose match leaf targets a non-
-    /// `AppId` field (`WindowClass Contains "steam"`, `Title Regex …`,
-    /// a composite match) silently evaluates to false here because
-    /// those leaves never resolve against a query that only knows the
-    /// appId. Migration-produced rules are all `AppId AppIdMatches
-    /// <pattern>` so legacy v3 behaviour is preserved exactly; the gap
-    /// only opens for hand-authored rules with broader match leaves.
-    /// A more thorough check would require the caller to pass the full
-    /// `WindowQuery` it can build from the WTS registry's per-window
-    /// attributes, instead of just the appId.
+    /// resolved against an appId-ONLY `WindowQuery`. This is a narrow seam:
+    /// the runtime exclusion path is @ref isWindowExcluded, which evaluates the
+    /// FULL window attributes; this method survives as (a) the early-init /
+    /// no-metadata fallback inside isWindowExcluded and (b) a directly testable
+    /// hook for the rule-set wiring (nullptr borrow, empty-set short-circuit,
+    /// evaluator rebind on pointer change, revision-bump invalidation). An
+    /// Exclude rule keyed on a non-`AppId` field (`WindowClass Contains …`,
+    /// `Title Regex …`) does NOT match here — use isWindowExcluded for that.
+    /// Pure const observer — no side effects beyond the `mutable` evaluator cache.
     bool isAppIdExcluded(const QString& appId) const;
 
     /// Resolve exclusion for a live windowId using the FULL window attributes
     /// when the exclusion query provider is wired (matching the autotile
     /// engine): evaluates the Exclude rule set against the complete WindowQuery
     /// and applies the minimum-window-size thresholds to the query's frame
-    /// size. Falls back to the appId-only path when no provider is set or window
-    /// metadata is not yet known. Public so the unit-test layer can drive the
-    /// wiring directly, mirroring @ref isAppIdExcluded.
+    /// size. Falls back to the appId-only path (@ref isAppIdExcluded's query
+    /// shape) when no provider is set or window metadata is not yet known.
+    /// Public so the unit-test layer can drive the wiring directly.
     bool isWindowExcluded(const QString& windowId) const;
 
 Q_SIGNALS:
@@ -848,13 +837,18 @@ private:
     // section above (so the unit tests can drive the wiring directly); full
     // docstrings live with those declarations.
 
+    /// Shared tail of both exclusion entry points: bind the lazy evaluator to
+    /// the current Exclude rule set (empty/null set short-circuits) and resolve
+    /// @p query. Keeps the rule-set/evaluator invariant in one place.
+    bool evaluateExcludeRules(const PhosphorWindowRules::WindowQuery& query) const;
+
     /// Borrowed pointer to the daemon's filtered Exclude rule set. nullptr
     /// in early-init paths (before the daemon wires the store) — the
-    /// `isAppIdExcluded` fast path short-circuits to false in that case.
+    /// `evaluateExcludeRules` fast path short-circuits to false in that case.
     ///
     /// @note Daemon-main-thread-only. Every access path runs on the
     /// daemon's main thread (rulesChanged signal delivery, navigation
-    /// slot dispatch, in-thread isAppIdExcluded calls). `setExcludeRuleSet`
+    /// slot dispatch, in-thread exclusion-resolve calls). `setExcludeRuleSet`
     /// writes the raw pointer non-atomically and the paired
     /// `m_excludeEvaluator` mutates a lazy priority-order index that
     /// must be externally serialised (see RuleEvaluator.h's thread-

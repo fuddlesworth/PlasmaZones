@@ -101,6 +101,8 @@ void WindowTrackingAdaptor::setEngines(PhosphorEngine::PlacementEngineBase* snap
     if (m_cachedSnapEngine) {
         m_cachedSnapEngine->setShouldRestorePredicate({});
         m_cachedSnapEngine->setRestorePositionPredicate({});
+        m_cachedSnapEngine->setManagedRestorePredicate({});
+        m_cachedSnapEngine->setExclusionQueryProvider({});
         m_cachedSnapEngine->setFloatPredicate({});
         m_cachedSnapEngine->setPlacementZonesResolver({});
     }

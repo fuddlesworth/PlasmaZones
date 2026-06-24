@@ -148,22 +148,24 @@ void SnapEngine::setExcludeRuleSet(const PhosphorWindowRules::WindowRuleSet* rul
     m_excludeEvaluator.reset();
 }
 
-bool SnapEngine::isAppIdExcluded(const QString& appId) const
+bool SnapEngine::evaluateExcludeRules(const PhosphorWindowRules::WindowQuery& query) const
 {
-    // No-wiring fast path: early-init can call isAppIdExcluded before the
-    // daemon hands the rule store over.
-    if (!m_excludeRuleSet) {
+    // No-wiring fast path: early-init can run before the daemon hands the rule
+    // store over; an empty set short-circuits with no evaluator allocation.
+    if (!m_excludeRuleSet || m_excludeRuleSet->isEmpty()) {
         return false;
-    }
-    if (m_excludeRuleSet->isEmpty()) {
-        return false; // no-exclusions fast path
     }
     if (!m_excludeEvaluator) {
         m_excludeEvaluator.emplace(*m_excludeRuleSet);
     }
+    return m_excludeEvaluator->resolve(query).isExcluded();
+}
+
+bool SnapEngine::isAppIdExcluded(const QString& appId) const
+{
     PhosphorWindowRules::WindowQuery query;
     query.appId = appId;
-    return m_excludeEvaluator->resolve(query).isExcluded();
+    return evaluateExcludeRules(query);
 }
 
 bool SnapEngine::isWindowExcluded(const QString& windowId) const
@@ -194,13 +196,7 @@ bool SnapEngine::isWindowExcluded(const QString& windowId) const
     }
 
     // Rule-based exclusion against the full query (no rules → nothing to match).
-    if (!m_excludeRuleSet || m_excludeRuleSet->isEmpty()) {
-        return false;
-    }
-    if (!m_excludeEvaluator) {
-        m_excludeEvaluator.emplace(*m_excludeRuleSet);
-    }
-    return m_excludeEvaluator->resolve(*query).isExcluded();
+    return evaluateExcludeRules(*query);
 }
 
 bool SnapEngine::isWindowExcludedForAction(const QString& windowId, const QString& action, const QString& screenId)

@@ -1164,25 +1164,33 @@ bool Daemon::init()
             if (gaps.isEmpty()) {
                 return {};
             }
+            namespace PSK = PhosphorEngine::PerScreenKeys;
             QVariantMap map;
             // zonePadding is snapping's inner spacing — the autotile inner gap.
             if (gaps.zonePadding) {
-                map.insert(QStringLiteral("InnerGap"), *gaps.zonePadding);
+                map.insert(QString(PSK::InnerGap), *gaps.zonePadding);
             }
             if (gaps.outerGap) {
-                map.insert(QStringLiteral("OuterGap"), *gaps.outerGap);
+                map.insert(QString(PSK::OuterGap), *gaps.outerGap);
+            }
+            // The per-side toggle gates whether the resolver honours the per-side
+            // values below — without it, stale per-side entries (left from when
+            // the rule had per-side enabled) would apply on autotile but not on
+            // snapping, which checks this flag (resolveOuterGapsFromMap).
+            if (gaps.usePerSideOuterGap) {
+                map.insert(QString(PSK::UsePerSideOuterGap), *gaps.usePerSideOuterGap);
             }
             if (gaps.outerGapTop) {
-                map.insert(QStringLiteral("OuterGapTop"), *gaps.outerGapTop);
+                map.insert(QString(PSK::OuterGapTop), *gaps.outerGapTop);
             }
             if (gaps.outerGapBottom) {
-                map.insert(QStringLiteral("OuterGapBottom"), *gaps.outerGapBottom);
+                map.insert(QString(PSK::OuterGapBottom), *gaps.outerGapBottom);
             }
             if (gaps.outerGapLeft) {
-                map.insert(QStringLiteral("OuterGapLeft"), *gaps.outerGapLeft);
+                map.insert(QString(PSK::OuterGapLeft), *gaps.outerGapLeft);
             }
             if (gaps.outerGapRight) {
-                map.insert(QStringLiteral("OuterGapRight"), *gaps.outerGapRight);
+                map.insert(QString(PSK::OuterGapRight), *gaps.outerGapRight);
             }
             return map;
         });

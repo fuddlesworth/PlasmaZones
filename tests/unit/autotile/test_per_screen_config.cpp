@@ -354,6 +354,96 @@ private Q_SLOTS:
         QCOMPARE(engine.effectiveInnerGap(screen), 5);
     }
 
+    // Context per-side outer gaps are honoured (and beat a per-screen per-side
+    // override) only when the rule set UsePerSideOuterGap — mirroring snapping.
+    void testPerScreen_contextGapProvider_perSideHonoredWhenUsePerSideSet()
+    {
+        AutotileEngine engine(nullptr, nullptr, nullptr, PlasmaZones::TestHelpers::testRegistry());
+        const QString screen = QStringLiteral("DP-1");
+        engine.setAutotileScreens({screen});
+        engine.config()->outerGap = 6;
+
+        // A per-screen per-side override sits below the context layer.
+        QVariantMap overrides;
+        overrides[QStringLiteral("OuterGapTop")] = 10;
+        engine.applyPerScreenConfig(screen, overrides);
+
+        engine.setContextGapProvider([screen](const QString& s) -> QVariantMap {
+            if (s != screen) {
+                return {};
+            }
+            QVariantMap m;
+            m.insert(QStringLiteral("UsePerSideOuterGap"), true);
+            m.insert(QStringLiteral("OuterGapTop"), 20);
+            m.insert(QStringLiteral("OuterGapBottom"), 22);
+            return m;
+        });
+
+        const ::PhosphorLayout::EdgeGaps gaps = engine.effectiveOuterGaps(screen);
+        QCOMPARE(gaps.top, 20); // context per-side beats per-screen per-side (10)
+        QCOMPARE(gaps.bottom, 22);
+        // Unset sides fall back to the global outer gap (no context uniform).
+        QCOMPARE(gaps.left, 6);
+        QCOMPARE(gaps.right, 6);
+    }
+
+    // Context per-side outer gaps WITHOUT UsePerSideOuterGap are ignored — a
+    // stale per-side entry must not apply (it would diverge from snapping).
+    void testPerScreen_contextGapProvider_perSideIgnoredWhenUsePerSideUnset()
+    {
+        AutotileEngine engine(nullptr, nullptr, nullptr, PlasmaZones::TestHelpers::testRegistry());
+        const QString screen = QStringLiteral("DP-1");
+        engine.setAutotileScreens({screen});
+        engine.config()->outerGap = 6;
+
+        engine.setContextGapProvider([screen](const QString& s) -> QVariantMap {
+            if (s != screen) {
+                return {};
+            }
+            QVariantMap m;
+            m.insert(QStringLiteral("OuterGapTop"), 30); // no UsePerSideOuterGap flag
+            return m;
+        });
+
+        const ::PhosphorLayout::EdgeGaps gaps = engine.effectiveOuterGaps(screen);
+        // The context layer yields nothing (per-side gated off, no uniform), so
+        // resolution falls through to the global uniform outer gap.
+        QCOMPARE(gaps.top, 6);
+        QCOMPARE(gaps.bottom, 6);
+        QCOMPARE(gaps.left, 6);
+        QCOMPARE(gaps.right, 6);
+    }
+
+    // A context uniform OuterGap wins as one atomic layer: it is NOT blended
+    // per-key with a static per-screen per-side override below it.
+    void testPerScreen_contextGapProvider_uniformWinsAtomicallyOverPerScreenPerSide()
+    {
+        AutotileEngine engine(nullptr, nullptr, nullptr, PlasmaZones::TestHelpers::testRegistry());
+        const QString screen = QStringLiteral("DP-1");
+        engine.setAutotileScreens({screen});
+        engine.config()->outerGap = 6;
+
+        QVariantMap overrides;
+        overrides[QStringLiteral("OuterGapTop")] = 40; // per-screen per-side
+        engine.applyPerScreenConfig(screen, overrides);
+
+        engine.setContextGapProvider([screen](const QString& s) -> QVariantMap {
+            if (s != screen) {
+                return {};
+            }
+            QVariantMap m;
+            m.insert(QStringLiteral("OuterGap"), 12); // context uniform, no per-side
+            return m;
+        });
+
+        const ::PhosphorLayout::EdgeGaps gaps = engine.effectiveOuterGaps(screen);
+        // All sides take the context uniform; the per-screen top=40 does NOT bleed in.
+        QCOMPARE(gaps.top, 12);
+        QCOMPARE(gaps.bottom, 12);
+        QCOMPARE(gaps.left, 12);
+        QCOMPARE(gaps.right, 12);
+    }
+
     // ═══════════════════════════════════════════════════════════════════════════
     // Edge cases
     // ═══════════════════════════════════════════════════════════════════════════

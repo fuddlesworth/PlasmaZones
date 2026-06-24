@@ -1086,7 +1086,14 @@ private Q_SLOTS:
         engine.setEngineSettings(m_settings);
         m_wts->setSnapState(engine.snapState());
 
-        engine.setManagedRestorePredicate([](const QString&) {
+        // Record that the gate actually CONSULTED the predicate. Geometry can't
+        // resolve in the guiless fixture, so we can't assert a positive snap —
+        // but this flag fails if the managed-restore gate were removed entirely
+        // (a full revert would never call the predicate), which a bare
+        // log-absence assertion would not catch.
+        bool consulted = false;
+        engine.setManagedRestorePredicate([&consulted](const QString&) {
+            consulted = true;
             return true;
         });
 
@@ -1104,11 +1111,9 @@ private Q_SLOTS:
         const QStringList lines =
             captureResolveLogs(engine, QStringLiteral("app|new"), QStringLiteral("DP-1"), &result);
 
-        // Geometry can't resolve in the guiless fixture, so the snapped restore
-        // still terminates at noSnap — but the managed gate must NOT be what
-        // skipped it.
+        QVERIFY2(consulted, "the snapped-record restore path must consult the managed-restore predicate");
         QVERIFY2(!lines.join(QLatin1Char('\n')).contains(QStringLiteral("managed-restore gate skipped snapped record")),
-                 "with managed restore on, the managed-restore gate must not fire");
+                 "with managed restore on, the managed-restore gate must not skip the record");
         m_wts->setSnapState(nullptr);
     }
 
@@ -1119,7 +1124,9 @@ private Q_SLOTS:
         m_wts->setSnapState(engine.snapState());
 
         // No predicate injected — the engine must restore snapped records
-        // unconditionally (the historical default).
+        // unconditionally (the historical default). This guards against a
+        // regression that treated a NULL predicate as "block" (skip): the gate
+        // must never fire when no predicate is wired.
         PhosphorEngine::WindowPlacement rec;
         rec.windowId = QStringLiteral("app|orig");
         rec.appId = QStringLiteral("app");
@@ -1862,8 +1869,41 @@ private Q_SLOTS:
         });
         QVERIFY(!engine.isWindowExcluded(QStringLiteral("app|big")));
 
+        // OR semantics: width under but height over → excluded (pins that the
+        // check is OR, not AND, and that each dimension is evaluated).
+        engine.setExclusionQueryProvider([](const QString&) {
+            PhosphorWindowRules::WindowQuery q;
+            q.width = 120; // under 200
+            q.height = 600; // over 150
+            return std::optional<PhosphorWindowRules::WindowQuery>(q);
+        });
+        QVERIFY(engine.isWindowExcluded(QStringLiteral("app|narrow")));
+
+        // Symmetric: height under but width over → excluded.
+        engine.setExclusionQueryProvider([](const QString&) {
+            PhosphorWindowRules::WindowQuery q;
+            q.width = 800; // over 200
+            q.height = 90; // under 150
+            return std::optional<PhosphorWindowRules::WindowQuery>(q);
+        });
+        QVERIFY(engine.isWindowExcluded(QStringLiteral("app|short")));
+
+        // A zero threshold disables that dimension: a 1x1 window is NOT excluded
+        // by size when both thresholds are 0 (guards the `> 0` enable check).
+        m_settings->setMinimumWindowWidth(0);
+        m_settings->setMinimumWindowHeight(0);
+        engine.setExclusionQueryProvider([](const QString&) {
+            PhosphorWindowRules::WindowQuery q;
+            q.width = 1;
+            q.height = 1;
+            return std::optional<PhosphorWindowRules::WindowQuery>(q);
+        });
+        QVERIFY(!engine.isWindowExcluded(QStringLiteral("app|zero-thresh")));
+
         // No provider → no frame size is known, so the size threshold is not
         // applied (the appId-only fallback, preserving historical behaviour).
+        m_settings->setMinimumWindowWidth(200);
+        m_settings->setMinimumWindowHeight(150);
         engine.setExclusionQueryProvider({});
         QVERIFY(!engine.isWindowExcluded(QStringLiteral("app|unknown")));
     }
