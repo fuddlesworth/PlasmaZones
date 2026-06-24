@@ -518,6 +518,11 @@ ComboBox {
                         globalAutoAssign: root.appSettings && root.appSettings.autoAssignAllLayouts === true
                     }
 
+                    // Autotile capability badges (memory / reflow / script-state)
+                    PZCommon.CapabilityBadgeRow {
+                        layoutData: modelData.layout || ({})
+                    }
+
                     // Aspect ratio badge
                     PZCommon.AspectRatioBadge {
                         aspectRatioClass: (modelData.layout && modelData.layout.aspectRatioClass) || "any"

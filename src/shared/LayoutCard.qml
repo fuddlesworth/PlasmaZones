@@ -327,6 +327,11 @@ Item {
             globalAutoAssign: root.globalAutoAssign
         }
 
+        CapabilityBadgeRow {
+            anchors.verticalCenter: parent.verticalCenter
+            layoutData: root.layoutData
+        }
+
         AspectRatioBadge {
             anchors.verticalCenter: parent.verticalCenter
             aspectRatioClass: root.layoutData.aspectRatioClass || "any"

@@ -56,31 +56,6 @@ Item {
     width: cellWidth
     height: cellHeight
 
-    // Small capability indicator (the memory / reflow / script-state card badges).
-    // One definition keeps the icon sizing, opacity, and hover-tooltip wiring in a
-    // single place; each instance sets only visible/source/color/text.
-    component CapabilityBadge: Kirigami.Icon {
-        id: badge
-
-        property string tooltipText
-
-        implicitWidth: Kirigami.Units.iconSizes.small
-        implicitHeight: Kirigami.Units.iconSizes.small
-        // Render as a mask tinted with `color` so every badge recolors uniformly:
-        // some symbolic icons (transform-scale, code-context) are not auto-recolored
-        // by the icon theme and would otherwise show a default grey, reading as
-        // "disabled" next to the recolored memory badge.
-        isMask: true
-        opacity: 0.7
-        ToolTip.delay: Kirigami.Units.toolTipDelay
-        ToolTip.visible: badgeHover.hovered && badge.visible
-        ToolTip.text: badge.tooltipText
-
-        HoverHandler {
-            id: badgeHover
-        }
-    }
-
     // Register a per-layout deep-link anchor ("layout:<id>") with the host
     // page's reveal registry so a layouts search result scrolls to and pulses
     // this exact card (expanding its group card if collapsed). Deferred via
@@ -379,34 +354,10 @@ Item {
                     globalAutoAssign: root.globalAutoAssign
                 }
 
-                // Memory indicator for algorithms that persist split state
-                CapabilityBadge {
-                    visible: root.modelData.supportsMemory === true
-                    source: "document-save-symbolic"
-                    color: Kirigami.Theme.positiveTextColor
-                    Accessible.name: i18n("Persistent algorithm")
-                    tooltipText: i18n("Remembers split positions across window changes")
-                }
-
-                // Reflow indicator for algorithms that adjust the layout when a
-                // tiled window is interactively resized.
-                CapabilityBadge {
-                    visible: root.modelData.reflowsOnResize === true
-                    source: "transform-scale-symbolic"
-                    color: Kirigami.Theme.highlightColor
-                    Accessible.name: i18n("Reflows")
-                    tooltipText: i18n("Reflows neighbouring windows when you resize a tiled window")
-                }
-
-                // Script-state indicator for scripted algorithms that persist an
-                // opaque per-screen state bag across retiles. Distinct colour from
-                // the reflow badge so the two are tellable apart when both show.
-                CapabilityBadge {
-                    visible: root.modelData.supportsScriptState === true
-                    source: "code-context-symbolic"
-                    color: Kirigami.Theme.neutralTextColor
-                    Accessible.name: i18n("Persistent script state")
-                    tooltipText: i18n("Remembers script-managed layout state across window changes")
+                // Autotile capability badges (memory / reflow / script-state).
+                // Shared with the overlay layout card so the set stays identical.
+                QFZCommon.CapabilityBadgeRow {
+                    layoutData: root.modelData
                 }
 
                 QFZCommon.AspectRatioBadge {
