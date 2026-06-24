@@ -158,6 +158,17 @@ void WindowTrackingAdaptor::setEngines(PhosphorEngine::PlacementEngineBase* snap
             return shouldRestoreFloatedPosition(windowId, PhosphorZones::AssignmentEntry::Mode::Snapping);
         });
 
+        // Managed (snapped-to-zone) restore gate. The snapped-to-zone analogue of
+        // the floated-position predicate above: when the user disables
+        // `restoreWindowsToZonesOnLogin`, a window that was snapped at logout is
+        // not auto-restored to its recorded zone on reopen. Settings-gated, so the
+        // engine stays settings-agnostic. windowId is unused today (the policy is a
+        // single global toggle) but keeps the signature aligned with the floated
+        // predicate for a future per-window override.
+        snap->setManagedRestorePredicate([this](const QString& /*windowId*/) -> bool {
+            return m_settings->restoreWindowsToZonesOnLogin();
+        });
+
         // Open-floating gate (snap). A matched "Float this app" rule opens the
         // window floating instead of auto-snapping it. Purely rule-driven (no
         // global default), so the same resolver serves both engines.

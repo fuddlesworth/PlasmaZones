@@ -202,6 +202,36 @@ public:
     }
 
     /**
+     * @brief Predicate consulted in `resolveWindowRestore` to decide whether a
+     *        window that was SNAPPED at logout should be restored to its recorded
+     *        zone on reopen/login (the "managed restore").
+     *
+     * This is the snapped-to-zone analogue of @ref RestorePositionPredicate
+     * (which governs FLOATED records). Keyed by the live windowId so the daemon
+     * closure stays settings-agnostic (LGPL boundary) — the engine only asks.
+     * The daemon wires it to the `restoreWindowsToZonesOnLogin` setting.
+     *
+     * When the predicate returns false the stored snap is not re-applied; the
+     * window falls through to the normal auto-snap policy chain, exactly as a
+     * disabled-context rejection does. When UNSET (default) the engine restores
+     * snapped records unconditionally — the historical behaviour unit tests rely
+     * on. This gate is independent of @ref ShouldRestorePredicate (the
+     * disabled-context gate); both must opt in for a managed restore to proceed.
+     */
+    using ManagedRestorePredicate = std::function<bool(const QString& windowId)>;
+
+    /**
+     * @brief Inject the managed (snapped-to-zone) restore gate. See
+     *        ManagedRestorePredicate. Same lifetime contract as
+     *        setRestorePositionPredicate — clear with `{}` before destroying any
+     *        captured state.
+     */
+    void setManagedRestorePredicate(ManagedRestorePredicate predicate)
+    {
+        m_managedRestorePredicate = std::move(predicate);
+    }
+
+    /**
      * @brief Predicate deciding whether an opening window should start FLOATING
      *        because a "Float this app" window rule matched it. Daemon-injected,
      *        keyed by the live windowId, evaluated on the window-open path. When
@@ -832,6 +862,11 @@ private:
     // only on the reopening screen — the historical behaviour unit tests rely on.
     // See RestorePositionPredicate doc above.
     RestorePositionPredicate m_restorePositionPredicate{};
+
+    // Managed (snapped-to-zone) restore gate. Empty until the daemon wires it;
+    // while empty the engine restores snapped records unconditionally — the
+    // historical behaviour unit tests rely on. See ManagedRestorePredicate.
+    ManagedRestorePredicate m_managedRestorePredicate{};
 
     // Rule-driven open-floating gate. Empty until the daemon wires it; while
     // empty no window is rule-floated. See FloatPredicate doc above.

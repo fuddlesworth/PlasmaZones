@@ -1036,6 +1036,110 @@ private Q_SLOTS:
     }
 
     // =========================================================================
+    // resolveWindowRestore — managed (snapped-to-zone) restore gate
+    // (ManagedRestorePredicate, restoreWindowsToZonesOnLogin)
+    //
+    // The daemon injects a predicate wired to restoreWindowsToZonesOnLogin. When
+    // it returns false a window that was SNAPPED last session must NOT be
+    // restored to its recorded zone on reopen — the snapped record is skipped and
+    // the window falls through to the normal chain. The distinctive log isolates
+    // this gate from a disabled-context veto. With no predicate (or one returning
+    // true) the snapped path is taken (it still resolves to noSnap in this guiless
+    // fixture because zone geometry can't resolve, asserted via log absence).
+    // =========================================================================
+
+    void testResolveWindowRestore_managedRestoreGate_rejectsWhenOff()
+    {
+        SnapEngine engine(m_layoutManager, m_wts, nullptr, nullptr, nullptr);
+        engine.setEngineSettings(m_settings);
+        m_wts->setSnapState(engine.snapState());
+
+        // restoreWindowsToZonesOnLogin is OFF.
+        engine.setManagedRestorePredicate([](const QString&) {
+            return false;
+        });
+
+        // A window snapped on DP-1 (its recorded screen, snapping mode).
+        PhosphorEngine::WindowPlacement rec;
+        rec.windowId = QStringLiteral("app|orig");
+        rec.appId = QStringLiteral("app");
+        rec.screenId = QStringLiteral("DP-1");
+        PhosphorEngine::EngineSlot slot;
+        slot.state = PhosphorEngine::WindowPlacement::stateSnapped();
+        slot.zoneIds = QStringList{QStringLiteral("z1")};
+        rec.engines.insert(PhosphorEngine::WindowPlacement::snapEngineId(), slot);
+        m_wts->placementStore().record(rec);
+
+        PhosphorEngine::SnapResult result;
+        const QStringList lines =
+            captureResolveLogs(engine, QStringLiteral("app|new"), QStringLiteral("DP-1"), &result);
+
+        QVERIFY2(!result.shouldSnap, "with managed restore off, a snapped record must not be re-applied");
+        QVERIFY2(lines.join(QLatin1Char('\n')).contains(QStringLiteral("managed-restore gate skipped snapped record")),
+                 "the managed-restore gate must be the branch that skipped the snapped record");
+        m_wts->setSnapState(nullptr);
+    }
+
+    void testResolveWindowRestore_managedRestoreGate_allowsWhenOn()
+    {
+        SnapEngine engine(m_layoutManager, m_wts, nullptr, nullptr, nullptr);
+        engine.setEngineSettings(m_settings);
+        m_wts->setSnapState(engine.snapState());
+
+        engine.setManagedRestorePredicate([](const QString&) {
+            return true;
+        });
+
+        PhosphorEngine::WindowPlacement rec;
+        rec.windowId = QStringLiteral("app|orig");
+        rec.appId = QStringLiteral("app");
+        rec.screenId = QStringLiteral("DP-1");
+        PhosphorEngine::EngineSlot slot;
+        slot.state = PhosphorEngine::WindowPlacement::stateSnapped();
+        slot.zoneIds = QStringList{QStringLiteral("z1")};
+        rec.engines.insert(PhosphorEngine::WindowPlacement::snapEngineId(), slot);
+        m_wts->placementStore().record(rec);
+
+        PhosphorEngine::SnapResult result;
+        const QStringList lines =
+            captureResolveLogs(engine, QStringLiteral("app|new"), QStringLiteral("DP-1"), &result);
+
+        // Geometry can't resolve in the guiless fixture, so the snapped restore
+        // still terminates at noSnap — but the managed gate must NOT be what
+        // skipped it.
+        QVERIFY2(!lines.join(QLatin1Char('\n')).contains(QStringLiteral("managed-restore gate skipped snapped record")),
+                 "with managed restore on, the managed-restore gate must not fire");
+        m_wts->setSnapState(nullptr);
+    }
+
+    void testResolveWindowRestore_managedRestoreGate_noPredicateRestores()
+    {
+        SnapEngine engine(m_layoutManager, m_wts, nullptr, nullptr, nullptr);
+        engine.setEngineSettings(m_settings);
+        m_wts->setSnapState(engine.snapState());
+
+        // No predicate injected — the engine must restore snapped records
+        // unconditionally (the historical default).
+        PhosphorEngine::WindowPlacement rec;
+        rec.windowId = QStringLiteral("app|orig");
+        rec.appId = QStringLiteral("app");
+        rec.screenId = QStringLiteral("DP-1");
+        PhosphorEngine::EngineSlot slot;
+        slot.state = PhosphorEngine::WindowPlacement::stateSnapped();
+        slot.zoneIds = QStringList{QStringLiteral("z1")};
+        rec.engines.insert(PhosphorEngine::WindowPlacement::snapEngineId(), slot);
+        m_wts->placementStore().record(rec);
+
+        PhosphorEngine::SnapResult result;
+        const QStringList lines =
+            captureResolveLogs(engine, QStringLiteral("app|new"), QStringLiteral("DP-1"), &result);
+
+        QVERIFY2(!lines.join(QLatin1Char('\n')).contains(QStringLiteral("managed-restore gate skipped snapped record")),
+                 "with no predicate the managed-restore gate must never fire");
+        m_wts->setSnapState(nullptr);
+    }
+
+    // =========================================================================
     // resolveWindowRestore — open-floating gate (FloatPredicate)
     //
     // The daemon injects a predicate that returns true when a "Float this app"
