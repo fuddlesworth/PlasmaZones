@@ -29,6 +29,14 @@
 
 namespace PlasmaZones {
 
+namespace {
+// Defined further down in this TU's anonymous namespace; forward-declared here
+// so setEngines() (above that definition) can reference it from the snap
+// engine's exclusion-query-provider closure.
+std::optional<PhosphorWindowRules::WindowQuery>
+buildRuleQueryForWindow(const QPointer<PhosphorEngine::WindowRegistry>& registry, const QString& windowId);
+} // namespace
+
 // ═══════════════════════════════════════════════════════════════════════════════
 // Engine wiring — cross-references and shared navigation feedback
 //
@@ -168,6 +176,18 @@ void WindowTrackingAdaptor::setEngines(PhosphorEngine::PlacementEngineBase* snap
         snap->setManagedRestorePredicate([this](const QString& /*windowId*/) -> bool {
             return m_settings->restoreWindowsToZonesOnLogin();
         });
+
+        // Full-query exclusion provider. The snap engine owns the Exclude rule
+        // set + evaluator but, without this, could only build an appId-only
+        // query — so Exclude rules keyed on window class / title / size, and the
+        // minimum-window-size thresholds, were silently ignored on snap (the
+        // autotile engine, which sees the live window in the effect, honoured
+        // them). Supplying the same full WindowQuery the float / restore
+        // predicates use brings snapping to parity.
+        snap->setExclusionQueryProvider(
+            [this](const QString& windowId) -> std::optional<PhosphorWindowRules::WindowQuery> {
+                return buildRuleQueryForWindow(m_windowRegistry, windowId);
+            });
 
         // Open-floating gate (snap). A matched "Float this app" rule opens the
         // window floating instead of auto-snapping it. Purely rule-driven (no

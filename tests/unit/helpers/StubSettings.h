@@ -446,17 +446,19 @@ public:
     }
     int minimumWindowWidth() const override
     {
-        return 0;
+        return m_minimumWindowWidth;
     }
-    void setMinimumWindowWidth(int) override
+    void setMinimumWindowWidth(int w) override
     {
+        m_minimumWindowWidth = w;
     }
     int minimumWindowHeight() const override
     {
-        return 0;
+        return m_minimumWindowHeight;
     }
-    void setMinimumWindowHeight(int) override
+    void setMinimumWindowHeight(int h) override
     {
+        m_minimumWindowHeight = h;
     }
 
     // Animation window filtering — pure-stub no-op accessors backed by
@@ -1193,6 +1195,8 @@ private:
     // Animation-filter defaults routed through ConfigDefaults so a future
     // tweak to the production defaults flows into tests automatically — keeps
     // the stub from drifting into "tests pass against a stale baseline".
+    int m_minimumWindowWidth = 0;
+    int m_minimumWindowHeight = 0;
     bool m_animationExcludeTransientWindows = ConfigDefaults::animationExcludeTransientWindows();
     bool m_animationExcludeNotificationsAndOsd = ConfigDefaults::animationExcludeNotificationsAndOsd();
     int m_animationMinimumWindowWidth = ConfigDefaults::animationMinimumWindowWidth();

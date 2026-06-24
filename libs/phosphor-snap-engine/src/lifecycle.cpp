@@ -466,8 +466,8 @@ SnapResult SnapEngine::resolveWindowRestore(const QString& windowId, const QStri
     // tracker. isAppIdExcluded resolves through the unified RuleEvaluator
     // (daemon-flavour AppIdMatches Exclude rules) — the same match model the
     // effect uses, replacing the hand-rolled appIdMatches loops.
-    if (m_windowTracker && isAppIdExcluded(m_windowTracker->currentAppIdFor(windowId))) {
-        qCInfo(PhosphorSnapEngine::lcSnapEngine) << "resolveWindowRestore:" << windowId << "excluded by rule";
+    if (m_windowTracker && isWindowExcluded(windowId)) {
+        qCInfo(PhosphorSnapEngine::lcSnapEngine) << "resolveWindowRestore:" << windowId << "excluded by rule or size";
         return SnapResult::noSnap();
     }
 

@@ -1793,6 +1793,81 @@ private Q_SLOTS:
         QVERIFY(!engine.isAppIdExcluded(QStringLiteral("konsole")));
     }
 
+    // isWindowExcluded — full-query exclusion (parity with autotile)
+    //
+    // With the daemon's exclusion query provider wired, a window's FULL
+    // attributes are evaluated, so an Exclude rule keyed on a non-appId field
+    // (here Title) matches — where the appId-only path silently would not.
+    void testWindowExcluded_fullQueryMatchesNonAppIdRule()
+    {
+        SnapEngine engine(nullptr, m_wts, nullptr, nullptr, nullptr);
+
+        PhosphorWindowRules::WindowRuleSet set;
+        PhosphorWindowRules::WindowRule rule;
+        rule.id = QUuid::createUuid();
+        rule.enabled = true;
+        rule.match = PhosphorWindowRules::MatchExpression::makeLeaf(
+            PhosphorWindowRules::Field::Title, PhosphorWindowRules::Operator::Contains, QStringLiteral("scratch"));
+        PhosphorWindowRules::RuleAction action;
+        action.type = QString(PhosphorWindowRules::ActionType::Exclude);
+        rule.actions.append(action);
+        QVERIFY(set.addRule(rule));
+        engine.setExcludeRuleSet(&set);
+
+        // Without the provider, the appId-only query can't see the title — the
+        // Title rule stays inert (the historical gap).
+        QVERIFY(!engine.isWindowExcluded(QStringLiteral("app|win")));
+
+        // With the provider supplying a full query, the Title rule matches.
+        engine.setExclusionQueryProvider([](const QString&) {
+            PhosphorWindowRules::WindowQuery q;
+            q.appId = QStringLiteral("editor");
+            q.title = QStringLiteral("scratchpad - notes");
+            return std::optional<PhosphorWindowRules::WindowQuery>(q);
+        });
+        QVERIFY(engine.isWindowExcluded(QStringLiteral("app|win")));
+
+        // A non-matching title is not excluded.
+        engine.setExclusionQueryProvider([](const QString&) {
+            PhosphorWindowRules::WindowQuery q;
+            q.title = QStringLiteral("main window");
+            return std::optional<PhosphorWindowRules::WindowQuery>(q);
+        });
+        QVERIFY(!engine.isWindowExcluded(QStringLiteral("app|win")));
+    }
+
+    // isWindowExcluded — minimum-window-size exclusion (parity with autotile)
+    void testWindowExcluded_minimumWindowSize()
+    {
+        SnapEngine engine(nullptr, m_wts, nullptr, nullptr, nullptr);
+        engine.setEngineSettings(m_settings);
+        m_settings->setMinimumWindowWidth(200);
+        m_settings->setMinimumWindowHeight(150);
+
+        // Sub-threshold frame → excluded (when the full query carries the size).
+        engine.setExclusionQueryProvider([](const QString&) {
+            PhosphorWindowRules::WindowQuery q;
+            q.width = 120;
+            q.height = 90;
+            return std::optional<PhosphorWindowRules::WindowQuery>(q);
+        });
+        QVERIFY(engine.isWindowExcluded(QStringLiteral("app|tiny")));
+
+        // At/above threshold → not excluded.
+        engine.setExclusionQueryProvider([](const QString&) {
+            PhosphorWindowRules::WindowQuery q;
+            q.width = 800;
+            q.height = 600;
+            return std::optional<PhosphorWindowRules::WindowQuery>(q);
+        });
+        QVERIFY(!engine.isWindowExcluded(QStringLiteral("app|big")));
+
+        // No provider → no frame size is known, so the size threshold is not
+        // applied (the appId-only fallback, preserving historical behaviour).
+        engine.setExclusionQueryProvider({});
+        QVERIFY(!engine.isWindowExcluded(QStringLiteral("app|unknown")));
+    }
+
     // Honest scope of this test (renamed from the earlier
     // `…InvalidatesEvalCache` name): exercises that across in-place
     // `WindowRuleSet::setRules` edits at the SAME bound pointer, the

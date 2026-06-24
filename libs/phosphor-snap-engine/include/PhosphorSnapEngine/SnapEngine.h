@@ -657,6 +657,27 @@ public:
     /// translation unit redefine the function and the link fails.
     void setExcludeRuleSet(const PhosphorWindowRules::WindowRuleSet* ruleSet);
 
+    /// Provider that builds the full WindowQuery (window class / title / role /
+    /// frame size / flags) for a live windowId. Daemon-injected, keyed by the
+    /// live windowId — the daemon resolves it from its WindowRegistry (the same
+    /// `buildRuleQueryForWindow` the float / restore predicates use). When set,
+    /// exclusion evaluates a window's FULL attributes (matching the autotile
+    /// engine) instead of appId alone, and the frame size carried in the query
+    /// is checked against the minimum-window-size thresholds. When UNSET
+    /// (default) the engine falls back to the appId-only query — the historical
+    /// behaviour unit tests rely on. A null/empty optional from the provider
+    /// (metadata not yet known) also falls back to appId-only.
+    using ExclusionQueryProvider =
+        std::function<std::optional<PhosphorWindowRules::WindowQuery>(const QString& windowId)>;
+
+    /// Inject the exclusion query provider. See ExclusionQueryProvider. Same
+    /// lifetime contract as setExcludeRuleSet — the caller keeps captured state
+    /// valid for the engine's lifetime; clear with `{}` before destroying it.
+    void setExclusionQueryProvider(ExclusionQueryProvider provider)
+    {
+        m_exclusionQueryProvider = std::move(provider);
+    }
+
     /// True if @p appId matches an enabled `Exclude`-action WindowRule
     /// whose match leaf targets the `AppId` field. Public so the unit-
     /// test layer can directly verify the wiring (nullptr borrow,
@@ -679,6 +700,15 @@ public:
     /// `WindowQuery` it can build from the WTS registry's per-window
     /// attributes, instead of just the appId.
     bool isAppIdExcluded(const QString& appId) const;
+
+    /// Resolve exclusion for a live windowId using the FULL window attributes
+    /// when the exclusion query provider is wired (matching the autotile
+    /// engine): evaluates the Exclude rule set against the complete WindowQuery
+    /// and applies the minimum-window-size thresholds to the query's frame
+    /// size. Falls back to the appId-only path when no provider is set or window
+    /// metadata is not yet known. Public so the unit-test layer can drive the
+    /// wiring directly, mirroring @ref isAppIdExcluded.
+    bool isWindowExcluded(const QString& windowId) const;
 
 Q_SIGNALS:
     // ═══════════════════════════════════════════════════════════════════════════
@@ -814,9 +844,9 @@ private:
     /// otherwise.
     bool isWindowExcludedForAction(const QString& windowId, const QString& action, const QString& screenId);
 
-    // `isAppIdExcluded` is declared in the public section above (so the
-    // unit tests can drive the wiring directly); full docstring + the
-    // AppId-only matching limitation live with that declaration.
+    // `isAppIdExcluded` and `isWindowExcluded` are declared in the public
+    // section above (so the unit tests can drive the wiring directly); full
+    // docstrings live with those declarations.
 
     /// Borrowed pointer to the daemon's filtered Exclude rule set. nullptr
     /// in early-init paths (before the daemon wires the store) — the
@@ -840,6 +870,11 @@ private:
     ///
     /// @note Same daemon-main-thread-only contract as @ref m_excludeRuleSet.
     mutable std::optional<PhosphorWindowRules::RuleEvaluator> m_excludeEvaluator;
+
+    /// Daemon-injected full-query provider for exclusion. Empty until the
+    /// daemon wires it; while empty exclusion uses the appId-only query and the
+    /// minimum-window-size thresholds are not applied. See ExclusionQueryProvider.
+    ExclusionQueryProvider m_exclusionQueryProvider{};
 
     // Persistence delegates (KConfig stays in adaptor layer)
     std::function<void()> m_saveFn;

@@ -27,6 +27,15 @@ public:
     // SnapEngine via `setExcludeRuleSet`; consumers that previously called
     // these accessors evaluate against the rule set instead.
 
+    // Global minimum-window-size exclusion (the shared Exclusions surface, not a
+    // snapping-only knob): a window whose frame is smaller than these thresholds
+    // is excluded from auto-snap, matching the autotile engine which already
+    // honours them. 0 disables the respective dimension. The engine only applies
+    // these when a full WindowQuery (carrying the frame size) is available via
+    // the injected exclusion query provider; the appId-only fast path skips them.
+    virtual int minimumWindowWidth() const = 0;
+    virtual int minimumWindowHeight() const = 0;
+
     virtual StickyWindowHandling snappingStickyWindowHandling() const = 0;
     virtual bool moveNewWindowsToLastZone() const = 0;
     virtual bool restoreWindowsToZonesOnLogin() const = 0;
