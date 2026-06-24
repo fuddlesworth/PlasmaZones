@@ -539,8 +539,6 @@ QString operatorLabelImpl(Operator op)
         return PhosphorI18n::tr("matches regex");
     case Operator::AppIdMatches:
         return PhosphorI18n::tr("matches app-id");
-    case Operator::In:
-        return PhosphorI18n::tr("is one of");
     case Operator::GreaterThan:
         return PhosphorI18n::tr("greater than");
     case Operator::LessThan:
@@ -676,19 +674,10 @@ QVariantList operatorsForField(int fieldValue)
         if (field == Field::AppId) {
             ops.append(Operator::AppIdMatches);
         }
-        if (field == Field::ScreenId || field == Field::Activity) {
-            ops.append(Operator::In);
-        }
     } else if (PhosphorWindowRules::fieldIsNumeric(field)) {
         ops = {Operator::Equals, Operator::GreaterThan, Operator::LessThan};
-        if (field == Field::VirtualDesktop) {
-            ops.append(Operator::In);
-        }
     } else if (PhosphorWindowRules::fieldIsBool(field) || field == Field::WindowType) {
         ops = {Operator::Equals};
-        if (field == Field::WindowType) {
-            ops.append(Operator::In);
-        }
     }
     QVariantList out;
     for (Operator op : ops) {

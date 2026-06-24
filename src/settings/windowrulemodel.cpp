@@ -66,41 +66,18 @@ void collectFields(const MatchExpression& match, QList<Field>& out)
 }
 
 /// Append every non-empty ScreenId leaf value in @p match to @p out.
-/// Handles both the scalar shape (Equals/Contains/…: value is a QString) and
-/// the set-membership shape (Operator::In: value is a QVariantList or
-/// QStringList — `toString()` returns empty for a list, so the entries must be
-/// iterated explicitly). Mirrors the dual-shape handling in
-/// `MatchExpression::evaluate` for the In case.
+/// Only the scalar Equals shape pins a literal monitor (the value is a
+/// connector / screen id string).
 void collectScreenIds(const MatchExpression& match, QStringList& out)
 {
     if (match.isLeaf()) {
         const auto& predicate = match.predicate();
-        if (predicate.field == Field::ScreenId) {
-            if (predicate.op == Operator::In) {
-                // The wire form is a QVariantList; a programmatically built
-                // leaf may carry a QStringList. Accept either — same contract
-                // as the validator/evaluator.
-                if (predicate.value.metaType().id() == QMetaType::QStringList) {
-                    for (const QString& member : predicate.value.toStringList()) {
-                        if (!member.isEmpty()) {
-                            out.append(member);
-                        }
-                    }
-                } else {
-                    for (const QVariant& member : predicate.value.toList()) {
-                        const QString value = member.toString();
-                        if (!value.isEmpty()) {
-                            out.append(value);
-                        }
-                    }
-                }
-            } else if (predicate.op == Operator::Equals) {
-                const QString value = predicate.value.toString();
-                if (!value.isEmpty()) {
-                    out.append(value);
-                }
+        if (predicate.field == Field::ScreenId && predicate.op == Operator::Equals) {
+            const QString value = predicate.value.toString();
+            if (!value.isEmpty()) {
+                out.append(value);
             }
-            // Any operator other than Equals/In (substring, regex, app-id, or
+            // Any operator other than Equals (substring, regex, app-id, or
             // numeric comparison) is not a literal monitor pin — its token never
             // equals a real connector id, so collecting it would silently
             // under-count the rule against every tile. Such a rule doesn't pin a
@@ -158,33 +135,6 @@ QString leafLabel(const MatchExpression::Predicate& predicate, const WindowRuleM
         const QString label = (*lookup)(raw);
         return label.isEmpty() ? raw : label;
     };
-
-    // An `In` operator stores the candidate set as a QVariantList or
-    // QStringList. `toString()` on either of those returns the empty string,
-    // so without this fan-out a rule like "ScreenId In [DP-2, DP-3]" would
-    // render as "Monitor: " with nothing after the colon. Mirror the dual-
-    // shape handling pattern the collectScreenIds helper uses.
-    if (predicate.op == Operator::In) {
-        QStringList resolved;
-        const QVariant& v = predicate.value;
-        if (v.metaType().id() == QMetaType::QStringList) {
-            const QStringList list = v.toStringList();
-            resolved.reserve(list.size());
-            for (const QString& raw : list) {
-                resolved.append(resolveOne(raw));
-            }
-        } else {
-            const QVariantList list = v.toList();
-            resolved.reserve(list.size());
-            for (const QVariant& item : list) {
-                resolved.append(resolveOne(item.toString()));
-            }
-        }
-        // QStringList::join keeps the rendered list short; falling back to
-        // a single space-joined line matches how the daemon logs the same set.
-        return PhosphorI18n::tr("%1: %2").arg(WindowRuleModel::fieldLabel(predicate.field),
-                                              resolved.join(QStringLiteral(", ")));
-    }
 
     return PhosphorI18n::tr("%1: %2").arg(WindowRuleModel::fieldLabel(predicate.field),
                                           resolveOne(predicate.value.toString()));

@@ -107,7 +107,6 @@ private Q_SLOTS:
     void reorder();
     void addRuleAtInsertsAtIndexWithSingleSignal();
     void validationIssueCountRole();
-    void screenIdsRoleHandlesInOperator();
     void screenIdsOfCollectsOnlyLiteralPinOperators();
     void actionSummaryRendersAllEngineModes();
     void disableEngineNamesTheModeBeingDisabled();
@@ -313,57 +312,9 @@ void TestWindowRuleModel::validationIssueCountRole()
     QVERIFY(model.roleNames().values().contains(QByteArrayLiteral("validationIssueCount")));
 }
 
-void TestWindowRuleModel::screenIdsRoleHandlesInOperator()
-{
-    // A rule authored as `ScreenId IN [DP-2, DP-3]` must surface both ids
-    // in ScreenIdsRole — earlier code did `value.toString()` on the leaf's
-    // value and dropped them silently (toString() returns empty for a list).
-    // The role drives the monitor-overview filter chip and the ruleCount
-    // tally per monitor, so a regression here makes In-rules invisible to
-    // the page.
-    WindowRule rule;
-    rule.id = QUuid::createUuid();
-    rule.name = QStringLiteral("DP-2/DP-3 layout");
-    rule.priority = 300;
-    rule.match = MatchExpression::makeLeaf(Field::ScreenId, Operator::In,
-                                           QVariantList{QStringLiteral("DP-2"), QStringLiteral("DP-3")});
-    RuleAction engine;
-    engine.type = QString(ActionType::SetEngineMode);
-    engine.params.insert(ActionParam::Mode, QStringLiteral("autotile"));
-    rule.actions = {engine};
-
-    WindowRuleModel model;
-    model.setRules({rule});
-
-    const QStringList ids = model.data(model.index(0, 0), WindowRuleModel::ScreenIdsRole).toStringList();
-    QCOMPARE(ids.size(), 2);
-    QVERIFY(ids.contains(QStringLiteral("DP-2")));
-    QVERIFY(ids.contains(QStringLiteral("DP-3")));
-
-    // Static helper exposed to the controller (used by monitorOverview)
-    // must walk the same path.
-    const QStringList collected = WindowRuleModel::screenIdsOf(rule.match);
-    QCOMPARE(collected.size(), 2);
-    QVERIFY(collected.contains(QStringLiteral("DP-2")));
-    QVERIFY(collected.contains(QStringLiteral("DP-3")));
-
-    // QStringList-typed predicate values must also be iterated correctly —
-    // a programmatically built leaf can carry that shape (see the
-    // matchexpression.cpp evaluator's dual-shape handling).
-    WindowRule rule2 = rule;
-    rule2.id = QUuid::createUuid();
-    rule2.match = MatchExpression::makeLeaf(
-        Field::ScreenId, Operator::In,
-        QVariant::fromValue(QStringList{QStringLiteral("HDMI-A-1"), QStringLiteral("eDP-1")}));
-    const QStringList ids2 = WindowRuleModel::screenIdsOf(rule2.match);
-    QCOMPARE(ids2.size(), 2);
-    QVERIFY(ids2.contains(QStringLiteral("HDMI-A-1")));
-    QVERIFY(ids2.contains(QStringLiteral("eDP-1")));
-}
-
 void TestWindowRuleModel::screenIdsOfCollectsOnlyLiteralPinOperators()
 {
-    // Only Equals and In are literal monitor pins. A substring / regex operator
+    // Only Equals is a literal monitor pin. A substring / regex operator
     // (StartsWith, Contains, …) never equals a real connector id, so collecting
     // its token would silently under-count the rule against every monitor tile.
     // Such rules must contribute NO screen id.

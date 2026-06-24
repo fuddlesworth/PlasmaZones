@@ -205,9 +205,8 @@ enum class Operator : int {
     EndsWith = 3, ///< suffix, case-insensitive (strings)
     Regex = 4, ///< QRegularExpression, precompiled & cached per predicate
     AppIdMatches = 5, ///< segment-aware reverse-DNS match (AppId only)
-    In = 6, ///< value is a set; membership test
-    GreaterThan = 7, ///< numeric compare (Pid / VirtualDesktop / Width / Height / PositionX / PositionY)
-    LessThan = 8, ///< numeric compare (Pid / VirtualDesktop / Width / Height / PositionX / PositionY)
+    GreaterThan = 6, ///< numeric compare (Pid / VirtualDesktop / Width / Height / PositionX / PositionY)
+    LessThan = 7, ///< numeric compare (Pid / VirtualDesktop / Width / Height / PositionX / PositionY)
 };
 
 /// The number of distinct `Operator` enumerators. `Operator` is a contiguous
@@ -230,8 +229,6 @@ inline QString operatorToString(Operator op)
         return QStringLiteral("regex");
     case Operator::AppIdMatches:
         return QStringLiteral("appIdMatches");
-    case Operator::In:
-        return QStringLiteral("in");
     case Operator::GreaterThan:
         return QStringLiteral("greaterThan");
     case Operator::LessThan:
@@ -250,7 +247,6 @@ inline std::optional<Operator> operatorFromString(QStringView s)
         {QLatin1StringView("endsWith"), Operator::EndsWith},
         {QLatin1StringView("regex"), Operator::Regex},
         {QLatin1StringView("appIdMatches"), Operator::AppIdMatches},
-        {QLatin1StringView("in"), Operator::In},
         {QLatin1StringView("greaterThan"), Operator::GreaterThan},
         {QLatin1StringView("lessThan"), Operator::LessThan},
     };
