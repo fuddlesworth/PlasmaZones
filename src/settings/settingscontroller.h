@@ -92,6 +92,7 @@ class SettingsController : public QObject
     Q_PROPERTY(UpdateChecker* updateChecker READ updateChecker CONSTANT)
     Q_PROPERTY(QString dismissedUpdateVersion READ dismissedUpdateVersion WRITE setDismissedUpdateVersion NOTIFY
                    dismissedUpdateVersionChanged)
+    Q_PROPERTY(bool advancedMode READ advancedMode WRITE setAdvancedMode NOTIFY advancedModeChanged)
 
     // What's New
     Q_PROPERTY(QString lastSeenWhatsNewVersion READ lastSeenWhatsNewVersion NOTIFY lastSeenWhatsNewVersionChanged)
@@ -220,6 +221,15 @@ public:
     }
     void setDismissedUpdateVersion(const QString& version);
     Q_INVOKABLE void dismissUpdate();
+
+    // Show advanced (niche) options. Persisted UI pref; default false = Simple.
+    // Advanced-only rows/sections are wrapped in AdvancedGroup.qml, which binds
+    // its visibility to this.
+    bool advancedMode() const
+    {
+        return m_advancedMode;
+    }
+    void setAdvancedMode(bool on);
 
     // What's New
     QString lastSeenWhatsNewVersion() const
@@ -538,6 +548,7 @@ Q_SIGNALS:
     /// individual key can't drive on its own.
     void perScreenOverridesChanged();
     void dismissedUpdateVersionChanged();
+    void advancedModeChanged();
     void lastSeenWhatsNewVersionChanged();
 
     // Virtual desktop / activity / assignment signals
@@ -676,6 +687,7 @@ private:
     DaemonController m_daemonController;
     UpdateChecker m_updateChecker;
     QString m_dismissedUpdateVersion;
+    bool m_advancedMode = false;
     QString m_lastSeenWhatsNewVersion;
     QVariantList m_whatsNewEntries;
     ScreenHelper m_screenHelper;

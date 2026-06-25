@@ -845,6 +845,8 @@ public:
     P_CONFIG_KEY(settingsAppWindowHeightKey, "height")
     P_CONFIG_KEY(settingsAppDismissedUpdateVersionKey, "dismissedUpdateVersion")
     P_CONFIG_KEY(settingsAppLastSeenWhatsNewVersionKey, "lastSeenWhatsNewVersion")
+    // Settings-app UI pref: show advanced (niche) options. Default false = Simple.
+    P_CONFIG_KEY(settingsAppAdvancedModeKey, "advancedMode")
 
     // ═══════════════════════════════════════════════════════════════════════════
     // Filesystem paths under XDG_DATA_HOME

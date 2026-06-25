@@ -295,6 +295,16 @@ void SettingsController::dismissUpdate()
     setDismissedUpdateVersion(m_updateChecker.latestVersion());
 }
 
+void SettingsController::setAdvancedMode(bool on)
+{
+    if (m_advancedMode != on) {
+        m_advancedMode = on;
+        QSettings appSettings;
+        appSettings.setValue(ConfigDefaults::settingsAppAdvancedModeKey(), on);
+        Q_EMIT advancedModeChanged();
+    }
+}
+
 // Highest version among m_whatsNewEntries, using QVersionNumber so "1.10.0"
 // sorts after "1.9.0" (plain string compare gets that wrong). Entries come
 // from the bundled whatsnew.json resource in no guaranteed order.

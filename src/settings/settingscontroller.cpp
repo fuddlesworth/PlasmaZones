@@ -749,6 +749,7 @@ SettingsController::SettingsController(QObject* parent)
         m_dismissedUpdateVersion = appSettings.value(ConfigDefaults::settingsAppDismissedUpdateVersionKey()).toString();
         m_lastSeenWhatsNewVersion =
             appSettings.value(ConfigDefaults::settingsAppLastSeenWhatsNewVersionKey()).toString();
+        m_advancedMode = appSettings.value(ConfigDefaults::settingsAppAdvancedModeKey(), false).toBool();
     }
 
     // Load What's New entries from embedded resource

@@ -142,6 +142,17 @@ Flickable {
         // This reveal wins over any anchor still awaiting registration.
         settingsFlickable._pendingRevealAnchor = "";
 
+        // Surface advanced-only content: if the target lives in an AdvancedGroup
+        // that Simple mode hides, switch on advanced mode so the reveal can show it.
+        if (!settingsController.advancedMode) {
+            for (var ap = entry.item; ap; ap = ap.parent) {
+                if (ap.isAdvancedGroup === true) {
+                    settingsController.advancedMode = true;
+                    break;
+                }
+            }
+        }
+
         var card = entry.card;
         if (card && card.collapsible === true && card.collapsed === true) {
             // Expand, then settle: drive the post-expand scroll off a one-shot

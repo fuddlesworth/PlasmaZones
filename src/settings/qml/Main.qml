@@ -128,6 +128,28 @@ PhosphorUi.SettingsAppWindow {
         RowLayout {
             spacing: Kirigami.Units.smallSpacing
 
+            // Simple / Advanced toggle: Advanced reveals the niche options that
+            // AdvancedGroup hides by default, so most users see a shorter list.
+            Label {
+                text: i18n("Advanced")
+                opacity: 0.7
+                Layout.alignment: Qt.AlignVCenter
+            }
+
+            SettingsSwitch {
+                Layout.alignment: Qt.AlignVCenter
+                checked: settingsController.advancedMode
+                accessibleName: i18n("Show advanced options")
+                onToggled: function (newValue) {
+                    settingsController.advancedMode = newValue;
+                }
+            }
+
+            Kirigami.Separator {
+                Layout.alignment: Qt.AlignVCenter
+                Layout.preferredHeight: Kirigami.Units.gridUnit
+            }
+
             Rectangle {
                 id: daemonDot
 
