@@ -369,43 +369,43 @@ ColumnLayout {
                 }
             }
         }
+    }
 
-        // =================================================================
-        // EFFECTS
-        // =================================================================
-        Item {
-            Layout.fillWidth: true
-            implicitHeight: effectsCard.implicitHeight
+    // =================================================================
+    // EFFECTS (kept in Simple — a single visible toggle)
+    // =================================================================
+    Item {
+        Layout.fillWidth: true
+        implicitHeight: effectsCard.implicitHeight
 
-            SettingsCard {
-                id: effectsCard
+        SettingsCard {
+            id: effectsCard
 
-                anchors.fill: parent
-                scopeLabel: i18n("Global")
-                headerText: i18n("Effects")
-                searchAnchor: "effects"
-                collapsible: true
+            anchors.fill: parent
+            scopeLabel: i18n("Global")
+            headerText: i18n("Effects")
+            searchAnchor: "effects"
+            collapsible: true
 
-                contentItem: ColumnLayout {
-                    spacing: Kirigami.Units.smallSpacing
+            contentItem: ColumnLayout {
+                spacing: Kirigami.Units.smallSpacing
 
-                    SettingsRow {
-                        title: i18n("Blur behind zones")
-                        searchAnchor: "blurBehindZones"
-                        description: i18n("Apply a blur effect to the area behind zone overlays")
+                SettingsRow {
+                    title: i18n("Blur behind zones")
+                    searchAnchor: "blurBehindZones"
+                    description: i18n("Apply a blur effect to the area behind zone overlays")
 
-                        SettingsSwitch {
-                            checked: appSettings.enableBlur
-                            accessibleName: i18n("Enable blur behind zones")
-                            onToggled: function (newValue) {
-                                appSettings.enableBlur = newValue;
-                            }
+                    SettingsSwitch {
+                        checked: appSettings.enableBlur
+                        accessibleName: i18n("Enable blur behind zones")
+                        onToggled: function (newValue) {
+                            appSettings.enableBlur = newValue;
                         }
                     }
-
-                    // Zone numbers and Flash on layout switch are behavior, so they
-                    // live in the overlay behavior section above (Display card).
                 }
+
+                // Zone numbers and Flash on layout switch are behavior, so they
+                // live in the overlay behavior section above (Display card).
             }
         }
     }

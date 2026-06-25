@@ -231,61 +231,62 @@ ColumnLayout {
         }
     }
 
-    // Layout Arrangement + Preview Size are appearance fine-tuning — advanced.
-    AdvancedGroup {
-        Item {
-            Layout.fillWidth: true
-            visible: root.showAppearance
-            implicitHeight: layoutCard.implicitHeight
+    // Layout Arrangement keeps "Arrangement" in Simple; its grid columns / max
+    // rows are advanced (grouped inside the card below).
+    Item {
+        Layout.fillWidth: true
+        visible: root.showAppearance
+        implicitHeight: layoutCard.implicitHeight
 
-            SettingsCard {
-                id: layoutCard
+        SettingsCard {
+            id: layoutCard
 
-                anchors.fill: parent
-                enabled: appSettings.zoneSelectorEnabled
-                headerText: i18n("Layout Arrangement")
-                searchAnchor: "layoutArrangement"
-                collapsible: true
-                scopeEnabled: true
-                scopeAppSettings: root.controller
-                scopeHasOverridesMethod: "hasPerScreenZoneSelectorSettings"
-                scopeClearerMethod: "clearPerScreenZoneSelectorSettings"
+            anchors.fill: parent
+            enabled: appSettings.zoneSelectorEnabled
+            headerText: i18n("Layout Arrangement")
+            searchAnchor: "layoutArrangement"
+            collapsible: true
+            scopeEnabled: true
+            scopeAppSettings: root.controller
+            scopeHasOverridesMethod: "hasPerScreenZoneSelectorSettings"
+            scopeClearerMethod: "clearPerScreenZoneSelectorSettings"
 
-                contentItem: ColumnLayout {
-                    spacing: Kirigami.Units.smallSpacing
+            contentItem: ColumnLayout {
+                spacing: Kirigami.Units.smallSpacing
 
-                    SettingsRow {
-                        title: i18n("Arrangement")
-                        searchAnchor: "arrangement"
-                        description: i18n("How layout previews are arranged in the popup")
+                SettingsRow {
+                    title: i18n("Arrangement")
+                    searchAnchor: "arrangement"
+                    description: i18n("How layout previews are arranged in the popup")
 
-                        WideComboBox {
-                            id: zoneSelectorLayoutModeCombo
+                    WideComboBox {
+                        id: zoneSelectorLayoutModeCombo
 
-                            Accessible.name: i18n("Arrangement")
-                            textRole: "text"
-                            valueRole: "value"
-                            model: [
-                                {
-                                    "text": i18n("Grid"),
-                                    "value": 0
-                                },
-                                {
-                                    "text": i18n("Horizontal"),
-                                    "value": 1
-                                },
-                                {
-                                    "text": i18n("Vertical"),
-                                    "value": 2
-                                }
-                            ]
-                            currentIndex: Math.max(0, indexOfValue(root.effectiveLayoutMode))
-                            onActivated: root.writeSetting("LayoutMode", currentValue, function (v) {
-                                appSettings.zoneSelectorLayoutMode = v;
-                            })
-                        }
+                        Accessible.name: i18n("Arrangement")
+                        textRole: "text"
+                        valueRole: "value"
+                        model: [
+                            {
+                                "text": i18n("Grid"),
+                                "value": 0
+                            },
+                            {
+                                "text": i18n("Horizontal"),
+                                "value": 1
+                            },
+                            {
+                                "text": i18n("Vertical"),
+                                "value": 2
+                            }
+                        ]
+                        currentIndex: Math.max(0, indexOfValue(root.effectiveLayoutMode))
+                        onActivated: root.writeSetting("LayoutMode", currentValue, function (v) {
+                            appSettings.zoneSelectorLayoutMode = v;
+                        })
                     }
+                }
 
+                AdvancedGroup {
                     SettingsSeparator {
                         visible: root.effectiveLayoutMode === 0
                     }
@@ -334,8 +335,10 @@ ColumnLayout {
                 }
             }
         }
+    }
 
-        // Preview Size card (appearance) - wrapped in Item for stable sizing
+    // Preview Size card (appearance) — advanced fine-tuning.
+    AdvancedGroup {
         Item {
             Layout.fillWidth: true
             visible: root.showAppearance
