@@ -72,7 +72,7 @@ WindowTrackingAdaptor::WindowTrackingAdaptor(PhosphorZones::LayoutRegistry* layo
     // desktop/activity callbacks let it resolve per-context gap rules for the
     // context a snap happens in (current desktop/activity), mirroring the
     // current-desktop occupancy filter used in buildEmptyZoneList.
-    auto geometryResolver = std::make_unique<PlasmaZones::DaemonGeometryResolver>(
+    m_geometryResolver = std::make_unique<PlasmaZones::DaemonGeometryResolver>(
         settings, layoutManager,
         [vdm = m_virtualDesktopManager](const QString& screenId) -> int {
             return vdm ? vdm->currentDesktopForScreen(screenId) : 0;
@@ -80,10 +80,6 @@ WindowTrackingAdaptor::WindowTrackingAdaptor(PhosphorZones::LayoutRegistry* layo
         [am = m_activityManager]() -> QString {
             return PhosphorWorkspaces::ActivityManager::currentActivityOrEmpty(am);
         });
-    // Keep a typed alias before the unique_ptr is upcast to IGeometryResolver,
-    // so the Control adaptor can reach resolveGapProvenance.
-    m_daemonGeometryResolver = geometryResolver.get();
-    m_geometryResolver = std::move(geometryResolver);
 
     // Create business logic service
     m_service = new PhosphorPlacement::WindowTrackingService(

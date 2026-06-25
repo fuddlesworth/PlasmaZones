@@ -283,14 +283,6 @@ public:
     /// C++ (PhosphorIdentity::VirtualScreenId), so QML must not re-spell it.
     Q_INVOKABLE QString physicalScreenId(const QString& name) const;
 
-    /// Read-only gap provenance for a screen ("what wins here?"). Queries the
-    /// daemon Control interface and returns a map
-    /// {innerValue:int, innerLayer:string, outerValue:int, outerLayer:string},
-    /// where the layer strings are the daemon's GapLayer keys (context-rule /
-    /// per-screen / layout / global / default). @p screenName is the per-monitor
-    /// scope name (empty = primary). Empty map if the daemon is unreachable.
-    Q_INVOKABLE QVariantMap gapProvenance(const QString& screenName) const;
-
     // Virtual desktops / activities (reactive via D-Bus signals)
     Q_PROPERTY(int virtualDesktopCount READ virtualDesktopCount NOTIFY virtualDesktopsChanged)
     Q_PROPERTY(QStringList virtualDesktopNames READ virtualDesktopNames NOTIFY virtualDesktopsChanged)

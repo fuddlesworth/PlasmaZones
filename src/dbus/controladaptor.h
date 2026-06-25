@@ -102,18 +102,6 @@ public Q_SLOTS:
      */
     QString generateSupportReport(int sinceMinutes, const QDBusMessage& message);
 
-    /**
-     * @brief Read-only gap provenance for a screen ("what wins here?").
-     * @param screenId Screen to resolve (empty = primary).
-     * @return JSON: {"screenId", "innerGap":{"value","layer"},
-     *         "outerGap":{"value","layer"}}, where layer is one of
-     *         context-rule / per-screen / layout / global / default. Empty
-     *         string if the daemon is detached.
-     * @note Resolves through the exact same cascade as live geometry, so the
-     *       reported winning layer matches what the daemon actually applies.
-     */
-    QString getGapProvenance(const QString& screenId);
-
 private:
     WindowTrackingAdaptor* m_wta;
     SnapAdaptor* m_snapAdaptor;

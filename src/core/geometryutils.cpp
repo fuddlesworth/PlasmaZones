@@ -137,36 +137,14 @@ QVariantMap contextGapOverrideMap(const PhosphorZones::ContextGapOverride& gaps)
     return map;
 }
 
-QString gapLayerKey(GapLayer layer)
-{
-    switch (layer) {
-    case GapLayer::ContextRule:
-        return QStringLiteral("context-rule");
-    case GapLayer::PerScreen:
-        return QStringLiteral("per-screen");
-    case GapLayer::Layout:
-        return QStringLiteral("layout");
-    case GapLayer::Global:
-        return QStringLiteral("global");
-    case GapLayer::Default:
-        return QStringLiteral("default");
-    }
-    return QStringLiteral("default");
-}
-
 int getEffectiveZonePadding(PhosphorZones::Layout* layout, ISettings* settings, const QString& screenId,
-                            const QVariantMap& ruleGapOverride, GapLayer* winningLayer)
+                            const QVariantMap& ruleGapOverride)
 {
     namespace PSK = PhosphorEngine::PerScreenSnappingKey;
-    const auto mark = [winningLayer](GapLayer layer) {
-        if (winningLayer)
-            *winningLayer = layer;
-    };
     // Highest precedence: a context-rule gap override for this context.
     {
         auto it = ruleGapOverride.constFind(PSK::ZonePadding);
         if (it != ruleGapOverride.constEnd()) {
-            mark(GapLayer::ContextRule);
             return it->toInt();
         }
     }
@@ -174,45 +152,33 @@ int getEffectiveZonePadding(PhosphorZones::Layout* layout, ISettings* settings, 
         QVariantMap perScreen = getPerScreenSnappingWithFallback(settings, screenId);
         auto it = perScreen.constFind(PSK::ZonePadding);
         if (it != perScreen.constEnd()) {
-            mark(GapLayer::PerScreen);
             return it->toInt();
         }
     }
     if (layout && layout->hasZonePaddingOverride()) {
-        mark(GapLayer::Layout);
         return layout->zonePadding();
     }
     if (settings) {
-        mark(GapLayer::Global);
         return settings->zonePadding();
     }
-    mark(GapLayer::Default);
     return PhosphorEngine::GeometryDefaults::ZonePadding;
 }
 
 ::PhosphorLayout::EdgeGaps getEffectiveOuterGaps(PhosphorZones::Layout* layout, ISettings* settings,
-                                                 const QString& screenId, const QVariantMap& ruleGapOverride,
-                                                 GapLayer* winningLayer)
+                                                 const QString& screenId, const QVariantMap& ruleGapOverride)
 {
     namespace GD = PhosphorEngine::GeometryDefaults;
-    const auto mark = [winningLayer](GapLayer layer) {
-        if (winningLayer)
-            *winningLayer = layer;
-    };
     // Highest precedence: a context-rule gap override for this context.
     if (auto ruleGaps = resolveOuterGapsFromMap(ruleGapOverride, settings)) {
-        mark(GapLayer::ContextRule);
         return *ruleGaps;
     }
     if (!screenId.isEmpty() && settings) {
         QVariantMap perScreen = getPerScreenSnappingWithFallback(settings, screenId);
         if (auto perScreenGaps = resolveOuterGapsFromMap(perScreen, settings)) {
-            mark(GapLayer::PerScreen);
             return *perScreenGaps;
         }
     }
     if (layout && layout->usePerSideOuterGap() && layout->hasPerSideOuterGapOverride()) {
-        mark(GapLayer::Layout);
         ::PhosphorLayout::EdgeGaps gaps = layout->rawOuterGaps();
         if (settings && settings->usePerSideOuterGap()) {
             if (gaps.top < 0)
@@ -237,18 +203,15 @@ int getEffectiveZonePadding(PhosphorZones::Layout* layout, ISettings* settings, 
         return gaps;
     }
     if (layout && layout->hasOuterGapOverride()) {
-        mark(GapLayer::Layout);
         return ::PhosphorLayout::EdgeGaps::uniform(layout->outerGap());
     }
     if (settings) {
-        mark(GapLayer::Global);
         if (settings->usePerSideOuterGap()) {
             return {settings->outerGapTop(), settings->outerGapBottom(), settings->outerGapLeft(),
                     settings->outerGapRight()};
         }
         return ::PhosphorLayout::EdgeGaps::uniform(settings->outerGap());
     }
-    mark(GapLayer::Default);
     return ::PhosphorLayout::EdgeGaps::uniform(GD::OuterGap);
 }
 

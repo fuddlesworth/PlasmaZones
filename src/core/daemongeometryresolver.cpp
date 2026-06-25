@@ -41,17 +41,6 @@ PhosphorLayout::EdgeGaps DaemonGeometryResolver::resolveOuterGaps(PhosphorZones:
     return GeometryUtils::getEffectiveOuterGaps(layout, m_settings, screenId, contextGapOverrideFor(screenId));
 }
 
-GapProvenance DaemonGeometryResolver::resolveGapProvenance(PhosphorZones::Layout* layout, const QString& screenId) const
-{
-    GapProvenance prov;
-    const QVariantMap ruleOverride = contextGapOverrideFor(screenId);
-    prov.zonePadding =
-        GeometryUtils::getEffectiveZonePadding(layout, m_settings, screenId, ruleOverride, &prov.zonePaddingLayer);
-    prov.outerGaps =
-        GeometryUtils::getEffectiveOuterGaps(layout, m_settings, screenId, ruleOverride, &prov.outerGapsLayer);
-    return prov;
-}
-
 int DaemonGeometryResolver::defaultBorderWidth() const
 {
     return m_settings ? m_settings->borderWidth() : 2;

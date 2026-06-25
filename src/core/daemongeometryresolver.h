@@ -10,8 +10,6 @@
 
 #include <functional>
 
-#include "geometryutils.h"
-
 namespace PhosphorZones {
 class LayoutRegistry;
 }
@@ -19,18 +17,6 @@ class LayoutRegistry;
 namespace PlasmaZones {
 
 class ISettings;
-
-/// Effective gap values for a screen plus which cascade layer supplied each,
-/// for the read-only "what wins here?" provenance query. Computed off the SAME
-/// inputs as resolveZonePadding / resolveOuterGaps (same context-rule override),
-/// so the inspector matches actual geometry.
-struct GapProvenance
-{
-    int zonePadding = 0;
-    GeometryUtils::GapLayer zonePaddingLayer = GeometryUtils::GapLayer::Default;
-    PhosphorLayout::EdgeGaps outerGaps;
-    GeometryUtils::GapLayer outerGapsLayer = GeometryUtils::GapLayer::Default;
-};
 
 /// Bridges the daemon's ISettings + window-rule context resolution to the
 /// placement library's IGeometryResolver. Gaps resolve through the cascade
@@ -56,11 +42,6 @@ public:
     PhosphorLayout::EdgeGaps resolveOuterGaps(PhosphorZones::Layout* layout, const QString& screenId) const override;
     int defaultBorderWidth() const override;
     int defaultBorderRadius() const override;
-
-    /// Resolve the effective gaps for @p screenId (using @p layout for the
-    /// layout layer) AND which cascade layer supplied each value. Reuses the
-    /// exact inputs of resolveZonePadding / resolveOuterGaps.
-    GapProvenance resolveGapProvenance(PhosphorZones::Layout* layout, const QString& screenId) const;
 
 private:
     /// Build a PerScreenSnappingKey-shaped override map from the context rules

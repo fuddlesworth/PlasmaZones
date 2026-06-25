@@ -100,7 +100,6 @@ SettingsFlickable {
             scopeAppSettings: settingsController
             scopeHasOverridesMethod: "hasPerScreenSnappingSettings"
             scopeClearerMethod: "clearPerScreenSnappingSettings"
-            provenanceEnabled: true
             // Snapping shares the "Inner gap" / "Outer gap" labels with tiling
             // (consistent cross-mode wording) but has no Smart gaps. Inner-gap
             // bounds come from zonePaddingMin/Max; the outer / per-side gaps from

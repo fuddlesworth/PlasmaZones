@@ -30,35 +30,10 @@
 #include <PhosphorWindowRules/WindowRuleStore.h>
 
 #include <QDBusConnection>
-#include <QJsonDocument>
-#include <QJsonObject>
 #include <QString>
 #include <QStringList>
 
 namespace PlasmaZones {
-
-QVariantMap SettingsController::gapProvenance(const QString& screenName) const
-{
-    QVariantMap result;
-    const QDBusMessage reply = DaemonDBus::callDaemon(QString(PhosphorProtocol::Service::Interface::Control),
-                                                      QStringLiteral("getGapProvenance"), {screenName});
-    if (reply.type() != QDBusMessage::ReplyMessage || reply.arguments().isEmpty()) {
-        return result; // daemon unreachable / error reply
-    }
-    const QString json = reply.arguments().constFirst().toString();
-    if (json.isEmpty()) {
-        return result;
-    }
-    const QJsonObject root = QJsonDocument::fromJson(json.toUtf8()).object();
-    const auto unpack = [&root, &result](QLatin1String facetKey, const QString& valueKey, const QString& layerKey) {
-        const QJsonObject facet = root.value(facetKey).toObject();
-        result.insert(valueKey, facet.value(QLatin1String("value")).toInt());
-        result.insert(layerKey, facet.value(QLatin1String("layer")).toString());
-    };
-    unpack(QLatin1String("innerGap"), QStringLiteral("innerValue"), QStringLiteral("innerLayer"));
-    unpack(QLatin1String("outerGap"), QStringLiteral("outerValue"), QStringLiteral("outerLayer"));
-    return result;
-}
 
 void SettingsController::wireDaemonSubscriptions(QStringList& failedSubscriptions)
 {

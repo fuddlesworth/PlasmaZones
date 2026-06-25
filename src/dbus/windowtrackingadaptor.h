@@ -66,7 +66,6 @@ class ScreenModeRouter;
 
 class PersistenceWorker;
 class ISettings;
-class DaemonGeometryResolver;
 
 class ZoneDetectionAdaptor;
 
@@ -995,15 +994,6 @@ private Q_SLOTS:
     void onPanelGeometryReady();
 
 public:
-    /// The owned DaemonGeometryResolver, typed (m_geometryResolver is held as
-    /// the IGeometryResolver base for the placement engine). Lets the Control
-    /// adaptor reach resolveGapProvenance for the read-only "what wins here?"
-    /// query. Never null after construction.
-    DaemonGeometryResolver* daemonGeometryResolver() const
-    {
-        return m_daemonGeometryResolver;
-    }
-
     /// Resolve a resnap filter (empty / physical / virtual screen id) into
     /// the concrete list of snap-mode screens the resnap should touch.
     /// Consults the shared ScreenModeRouter to drop autotile screens from
@@ -1158,9 +1148,6 @@ private:
     // unique_ptr must outlive m_service — declare it BEFORE m_service so
     // reverse-order member destruction tears m_service down first.
     std::unique_ptr<PhosphorPlacement::IGeometryResolver> m_geometryResolver;
-    /// Non-owning typed alias of *m_geometryResolver (which is always a
-    /// DaemonGeometryResolver) for the provenance accessor above.
-    DaemonGeometryResolver* m_daemonGeometryResolver = nullptr;
     PhosphorPlacement::WindowTrackingService* m_service = nullptr;
 
     // Shared registry: compositor-supplied instance id → current metadata.
