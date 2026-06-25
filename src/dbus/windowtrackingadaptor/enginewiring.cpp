@@ -665,7 +665,9 @@ void WindowTrackingAdaptor::applyOpenScreenRouting(const QString& windowId, cons
     if (target.isEmpty() || target == screenId) {
         return;
     }
-    PhosphorScreens::ScreenManager* screens = m_service ? m_service->screenManager() : nullptr;
+    // m_service is non-null post-construction (class invariant); screenManager()
+    // itself may still be null (e.g. an unconfigured test fixture), so guard that.
+    PhosphorScreens::ScreenManager* screens = m_service->screenManager();
     if (!screens) {
         return;
     }

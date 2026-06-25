@@ -139,7 +139,7 @@ SnapResult SnapEngine::calculateSnapToPlacementRule(const QString& windowId, con
 
     qCInfo(PhosphorSnapEngine::lcSnapEngine)
         << "calculateSnapToPlacementRule: snapping" << windowId << "to zones" << ordinals << "on screen"
-        << placementScreen << (directive.targetScreenId.isEmpty() ? "(opening screen)" : "(routed)");
+        << placementScreen << (placementScreen != windowScreenName ? "(routed)" : "(opening screen)");
 
     SnapResult result;
     result.shouldSnap = true;
