@@ -3,7 +3,6 @@
 
 import QtQuick
 import QtQuick.Controls
-import QtQuick.Dialogs
 import QtQuick.Layouts
 import org.kde.kirigami as Kirigami
 
@@ -44,150 +43,45 @@ SettingsFlickable {
         width: parent.width
         spacing: Kirigami.Units.largeSpacing
 
-        // =================================================================
-        // Colors Card
-        // =================================================================
-        SettingsCard {
+        // Colors / Decorations / Borders — shared with Snapping → Window
+        // Appearance via AppearanceFacetCards. These are global (not per-screen),
+        // so they carry no scope chrome.
+        AppearanceFacetCards {
             Layout.fillWidth: true
-            headerText: i18n("Colors")
-            searchAnchor: "colors"
-            collapsible: true
 
-            contentItem: ColumnLayout {
-                spacing: Kirigami.Units.smallSpacing
+            useSystemBorderColors: appSettings.autotileUseSystemBorderColors
+            activeBorderColor: appSettings.autotileBorderColor
+            inactiveBorderColor: appSettings.autotileInactiveBorderColor
+            hideTitleBars: appSettings.autotileHideTitleBars
+            hideTitleBarsDescription: i18n("Remove window title bars while autotiled, restored when floating")
+            showBorder: appSettings.autotileShowBorder
+            borderWidth: appSettings.autotileBorderWidth
+            borderWidthMin: root.settingsBridge.autotileBorderWidthMin
+            borderWidthMax: root.settingsBridge.autotileBorderWidthMax
+            borderRadius: appSettings.autotileBorderRadius
+            borderRadiusMin: root.settingsBridge.autotileBorderRadiusMin
+            borderRadiusMax: root.settingsBridge.autotileBorderRadiusMax
 
-                SettingsRow {
-                    title: i18n("Use system accent color")
-                    searchAnchor: "useSystemAccentColor"
-                    description: i18n("Derive border colors from your system color scheme")
-
-                    SettingsSwitch {
-                        id: useSystemColorsSwitch
-
-                        checked: appSettings.autotileUseSystemBorderColors
-                        accessibleName: i18n("Use system accent color")
-                        onToggled: function (newValue) {
-                            appSettings.autotileUseSystemBorderColors = newValue;
-                        }
-                    }
-                }
-
-                SettingsSeparator {
-                    visible: !useSystemColorsSwitch.checked
-                }
-
-                SettingsRow {
-                    visible: !useSystemColorsSwitch.checked
-                    title: i18n("Active border color")
-                    searchAnchor: "activeBorderColor"
-                    description: i18n("Border color for the focused window")
-
-                    ColorSwatchRow {
-                        color: appSettings.autotileBorderColor
-                        onClicked: {
-                            activeBorderColorDialog.selectedColor = appSettings.autotileBorderColor;
-                            activeBorderColorDialog.open();
-                        }
-                    }
-                }
-
-                SettingsSeparator {
-                    visible: !useSystemColorsSwitch.checked
-                }
-
-                SettingsRow {
-                    visible: !useSystemColorsSwitch.checked
-                    title: i18n("Inactive border color")
-                    searchAnchor: "inactiveBorderColor"
-                    description: i18n("Border color for unfocused windows")
-
-                    ColorSwatchRow {
-                        color: appSettings.autotileInactiveBorderColor
-                        onClicked: {
-                            inactiveBorderColorDialog.selectedColor = appSettings.autotileInactiveBorderColor;
-                            inactiveBorderColorDialog.open();
-                        }
-                    }
-                }
+            onUseSystemBorderColorsToggled: checked => {
+                return appSettings.autotileUseSystemBorderColors = checked;
             }
-        }
-
-        // =================================================================
-        // Decorations Card
-        // =================================================================
-        SettingsCard {
-            Layout.fillWidth: true
-            headerText: i18n("Decorations")
-            searchAnchor: "decorations"
-            collapsible: true
-
-            contentItem: ColumnLayout {
-                spacing: Kirigami.Units.smallSpacing
-
-                SettingsRow {
-                    title: i18n("Hide title bars")
-                    searchAnchor: "hideTitleBars"
-                    description: i18n("Remove window title bars while autotiled, restored when floating")
-
-                    SettingsSwitch {
-                        checked: appSettings.autotileHideTitleBars
-                        accessibleName: i18n("Hide title bars on tiled windows")
-                        onToggled: function (newValue) {
-                            appSettings.autotileHideTitleBars = newValue;
-                        }
-                    }
-                }
+            onActiveBorderColorPicked: selectedColor => {
+                return appSettings.autotileBorderColor = selectedColor;
             }
-        }
-
-        // =================================================================
-        // Borders Card
-        // =================================================================
-        SettingsCard {
-            Layout.fillWidth: true
-            headerText: i18n("Borders")
-            searchAnchor: "borders"
-            showToggle: true
-            toggleChecked: appSettings.autotileShowBorder
-            onToggleClicked: checked => {
+            onInactiveBorderColorPicked: selectedColor => {
+                return appSettings.autotileInactiveBorderColor = selectedColor;
+            }
+            onHideTitleBarsToggled: checked => {
+                return appSettings.autotileHideTitleBars = checked;
+            }
+            onShowBorderToggled: checked => {
                 return appSettings.autotileShowBorder = checked;
             }
-            collapsible: true
-
-            contentItem: ColumnLayout {
-                spacing: Kirigami.Units.smallSpacing
-
-                SettingsRow {
-                    title: i18n("Border width")
-                    searchAnchor: "borderWidth"
-                    description: i18n("Thickness of colored borders around tiled windows")
-
-                    SettingsSpinBox {
-                        from: root.settingsBridge.autotileBorderWidthMin
-                        to: root.settingsBridge.autotileBorderWidthMax
-                        value: appSettings.autotileBorderWidth
-                        onValueModified: value => {
-                            return appSettings.autotileBorderWidth = value;
-                        }
-                    }
-                }
-
-                SettingsSeparator {}
-
-                SettingsRow {
-                    title: i18n("Corner radius")
-                    searchAnchor: "cornerRadius"
-                    description: i18n("Roundness of border corners (0 for square)")
-
-                    SettingsSpinBox {
-                        from: root.settingsBridge.autotileBorderRadiusMin
-                        to: root.settingsBridge.autotileBorderRadiusMax
-                        value: appSettings.autotileBorderRadius
-                        onValueModified: value => {
-                            return appSettings.autotileBorderRadius = value;
-                        }
-                    }
-                }
+            onBorderWidthModified: value => {
+                return appSettings.autotileBorderWidth = value;
+            }
+            onBorderRadiusModified: value => {
+                return appSettings.autotileBorderRadius = value;
             }
         }
 
@@ -258,24 +152,5 @@ SettingsFlickable {
                 });
             }
         }
-    }
-
-    // =====================================================================
-    // Color Dialogs
-    // =====================================================================
-    ColorDialog {
-        id: activeBorderColorDialog
-
-        options: ColorDialog.ShowAlphaChannel
-        title: i18n("Choose Active Border Color")
-        onAccepted: appSettings.autotileBorderColor = selectedColor
-    }
-
-    ColorDialog {
-        id: inactiveBorderColorDialog
-
-        options: ColorDialog.ShowAlphaChannel
-        title: i18n("Choose Inactive Border Color")
-        onAccepted: appSettings.autotileInactiveBorderColor = selectedColor
     }
 }

@@ -3,7 +3,6 @@
 
 import QtQuick
 import QtQuick.Controls
-import QtQuick.Dialogs
 import QtQuick.Layouts
 import org.kde.kirigami as Kirigami
 
@@ -44,150 +43,49 @@ SettingsFlickable {
         width: parent.width
         spacing: Kirigami.Units.largeSpacing
 
-        // =================================================================
-        // Colors Card
-        // =================================================================
-        SettingsCard {
+        // Colors / Decorations / Borders — shared with Tiling → Appearance via
+        // AppearanceFacetCards. These are global (not per-screen), so they carry
+        // no scope chrome.
+        AppearanceFacetCards {
             Layout.fillWidth: true
-            headerText: i18n("Colors")
-            searchAnchor: "colors"
-            collapsible: true
 
-            contentItem: ColumnLayout {
-                spacing: Kirigami.Units.smallSpacing
+            useSystemBorderColors: appSettings.snappingUseSystemBorderColors
+            activeBorderColor: appSettings.snappingBorderColor
+            inactiveBorderColor: appSettings.snappingInactiveBorderColor
+            activeColorDescription: i18n("Border color for the focused snapped window")
+            inactiveColorDescription: i18n("Border color for unfocused snapped windows")
+            hideTitleBars: appSettings.snappingHideTitleBars
+            hideTitleBarsDescription: i18n("Remove window title bars while snapped, restored when floating")
+            hideTitleBarsAccessibleName: i18n("Hide title bars on snapped windows")
+            showBorder: appSettings.snappingShowBorder
+            borderWidth: appSettings.snappingBorderWidth
+            borderWidthMin: root.settingsBridge.snappingBorderWidthMin
+            borderWidthMax: root.settingsBridge.snappingBorderWidthMax
+            borderWidthDescription: i18n("Thickness of colored borders around snapped windows")
+            borderRadius: appSettings.snappingBorderRadius
+            borderRadiusMin: root.settingsBridge.snappingBorderRadiusMin
+            borderRadiusMax: root.settingsBridge.snappingBorderRadiusMax
 
-                SettingsRow {
-                    title: i18n("Use system accent color")
-                    searchAnchor: "useSystemAccentColor"
-                    description: i18n("Derive border colors from your system color scheme")
-
-                    SettingsSwitch {
-                        id: useSystemColorsSwitch
-
-                        checked: appSettings.snappingUseSystemBorderColors
-                        accessibleName: i18n("Use system accent color")
-                        onToggled: function (newValue) {
-                            appSettings.snappingUseSystemBorderColors = newValue;
-                        }
-                    }
-                }
-
-                SettingsSeparator {
-                    visible: !useSystemColorsSwitch.checked
-                }
-
-                SettingsRow {
-                    visible: !useSystemColorsSwitch.checked
-                    title: i18n("Active border color")
-                    searchAnchor: "activeBorderColor"
-                    description: i18n("Border color for the focused snapped window")
-
-                    ColorSwatchRow {
-                        color: appSettings.snappingBorderColor
-                        onClicked: {
-                            activeBorderColorDialog.selectedColor = appSettings.snappingBorderColor;
-                            activeBorderColorDialog.open();
-                        }
-                    }
-                }
-
-                SettingsSeparator {
-                    visible: !useSystemColorsSwitch.checked
-                }
-
-                SettingsRow {
-                    visible: !useSystemColorsSwitch.checked
-                    title: i18n("Inactive border color")
-                    searchAnchor: "inactiveBorderColor"
-                    description: i18n("Border color for unfocused snapped windows")
-
-                    ColorSwatchRow {
-                        color: appSettings.snappingInactiveBorderColor
-                        onClicked: {
-                            inactiveBorderColorDialog.selectedColor = appSettings.snappingInactiveBorderColor;
-                            inactiveBorderColorDialog.open();
-                        }
-                    }
-                }
+            onUseSystemBorderColorsToggled: checked => {
+                return appSettings.snappingUseSystemBorderColors = checked;
             }
-        }
-
-        // =================================================================
-        // Decorations Card
-        // =================================================================
-        SettingsCard {
-            Layout.fillWidth: true
-            headerText: i18n("Decorations")
-            searchAnchor: "decorations"
-            collapsible: true
-
-            contentItem: ColumnLayout {
-                spacing: Kirigami.Units.smallSpacing
-
-                SettingsRow {
-                    title: i18n("Hide title bars")
-                    searchAnchor: "hideTitleBars"
-                    description: i18n("Remove window title bars while snapped, restored when floating")
-
-                    SettingsSwitch {
-                        checked: appSettings.snappingHideTitleBars
-                        accessibleName: i18n("Hide title bars on snapped windows")
-                        onToggled: function (newValue) {
-                            appSettings.snappingHideTitleBars = newValue;
-                        }
-                    }
-                }
+            onActiveBorderColorPicked: selectedColor => {
+                return appSettings.snappingBorderColor = selectedColor;
             }
-        }
-
-        // =================================================================
-        // Borders Card
-        // =================================================================
-        SettingsCard {
-            Layout.fillWidth: true
-            headerText: i18n("Borders")
-            searchAnchor: "borders"
-            showToggle: true
-            toggleChecked: appSettings.snappingShowBorder
-            onToggleClicked: checked => {
+            onInactiveBorderColorPicked: selectedColor => {
+                return appSettings.snappingInactiveBorderColor = selectedColor;
+            }
+            onHideTitleBarsToggled: checked => {
+                return appSettings.snappingHideTitleBars = checked;
+            }
+            onShowBorderToggled: checked => {
                 return appSettings.snappingShowBorder = checked;
             }
-            collapsible: true
-
-            contentItem: ColumnLayout {
-                spacing: Kirigami.Units.smallSpacing
-
-                SettingsRow {
-                    title: i18n("Border width")
-                    searchAnchor: "borderWidth"
-                    description: i18n("Thickness of colored borders around snapped windows")
-
-                    SettingsSpinBox {
-                        from: root.settingsBridge.snappingBorderWidthMin
-                        to: root.settingsBridge.snappingBorderWidthMax
-                        value: appSettings.snappingBorderWidth
-                        onValueModified: value => {
-                            return appSettings.snappingBorderWidth = value;
-                        }
-                    }
-                }
-
-                SettingsSeparator {}
-
-                SettingsRow {
-                    title: i18n("Corner radius")
-                    searchAnchor: "cornerRadius"
-                    description: i18n("Roundness of border corners (0 for square)")
-
-                    SettingsSpinBox {
-                        from: root.settingsBridge.snappingBorderRadiusMin
-                        to: root.settingsBridge.snappingBorderRadiusMax
-                        value: appSettings.snappingBorderRadius
-                        onValueModified: value => {
-                            return appSettings.snappingBorderRadius = value;
-                        }
-                    }
-                }
+            onBorderWidthModified: value => {
+                return appSettings.snappingBorderWidth = value;
+            }
+            onBorderRadiusModified: value => {
+                return appSettings.snappingBorderRadius = value;
             }
         }
 
@@ -258,24 +156,5 @@ SettingsFlickable {
                 });
             }
         }
-    }
-
-    // =====================================================================
-    // Color Dialogs
-    // =====================================================================
-    ColorDialog {
-        id: activeBorderColorDialog
-
-        options: ColorDialog.ShowAlphaChannel
-        title: i18n("Choose Active Border Color")
-        onAccepted: appSettings.snappingBorderColor = selectedColor
-    }
-
-    ColorDialog {
-        id: inactiveBorderColorDialog
-
-        options: ColorDialog.ShowAlphaChannel
-        title: i18n("Choose Inactive Border Color")
-        onAccepted: appSettings.snappingInactiveBorderColor = selectedColor
     }
 }
