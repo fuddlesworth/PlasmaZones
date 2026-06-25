@@ -148,9 +148,7 @@ void SettingsController::buildApplicationController()
     // sidebar location moved. Surface-node grouping mirrors src/config/surfacenodes.h
     // (windows.tiled / windows.snapped; daemon.overlay). The Tiling and Snapping
     // feature areas keep behavior only.
-    regVirtual(QStringLiteral("appearance-surfaces"), QStringLiteral("appearance"), PhosphorI18n::tr("Surfaces"),
-               QString(), QStringLiteral("preferences-desktop-theme"), /*collapsible=*/true);
-    regVirtual(QStringLiteral("appearance-windows"), QStringLiteral("appearance-surfaces"), PhosphorI18n::tr("Windows"),
+    regVirtual(QStringLiteral("appearance-windows"), QStringLiteral("appearance"), PhosphorI18n::tr("Windows"),
                QString(), QStringLiteral("preferences-system-windows"), /*collapsible=*/true);
     // Windows → Tiled / Snapped: the tiled-window and snapped-window appearance
     // pages (each composes the shared AppearanceFacetCards + its Gaps card). Both
@@ -164,8 +162,8 @@ void SettingsController::buildApplicationController()
     // General; Zone Selector embeds ZoneSelectorSection in "appearance" mode
     // (its behavior stays under Snapping → Zone Selector). Both bind existing
     // controllers/Settings, so they are regVirtual.
-    regVirtual(QStringLiteral("appearance-daemon"), QStringLiteral("appearance-surfaces"),
-               PhosphorI18n::tr("Daemon Surfaces"), QString(), QStringLiteral("preferences-desktop-display"),
+    regVirtual(QStringLiteral("appearance-daemon"), QStringLiteral("appearance"), PhosphorI18n::tr("Daemon Surfaces"),
+               QString(), QStringLiteral("preferences-desktop-display"),
                /*collapsible=*/true);
     regVirtual(QStringLiteral("osd-appearance"), QStringLiteral("appearance-daemon"), PhosphorI18n::tr("OSDs"),
                QStringLiteral("OsdAppearancePage.qml"), QStringLiteral("dialog-information"));
@@ -214,7 +212,7 @@ void SettingsController::buildApplicationController()
                PhosphorI18n::tr("Behavior"), QStringLiteral("SnappingWindowBehaviorPage.qml"),
                QStringLiteral("preferences-system"));
     // Window appearance (snapping-window-appearance) re-parented to the
-    // Appearance hub (Surfaces → Windows → Snapped) above.
+    // Appearance hub (Windows → Snapped) above.
 
     regVirtual(QStringLiteral("snapping-config-cat"), QStringLiteral("snapping"), PhosphorI18n::tr("Configuration"),
                QString(), QStringLiteral("configure"), /*collapsible=*/true);
@@ -238,7 +236,7 @@ void SettingsController::buildApplicationController()
     regPage(m_tilingBehaviorPage, QStringLiteral("tiling-window-cat"), PhosphorI18n::tr("Behavior"),
             QStringLiteral("TilingBehaviorPage.qml"), QStringLiteral("preferences-system"));
     // Tiled-window appearance (tiling-appearance) re-parented to the Appearance
-    // hub (Surfaces → Windows → Tiled) above.
+    // hub (Windows → Tiled) above.
 
     // Algorithm is a top-level leaf under Tiling (no snapping peer — snapping's
     // layout equivalent lives under Display → Layouts). Divider after it sets the
@@ -398,11 +396,9 @@ const QHash<QString, QString>& SettingsController::parentPageRedirects()
     static const QHash<QString, QString> redirects{
         {QStringLiteral("display"), QStringLiteral("virtualscreens")},
         // Appearance hub virtual parents → first reachable leaf. The first
-        // child chain is appearance → Surfaces → Windows → Tiled
-        // (tiling-appearance); Daemon Surfaces' first leaf is Zone Overlay
-        // (snapping-overlay-appearance).
+        // child chain is appearance → Windows → Tiled (tiling-appearance);
+        // Daemon Surfaces' first leaf is OSDs (osd-appearance).
         {QStringLiteral("appearance"), QStringLiteral("tiling-appearance")},
-        {QStringLiteral("appearance-surfaces"), QStringLiteral("tiling-appearance")},
         {QStringLiteral("appearance-windows"), QStringLiteral("tiling-appearance")},
         {QStringLiteral("appearance-daemon"), QStringLiteral("osd-appearance")},
         // "placement" is the inline-collapsible parent of snapping/tiling; it
@@ -513,9 +509,10 @@ const QHash<QString, QSet<QString>>& SettingsController::pageGroupChildren()
     static const QSet<QString> kTilingAllLeaves =
         kTilingWindowChildren + QSet<QString>{kTilingAlgorithm} + kTilingConfigChildren;
     // Appearance hub leaves (re-parented from the feature areas above). Grouped
-    // by the surface tree so a collapsed Appearance / Surfaces / Windows /
-    // Daemon-Surfaces header lights its dirty badge when any contained node is
-    // dirty. Pack Library (snapping-shaders) hangs directly off "appearance".
+    // by surface so a collapsed Appearance / Windows / Daemon-Surfaces header
+    // lights its dirty badge when any contained node is dirty. Windows and Daemon
+    // Surfaces hang directly off the Appearance drill-down, as does Pack Library
+    // (snapping-shaders).
     static const QSet<QString> kAppearanceWindowsChildren{
         QStringLiteral("tiling-appearance"),
         QStringLiteral("snapping-window-appearance"),
@@ -525,12 +522,10 @@ const QHash<QString, QSet<QString>>& SettingsController::pageGroupChildren()
         QStringLiteral("snapping-overlay-appearance"),
         QStringLiteral("zoneselector-appearance"),
     };
-    static const QSet<QString> kAppearanceSurfacesChildren = kAppearanceWindowsChildren + kAppearanceDaemonChildren;
     static const QSet<QString> kAppearanceAllLeaves =
-        kAppearanceSurfacesChildren + QSet<QString>{QStringLiteral("snapping-shaders")};
+        kAppearanceWindowsChildren + kAppearanceDaemonChildren + QSet<QString>{QStringLiteral("snapping-shaders")};
     static const QHash<QString, QSet<QString>> groups{
         {QStringLiteral("appearance"), kAppearanceAllLeaves},
-        {QStringLiteral("appearance-surfaces"), kAppearanceSurfacesChildren},
         {QStringLiteral("appearance-windows"), kAppearanceWindowsChildren},
         {QStringLiteral("appearance-daemon"), kAppearanceDaemonChildren},
         {QStringLiteral("snapping"), kSnappingAllLeaves},
