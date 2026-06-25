@@ -157,14 +157,22 @@ void SettingsController::buildApplicationController()
             QStringLiteral("TilingAppearancePage.qml"), QStringLiteral("window-duplicate"));
     regPage(m_snappingWindowAppearancePage, QStringLiteral("appearance-windows"), PhosphorI18n::tr("Snapped"),
             QStringLiteral("SnappingWindowAppearancePage.qml"), QStringLiteral("view-split-left-right"));
-    // Daemon Surfaces → Zone Overlay: the drag-overlay appearance page. (OSDs and
-    // Zone Selector appearance nodes arrive in the follow-up split commit.)
+    // Daemon Surfaces → OSDs · Zone Overlay · Zone Selector. OSDs and Zone
+    // Selector are appearance-only views: OSDs hosts the OSD style moved out of
+    // General; Zone Selector embeds ZoneSelectorSection in "appearance" mode
+    // (its behavior stays under Snapping → Zone Selector). Both bind existing
+    // controllers/Settings, so they are regVirtual.
     regVirtual(QStringLiteral("appearance-daemon"), QStringLiteral("appearance-surfaces"),
                PhosphorI18n::tr("Daemon Surfaces"), QString(), QStringLiteral("preferences-desktop-display"),
                /*collapsible=*/true);
+    regVirtual(QStringLiteral("osd-appearance"), QStringLiteral("appearance-daemon"), PhosphorI18n::tr("OSDs"),
+               QStringLiteral("OsdAppearancePage.qml"), QStringLiteral("dialog-information"));
     regVirtual(QStringLiteral("snapping-overlay-appearance"), QStringLiteral("appearance-daemon"),
                PhosphorI18n::tr("Zone Overlay"), QStringLiteral("SnappingOverlayAppearancePage.qml"),
                QStringLiteral("preferences-desktop-color"));
+    regVirtual(QStringLiteral("zoneselector-appearance"), QStringLiteral("appearance-daemon"),
+               PhosphorI18n::tr("Zone Selector"), QStringLiteral("ZoneSelectorAppearancePage.qml"),
+               QStringLiteral("view-choose"));
     // Pack Library — the installed shader-pack browser, a cross-surface library
     // (sibling of Surfaces, not a surface node itself).
     regPage(m_snappingShadersPage.get(), QStringLiteral("appearance"), PhosphorI18n::tr("Pack Library"),
@@ -394,7 +402,7 @@ const QHash<QString, QString>& SettingsController::parentPageRedirects()
         {QStringLiteral("appearance"), QStringLiteral("tiling-appearance")},
         {QStringLiteral("appearance-surfaces"), QStringLiteral("tiling-appearance")},
         {QStringLiteral("appearance-windows"), QStringLiteral("tiling-appearance")},
-        {QStringLiteral("appearance-daemon"), QStringLiteral("snapping-overlay-appearance")},
+        {QStringLiteral("appearance-daemon"), QStringLiteral("osd-appearance")},
         // "placement" is the inline-collapsible parent of snapping/tiling; it
         // has no page of its own, so a --page=placement / D-Bus call lands on
         // the first leaf of its first child (snapping → snapping-overlay-behavior).
@@ -511,7 +519,9 @@ const QHash<QString, QSet<QString>>& SettingsController::pageGroupChildren()
         QStringLiteral("snapping-window-appearance"),
     };
     static const QSet<QString> kAppearanceDaemonChildren{
+        QStringLiteral("osd-appearance"),
         QStringLiteral("snapping-overlay-appearance"),
+        QStringLiteral("zoneselector-appearance"),
     };
     static const QSet<QString> kAppearanceSurfacesChildren = kAppearanceWindowsChildren + kAppearanceDaemonChildren;
     static const QSet<QString> kAppearanceAllLeaves =
@@ -561,6 +571,8 @@ const QSet<QString>& SettingsController::validPageNames()
         QStringLiteral("layouts"),
         QStringLiteral("snapping-overlay-behavior"),
         QStringLiteral("snapping-overlay-appearance"),
+        QStringLiteral("osd-appearance"),
+        QStringLiteral("zoneselector-appearance"),
         QStringLiteral("snapping-zoneselector"),
         QStringLiteral("snapping-window-behavior"),
         QStringLiteral("snapping-window-appearance"),

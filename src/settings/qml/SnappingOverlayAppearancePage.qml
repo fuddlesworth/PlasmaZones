@@ -401,37 +401,10 @@ SettingsFlickable {
                         }
                     }
 
-                    SettingsSeparator {}
-
-                    SettingsRow {
-                        title: i18n("Zone numbers")
-                        searchAnchor: "zoneNumbers"
-                        description: i18n("Display a number label inside each zone")
-
-                        SettingsSwitch {
-                            checked: appSettings.showZoneNumbers
-                            accessibleName: i18n("Show zone numbers")
-                            onToggled: function (newValue) {
-                                appSettings.showZoneNumbers = newValue;
-                            }
-                        }
-                    }
-
-                    SettingsSeparator {}
-
-                    SettingsRow {
-                        title: i18n("Flash on layout switch")
-                        searchAnchor: "flashOnLayoutSwitch"
-                        description: i18n("Briefly flash zones when switching between layouts")
-
-                        SettingsSwitch {
-                            checked: appSettings.flashZonesOnSwitch
-                            accessibleName: i18n("Flash zones on layout switch")
-                            onToggled: function (newValue) {
-                                appSettings.flashZonesOnSwitch = newValue;
-                            }
-                        }
-                    }
+                    // Zone numbers (showZoneNumbers) and Flash on layout switch
+                    // (flashZonesOnSwitch) moved to Snapping → Overlay → Behavior:
+                    // they change what the overlay does on an event, not how a
+                    // surface is styled.
                 }
             }
         }

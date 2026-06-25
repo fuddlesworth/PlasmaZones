@@ -7,12 +7,12 @@ import QtQuick.Layouts
 import QtQuick.Window
 import org.kde.kirigami as Kirigami
 
-// Snapping → Zone Selector (behavior). The edge-triggered layout-picker popup's
-// behavior facets: the enable toggle and trigger distance. Its appearance facets
-// (position, arrangement, preview size) live under Appearance → Daemon Surfaces →
-// Zone Selector, which embeds the same ZoneSelectorSection in "appearance" mode.
-// The per-screen popup overrides are scoped by the header scope chip on each of
-// ZoneSelectorSection's per-monitor cards.
+// Appearance → Daemon Surfaces → Zone Selector. The popup's appearance facets:
+// on-screen position, layout arrangement and preview size. Its behavior (enable
+// + trigger distance) lives under Snapping → Zone Selector; both embed the same
+// ZoneSelectorSection (so the per-screen helper and effective* resolution stay
+// single-sourced) and select a facet subset via `mode`. Bounds wiring mirrors
+// SnappingZoneSelectorPage — the same controller bridge feeds both.
 SettingsFlickable {
     id: root
 
@@ -44,7 +44,7 @@ SettingsFlickable {
 
         ZoneSelectorSection {
             Layout.fillWidth: true
-            mode: "behavior"
+            mode: "appearance"
             appSettings: settingsController.settings
             controller: settingsController
             constants: root

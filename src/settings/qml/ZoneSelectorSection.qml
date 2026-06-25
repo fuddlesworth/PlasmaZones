@@ -33,6 +33,15 @@ ColumnLayout {
     // Screen aspect ratio for preview calculations (with safety check)
     property real screenAspectRatio: 16 / 9
     readonly property real safeAspectRatio: screenAspectRatio > 0 ? screenAspectRatio : (16 / 9)
+    // Which facets to render. The popup is split across two homes: its behavior
+    // (enable + trigger distance) lives under Snapping; its appearance (position,
+    // arrangement, preview size) lives under Appearance → Daemon Surfaces → Zone
+    // Selector. Both embed this one component (so the per-screen helper and the
+    // effective* resolution stay single-sourced) and pick a subset via `mode`.
+    // "all" keeps the unsplit page working if ever reused.
+    property string mode: "all"
+    readonly property bool showBehavior: mode === "all" || mode === "behavior"
+    readonly property bool showAppearance: mode === "all" || mode === "appearance"
     // Effective values that resolve per-screen > global
     readonly property int effectivePosition: settingValue("Position", appSettings.zoneSelectorPosition)
     readonly property int effectiveLayoutMode: settingValue("LayoutMode", appSettings.zoneSelectorLayoutMode)
@@ -80,7 +89,7 @@ ColumnLayout {
         Layout.fillWidth: true
         type: Kirigami.MessageType.Information
         text: i18n("The zone selector popup appears when dragging windows to screen edges, allowing quick layout selection.")
-        visible: true
+        visible: root.showBehavior
     }
 
     // Enable toggle. Intentionally app-wide (not per-monitor): it is the global
@@ -88,6 +97,7 @@ ColumnLayout {
     // Layout, Preview Size) carry the header scope chip and store per-monitor
     // overrides.
     SettingsRow {
+        visible: root.showBehavior
         title: i18n("Zone selector popup")
         searchAnchor: "zoneSelectorEnabled"
         description: i18n("Show a layout picker when dragging windows to screen edges")
@@ -101,9 +111,74 @@ ColumnLayout {
         }
     }
 
-    // Position & Trigger card - wrapped in Item for stable sizing
+    // Trigger distance card (behavior) - wrapped in Item for stable sizing. Was
+    // the second half of the old "Position & Trigger" card; Position split out to
+    // the appearance card below. Both share the one zone-selector per-screen
+    // override set (hasPerScreen/clearPerScreen), as the three cards always did.
     Item {
         Layout.fillWidth: true
+        visible: root.showBehavior
+        implicitHeight: triggerCard.implicitHeight
+
+        SettingsCard {
+            id: triggerCard
+
+            anchors.fill: parent
+            enabled: appSettings.zoneSelectorEnabled
+            headerText: i18n("Trigger")
+            searchAnchor: "triggerDistance"
+            collapsible: true
+            scopeEnabled: true
+            scopeAppSettings: root.controller
+            scopeHasOverridesMethod: "hasPerScreenZoneSelectorSettings"
+            scopeClearerMethod: "clearPerScreenZoneSelectorSettings"
+
+            contentItem: ColumnLayout {
+                spacing: Kirigami.Units.largeSpacing
+
+                SettingsRow {
+                    title: i18n("Trigger distance")
+                    searchAnchor: "triggerDistanceRow"
+                    description: i18n("How close to the screen edge before the popup appears")
+
+                    RowLayout {
+                        spacing: Kirigami.Units.smallSpacing
+
+                        Slider {
+                            id: triggerSlider
+
+                            Layout.preferredWidth: Kirigami.Units.gridUnit * 10
+                            from: root.constants.zoneSelectorTriggerMin
+                            to: root.constants.zoneSelectorTriggerMax
+                            stepSize: 10
+                            Accessible.name: i18n("Trigger distance")
+                            onMoved: root.writeSetting("TriggerDistance", value, function (v) {
+                                appSettings.zoneSelectorTriggerDistance = v;
+                            })
+
+                            Binding on value {
+                                value: root.effectiveTriggerDistance
+                                when: !triggerSlider.pressed
+                                restoreMode: Binding.RestoreNone
+                            }
+                        }
+
+                        Label {
+                            text: root.effectiveTriggerDistance + " px"
+                            Layout.preferredWidth: root.constants.sliderValueLabelWidth + Kirigami.Units.largeSpacing
+                            horizontalAlignment: Text.AlignRight
+                            font: Kirigami.Theme.fixedWidthFont
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // Position card (appearance) - wrapped in Item for stable sizing
+    Item {
+        Layout.fillWidth: true
+        visible: root.showAppearance
         implicitHeight: positionCard.implicitHeight
 
         SettingsCard {
@@ -111,8 +186,8 @@ ColumnLayout {
 
             anchors.fill: parent
             enabled: appSettings.zoneSelectorEnabled
-            headerText: i18n("Position & Trigger")
-            searchAnchor: "positionTrigger"
+            headerText: i18n("Position")
+            searchAnchor: "position"
             collapsible: true
             scopeEnabled: true
             scopeAppSettings: root.controller
@@ -152,52 +227,14 @@ ColumnLayout {
                         font: Kirigami.Theme.smallFont
                     }
                 }
-
-                SettingsSeparator {}
-
-                // Trigger distance
-                SettingsRow {
-                    title: i18n("Trigger distance")
-                    searchAnchor: "triggerDistance"
-                    description: i18n("How close to the screen edge before the popup appears")
-
-                    RowLayout {
-                        spacing: Kirigami.Units.smallSpacing
-
-                        Slider {
-                            id: triggerSlider
-
-                            Layout.preferredWidth: Kirigami.Units.gridUnit * 10
-                            from: root.constants.zoneSelectorTriggerMin
-                            to: root.constants.zoneSelectorTriggerMax
-                            stepSize: 10
-                            Accessible.name: i18n("Trigger distance")
-                            onMoved: root.writeSetting("TriggerDistance", value, function (v) {
-                                appSettings.zoneSelectorTriggerDistance = v;
-                            })
-
-                            Binding on value {
-                                value: root.effectiveTriggerDistance
-                                when: !triggerSlider.pressed
-                                restoreMode: Binding.RestoreNone
-                            }
-                        }
-
-                        Label {
-                            text: root.effectiveTriggerDistance + " px"
-                            Layout.preferredWidth: root.constants.sliderValueLabelWidth + Kirigami.Units.largeSpacing
-                            horizontalAlignment: Text.AlignRight
-                            font: Kirigami.Theme.fixedWidthFont
-                        }
-                    }
-                }
             }
         }
     }
 
-    // Layout Arrangement card - wrapped in Item for stable sizing
+    // Layout Arrangement card (appearance) - wrapped in Item for stable sizing
     Item {
         Layout.fillWidth: true
+        visible: root.showAppearance
         implicitHeight: layoutCard.implicitHeight
 
         SettingsCard {
@@ -297,9 +334,10 @@ ColumnLayout {
         }
     }
 
-    // Preview Size card - wrapped in Item for stable sizing
+    // Preview Size card (appearance) - wrapped in Item for stable sizing
     Item {
         Layout.fillWidth: true
+        visible: root.showAppearance
         implicitHeight: previewCard.implicitHeight
 
         SettingsCard {

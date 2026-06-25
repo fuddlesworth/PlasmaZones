@@ -91,6 +91,14 @@ void seedSearchCatalog(PhosphorControl::SearchController* search)
     search->setPageKeywords(QStringLiteral("snapping-shaders"),
                             {PhosphorI18n::tr("shader"), PhosphorI18n::tr("effect"), PhosphorI18n::tr("glow")});
 
+    // Appearance hub — Daemon Surfaces nodes that aren't a re-parented page.
+    search->setPageKeywords(QStringLiteral("osd-appearance"),
+                            {PhosphorI18n::tr("osd"), PhosphorI18n::tr("notification"),
+                             PhosphorI18n::tr("on-screen display"), PhosphorI18n::tr("style")});
+    search->setPageKeywords(QStringLiteral("zoneselector-appearance"),
+                            {PhosphorI18n::tr("zone selector"), PhosphorI18n::tr("position"),
+                             PhosphorI18n::tr("arrangement"), PhosphorI18n::tr("preview"), PhosphorI18n::tr("size")});
+
     // Tiling
     search->setPageKeywords(QStringLiteral("tiling-behavior"),
                             {PhosphorI18n::tr("tile"), PhosphorI18n::tr("tiling"), PhosphorI18n::tr("auto"),
@@ -228,10 +236,11 @@ void seedSearchCatalog(PhosphorControl::SearchController* search)
                {PhosphorI18n::tr("size"), PhosphorI18n::tr("text"), PhosphorI18n::tr("multiplier")});
     addSetting(search, QStringLiteral("snapping-overlay-appearance"), QStringLiteral("blurBehindZones"),
                PhosphorI18n::tr("Blur behind zones"), {PhosphorI18n::tr("frost"), PhosphorI18n::tr("background")});
-    addSetting(search, QStringLiteral("snapping-overlay-appearance"), QStringLiteral("zoneNumbers"),
+    // Zone numbers + Flash on layout switch moved to Overlay → Behavior (Display card).
+    addSetting(search, QStringLiteral("snapping-overlay-behavior"), QStringLiteral("zoneNumbers"),
                PhosphorI18n::tr("Zone numbers"),
                {PhosphorI18n::tr("index"), PhosphorI18n::tr("digit"), PhosphorI18n::tr("label")});
-    addSetting(search, QStringLiteral("snapping-overlay-appearance"), QStringLiteral("flashOnLayoutSwitch"),
+    addSetting(search, QStringLiteral("snapping-overlay-behavior"), QStringLiteral("flashOnLayoutSwitch"),
                PhosphorI18n::tr("Flash on layout switch"), {PhosphorI18n::tr("blink"), PhosphorI18n::tr("animation")});
     addSetting(search, QStringLiteral("snapping-overlay-appearance"), QStringLiteral("frameRate"),
                PhosphorI18n::tr("Frame rate"),
@@ -460,27 +469,36 @@ void seedSearchCatalog(PhosphorControl::SearchController* search)
     addSetting(search, QStringLiteral("general"), QStringLiteral("restore"), PhosphorI18n::tr("Restore"),
                {PhosphorI18n::tr("import"), PhosphorI18n::tr("load"), PhosphorI18n::tr("data")});
 
-    // Snapping › Zone Selector
+    // Snapping › Zone Selector (behavior — enable + trigger). Position,
+    // arrangement and preview size split out to the Appearance hub below.
     addSetting(search, QStringLiteral("snapping-zoneselector"), QStringLiteral("zoneSelectorEnabled"),
                PhosphorI18n::tr("Zone selector popup"),
                {PhosphorI18n::tr("enable"), PhosphorI18n::tr("toggle"), PhosphorI18n::tr("picker")});
-    addSection(search, QStringLiteral("snapping-zoneselector"), QStringLiteral("positionTrigger"),
-               PhosphorI18n::tr("Position & Trigger"));
-    addSetting(search, QStringLiteral("snapping-zoneselector"), QStringLiteral("triggerDistance"),
+    addSection(search, QStringLiteral("snapping-zoneselector"), QStringLiteral("triggerDistance"),
+               PhosphorI18n::tr("Trigger"));
+    addSetting(search, QStringLiteral("snapping-zoneselector"), QStringLiteral("triggerDistanceRow"),
                PhosphorI18n::tr("Trigger distance"),
                {PhosphorI18n::tr("edge"), PhosphorI18n::tr("distance"), PhosphorI18n::tr("proximity")});
-    addSection(search, QStringLiteral("snapping-zoneselector"), QStringLiteral("layoutArrangement"),
+
+    // Appearance › Daemon Surfaces › OSDs (moved from General → On-Screen Display)
+    addSetting(search, QStringLiteral("osd-appearance"), QStringLiteral("osdStyle"), PhosphorI18n::tr("OSD style"),
+               {PhosphorI18n::tr("notification"), PhosphorI18n::tr("style"), PhosphorI18n::tr("appearance")});
+
+    // Appearance › Daemon Surfaces › Zone Selector (position / arrangement / preview)
+    addSection(search, QStringLiteral("zoneselector-appearance"), QStringLiteral("position"),
+               PhosphorI18n::tr("Position"));
+    addSection(search, QStringLiteral("zoneselector-appearance"), QStringLiteral("layoutArrangement"),
                PhosphorI18n::tr("Layout Arrangement"));
-    addSetting(search, QStringLiteral("snapping-zoneselector"), QStringLiteral("arrangement"),
+    addSetting(search, QStringLiteral("zoneselector-appearance"), QStringLiteral("arrangement"),
                PhosphorI18n::tr("Arrangement"),
                {PhosphorI18n::tr("grid"), PhosphorI18n::tr("horizontal"), PhosphorI18n::tr("vertical")});
-    addSetting(search, QStringLiteral("snapping-zoneselector"), QStringLiteral("gridColumns"),
+    addSetting(search, QStringLiteral("zoneselector-appearance"), QStringLiteral("gridColumns"),
                PhosphorI18n::tr("Grid columns"),
                {PhosphorI18n::tr("columns"), PhosphorI18n::tr("per row"), PhosphorI18n::tr("count")});
-    addSetting(search, QStringLiteral("snapping-zoneselector"), QStringLiteral("maxVisibleRows"),
+    addSetting(search, QStringLiteral("zoneselector-appearance"), QStringLiteral("maxVisibleRows"),
                PhosphorI18n::tr("Max visible rows"),
                {PhosphorI18n::tr("rows"), PhosphorI18n::tr("scroll"), PhosphorI18n::tr("visible")});
-    addSection(search, QStringLiteral("snapping-zoneselector"), QStringLiteral("previewSize"),
+    addSection(search, QStringLiteral("zoneselector-appearance"), QStringLiteral("previewSize"),
                PhosphorI18n::tr("Preview Size"));
 
     // Ordering (shared OrderingPage) + Quick shortcuts (shared QuickLayoutSlotsCard)
