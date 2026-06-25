@@ -231,391 +231,393 @@ ColumnLayout {
         }
     }
 
-    // Layout Arrangement card (appearance) - wrapped in Item for stable sizing
-    Item {
-        Layout.fillWidth: true
-        visible: root.showAppearance
-        implicitHeight: layoutCard.implicitHeight
+    // Layout Arrangement + Preview Size are appearance fine-tuning — advanced.
+    AdvancedGroup {
+        Item {
+            Layout.fillWidth: true
+            visible: root.showAppearance
+            implicitHeight: layoutCard.implicitHeight
 
-        SettingsCard {
-            id: layoutCard
+            SettingsCard {
+                id: layoutCard
 
-            anchors.fill: parent
-            enabled: appSettings.zoneSelectorEnabled
-            headerText: i18n("Layout Arrangement")
-            searchAnchor: "layoutArrangement"
-            collapsible: true
-            scopeEnabled: true
-            scopeAppSettings: root.controller
-            scopeHasOverridesMethod: "hasPerScreenZoneSelectorSettings"
-            scopeClearerMethod: "clearPerScreenZoneSelectorSettings"
+                anchors.fill: parent
+                enabled: appSettings.zoneSelectorEnabled
+                headerText: i18n("Layout Arrangement")
+                searchAnchor: "layoutArrangement"
+                collapsible: true
+                scopeEnabled: true
+                scopeAppSettings: root.controller
+                scopeHasOverridesMethod: "hasPerScreenZoneSelectorSettings"
+                scopeClearerMethod: "clearPerScreenZoneSelectorSettings"
 
-            contentItem: ColumnLayout {
-                spacing: Kirigami.Units.smallSpacing
+                contentItem: ColumnLayout {
+                    spacing: Kirigami.Units.smallSpacing
 
-                SettingsRow {
-                    title: i18n("Arrangement")
-                    searchAnchor: "arrangement"
-                    description: i18n("How layout previews are arranged in the popup")
+                    SettingsRow {
+                        title: i18n("Arrangement")
+                        searchAnchor: "arrangement"
+                        description: i18n("How layout previews are arranged in the popup")
 
-                    WideComboBox {
-                        id: zoneSelectorLayoutModeCombo
+                        WideComboBox {
+                            id: zoneSelectorLayoutModeCombo
 
-                        Accessible.name: i18n("Arrangement")
-                        textRole: "text"
-                        valueRole: "value"
-                        model: [
-                            {
-                                "text": i18n("Grid"),
-                                "value": 0
-                            },
-                            {
-                                "text": i18n("Horizontal"),
-                                "value": 1
-                            },
-                            {
-                                "text": i18n("Vertical"),
-                                "value": 2
-                            }
-                        ]
-                        currentIndex: Math.max(0, indexOfValue(root.effectiveLayoutMode))
-                        onActivated: root.writeSetting("LayoutMode", currentValue, function (v) {
-                            appSettings.zoneSelectorLayoutMode = v;
-                        })
-                    }
-                }
-
-                SettingsSeparator {
-                    visible: root.effectiveLayoutMode === 0
-                }
-
-                SettingsRow {
-                    visible: root.effectiveLayoutMode === 0
-                    title: i18n("Grid columns")
-                    searchAnchor: "gridColumns"
-                    description: i18n("Number of layout previews per row")
-
-                    SettingsSpinBox {
-                        from: root.constants.zoneSelectorGridColumnsMin
-                        to: root.constants.zoneSelectorGridColumnsMax
-                        value: root.effectiveGridColumns
-                        unitText: ""
-                        onValueModified: value => {
-                            return root.writeSetting("GridColumns", value, function (v) {
-                                appSettings.zoneSelectorGridColumns = v;
-                            });
+                            Accessible.name: i18n("Arrangement")
+                            textRole: "text"
+                            valueRole: "value"
+                            model: [
+                                {
+                                    "text": i18n("Grid"),
+                                    "value": 0
+                                },
+                                {
+                                    "text": i18n("Horizontal"),
+                                    "value": 1
+                                },
+                                {
+                                    "text": i18n("Vertical"),
+                                    "value": 2
+                                }
+                            ]
+                            currentIndex: Math.max(0, indexOfValue(root.effectiveLayoutMode))
+                            onActivated: root.writeSetting("LayoutMode", currentValue, function (v) {
+                                appSettings.zoneSelectorLayoutMode = v;
+                            })
                         }
                     }
-                }
 
-                SettingsSeparator {
-                    visible: root.effectiveLayoutMode === 0
-                }
+                    SettingsSeparator {
+                        visible: root.effectiveLayoutMode === 0
+                    }
 
-                SettingsRow {
-                    visible: root.effectiveLayoutMode === 0
-                    title: i18n("Max visible rows")
-                    searchAnchor: "maxVisibleRows"
-                    description: i18n("Scrolling enabled when more rows exist")
+                    SettingsRow {
+                        visible: root.effectiveLayoutMode === 0
+                        title: i18n("Grid columns")
+                        searchAnchor: "gridColumns"
+                        description: i18n("Number of layout previews per row")
 
-                    SettingsSpinBox {
-                        from: root.constants.zoneSelectorMaxRowsMin
-                        to: root.constants.zoneSelectorMaxRowsMax
-                        value: root.effectiveMaxRows
-                        unitText: ""
-                        onValueModified: value => {
-                            return root.writeSetting("MaxRows", value, function (v) {
-                                appSettings.zoneSelectorMaxRows = v;
-                            });
+                        SettingsSpinBox {
+                            from: root.constants.zoneSelectorGridColumnsMin
+                            to: root.constants.zoneSelectorGridColumnsMax
+                            value: root.effectiveGridColumns
+                            unitText: ""
+                            onValueModified: value => {
+                                return root.writeSetting("GridColumns", value, function (v) {
+                                    appSettings.zoneSelectorGridColumns = v;
+                                });
+                            }
+                        }
+                    }
+
+                    SettingsSeparator {
+                        visible: root.effectiveLayoutMode === 0
+                    }
+
+                    SettingsRow {
+                        visible: root.effectiveLayoutMode === 0
+                        title: i18n("Max visible rows")
+                        searchAnchor: "maxVisibleRows"
+                        description: i18n("Scrolling enabled when more rows exist")
+
+                        SettingsSpinBox {
+                            from: root.constants.zoneSelectorMaxRowsMin
+                            to: root.constants.zoneSelectorMaxRowsMax
+                            value: root.effectiveMaxRows
+                            unitText: ""
+                            onValueModified: value => {
+                                return root.writeSetting("MaxRows", value, function (v) {
+                                    appSettings.zoneSelectorMaxRows = v;
+                                });
+                            }
                         }
                     }
                 }
             }
         }
-    }
 
-    // Preview Size card (appearance) - wrapped in Item for stable sizing
-    Item {
-        Layout.fillWidth: true
-        visible: root.showAppearance
-        implicitHeight: previewCard.implicitHeight
+        // Preview Size card (appearance) - wrapped in Item for stable sizing
+        Item {
+            Layout.fillWidth: true
+            visible: root.showAppearance
+            implicitHeight: previewCard.implicitHeight
 
-        SettingsCard {
-            id: previewCard
+            SettingsCard {
+                id: previewCard
 
-            anchors.fill: parent
-            enabled: appSettings.zoneSelectorEnabled
-            headerText: i18n("Preview Size")
-            searchAnchor: "previewSize"
-            collapsible: true
-            scopeEnabled: true
-            scopeAppSettings: root.controller
-            scopeHasOverridesMethod: "hasPerScreenZoneSelectorSettings"
-            scopeClearerMethod: "clearPerScreenZoneSelectorSettings"
+                anchors.fill: parent
+                enabled: appSettings.zoneSelectorEnabled
+                headerText: i18n("Preview Size")
+                searchAnchor: "previewSize"
+                collapsible: true
+                scopeEnabled: true
+                scopeAppSettings: root.controller
+                scopeHasOverridesMethod: "hasPerScreenZoneSelectorSettings"
+                scopeClearerMethod: "clearPerScreenZoneSelectorSettings"
 
-            contentItem: ColumnLayout {
-                spacing: Kirigami.Units.largeSpacing
+                contentItem: ColumnLayout {
+                    spacing: Kirigami.Units.largeSpacing
 
-                // Live preview - centered
-                Item {
-                    Layout.fillWidth: true
-                    Layout.preferredHeight: root.effectivePreviewHeight + Kirigami.Units.gridUnit * 3
-
-                    // Preview container
+                    // Live preview - centered
                     Item {
-                        id: sizePreviewContainer
+                        Layout.fillWidth: true
+                        Layout.preferredHeight: root.effectivePreviewHeight + Kirigami.Units.gridUnit * 3
 
-                        anchors.horizontalCenter: parent.horizontalCenter
-                        anchors.top: parent.top
-                        width: root.effectivePreviewWidth
-                        height: root.effectivePreviewHeight
+                        // Preview container
+                        Item {
+                            id: sizePreviewContainer
 
-                        Rectangle {
-                            anchors.fill: parent
-                            color: "transparent"
-                            radius: Kirigami.Units.smallSpacing * 1.5
-                            border.color: Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g, Kirigami.Theme.highlightColor.b, 0.4)
-                            border.width: 1
+                            anchors.horizontalCenter: parent.horizontalCenter
+                            anchors.top: parent.top
+                            width: root.effectivePreviewWidth
+                            height: root.effectivePreviewHeight
 
-                            // Sample zones. The small integer literals below
-                            // (2px inset, 1px inter-zone gap, 2px corner radius,
-                            // 1px borders, the 20px label-visibility threshold)
-                            // are intentional fixed drawing dimensions of this
-                            // miniature preview — diagram detail, not layout
-                            // spacing, so they are deliberately not theme-scaled.
-                            Row {
+                            Rectangle {
                                 anchors.fill: parent
-                                anchors.margins: 2
-                                spacing: 1
+                                color: "transparent"
+                                radius: Kirigami.Units.smallSpacing * 1.5
+                                border.color: Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g, Kirigami.Theme.highlightColor.b, 0.4)
+                                border.width: 1
 
-                                Repeater {
-                                    model: 3
+                                // Sample zones. The small integer literals below
+                                // (2px inset, 1px inter-zone gap, 2px corner radius,
+                                // 1px borders, the 20px label-visibility threshold)
+                                // are intentional fixed drawing dimensions of this
+                                // miniature preview — diagram detail, not layout
+                                // spacing, so they are deliberately not theme-scaled.
+                                Row {
+                                    anchors.fill: parent
+                                    anchors.margins: 2
+                                    spacing: 1
 
-                                    Rectangle {
-                                        width: (parent.width - 2) / 3
-                                        height: parent.height
-                                        radius: 2
-                                        color: Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.35)
-                                        border.color: Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.7)
-                                        border.width: 1
+                                    Repeater {
+                                        model: 3
 
-                                        Label {
-                                            anchors.centerIn: parent
-                                            text: (index + 1).toString()
-                                            font.pixelSize: Math.min(parent.width, parent.height) * 0.3
-                                            font.weight: Font.DemiBold
-                                            color: Kirigami.Theme.textColor
-                                            opacity: 0.5
-                                            visible: parent.width >= 20
+                                        Rectangle {
+                                            width: (parent.width - 2) / 3
+                                            height: parent.height
+                                            radius: 2
+                                            color: Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.35)
+                                            border.color: Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.7)
+                                            border.width: 1
+
+                                            Label {
+                                                anchors.centerIn: parent
+                                                text: (index + 1).toString()
+                                                font.pixelSize: Math.min(parent.width, parent.height) * 0.3
+                                                font.weight: Font.DemiBold
+                                                color: Kirigami.Theme.textColor
+                                                opacity: 0.5
+                                                visible: parent.width >= 20
+                                            }
                                         }
                                     }
                                 }
                             }
-                        }
 
-                        // Size label
-                        Label {
-                            anchors.horizontalCenter: parent.horizontalCenter
-                            anchors.top: parent.bottom
-                            anchors.topMargin: Kirigami.Units.smallSpacing
-                            text: root.effectivePreviewWidth + " × " + root.effectivePreviewHeight + " px"
-                            font: Kirigami.Theme.fixedWidthFont
-                            opacity: 0.7
+                            // Size label
+                            Label {
+                                anchors.horizontalCenter: parent.horizontalCenter
+                                anchors.top: parent.bottom
+                                anchors.topMargin: Kirigami.Units.smallSpacing
+                                text: root.effectivePreviewWidth + " × " + root.effectivePreviewHeight + " px"
+                                font: Kirigami.Theme.fixedWidthFont
+                                opacity: 0.7
+                            }
                         }
                     }
-                }
 
-                // Size selection - segmented button style
-                RowLayout {
-                    // Custom (width doesn't match preset)
+                    // Size selection - segmented button style
+                    RowLayout {
+                        // Custom (width doesn't match preset)
 
-                    id: sizeButtonRow
+                        id: sizeButtonRow
 
-                    // Track explicit Custom mode selection
-                    property bool customModeActive: false
-                    // Track which size is selected
-                    // 0=Auto, 1=Small, 2=Medium, 3=Large, 4=Custom. A preset is
-                    // considered selected when the width is within half a slider
-                    // step (stepSize 10 → 5px) of that preset's value.
-                    readonly property int presetMatchTolerance: 5
-                    property int selectedSize: {
-                        if (root.effectiveSizeMode === 0)
-                            return 0;
+                        // Track explicit Custom mode selection
+                        property bool customModeActive: false
+                        // Track which size is selected
+                        // 0=Auto, 1=Small, 2=Medium, 3=Large, 4=Custom. A preset is
+                        // considered selected when the width is within half a slider
+                        // step (stepSize 10 → 5px) of that preset's value.
+                        readonly property int presetMatchTolerance: 5
+                        property int selectedSize: {
+                            if (root.effectiveSizeMode === 0)
+                                return 0;
 
-                        // Auto
-                        if (customModeActive)
+                            // Auto
+                            if (customModeActive)
+                                return 4;
+
+                            // Explicit Custom selection
+                            var w = root.effectivePreviewWidth;
+                            if (Math.abs(w - root.constants.zoneSelectorPreviewSmall) <= presetMatchTolerance)
+                                return 1;
+
+                            // Small
+                            if (Math.abs(w - root.constants.zoneSelectorPreviewMedium) <= presetMatchTolerance)
+                                return 2;
+
+                            // Medium
+                            if (Math.abs(w - root.constants.zoneSelectorPreviewLarge) <= presetMatchTolerance)
+                                return 3;
+
+                            // Large
                             return 4;
-
-                        // Explicit Custom selection
-                        var w = root.effectivePreviewWidth;
-                        if (Math.abs(w - root.constants.zoneSelectorPreviewSmall) <= presetMatchTolerance)
-                            return 1;
-
-                        // Small
-                        if (Math.abs(w - root.constants.zoneSelectorPreviewMedium) <= presetMatchTolerance)
-                            return 2;
-
-                        // Medium
-                        if (Math.abs(w - root.constants.zoneSelectorPreviewLarge) <= presetMatchTolerance)
-                            return 3;
-
-                        // Large
-                        return 4;
-                    }
-
-                    Layout.alignment: Qt.AlignHCenter
-                    spacing: 0
-
-                    Button {
-                        text: i18n("Auto")
-                        flat: parent.selectedSize !== 0
-                        highlighted: parent.selectedSize === 0
-                        onClicked: {
-                            sizeButtonRow.customModeActive = false;
-                            root.writeSetting("SizeMode", 0, function (v) {
-                                appSettings.zoneSelectorSizeMode = v;
-                            });
                         }
-                        ToolTip.visible: hovered
-                        ToolTip.delay: Kirigami.Units.toolTipDelay
-                        ToolTip.text: i18n("Size scales automatically with your screen resolution")
-                    }
 
-                    Button {
-                        text: i18n("Small")
-                        flat: parent.selectedSize !== 1
-                        highlighted: parent.selectedSize === 1
-                        onClicked: {
-                            sizeButtonRow.customModeActive = false;
-                            root.writeSetting("SizeMode", 1, function (v) {
-                                appSettings.zoneSelectorSizeMode = v;
-                            });
-                            root.writeSetting("PreviewWidth", root.constants.zoneSelectorPreviewSmall, function (v) {
-                                appSettings.zoneSelectorPreviewWidth = v;
-                            });
-                            root.writeSetting("PreviewHeight", Math.round(root.constants.zoneSelectorPreviewSmall / root.safeAspectRatio), function (v) {
-                                appSettings.zoneSelectorPreviewHeight = v;
-                            });
+                        Layout.alignment: Qt.AlignHCenter
+                        spacing: 0
+
+                        Button {
+                            text: i18n("Auto")
+                            flat: parent.selectedSize !== 0
+                            highlighted: parent.selectedSize === 0
+                            onClicked: {
+                                sizeButtonRow.customModeActive = false;
+                                root.writeSetting("SizeMode", 0, function (v) {
+                                    appSettings.zoneSelectorSizeMode = v;
+                                });
+                            }
+                            ToolTip.visible: hovered
+                            ToolTip.delay: Kirigami.Units.toolTipDelay
+                            ToolTip.text: i18n("Size scales automatically with your screen resolution")
                         }
-                        ToolTip.visible: hovered
-                        ToolTip.delay: Kirigami.Units.toolTipDelay
-                        ToolTip.text: i18n("%1px width", root.constants.zoneSelectorPreviewSmall)
-                    }
 
-                    Button {
-                        text: i18n("Medium")
-                        flat: parent.selectedSize !== 2
-                        highlighted: parent.selectedSize === 2
-                        onClicked: {
-                            sizeButtonRow.customModeActive = false;
-                            root.writeSetting("SizeMode", 1, function (v) {
-                                appSettings.zoneSelectorSizeMode = v;
-                            });
-                            root.writeSetting("PreviewWidth", root.constants.zoneSelectorPreviewMedium, function (v) {
-                                appSettings.zoneSelectorPreviewWidth = v;
-                            });
-                            root.writeSetting("PreviewHeight", Math.round(root.constants.zoneSelectorPreviewMedium / root.safeAspectRatio), function (v) {
-                                appSettings.zoneSelectorPreviewHeight = v;
-                            });
+                        Button {
+                            text: i18n("Small")
+                            flat: parent.selectedSize !== 1
+                            highlighted: parent.selectedSize === 1
+                            onClicked: {
+                                sizeButtonRow.customModeActive = false;
+                                root.writeSetting("SizeMode", 1, function (v) {
+                                    appSettings.zoneSelectorSizeMode = v;
+                                });
+                                root.writeSetting("PreviewWidth", root.constants.zoneSelectorPreviewSmall, function (v) {
+                                    appSettings.zoneSelectorPreviewWidth = v;
+                                });
+                                root.writeSetting("PreviewHeight", Math.round(root.constants.zoneSelectorPreviewSmall / root.safeAspectRatio), function (v) {
+                                    appSettings.zoneSelectorPreviewHeight = v;
+                                });
+                            }
+                            ToolTip.visible: hovered
+                            ToolTip.delay: Kirigami.Units.toolTipDelay
+                            ToolTip.text: i18n("%1px width", root.constants.zoneSelectorPreviewSmall)
                         }
-                        ToolTip.visible: hovered
-                        ToolTip.delay: Kirigami.Units.toolTipDelay
-                        ToolTip.text: i18n("%1px width", root.constants.zoneSelectorPreviewMedium)
-                    }
 
-                    Button {
-                        text: i18n("Large")
-                        flat: parent.selectedSize !== 3
-                        highlighted: parent.selectedSize === 3
-                        onClicked: {
-                            sizeButtonRow.customModeActive = false;
-                            root.writeSetting("SizeMode", 1, function (v) {
-                                appSettings.zoneSelectorSizeMode = v;
-                            });
-                            root.writeSetting("PreviewWidth", root.constants.zoneSelectorPreviewLarge, function (v) {
-                                appSettings.zoneSelectorPreviewWidth = v;
-                            });
-                            root.writeSetting("PreviewHeight", Math.round(root.constants.zoneSelectorPreviewLarge / root.safeAspectRatio), function (v) {
-                                appSettings.zoneSelectorPreviewHeight = v;
-                            });
+                        Button {
+                            text: i18n("Medium")
+                            flat: parent.selectedSize !== 2
+                            highlighted: parent.selectedSize === 2
+                            onClicked: {
+                                sizeButtonRow.customModeActive = false;
+                                root.writeSetting("SizeMode", 1, function (v) {
+                                    appSettings.zoneSelectorSizeMode = v;
+                                });
+                                root.writeSetting("PreviewWidth", root.constants.zoneSelectorPreviewMedium, function (v) {
+                                    appSettings.zoneSelectorPreviewWidth = v;
+                                });
+                                root.writeSetting("PreviewHeight", Math.round(root.constants.zoneSelectorPreviewMedium / root.safeAspectRatio), function (v) {
+                                    appSettings.zoneSelectorPreviewHeight = v;
+                                });
+                            }
+                            ToolTip.visible: hovered
+                            ToolTip.delay: Kirigami.Units.toolTipDelay
+                            ToolTip.text: i18n("%1px width", root.constants.zoneSelectorPreviewMedium)
                         }
-                        ToolTip.visible: hovered
-                        ToolTip.delay: Kirigami.Units.toolTipDelay
-                        ToolTip.text: i18n("%1px width", root.constants.zoneSelectorPreviewLarge)
-                    }
 
-                    Button {
-                        text: i18n("Custom")
-                        flat: parent.selectedSize !== 4
-                        highlighted: parent.selectedSize === 4
-                        onClicked: {
-                            sizeButtonRow.customModeActive = true;
-                            root.writeSetting("SizeMode", 1, function (v) {
-                                appSettings.zoneSelectorSizeMode = v;
-                            });
+                        Button {
+                            text: i18n("Large")
+                            flat: parent.selectedSize !== 3
+                            highlighted: parent.selectedSize === 3
+                            onClicked: {
+                                sizeButtonRow.customModeActive = false;
+                                root.writeSetting("SizeMode", 1, function (v) {
+                                    appSettings.zoneSelectorSizeMode = v;
+                                });
+                                root.writeSetting("PreviewWidth", root.constants.zoneSelectorPreviewLarge, function (v) {
+                                    appSettings.zoneSelectorPreviewWidth = v;
+                                });
+                                root.writeSetting("PreviewHeight", Math.round(root.constants.zoneSelectorPreviewLarge / root.safeAspectRatio), function (v) {
+                                    appSettings.zoneSelectorPreviewHeight = v;
+                                });
+                            }
+                            ToolTip.visible: hovered
+                            ToolTip.delay: Kirigami.Units.toolTipDelay
+                            ToolTip.text: i18n("%1px width", root.constants.zoneSelectorPreviewLarge)
                         }
-                        ToolTip.visible: hovered
-                        ToolTip.delay: Kirigami.Units.toolTipDelay
-                        ToolTip.text: i18n("Custom size with slider")
+
+                        Button {
+                            text: i18n("Custom")
+                            flat: parent.selectedSize !== 4
+                            highlighted: parent.selectedSize === 4
+                            onClicked: {
+                                sizeButtonRow.customModeActive = true;
+                                root.writeSetting("SizeMode", 1, function (v) {
+                                    appSettings.zoneSelectorSizeMode = v;
+                                });
+                            }
+                            ToolTip.visible: hovered
+                            ToolTip.delay: Kirigami.Units.toolTipDelay
+                            ToolTip.text: i18n("Custom size with slider")
+                        }
                     }
-                }
 
-                // Custom size slider - only visible when Custom is selected
-                RowLayout {
-                    Layout.fillWidth: true
-                    Layout.alignment: Qt.AlignHCenter
-                    Layout.maximumWidth: Kirigami.Units.gridUnit * 25
-                    visible: sizeButtonRow.selectedSize === 4
-                    spacing: Kirigami.Units.smallSpacing
-
-                    Label {
-                        text: i18n("Size:")
-                    }
-
-                    Slider {
-                        id: customSizeSlider
-
+                    // Custom size slider - only visible when Custom is selected
+                    RowLayout {
                         Layout.fillWidth: true
-                        from: root.constants.zoneSelectorPreviewWidthMin
-                        to: root.constants.zoneSelectorPreviewWidthMax
-                        stepSize: 10
-                        Accessible.name: i18n("Preview size")
-                        onMoved: {
-                            root.writeSetting("PreviewWidth", value, function (v) {
-                                appSettings.zoneSelectorPreviewWidth = v;
-                            });
-                            // Always maintain aspect ratio
-                            var newHeight = Math.round(value / root.safeAspectRatio);
-                            newHeight = Math.max(root.constants.zoneSelectorPreviewHeightMin, Math.min(root.constants.zoneSelectorPreviewHeightMax, newHeight));
-                            root.writeSetting("PreviewHeight", newHeight, function (v) {
-                                appSettings.zoneSelectorPreviewHeight = v;
-                            });
+                        Layout.alignment: Qt.AlignHCenter
+                        Layout.maximumWidth: Kirigami.Units.gridUnit * 25
+                        visible: sizeButtonRow.selectedSize === 4
+                        spacing: Kirigami.Units.smallSpacing
+
+                        Label {
+                            text: i18n("Size:")
                         }
 
-                        Binding on value {
-                            value: root.effectivePreviewWidth
-                            when: !customSizeSlider.pressed
-                            restoreMode: Binding.RestoreNone
+                        Slider {
+                            id: customSizeSlider
+
+                            Layout.fillWidth: true
+                            from: root.constants.zoneSelectorPreviewWidthMin
+                            to: root.constants.zoneSelectorPreviewWidthMax
+                            stepSize: 10
+                            Accessible.name: i18n("Preview size")
+                            onMoved: {
+                                root.writeSetting("PreviewWidth", value, function (v) {
+                                    appSettings.zoneSelectorPreviewWidth = v;
+                                });
+                                // Always maintain aspect ratio
+                                var newHeight = Math.round(value / root.safeAspectRatio);
+                                newHeight = Math.max(root.constants.zoneSelectorPreviewHeightMin, Math.min(root.constants.zoneSelectorPreviewHeightMax, newHeight));
+                                root.writeSetting("PreviewHeight", newHeight, function (v) {
+                                    appSettings.zoneSelectorPreviewHeight = v;
+                                });
+                            }
+
+                            Binding on value {
+                                value: root.effectivePreviewWidth
+                                when: !customSizeSlider.pressed
+                                restoreMode: Binding.RestoreNone
+                            }
+                        }
+
+                        Label {
+                            text: root.effectivePreviewWidth + " px"
+                            Layout.preferredWidth: root.constants.sliderValueLabelWidth + Kirigami.Units.largeSpacing
+                            horizontalAlignment: Text.AlignRight
+                            font: Kirigami.Theme.fixedWidthFont
                         }
                     }
 
+                    // Info text for auto mode
                     Label {
-                        text: root.effectivePreviewWidth + " px"
-                        Layout.preferredWidth: root.constants.sliderValueLabelWidth + Kirigami.Units.largeSpacing
-                        horizontalAlignment: Text.AlignRight
-                        font: Kirigami.Theme.fixedWidthFont
+                        Layout.fillWidth: true
+                        Layout.alignment: Qt.AlignHCenter
+                        visible: root.effectiveSizeMode === 0
+                        text: i18n("Preview size adjusts automatically based on your screen resolution.")
+                        opacity: 0.7
+                        font: Kirigami.Theme.smallFont
+                        horizontalAlignment: Text.AlignHCenter
                     }
-                }
-
-                // Info text for auto mode
-                Label {
-                    Layout.fillWidth: true
-                    Layout.alignment: Qt.AlignHCenter
-                    visible: root.effectiveSizeMode === 0
-                    text: i18n("Preview size adjusts automatically based on your screen resolution.")
-                    opacity: 0.7
-                    font: Kirigami.Theme.smallFont
-                    horizontalAlignment: Text.AlignHCenter
                 }
             }
         }

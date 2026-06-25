@@ -163,50 +163,52 @@ ColumnLayout {
     // =================================================================
     // OPACITY
     // =================================================================
-    Item {
-        Layout.fillWidth: true
-        implicitHeight: opacityCard.implicitHeight
+    AdvancedGroup {
+        Item {
+            Layout.fillWidth: true
+            implicitHeight: opacityCard.implicitHeight
 
-        SettingsCard {
-            id: opacityCard
+            SettingsCard {
+                id: opacityCard
 
-            anchors.fill: parent
-            scopeLabel: i18n("Global")
-            headerText: i18n("Opacity")
-            searchAnchor: "opacity"
-            collapsible: true
+                anchors.fill: parent
+                scopeLabel: i18n("Global")
+                headerText: i18n("Opacity")
+                searchAnchor: "opacity"
+                collapsible: true
 
-            contentItem: ColumnLayout {
-                spacing: Kirigami.Units.smallSpacing
+                contentItem: ColumnLayout {
+                    spacing: Kirigami.Units.smallSpacing
 
-                SettingsRow {
-                    title: i18n("Active opacity")
-                    searchAnchor: "activeOpacity"
-                    description: i18n("Opacity of the zone under the cursor")
+                    SettingsRow {
+                        title: i18n("Active opacity")
+                        searchAnchor: "activeOpacity"
+                        description: i18n("Opacity of the zone under the cursor")
 
-                    SettingsSlider {
-                        from: 0
-                        to: root.opacitySliderMax
-                        value: appSettings.activeOpacity * root.opacitySliderMax
-                        onMoved: value => {
-                            return appSettings.activeOpacity = value / root.opacitySliderMax;
+                        SettingsSlider {
+                            from: 0
+                            to: root.opacitySliderMax
+                            value: appSettings.activeOpacity * root.opacitySliderMax
+                            onMoved: value => {
+                                return appSettings.activeOpacity = value / root.opacitySliderMax;
+                            }
                         }
                     }
-                }
 
-                SettingsSeparator {}
+                    SettingsSeparator {}
 
-                SettingsRow {
-                    title: i18n("Inactive opacity")
-                    searchAnchor: "inactiveOpacity"
-                    description: i18n("Opacity of zones not under the cursor")
+                    SettingsRow {
+                        title: i18n("Inactive opacity")
+                        searchAnchor: "inactiveOpacity"
+                        description: i18n("Opacity of zones not under the cursor")
 
-                    SettingsSlider {
-                        from: 0
-                        to: root.opacitySliderMax
-                        value: appSettings.inactiveOpacity * root.opacitySliderMax
-                        onMoved: value => {
-                            return appSettings.inactiveOpacity = value / root.opacitySliderMax;
+                        SettingsSlider {
+                            from: 0
+                            to: root.opacitySliderMax
+                            value: appSettings.inactiveOpacity * root.opacitySliderMax
+                            onMoved: value => {
+                                return appSettings.inactiveOpacity = value / root.opacitySliderMax;
+                            }
                         }
                     }
                 }
@@ -271,137 +273,139 @@ ColumnLayout {
     // =================================================================
     // ZONE LABELS
     // =================================================================
-    Item {
-        Layout.fillWidth: true
-        implicitHeight: labelsCard.implicitHeight
+    AdvancedGroup {
+        Item {
+            Layout.fillWidth: true
+            implicitHeight: labelsCard.implicitHeight
 
-        SettingsCard {
-            id: labelsCard
+            SettingsCard {
+                id: labelsCard
 
-            anchors.fill: parent
-            scopeLabel: i18n("Global")
-            headerText: i18n("Zone Labels")
-            searchAnchor: "zoneLabels"
-            collapsible: true
+                anchors.fill: parent
+                scopeLabel: i18n("Global")
+                headerText: i18n("Zone Labels")
+                searchAnchor: "zoneLabels"
+                collapsible: true
 
-            contentItem: ColumnLayout {
-                spacing: Kirigami.Units.smallSpacing
+                contentItem: ColumnLayout {
+                    spacing: Kirigami.Units.smallSpacing
 
-                SettingsRow {
-                    visible: !useSystemColorsSwitch.checked
-                    title: i18n("Label color")
-                    searchAnchor: "labelColor"
-                    description: i18n("Text color for zone labels")
+                    SettingsRow {
+                        visible: !useSystemColorsSwitch.checked
+                        title: i18n("Label color")
+                        searchAnchor: "labelColor"
+                        description: i18n("Text color for zone labels")
 
-                    ColorSwatchRow {
-                        color: appSettings.labelFontColor
-                        onClicked: {
-                            labelFontColorDialog.selectedColor = appSettings.labelFontColor;
-                            labelFontColorDialog.open();
-                        }
-                    }
-                }
-
-                SettingsSeparator {
-                    visible: !useSystemColorsSwitch.checked
-                }
-
-                SettingsRow {
-                    title: i18n("Font")
-                    searchAnchor: "font"
-                    description: i18n("Typeface and style for zone labels")
-
-                    RowLayout {
-                        spacing: Kirigami.Units.smallSpacing
-
-                        Button {
-                            text: appSettings.labelFontFamily || i18n("System default")
-                            font.family: appSettings.labelFontFamily
-                            font.weight: appSettings.labelFontWeight
-                            font.italic: appSettings.labelFontItalic
-                            icon.name: "font-select-symbolic"
+                        ColorSwatchRow {
+                            color: appSettings.labelFontColor
                             onClicked: {
-                                fontPickerDialog.selectedFamily = appSettings.labelFontFamily;
-                                fontPickerDialog.selectedWeight = appSettings.labelFontWeight;
-                                fontPickerDialog.selectedItalic = appSettings.labelFontItalic;
-                                fontPickerDialog.selectedUnderline = appSettings.labelFontUnderline;
-                                fontPickerDialog.selectedStrikeout = appSettings.labelFontStrikeout;
-                                fontPickerDialog.open();
-                            }
-                        }
-
-                        Button {
-                            icon.name: "edit-clear"
-                            visible: appSettings.labelFontFamily !== "" || appSettings.labelFontWeight !== Font.Bold || appSettings.labelFontItalic || appSettings.labelFontUnderline || appSettings.labelFontStrikeout || Math.abs(appSettings.labelFontSizeScale - 1) > 0.01
-                            Accessible.name: i18n("Reset to defaults")
-                            onClicked: {
-                                appSettings.labelFontFamily = "";
-                                appSettings.labelFontSizeScale = 1;
-                                appSettings.labelFontWeight = Font.Bold;
-                                appSettings.labelFontItalic = false;
-                                appSettings.labelFontUnderline = false;
-                                appSettings.labelFontStrikeout = false;
+                                labelFontColorDialog.selectedColor = appSettings.labelFontColor;
+                                labelFontColorDialog.open();
                             }
                         }
                     }
-                }
 
-                SettingsSeparator {}
+                    SettingsSeparator {
+                        visible: !useSystemColorsSwitch.checked
+                    }
 
-                SettingsRow {
-                    title: i18n("Label scale")
-                    searchAnchor: "labelScale"
-                    description: i18n("Size multiplier for zone label text")
+                    SettingsRow {
+                        title: i18n("Font")
+                        searchAnchor: "font"
+                        description: i18n("Typeface and style for zone labels")
 
-                    SettingsSlider {
-                        from: root.zonesBridge.labelFontScaleMin * 100
-                        to: root.zonesBridge.labelFontScaleMax * 100
-                        stepSize: 5
-                        value: appSettings.labelFontSizeScale * 100
-                        onMoved: value => {
-                            return appSettings.labelFontSizeScale = value / 100;
+                        RowLayout {
+                            spacing: Kirigami.Units.smallSpacing
+
+                            Button {
+                                text: appSettings.labelFontFamily || i18n("System default")
+                                font.family: appSettings.labelFontFamily
+                                font.weight: appSettings.labelFontWeight
+                                font.italic: appSettings.labelFontItalic
+                                icon.name: "font-select-symbolic"
+                                onClicked: {
+                                    fontPickerDialog.selectedFamily = appSettings.labelFontFamily;
+                                    fontPickerDialog.selectedWeight = appSettings.labelFontWeight;
+                                    fontPickerDialog.selectedItalic = appSettings.labelFontItalic;
+                                    fontPickerDialog.selectedUnderline = appSettings.labelFontUnderline;
+                                    fontPickerDialog.selectedStrikeout = appSettings.labelFontStrikeout;
+                                    fontPickerDialog.open();
+                                }
+                            }
+
+                            Button {
+                                icon.name: "edit-clear"
+                                visible: appSettings.labelFontFamily !== "" || appSettings.labelFontWeight !== Font.Bold || appSettings.labelFontItalic || appSettings.labelFontUnderline || appSettings.labelFontStrikeout || Math.abs(appSettings.labelFontSizeScale - 1) > 0.01
+                                Accessible.name: i18n("Reset to defaults")
+                                onClicked: {
+                                    appSettings.labelFontFamily = "";
+                                    appSettings.labelFontSizeScale = 1;
+                                    appSettings.labelFontWeight = Font.Bold;
+                                    appSettings.labelFontItalic = false;
+                                    appSettings.labelFontUnderline = false;
+                                    appSettings.labelFontStrikeout = false;
+                                }
+                            }
+                        }
+                    }
+
+                    SettingsSeparator {}
+
+                    SettingsRow {
+                        title: i18n("Label scale")
+                        searchAnchor: "labelScale"
+                        description: i18n("Size multiplier for zone label text")
+
+                        SettingsSlider {
+                            from: root.zonesBridge.labelFontScaleMin * 100
+                            to: root.zonesBridge.labelFontScaleMax * 100
+                            stepSize: 5
+                            value: appSettings.labelFontSizeScale * 100
+                            onMoved: value => {
+                                return appSettings.labelFontSizeScale = value / 100;
+                            }
                         }
                     }
                 }
             }
         }
-    }
 
-    // =================================================================
-    // EFFECTS
-    // =================================================================
-    Item {
-        Layout.fillWidth: true
-        implicitHeight: effectsCard.implicitHeight
+        // =================================================================
+        // EFFECTS
+        // =================================================================
+        Item {
+            Layout.fillWidth: true
+            implicitHeight: effectsCard.implicitHeight
 
-        SettingsCard {
-            id: effectsCard
+            SettingsCard {
+                id: effectsCard
 
-            anchors.fill: parent
-            scopeLabel: i18n("Global")
-            headerText: i18n("Effects")
-            searchAnchor: "effects"
-            collapsible: true
+                anchors.fill: parent
+                scopeLabel: i18n("Global")
+                headerText: i18n("Effects")
+                searchAnchor: "effects"
+                collapsible: true
 
-            contentItem: ColumnLayout {
-                spacing: Kirigami.Units.smallSpacing
+                contentItem: ColumnLayout {
+                    spacing: Kirigami.Units.smallSpacing
 
-                SettingsRow {
-                    title: i18n("Blur behind zones")
-                    searchAnchor: "blurBehindZones"
-                    description: i18n("Apply a blur effect to the area behind zone overlays")
+                    SettingsRow {
+                        title: i18n("Blur behind zones")
+                        searchAnchor: "blurBehindZones"
+                        description: i18n("Apply a blur effect to the area behind zone overlays")
 
-                    SettingsSwitch {
-                        checked: appSettings.enableBlur
-                        accessibleName: i18n("Enable blur behind zones")
-                        onToggled: function (newValue) {
-                            appSettings.enableBlur = newValue;
+                        SettingsSwitch {
+                            checked: appSettings.enableBlur
+                            accessibleName: i18n("Enable blur behind zones")
+                            onToggled: function (newValue) {
+                                appSettings.enableBlur = newValue;
+                            }
                         }
                     }
-                }
 
-                // Zone numbers and Flash on layout switch are behavior, so they
-                // live in the overlay behavior section above (Display card).
+                    // Zone numbers and Flash on layout switch are behavior, so they
+                    // live in the overlay behavior section above (Display card).
+                }
             }
         }
     }

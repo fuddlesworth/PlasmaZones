@@ -168,157 +168,159 @@ Item {
                         }
                     }
 
-                    SettingsCard {
-                        Layout.fillWidth: true
-                        headerText: i18n("Window Handling")
-                        searchAnchor: "windowHandling"
-                        collapsible: true
+                    AdvancedGroup {
+                        SettingsCard {
+                            Layout.fillWidth: true
+                            headerText: i18n("Window Handling")
+                            searchAnchor: "windowHandling"
+                            collapsible: true
 
-                        contentItem: ColumnLayout {
-                            spacing: Kirigami.Units.smallSpacing
+                            contentItem: ColumnLayout {
+                                spacing: Kirigami.Units.smallSpacing
 
-                            SettingsRow {
-                                title: i18n("New window placement")
-                                searchAnchor: "newWindowPlacement"
-                                description: i18n("Where newly opened windows appear in the tiling order")
+                                SettingsRow {
+                                    title: i18n("New window placement")
+                                    searchAnchor: "newWindowPlacement"
+                                    description: i18n("Where newly opened windows appear in the tiling order")
 
-                                ComboBox {
-                                    Layout.fillWidth: false
-                                    Accessible.name: i18n("New window placement")
-                                    textRole: "text"
-                                    valueRole: "value"
-                                    model: [
-                                        {
-                                            "text": i18n("After existing"),
-                                            "value": 0
-                                        },
-                                        {
-                                            "text": i18n("After focused"),
-                                            "value": 1
-                                        },
-                                        {
-                                            "text": i18n("As main window"),
-                                            "value": 2
-                                        }
-                                    ]
-                                    currentIndex: Math.max(0, indexOfValue(appSettings.autotileInsertPosition))
-                                    onActivated: appSettings.autotileInsertPosition = currentValue
-                                }
-                            }
-
-                            SettingsSeparator {}
-
-                            SettingsRow {
-                                title: i18n("Respect minimum size")
-                                searchAnchor: "respectMinimumSize"
-                                description: i18n("Prevent windows from being resized below their minimum, which may leave gaps")
-
-                                SettingsSwitch {
-                                    checked: appSettings.autotileRespectMinimumSize
-                                    accessibleName: i18n("Respect window minimum size")
-                                    onToggled: function (newValue) {
-                                        appSettings.autotileRespectMinimumSize = newValue;
+                                    ComboBox {
+                                        Layout.fillWidth: false
+                                        Accessible.name: i18n("New window placement")
+                                        textRole: "text"
+                                        valueRole: "value"
+                                        model: [
+                                            {
+                                                "text": i18n("After existing"),
+                                                "value": 0
+                                            },
+                                            {
+                                                "text": i18n("After focused"),
+                                                "value": 1
+                                            },
+                                            {
+                                                "text": i18n("As main window"),
+                                                "value": 2
+                                            }
+                                        ]
+                                        currentIndex: Math.max(0, indexOfValue(appSettings.autotileInsertPosition))
+                                        onActivated: appSettings.autotileInsertPosition = currentValue
                                     }
                                 }
-                            }
 
-                            SettingsSeparator {}
+                                SettingsSeparator {}
 
-                            SettingsRow {
-                                title: i18n("Restore untiled windows to their previous position")
-                                searchAnchor: "restoreUntiledWindowsPosition"
-                                description: i18n("When an untiled (floated) window reopens after a logout, it returns to the position and monitor it was on instead of wherever the compositor would place it. A per-window rule can override this either way, opting individual windows in or out.")
+                                SettingsRow {
+                                    title: i18n("Respect minimum size")
+                                    searchAnchor: "respectMinimumSize"
+                                    description: i18n("Prevent windows from being resized below their minimum, which may leave gaps")
 
-                                SettingsSwitch {
-                                    checked: appSettings.autotileRestoreFloatedWindowsOnLogin
-                                    accessibleName: i18n("Restore untiled windows to their previous position")
-                                    onToggled: function (newValue) {
-                                        appSettings.autotileRestoreFloatedWindowsOnLogin = newValue;
+                                    SettingsSwitch {
+                                        checked: appSettings.autotileRespectMinimumSize
+                                        accessibleName: i18n("Respect window minimum size")
+                                        onToggled: function (newValue) {
+                                            appSettings.autotileRespectMinimumSize = newValue;
+                                        }
                                     }
                                 }
-                            }
 
-                            SettingsSeparator {}
+                                SettingsSeparator {}
 
-                            SettingsRow {
-                                title: i18n("Sticky windows")
-                                searchAnchor: "stickyWindows"
-                                description: i18n("How to handle windows that appear on all desktops")
+                                SettingsRow {
+                                    title: i18n("Restore untiled windows to their previous position")
+                                    searchAnchor: "restoreUntiledWindowsPosition"
+                                    description: i18n("When an untiled (floated) window reopens after a logout, it returns to the position and monitor it was on instead of wherever the compositor would place it. A per-window rule can override this either way, opting individual windows in or out.")
 
-                                WideComboBox {
-                                    Accessible.name: i18n("Sticky windows")
-                                    textRole: "text"
-                                    valueRole: "value"
-                                    model: [
-                                        {
-                                            "text": i18n("Treat as normal"),
-                                            "value": 0
-                                        },
-                                        {
-                                            "text": i18n("Restore only"),
-                                            "value": 1
-                                        },
-                                        {
-                                            "text": i18n("Ignore all"),
-                                            "value": 2
+                                    SettingsSwitch {
+                                        checked: appSettings.autotileRestoreFloatedWindowsOnLogin
+                                        accessibleName: i18n("Restore untiled windows to their previous position")
+                                        onToggled: function (newValue) {
+                                            appSettings.autotileRestoreFloatedWindowsOnLogin = newValue;
                                         }
-                                    ]
-                                    currentIndex: Math.max(0, indexOfValue(appSettings.autotileStickyWindowHandling))
-                                    onActivated: appSettings.autotileStickyWindowHandling = currentValue
+                                    }
                                 }
-                            }
 
-                            SettingsSeparator {}
+                                SettingsSeparator {}
 
-                            SettingsRow {
-                                title: i18n("Drag behavior")
-                                searchAnchor: "dragBehavior"
-                                description: i18n("Float converts a dragged tile to free-floating. Reorder keeps it tiled and swaps it into the drop slot.")
+                                SettingsRow {
+                                    title: i18n("Sticky windows")
+                                    searchAnchor: "stickyWindows"
+                                    description: i18n("How to handle windows that appear on all desktops")
 
-                                WideComboBox {
-                                    Accessible.name: i18n("Autotile drag behavior")
-                                    Accessible.description: i18n("Selects how dragging a tiled window on an autotile screen behaves: Float converts it to free-floating, Reorder keeps it tiled and swaps it into the drop slot.")
-                                    textRole: "text"
-                                    valueRole: "value"
-                                    model: [
-                                        {
-                                            "text": i18n("Float on drag"),
-                                            "value": 0
-                                        },
-                                        {
-                                            "text": i18n("Reorder on drag"),
-                                            "value": 1
-                                        }
-                                    ]
-                                    currentIndex: Math.max(0, indexOfValue(appSettings.autotileDragBehavior))
-                                    onActivated: appSettings.autotileDragBehavior = currentValue
+                                    WideComboBox {
+                                        Accessible.name: i18n("Sticky windows")
+                                        textRole: "text"
+                                        valueRole: "value"
+                                        model: [
+                                            {
+                                                "text": i18n("Treat as normal"),
+                                                "value": 0
+                                            },
+                                            {
+                                                "text": i18n("Restore only"),
+                                                "value": 1
+                                            },
+                                            {
+                                                "text": i18n("Ignore all"),
+                                                "value": 2
+                                            }
+                                        ]
+                                        currentIndex: Math.max(0, indexOfValue(appSettings.autotileStickyWindowHandling))
+                                        onActivated: appSettings.autotileStickyWindowHandling = currentValue
+                                    }
                                 }
-                            }
 
-                            SettingsSeparator {}
+                                SettingsSeparator {}
 
-                            SettingsRow {
-                                title: i18n("Overflow behavior")
-                                searchAnchor: "overflowBehavior"
-                                description: i18n("Float excess windows beyond the max-windows cap, or Unlimited to tile every window regardless of count.")
+                                SettingsRow {
+                                    title: i18n("Drag behavior")
+                                    searchAnchor: "dragBehavior"
+                                    description: i18n("Float converts a dragged tile to free-floating. Reorder keeps it tiled and swaps it into the drop slot.")
 
-                                WideComboBox {
-                                    Accessible.name: i18n("Autotile overflow behavior")
-                                    Accessible.description: i18n("Selects how windows beyond the max-windows cap are handled: Float excess windows, or Unlimited to tile every window regardless of count.")
-                                    textRole: "text"
-                                    valueRole: "value"
-                                    model: [
-                                        {
-                                            "text": i18n("Float excess"),
-                                            "value": 0
-                                        },
-                                        {
-                                            "text": i18n("Unlimited"),
-                                            "value": 1
-                                        }
-                                    ]
-                                    currentIndex: Math.max(0, indexOfValue(appSettings.autotileOverflowBehavior))
-                                    onActivated: appSettings.autotileOverflowBehavior = currentValue
+                                    WideComboBox {
+                                        Accessible.name: i18n("Autotile drag behavior")
+                                        Accessible.description: i18n("Selects how dragging a tiled window on an autotile screen behaves: Float converts it to free-floating, Reorder keeps it tiled and swaps it into the drop slot.")
+                                        textRole: "text"
+                                        valueRole: "value"
+                                        model: [
+                                            {
+                                                "text": i18n("Float on drag"),
+                                                "value": 0
+                                            },
+                                            {
+                                                "text": i18n("Reorder on drag"),
+                                                "value": 1
+                                            }
+                                        ]
+                                        currentIndex: Math.max(0, indexOfValue(appSettings.autotileDragBehavior))
+                                        onActivated: appSettings.autotileDragBehavior = currentValue
+                                    }
+                                }
+
+                                SettingsSeparator {}
+
+                                SettingsRow {
+                                    title: i18n("Overflow behavior")
+                                    searchAnchor: "overflowBehavior"
+                                    description: i18n("Float excess windows beyond the max-windows cap, or Unlimited to tile every window regardless of count.")
+
+                                    WideComboBox {
+                                        Accessible.name: i18n("Autotile overflow behavior")
+                                        Accessible.description: i18n("Selects how windows beyond the max-windows cap are handled: Float excess windows, or Unlimited to tile every window regardless of count.")
+                                        textRole: "text"
+                                        valueRole: "value"
+                                        model: [
+                                            {
+                                                "text": i18n("Float excess"),
+                                                "value": 0
+                                            },
+                                            {
+                                                "text": i18n("Unlimited"),
+                                                "value": 1
+                                            }
+                                        ]
+                                        currentIndex: Math.max(0, indexOfValue(appSettings.autotileOverflowBehavior))
+                                        onActivated: appSettings.autotileOverflowBehavior = currentValue
+                                    }
                                 }
                             }
                         }
