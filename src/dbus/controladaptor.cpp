@@ -10,6 +10,7 @@
 #include <PhosphorZones/Layout.h>
 #include <PhosphorZones/Zone.h>
 #include "../core/logging.h"
+#include "../core/daemongeometryresolver.h"
 #include "../core/geometryutils.h"
 #include <PhosphorScreens/Manager.h>
 #include "../core/supportreport.h"
@@ -69,6 +70,35 @@ void ControlAdaptor::snapWindowToZone(const QString& windowId, int zoneNumber, c
     if (m_snapAdaptor) {
         m_snapAdaptor->moveWindowToZone(windowId, zone->id().toString());
     }
+}
+
+QString ControlAdaptor::getGapProvenance(const QString& screenId)
+{
+    if (!m_wta || !m_layoutManager) {
+        return {};
+    }
+    DaemonGeometryResolver* resolver = m_wta->daemonGeometryResolver();
+    if (!resolver) {
+        return {};
+    }
+    // The active layout for this screen supplies the layout cascade layer,
+    // matching what live geometry resolves against.
+    PhosphorZones::Layout* layout = m_layoutManager->resolveLayoutForScreen(screenId);
+    const GapProvenance prov = resolver->resolveGapProvenance(layout, screenId);
+
+    const auto facet = [](int value, GeometryUtils::GapLayer layer) {
+        QJsonObject o;
+        o.insert(QStringLiteral("value"), value);
+        o.insert(QStringLiteral("layer"), GeometryUtils::gapLayerKey(layer));
+        return o;
+    };
+    QJsonObject out;
+    out.insert(QStringLiteral("screenId"), screenId);
+    out.insert(QStringLiteral("innerGap"), facet(prov.zonePadding, prov.zonePaddingLayer));
+    // Outer gap reports the uniform/top value as the representative; the winning
+    // layer covers the whole edge-gap resolution.
+    out.insert(QStringLiteral("outerGap"), facet(prov.outerGaps.top, prov.outerGapsLayer));
+    return QString::fromUtf8(QJsonDocument(out).toJson(QJsonDocument::Compact));
 }
 
 void ControlAdaptor::toggleAutotileForScreen(const QString& screenId)

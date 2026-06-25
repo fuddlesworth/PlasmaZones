@@ -137,6 +137,23 @@ QVariantMap contextGapOverrideMap(const PhosphorZones::ContextGapOverride& gaps)
     return map;
 }
 
+QString gapLayerKey(GapLayer layer)
+{
+    switch (layer) {
+    case GapLayer::ContextRule:
+        return QStringLiteral("context-rule");
+    case GapLayer::PerScreen:
+        return QStringLiteral("per-screen");
+    case GapLayer::Layout:
+        return QStringLiteral("layout");
+    case GapLayer::Global:
+        return QStringLiteral("global");
+    case GapLayer::Default:
+        return QStringLiteral("default");
+    }
+    return QStringLiteral("default");
+}
+
 int getEffectiveZonePadding(PhosphorZones::Layout* layout, ISettings* settings, const QString& screenId,
                             const QVariantMap& ruleGapOverride, GapLayer* winningLayer)
 {

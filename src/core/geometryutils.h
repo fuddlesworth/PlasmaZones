@@ -112,6 +112,16 @@ enum class GapLayer {
 };
 
 /**
+ * @brief Stable string key for a GapLayer, shared between the daemon's
+ *        provenance D-Bus reply and the settings "what wins here?" inspector.
+ *
+ * This is the wire contract for the layer identity (the UI maps it to a
+ * translated label): "context-rule" | "per-screen" | "layout" | "global" |
+ * "default".
+ */
+PLASMAZONES_EXPORT QString gapLayerKey(GapLayer layer);
+
+/**
  * @brief Get effective zone padding for a layout
  * @param layout PhosphorZones::Layout to get padding for (may have per-layout override)
  * @param settings Global settings (used if layout has no override)

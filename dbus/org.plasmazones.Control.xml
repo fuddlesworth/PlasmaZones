@@ -41,5 +41,14 @@ SPDX-License-Identifier: GPL-3.0-or-later
                 <annotation name="org.gtk.GDBus.DocString" value="Markdown-formatted support report with config, screens, and logs."/>
             </arg>
         </method>
+        <method name="getGapProvenance">
+            <annotation name="org.gtk.GDBus.DocString" value="Read-only 'what wins here?' query: the effective inner/outer gap for a screen and which scope layer (context-rule, per-screen, layout, global, default) supplied it, resolved through the same cascade as live geometry."/>
+            <arg name="screenId" type="s" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="Screen to resolve (empty = primary)."/>
+            </arg>
+            <arg name="provenance" type="s" direction="out">
+                <annotation name="org.gtk.GDBus.DocString" value="JSON: {screenId, innerGap:{value,layer}, outerGap:{value,layer}}."/>
+            </arg>
+        </method>
     </interface>
 </node>
