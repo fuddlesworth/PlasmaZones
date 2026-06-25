@@ -18,6 +18,24 @@ SettingsFlickable {
     readonly property int sliderPreferredWidth: Kirigami.Units.gridUnit * 16
     readonly property int thresholdMax: root.settingsBridge.adjacentThresholdMax
 
+    // Switch to the tab containing a searched/deep-linked anchor before reveal.
+    ensureAnchorVisible: function (anchorId) {
+        var e = root._searchAnchors[anchorId];
+        if (!e || !e.item) {
+            return;
+        }
+        for (var p = e.item; p; p = p.parent) {
+            if (p === appearanceGroup) {
+                tabBar.currentIndex = 1;
+                return;
+            }
+            if (p === behaviorGroup) {
+                tabBar.currentIndex = 0;
+                return;
+            }
+        }
+    }
+
     contentHeight: content.implicitHeight
     clip: true
 
@@ -27,232 +45,252 @@ SettingsFlickable {
         width: parent.width
         spacing: Kirigami.Units.largeSpacing
 
+        TabBar {
+            id: tabBar
+
+            Layout.fillWidth: true
+
+            TabButton {
+                text: i18n("Behavior")
+            }
+            TabButton {
+                text: i18n("Appearance")
+            }
+        }
+
         // ═══════════════════════════ BEHAVIOR ═══════════════════════════
+        ColumnLayout {
+            id: behaviorGroup
 
-        Item {
             Layout.fillWidth: true
-            implicitHeight: triggersCard.implicitHeight
+            visible: tabBar.currentIndex === 0
+            spacing: Kirigami.Units.largeSpacing
 
-            SettingsCard {
-                id: triggersCard
+            Item {
+                Layout.fillWidth: true
+                implicitHeight: triggersCard.implicitHeight
 
-                anchors.fill: parent
-                headerText: i18n("Triggers")
-                searchAnchor: "triggers"
-                collapsible: true
+                SettingsCard {
+                    id: triggersCard
 
-                contentItem: ColumnLayout {
-                    spacing: Kirigami.Units.smallSpacing
+                    anchors.fill: parent
+                    headerText: i18n("Triggers")
+                    searchAnchor: "triggers"
+                    collapsible: true
 
-                    SettingsRow {
-                        title: i18n("Activate on every drag")
-                        searchAnchor: "activateOnEveryDrag"
-                        description: i18n("Show the zone overlay on every window drag without requiring a modifier key or mouse button")
+                    contentItem: ColumnLayout {
+                        spacing: Kirigami.Units.smallSpacing
 
-                        SettingsSwitch {
-                            id: alwaysActivateSwitch
+                        SettingsRow {
+                            title: i18n("Activate on every drag")
+                            searchAnchor: "activateOnEveryDrag"
+                            description: i18n("Show the zone overlay on every window drag without requiring a modifier key or mouse button")
 
-                            checked: root.settingsBridge.alwaysActivateOnDrag
-                            accessibleName: i18n("Activate on every window drag")
-                            onToggled: function (newValue) {
-                                root.settingsBridge.alwaysActivateOnDrag = newValue;
+                            SettingsSwitch {
+                                id: alwaysActivateSwitch
+
+                                checked: root.settingsBridge.alwaysActivateOnDrag
+                                accessibleName: i18n("Activate on every window drag")
+                                onToggled: function (newValue) {
+                                    root.settingsBridge.alwaysActivateOnDrag = newValue;
+                                }
                             }
                         }
-                    }
 
-                    SettingsSeparator {}
+                        SettingsSeparator {}
 
-                    SettingsRow {
-                        readonly property string activeTitle: alwaysActivateSwitch.checked ? i18n("Hold to deactivate") : i18n("Hold to activate")
-                        readonly property string activeDescription: alwaysActivateSwitch.checked ? i18n("Hold a modifier or mouse button while dragging to hide the zone overlay. Esc still cancels the drag entirely.") : i18n("Hold a modifier or mouse button to show zones while dragging")
+                        SettingsRow {
+                            readonly property string activeTitle: alwaysActivateSwitch.checked ? i18n("Hold to deactivate") : i18n("Hold to activate")
+                            readonly property string activeDescription: alwaysActivateSwitch.checked ? i18n("Hold a modifier or mouse button while dragging to hide the zone overlay. Esc still cancels the drag entirely.") : i18n("Hold a modifier or mouse button to show zones while dragging")
 
-                        title: activeTitle
-                        searchAnchor: "holdToActivate"
-                        description: activeDescription
+                            title: activeTitle
+                            searchAnchor: "holdToActivate"
+                            description: activeDescription
 
-                        ModifierAndMouseCheckBoxes {
-                            id: dragActivationInput
+                            ModifierAndMouseCheckBoxes {
+                                id: dragActivationInput
 
-                            width: root.sliderPreferredWidth
-                            allowMultiple: true
-                            acceptMode: acceptModeAll
-                            triggers: root.settingsBridge.dragActivationTriggers
-                            defaultTriggers: root.settingsBridge.defaultDragActivationTriggers
-                            tooltipEnabled: false
-                            onTriggersModified: triggers => {
-                                root.settingsBridge.dragActivationTriggers = triggers;
+                                width: root.sliderPreferredWidth
+                                allowMultiple: true
+                                acceptMode: acceptModeAll
+                                triggers: root.settingsBridge.dragActivationTriggers
+                                defaultTriggers: root.settingsBridge.defaultDragActivationTriggers
+                                tooltipEnabled: false
+                                onTriggersModified: triggers => {
+                                    root.settingsBridge.dragActivationTriggers = triggers;
+                                }
                             }
                         }
-                    }
 
-                    SettingsSeparator {}
+                        SettingsSeparator {}
 
-                    SettingsRow {
-                        readonly property string activeDescription: alwaysActivateSwitch.checked ? i18n("Tap the trigger once to hide the overlay, tap again to show it") : i18n("Tap the activation trigger once to show the overlay, tap again to hide it")
+                        SettingsRow {
+                            readonly property string activeDescription: alwaysActivateSwitch.checked ? i18n("Tap the trigger once to hide the overlay, tap again to show it") : i18n("Tap the activation trigger once to show the overlay, tap again to hide it")
 
-                        title: i18n("Toggle mode")
-                        searchAnchor: "triggersToggleMode"
-                        description: activeDescription
+                            title: i18n("Toggle mode")
+                            searchAnchor: "triggersToggleMode"
+                            description: activeDescription
 
-                        SettingsSwitch {
-                            checked: appSettings.toggleActivation
-                            accessibleName: i18n("Toggle mode")
-                            onToggled: function (newValue) {
-                                appSettings.toggleActivation = newValue;
+                            SettingsSwitch {
+                                checked: appSettings.toggleActivation
+                                accessibleName: i18n("Toggle mode")
+                                onToggled: function (newValue) {
+                                    appSettings.toggleActivation = newValue;
+                                }
                             }
                         }
                     }
                 }
             }
-        }
 
-        Item {
-            Layout.fillWidth: true
-            implicitHeight: zoneSpanCard.implicitHeight
+            Item {
+                Layout.fillWidth: true
+                implicitHeight: zoneSpanCard.implicitHeight
 
-            SettingsCard {
-                id: zoneSpanCard
+                SettingsCard {
+                    id: zoneSpanCard
 
-                anchors.fill: parent
-                headerText: i18n("Zone Span")
-                searchAnchor: "zoneSpan"
-                showToggle: true
-                toggleChecked: appSettings.zoneSpanEnabled
-                collapsible: true
-                onToggleClicked: checked => {
-                    return appSettings.zoneSpanEnabled = checked;
-                }
-
-                contentItem: ColumnLayout {
-                    spacing: Kirigami.Units.smallSpacing
-
-                    SettingsRow {
-                        title: i18n("Span modifier")
-                        searchAnchor: "spanModifier"
-                        description: i18n("Hold a modifier or mouse button while dragging to paint across zones")
-
-                        ModifierAndMouseCheckBoxes {
-                            width: root.sliderPreferredWidth
-                            allowMultiple: true
-                            acceptMode: acceptModeAll
-                            triggers: root.settingsBridge.zoneSpanTriggers
-                            defaultTriggers: root.settingsBridge.defaultZoneSpanTriggers
-                            tooltipEnabled: false
-                            onTriggersModified: triggers => {
-                                root.settingsBridge.zoneSpanTriggers = triggers;
-                            }
-                        }
+                    anchors.fill: parent
+                    headerText: i18n("Zone Span")
+                    searchAnchor: "zoneSpan"
+                    showToggle: true
+                    toggleChecked: appSettings.zoneSpanEnabled
+                    collapsible: true
+                    onToggleClicked: checked => {
+                        return appSettings.zoneSpanEnabled = checked;
                     }
 
-                    SettingsSeparator {}
+                    contentItem: ColumnLayout {
+                        spacing: Kirigami.Units.smallSpacing
 
-                    SettingsRow {
-                        title: i18n("Toggle mode")
-                        searchAnchor: "zoneSpanToggleMode"
-                        description: i18n("Tap the span modifier once to start spanning, tap again to stop, instead of holding it")
+                        SettingsRow {
+                            title: i18n("Span modifier")
+                            searchAnchor: "spanModifier"
+                            description: i18n("Hold a modifier or mouse button while dragging to paint across zones")
 
-                        SettingsSwitch {
-                            checked: appSettings.zoneSpanToggleMode
-                            accessibleName: i18n("Zone span toggle mode")
-                            onToggled: function (newValue) {
-                                appSettings.zoneSpanToggleMode = newValue;
+                            ModifierAndMouseCheckBoxes {
+                                width: root.sliderPreferredWidth
+                                allowMultiple: true
+                                acceptMode: acceptModeAll
+                                triggers: root.settingsBridge.zoneSpanTriggers
+                                defaultTriggers: root.settingsBridge.defaultZoneSpanTriggers
+                                tooltipEnabled: false
+                                onTriggersModified: triggers => {
+                                    root.settingsBridge.zoneSpanTriggers = triggers;
+                                }
                             }
                         }
-                    }
 
-                    SettingsSeparator {}
+                        SettingsSeparator {}
 
-                    SettingsRow {
-                        title: i18n("Edge threshold")
-                        searchAnchor: "edgeThreshold"
-                        description: i18n("Distance from zone edge for multi-zone selection")
+                        SettingsRow {
+                            title: i18n("Toggle mode")
+                            searchAnchor: "zoneSpanToggleMode"
+                            description: i18n("Tap the span modifier once to start spanning, tap again to stop, instead of holding it")
 
-                        SettingsSpinBox {
-                            from: root.settingsBridge.adjacentThresholdMin
-                            to: root.thresholdMax
-                            value: appSettings.adjacentThreshold
-                            onValueModified: value => {
-                                return appSettings.adjacentThreshold = value;
+                            SettingsSwitch {
+                                checked: appSettings.zoneSpanToggleMode
+                                accessibleName: i18n("Zone span toggle mode")
+                                onToggled: function (newValue) {
+                                    appSettings.zoneSpanToggleMode = newValue;
+                                }
+                            }
+                        }
+
+                        SettingsSeparator {}
+
+                        SettingsRow {
+                            title: i18n("Edge threshold")
+                            searchAnchor: "edgeThreshold"
+                            description: i18n("Distance from zone edge for multi-zone selection")
+
+                            SettingsSpinBox {
+                                from: root.settingsBridge.adjacentThresholdMin
+                                to: root.thresholdMax
+                                value: appSettings.adjacentThreshold
+                                onValueModified: value => {
+                                    return appSettings.adjacentThreshold = value;
+                                }
                             }
                         }
                     }
                 }
             }
-        }
 
-        Item {
-            Layout.fillWidth: true
-            implicitHeight: displayCard.implicitHeight
+            Item {
+                Layout.fillWidth: true
+                implicitHeight: displayCard.implicitHeight
 
-            SettingsCard {
-                id: displayCard
+                SettingsCard {
+                    id: displayCard
 
-                anchors.fill: parent
-                headerText: i18n("Display")
-                searchAnchor: "display"
-                collapsible: true
+                    anchors.fill: parent
+                    headerText: i18n("Display")
+                    searchAnchor: "display"
+                    collapsible: true
 
-                contentItem: ColumnLayout {
-                    spacing: Kirigami.Units.smallSpacing
+                    contentItem: ColumnLayout {
+                        spacing: Kirigami.Units.smallSpacing
 
-                    SettingsRow {
-                        title: i18n("Show zones on all monitors")
-                        searchAnchor: "showZonesOnAllMonitors"
-                        description: i18n("Display zone overlays on every monitor while dragging a window")
+                        SettingsRow {
+                            title: i18n("Show zones on all monitors")
+                            searchAnchor: "showZonesOnAllMonitors"
+                            description: i18n("Display zone overlays on every monitor while dragging a window")
 
-                        SettingsSwitch {
-                            checked: appSettings.showZonesOnAllMonitors
-                            accessibleName: i18n("Show zones on all monitors")
-                            onToggled: function (newValue) {
-                                appSettings.showZonesOnAllMonitors = newValue;
+                            SettingsSwitch {
+                                checked: appSettings.showZonesOnAllMonitors
+                                accessibleName: i18n("Show zones on all monitors")
+                                onToggled: function (newValue) {
+                                    appSettings.showZonesOnAllMonitors = newValue;
+                                }
                             }
                         }
-                    }
 
-                    SettingsSeparator {}
+                        SettingsSeparator {}
 
-                    SettingsRow {
-                        title: i18n("Filter by aspect ratio")
-                        searchAnchor: "filterByAspectRatio"
-                        description: i18n("Only show layouts matching the current monitor's aspect ratio")
+                        SettingsRow {
+                            title: i18n("Filter by aspect ratio")
+                            searchAnchor: "filterByAspectRatio"
+                            description: i18n("Only show layouts matching the current monitor's aspect ratio")
 
-                        SettingsSwitch {
-                            checked: appSettings.filterLayoutsByAspectRatio
-                            accessibleName: i18n("Filter layouts by aspect ratio")
-                            onToggled: function (newValue) {
-                                appSettings.filterLayoutsByAspectRatio = newValue;
+                            SettingsSwitch {
+                                checked: appSettings.filterLayoutsByAspectRatio
+                                accessibleName: i18n("Filter layouts by aspect ratio")
+                                onToggled: function (newValue) {
+                                    appSettings.filterLayoutsByAspectRatio = newValue;
+                                }
                             }
                         }
-                    }
 
-                    SettingsSeparator {}
+                        SettingsSeparator {}
 
-                    SettingsRow {
-                        title: i18n("Zone numbers")
-                        searchAnchor: "zoneNumbers"
-                        description: i18n("Display a number label inside each zone")
+                        SettingsRow {
+                            title: i18n("Zone numbers")
+                            searchAnchor: "zoneNumbers"
+                            description: i18n("Display a number label inside each zone")
 
-                        SettingsSwitch {
-                            checked: appSettings.showZoneNumbers
-                            accessibleName: i18n("Show zone numbers")
-                            onToggled: function (newValue) {
-                                appSettings.showZoneNumbers = newValue;
+                            SettingsSwitch {
+                                checked: appSettings.showZoneNumbers
+                                accessibleName: i18n("Show zone numbers")
+                                onToggled: function (newValue) {
+                                    appSettings.showZoneNumbers = newValue;
+                                }
                             }
                         }
-                    }
 
-                    SettingsSeparator {}
+                        SettingsSeparator {}
 
-                    SettingsRow {
-                        title: i18n("Flash on layout switch")
-                        searchAnchor: "flashOnLayoutSwitch"
-                        description: i18n("Briefly flash zones when switching between layouts")
+                        SettingsRow {
+                            title: i18n("Flash on layout switch")
+                            searchAnchor: "flashOnLayoutSwitch"
+                            description: i18n("Briefly flash zones when switching between layouts")
 
-                        SettingsSwitch {
-                            checked: appSettings.flashZonesOnSwitch
-                            accessibleName: i18n("Flash zones on layout switch")
-                            onToggled: function (newValue) {
-                                appSettings.flashZonesOnSwitch = newValue;
+                            SettingsSwitch {
+                                checked: appSettings.flashZonesOnSwitch
+                                accessibleName: i18n("Flash zones on layout switch")
+                                onToggled: function (newValue) {
+                                    appSettings.flashZonesOnSwitch = newValue;
+                                }
                             }
                         }
                     }
@@ -261,9 +299,16 @@ SettingsFlickable {
         }
 
         // ══════════════════════════ APPEARANCE ══════════════════════════
+        ColumnLayout {
+            id: appearanceGroup
 
-        SnappingOverlayAppearanceCards {
             Layout.fillWidth: true
+            visible: tabBar.currentIndex === 1
+            spacing: Kirigami.Units.largeSpacing
+
+            SnappingOverlayAppearanceCards {
+                Layout.fillWidth: true
+            }
         }
     }
 }

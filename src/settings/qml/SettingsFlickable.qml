@@ -97,6 +97,12 @@ Flickable {
     // Retained here and retried from registerSearchAnchor (consume-once).
     property string _pendingRevealAnchor: ""
 
+    // Optional hook: a page that hides some sections behind an in-page tab sets
+    // this to a function(anchorId) that makes the anchor's section visible (e.g.
+    // switches the Behavior/Appearance tab) before the reveal scrolls. Without it
+    // a search / deep-link into the inactive tab would scroll to a hidden item.
+    property var ensureAnchorVisible: null
+
     function registerSearchAnchor(anchorId, item, card) {
         if (!anchorId || anchorId.length === 0 || !item)
             return;
@@ -119,6 +125,12 @@ Flickable {
     }
 
     function revealAnchor(anchorId) {
+        // Let a tabbed page surface the anchor's section first (see
+        // ensureAnchorVisible), so the reveal scrolls to a now-visible item.
+        if (settingsFlickable.ensureAnchorVisible) {
+            settingsFlickable.ensureAnchorVisible(anchorId);
+        }
+
         var entry = settingsFlickable._searchAnchors[anchorId];
         if (!entry || !entry.item) {
             // Not registered yet — retain and retry once it registers, so the

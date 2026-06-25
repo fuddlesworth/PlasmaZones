@@ -31,6 +31,13 @@ SettingsFlickable {
     readonly property int zoneSelectorMaxRowsMin: root.settingsBridge.maxRowsMin
     readonly property int zoneSelectorMaxRowsMax: root.settingsBridge.maxRowsMax
     readonly property real screenAspectRatio: Screen.width > 0 && Screen.height > 0 ? (Screen.width / Screen.height) : (16 / 9)
+    // Anchors that belong to the Behavior tab; everything else is Appearance.
+    readonly property var behaviorAnchors: ["zoneSelectorEnabled", "triggerDistance", "triggerDistanceRow"]
+
+    // Switch to the tab containing a searched/deep-linked anchor before reveal.
+    ensureAnchorVisible: function (anchorId) {
+        tabBar.currentIndex = root.behaviorAnchors.indexOf(anchorId) >= 0 ? 0 : 1;
+    }
 
     contentHeight: content.implicitHeight
     clip: true
@@ -41,9 +48,24 @@ SettingsFlickable {
         width: parent.width
         spacing: Kirigami.Units.largeSpacing
 
+        TabBar {
+            id: tabBar
+
+            Layout.fillWidth: true
+
+            TabButton {
+                text: i18n("Behavior")
+            }
+            TabButton {
+                text: i18n("Appearance")
+            }
+        }
+
+        // ZoneSelectorSection renders behavior (enable + trigger) or appearance
+        // (position, arrangement, preview) cards by mode — driven by the tab.
         ZoneSelectorSection {
             Layout.fillWidth: true
-            mode: "all"
+            mode: tabBar.currentIndex === 0 ? "behavior" : "appearance"
             appSettings: settingsController.settings
             controller: settingsController
             constants: root
