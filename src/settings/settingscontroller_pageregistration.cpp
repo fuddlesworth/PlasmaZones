@@ -86,10 +86,12 @@ void SettingsController::buildApplicationController()
 
     // ── Block 2: per-feature configuration ──
     // Appearance leads block 2: a surface-organized hub (see the Appearance
-    // children section below). Feature areas (Display / Placement) keep
+    // children section below). A drill-down parent (collapsible=false, like
+    // Animations) — clicking it navigates into the hub rather than expanding an
+    // inline dropdown in the main rail. Feature areas (Display / Placement) keep
     // behavior only.
     regVirtual(QStringLiteral("appearance"), QString(), PhosphorI18n::tr("Appearance"), QString(),
-               QStringLiteral("preferences-desktop-color"), /*collapsible=*/true);
+               QStringLiteral("preferences-desktop-color"));
     regVirtual(QStringLiteral("display"), QString(), PhosphorI18n::tr("Display"), QString(),
                QStringLiteral("preferences-desktop-display"), /*collapsible=*/true);
     // Placement groups the two placement modes (Snapping / Tiling) as an
