@@ -95,6 +95,23 @@ PLASMAZONES_EXPORT QRectF getZoneGeometryForScreenF(PhosphorScreens::ScreenManag
                                                     PhosphorZones::IZoneLayoutRegistry* layoutRegistry = nullptr);
 
 /**
+ * @brief Which scope layer of the gap cascade supplied the effective value.
+ *
+ * Mirrors the documented precedence, most specific first. The resolution
+ * functions below optionally report which layer they returned from, so the
+ * read-only provenance query that powers the settings "what wins here?"
+ * inspector reads the SAME path that actual geometry uses and can never disagree
+ * with it.
+ */
+enum class GapLayer {
+    ContextRule,
+    PerScreen,
+    Layout,
+    Global,
+    Default,
+};
+
+/**
  * @brief Get effective zone padding for a layout
  * @param layout PhosphorZones::Layout to get padding for (may have per-layout override)
  * @param settings Global settings (used if layout has no override)
@@ -104,12 +121,15 @@ PLASMAZONES_EXPORT QRectF getZoneGeometryForScreenF(PhosphorScreens::ScreenManag
  * @param ruleGapOverride Optional PerScreenSnappingKey-shaped map of context-rule
  *        gap overrides (built by DaemonGeometryResolver from the resolved
  *        context rules); takes precedence over every other layer.
+ * @param winningLayer Optional out-parameter; when non-null, receives which
+ *        cascade layer supplied the returned value.
  *
  * Resolution cascade: context-rule override → per-screen override → layout
  * override → global settings → default (8px)
  */
 PLASMAZONES_EXPORT int getEffectiveZonePadding(PhosphorZones::Layout* layout, ISettings* settings,
-                                               const QString& screenId = {}, const QVariantMap& ruleGapOverride = {});
+                                               const QString& screenId = {}, const QVariantMap& ruleGapOverride = {},
+                                               GapLayer* winningLayer = nullptr);
 
 using ::PhosphorZones::GeometryUtils::snapToRect;
 
@@ -125,10 +145,16 @@ using ::PhosphorZones::GeometryUtils::snapToRect;
  *
  * Resolution cascade: context-rule override → per-screen per-side → per-screen
  * uniform → layout per-side → layout uniform → global per-side → global uniform → default
+ *
+ * @param winningLayer Optional out-parameter; when non-null, receives which
+ *        cascade layer supplied the returned gaps (the highest-priority layer
+ *        that contributed; per-side fills from a lower layer are not reported
+ *        separately).
  */
 PLASMAZONES_EXPORT ::PhosphorLayout::EdgeGaps getEffectiveOuterGaps(PhosphorZones::Layout* layout, ISettings* settings,
                                                                     const QString& screenId = {},
-                                                                    const QVariantMap& ruleGapOverride = {});
+                                                                    const QVariantMap& ruleGapOverride = {},
+                                                                    GapLayer* winningLayer = nullptr);
 
 /**
  * @brief Convert a resolved ContextGapOverride into the PerScreenSnappingKey-shaped
