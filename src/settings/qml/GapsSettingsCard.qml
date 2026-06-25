@@ -241,10 +241,12 @@ SettingsCard {
             visible: root.provenanceEnabled
             spacing: Kirigami.Units.smallSpacing
 
-            property var data: null
+            // NB: not named `data` — that is the default child-list property of
+            // every QML item, and shadowing it silently breaks the layout.
+            property var prov: null
 
             function refresh() {
-                provenanceSection.data = (root.scopeAppSettings ? root.scopeAppSettings.gapProvenance(root.scopeAppSettings.scopeScreenName) : null) || null;
+                provenanceSection.prov = (root.scopeAppSettings ? root.scopeAppSettings.gapProvenance(root.scopeAppSettings.scopeScreenName) : null) || null;
             }
             function layerLabel(key) {
                 switch (key) {
@@ -266,7 +268,7 @@ SettingsCard {
             Connections {
                 target: root.scopeAppSettings
                 function onScopeScreenNameChanged() {
-                    provenanceSection.data = null;
+                    provenanceSection.prov = null;
                 }
             }
 
@@ -281,21 +283,21 @@ SettingsCard {
                 }
 
                 Button {
-                    text: provenanceSection.data ? i18n("Refresh") : i18n("Show")
+                    text: provenanceSection.prov ? i18n("Refresh") : i18n("Show")
                     onClicked: provenanceSection.refresh()
                 }
             }
 
             Label {
                 Layout.fillWidth: true
-                visible: provenanceSection.data !== null
+                visible: provenanceSection.prov !== null
                 wrapMode: Text.WordWrap
                 opacity: 0.8
                 text: {
-                    if (!provenanceSection.data || provenanceSection.data.innerLayer === undefined) {
+                    if (!provenanceSection.prov || provenanceSection.prov.innerLayer === undefined) {
                         return i18n("Effective values are unavailable. Is the daemon running?");
                     }
-                    return i18n("Inner gap is %1 px, from %2.", provenanceSection.data.innerValue, provenanceSection.layerLabel(provenanceSection.data.innerLayer)) + "\n" + i18n("Outer gap is %1 px, from %2.", provenanceSection.data.outerValue, provenanceSection.layerLabel(provenanceSection.data.outerLayer));
+                    return i18n("Inner gap is %1 px, from %2.", provenanceSection.prov.innerValue, provenanceSection.layerLabel(provenanceSection.prov.innerLayer)) + "\n" + i18n("Outer gap is %1 px, from %2.", provenanceSection.prov.outerValue, provenanceSection.layerLabel(provenanceSection.prov.outerLayer));
                 }
             }
         }
