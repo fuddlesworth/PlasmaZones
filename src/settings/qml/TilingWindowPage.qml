@@ -168,45 +168,45 @@ Item {
                         }
                     }
 
-                    AdvancedGroup {
-                        SettingsCard {
-                            Layout.fillWidth: true
-                            headerText: i18n("Window Handling")
-                            searchAnchor: "windowHandling"
-                            collapsible: true
+                    SettingsCard {
+                        Layout.fillWidth: true
+                        headerText: i18n("Window Handling")
+                        searchAnchor: "windowHandling"
+                        collapsible: true
 
-                            contentItem: ColumnLayout {
-                                spacing: Kirigami.Units.smallSpacing
+                        contentItem: ColumnLayout {
+                            spacing: Kirigami.Units.smallSpacing
 
-                                SettingsRow {
-                                    title: i18n("New window placement")
-                                    searchAnchor: "newWindowPlacement"
-                                    description: i18n("Where newly opened windows appear in the tiling order")
+                            SettingsRow {
+                                title: i18n("New window placement")
+                                searchAnchor: "newWindowPlacement"
+                                description: i18n("Where newly opened windows appear in the tiling order")
 
-                                    ComboBox {
-                                        Layout.fillWidth: false
-                                        Accessible.name: i18n("New window placement")
-                                        textRole: "text"
-                                        valueRole: "value"
-                                        model: [
-                                            {
-                                                "text": i18n("After existing"),
-                                                "value": 0
-                                            },
-                                            {
-                                                "text": i18n("After focused"),
-                                                "value": 1
-                                            },
-                                            {
-                                                "text": i18n("As main window"),
-                                                "value": 2
-                                            }
-                                        ]
-                                        currentIndex: Math.max(0, indexOfValue(appSettings.autotileInsertPosition))
-                                        onActivated: appSettings.autotileInsertPosition = currentValue
-                                    }
+                                ComboBox {
+                                    Layout.fillWidth: false
+                                    Accessible.name: i18n("New window placement")
+                                    textRole: "text"
+                                    valueRole: "value"
+                                    model: [
+                                        {
+                                            "text": i18n("After existing"),
+                                            "value": 0
+                                        },
+                                        {
+                                            "text": i18n("After focused"),
+                                            "value": 1
+                                        },
+                                        {
+                                            "text": i18n("As main window"),
+                                            "value": 2
+                                        }
+                                    ]
+                                    currentIndex: Math.max(0, indexOfValue(appSettings.autotileInsertPosition))
+                                    onActivated: appSettings.autotileInsertPosition = currentValue
                                 }
+                            }
 
+                            AdvancedGroup {
                                 SettingsSeparator {}
 
                                 SettingsRow {
@@ -268,34 +268,36 @@ Item {
                                         onActivated: appSettings.autotileStickyWindowHandling = currentValue
                                     }
                                 }
+                            }
 
-                                SettingsSeparator {}
+                            SettingsSeparator {}
 
-                                SettingsRow {
-                                    title: i18n("Drag behavior")
-                                    searchAnchor: "dragBehavior"
-                                    description: i18n("Float converts a dragged tile to free-floating. Reorder keeps it tiled and swaps it into the drop slot.")
+                            SettingsRow {
+                                title: i18n("Drag behavior")
+                                searchAnchor: "dragBehavior"
+                                description: i18n("Float converts a dragged tile to free-floating. Reorder keeps it tiled and swaps it into the drop slot.")
 
-                                    WideComboBox {
-                                        Accessible.name: i18n("Autotile drag behavior")
-                                        Accessible.description: i18n("Selects how dragging a tiled window on an autotile screen behaves: Float converts it to free-floating, Reorder keeps it tiled and swaps it into the drop slot.")
-                                        textRole: "text"
-                                        valueRole: "value"
-                                        model: [
-                                            {
-                                                "text": i18n("Float on drag"),
-                                                "value": 0
-                                            },
-                                            {
-                                                "text": i18n("Reorder on drag"),
-                                                "value": 1
-                                            }
-                                        ]
-                                        currentIndex: Math.max(0, indexOfValue(appSettings.autotileDragBehavior))
-                                        onActivated: appSettings.autotileDragBehavior = currentValue
-                                    }
+                                WideComboBox {
+                                    Accessible.name: i18n("Autotile drag behavior")
+                                    Accessible.description: i18n("Selects how dragging a tiled window on an autotile screen behaves: Float converts it to free-floating, Reorder keeps it tiled and swaps it into the drop slot.")
+                                    textRole: "text"
+                                    valueRole: "value"
+                                    model: [
+                                        {
+                                            "text": i18n("Float on drag"),
+                                            "value": 0
+                                        },
+                                        {
+                                            "text": i18n("Reorder on drag"),
+                                            "value": 1
+                                        }
+                                    ]
+                                    currentIndex: Math.max(0, indexOfValue(appSettings.autotileDragBehavior))
+                                    onActivated: appSettings.autotileDragBehavior = currentValue
                                 }
+                            }
 
+                            AdvancedGroup {
                                 SettingsSeparator {}
 
                                 SettingsRow {

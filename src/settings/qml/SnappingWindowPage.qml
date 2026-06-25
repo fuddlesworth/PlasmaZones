@@ -158,68 +158,68 @@ Item {
                         }
                     }
 
-                    AdvancedGroup {
-                        Item {
-                            Layout.fillWidth: true
-                            implicitHeight: windowHandlingCard.implicitHeight
+                    Item {
+                        Layout.fillWidth: true
+                        implicitHeight: windowHandlingCard.implicitHeight
 
-                            SettingsCard {
-                                id: windowHandlingCard
+                        SettingsCard {
+                            id: windowHandlingCard
 
-                                anchors.fill: parent
-                                headerText: i18n("Window Handling")
-                                searchAnchor: "windowHandling"
-                                collapsible: true
+                            anchors.fill: parent
+                            headerText: i18n("Window Handling")
+                            searchAnchor: "windowHandling"
+                            collapsible: true
 
-                                contentItem: ColumnLayout {
-                                    spacing: Kirigami.Units.smallSpacing
+                            contentItem: ColumnLayout {
+                                spacing: Kirigami.Units.smallSpacing
 
-                                    SettingsRow {
-                                        title: i18n("Re-snap on resolution change")
-                                        searchAnchor: "reSnapOnResolutionChange"
-                                        description: i18n("Move windows back to their zones after the screen resolution changes")
+                                SettingsRow {
+                                    title: i18n("Re-snap on resolution change")
+                                    searchAnchor: "reSnapOnResolutionChange"
+                                    description: i18n("Move windows back to their zones after the screen resolution changes")
 
-                                        SettingsSwitch {
-                                            checked: appSettings.keepWindowsInZonesOnResolutionChange
-                                            accessibleName: i18n("Re-snap on resolution change")
-                                            onToggled: function (newValue) {
-                                                appSettings.keepWindowsInZonesOnResolutionChange = newValue;
-                                            }
+                                    SettingsSwitch {
+                                        checked: appSettings.keepWindowsInZonesOnResolutionChange
+                                        accessibleName: i18n("Re-snap on resolution change")
+                                        onToggled: function (newValue) {
+                                            appSettings.keepWindowsInZonesOnResolutionChange = newValue;
                                         }
                                     }
+                                }
 
-                                    SettingsSeparator {}
+                                SettingsSeparator {}
 
-                                    SettingsRow {
-                                        title: i18n("Open new windows in the last-used zone")
-                                        searchAnchor: "openNewWindowsInLastUsedZone"
-                                        description: i18n("Snap every newly opened window into whichever zone you most recently snapped a window into")
+                                SettingsRow {
+                                    title: i18n("Open new windows in the last-used zone")
+                                    searchAnchor: "openNewWindowsInLastUsedZone"
+                                    description: i18n("Snap every newly opened window into whichever zone you most recently snapped a window into")
 
-                                        SettingsSwitch {
-                                            checked: appSettings.moveNewWindowsToLastZone
-                                            accessibleName: i18n("Open new windows in the last-used zone")
-                                            onToggled: function (newValue) {
-                                                appSettings.moveNewWindowsToLastZone = newValue;
-                                            }
+                                    SettingsSwitch {
+                                        checked: appSettings.moveNewWindowsToLastZone
+                                        accessibleName: i18n("Open new windows in the last-used zone")
+                                        onToggled: function (newValue) {
+                                            appSettings.moveNewWindowsToLastZone = newValue;
                                         }
                                     }
+                                }
 
-                                    SettingsSeparator {}
+                                SettingsSeparator {}
 
-                                    SettingsRow {
-                                        title: i18n("Auto-assign new windows for all layouts")
-                                        searchAnchor: "autoAssignNewWindowsAllLayouts"
-                                        description: i18n("Fill the first empty zone when a new window opens. When on, this overrides each layout's individual auto-assign toggle and applies to every layout.")
+                                SettingsRow {
+                                    title: i18n("Auto-assign new windows for all layouts")
+                                    searchAnchor: "autoAssignNewWindowsAllLayouts"
+                                    description: i18n("Fill the first empty zone when a new window opens. When on, this overrides each layout's individual auto-assign toggle and applies to every layout.")
 
-                                        SettingsSwitch {
-                                            checked: appSettings.autoAssignAllLayouts
-                                            accessibleName: i18n("Auto-assign new windows for all layouts")
-                                            onToggled: function (newValue) {
-                                                appSettings.autoAssignAllLayouts = newValue;
-                                            }
+                                    SettingsSwitch {
+                                        checked: appSettings.autoAssignAllLayouts
+                                        accessibleName: i18n("Auto-assign new windows for all layouts")
+                                        onToggled: function (newValue) {
+                                            appSettings.autoAssignAllLayouts = newValue;
                                         }
                                     }
+                                }
 
+                                AdvancedGroup {
                                     SettingsSeparator {}
 
                                     SettingsRow {
@@ -318,7 +318,9 @@ Item {
                                 }
                             }
                         }
+                    }
 
+                    AdvancedGroup {
                         Item {
                             Layout.fillWidth: true
                             implicitHeight: focusCard.implicitHeight
