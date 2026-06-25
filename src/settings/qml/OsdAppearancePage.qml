@@ -25,6 +25,7 @@ SettingsFlickable {
             Layout.fillWidth: true
             headerText: i18n("On-Screen Display")
             searchAnchor: "osd"
+            scopeLabel: i18n("Global")
             collapsible: true
 
             contentItem: ColumnLayout {

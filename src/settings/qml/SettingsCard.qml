@@ -75,6 +75,12 @@ Item {
     property var scopeAppSettings: null
     property string scopeHasOverridesMethod: ""
     property string scopeClearerMethod: ""
+    // Static scope label (e.g. "Global") for facets that do NOT resolve
+    // per-monitor. Shown as a passive pill next to the title, the global-only
+    // counterpart to the interactive MonitorScopeChip, so every facet reads its
+    // scope explicitly instead of leaving global cards blank. Ignored while the
+    // interactive scope chip is active (scopeEnabled).
+    property string scopeLabel: ""
 
     signal toggleClicked(bool checked)
 
@@ -238,6 +244,33 @@ Item {
                                 appSettings: root.scopeAppSettings
                                 hasOverridesMethod: root.scopeHasOverridesMethod
                                 clearerMethod: root.scopeClearerMethod
+                            }
+                        }
+                    }
+
+                    // Static scope label (e.g. "Global") — the passive counterpart
+                    // to the MonitorScopeChip, for facets that don't resolve
+                    // per-monitor. Mutually exclusive with the chip above.
+                    Loader {
+                        active: root.scopeLabel.length > 0 && !(root.scopeEnabled && root.scopeAppSettings !== null)
+                        visible: active
+                        Layout.leftMargin: active ? Kirigami.Units.smallSpacing : 0
+                        Layout.alignment: Qt.AlignVCenter
+                        sourceComponent: Component {
+                            Rectangle {
+                                implicitWidth: staticScopeText.implicitWidth + Kirigami.Units.largeSpacing
+                                implicitHeight: staticScopeText.implicitHeight + Kirigami.Units.smallSpacing
+                                radius: height / 2
+                                color: Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.08)
+
+                                Label {
+                                    id: staticScopeText
+
+                                    anchors.centerIn: parent
+                                    text: root.scopeLabel
+                                    font: Kirigami.Theme.smallFont
+                                    opacity: 0.7
+                                }
                             }
                         }
                     }

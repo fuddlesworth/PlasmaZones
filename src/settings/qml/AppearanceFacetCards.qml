@@ -56,6 +56,7 @@ ColumnLayout {
         Layout.fillWidth: true
         headerText: i18n("Colors")
         searchAnchor: "colors"
+        scopeLabel: i18n("Global")
         collapsible: true
 
         contentItem: ColumnLayout {
@@ -124,6 +125,7 @@ ColumnLayout {
         Layout.fillWidth: true
         headerText: i18n("Decorations")
         searchAnchor: "decorations"
+        scopeLabel: i18n("Global")
         collapsible: true
 
         contentItem: ColumnLayout {
@@ -152,6 +154,7 @@ ColumnLayout {
         Layout.fillWidth: true
         headerText: i18n("Borders")
         searchAnchor: "borders"
+        scopeLabel: i18n("Global")
         showToggle: true
         toggleChecked: root.showBorder
         onToggleClicked: checked => {

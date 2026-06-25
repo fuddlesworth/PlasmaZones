@@ -39,6 +39,7 @@ SettingsFlickable {
                 id: colorsCard
 
                 anchors.fill: parent
+                scopeLabel: i18n("Global")
                 headerText: i18n("Colors")
                 searchAnchor: "colors"
                 collapsible: true
@@ -176,6 +177,7 @@ SettingsFlickable {
                 id: opacityCard
 
                 anchors.fill: parent
+                scopeLabel: i18n("Global")
                 headerText: i18n("Opacity")
                 searchAnchor: "opacity"
                 collapsible: true
@@ -229,6 +231,7 @@ SettingsFlickable {
                 id: borderCard
 
                 anchors.fill: parent
+                scopeLabel: i18n("Global")
                 headerText: i18n("Border")
                 searchAnchor: "border"
                 collapsible: true
@@ -282,6 +285,7 @@ SettingsFlickable {
                 id: labelsCard
 
                 anchors.fill: parent
+                scopeLabel: i18n("Global")
                 headerText: i18n("Zone Labels")
                 searchAnchor: "zoneLabels"
                 collapsible: true
@@ -380,6 +384,7 @@ SettingsFlickable {
                 id: effectsCard
 
                 anchors.fill: parent
+                scopeLabel: i18n("Global")
                 headerText: i18n("Effects")
                 searchAnchor: "effects"
                 collapsible: true
@@ -420,6 +425,7 @@ SettingsFlickable {
                 id: shaderCard
 
                 anchors.fill: parent
+                scopeLabel: i18n("Global")
                 headerText: i18n("Shader Effects")
                 searchAnchor: "shaderEffects"
                 showToggle: true
