@@ -6,16 +6,39 @@ import QtQuick.Controls
 import QtQuick.Layouts
 import org.kde.kirigami as Kirigami
 
+// Tiling → Window. One page for everything about tiled windows: behavior cards
+// (Triggers, Window Handling, Focus) first, then appearance cards (Colors,
+// Decorations, Borders, Gaps). Behavior and Appearance are sections here, not
+// separate nav pages — so a tiled-window setting is always one place, never a
+// "which tab?" guess. Behavior binds tilingBehaviorPage; appearance binds
+// tilingAppearancePage (border/gap bounds) + the per-screen gaps helper.
 SettingsFlickable {
     id: root
 
-    // Page-scoped Q_PROPERTY surface lives on the sub-controller; appSettings
-    // references stay direct (those are Settings Q_PROPERTYs not wrapped here).
-    readonly property var settingsBridge: settingsController.tilingBehaviorPage
+    readonly property var behaviorBridge: settingsController.tilingBehaviorPage
+    readonly property var appearanceBridge: settingsController.tilingAppearancePage
     readonly property int triggerPreferredWidth: Kirigami.Units.gridUnit * 16
+    readonly property int gapMax: root.appearanceBridge.autotileGapMax
+
+    // Per-screen override helper for the Gaps card (autotile per-monitor map).
+    function settingValue(key, globalValue) {
+        return psHelper.settingValue(key, globalValue);
+    }
+    function writeSetting(key, value, globalSetter) {
+        psHelper.writeSetting(key, value, globalSetter);
+    }
 
     contentHeight: content.implicitHeight
     clip: true
+
+    PerScreenOverrideHelper {
+        id: psHelper
+
+        appSettings: settingsController
+        selectedScreenName: settingsController.scopeScreenName
+        getterMethod: "getPerScreenAutotileSettings"
+        setterMethod: "setPerScreenAutotileSetting"
+    }
 
     ColumnLayout {
         id: content
@@ -23,9 +46,8 @@ SettingsFlickable {
         width: parent.width
         spacing: Kirigami.Units.largeSpacing
 
-        // =================================================================
-        // Triggers Card
-        // =================================================================
+        // ═══════════════════════════ BEHAVIOR ═══════════════════════════
+
         SettingsCard {
             Layout.fillWidth: true
             headerText: i18n("Triggers")
@@ -43,10 +65,10 @@ SettingsFlickable {
                     SettingsSwitch {
                         id: alwaysReinsertSwitch
 
-                        checked: root.settingsBridge.alwaysReinsertIntoStack
+                        checked: root.behaviorBridge.alwaysReinsertIntoStack
                         accessibleName: i18n("Always re-insert into stack on drag")
                         onToggled: function (newValue) {
-                            root.settingsBridge.alwaysReinsertIntoStack = newValue;
+                            root.behaviorBridge.alwaysReinsertIntoStack = newValue;
                         }
                     }
                 }
@@ -63,11 +85,11 @@ SettingsFlickable {
                         width: root.triggerPreferredWidth
                         allowMultiple: true
                         acceptMode: acceptModeAll
-                        triggers: root.settingsBridge.autotileDragInsertTriggers
-                        defaultTriggers: root.settingsBridge.defaultAutotileDragInsertTriggers
+                        triggers: root.behaviorBridge.autotileDragInsertTriggers
+                        defaultTriggers: root.behaviorBridge.defaultAutotileDragInsertTriggers
                         tooltipEnabled: false
                         onTriggersModified: triggers => {
-                            root.settingsBridge.autotileDragInsertTriggers = triggers;
+                            root.behaviorBridge.autotileDragInsertTriggers = triggers;
                         }
                     }
                 }
@@ -91,9 +113,6 @@ SettingsFlickable {
             }
         }
 
-        // =================================================================
-        // Window Handling Card
-        // =================================================================
         SettingsCard {
             Layout.fillWidth: true
             headerText: i18n("Window Handling")
@@ -250,9 +269,6 @@ SettingsFlickable {
             }
         }
 
-        // =================================================================
-        // Focus Card
-        // =================================================================
         SettingsCard {
             Layout.fillWidth: true
             headerText: i18n("Focus")
@@ -291,6 +307,110 @@ SettingsFlickable {
                         }
                     }
                 }
+            }
+        }
+
+        // ══════════════════════════ APPEARANCE ══════════════════════════
+
+        // Colors / Decorations / Borders — shared with Snapping → Window via
+        // AppearanceFacetCards. Global (not per-screen), so they read as "Global".
+        AppearanceFacetCards {
+            Layout.fillWidth: true
+
+            useSystemBorderColors: appSettings.autotileUseSystemBorderColors
+            activeBorderColor: appSettings.autotileBorderColor
+            inactiveBorderColor: appSettings.autotileInactiveBorderColor
+            hideTitleBars: appSettings.autotileHideTitleBars
+            hideTitleBarsDescription: i18n("Remove window title bars while autotiled, restored when floating")
+            showBorder: appSettings.autotileShowBorder
+            borderWidth: appSettings.autotileBorderWidth
+            borderWidthMin: root.appearanceBridge.autotileBorderWidthMin
+            borderWidthMax: root.appearanceBridge.autotileBorderWidthMax
+            borderRadius: appSettings.autotileBorderRadius
+            borderRadiusMin: root.appearanceBridge.autotileBorderRadiusMin
+            borderRadiusMax: root.appearanceBridge.autotileBorderRadiusMax
+
+            onUseSystemBorderColorsToggled: checked => {
+                return appSettings.autotileUseSystemBorderColors = checked;
+            }
+            onActiveBorderColorPicked: selectedColor => {
+                return appSettings.autotileBorderColor = selectedColor;
+            }
+            onInactiveBorderColorPicked: selectedColor => {
+                return appSettings.autotileInactiveBorderColor = selectedColor;
+            }
+            onHideTitleBarsToggled: checked => {
+                return appSettings.autotileHideTitleBars = checked;
+            }
+            onShowBorderToggled: checked => {
+                return appSettings.autotileShowBorder = checked;
+            }
+            onBorderWidthModified: value => {
+                return appSettings.autotileBorderWidth = value;
+            }
+            onBorderRadiusModified: value => {
+                return appSettings.autotileBorderRadius = value;
+            }
+        }
+
+        GapsSettingsCard {
+            Layout.fillWidth: true
+            searchAnchor: "gaps"
+            scopeEnabled: true
+            scopeAppSettings: settingsController
+            scopeHasOverridesMethod: "hasPerScreenAutotileGapsSettings"
+            scopeClearerMethod: "clearPerScreenAutotileGapsSettings"
+            gapMax: root.gapMax
+            gapMin: root.appearanceBridge.autotileGapMin
+            primaryGapMin: root.appearanceBridge.autotileInnerGapMin
+            primaryGapMax: root.appearanceBridge.autotileInnerGapMax
+            primaryGapValue: root.settingValue("InnerGap", appSettings.autotileInnerGap)
+            outerGapValue: root.settingValue("OuterGap", appSettings.autotileOuterGap)
+            usePerSideOuterGap: root.settingValue("UsePerSideOuterGap", appSettings.autotileUsePerSideOuterGap)
+            smartGapsValue: root.settingValue("SmartGaps", appSettings.autotileSmartGaps)
+            outerGapTopValue: root.settingValue("OuterGapTop", appSettings.autotileOuterGapTop)
+            outerGapBottomValue: root.settingValue("OuterGapBottom", appSettings.autotileOuterGapBottom)
+            outerGapLeftValue: root.settingValue("OuterGapLeft", appSettings.autotileOuterGapLeft)
+            outerGapRightValue: root.settingValue("OuterGapRight", appSettings.autotileOuterGapRight)
+            onPrimaryGapModified: value => {
+                return root.writeSetting("InnerGap", value, function (v) {
+                    appSettings.autotileInnerGap = v;
+                });
+            }
+            onOuterGapModified: value => {
+                return root.writeSetting("OuterGap", value, function (v) {
+                    appSettings.autotileOuterGap = v;
+                });
+            }
+            onUsePerSideOuterGapToggled: checked => {
+                return root.writeSetting("UsePerSideOuterGap", checked, function (v) {
+                    appSettings.autotileUsePerSideOuterGap = v;
+                });
+            }
+            onOuterGapTopModified: value => {
+                return root.writeSetting("OuterGapTop", value, function (v) {
+                    appSettings.autotileOuterGapTop = v;
+                });
+            }
+            onOuterGapBottomModified: value => {
+                return root.writeSetting("OuterGapBottom", value, function (v) {
+                    appSettings.autotileOuterGapBottom = v;
+                });
+            }
+            onOuterGapLeftModified: value => {
+                return root.writeSetting("OuterGapLeft", value, function (v) {
+                    appSettings.autotileOuterGapLeft = v;
+                });
+            }
+            onOuterGapRightModified: value => {
+                return root.writeSetting("OuterGapRight", value, function (v) {
+                    appSettings.autotileOuterGapRight = v;
+                });
+            }
+            onSmartGapsToggled: checked => {
+                return root.writeSetting("SmartGaps", checked, function (v) {
+                    appSettings.autotileSmartGaps = v;
+                });
             }
         }
     }

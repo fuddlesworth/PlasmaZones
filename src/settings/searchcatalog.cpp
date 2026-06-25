@@ -100,12 +100,12 @@ void seedSearchCatalog(PhosphorControl::SearchController* search)
                              PhosphorI18n::tr("arrangement"), PhosphorI18n::tr("preview"), PhosphorI18n::tr("size")});
 
     // Tiling
+    // tiling-behavior is the combined Tiling → Window page (behavior + appearance
+    // sections), so its keywords cover both.
     search->setPageKeywords(QStringLiteral("tiling-behavior"),
                             {PhosphorI18n::tr("tile"), PhosphorI18n::tr("tiling"), PhosphorI18n::tr("auto"),
-                             PhosphorI18n::tr("gap"), PhosphorI18n::tr("spacing")});
-    search->setPageKeywords(QStringLiteral("tiling-appearance"),
-                            {PhosphorI18n::tr("tile"), PhosphorI18n::tr("gap"), PhosphorI18n::tr("spacing"),
-                             PhosphorI18n::tr("border"), PhosphorI18n::tr("color")});
+                             PhosphorI18n::tr("gap"), PhosphorI18n::tr("spacing"), PhosphorI18n::tr("border"),
+                             PhosphorI18n::tr("color")});
     search->setPageKeywords(QStringLiteral("tiling-algorithm"),
                             {PhosphorI18n::tr("algorithm"), PhosphorI18n::tr("bsp"), PhosphorI18n::tr("binary"),
                              PhosphorI18n::tr("spiral"), PhosphorI18n::tr("master"), PhosphorI18n::tr("stack")});
@@ -346,45 +346,45 @@ void seedSearchCatalog(PhosphorControl::SearchController* search)
                PhosphorI18n::tr("Focus follows mouse"), {PhosphorI18n::tr("focus"), PhosphorI18n::tr("pointer")});
 
     // Tiling › Appearance (incl. shared GapsSettingsCard)
-    addSection(search, QStringLiteral("tiling-appearance"), QStringLiteral("colors"), PhosphorI18n::tr("Colors"));
-    addSection(search, QStringLiteral("tiling-appearance"), QStringLiteral("decorations"),
+    addSection(search, QStringLiteral("tiling-behavior"), QStringLiteral("colors"), PhosphorI18n::tr("Colors"));
+    addSection(search, QStringLiteral("tiling-behavior"), QStringLiteral("decorations"),
                PhosphorI18n::tr("Decorations"));
-    addSection(search, QStringLiteral("tiling-appearance"), QStringLiteral("borders"), PhosphorI18n::tr("Borders"));
-    addSection(search, QStringLiteral("tiling-appearance"), QStringLiteral("gaps"), PhosphorI18n::tr("Gaps"));
+    addSection(search, QStringLiteral("tiling-behavior"), QStringLiteral("borders"), PhosphorI18n::tr("Borders"));
+    addSection(search, QStringLiteral("tiling-behavior"), QStringLiteral("gaps"), PhosphorI18n::tr("Gaps"));
     addSetting(
-        search, QStringLiteral("tiling-appearance"), QStringLiteral("useSystemAccentColor"),
+        search, QStringLiteral("tiling-behavior"), QStringLiteral("useSystemAccentColor"),
         PhosphorI18n::tr("Use system accent color"),
         {PhosphorI18n::tr("color"), PhosphorI18n::tr("accent"), PhosphorI18n::tr("theme"), PhosphorI18n::tr("border")});
     addSetting(
-        search, QStringLiteral("tiling-appearance"), QStringLiteral("activeBorderColor"),
+        search, QStringLiteral("tiling-behavior"), QStringLiteral("activeBorderColor"),
         PhosphorI18n::tr("Active border color"),
         {PhosphorI18n::tr("color"), PhosphorI18n::tr("border"), PhosphorI18n::tr("focus"), PhosphorI18n::tr("active")});
-    addSetting(search, QStringLiteral("tiling-appearance"), QStringLiteral("inactiveBorderColor"),
+    addSetting(search, QStringLiteral("tiling-behavior"), QStringLiteral("inactiveBorderColor"),
                PhosphorI18n::tr("Inactive border color"),
                {PhosphorI18n::tr("color"), PhosphorI18n::tr("border"), PhosphorI18n::tr("inactive"),
                 PhosphorI18n::tr("unfocused")});
-    addSetting(search, QStringLiteral("tiling-appearance"), QStringLiteral("hideTitleBars"),
+    addSetting(search, QStringLiteral("tiling-behavior"), QStringLiteral("hideTitleBars"),
                PhosphorI18n::tr("Hide title bars"),
                {PhosphorI18n::tr("titlebar"), PhosphorI18n::tr("decoration"), PhosphorI18n::tr("header")});
-    addSetting(search, QStringLiteral("tiling-appearance"), QStringLiteral("borderWidth"),
+    addSetting(search, QStringLiteral("tiling-behavior"), QStringLiteral("borderWidth"),
                PhosphorI18n::tr("Border width"),
                {PhosphorI18n::tr("border"), PhosphorI18n::tr("width"), PhosphorI18n::tr("thickness")});
-    addSetting(search, QStringLiteral("tiling-appearance"), QStringLiteral("cornerRadius"),
+    addSetting(search, QStringLiteral("tiling-behavior"), QStringLiteral("cornerRadius"),
                PhosphorI18n::tr("Corner radius"),
                {PhosphorI18n::tr("corner"), PhosphorI18n::tr("radius"), PhosphorI18n::tr("rounded")});
-    addSetting(search, QStringLiteral("tiling-appearance"), QStringLiteral("primaryGap"), PhosphorI18n::tr("Inner gap"),
+    addSetting(search, QStringLiteral("tiling-behavior"), QStringLiteral("primaryGap"), PhosphorI18n::tr("Inner gap"),
                {PhosphorI18n::tr("gap"), PhosphorI18n::tr("gaps"), PhosphorI18n::tr("spacing"),
                 PhosphorI18n::tr("padding"), PhosphorI18n::tr("margin"), PhosphorI18n::tr("inner")});
-    addSetting(search, QStringLiteral("tiling-appearance"), QStringLiteral("outerGap"), PhosphorI18n::tr("Outer gap"),
+    addSetting(search, QStringLiteral("tiling-behavior"), QStringLiteral("outerGap"), PhosphorI18n::tr("Outer gap"),
                {PhosphorI18n::tr("gap"), PhosphorI18n::tr("gaps"), PhosphorI18n::tr("spacing"),
                 PhosphorI18n::tr("padding"), PhosphorI18n::tr("margin"), PhosphorI18n::tr("outer"),
                 PhosphorI18n::tr("edge")});
-    addSetting(search, QStringLiteral("tiling-appearance"), QStringLiteral("perSideOuterGaps"),
+    addSetting(search, QStringLiteral("tiling-behavior"), QStringLiteral("perSideOuterGaps"),
                PhosphorI18n::tr("Per-side outer gaps"),
                {PhosphorI18n::tr("gap"), PhosphorI18n::tr("gaps"), PhosphorI18n::tr("spacing"),
                 PhosphorI18n::tr("padding"), PhosphorI18n::tr("margin"), PhosphorI18n::tr("edge"),
                 PhosphorI18n::tr("side")});
-    addSetting(search, QStringLiteral("tiling-appearance"), QStringLiteral("smartGaps"), PhosphorI18n::tr("Smart gaps"),
+    addSetting(search, QStringLiteral("tiling-behavior"), QStringLiteral("smartGaps"), PhosphorI18n::tr("Smart gaps"),
                {PhosphorI18n::tr("gap"), PhosphorI18n::tr("gaps"), PhosphorI18n::tr("spacing"),
                 PhosphorI18n::tr("smart"), PhosphorI18n::tr("single")});
 
