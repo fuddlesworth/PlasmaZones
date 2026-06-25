@@ -6,18 +6,36 @@ import QtQuick.Controls
 import QtQuick.Layouts
 import org.kde.kirigami as Kirigami
 
-// Snapping → Window → Behavior. How snapped WINDOWS behave: snap-assist (the
-// fill-empty-zones picker) and window-handling (restore on login, re-snap on
-// resolution change, sticky handling, …). Binds to the shared
-// snappingBehaviorPage controller for the snap-assist trigger list.
+// Snapping → Window. One page for everything about snapped windows: behavior
+// cards (Snap Assist, Window Handling, Focus) first, then appearance cards
+// (Colors, Decorations, Borders, Gaps). Behavior and Appearance are sections
+// here, not separate nav pages. Behavior binds snappingBehaviorPage; appearance
+// binds snappingWindowAppearancePage (border/gap bounds) + the per-screen helper.
 SettingsFlickable {
     id: root
 
-    readonly property var settingsBridge: settingsController.snappingBehaviorPage
+    readonly property var behaviorBridge: settingsController.snappingBehaviorPage
+    readonly property var appearanceBridge: settingsController.snappingWindowAppearancePage
     readonly property int sliderPreferredWidth: Kirigami.Units.gridUnit * 16
+
+    function snappingSettingValue(key, globalValue) {
+        return snappingHelper.settingValue(key, globalValue);
+    }
+    function writeSnappingSetting(key, value, globalSetter) {
+        snappingHelper.writeSetting(key, value, globalSetter);
+    }
 
     contentHeight: content.implicitHeight
     clip: true
+
+    PerScreenOverrideHelper {
+        id: snappingHelper
+
+        appSettings: settingsController
+        selectedScreenName: settingsController.scopeScreenName
+        getterMethod: "getPerScreenSnappingSettings"
+        setterMethod: "setPerScreenSnappingSetting"
+    }
 
     ColumnLayout {
         id: content
@@ -25,9 +43,8 @@ SettingsFlickable {
         width: parent.width
         spacing: Kirigami.Units.largeSpacing
 
-        // =================================================================
-        // SNAP ASSIST
-        // =================================================================
+        // ═══════════════════════════ BEHAVIOR ═══════════════════════════
+
         Item {
             Layout.fillWidth: true
             implicitHeight: snapAssistCard.implicitHeight
@@ -76,11 +93,11 @@ SettingsFlickable {
                             width: root.sliderPreferredWidth
                             allowMultiple: true
                             acceptMode: acceptModeAll
-                            triggers: root.settingsBridge.snapAssistTriggers
-                            defaultTriggers: root.settingsBridge.defaultSnapAssistTriggers
+                            triggers: root.behaviorBridge.snapAssistTriggers
+                            defaultTriggers: root.behaviorBridge.defaultSnapAssistTriggers
                             tooltipEnabled: false
                             onTriggersModified: triggers => {
-                                root.settingsBridge.snapAssistTriggers = triggers;
+                                root.behaviorBridge.snapAssistTriggers = triggers;
                             }
                         }
                     }
@@ -88,9 +105,6 @@ SettingsFlickable {
             }
         }
 
-        // =================================================================
-        // WINDOW HANDLING
-        // =================================================================
         Item {
             Layout.fillWidth: true
             implicitHeight: windowHandlingCard.implicitHeight
@@ -251,9 +265,6 @@ SettingsFlickable {
             }
         }
 
-        // =================================================================
-        // FOCUS
-        // =================================================================
         Item {
             Layout.fillWidth: true
             implicitHeight: focusCard.implicitHeight
@@ -299,6 +310,113 @@ SettingsFlickable {
                         }
                     }
                 }
+            }
+        }
+
+        // ══════════════════════════ APPEARANCE ══════════════════════════
+
+        // Colors / Decorations / Borders — shared with Tiling → Window via
+        // AppearanceFacetCards. Global (not per-screen), so they read as "Global".
+        AppearanceFacetCards {
+            Layout.fillWidth: true
+
+            useSystemBorderColors: appSettings.snappingUseSystemBorderColors
+            activeBorderColor: appSettings.snappingBorderColor
+            inactiveBorderColor: appSettings.snappingInactiveBorderColor
+            activeColorDescription: i18n("Border color for the focused snapped window")
+            inactiveColorDescription: i18n("Border color for unfocused snapped windows")
+            hideTitleBars: appSettings.snappingHideTitleBars
+            hideTitleBarsDescription: i18n("Remove window title bars while snapped, restored when floating")
+            hideTitleBarsAccessibleName: i18n("Hide title bars on snapped windows")
+            showBorder: appSettings.snappingShowBorder
+            borderWidth: appSettings.snappingBorderWidth
+            borderWidthMin: root.appearanceBridge.snappingBorderWidthMin
+            borderWidthMax: root.appearanceBridge.snappingBorderWidthMax
+            borderWidthDescription: i18n("Thickness of colored borders around snapped windows")
+            borderRadius: appSettings.snappingBorderRadius
+            borderRadiusMin: root.appearanceBridge.snappingBorderRadiusMin
+            borderRadiusMax: root.appearanceBridge.snappingBorderRadiusMax
+
+            onUseSystemBorderColorsToggled: checked => {
+                return appSettings.snappingUseSystemBorderColors = checked;
+            }
+            onActiveBorderColorPicked: selectedColor => {
+                return appSettings.snappingBorderColor = selectedColor;
+            }
+            onInactiveBorderColorPicked: selectedColor => {
+                return appSettings.snappingInactiveBorderColor = selectedColor;
+            }
+            onHideTitleBarsToggled: checked => {
+                return appSettings.snappingHideTitleBars = checked;
+            }
+            onShowBorderToggled: checked => {
+                return appSettings.snappingShowBorder = checked;
+            }
+            onBorderWidthModified: value => {
+                return appSettings.snappingBorderWidth = value;
+            }
+            onBorderRadiusModified: value => {
+                return appSettings.snappingBorderRadius = value;
+            }
+        }
+
+        GapsSettingsCard {
+            Layout.fillWidth: true
+            searchAnchor: "gaps"
+            scopeEnabled: true
+            scopeAppSettings: settingsController
+            scopeHasOverridesMethod: "hasPerScreenSnappingSettings"
+            scopeClearerMethod: "clearPerScreenSnappingSettings"
+            primaryGapLabel: i18n("Inner gap")
+            primaryGapDescription: i18n("Space between snapped windows")
+            outerGapLabel: i18n("Outer gap")
+            outerGapDescription: i18n("Space from screen edges to snapped windows")
+            showSmartGaps: false
+            gapMin: root.appearanceBridge.gapMin
+            gapMax: root.appearanceBridge.gapMax
+            primaryGapMin: root.appearanceBridge.zonePaddingMin
+            primaryGapMax: root.appearanceBridge.zonePaddingMax
+            primaryGapValue: root.snappingSettingValue("ZonePadding", appSettings.zonePadding)
+            outerGapValue: root.snappingSettingValue("OuterGap", appSettings.outerGap)
+            usePerSideOuterGap: root.snappingSettingValue("UsePerSideOuterGap", appSettings.usePerSideOuterGap)
+            outerGapTopValue: root.snappingSettingValue("OuterGapTop", appSettings.outerGapTop)
+            outerGapBottomValue: root.snappingSettingValue("OuterGapBottom", appSettings.outerGapBottom)
+            outerGapLeftValue: root.snappingSettingValue("OuterGapLeft", appSettings.outerGapLeft)
+            outerGapRightValue: root.snappingSettingValue("OuterGapRight", appSettings.outerGapRight)
+            onPrimaryGapModified: value => {
+                return root.writeSnappingSetting("ZonePadding", value, function (v) {
+                    appSettings.zonePadding = v;
+                });
+            }
+            onOuterGapModified: value => {
+                return root.writeSnappingSetting("OuterGap", value, function (v) {
+                    appSettings.outerGap = v;
+                });
+            }
+            onUsePerSideOuterGapToggled: checked => {
+                return root.writeSnappingSetting("UsePerSideOuterGap", checked, function (v) {
+                    appSettings.usePerSideOuterGap = v;
+                });
+            }
+            onOuterGapTopModified: value => {
+                return root.writeSnappingSetting("OuterGapTop", value, function (v) {
+                    appSettings.outerGapTop = v;
+                });
+            }
+            onOuterGapBottomModified: value => {
+                return root.writeSnappingSetting("OuterGapBottom", value, function (v) {
+                    appSettings.outerGapBottom = v;
+                });
+            }
+            onOuterGapLeftModified: value => {
+                return root.writeSnappingSetting("OuterGapLeft", value, function (v) {
+                    appSettings.outerGapLeft = v;
+                });
+            }
+            onOuterGapRightModified: value => {
+                return root.writeSnappingSetting("OuterGapRight", value, function (v) {
+                    appSettings.outerGapRight = v;
+                });
             }
         }
     }

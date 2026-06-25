@@ -236,8 +236,7 @@ qt_add_qml_module(plasmazones-settings
         qml/SnappingZoneSelectorPage.qml
         qml/ZoneSelectorAppearancePage.qml
         qml/OsdAppearancePage.qml
-        qml/SnappingWindowBehaviorPage.qml
-        qml/SnappingWindowAppearancePage.qml
+        qml/SnappingWindowPage.qml
         qml/TilingWindowPage.qml
         qml/TilingAlgorithmPage.qml
         qml/EditorPage.qml

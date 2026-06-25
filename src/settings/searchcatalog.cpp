@@ -77,12 +77,11 @@ void seedSearchCatalog(PhosphorControl::SearchController* search)
     search->setPageKeywords(QStringLiteral("snapping-zoneselector"),
                             {PhosphorI18n::tr("zone selector"), PhosphorI18n::tr("picker"), PhosphorI18n::tr("chooser"),
                              PhosphorI18n::tr("popup")});
+    // Combined Snapping → Window page (behavior + appearance sections).
     search->setPageKeywords(QStringLiteral("snapping-window-behavior"),
                             {PhosphorI18n::tr("window"), PhosphorI18n::tr("snap"), PhosphorI18n::tr("drag"),
-                             PhosphorI18n::tr("modifier"), PhosphorI18n::tr("key")});
-    search->setPageKeywords(QStringLiteral("snapping-window-appearance"),
-                            {PhosphorI18n::tr("window"), PhosphorI18n::tr("highlight"), PhosphorI18n::tr("indicator"),
-                             PhosphorI18n::tr("outline")});
+                             PhosphorI18n::tr("modifier"), PhosphorI18n::tr("key"), PhosphorI18n::tr("highlight"),
+                             PhosphorI18n::tr("indicator"), PhosphorI18n::tr("outline")});
     search->setPageKeywords(QStringLiteral("snapping-ordering"),
                             {PhosphorI18n::tr("priority"), PhosphorI18n::tr("order"), PhosphorI18n::tr("precedence")});
     search->setPageKeywords(QStringLiteral("snapping-shortcuts"),
@@ -254,39 +253,39 @@ void seedSearchCatalog(PhosphorControl::SearchController* search)
                {PhosphorI18n::tr("cava"), PhosphorI18n::tr("bands"), PhosphorI18n::tr("frequency")});
 
     // Snapping › Window (appearance)
-    addSection(search, QStringLiteral("snapping-window-appearance"), QStringLiteral("colors"),
+    addSection(search, QStringLiteral("snapping-window-behavior"), QStringLiteral("colors"),
                PhosphorI18n::tr("Colors"));
-    addSection(search, QStringLiteral("snapping-window-appearance"), QStringLiteral("decorations"),
+    addSection(search, QStringLiteral("snapping-window-behavior"), QStringLiteral("decorations"),
                PhosphorI18n::tr("Decorations"));
-    addSection(search, QStringLiteral("snapping-window-appearance"), QStringLiteral("borders"),
+    addSection(search, QStringLiteral("snapping-window-behavior"), QStringLiteral("borders"),
                PhosphorI18n::tr("Borders"));
-    addSetting(search, QStringLiteral("snapping-window-appearance"), QStringLiteral("useSystemAccentColor"),
+    addSetting(search, QStringLiteral("snapping-window-behavior"), QStringLiteral("useSystemAccentColor"),
                PhosphorI18n::tr("Use system accent color"),
                {PhosphorI18n::tr("theme"), PhosphorI18n::tr("scheme"), PhosphorI18n::tr("colour")});
-    addSetting(search, QStringLiteral("snapping-window-appearance"), QStringLiteral("activeBorderColor"),
+    addSetting(search, QStringLiteral("snapping-window-behavior"), QStringLiteral("activeBorderColor"),
                PhosphorI18n::tr("Active border color"),
                {PhosphorI18n::tr("colour"), PhosphorI18n::tr("focused"), PhosphorI18n::tr("outline")});
-    addSetting(search, QStringLiteral("snapping-window-appearance"), QStringLiteral("inactiveBorderColor"),
+    addSetting(search, QStringLiteral("snapping-window-behavior"), QStringLiteral("inactiveBorderColor"),
                PhosphorI18n::tr("Inactive border color"),
                {PhosphorI18n::tr("colour"), PhosphorI18n::tr("unfocused"), PhosphorI18n::tr("outline")});
-    addSetting(search, QStringLiteral("snapping-window-appearance"), QStringLiteral("hideTitleBars"),
+    addSetting(search, QStringLiteral("snapping-window-behavior"), QStringLiteral("hideTitleBars"),
                PhosphorI18n::tr("Hide title bars"),
                {PhosphorI18n::tr("titlebar"), PhosphorI18n::tr("decoration"), PhosphorI18n::tr("header")});
-    addSetting(search, QStringLiteral("snapping-window-appearance"), QStringLiteral("borderWidth"),
+    addSetting(search, QStringLiteral("snapping-window-behavior"), QStringLiteral("borderWidth"),
                PhosphorI18n::tr("Border width"), {PhosphorI18n::tr("thickness"), PhosphorI18n::tr("size")});
-    addSetting(search, QStringLiteral("snapping-window-appearance"), QStringLiteral("cornerRadius"),
+    addSetting(search, QStringLiteral("snapping-window-behavior"), QStringLiteral("cornerRadius"),
                PhosphorI18n::tr("Corner radius"), {PhosphorI18n::tr("rounding"), PhosphorI18n::tr("border")});
     // Shared GapsSettingsCard is also hosted here (no Smart gaps on this page).
-    addSection(search, QStringLiteral("snapping-window-appearance"), QStringLiteral("gaps"), PhosphorI18n::tr("Gaps"));
-    addSetting(search, QStringLiteral("snapping-window-appearance"), QStringLiteral("primaryGap"),
+    addSection(search, QStringLiteral("snapping-window-behavior"), QStringLiteral("gaps"), PhosphorI18n::tr("Gaps"));
+    addSetting(search, QStringLiteral("snapping-window-behavior"), QStringLiteral("primaryGap"),
                PhosphorI18n::tr("Inner gap"),
                {PhosphorI18n::tr("gap"), PhosphorI18n::tr("gaps"), PhosphorI18n::tr("spacing"),
                 PhosphorI18n::tr("padding"), PhosphorI18n::tr("margin"), PhosphorI18n::tr("inner")});
     addSetting(
-        search, QStringLiteral("snapping-window-appearance"), QStringLiteral("outerGap"), PhosphorI18n::tr("Outer gap"),
+        search, QStringLiteral("snapping-window-behavior"), QStringLiteral("outerGap"), PhosphorI18n::tr("Outer gap"),
         {PhosphorI18n::tr("gap"), PhosphorI18n::tr("gaps"), PhosphorI18n::tr("spacing"), PhosphorI18n::tr("padding"),
          PhosphorI18n::tr("margin"), PhosphorI18n::tr("outer"), PhosphorI18n::tr("edge")});
-    addSetting(search, QStringLiteral("snapping-window-appearance"), QStringLiteral("perSideOuterGaps"),
+    addSetting(search, QStringLiteral("snapping-window-behavior"), QStringLiteral("perSideOuterGaps"),
                PhosphorI18n::tr("Per-side outer gaps"),
                {PhosphorI18n::tr("gap"), PhosphorI18n::tr("gaps"), PhosphorI18n::tr("spacing"),
                 PhosphorI18n::tr("padding"), PhosphorI18n::tr("margin"), PhosphorI18n::tr("edge"),
