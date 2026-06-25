@@ -31,6 +31,11 @@ SettingsCard {
     required property int outerGapRightValue
     // Smart gaps is autotile-only; snapping hides the row.
     property bool showSmartGaps: true
+    // Opt-in "what wins here?" provenance footer. Only the snapping gaps card
+    // enables it: the daemon's read-only provenance query resolves through the
+    // placement/snapping geometry cascade, so it is accurate for snapping gaps
+    // but not for autotile gaps (a separate resolution path).
+    property bool provenanceEnabled: false
     property bool smartGapsValue: false
     // Defaults; hosts may override the label/description per mode. Tiling and
     // snapping currently share "Inner gap" / "Outer gap" for cross-mode
@@ -217,6 +222,80 @@ SettingsCard {
                 accessibleName: i18n("Smart gaps")
                 onToggled: function (newValue) {
                     root.smartGapsToggled(newValue);
+                }
+            }
+        }
+
+        SettingsSeparator {
+            visible: root.provenanceEnabled
+        }
+
+        // "What wins here?" — read-only provenance from the daemon: the effective
+        // gap for the current monitor and which scope layer supplied it. Lazy
+        // (a blocking daemon round-trip), so it queries on demand and re-queries
+        // when the monitor changes.
+        ColumnLayout {
+            id: provenanceSection
+
+            Layout.fillWidth: true
+            visible: root.provenanceEnabled
+            spacing: Kirigami.Units.smallSpacing
+
+            property var data: null
+
+            function refresh() {
+                provenanceSection.data = (root.scopeAppSettings ? root.scopeAppSettings.gapProvenance(root.scopeAppSettings.scopeScreenName) : null) || null;
+            }
+            function layerLabel(key) {
+                switch (key) {
+                case "context-rule":
+                    return i18n("a window rule");
+                case "per-screen":
+                    return i18n("this monitor");
+                case "layout":
+                    return i18n("the layout");
+                case "global":
+                    return i18n("the global setting");
+                case "default":
+                    return i18n("the built-in default");
+                default:
+                    return key;
+                }
+            }
+
+            Connections {
+                target: root.scopeAppSettings
+                function onScopeScreenNameChanged() {
+                    provenanceSection.data = null;
+                }
+            }
+
+            RowLayout {
+                Layout.fillWidth: true
+                spacing: Kirigami.Units.smallSpacing
+
+                Label {
+                    text: i18n("What wins here?")
+                    font.bold: true
+                    Layout.fillWidth: true
+                }
+
+                Button {
+                    text: provenanceSection.data ? i18n("Refresh") : i18n("Show")
+                    onClicked: provenanceSection.refresh()
+                }
+            }
+
+            Label {
+                Layout.fillWidth: true
+                visible: provenanceSection.data !== null
+                wrapMode: Text.WordWrap
+                opacity: 0.8
+                text: {
+                    if (!provenanceSection.data || provenanceSection.data.innerLayer === undefined) {
+                        return i18n("Effective values are unavailable. Is the daemon running?");
+                    }
+                    return i18n("Inner gap is %1 px, from %2.", provenanceSection.data.innerValue, provenanceSection.layerLabel(provenanceSection.data.innerLayer)) + "\n" + i18n("Outer gap is %1 px, from %2.", provenanceSection.data.outerValue, provenanceSection.layerLabel(provenanceSection.data.outerLayer));
                 }
             }
         }
