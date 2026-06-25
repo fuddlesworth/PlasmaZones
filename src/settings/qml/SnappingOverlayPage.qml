@@ -159,73 +159,75 @@ Item {
                         }
                     }
 
-                    Item {
-                        Layout.fillWidth: true
-                        implicitHeight: zoneSpanCard.implicitHeight
+                    AdvancedGroup {
+                        Item {
+                            Layout.fillWidth: true
+                            implicitHeight: zoneSpanCard.implicitHeight
 
-                        SettingsCard {
-                            id: zoneSpanCard
+                            SettingsCard {
+                                id: zoneSpanCard
 
-                            anchors.fill: parent
-                            headerText: i18n("Zone Span")
-                            searchAnchor: "zoneSpan"
-                            showToggle: true
-                            toggleChecked: appSettings.zoneSpanEnabled
-                            collapsible: true
-                            onToggleClicked: checked => {
-                                return appSettings.zoneSpanEnabled = checked;
-                            }
-
-                            contentItem: ColumnLayout {
-                                spacing: Kirigami.Units.smallSpacing
-
-                                SettingsRow {
-                                    title: i18n("Span modifier")
-                                    searchAnchor: "spanModifier"
-                                    description: i18n("Hold a modifier or mouse button while dragging to paint across zones")
-
-                                    ModifierAndMouseCheckBoxes {
-                                        width: root.sliderPreferredWidth
-                                        allowMultiple: true
-                                        acceptMode: acceptModeAll
-                                        triggers: root.settingsBridge.zoneSpanTriggers
-                                        defaultTriggers: root.settingsBridge.defaultZoneSpanTriggers
-                                        tooltipEnabled: false
-                                        onTriggersModified: triggers => {
-                                            root.settingsBridge.zoneSpanTriggers = triggers;
-                                        }
-                                    }
+                                anchors.fill: parent
+                                headerText: i18n("Zone Span")
+                                searchAnchor: "zoneSpan"
+                                showToggle: true
+                                toggleChecked: appSettings.zoneSpanEnabled
+                                collapsible: true
+                                onToggleClicked: checked => {
+                                    return appSettings.zoneSpanEnabled = checked;
                                 }
 
-                                SettingsSeparator {}
+                                contentItem: ColumnLayout {
+                                    spacing: Kirigami.Units.smallSpacing
 
-                                SettingsRow {
-                                    title: i18n("Toggle mode")
-                                    searchAnchor: "zoneSpanToggleMode"
-                                    description: i18n("Tap the span modifier once to start spanning, tap again to stop, instead of holding it")
+                                    SettingsRow {
+                                        title: i18n("Span modifier")
+                                        searchAnchor: "spanModifier"
+                                        description: i18n("Hold a modifier or mouse button while dragging to paint across zones")
 
-                                    SettingsSwitch {
-                                        checked: appSettings.zoneSpanToggleMode
-                                        accessibleName: i18n("Zone span toggle mode")
-                                        onToggled: function (newValue) {
-                                            appSettings.zoneSpanToggleMode = newValue;
+                                        ModifierAndMouseCheckBoxes {
+                                            width: root.sliderPreferredWidth
+                                            allowMultiple: true
+                                            acceptMode: acceptModeAll
+                                            triggers: root.settingsBridge.zoneSpanTriggers
+                                            defaultTriggers: root.settingsBridge.defaultZoneSpanTriggers
+                                            tooltipEnabled: false
+                                            onTriggersModified: triggers => {
+                                                root.settingsBridge.zoneSpanTriggers = triggers;
+                                            }
                                         }
                                     }
-                                }
 
-                                SettingsSeparator {}
+                                    SettingsSeparator {}
 
-                                SettingsRow {
-                                    title: i18n("Edge threshold")
-                                    searchAnchor: "edgeThreshold"
-                                    description: i18n("Distance from zone edge for multi-zone selection")
+                                    SettingsRow {
+                                        title: i18n("Toggle mode")
+                                        searchAnchor: "zoneSpanToggleMode"
+                                        description: i18n("Tap the span modifier once to start spanning, tap again to stop, instead of holding it")
 
-                                    SettingsSpinBox {
-                                        from: root.settingsBridge.adjacentThresholdMin
-                                        to: root.thresholdMax
-                                        value: appSettings.adjacentThreshold
-                                        onValueModified: value => {
-                                            return appSettings.adjacentThreshold = value;
+                                        SettingsSwitch {
+                                            checked: appSettings.zoneSpanToggleMode
+                                            accessibleName: i18n("Zone span toggle mode")
+                                            onToggled: function (newValue) {
+                                                appSettings.zoneSpanToggleMode = newValue;
+                                            }
+                                        }
+                                    }
+
+                                    SettingsSeparator {}
+
+                                    SettingsRow {
+                                        title: i18n("Edge threshold")
+                                        searchAnchor: "edgeThreshold"
+                                        description: i18n("Distance from zone edge for multi-zone selection")
+
+                                        SettingsSpinBox {
+                                            from: root.settingsBridge.adjacentThresholdMin
+                                            to: root.thresholdMax
+                                            value: appSettings.adjacentThreshold
+                                            onValueModified: value => {
+                                                return appSettings.adjacentThreshold = value;
+                                            }
                                         }
                                     }
                                 }

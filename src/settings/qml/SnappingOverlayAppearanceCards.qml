@@ -407,91 +407,93 @@ ColumnLayout {
     }
 
     // =================================================================
-    // SHADER EFFECTS
+    // SHADER EFFECTS (advanced)
     // =================================================================
-    Item {
-        Layout.fillWidth: true
-        implicitHeight: shaderCard.implicitHeight
+    AdvancedGroup {
+        Item {
+            Layout.fillWidth: true
+            implicitHeight: shaderCard.implicitHeight
 
-        SettingsCard {
-            id: shaderCard
+            SettingsCard {
+                id: shaderCard
 
-            anchors.fill: parent
-            scopeLabel: i18n("Global")
-            headerText: i18n("Shader Effects")
-            searchAnchor: "shaderEffects"
-            showToggle: true
-            toggleChecked: appSettings.enableShaderEffects
-            collapsible: true
-            onToggleClicked: checked => {
-                return appSettings.enableShaderEffects = checked;
-            }
+                anchors.fill: parent
+                scopeLabel: i18n("Global")
+                headerText: i18n("Shader Effects")
+                searchAnchor: "shaderEffects"
+                showToggle: true
+                toggleChecked: appSettings.enableShaderEffects
+                collapsible: true
+                onToggleClicked: checked => {
+                    return appSettings.enableShaderEffects = checked;
+                }
 
-            contentItem: ColumnLayout {
-                spacing: Kirigami.Units.smallSpacing
+                contentItem: ColumnLayout {
+                    spacing: Kirigami.Units.smallSpacing
 
-                SettingsRow {
-                    title: i18n("Frame rate")
-                    searchAnchor: "frameRate"
-                    description: i18n("Target refresh rate for shader animations")
+                    SettingsRow {
+                        title: i18n("Frame rate")
+                        searchAnchor: "frameRate"
+                        description: i18n("Target refresh rate for shader animations")
 
-                    SettingsSlider {
-                        from: root.effectsBridge.shaderFrameRateMin
-                        to: root.effectsBridge.shaderFrameRateMax
-                        value: appSettings.shaderFrameRate
-                        valueSuffix: " fps"
-                        labelWidth: Kirigami.Units.gridUnit * 4
-                        onMoved: value => {
-                            return appSettings.shaderFrameRate = Math.round(value);
+                        SettingsSlider {
+                            from: root.effectsBridge.shaderFrameRateMin
+                            to: root.effectsBridge.shaderFrameRateMax
+                            value: appSettings.shaderFrameRate
+                            valueSuffix: " fps"
+                            labelWidth: Kirigami.Units.gridUnit * 4
+                            onMoved: value => {
+                                return appSettings.shaderFrameRate = Math.round(value);
+                            }
                         }
                     }
-                }
 
-                SettingsSeparator {}
+                    SettingsSeparator {}
 
-                SettingsRow {
-                    title: i18n("Audio spectrum")
-                    searchAnchor: "audioSpectrum"
-                    description: root.effectsBridge.cavaAvailable ? i18n("Feed audio spectrum data to shaders that support it") : i18n("CAVA is not installed. Install cava to enable audio visualization.")
+                    SettingsRow {
+                        title: i18n("Audio spectrum")
+                        searchAnchor: "audioSpectrum"
+                        description: root.effectsBridge.cavaAvailable ? i18n("Feed audio spectrum data to shaders that support it") : i18n("CAVA is not installed. Install cava to enable audio visualization.")
 
-                    SettingsSwitch {
-                        id: audioVizSwitch
+                        SettingsSwitch {
+                            id: audioVizSwitch
 
-                        enabled: root.effectsBridge.cavaAvailable
-                        checked: appSettings.enableAudioVisualizer
-                        accessibleName: i18n("Enable CAVA audio spectrum")
-                        onToggled: function (newValue) {
-                            appSettings.enableAudioVisualizer = newValue;
+                            enabled: root.effectsBridge.cavaAvailable
+                            checked: appSettings.enableAudioVisualizer
+                            accessibleName: i18n("Enable CAVA audio spectrum")
+                            onToggled: function (newValue) {
+                                appSettings.enableAudioVisualizer = newValue;
+                            }
                         }
                     }
-                }
 
-                Kirigami.InlineMessage {
-                    Layout.fillWidth: true
-                    Layout.leftMargin: Kirigami.Units.largeSpacing
-                    Layout.rightMargin: Kirigami.Units.largeSpacing
-                    type: Kirigami.MessageType.Warning
-                    text: i18n("CAVA is not installed. Install the <b>cava</b> package to enable audio-reactive shader effects.")
-                    visible: !root.effectsBridge.cavaAvailable && shaderCard.toggleChecked
-                }
+                    Kirigami.InlineMessage {
+                        Layout.fillWidth: true
+                        Layout.leftMargin: Kirigami.Units.largeSpacing
+                        Layout.rightMargin: Kirigami.Units.largeSpacing
+                        type: Kirigami.MessageType.Warning
+                        text: i18n("CAVA is not installed. Install the <b>cava</b> package to enable audio-reactive shader effects.")
+                        visible: !root.effectsBridge.cavaAvailable && shaderCard.toggleChecked
+                    }
 
-                SettingsSeparator {}
+                    SettingsSeparator {}
 
-                SettingsRow {
-                    title: i18n("Spectrum bars")
-                    searchAnchor: "spectrumBars"
-                    description: i18n("Number of frequency bands in the audio visualization")
-                    enabled: audioVizSwitch.checked && root.effectsBridge.cavaAvailable
+                    SettingsRow {
+                        title: i18n("Spectrum bars")
+                        searchAnchor: "spectrumBars"
+                        description: i18n("Number of frequency bands in the audio visualization")
+                        enabled: audioVizSwitch.checked && root.effectsBridge.cavaAvailable
 
-                    SettingsSlider {
-                        from: root.effectsBridge.audioSpectrumBarCountMin
-                        to: root.effectsBridge.audioSpectrumBarCountMax
-                        stepSize: 2
-                        value: appSettings.audioSpectrumBarCount
-                        valueSuffix: ""
-                        labelWidth: Kirigami.Units.gridUnit * 4
-                        onMoved: value => {
-                            return appSettings.audioSpectrumBarCount = Math.round(value);
+                        SettingsSlider {
+                            from: root.effectsBridge.audioSpectrumBarCountMin
+                            to: root.effectsBridge.audioSpectrumBarCountMax
+                            stepSize: 2
+                            value: appSettings.audioSpectrumBarCount
+                            valueSuffix: ""
+                            labelWidth: Kirigami.Units.gridUnit * 4
+                            onMoved: value => {
+                                return appSettings.audioSpectrumBarCount = Math.round(value);
+                            }
                         }
                     }
                 }

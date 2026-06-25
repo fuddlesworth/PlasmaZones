@@ -98,125 +98,128 @@ SettingsCard {
             }
         }
 
-        SettingsSeparator {}
+        // Per-side gaps and Smart gaps are fine-tuning — advanced only.
+        AdvancedGroup {
+            SettingsSeparator {}
 
-        SettingsRow {
-            title: i18n("Per-side outer gaps")
-            searchAnchor: "perSideOuterGaps"
-            description: tilePerSideSwitch.checked ? i18n("Set different gap sizes for each screen edge") : i18n("Use a single outer gap value for all edges")
+            SettingsRow {
+                title: i18n("Per-side outer gaps")
+                searchAnchor: "perSideOuterGaps"
+                description: tilePerSideSwitch.checked ? i18n("Set different gap sizes for each screen edge") : i18n("Use a single outer gap value for all edges")
 
-            SettingsSwitch {
-                id: tilePerSideSwitch
+                SettingsSwitch {
+                    id: tilePerSideSwitch
 
-                checked: root.usePerSideOuterGap
-                accessibleName: i18n("Set gaps per side")
-                onToggled: function (newValue) {
-                    root.usePerSideOuterGapToggled(newValue);
-                }
-            }
-        }
-
-        // Per-side gap grid (only when per-side is enabled)
-        GridLayout {
-            visible: tilePerSideSwitch.checked
-            Layout.alignment: Qt.AlignRight
-            Layout.rightMargin: Kirigami.Units.largeSpacing
-            columns: 4
-            columnSpacing: Kirigami.Units.largeSpacing
-            rowSpacing: Kirigami.Units.smallSpacing
-
-            Label {
-                text: i18n("Top")
-            }
-
-            SpinBox {
-                id: topGapSpinBox
-
-                from: root.gapMin
-                to: root.gapMax
-                onValueModified: root.outerGapTopModified(value)
-                Accessible.name: i18nc("@label", "Top gap")
-
-                Binding on value {
-                    value: root.outerGapTopValue
-                    when: !topGapSpinBox.activeFocus
-                    restoreMode: Binding.RestoreNone
+                    checked: root.usePerSideOuterGap
+                    accessibleName: i18n("Set gaps per side")
+                    onToggled: function (newValue) {
+                        root.usePerSideOuterGapToggled(newValue);
+                    }
                 }
             }
 
-            Label {
-                text: i18n("Bottom")
-            }
+            // Per-side gap grid (only when per-side is enabled)
+            GridLayout {
+                visible: tilePerSideSwitch.checked
+                Layout.alignment: Qt.AlignRight
+                Layout.rightMargin: Kirigami.Units.largeSpacing
+                columns: 4
+                columnSpacing: Kirigami.Units.largeSpacing
+                rowSpacing: Kirigami.Units.smallSpacing
 
-            SpinBox {
-                id: bottomGapSpinBox
+                Label {
+                    text: i18n("Top")
+                }
 
-                from: root.gapMin
-                to: root.gapMax
-                onValueModified: root.outerGapBottomModified(value)
-                Accessible.name: i18nc("@label", "Bottom gap")
+                SpinBox {
+                    id: topGapSpinBox
 
-                Binding on value {
-                    value: root.outerGapBottomValue
-                    when: !bottomGapSpinBox.activeFocus
-                    restoreMode: Binding.RestoreNone
+                    from: root.gapMin
+                    to: root.gapMax
+                    onValueModified: root.outerGapTopModified(value)
+                    Accessible.name: i18nc("@label", "Top gap")
+
+                    Binding on value {
+                        value: root.outerGapTopValue
+                        when: !topGapSpinBox.activeFocus
+                        restoreMode: Binding.RestoreNone
+                    }
+                }
+
+                Label {
+                    text: i18n("Bottom")
+                }
+
+                SpinBox {
+                    id: bottomGapSpinBox
+
+                    from: root.gapMin
+                    to: root.gapMax
+                    onValueModified: root.outerGapBottomModified(value)
+                    Accessible.name: i18nc("@label", "Bottom gap")
+
+                    Binding on value {
+                        value: root.outerGapBottomValue
+                        when: !bottomGapSpinBox.activeFocus
+                        restoreMode: Binding.RestoreNone
+                    }
+                }
+
+                Label {
+                    text: i18n("Left")
+                }
+
+                SpinBox {
+                    id: leftGapSpinBox
+
+                    from: root.gapMin
+                    to: root.gapMax
+                    onValueModified: root.outerGapLeftModified(value)
+                    Accessible.name: i18nc("@label", "Left gap")
+
+                    Binding on value {
+                        value: root.outerGapLeftValue
+                        when: !leftGapSpinBox.activeFocus
+                        restoreMode: Binding.RestoreNone
+                    }
+                }
+
+                Label {
+                    text: i18n("Right")
+                }
+
+                SpinBox {
+                    id: rightGapSpinBox
+
+                    from: root.gapMin
+                    to: root.gapMax
+                    onValueModified: root.outerGapRightModified(value)
+                    Accessible.name: i18nc("@label", "Right gap")
+
+                    Binding on value {
+                        value: root.outerGapRightValue
+                        when: !rightGapSpinBox.activeFocus
+                        restoreMode: Binding.RestoreNone
+                    }
                 }
             }
 
-            Label {
-                text: i18n("Left")
+            SettingsSeparator {
+                visible: root.showSmartGaps
             }
 
-            SpinBox {
-                id: leftGapSpinBox
+            SettingsRow {
+                visible: root.showSmartGaps
+                title: i18n("Smart gaps")
+                searchAnchor: "smartGaps"
+                description: i18n("Remove all gaps when only one window is tiled")
 
-                from: root.gapMin
-                to: root.gapMax
-                onValueModified: root.outerGapLeftModified(value)
-                Accessible.name: i18nc("@label", "Left gap")
-
-                Binding on value {
-                    value: root.outerGapLeftValue
-                    when: !leftGapSpinBox.activeFocus
-                    restoreMode: Binding.RestoreNone
-                }
-            }
-
-            Label {
-                text: i18n("Right")
-            }
-
-            SpinBox {
-                id: rightGapSpinBox
-
-                from: root.gapMin
-                to: root.gapMax
-                onValueModified: root.outerGapRightModified(value)
-                Accessible.name: i18nc("@label", "Right gap")
-
-                Binding on value {
-                    value: root.outerGapRightValue
-                    when: !rightGapSpinBox.activeFocus
-                    restoreMode: Binding.RestoreNone
-                }
-            }
-        }
-
-        SettingsSeparator {
-            visible: root.showSmartGaps
-        }
-
-        SettingsRow {
-            visible: root.showSmartGaps
-            title: i18n("Smart gaps")
-            searchAnchor: "smartGaps"
-            description: i18n("Remove all gaps when only one window is tiled")
-
-            SettingsSwitch {
-                checked: root.smartGapsValue
-                accessibleName: i18n("Smart gaps")
-                onToggled: function (newValue) {
-                    root.smartGapsToggled(newValue);
+                SettingsSwitch {
+                    checked: root.smartGapsValue
+                    accessibleName: i18n("Smart gaps")
+                    onToggled: function (newValue) {
+                        root.smartGapsToggled(newValue);
+                    }
                 }
             }
         }

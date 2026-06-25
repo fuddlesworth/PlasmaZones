@@ -324,41 +324,43 @@ Item {
                         }
                     }
 
-                    SettingsCard {
-                        Layout.fillWidth: true
-                        headerText: i18n("Focus")
-                        searchAnchor: "focus"
-                        collapsible: true
+                    AdvancedGroup {
+                        SettingsCard {
+                            Layout.fillWidth: true
+                            headerText: i18n("Focus")
+                            searchAnchor: "focus"
+                            collapsible: true
 
-                        contentItem: ColumnLayout {
-                            spacing: Kirigami.Units.smallSpacing
+                            contentItem: ColumnLayout {
+                                spacing: Kirigami.Units.smallSpacing
 
-                            SettingsRow {
-                                title: i18n("Focus new windows")
-                                searchAnchor: "focusNewWindows"
-                                description: i18n("Focus a window when it opens")
+                                SettingsRow {
+                                    title: i18n("Focus new windows")
+                                    searchAnchor: "focusNewWindows"
+                                    description: i18n("Focus a window when it opens")
 
-                                SettingsSwitch {
-                                    checked: appSettings.autotileFocusNewWindows
-                                    accessibleName: i18n("Focus newly opened windows")
-                                    onToggled: function (newValue) {
-                                        appSettings.autotileFocusNewWindows = newValue;
+                                    SettingsSwitch {
+                                        checked: appSettings.autotileFocusNewWindows
+                                        accessibleName: i18n("Focus newly opened windows")
+                                        onToggled: function (newValue) {
+                                            appSettings.autotileFocusNewWindows = newValue;
+                                        }
                                     }
                                 }
-                            }
 
-                            SettingsSeparator {}
+                                SettingsSeparator {}
 
-                            SettingsRow {
-                                title: i18n("Focus follows mouse")
-                                searchAnchor: "focusFollowsMouse"
-                                description: i18n("Moving the mouse pointer over a window gives it focus")
+                                SettingsRow {
+                                    title: i18n("Focus follows mouse")
+                                    searchAnchor: "focusFollowsMouse"
+                                    description: i18n("Moving the mouse pointer over a window gives it focus")
 
-                                SettingsSwitch {
-                                    checked: appSettings.autotileFocusFollowsMouse
-                                    accessibleName: i18n("Focus follows mouse pointer")
-                                    onToggled: function (newValue) {
-                                        appSettings.autotileFocusFollowsMouse = newValue;
+                                    SettingsSwitch {
+                                        checked: appSettings.autotileFocusFollowsMouse
+                                        accessibleName: i18n("Focus follows mouse pointer")
+                                        onToggled: function (newValue) {
+                                            appSettings.autotileFocusFollowsMouse = newValue;
+                                        }
                                     }
                                 }
                             }
