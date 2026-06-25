@@ -178,41 +178,27 @@ void SettingsController::buildApplicationController()
     regPage(m_snappingShadersPage.get(), QStringLiteral("appearance"), PhosphorI18n::tr("Pack Library"),
             QStringLiteral("SnappingShadersPage.qml"), QStringLiteral("folder-open"));
 
-    // Snapping children — organised by SUBJECT, each carrying its own Behavior
-    // and Appearance pages: the drag Overlay, the edge Zone-Selector popup, and
-    // the snapped Window, plus a shared Configuration block. Most leaves are
-    // QML-only (regVirtual) and bind to the existing per-feature controllers —
-    // Overlay→Behavior and Window→Behavior bind snappingBehaviorPage; Overlay→
-    // Appearance binds snappingZonesPage + snappingEffectsPage; Zone Selector
-    // binds snappingZoneSelectorPage. Those controllers stay exposed as
-    // Q_PROPERTY bridges on SettingsController but are no longer registered as
-    // pages of their own. Window→Appearance keeps its dedicated controller
-    // (border/gap bounds), so it alone stays a regPage. Per-page dirtiness keys
-    // off the ACTIVE page at edit time (see setNeedsSave), so sharing a
-    // controller across two pages is fine.
-    regVirtual(QStringLiteral("snapping-overlay-cat"), QStringLiteral("snapping"), PhosphorI18n::tr("Overlay"),
-               QString(), QStringLiteral("preferences-desktop-color"), /*collapsible=*/true, /*divider=*/true);
-    regVirtual(QStringLiteral("snapping-overlay-behavior"), QStringLiteral("snapping-overlay-cat"),
-               PhosphorI18n::tr("Behavior"), QStringLiteral("SnappingOverlayBehaviorPage.qml"),
-               QStringLiteral("preferences-system"));
-    // Overlay appearance (snapping-overlay-appearance) re-parented to the
-    // Appearance hub (Daemon Surfaces → Zone Overlay) above.
-
-    // Zone Selector is a single top leaf under Snapping (not split into
-    // Behavior/Appearance): its behaviour is just the enable toggle + trigger
-    // distance, too small to warrant its own page. Structurally parallel to
-    // Tiling's Algorithm leaf.
+    // Snapping children — organised by SUBJECT: the drag Overlay, the edge
+    // Zone-Selector popup, and the snapped Window, plus a shared Configuration
+    // block. Each subject's appearance moved to the Appearance hub, leaving one
+    // behavior page per subject; with the per-subject "Behavior" leaf now alone,
+    // the old collapsible Overlay/Window category wrappers are folded away and
+    // the leaves promoted directly under Snapping, labelled by subject (Overlay /
+    // Window) so the two distinct behavior pages stay disambiguated. The Overlay
+    // and Window behavior pages bind snappingBehaviorPage; Zone Selector binds
+    // snappingZoneSelectorPage. Per-page dirtiness keys off the ACTIVE page at
+    // edit time (see setNeedsSave), so sharing a controller across pages is fine.
+    regVirtual(QStringLiteral("snapping-overlay-behavior"), QStringLiteral("snapping"), PhosphorI18n::tr("Overlay"),
+               QStringLiteral("SnappingOverlayBehaviorPage.qml"), QStringLiteral("preferences-desktop-color"),
+               /*collapsible=*/false, /*divider=*/true);
+    // Zone Selector behavior (enable + trigger). Its appearance lives in the
+    // Appearance hub (Daemon Surfaces → Zone Selector).
     regVirtual(QStringLiteral("snapping-zoneselector"), QStringLiteral("snapping"), PhosphorI18n::tr("Zone Selector"),
                QStringLiteral("SnappingZoneSelectorPage.qml"), QStringLiteral("view-choose"), /*collapsible=*/false,
                /*divider=*/true);
-
-    regVirtual(QStringLiteral("snapping-window-cat"), QStringLiteral("snapping"), PhosphorI18n::tr("Window"), QString(),
-               QStringLiteral("preferences-system-windows"), /*collapsible=*/true, /*divider=*/true);
-    regVirtual(QStringLiteral("snapping-window-behavior"), QStringLiteral("snapping-window-cat"),
-               PhosphorI18n::tr("Behavior"), QStringLiteral("SnappingWindowBehaviorPage.qml"),
-               QStringLiteral("preferences-system"));
-    // Window appearance (snapping-window-appearance) re-parented to the
-    // Appearance hub (Windows → Snapped) above.
+    regVirtual(QStringLiteral("snapping-window-behavior"), QStringLiteral("snapping"), PhosphorI18n::tr("Window"),
+               QStringLiteral("SnappingWindowBehaviorPage.qml"), QStringLiteral("preferences-system-windows"),
+               /*collapsible=*/false, /*divider=*/true);
 
     regVirtual(QStringLiteral("snapping-config-cat"), QStringLiteral("snapping"), PhosphorI18n::tr("Configuration"),
                QString(), QStringLiteral("configure"), /*collapsible=*/true);
@@ -224,19 +210,14 @@ void SettingsController::buildApplicationController()
     // Shaders (snapping-shaders) re-parented to the Appearance hub (Pack
     // Library) above.
 
-    // Tiling children — organised by subject (Window / Algorithm / Configuration)
-    // to match the snapping reorg. Tiling has no drag-overlay or selector popup,
-    // so its only interaction surface (the drag-insert indicator) folds into
-    // Window → Behavior; the layout algorithm is its own top leaf, and gaps moved
-    // onto Window → Appearance. Page IDs are unchanged (tiling has a single
-    // Behavior/Appearance pair, so they need no overlay/selector disambiguation) —
-    // only the parents changed, keeping the per-page controller ids stable.
-    regVirtual(QStringLiteral("tiling-window-cat"), QStringLiteral("tiling"), PhosphorI18n::tr("Window"), QString(),
-               QStringLiteral("preferences-system-windows"), /*collapsible=*/true, /*divider=*/true);
-    regPage(m_tilingBehaviorPage, QStringLiteral("tiling-window-cat"), PhosphorI18n::tr("Behavior"),
-            QStringLiteral("TilingBehaviorPage.qml"), QStringLiteral("preferences-system"));
-    // Tiled-window appearance (tiling-appearance) re-parented to the Appearance
-    // hub (Windows → Tiled) above.
+    // Tiling children — Behavior / Algorithm / Configuration. Tiling has a single
+    // behavior surface (no drag-overlay or selector popup to disambiguate), so its
+    // Behavior page is a top leaf directly under Tiling rather than wrapped in a
+    // single-child Window category. Its appearance moved to the Appearance hub
+    // (Windows → Tiled); page ids are unchanged.
+    regPage(m_tilingBehaviorPage, QStringLiteral("tiling"), PhosphorI18n::tr("Behavior"),
+            QStringLiteral("TilingBehaviorPage.qml"), QStringLiteral("preferences-system"), /*collapsible=*/false,
+            /*divider=*/true);
 
     // Algorithm is a top-level leaf under Tiling (no snapping peer — snapping's
     // layout equivalent lives under Display → Layouts). Divider after it sets the
@@ -406,7 +387,7 @@ const QHash<QString, QString>& SettingsController::parentPageRedirects()
         // the first leaf of its first child (snapping → snapping-overlay-behavior).
         {QStringLiteral("placement"), QStringLiteral("snapping-overlay-behavior")},
         {QStringLiteral("snapping"), QStringLiteral("snapping-overlay-behavior")},
-        // Tiling's first child is the Window category → its first leaf is Behavior.
+        // Tiling's first child leaf is Behavior.
         {QStringLiteral("tiling"), QStringLiteral("tiling-behavior")},
         {QStringLiteral("animations"), QStringLiteral("animations-general")},
         {QStringLiteral("animations-surfaces"), QStringLiteral("animations-windows")},
@@ -414,18 +395,16 @@ const QHash<QString, QString>& SettingsController::parentPageRedirects()
         // The "rules" parent virtual retired when Window Rules promoted
         // to a top-level entry; no redirect needed because there is no
         // longer a parent id to land on.
-        // The *-cat virtual headers (registered as collapsible category
-        // entries in buildApplicationController above) are real entries
-        // in the framework PageRegistry — without an explicit redirect,
-        // anything that drives setCurrentPageId("snapping-overlay-cat")
-        // would land on a page id that isn't in validPageNames() and
-        // m_activePage would diverge from m_app->currentPageId(). Map
-        // each *-cat to its first leaf so the active-page state stays
-        // coherent regardless of how the id was reached.
-        {QStringLiteral("snapping-overlay-cat"), QStringLiteral("snapping-overlay-behavior")},
-        {QStringLiteral("snapping-window-cat"), QStringLiteral("snapping-window-behavior")},
+        // The remaining *-cat virtual headers (registered as collapsible
+        // category entries in buildApplicationController above) are real entries
+        // in the framework PageRegistry — without an explicit redirect, anything
+        // that drives setCurrentPageId("snapping-config-cat") would land on a
+        // page id that isn't in validPageNames() and m_activePage would diverge
+        // from m_app->currentPageId(). Map each to its first leaf so the
+        // active-page state stays coherent regardless of how the id was reached.
+        // (The Overlay/Window *-cat wrappers were folded away when their single
+        // Behavior leaf was promoted directly under snapping/tiling.)
         {QStringLiteral("snapping-config-cat"), QStringLiteral("snapping-ordering")},
-        {QStringLiteral("tiling-window-cat"), QStringLiteral("tiling-behavior")},
         {QStringLiteral("tiling-config-cat"), QStringLiteral("tiling-ordering")},
     };
     return redirects;
@@ -467,47 +446,30 @@ const QHash<QString, QSet<QString>>& SettingsController::pageGroupChildren()
     static const QSet<QString> kAnimationsDirectChildren{QStringLiteral("animations-general")};
     static const QSet<QString> kAnimationsAllLeaves =
         kAnimationsDirectChildren + kAnimationsSurfacesChildren + kAnimationsLibraryChildren;
-    // Mid-level *-cat collapsible category headers under the snapping /
-    // tiling drill-down parents. Sidebar.qml renders these as collapsible
-    // section headers; when COLLAPSED the `sidebar.trailingDelegate` in
-    // Main.qml calls isPageDirty(<*-cat>) to decide whether to light the
-    // badge. Without these entries that lookup would always
-    // return false even when a leaf inside the collapsed section is
-    // dirty (mirrors the snapping/tiling parent entries above, just one
-    // level deeper). Keep in sync with the regVirtual *-cat registrations
-    // in buildApplicationController() above.
-    // The window/overlay appearance leaves and the shader browser moved to the
-    // Appearance hub (see kAppearance* sets below), so the snapping feature
-    // categories now hold behavior only (+ config). The *-cat headers below are
-    // single-child until the follow-up split commit folds them flat.
-    static const QSet<QString> kSnappingOverlayChildren{
-        QStringLiteral("snapping-overlay-behavior"),
-    };
-    // Zone Selector is a standalone top leaf under "snapping" (no category, no
-    // Behavior/Appearance split) — folded directly into the parent sets below.
-    static const QString kSnappingZoneSelector = QStringLiteral("snapping-zoneselector");
-    static const QSet<QString> kSnappingWindowChildren{
-        QStringLiteral("snapping-window-behavior"),
-    };
+    // The Overlay/Window appearance leaves and the shader browser moved to the
+    // Appearance hub (see kAppearance* sets below), leaving one behavior page per
+    // snapping/tiling subject. Those single leaves were promoted directly under
+    // the snapping/tiling drill-downs, so the old Overlay/Window *-cat category
+    // wrappers are gone; only the Configuration *-cat headers remain. Sidebar.qml
+    // renders those as collapsible section headers, and Main.qml's
+    // trailingDelegate calls isPageDirty(<*-cat>) when collapsed, so they keep a
+    // group entry below.
     static const QSet<QString> kSnappingConfigChildren{
         QStringLiteral("snapping-ordering"),
         QStringLiteral("snapping-shortcuts"),
     };
-    static const QSet<QString> kSnappingAllLeaves = kSnappingOverlayChildren + QSet<QString>{kSnappingZoneSelector}
-        + kSnappingWindowChildren + kSnappingConfigChildren;
-    static const QSet<QString> kTilingWindowChildren{
-        QStringLiteral("tiling-behavior"),
+    static const QSet<QString> kSnappingBehaviorLeaves{
+        QStringLiteral("snapping-overlay-behavior"),
+        QStringLiteral("snapping-zoneselector"),
+        QStringLiteral("snapping-window-behavior"),
     };
-    // Algorithm is a standalone top leaf under "tiling" (no category), so it has
-    // no *-cat group of its own; it is folded directly into the tiling/placement
-    // parent sets below.
-    static const QString kTilingAlgorithm = QStringLiteral("tiling-algorithm");
+    static const QSet<QString> kSnappingAllLeaves = kSnappingBehaviorLeaves + kSnappingConfigChildren;
     static const QSet<QString> kTilingConfigChildren{
         QStringLiteral("tiling-ordering"),
         QStringLiteral("tiling-shortcuts"),
     };
     static const QSet<QString> kTilingAllLeaves =
-        kTilingWindowChildren + QSet<QString>{kTilingAlgorithm} + kTilingConfigChildren;
+        QSet<QString>{QStringLiteral("tiling-behavior"), QStringLiteral("tiling-algorithm")} + kTilingConfigChildren;
     // Appearance hub leaves (re-parented from the feature areas above). Grouped
     // by surface so a collapsed Appearance / Windows / Daemon-Surfaces header
     // lights its dirty badge when any contained node is dirty. Windows and Daemon
@@ -534,10 +496,7 @@ const QHash<QString, QSet<QString>>& SettingsController::pageGroupChildren()
         // when collapsed its dirty badge must light if any snapping OR tiling
         // leaf is dirty, so its leaf set is the union of both modes' leaves.
         {QStringLiteral("placement"), kSnappingAllLeaves + kTilingAllLeaves},
-        {QStringLiteral("snapping-overlay-cat"), kSnappingOverlayChildren},
-        {QStringLiteral("snapping-window-cat"), kSnappingWindowChildren},
         {QStringLiteral("snapping-config-cat"), kSnappingConfigChildren},
-        {QStringLiteral("tiling-window-cat"), kTilingWindowChildren},
         {QStringLiteral("tiling-config-cat"), kTilingConfigChildren},
         {QStringLiteral("animations"), kAnimationsAllLeaves},
         {QStringLiteral("animations-surfaces"), kAnimationsSurfacesChildren},
