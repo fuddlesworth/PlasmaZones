@@ -85,7 +85,7 @@ struct WindowQuery
      * treats as a non-match). Context fields always resolve.
      *
      * Bool flags resolve to `bool`, numeric fields to `int`, the window
-     * type to its underlying `int` (so `Equals`/`In` compare uniformly),
+     * type to its underlying `int` (so `Equals` comparisons are uniform),
      * everything else to `QString`.
      */
     std::optional<QVariant> valueForField(Field field) const

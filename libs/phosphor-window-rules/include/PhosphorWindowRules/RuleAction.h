@@ -85,7 +85,8 @@ struct PHOSPHORWINDOWRULES_EXPORT RuleAction
  * switch. `kind` is a UI-side hint string (the canonical kinds are
  * `string`, `number`, `percent`, `enum`, `bool`, `color`, plus the
  * picker-aware kinds `snappingLayout`, `tilingAlgorithm`, `animationEvent`,
- * `shaderEffect`, `overlayShader`, `zoneOrdinals`, `curveEditor`); QML loaders dispatch on it. Labels stay in
+ * `shaderEffect`, `overlayShader`, `zoneOrdinals`, `curveEditor`, `screenId`,
+ * `virtualDesktop`); QML loaders dispatch on it. Labels stay in
  * the GPL settings layer because they need translation through PhosphorI18n::tr —
  * the lib only owns the structural part of the schema.
  *
@@ -311,6 +312,20 @@ inline constexpr QLatin1StringView Float{"float"};
 /// shortcuts. Daemon-consumed (placement) on the SnapEngine open path; supersedes
 /// the retired per-layout `Layout::appRules`. Domain Window.
 inline constexpr QLatin1StringView SnapToZone{"snapToZone"};
+/// Route a matched window to a specific monitor on open. Carries the canonical
+/// target screen id (`ActionParam::TargetScreenId`, the EDID `Manuf:Model:Serial`
+/// form the settings screen-picker and the runtime both use — physical OR virtual
+/// screen id). Composes with `SnapToZone` (snap into a zone ON the target screen)
+/// and with autotile (insert the window into the target screen's tiling state); on
+/// its own it just moves the window to that monitor. Restores the per-monitor
+/// pinning the retired per-layout `Layout::appRules` `targetScreen` field carried.
+/// Daemon-consumed on the open path. Domain Window.
+inline constexpr QLatin1StringView RouteToScreen{"routeToScreen"};
+/// Route a matched window to a specific virtual desktop on open. Carries the
+/// 1-based desktop number (`ActionParam::TargetDesktop`). Composes with the other
+/// open-path placement actions. Sticky (on-all-desktops) windows are left alone.
+/// Daemon-consumed on the open path. Domain Window.
+inline constexpr QLatin1StringView RouteToDesktop{"routeToDesktop"};
 inline constexpr QLatin1StringView OverrideAnimationShader{"overrideAnimationShader"};
 inline constexpr QLatin1StringView OverrideAnimationTiming{"overrideAnimationTiming"};
 /// Curve-only animation override — separate slot from timing so a user can
@@ -435,6 +450,13 @@ inline constexpr QLatin1StringView Algorithm{"algorithm"};
 // SnapToZone target-zone key — wire is a non-empty JSON array of 1-based zone
 // ordinals (e.g. `[1]` or `[1, 2]`); multiple entries snap to their union.
 inline constexpr QLatin1StringView Zones{"zones"};
+// RouteToScreen target-monitor key — wire is the canonical EDID screen id
+// (`Manuf:Model:Serial`, optionally `/CONNECTOR`-disambiguated, or a virtual
+// screen id), the same form the ScreenId match field and the settings
+// screen-picker store.
+inline constexpr QLatin1StringView TargetScreenId{"targetScreenId"};
+// RouteToDesktop target-desktop key — wire is a 1-based virtual desktop number.
+inline constexpr QLatin1StringView TargetDesktop{"targetDesktop"};
 } // namespace ActionParam
 
 /// Upper bound for a `SnapToZone` zone ordinal (each `ActionParam::Zones` entry).
@@ -444,6 +466,14 @@ inline constexpr QLatin1StringView Zones{"zones"};
 /// an out-of-range double to int (which is UB). Shared by the descriptor validator
 /// (ruleaction.cpp) and the v3→v4 migration so the two stay in lockstep.
 inline constexpr int MaxZoneOrdinal = 64;
+
+/// Upper bound for a `RouteToDesktop` 1-based virtual-desktop number. KWin tops
+/// out far below this in practice; the cap exists only to reject a grossly
+/// malformed hand-edited payload and to keep the validator's integrality check
+/// from narrowing an out-of-range double to int (UB). The descriptor validator
+/// (ruleaction.cpp) enforces the bound once, at load; downstream consumers only
+/// re-check the 1-based lower bound, trusting the load-time upper-bound clamp.
+inline constexpr int MaxVirtualDesktopOrdinal = 1024;
 
 /// Wire tokens for OverrideOverlayStyle's `value` param — the closed vocabulary
 /// the descriptor's validator + `enumWireValues`, the daemon consumer
@@ -477,6 +507,13 @@ inline constexpr QLatin1StringView Float{"float"};
 /// (`ActionParam::Zones`) the daemon snaps the opening window into. Mutually
 /// resolved against `Float` on the open path (a float rule opts out of snapping).
 inline constexpr QLatin1StringView Placement{"placement"};
+/// Window-scoped open-routing slots — filled by `ActionType::RouteToScreen` /
+/// `RouteToDesktop`. Each is a single slot (first-matching-rule-wins) carrying the
+/// target monitor / desktop the daemon routes the opening window to. Independent
+/// of `Placement`: a window can be routed to a screen AND snapped to a zone there,
+/// or routed with no zone (just moved to the monitor / desktop).
+inline constexpr QLatin1StringView RouteScreen{"route-screen"};
+inline constexpr QLatin1StringView RouteDesktop{"route-desktop"};
 inline constexpr QLatin1StringView Opacity{"opacity"};
 inline constexpr QLatin1StringView RestorePosition{"restore-position"};
 // Per-window border / title-bar appearance slots (one per property so

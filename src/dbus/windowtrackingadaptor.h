@@ -9,6 +9,7 @@
 #include <PhosphorEngine/PlacementEngineBase.h>
 #include <PhosphorZones/AssignmentEntry.h>
 #include <PhosphorSnapEngine/INavigationStateProvider.h>
+#include <PhosphorSnapEngine/PlacementDirective.h>
 #include <PhosphorProtocol/AutotileMarshalling.h>
 #include <PhosphorProtocol/WindowMarshalling.h>
 #include <PhosphorProtocol/ZoneMarshalling.h>
@@ -56,6 +57,7 @@ class ActivityManager;
 namespace PhosphorWindowRules {
 class WindowRuleStore;
 class RuleEvaluator;
+class ResolvedActions;
 }
 
 namespace PlasmaZones {
@@ -680,15 +682,53 @@ public:
     /// params are free-form, so the verdict is the presence of the filled slot.
     bool shouldFloatByRule(const QString& windowId);
 
-    /// Resolve the 1-based zone ordinals an opening window should snap into
-    /// because a `SnapToZone` window rule matched it. Consulted by the placement
-    /// resolver the daemon injects into the SnapEngine (in-process, not via
-    /// D-Bus). Returns an empty list when no SnapToZone rule matches; multiple
-    /// ordinals request a zone span. Builds a WindowQuery from the window
-    /// registry metadata, pins it to @p screenId (the screen the window is
-    /// opening on) so a `ScreenId`-constrained rule resolves, and reads the
-    /// `Placement` slot — mirrors shouldFloatByRule.
-    QList<int> placementZonesByRule(const QString& windowId, const QString& screenId);
+    /// Resolve the open-placement directive for a window from its matched window
+    /// rules: the 1-based `SnapToZone` ordinals to snap into (empty when no
+    /// SnapToZone rule matches; multiple ordinals request a zone span) plus the
+    /// `RouteToScreen` target monitor (empty when unrouted). Consulted by the
+    /// placement resolver the daemon injects into the SnapEngine (in-process, not
+    /// via D-Bus). Builds a WindowQuery from the window registry metadata, pins it
+    /// to @p screenId (the screen the window is opening on) so a
+    /// `ScreenId`-constrained rule resolves, and reads the `Placement` /
+    /// `RouteScreen` slots — mirrors shouldFloatByRule.
+    PhosphorSnapEngine::PlacementDirective placementZonesByRule(const QString& windowId, const QString& screenId);
+
+    /// Engine-neutral RouteToDesktop: if a matched window rule pins @p windowId to
+    /// a virtual desktop, emit windowDesktopMoveRequested so the compositor moves
+    /// it there on open. Independent of snapping/tiling — composes with the
+    /// window's placement. Called from the snap open-path facade. Pins @p screenId
+    /// so a ScreenId-scoped rule resolves; reuses the per-window evaluator cache
+    /// placementZonesByRule seeds.
+    void applyOpenDesktopRouting(const QString& windowId, const QString& screenId);
+
+    /// Autotile open-path routing. Emits RouteToDesktop (as applyOpenDesktopRouting)
+    /// AND resolves a RouteToScreen pin: when the matched rule routes the window to a
+    /// DIFFERENT monitor that is itself in autotile mode, emits windowOutputMoveExpected
+    /// and returns that screen id so the caller inserts the window into that screen's
+    /// tiling state. Returns an empty string when there is no autotile redirect (no
+    /// rule, snap/disabled target, or same screen) — the caller then uses the spawn
+    /// screen. Snap-mode targets are handled by the snap placement directive, not here.
+    QString applyOpenRoutingForAutotile(const QString& windowId, const QString& screenId);
+
+    /// Engine-neutral RouteToScreen for a BARE route (no SnapToZone): if a matched
+    /// rule pins @p windowId to a different monitor and the rule carries no
+    /// SnapToZone (a route + snap is placed by the snap placement directive, which
+    /// resolves the zones ON the target screen), move the window there free.
+    /// Translates the window's current frame geometry onto the target screen's
+    /// available area (preserving its relative position, clamped to fit) and emits
+    /// applyGeometryRequested with an empty zone id (a free placement, no snap
+    /// chrome) plus the windowOutputMoveExpected marker. Called from the snap
+    /// open-path facade only when nothing snapped the window, so a SnapToZone
+    /// restore or a remembered snap takes precedence and the explicit route wins
+    /// over a remembered float position. No-ops when the target is unset, the spawn
+    /// screen, or not currently connected, or when the window has pushed no geometry
+    /// yet. A target in autotile mode is moved (not tiled) — cross-engine tiling
+    /// insertion stays with the autotile spawn path (applyOpenRoutingForAutotile).
+    void applyOpenScreenRouting(const QString& windowId, const QString& screenId);
+
+    /// Shared by the two open-routing entry points: if @p resolved carries a
+    /// RouteToDesktop action, emit windowDesktopMoveRequested for @p windowId.
+    void emitRouteToDesktopIfMatched(const PhosphorWindowRules::ResolvedActions& resolved, const QString& windowId);
     /**
      * @brief Drop unified WindowPlacement records for excluded appIds.
      *

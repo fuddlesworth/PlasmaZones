@@ -239,20 +239,6 @@ private Q_SLOTS:
         QVERIFY(!dialog.evaluate(firefoxQuery()));
     }
 
-    void testInOperator_strings()
-    {
-        const QVariantList screens{QStringLiteral("DP-1"), QStringLiteral("DP-2")};
-        const auto expr = MatchExpression::makeLeaf(Field::ScreenId, Operator::In, screens);
-        QVERIFY(expr.evaluate(firefoxQuery()));
-    }
-
-    void testInOperator_numeric()
-    {
-        const QVariantList desktops{1, 2, 3};
-        const auto expr = MatchExpression::makeLeaf(Field::VirtualDesktop, Operator::In, desktops);
-        QVERIFY(expr.evaluate(firefoxQuery()));
-    }
-
     // ── Composites ──
 
     void testAll_andSemantics()

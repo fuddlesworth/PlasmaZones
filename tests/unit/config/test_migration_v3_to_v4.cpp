@@ -327,8 +327,8 @@ private Q_SLOTS:
 
         // A v3 layout file carrying two legacy app→zone rules: firefox → zone 2
         // (no screen), and konsole → zone 3 with a legacy targetScreen "DP-1"
-        // (which v4 intentionally drops — see below). They live in the user data
-        // dir the migration scans.
+        // (which v4 carries over as a RouteToScreen action — see below). They live
+        // in the user data dir the migration scans.
         const QString layoutsDir = QStandardPaths::writableLocation(QStandardPaths::GenericDataLocation)
             + QLatin1Char('/') + ConfigDefaults::layoutsSubdir();
         QJsonArray appRules;
@@ -372,18 +372,88 @@ private Q_SLOTS:
             }
         }
 
+        // The targetScreenId carried by a rule's RouteToScreen action (empty when
+        // the rule has none).
+        const auto routeScreen = [](const QJsonObject& rule) -> QString {
+            for (const QJsonValue& v : rule.value(QStringLiteral("actions")).toArray()) {
+                const QJsonObject a = v.toObject();
+                if (a.value(QStringLiteral("type")).toString() == QLatin1String("routeToScreen")) {
+                    return a.value(QStringLiteral("targetScreenId")).toString();
+                }
+            }
+            return QString();
+        };
+
         // firefox → SnapToZone [2]; a single AppId-appIdMatches leaf (no screen).
+        // No targetScreen in the source, so no RouteToScreen action is emitted.
         QVERIFY(!firefoxRule.isEmpty());
         QCOMPARE(snapZones(firefoxRule), (QList<int>{2}));
         QCOMPARE(matchLeaves(firefoxRule).size(), 1);
+        QVERIFY(routeScreen(firefoxRule).isEmpty());
+        QVERIFY(!actionTypes(firefoxRule).contains(QLatin1String("routeToScreen")));
 
-        // konsole → SnapToZone [3]; the legacy targetScreen "DP-1" is dropped, so
-        // it is a single AppId-appIdMatches leaf with NO ScreenId constraint (a
-        // migrated app snaps on whatever screen it opens on).
+        // konsole → SnapToZone [3] PLUS a RouteToScreen action carrying the legacy
+        // targetScreen "DP-1". The MATCH stays a single AppId-appIdMatches leaf with
+        // NO ScreenId constraint — RouteToScreen is an ACTION (it routes), not a
+        // ScreenId match (which would only scope).
         QVERIFY(!konsoleRule.isEmpty());
         QCOMPARE(snapZones(konsoleRule), (QList<int>{3}));
         QCOMPARE(matchLeaves(konsoleRule).size(), 1);
         QVERIFY(matchLeafValueByOp(konsoleRule, QStringLiteral("screenId"), QStringLiteral("equals")).isEmpty());
+        QCOMPARE(routeScreen(konsoleRule), QStringLiteral("DP-1"));
+    }
+
+    // The reporter's exact shape (discussion #686): a v3 appRule whose pattern is
+    // the X11 two-token "resourceName resourceClass" form, pinned to a monitor.
+    // v4 must (a) normalize the pattern to the single appId token the daemon keys
+    // on — without this the AppIdMatches leaf would never fire — and (b) carry the
+    // targetScreen as a RouteToScreen action so the app still opens on that monitor.
+    void testLayoutAppRules_normalizesTwoTokenPatternAndRoutesScreen()
+    {
+        IsolatedConfigGuard guard;
+        writeJson(ConfigDefaults::configFilePath(), makeV3Config());
+        writeJson(assignmentsPath(), makeAssignments());
+
+        const QString layoutsDir = QStandardPaths::writableLocation(QStandardPaths::GenericDataLocation)
+            + QLatin1Char('/') + ConfigDefaults::layoutsSubdir();
+        const QString kGigabyte = QStringLiteral("GIGA-BYTE TECHNOLOGY CO., LTD.:MO34WQC:16843009");
+        QJsonObject appRule;
+        appRule.insert(QStringLiteral("pattern"), QStringLiteral("chromium chromium"));
+        appRule.insert(QStringLiteral("zoneNumber"), 2);
+        appRule.insert(QStringLiteral("targetScreen"), kGigabyte);
+        QJsonObject layout;
+        layout.insert(QStringLiteral("appRules"), QJsonArray{appRule});
+        writeJson(layoutsDir + QStringLiteral("/columns.json"), layout);
+
+        QVERIFY(ConfigMigration::ensureJsonConfig());
+
+        // Exactly one rule whose AppId leaf is the NORMALIZED single token.
+        QJsonObject chromiumRule;
+        for (const QJsonValue& v : rulesFromWindowRules()) {
+            const QJsonObject r = v.toObject();
+            if (matchLeafValueByOp(r, QStringLiteral("appId"), QStringLiteral("appIdMatches"))
+                == QLatin1String("chromium")) {
+                chromiumRule = r;
+            }
+        }
+        QVERIFY2(!chromiumRule.isEmpty(), "two-token 'chromium chromium' must normalize to the appId leaf 'chromium'");
+
+        // The RouteToScreen action carries the legacy monitor verbatim.
+        QString routedScreen;
+        QList<int> zones;
+        for (const QJsonValue& v : chromiumRule.value(QStringLiteral("actions")).toArray()) {
+            const QJsonObject a = v.toObject();
+            const QString type = a.value(QStringLiteral("type")).toString();
+            if (type == QLatin1String("routeToScreen")) {
+                routedScreen = a.value(QStringLiteral("targetScreenId")).toString();
+            } else if (type == QLatin1String("snapToZone")) {
+                for (const QJsonValue& z : a.value(QStringLiteral("zones")).toArray()) {
+                    zones.append(z.toInt());
+                }
+            }
+        }
+        QCOMPARE(zones, (QList<int>{2}));
+        QCOMPARE(routedScreen, kGigabyte);
     }
 
     void testLayoutAppRules_dedupePatternAcrossLayouts()
@@ -433,8 +503,9 @@ private Q_SLOTS:
     void testLayoutAppRules_idempotentRuleIds()
     {
         // The SnapToZone migration's rule id is derived from
-        // (pattern, zoneNumber) via a fixed v5-UUID namespace, so a
-        // crash-and-retry conversion yields byte-identical rules. This mirrors the
+        // (normalized pattern, zoneNumber, targetScreen) via a fixed v5-UUID
+        // namespace, so a crash-and-retry conversion yields byte-identical rules.
+        // This mirrors the
         // sibling exclusion / animation folds' idempotency tests and pins the
         // namespace UUID + segment encoding so a future drift in either forces a
         // deliberate update here (the migration owns both ends of the derivation,
@@ -469,12 +540,14 @@ private Q_SLOTS:
 
         // Golden assertion against the SPEC: namespace UUID + length-prefixed
         // segment encoding ("<size>:<bytes>" per segment, no separator). The id is
-        // derived from (pattern, zoneNumber) only — targetScreen is not carried
-        // into the rule, so it is not part of the identity.
-        //   segment 1 → pattern    "firefox" → "7:firefox"
-        //   segment 2 → zoneNumber "2"       → "1:2"
+        // derived from (normalized pattern, zoneNumber, targetScreen). This fixture
+        // pins firefox with no targetScreen, so the third segment is the empty
+        // string ("0:").
+        //   segment 1 → pattern      "firefox" → "7:firefox"
+        //   segment 2 → zoneNumber   "2"       → "1:2"
+        //   segment 3 → targetScreen ""        → "0:"
         const QUuid kExpectedNamespace(QStringLiteral("{6f1c8e44-2a7b-5d93-8e10-4b2c9a7f1d35}"));
-        const QString kExpectedKey = QStringLiteral("7:firefox") + QStringLiteral("1:2");
+        const QString kExpectedKey = QStringLiteral("7:firefox") + QStringLiteral("1:2") + QStringLiteral("0:");
         QCOMPARE(firstId, QUuid::createUuidV5(kExpectedNamespace, kExpectedKey).toString());
 
         // Force the rebuild path again and re-stage the same v3 inputs.

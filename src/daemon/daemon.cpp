@@ -1533,6 +1533,9 @@ bool Daemon::init()
     m_snapAdaptor = new SnapAdaptor(snapEngine, m_windowTrackingAdaptor, m_settings.get(), this);
     m_snapAdaptor->setContextResolver(m_contextResolver.get());
     m_autotileAdaptor = new AutotileAdaptor(autotileEngine, m_screenManager.get(), m_algorithmRegistry.get(), this);
+    // Wire the WTA so the autotile open path can resolve RouteToScreen /
+    // RouteToDesktop window rules (the rule store + evaluator live on the WTA).
+    m_autotileAdaptor->setWindowTrackingAdaptor(m_windowTrackingAdaptor);
 
     // Control adaptor - high-level convenience API for third-party integrations.
     // Held as a member so stop() can detach() it before the unique_ptr members
@@ -2129,6 +2132,15 @@ void Daemon::stop()
         // a freed router pointer. SnapAdaptor's clearEngine() does
         // the symmetric clear (snapadaptor.cpp).
         m_windowTrackingAdaptor->setScreenModeRouter(nullptr);
+    }
+    if (m_autotileAdaptor) {
+        // Sever the autotile adaptor's post-construction borrow of the WTA (wired
+        // in init() so the autotile open path can resolve RouteToScreen /
+        // RouteToDesktop rules). The autotile open path no-ops on a null WTA, so
+        // a D-Bus open landing in the teardown gap can't drive routing against
+        // half-torn-down state. Symmetric with the resolver / router clears above
+        // and honours the shutdown-nullptr contract documented in autotileadaptor.h.
+        m_autotileAdaptor->setWindowTrackingAdaptor(nullptr);
     }
     m_contextResolver.reset();
     m_settingsGateAdapter.reset();

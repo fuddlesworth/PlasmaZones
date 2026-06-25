@@ -92,10 +92,18 @@ bool SnapEngine::unfloatToZone(const QString& windowId, const QString& screenId)
         const PhosphorEngine::SnapResult ruleSnap =
             calculateSnapToPlacementRule(windowId, screenId, /*isSticky=*/false);
         if (ruleSnap.shouldSnap && !ruleSnap.zoneIds.isEmpty()) {
+            // Forward the routed desktop (RouteToDesktop): calculateSnapToPlacementRule
+            // resolved the zones against ruleSnap.virtualDesktop's layout, so the commit
+            // must record the assignment on that same desktop — otherwise a
+            // SnapToZone + RouteToDesktop rule lands zones from the routed desktop's
+            // layout under the current desktop. Mirrors the open path (lifecycle.cpp);
+            // 0 ⇒ current desktop, the historical behaviour for unrouted rules.
             if (ruleSnap.zoneIds.size() > 1) {
-                commitMultiZoneSnap(windowId, ruleSnap.zoneIds, ruleSnap.screenId, SnapIntent::UserInitiated);
+                commitMultiZoneSnap(windowId, ruleSnap.zoneIds, ruleSnap.screenId, SnapIntent::UserInitiated,
+                                    ruleSnap.virtualDesktop);
             } else {
-                commitSnap(windowId, ruleSnap.zoneIds.first(), ruleSnap.screenId, SnapIntent::UserInitiated);
+                commitSnap(windowId, ruleSnap.zoneIds.first(), ruleSnap.screenId, SnapIntent::UserInitiated,
+                           ruleSnap.virtualDesktop);
             }
             // Non-empty zoneId so the effect treats this as a snap commit (re-applies
             // snap chrome), mirroring the pre-float-zone path below.

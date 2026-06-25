@@ -4,6 +4,7 @@
 #include "autotileadaptor.h"
 
 #include "core/logging.h"
+#include "windowtrackingadaptor.h"
 
 #include <PhosphorProtocol/AutotileMarshalling.h>
 #include <PhosphorProtocol/WindowMarshalling.h>
@@ -208,7 +209,20 @@ void AutotileAdaptor::dispatchWindowOpened(const PhosphorProtocol::WindowOpenedE
     if (entry.windowId.isEmpty() || entry.screenId.isEmpty()) {
         return;
     }
-    m_engine->windowOpened(entry.windowId, entry.screenId, qMax(0, entry.minWidth), qMax(0, entry.minHeight));
+    // Window-rule open routing (RouteToScreen / RouteToDesktop). The WTA owns the
+    // rule store + evaluator and the desktop/output-move relay signals. It emits a
+    // RouteToDesktop move and, for a RouteToScreen pin onto a DIFFERENT autotile
+    // monitor, returns that screen so we insert the window into its tiling state
+    // instead of the spawn screen's (snap-mode targets are handled by the snap
+    // placement path, so the returned screen is always empty or an autotile screen).
+    QString screenId = entry.screenId;
+    if (m_windowTrackingAdaptor) {
+        const QString routed = m_windowTrackingAdaptor->applyOpenRoutingForAutotile(entry.windowId, entry.screenId);
+        if (!routed.isEmpty()) {
+            screenId = routed;
+        }
+    }
+    m_engine->windowOpened(entry.windowId, screenId, qMax(0, entry.minWidth), qMax(0, entry.minHeight));
 }
 
 bool AutotileAdaptor::deferUntilPanelReady()

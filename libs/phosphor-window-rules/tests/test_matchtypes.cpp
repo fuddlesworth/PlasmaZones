@@ -39,7 +39,7 @@ private Q_SLOTS:
     {
         // Canary: the loop bound is derived from OperatorCount — see
         // testFieldRoundTrip_data.
-        QCOMPARE(OperatorCount, 9);
+        QCOMPARE(OperatorCount, 8);
         QTest::addColumn<int>("opValue");
         for (int v = 0; v < OperatorCount; ++v) {
             QTest::addRow("op-%d", v) << v;

@@ -107,13 +107,13 @@ private Q_SLOTS:
     void reorder();
     void addRuleAtInsertsAtIndexWithSingleSignal();
     void validationIssueCountRole();
-    void screenIdsRoleHandlesInOperator();
     void screenIdsOfCollectsOnlyLiteralPinOperators();
     void actionSummaryRendersAllEngineModes();
     void disableEngineNamesTheModeBeingDisabled();
     void setOpacityRendersValidValuesAndGuardsRejectPaths();
     void restorePositionRendersValueAwareLabel();
     void shaderAndCurveLabelsResolveThroughLookups();
+    void routeActionsRenderFriendlyLabels();
 };
 
 void TestWindowRuleModel::rolesExposed()
@@ -313,57 +313,9 @@ void TestWindowRuleModel::validationIssueCountRole()
     QVERIFY(model.roleNames().values().contains(QByteArrayLiteral("validationIssueCount")));
 }
 
-void TestWindowRuleModel::screenIdsRoleHandlesInOperator()
-{
-    // A rule authored as `ScreenId IN [DP-2, DP-3]` must surface both ids
-    // in ScreenIdsRole — earlier code did `value.toString()` on the leaf's
-    // value and dropped them silently (toString() returns empty for a list).
-    // The role drives the monitor-overview filter chip and the ruleCount
-    // tally per monitor, so a regression here makes In-rules invisible to
-    // the page.
-    WindowRule rule;
-    rule.id = QUuid::createUuid();
-    rule.name = QStringLiteral("DP-2/DP-3 layout");
-    rule.priority = 300;
-    rule.match = MatchExpression::makeLeaf(Field::ScreenId, Operator::In,
-                                           QVariantList{QStringLiteral("DP-2"), QStringLiteral("DP-3")});
-    RuleAction engine;
-    engine.type = QString(ActionType::SetEngineMode);
-    engine.params.insert(ActionParam::Mode, QStringLiteral("autotile"));
-    rule.actions = {engine};
-
-    WindowRuleModel model;
-    model.setRules({rule});
-
-    const QStringList ids = model.data(model.index(0, 0), WindowRuleModel::ScreenIdsRole).toStringList();
-    QCOMPARE(ids.size(), 2);
-    QVERIFY(ids.contains(QStringLiteral("DP-2")));
-    QVERIFY(ids.contains(QStringLiteral("DP-3")));
-
-    // Static helper exposed to the controller (used by monitorOverview)
-    // must walk the same path.
-    const QStringList collected = WindowRuleModel::screenIdsOf(rule.match);
-    QCOMPARE(collected.size(), 2);
-    QVERIFY(collected.contains(QStringLiteral("DP-2")));
-    QVERIFY(collected.contains(QStringLiteral("DP-3")));
-
-    // QStringList-typed predicate values must also be iterated correctly —
-    // a programmatically built leaf can carry that shape (see the
-    // matchexpression.cpp evaluator's dual-shape handling).
-    WindowRule rule2 = rule;
-    rule2.id = QUuid::createUuid();
-    rule2.match = MatchExpression::makeLeaf(
-        Field::ScreenId, Operator::In,
-        QVariant::fromValue(QStringList{QStringLiteral("HDMI-A-1"), QStringLiteral("eDP-1")}));
-    const QStringList ids2 = WindowRuleModel::screenIdsOf(rule2.match);
-    QCOMPARE(ids2.size(), 2);
-    QVERIFY(ids2.contains(QStringLiteral("HDMI-A-1")));
-    QVERIFY(ids2.contains(QStringLiteral("eDP-1")));
-}
-
 void TestWindowRuleModel::screenIdsOfCollectsOnlyLiteralPinOperators()
 {
-    // Only Equals and In are literal monitor pins. A substring / regex operator
+    // Only Equals is a literal monitor pin. A substring / regex operator
     // (StartsWith, Contains, …) never equals a real connector id, so collecting
     // its token would silently under-count the rule against every monitor tile.
     // Such rules must contribute NO screen id.
@@ -610,6 +562,77 @@ void TestWindowRuleModel::shaderAndCurveLabelsResolveThroughLookups()
     QCOMPARE(summaryAt(2), QStringLiteral("Block animation shader"));
     QCOMPARE(summaryAt(3), QStringLiteral("Animation curve"));
     QCOMPARE(summaryAt(4), QStringLiteral("Shader: mystery"));
+}
+
+void TestWindowRuleModel::routeActionsRenderFriendlyLabels()
+{
+    // Pin that RouteToScreen / RouteToDesktop render human labels in the action
+    // summary rather than leaking their raw wire tokens. Both actions are
+    // user-authorable (they appear in the action picker), so a missing
+    // actionLabel branch would surface "routeToScreen" / "routeToDesktop" in the
+    // rules list while the editor shows "Open on monitor" / "Open on desktop" — an
+    // inconsistency this test guards against. RouteToScreen also
+    // resolves its target through the injected screen lookup, mirroring the
+    // ScreenId match-leaf path, and falls back to the raw id when unresolved.
+    const auto screenRuleWith = [](const QString& screenId) {
+        WindowRule rule;
+        rule.id = QUuid::createUuid();
+        rule.priority = 200;
+        rule.match = MatchExpression::makeLeaf(Field::AppId, Operator::Equals, QStringLiteral("firefox"));
+        RuleAction route;
+        route.type = QString(ActionType::RouteToScreen);
+        if (!screenId.isNull()) {
+            route.params.insert(ActionParam::TargetScreenId, screenId);
+        }
+        rule.actions = {route};
+        return rule;
+    };
+    const auto desktopRuleWith = [](int desktop) {
+        WindowRule rule;
+        rule.id = QUuid::createUuid();
+        rule.priority = 199;
+        rule.match = MatchExpression::makeLeaf(Field::AppId, Operator::Equals, QStringLiteral("konsole"));
+        RuleAction route;
+        route.type = QString(ActionType::RouteToDesktop);
+        if (desktop >= 1) {
+            route.params.insert(ActionParam::TargetDesktop, desktop);
+        }
+        rule.actions = {route};
+        return rule;
+    };
+
+    WindowRuleModel model;
+    model.setRules({
+        screenRuleWith(QStringLiteral("DP-2")), // resolved through the lookup once installed
+        screenRuleWith(QString()), // no target → placeholder, lookup not consulted
+        desktopRuleWith(2),
+        desktopRuleWith(0), // absent/invalid desktop → placeholder
+    });
+
+    const auto summaryAt = [&](int row) {
+        return model.data(model.index(row, 0), WindowRuleModel::ActionSummaryRole).toString();
+    };
+
+    // No screen lookup wired → the raw canonical id round-trips behind the label.
+    QCOMPARE(summaryAt(0), QStringLiteral("Open on monitor: DP-2"));
+    QCOMPARE(summaryAt(1), QStringLiteral("Open on monitor"));
+    QCOMPARE(summaryAt(2), QStringLiteral("Open on desktop 2"));
+    QCOMPARE(summaryAt(3), QStringLiteral("Open on desktop"));
+
+    // No summary may leak the lowercase wire token — that signals the
+    // actionLabel branch fell through to the raw-type fallback.
+    for (int row = 0; row < model.rowCount(); ++row) {
+        QVERIFY2(!summaryAt(row).contains(QStringLiteral("routeToScreen")), qPrintable(summaryAt(row)));
+        QVERIFY2(!summaryAt(row).contains(QStringLiteral("routeToDesktop")), qPrintable(summaryAt(row)));
+    }
+
+    // Installing the screen lookup resolves the target to its friendly monitor
+    // label; refreshLabels coalesces the update into one dataChanged.
+    model.setScreenLabelLookup([](const QString& id) {
+        return id == QLatin1String("DP-2") ? QStringLiteral("LG Ultra HD · DP-2") : id;
+    });
+    model.refreshLabels();
+    QCOMPARE(summaryAt(0), QStringLiteral("Open on monitor: LG Ultra HD · DP-2"));
 }
 
 QTEST_MAIN(TestWindowRuleModel)

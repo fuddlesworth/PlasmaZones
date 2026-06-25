@@ -34,7 +34,6 @@ bool operatorIsStringOnly(Operator op)
         return true;
     case Operator::Equals:
     case Operator::AppIdMatches:
-    case Operator::In:
     case Operator::GreaterThan:
     case Operator::LessThan:
         return false;
@@ -206,21 +205,6 @@ bool MatchExpression::isValid() const
     if (operatorIsNumeric(op) && !fieldIsNumeric(field)) {
         return false;
     }
-    if (op == Operator::In) {
-        // In does not apply to a boolean flag — a bool has only two states,
-        // so a set-membership test is degenerate and almost certainly an
-        // authoring mistake. Reject it explicitly.
-        if (fieldIsBool(field)) {
-            return false;
-        }
-        // In requires a list value. A QVariantList is the canonical wire
-        // shape, but a programmatically built leaf may carry a QStringList —
-        // accept either.
-        const int valueTypeId = m_predicate.value.metaType().id();
-        if (valueTypeId != QMetaType::QVariantList && valueTypeId != QMetaType::QStringList) {
-            return false;
-        }
-    }
     // A Regex pattern must compile. The program was compiled eagerly by
     // ensureRegex() at construction — reuse it rather than recompiling.
     // Also reject an empty pattern: QRegularExpression("") is a valid
@@ -240,11 +224,8 @@ bool MatchExpression::isValid() const
     // double, so an authored `"value": 12.7` would otherwise be silently
     // truncated by `subject.toInt()` to 12 — a Pid 12.7 leaf would match pid
     // 12. Reject the leaf rather than accepting a value the user almost
-    // certainly did not intend. Skips Operator::In (the list-of-values
-    // shape is dimensional — element-wise enforcement would belong here as
-    // a future tightening but is out of scope for the current numeric
-    // tolerance fix).
-    if (fieldIsNumeric(field) && op != Operator::In) {
+    // certainly did not intend.
+    if (fieldIsNumeric(field)) {
         const int valueTypeId = m_predicate.value.metaType().id();
         if (valueTypeId == QMetaType::Double) {
             const double d = m_predicate.value.toDouble();
@@ -307,57 +288,6 @@ bool MatchExpression::evaluateLeaf(const WindowQuery& query) const
     const Operator op = m_predicate.op;
     const QVariant& value = m_predicate.value;
 
-    // ── Set membership ──
-    if (op == Operator::In) {
-        // isValid() accepts either a QVariantList (the canonical wire shape)
-        // or a QStringList (a programmatically built leaf). QVariant::toList()
-        // does NOT convert a QStringList-typed QVariant — it returns an empty
-        // list — so a QStringList leaf must be iterated through toStringList()
-        // to evaluate correctly. Keep both branches so isValid()/evaluate()
-        // agree on what an `In` leaf can carry.
-        const bool stringField = fieldIsString(m_predicate.field);
-        // For a numeric field, `subject` must itself parse as a number — a
-        // non-numeric subject would coerce to 0 via toInt() and spuriously
-        // match a `0` candidate.
-        bool subjectOk = false;
-        const int subjectInt = stringField ? 0 : subject.toInt(&subjectOk);
-        if (value.metaType().id() == QMetaType::QStringList) {
-            const QString subjectStr = subject.toString();
-            for (const QString& candidate : value.toStringList()) {
-                if (stringField) {
-                    if (subjectStr.compare(candidate, Qt::CaseInsensitive) == 0) {
-                        return true;
-                    }
-                } else if (subjectOk) {
-                    // Skip any candidate that does not parse as a number —
-                    // toInt() would otherwise coerce it to 0 and match a
-                    // zero-valued numeric subject.
-                    bool candidateOk = false;
-                    const int candidateInt = candidate.toInt(&candidateOk);
-                    if (candidateOk && subjectInt == candidateInt) {
-                        return true;
-                    }
-                }
-            }
-            return false;
-        }
-        const QVariantList set = value.toList();
-        for (const QVariant& candidate : set) {
-            if (stringField) {
-                if (subject.toString().compare(candidate.toString(), Qt::CaseInsensitive) == 0) {
-                    return true;
-                }
-            } else if (subjectOk) {
-                bool candidateOk = false;
-                const int candidateInt = candidate.toInt(&candidateOk);
-                if (candidateOk && subjectInt == candidateInt) {
-                    return true;
-                }
-            }
-        }
-        return false;
-    }
-
     // ── Boolean fields ──
     if (fieldIsBool(m_predicate.field)) {
         // Only Equals is meaningful on a flag.
@@ -383,8 +313,7 @@ bool MatchExpression::evaluateLeaf(const WindowQuery& query) const
         }
     }
 
-    // ── WindowType — compared by its underlying int (Equals only here;
-    //    In is handled above) ──
+    // ── WindowType — compared by its underlying int (Equals only) ──
     if (m_predicate.field == Field::WindowType) {
         if (op != Operator::Equals) {
             return false;
