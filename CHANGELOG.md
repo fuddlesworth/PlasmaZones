@@ -7,6 +7,33 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [3.1.1] - 2026-06-24
+
+### Added
+
+- **Route a window to a monitor or virtual desktop**: two new window-rule actions, RouteToScreen and RouteToDesktop, open a matched window on a specific monitor or virtual desktop (or both) and can snap it into a zone there. On its own a rule can just move the window to that monitor. This restores the per-monitor app-to-zone assignment from v3 and generalizes it to "open app X on context Y" for both snapping and tiling ([#691](https://github.com/fuddlesworth/PlasmaZones/pull/691)).
+- **Autotile capability badges in layout previews**: the shared preview cards used by the overlay picker, the zone selector, and the settings layout surfaces now show the autotile capability badges, matching the Layouts page ([#688](https://github.com/fuddlesworth/PlasmaZones/pull/688)).
+
+### Changed
+
+- **Curated default layout and algorithm visibility on fresh installs**: the plain `grid` autotile algorithm is hidden by default because the resize-aware `aligned-grid` supersedes it, and the `Wide` snapping layout is now shown by default. This only seeds on a fresh config, so existing users keep their current visibility ([#687](https://github.com/fuddlesworth/PlasmaZones/pull/687)).
+
+### Removed
+
+- **The "is one of" match operator**: this window-rule match operator was unusable in the editor and has been removed ([#691](https://github.com/fuddlesworth/PlasmaZones/pull/691)).
+
+### Fixed
+
+- **Autotiling failed to load any algorithm in non-C locales**: scripted algorithms compile through Luau, which parsed numbers with the system locale, so a regional locale with a decimal comma broke every algorithm, including the shared prelude, and the UI reported "No autotile algorithms available". LC_NUMERIC is now pinned to "C" while Luau compiles and runs ([#692](https://github.com/fuddlesworth/PlasmaZones/pull/692), [discussion #690](https://github.com/fuddlesworth/PlasmaZones/discussions/690)).
+- **Per-monitor app assignments stopped working after upgrading from v3**: the v3 to v4 migration dropped the legacy per-monitor `targetScreen` pin and left X11 two-token patterns (`chromium chromium`) that never matched the normalized app id. The migration now carries the pin across as a RouteToScreen action and normalizes the pattern ([#691](https://github.com/fuddlesworth/PlasmaZones/pull/691), [discussion #686](https://github.com/fuddlesworth/PlasmaZones/discussions/686)).
+- **Quick Shortcuts applied the wrong layout**: `Meta+Alt+#` applied whatever layout sat at that position in Priority order instead of the layout bound to that quick slot ([#684](https://github.com/fuddlesworth/PlasmaZones/pull/684)).
+- **Windows landed in the wrong zones during fast rotation**: holding the rotate shortcut applied superseded geometry updates after the daemon had already moved on, so windows ended up in stale zones. The effect now drops superseded geometry ticks ([#689](https://github.com/fuddlesworth/PlasmaZones/pull/689)).
+- **`restoreWindowsToZonesOnLogin` did nothing**: the toggle round-tripped through config, D-Bus, and the UI but its value was never read, so a window snapped at logout always restored to its zone. It is now honored on login ([#685](https://github.com/fuddlesworth/PlasmaZones/pull/685)).
+- **Per-context gap and padding overrides were ignored for tiled windows**: window-rule gap overrides applied only to snapped windows, not autotiled ones. They now apply to both ([#685](https://github.com/fuddlesworth/PlasmaZones/pull/685)).
+- **Snapping ignored some window-rule exclusions**: window-class, title, and minimum-size exclusion conditions were not honored on the snapping path. The full window query is now consulted ([#685](https://github.com/fuddlesworth/PlasmaZones/pull/685)).
+- **Layout names were blank in the overlay previews**: the picker, OSD, and zone-selector preview cards read the old `name` key instead of `displayName`, so the name label rendered empty. They now read `displayName` ([#688](https://github.com/fuddlesworth/PlasmaZones/pull/688)).
+- **The layout dropdown highlight washed out the badges**: the layout combo box highlighted the active row with a full opaque band that left the category, capability, and aspect-ratio badges illegible. It now uses the same subtle tint as the rest of the app ([#693](https://github.com/fuddlesworth/PlasmaZones/pull/693)).
+
 ## [3.1.0] - 2026-06-23
 
 ### Added
@@ -1520,7 +1547,8 @@ Initial packaged release. Wayland-only (X11 support removed). Requires KDE Plasm
 - Session restoration and rotation after login ([#66])
 - Window tracking: snap/restore behavior, zone clearing, startup timing, rotation zone ID matching, floating window exclusion ([#67])
 
-[Unreleased]: https://github.com/fuddlesworth/PlasmaZones/compare/v3.1.0...HEAD
+[Unreleased]: https://github.com/fuddlesworth/PlasmaZones/compare/v3.1.1...HEAD
+[3.1.1]: https://github.com/fuddlesworth/PlasmaZones/compare/v3.1.0...v3.1.1
 [3.1.0]: https://github.com/fuddlesworth/PlasmaZones/compare/v3.0.17...v3.1.0
 [3.0.17]: https://github.com/fuddlesworth/PlasmaZones/compare/v3.0.16...v3.0.17
 [3.0.16]: https://github.com/fuddlesworth/PlasmaZones/compare/v3.0.15...v3.0.16

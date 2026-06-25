@@ -1,6 +1,19 @@
 {
     "releases": [
         {
+            "version": "3.1.1",
+            "date": "2026-06-24",
+            "highlights": [
+                "Open an app on a specific monitor or virtual desktop with a window rule, and optionally snap it into a zone there. This brings back the per-monitor app assignments from v3 (#691)",
+                "Fixed: autotiling could fail to load any algorithm in some regional locales (for example where the decimal separator is a comma), showing 'No autotile algorithms available'. All algorithms load again (#692)",
+                "Fixed: per-monitor app assignments that stopped working after upgrading from v3 are migrated correctly again (#686)",
+                "Fixed: Quick Shortcuts (Meta+Alt+number) now apply the layout you assigned to that slot instead of the one at that position in your priority list (#684)",
+                "Fixed: windows no longer get stuck in the wrong zones when you rotate them quickly (#689)",
+                "Fixed: the setting to restore snapped windows to their zones on login now takes effect, and per-window gap and padding overrides now apply to tiled windows too (#685)",
+                "Fixed: layout names show again in the overlay picker and zone selector, and the layout dropdown highlight no longer washes out the badges (#688, #693)"
+            ]
+        },
+        {
             "version": "3.1.0",
             "date": "2026-06-23",
             "highlights": [
