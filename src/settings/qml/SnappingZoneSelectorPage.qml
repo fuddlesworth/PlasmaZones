@@ -12,41 +12,18 @@ import org.kde.kirigami as Kirigami
 // arrangement, preview size) as sections via ZoneSelectorSection in "all" mode.
 // The per-screen popup overrides are scoped by the header scope chip on each of
 // ZoneSelectorSection's per-monitor cards.
-SettingsFlickable {
-    id: root
+Item {
+    id: pageRoot
 
-    readonly property var settingsBridge: settingsController.snappingZoneSelectorPage
-    readonly property int sliderValueLabelWidth: Kirigami.Units.gridUnit * 3
-    readonly property int zoneSelectorTriggerMin: root.settingsBridge.triggerDistanceMin
-    readonly property int zoneSelectorTriggerMax: root.settingsBridge.triggerDistanceMax
-    readonly property int zoneSelectorPreviewWidthMin: root.settingsBridge.previewWidthMin
-    readonly property int zoneSelectorPreviewWidthMax: root.settingsBridge.previewWidthMax
-    readonly property int zoneSelectorPreviewSmall: root.settingsBridge.previewWidthSmall
-    readonly property int zoneSelectorPreviewMedium: root.settingsBridge.previewWidthMedium
-    readonly property int zoneSelectorPreviewLarge: root.settingsBridge.previewWidthLarge
-    readonly property int zoneSelectorPreviewHeightMin: root.settingsBridge.previewHeightMin
-    readonly property int zoneSelectorPreviewHeightMax: root.settingsBridge.previewHeightMax
-    readonly property int zoneSelectorGridColumnsMin: root.settingsBridge.gridColumnsMin
-    readonly property int zoneSelectorGridColumnsMax: root.settingsBridge.gridColumnsMax
-    readonly property int zoneSelectorMaxRowsMin: root.settingsBridge.maxRowsMin
-    readonly property int zoneSelectorMaxRowsMax: root.settingsBridge.maxRowsMax
-    readonly property real screenAspectRatio: Screen.width > 0 && Screen.height > 0 ? (Screen.width / Screen.height) : (16 / 9)
-    // Anchors that belong to the Behavior tab; everything else is Appearance.
-    readonly property var behaviorAnchors: ["zoneSelectorEnabled", "triggerDistance", "triggerDistanceRow"]
-
-    // Switch to the tab containing a searched/deep-linked anchor before reveal.
-    ensureAnchorVisible: function (anchorId) {
-        tabBar.currentIndex = root.behaviorAnchors.indexOf(anchorId) >= 0 ? 0 : 1;
+    // PageHost duck-calls revealAnchor() on the page root; forward it to the
+    // scrolling flickable below the pinned tabs.
+    function revealAnchor(anchorId) {
+        return root.revealAnchor(anchorId);
     }
 
-    contentHeight: content.implicitHeight
-    clip: true
-
     ColumnLayout {
-        id: content
-
-        width: parent.width
-        spacing: Kirigami.Units.largeSpacing
+        anchors.fill: parent
+        spacing: 0
 
         TabBar {
             id: tabBar
@@ -61,15 +38,56 @@ SettingsFlickable {
             }
         }
 
-        // ZoneSelectorSection renders behavior (enable + trigger) or appearance
-        // (position, arrangement, preview) cards by mode — driven by the tab.
-        ZoneSelectorSection {
+        SettingsFlickable {
+            id: root
+
             Layout.fillWidth: true
-            mode: tabBar.currentIndex === 0 ? "behavior" : "appearance"
-            appSettings: settingsController.settings
-            controller: settingsController
-            constants: root
-            screenAspectRatio: root.screenAspectRatio
+            Layout.fillHeight: true
+
+            readonly property var settingsBridge: settingsController.snappingZoneSelectorPage
+            readonly property int sliderValueLabelWidth: Kirigami.Units.gridUnit * 3
+            readonly property int zoneSelectorTriggerMin: root.settingsBridge.triggerDistanceMin
+            readonly property int zoneSelectorTriggerMax: root.settingsBridge.triggerDistanceMax
+            readonly property int zoneSelectorPreviewWidthMin: root.settingsBridge.previewWidthMin
+            readonly property int zoneSelectorPreviewWidthMax: root.settingsBridge.previewWidthMax
+            readonly property int zoneSelectorPreviewSmall: root.settingsBridge.previewWidthSmall
+            readonly property int zoneSelectorPreviewMedium: root.settingsBridge.previewWidthMedium
+            readonly property int zoneSelectorPreviewLarge: root.settingsBridge.previewWidthLarge
+            readonly property int zoneSelectorPreviewHeightMin: root.settingsBridge.previewHeightMin
+            readonly property int zoneSelectorPreviewHeightMax: root.settingsBridge.previewHeightMax
+            readonly property int zoneSelectorGridColumnsMin: root.settingsBridge.gridColumnsMin
+            readonly property int zoneSelectorGridColumnsMax: root.settingsBridge.gridColumnsMax
+            readonly property int zoneSelectorMaxRowsMin: root.settingsBridge.maxRowsMin
+            readonly property int zoneSelectorMaxRowsMax: root.settingsBridge.maxRowsMax
+            readonly property real screenAspectRatio: Screen.width > 0 && Screen.height > 0 ? (Screen.width / Screen.height) : (16 / 9)
+            // Anchors that belong to the Behavior tab; everything else is Appearance.
+            readonly property var behaviorAnchors: ["zoneSelectorEnabled", "triggerDistance", "triggerDistanceRow"]
+
+            // Switch to the tab containing a searched/deep-linked anchor before reveal.
+            ensureAnchorVisible: function (anchorId) {
+                tabBar.currentIndex = root.behaviorAnchors.indexOf(anchorId) >= 0 ? 0 : 1;
+            }
+
+            contentHeight: content.implicitHeight
+            clip: true
+
+            ColumnLayout {
+                id: content
+
+                width: parent.width
+                spacing: Kirigami.Units.largeSpacing
+
+                // ZoneSelectorSection renders behavior (enable + trigger) or appearance
+                // (position, arrangement, preview) cards by mode — driven by the tab.
+                ZoneSelectorSection {
+                    Layout.fillWidth: true
+                    mode: tabBar.currentIndex === 0 ? "behavior" : "appearance"
+                    appSettings: settingsController.settings
+                    controller: settingsController
+                    constants: root
+                    screenAspectRatio: root.screenAspectRatio
+                }
+            }
         }
     }
 }
