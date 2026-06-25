@@ -231,10 +231,9 @@ qt_add_qml_module(plasmazones-settings
         # Snapping, organised by subject (Overlay / Zone Selector / Window),
         # each with a Behavior + Appearance page. Window Appearance also hosts
         # the per-screen Gaps; Shaders lives under Configuration.
-        qml/SnappingOverlayBehaviorPage.qml
-        qml/SnappingOverlayAppearancePage.qml
+        qml/SnappingOverlayPage.qml
+        qml/SnappingOverlayAppearanceCards.qml
         qml/SnappingZoneSelectorPage.qml
-        qml/OsdAppearancePage.qml
         qml/SnappingWindowPage.qml
         qml/TilingWindowPage.qml
         qml/TilingAlgorithmPage.qml

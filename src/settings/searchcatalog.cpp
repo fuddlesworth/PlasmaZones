@@ -68,12 +68,11 @@ void seedSearchCatalog(PhosphorControl::SearchController* search)
                              PhosphorI18n::tr("aspect ratio")});
 
     // Snapping
+    // Combined Snapping → Overlay page (behavior + appearance sections).
     search->setPageKeywords(QStringLiteral("snapping-overlay-behavior"),
                             {PhosphorI18n::tr("overlay"), PhosphorI18n::tr("trigger"), PhosphorI18n::tr("edge"),
-                             PhosphorI18n::tr("magnet"), PhosphorI18n::tr("snap")});
-    search->setPageKeywords(QStringLiteral("snapping-overlay-appearance"),
-                            {PhosphorI18n::tr("color"), PhosphorI18n::tr("colour"), PhosphorI18n::tr("opacity"),
-                             PhosphorI18n::tr("transparency"), PhosphorI18n::tr("theme"), PhosphorI18n::tr("border")});
+                             PhosphorI18n::tr("magnet"), PhosphorI18n::tr("snap"), PhosphorI18n::tr("color"),
+                             PhosphorI18n::tr("opacity"), PhosphorI18n::tr("border"), PhosphorI18n::tr("shader")});
     search->setPageKeywords(QStringLiteral("snapping-zoneselector"),
                             {PhosphorI18n::tr("zone selector"), PhosphorI18n::tr("picker"), PhosphorI18n::tr("chooser"),
                              PhosphorI18n::tr("popup"), PhosphorI18n::tr("position"), PhosphorI18n::tr("arrangement"),
@@ -90,11 +89,6 @@ void seedSearchCatalog(PhosphorControl::SearchController* search)
                              PhosphorI18n::tr("keyboard"), PhosphorI18n::tr("key")});
     search->setPageKeywords(QStringLiteral("snapping-shaders"),
                             {PhosphorI18n::tr("shader"), PhosphorI18n::tr("effect"), PhosphorI18n::tr("glow")});
-
-    // Appearance hub — Daemon Surfaces nodes that aren't a re-parented page.
-    search->setPageKeywords(QStringLiteral("osd-appearance"),
-                            {PhosphorI18n::tr("osd"), PhosphorI18n::tr("notification"),
-                             PhosphorI18n::tr("on-screen display"), PhosphorI18n::tr("style")});
 
     // Tiling
     // tiling-behavior is the combined Tiling → Window page (behavior + appearance
@@ -189,49 +183,49 @@ void seedSearchCatalog(PhosphorControl::SearchController* search)
 
     // ── Setting + section anchors: appearance / algorithm / behaviour rows ──
     // Snapping › Overlay (appearance)
-    addSection(search, QStringLiteral("snapping-overlay-appearance"), QStringLiteral("colors"),
+    addSection(search, QStringLiteral("snapping-overlay-behavior"), QStringLiteral("colors"),
                PhosphorI18n::tr("Colors"));
-    addSection(search, QStringLiteral("snapping-overlay-appearance"), QStringLiteral("opacity"),
+    addSection(search, QStringLiteral("snapping-overlay-behavior"), QStringLiteral("opacity"),
                PhosphorI18n::tr("Opacity"));
-    addSection(search, QStringLiteral("snapping-overlay-appearance"), QStringLiteral("border"),
+    addSection(search, QStringLiteral("snapping-overlay-behavior"), QStringLiteral("border"),
                PhosphorI18n::tr("Border"));
-    addSection(search, QStringLiteral("snapping-overlay-appearance"), QStringLiteral("zoneLabels"),
+    addSection(search, QStringLiteral("snapping-overlay-behavior"), QStringLiteral("zoneLabels"),
                PhosphorI18n::tr("Zone Labels"));
-    addSection(search, QStringLiteral("snapping-overlay-appearance"), QStringLiteral("effects"),
+    addSection(search, QStringLiteral("snapping-overlay-behavior"), QStringLiteral("effects"),
                PhosphorI18n::tr("Effects"));
-    addSection(search, QStringLiteral("snapping-overlay-appearance"), QStringLiteral("shaderEffects"),
+    addSection(search, QStringLiteral("snapping-overlay-behavior"), QStringLiteral("shaderEffects"),
                PhosphorI18n::tr("Shader Effects"));
-    addSetting(search, QStringLiteral("snapping-overlay-appearance"), QStringLiteral("systemAccentColor"),
+    addSetting(search, QStringLiteral("snapping-overlay-behavior"), QStringLiteral("systemAccentColor"),
                PhosphorI18n::tr("System accent color"),
                {PhosphorI18n::tr("theme"), PhosphorI18n::tr("scheme"), PhosphorI18n::tr("colour")});
-    addSetting(search, QStringLiteral("snapping-overlay-appearance"), QStringLiteral("highlightColor"),
+    addSetting(search, QStringLiteral("snapping-overlay-behavior"), QStringLiteral("highlightColor"),
                PhosphorI18n::tr("Highlight color"),
                {PhosphorI18n::tr("colour"), PhosphorI18n::tr("active"), PhosphorI18n::tr("hover")});
-    addSetting(search, QStringLiteral("snapping-overlay-appearance"), QStringLiteral("inactiveColor"),
+    addSetting(search, QStringLiteral("snapping-overlay-behavior"), QStringLiteral("inactiveColor"),
                PhosphorI18n::tr("Inactive color"), {PhosphorI18n::tr("colour"), PhosphorI18n::tr("unfocused")});
-    addSetting(search, QStringLiteral("snapping-overlay-appearance"), QStringLiteral("borderColor"),
+    addSetting(search, QStringLiteral("snapping-overlay-behavior"), QStringLiteral("borderColor"),
                PhosphorI18n::tr("Border color"), {PhosphorI18n::tr("colour"), PhosphorI18n::tr("outline")});
     addSetting(
-        search, QStringLiteral("snapping-overlay-appearance"), QStringLiteral("importColors"),
+        search, QStringLiteral("snapping-overlay-behavior"), QStringLiteral("importColors"),
         PhosphorI18n::tr("Import colors"),
         {PhosphorI18n::tr("pywal"), PhosphorI18n::tr("json"), PhosphorI18n::tr("scheme"), PhosphorI18n::tr("load")});
-    addSetting(search, QStringLiteral("snapping-overlay-appearance"), QStringLiteral("activeOpacity"),
+    addSetting(search, QStringLiteral("snapping-overlay-behavior"), QStringLiteral("activeOpacity"),
                PhosphorI18n::tr("Active opacity"), {PhosphorI18n::tr("transparency"), PhosphorI18n::tr("alpha")});
-    addSetting(search, QStringLiteral("snapping-overlay-appearance"), QStringLiteral("inactiveOpacity"),
+    addSetting(search, QStringLiteral("snapping-overlay-behavior"), QStringLiteral("inactiveOpacity"),
                PhosphorI18n::tr("Inactive opacity"), {PhosphorI18n::tr("transparency"), PhosphorI18n::tr("alpha")});
-    addSetting(search, QStringLiteral("snapping-overlay-appearance"), QStringLiteral("borderWidth"),
+    addSetting(search, QStringLiteral("snapping-overlay-behavior"), QStringLiteral("borderWidth"),
                PhosphorI18n::tr("Border width"), {PhosphorI18n::tr("thickness"), PhosphorI18n::tr("size")});
-    addSetting(search, QStringLiteral("snapping-overlay-appearance"), QStringLiteral("borderRadius"),
+    addSetting(search, QStringLiteral("snapping-overlay-behavior"), QStringLiteral("borderRadius"),
                PhosphorI18n::tr("Border radius"), {PhosphorI18n::tr("rounding"), PhosphorI18n::tr("corner")});
-    addSetting(search, QStringLiteral("snapping-overlay-appearance"), QStringLiteral("labelColor"),
+    addSetting(search, QStringLiteral("snapping-overlay-behavior"), QStringLiteral("labelColor"),
                PhosphorI18n::tr("Label color"),
                {PhosphorI18n::tr("colour"), PhosphorI18n::tr("text"), PhosphorI18n::tr("font")});
-    addSetting(search, QStringLiteral("snapping-overlay-appearance"), QStringLiteral("font"), PhosphorI18n::tr("Font"),
+    addSetting(search, QStringLiteral("snapping-overlay-behavior"), QStringLiteral("font"), PhosphorI18n::tr("Font"),
                {PhosphorI18n::tr("typeface"), PhosphorI18n::tr("family"), PhosphorI18n::tr("style")});
-    addSetting(search, QStringLiteral("snapping-overlay-appearance"), QStringLiteral("labelScale"),
+    addSetting(search, QStringLiteral("snapping-overlay-behavior"), QStringLiteral("labelScale"),
                PhosphorI18n::tr("Label scale"),
                {PhosphorI18n::tr("size"), PhosphorI18n::tr("text"), PhosphorI18n::tr("multiplier")});
-    addSetting(search, QStringLiteral("snapping-overlay-appearance"), QStringLiteral("blurBehindZones"),
+    addSetting(search, QStringLiteral("snapping-overlay-behavior"), QStringLiteral("blurBehindZones"),
                PhosphorI18n::tr("Blur behind zones"), {PhosphorI18n::tr("frost"), PhosphorI18n::tr("background")});
     // Zone numbers + Flash on layout switch moved to Overlay → Behavior (Display card).
     addSetting(search, QStringLiteral("snapping-overlay-behavior"), QStringLiteral("zoneNumbers"),
@@ -239,14 +233,14 @@ void seedSearchCatalog(PhosphorControl::SearchController* search)
                {PhosphorI18n::tr("index"), PhosphorI18n::tr("digit"), PhosphorI18n::tr("label")});
     addSetting(search, QStringLiteral("snapping-overlay-behavior"), QStringLiteral("flashOnLayoutSwitch"),
                PhosphorI18n::tr("Flash on layout switch"), {PhosphorI18n::tr("blink"), PhosphorI18n::tr("animation")});
-    addSetting(search, QStringLiteral("snapping-overlay-appearance"), QStringLiteral("frameRate"),
+    addSetting(search, QStringLiteral("snapping-overlay-behavior"), QStringLiteral("frameRate"),
                PhosphorI18n::tr("Frame rate"),
                {PhosphorI18n::tr("fps"), PhosphorI18n::tr("refresh"), PhosphorI18n::tr("animation")});
-    addSetting(search, QStringLiteral("snapping-overlay-appearance"), QStringLiteral("audioSpectrum"),
+    addSetting(search, QStringLiteral("snapping-overlay-behavior"), QStringLiteral("audioSpectrum"),
                PhosphorI18n::tr("Audio spectrum"),
                {PhosphorI18n::tr("cava"), PhosphorI18n::tr("music"), PhosphorI18n::tr("visualizer"),
                 PhosphorI18n::tr("sound")});
-    addSetting(search, QStringLiteral("snapping-overlay-appearance"), QStringLiteral("spectrumBars"),
+    addSetting(search, QStringLiteral("snapping-overlay-behavior"), QStringLiteral("spectrumBars"),
                PhosphorI18n::tr("Spectrum bars"),
                {PhosphorI18n::tr("cava"), PhosphorI18n::tr("bands"), PhosphorI18n::tr("frequency")});
 
@@ -478,7 +472,7 @@ void seedSearchCatalog(PhosphorControl::SearchController* search)
                {PhosphorI18n::tr("edge"), PhosphorI18n::tr("distance"), PhosphorI18n::tr("proximity")});
 
     // Appearance › Daemon Surfaces › OSDs (moved from General → On-Screen Display)
-    addSetting(search, QStringLiteral("osd-appearance"), QStringLiteral("osdStyle"), PhosphorI18n::tr("OSD style"),
+    addSetting(search, QStringLiteral("general"), QStringLiteral("osdStyle"), PhosphorI18n::tr("OSD style"),
                {PhosphorI18n::tr("notification"), PhosphorI18n::tr("style"), PhosphorI18n::tr("appearance")});
 
     // Appearance › Daemon Surfaces › Zone Selector (position / arrangement / preview)

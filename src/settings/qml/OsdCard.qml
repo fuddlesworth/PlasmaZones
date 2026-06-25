@@ -75,9 +75,26 @@ Item {
                 }
             }
 
-            // OSD style (osdStyle) moved to Appearance → Daemon Surfaces → OSDs:
-            // it styles the OSD surface. The toggles above ("which OSD shows")
-            // and Overlay style below stay here as behavior.
+            SettingsSeparator {}
+
+            SettingsRow {
+                title: i18n("OSD style")
+                description: i18n("Visual style of on-screen notifications")
+
+                WideComboBox {
+                    id: osdStyleCombo
+
+                    readonly property bool anyOsdEnabled: osdRoot.appSettings.showOsdOnLayoutSwitch || osdRoot.appSettings.showOsdOnDesktopSwitch || osdRoot.appSettings.showNavigationOsd
+
+                    Accessible.name: i18n("OSD style")
+                    enabled: osdStyleCombo.anyOsdEnabled
+                    currentIndex: Math.max(0, Math.min(osdRoot.appSettings.osdStyle, 2))
+                    model: [i18n("None"), i18n("Text only"), i18n("Visual preview")]
+                    onActivated: index => {
+                        osdRoot.appSettings.osdStyle = index;
+                    }
+                }
+            }
 
             SettingsSeparator {}
 

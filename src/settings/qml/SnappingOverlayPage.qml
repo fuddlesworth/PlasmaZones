@@ -6,10 +6,11 @@ import QtQuick.Controls
 import QtQuick.Layouts
 import org.kde.kirigami as Kirigami
 
-// Snapping → Overlay → Behavior. The drag-time zone overlay's activation:
-// when it shows (triggers), multi-zone span, and which monitors it spans.
-// Binds to the shared snappingBehaviorPage controller for the trigger lists
-// (drag activation / zone span) that are not plain Settings Q_PROPERTYs.
+// Snapping → Overlay. One page for the drag-time zone overlay: behavior cards
+// (Triggers, Zone Span, Display) first, then the appearance cards (Colors,
+// Opacity, Border, Zone Labels, Effects, Shaders) via SnappingOverlayAppearanceCards.
+// Behavior binds snappingBehaviorPage; the appearance component binds
+// snappingZonesPage + snappingEffectsPage itself.
 SettingsFlickable {
     id: root
 
@@ -26,9 +27,8 @@ SettingsFlickable {
         width: parent.width
         spacing: Kirigami.Units.largeSpacing
 
-        // =================================================================
-        // TRIGGERS
-        // =================================================================
+        // ═══════════════════════════ BEHAVIOR ═══════════════════════════
+
         Item {
             Layout.fillWidth: true
             implicitHeight: triggersCard.implicitHeight
@@ -62,12 +62,6 @@ SettingsFlickable {
 
                     SettingsSeparator {}
 
-                    // The activation trigger list and the Hold/Toggle controls
-                    // serve dual purpose (#249): when "Activate on every drag"
-                    // is on, the same triggers DEACTIVATE the overlay (hold to
-                    // hide; toggle to flip off the implicitly-on overlay).
-                    // resolveActivationActive in the runtime mirrors this with
-                    // an inversion gated on alwaysActiveOnDrag.
                     SettingsRow {
                         readonly property string activeTitle: alwaysActivateSwitch.checked ? i18n("Hold to deactivate") : i18n("Hold to activate")
                         readonly property string activeDescription: alwaysActivateSwitch.checked ? i18n("Hold a modifier or mouse button while dragging to hide the zone overlay. Esc still cancels the drag entirely.") : i18n("Hold a modifier or mouse button to show zones while dragging")
@@ -112,9 +106,6 @@ SettingsFlickable {
             }
         }
 
-        // =================================================================
-        // ZONE SPAN
-        // =================================================================
         Item {
             Layout.fillWidth: true
             implicitHeight: zoneSpanCard.implicitHeight
@@ -189,9 +180,6 @@ SettingsFlickable {
             }
         }
 
-        // =================================================================
-        // DISPLAY
-        // =================================================================
         Item {
             Layout.fillWidth: true
             implicitHeight: displayCard.implicitHeight
@@ -239,8 +227,6 @@ SettingsFlickable {
 
                     SettingsSeparator {}
 
-                    // Moved from Overlay → Appearance → Effects: these change what
-                    // the overlay does on an event, not how a surface is styled.
                     SettingsRow {
                         title: i18n("Zone numbers")
                         searchAnchor: "zoneNumbers"
@@ -272,6 +258,12 @@ SettingsFlickable {
                     }
                 }
             }
+        }
+
+        // ══════════════════════════ APPEARANCE ══════════════════════════
+
+        SnappingOverlayAppearanceCards {
+            Layout.fillWidth: true
         }
     }
 }
