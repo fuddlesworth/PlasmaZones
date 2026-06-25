@@ -163,9 +163,8 @@ void SettingsController::buildApplicationController()
     regVirtual(QStringLiteral("snapping-overlay-appearance"), QStringLiteral("appearance-daemon"),
                PhosphorI18n::tr("Zone Overlay"), QStringLiteral("SnappingOverlayAppearancePage.qml"),
                QStringLiteral("preferences-desktop-color"));
-    regVirtual(QStringLiteral("zoneselector-appearance"), QStringLiteral("appearance-daemon"),
-               PhosphorI18n::tr("Zone Selector"), QStringLiteral("ZoneSelectorAppearancePage.qml"),
-               QStringLiteral("view-choose"));
+    // Zone Selector appearance folded into Snapping → Zone Selector (one page,
+    // ZoneSelectorSection in "all" mode), so the hub no longer lists it.
     // Pack Library — the installed shader-pack browser, a cross-surface library
     // (sibling of Surfaces, not a surface node itself).
     regPage(m_snappingShadersPage.get(), QStringLiteral("appearance"), PhosphorI18n::tr("Pack Library"),
@@ -387,6 +386,7 @@ const QHash<QString, QString>& SettingsController::parentPageRedirects()
         // old deep-links land on the combined pages.
         {QStringLiteral("tiling-appearance"), QStringLiteral("tiling-behavior")},
         {QStringLiteral("snapping-window-appearance"), QStringLiteral("snapping-window-behavior")},
+        {QStringLiteral("zoneselector-appearance"), QStringLiteral("snapping-zoneselector")},
         // "placement" is the inline-collapsible parent of snapping/tiling; it
         // has no page of its own, so a --page=placement / D-Bus call lands on
         // the first leaf of its first child (snapping → snapping-overlay-behavior).
@@ -483,7 +483,6 @@ const QHash<QString, QSet<QString>>& SettingsController::pageGroupChildren()
     static const QSet<QString> kAppearanceDaemonChildren{
         QStringLiteral("osd-appearance"),
         QStringLiteral("snapping-overlay-appearance"),
-        QStringLiteral("zoneselector-appearance"),
     };
     static const QSet<QString> kAppearanceAllLeaves =
         kAppearanceDaemonChildren + QSet<QString>{QStringLiteral("snapping-shaders")};
@@ -528,7 +527,6 @@ const QSet<QString>& SettingsController::validPageNames()
         QStringLiteral("snapping-overlay-behavior"),
         QStringLiteral("snapping-overlay-appearance"),
         QStringLiteral("osd-appearance"),
-        QStringLiteral("zoneselector-appearance"),
         QStringLiteral("snapping-zoneselector"),
         QStringLiteral("snapping-window-behavior"),
         QStringLiteral("snapping-shaders"),

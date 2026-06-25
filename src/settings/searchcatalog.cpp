@@ -76,7 +76,8 @@ void seedSearchCatalog(PhosphorControl::SearchController* search)
                              PhosphorI18n::tr("transparency"), PhosphorI18n::tr("theme"), PhosphorI18n::tr("border")});
     search->setPageKeywords(QStringLiteral("snapping-zoneselector"),
                             {PhosphorI18n::tr("zone selector"), PhosphorI18n::tr("picker"), PhosphorI18n::tr("chooser"),
-                             PhosphorI18n::tr("popup")});
+                             PhosphorI18n::tr("popup"), PhosphorI18n::tr("position"), PhosphorI18n::tr("arrangement"),
+                             PhosphorI18n::tr("preview"), PhosphorI18n::tr("size")});
     // Combined Snapping → Window page (behavior + appearance sections).
     search->setPageKeywords(QStringLiteral("snapping-window-behavior"),
                             {PhosphorI18n::tr("window"), PhosphorI18n::tr("snap"), PhosphorI18n::tr("drag"),
@@ -94,9 +95,6 @@ void seedSearchCatalog(PhosphorControl::SearchController* search)
     search->setPageKeywords(QStringLiteral("osd-appearance"),
                             {PhosphorI18n::tr("osd"), PhosphorI18n::tr("notification"),
                              PhosphorI18n::tr("on-screen display"), PhosphorI18n::tr("style")});
-    search->setPageKeywords(QStringLiteral("zoneselector-appearance"),
-                            {PhosphorI18n::tr("zone selector"), PhosphorI18n::tr("position"),
-                             PhosphorI18n::tr("arrangement"), PhosphorI18n::tr("preview"), PhosphorI18n::tr("size")});
 
     // Tiling
     // tiling-behavior is the combined Tiling → Window page (behavior + appearance
@@ -484,20 +482,20 @@ void seedSearchCatalog(PhosphorControl::SearchController* search)
                {PhosphorI18n::tr("notification"), PhosphorI18n::tr("style"), PhosphorI18n::tr("appearance")});
 
     // Appearance › Daemon Surfaces › Zone Selector (position / arrangement / preview)
-    addSection(search, QStringLiteral("zoneselector-appearance"), QStringLiteral("position"),
+    addSection(search, QStringLiteral("snapping-zoneselector"), QStringLiteral("position"),
                PhosphorI18n::tr("Position"));
-    addSection(search, QStringLiteral("zoneselector-appearance"), QStringLiteral("layoutArrangement"),
+    addSection(search, QStringLiteral("snapping-zoneselector"), QStringLiteral("layoutArrangement"),
                PhosphorI18n::tr("Layout Arrangement"));
-    addSetting(search, QStringLiteral("zoneselector-appearance"), QStringLiteral("arrangement"),
+    addSetting(search, QStringLiteral("snapping-zoneselector"), QStringLiteral("arrangement"),
                PhosphorI18n::tr("Arrangement"),
                {PhosphorI18n::tr("grid"), PhosphorI18n::tr("horizontal"), PhosphorI18n::tr("vertical")});
-    addSetting(search, QStringLiteral("zoneselector-appearance"), QStringLiteral("gridColumns"),
+    addSetting(search, QStringLiteral("snapping-zoneselector"), QStringLiteral("gridColumns"),
                PhosphorI18n::tr("Grid columns"),
                {PhosphorI18n::tr("columns"), PhosphorI18n::tr("per row"), PhosphorI18n::tr("count")});
-    addSetting(search, QStringLiteral("zoneselector-appearance"), QStringLiteral("maxVisibleRows"),
+    addSetting(search, QStringLiteral("snapping-zoneselector"), QStringLiteral("maxVisibleRows"),
                PhosphorI18n::tr("Max visible rows"),
                {PhosphorI18n::tr("rows"), PhosphorI18n::tr("scroll"), PhosphorI18n::tr("visible")});
-    addSection(search, QStringLiteral("zoneselector-appearance"), QStringLiteral("previewSize"),
+    addSection(search, QStringLiteral("snapping-zoneselector"), QStringLiteral("previewSize"),
                PhosphorI18n::tr("Preview Size"));
 
     // Ordering (shared OrderingPage) + Quick shortcuts (shared QuickLayoutSlotsCard)
