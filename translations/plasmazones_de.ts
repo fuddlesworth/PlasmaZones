@@ -5356,22 +5356,22 @@ Seitenverhältnis: %3</translation>
         </translation>
     </message>
     <message>
-        <location filename="../src/daemon/daemon.cpp" line="1772"/>
+        <location filename="../src/daemon/daemon.cpp" line="1839"/>
         <source>The PlasmaZones KWin effect plugin is not installed where KWin can find it. Reinstall PlasmaZones.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/daemon/daemon.cpp" line="1811"/>
+        <location filename="../src/daemon/daemon.cpp" line="1878"/>
         <source>The PlasmaZones KWin effect was built for KWin %1 but KWin %2 is running, so KWin will not load it. Rebuild and reinstall PlasmaZones against the running KWin. On NixOS, install via the flake&apos;s nixosModules or overlay (not packages.default).</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/daemon/daemon.cpp" line="1840"/>
+        <location filename="../src/daemon/daemon.cpp" line="1907"/>
         <source>The PlasmaZones KWin effect has not registered with the daemon, so window dragging and shortcuts will not work. Make sure it is enabled in System Settings &gt; Desktop Effects, then restart the Plasma session.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/daemon/daemon.cpp" line="1859"/>
+        <location filename="../src/daemon/daemon.cpp" line="1926"/>
         <source>PlasmaZones: window manager integration inactive</source>
         <translation type="unfinished"></translation>
     </message>
