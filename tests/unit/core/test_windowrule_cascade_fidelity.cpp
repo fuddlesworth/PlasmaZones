@@ -811,6 +811,57 @@ private Q_SLOTS:
         }
     }
 
+    // ─── Default change is reflected without a rule-set mutation ──────────
+    //
+    // A layout-only rule bases its entry on the GLOBAL default for every slot
+    // it does not fill. The resolver memoizes only the rule-derived portion, so
+    // a default-setting change must surface immediately — with NO rule-set
+    // revision bump (a settings edit produces none). This guards against baking
+    // the live default into the revision-invalidated context cache, which would
+    // pin a stale mode/algorithm on the layout-only path until the next rule
+    // edit or daemon restart.
+
+    void testDefaultChangeReflectedWithoutRuleMutation()
+    {
+        RegistryFixture f = makeRegistryFixture();
+        bool snappingPreferred = false;
+        f.registry->setSnappingPreferredProvider([&snappingPreferred]() {
+            return snappingPreferred;
+        });
+        f.registry->setDefaultAutotileAlgorithmProvider([]() {
+            return QStringLiteral("bsp");
+        });
+
+        // Layout-only catch-all: snapping layout, NO engine-mode action.
+        PWR::WindowRule layoutOnly =
+            makeUserCatchAllRule(/*autotileMode=*/false, QStringLiteral("{columns-3}"), QString(), 398);
+        layoutOnly.actions.removeIf([](const PWR::RuleAction& a) {
+            return a.type == QString(PWR::ActionType::SetEngineMode);
+        });
+        QVERIFY(f.store->addRule(layoutOnly));
+
+        // Default engine is autotile (snapping not preferred). The rule fills
+        // the snapping slot; the mode is the default's autotile.
+        {
+            const PhosphorZones::AssignmentEntry entry =
+                f.registry->assignmentEntryForScreen(QStringLiteral("DP-2"), 2, QString());
+            QCOMPARE(entry.mode, PhosphorZones::AssignmentEntry::Autotile);
+            QCOMPARE(entry.tilingAlgorithm, QStringLiteral("bsp"));
+            QCOMPARE(entry.snappingLayout, QStringLiteral("{columns-3}"));
+        }
+
+        // Flip the global default to snapping-preferred WITHOUT mutating any
+        // rule. The same cached context must now report the NEW default mode,
+        // not the stale autotile one.
+        snappingPreferred = true;
+        {
+            const PhosphorZones::AssignmentEntry entry =
+                f.registry->assignmentEntryForScreen(QStringLiteral("DP-2"), 2, QString());
+            QCOMPARE(entry.mode, PhosphorZones::AssignmentEntry::Snapping);
+            QCOMPARE(entry.snappingLayout, QStringLiteral("{columns-3}"));
+        }
+    }
+
     // ─── Context-rule gap overrides ──────────────────────────────────────
     // Gaps are context-domain but, unlike engine-mode assignments, resolve
     // PER SLOT — so a zone-padding rule and a separate outer-gap rule on the

@@ -123,9 +123,20 @@ std::optional<AssignmentEntry> LayoutRegistry::resolveAssignmentEntry(const QStr
     // per cursor-move, and the connector + virtual-screen fallback chain in the
     // public resolvers triples that on a miss. A @c nullopt is cached too — a
     // genuine miss must not re-walk three times per cursor frame.
-    return resolveCachedContext(
+    //
+    // Only the RULE-derived resolution is cached, keeping the cache a pure
+    // function of the rule set (its revision-invalidation contract). The global
+    // default — an external provider, not part of the rule set and not
+    // revision-tracked — is folded in AFTER the cache so a default-setting
+    // change (snapping toggled, a different default layout/algorithm) is
+    // reflected immediately, with no rule-set revision bump (a settings edit
+    // produces none). Caching the default-derived entry would otherwise pin a
+    // stale mode/layout on the layout-only path until the next rule edit. The
+    // fold-in is a handful of O(1) provider / per-context-slot reads, so the
+    // expensive priority walk stays memoized.
+    const std::optional<RuleSlotResolution> rules = resolveCachedContext(
         m_contextResolveCache, m_contextResolveCacheRevision, screenId, virtualDesktop, activity,
-        [&]() -> std::optional<AssignmentEntry> {
+        [&]() -> std::optional<RuleSlotResolution> {
             const PWR::WindowQuery query = makeContextQuery(screenId, virtualDesktop, activity);
 
             // Specificity-tiered slot match: a pinned rule wins over a user
@@ -152,24 +163,43 @@ std::optional<AssignmentEntry> LayoutRegistry::resolveAssignmentEntry(const QStr
                 return std::nullopt; // genuine miss — the caller routes to the default
             }
 
-            // Base: the engine-mode rule decides the mode (and carries its own
-            // layout tokens). With no engine-mode rule, the default for this
-            // context supplies the mode — a layout-only rule must not force one.
-            AssignmentEntry entry = modeRule != nullptr
-                ? entryFromRuleMatchActions(*modeRule)
-                : resolveDefaultAssignmentEntryForContext(screenId, virtualDesktop, activity);
-
-            // Per-slot layout winners override their field. tieredMatch already
-            // ranks pinned over catch-all, so a more-specific layout rule beats
-            // a catch-all layout rule regardless of the raw priority numbers.
+            // The engine-mode rule decides the mode (and carries its own layout
+            // tokens, preserving mode-toggle losslessness); the per-slot layout
+            // winners fill their own field. tieredMatch already ranks pinned over
+            // catch-all, so a more-specific layout rule beats a catch-all layout
+            // rule regardless of the raw priority numbers.
+            RuleSlotResolution resolved;
+            if (modeRule != nullptr) {
+                resolved.modeEntry = entryFromRuleMatchActions(*modeRule);
+            }
             if (snapRule != nullptr) {
-                entry.snappingLayout = entryFromRuleMatchActions(*snapRule).snappingLayout;
+                resolved.snappingLayout = entryFromRuleMatchActions(*snapRule).snappingLayout;
             }
             if (algoRule != nullptr) {
-                entry.tilingAlgorithm = entryFromRuleMatchActions(*algoRule).tilingAlgorithm;
+                resolved.tilingAlgorithm = entryFromRuleMatchActions(*algoRule).tilingAlgorithm;
             }
-            return entry;
+            return resolved;
         });
+
+    if (!rules) {
+        return std::nullopt; // genuine miss — the caller routes to the default
+    }
+
+    // Base: the engine-mode rule's decoded entry. With no engine-mode rule, the
+    // live default for this context supplies the mode — a layout-only rule must
+    // not force one. Resolved here, OUTSIDE the cache, so it tracks settings.
+    AssignmentEntry entry = rules->modeEntry
+        ? *rules->modeEntry
+        : resolveDefaultAssignmentEntryForContext(screenId, virtualDesktop, activity);
+
+    // Per-slot layout winners override their field.
+    if (rules->snappingLayout) {
+        entry.snappingLayout = *rules->snappingLayout;
+    }
+    if (rules->tilingAlgorithm) {
+        entry.tilingAlgorithm = *rules->tilingAlgorithm;
+    }
+    return entry;
 }
 
 ContextGapOverride LayoutRegistry::resolveContextGaps(const QString& screenId, int virtualDesktop,
