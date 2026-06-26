@@ -106,20 +106,20 @@ Item {
     // Signals
     signal clicked(var event)
     // Pass mouse event for modifier key handling (Ctrl+click, Shift+click)
-    signal contextMenuRequested()
+    signal contextMenuRequested
     // Emitted when context menu should be shown
     signal geometryChanged(real x, real y, real width, real height, bool skipSnapping)
-    signal deleteRequested()
-    signal duplicateRequested()
-    signal splitHorizontalRequested()
-    signal splitVerticalRequested()
-    signal expandToFillRequested()
+    signal deleteRequested
+    signal duplicateRequested
+    signal splitHorizontalRequested
+    signal splitVerticalRequested
+    signal expandToFillRequested
     signal expandToFillWithCoords(real mouseX, real mouseY) // Pass zone center for consistent algorithm
-    signal deleteWithFillRequested()
-    signal bringToFrontRequested()
-    signal sendToBackRequested()
-    signal bringForwardRequested()
-    signal sendBackwardRequested()
+    signal deleteWithFillRequested
+    signal bringToFrontRequested
+    signal sendToBackRequested
+    signal bringForwardRequested
+    signal sendBackwardRequested
     signal operationStarted(string zoneId, real x, real y, real width, real height)
     signal operationUpdated(string zoneId, real x, real y, real width, real height)
     signal operationEnded(string zoneId)
@@ -253,7 +253,7 @@ Item {
     function syncFromZoneData() {
         // Guard: zone removed from Repeater - avoid use-after-free from pending Qt.callLater
         if (!parent)
-            return ;
+            return;
 
         geometrySync.syncFromZoneData();
     }
@@ -262,7 +262,7 @@ Item {
     function ensureDimensionsInitialized() {
         // Guard: zone removed from Repeater - avoid use-after-free from pending Qt.callLater
         if (!parent)
-            return ;
+            return;
 
         geometrySync.ensureDimensionsInitialized();
     }
@@ -289,19 +289,26 @@ Item {
     onCanvasHeightChanged: {
         Qt.callLater(ensureDimensionsInitialized);
     }
-    // Let onZoneGeometryChanged handle updates after operations
+    // When an operation (drag/resize) finishes, always reconcile the visual
+    // geometry against the authoritative model. onZoneGeometryChanged only fires
+    // when the model actually changes, so a committed no-op (e.g. snapping pulled
+    // the geometry back to its original spot, or validation rejected it) would
+    // otherwise leave the visual stranded at the dragged position while the model
+    // and properties panel keep the old values. Reconciling here makes the visual
+    // snap back to the model; it is idempotent for the normal committed case.
     onOperationStateChanged: {
+        if (operationState === EditorZone.State.Idle && !isDividerOperation && !isAnimatingFill)
+            Qt.callLater(syncFromZoneData);
     }
     // Watch for divider operation state changes
     onIsDividerOperationChanged: {
         if (!isDividerOperation && operationState === EditorZone.State.Idle)
             Qt.callLater(syncFromZoneData);
-
     }
     // Initialize visual properties when zoneData changes
     onZoneDataChanged: {
         if (root.operationState !== EditorZone.State.Idle || root.isDividerOperation)
-            return ;
+            return;
 
         // Update color trackers when zoneData changes
         if (zoneData) {
@@ -318,7 +325,6 @@ Item {
         if (canvasWidth > 0 && canvasHeight > 0 && isFinite(canvasWidth) && isFinite(canvasHeight)) {
             if (visualWidth === 0 || visualHeight === 0 || !hasValidDimensions)
                 Qt.callLater(syncFromZoneData);
-
         }
     }
     // Initialize visual properties on component creation
@@ -331,7 +337,6 @@ Item {
     Component.onDestruction: {
         if (operationState !== EditorZone.State.Idle)
             operationState = EditorZone.State.Idle;
-
     }
     // Handle context menu signal from drag handler — use shared EditorWindow menu
     onContextMenuRequested: {
@@ -339,7 +344,6 @@ Item {
         var win = Window.window;
         if (win && win.openContextMenu)
             win.openContextMenu(root.zoneId);
-
     }
 
     // ═══════════════════════════════════════════════════════════════════
@@ -506,9 +510,7 @@ Item {
                     profile: root.isPartOfMultiSelection ? "widget.fadeIn" : "widget.fadeOut"
                     durationOverride: Kirigami.Units.shortDuration
                 }
-
             }
-
         }
 
         Behavior on color {
@@ -518,7 +520,6 @@ Item {
                 profile: "widget.dim"
                 durationOverride: Theme.animDuration
             }
-
         }
 
         Behavior on border.color {
@@ -528,9 +529,7 @@ Item {
                 profile: "widget.dim"
                 durationOverride: Theme.animDuration
             }
-
         }
-
     }
 
     // Zone content (number and name labels)
@@ -557,15 +556,15 @@ Item {
         // Qt.callLater callbacks from prior zoneColorChanged/zonesChanged still run.
         function onZoneColorChanged(zoneId) {
             if (zoneId !== root.zoneId || !root.zoneData)
-                return ;
+                return;
 
             var rootRef = root;
             var zoneRectRef = zoneRect;
-            Qt.callLater(function() {
+            Qt.callLater(function () {
                 try {
                     // Guard: zone removed from scene (Repeater update) - avoid accessing destroyed objects
                     if (!rootRef || !rootRef.parent || !rootRef.zoneData || !zoneRectRef)
-                        return ;
+                        return;
 
                     zoneRectRef._highlightColorTracker = rootRef.zoneData.highlightColor;
                     zoneRectRef._inactiveColorTracker = rootRef.zoneData.inactiveColor;
@@ -575,22 +574,21 @@ Item {
                     zoneRectRef._borderWidthTracker = rootRef.zoneData.borderWidth;
                     zoneRectRef._borderRadiusTracker = rootRef.zoneData.borderRadius;
                     zoneRectRef._useCustomColorsTracker = rootRef.zoneData.useCustomColors;
-                } catch (e) {
-                }
+                } catch (e) {}
             });
         }
 
         function onZonesChanged() {
             if (!root.zoneData)
-                return ;
+                return;
 
             var rootRef = root;
             var zoneRectRef = zoneRect;
-            Qt.callLater(function() {
+            Qt.callLater(function () {
                 try {
                     // Guard: zone removed from scene (Repeater update) - avoid accessing destroyed objects
                     if (!rootRef || !rootRef.parent || !rootRef.zoneData || !zoneRectRef)
-                        return ;
+                        return;
 
                     zoneRectRef._highlightColorTracker = rootRef.zoneData.highlightColor;
                     zoneRectRef._inactiveColorTracker = rootRef.zoneData.inactiveColor;
@@ -600,8 +598,7 @@ Item {
                     zoneRectRef._borderWidthTracker = rootRef.zoneData.borderWidth;
                     zoneRectRef._borderRadiusTracker = rootRef.zoneData.borderRadius;
                     zoneRectRef._useCustomColorsTracker = rootRef.zoneData.useCustomColors;
-                } catch (e) {
-                }
+                } catch (e) {}
             });
         }
 
@@ -651,7 +648,6 @@ Item {
         PhosphorMotionAnimation {
             profile: "editor.snapResize"
         }
-
     }
 
     Behavior on visualY {
@@ -660,7 +656,6 @@ Item {
         PhosphorMotionAnimation {
             profile: "editor.snapResize"
         }
-
     }
 
     Behavior on visualWidth {
@@ -669,7 +664,6 @@ Item {
         PhosphorMotionAnimation {
             profile: "editor.snapResize"
         }
-
     }
 
     Behavior on visualHeight {
@@ -678,7 +672,5 @@ Item {
         PhosphorMotionAnimation {
             profile: "editor.snapResize"
         }
-
     }
-
 }
