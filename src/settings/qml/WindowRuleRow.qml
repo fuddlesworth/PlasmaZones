@@ -274,7 +274,9 @@ ItemDelegate {
                     id: priorityLabel
 
                     anchors.centerIn: parent
-                    text: i18nc("Badge showing the rule's raw priority integer", "Priority %1", row.priority)
+                    // Managed System rules are pinned to INT_MIN so they always
+                    // sort below user rules — show that intent, not the raw number.
+                    text: row.managed ? i18nc("Priority badge for a managed baseline rule that always sorts last", "Lowest priority") : i18nc("Badge showing the rule's raw priority integer", "Priority %1", row.priority)
                     font.pointSize: Kirigami.Theme.smallFont.pointSize
                     opacity: 0.7
                 }
