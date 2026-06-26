@@ -51,11 +51,12 @@ SettingsFlickable {
     // function-call value bindings below re-evaluate against the fresh rule.
     property int reloadTick: 0
 
-    // Gap scope: "" = global (edits the baseline rule's gap actions); otherwise
-    // the connector id of the monitor whose gap override is being edited (a
-    // separate, screen-scoped rule). The border/title-bar cards always edit the
-    // global baseline; only the Gaps card is scope-aware.
-    property string gapScope: ""
+    // Gap scope follows the shared monitor scope chip (settingsController.
+    // scopeScreenName): "" = global (edits the baseline rule's gap actions);
+    // otherwise the monitor whose gap override rule is being edited. The
+    // border/title-bar cards always edit the global baseline; only the Gaps card
+    // is scope-aware.
+    readonly property string gapScope: settingsController.scopeScreenName
 
     contentHeight: content.implicitHeight
     clip: true
@@ -223,15 +224,6 @@ SettingsFlickable {
         root.reloadTick++;
     }
 
-    // Drop the current monitor's gap override so it falls back to the global gaps.
-    function resetGapScope() {
-        const id = root.perScreenGapId();
-        if (id !== "") {
-            ruleController.removeRule(id);
-        }
-        root.reloadTick++;
-    }
-
     // Write one or more param values onto the baseline rule's action of the
     // given type (creating the action if it is somehow absent), then push the
     // updated rule back through the controller. @p params is a plain object of
@@ -280,6 +272,19 @@ SettingsFlickable {
     Connections {
         target: root.ruleController
         function onRulesLoaded() {
+            root.reloadTick++;
+        }
+    }
+
+    // Re-evaluate the gap value bindings when the monitor scope chip changes the
+    // active scope, or when a per-screen gap rule is added / cleared (the chip's
+    // clear and rule-model changes both surface as perScreenOverridesChanged).
+    Connections {
+        target: settingsController
+        function onScopeScreenNameChanged() {
+            root.reloadTick++;
+        }
+        function onPerScreenOverridesChanged() {
             root.reloadTick++;
         }
     }
@@ -495,16 +500,14 @@ SettingsFlickable {
             outerGapLabel: i18n("Outer gap")
             outerGapDescription: i18n("Space from the screen edges to windows")
             showSmartGaps: false
-            // Per-monitor scope chooser: "All monitors" edits the global default
-            // (the baseline rule); picking a monitor edits that monitor's gap
-            // override rule only.
-            showScopeSelector: true
-            scopeScreens: settingsController.screens
-            scopeValue: root.gapScope
-            scopeHasOverride: {
-                root.reloadTick;
-                return root.perScreenGapRuleExists();
-            }
+            // Per-monitor scoping via the shared SettingsCard header chip: "All
+            // monitors" edits the global baseline rule; picking a monitor edits
+            // that monitor's gap override rule. has/clear go through the
+            // controller's rule-backed per-screen gap methods.
+            scopeEnabled: true
+            scopeAppSettings: settingsController
+            scopeHasOverridesMethod: "hasPerScreenGapRule"
+            scopeClearerMethod: "clearPerScreenGapRule"
             primaryGapValue: {
                 root.reloadTick;
                 return root.gapValue(root.actInnerGap, "value", root.bounds.innerGapMin);
@@ -532,13 +535,6 @@ SettingsFlickable {
             outerGapRightValue: {
                 root.reloadTick;
                 return root.gapValue(root.actOuterGapRight, "value", root.bounds.outerGapMin);
-            }
-            onScopeSelected: screenName => {
-                root.gapScope = screenName;
-                root.reloadTick++;
-            }
-            onScopeReset: {
-                root.resetGapScope();
             }
             onPrimaryGapModified: value => {
                 return root.writeGapAction(root.actInnerGap, {

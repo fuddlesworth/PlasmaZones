@@ -473,6 +473,14 @@ SettingsController::SettingsController(QObject* parent)
     // from this controller's save()/load() so they don't race the
     // setNeedsSave(false) those methods emit.
     m_windowRulesPage = new WindowRuleController(this);
+    // A per-monitor gap override is a screen-scoped gap WindowRule. Adding or
+    // removing one changes the rule model's count, so refresh the Gaps card's
+    // scope chip (its override dot polls hasPerScreenGapRule on
+    // perScreenOverridesChanged) when rules are added/removed.
+    if (m_windowRulesPage->model() != nullptr) {
+        connect(m_windowRulesPage->model(), &WindowRuleModel::countChanged, this,
+                &SettingsController::perScreenOverridesChanged);
+    }
     connect(m_windowRulesPage, &WindowRuleController::dirtyChanged, this, [this]() {
         if (m_loading || m_saving)
             return;

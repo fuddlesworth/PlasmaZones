@@ -17,7 +17,12 @@
 
 #include "settingscontroller.h"
 
+#include "../config/configdefaults.h"
+#include "windowrulecontroller.h"
+
 #include <PhosphorIdentity/VirtualScreenId.h>
+
+#include <QUuid>
 
 namespace PlasmaZones {
 
@@ -79,9 +84,34 @@ void SettingsController::clearPerScreenAutotileAlgorithmSettings(const QString& 
     m_settings.clearPerScreenAutotileAlgorithmSettings(screenName);
 }
 
-// Snapping per-screen gaps are rule-backed (per-monitor gap WindowRules) and
-// edited through the Window Appearance page's Gaps card, so there is no
-// per-screen snapping reader or writer surface on the controller.
+// ── Per-screen gap overrides (rule-backed) ───────────────────────────────
+// A per-monitor gap override is a screen-scoped gap WindowRule whose id is
+// derived deterministically from the baseline appearance rule + the screen
+// name (matching WindowAppearanceController::perScreenGapRuleId). The Gaps
+// card's monitor scope chip drives has/clear through these; the gap controls
+// themselves read/write the rule's actions via windowRulesPage. Mirrors the
+// autotile per-screen has/clear shape so the shared MonitorScopeChip can drive
+// it uniformly.
+
+bool SettingsController::hasPerScreenGapRule(const QString& screenName) const
+{
+    if (screenName.isEmpty() || m_windowRulesPage == nullptr) {
+        return false;
+    }
+    const QString id = QUuid::createUuidV5(ConfigDefaults::baselineAppearanceRuleId(), screenName.toUtf8()).toString();
+    return !m_windowRulesPage->ruleJson(id).isEmpty();
+}
+
+void SettingsController::clearPerScreenGapRule(const QString& screenName)
+{
+    if (screenName.isEmpty() || m_windowRulesPage == nullptr) {
+        return;
+    }
+    const QString id = QUuid::createUuidV5(ConfigDefaults::baselineAppearanceRuleId(), screenName.toUtf8()).toString();
+    if (m_windowRulesPage->removeRule(id)) {
+        Q_EMIT perScreenOverridesChanged();
+    }
+}
 
 // ── Per-screen zone selector overrides ───────────────────────────────────
 
