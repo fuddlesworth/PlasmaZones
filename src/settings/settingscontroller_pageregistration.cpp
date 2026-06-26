@@ -93,21 +93,25 @@ void SettingsController::buildApplicationController()
     // Animations / Window Rules pages that follow.
     regVirtual(QStringLiteral("placement"), QString(), PhosphorI18n::tr("Placement"), QString(),
                QStringLiteral("preferences-system-windows"), /*collapsible=*/true, /*divider=*/true);
-    // Shared, mode-neutral page. Window Appearance edits the single managed
+    // Appearance groups the visual surfaces — the window border / title-bar / gap
+    // page and the Animations tree — as an inline-collapsible category (matching
+    // Display / Placement). No QML of its own; redirects to its first leaf.
+    regVirtual(QStringLiteral("appearance"), QString(), PhosphorI18n::tr("Appearance"), QString(),
+               QStringLiteral("preferences-desktop-theme"), /*collapsible=*/true);
+    // Shared, mode-neutral page under Appearance. Edits the single managed
     // baseline appearance WindowRule — the window border / title bar AND the
-    // unified inner/outer gap model (both global, not per-mode), so it sits as a
-    // top-level leaf rather than under the Snapping / Tiling categories.
-    regPage(m_windowAppearancePage, QString(), PhosphorI18n::tr("Window Appearance"),
+    // unified inner/outer gap model (both global, not per-mode).
+    regPage(m_windowAppearancePage, QStringLiteral("appearance"), PhosphorI18n::tr("Windows"),
             QStringLiteral("WindowAppearancePage.qml"), QStringLiteral("preferences-desktop-color"));
-    // "animations" is a no-QML drill-down parent — register it as a virtual
-    // navigation node (like display / placement / snapping / tiling), NOT as
-    // m_animationsPage's own id. The AnimationsPageController is the staging
-    // controller for animation edits; it carries the distinct id
+    // "animations" is a no-QML drill-down parent under Appearance — register it as
+    // a virtual navigation node (like display / placement / snapping / tiling),
+    // NOT as m_animationsPage's own id. The AnimationsPageController is the
+    // staging controller for animation edits; it carries the distinct id
     // "animations-staging" and is wired into the framework's dirty/apply
     // machinery as a headless domain below. Splitting the two means the nav
     // handle ("animations", redirected to "animations-general") and the
     // staging controller are independently addressable by QML / D-Bus.
-    regVirtual(QStringLiteral("animations"), QString(), PhosphorI18n::tr("Animations"), QString(),
+    regVirtual(QStringLiteral("animations"), QStringLiteral("appearance"), PhosphorI18n::tr("Animations"), QString(),
                QStringLiteral("media-playback-start"));
     // Headless staging domain — trackDomain() connects dirtyChanged + appends
     // to m_domains so applyAllAsync walks it, exactly as registerPage would
@@ -357,6 +361,9 @@ const QHash<QString, QString>& SettingsController::parentPageRedirects()
     // the generic "Unknown settings page" warning.
     static const QHash<QString, QString> redirects{
         {QStringLiteral("display"), QStringLiteral("virtualscreens")},
+        // "appearance" is the inline-collapsible parent of the Windows page +
+        // the Animations tree; land on its first leaf (the Windows page).
+        {QStringLiteral("appearance"), QStringLiteral("window-appearance")},
         // "placement" is the inline-collapsible parent of snapping/tiling; it
         // has no page of its own, so a --page=placement / D-Bus call lands on
         // the first leaf of its first child (snapping → snapping-overlay-behavior).
@@ -472,6 +479,9 @@ const QHash<QString, QSet<QString>>& SettingsController::pageGroupChildren()
         {QStringLiteral("animations"), kAnimationsAllLeaves},
         {QStringLiteral("animations-surfaces"), kAnimationsSurfacesChildren},
         {QStringLiteral("animations-library"), kAnimationsLibraryChildren},
+        // "appearance" wraps the Windows page + the whole Animations tree; its
+        // collapsed badge lights if either is dirty.
+        {QStringLiteral("appearance"), QSet<QString>{QStringLiteral("window-appearance")} + kAnimationsAllLeaves},
         // Top-level inline-collapsible parents must also propagate
         // dirty state from their leaves — without these entries the
         // sidebar's collapsed dirty badge stays cold even when a
