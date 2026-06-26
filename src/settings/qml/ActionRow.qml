@@ -603,21 +603,26 @@ ColumnLayout {
         RowLayout {
             readonly property var _param: parent.modelData
             readonly property string _hex: (row.action[_param.key] !== undefined && row.action[_param.key] !== "") ? String(row.action[_param.key]) : "#FF3DAEE9"
+            // SetBorderColor's active/inactive params may carry the "accent"
+            // sentinel ("follow the system accent") instead of a hex string. It is
+            // not a QColor, so render the live accent colour for the swatch and a
+            // word for the label rather than letting QColor("accent") fall to black.
+            readonly property bool _isAccent: _hex === "accent"
 
             spacing: Kirigami.Units.smallSpacing
 
             ColorButton {
                 id: swatch
 
-                color: _hex
+                color: parent._isAccent ? Kirigami.Theme.highlightColor : parent._hex
                 Accessible.name: _param.label
                 onClicked: colorDialog.open()
             }
 
             Label {
-                // Show the stored #AARRGGBB wire value (alpha-first), which the
-                // swatch round-trips through QColor::HexArgb.
-                text: parent._hex.toUpperCase()
+                // Show the stored #AARRGGBB wire value (alpha-first), or "Accent"
+                // for the system-accent sentinel.
+                text: parent._isAccent ? i18n("Accent") : parent._hex.toUpperCase()
                 font: Kirigami.Theme.fixedWidthFont
             }
 
