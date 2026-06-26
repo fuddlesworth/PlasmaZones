@@ -223,23 +223,25 @@ ContextGapOverride LayoutRegistry::resolveContextGaps(const QString& screenId, i
             ContextGapOverride gaps;
             const PWR::WindowQuery query = makeContextQuery(screenId, virtualDesktop, activity);
 
-            // Resolve each gap slot from the highest-priority matching USER rule
-            // that carries that slot's action. Managed rules are deliberately
-            // EXCLUDED: the managed baseline appearance rule carries the GLOBAL
-            // default gap values (it is the level-4 default tier, surfaced through
-            // Settings), not a context override. Were it included here, its
-            // catch-all match would fill every gap slot with the global default,
-            // and that value would masquerade as a top-tier context override —
-            // shadowing the per-screen and layout tiers that sit BELOW the context
-            // layer. The per-slot, first-matching-rule-wins semantics the old
-            // resolve() walk produced are reproduced by highestPriorityMatch with a
-            // per-slot "carries this slot, not managed" filter.
+            // Resolve each gap slot from the highest-priority matching rule that
+            // carries that slot's action. The CATCH-ALL managed baseline rule is
+            // EXCLUDED: it carries the GLOBAL default gap values (the level-4
+            // default tier, surfaced through Settings), not a context override —
+            // were it included, its catch-all match would fill every gap slot with
+            // the global default and masquerade as a top-tier context override,
+            // shadowing the per-screen and layout tiers below the context layer.
+            // Managed SCREEN-scoped gap rules (per-monitor overrides authored via
+            // the Appearance page's monitor scope) have a SPECIFIC match, so they
+            // are NOT catch-all and DO participate here as context overrides. The
+            // per-slot, first-matching-rule-wins semantics the old resolve() walk
+            // produced are reproduced by highestPriorityMatch with a per-slot
+            // "carries this slot, not the catch-all baseline" filter.
             const PWR::ActionRegistry& registry = PWR::ActionRegistry::instance();
             const auto winningAction = [this, &query,
                                         &registry](QLatin1StringView slot) -> std::optional<PWR::RuleAction> {
                 const QString slotId = QString(slot);
                 const auto carries = [&registry, &slotId](const PWR::WindowRule& rule) {
-                    if (rule.managed) {
+                    if (rule.managed && rule.match.isCatchAll()) {
                         return false;
                     }
                     for (const PWR::RuleAction& a : rule.actions) {

@@ -299,9 +299,34 @@ Daemon::Daemon(QObject* parent)
     // rulesChanged consumers are wired later (createAdaptors / setup), so the
     // emit at construction is inert. The daemon is the sole writer, so seeding
     // here is the single source for every consumer (effect, settings, editor).
-    if (m_windowRuleStore && !m_windowRuleStore->contains(ConfigDefaults::baselineAppearanceRuleId())) {
-        if (!m_windowRuleStore->addRule(makeBaselineAppearanceRule())) {
-            qCWarning(lcDaemon) << "Failed to seed the baseline appearance rule";
+    if (m_windowRuleStore) {
+        const QUuid baselineId = ConfigDefaults::baselineAppearanceRuleId();
+        const auto existing = m_windowRuleStore->ruleSet().ruleById(baselineId);
+        if (!existing) {
+            if (!m_windowRuleStore->addRule(makeBaselineAppearanceRule())) {
+                qCWarning(lcDaemon) << "Failed to seed the baseline appearance rule";
+            }
+        } else {
+            // Reconcile: a baseline seeded by an older build may lack actions added
+            // since (e.g. the gap actions). Append any missing action type from the
+            // canonical template, preserving the user's Appearance-page-edited
+            // values for actions already present.
+            const PhosphorWindowRules::WindowRule canonical = makeBaselineAppearanceRule();
+            QSet<QString> present;
+            for (const PhosphorWindowRules::RuleAction& a : existing->actions) {
+                present.insert(a.type);
+            }
+            PhosphorWindowRules::WindowRule merged = *existing;
+            bool changed = false;
+            for (const PhosphorWindowRules::RuleAction& a : canonical.actions) {
+                if (!present.contains(a.type)) {
+                    merged.actions.append(a);
+                    changed = true;
+                }
+            }
+            if (changed && !m_windowRuleStore->updateRule(merged)) {
+                qCWarning(lcDaemon) << "Failed to reconcile the baseline appearance rule";
+            }
         }
     }
 
