@@ -83,38 +83,93 @@ auto resolveWithScreenFallback(const QString& screenId, TryFn&& tryOne) -> declt
 std::optional<AssignmentEntry> LayoutRegistry::resolveAssignmentEntry(const QString& screenId, int virtualDesktop,
                                                                       const QString& activity) const
 {
-    // The cascade is reproduced by the rule set's descending-priority order.
-    // The legacy walkCascade treated the provider default as a MISS
-    // (resolveDefaultAssignmentEntry handled it via injected lambdas), so the
-    // catch-all rule is excluded here — only PINNED context rules count as a
-    // cascade hit.
+    // Resolution is per-slot AND specificity-tiered. There are three
+    // independent slots — engine mode, snapping layout, tiling algorithm — each
+    // resolved separately, so a layout-only rule (a SetSnappingLayout or
+    // SetTilingAlgorithm with NO SetEngineMode) sets the layout for its engine
+    // in this context WITHOUT forcing the engine mode. The engine mode is the
+    // global default's (or another rule's); the layout slot is just filled.
     //
-    // The descending-priority, tie-break-by-list-order walk is the shared
-    // RuleEvaluator::highestPriorityMatch — the one place that walk lives, so
-    // this resolver can never drift from the evaluator's own ordering. The
-    // candidate filter keeps only pinned context-assignment rules.
-    // SetSnappingLayout and SetTilingAlgorithm share the `layout` action slot,
-    // so the winning rule's full action list is read, preserving the
-    // mode-toggle losslessness invariant (an entry keeps BOTH snappingLayout
-    // and tilingAlgorithm regardless of active mode).
+    // Within each slot the match is specificity-tiered, not a flat priority
+    // walk: the most specific *kind* of rule wins, and only within a kind does
+    // descending priority (then list order) break the tie. This keeps the
+    // answer correct even though pinned-rule priorities (ContextRuleBridge's
+    // cascade weights) and user-authored catch-all priorities (the Settings UI
+    // bands) live in one numeric space that can overlap — a screen-only pin at
+    // 310 must still beat a catch-all authored at 399.
+    //
+    //   Tier 1 — a PINNED (non-catch-all) rule carrying the slot's action.
+    //   Tier 2 — a USER-authored catch-all rule carrying it: the explicit
+    //            floor. The synthesized provider-default carries
+    //            kProviderDefaultPriority and is excluded so the settings-gated
+    //            resolveDefaultAssignmentEntry stays the single source of truth
+    //            for the true global default.
+    //
+    // Each tier is the shared RuleEvaluator::highestPriorityMatch — the one
+    // place the descending-priority, tie-break-by-list-order walk lives, so this
+    // resolver can never drift from the evaluator's own ordering.
+    //
+    // If no slot matched at all it's a genuine miss (nullopt) and the caller
+    // routes to the global default. If at least one slot matched, the entry's
+    // base is the engine-mode rule (mode + the layout tokens that rule itself
+    // carries, preserving mode-toggle losslessness); the per-slot layout
+    // winners then override the snapping-layout / tiling-algorithm fields. When
+    // only a layout rule matched (no engine-mode rule), the base is the global
+    // default for this context, so the resolved mode is the default's and the
+    // layout rule merely fills its slot.
     //
     // Hot-path cache via the shared revision-invalidated memoizer. The linear
     // walk is O(N rules × M predicates per match); overlay/OSD callers issue it
     // per cursor-move, and the connector + virtual-screen fallback chain in the
     // public resolvers triples that on a miss. A @c nullopt is cached too — a
     // genuine miss must not re-walk three times per cursor frame.
-    return resolveCachedContext(m_contextResolveCache, m_contextResolveCacheRevision, screenId, virtualDesktop,
-                                activity, [&]() -> std::optional<AssignmentEntry> {
-                                    const PWR::WindowQuery query = makeContextQuery(screenId, virtualDesktop, activity);
-                                    const PWR::WindowRule* winner =
-                                        m_evaluator->highestPriorityMatch(query, [](const PWR::WindowRule& rule) {
-                                            return hasEngineModeAction(rule) && !rule.match.isCatchAll();
-                                        });
-                                    if (winner != nullptr) {
-                                        return entryFromRuleMatchActions(*winner);
-                                    }
-                                    return std::nullopt;
-                                });
+    return resolveCachedContext(
+        m_contextResolveCache, m_contextResolveCacheRevision, screenId, virtualDesktop, activity,
+        [&]() -> std::optional<AssignmentEntry> {
+            const PWR::WindowQuery query = makeContextQuery(screenId, virtualDesktop, activity);
+
+            // Specificity-tiered slot match: a pinned rule wins over a user
+            // catch-all, and the synthesized provider-default (priority 0) is
+            // excluded so the gated default resolver remains authoritative.
+            const auto tieredMatch = [&](bool (*carriesSlot)(const PWR::WindowRule&)) -> const PWR::WindowRule* {
+                if (const PWR::WindowRule* pinned =
+                        m_evaluator->highestPriorityMatch(query, [carriesSlot](const PWR::WindowRule& rule) {
+                            return carriesSlot(rule) && !rule.match.isCatchAll();
+                        })) {
+                    return pinned;
+                }
+                return m_evaluator->highestPriorityMatch(query, [carriesSlot](const PWR::WindowRule& rule) {
+                    return carriesSlot(rule) && rule.match.isCatchAll()
+                        && rule.priority > PWR::ContextRuleBridge::kProviderDefaultPriority;
+                });
+            };
+
+            const PWR::WindowRule* modeRule = tieredMatch(hasEngineModeAction);
+            const PWR::WindowRule* snapRule = tieredMatch(hasSnappingLayoutAction);
+            const PWR::WindowRule* algoRule = tieredMatch(hasTilingAlgorithmAction);
+
+            if (modeRule == nullptr && snapRule == nullptr && algoRule == nullptr) {
+                return std::nullopt; // genuine miss — the caller routes to the default
+            }
+
+            // Base: the engine-mode rule decides the mode (and carries its own
+            // layout tokens). With no engine-mode rule, the default for this
+            // context supplies the mode — a layout-only rule must not force one.
+            AssignmentEntry entry = modeRule != nullptr
+                ? entryFromRuleMatchActions(*modeRule)
+                : resolveDefaultAssignmentEntryForContext(screenId, virtualDesktop, activity);
+
+            // Per-slot layout winners override their field. tieredMatch already
+            // ranks pinned over catch-all, so a more-specific layout rule beats
+            // a catch-all layout rule regardless of the raw priority numbers.
+            if (snapRule != nullptr) {
+                entry.snappingLayout = entryFromRuleMatchActions(*snapRule).snappingLayout;
+            }
+            if (algoRule != nullptr) {
+                entry.tilingAlgorithm = entryFromRuleMatchActions(*algoRule).tilingAlgorithm;
+            }
+            return entry;
+        });
 }
 
 ContextGapOverride LayoutRegistry::resolveContextGaps(const QString& screenId, int virtualDesktop,
