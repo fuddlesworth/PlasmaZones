@@ -1090,16 +1090,15 @@ std::optional<PerScreenDispatch> dispatchFor(ISettings* settings, const QString&
         };
     }
     if (category == QLatin1String("snapping")) {
+        // Per-screen snapping gaps are rule-backed: the getter reads the
+        // resolved gap rules, but there is no per-screen snapping writer
+        // surface, so set/clear are no-ops on this category.
         return PerScreenDispatch{
             [settings](const QString& id) {
                 return settings->getPerScreenSnappingSettings(id);
             },
-            [settings](const QString& id, const QString& k, const QVariant& v) {
-                settings->setPerScreenSnappingSetting(id, k, v);
-            },
-            [settings](const QString& id) {
-                settings->clearPerScreenSnappingSettings(id);
-            },
+            [](const QString&, const QString&, const QVariant&) { },
+            [](const QString&) { },
         };
     }
     if (category == QLatin1String("zoneSelector")) {

@@ -79,14 +79,9 @@ void SettingsController::clearPerScreenAutotileAlgorithmSettings(const QString& 
     m_settings.clearPerScreenAutotileAlgorithmSettings(screenName);
 }
 
-// ── Per-screen snapping overrides ────────────────────────────────────────
-
-QVariantMap SettingsController::getPerScreenSnappingSettings(const QString& screenName) const
-{
-    return m_settings.getPerScreenSnappingSettings(screenName);
-}
-
-// Snapping per-screen gaps are rule-backed; there is no set/clear/has here.
+// Snapping per-screen gaps are rule-backed (per-monitor gap WindowRules) and
+// edited through the Window Appearance page's Gaps card, so there is no
+// per-screen snapping reader or writer surface on the controller.
 
 // ── Per-screen zone selector overrides ───────────────────────────────────
 

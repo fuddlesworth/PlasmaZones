@@ -471,11 +471,9 @@ public:
     Q_INVOKABLE bool hasPerScreenAutotileAlgorithmSettings(const QString& screenName) const;
     Q_INVOKABLE void clearPerScreenAutotileAlgorithmSettings(const QString& screenName);
 
-    // ── Per-screen snapping overrides ────────────────────────────────────────
-    // Snapping per-screen gaps are rule-backed (per-monitor gap WindowRules), so
-    // only the reader remains; the gap values are edited through the Window
-    // Appearance page's rule-backed Gaps card, not a per-screen snapping setter.
-    Q_INVOKABLE QVariantMap getPerScreenSnappingSettings(const QString& screenName) const;
+    // Per-screen snapping gaps are rule-backed (per-monitor gap WindowRules) and
+    // edited through the Window Appearance page's rule-backed Gaps card, so the
+    // controller carries no per-screen snapping reader or writer surface.
 
     // ── Virtual screen configuration ──────────────────────────────────────────
     Q_INVOKABLE QStringList getPhysicalScreens() const;

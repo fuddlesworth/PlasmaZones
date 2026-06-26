@@ -256,28 +256,17 @@ public:
         return false;
     }
 
-    // NOTE: only the getter `override`s — `getPerScreenSnappingSettings`
+    // NOTE: snapping exposes only the getter — `getPerScreenSnappingSettings`
     // is the lone snapping accessor declared on
     // PhosphorEngine::IGeometrySettings (consumed by the geometry
-    // pipeline). The set/clear/has triplet is ISettings-only (writers
-    // live in settings + KCM, never reached from the geometry path),
-    // so they're plain `virtual` with no base to override. Mirrors the
-    // autotile + zone-selector blocks above where neither side declares
-    // any of the four on IGeometrySettings.
+    // pipeline). Per-screen snapping gaps are rule-backed now, so there
+    // is no set/clear/has triplet: the getter reads the resolved gap
+    // rules and there is no per-screen snapping writer surface (unlike
+    // the autotile + zone-selector blocks above, which still carry
+    // ISettings-only set/clear/has writers).
     QVariantMap getPerScreenSnappingSettings(const QString& /*screenIdOrName*/) const override
     {
         return {};
-    }
-    virtual void setPerScreenSnappingSetting(const QString& /*screenIdOrName*/, const QString& /*key*/,
-                                             const QVariant& /*value*/)
-    {
-    }
-    virtual void clearPerScreenSnappingSettings(const QString& /*screenIdOrName*/)
-    {
-    }
-    virtual bool hasPerScreenSnappingSettings(const QString& /*screenIdOrName*/) const
-    {
-        return false;
     }
 
     // Persistence (unique to ISettings)
