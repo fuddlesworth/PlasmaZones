@@ -7,6 +7,13 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [3.1.2] - 2026-06-25
+
+### Fixed
+
+- **A "Default / Any window" layout rule was ignored**: a per-context rule that set the engine or snapping layout for any window did nothing, so a virtual desktop with no specific assignment fell through to the global default (for example BSP) instead of the configured layout. A layout-only rule (a snapping layout or tiling algorithm with no engine set) was dropped the same way. Per-context rules now resolve each slot on its own, so the catch-all rule applies as the default and a layout-only rule fills its slot without forcing the engine ([#698](https://github.com/fuddlesworth/PlasmaZones/pull/698)).
+- **Editor zone edits were lost when the geometry snapped back**: dragging or resizing a zone updated it on screen, but the change was never written to the layout or shown in the properties panel when the committed geometry rounded back to roughly its original spot. The visual is now reconciled with the saved geometry whenever an operation ends ([#697](https://github.com/fuddlesworth/PlasmaZones/pull/697), [discussion #696](https://github.com/fuddlesworth/PlasmaZones/discussions/696)).
+
 ## [3.1.1] - 2026-06-24
 
 ### Added
@@ -1547,7 +1554,8 @@ Initial packaged release. Wayland-only (X11 support removed). Requires KDE Plasm
 - Session restoration and rotation after login ([#66])
 - Window tracking: snap/restore behavior, zone clearing, startup timing, rotation zone ID matching, floating window exclusion ([#67])
 
-[Unreleased]: https://github.com/fuddlesworth/PlasmaZones/compare/v3.1.1...HEAD
+[Unreleased]: https://github.com/fuddlesworth/PlasmaZones/compare/v3.1.2...HEAD
+[3.1.2]: https://github.com/fuddlesworth/PlasmaZones/compare/v3.1.1...v3.1.2
 [3.1.1]: https://github.com/fuddlesworth/PlasmaZones/compare/v3.1.0...v3.1.1
 [3.1.0]: https://github.com/fuddlesworth/PlasmaZones/compare/v3.0.17...v3.1.0
 [3.0.17]: https://github.com/fuddlesworth/PlasmaZones/compare/v3.0.16...v3.0.17

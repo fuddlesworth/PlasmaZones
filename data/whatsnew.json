@@ -1,6 +1,14 @@
 {
     "releases": [
         {
+            "version": "3.1.2",
+            "date": "2026-06-25",
+            "highlights": [
+                "Fixed: a \"Default / Any window\" layout rule was ignored, so a virtual desktop with no specific assignment fell back to the global default instead of the layout you set. These rules now apply (#698)",
+                "Fixed: dragging or resizing a zone in the editor could leave the change unsaved when the geometry snapped back near its original spot. Edits are now kept (#697)"
+            ]
+        },
+        {
             "version": "3.1.1",
             "date": "2026-06-24",
             "highlights": [
