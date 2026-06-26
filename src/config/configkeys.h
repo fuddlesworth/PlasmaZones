@@ -87,14 +87,11 @@ public:
     P_CONFIG_GROUP(snappingZonesLabelsGroup, "Snapping.Zones.Labels")
     P_CONFIG_GROUP(snappingEffectsGroup, "Snapping.Effects")
     P_CONFIG_GROUP(snappingZoneSelectorGroup, "Snapping.ZoneSelector")
-    // Snapping.Gaps now holds only the snapping-specific adjacency threshold —
-    // the inner/outer gap values moved to the shared gapsGroup ("Gaps") below,
-    // unified across snapping and tiling.
+    // Snapping.Gaps holds only the snapping-specific adjacency threshold. The
+    // inner/outer gap values are no longer stored in config at all: they live on
+    // the managed baseline appearance rule and are read back through Settings'
+    // gap getters.
     P_CONFIG_GROUP(snappingGapsGroup, "Snapping.Gaps")
-
-    // Shared inner/outer gap values, used by BOTH snapping and tiling. Holds the
-    // Inner/Outer/UsePerSide/Top/Bottom/Left/Right keys.
-    P_CONFIG_GROUP(gapsGroup, "Gaps")
 
     // Display (mode-neutral) — per-mode disable lists. Lives outside Snapping.*
     // because the values gate the whole product (snap + autotile), not just
@@ -301,13 +298,6 @@ public:
     // Config Keys — Snapping.Gaps
     // ═══════════════════════════════════════════════════════════════════════════
 
-    P_CONFIG_KEY(innerKey, "Inner")
-    P_CONFIG_KEY(outerKey, "Outer")
-    P_CONFIG_KEY(usePerSideKey, "UsePerSide")
-    P_CONFIG_KEY(topKey, "Top")
-    P_CONFIG_KEY(bottomKey, "Bottom")
-    P_CONFIG_KEY(leftKey, "Left")
-    P_CONFIG_KEY(rightKey, "Right")
     P_CONFIG_KEY(adjacentThresholdKey, "AdjacentThreshold")
 
     // ═══════════════════════════════════════════════════════════════════════════
@@ -344,7 +334,6 @@ public:
     // Config Keys — Tiling.Gaps
     // ═══════════════════════════════════════════════════════════════════════════
 
-    // (uses innerKey, outerKey, usePerSideKey, topKey, bottomKey, leftKey, rightKey)
     P_CONFIG_KEY(smartGapsKey, "SmartGaps")
 
     // ═══════════════════════════════════════════════════════════════════════════
